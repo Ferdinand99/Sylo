@@ -44,6 +44,24 @@ const MIGRATIONS = [
       CREATE INDEX idx_stats_cache_created_at ON stats_cache (created_at DESC);
     `);
   },
+
+  // Moderation: per-guild mod-log channel + a warnings log.
+  (database) => {
+    database.exec(`
+      ALTER TABLE guild_settings ADD COLUMN modlog_channel_id TEXT;
+
+      CREATE TABLE warnings (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id     TEXT NOT NULL,
+        user_id      TEXT NOT NULL,
+        moderator_id TEXT NOT NULL,
+        reason       TEXT NOT NULL,
+        created_at   INTEGER NOT NULL
+      );
+
+      CREATE INDEX idx_warnings_guild_user ON warnings (guild_id, user_id);
+    `);
+  },
 ];
 
 /**

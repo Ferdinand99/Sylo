@@ -10,6 +10,9 @@
     <% commands.forEach(function (cmd) { %>
       <div class="cmd">
         <code class="cmd-sig"><%= cmd.signature %></code>
+        <% if (cmd.permissions) { %>
+          <span class="cmd-perm">requires: <%= cmd.permissions.join(', ') %></span>
+        <% } %>
         <p class="cmd-desc"><%= cmd.description %></p>
         <% if (cmd.options.length > 0) { %>
           <table class="cmd-opts">

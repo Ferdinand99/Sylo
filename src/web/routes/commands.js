@@ -2,10 +2,21 @@
 // The list is derived from the live command collection, so it always matches
 // what is actually registered.
 import { Router } from 'express';
-import { ApplicationCommandOptionType as OptType } from 'discord.js';
+import { ApplicationCommandOptionType as OptType, PermissionsBitField } from 'discord.js';
 import { runtime } from '../../runtime.js';
 
 const router = Router();
+
+/** Decode a default_member_permissions bitfield string into readable flag names. */
+function describePermissions(bits) {
+  if (bits == null) return null;
+  try {
+    const names = new PermissionsBitField(BigInt(bits)).toArray();
+    return names.length ? names.map((n) => n.replace(/([a-z])([A-Z])/g, '$1 $2')) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** @param {any} opt */
 function mapOption(opt) {
@@ -33,6 +44,7 @@ function describeCommands(collection) {
 
   for (const { data } of collection.values()) {
     const json = data.toJSON();
+    const permissions = describePermissions(json.default_member_permissions);
     const subs = (json.options ?? []).filter(
       (o) => o.type === OptType.Subcommand || o.type === OptType.SubcommandGroup
     );
@@ -42,6 +54,7 @@ function describeCommands(collection) {
       rows.push({
         signature: `/${json.name}${options.length ? ` ${usage(options)}` : ''}`,
         description: json.description,
+        permissions,
         options,
       });
       continue;
@@ -52,6 +65,7 @@ function describeCommands(collection) {
       rows.push({
         signature: `/${json.name} ${sub.name}${options.length ? ` ${usage(options)}` : ''}`,
         description: sub.description,
+        permissions,
         options,
       });
     }

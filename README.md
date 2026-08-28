@@ -12,6 +12,11 @@ self-hosting on an **Unraid server via Docker**.
   - `/stats battlefield <title> <username> <platform>` — player stats as an embed
     (K/D, win rate, time played, KPM/SPM, best class, …)
   - Friendly, non-crashing error handling (unknown player, API down, rate-limited)
+- **Moderation** — `/kick`, `/ban`, `/unban`, `/timeout`, `/untimeout`, `/purge`,
+  `/slowmode`, `/warn` (add/list/remove/clear), and `/modlog` to send every action
+  to a log channel. Role-hierarchy and permission checks, optional DM to the
+  target, and per-command default permissions so Discord hides them from
+  non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
 - **Web dashboard** (Express + EJS, no frontend framework)
@@ -19,8 +24,8 @@ self-hosting on an **Unraid server via Docker**.
   - `/` — bot online/offline, server list, recently queried stats
   - `/commands` — list of the slash commands the bot currently has loaded
   - `/stats` — browse cached lookups
-- **SQLite persistence** (`better-sqlite3`) — guild settings + a TTL stats cache,
-  stored in a single file so it lives on a mounted volume.
+- **SQLite persistence** (`better-sqlite3`) — guild settings, warnings, and a TTL
+  stats cache, stored in a single file so it lives on a mounted volume.
 - **Lean Docker image** — multi-stage `node:20-alpine`, non-root, `HEALTHCHECK`.
 
 ## Project structure
@@ -34,9 +39,11 @@ src/
     index.js            Discord client bootstrap
     loadCommands.js     Command loader (shared with the register script)
     registerCommands.js Slash command registration via REST
-    commands/           ping.js, stats.js
+    commands/           ping.js, stats.js, kick/ban/unban/timeout/untimeout/
+                        purge/slowmode/warn/modlog.js
     events/             ready.js, interactionCreate.js
     embeds/             battlefieldStats.js
+    lib/                duration.js, moderation.js, modlog.js
   adapters/games/
     gameAdapter.js      Shared interface + typed errors
     registry.js         id -> adapter map
@@ -45,13 +52,15 @@ src/
   db/
     index.js            SQLite connection + migrations
     cache.js            TTL stats cache
+    guildSettings.js    Per-guild settings (mod-log channel, …)
+    warnings.js         Warning records
   web/
     server.js           Express app
     routes/             health.js, dashboard.js, commands.js, stats.js
     middleware/auth.js  No-op requireAdmin (OAuth2-ready)
     views/ public/      EJS templates + styles.css
 scripts/register-commands.js
-test/battlefield.adapter.test.js
+test/                   battlefield.adapter.test.js, duration.test.js
 data/                   SQLite file lives here (git-ignored, volume-mounted)
 ```
 
@@ -91,9 +100,16 @@ commands then register instantly instead of taking up to ~1 hour globally.
 2. **Bot** tab → **Reset Token** → copy into `DISCORD_TOKEN`. No privileged
    intents are required.
 3. **General Information** → copy **Application ID** into `DISCORD_CLIENT_ID`.
-4. **OAuth2 → URL Generator** → scopes `bot` + `applications.commands`,
-   bot permission **Send Messages** (and **Embed Links**). Open the generated
-   URL to invite the bot.
+4. **OAuth2 → URL Generator** → scopes `bot` + `applications.commands`. Bot
+   permissions:
+   - **Send Messages**, **Embed Links** — always
+   - **Kick Members**, **Ban Members**, **Moderate Members**, **Manage Messages**,
+     **Manage Channels** — for the moderation commands (skip any you don't want)
+
+   Open the generated URL to invite the bot.
+5. For moderation to work, drag **Sylo's role above the roles of the members it
+   should manage** in *Server Settings → Roles*. The bot can never kick/ban/timeout
+   someone whose highest role sits above its own.
 
 ## Docker
 
