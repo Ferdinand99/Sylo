@@ -141,15 +141,15 @@ make the host data directory writable once:
 `unraid/sylo.xml` is a ready-made CA template with all ports, paths, and
 environment variables pre-defined. It needs a **published image** first:
 
-1. **Publish the image** to a registry the Unraid box can pull. With GitHub
-   Container Registry:
+1. **Publish the image.** CI does this automatically (see
+   [Releases & CI](#releases--ci) below) — push to `main` and, once the package
+   exists, set its visibility to **Public** (GitHub → your profile → Packages →
+   `sylo` → Package settings). To publish once by hand instead:
    ```bash
    echo $GITHUB_TOKEN | docker login ghcr.io -u Ferdinand99 --password-stdin
    docker build -t ghcr.io/ferdinand99/sylo:latest .
    docker push ghcr.io/ferdinand99/sylo:latest
    ```
-   Make the package public (GitHub → Packages → sylo → Package settings), or add
-   pull credentials on Unraid. A CI workflow can do this on every push/tag.
 2. **Add a 256×256 icon** at `unraid/sylo-icon.png` (the template references it).
 3. **Use the template** on Unraid — either:
    - *Docker tab → Add Container → Template:* paste the raw URL
@@ -162,6 +162,40 @@ environment variables pre-defined. It needs a **published image** first:
 
 Edit `Repository`, `Support`, `Project`, `TemplateURL`, and `Icon` in the XML if
 your GitHub username or repo name differ.
+
+## Releases & CI
+
+Two GitHub Actions workflows drive the images on GHCR:
+
+| Workflow | Trigger | Publishes |
+|---|---|---|
+| `.github/workflows/docker-publish.yml` | every push to `main` (PRs build only) | `:main`, `:sha-<short>` — rolling dev image |
+| `.github/workflows/release-please.yml` | merging a **release PR** | `:latest`, `:X.Y.Z`, `:X.Y` — stable release |
+
+**Cutting a release** is automated with
+[release-please](https://github.com/googleapis/release-please):
+
+1. Land changes on `main` using [Conventional Commits](https://www.conventionalcommits.org)
+   (`feat: …`, `fix: …`, `refactor: …`, `chore: …`, `feat!: …`/`BREAKING CHANGE:`
+   for a major bump).
+2. release-please keeps a PR titled *"chore(main): release X.Y.Z"* open,
+   accumulating a changelog. When you're ready, **merge it**.
+3. Merging tags the commit `vX.Y.Z`, creates the GitHub Release with notes,
+   bumps `package.json` + `CHANGELOG.md`, then builds and pushes the versioned
+   images — including `:latest`, which is what the Unraid template tracks.
+
+No secrets to configure — both workflows use the built-in `GITHUB_TOKEN`.
+Note that a tag/Release created by CI does **not** trigger other workflows, which
+is why `release-please.yml` builds the image itself rather than relying on the
+tag trigger.
+
+For a clean starting point, tag the current commit once so release-please has a
+baseline: `git tag v1.0.0 && git push origin v1.0.0`
+(keep `.release-please-manifest.json` at `1.0.0`).
+
+Unraid users who want the bleeding edge can point the container at
+`ghcr.io/ferdinand99/sylo:main` instead of `:latest`; pin to `:X.Y.Z` to freeze a
+version.
 
 ## Adding another game
 
