@@ -12,6 +12,7 @@ data
 .vscode
 .idea
 test
+unraid
 *.md
 !README.md
 Dockerfile

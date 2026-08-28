@@ -1,0 +1,118 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Sylo</Name>
+  <Repository>ghcr.io/ferdinand99/sylo:latest</Repository>
+  <Registry>https://github.com/Ferdinand99/Sylo/pkgs/container/sylo</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Ferdinand99/Sylo/issues</Support>
+  <Project>https://github.com/Ferdinand99/Sylo</Project>
+  <Overview>Sylo is a multi-function Discord bot with a web dashboard and an extensible game-stats module. v1 provides Battlefield-series player stats (BF1, BF3, BF4, BFV, Hardline, and best-effort BF2042/BF6) via the public gametools.network API, plus a lightweight status dashboard. Data (guild settings and a TTL stats cache) is stored in a single SQLite file under /app/data.
+
+Setup: create a Discord application at https://discord.com/developers/applications, then set DISCORD_TOKEN (Bot tab) and DISCORD_CLIENT_ID (General Information). No privileged intents are required. Invite the bot with the scopes "bot" and "applications.commands".</Overview>
+  <Category>Tools: Network:Messenger</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Ferdinand99/Sylo/main/unraid/sylo.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/Ferdinand99/Sylo/main/unraid/sylo-icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config
+    Name="WebUI Port"
+    Target="3000"
+    Default="3000"
+    Mode="tcp"
+    Description="Host port for the Sylo dashboard. Only change the host side; the container always listens on 3000."
+    Type="Port"
+    Display="always"
+    Required="true"
+    Mask="false">3000</Config>
+  <Config
+    Name="Data Directory"
+    Target="/app/data"
+    Default="/mnt/user/appdata/sylo/data"
+    Mode="rw"
+    Description="Where the SQLite database (sylo.db) is stored. Persists across updates/restarts."
+    Type="Path"
+    Display="always"
+    Required="true"
+    Mask="false">/mnt/user/appdata/sylo/data</Config>
+  <Config
+    Name="DISCORD_TOKEN"
+    Target="DISCORD_TOKEN"
+    Default=""
+    Description="Discord bot token (Developer Portal -> your app -> Bot -> Reset Token)."
+    Type="Variable"
+    Display="always"
+    Required="true"
+    Mask="true"/>
+  <Config
+    Name="DISCORD_CLIENT_ID"
+    Target="DISCORD_CLIENT_ID"
+    Default=""
+    Description="Discord application (client) ID (Developer Portal -> your app -> General Information)."
+    Type="Variable"
+    Display="always"
+    Required="true"
+    Mask="false"/>
+  <Config
+    Name="DISCORD_GUILD_ID"
+    Target="DISCORD_GUILD_ID"
+    Default=""
+    Description="Optional. Set to a server ID to register slash commands to that one guild instantly (useful for testing). Leave blank to register globally (can take up to ~1 hour the first time)."
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false"/>
+  <Config
+    Name="STATS_CACHE_TTL_MINUTES"
+    Target="STATS_CACHE_TTL_MINUTES"
+    Default="5"
+    Description="How long (minutes) to cache a stats lookup before hitting the API again."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false">5</Config>
+  <Config
+    Name="GAMETOOLS_API_BASE"
+    Target="GAMETOOLS_API_BASE"
+    Default="https://api.gametools.network"
+    Description="Base URL of the Battlefield stats API."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false">https://api.gametools.network</Config>
+  <Config
+    Name="DATABASE_PATH"
+    Target="DATABASE_PATH"
+    Default="/app/data/sylo.db"
+    Description="Path to the SQLite file inside the container. Must sit inside the Data Directory mount."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false">/app/data/sylo.db</Config>
+  <Config
+    Name="WEB_PORT"
+    Target="WEB_PORT"
+    Default="3000"
+    Description="Port the app listens on inside the container. Leave at 3000 unless you also change the container side of the WebUI Port mapping."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false">3000</Config>
+  <Config
+    Name="NODE_ENV"
+    Target="NODE_ENV"
+    Default="production"
+    Description="Node environment."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false">production</Config>
+</Container>

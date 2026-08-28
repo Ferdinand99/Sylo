@@ -136,8 +136,32 @@ The container runs as a non-root user (uid 100). If it can't write the database,
 make the host data directory writable once:
 `chmod -R 0777 /mnt/user/appdata/sylo/data` (or `chown -R 100:101`).
 
-A Community Applications template (`unraid/sylo.xml`) can be added later; it is
-not required to run the container.
+### Option C — Unraid Community Applications template
+
+`unraid/sylo.xml` is a ready-made CA template with all ports, paths, and
+environment variables pre-defined. It needs a **published image** first:
+
+1. **Publish the image** to a registry the Unraid box can pull. With GitHub
+   Container Registry:
+   ```bash
+   echo $GITHUB_TOKEN | docker login ghcr.io -u Ferdinand99 --password-stdin
+   docker build -t ghcr.io/ferdinand99/sylo:latest .
+   docker push ghcr.io/ferdinand99/sylo:latest
+   ```
+   Make the package public (GitHub → Packages → sylo → Package settings), or add
+   pull credentials on Unraid. A CI workflow can do this on every push/tag.
+2. **Add a 256×256 icon** at `unraid/sylo-icon.png` (the template references it).
+3. **Use the template** on Unraid — either:
+   - *Docker tab → Add Container → Template:* paste the raw URL
+     `https://raw.githubusercontent.com/Ferdinand99/Sylo/main/unraid/sylo.xml`, or
+   - drop the file in `/boot/config/plugins/dockerMan/templates-user/` and pick
+     `Sylo` from the **User templates** dropdown.
+4. **To list it in the public CA store**, submit the repo to
+   [community-applications](https://github.com/Squidly271/community.applications)
+   (the *Add to CA* thread / template-repo process).
+
+Edit `Repository`, `Support`, `Project`, `TemplateURL`, and `Icon` in the XML if
+your GitHub username or repo name differ.
 
 ## Adding another game
 
