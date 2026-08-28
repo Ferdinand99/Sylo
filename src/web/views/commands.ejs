@@ -1,0 +1,34 @@
+<%- include('partials/header', { title: 'Sylo — Commands' }) %>
+
+<section class="card">
+  <h2>Available slash commands</h2>
+  <p class="muted">Generated from the commands the bot currently has loaded. Use them in any server Sylo is in.</p>
+
+  <% if (commands.length === 0) { %>
+    <p class="muted">No commands loaded yet.</p>
+  <% } else { %>
+    <% commands.forEach(function (cmd) { %>
+      <div class="cmd">
+        <code class="cmd-sig"><%= cmd.signature %></code>
+        <p class="cmd-desc"><%= cmd.description %></p>
+        <% if (cmd.options.length > 0) { %>
+          <table class="cmd-opts">
+            <thead><tr><th>Option</th><th>Required</th><th>Description</th><th>Choices</th></tr></thead>
+            <tbody>
+              <% cmd.options.forEach(function (opt) { %>
+                <tr>
+                  <td class="mono"><%= opt.name %></td>
+                  <td><%= opt.required ? 'yes' : 'no' %></td>
+                  <td><%= opt.description %></td>
+                  <td class="muted"><%= opt.choices.length ? opt.choices.join(', ') : '—' %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        <% } %>
+      </div>
+    <% }) %>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

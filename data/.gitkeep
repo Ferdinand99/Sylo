@@ -1,0 +1,2 @@
+# Keeps the data/ directory in git. The SQLite database file lives here at
+# runtime and is git-ignored. In Docker this directory is a mounted volume.

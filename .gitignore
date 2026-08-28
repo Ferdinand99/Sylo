@@ -134,3 +134,8 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# ---- Sylo ----
+# SQLite database + WAL/SHM sidecar files (keep the data/ directory itself).
+/data/*
+!/data/.gitkeep

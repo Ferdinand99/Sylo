@@ -1,0 +1,32 @@
+{
+  "name": "sylo",
+  "version": "1.0.0",
+  "description": "Multi-function Discord bot with a web dashboard and an extensible game-stats module (starting with the Battlefield series).",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "register": "node scripts/register-commands.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "discord",
+    "discord-bot",
+    "battlefield",
+    "stats",
+    "dashboard"
+  ],
+  "author": "Ferdinand99",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.7",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2"
+  }
+}

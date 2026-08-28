@@ -1,0 +1,66 @@
+<%- include('partials/header', { title: 'Sylo — Dashboard' }) %>
+
+<section class="grid">
+  <div class="card status <%= ready ? 'ok' : 'bad' %>">
+    <h2>Bot</h2>
+    <p class="big"><%= ready ? 'Online' : 'Offline' %></p>
+    <p class="muted"><%= botTag ? botTag : 'not connected' %></p>
+  </div>
+  <div class="card">
+    <h2>Servers</h2>
+    <p class="big"><%= guildCount %></p>
+    <p class="muted">connected guilds</p>
+  </div>
+  <div class="card">
+    <h2>Uptime</h2>
+    <p class="big"><%= uptime %></p>
+    <p class="muted">since process start</p>
+  </div>
+</section>
+
+<% if (lastError) { %>
+  <section class="card warn">
+    <h2>Last error <span class="muted">(<%= lastErrorAgo %>)</span></h2>
+    <pre><%= lastError.message %></pre>
+  </section>
+<% } %>
+
+<section class="card">
+  <h2>Guilds</h2>
+  <% if (guilds.length === 0) { %>
+    <p class="muted">No guilds yet — invite the bot to a server.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>Name</th><th>ID</th><th class="num">Members</th></tr></thead>
+      <tbody>
+        <% guilds.forEach(function (g) { %>
+          <tr><td><%= g.name %></td><td class="mono"><%= g.id %></td><td class="num"><%= g.memberCount %></td></tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<section class="card">
+  <h2>Recently queried stats</h2>
+  <% if (recent.length === 0) { %>
+    <p class="muted">Nothing cached yet — run <code>/stats battlefield</code> in Discord.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>Game</th><th>Title</th><th>Player</th><th>Platform</th><th>When</th></tr></thead>
+      <tbody>
+        <% recent.forEach(function (r) { %>
+          <tr>
+            <td><%= r.game %></td>
+            <td><%= r.title %></td>
+            <td><%= r.username %></td>
+            <td><%= r.platform %></td>
+            <td class="muted"><%= r.ago %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

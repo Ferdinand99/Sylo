@@ -1,0 +1,34 @@
+<%- include('partials/header', { title: 'Sylo — Cached Stats' }) %>
+
+<section class="card">
+  <h2>Cached stats lookups</h2>
+  <p class="muted">Results are cached for <%= ttlMinutes %> minute(s). "Stale" rows will be refreshed on the next Discord query.</p>
+  <% if (rows.length === 0) { %>
+    <p class="muted">Nothing cached yet — run <code>/stats battlefield</code> in Discord.</p>
+  <% } else { %>
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th><th>Player</th><th>Platform</th>
+          <th>K/D</th><th>Win %</th><th>Time played</th><th>Cached</th><th>State</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% rows.forEach(function (r) { %>
+          <tr>
+            <td><%= r.title %></td>
+            <td><%= r.username %></td>
+            <td><%= r.platform %></td>
+            <td><%= r.kd %></td>
+            <td><%= r.winRate %></td>
+            <td><%= r.timePlayed %></td>
+            <td class="muted"><%= r.ago %></td>
+            <td><span class="pill <%= r.fresh ? 'ok' : 'stale' %>"><%= r.fresh ? 'fresh' : 'stale' %></span></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,25 @@
+services:
+  sylo:
+    build: .
+    image: sylo:latest
+    container_name: sylo
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # host:container. Both sides follow WEB_PORT from .env so the app, the
+      # published port, and the healthcheck stay in sync. On Unraid you can
+      # instead map a different host port in the Docker template.
+      - "${WEB_PORT:-3000}:${WEB_PORT:-3000}"
+    volumes:
+      # SQLite database + WAL files persist here across restarts/updates.
+      - ./data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:'+(process.env.WEB_PORT||3000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
