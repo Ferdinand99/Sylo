@@ -51,6 +51,78 @@
     }
   });
 
+  // --- emoji picker ----------------------------------------------------
+  const COMMON_EMOJI = (
+    '😀 😂 😍 😎 🤔 😴 🥳 😢 😡 👍 👎 👌 🙏 👏 🙌 💪 🔥 ✨ ⭐ 🌟 💯 ✅ ❌ ⚠️ ❗ ❓ 💡 🔔 📌 📢 ' +
+    '🎮 🕹️ 🎧 🎵 🎬 📷 💻 📱 🖥️ ⌨️ 🛠️ ⚙️ 🔧 🔒 🔑 🚀 🛰️ 🌍 🗺️ 🏆 🥇 🎯 🎲 ♠️ ♥️ ♦️ ♣️ ' +
+    '❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💖 💗 🎉 🎊 🎁 🍕 🍔 🍟 🌮 🍺 🍻 ☕ 🧊 🐶 🐱 🦊 🐸 🐼 🦁 🐢 🐧'
+  ).split(' ');
+
+  let pickerEl = null;
+  let pickerTarget = null;
+  let customEmojiCache = new Map(); // guildId -> array
+
+  function closePicker() {
+    pickerEl?.remove();
+    pickerEl = null;
+    pickerTarget = null;
+  }
+
+  async function openPicker(button) {
+    if (pickerEl) return closePicker();
+    const input = button.previousElementSibling;
+    pickerTarget = input;
+    const guildId = button.dataset.guild;
+
+    pickerEl = document.createElement('div');
+    pickerEl.className = 'emoji-pop';
+    pickerEl.innerHTML = '<div class="emoji-sec">Loading…</div>';
+    button.parentElement.style.position = 'relative';
+    button.parentElement.appendChild(pickerEl);
+
+    let custom = customEmojiCache.get(guildId);
+    if (!custom) {
+      try {
+        const r = await fetch(`/guilds/${guildId}/emojis`);
+        custom = (await r.json()).custom || [];
+      } catch {
+        custom = [];
+      }
+      customEmojiCache.set(guildId, custom);
+    }
+
+    const cell = (label, value, isImg) =>
+      `<button type="button" class="emoji-cell" data-value="${value.replace(/"/g, '&quot;')}">` +
+      (isImg ? `<img src="${label}" alt="">` : label) +
+      '</button>';
+
+    pickerEl.innerHTML =
+      (custom.length
+        ? `<div class="emoji-sec">Server</div><div class="emoji-grid">${custom
+            .map((e) => cell(e.url, e.display, true))
+            .join('')}</div>`
+        : '') +
+      `<div class="emoji-sec">Emoji</div><div class="emoji-grid">${COMMON_EMOJI.map((e) => cell(e, e, false)).join(
+        ''
+      )}</div>`;
+  }
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.emoji-btn');
+    if (btn) {
+      e.preventDefault();
+      openPicker(btn);
+      return;
+    }
+    const cellBtn = e.target.closest('.emoji-cell');
+    if (cellBtn && pickerTarget) {
+      pickerTarget.value = cellBtn.dataset.value;
+      closePicker();
+      return;
+    }
+    if (pickerEl && !e.target.closest('.emoji-pop')) closePicker();
+  });
+
   // --- fetch helper for JSON actions (used by later phases) ------------
   window.syloAction = async function syloAction(url, body) {
     const res = await fetch(url, {

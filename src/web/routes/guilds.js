@@ -6,7 +6,7 @@ import { PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import { runtime } from '../../runtime.js';
 import { requireGuildAdmin, currentUser } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { getGuild, baseContext } from '../lib/guildContext.js';
+import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { guildTextChannels, resolveUserTags } from '../lib/discord.js';
 import { getModule } from '../../modules/registry.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
@@ -19,11 +19,13 @@ import { timeAgo } from '../lib/format.js';
 import { BF_TITLE_CHOICES } from '../../bot/commands/stats.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
+import { applyWarnThresholds, normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
+import { parseEmoji, createReactionMessage } from '../../modules/roles.js';
 
 const router = Router();
 
 // Module ids that have a real settings partial (views/guild/modules/<id>.ejs).
-const CONFIG_VIEWS = new Set(['logging', 'welcome']);
+const CONFIG_VIEWS = new Set(['moderation', 'logging', 'welcome', 'roles', 'sticky']);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
 
@@ -51,6 +53,16 @@ router.use('/:guildId', loadGuild, requireGuildAdmin);
 
 router.get('/', (req, res) => res.redirect('/'));
 router.get('/:guildId', (req, res) => res.redirect(`/guilds/${req.params.guildId}/overview`));
+
+// Custom emojis for the reaction-role emoji picker.
+router.get('/:guildId/emojis', (req, res) => {
+  const custom = [...req.guild.emojis.cache.values()].map((e) => ({
+    name: e.name,
+    display: e.toString(),
+    url: e.imageURL({ size: 32 }),
+  }));
+  res.json({ custom });
+});
 
 // --- Panels ----------------------------------------------------------------
 
@@ -162,6 +174,9 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     configView: CONFIG_VIEWS.has(mod.id) ? `guild/modules/${mod.id}` : 'guild/modules/stub',
     logEvents: LOG_EVENTS,
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
+    thresholdActions: THRESHOLD_ACTIONS,
+    modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
+    roles: mod.id === 'roles' ? assignableRoles(req.guild) : [],
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
   });
 });
@@ -173,7 +188,21 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
   const back = `/guilds/${req.guild.id}/m/${mod.id}`;
 
   let config;
-  if (mod.id === 'logging') {
+  if (mod.id === 'moderation') {
+    // Threshold rows come as parallel arrays: t_count[], t_action[], t_duration[].
+    const counts = [].concat(req.body.t_count ?? []);
+    const actions = [].concat(req.body.t_action ?? []);
+    const durations = [].concat(req.body.t_duration ?? []);
+    const rows = counts.map((c, i) => ({
+      count: c,
+      action: actions[i],
+      durationMinutes: durations[i],
+    }));
+    config = {
+      dmOnPunish: req.body.dmOnPunish === 'on',
+      warnThresholds: normaliseThresholds(rows),
+    };
+  } else if (mod.id === 'logging') {
     config = {
       channel: /^\d{17,20}$/.test(req.body.channel ?? '') ? req.body.channel : '',
       events: Object.fromEntries(LOG_EVENTS.map(([key]) => [key, req.body[`ev_${key}`] === 'on'])),
@@ -188,6 +217,23 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
       dmMessage: String(req.body.dmMessage ?? '').slice(0, 1500),
       useEmbed: req.body.useEmbed === 'on',
     };
+  } else if (mod.id === 'roles') {
+    const existing = getGuildModule(req.guild.id, 'roles').config;
+    const autoroles = [].concat(req.body.autoroles ?? []).filter((r) => /^\d{17,20}$/.test(r));
+    config = { autoroles, reactionMessages: existing.reactionMessages ?? [] };
+  } else if (mod.id === 'sticky') {
+    const prev = getGuildModule(req.guild.id, 'sticky').config;
+    const prevById = new Map((prev.stickies ?? []).map((s) => [s.channelId, s]));
+    const chans = [].concat(req.body.s_channel ?? []);
+    const contents = [].concat(req.body.s_content ?? []);
+    const stickies = chans
+      .map((channelId, i) => ({
+        channelId,
+        content: String(contents[i] ?? '').slice(0, 2000),
+        lastMessageId: prevById.get(channelId)?.lastMessageId ?? null,
+      }))
+      .filter((s) => /^\d{17,20}$/.test(s.channelId) && s.content.trim() !== '');
+    config = { stickies };
   } else {
     return res.redirect(back);
   }
@@ -196,7 +242,91 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
   res.redirect(`${back}?msg=saved`);
 });
 
+// Create a reaction-role message: the bot posts it and adds the reactions.
+router.post(
+  '/:guildId/m/roles/reaction-message',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/m/roles`;
+    const channelId = String(req.body.channelId ?? '');
+    if (!/^\d{17,20}$/.test(channelId)) return res.redirect(`${back}?msg=badchannel`);
+
+    const emojis = [].concat(req.body.re_emoji ?? []);
+    const roleIds = [].concat(req.body.re_role ?? []);
+    const pairs = [];
+    for (let i = 0; i < emojis.length; i += 1) {
+      const parsed = parseEmoji(emojis[i], guild);
+      if (parsed && /^\d{17,20}$/.test(roleIds[i] ?? '')) {
+        pairs.push({ ...parsed, roleId: roleIds[i] });
+      }
+    }
+    if (pairs.length === 0) return res.redirect(`${back}?msg=needpair`);
+
+    const colorHex = String(req.body.color ?? '').replace('#', '');
+    try {
+      const record = await createReactionMessage(guild, {
+        channelId,
+        title: String(req.body.title ?? '').slice(0, 240),
+        description: String(req.body.description ?? '').slice(0, 1500),
+        color: /^[0-9a-fA-F]{6}$/.test(colorHex) ? parseInt(colorHex, 16) : undefined,
+        pairs,
+      });
+      const cfg = getGuildModule(guild.id, 'roles').config;
+      cfg.reactionMessages = [...(cfg.reactionMessages ?? []), record];
+      // Turn the module on — a reaction message is useless while it's disabled.
+      setGuildModule(guild.id, 'roles', { enabled: true, config: cfg });
+      res.redirect(`${back}?msg=saved`);
+    } catch (err) {
+      console.error('[roles] create reaction message failed:', err.message);
+      res.redirect(`${back}?msg=rrfail`);
+    }
+  })
+);
+
+// Remove a reaction-role message from config (leaves the Discord message).
+router.post('/:guildId/m/roles/reaction-message/:index/delete', (req, res) => {
+  const guild = req.guild;
+  const back = `/guilds/${guild.id}/m/roles`;
+  const cfg = getGuildModule(guild.id, 'roles').config;
+  const list = cfg.reactionMessages ?? [];
+  const idx = Number(req.params.index);
+  if (Number.isInteger(idx) && idx >= 0 && idx < list.length) {
+    list.splice(idx, 1);
+    setGuildModule(guild.id, 'roles', { config: { ...cfg, reactionMessages: list } });
+  }
+  res.redirect(`${back}?msg=saved`);
+});
+
 // --- Actions -------------------------------------------------------------
+
+// Lift a ban from the moderation panel.
+router.post(
+  '/:guildId/unban',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/moderation`;
+    const userId = parseUserId(req.body.userId);
+    if (!userId) return res.redirect(`${back}?msg=baduser`);
+
+    if (!guild.members.me?.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return res.redirect(`${back}?msg=perms`);
+    }
+    const existing = await guild.bans.fetch(userId).catch(() => null);
+    if (!existing) return res.redirect(`${back}?msg=notbanned`);
+
+    await guild.bans.remove(userId, `${moderatorDisplayName(req)}: unbanned via dashboard`);
+
+    const embed = new EmbedBuilder()
+      .setColor(MOD_COLOR)
+      .setTitle('Ban removed')
+      .setDescription(`${existing.user.tag} (\`${existing.user.id}\`)`)
+      .addFields({ name: 'Moderator', value: moderatorDisplayName(req) })
+      .setTimestamp(Date.now());
+    await postModLog(guild, embed);
+
+    res.redirect(`${back}?msg=unbanned`);
+  })
+);
 
 // Toggle a module on/off (JSON, called from app.js).
 router.post('/:guildId/modules/:moduleId', (req, res) => {
@@ -297,6 +427,7 @@ router.post(
       )
       .setTimestamp(Date.now());
     const logged = await postModLog(guild, embed);
+    await applyWarnThresholds(guild, user, count, moderatorDisplayName(req));
     res.redirect(`${back}?msg=${logged ? 'warned' : 'warned-nolog'}`);
   })
 );

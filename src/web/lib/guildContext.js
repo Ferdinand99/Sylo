@@ -9,6 +9,14 @@ export function getGuild(req) {
   return runtime.client?.guilds.cache.get(req.params.guildId) ?? null;
 }
 
+/** Roles a form can reasonably offer (excludes @everyone and managed roles). */
+export function assignableRoles(guild) {
+  return [...guild.roles.cache.values()]
+    .filter((r) => r.id !== guild.id && !r.managed)
+    .sort((a, b) => b.position - a.position)
+    .map((r) => ({ id: r.id, name: r.name }));
+}
+
 /**
  * Base context every panel needs: guild summary, text channels, and the module
  * list with per-guild enabled state and intent readiness.

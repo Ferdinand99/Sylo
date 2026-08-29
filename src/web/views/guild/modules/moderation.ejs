@@ -1,0 +1,58 @@
+<% var cfg = moduleConfig || {}; var rules = Array.isArray(cfg.warnThresholds) ? cfg.warnThresholds : []; %>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/moderation/config" class="stack" style="max-width:600px">
+  <label class="check">
+    <input type="checkbox" name="dmOnPunish" <%= cfg.dmOnPunish !== false ? 'checked' : '' %> />
+    DM the user when they are punished
+  </label>
+
+  <label style="margin-top:8px">Warning thresholds</label>
+  <p class="muted small">When a member reaches a warning count, apply an action automatically. The strictest matching rule wins.</p>
+
+  <table class="thresholds">
+    <thead><tr><th>At warning #</th><th>Action</th><th>Timeout (min)</th><th></th></tr></thead>
+    <tbody id="threshold-rows">
+      <% rules.forEach(function (r) { %>
+        <tr>
+          <td><input type="number" name="t_count" min="1" max="100" value="<%= r.count %>" /></td>
+          <td>
+            <select name="t_action">
+              <% thresholdActions.forEach(function (a) { %>
+                <option value="<%= a %>" <%= a === r.action ? 'selected' : '' %>><%= a %></option>
+              <% }) %>
+            </select>
+          </td>
+          <td><input type="number" name="t_duration" min="1" value="<%= r.durationMinutes || 60 %>" /></td>
+          <td><button type="button" class="link-btn" onclick="this.closest('tr').remove()">remove</button></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <div><button type="button" class="secondary" id="add-threshold">+ Add rule</button></div>
+
+  <div style="margin-top:10px"><button type="submit">Save</button></div>
+</form>
+
+<p class="muted small" style="margin-top:14px">
+  The moderation log channel is set under <a href="/guilds/<%= guild.id %>/general">General</a>.
+  Warnings and bans are managed under <a href="/guilds/<%= guild.id %>/moderation">Moderation</a>.
+</p>
+
+<template id="threshold-template">
+  <tr>
+    <td><input type="number" name="t_count" min="1" max="100" value="3" /></td>
+    <td>
+      <select name="t_action">
+        <% thresholdActions.forEach(function (a) { %><option value="<%= a %>"><%= a %></option><% }) %>
+      </select>
+    </td>
+    <td><input type="number" name="t_duration" min="1" value="60" /></td>
+    <td><button type="button" class="link-btn" onclick="this.closest('tr').remove()">remove</button></td>
+  </tr>
+</template>
+<script>
+  document.getElementById('add-threshold')?.addEventListener('click', () => {
+    const tpl = document.getElementById('threshold-template');
+    document.getElementById('threshold-rows').appendChild(tpl.content.cloneNode(true));
+  });
+</script>

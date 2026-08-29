@@ -34,12 +34,21 @@
   <p class="muted">No active bans in this server.</p>
 <% } else { %>
   <table>
-    <thead><tr><th>User</th><th>ID</th><th>Reason</th></tr></thead>
+    <thead><tr><th>User</th><th>ID</th><th>Reason</th><th></th></tr></thead>
     <tbody>
       <% bans.forEach(function (b) { %>
-        <tr><td><%= b.tag %></td><td class="mono"><%= b.id %></td><td><%= b.reason %></td></tr>
+        <tr>
+          <td><%= b.tag %></td>
+          <td class="mono"><%= b.id %></td>
+          <td><%= b.reason %></td>
+          <td class="num">
+            <form method="POST" action="/guilds/<%= guild.id %>/unban" data-confirm="Unban <%= b.tag %>?" style="display:inline">
+              <input type="hidden" name="userId" value="<%= b.id %>" />
+              <button type="submit" class="link-btn">unban</button>
+            </form>
+          </td>
+        </tr>
       <% }) %>
     </tbody>
   </table>
-  <p class="muted small">Lift a ban from Discord with <code>/unban &lt;user_id&gt;</code>.</p>
 <% } %>

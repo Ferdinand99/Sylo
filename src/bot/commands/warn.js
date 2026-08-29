@@ -9,6 +9,7 @@ import {
 import { MOD_COLOR, INFO_COLOR, notifyTarget, resultEmbed } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
 import { addWarning, listWarnings, getWarning, removeWarning, clearWarnings } from '../../db/warnings.js';
+import { applyWarnThresholds } from '../../modules/moderation.js';
 
 export const data = new SlashCommandBuilder()
   .setName('warn')
@@ -82,6 +83,7 @@ export async function execute(interaction) {
     });
     await interaction.editReply({ embeds: [embed] });
     await postModLog(interaction.guild, embed);
+    await applyWarnThresholds(interaction.guild, user, count, interaction.user.tag);
     return;
   }
 

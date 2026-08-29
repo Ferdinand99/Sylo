@@ -43,7 +43,7 @@ export const MODULES = [
     icon: '🎭',
     requiredIntents: ['GuildMembers'],
     defaultEnabled: false,
-    configurable: false,
+    configurable: true,
   },
   {
     id: 'welcome',
@@ -71,6 +71,15 @@ export const MODULES = [
     requiredIntents: [],
     defaultEnabled: false,
     configurable: false,
+  },
+  {
+    id: 'sticky',
+    name: 'Sticky messages',
+    description: 'Keep a message pinned to the bottom of a channel by re-posting it.',
+    icon: '📌',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
   },
   {
     id: 'leveling',

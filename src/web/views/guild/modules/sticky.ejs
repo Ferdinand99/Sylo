@@ -1,0 +1,38 @@
+<% var stickies = (moduleConfig && Array.isArray(moduleConfig.stickies)) ? moduleConfig.stickies : []; %>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/sticky/config" class="stack" style="max-width:600px">
+  <p class="muted small">Each channel can have one sticky message. It is re-posted at the bottom whenever someone else writes in that channel.</p>
+
+  <div id="sticky-rows">
+    <% (stickies.length ? stickies : [{ channelId: '', content: '' }]).forEach(function (s) { %>
+      <div class="sticky-row">
+        <select name="s_channel">
+          <option value="">— channel —</option>
+          <% channels.forEach(function (c) { %>
+            <option value="<%= c.id %>" <%= c.id === s.channelId ? 'selected' : '' %>>#<%= c.name %></option>
+          <% }) %>
+        </select>
+        <textarea name="s_content" rows="3" placeholder="Message to keep at the bottom…"><%= s.content || '' %></textarea>
+        <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove</button>
+      </div>
+    <% }) %>
+  </div>
+  <div><button type="button" class="secondary" id="sticky-add">+ Add channel</button></div>
+  <div style="margin-top:8px"><button type="submit">Save</button></div>
+</form>
+
+<template id="sticky-template">
+  <div class="sticky-row">
+    <select name="s_channel">
+      <option value="">— channel —</option>
+      <% channels.forEach(function (c) { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %>
+    </select>
+    <textarea name="s_content" rows="3" placeholder="Message to keep at the bottom…"></textarea>
+    <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove</button>
+  </div>
+</template>
+<script>
+  document.getElementById('sticky-add')?.addEventListener('click', () => {
+    document.getElementById('sticky-rows').appendChild(document.getElementById('sticky-template').content.cloneNode(true));
+  });
+</script>

@@ -39,10 +39,18 @@ export function register(client) {
     if (channel.guildId) dispatch('channelDelete', channel.guildId, channel);
   });
 
-  client.on(Events.MessageReactionAdd, (reaction, user) => {
-    if (reaction.message.guildId) dispatch('reactionAdd', reaction.message.guildId, { reaction, user });
-  });
-  client.on(Events.MessageReactionRemove, (reaction, user) => {
-    if (reaction.message.guildId) dispatch('reactionRemove', reaction.message.guildId, { reaction, user });
-  });
+  const forwardReaction = (event) => async (reaction, user) => {
+    // A reaction on an uncached message arrives partial; guildId is null until
+    // the message is fetched.
+    try {
+      if (reaction.partial) await reaction.fetch();
+      if (reaction.message.partial) await reaction.message.fetch();
+    } catch {
+      return;
+    }
+    const guildId = reaction.message.guildId ?? reaction.message.guild?.id;
+    if (guildId) dispatch(event, guildId, { reaction, user });
+  };
+  client.on(Events.MessageReactionAdd, forwardReaction('reactionAdd'));
+  client.on(Events.MessageReactionRemove, forwardReaction('reactionRemove'));
 }

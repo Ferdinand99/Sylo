@@ -1,0 +1,80 @@
+<% var cfg = moduleConfig || {}; var autoroles = Array.isArray(cfg.autoroles) ? cfg.autoroles : []; var rrMsgs = Array.isArray(cfg.reactionMessages) ? cfg.reactionMessages : []; %>
+
+<h3 style="font-size:14px;margin:4px 0">Autoroles</h3>
+<form method="POST" action="/guilds/<%= guild.id %>/m/roles/config" class="stack" style="max-width:520px">
+  <label>Roles to add automatically when a member joins</label>
+  <select name="autoroles" multiple size="6">
+    <% roles.forEach(function (r) { %>
+      <option value="<%= r.id %>" <%= autoroles.includes(r.id) ? 'selected' : '' %>><%= r.name %></option>
+    <% }) %>
+  </select>
+  <div><button type="submit">Save autoroles</button></div>
+</form>
+
+<hr class="sep" />
+
+<h3 style="font-size:14px;margin:4px 0">Reaction role messages</h3>
+<% if (rrMsgs.length === 0) { %>
+  <p class="muted small">None yet.</p>
+<% } else { %>
+  <% rrMsgs.forEach(function (rm, i) { %>
+    <div class="rr-msg">
+      <div>
+        <span class="mono small">#<%= (channels.find(function(c){return c.id===rm.channelId;})||{}).name || rm.channelId %></span> ·
+        <span class="muted small">msg <%= rm.messageId %></span>
+      </div>
+      <div class="small"><% rm.pairs.forEach(function (p) { %><%= p.display %> → <span class="muted">&lt;@&<%= p.roleId %>&gt;</span> &nbsp;<% }) %></div>
+      <form method="POST" action="/guilds/<%= guild.id %>/m/roles/reaction-message/<%= i %>/delete" data-confirm="Stop tracking this reaction-role message?" style="display:inline">
+        <button type="submit" class="link-btn">remove</button>
+      </form>
+    </div>
+  <% }) %>
+<% } %>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/roles/reaction-message" class="stack" style="max-width:560px;margin-top:12px">
+  <label>New reaction-role message — channel</label>
+  <select name="channelId">
+    <% channels.forEach(function (c) { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %>
+  </select>
+  <label>Embed title (optional)</label>
+  <input type="text" name="title" placeholder="Pick your roles" />
+  <label>Embed description (optional)</label>
+  <textarea name="description" rows="2" placeholder="React below to get a role."></textarea>
+  <label>Embed colour</label>
+  <input type="color" name="color" value="#4aa3df" style="width:60px;height:32px;padding:2px" />
+
+  <label>Emoji → role</label>
+  <table class="thresholds"><tbody id="rr-rows">
+    <tr>
+      <td class="emoji-cellwrap">
+        <input type="text" name="re_emoji" placeholder="🎮" style="width:90px" />
+        <button type="button" class="emoji-btn" data-guild="<%= guild.id %>">😀</button>
+      </td>
+      <td>
+        <select name="re_role">
+          <% roles.forEach(function (r) { %><option value="<%= r.id %>"><%= r.name %></option><% }) %>
+        </select>
+      </td>
+      <td><button type="button" class="link-btn" onclick="this.closest('tr').remove()">remove</button></td>
+    </tr>
+  </tbody></table>
+  <div><button type="button" class="secondary" id="rr-add">+ Add row</button></div>
+
+  <div style="margin-top:8px"><button type="submit">Create message</button></div>
+</form>
+
+<template id="rr-template">
+  <tr>
+    <td class="emoji-cellwrap">
+      <input type="text" name="re_emoji" placeholder="🎮" style="width:90px" />
+      <button type="button" class="emoji-btn" data-guild="<%= guild.id %>">😀</button>
+    </td>
+    <td><select name="re_role"><% roles.forEach(function (r) { %><option value="<%= r.id %>"><%= r.name %></option><% }) %></select></td>
+    <td><button type="button" class="link-btn" onclick="this.closest('tr').remove()">remove</button></td>
+  </tr>
+</template>
+<script>
+  document.getElementById('rr-add')?.addEventListener('click', () => {
+    document.getElementById('rr-rows').appendChild(document.getElementById('rr-template').content.cloneNode(true));
+  });
+</script>

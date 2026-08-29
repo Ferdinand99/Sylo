@@ -208,3 +208,28 @@ td.num, th.num { text-align: right; }
 .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
 .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
 .check input { width: auto; }
+
+.thresholds { width: auto; }
+.thresholds th, .thresholds td { padding: 5px 8px; }
+.thresholds input[type="number"] { width: 80px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; font: inherit; }
+.thresholds select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; font: inherit; }
+.link-btn { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 0; }
+.link-btn:hover { text-decoration: underline; }
+button.secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+button.secondary:hover { border-color: var(--accent); }
+.stack button[type="submit"], .cmd-override button[type="submit"], form button[type="submit"] {
+  background: var(--accent); color: #06121a; border: 0; border-radius: 6px; padding: 8px 16px; font: inherit; font-weight: 600; cursor: pointer;
+}
+
+.rr-msg { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+.sticky-row { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.sticky-row select { align-self: flex-start; }
+
+.emoji-cellwrap { display: flex; gap: 4px; align-items: center; }
+.emoji-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 15px; line-height: 1; padding: 4px 6px; }
+.emoji-pop { position: absolute; z-index: 40; top: 110%; left: 0; width: 260px; max-height: 220px; overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.emoji-sec { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 4px 2px; }
+.emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+.emoji-cell { background: none; border: 0; cursor: pointer; font-size: 18px; padding: 3px; border-radius: 6px; line-height: 1; }
+.emoji-cell:hover { background: var(--bg); }
+.emoji-cell img { width: 22px; height: 22px; object-fit: contain; }

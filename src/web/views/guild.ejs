@@ -20,8 +20,12 @@
        'warned-nolog': 'Warning added — no mod-log channel is set, so it was not logged.',
        baduser: 'Enter a valid user ID (or @mention) and a reason.',
        botuser: "You can't warn a bot.",
+       unbanned: 'Ban removed.',
+       notbanned: 'That user is not banned.',
+       needpair: 'Add at least one emoji → role pair.',
+       rrfail: 'Could not post the reaction-role message (check the bot\'s permissions in that channel).',
      };
-     const ok = ['saved', 'cleared', 'warned'].includes(msg);
+     const ok = ['saved', 'cleared', 'warned', 'unbanned'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' ? 'info' : 'bad');
 %>
   <div class="banner <%= cls %>"><%= messages[msg] || 'Done.' %></div>
