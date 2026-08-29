@@ -258,6 +258,17 @@ npm test
 Runs the `node:test` suite for the Battlefield adapter (parsing + error
 handling, `fetch` stubbed — no network).
 
+## Legal
+
+For the instances operated by Ferdinand99 (the public **Sylo** and **Sylo -
+Test** Discord applications):
+
+- [Terms of Service](docs/terms-of-service.md)
+- [Privacy Policy](docs/privacy-policy.md)
+
+Self-hosted instances are run by their own operators; adjust these documents if
+you publish your own.
+
 ## License
 
 MIT © Ferdinand99
