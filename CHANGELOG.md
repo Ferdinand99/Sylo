@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.0](https://github.com/Ferdinand99/Sylo/compare/v1.8.0...v1.9.0) (2026-08-29)
+
+
+### Features
+
+* downloadable ticket transcripts with local-time timestamps ([fe43de2](https://github.com/Ferdinand99/Sylo/commit/fe43de2109eaf03ef9f331082a9f4315217fea3e))
+* ticket / modmail system (DM the bot, staff reply from the dashboard) ([2e8f98f](https://github.com/Ferdinand99/Sylo/commit/2e8f98f8afd1ced41f9c604abb1c7fc26ea794ba))
+
 ## [1.8.0](https://github.com/Ferdinand99/Sylo/compare/v1.7.0...v1.8.0) (2026-08-29)
 
 
