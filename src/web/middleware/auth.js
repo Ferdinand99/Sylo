@@ -66,7 +66,7 @@ export function adminGuildIds(req) {
 export function requireAuth(req, res, next) {
   if (!config.authEnabled || req.session?.user) return next();
   req.session.returnTo = req.originalUrl;
-  res.redirect('/auth/login');
+  res.redirect('/auth/discord/login');
 }
 
 /** Require the signed-in user to be an admin of req.params.guildId. */
@@ -74,7 +74,7 @@ export function requireGuildAdmin(req, res, next) {
   if (!config.authEnabled) return next();
   if (!req.session?.user) {
     req.session.returnTo = req.originalUrl;
-    return res.redirect('/auth/login');
+    return res.redirect('/auth/discord/login');
   }
   if (adminGuildIds(req).has(req.params.guildId)) return next();
   res.status(403).render('error', {
@@ -113,13 +113,13 @@ export function mountAuth(app) {
 
   const router = Router();
 
-  router.get('/login', (req, res) => {
+  router.get('/discord/login', (req, res) => {
     if (!config.authEnabled) return res.redirect('/');
     const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
     req.session.oauthState = state;
     const params = new URLSearchParams({
       client_id: config.discordClientId,
-      redirect_uri: `${baseUrl(req)}/auth/callback`,
+      redirect_uri: `${baseUrl(req)}/auth/discord/callback`,
       response_type: 'code',
       scope: OAUTH_SCOPES,
       state,
@@ -127,7 +127,7 @@ export function mountAuth(app) {
     res.redirect(`https://discord.com/oauth2/authorize?${params}`);
   });
 
-  router.get('/callback', async (req, res, next) => {
+  router.get('/discord/callback', async (req, res, next) => {
     if (!config.authEnabled) return res.redirect('/');
     try {
       const { code, state } = req.query;
@@ -148,7 +148,7 @@ export function mountAuth(app) {
           client_secret: config.discordClientSecret,
           grant_type: 'authorization_code',
           code: String(code),
-          redirect_uri: `${baseUrl(req)}/auth/callback`,
+          redirect_uri: `${baseUrl(req)}/auth/discord/callback`,
         }),
       });
       if (!tokenRes.ok) throw new Error(`token exchange failed: ${tokenRes.status}`);

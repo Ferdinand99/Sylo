@@ -21,7 +21,7 @@
         <span><%= user.name %></span>
         <a href="/auth/logout">Log out</a>
       <% } else if (typeof authEnabled !== 'undefined' && authEnabled) { %>
-        <a href="/auth/login">Log in with Discord</a>
+        <a href="/auth/discord/login">Log in with Discord</a>
       <% } else { %>
         <span class="tag-open">open mode — no auth</span>
       <% } %>

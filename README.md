@@ -61,9 +61,9 @@ src/
   web/
     server.js           Express app
     routes/             health.js, dashboard.js, commands.js, stats.js, guilds.js
-    middleware/auth.js  No-op requireAdmin (OAuth2-ready)
+    middleware/auth.js  Discord OAuth2 login + requireAuth / requireGuildAdmin
     lib/                format.js, discord.js, asyncHandler.js
-    views/ public/      EJS templates + styles.css
+    views/ public/      EJS templates, styles.css, app.js
 scripts/register-commands.js
 test/                   battlefield.adapter.test.js, duration.test.js
 data/                   SQLite file lives here (git-ignored, volume-mounted)
@@ -109,8 +109,8 @@ trusted LAN. To lock it down:
 
 1. Discord Developer Portal → your app → **OAuth2** → copy the **Client Secret**
    into `DISCORD_CLIENT_SECRET`.
-2. Same page → **Redirects** → add `http://<host>:<WEB_PORT>/auth/callback`
-   (e.g. `http://192.168.1.10:3000/auth/callback`). Behind a reverse proxy, use
+2. Same page → **Redirects** → add `http://<host>:<WEB_PORT>/auth/discord/callback`
+   (e.g. `http://192.168.1.10:3000/auth/discord/callback`). Behind a reverse proxy, use
    the public URL and set `DASHBOARD_URL` to match.
 3. Set a long random `SESSION_SECRET` so sessions survive restarts.
 
