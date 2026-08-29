@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/Ferdinand99/Sylo/compare/v1.11.0...v1.12.0) (2026-08-29)
+
+
+### Features
+
+* **bot:** add /version and /about commands ([be7e177](https://github.com/Ferdinand99/Sylo/commit/be7e17753d1866a563be57b898cd06249700fb6b))
+
 ## [1.11.0](https://github.com/Ferdinand99/Sylo/compare/v1.10.0...v1.11.0) (2026-08-29)
 
 
