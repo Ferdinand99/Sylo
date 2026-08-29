@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/Ferdinand99/Sylo/compare/v1.10.0...v1.11.0) (2026-08-29)
+
+
+### Features
+
+* **web:** add topbar server switcher and rework the dashboard ([1b4f254](https://github.com/Ferdinand99/Sylo/commit/1b4f254e621bda6ad34976c186c8cf20ea10acd4))
+
 ## [1.10.0](https://github.com/Ferdinand99/Sylo/compare/v1.9.0...v1.10.0) (2026-08-29)
 
 
