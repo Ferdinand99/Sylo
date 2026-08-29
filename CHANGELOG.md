@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/Ferdinand99/Sylo/compare/v1.3.0...v1.4.0) (2026-08-29)
+
+
+### Features
+
+* tell the dashboard when a warning wasn't logged, fix banner colour ([9571c2d](https://github.com/Ferdinand99/Sylo/commit/9571c2dc0e9c83dd633ae581ba6f397dc2dd0bc3))
+
 ## [1.3.0](https://github.com/Ferdinand99/Sylo/compare/v1.2.0...v1.3.0) (2026-08-29)
 
 
