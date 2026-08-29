@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/Ferdinand99/Sylo/compare/v1.6.0...v1.7.0) (2026-08-29)
+
+
+### Features
+
+* functional Server logging and Welcome & leave modules ([f532494](https://github.com/Ferdinand99/Sylo/commit/f532494aabc153d42b3ed5bbd678b8e187e5969b))
+
 ## [1.6.0](https://github.com/Ferdinand99/Sylo/compare/v1.5.0...v1.6.0) (2026-08-29)
 
 
