@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/Ferdinand99/Sylo/compare/v1.7.0...v1.8.0) (2026-08-29)
+
+
+### Features
+
+* functional Moderation, Reaction roles/Autoroles, and Sticky messages ([1134f55](https://github.com/Ferdinand99/Sylo/commit/1134f55829c20fd9fa4e8381aff0f8ca62f2d5a8))
+
 ## [1.7.0](https://github.com/Ferdinand99/Sylo/compare/v1.6.0...v1.7.0) (2026-08-29)
 
 
