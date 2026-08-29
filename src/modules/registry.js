@@ -34,7 +34,7 @@ export const MODULES = [
     icon: '📝',
     requiredIntents: ['GuildMembers', 'MessageContent'],
     defaultEnabled: false,
-    configurable: false,
+    configurable: true,
   },
   {
     id: 'roles',
@@ -52,7 +52,7 @@ export const MODULES = [
     icon: '👋',
     requiredIntents: ['GuildMembers'],
     defaultEnabled: false,
-    configurable: false,
+    configurable: true,
   },
   {
     id: 'custom-commands',

@@ -17,8 +17,13 @@ import { notifyTarget, MOD_COLOR } from '../../bot/lib/moderation.js';
 import { postModLog } from '../../bot/lib/modlog.js';
 import { timeAgo } from '../lib/format.js';
 import { BF_TITLE_CHOICES } from '../../bot/commands/stats.js';
+import { LOG_EVENTS } from '../../modules/logging.js';
+import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 
 const router = Router();
+
+// Module ids that have a real settings partial (views/guild/modules/<id>.ejs).
+const CONFIG_VIEWS = new Set(['logging', 'welcome']);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
 
@@ -144,11 +149,51 @@ router.get(
   })
 );
 
-// A not-yet-built module: show its description + the enable toggle.
+// Per-module settings panel.
 router.get('/:guildId/m/:moduleId', (req, res) => {
   const mod = getModule(req.params.moduleId);
   if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
-  res.render('guild', { ...baseContext(req.guild, `m/${mod.id}`), activeModule: mod });
+  const { enabled, config } = getGuildModule(req.guild.id, mod.id);
+  res.render('guild', {
+    ...baseContext(req.guild, `m/${mod.id}`),
+    activeModule: mod,
+    moduleEnabled: enabled,
+    moduleConfig: config,
+    configView: CONFIG_VIEWS.has(mod.id) ? `guild/modules/${mod.id}` : 'guild/modules/stub',
+    logEvents: LOG_EVENTS,
+    welcomePlaceholders: WELCOME_PLACEHOLDERS,
+    msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+  });
+});
+
+// Save a module's settings.
+router.post('/:guildId/m/:moduleId/config', (req, res) => {
+  const mod = getModule(req.params.moduleId);
+  if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
+  const back = `/guilds/${req.guild.id}/m/${mod.id}`;
+
+  let config;
+  if (mod.id === 'logging') {
+    config = {
+      channel: /^\d{17,20}$/.test(req.body.channel ?? '') ? req.body.channel : '',
+      events: Object.fromEntries(LOG_EVENTS.map(([key]) => [key, req.body[`ev_${key}`] === 'on'])),
+    };
+  } else if (mod.id === 'welcome') {
+    const chan = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
+    config = {
+      joinChannel: chan(req.body.joinChannel),
+      joinMessage: String(req.body.joinMessage ?? '').slice(0, 1500),
+      leaveChannel: chan(req.body.leaveChannel),
+      leaveMessage: String(req.body.leaveMessage ?? '').slice(0, 1500),
+      dmMessage: String(req.body.dmMessage ?? '').slice(0, 1500),
+      useEmbed: req.body.useEmbed === 'on',
+    };
+  } else {
+    return res.redirect(back);
+  }
+
+  setGuildModule(req.guild.id, mod.id, { config });
+  res.redirect(`${back}?msg=saved`);
 });
 
 // --- Actions -------------------------------------------------------------

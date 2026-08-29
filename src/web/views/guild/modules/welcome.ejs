@@ -1,0 +1,30 @@
+<form method="POST" action="/guilds/<%= guild.id %>/m/welcome/config" class="stack" style="max-width:560px">
+  <p class="muted small">Placeholders: <% welcomePlaceholders.forEach(function (p) { %><code><%= p %></code> <% }) %></p>
+
+  <label>Welcome channel</label>
+  <select name="joinChannel">
+    <option value="">— none —</option>
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= c.id === (moduleConfig.joinChannel || '') ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+  <label>Welcome message</label>
+  <textarea name="joinMessage" rows="2" placeholder="Welcome {user} to {server}!"><%= moduleConfig.joinMessage || '' %></textarea>
+
+  <label style="margin-top:6px">Leave channel</label>
+  <select name="leaveChannel">
+    <option value="">— none —</option>
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= c.id === (moduleConfig.leaveChannel || '') ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+  <label>Leave message</label>
+  <textarea name="leaveMessage" rows="2" placeholder="{user.tag} left the server."><%= moduleConfig.leaveMessage || '' %></textarea>
+
+  <label style="margin-top:6px">DM to new members (optional)</label>
+  <textarea name="dmMessage" rows="2" placeholder="Hi {user.name}, welcome to {server}!"><%= moduleConfig.dmMessage || '' %></textarea>
+
+  <label class="check"><input type="checkbox" name="useEmbed" <%= moduleConfig.useEmbed ? 'checked' : '' %> /> Send as an embed</label>
+
+  <div><button type="submit">Save</button></div>
+</form>

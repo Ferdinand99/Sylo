@@ -198,3 +198,13 @@ td.num, th.num { text-align: right; }
 .switch input:checked + .slider { background: var(--ok); }
 .switch input:checked + .slider::before { transform: translateX(18px); }
 .switch input:disabled + .slider { opacity: .4; cursor: not-allowed; }
+
+.module-panel-head { display: flex; align-items: center; justify-content: space-between; }
+.sep { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
+.stack textarea {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 10px; font: inherit; resize: vertical;
+}
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
+.check input { width: auto; }

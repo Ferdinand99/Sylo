@@ -117,18 +117,22 @@
       <%- include('guild/moderation', { guild: guild, warnings: warnings, warningTotal: warningTotal, warningShown: warningShown, bans: bans, bansTotal: bansTotal, bansShown: bansShown, bansError: bansError, banLimit: banLimit }) %>
 
     <% } else if (panel.indexOf('m/') === 0 && typeof activeModule !== 'undefined') { %>
-      <h2><%= activeModule.icon %> <%= activeModule.name %></h2>
-      <p><%= activeModule.description %></p>
-      <label class="switch">
-        <input type="checkbox" class="module-toggle" data-guild="<%= guild.id %>" data-module="<%= activeModule.id %>"
-          <%= modules.find(function (x) { return x.id === activeModule.id; }).enabled ? 'checked' : '' %>
-          <%= modules.find(function (x) { return x.id === activeModule.id; }).missingIntents.length ? 'disabled' : '' %> />
-        <span class="slider"></span>
-      </label>
-      <span class="muted">Enable this module</span>
-      <% var mi = modules.find(function (x) { return x.id === activeModule.id; }).missingIntents; %>
-      <% if (mi.length) { %><p class="warn-text small">Needs intent: <%= mi.join(', ') %> — enable it in the Discord Developer Portal.</p><% } %>
-      <p class="muted small">A configuration panel for this module is coming in a later release.</p>
+      <% var mrow = modules.find(function (x) { return x.id === activeModule.id; }); %>
+      <div class="module-panel-head">
+        <h2><%= activeModule.icon %> <%= activeModule.name %></h2>
+        <label class="switch">
+          <input type="checkbox" class="module-toggle" data-guild="<%= guild.id %>" data-module="<%= activeModule.id %>"
+            <%= mrow.enabled ? 'checked' : '' %> <%= mrow.missingIntents.length ? 'disabled' : '' %> />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <p class="muted"><%= activeModule.description %></p>
+      <% if (mrow.missingIntents.length) { %>
+        <p class="warn-text small">Needs intent: <%= mrow.missingIntents.join(', ') %> — enable it in the Discord Developer Portal.</p>
+      <% } %>
+      <% if (!mrow.enabled) { %><p class="muted small">Enable the module (toggle above) for these settings to take effect.</p><% } %>
+      <hr class="sep" />
+      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []) }) %>
     <% } %>
   </section>
 </div>

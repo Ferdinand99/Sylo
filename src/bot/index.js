@@ -24,13 +24,21 @@ function buildIntents() {
 
 const eventsDir = join(dirname(fileURLToPath(import.meta.url)), 'events');
 
-/** Wire up every event module in ./events onto the client. */
+/**
+ * Wire up every event module in ./events onto the client. A module either
+ * exports { name, execute[, once] } for a single listener, or a
+ * register(client) function that attaches its own listeners.
+ */
 async function loadEvents(client) {
   const files = readdirSync(eventsDir).filter((f) => f.endsWith('.js') && !f.startsWith('_'));
   for (const file of files) {
     const mod = await import(pathToFileURL(join(eventsDir, file)).href);
+    if (typeof mod.register === 'function') {
+      mod.register(client);
+      continue;
+    }
     if (!mod.name || typeof mod.execute !== 'function') {
-      console.warn(`[bot] Skipping event ${file}: missing "name" or "execute" export`);
+      console.warn(`[bot] Skipping event ${file}: missing "name"/"execute" or "register" export`);
       continue;
     }
     if (mod.once) client.once(mod.name, (...args) => mod.execute(...args));
