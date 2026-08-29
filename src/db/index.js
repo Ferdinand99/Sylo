@@ -118,6 +118,21 @@ const MIGRATIONS = [
       CREATE INDEX idx_ticket_messages_ticket ON ticket_messages (ticket_id, created_at);
     `);
   },
+
+  // Message Creator: messages composed and sent as the bot from the dashboard.
+  (database) => {
+    database.exec(`
+      CREATE TABLE composed_messages (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id   TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        message_id TEXT,
+        spec       TEXT NOT NULL DEFAULT '{}',
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_composed_guild ON composed_messages (guild_id, updated_at DESC);
+    `);
+  },
 ];
 
 /**

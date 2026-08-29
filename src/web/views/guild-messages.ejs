@@ -1,0 +1,111 @@
+<%- include('partials/header', { title: `Sylo — Message Creator — ${guild.name}` }) %>
+
+<p class="muted"><a href="/guilds/<%= guild.id %>/overview">&larr; <%= guild.name %></a></p>
+<h1 class="page-title">Message Creator</h1>
+
+<% if (msg) {
+     var known = { sent: 'Message sent.', updated: 'Message updated.', deleted: 'Message deleted in Discord and removed from the list.', removed: 'Removed from the list (the Discord message could not be deleted — it may already be gone).', bad: 'Could not read the message — try again.' };
+     var text = known[msg];
+     if (!text) { try { text = decodeURIComponent(msg); } catch (_) { text = msg; } }
+%>
+  <div class="banner <%= (msg === 'sent' || msg === 'updated' || msg === 'deleted') ? 'ok' : (msg === 'removed' ? 'info' : 'bad') %>"><%= text %></div>
+<% } %>
+
+<div class="guild-layout">
+  <%- include('guild/_nav') %>
+  <section class="guild-panel mc-panel">
+    <div class="mc-grid">
+      <form method="POST" action="<%= editing ? `/guilds/${guild.id}/messages/${editing.id}` : `/guilds/${guild.id}/messages` %>" id="mc-form" class="mc-editor">
+        <input type="hidden" name="spec" id="mc-spec" />
+
+        <label>Channel</label>
+        <select name="channelId" id="mc-channel" required>
+          <option value="">— select —</option>
+          <% channels.forEach(function (c) { %>
+            <option value="<%= c.id %>" <%= editing && editing.channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+          <% }) %>
+        </select>
+
+        <label>Message content <span class="muted small">(optional)</span></label>
+        <textarea name="e_content" id="content" rows="3" maxlength="2000"></textarea>
+
+        <fieldset class="mc-fs">
+          <legend>Embed <span class="muted small">(optional)</span></legend>
+          <div class="mc-two">
+            <div><label class="small">Title</label><input type="text" name="e_title" maxlength="256"></div>
+            <div><label class="small">URL</label><input type="text" name="e_url" placeholder="https://…"></div>
+          </div>
+          <label class="small">Description</label>
+          <textarea name="e_desc" rows="3" maxlength="4096"></textarea>
+          <div class="mc-two">
+            <div><label class="small">Colour</label><input type="color" name="e_color" value="#4aa3df"></div>
+            <div><label class="small"><input type="checkbox" name="e_timestamp"> Timestamp</label></div>
+          </div>
+          <div class="mc-two">
+            <div><label class="small">Author name</label><input type="text" name="e_authorName" maxlength="256"></div>
+            <div><label class="small">Author icon URL</label><input type="text" name="e_authorIcon"></div>
+          </div>
+          <div class="mc-two">
+            <div><label class="small">Footer text</label><input type="text" name="e_footerText" maxlength="2048"></div>
+            <div><label class="small">Footer icon URL</label><input type="text" name="e_footerIcon"></div>
+          </div>
+          <div class="mc-two">
+            <div><label class="small">Thumbnail URL</label><input type="text" name="e_thumbnail"></div>
+            <div><label class="small">Image URL</label><input type="text" name="e_image"></div>
+          </div>
+          <label class="small">Fields</label>
+          <div id="fields"></div>
+          <button type="button" class="secondary" data-add="field">+ Field</button>
+        </fieldset>
+
+        <fieldset class="mc-fs">
+          <legend>Components <span class="muted small">(buttons &amp; menus, up to 5 rows)</span></legend>
+          <div id="rows"></div>
+          <button type="button" class="secondary" data-add="btnrow">+ Button row</button>
+          <button type="button" class="secondary" data-add="selrow">+ Role select</button>
+        </fieldset>
+
+        <div class="mc-actions">
+          <button type="submit"><%= editing && editing.message_id ? 'Update message' : 'Send message' %></button>
+          <% if (editing) { %><a class="link-btn" href="/guilds/<%= guild.id %>/messages">New message</a><% } %>
+        </div>
+      </form>
+
+      <aside class="mc-preview">
+        <div class="muted small">Live preview</div>
+        <div id="mc-preview" class="dc-preview"><p class="muted">Nothing yet.</p></div>
+      </aside>
+    </div>
+
+    <h2 style="margin-top:22px">Recent</h2>
+    <% if (recent.length === 0) { %>
+      <p class="muted">Nothing composed yet.</p>
+    <% } else { %>
+      <table>
+        <thead><tr><th>Message</th><th>Channel</th><th>When</th><th></th></tr></thead>
+        <tbody>
+          <% recent.forEach(function (r) { %>
+            <tr>
+              <td><a href="/guilds/<%= guild.id %>/messages/<%= r.id %>"><%= r.title %></a></td>
+              <td class="muted">#<%= r.channel %></td>
+              <td class="muted"><%= r.when %></td>
+              <td class="num">
+                <form method="POST" action="/guilds/<%= guild.id %>/messages/<%= r.id %>/delete" data-confirm="Delete this message in Discord?" style="display:inline">
+                  <button type="submit" class="link-btn">delete</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </section>
+</div>
+
+<script>
+  window.MC_SPEC = <%- JSON.stringify(spec || {}).replace(/</g, '\\u003c') %>;
+  window.MC_ROLES = <%- JSON.stringify(roles).replace(/</g, '\\u003c') %>;
+</script>
+<script src="/message-creator.js"></script>
+
+<%- include('partials/footer') %>
