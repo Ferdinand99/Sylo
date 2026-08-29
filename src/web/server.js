@@ -10,6 +10,7 @@ import dashboardRouter from './routes/dashboard.js';
 import statsRouter from './routes/stats.js';
 import commandsRouter from './routes/commands.js';
 import guildsRouter from './routes/guilds.js';
+import guildTicketsRouter from './routes/guildTickets.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -34,6 +35,9 @@ export function createApp() {
   app.use('/', dashboardRouter);
   app.use('/stats', statsRouter);
   app.use('/commands', commandsRouter);
+  // Tickets are mounted first: they have their own (staff-role aware) access
+  // check, so they must not fall through to the admin-only /guilds router.
+  app.use('/guilds/:guildId/tickets', guildTicketsRouter);
   app.use('/guilds', guildsRouter);
 
   // Central error handler — keep the server up, record the error for the dashboard.

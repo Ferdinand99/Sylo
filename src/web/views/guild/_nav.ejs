@@ -1,0 +1,17 @@
+<nav class="guild-nav">
+  <a href="/guilds/<%= guild.id %>/overview" class="<%= panel === 'overview' ? 'active' : '' %>">Overview</a>
+  <a href="/guilds/<%= guild.id %>/general" class="<%= panel === 'general' ? 'active' : '' %>">General</a>
+  <a href="/guilds/<%= guild.id %>/commands" class="<%= panel === 'commands' ? 'active' : '' %>">Commands</a>
+  <a href="/guilds/<%= guild.id %>/moderation" class="<%= panel === 'moderation' ? 'active' : '' %>">Moderation</a>
+  <a href="/guilds/<%= guild.id %>/tickets" class="<%= panel === 'tickets' ? 'active' : '' %>">
+    <span>Tickets</span>
+    <% if (typeof openTickets !== 'undefined' && openTickets > 0) { %><span class="nav-badge"><%= openTickets %></span><% } %>
+  </a>
+  <div class="guild-nav-sep">Modules</div>
+  <% modules.forEach(function (m) { %>
+    <a href="/guilds/<%= guild.id %>/m/<%= m.id %>" class="mod-link <%= panel === ('m/' + m.id) ? 'active' : '' %>">
+      <span><%= m.icon %> <%= m.name %></span>
+      <span class="dot <%= m.enabled ? 'on' : 'off' %>"></span>
+    </a>
+  <% }) %>
+</nav>

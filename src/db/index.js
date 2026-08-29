@@ -87,6 +87,37 @@ const MIGRATIONS = [
       );
     `);
   },
+
+  // Ticket / modmail system: users DM the bot, staff reply from the dashboard.
+  (database) => {
+    database.exec(`
+      CREATE TABLE tickets (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id   TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        status     TEXT NOT NULL DEFAULT 'open',
+        created_at INTEGER NOT NULL,
+        last_at    INTEGER NOT NULL,
+        closed_at  INTEGER,
+        closed_by  TEXT,
+        staff_seen_at INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX idx_tickets_guild_status ON tickets (guild_id, status, last_at DESC);
+      CREATE UNIQUE INDEX idx_tickets_open_user ON tickets (guild_id, user_id) WHERE status = 'open';
+
+      CREATE TABLE ticket_messages (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticket_id   INTEGER NOT NULL,
+        author_id   TEXT NOT NULL,
+        author_kind TEXT NOT NULL,
+        content     TEXT NOT NULL DEFAULT '',
+        attachments TEXT NOT NULL DEFAULT '[]',
+        delivered   INTEGER NOT NULL DEFAULT 1,
+        created_at  INTEGER NOT NULL
+      );
+      CREATE INDEX idx_ticket_messages_ticket ON ticket_messages (ticket_id, created_at);
+    `);
+  },
 ];
 
 /**

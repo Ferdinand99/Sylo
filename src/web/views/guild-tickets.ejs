@@ -1,0 +1,41 @@
+<%- include('partials/header', { title: `Sylo — Tickets — ${guild.name}` }) %>
+
+<p class="muted"><a href="/guilds/<%= guild.id %>/overview">&larr; <%= guild.name %></a></p>
+<h1 class="page-title">Tickets</h1>
+
+<div class="guild-layout">
+  <%- include('guild/_nav') %>
+  <section class="guild-panel">
+    <h2>Open <span class="muted">(<%= open.length %>)</span></h2>
+    <% if (open.length === 0) { %>
+      <p class="muted">No open tickets. Members open one by DMing the bot.</p>
+    <% } else { %>
+      <ul class="ticket-list">
+        <% open.forEach(function (t) { %>
+          <li class="<%= t.unread ? 'unread' : '' %>">
+            <a href="/guilds/<%= guild.id %>/tickets/<%= t.id %>">
+              <span class="t-user">#<%= t.id %> · <%= t.user %></span>
+              <span class="t-preview muted"><%= t.previewKind === 'staff' ? 'You: ' : '' %><%= t.preview || '(no text)' %></span>
+              <span class="t-age muted"><%= t.ago %></span>
+            </a>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+
+    <% if (closed.length) { %>
+      <h2 style="margin-top:20px">Recently closed</h2>
+      <ul class="ticket-list closed">
+        <% closed.forEach(function (t) { %>
+          <li><a href="/guilds/<%= guild.id %>/tickets/<%= t.id %>">
+            <span class="t-user">#<%= t.id %> · <%= t.user %></span>
+            <span class="t-preview muted"><%= t.preview || '' %></span>
+            <span class="t-age muted"><%= t.ago %></span>
+          </a></li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+</div>
+
+<%- include('partials/footer') %>

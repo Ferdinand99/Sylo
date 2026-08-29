@@ -1,0 +1,68 @@
+<%- include('partials/header', { title: `Sylo — Ticket #${ticket.id}` }) %>
+
+<p class="muted"><a href="/guilds/<%= guild.id %>/tickets">&larr; Tickets</a></p>
+<h1 class="page-title">Ticket #<%= ticket.id %> · <%= ticket.user %></h1>
+<p class="muted">
+  <span class="mono"><%= ticket.userId %></span> · opened <%= ticket.openedAgo %> ·
+  <span class="pill <%= ticket.status === 'open' ? 'ok' : 'stale' %>"><%= ticket.status %></span>
+</p>
+
+<% if (msg) { %>
+  <% var m = { sent: 'Reply sent.', undelivered: 'Saved, but the user could not be DMed (DMs closed or bot blocked).', empty: 'Write something first.', closed: 'This ticket is closed.' }; %>
+  <div class="banner <%= msg === 'sent' ? 'ok' : (msg === 'undelivered' ? 'info' : 'bad') %>"><%= m[msg] || 'Done.' %></div>
+<% } %>
+
+<div class="chat" id="chat" data-status="<%= ticket.status %>" data-last="<%= lastId %>" data-poll="/guilds/<%= guild.id %>/tickets/<%= ticket.id %>/messages.json">
+  <% messages.forEach(function (m) { %>
+    <div class="bubble <%= m.kind %>">
+      <div class="bubble-meta"><%= m.who %> · <%= m.ago %><% if (m.kind === 'staff' && !m.delivered) { %> · <span class="warn-text">not delivered</span><% } %></div>
+      <% if (m.content) { %><div class="bubble-body"><%= m.content %></div><% } %>
+      <% m.attachments.forEach(function (a) { %><a class="bubble-att" href="<%= a %>" target="_blank" rel="noopener">attachment</a><% }) %>
+    </div>
+  <% }) %>
+</div>
+
+<% if (ticket.status === 'open') { %>
+  <form method="POST" action="/guilds/<%= guild.id %>/tickets/<%= ticket.id %>/reply" class="reply-form">
+    <textarea name="content" rows="3" maxlength="2000" placeholder="Reply as Staff…" required></textarea>
+    <div class="reply-actions">
+      <button type="submit">Send reply</button>
+      <button type="submit" formaction="/guilds/<%= guild.id %>/tickets/<%= ticket.id %>/close" formnovalidate class="secondary" data-confirm="Close ticket #<%= ticket.id %>?">Close ticket</button>
+    </div>
+    <p class="muted small">Type a message and hit <em>Close ticket</em> to send it as the final reply and close. Close with the box empty to send the default closing notice.</p>
+  </form>
+<% } else { %>
+  <p class="muted">This ticket is closed. The member can open a new one by DMing the bot again.</p>
+<% } %>
+
+<script>
+  (() => {
+    const chat = document.getElementById('chat');
+    if (!chat) return;
+    chat.scrollTop = chat.scrollHeight;
+    // Only poll while the ticket is open; a closed ticket has nothing to stream.
+    if (chat.dataset.status !== 'open') return;
+    let last = Number(chat.dataset.last) || 0;
+    const url = chat.dataset.poll;
+    const timer = setInterval(async () => {
+      try {
+        const r = await fetch(url + '?after=' + last);
+        if (!r.ok) return;
+        const data = await r.json();
+        for (const m of data.messages) {
+          last = m.id;
+          const el = document.createElement('div');
+          el.className = 'bubble ' + m.kind;
+          el.innerHTML = '<div class="bubble-meta">' + m.who + ' · just now</div>' +
+            (m.content ? '<div class="bubble-body"></div>' : '');
+          if (m.content) el.querySelector('.bubble-body').textContent = m.content;
+          chat.appendChild(el);
+        }
+        if (data.messages.length) chat.scrollTop = chat.scrollHeight;
+        if (data.status !== 'open') { clearInterval(timer); location.reload(); }
+      } catch {}
+    }, 6000);
+  })();
+</script>
+
+<%- include('partials/footer') %>

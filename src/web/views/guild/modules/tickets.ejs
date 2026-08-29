@@ -1,0 +1,31 @@
+<% var cfg = moduleConfig || {}; var staff = Array.isArray(cfg.staffRoles) ? cfg.staffRoles : []; %>
+
+<p class="muted small">
+  Members open a ticket by sending the bot a direct message. Staff read and reply here — replies reach the member as an
+  anonymous “Staff” DM. Manage the queue under <a href="/guilds/<%= guild.id %>/tickets">Tickets</a>.
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/tickets/config" class="stack" style="max-width:600px">
+  <label>Greeting sent when a ticket opens <span class="muted small">— {server} is replaced</span></label>
+  <textarea name="greeting" rows="2" placeholder="Thanks for contacting the staff of {server}…"><%= cfg.greeting || '' %></textarea>
+
+  <label>Message sent when a ticket is closed</label>
+  <textarea name="closeMessage" rows="2" placeholder="This ticket has been closed…"><%= cfg.closeMessage || '' %></textarea>
+
+  <label>Staff notification channel <span class="muted small">— optional, pinged on new tickets/replies</span></label>
+  <select name="notifyChannel">
+    <option value="">— none —</option>
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= c.id === (cfg.notifyChannel || '') ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+
+  <label>Staff roles <span class="muted small">— may read/reply to tickets even without Manage Server</span></label>
+  <select name="staffRoles" multiple size="6">
+    <% roles.forEach(function (r) { %>
+      <option value="<%= r.id %>" <%= staff.includes(r.id) ? 'selected' : '' %>><%= r.name %></option>
+    <% }) %>
+  </select>
+
+  <div><button type="submit">Save</button></div>
+</form>

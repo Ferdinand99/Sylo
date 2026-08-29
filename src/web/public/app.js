@@ -22,7 +22,8 @@
 
   // --- Confirm-on-submit / confirm-on-click -----------------------------
   document.addEventListener('submit', (e) => {
-    const msg = e.target.getAttribute('data-confirm');
+    // data-confirm may sit on the <form> or on the submitter <button>.
+    const msg = e.submitter?.getAttribute('data-confirm') || e.target.getAttribute('data-confirm');
     if (msg && !window.confirm(msg)) e.preventDefault();
   });
   document.addEventListener('click', (e) => {

@@ -37,6 +37,15 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'tickets',
+    name: 'Tickets (modmail)',
+    description: 'Members DM the bot; staff read and reply from this dashboard.',
+    icon: '🎫',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
+  {
     id: 'roles',
     name: 'Reaction roles & autoroles',
     description: 'Self-assign roles from a message; roles automatically on join.',

@@ -19,17 +19,28 @@ self-hosting on an **Unraid server via Docker**.
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
+- **Per-guild modules** — toggle and configure feature groups from the dashboard:
+  - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
+  - **Server logging** — member / message / role / channel events to a log channel
+  - **Reaction roles & autoroles** — dashboard-built reaction-role embeds; roles on join
+  - **Welcome & leave** — join/leave messages with placeholders, optional DM
+  - **Sticky messages** — keep a message pinned to the bottom of a channel
+  - **Tickets (modmail)** — members DM the bot; staff read and reply from the
+    dashboard (replies arrive as an anonymous "Staff" DM)
+  - Placeholders for custom commands, scheduled messages, leveling and automod
+- **Command management** — disable a command per server or restrict it to
+  channels / roles (admins bypass).
 - **Web dashboard** (Express + EJS, no frontend framework)
   - `GET /health` — JSON status (uptime, guild count, last error) for healthchecks
   - `/` — bot online/offline, server list, recently queried stats
-  - `/commands` — list of the slash commands the bot currently has loaded
-  - `/stats` — browse cached lookups
-  - `/guilds/<id>` — per-server page: set the **mod-log channel**, **add** and
-    browse **warnings** (DMs the user + posts to the mod-log), and list **bans**
-  - **Discord OAuth2 login** (optional) — gate the dashboard to server admins;
-    runs open on a trusted LAN when unconfigured. See *Dashboard authentication*.
-- **SQLite persistence** (`better-sqlite3`) — guild settings, warnings, and a TTL
-  stats cache, stored in a single file so it lives on a mounted volume.
+  - `/commands` — slash-command reference · `/stats` — cached lookups
+  - `/guilds/<id>` — per-server control panel: module sidebar, General settings,
+    Commands, Moderation (warnings + bans), and Tickets
+  - **Discord OAuth2 login** (optional) — gate the dashboard to server admins
+    (and configurable staff roles for tickets); runs open on a trusted LAN when
+    unconfigured. See *Dashboard authentication*.
+- **SQLite persistence** (`better-sqlite3`) — guild settings, module config,
+  warnings, tickets and a TTL stats cache, in a single volume-mounted file.
 - **Lean Docker image** — multi-stage `node:20-alpine`, non-root, `HEALTHCHECK`.
 
 ## Project structure
@@ -40,30 +51,27 @@ src/
   config.js             Loads/validates env vars
   runtime.js            Shared in-memory state (uptime, last error, client)
   bot/
-    index.js            Discord client bootstrap
-    loadCommands.js     Command loader (shared with the register script)
-    registerCommands.js Slash command registration via REST
-    commands/           ping.js, stats.js, kick/ban/unban/timeout/untimeout/
-                        purge/slowmode/warn/modlog.js
-    events/             ready.js, interactionCreate.js
-    embeds/             battlefieldStats.js
-    lib/                duration.js, moderation.js, modlog.js
-  adapters/games/
-    gameAdapter.js      Shared interface + typed errors
-    registry.js         id -> adapter map
-    index.js            Registers all adapters
-    battlefield.js      gametools.network implementation
+    index.js            Discord client bootstrap (intents, partials)
+    loadCommands.js / registerCommands.js
+    commands/           ping, stats, kick/ban/unban/timeout/untimeout/
+                        purge/slowmode/warn/modlog
+    events/             ready, interactionCreate, moduleEvents (gateway → modules),
+                        dmTickets (DM → ticket)
+    embeds/ lib/        embed builders; duration, moderation, modlog helpers
+  modules/
+    registry.js         module catalogue (id, intents, defaults)
+    dispatch.js         fans gateway events out to enabled modules
+    index.js            loads module implementations
+    logging.js welcome.js roles.js sticky.js moderation.js tickets.js
+  adapters/games/       gameAdapter, registry, battlefield
   db/
     index.js            SQLite connection + migrations
-    cache.js            TTL stats cache
-    guildSettings.js    Per-guild settings (mod-log channel, …)
-    warnings.js         Warning records
+    cache, guildSettings, modules, commandOverrides, warnings, tickets
   web/
     server.js           Express app
-    routes/             health.js, dashboard.js, commands.js, stats.js, guilds.js
-    middleware/auth.js  Discord OAuth2 login + requireAuth / requireGuildAdmin
-    lib/                format.js, discord.js, asyncHandler.js
-    views/ public/      EJS templates, styles.css, app.js
+    routes/             health, dashboard, commands, stats, guilds, guildTickets
+    middleware/         auth (OAuth2), ticketAccess
+    lib/ views/ public/ helpers; EJS templates; styles.css, app.js
 scripts/register-commands.js
 test/                   battlefield.adapter.test.js, duration.test.js
 data/                   SQLite file lives here (git-ignored, volume-mounted)
@@ -123,16 +131,21 @@ owner) in that server. `/health` stays public for the container healthcheck.
 ## Discord application setup
 
 1. <https://discord.com/developers/applications> → **New Application**.
-2. **Bot** tab → **Reset Token** → copy into `DISCORD_TOKEN`. No privileged
-   intents are required.
+2. **Bot** tab → **Reset Token** → copy into `DISCORD_TOKEN`. Under *Privileged
+   Gateway Intents* enable **Server Members** and **Message Content** if you want
+   the member/message-driven modules (logging, welcome, autoroles, leveling,
+   automod); a verified bot may need Discord's approval for Message Content.
+   Otherwise set `INTENT_GUILD_MEMBERS=false` / `INTENT_MESSAGE_CONTENT=false`.
 3. **General Information** → copy **Application ID** into `DISCORD_CLIENT_ID`.
 4. **OAuth2 → URL Generator** → scopes `bot` + `applications.commands`. Bot
    permissions:
    - **Send Messages**, **Embed Links** — always
    - **Kick Members**, **Ban Members**, **Moderate Members**, **Manage Messages**,
-     **Manage Channels** — for the moderation commands (skip any you don't want)
+     **Manage Channels** — moderation
+   - **Manage Roles** — reaction roles / autoroles
 
-   Open the generated URL to invite the bot.
+   Open the generated URL to invite the bot. Tickets (modmail) need no extra
+   permission — just leave the bot able to receive DMs.
 5. For moderation to work, drag **Sylo's role above the roles of the members it
    should manage** in *Server Settings → Roles*. The bot can never kick/ban/timeout
    someone whose highest role sits above its own.

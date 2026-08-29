@@ -233,3 +233,28 @@ button.secondary:hover { border-color: var(--accent); }
 .emoji-cell { background: none; border: 0; cursor: pointer; font-size: 18px; padding: 3px; border-radius: 6px; line-height: 1; }
 .emoji-cell:hover { background: var(--bg); }
 .emoji-cell img { width: 22px; height: 22px; object-fit: contain; }
+
+/* --- Tickets --- */
+.nav-badge { background: var(--bad); color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 6px; }
+.ticket-list { list-style: none; padding: 0; margin: 8px 0; }
+.ticket-list li { border-bottom: 1px solid var(--border); }
+.ticket-list li:last-child { border-bottom: 0; }
+.ticket-list a { display: grid; grid-template-columns: 200px 1fr auto; gap: 12px; padding: 10px 6px; align-items: baseline; text-decoration: none; color: var(--text); }
+.ticket-list a:hover { background: var(--bg); }
+.ticket-list li.unread .t-user { font-weight: 700; }
+.ticket-list li.unread .t-user::before { content: "● "; color: var(--bad); }
+.ticket-list .t-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ticket-list.closed { opacity: 0.65; }
+
+.chat { border: 1px solid var(--border); border-radius: 10px; padding: 14px; max-height: 55vh; overflow-y: auto; background: var(--bg); display: flex; flex-direction: column; gap: 8px; }
+.bubble { max-width: 78%; padding: 8px 12px; border-radius: 12px; }
+.bubble.user { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); }
+.bubble.staff { align-self: flex-end; background: rgba(74,163,223,0.15); border: 1px solid rgba(74,163,223,0.35); }
+.bubble.system { align-self: center; background: none; color: var(--muted); font-size: 12px; padding: 2px; }
+.bubble-meta { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.bubble-body { white-space: pre-wrap; word-break: break-word; }
+.bubble-att { display: inline-block; margin-top: 4px; font-size: 12px; }
+
+.reply-form { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.reply-form textarea { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; resize: vertical; }
+.reply-actions { display: flex; gap: 10px; }

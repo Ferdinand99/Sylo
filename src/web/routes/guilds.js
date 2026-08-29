@@ -25,7 +25,7 @@ import { parseEmoji, createReactionMessage } from '../../modules/roles.js';
 const router = Router();
 
 // Module ids that have a real settings partial (views/guild/modules/<id>.ejs).
-const CONFIG_VIEWS = new Set(['moderation', 'logging', 'welcome', 'roles', 'sticky']);
+const CONFIG_VIEWS = new Set(['moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets']);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
 
@@ -176,7 +176,7 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
-    roles: mod.id === 'roles' ? assignableRoles(req.guild) : [],
+    roles: (mod.id === 'roles' || mod.id === 'tickets') ? assignableRoles(req.guild) : [],
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
   });
 });
@@ -234,6 +234,13 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
       }))
       .filter((s) => /^\d{17,20}$/.test(s.channelId) && s.content.trim() !== '');
     config = { stickies };
+  } else if (mod.id === 'tickets') {
+    config = {
+      greeting: String(req.body.greeting ?? '').slice(0, 1500),
+      closeMessage: String(req.body.closeMessage ?? '').slice(0, 1500),
+      notifyChannel: /^\d{17,20}$/.test(req.body.notifyChannel ?? '') ? req.body.notifyChannel : '',
+      staffRoles: [].concat(req.body.staffRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)),
+    };
   } else {
     return res.redirect(back);
   }
