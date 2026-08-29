@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/Ferdinand99/Sylo/compare/v1.2.0...v1.3.0) (2026-08-29)
+
+
+### Features
+
+* moderation dashboard — mod-log channel, warnings (view + add), bans ([740ea65](https://github.com/Ferdinand99/Sylo/commit/740ea65f24dc75bbf5b0ac9e82747ebd687135be))
+
 ## [1.2.0](https://github.com/Ferdinand99/Sylo/compare/v1.1.0...v1.2.0) (2026-08-28)
 
 
