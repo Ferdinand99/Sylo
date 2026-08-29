@@ -24,6 +24,12 @@ self-hosting on an **Unraid server via Docker**.
   - `/` — bot online/offline, server list, recently queried stats
   - `/commands` — list of the slash commands the bot currently has loaded
   - `/stats` — browse cached lookups
+  - `/guilds/<id>` — per-server page: set the **mod-log channel**, **add** and
+    browse **warnings** (DMs the user + posts to the mod-log, attributed to
+    "Dashboard"), and list **bans**
+  - ⚠️ **No authentication yet.** The dashboard can change settings and shows
+    ban lists — keep it on `localhost` / a trusted LAN until Discord OAuth2 is
+    added (`src/web/middleware/auth.js`).
 - **SQLite persistence** (`better-sqlite3`) — guild settings, warnings, and a TTL
   stats cache, stored in a single file so it lives on a mounted volume.
 - **Lean Docker image** — multi-stage `node:20-alpine`, non-root, `HEALTHCHECK`.
@@ -56,8 +62,9 @@ src/
     warnings.js         Warning records
   web/
     server.js           Express app
-    routes/             health.js, dashboard.js, commands.js, stats.js
+    routes/             health.js, dashboard.js, commands.js, stats.js, guilds.js
     middleware/auth.js  No-op requireAdmin (OAuth2-ready)
+    lib/                format.js, discord.js, asyncHandler.js
     views/ public/      EJS templates + styles.css
 scripts/register-commands.js
 test/                   battlefield.adapter.test.js, duration.test.js

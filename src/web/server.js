@@ -8,6 +8,7 @@ import healthRouter from './routes/health.js';
 import dashboardRouter from './routes/dashboard.js';
 import statsRouter from './routes/stats.js';
 import commandsRouter from './routes/commands.js';
+import guildsRouter from './routes/guilds.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -18,11 +19,13 @@ export function createApp() {
   app.set('view engine', 'ejs');
   app.set('views', join(here, 'views'));
   app.use(express.static(join(here, 'public')));
+  app.use(express.urlencoded({ extended: false }));
 
   app.use('/health', healthRouter);
   app.use('/', dashboardRouter);
   app.use('/stats', statsRouter);
   app.use('/commands', commandsRouter);
+  app.use('/guilds', guildsRouter);
 
   // Central error handler — keep the server up, record the error for the dashboard.
   // eslint-disable-next-line no-unused-vars

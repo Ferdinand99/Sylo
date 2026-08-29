@@ -1,9 +1,10 @@
 // Authentication middleware.
 //
-// v1 has no auth — the dashboard is read-only and exposes no secrets. This
-// module exists so admin-only routes can adopt real auth later without
-// restructuring the routers: wrap a route with `requireAdmin` and implement
-// the Discord OAuth2 flow here.
+// There is no auth yet. The dashboard can now change guild settings (mod-log
+// channel) and view ban/warning lists, so it MUST NOT be exposed beyond
+// localhost or a trusted LAN until this is implemented. `requireAdmin` is
+// already applied to the mutating routes so a real check only needs filling in
+// here.
 //
 // Planned flow:
 //   1. GET /auth/login  -> redirect to Discord OAuth2 (scope: identify, guilds)

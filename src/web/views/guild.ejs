@@ -1,0 +1,91 @@
+<%- include('partials/header', { title: `Sylo — ${guild.name}` }) %>
+
+<p class="muted"><a href="/">&larr; Dashboard</a></p>
+<h1 class="page-title"><%= guild.name %></h1>
+<p class="muted"><%= guild.memberCount %> members · <span class="mono"><%= guild.id %></span></p>
+
+<% if (msg) { %>
+  <div class="banner <%= msg === 'saved' || msg === 'cleared' ? 'ok' : 'bad' %>">
+    <%
+      const messages = {
+        saved: 'Mod-log channel saved.',
+        cleared: 'Mod-log logging disabled.',
+        badchannel: 'That channel is not a text channel in this server.',
+        perms: 'The bot lacks View Channel / Send Messages / Embed Links in that channel.',
+        warned: 'Warning added.',
+        baduser: 'Enter a valid user ID (or @mention) and a reason.',
+        botuser: "You can't warn a bot.",
+      };
+    %><%= messages[msg] || 'Done.' %>
+  </div>
+<% } %>
+
+<section class="card">
+  <h2>Moderation log channel</h2>
+  <p class="muted">Where <code>/kick</code>, <code>/ban</code>, <code>/timeout</code>, <code>/warn</code> and the other moderation actions are posted.</p>
+  <form method="POST" action="/guilds/<%= guild.id %>/modlog" class="row-form">
+    <select name="channelId">
+      <option value="" <%= modlogChannelId === '' ? 'selected' : '' %>>— disabled —</option>
+      <% channels.forEach(function (c) { %>
+        <option value="<%= c.id %>" <%= c.id === modlogChannelId ? 'selected' : '' %>>#<%= c.name %></option>
+      <% }) %>
+    </select>
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Warnings <span class="muted">(<%= warningShown %><%= warningTotal > warningShown ? ` of ${warningTotal}` : '' %>)</span></h2>
+
+  <form method="POST" action="/guilds/<%= guild.id %>/warnings" class="row-form">
+    <input type="text" name="userId" placeholder="User ID or @mention" pattern="(&lt;@!?\d+&gt;)|(\d{17,20})" required />
+    <input type="text" name="reason" placeholder="Reason" maxlength="400" required class="grow" />
+    <button type="submit">Add warning</button>
+  </form>
+  <p class="muted small">Issued as “Dashboard”. The user is DM'd and the action is sent to the mod-log.</p>
+
+  <% if (warnings.length === 0) { %>
+    <p class="muted">No warnings recorded in this server.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>ID</th><th>User</th><th>Moderator</th><th>Reason</th><th>When</th></tr></thead>
+      <tbody>
+        <% warnings.forEach(function (w) { %>
+          <tr>
+            <td>#<%= w.id %></td>
+            <td><%= w.user %> <span class="muted mono"><%= w.userId %></span></td>
+            <td><%= w.moderator %></td>
+            <td><%= w.reason %></td>
+            <td class="muted"><%= w.ago %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <p class="muted small">Remove or clear warnings from Discord with <code>/warn remove</code> and <code>/warn clear</code>.</p>
+  <% } %>
+</section>
+
+<section class="card">
+  <h2>Bans <span class="muted">(<%= bansShown %><%= bansTotal > bansShown ? ` of ${bansTotal}, first ${banLimit} shown` : '' %>)</span></h2>
+  <% if (bansError) { %>
+    <p class="warn-text">⚠️ <%= bansError %></p>
+  <% } else if (bans.length === 0) { %>
+    <p class="muted">No active bans in this server.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>User</th><th>ID</th><th>Reason</th></tr></thead>
+      <tbody>
+        <% bans.forEach(function (b) { %>
+          <tr>
+            <td><%= b.tag %></td>
+            <td class="mono"><%= b.id %></td>
+            <td><%= b.reason %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <p class="muted small">Lift a ban from Discord with <code>/unban &lt;user_id&gt;</code>.</p>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

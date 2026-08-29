@@ -8,7 +8,7 @@ import {
 } from 'discord.js';
 import { MOD_COLOR, INFO_COLOR, notifyTarget, resultEmbed } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
-import { addWarning, listWarnings, removeWarning, clearWarnings } from '../../db/warnings.js';
+import { addWarning, listWarnings, getWarning, removeWarning, clearWarnings } from '../../db/warnings.js';
 
 export const data = new SlashCommandBuilder()
   .setName('warn')
@@ -99,9 +99,10 @@ export async function execute(interaction) {
     } else {
       embed.setDescription(`${rows.length} warning${rows.length === 1 ? '' : 's'} on record.`);
       for (const w of rows.slice(0, 25)) {
+        const by = /^\d+$/.test(w.moderator_id) ? `<@${w.moderator_id}>` : 'Dashboard';
         embed.addFields({
           name: `#${w.id} · <t:${Math.floor(w.created_at / 1000)}:d>`,
-          value: `By <@${w.moderator_id}> — ${w.reason}`,
+          value: `By ${by} — ${w.reason}`,
         });
       }
     }
@@ -111,11 +112,26 @@ export async function execute(interaction) {
 
   if (sub === 'remove') {
     const id = interaction.options.getInteger('id', true);
-    const ok = removeWarning(guildId, id);
-    await interaction.reply({
-      content: ok ? `✅ Removed warning #${id}.` : `⚠️ No warning #${id} in this server.`,
-      flags: MessageFlags.Ephemeral,
-    });
+    const existing = getWarning(guildId, id);
+    if (!existing || !removeWarning(guildId, id)) {
+      await interaction.reply({ content: `⚠️ No warning #${id} in this server.`, flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply();
+    const target = await interaction.client.users.fetch(existing.user_id).catch(() => null);
+    const embed = new EmbedBuilder()
+      .setColor(MOD_COLOR)
+      .setTitle('Warning removed')
+      .addFields(
+        { name: 'Warning ID', value: `#${id}` },
+        { name: 'User', value: target ? `${target.tag} (\`${existing.user_id}\`)` : `\`${existing.user_id}\`` },
+        { name: 'Original reason', value: existing.reason },
+        { name: 'Removed by', value: interaction.user.tag }
+      )
+      .setTimestamp(Date.now());
+    await interaction.editReply({ embeds: [embed] });
+    await postModLog(interaction.guild, embed);
     return;
   }
 

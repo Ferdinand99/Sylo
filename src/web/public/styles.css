@@ -53,7 +53,43 @@ main { max-width: 960px; margin: 24px auto; padding: 0 24px; }
 .card h2 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
 .big { font-size: 28px; font-weight: 700; margin: 4px 0; }
 .muted { color: var(--muted); }
+.muted.small, .small { font-size: 12px; }
 .mono, .card pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+td .mono { margin-left: 6px; opacity: 0.7; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.page-title { margin: 4px 0 2px; font-size: 22px; }
+
+.banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 14px; }
+.banner.ok { background: rgba(63, 185, 80, 0.14); color: var(--ok); }
+.banner.bad { background: rgba(248, 81, 73, 0.14); color: var(--bad); }
+.warn-text { color: var(--warn); }
+
+.row-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.row-form select,
+.row-form input[type="text"] {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font: inherit;
+  min-width: 220px;
+}
+.row-form input.grow { flex: 1; min-width: 240px; }
+.row-form button {
+  background: var(--accent);
+  color: #06121a;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.row-form button:hover { filter: brightness(1.08); }
 
 .status.ok .big { color: var(--ok); }
 .status.bad .big { color: var(--bad); }
