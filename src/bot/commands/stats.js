@@ -20,6 +20,9 @@ const BF_TITLES = [
   { name: 'Battlefield 6 (beta)', value: 'bf6' },
 ];
 
+/** Same list, exported for the dashboard's per-guild default-title setting. */
+export const BF_TITLE_CHOICES = BF_TITLES;
+
 // Superset of platform ids across all Battlefield titles. The adapter validates
 // the title/platform combination and returns a friendly error for mismatches.
 const BF_PLATFORMS = [

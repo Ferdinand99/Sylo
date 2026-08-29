@@ -1,96 +1,136 @@
 <%- include('partials/header', { title: `Sylo — ${guild.name}` }) %>
 
 <p class="muted"><a href="/">&larr; Dashboard</a></p>
-<h1 class="page-title"><%= guild.name %></h1>
-<p class="muted"><%= guild.memberCount %> members · <span class="mono"><%= guild.id %></span></p>
+<div class="guild-head">
+  <% if (guild.icon) { %><img class="guild-icon" src="<%= guild.icon %>" alt="" /><% } %>
+  <div>
+    <h1 class="page-title"><%= guild.name %></h1>
+    <p class="muted"><%= guild.memberCount %> members · <span class="mono"><%= guild.id %></span></p>
+  </div>
+</div>
 
-<% if (msg) { %>
-  <%
-    const messages = {
-      saved: 'Mod-log channel saved.',
-      cleared: 'Mod-log logging disabled.',
-      badchannel: 'That channel is not a text channel in this server.',
-      perms: 'The bot lacks View Channel / Send Messages / Embed Links in that channel.',
-      warned: 'Warning added.',
-      'warned-nolog': 'Warning added — but no mod-log channel is set, so it wasn\'t logged. Set one above.',
-      baduser: 'Enter a valid user ID (or @mention) and a reason.',
-      botuser: "You can't warn a bot.",
-    };
-    const bannerClass = ['saved', 'cleared', 'warned'].includes(msg)
-      ? 'ok'
-      : msg === 'warned-nolog'
-        ? 'info'
-        : 'bad';
-  %>
-  <div class="banner <%= bannerClass %>"><%= messages[msg] || 'Done.' %></div>
+<% if (typeof msg !== 'undefined' && msg) {
+     const messages = {
+       saved: 'Saved.', cleared: 'Mod-log logging disabled.',
+       badchannel: 'That channel is not a usable text channel.',
+       badtitle: 'Unknown Battlefield title.',
+       badcommand: 'Unknown command.',
+       perms: 'The bot lacks View Channel / Send Messages / Embed Links there.',
+       warned: 'Warning added.',
+       'warned-nolog': 'Warning added — no mod-log channel is set, so it was not logged.',
+       baduser: 'Enter a valid user ID (or @mention) and a reason.',
+       botuser: "You can't warn a bot.",
+     };
+     const ok = ['saved', 'cleared', 'warned'].includes(msg);
+     const cls = ok ? 'ok' : (msg === 'warned-nolog' ? 'info' : 'bad');
+%>
+  <div class="banner <%= cls %>"><%= messages[msg] || 'Done.' %></div>
 <% } %>
 
-<section class="card">
-  <h2>Moderation log channel</h2>
-  <p class="muted">Where <code>/kick</code>, <code>/ban</code>, <code>/timeout</code>, <code>/warn</code> and the other moderation actions are posted.</p>
-  <form method="POST" action="/guilds/<%= guild.id %>/modlog" class="row-form">
-    <select name="channelId">
-      <option value="" <%= modlogChannelId === '' ? 'selected' : '' %>>— disabled —</option>
-      <% channels.forEach(function (c) { %>
-        <option value="<%= c.id %>" <%= c.id === modlogChannelId ? 'selected' : '' %>>#<%= c.name %></option>
+<div class="guild-layout">
+  <nav class="guild-nav">
+    <a href="/guilds/<%= guild.id %>/overview" class="<%= panel === 'overview' ? 'active' : '' %>">Overview</a>
+    <a href="/guilds/<%= guild.id %>/general" class="<%= panel === 'general' ? 'active' : '' %>">General</a>
+    <a href="/guilds/<%= guild.id %>/commands" class="<%= panel === 'commands' ? 'active' : '' %>">Commands</a>
+    <a href="/guilds/<%= guild.id %>/moderation" class="<%= panel === 'moderation' ? 'active' : '' %>">Moderation</a>
+    <div class="guild-nav-sep">Modules</div>
+    <% modules.forEach(function (m) { %>
+      <a href="/guilds/<%= guild.id %>/m/<%= m.id %>" class="mod-link <%= panel === ('m/' + m.id) ? 'active' : '' %>">
+        <span><%= m.icon %> <%= m.name %></span>
+        <span class="dot <%= m.enabled ? 'on' : 'off' %>"></span>
+      </a>
+    <% }) %>
+  </nav>
+
+  <section class="guild-panel">
+    <% if (panel === 'overview') { %>
+      <h2>Modules</h2>
+      <p class="muted">Turn features on per server. Configuration for each module lands in later releases.</p>
+      <div class="module-grid">
+        <% modules.forEach(function (m) { %>
+          <div class="module-card">
+            <div class="module-card-head">
+              <span class="module-icon"><%= m.icon %></span>
+              <label class="switch">
+                <input type="checkbox" class="module-toggle" data-guild="<%= guild.id %>" data-module="<%= m.id %>"
+                  <%= m.enabled ? 'checked' : '' %> <%= m.missingIntents.length ? 'disabled' : '' %> />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <h3><%= m.name %></h3>
+            <p class="muted small"><%= m.description %></p>
+            <% if (m.missingIntents.length) { %>
+              <p class="warn-text small">Needs intent: <%= m.missingIntents.join(', ') %></p>
+            <% } %>
+          </div>
+        <% }) %>
+      </div>
+
+    <% } else if (panel === 'general') { %>
+      <h2>General</h2>
+      <form method="POST" action="/guilds/<%= guild.id %>/general" class="stack">
+        <label>Default Battlefield title <span class="muted small">— used by <code>/stats</code> when none is given (coming soon)</span></label>
+        <select name="defaultTitle">
+          <option value="">— none —</option>
+          <% titleChoices.forEach(function (t) { %>
+            <option value="<%= t.value %>" <%= t.value === defaultTitle ? 'selected' : '' %>><%= t.name %></option>
+          <% }) %>
+        </select>
+
+        <label>Moderation log channel</label>
+        <select name="modlogChannelId">
+          <option value="">— disabled —</option>
+          <% channels.forEach(function (c) { %>
+            <option value="<%= c.id %>" <%= c.id === modlogChannelId ? 'selected' : '' %>>#<%= c.name %></option>
+          <% }) %>
+        </select>
+
+        <div><button type="submit">Save</button></div>
+      </form>
+
+    <% } else if (panel === 'commands') { %>
+      <h2>Commands</h2>
+      <p class="muted">Disable a command in this server, or restrict it to channels / roles. Administrators always bypass these limits.</p>
+      <% commands.forEach(function (c) { %>
+        <form method="POST" action="/guilds/<%= guild.id %>/commands/<%= c.name %>" class="cmd-override">
+          <div class="cmd-override-head">
+            <code>/<%= c.name %></code>
+            <label class="switch">
+              <input type="checkbox" name="enabled" <%= c.enabled ? 'checked' : '' %> />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <p class="muted small"><%= c.description %></p>
+          <label class="small">Limit to channels (comma-separated IDs, blank = all)</label>
+          <input type="text" name="channels" value="<%= c.allowedChannels.join(',') %>" placeholder="e.g. 123, 456" />
+          <label class="small">Limit to roles</label>
+          <select name="roles" multiple size="4">
+            <% roles.forEach(function (r) { %>
+              <option value="<%= r.id %>" <%= c.allowedRoles.includes(r.id) ? 'selected' : '' %>><%= r.name %></option>
+            <% }) %>
+          </select>
+          <div><button type="submit">Save</button></div>
+        </form>
       <% }) %>
-    </select>
-    <button type="submit">Save</button>
-  </form>
-</section>
 
-<section class="card">
-  <h2>Warnings <span class="muted">(<%= warningShown %><%= warningTotal > warningShown ? ` of ${warningTotal}` : '' %>)</span></h2>
+    <% } else if (panel === 'moderation') { %>
+      <%- include('guild/moderation', { guild: guild, warnings: warnings, warningTotal: warningTotal, warningShown: warningShown, bans: bans, bansTotal: bansTotal, bansShown: bansShown, bansError: bansError, banLimit: banLimit }) %>
 
-  <form method="POST" action="/guilds/<%= guild.id %>/warnings" class="row-form">
-    <input type="text" name="userId" placeholder="User ID or @mention" pattern="(&lt;@!?\d+&gt;)|(\d{17,20})" required />
-    <input type="text" name="reason" placeholder="Reason" maxlength="400" required class="grow" />
-    <button type="submit">Add warning</button>
-  </form>
-  <p class="muted small">Issued as “Dashboard”. The user is DM'd and the action is sent to the mod-log.</p>
-
-  <% if (warnings.length === 0) { %>
-    <p class="muted">No warnings recorded in this server.</p>
-  <% } else { %>
-    <table>
-      <thead><tr><th>ID</th><th>User</th><th>Moderator</th><th>Reason</th><th>When</th></tr></thead>
-      <tbody>
-        <% warnings.forEach(function (w) { %>
-          <tr>
-            <td>#<%= w.id %></td>
-            <td><%= w.user %> <span class="muted mono"><%= w.userId %></span></td>
-            <td><%= w.moderator %></td>
-            <td><%= w.reason %></td>
-            <td class="muted"><%= w.ago %></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-    <p class="muted small">Remove or clear warnings from Discord with <code>/warn remove</code> and <code>/warn clear</code>.</p>
-  <% } %>
-</section>
-
-<section class="card">
-  <h2>Bans <span class="muted">(<%= bansShown %><%= bansTotal > bansShown ? ` of ${bansTotal}, first ${banLimit} shown` : '' %>)</span></h2>
-  <% if (bansError) { %>
-    <p class="warn-text">⚠️ <%= bansError %></p>
-  <% } else if (bans.length === 0) { %>
-    <p class="muted">No active bans in this server.</p>
-  <% } else { %>
-    <table>
-      <thead><tr><th>User</th><th>ID</th><th>Reason</th></tr></thead>
-      <tbody>
-        <% bans.forEach(function (b) { %>
-          <tr>
-            <td><%= b.tag %></td>
-            <td class="mono"><%= b.id %></td>
-            <td><%= b.reason %></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-    <p class="muted small">Lift a ban from Discord with <code>/unban &lt;user_id&gt;</code>.</p>
-  <% } %>
-</section>
+    <% } else if (panel.indexOf('m/') === 0 && typeof activeModule !== 'undefined') { %>
+      <h2><%= activeModule.icon %> <%= activeModule.name %></h2>
+      <p><%= activeModule.description %></p>
+      <label class="switch">
+        <input type="checkbox" class="module-toggle" data-guild="<%= guild.id %>" data-module="<%= activeModule.id %>"
+          <%= modules.find(function (x) { return x.id === activeModule.id; }).enabled ? 'checked' : '' %>
+          <%= modules.find(function (x) { return x.id === activeModule.id; }).missingIntents.length ? 'disabled' : '' %> />
+        <span class="slider"></span>
+      </label>
+      <span class="muted">Enable this module</span>
+      <% var mi = modules.find(function (x) { return x.id === activeModule.id; }).missingIntents; %>
+      <% if (mi.length) { %><p class="warn-text small">Needs intent: <%= mi.join(', ') %> — enable it in the Discord Developer Portal.</p><% } %>
+      <p class="muted small">A configuration panel for this module is coming in a later release.</p>
+    <% } %>
+  </section>
+</div>
 
 <%- include('partials/footer') %>

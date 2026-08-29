@@ -1,6 +1,7 @@
 // Push slash command definitions to Discord via the REST API.
 // If config.discordGuildId is set, commands are registered for that single
-// guild (instant — ideal for development). Otherwise they are registered
+// guild (instant — ideal for development) and any leftover GLOBAL commands are
+// cleared so they don't show up twice. Otherwise commands are registered
 // globally (propagation can take up to ~1 hour).
 import { REST, Routes } from 'discord.js';
 import { config } from '../config.js';
@@ -12,14 +13,26 @@ import { config } from '../config.js';
 export async function registerCommands(commands) {
   const body = [...commands.values()].map((c) => c.data.toJSON());
   const rest = new REST({ version: '10' }).setToken(config.discordToken);
+  const clientId = config.discordClientId;
 
-  const route = config.discordGuildId
-    ? Routes.applicationGuildCommands(config.discordClientId, config.discordGuildId)
-    : Routes.applicationCommands(config.discordClientId);
+  if (config.discordGuildId) {
+    await rest.put(Routes.applicationGuildCommands(clientId, config.discordGuildId), { body });
+    // Guild-scoped registration is a dev convenience; wipe any global commands
+    // so users don't see each command duplicated in the picker.
+    try {
+      const global = await rest.get(Routes.applicationCommands(clientId));
+      if (Array.isArray(global) && global.length > 0) {
+        await rest.put(Routes.applicationCommands(clientId), { body: [] });
+        console.log(`[bot] Cleared ${global.length} stale global command(s)`);
+      }
+    } catch (err) {
+      console.warn('[bot] Could not clear global commands:', err.message);
+    }
+    console.log(`[bot] Registered ${body.length} slash command(s) to guild ${config.discordGuildId}`);
+  } else {
+    await rest.put(Routes.applicationCommands(clientId), { body });
+    console.log(`[bot] Registered ${body.length} slash command(s) globally`);
+  }
 
-  await rest.put(route, { body });
-
-  const scope = config.discordGuildId ? `guild ${config.discordGuildId}` : 'globally';
-  console.log(`[bot] Registered ${body.length} slash command(s) ${scope}`);
   return body.length;
 }

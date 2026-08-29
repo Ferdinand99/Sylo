@@ -9,6 +9,13 @@ const upsertModlogStmt = db.prepare(`
     modlog_channel_id = excluded.modlog_channel_id,
     updated_at        = excluded.updated_at
 `);
+const upsertTitleStmt = db.prepare(`
+  INSERT INTO guild_settings (guild_id, default_title, updated_at)
+  VALUES (@guildId, @title, @updatedAt)
+  ON CONFLICT (guild_id) DO UPDATE SET
+    default_title = excluded.default_title,
+    updated_at    = excluded.updated_at
+`);
 
 /**
  * @param {string} guildId
@@ -25,4 +32,14 @@ export function getGuildSettings(guildId) {
  */
 export function setModlogChannel(guildId, channelId) {
   upsertModlogStmt.run({ guildId, channelId, updatedAt: Date.now() });
+}
+
+/**
+ * Set (or clear, with null) the default Battlefield title used by /stats when
+ * the caller omits one.
+ * @param {string} guildId
+ * @param {string | null} title
+ */
+export function setDefaultTitle(guildId, title) {
+  upsertTitleStmt.run({ guildId, title, updatedAt: Date.now() });
 }

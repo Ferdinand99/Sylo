@@ -62,6 +62,31 @@ const MIGRATIONS = [
       CREATE INDEX idx_warnings_guild_user ON warnings (guild_id, user_id);
     `);
   },
+
+  // Module framework: per-guild module enable state + config, and per-guild
+  // command overrides (enable/disable + channel/role restrictions).
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_modules (
+        guild_id   TEXT NOT NULL,
+        module_id  TEXT NOT NULL,
+        enabled    INTEGER NOT NULL DEFAULT 0,
+        config     TEXT NOT NULL DEFAULT '{}',
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, module_id)
+      );
+
+      CREATE TABLE command_overrides (
+        guild_id         TEXT NOT NULL,
+        command_name     TEXT NOT NULL,
+        enabled          INTEGER NOT NULL DEFAULT 1,
+        allowed_channels TEXT NOT NULL DEFAULT '[]',
+        allowed_roles    TEXT NOT NULL DEFAULT '[]',
+        updated_at       INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, command_name)
+      );
+    `);
+  },
 ];
 
 /**

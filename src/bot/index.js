@@ -3,11 +3,24 @@
 import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { config } from '../config.js';
 import { setClient, setLastError } from '../runtime.js';
 import { loadCommands } from './loadCommands.js';
 import { registerCommands } from './registerCommands.js';
+
+/** Build the gateway intent list from config. */
+function buildIntents() {
+  const intents = [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildModeration, // ban add/remove, audit-log-adjacent events
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMessageReactions, // reaction roles
+  ];
+  if (config.intentGuildMembers) intents.push(GatewayIntentBits.GuildMembers);
+  if (config.intentMessageContent) intents.push(GatewayIntentBits.MessageContent);
+  return intents;
+}
 
 const eventsDir = join(dirname(fileURLToPath(import.meta.url)), 'events');
 
@@ -31,8 +44,11 @@ async function loadEvents(client) {
  * @returns {Promise<import('discord.js').Client>}
  */
 export async function startBot() {
-  // Slash commands only — no privileged intents or partials required.
-  const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  const client = new Client({
+    intents: buildIntents(),
+    // Needed to receive reaction/message events for messages not in cache.
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.GuildMember, Partials.User],
+  });
 
   const commands = await loadCommands();
   client.commands = commands;
@@ -50,7 +66,20 @@ export async function startBot() {
     console.error('[bot] Slash command registration failed:', err.message);
   }
 
-  await client.login(config.discordToken);
+  try {
+    await client.login(config.discordToken);
+  } catch (err) {
+    if (err?.code === 'DisallowedIntents' || /disallowed intents/i.test(err?.message ?? '')) {
+      console.error(
+        '[bot] Login failed: this bot is requesting privileged intents that are not enabled.\n' +
+          '      Enable "Server Members Intent" and "Message Content Intent" on the Discord\n' +
+          '      Developer Portal (Bot page) for this application — verified bots may also need\n' +
+          '      Discord approval. To run without them for now, set INTENT_GUILD_MEMBERS=false\n' +
+          '      and/or INTENT_MESSAGE_CONTENT=false.'
+      );
+    }
+    throw err;
+  }
   setClient(client);
   return client;
 }

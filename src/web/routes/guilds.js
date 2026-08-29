@@ -1,59 +1,102 @@
-// Per-guild management: mod-log channel, warnings (view + add), bans.
-// Every route requires the signed-in user to be an admin of that guild
-// (pass-through in open mode).
+// Per-guild control panel: module toggles, general settings, command
+// management, and the moderation panel (warnings + bans). Every route requires
+// the signed-in user to be an admin of that guild (pass-through in open mode).
 import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import { runtime } from '../../runtime.js';
 import { requireGuildAdmin, currentUser } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { getGuild, baseContext } from '../lib/guildContext.js';
 import { guildTextChannels, resolveUserTags } from '../lib/discord.js';
-import { getGuildSettings, setModlogChannel } from '../../db/guildSettings.js';
+import { getModule } from '../../modules/registry.js';
+import { getGuildModule, setGuildModule } from '../../db/modules.js';
+import { getCommandOverrides, setCommandOverride } from '../../db/commandOverrides.js';
+import { getGuildSettings, setModlogChannel, setDefaultTitle } from '../../db/guildSettings.js';
 import { listGuildWarnings, addWarning } from '../../db/warnings.js';
 import { notifyTarget, MOD_COLOR } from '../../bot/lib/moderation.js';
 import { postModLog } from '../../bot/lib/modlog.js';
 import { timeAgo } from '../lib/format.js';
+import { BF_TITLE_CHOICES } from '../../bot/commands/stats.js';
 
 const router = Router();
-
 const BAN_DISPLAY_LIMIT = 200;
-
-// Fallback moderator_id for warnings issued from the dashboard in open mode
-// (no signed-in identity). Rendered as "Dashboard".
 const WEB_MODERATOR = 'web';
 
-/** moderator_id to record for a dashboard action: the Discord user id, else "web". */
 function webModeratorId(req) {
   return currentUser(req)?.id ?? WEB_MODERATOR;
 }
-
-/** Extract a user id from a raw "<@123>" mention or a bare id. */
+function moderatorDisplayName(req) {
+  return currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`;
+}
 function parseUserId(raw) {
   const m = String(raw ?? '').trim().match(/^<@!?(\d{17,20})>$|^(\d{17,20})$/);
   return m ? m[1] || m[2] : null;
 }
 
-/** Resolve the guild from the URL, or null. */
-function getGuild(req) {
-  return runtime.client?.guilds.cache.get(req.params.guildId) ?? null;
+// Resolve the guild (404 if unknown) then require admin — for every /:guildId route.
+function loadGuild(req, res, next) {
+  req.guild = getGuild(req);
+  if (!req.guild) {
+    res.status(404).render('guild-missing', { guildId: req.params.guildId });
+    return;
+  }
+  next();
 }
+router.use('/:guildId', loadGuild, requireGuildAdmin);
 
 router.get('/', (req, res) => res.redirect('/'));
+router.get('/:guildId', (req, res) => res.redirect(`/guilds/${req.params.guildId}/overview`));
+
+// --- Panels ----------------------------------------------------------------
+
+router.get('/:guildId/overview', (req, res) => {
+  res.render('guild', { ...baseContext(req.guild, 'overview') });
+});
+
+router.get('/:guildId/general', (req, res) => {
+  const settings = getGuildSettings(req.guild.id);
+  res.render('guild', {
+    ...baseContext(req.guild, 'general'),
+    defaultTitle: settings?.default_title ?? '',
+    modlogChannelId: settings?.modlog_channel_id ?? '',
+    titleChoices: BF_TITLE_CHOICES,
+    msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+  });
+});
+
+router.get('/:guildId/commands', (req, res) => {
+  const overrides = getCommandOverrides(req.guild.id);
+  const roles = [...req.guild.roles.cache.values()]
+    .filter((r) => r.id !== req.guild.id)
+    .sort((a, b) => b.position - a.position)
+    .map((r) => ({ id: r.id, name: r.name }));
+
+  const commands = [...(runtime.client?.commands?.values() ?? [])]
+    .map(({ data }) => {
+      const ov = overrides.get(data.name);
+      return {
+        name: data.name,
+        description: data.description,
+        enabled: ov ? ov.enabled : true,
+        allowedChannels: ov?.allowedChannels ?? [],
+        allowedRoles: ov?.allowedRoles ?? [],
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  res.render('guild', {
+    ...baseContext(req.guild, 'commands'),
+    commands,
+    roles,
+    msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+  });
+});
 
 router.get(
-  '/:guildId',
-  requireGuildAdmin,
+  '/:guildId/moderation',
   asyncHandler(async (req, res) => {
-    const guild = getGuild(req);
-    if (!guild) {
-      res.status(404).render('guild-missing', { guildId: req.params.guildId });
-      return;
-    }
-
-    const settings = getGuildSettings(guild.id);
+    const guild = req.guild;
     const { rows: warningRows, total: warningTotal } = listGuildWarnings(guild.id, 200);
-
-    // Resolve the user + moderator ids that appear in the warnings (skip the
-    // non-id dashboard marker).
     const tags = await resolveUserTags(
       runtime.client,
       warningRows.flatMap((w) => [w.user_id, w.moderator_id]).filter((id) => /^\d+$/.test(id))
@@ -67,7 +110,6 @@ router.get(
       ago: timeAgo(w.created_at),
     }));
 
-    // Bans (REST). Requires the Ban Members permission.
     let bans = [];
     let bansError = null;
     let bansTotal = 0;
@@ -88,9 +130,7 @@ router.get(
     }
 
     res.render('guild', {
-      guild: { id: guild.id, name: guild.name, memberCount: guild.memberCount ?? 0 },
-      channels: guildTextChannels(guild),
-      modlogChannelId: settings?.modlog_channel_id ?? '',
+      ...baseContext(guild, 'moderation'),
       warnings,
       warningTotal,
       warningShown: warnings.length,
@@ -104,75 +144,93 @@ router.get(
   })
 );
 
-router.post('/:guildId/modlog', requireGuildAdmin, (req, res) => {
-  const guild = getGuild(req);
-  if (!guild) {
-    res.redirect('/');
-    return;
+// A not-yet-built module: show its description + the enable toggle.
+router.get('/:guildId/m/:moduleId', (req, res) => {
+  const mod = getModule(req.params.moduleId);
+  if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
+  res.render('guild', { ...baseContext(req.guild, `m/${mod.id}`), activeModule: mod });
+});
+
+// --- Actions -------------------------------------------------------------
+
+// Toggle a module on/off (JSON, called from app.js).
+router.post('/:guildId/modules/:moduleId', (req, res) => {
+  const mod = getModule(req.params.moduleId);
+  if (!mod) return res.status(404).json({ error: 'Unknown module' });
+  const enabled = Boolean(req.body?.enabled);
+  setGuildModule(req.guild.id, mod.id, { enabled });
+  res.json({ enabled });
+});
+
+router.post('/:guildId/general', (req, res) => {
+  const guild = req.guild;
+  const back = `/guilds/${guild.id}/general`;
+
+  // Default Battlefield title (empty = none).
+  const rawTitle = String(req.body.defaultTitle ?? '').trim();
+  const title = rawTitle === '' ? null : rawTitle;
+  if (title && !BF_TITLE_CHOICES.some((c) => c.value === title)) {
+    return res.redirect(`${back}?msg=badtitle`);
   }
+  setDefaultTitle(guild.id, title);
 
-  const channelId = String(req.body.channelId ?? '').trim();
-
+  // Mod-log channel (empty = disabled).
+  const channelId = String(req.body.modlogChannelId ?? '').trim();
   if (channelId === '') {
     setModlogChannel(guild.id, null);
-    res.redirect(`/guilds/${guild.id}?msg=cleared`);
-    return;
+    return res.redirect(`${back}?msg=saved`);
   }
-
   const channel = guild.channels.cache.get(channelId);
   if (!channel || !guildTextChannels(guild).some((c) => c.id === channelId)) {
-    res.redirect(`/guilds/${guild.id}?msg=badchannel`);
-    return;
+    return res.redirect(`${back}?msg=badchannel`);
   }
-
-  const me = guild.members.me;
-  if (!channel.permissionsFor(me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) {
-    res.redirect(`/guilds/${guild.id}?msg=perms`);
-    return;
+  if (!channel.permissionsFor(guild.members.me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) {
+    return res.redirect(`${back}?msg=perms`);
   }
-
   setModlogChannel(guild.id, channelId);
-  res.redirect(`/guilds/${guild.id}?msg=saved`);
+  res.redirect(`${back}?msg=saved`);
+});
+
+router.post('/:guildId/commands/:command', (req, res) => {
+  const guild = req.guild;
+  const command = req.params.command;
+  if (!runtime.client?.commands?.has(command)) {
+    return res.redirect(`/guilds/${guild.id}/commands?msg=badcommand`);
+  }
+  // Accepts an array (multi-select) or a comma/space-separated string of ids.
+  const toIds = (v) =>
+    (Array.isArray(v) ? v : v == null ? [] : String(v).split(/[\s,]+/))
+      .map((s) => String(s).trim())
+      .filter((s) => /^\d{17,20}$/.test(s));
+
+  setCommandOverride(guild.id, command, {
+    enabled: req.body.enabled === 'on' || req.body.enabled === 'true',
+    allowedChannels: toIds(req.body.channels),
+    allowedRoles: toIds(req.body.roles),
+  });
+  res.redirect(`/guilds/${guild.id}/commands?msg=saved`);
 });
 
 router.post(
   '/:guildId/warnings',
-  requireGuildAdmin,
   asyncHandler(async (req, res) => {
-    const guild = getGuild(req);
-    if (!guild) {
-      res.redirect('/');
-      return;
-    }
-    const back = `/guilds/${guild.id}`;
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/moderation`;
 
     const userId = parseUserId(req.body.userId);
     const reason = String(req.body.reason ?? '').trim().slice(0, 400);
-    if (!userId || reason === '') {
-      res.redirect(`${back}?msg=baduser`);
-      return;
-    }
+    if (!userId || reason === '') return res.redirect(`${back}?msg=baduser`);
 
     const user = await runtime.client.users.fetch(userId).catch(() => null);
-    if (!user) {
-      res.redirect(`${back}?msg=baduser`);
-      return;
-    }
-    if (user.bot) {
-      res.redirect(`${back}?msg=botuser`);
-      return;
-    }
-
-    const moderatorId = webModeratorId(req);
-    const moderatorName = currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`;
+    if (!user) return res.redirect(`${back}?msg=baduser`);
+    if (user.bot) return res.redirect(`${back}?msg=botuser`);
 
     const { id, count } = addWarning({
       guildId: guild.id,
       userId: user.id,
-      moderatorId,
+      moderatorId: webModeratorId(req),
       reason,
     });
-
     const dmed = await notifyTarget(user, {
       guildName: guild.name,
       action: 'warned',
@@ -186,7 +244,7 @@ router.post(
       .setThumbnail(user.displayAvatarURL())
       .addFields(
         { name: 'User', value: `${user.tag} (\`${user.id}\`)` },
-        { name: 'Moderator', value: moderatorName },
+        { name: 'Moderator', value: moderatorDisplayName(req) },
         { name: 'Reason', value: reason },
         { name: 'Warning ID', value: `#${id}` },
         { name: 'Total warnings', value: String(count) },
@@ -194,7 +252,6 @@ router.post(
       )
       .setTimestamp(Date.now());
     const logged = await postModLog(guild, embed);
-
     res.redirect(`${back}?msg=${logged ? 'warned' : 'warned-nolog'}`);
   })
 );

@@ -41,6 +41,13 @@ function optionalOrNull(name) {
   return value && value.trim() !== '' ? value.trim() : null;
 }
 
+/** Read a boolean env var (1/true/yes/on = true). */
+function optionalBool(name, fallback) {
+  const value = process.env[name];
+  if (value == null || value.trim() === '') return fallback;
+  return /^(1|true|yes|on)$/i.test(value.trim());
+}
+
 const cacheTtlMinutes = Number(optional('STATS_CACHE_TTL_MINUTES', '5'));
 if (!Number.isFinite(cacheTtlMinutes) || cacheTtlMinutes <= 0) {
   console.error('[config] STATS_CACHE_TTL_MINUTES must be a positive number.');
@@ -93,6 +100,13 @@ export const config = Object.freeze({
 
   // Persistence
   databasePath: optional('DATABASE_PATH', './data/sylo.db'),
+
+  // Privileged gateway intents. Enable the matching toggles in the Discord
+  // Developer Portal (Bot page). Verified bots may also need Discord's approval.
+  // Turn a flag off to boot without that intent (dependent modules then stay
+  // disabled) rather than hitting a "disallowed intents" login error.
+  intentGuildMembers: optionalBool('INTENT_GUILD_MEMBERS', true),
+  intentMessageContent: optionalBool('INTENT_MESSAGE_CONTENT', true),
 
   // Misc
   nodeEnv: optional('NODE_ENV', 'development'),

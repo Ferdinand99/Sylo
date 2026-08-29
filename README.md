@@ -97,6 +97,8 @@ commands then register instantly instead of taking up to ~1 hour globally.
 | `DISCORD_CLIENT_SECRET`   | no       | —                              | Set to require "Log in with Discord" on the dashboard (see below) |
 | `SESSION_SECRET`          | no       | random                         | Signs the session cookie; pin it so logins survive restarts |
 | `DASHBOARD_URL`           | no       | derived                        | Public dashboard URL; only needed behind a reverse proxy |
+| `INTENT_GUILD_MEMBERS`    | no       | `true`                         | Request the Server Members privileged intent |
+| `INTENT_MESSAGE_CONTENT`  | no       | `true`                         | Request the Message Content privileged intent |
 | `GAMETOOLS_API_BASE`      | no       | `https://api.gametools.network`| Stats API base URL |
 | `STATS_CACHE_TTL_MINUTES` | no       | `5`                            | How long stats lookups are cached |
 | `DATABASE_PATH`           | no       | `./data/sylo.db`               | SQLite file path |

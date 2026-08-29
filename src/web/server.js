@@ -21,6 +21,7 @@ export function createApp() {
   app.set('views', join(here, 'views'));
   app.use(express.static(join(here, 'public')));
   app.use(express.urlencoded({ extended: false }));
+  app.use(express.json());
 
   // Session + res.locals + /auth/* routes. No-op guards in open mode.
   mountAuth(app);

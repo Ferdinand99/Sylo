@@ -32,6 +32,25 @@
     }
   });
 
+  // --- module enable/disable toggles ---------------------------------
+  document.addEventListener('change', async (e) => {
+    const t = e.target;
+    if (!t.classList.contains('module-toggle')) return;
+    const { guild, module: moduleId } = t.dataset;
+    t.disabled = true;
+    try {
+      const data = await window.syloAction(`/guilds/${guild}/modules/${moduleId}`, { enabled: t.checked });
+      t.checked = data.enabled;
+      toast(`${moduleId} ${data.enabled ? 'enabled' : 'disabled'}`);
+      const dot = t.closest('.mod-link')?.querySelector('.dot');
+      if (dot) dot.classList.toggle('on', data.enabled), dot.classList.toggle('off', !data.enabled);
+    } catch {
+      t.checked = !t.checked; // revert
+    } finally {
+      t.disabled = false;
+    }
+  });
+
   // --- fetch helper for JSON actions (used by later phases) ------------
   window.syloAction = async function syloAction(url, body) {
     const res = await fetch(url, {

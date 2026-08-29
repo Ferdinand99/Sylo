@@ -1,10 +1,46 @@
-// Routes incoming slash-command interactions to the matching command module.
+// Routes incoming slash-command interactions to the matching command module,
+// applying per-guild command overrides (disabled / channel / role limits).
 // Every command's execute() is wrapped so a thrown error is logged and shown to
 // the user without ever crashing the process.
-import { Events, MessageFlags } from 'discord.js';
+import { Events, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { setLastError } from '../../runtime.js';
+import { getCommandOverride } from '../../db/commandOverrides.js';
 
 export const name = Events.InteractionCreate;
+
+/**
+ * Check a per-guild command override. Returns a user-facing block reason, or
+ * null when the command may run.
+ *
+ * A full disable applies to everyone (admins included) — if a server turns a
+ * command off, it's off. Channel / role restrictions are bypassed by
+ * administrators.
+ * @param {import('discord.js').ChatInputCommandInteraction} interaction
+ */
+function overrideBlockReason(interaction) {
+  if (!interaction.inGuild()) return null;
+
+  const ov = getCommandOverride(interaction.guildId, interaction.commandName);
+  if (!ov) return null;
+
+  if (!ov.enabled) return 'This command is disabled in this server.';
+
+  if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return null;
+
+  if (ov.allowedChannels.length && !ov.allowedChannels.includes(interaction.channelId)) {
+    return `This command can only be used in: ${ov.allowedChannels.map((c) => `<#${c}>`).join(', ')}.`;
+  }
+
+  if (ov.allowedRoles.length) {
+    const roles = interaction.member?.roles;
+    const ids = roles?.cache ? [...roles.cache.keys()] : Array.isArray(roles) ? roles : [];
+    if (!ov.allowedRoles.some((r) => ids.includes(r))) {
+      return 'You do not have a role allowed to use this command here.';
+    }
+  }
+
+  return null;
+}
 
 /** @param {import('discord.js').Interaction} interaction */
 export async function execute(interaction) {
@@ -13,6 +49,12 @@ export async function execute(interaction) {
   const command = interaction.client.commands.get(interaction.commandName);
   if (!command) {
     console.warn(`[bot] Received unknown command: ${interaction.commandName}`);
+    return;
+  }
+
+  const blocked = overrideBlockReason(interaction);
+  if (blocked) {
+    await interaction.reply({ content: `⚠️ ${blocked}`, flags: MessageFlags.Ephemeral }).catch(() => {});
     return;
   }
 

@@ -1,0 +1,45 @@
+<h2>Warnings <span class="muted">(<%= warningShown %><%= warningTotal > warningShown ? ` of ${warningTotal}` : '' %>)</span></h2>
+
+<form method="POST" action="/guilds/<%= guild.id %>/warnings" class="row-form">
+  <input type="text" name="userId" placeholder="User ID or @mention" required />
+  <input type="text" name="reason" placeholder="Reason" maxlength="400" required class="grow" />
+  <button type="submit">Add warning</button>
+</form>
+<p class="muted small">The user is DM'd and the action is sent to the mod-log (if set).</p>
+
+<% if (warnings.length === 0) { %>
+  <p class="muted">No warnings recorded in this server.</p>
+<% } else { %>
+  <table>
+    <thead><tr><th>ID</th><th>User</th><th>Moderator</th><th>Reason</th><th>When</th></tr></thead>
+    <tbody>
+      <% warnings.forEach(function (w) { %>
+        <tr>
+          <td>#<%= w.id %></td>
+          <td><%= w.user %> <span class="muted mono"><%= w.userId %></span></td>
+          <td><%= w.moderator %></td>
+          <td><%= w.reason %></td>
+          <td class="muted"><%= w.ago %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <p class="muted small">Remove or clear warnings from Discord with <code>/warn remove</code> and <code>/warn clear</code>.</p>
+<% } %>
+
+<h2 style="margin-top:24px">Bans <span class="muted">(<%= bansShown %><%= bansTotal > bansShown ? ` of ${bansTotal}, first ${banLimit}` : '' %>)</span></h2>
+<% if (bansError) { %>
+  <p class="warn-text">⚠️ <%= bansError %></p>
+<% } else if (bans.length === 0) { %>
+  <p class="muted">No active bans in this server.</p>
+<% } else { %>
+  <table>
+    <thead><tr><th>User</th><th>ID</th><th>Reason</th></tr></thead>
+    <tbody>
+      <% bans.forEach(function (b) { %>
+        <tr><td><%= b.tag %></td><td class="mono"><%= b.id %></td><td><%= b.reason %></td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <p class="muted small">Lift a ban from Discord with <code>/unban &lt;user_id&gt;</code>.</p>
+<% } %>
