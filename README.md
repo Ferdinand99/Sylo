@@ -9,6 +9,8 @@ self-hosting on an **Unraid server via Docker**.
 
 - **Discord bot** (discord.js v14, slash commands)
   - `/ping` — health check with gateway + round-trip latency
+  - `/version` — the release this instance is running · `/about` — version,
+    uptime and runtime info
   - `/stats battlefield <title> <username> <platform>` — player stats as an embed
     (K/D, win rate, time played, KPM/SPM, best class, …)
   - Friendly, non-crashing error handling (unknown player, API down, rate-limited)
