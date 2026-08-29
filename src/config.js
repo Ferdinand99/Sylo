@@ -1,6 +1,7 @@
 // Loads and validates environment configuration for Sylo.
 // All secrets and tunables come from environment variables (see .env.example).
 import 'dotenv/config';
+import { randomBytes } from 'node:crypto';
 
 /**
  * Read a required string env var, or exit with a clear message.
@@ -52,6 +53,19 @@ if (!Number.isInteger(webPort) || webPort <= 0 || webPort > 65535) {
   process.exit(1);
 }
 
+// Dashboard auth. When DISCORD_CLIENT_SECRET is set, the dashboard requires
+// "Log in with Discord" and gates actions to guild admins. When unset, the
+// dashboard runs in open mode (localhost / trusted LAN only).
+const discordClientSecret = optionalOrNull('DISCORD_CLIENT_SECRET');
+let sessionSecret = optionalOrNull('SESSION_SECRET');
+if (discordClientSecret && !sessionSecret) {
+  sessionSecret = randomBytes(32).toString('hex');
+  console.warn(
+    '[config] SESSION_SECRET is not set — generated a random one. ' +
+      'Dashboard sessions will not survive a restart until you pin SESSION_SECRET.'
+  );
+}
+
 export const config = Object.freeze({
   // Discord
   discordToken: required('DISCORD_TOKEN'),
@@ -62,6 +76,15 @@ export const config = Object.freeze({
 
   // Web dashboard
   webPort,
+  // Public base URL of the dashboard, used to build the OAuth2 redirect URI.
+  // When null it is derived per-request (fine for direct access; set this
+  // behind a reverse proxy).
+  dashboardUrl: optionalOrNull('DASHBOARD_URL')?.replace(/\/+$/, '') ?? null,
+
+  // Dashboard auth (see above)
+  authEnabled: Boolean(discordClientSecret),
+  discordClientSecret,
+  sessionSecret,
 
   // Game stats
   gametoolsApiBase: optional('GAMETOOLS_API_BASE', 'https://api.gametools.network').replace(/\/+$/, ''),

@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { setLastError } from '../runtime.js';
+import { mountAuth, requireAuth } from './middleware/auth.js';
 import healthRouter from './routes/health.js';
 import dashboardRouter from './routes/dashboard.js';
 import statsRouter from './routes/stats.js';
@@ -21,7 +22,14 @@ export function createApp() {
   app.use(express.static(join(here, 'public')));
   app.use(express.urlencoded({ extended: false }));
 
+  // Session + res.locals + /auth/* routes. No-op guards in open mode.
+  mountAuth(app);
+
+  // Public: healthcheck only.
   app.use('/health', healthRouter);
+
+  // Everything below requires a signed-in user when auth is enabled.
+  app.use(requireAuth);
   app.use('/', dashboardRouter);
   app.use('/stats', statsRouter);
   app.use('/commands', commandsRouter);

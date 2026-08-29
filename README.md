@@ -25,11 +25,9 @@ self-hosting on an **Unraid server via Docker**.
   - `/commands` — list of the slash commands the bot currently has loaded
   - `/stats` — browse cached lookups
   - `/guilds/<id>` — per-server page: set the **mod-log channel**, **add** and
-    browse **warnings** (DMs the user + posts to the mod-log, attributed to
-    "Dashboard"), and list **bans**
-  - ⚠️ **No authentication yet.** The dashboard can change settings and shows
-    ban lists — keep it on `localhost` / a trusted LAN until Discord OAuth2 is
-    added (`src/web/middleware/auth.js`).
+    browse **warnings** (DMs the user + posts to the mod-log), and list **bans**
+  - **Discord OAuth2 login** (optional) — gate the dashboard to server admins;
+    runs open on a trusted LAN when unconfigured. See *Dashboard authentication*.
 - **SQLite persistence** (`better-sqlite3`) — guild settings, warnings, and a TTL
   stats cache, stored in a single file so it lives on a mounted volume.
 - **Lean Docker image** — multi-stage `node:20-alpine`, non-root, `HEALTHCHECK`.
@@ -96,10 +94,29 @@ commands then register instantly instead of taking up to ~1 hour globally.
 | `DISCORD_CLIENT_ID`       | yes      | —                              | Application (client) ID |
 | `DISCORD_GUILD_ID`        | no       | —                              | Register commands to one guild (dev) instead of globally |
 | `WEB_PORT`                | no       | `3000`                         | Dashboard HTTP port |
+| `DISCORD_CLIENT_SECRET`   | no       | —                              | Set to require "Log in with Discord" on the dashboard (see below) |
+| `SESSION_SECRET`          | no       | random                         | Signs the session cookie; pin it so logins survive restarts |
+| `DASHBOARD_URL`           | no       | derived                        | Public dashboard URL; only needed behind a reverse proxy |
 | `GAMETOOLS_API_BASE`      | no       | `https://api.gametools.network`| Stats API base URL |
 | `STATS_CACHE_TTL_MINUTES` | no       | `5`                            | How long stats lookups are cached |
 | `DATABASE_PATH`           | no       | `./data/sylo.db`               | SQLite file path |
 | `NODE_ENV`                | no       | `development`                  | Set to `production` in deployment |
+
+### Dashboard authentication
+
+By default the dashboard runs **open** (no login) — only safe on `localhost` or a
+trusted LAN. To lock it down:
+
+1. Discord Developer Portal → your app → **OAuth2** → copy the **Client Secret**
+   into `DISCORD_CLIENT_SECRET`.
+2. Same page → **Redirects** → add `http://<host>:<WEB_PORT>/auth/callback`
+   (e.g. `http://192.168.1.10:3000/auth/callback`). Behind a reverse proxy, use
+   the public URL and set `DASHBOARD_URL` to match.
+3. Set a long random `SESSION_SECRET` so sessions survive restarts.
+
+With `DISCORD_CLIENT_SECRET` set, every page except `/health` requires "Log in
+with Discord", and per-server pages require **Manage Server** (or Administrator /
+owner) in that server. `/health` stays public for the container healthcheck.
 
 ## Discord application setup
 

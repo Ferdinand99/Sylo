@@ -15,5 +15,16 @@
       <a href="/stats">Stats</a>
       <a href="/health">Health</a>
     </nav>
+    <span class="topbar-user">
+      <% if (typeof user !== 'undefined' && user && !user.open) { %>
+        <% if (user.avatar) { %><img class="avatar" src="<%= user.avatar %>" alt="" /><% } %>
+        <span><%= user.name %></span>
+        <a href="/auth/logout">Log out</a>
+      <% } else if (typeof authEnabled !== 'undefined' && authEnabled) { %>
+        <a href="/auth/login">Log in with Discord</a>
+      <% } else { %>
+        <span class="tag-open">open mode — no auth</span>
+      <% } %>
+    </span>
   </header>
   <main>

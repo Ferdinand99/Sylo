@@ -1,13 +1,10 @@
-// Per-guild moderation view: set the mod-log channel, browse warnings and bans.
-//
-// NOTE: like the rest of the dashboard this has no authentication yet. The
-// requireAdmin stub is applied so a real check (Discord OAuth2) only needs to be
-// implemented in one place. Do not expose this beyond localhost / a trusted LAN
-// until that is done.
+// Per-guild management: mod-log channel, warnings (view + add), bans.
+// Every route requires the signed-in user to be an admin of that guild
+// (pass-through in open mode).
 import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import { runtime } from '../../runtime.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireGuildAdmin, currentUser } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { guildTextChannels, resolveUserTags } from '../lib/discord.js';
 import { getGuildSettings, setModlogChannel } from '../../db/guildSettings.js';
@@ -17,13 +14,17 @@ import { postModLog } from '../../bot/lib/modlog.js';
 import { timeAgo } from '../lib/format.js';
 
 const router = Router();
-router.use(requireAdmin);
 
 const BAN_DISPLAY_LIMIT = 200;
 
-// Marker stored as moderator_id for warnings issued from the dashboard (which
-// has no authenticated user yet). Rendered as "Dashboard" everywhere.
+// Fallback moderator_id for warnings issued from the dashboard in open mode
+// (no signed-in identity). Rendered as "Dashboard".
 const WEB_MODERATOR = 'web';
+
+/** moderator_id to record for a dashboard action: the Discord user id, else "web". */
+function webModeratorId(req) {
+  return currentUser(req)?.id ?? WEB_MODERATOR;
+}
 
 /** Extract a user id from a raw "<@123>" mention or a bare id. */
 function parseUserId(raw) {
@@ -40,6 +41,7 @@ router.get('/', (req, res) => res.redirect('/'));
 
 router.get(
   '/:guildId',
+  requireGuildAdmin,
   asyncHandler(async (req, res) => {
     const guild = getGuild(req);
     if (!guild) {
@@ -102,7 +104,7 @@ router.get(
   })
 );
 
-router.post('/:guildId/modlog', (req, res) => {
+router.post('/:guildId/modlog', requireGuildAdmin, (req, res) => {
   const guild = getGuild(req);
   if (!guild) {
     res.redirect('/');
@@ -135,6 +137,7 @@ router.post('/:guildId/modlog', (req, res) => {
 
 router.post(
   '/:guildId/warnings',
+  requireGuildAdmin,
   asyncHandler(async (req, res) => {
     const guild = getGuild(req);
     if (!guild) {
@@ -160,10 +163,13 @@ router.post(
       return;
     }
 
+    const moderatorId = webModeratorId(req);
+    const moderatorName = currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`;
+
     const { id, count } = addWarning({
       guildId: guild.id,
       userId: user.id,
-      moderatorId: WEB_MODERATOR,
+      moderatorId,
       reason,
     });
 
@@ -180,7 +186,7 @@ router.post(
       .setThumbnail(user.displayAvatarURL())
       .addFields(
         { name: 'User', value: `${user.tag} (\`${user.id}\`)` },
-        { name: 'Moderator', value: 'Dashboard' },
+        { name: 'Moderator', value: moderatorName },
         { name: 'Reason', value: reason },
         { name: 'Warning ID', value: `#${id}` },
         { name: 'Total warnings', value: String(count) },
