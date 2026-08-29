@@ -65,6 +65,7 @@ a:hover { text-decoration: underline; }
 .banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 14px; }
 .banner.ok { background: rgba(63, 185, 80, 0.14); color: var(--ok); }
 .banner.bad { background: rgba(248, 81, 73, 0.14); color: var(--bad); }
+.banner.info { background: rgba(210, 153, 34, 0.14); color: var(--warn); }
 .warn-text { color: var(--warn); }
 
 .row-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }

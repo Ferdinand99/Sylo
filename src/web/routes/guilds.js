@@ -187,9 +187,9 @@ router.post(
         { name: 'Notified', value: dmed ? 'Yes (DM sent)' : 'No (DMs closed)' }
       )
       .setTimestamp(Date.now());
-    await postModLog(guild, embed);
+    const logged = await postModLog(guild, embed);
 
-    res.redirect(`${back}?msg=warned`);
+    res.redirect(`${back}?msg=${logged ? 'warned' : 'warned-nolog'}`);
   })
 );
 

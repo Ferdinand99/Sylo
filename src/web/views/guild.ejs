@@ -5,19 +5,24 @@
 <p class="muted"><%= guild.memberCount %> members · <span class="mono"><%= guild.id %></span></p>
 
 <% if (msg) { %>
-  <div class="banner <%= msg === 'saved' || msg === 'cleared' ? 'ok' : 'bad' %>">
-    <%
-      const messages = {
-        saved: 'Mod-log channel saved.',
-        cleared: 'Mod-log logging disabled.',
-        badchannel: 'That channel is not a text channel in this server.',
-        perms: 'The bot lacks View Channel / Send Messages / Embed Links in that channel.',
-        warned: 'Warning added.',
-        baduser: 'Enter a valid user ID (or @mention) and a reason.',
-        botuser: "You can't warn a bot.",
-      };
-    %><%= messages[msg] || 'Done.' %>
-  </div>
+  <%
+    const messages = {
+      saved: 'Mod-log channel saved.',
+      cleared: 'Mod-log logging disabled.',
+      badchannel: 'That channel is not a text channel in this server.',
+      perms: 'The bot lacks View Channel / Send Messages / Embed Links in that channel.',
+      warned: 'Warning added.',
+      'warned-nolog': 'Warning added — but no mod-log channel is set, so it wasn\'t logged. Set one above.',
+      baduser: 'Enter a valid user ID (or @mention) and a reason.',
+      botuser: "You can't warn a bot.",
+    };
+    const bannerClass = ['saved', 'cleared', 'warned'].includes(msg)
+      ? 'ok'
+      : msg === 'warned-nolog'
+        ? 'info'
+        : 'bad';
+  %>
+  <div class="banner <%= bannerClass %>"><%= messages[msg] || 'Done.' %></div>
 <% } %>
 
 <section class="card">
