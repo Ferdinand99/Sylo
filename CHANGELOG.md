@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/Ferdinand99/Sylo/compare/v1.4.1...v1.5.0) (2026-08-29)
+
+
+### Features
+
+* optional Discord OAuth2 login for the dashboard ([2cac5fe](https://github.com/Ferdinand99/Sylo/commit/2cac5fe090aa5f7192d546c91952ab91a55713d8))
+
 ## [1.4.1](https://github.com/Ferdinand99/Sylo/compare/v1.4.0...v1.4.1) (2026-08-29)
 
 
