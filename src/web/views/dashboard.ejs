@@ -9,12 +9,12 @@
   <div class="card">
     <h2>Servers</h2>
     <p class="big"><%= guildCount %></p>
-    <p class="muted">connected guilds</p>
+    <p class="muted"><%= memberReach.toLocaleString('en') %> members reached</p>
   </div>
   <div class="card">
     <h2>Uptime</h2>
     <p class="big"><%= uptime %></p>
-    <p class="muted">since process start</p>
+    <p class="muted">gateway ping <%= gatewayPing === null ? '—' : gatewayPing + ' ms' %></p>
   </div>
 </section>
 
@@ -25,25 +25,45 @@
   </section>
 <% } %>
 
+<section class="grid">
+  <div class="card">
+    <h2>Open tickets</h2>
+    <p class="big"><%= stats.openTickets %></p>
+    <p class="muted"><%= stats.ticketsTotal %> all-time</p>
+  </div>
+  <div class="card">
+    <h2>Warnings</h2>
+    <p class="big"><%= stats.warningsTotal %></p>
+    <p class="muted"><%= stats.warningsWeek %> in the last 7 days</p>
+  </div>
+  <div class="card">
+    <h2>Composed messages</h2>
+    <p class="big"><%= stats.composedTotal %></p>
+    <p class="muted">sent via Message Creator</p>
+  </div>
+  <div class="card">
+    <h2>Cached stat lookups</h2>
+    <p class="big"><%= stats.cachedLookups %></p>
+    <p class="muted">Battlefield player queries</p>
+  </div>
+</section>
+
 <section class="card">
-  <h2>Guilds</h2>
-  <% if (guilds.length === 0) { %>
-    <p class="muted">No guilds yet — invite the bot to a server.</p>
+  <h2>Module adoption</h2>
+  <% if (modules.length === 0) { %>
+    <p class="muted">No modules enabled yet — open a server from the switcher above and turn some on.</p>
   <% } else { %>
     <table>
-      <thead><tr><th>Name</th><th>ID</th><th class="num">Members</th><th></th></tr></thead>
+      <thead><tr><th>Module</th><th class="num">Servers</th></tr></thead>
       <tbody>
-        <% guilds.forEach(function (g) { %>
+        <% modules.forEach(function (m) { %>
           <tr>
-            <td><a href="/guilds/<%= g.id %>"><%= g.name %></a></td>
-            <td class="mono"><%= g.id %></td>
-            <td class="num"><%= g.memberCount %></td>
-            <td class="num"><a href="/guilds/<%= g.id %>">Manage &rarr;</a></td>
+            <td><%= m.icon %> <%= m.name %></td>
+            <td class="num"><%= m.guilds %></td>
           </tr>
         <% }) %>
       </tbody>
     </table>
-    <p class="muted small">Open a server to set its mod-log channel and view warnings &amp; bans.</p>
   <% } %>
 </section>
 

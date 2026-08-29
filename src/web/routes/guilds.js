@@ -21,6 +21,7 @@ import { LOG_EVENTS } from '../../modules/logging.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { applyWarnThresholds, normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
 import { parseEmoji, createReactionMessage } from '../../modules/roles.js';
+import { buildOverview } from '../lib/overviewSummary.js';
 
 const router = Router();
 
@@ -67,7 +68,7 @@ router.get('/:guildId/emojis', (req, res) => {
 // --- Panels ----------------------------------------------------------------
 
 router.get('/:guildId/overview', (req, res) => {
-  res.render('guild', { ...baseContext(req.guild, 'overview') });
+  res.render('guild', { ...baseContext(req.guild, 'overview'), overview: buildOverview(req.guild) });
 });
 
 router.get('/:guildId/general', (req, res) => {

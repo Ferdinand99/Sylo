@@ -50,6 +50,21 @@ export function currentUser(req) {
   };
 }
 
+/**
+ * Guilds the signed-in user can manage, resolved against the bot's cache so we
+ * have names and icons. Used for the topbar server switcher.
+ * @returns {Array<{ id: string, name: string, icon: string|null }>}
+ */
+export function manageableGuilds(req) {
+  const cache = runtime.client?.guilds.cache;
+  if (!cache) return [];
+  return [...adminGuildIds(req)]
+    .map((id) => cache.get(id))
+    .filter(Boolean)
+    .map((g) => ({ id: g.id, name: g.name, icon: g.iconURL({ size: 32 }) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** Guild ids (bot ∩ user-is-admin) for the signed-in user. */
 export function adminGuildIds(req) {
   if (!config.authEnabled) {
@@ -108,6 +123,8 @@ export function mountAuth(app) {
   app.use((req, res, next) => {
     res.locals.authEnabled = config.authEnabled;
     res.locals.user = currentUser(req);
+    res.locals.manageableGuilds = res.locals.user ? manageableGuilds(req) : [];
+    res.locals.currentGuildId = (req.path.match(/^\/guilds\/(\d{17,20})/) || [])[1] || null;
     next();
   });
 

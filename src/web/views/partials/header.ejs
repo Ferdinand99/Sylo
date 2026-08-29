@@ -15,6 +15,27 @@
       <a href="/stats">Stats</a>
       <a href="/health">Health</a>
     </nav>
+
+    <% var mg = typeof manageableGuilds !== 'undefined' ? manageableGuilds : []; %>
+    <% if (mg.length) { %>
+      <% var curG = mg.find(function (g) { return g.id === currentGuildId; }); %>
+      <details class="srv-switch">
+        <summary>
+          <% if (curG && curG.icon) { %><img class="srv-switch-icon" src="<%= curG.icon %>" alt="" /><% } %>
+          <span class="srv-switch-name"><%= curG ? curG.name : 'Select a server' %></span>
+          <span class="srv-switch-caret" aria-hidden="true">▾</span>
+        </summary>
+        <div class="srv-switch-menu">
+          <% mg.forEach(function (g) { %>
+            <a href="/guilds/<%= g.id %>" class="<%= g.id === currentGuildId ? 'active' : '' %>">
+              <% if (g.icon) { %><img src="<%= g.icon %>" alt="" /><% } else { %><span class="srv-switch-dot"></span><% } %>
+              <span><%= g.name %></span>
+            </a>
+          <% }) %>
+        </div>
+      </details>
+    <% } %>
+
     <span class="topbar-user">
       <% if (typeof user !== 'undefined' && user && !user.open) { %>
         <% if (user.avatar) { %><img class="avatar" src="<%= user.avatar %>" alt="" /><% } %>

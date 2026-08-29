@@ -36,27 +36,68 @@
 
   <section class="guild-panel">
     <% if (panel === 'overview') { %>
-      <h2>Modules</h2>
-      <p class="muted">Turn features on per server. Configuration for each module lands in later releases.</p>
-      <div class="module-grid">
-        <% modules.forEach(function (m) { %>
-          <div class="module-card">
-            <div class="module-card-head">
-              <span class="module-icon"><%= m.icon %></span>
-              <label class="switch">
-                <input type="checkbox" class="module-toggle" data-guild="<%= guild.id %>" data-module="<%= m.id %>"
-                  <%= m.enabled ? 'checked' : '' %> <%= m.missingIntents.length ? 'disabled' : '' %> />
-                <span class="slider"></span>
-              </label>
-            </div>
-            <h3><%= m.name %></h3>
-            <p class="muted small"><%= m.description %></p>
-            <% if (m.missingIntents.length) { %>
-              <p class="warn-text small">Needs intent: <%= m.missingIntents.join(', ') %></p>
-            <% } %>
-          </div>
-        <% }) %>
+      <h2>Combined overview</h2>
+      <p class="muted">Everything Sylo does in this server at a glance. Toggle a module here, or open it to change its settings.</p>
+
+      <% var h = overview.health; %>
+      <div class="ov-health">
+        <div class="ov-h-item <%= h.perms.ok ? 'state-on' : 'state-off' %>">
+          <span class="ov-h-k">Bot permissions</span>
+          <span class="ov-h-v"><%= h.perms.ok ? 'All key permissions granted' : ('Missing: ' + h.perms.missing.join(', ')) %></span>
+        </div>
+        <div class="ov-h-item <%= (h.intents.membersBlocking || h.intents.contentBlocking) ? 'state-off' : 'state-neutral' %>">
+          <span class="ov-h-k">Privileged intents</span>
+          <span class="ov-h-v">
+            Server Members <%= h.intents.members ? '✓' : '—' %> ·
+            Message Content <%= h.intents.content ? '✓' : '—' %>
+            <% if (h.intents.membersBlocking || h.intents.contentBlocking) { %>(an enabled module needs one that is off)<% } %>
+          </span>
+        </div>
+        <div class="ov-h-item <%= h.modlog.set ? 'state-on' : 'state-off' %>">
+          <span class="ov-h-k">Mod-log channel</span>
+          <span class="ov-h-v"><%= h.modlog.set ? ('#' + h.modlog.name) : 'not set' %></span>
+        </div>
+        <div class="ov-h-item state-neutral">
+          <span class="ov-h-k">Open tickets</span>
+          <span class="ov-h-v"><%= h.tickets.open %><% if (h.tickets.unread) { %> · <%= h.tickets.unread %> unread<% } %></span>
+        </div>
+        <div class="ov-h-item state-neutral">
+          <span class="ov-h-k">Modules enabled</span>
+          <span class="ov-h-v"><%= h.modules.enabled %> of <%= h.modules.total %></span>
+        </div>
       </div>
+
+      <% overview.groups.forEach(function (group) { %>
+        <h3 class="ov-group"><%= group.title %></h3>
+        <div class="ov-grid">
+          <% group.cards.forEach(function (c) { %>
+            <div class="ov-card is-<%= c.status %>">
+              <div class="ov-card-head">
+                <span class="ov-card-title"><span class="module-icon"><%= c.icon %></span> <%= c.name %></span>
+                <% if (c.hasToggle) { %>
+                  <label class="switch">
+                    <input type="checkbox" class="module-toggle" data-guild="<%= guild.id %>" data-module="<%= c.id %>"
+                      <%= c.enabled ? 'checked' : '' %> <%= c.missingIntents.length ? 'disabled' : '' %> />
+                    <span class="slider"></span>
+                  </label>
+                <% } else { %>
+                  <span class="pill">panel</span>
+                <% } %>
+              </div>
+              <p class="muted small ov-card-desc"><%= c.description %></p>
+              <ul class="ov-lines">
+                <% c.lines.forEach(function (ln) { %>
+                  <li><span class="ov-k"><%= ln.label %></span><span class="ov-v state-<%= ln.state %>"><%= ln.value %></span></li>
+                <% }) %>
+              </ul>
+              <% if (c.missingIntents && c.missingIntents.length) { %>
+                <p class="warn-text small">Needs intent: <%= c.missingIntents.join(', ') %></p>
+              <% } %>
+              <a class="ov-card-link" href="<%= c.href %>">Change settings here &rarr;</a>
+            </div>
+          <% }) %>
+        </div>
+      <% }) %>
 
     <% } else if (panel === 'general') { %>
       <h2>General</h2>

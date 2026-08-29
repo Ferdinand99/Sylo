@@ -124,6 +124,15 @@
     if (pickerEl && !e.target.closest('.emoji-pop')) closePicker();
   });
 
+  // --- server switcher: close the dropdown on outside click / Escape ---
+  document.addEventListener('click', (e) => {
+    const open = document.querySelector('.srv-switch[open]');
+    if (open && !e.target.closest('.srv-switch')) open.removeAttribute('open');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') document.querySelector('.srv-switch[open]')?.removeAttribute('open');
+  });
+
   // --- fetch helper for JSON actions (used by later phases) ------------
   window.syloAction = async function syloAction(url, body) {
     const res = await fetch(url, {
