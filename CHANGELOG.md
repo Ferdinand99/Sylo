@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/Ferdinand99/Sylo/compare/v1.9.0...v1.10.0) (2026-08-29)
+
+
+### Features
+
+* Message Creator — compose and send messages/embeds as the bot ([c0009a2](https://github.com/Ferdinand99/Sylo/commit/c0009a28226d512bb07c1f0ba078454e5bce8e63))
+
 ## [1.9.0](https://github.com/Ferdinand99/Sylo/compare/v1.8.0...v1.9.0) (2026-08-29)
 
 
