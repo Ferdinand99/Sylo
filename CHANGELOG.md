@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/Ferdinand99/Sylo/compare/v1.4.0...v1.4.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* create the SQLite data dir writable on root-owned volume mounts ([1fbd909](https://github.com/Ferdinand99/Sylo/commit/1fbd909ce1094abd0d1a4f135adf2fdc7db09a62))
+
 ## [1.4.0](https://github.com/Ferdinand99/Sylo/compare/v1.3.0...v1.4.0) (2026-08-29)
 
 
