@@ -11,7 +11,9 @@
   <Project>https://github.com/Ferdinand99/Sylo</Project>
   <Overview>Sylo is a multi-function Discord bot with a web dashboard and an extensible game-stats module. v1 provides Battlefield-series player stats (BF1, BF3, BF4, BFV, Hardline, and best-effort BF2042/BF6) via the public gametools.network API, plus a lightweight status dashboard. Data (guild settings and a TTL stats cache) is stored in a single SQLite file under /app/data.
 
-Setup: create a Discord application at https://discord.com/developers/applications, then set DISCORD_TOKEN (Bot tab) and DISCORD_CLIENT_ID (General Information). No privileged intents are required. Invite the bot with the scopes "bot" and "applications.commands".</Overview>
+Setup: create a Discord application at https://discord.com/developers/applications, then set DISCORD_TOKEN (Bot tab) and DISCORD_CLIENT_ID (General Information). No privileged intents are required. Invite the bot with the scopes "bot" and "applications.commands".
+
+Dashboard: runs open by default (use only on a trusted LAN). To require "Log in with Discord" for server admins, set DISCORD_CLIENT_SECRET and add http://[UNRAID-IP]:[HOST-PORT]/auth/discord/callback to the app's OAuth2 Redirects.</Overview>
   <Category>Tools: Network:Messenger</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Ferdinand99/Sylo/main/unraid/sylo.xml</TemplateURL>
@@ -68,6 +70,33 @@ Setup: create a Discord application at https://discord.com/developers/applicatio
     Description="Optional. Set to a server ID to register slash commands to that one guild instantly (useful for testing). Leave blank to register globally (can take up to ~1 hour the first time)."
     Type="Variable"
     Display="always"
+    Required="false"
+    Mask="false"/>
+  <Config
+    Name="DISCORD_CLIENT_SECRET"
+    Target="DISCORD_CLIENT_SECRET"
+    Default=""
+    Description="Optional. Set this (Developer Portal -> OAuth2 -> Client Secret) to require 'Log in with Discord' on the dashboard, restricted to server admins. Also add http://[UNRAID-IP]:[HOST-PORT]/auth/discord/callback to the app's OAuth2 Redirects. Leave blank to run the dashboard open (trusted LAN only)."
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="true"/>
+  <Config
+    Name="SESSION_SECRET"
+    Target="SESSION_SECRET"
+    Default=""
+    Description="Optional. Any long random string; signs the dashboard session cookie so logins survive a container restart. Auto-generated when blank."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"/>
+  <Config
+    Name="DASHBOARD_URL"
+    Target="DASHBOARD_URL"
+    Default=""
+    Description="Optional. Only needed behind a reverse proxy: the public dashboard URL (e.g. https://sylo.example.com) used to build the OAuth2 redirect URI. Leave blank for direct IP access."
+    Type="Variable"
+    Display="advanced"
     Required="false"
     Mask="false"/>
   <Config
