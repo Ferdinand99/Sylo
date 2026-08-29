@@ -16,11 +16,14 @@ COPY . .
 # ---- runtime: minimal image ----
 FROM node:20-alpine AS runtime
 ENV NODE_ENV=production
+# Default timezone (used for transcript timestamps). Override via the TZ env var,
+# e.g. TZ=Europe/Oslo or TZ=UTC.
+ENV TZ=Europe/Oslo
 WORKDIR /app
 
-# su-exec lets the entrypoint drop from root to the unprivileged user after
-# fixing bind-mount ownership.
-RUN apk add --no-cache su-exec \
+# su-exec: drop from root to the unprivileged user after fixing volume ownership.
+# tzdata: makes the TZ env var actually resolve for local-time formatting.
+RUN apk add --no-cache su-exec tzdata \
   && addgroup -S sylo && adduser -S sylo -G sylo \
   && mkdir -p /app/data && chown -R sylo:sylo /app
 

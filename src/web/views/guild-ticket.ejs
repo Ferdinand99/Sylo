@@ -4,7 +4,8 @@
 <h1 class="page-title">Ticket #<%= ticket.id %> · <%= ticket.user %></h1>
 <p class="muted">
   <span class="mono"><%= ticket.userId %></span> · opened <%= ticket.openedAgo %> ·
-  <span class="pill <%= ticket.status === 'open' ? 'ok' : 'stale' %>"><%= ticket.status %></span>
+  <span class="pill <%= ticket.status === 'open' ? 'ok' : 'stale' %>"><%= ticket.status %></span> ·
+  <a href="/guilds/<%= guild.id %>/tickets/<%= ticket.id %>/transcript" download>Download transcript</a>
 </p>
 
 <% if (msg) { %>

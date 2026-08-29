@@ -13,7 +13,7 @@ import {
   ticketMessages,
   markStaffSeen,
 } from '../../db/tickets.js';
-import { relayStaffReply, closeTicketWithNotice } from '../../modules/tickets.js';
+import { relayStaffReply, closeTicketWithNotice, buildTranscript } from '../../modules/tickets.js';
 
 const router = Router({ mergeParams: true });
 
@@ -80,6 +80,18 @@ router.get(
       lastId: rows.length ? rows[rows.length - 1].id : 0,
       msg: typeof req.query.msg === 'string' ? req.query.msg : null,
     });
+  })
+);
+
+// Download an HTML transcript.
+router.get(
+  '/:ticketId/transcript',
+  asyncHandler(async (req, res) => {
+    const ticket = getTicket(Number(req.params.ticketId));
+    if (!ticket || ticket.guild_id !== req.guild.id) return res.status(404).send('Not found');
+    const { filename, html } = await buildTranscript(ticket);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.type('html').send(html);
   })
 );
 
