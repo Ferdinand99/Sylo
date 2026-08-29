@@ -155,9 +155,11 @@ The image's `HEALTHCHECK` hits `/health`, so Unraid shows the container health
 once it is up. To build the image on the Unraid box itself:
 `docker build -t sylo:latest /mnt/user/appdata/sylo`.
 
-The container runs as a non-root user (uid 100). If it can't write the database,
-make the host data directory writable once:
-`chmod -R 0777 /mnt/user/appdata/sylo/data` (or `chown -R 100:101`).
+The image starts as root only long enough for its entrypoint to fix ownership of
+the mounted data directory, then runs the Node process as an unprivileged user
+(`sylo`, uid 100). So a fresh, root-owned `appdata` folder works out of the box —
+no manual `chmod`/`chown` needed. If you still see `SQLITE_CANTOPEN`, run once:
+`chown -R 100:101 /mnt/user/appdata/sylo/data`.
 
 ### Option C — Unraid Community Applications template
 
