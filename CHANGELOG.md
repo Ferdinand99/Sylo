@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.0](https://github.com/Ferdinand99/Sylo/compare/v2.3.0...v2.4.0) (2026-08-30)
+
+
+### Features
+
+* add IsThereAnyDeal as a Free games source ([c765277](https://github.com/Ferdinand99/Sylo/commit/c7652774be0739fbe3836361151c1ecf85ce9544))
+
 ## [2.3.0](https://github.com/Ferdinand99/Sylo/compare/v2.2.1...v2.3.0) (2026-08-30)
 
 
