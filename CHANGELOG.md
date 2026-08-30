@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/Ferdinand99/Sylo/compare/v2.0.1...v2.1.0) (2026-08-30)
+
+
+### Features
+
+* add Autoresponder, /help, and dashboard-configurable bot presence ([5eb3d7d](https://github.com/Ferdinand99/Sylo/commit/5eb3d7d7dca386ff877d819590aa99139bf5fbcb))
+
 ## [2.0.1](https://github.com/Ferdinand99/Sylo/compare/v2.0.0...v2.0.1) (2026-08-30)
 
 
