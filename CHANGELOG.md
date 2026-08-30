@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.0](https://github.com/Ferdinand99/Sylo/compare/v1.13.0...v1.14.0) (2026-08-30)
+
+
+### Features
+
+* make Custom commands and Scheduled messages functional ([876b4e9](https://github.com/Ferdinand99/Sylo/commit/876b4e928a52fa26ef41edf31bb7aa7c21de84dc))
+
 ## [1.13.0](https://github.com/Ferdinand99/Sylo/compare/v1.12.0...v1.13.0) (2026-08-30)
 
 
