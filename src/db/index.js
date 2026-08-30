@@ -287,6 +287,24 @@ const MIGRATIONS = [
       ALTER TABLE guild_settings ADD COLUMN embed_color INTEGER;
     `);
   },
+
+  // Starboard: which source messages have a starboard post, and their star count.
+  (database) => {
+    database.exec(`
+      CREATE TABLE starboard_posts (
+        guild_id       TEXT NOT NULL,
+        board_id       TEXT NOT NULL,
+        source_msg_id  TEXT NOT NULL,
+        source_chan_id TEXT NOT NULL,
+        post_msg_id    TEXT,
+        star_count     INTEGER NOT NULL DEFAULT 0,
+        posted_at      INTEGER,
+        PRIMARY KEY (guild_id, board_id, source_msg_id)
+      );
+      CREATE INDEX idx_starboard_post ON starboard_posts (post_msg_id);
+      CREATE INDEX idx_starboard_guild ON starboard_posts (guild_id, board_id);
+    `);
+  },
 ];
 
 /**

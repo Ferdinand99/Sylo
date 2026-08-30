@@ -113,5 +113,5 @@ export function buildSidebar(req, gid = null) {
     items: c.items.map(resolve).filter(Boolean),
   }));
 
-  return { top, guild: { id: gid, name: guild.name, icon: guild.iconURL({ size: 48 }) }, categories };
+  return { top, guild: { id: gid, name: guild.name, icon: guild.iconURL({ size: 64 }) }, categories };
 }
