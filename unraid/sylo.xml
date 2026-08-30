@@ -9,9 +9,11 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/Ferdinand99/Sylo/issues</Support>
   <Project>https://github.com/Ferdinand99/Sylo</Project>
-  <Overview>Sylo is a multi-function Discord bot with a web dashboard and an extensible game-stats module. v1 provides Battlefield-series player stats (BF1, BF3, BF4, BFV, Hardline, and best-effort BF2042/BF6) via the public gametools.network API, plus a lightweight status dashboard. Data (guild settings and a TTL stats cache) is stored in a single SQLite file under /app/data.
+  <Overview>Sylo is a multi-function Discord bot with a web dashboard. It has a per-guild module system - moderation with warning thresholds, server logging, tickets/modmail answered from the dashboard, reaction roles &amp; autoroles, welcome/leave messages, sticky messages, auto-moderation (invite/link/flood/mention/caps/word filters), a counting mini-game, and a message/embed creator - plus per-server command management and Battlefield-series player stats (BF1, BF3, BF4, BFV, Hardline, and best-effort BF2042/BF6) via the public gametools.network API. State is stored in a single SQLite file under /app/data and survives updates.
 
-Setup: create a Discord application at https://discord.com/developers/applications, then set DISCORD_TOKEN (Bot tab) and DISCORD_CLIENT_ID (General Information). No privileged intents are required. Invite the bot with the scopes "bot" and "applications.commands".
+Setup: create a Discord application at https://discord.com/developers/applications, then set DISCORD_TOKEN (Bot tab) and DISCORD_CLIENT_ID (General Information). Invite the bot with the scopes "bot" and "applications.commands".
+
+Intents: the member/message-driven modules (logging, welcome, roles, auto-moderation, counting) need the "Server Members" and/or "Message Content" intents enabled on the Developer Portal Bot page. Leave INTENT_GUILD_MEMBERS / INTENT_MESSAGE_CONTENT at their defaults, or set one to false to boot without that intent (its modules stay unavailable).
 
 Dashboard: runs open by default (use only on a trusted LAN). To require "Log in with Discord" for server admins, set DISCORD_CLIENT_SECRET and add http://[UNRAID-IP]:[HOST-PORT]/auth/discord/callback to the app's OAuth2 Redirects.</Overview>
   <Category>Tools: Network:Messenger</Category>
@@ -82,6 +84,24 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Required="false"
     Mask="true"/>
   <Config
+    Name="INTENT_GUILD_MEMBERS"
+    Target="INTENT_GUILD_MEMBERS"
+    Default="true"
+    Description="Whether to request the Server Members privileged intent (needed by logging, welcome, roles/autoroles and leveling). Must also be enabled on the Developer Portal Bot page. Set to false to boot without it - those modules then stay unavailable."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false">true</Config>
+  <Config
+    Name="INTENT_MESSAGE_CONTENT"
+    Target="INTENT_MESSAGE_CONTENT"
+    Default="true"
+    Description="Whether to request the Message Content privileged intent (needed by logging, auto-moderation and the counting game). Must also be enabled on the Developer Portal Bot page. Set to false to boot without it - those modules then stay unavailable."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false">true</Config>
+  <Config
     Name="SESSION_SECRET"
     Target="SESSION_SECRET"
     Default=""
@@ -144,4 +164,13 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Display="advanced"
     Required="false"
     Mask="false">production</Config>
+  <Config
+    Name="TZ"
+    Target="TZ"
+    Default="Europe/Oslo"
+    Description="IANA timezone name, used for timestamps in ticket transcripts and logs. Defaults to Europe/Oslo."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false">Europe/Oslo</Config>
 </Container>
