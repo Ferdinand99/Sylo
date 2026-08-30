@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/Ferdinand99/Sylo/compare/v2.1.0...v2.2.0) (2026-08-30)
+
+
+### Features
+
+* add the Verification module (Verify button + Turnstile captcha) ([3ab4ff2](https://github.com/Ferdinand99/Sylo/commit/3ab4ff2abe84f25acc6732e14c5a98493fb8ee77))
+
 ## [2.1.0](https://github.com/Ferdinand99/Sylo/compare/v2.0.1...v2.1.0) (2026-08-30)
 
 
