@@ -38,3 +38,11 @@ test('normaliseServerStats: drops rows without {count} or a channel, clamps to 1
   assert.equal(c.channels[0].type, 'humans');
   assert.equal(c.channels[1].type, 'members');
 });
+
+test('normaliseServerStats: refreshMinutes defaults to 10 and clamps to 5..60', () => {
+  assert.equal(normaliseServerStats({}).refreshMinutes, 10);
+  assert.equal(normaliseServerStats({ refreshMinutes: 1 }).refreshMinutes, 5);
+  assert.equal(normaliseServerStats({ refreshMinutes: 999 }).refreshMinutes, 60);
+  assert.equal(normaliseServerStats({ refreshMinutes: '15' }).refreshMinutes, 15);
+  assert.equal(normaliseServerStats({ refreshMinutes: 'abc' }).refreshMinutes, 10);
+});

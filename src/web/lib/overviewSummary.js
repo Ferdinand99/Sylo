@@ -216,7 +216,10 @@ function moduleLines(id, guild, cfg) {
     }
     case 'server-stats': {
       const n = Array.isArray(cfg.channels) ? cfg.channels.length : 0;
-      return [n ? on('Stat channels', String(n)) : off('Stat channels', 'none')];
+      return [
+        n ? on('Stat channels', String(n)) : off('Stat channels', 'none'),
+        neutral('Refresh', `every ${cfg.refreshMinutes || 10} min`),
+      ];
     }
     case 'free-games': {
       const ch = channelName(guild, cfg.channelId);

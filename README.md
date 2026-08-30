@@ -8,18 +8,20 @@ messages, leveling, AFK, server statistics, free games, ban appeals), Discord OA
 login, a public leveling leaderboard, and **Battlefield-series** player stats via the
 public [gametools.network](https://gametools.network) API.
 
-## What's new in 2.0
+## What's new since 2.0
 
-- All eleven modules are functional and configurable from the dashboard
-- Custom commands (prefix **and** optional `/slash`), scheduled messages
-  (1 min – 4 weeks), and a full leveling system with `/rank`, `/leaderboard`
-  and a shareable public leaderboard page
-- Auto-moderation, a Counting mini-game, a YAGPDB-style combined overview, and a
-  topbar server switcher
-- `/forget` for self-service data deletion; automatic data purge when Sylo
-  leaves a server; a per-server config **audit log** and JSON **config export**
-- CI now runs the test suite before any image is built or published;
-  rate-limited public and auth endpoints; a database integrity check on boot
+- **Six more modules**: Verification (button or Cloudflare Turnstile captcha),
+  Autoresponder, AFK, Server statistics (live count voice channels), Free games
+  (Epic + IsThereAnyDeal), and Ban appeals (DM'd appeal link → dashboard review
+  → decision shown on the link, with a single-use rejoin invite on accept)
+- Every module is functional and configurable from the dashboard — 17 in total
+- Editable Discord **presence / activity** from the dashboard (`/settings`)
+- 2.0 groundwork still current: custom commands (prefix **and** `/slash`),
+  scheduled messages, full leveling with a public leaderboard, auto-moderation,
+  the Counting mini-game, a YAGPDB-style combined overview and a topbar server
+  switcher; `/forget` + guild-leave data purge; per-server **audit log** and
+  JSON **config export**; CI test gate before any image publish; rate-limited
+  public/auth routes; a database integrity check on boot
 
 ## Features
 
@@ -67,7 +69,7 @@ public [gametools.network](https://gametools.network) API.
   - **AFK** — `/afk [reason]`; Sylo replies to anyone who mentions an away
     member and clears the status when they next speak
   - **Server statistics** — keep chosen voice channels named with a live
-    member / role / boost count
+    member / role / boost count, on a configurable 5–60 minute refresh
   - **Free games** — announces games that become free to claim (hourly poll):
     the Epic Games Store, plus Steam / GOG / Fanatical / Humble and more with an
     `ITAD_API_KEY`. Optional ping role; `/freegames [dlc]` on demand
@@ -88,9 +90,10 @@ public [gametools.network](https://gametools.network) API.
   - `GET /health` — JSON status (uptime, guild count, last error) for healthchecks
   - `/` — bot status, activity stats and module adoption; topbar server switcher
   - `/commands` — slash-command reference · `/stats` — cached lookups
+  - `/settings` — bot-wide Discord presence / activity
   - `/guilds/<id>` — per-server control panel: a combined overview, General
-    settings, Commands, Moderation (warnings + bans), Tickets, Message Creator,
-    and a settings panel per module
+    settings, Commands, Moderation (warnings + bans), Tickets, Ban appeals,
+    Message Creator, an audit log, and a settings panel per module
   - **Discord OAuth2 login** (optional) — gate the dashboard to server admins
     (and configurable staff roles for tickets); runs open on a trusted LAN when
     unconfigured. See *Dashboard authentication*.

@@ -461,6 +461,7 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
     const types = [].concat(req.body.ss_type ?? []);
     const templates = [].concat(req.body.ss_template ?? []);
     config = normaliseServerStats({
+      refreshMinutes: req.body.refreshMinutes,
       channels: chans.map((channelId, i) => ({
         channelId,
         type: types[i],

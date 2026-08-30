@@ -16,10 +16,22 @@ export const STAT_TYPES = [
 
 const VALID = new Set(STAT_TYPES.map(([t]) => t));
 const NEEDS_MEMBERS = new Set(['humans', 'bots']);
-const REFRESH_MS = 10 * 60 * 1000;
+
+// Discord rate-limits channel renames to ~2 per 10 minutes per channel, so a
+// sustained refresh faster than every 5 minutes just builds a 429 backlog.
+export const REFRESH_MIN_MINUTES = 5;
+export const REFRESH_MAX_MINUTES = 60;
+export const REFRESH_DEFAULT_MINUTES = 10;
+const BASE_TICK_MS = 60 * 1000; // check which guilds are due once a minute
+
+const clampInt = (v, min, max, dflt) => {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : dflt;
+};
 
 export function normaliseServerStats(raw = {}) {
   return {
+    refreshMinutes: clampInt(raw.refreshMinutes, REFRESH_MIN_MINUTES, REFRESH_MAX_MINUTES, REFRESH_DEFAULT_MINUTES),
     channels: (Array.isArray(raw.channels) ? raw.channels : [])
       .map((c) => ({
         channelId: /^\d{17,20}$/.test(c.channelId ?? '') ? c.channelId : '',
@@ -50,12 +62,7 @@ function computeCount(guild, type, members) {
   }
 }
 
-async function refreshGuild(guild) {
-  const { enabled, config } = getGuildModule(guild.id, 'server-stats');
-  if (!enabled) return;
-  const cfg = normaliseServerStats(config);
-  if (cfg.channels.length === 0) return;
-
+async function refreshGuild(guild, cfg) {
   let members = null;
   if (cfg.channels.some((c) => NEEDS_MEMBERS.has(c.type))) {
     members = await guild.members.fetch().catch(() => null);
@@ -72,11 +79,23 @@ async function refreshGuild(guild) {
   }
 }
 
+const lastRefresh = new Map(); // guildId -> timestamp of the last rename pass
+
 async function tick() {
   const client = runtime.client;
   if (!client?.isReady()) return;
+  const now = Date.now();
   for (const guild of client.guilds.cache.values()) {
-    await refreshGuild(guild).catch((err) =>
+    const { enabled, config } = getGuildModule(guild.id, 'server-stats');
+    if (!enabled) continue;
+    const cfg = normaliseServerStats(config);
+    if (cfg.channels.length === 0) continue;
+
+    // Respect this guild's chosen interval.
+    if (now - (lastRefresh.get(guild.id) ?? 0) < cfg.refreshMinutes * 60_000) continue;
+    lastRefresh.set(guild.id, now);
+
+    await refreshGuild(guild, cfg).catch((err) =>
       console.error(`[server-stats] refresh failed for ${guild.id}:`, err.message)
     );
   }
@@ -84,7 +103,7 @@ async function tick() {
 
 setInterval(() => {
   tick().catch((err) => console.error('[server-stats] tick failed:', err.message));
-}, REFRESH_MS).unref();
+}, BASE_TICK_MS).unref();
 
 // First pass a minute after boot.
 setTimeout(() => tick().catch(() => {}), 60_000).unref();
