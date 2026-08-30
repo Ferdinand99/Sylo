@@ -147,6 +147,25 @@ const MIGRATIONS = [
       );
     `);
   },
+
+  // Scheduled messages: recurring posts to a channel on a fixed interval.
+  (database) => {
+    database.exec(`
+      CREATE TABLE scheduled_messages (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id         TEXT NOT NULL,
+        channel_id       TEXT NOT NULL,
+        content          TEXT NOT NULL DEFAULT '',
+        interval_minutes INTEGER NOT NULL,
+        next_run_at      INTEGER NOT NULL,
+        last_run_at      INTEGER,
+        enabled          INTEGER NOT NULL DEFAULT 1,
+        created_at       INTEGER NOT NULL
+      );
+      CREATE INDEX idx_sched_due ON scheduled_messages (enabled, next_run_at);
+      CREATE INDEX idx_sched_guild ON scheduled_messages (guild_id, created_at);
+    `);
+  },
 ];
 
 /**

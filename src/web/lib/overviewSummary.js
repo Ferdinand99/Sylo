@@ -11,6 +11,7 @@ import { getCommandOverrides } from '../../db/commandOverrides.js';
 import { openTicketCount, unreadTicketCount } from '../../db/tickets.js';
 import { listComposed } from '../../db/composedMessages.js';
 import { getCounting } from '../../db/counting.js';
+import { listScheduled } from '../../db/scheduledMessages.js';
 import { BF_TITLE_CHOICES } from '../../bot/commands/stats.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
@@ -174,6 +175,20 @@ function moduleLines(id, guild, cfg) {
         ch ? on('Channel', `#${ch}`) : off('Channel', 'not set'),
         neutral('Count', String(st.current)),
         neutral('Best streak', String(st.record)),
+      ];
+    }
+    case 'custom-commands': {
+      const n = Array.isArray(cfg.commands) ? cfg.commands.length : 0;
+      return [
+        neutral('Prefix', cfg.prefix || '!'),
+        n ? on('Commands', String(n)) : off('Commands', 'none'),
+      ];
+    }
+    case 'scheduled-messages': {
+      const jobs = listScheduled(guild.id);
+      const active = jobs.filter((j) => j.enabled === 1).length;
+      return [
+        jobs.length ? on('Jobs', `${active} active${jobs.length > active ? ` · ${jobs.length - active} paused` : ''}`) : off('Jobs', 'none'),
       ];
     }
     case 'automod': {

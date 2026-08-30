@@ -23,12 +23,30 @@ import { applyWarnThresholds, normaliseThresholds, THRESHOLD_ACTIONS } from '../
 import { normaliseAutomodConfig, AUTOMOD_RULES, AUTOMOD_ACTIONS } from '../../modules/automod.js';
 import { parseEmoji, createReactionMessage } from '../../modules/roles.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
+import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
+import {
+  listScheduled,
+  createScheduled,
+  deleteScheduled,
+  setScheduledEnabled,
+  getScheduled,
+} from '../../db/scheduledMessages.js';
+import {
+  SCHEDULE_PRESETS,
+  SCHEDULE_UNITS,
+  MIN_INTERVAL_MINUTES,
+  MAX_INTERVAL_MINUTES,
+} from '../../modules/scheduledMessages.js';
+import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 
 const router = Router();
 
 // Module ids that have a real settings partial (views/guild/modules/<id>.ejs).
-const CONFIG_VIEWS = new Set(['moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting']);
+const CONFIG_VIEWS = new Set([
+  'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
+  'custom-commands', 'scheduled-messages',
+]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
 
@@ -183,6 +201,20 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     automodRules: AUTOMOD_RULES,
     automodActions: AUTOMOD_ACTIONS,
     countingState: mod.id === 'counting' ? getCounting(req.guild.id) : null,
+    ccPlaceholders: CC_PLACEHOLDERS,
+    scheduledJobs: mod.id === 'scheduled-messages'
+      ? listScheduled(req.guild.id).map((j) => ({
+          id: j.id,
+          channel: guildTextChannels(req.guild).find((c) => c.id === j.channel_id)?.name ?? j.channel_id,
+          content: j.content,
+          intervalMinutes: j.interval_minutes,
+          enabled: j.enabled === 1,
+          nextRun: j.enabled === 1 ? new Date(j.next_run_at).toISOString() : null,
+          lastRun: j.last_run_at ? timeAgo(j.last_run_at) : null,
+        }))
+      : [],
+    schedulePresets: SCHEDULE_PRESETS,
+    scheduleUnits: SCHEDULE_UNITS,
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
   });
 });
@@ -274,11 +306,34 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
       resetOnFail: req.body.resetOnFail === 'on',
       react: req.body.react === 'on',
     };
+  } else if (mod.id === 'custom-commands') {
+    // Repeating rows: cc_name[], cc_response[], cc_type[], cc_embedTitle[], cc_embedColor[].
+    const names = [].concat(req.body.cc_name ?? []);
+    const responses = [].concat(req.body.cc_response ?? []);
+    const types = [].concat(req.body.cc_type ?? []);
+    const titles = [].concat(req.body.cc_embedTitle ?? []);
+    const colors = [].concat(req.body.cc_embedColor ?? []);
+    config = normaliseCustomCommands({
+      prefix: req.body.prefix,
+      slash: req.body.slash === 'on',
+      commands: names.map((name, i) => ({
+        name,
+        response: responses[i] ?? '',
+        embed: types[i] === 'embed',
+        embedTitle: titles[i] ?? '',
+        embedColor: colors[i] ?? '',
+      })),
+    });
   } else {
     return res.redirect(back);
   }
 
   setGuildModule(req.guild.id, mod.id, { config });
+  if (mod.id === 'custom-commands') {
+    syncGuildCustomCommands(req.guild).catch((err) =>
+      console.error('[custom-commands] sync after save failed:', err.message)
+    );
+  }
   res.redirect(`${back}?msg=saved`);
 });
 
@@ -295,6 +350,38 @@ router.post('/:guildId/m/counting/count', (req, res) => {
   }
   setCount(req.guild.id, n);
   res.redirect(`${back}?msg=count-set`);
+});
+
+// --- Scheduled messages: one job per row, managed here (not in module config) ---
+router.post('/:guildId/m/scheduled-messages/job', (req, res) => {
+  const back = `/guilds/${req.guild.id}/m/scheduled-messages`;
+  const channelId = String(req.body.channelId ?? '');
+  const content = String(req.body.content ?? '').trim();
+  const customVal = String(req.body.customValue ?? '').trim();
+  const unitMult = Number(req.body.customUnit) || 1;
+  const minutes = Math.floor(
+    customVal !== '' ? Number(customVal) * unitMult : Number(req.body.intervalMinutes)
+  );
+
+  if (!guildTextChannels(req.guild).some((c) => c.id === channelId)) {
+    return res.redirect(`${back}?msg=badchannel`);
+  }
+  if (content === '' || !Number.isFinite(minutes) || minutes < MIN_INTERVAL_MINUTES || minutes > MAX_INTERVAL_MINUTES) {
+    return res.redirect(`${back}?msg=sched-bad`);
+  }
+  createScheduled(req.guild.id, { channelId, content: content.slice(0, 2000), intervalMinutes: minutes });
+  res.redirect(`${back}?msg=saved`);
+});
+
+router.post('/:guildId/m/scheduled-messages/job/:id/delete', (req, res) => {
+  deleteScheduled(req.guild.id, Number(req.params.id));
+  res.redirect(`/guilds/${req.guild.id}/m/scheduled-messages?msg=saved`);
+});
+
+router.post('/:guildId/m/scheduled-messages/job/:id/toggle', (req, res) => {
+  const job = getScheduled(req.guild.id, Number(req.params.id));
+  if (job) setScheduledEnabled(req.guild.id, job.id, job.enabled !== 1);
+  res.redirect(`/guilds/${req.guild.id}/m/scheduled-messages?msg=saved`);
 });
 
 // Create a reaction-role message: the bot posts it and adds the reactions.
@@ -389,6 +476,11 @@ router.post('/:guildId/modules/:moduleId', (req, res) => {
   if (!mod) return res.status(404).json({ error: 'Unknown module' });
   const enabled = Boolean(req.body?.enabled);
   setGuildModule(req.guild.id, mod.id, { enabled });
+  if (mod.id === 'custom-commands') {
+    syncGuildCustomCommands(req.guild).catch((err) =>
+      console.error('[custom-commands] sync after toggle failed:', err.message)
+    );
+  }
   res.json({ enabled });
 });
 

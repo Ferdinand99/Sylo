@@ -27,6 +27,7 @@
        'count-set': 'Counting number updated.',
        'count-reset': 'Counting reset to 0.',
        'count-bad': 'Enter a whole number of 0 or more.',
+       'sched-bad': 'Enter a message and an interval between 1 minute and 4 weeks.',
      };
      const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' ? 'info' : 'bad');
@@ -168,7 +169,7 @@
       <% } %>
       <% if (!mrow.enabled) { %><p class="muted small">Enable the module (toggle above) for these settings to take effect.</p><% } %>
       <hr class="sep" />
-      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, roles: (typeof roles !== 'undefined' ? roles : []), logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []), thresholdActions: (typeof thresholdActions !== 'undefined' ? thresholdActions : []), automodRules: (typeof automodRules !== 'undefined' ? automodRules : []), automodActions: (typeof automodActions !== 'undefined' ? automodActions : []), countingState: (typeof countingState !== 'undefined' ? countingState : null) }) %>
+      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, roles: (typeof roles !== 'undefined' ? roles : []), logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []), thresholdActions: (typeof thresholdActions !== 'undefined' ? thresholdActions : []), automodRules: (typeof automodRules !== 'undefined' ? automodRules : []), automodActions: (typeof automodActions !== 'undefined' ? automodActions : []), countingState: (typeof countingState !== 'undefined' ? countingState : null), ccPlaceholders: (typeof ccPlaceholders !== 'undefined' ? ccPlaceholders : []), scheduledJobs: (typeof scheduledJobs !== 'undefined' ? scheduledJobs : []), schedulePresets: (typeof schedulePresets !== 'undefined' ? schedulePresets : []), scheduleUnits: (typeof scheduleUnits !== 'undefined' ? scheduleUnits : []) }) %>
     <% } %>
   </section>
 </div>

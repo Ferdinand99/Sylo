@@ -5,6 +5,7 @@
 import { Events, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { setLastError } from '../../runtime.js';
 import { getCommandOverride } from '../../db/commandOverrides.js';
+import { handleCustomSlash } from '../lib/customCommandSync.js';
 
 export const name = Events.InteractionCreate;
 
@@ -48,6 +49,13 @@ export async function execute(interaction) {
 
   const command = interaction.client.commands.get(interaction.commandName);
   if (!command) {
+    try {
+      if (await handleCustomSlash(interaction)) return;
+    } catch (err) {
+      setLastError(err);
+      console.error(`[bot] Custom slash command "${interaction.commandName}" failed:`, err);
+      return;
+    }
     console.warn(`[bot] Received unknown command: ${interaction.commandName}`);
     return;
   }
