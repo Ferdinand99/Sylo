@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.0](https://github.com/Ferdinand99/Sylo/compare/v2.7.1...v2.8.0) (2026-08-30)
+
+
+### Features
+
+* add a Starboard module ([abea2b7](https://github.com/Ferdinand99/Sylo/commit/abea2b7164de4f3da0fa9849c0a8566db88ae467))
+
 ## [2.7.1](https://github.com/Ferdinand99/Sylo/compare/v2.7.0...v2.7.1) (2026-08-30)
 
 
