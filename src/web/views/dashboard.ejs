@@ -4,7 +4,7 @@
   <div class="card status <%= ready ? 'ok' : 'bad' %>">
     <h2>Bot</h2>
     <p class="big"><%= ready ? 'Online' : 'Offline' %></p>
-    <p class="muted"><%= botTag ? botTag : 'not connected' %></p>
+    <p class="muted"><%= botTag ? botTag : 'not connected' %><% if (typeof syloVersion !== 'undefined' && syloVersion) { %> &middot; v<%= syloVersion %><% } %></p>
   </div>
   <div class="card">
     <h2>Servers</h2>

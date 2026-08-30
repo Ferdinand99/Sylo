@@ -8,6 +8,7 @@ import { Router } from 'express';
 import cookieSession from 'cookie-session';
 import { config } from '../../config.js';
 import { runtime } from '../../runtime.js';
+import { BUILD } from '../../bot/lib/buildInfo.js';
 import { rateLimit } from './rateLimit.js';
 
 const DISCORD_API = 'https://discord.com/api/v10';
@@ -126,6 +127,7 @@ export function mountAuth(app) {
   // Expose auth state to every view.
   app.use((req, res, next) => {
     res.locals.authEnabled = config.authEnabled;
+    res.locals.syloVersion = BUILD.version;
     res.locals.user = currentUser(req);
     res.locals.manageableGuilds = res.locals.user ? manageableGuilds(req) : [];
     res.locals.currentGuildId = (req.path.match(/^\/guilds\/(\d{17,20})/) || [])[1] || null;
