@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.1](https://github.com/Ferdinand99/Sylo/compare/v2.8.0...v2.8.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* accept multiple DISCORD_GUILD_ID values and handle a missing bot member ([2b461a4](https://github.com/Ferdinand99/Sylo/commit/2b461a4237a2dbefa44ddc103bbe14430990874d))
+
 ## [2.8.0](https://github.com/Ferdinand99/Sylo/compare/v2.7.1...v2.8.0) (2026-08-30)
 
 
