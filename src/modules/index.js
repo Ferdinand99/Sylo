@@ -14,4 +14,5 @@ import './verification.js';
 import './afk.js';
 import './serverStats.js';
 import './freeGames.js';
+import './appeals.js';
 // moderation.js has no event handlers (called from the warn flow) — not imported here.

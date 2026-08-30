@@ -422,3 +422,16 @@ td.num, th.num { text-align: right; }
 .dc-chip { background: #4e5058; color: #fff; border-radius: 6px; padding: 3px 10px; font-size: 12px; }
 .dc-chip.primary { background: #5865f2; } .dc-chip.success { background: #248046; }
 .dc-chip.danger { background: #da373c; } .dc-chip.link { background: #4e5058; }
+
+/* Ban appeals review panel */
+.pill.open { background: rgba(122, 162, 247, 0.14); border-color: rgba(122, 162, 247, 0.3); color: var(--accent); }
+.pill.on { background: rgba(88, 214, 141, 0.14); border-color: rgba(88, 214, 141, 0.3); color: var(--ok); }
+.pill.off { background: rgba(242, 85, 90, 0.14); border-color: rgba(242, 85, 90, 0.3); color: var(--bad); }
+.appeal-answers { margin: 4px 0 8px; }
+.appeal-answers dt { color: var(--muted); font-weight: 600; margin-top: 6px; }
+.appeal-answers dd { margin: 2px 0 0; white-space: pre-wrap; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+button.danger { background: var(--bad); color: #fff; }
+button.danger:hover { filter: brightness(1.06); }
+label.checkline { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+label.checkline input { width: auto; }

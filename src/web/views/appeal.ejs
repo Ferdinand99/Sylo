@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ban appeal — Sylo</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="verify-wrap">
+    <div class="card">
+      <% if (state === 'form') { %>
+        <h1 class="page-title">Appeal your ban<% if (guildName) { %> — <%= guildName %><% } %></h1>
+        <p class="muted">Answer honestly. A moderator will review this. The decision will show up on this page — keep the link.</p>
+        <% if (typeof message !== 'undefined' && message) { %>
+          <p class="warn-text"><%= message %></p>
+        <% } %>
+        <form method="POST" action="/appeal/<%= guildId %>" class="stack">
+          <input type="hidden" name="t" value="<%= token %>" />
+          <% questions.forEach(function (q, i) { %>
+            <label class="small"><%= q %></label>
+            <textarea name="a" rows="3" maxlength="2000" <%= i === 0 ? 'required' : '' %>></textarea>
+          <% }) %>
+          <div style="margin-top:12px"><button type="submit">Submit appeal</button></div>
+        </form>
+        <% if (serverInvite) { %>
+          <p class="muted small" style="margin-top:12px">📩 Want the decision by DM too? Join <a href="<%= serverInvite %>"><%= serverInvite %></a> so Sylo shares a server with you.</p>
+        <% } %>
+
+      <% } else if (state === 'submitted' || state === 'pending') { %>
+        <h1 class="page-title"><%= state === 'submitted' ? '✅ Appeal submitted' : 'Appeal pending' %></h1>
+        <p><%= message %></p>
+        <% if (serverInvite) { %>
+          <p class="muted small">📩 To also get the decision by DM, join <a href="<%= serverInvite %>"><%= serverInvite %></a>.</p>
+        <% } %>
+        <p class="muted small">You can close this tab and check back here later.</p>
+
+      <% } else if (state === 'decided') { %>
+        <% if (verdict === 'accepted') { %>
+          <h1 class="page-title">✅ Appeal accepted</h1>
+          <p>Your ban appeal<% if (guildName) { %> for <strong><%= guildName %></strong><% } %> was accepted.</p>
+          <p><strong>Note from the moderators:</strong> <%= decisionReason %></p>
+          <% if (rejoinInvite) { %>
+            <p style="margin-top:14px"><a class="btn" href="<%= rejoinInvite %>">Rejoin<% if (guildName) { %> <%= guildName %><% } %> &rarr;</a></p>
+            <p class="muted small">This invite is single-use — don't share it.</p>
+          <% } else { %>
+            <p class="muted small">Your ban has been lifted. Use any normal invite to rejoin, or ask a moderator for one.</p>
+          <% } %>
+        <% } else if (verdict === 'denied') { %>
+          <h1 class="page-title">❌ Appeal denied</h1>
+          <p>Your ban appeal<% if (guildName) { %> for <strong><%= guildName %></strong><% } %> was denied.</p>
+          <p><strong>Reason:</strong> <%= decisionReason %></p>
+          <% if (reappealDays > 0) { %>
+            <p class="muted small">You can submit a new appeal in about <%= reappealDays %> day(s) — reopen this link then.</p>
+          <% } %>
+        <% } else { %>
+          <h1 class="page-title">Nothing to appeal</h1>
+          <p class="muted"><%= decisionReason %></p>
+        <% } %>
+
+      <% } else { %>
+        <h1 class="page-title">Something went wrong</h1>
+        <p class="warn-text"><%= message %></p>
+      <% } %>
+    </div>
+    <p class="lb-foot muted small">Powered by Sylo</p>
+  </main>
+</body>
+</html>

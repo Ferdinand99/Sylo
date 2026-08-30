@@ -162,6 +162,15 @@ export const MODULES = [
     defaultEnabled: false,
     configurable: true,
   },
+  {
+    id: 'appeals',
+    name: 'Ban appeals',
+    description: 'DM banned members a link to an appeal form; staff accept or deny it here.',
+    icon: '⚖️',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
 ];
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));

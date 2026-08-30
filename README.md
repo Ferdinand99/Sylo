@@ -1,12 +1,12 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Sixteen per-guild modules
+for self-hosting on an **Unraid server via Docker**. Seventeen per-guild modules
 (moderation, logging, tickets, reaction roles, verification, welcome, sticky
 messages, auto-moderation, counting, custom commands, autoresponder, scheduled
-messages, leveling, AFK, server statistics, free games), Discord OAuth2 login, a public
-leveling leaderboard, and **Battlefield-series** player stats via the public
-[gametools.network](https://gametools.network) API.
+messages, leveling, AFK, server statistics, free games, ban appeals), Discord OAuth2
+login, a public leveling leaderboard, and **Battlefield-series** player stats via the
+public [gametools.network](https://gametools.network) API.
 
 ## What's new in 2.0
 
@@ -40,7 +40,7 @@ leveling leaderboard, and **Battlefield-series** player stats via the public
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 16 feature groups, each toggled and configured from the
+- **Per-guild modules** — 17 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -71,6 +71,14 @@ leveling leaderboard, and **Battlefield-series** player stats via the public
   - **Free games** — announces games that become free to claim (hourly poll):
     the Epic Games Store, plus Steam / GOG / Fanatical / Humble and more with an
     `ITAD_API_KEY`. Optional ping role; `/freegames [dlc]` on demand
+  - **Ban appeals** — banned members are DM'd a signed link to an appeal form
+    (sent *before* the ban lands, since a bot can't DM a user it no longer shares
+    a server with). Staff accept (auto-unban + single-use rejoin invite) or deny
+    with a reason from the Appeals tab. The decision, reason and rejoin invite are
+    always shown on the same link when the user reopens it, so notification never
+    depends on the DM. Configurable questions, post-denial cooldown, and an
+    optional "appeals server" invite so Sylo can DM the outcome too; needs
+    `DASHBOARD_URL` set
 - **Command management** — disable a command per server or restrict it to
   channels / roles (admins bypass).
 - **Operations** — per-server config **audit log** and JSON **config export**,
@@ -111,15 +119,16 @@ src/
     index.js            loads module implementations
     moderation.js logging.js tickets.js roles.js welcome.js sticky.js
     counting.js automod.js customCommands.js autoresponder.js verification.js
-    scheduledMessages.js leveling.js afk.js serverStats.js freeGames.js
+    scheduledMessages.js leveling.js afk.js serverStats.js freeGames.js appeals.js
   adapters/games/       gameAdapter, registry, battlefield
   db/
     index.js            SQLite connection + migrations
     cache guildSettings modules commandOverrides warnings tickets
-    composedMessages counting scheduledMessages leveling
+    composedMessages counting scheduledMessages leveling appeals
   web/
     server.js           Express app
-    routes/             health, dashboard, commands, stats, guilds, guildTickets
+    routes/             health, dashboard, commands, stats, guilds, guildTickets,
+                        verify + appeal (public), leaderboard (public)
     middleware/         auth (OAuth2), ticketAccess
     lib/ views/ public/ helpers; EJS templates; styles.css, app.js
 scripts/register-commands.js
@@ -154,7 +163,7 @@ commands then register instantly instead of taking up to ~1 hour globally.
 | `WEB_PORT`                | no       | `3000`                         | Dashboard HTTP port |
 | `DISCORD_CLIENT_SECRET`   | no       | —                              | Set to require "Log in with Discord" on the dashboard (see below) |
 | `SESSION_SECRET`          | no       | random                         | Signs the session cookie; pin it so logins survive restarts |
-| `DASHBOARD_URL`           | no       | derived                        | Public dashboard URL; only needed behind a reverse proxy |
+| `DASHBOARD_URL`           | no       | derived                        | Public dashboard URL; needed behind a reverse proxy and for verification-captcha / ban-appeal links |
 | `TURNSTILE_SITE_KEY`      | no       | —                              | Cloudflare Turnstile site key — enables the Verification captcha mode |
 | `TURNSTILE_SECRET_KEY`    | no       | —                              | Cloudflare Turnstile secret key (pair with the site key) |
 | `ITAD_API_KEY`            | no       | —                              | IsThereAnyDeal key — adds non-Epic stores to the Free games module |

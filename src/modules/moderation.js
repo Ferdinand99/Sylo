@@ -10,6 +10,7 @@ import { EmbedBuilder } from 'discord.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget, MOD_COLOR } from '../bot/lib/moderation.js';
+import { sendPreBanAppealDm } from './appeals.js';
 
 export const THRESHOLD_ACTIONS = ['timeout', 'kick', 'ban'];
 const MAX_TIMEOUT_MS = 28 * 86_400_000;
@@ -58,7 +59,11 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
       done = 'kicked';
     } else if (rule.action === 'ban' && guild.members.me?.permissions.has('BanMembers')) {
       if (config.dmOnPunish !== false) {
-        await notifyTarget(targetUser, { guildName: guild.name, action: 'banned', reason });
+        // DM before the ban; the appeals module adds the appeal link when active.
+        const appeal = await sendPreBanAppealDm(guild, targetUser, reason);
+        if (appeal === null) {
+          await notifyTarget(targetUser, { guildName: guild.name, action: 'banned', reason });
+        }
       }
       await guild.bans.create(targetUser.id, { reason });
       done = 'banned';

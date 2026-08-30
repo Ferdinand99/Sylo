@@ -16,6 +16,7 @@ const GUILD_TABLES = [
   'config_audit',
   'afk',
   'free_games_posted',
+  'appeals',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -47,6 +48,7 @@ const userStmts = {
       AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ? AND user_id = ?)
   `),
   tickets: db.prepare('DELETE FROM tickets WHERE guild_id = ? AND user_id = ?'),
+  appeals: db.prepare('DELETE FROM appeals WHERE guild_id = ? AND user_id = ?'),
 };
 
 const forgetUserTxn = db.transaction((guildId, userId) => {
@@ -55,12 +57,13 @@ const forgetUserTxn = db.transaction((guildId, userId) => {
   userStmts.counting.run(guildId, userId);
   const ticketMsgs = userStmts.ticketMsgs.run(guildId, userId).changes;
   const tickets = userStmts.tickets.run(guildId, userId).changes;
-  return { warnings, leveling, tickets, ticketMessages: ticketMsgs };
+  const appeals = userStmts.appeals.run(guildId, userId).changes;
+  return { warnings, leveling, tickets, ticketMessages: ticketMsgs, appeals };
 });
 
 /**
  * Erase a single member's data within one guild.
- * @returns {{ warnings: number, leveling: number, tickets: number, ticketMessages: number }}
+ * @returns {{ warnings: number, leveling: number, tickets: number, ticketMessages: number, appeals: number }}
  */
 export function forgetUser(guildId, userId) {
   return forgetUserTxn(guildId, userId);

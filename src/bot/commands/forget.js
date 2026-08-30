@@ -23,7 +23,7 @@ export async function execute(interaction) {
     return interaction.reply({
       flags: MessageFlags.Ephemeral,
       content:
-        `This permanently deletes your **warnings**, **XP / level**, and **ticket history** in ` +
+        `This permanently deletes your **warnings**, **XP / level**, **ticket history**, and **ban appeals** in ` +
         `**${interaction.guild.name}**. Moderation messages already posted to channels are not removed, ` +
         `and Sylo will still store new data going forward.\n\nRun \`/forget confirm:True\` to proceed.`,
     });
@@ -37,7 +37,8 @@ export async function execute(interaction) {
     .addFields(
       { name: 'Warnings', value: String(r.warnings), inline: true },
       { name: 'Leveling records', value: String(r.leveling), inline: true },
-      { name: 'Tickets', value: `${r.tickets} (${r.ticketMessages} msgs)`, inline: true }
+      { name: 'Tickets', value: `${r.tickets} (${r.ticketMessages} msgs)`, inline: true },
+      { name: 'Ban appeals', value: String(r.appeals), inline: true }
     );
   return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }

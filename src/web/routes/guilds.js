@@ -26,6 +26,8 @@ import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCo
 import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
 import { normaliseVerificationConfig, VERIFY_MODES, ensureVerifyMessage } from '../../modules/verification.js';
 import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
+import { normaliseAppealsConfig, decideAndNotify } from '../../modules/appeals.js';
+import { listAppeals, getAppeal } from '../../db/appeals.js';
 import { config as appConfig } from '../../config.js';
 import {
   listScheduled,
@@ -53,7 +55,7 @@ const router = Router();
 const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
   'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder', 'verification',
-  'afk', 'server-stats', 'free-games',
+  'afk', 'server-stats', 'free-games', 'appeals',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -188,6 +190,65 @@ router.get(
   })
 );
 
+// Ban appeals review panel: open submissions + recent decisions.
+router.get(
+  '/:guildId/appeals',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const rows = listAppeals(guild.id, 100);
+    const cfg = normaliseAppealsConfig(getGuildModule(guild.id, 'appeals').config);
+    const appeals = rows.map((a) => ({
+      id: a.id,
+      user: a.user_tag || a.user_id,
+      userId: a.user_id,
+      banReason: a.ban_reason || '—',
+      answers: a.answers,
+      status: a.status,
+      decidedBy: a.decided_by,
+      decisionReason: a.decision_reason,
+      ago: timeAgo(a.created_at),
+      decidedAgo: a.decided_at ? timeAgo(a.decided_at) : null,
+    }));
+    res.render('guild', {
+      ...baseContext(guild, 'appeals'),
+      appeals,
+      appealsOpen: appeals.filter((a) => a.status === 'open').length,
+      appealsModuleEnabled: getGuildModule(guild.id, 'appeals').enabled,
+      appealsConfigured: cfg.questions.length > 0,
+      msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+    });
+  })
+);
+
+// Accept or deny one appeal.
+router.post(
+  '/:guildId/appeals/:id/decide',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/appeals`;
+    const appeal = getAppeal(guild.id, req.params.id);
+    if (!appeal || appeal.status !== 'open') return res.redirect(`${back}?msg=appeal-gone`);
+
+    const decision = req.body.decision === 'accept' ? 'accepted' : req.body.decision === 'deny' ? 'denied' : null;
+    if (!decision) return res.redirect(`${back}?msg=appeal-bad`);
+    const reason = String(req.body.reason ?? '').trim().slice(0, 1000) || 'No reason given';
+
+    const result = await decideAndNotify(guild, appeal, {
+      status: decision,
+      decidedBy: moderatorDisplayName(req),
+      reason,
+    });
+    if (!result.recorded) return res.redirect(`${back}?msg=appeal-gone`);
+
+    recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: `appeal:${decision}`,
+      detail: `#${appeal.id} ${appeal.user_tag || appeal.user_id}${decision === 'accepted' && !result.unbanned ? ' (unban manually)' : ''}`,
+    });
+    res.redirect(`${back}?msg=appeal-${decision}${result.dmDelivered ? '' : '-nodm'}`);
+  })
+);
+
 // Per-module settings panel.
 router.get('/:guildId/m/:moduleId', (req, res) => {
   const mod = getModule(req.params.moduleId);
@@ -210,6 +271,7 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     automodActions: AUTOMOD_ACTIONS,
     verifyModes: VERIFY_MODES,
     turnstileEnabled: appConfig.turnstileEnabled,
+    dashboardUrlSet: Boolean(appConfig.dashboardUrl),
     voiceChannels: mod.id === 'server-stats' ? guildVoiceChannels(req.guild) : [],
     statTypes: STAT_TYPES,
     countingState: mod.id === 'counting' ? getCounting(req.guild.id) : null,
@@ -404,6 +466,15 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
         type: types[i],
         template: templates[i] ?? '',
       })),
+    });
+  } else if (mod.id === 'appeals') {
+    config = normaliseAppealsConfig({
+      questions: [].concat(req.body.q ?? []),
+      autoUnbanOnAccept: req.body.autoUnbanOnAccept === 'on',
+      reviewChannelId: req.body.reviewChannelId,
+      cooldownDays: req.body.cooldownDays,
+      appealMessage: req.body.appealMessage,
+      appealServerInvite: req.body.appealServerInvite,
     });
   } else if (mod.id === 'verification') {
     const prev = getGuildModule(req.guild.id, 'verification').config;

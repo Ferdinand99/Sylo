@@ -30,9 +30,15 @@
        'lvl-set': 'Member XP updated.',
        'lvl-reset': 'Leveling data cleared for this server.',
        'lvl-bad': 'Enter a valid user ID (or @mention) and an XP amount of 0 or more.',
+       'appeal-accepted': 'Appeal accepted — the member was DM\'d and can see it on their appeal link.',
+       'appeal-denied': 'Appeal denied — the member was DM\'d and can see it on their appeal link.',
+       'appeal-accepted-nodm': 'Appeal accepted. Sylo could not DM the member (no shared server) — they will see the decision and a rejoin invite on their appeal link.',
+       'appeal-denied-nodm': 'Appeal denied. Sylo could not DM the member (no shared server) — they will see the decision on their appeal link.',
+       'appeal-gone': 'That appeal was already decided or withdrawn.',
+       'appeal-bad': 'Choose accept or deny.',
      };
-     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset'].includes(msg);
-     const cls = ok ? 'ok' : (msg === 'warned-nolog' ? 'info' : 'bad');
+     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied'].includes(msg);
+     const cls = ok ? 'ok' : (msg === 'warned-nolog' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');
 %>
   <div class="banner <%= cls %>"><%= messages[msg] || 'Done.' %></div>
 <% } %>
@@ -173,6 +179,47 @@
     <% } else if (panel === 'moderation') { %>
       <%- include('guild/moderation', { guild: guild, warnings: warnings, warningTotal: warningTotal, warningShown: warningShown, bans: bans, bansTotal: bansTotal, bansShown: bansShown, bansError: bansError, banLimit: banLimit }) %>
 
+    <% } else if (panel === 'appeals') { %>
+      <h2>⚖️ Ban appeals</h2>
+      <p class="muted">Banned members are DM'd a link to an appeal form. Accept or deny each one with a reason — Sylo DMs the member the outcome, and accepting lifts the ban automatically when that option is on.</p>
+      <% if (!appealsModuleEnabled) { %>
+        <div class="banner info">The <strong>Ban appeals</strong> module is off. <a href="/guilds/<%= guild.id %>/m/appeals">Enable and configure it</a> to start collecting appeals.</div>
+      <% } %>
+
+      <% if (appeals.length === 0) { %>
+        <p class="muted">No appeals yet.</p>
+      <% } else { %>
+        <% appeals.forEach(function (a) { %>
+          <div class="cmd-override">
+            <div class="cmd-override-head">
+              <span><strong><%= a.user %></strong> <span class="mono muted">(<%= a.userId %>)</span></span>
+              <span class="pill <%= a.status === 'open' ? 'open' : (a.status === 'accepted' ? 'on' : 'off') %>"><%= a.status %></span>
+            </div>
+            <p class="muted small">Submitted <%= a.ago %> · original ban reason: <%= a.banReason %></p>
+            <dl class="appeal-answers">
+              <% a.answers.forEach(function (qa) { %>
+                <dt class="small"><%= qa.q %></dt>
+                <dd><%= qa.a || '—' %></dd>
+              <% }) %>
+            </dl>
+            <% if (a.status === 'open') { %>
+              <form method="POST" action="/guilds/<%= guild.id %>/appeals/<%= a.id %>/decide" class="stack">
+                <label class="small">Reason / note to the member</label>
+                <textarea name="reason" rows="2" maxlength="1000" placeholder="Explain the decision — the member sees this."></textarea>
+                <div class="btn-row">
+                  <button type="submit" name="decision" value="accept">Accept &amp; unban</button>
+                  <button type="submit" name="decision" value="deny" class="danger">Deny</button>
+                </div>
+              </form>
+            <% } else { %>
+              <p class="muted small">
+                <%= a.status === 'accepted' ? 'Accepted' : 'Denied' %> <%= a.decidedAgo %> by <%= a.decidedBy || '—' %><% if (a.decisionReason) { %> — “<%= a.decisionReason %>”<% } %>
+              </p>
+            <% } %>
+          </div>
+        <% }) %>
+      <% } %>
+
     <% } else if (panel.indexOf('m/') === 0 && typeof activeModule !== 'undefined') { %>
       <% var mrow = modules.find(function (x) { return x.id === activeModule.id; }); %>
       <div class="module-panel-head">
@@ -189,7 +236,7 @@
       <% } %>
       <% if (!mrow.enabled) { %><p class="muted small">Enable the module (toggle above) for these settings to take effect.</p><% } %>
       <hr class="sep" />
-      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, roles: (typeof roles !== 'undefined' ? roles : []), logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []), thresholdActions: (typeof thresholdActions !== 'undefined' ? thresholdActions : []), automodRules: (typeof automodRules !== 'undefined' ? automodRules : []), automodActions: (typeof automodActions !== 'undefined' ? automodActions : []), countingState: (typeof countingState !== 'undefined' ? countingState : null), ccPlaceholders: (typeof ccPlaceholders !== 'undefined' ? ccPlaceholders : []), arPlaceholders: (typeof arPlaceholders !== 'undefined' ? arPlaceholders : []), arMatchModes: (typeof arMatchModes !== 'undefined' ? arMatchModes : []), scheduledJobs: (typeof scheduledJobs !== 'undefined' ? scheduledJobs : []), schedulePresets: (typeof schedulePresets !== 'undefined' ? schedulePresets : []), scheduleUnits: (typeof scheduleUnits !== 'undefined' ? scheduleUnits : []), announceModes: (typeof announceModes !== 'undefined' ? announceModes : []), levelingBoard: (typeof levelingBoard !== 'undefined' ? levelingBoard : null), verifyModes: (typeof verifyModes !== 'undefined' ? verifyModes : []), turnstileEnabled: (typeof turnstileEnabled !== 'undefined' ? turnstileEnabled : false), voiceChannels: (typeof voiceChannels !== 'undefined' ? voiceChannels : []), statTypes: (typeof statTypes !== 'undefined' ? statTypes : []) }) %>
+      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, roles: (typeof roles !== 'undefined' ? roles : []), logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []), thresholdActions: (typeof thresholdActions !== 'undefined' ? thresholdActions : []), automodRules: (typeof automodRules !== 'undefined' ? automodRules : []), automodActions: (typeof automodActions !== 'undefined' ? automodActions : []), countingState: (typeof countingState !== 'undefined' ? countingState : null), ccPlaceholders: (typeof ccPlaceholders !== 'undefined' ? ccPlaceholders : []), arPlaceholders: (typeof arPlaceholders !== 'undefined' ? arPlaceholders : []), arMatchModes: (typeof arMatchModes !== 'undefined' ? arMatchModes : []), scheduledJobs: (typeof scheduledJobs !== 'undefined' ? scheduledJobs : []), schedulePresets: (typeof schedulePresets !== 'undefined' ? schedulePresets : []), scheduleUnits: (typeof scheduleUnits !== 'undefined' ? scheduleUnits : []), announceModes: (typeof announceModes !== 'undefined' ? announceModes : []), levelingBoard: (typeof levelingBoard !== 'undefined' ? levelingBoard : null), verifyModes: (typeof verifyModes !== 'undefined' ? verifyModes : []), turnstileEnabled: (typeof turnstileEnabled !== 'undefined' ? turnstileEnabled : false), voiceChannels: (typeof voiceChannels !== 'undefined' ? voiceChannels : []), statTypes: (typeof statTypes !== 'undefined' ? statTypes : []), dashboardUrlSet: (typeof dashboardUrlSet !== 'undefined' ? dashboardUrlSet : false) }) %>
     <% } %>
   </section>
 </div>

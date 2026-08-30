@@ -10,6 +10,7 @@ import { rateLimit } from './middleware/rateLimit.js';
 import healthRouter from './routes/health.js';
 import leaderboardRouter from './routes/leaderboard.js';
 import verifyRouter from './routes/verify.js';
+import appealRouter from './routes/appeal.js';
 import dashboardRouter from './routes/dashboard.js';
 import statsRouter from './routes/stats.js';
 import commandsRouter from './routes/commands.js';
@@ -42,6 +43,7 @@ export function createApp() {
   app.use('/health', healthRouter);
   app.use('/leaderboard', rateLimit({ windowMs: 60_000, max: 40 }), leaderboardRouter);
   app.use('/verify', rateLimit({ windowMs: 60_000, max: 20 }), verifyRouter);
+  app.use('/appeal', rateLimit({ windowMs: 60_000, max: 15 }), appealRouter);
 
   // Everything below requires a signed-in user when auth is enabled.
   app.use(requireAuth);

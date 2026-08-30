@@ -235,6 +235,34 @@ const MIGRATIONS = [
       CREATE INDEX idx_free_games_posted_at ON free_games_posted (posted_at);
     `);
   },
+
+  // Ban appeals: a banned user opens a signed link, answers the guild's
+  // questions, and staff accept or deny from the dashboard.
+  (database) => {
+    database.exec(`
+      CREATE TABLE appeals (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id        TEXT NOT NULL,
+        user_id         TEXT NOT NULL,
+        user_tag        TEXT NOT NULL DEFAULT '',
+        ban_reason      TEXT NOT NULL DEFAULT '',
+        answers         TEXT NOT NULL DEFAULT '[]',
+        status          TEXT NOT NULL DEFAULT 'open',
+        decided_by      TEXT,
+        decision_reason TEXT,
+        created_at      INTEGER NOT NULL,
+        decided_at      INTEGER
+      );
+      CREATE INDEX idx_appeals_guild_status ON appeals (guild_id, status, created_at DESC);
+      CREATE UNIQUE INDEX idx_appeals_open_user ON appeals (guild_id, user_id) WHERE status = 'open';
+    `);
+  },
+
+  // Appeals: store the single-use rejoin invite generated when one is accepted,
+  // so the appeal page can show it when the user reopens their link.
+  (database) => {
+    database.exec('ALTER TABLE appeals ADD COLUMN invite_url TEXT;');
+  },
 ];
 
 /**

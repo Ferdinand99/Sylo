@@ -3,6 +3,10 @@
   <a href="/guilds/<%= guild.id %>/general" class="<%= panel === 'general' ? 'active' : '' %>">General</a>
   <a href="/guilds/<%= guild.id %>/commands" class="<%= panel === 'commands' ? 'active' : '' %>">Commands</a>
   <a href="/guilds/<%= guild.id %>/moderation" class="<%= panel === 'moderation' ? 'active' : '' %>">Moderation</a>
+  <a href="/guilds/<%= guild.id %>/appeals" class="<%= panel === 'appeals' ? 'active' : '' %>">
+    <span>Appeals</span>
+    <% if (typeof openAppeals !== 'undefined' && openAppeals > 0) { %><span class="nav-badge"><%= openAppeals %></span><% } %>
+  </a>
   <a href="/guilds/<%= guild.id %>/tickets" class="<%= panel === 'tickets' ? 'active' : '' %>">
     <span>Tickets</span>
     <% if (typeof openTickets !== 'undefined' && openTickets > 0) { %><span class="nav-badge"><%= openTickets %></span><% } %>

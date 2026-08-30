@@ -12,6 +12,7 @@ import { openTicketCount, unreadTicketCount } from '../../db/tickets.js';
 import { listComposed } from '../../db/composedMessages.js';
 import { getCounting } from '../../db/counting.js';
 import { listScheduled } from '../../db/scheduledMessages.js';
+import { countOpenAppeals } from '../../db/appeals.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
@@ -30,7 +31,7 @@ const KEY_PERMS = [
 // of the synthetic cards built below ('general', 'commands', 'messages').
 const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
-  { title: 'Moderation & filtering', ids: ['automod', 'verification', 'logging'] },
+  { title: 'Moderation & filtering', ids: ['automod', 'verification', 'appeals', 'logging'] },
   { title: 'Engagement', ids: ['welcome', 'roles', 'counting', 'leveling', 'sticky'] },
   { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'autoresponder', 'afk', 'server-stats', 'free-games'] },
 ];
@@ -161,6 +162,16 @@ function moduleLines(id, guild, cfg) {
         role ? on('Verified role', `@${role.name}`) : off('Verified role', 'not set'),
         ch ? on('Channel', `#${ch}`) : off('Channel', 'not set'),
         neutral('Mode', cfg.mode || 'button'),
+      ];
+    }
+    case 'appeals': {
+      const q = Array.isArray(cfg.questions) ? cfg.questions.length : 3;
+      const open = countOpenAppeals(guild.id);
+      const review = channelName(guild, cfg.reviewChannelId);
+      return [
+        on('Form questions', String(q || 3)),
+        open ? on('Open appeals', String(open)) : neutral('Open appeals', '0'),
+        review ? on('Review channel', `#${review}`) : neutral('Review channel', 'not set'),
       ];
     }
     case 'welcome': {

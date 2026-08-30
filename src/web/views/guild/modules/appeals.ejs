@@ -1,0 +1,58 @@
+<% var cfg = moduleConfig || {}; %>
+<% var questions = (Array.isArray(cfg.questions) && cfg.questions.length) ? cfg.questions : [
+     'Why were you banned?',
+     'Why should your ban be lifted?',
+     'What will you do differently if your appeal is accepted?'
+   ]; %>
+
+<p class="muted small">
+  When a member is banned, Sylo DMs them a private link to an appeal form on this dashboard.
+  Their answers show up on the <a href="/guilds/<%= guild.id %>/appeals">Appeals tab</a>. The decision (and,
+  on accept, a single-use rejoin invite) is always shown on that same link when they reopen it — Discord
+  won't let a bot DM someone it no longer shares a server with, so the page is the reliable channel.
+  <% if (!dashboardUrlSet) { %>
+    <br /><span class="warn-text">Set <code>DASHBOARD_URL</code> to a URL your members can reach —
+    without it the appeal link cannot be built.</span>
+  <% } %>
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/appeals/config" class="stack" style="max-width:600px">
+  <label>Appeal form questions <span class="muted small">— 1 to 5; blank rows are dropped</span></label>
+  <% for (var i = 0; i < 5; i++) { %>
+    <input type="text" name="q" maxlength="200" value="<%= questions[i] || '' %>"
+      placeholder="Question <%= i + 1 %><%= i === 0 ? ' (required)' : ' (optional)' %>" />
+  <% } %>
+
+  <label class="checkline" style="margin-top:8px">
+    <input type="checkbox" name="autoUnbanOnAccept" <%= cfg.autoUnbanOnAccept !== false ? 'checked' : '' %> />
+    Lift the ban automatically when an appeal is accepted
+  </label>
+
+  <label style="margin-top:6px">Staff review channel <span class="muted small">— optional; gets new-appeal and decision notices</span></label>
+  <select name="reviewChannelId">
+    <option value="">— none —</option>
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= c.id === (cfg.reviewChannelId || '') ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+
+  <label class="small" style="margin-top:6px">Cooldown after a denied appeal (days, 0 = allow immediately)</label>
+  <input type="number" name="cooldownDays" min="0" max="90" value="<%= (cfg.cooldownDays != null ? cfg.cooldownDays : 7) %>" style="width:100px" />
+
+  <label class="small" style="margin-top:6px">Extra line in the ban DM <span class="muted">— optional</span></label>
+  <textarea name="appealMessage" rows="2" maxlength="1000" placeholder="e.g. Appeals are reviewed within 48 hours."><%= cfg.appealMessage || '' %></textarea>
+
+  <label class="small" style="margin-top:6px">Appeals server invite <span class="muted">— optional</span></label>
+  <input type="text" name="appealServerInvite" maxlength="100" value="<%= cfg.appealServerInvite || '' %>"
+    placeholder="https://discord.gg/…" />
+  <span class="muted small">A permanent invite to another server Sylo is in. If the banned user joins it,
+  Sylo shares a server with them and can also DM the decision.</span>
+
+  <div style="margin-top:12px"><button type="submit">Save</button></div>
+</form>
+
+<p class="muted small" style="margin-top:12px">
+  Sylo needs <strong>Ban Members</strong> to read ban reasons and auto-unban on accept, and
+  <strong>Create Invite</strong> to mint the rejoin link. The review channel post always includes the
+  appeal link so you can share it manually if a member's DMs are closed.
+</p>

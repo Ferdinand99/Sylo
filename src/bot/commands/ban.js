@@ -7,6 +7,7 @@ import {
 } from 'discord.js';
 import { checkActable, notifyTarget, resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
+import { sendPreBanAppealDm } from '../../modules/appeals.js';
 
 const DELETE_CHOICES = [
   { name: "Don't delete any", value: 0 },
@@ -68,9 +69,16 @@ export async function execute(interaction) {
   }
 
   await interaction.deferReply();
-  const dmed = member
-    ? await notifyTarget(user, { guildName: guild.name, action: 'banned', reason })
-    : false;
+  // DM before banning — a bot can't message a user it no longer shares a guild
+  // with. When the appeals module is active it sends the DM (with the appeal
+  // link); otherwise fall back to the plain "you were banned" notice.
+  let dmed = false;
+  if (member) {
+    const appeal = await sendPreBanAppealDm(guild, user, reason);
+    dmed = appeal === null
+      ? await notifyTarget(user, { guildName: guild.name, action: 'banned', reason })
+      : appeal;
+  }
   await guild.bans.create(user.id, { reason: `${interaction.user.tag}: ${reason}`, deleteMessageSeconds });
 
   const embed = resultEmbed({

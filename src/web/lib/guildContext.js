@@ -3,6 +3,7 @@ import { runtime } from '../../runtime.js';
 import { MODULES, missingIntents } from '../../modules/registry.js';
 import { getGuildModules } from '../../db/modules.js';
 import { openTicketCount } from '../../db/tickets.js';
+import { countOpenAppeals } from '../../db/appeals.js';
 import { guildTextChannels } from './discord.js';
 
 /** The guild from the URL, or null. */
@@ -41,6 +42,7 @@ export function baseContext(guild, panel) {
     channels: guildTextChannels(guild),
     modules,
     openTickets: openTicketCount(guild.id),
+    openAppeals: countOpenAppeals(guild.id),
     panel,
     msg: null,
   };
