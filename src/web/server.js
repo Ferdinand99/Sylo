@@ -9,6 +9,7 @@ import { mountAuth, requireAuth } from './middleware/auth.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import healthRouter from './routes/health.js';
 import leaderboardRouter from './routes/leaderboard.js';
+import verifyRouter from './routes/verify.js';
 import dashboardRouter from './routes/dashboard.js';
 import statsRouter from './routes/stats.js';
 import commandsRouter from './routes/commands.js';
@@ -37,9 +38,10 @@ export function createApp() {
   // Session + res.locals + /auth/* routes. No-op guards in open mode.
   mountAuth(app);
 
-  // Public routes: healthcheck and the shareable per-guild leaderboard.
+  // Public routes: healthcheck, the shareable leaderboard, and member verification.
   app.use('/health', healthRouter);
   app.use('/leaderboard', rateLimit({ windowMs: 60_000, max: 40 }), leaderboardRouter);
+  app.use('/verify', rateLimit({ windowMs: 60_000, max: 20 }), verifyRouter);
 
   // Everything below requires a signed-in user when auth is enabled.
   app.use(requireAuth);

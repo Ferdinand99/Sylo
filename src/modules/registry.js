@@ -55,6 +55,15 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'verification',
+    name: 'Verification',
+    description: 'Gate new members behind a Verify button or a captcha before they get a role.',
+    icon: '✅',
+    requiredIntents: ['GuildMembers'],
+    defaultEnabled: false,
+    configurable: true,
+  },
+  {
     id: 'welcome',
     name: 'Welcome & leave',
     description: 'Greet new members and announce departures.',

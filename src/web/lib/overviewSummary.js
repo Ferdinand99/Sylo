@@ -30,7 +30,7 @@ const KEY_PERMS = [
 // of the synthetic cards built below ('general', 'commands', 'messages').
 const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
-  { title: 'Moderation & filtering', ids: ['automod', 'logging'] },
+  { title: 'Moderation & filtering', ids: ['automod', 'verification', 'logging'] },
   { title: 'Engagement', ids: ['welcome', 'roles', 'counting', 'leveling', 'sticky'] },
   { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'autoresponder'] },
 ];
@@ -152,6 +152,15 @@ function moduleLines(id, guild, cfg) {
       return [
         rr ? on('Reaction-role messages', String(rr)) : off('Reaction-role messages', 'none'),
         auto ? on('Autoroles on join', String(auto)) : off('Autoroles on join', 'none'),
+      ];
+    }
+    case 'verification': {
+      const role = cfg.verifiedRoleId ? guild.roles?.cache?.get(cfg.verifiedRoleId) : null;
+      const ch = channelName(guild, cfg.channelId);
+      return [
+        role ? on('Verified role', `@${role.name}`) : off('Verified role', 'not set'),
+        ch ? on('Channel', `#${ch}`) : off('Channel', 'not set'),
+        neutral('Mode', cfg.mode || 'button'),
       ];
     }
     case 'welcome': {

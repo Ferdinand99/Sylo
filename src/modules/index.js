@@ -10,4 +10,5 @@ import './customCommands.js';
 import './scheduledMessages.js';
 import './leveling.js';
 import './autoresponder.js';
+import './verification.js';
 // moderation.js has no event handlers (called from the warn flow) — not imported here.

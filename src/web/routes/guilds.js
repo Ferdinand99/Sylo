@@ -24,6 +24,8 @@ import { parseEmoji, createReactionMessage } from '../../modules/roles.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
 import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
+import { normaliseVerificationConfig, VERIFY_MODES, ensureVerifyMessage } from '../../modules/verification.js';
+import { config as appConfig } from '../../config.js';
 import {
   listScheduled,
   createScheduled,
@@ -49,7 +51,7 @@ const router = Router();
 // Module ids that have a real settings partial (views/guild/modules/<id>.ejs).
 const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
-  'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder',
+  'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder', 'verification',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -199,9 +201,13 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
-    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder'].includes(mod.id) ? assignableRoles(req.guild) : [],
+    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification'].includes(mod.id)
+      ? assignableRoles(req.guild)
+      : [],
     automodRules: AUTOMOD_RULES,
     automodActions: AUTOMOD_ACTIONS,
+    verifyModes: VERIFY_MODES,
+    turnstileEnabled: appConfig.turnstileEnabled,
     countingState: mod.id === 'counting' ? getCounting(req.guild.id) : null,
     ccPlaceholders: CC_PLACEHOLDERS,
     arPlaceholders: AR_PLACEHOLDERS,
@@ -373,6 +379,19 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
         deleteTrigger: del[i] === 'delete',
       })),
     });
+  } else if (mod.id === 'verification') {
+    const prev = getGuildModule(req.guild.id, 'verification').config;
+    config = normaliseVerificationConfig({
+      mode: req.body.mode,
+      verifiedRoleId: req.body.verifiedRoleId,
+      channelId: req.body.channelId,
+      messageId: prev.messageId, // bot-managed
+      title: req.body.title,
+      message: req.body.message,
+      successMessage: req.body.successMessage,
+      logChannelId: req.body.logChannelId,
+      kickAfterMinutes: req.body.kickAfterMinutes,
+    });
   } else {
     return res.redirect(back);
   }
@@ -382,6 +401,11 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
   if (mod.id === 'custom-commands') {
     syncGuildCustomCommands(req.guild).catch((err) =>
       console.error('[custom-commands] sync after save failed:', err.message)
+    );
+  }
+  if (mod.id === 'verification') {
+    ensureVerifyMessage(req.guild, config).catch((err) =>
+      console.error('[verification] ensure message after save failed:', err.message)
     );
   }
   res.redirect(`${back}?msg=saved`);

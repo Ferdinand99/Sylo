@@ -1,10 +1,10 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Twelve per-guild modules
-(moderation, logging, tickets, reaction roles, welcome, sticky messages,
-auto-moderation, counting, custom commands, autoresponder, scheduled messages,
-leveling), Discord OAuth2 login, a public leveling leaderboard, and
+for self-hosting on an **Unraid server via Docker**. Thirteen per-guild modules
+(moderation, logging, tickets, reaction roles, verification, welcome, sticky
+messages, auto-moderation, counting, custom commands, autoresponder, scheduled
+messages, leveling), Discord OAuth2 login, a public leveling leaderboard, and
 **Battlefield-series** player stats via the public
 [gametools.network](https://gametools.network) API.
 
@@ -40,11 +40,14 @@ leveling), Discord OAuth2 login, a public leveling leaderboard, and
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 12 feature groups, each toggled and configured from the
+- **Per-guild modules** — 13 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
   - **Reaction roles & autoroles** — dashboard-built reaction-role embeds; roles on join
+  - **Verification** — gate new members behind a Verify button, or a Cloudflare
+    Turnstile captcha on the dashboard, before granting a role; optional
+    auto-kick of unverified members
   - **Welcome & leave** — join/leave messages with placeholders, optional DM
   - **Sticky messages** — keep a message pinned to the bottom of a channel
   - **Tickets (modmail)** — members DM the bot; staff read and reply from the
@@ -100,7 +103,7 @@ src/
     dispatch.js         fans gateway events out to enabled modules
     index.js            loads module implementations
     moderation.js logging.js tickets.js roles.js welcome.js sticky.js
-    counting.js automod.js customCommands.js autoresponder.js
+    counting.js automod.js customCommands.js autoresponder.js verification.js
     scheduledMessages.js leveling.js
   adapters/games/       gameAdapter, registry, battlefield
   db/
@@ -145,6 +148,8 @@ commands then register instantly instead of taking up to ~1 hour globally.
 | `DISCORD_CLIENT_SECRET`   | no       | —                              | Set to require "Log in with Discord" on the dashboard (see below) |
 | `SESSION_SECRET`          | no       | random                         | Signs the session cookie; pin it so logins survive restarts |
 | `DASHBOARD_URL`           | no       | derived                        | Public dashboard URL; only needed behind a reverse proxy |
+| `TURNSTILE_SITE_KEY`      | no       | —                              | Cloudflare Turnstile site key — enables the Verification captcha mode |
+| `TURNSTILE_SECRET_KEY`    | no       | —                              | Cloudflare Turnstile secret key (pair with the site key) |
 | `INTENT_GUILD_MEMBERS`    | no       | `true`                         | Request the Server Members privileged intent |
 | `INTENT_MESSAGE_CONTENT`  | no       | `true`                         | Request the Message Content privileged intent |
 | `GAMETOOLS_API_BASE`      | no       | `https://api.gametools.network`| Stats API base URL |

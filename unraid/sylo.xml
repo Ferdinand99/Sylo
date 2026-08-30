@@ -120,6 +120,24 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Required="false"
     Mask="false"/>
   <Config
+    Name="TURNSTILE_SITE_KEY"
+    Target="TURNSTILE_SITE_KEY"
+    Default=""
+    Description="Optional. Cloudflare Turnstile site key — enables the Verification module's captcha mode. Free at dash.cloudflare.com -&gt; Turnstile. Needs both keys and DASHBOARD_URL set; otherwise captcha mode falls back to a plain Verify button."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+  <Config
+    Name="TURNSTILE_SECRET_KEY"
+    Target="TURNSTILE_SECRET_KEY"
+    Default=""
+    Description="Optional. Cloudflare Turnstile secret key — pairs with TURNSTILE_SITE_KEY for the Verification captcha."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"/>
+  <Config
     Name="STATS_CACHE_TTL_MINUTES"
     Target="STATS_CACHE_TTL_MINUTES"
     Default="5"

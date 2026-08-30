@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Verify — Sylo</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <% if (state === 'challenge') { %>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <% } %>
+</head>
+<body>
+  <main class="verify-wrap">
+    <div class="card">
+      <% if (state === 'challenge') { %>
+        <h1 class="page-title">Verify to continue</h1>
+        <p class="muted">Complete the check below and you'll get access to the server.</p>
+        <form method="POST" action="/verify/<%= guildId %>" class="stack" style="align-items:center">
+          <input type="hidden" name="t" value="<%= token %>" />
+          <div class="cf-turnstile" data-sitekey="<%= siteKey %>" data-theme="dark"></div>
+          <div style="margin-top:10px"><button type="submit">Verify</button></div>
+        </form>
+      <% } else if (state === 'done') { %>
+        <h1 class="page-title">✅ Verified</h1>
+        <p><%= message %></p>
+        <p class="muted small">You can close this tab and head back to Discord.</p>
+      <% } else { %>
+        <h1 class="page-title">Verification failed</h1>
+        <p class="warn-text"><%= message %></p>
+      <% } %>
+    </div>
+    <p class="lb-foot muted small">Powered by Sylo</p>
+  </main>
+</body>
+</html>

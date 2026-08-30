@@ -64,13 +64,20 @@ if (!Number.isInteger(webPort) || webPort <= 0 || webPort > 65535) {
 // "Log in with Discord" and gates actions to guild admins. When unset, the
 // dashboard runs in open mode (localhost / trusted LAN only).
 const discordClientSecret = optionalOrNull('DISCORD_CLIENT_SECRET');
+const turnstileSiteKey = optionalOrNull('TURNSTILE_SITE_KEY');
+const turnstileSecretKey = optionalOrNull('TURNSTILE_SECRET_KEY');
+// Signs session cookies and short-lived tokens (e.g. verification links), so it
+// must always exist. When unset we generate one; that only matters for
+// persistence when the dashboard login is enabled.
 let sessionSecret = optionalOrNull('SESSION_SECRET');
-if (discordClientSecret && !sessionSecret) {
+if (!sessionSecret) {
   sessionSecret = randomBytes(32).toString('hex');
-  console.warn(
-    '[config] SESSION_SECRET is not set — generated a random one. ' +
-      'Dashboard sessions will not survive a restart until you pin SESSION_SECRET.'
-  );
+  if (discordClientSecret) {
+    console.warn(
+      '[config] SESSION_SECRET is not set — generated a random one. ' +
+        'Dashboard sessions will not survive a restart until you pin SESSION_SECRET.'
+    );
+  }
 }
 
 export const config = Object.freeze({
@@ -92,6 +99,12 @@ export const config = Object.freeze({
   authEnabled: Boolean(discordClientSecret),
   discordClientSecret,
   sessionSecret,
+
+  // Cloudflare Turnstile — powers the Verification module's captcha mode. When
+  // both are unset, captcha mode falls back to a plain button.
+  turnstileSiteKey,
+  turnstileSecretKey,
+  turnstileEnabled: Boolean(turnstileSiteKey && turnstileSecretKey),
 
   // Game stats
   gametoolsApiBase: optional('GAMETOOLS_API_BASE', 'https://api.gametools.network').replace(/\/+$/, ''),

@@ -1,0 +1,65 @@
+<% var cfg = moduleConfig || {}; %>
+
+<p class="muted small">
+  Posts a message with a <strong>Verify</strong> button in the chosen channel. New members click it to
+  get the verified role. In <strong>captcha</strong> mode the button sends them a private link to a
+  Cloudflare Turnstile check on this dashboard first.
+  <% if (!turnstileEnabled) { %>
+    <br /><span class="warn-text">Captcha mode needs <code>TURNSTILE_SITE_KEY</code> and
+    <code>TURNSTILE_SECRET_KEY</code> set — until then it behaves like button mode.</span>
+  <% } %>
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/verification/config" class="stack" style="max-width:560px">
+  <label>Mode</label>
+  <select name="mode">
+    <% verifyModes.forEach(function (m) { %>
+      <option value="<%= m %>" <%= m === (cfg.mode || 'button') ? 'selected' : '' %>>
+        <%= m === 'captcha' ? 'Captcha (button + Turnstile)' : 'Button only' %>
+      </option>
+    <% }) %>
+  </select>
+
+  <label>Verified role <span class="muted small">— granted on success; put Sylo's role above it</span></label>
+  <select name="verifiedRoleId" required>
+    <option value="">— select —</option>
+    <% roles.forEach(function (r) { %>
+      <option value="<%= r.id %>" <%= r.id === (cfg.verifiedRoleId || '') ? 'selected' : '' %>><%= r.name %></option>
+    <% }) %>
+  </select>
+
+  <label>Verify channel</label>
+  <select name="channelId" required>
+    <option value="">— select —</option>
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= c.id === (cfg.channelId || '') ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+
+  <label class="small" style="margin-top:6px">Message title</label>
+  <input type="text" name="title" maxlength="200" value="<%= cfg.title || 'Verification' %>" />
+
+  <label class="small">Message body</label>
+  <textarea name="message" rows="2" maxlength="1500"><%= cfg.message || 'Click the button below to verify and unlock the rest of the server.' %></textarea>
+
+  <label class="small">Reply after verifying</label>
+  <input type="text" name="successMessage" maxlength="1000" value="<%= cfg.successMessage || 'You are verified — welcome!' %>" />
+
+  <label style="margin-top:6px">Log channel <span class="muted small">— optional</span></label>
+  <select name="logChannelId">
+    <option value="">— none —</option>
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= c.id === (cfg.logChannelId || '') ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+
+  <label class="small" style="margin-top:6px">Kick members who don't verify within (minutes, 0 = never)</label>
+  <input type="number" name="kickAfterMinutes" min="0" max="10080" value="<%= cfg.kickAfterMinutes || 0 %>" style="width:100px" />
+
+  <div style="margin-top:12px"><button type="submit">Save</button></div>
+</form>
+
+<p class="muted small" style="margin-top:12px">
+  Saving (re)posts the verify message. Sylo needs <strong>Manage Roles</strong>, and — for the
+  kick option — <strong>Kick Members</strong>.
+</p>
