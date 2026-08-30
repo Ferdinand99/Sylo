@@ -11,6 +11,12 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # src/config.js requires these and exits without them; the suite only needs
+    # them to exist, never to be valid. DB tests redirect DATABASE_PATH to a
+    # temp file themselves (see test/helpers/tmpDb.js).
+    env:
+      DISCORD_TOKEN: ci-placeholder
+      DISCORD_CLIENT_ID: "000000000000000000"
     steps:
       - uses: actions/checkout@v4
 
