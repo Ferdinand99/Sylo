@@ -71,9 +71,11 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
-          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
+          # Push Docker (schema 2) media types, not OCI — Unraid's "check for
+          # updates" can't parse application/vnd.oci.image.manifest.v1+json.
+          outputs: type=image,oci-mediatypes=false,push=true
