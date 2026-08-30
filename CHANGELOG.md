@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0](https://github.com/Ferdinand99/Sylo/compare/v1.15.0...v2.0.0) (2026-08-30)
+
+
+### Features
+
+* 2.0 hardening — CI test gate, data controls, audit log, rate limiting ([9eaeab1](https://github.com/Ferdinand99/Sylo/commit/9eaeab13bdbecf0b6f2fd33695bb93adc4eb98c0))
+
 ## [1.15.0](https://github.com/Ferdinand99/Sylo/compare/v1.14.0...v1.15.0) (2026-08-30)
 
 
