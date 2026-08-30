@@ -32,7 +32,7 @@ const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
   { title: 'Moderation & filtering', ids: ['automod', 'logging'] },
   { title: 'Engagement', ids: ['welcome', 'roles', 'counting', 'leveling', 'sticky'] },
-  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands'] },
+  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'autoresponder'] },
 ];
 
 const line = (label, value, state) => ({ label, value, state });
@@ -183,6 +183,10 @@ function moduleLines(id, guild, cfg) {
         neutral('Prefix', cfg.prefix || '!'),
         n ? on('Commands', String(n)) : off('Commands', 'none'),
       ];
+    }
+    case 'autoresponder': {
+      const n = Array.isArray(cfg.responders) ? cfg.responders.length : 0;
+      return [n ? on('Responders', String(n)) : off('Responders', 'none')];
     }
     case 'scheduled-messages': {
       const jobs = listScheduled(guild.id);

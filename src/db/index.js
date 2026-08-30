@@ -197,6 +197,17 @@ const MIGRATIONS = [
       CREATE INDEX idx_config_audit_guild ON config_audit (guild_id, created_at DESC);
     `);
   },
+
+  // Bot-wide key/value settings (e.g. the presence / activity shown in Discord).
+  (database) => {
+    database.exec(`
+      CREATE TABLE app_settings (
+        key        TEXT PRIMARY KEY,
+        value      TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+  },
 ];
 
 /**

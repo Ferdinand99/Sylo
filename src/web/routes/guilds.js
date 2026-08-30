@@ -23,6 +23,7 @@ import { normaliseAutomodConfig, AUTOMOD_RULES, AUTOMOD_ACTIONS } from '../../mo
 import { parseEmoji, createReactionMessage } from '../../modules/roles.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
+import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
 import {
   listScheduled,
   createScheduled,
@@ -48,7 +49,7 @@ const router = Router();
 // Module ids that have a real settings partial (views/guild/modules/<id>.ejs).
 const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
-  'custom-commands', 'scheduled-messages', 'leveling',
+  'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -198,11 +199,13 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
-    roles: ['roles', 'tickets', 'automod', 'leveling'].includes(mod.id) ? assignableRoles(req.guild) : [],
+    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder'].includes(mod.id) ? assignableRoles(req.guild) : [],
     automodRules: AUTOMOD_RULES,
     automodActions: AUTOMOD_ACTIONS,
     countingState: mod.id === 'counting' ? getCounting(req.guild.id) : null,
     ccPlaceholders: CC_PLACEHOLDERS,
+    arPlaceholders: AR_PLACEHOLDERS,
+    arMatchModes: AR_MATCH_MODES,
     scheduledJobs: mod.id === 'scheduled-messages'
       ? listScheduled(req.guild.id).map((j) => ({
           id: j.id,
@@ -351,6 +354,24 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
       stackRewards: req.body.stackRewards === 'on',
       publicLeaderboard: req.body.publicLeaderboard === 'on',
       rewards: levels.map((level, i) => ({ level, roleId: roleIds[i] ?? '' })),
+    });
+  } else if (mod.id === 'autoresponder') {
+    const triggers = [].concat(req.body.ar_trigger ?? []);
+    const matches = [].concat(req.body.ar_match ?? []);
+    const responses = [].concat(req.body.ar_response ?? []);
+    const asEmbed = [].concat(req.body.ar_embed ?? []);
+    const del = [].concat(req.body.ar_delete ?? []);
+    config = normaliseAutoresponder({
+      cooldownSeconds: req.body.cooldownSeconds,
+      ignoreChannels: [].concat(req.body.ignoreChannels ?? []),
+      ignoreRoles: [].concat(req.body.ignoreRoles ?? []),
+      responders: triggers.map((trigger, i) => ({
+        trigger,
+        match: matches[i],
+        response: responses[i] ?? '',
+        embed: asEmbed[i] === 'embed',
+        deleteTrigger: del[i] === 'delete',
+      })),
     });
   } else {
     return res.redirect(back);

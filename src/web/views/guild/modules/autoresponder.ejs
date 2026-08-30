@@ -1,0 +1,79 @@
+<% var cfg = moduleConfig || {}; var list = Array.isArray(cfg.responders) ? cfg.responders : []; %>
+<%
+  var matchLabels = { contains: 'contains', exact: 'is exactly', startswith: 'starts with', wholeword: 'whole word' };
+  var igC = Array.isArray(cfg.ignoreChannels) ? cfg.ignoreChannels : [];
+  var igR = Array.isArray(cfg.ignoreRoles) ? cfg.ignoreRoles : [];
+%>
+
+<p class="muted small">
+  Replies automatically when a message matches a trigger — no prefix. First matching responder wins.
+  Placeholders: <%= arPlaceholders.map(function (p) { return '<code>' + p + '</code>'; }).join(' ') %>.
+  Deleting the trigger needs the <strong>Manage Messages</strong> permission.
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/autoresponder/config" class="stack" style="max-width:720px">
+  <label>Per-channel cooldown (seconds)</label>
+  <input type="number" name="cooldownSeconds" min="0" max="300" value="<%= cfg.cooldownSeconds != null ? cfg.cooldownSeconds : 2 %>" style="width:100px" />
+
+  <label style="margin-top:8px">Responders</label>
+  <div id="ar-rows">
+    <% (list.length ? list : [{ trigger: '', match: 'contains', response: '', embed: false, deleteTrigger: false }]).forEach(function (r) { %>
+      <div class="sticky-row">
+        <div class="row-form">
+          <input type="text" name="ar_trigger" placeholder="trigger phrase" value="<%= r.trigger || '' %>" style="width:190px" />
+          <select name="ar_match" style="width:130px">
+            <% arMatchModes.forEach(function (m) { %>
+              <option value="<%= m %>" <%= m === (r.match || 'contains') ? 'selected' : '' %>><%= matchLabels[m] || m %></option>
+            <% }) %>
+          </select>
+          <select name="ar_embed" style="width:100px">
+            <option value="text" <%= r.embed ? '' : 'selected' %>>Text</option>
+            <option value="embed" <%= r.embed ? 'selected' : '' %>>Embed</option>
+          </select>
+          <select name="ar_delete" style="width:130px">
+            <option value="keep" <%= r.deleteTrigger ? '' : 'selected' %>>Keep trigger</option>
+            <option value="delete" <%= r.deleteTrigger ? 'selected' : '' %>>Delete trigger</option>
+          </select>
+          <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove</button>
+        </div>
+        <textarea name="ar_response" rows="2" placeholder="Reply…"><%= r.response || '' %></textarea>
+      </div>
+    <% }) %>
+  </div>
+  <div><button type="button" class="secondary" id="ar-add">+ Add responder</button></div>
+
+  <label style="margin-top:10px">Ignore channels</label>
+  <select name="ignoreChannels" multiple size="4">
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= igC.includes(c.id) ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+  <label style="margin-top:6px">Ignore roles</label>
+  <select name="ignoreRoles" multiple size="4">
+    <% roles.forEach(function (r) { %>
+      <option value="<%= r.id %>" <%= igR.includes(r.id) ? 'selected' : '' %>><%= r.name %></option>
+    <% }) %>
+  </select>
+
+  <div style="margin-top:12px"><button type="submit">Save</button></div>
+</form>
+
+<template id="ar-template">
+  <div class="sticky-row">
+    <div class="row-form">
+      <input type="text" name="ar_trigger" placeholder="trigger phrase" style="width:190px" />
+      <select name="ar_match" style="width:130px">
+        <% arMatchModes.forEach(function (m) { %><option value="<%= m %>"><%= matchLabels[m] || m %></option><% }) %>
+      </select>
+      <select name="ar_embed" style="width:100px"><option value="text" selected>Text</option><option value="embed">Embed</option></select>
+      <select name="ar_delete" style="width:130px"><option value="keep" selected>Keep trigger</option><option value="delete">Delete trigger</option></select>
+      <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove</button>
+    </div>
+    <textarea name="ar_response" rows="2" placeholder="Reply…"></textarea>
+  </div>
+</template>
+<script>
+  document.getElementById('ar-add')?.addEventListener('click', () => {
+    document.getElementById('ar-rows').appendChild(document.getElementById('ar-template').content.cloneNode(true));
+  });
+</script>

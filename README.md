@@ -1,11 +1,12 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Eleven per-guild modules
+for self-hosting on an **Unraid server via Docker**. Twelve per-guild modules
 (moderation, logging, tickets, reaction roles, welcome, sticky messages,
-auto-moderation, counting, custom commands, scheduled messages, leveling),
-Discord OAuth2 login, a public leveling leaderboard, and **Battlefield-series**
-player stats via the public [gametools.network](https://gametools.network) API.
+auto-moderation, counting, custom commands, autoresponder, scheduled messages,
+leveling), Discord OAuth2 login, a public leveling leaderboard, and
+**Battlefield-series** player stats via the public
+[gametools.network](https://gametools.network) API.
 
 ## What's new in 2.0
 
@@ -23,6 +24,7 @@ player stats via the public [gametools.network](https://gametools.network) API.
 ## Features
 
 - **Discord bot** (discord.js v14, slash commands)
+  - `/help` — command overview + a link to the dashboard
   - `/ping` — health check with gateway + round-trip latency
   - `/version` — the release this instance is running · `/about` — version,
     uptime and runtime info
@@ -38,7 +40,7 @@ player stats via the public [gametools.network](https://gametools.network) API.
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 11 feature groups, each toggled and configured from the
+- **Per-guild modules** — 12 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -53,6 +55,8 @@ player stats via the public [gametools.network](https://gametools.network) API.
     correct or reset the running number from the dashboard
   - **Custom commands** — text/embed replies triggered by a chat prefix and,
     optionally, as `/name` slash commands synced to Discord
+  - **Autoresponder** — auto-reply when a message matches a trigger (contains /
+    exact / starts-with / whole-word), optionally deleting the trigger
   - **Scheduled messages** — recurring posts to a channel, every minute to every
     4 weeks, with pause/resume
   - **Leveling** — 15–25 XP per message on a MEE6-style curve, level-up
@@ -86,7 +90,7 @@ src/
   bot/
     index.js            Discord client bootstrap (intents, partials)
     loadCommands.js / registerCommands.js
-    commands/           ping, about, version, stats, rank, leaderboard, forget,
+    commands/           help, ping, about, version, stats, rank, leaderboard, forget,
                         kick/ban/unban/timeout/untimeout/purge/slowmode/warn/modlog
     events/             ready, interactionCreate, moduleEvents (gateway → modules),
                         dmTickets (DM → ticket), guildDelete (purge on leave)
@@ -96,7 +100,8 @@ src/
     dispatch.js         fans gateway events out to enabled modules
     index.js            loads module implementations
     moderation.js logging.js tickets.js roles.js welcome.js sticky.js
-    counting.js automod.js customCommands.js scheduledMessages.js leveling.js
+    counting.js automod.js customCommands.js autoresponder.js
+    scheduledMessages.js leveling.js
   adapters/games/       gameAdapter, registry, battlefield
   db/
     index.js            SQLite connection + migrations

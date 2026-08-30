@@ -1,0 +1,40 @@
+<%- include('partials/header', { title: 'Sylo — Settings' }) %>
+
+<h1 class="page-title">Settings</h1>
+<p class="muted">Bot-wide settings for <%= botTag || 'Sylo' %>. These apply everywhere the bot runs.</p>
+
+<% if (saved) { %><div class="banner ok">Presence updated.</div><% } %>
+
+<section class="card">
+  <h2>Presence / activity</h2>
+  <p class="muted small">
+    What shows under the bot's name in Discord. <code>{servers}</code> and <code>{members}</code>
+    are replaced with live counts and refreshed every 10 minutes.
+  </p>
+
+  <form method="POST" action="/settings/presence" class="stack" style="max-width:520px">
+    <label>Online status</label>
+    <select name="status">
+      <% presenceStatuses.forEach(function (s) { %>
+        <option value="<%= s %>" <%= s === presence.status ? 'selected' : '' %>>
+          <%= ({ online: 'Online', idle: 'Idle', dnd: 'Do Not Disturb', invisible: 'Invisible' })[s] || s %>
+        </option>
+      <% }) %>
+    </select>
+
+    <label>Activity type</label>
+    <select name="type">
+      <% presenceTypes.forEach(function (t) { %>
+        <option value="<%= t %>" <%= t === presence.type ? 'selected' : '' %>><%= t %></option>
+      <% }) %>
+    </select>
+    <p class="muted small">“Custom” shows the text as-is; the others prefix it with Playing / Listening to / Watching / Competing in.</p>
+
+    <label>Text</label>
+    <input type="text" name="text" maxlength="128" value="<%= presence.text %>" placeholder="e.g. over {servers} servers" />
+
+    <div style="margin-top:10px"><button type="submit">Save</button></div>
+  </form>
+</section>
+
+<%- include('partials/footer') %>

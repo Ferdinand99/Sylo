@@ -12,6 +12,7 @@ import leaderboardRouter from './routes/leaderboard.js';
 import dashboardRouter from './routes/dashboard.js';
 import statsRouter from './routes/stats.js';
 import commandsRouter from './routes/commands.js';
+import settingsRouter from './routes/settings.js';
 import guildsRouter from './routes/guilds.js';
 import guildTicketsRouter from './routes/guildTickets.js';
 import guildMessagesRouter from './routes/guildMessages.js';
@@ -45,6 +46,7 @@ export function createApp() {
   app.use('/', dashboardRouter);
   app.use('/stats', statsRouter);
   app.use('/commands', commandsRouter);
+  app.use('/settings', settingsRouter);
   // Tickets are mounted first: they have their own (staff-role aware) access
   // check, so they must not fall through to the admin-only /guilds router.
   app.use('/guilds/:guildId/tickets', guildTicketsRouter);

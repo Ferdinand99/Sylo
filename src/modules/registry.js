@@ -73,6 +73,15 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'autoresponder',
+    name: 'Autoresponder',
+    description: 'Automatically reply when a message matches a trigger phrase.',
+    icon: '💬',
+    requiredIntents: ['MessageContent'],
+    defaultEnabled: false,
+    configurable: true,
+  },
+  {
     id: 'scheduled-messages',
     name: 'Scheduled messages',
     description: 'Post a message to a channel on a repeating interval.',
