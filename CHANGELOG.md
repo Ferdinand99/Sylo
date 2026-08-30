@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.1](https://github.com/Ferdinand99/Sylo/compare/v2.7.0...v2.7.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* use a valid CDN size for the sidebar guild icon ([f1c0012](https://github.com/Ferdinand99/Sylo/commit/f1c0012931e6aa6c2722528dfcad8013d67680a9))
+
 ## [2.7.0](https://github.com/Ferdinand99/Sylo/compare/v2.6.0...v2.7.0) (2026-08-30)
 
 
