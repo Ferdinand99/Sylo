@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/Ferdinand99/Sylo/compare/v1.12.0...v1.13.0) (2026-08-30)
+
+
+### Features
+
+* add Counting mini-game and make Auto-moderation functional ([ce2c345](https://github.com/Ferdinand99/Sylo/commit/ce2c345c416a3f9cb769aad434cce60d6be4acec))
+
 ## [1.12.0](https://github.com/Ferdinand99/Sylo/compare/v1.11.0...v1.12.0) (2026-08-29)
 
 
