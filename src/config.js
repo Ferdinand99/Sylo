@@ -66,6 +66,7 @@ if (!Number.isInteger(webPort) || webPort <= 0 || webPort > 65535) {
 const discordClientSecret = optionalOrNull('DISCORD_CLIENT_SECRET');
 const turnstileSiteKey = optionalOrNull('TURNSTILE_SITE_KEY');
 const turnstileSecretKey = optionalOrNull('TURNSTILE_SECRET_KEY');
+const itadApiKey = optionalOrNull('ITAD_API_KEY');
 // Signs session cookies and short-lived tokens (e.g. verification links), so it
 // must always exist. When unset we generate one; that only matters for
 // persistence when the dashboard login is enabled.
@@ -105,6 +106,11 @@ export const config = Object.freeze({
   turnstileSiteKey,
   turnstileSecretKey,
   turnstileEnabled: Boolean(turnstileSiteKey && turnstileSecretKey),
+
+  // IsThereAnyDeal API key — broadens the Free games module beyond Epic. Free
+  // key from isthereanydeal.com/apps. When unset, Free games is Epic-only.
+  itadApiKey,
+  itadEnabled: Boolean(itadApiKey),
 
   // Game stats
   gametoolsApiBase: optional('GAMETOOLS_API_BASE', 'https://api.gametools.network').replace(/\/+$/, ''),

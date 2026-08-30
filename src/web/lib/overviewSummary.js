@@ -32,7 +32,7 @@ const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
   { title: 'Moderation & filtering', ids: ['automod', 'verification', 'logging'] },
   { title: 'Engagement', ids: ['welcome', 'roles', 'counting', 'leveling', 'sticky'] },
-  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'autoresponder', 'afk', 'server-stats'] },
+  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'autoresponder', 'afk', 'server-stats', 'free-games'] },
 ];
 
 const line = (label, value, state) => ({ label, value, state });
@@ -206,6 +206,14 @@ function moduleLines(id, guild, cfg) {
     case 'server-stats': {
       const n = Array.isArray(cfg.channels) ? cfg.channels.length : 0;
       return [n ? on('Stat channels', String(n)) : off('Stat channels', 'none')];
+    }
+    case 'free-games': {
+      const ch = channelName(guild, cfg.channelId);
+      const role = cfg.roleId ? guild.roles?.cache?.get(cfg.roleId) : null;
+      return [
+        ch ? on('Channel', `#${ch}`) : off('Channel', 'not set'),
+        role ? on('Ping role', `@${role.name}`) : neutral('Ping role', 'none'),
+      ];
     }
     case 'scheduled-messages': {
       const jobs = listScheduled(guild.id);

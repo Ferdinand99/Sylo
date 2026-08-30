@@ -138,6 +138,15 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Required="false"
     Mask="true"/>
   <Config
+    Name="ITAD_API_KEY"
+    Target="ITAD_API_KEY"
+    Default=""
+    Description="Optional. IsThereAnyDeal API key (free at isthereanydeal.com/apps) — broadens the Free games module beyond the Epic Games Store to Steam, GOG, Fanatical, Humble and more. Without it, Free games is Epic-only."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"/>
+  <Config
     Name="STATS_CACHE_TTL_MINUTES"
     Target="STATS_CACHE_TTL_MINUTES"
     Default="5"

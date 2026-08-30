@@ -1,10 +1,10 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Fifteen per-guild modules
+for self-hosting on an **Unraid server via Docker**. Sixteen per-guild modules
 (moderation, logging, tickets, reaction roles, verification, welcome, sticky
 messages, auto-moderation, counting, custom commands, autoresponder, scheduled
-messages, leveling, AFK, server statistics), Discord OAuth2 login, a public
+messages, leveling, AFK, server statistics, free games), Discord OAuth2 login, a public
 leveling leaderboard, and **Battlefield-series** player stats via the public
 [gametools.network](https://gametools.network) API.
 
@@ -40,7 +40,7 @@ leveling leaderboard, and **Battlefield-series** player stats via the public
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 15 feature groups, each toggled and configured from the
+- **Per-guild modules** — 16 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -68,6 +68,9 @@ leveling leaderboard, and **Battlefield-series** player stats via the public
     member and clears the status when they next speak
   - **Server statistics** — keep chosen voice channels named with a live
     member / role / boost count
+  - **Free games** — announces games that become free to claim (hourly poll):
+    the Epic Games Store, plus Steam / GOG / Fanatical / Humble and more with an
+    `ITAD_API_KEY`. Optional ping role; `/freegames [dlc]` on demand
 - **Command management** — disable a command per server or restrict it to
   channels / roles (admins bypass).
 - **Operations** — per-server config **audit log** and JSON **config export**,
@@ -98,7 +101,7 @@ src/
     index.js            Discord client bootstrap (intents, partials)
     loadCommands.js / registerCommands.js
     commands/           help, ping, about, version, stats, rank, leaderboard, forget,
-                        afk, kick/ban/unban/timeout/untimeout/purge/slowmode/warn/modlog
+                        afk, freegames, kick/ban/unban/timeout/untimeout/purge/slowmode/warn/modlog
     events/             ready, interactionCreate, moduleEvents (gateway → modules),
                         dmTickets (DM → ticket), guildDelete (purge on leave)
     embeds/ lib/        embed builders; duration, moderation, modlog, custom-command sync
@@ -108,7 +111,7 @@ src/
     index.js            loads module implementations
     moderation.js logging.js tickets.js roles.js welcome.js sticky.js
     counting.js automod.js customCommands.js autoresponder.js verification.js
-    scheduledMessages.js leveling.js afk.js serverStats.js
+    scheduledMessages.js leveling.js afk.js serverStats.js freeGames.js
   adapters/games/       gameAdapter, registry, battlefield
   db/
     index.js            SQLite connection + migrations
@@ -154,6 +157,7 @@ commands then register instantly instead of taking up to ~1 hour globally.
 | `DASHBOARD_URL`           | no       | derived                        | Public dashboard URL; only needed behind a reverse proxy |
 | `TURNSTILE_SITE_KEY`      | no       | —                              | Cloudflare Turnstile site key — enables the Verification captcha mode |
 | `TURNSTILE_SECRET_KEY`    | no       | —                              | Cloudflare Turnstile secret key (pair with the site key) |
+| `ITAD_API_KEY`            | no       | —                              | IsThereAnyDeal key — adds non-Epic stores to the Free games module |
 | `INTENT_GUILD_MEMBERS`    | no       | `true`                         | Request the Server Members privileged intent |
 | `INTENT_MESSAGE_CONTENT`  | no       | `true`                         | Request the Message Content privileged intent |
 | `GAMETOOLS_API_BASE`      | no       | `https://api.gametools.network`| Stats API base URL |

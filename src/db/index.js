@@ -222,6 +222,19 @@ const MIGRATIONS = [
       );
     `);
   },
+
+  // Free games notifier: which offers have already been announced per guild.
+  (database) => {
+    database.exec(`
+      CREATE TABLE free_games_posted (
+        guild_id  TEXT NOT NULL,
+        game_key  TEXT NOT NULL,
+        posted_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, game_key)
+      );
+      CREATE INDEX idx_free_games_posted_at ON free_games_posted (posted_at);
+    `);
+  },
 ];
 
 /**

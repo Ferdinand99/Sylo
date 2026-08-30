@@ -1,0 +1,29 @@
+<% var cfg = moduleConfig || {}; %>
+
+<p class="muted small">
+  Sylo checks hourly and posts an embed when a game becomes free to claim — from the Epic Games
+  Store, plus Steam / GOG / Fanatical / Humble and more when an <code>ITAD_API_KEY</code> is set.
+  DLC is filtered out of announcements; <code>/freegames dlc:true</code> shows free DLC on demand.
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/free-games/config" class="stack" style="max-width:520px">
+  <label>Announcement channel</label>
+  <select name="channelId" required>
+    <option value="">— select —</option>
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= c.id === (cfg.channelId || '') ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+
+  <label style="margin-top:6px">Ping role <span class="muted small">— optional</span></label>
+  <select name="roleId">
+    <option value="">— none —</option>
+    <% roles.forEach(function (r) { %>
+      <option value="<%= r.id %>" <%= r.id === (cfg.roleId || '') ? 'selected' : '' %>><%= r.name %></option>
+    <% }) %>
+  </select>
+
+  <div style="margin-top:12px"><button type="submit">Save</button></div>
+</form>
+
+<p class="muted small" style="margin-top:12px">Sylo needs View Channel / Send Messages / Embed Links in that channel.</p>

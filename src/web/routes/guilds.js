@@ -53,7 +53,7 @@ const router = Router();
 const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
   'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder', 'verification',
-  'afk', 'server-stats',
+  'afk', 'server-stats', 'free-games',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -203,7 +203,7 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
-    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification'].includes(mod.id)
+    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification', 'free-games'].includes(mod.id)
       ? assignableRoles(req.guild)
       : [],
     automodRules: AUTOMOD_RULES,
@@ -388,6 +388,11 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
       setNickname: req.body.setNickname === 'on',
       mentionReply: req.body.mentionReply === 'on',
       ignoreChannels: [].concat(req.body.ignoreChannels ?? []).filter((c) => /^\d{17,20}$/.test(c)),
+    };
+  } else if (mod.id === 'free-games') {
+    config = {
+      channelId: /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '',
+      roleId: /^\d{17,20}$/.test(req.body.roleId ?? '') ? req.body.roleId : '',
     };
   } else if (mod.id === 'server-stats') {
     const chans = [].concat(req.body.ss_channel ?? []);

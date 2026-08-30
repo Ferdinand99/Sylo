@@ -153,6 +153,15 @@ export const MODULES = [
     defaultEnabled: false,
     configurable: true,
   },
+  {
+    id: 'free-games',
+    name: 'Free games',
+    description: 'Announce games that become free to claim on the Epic Games Store.',
+    icon: '🎮',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
 ];
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));
