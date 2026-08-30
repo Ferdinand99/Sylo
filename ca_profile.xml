@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<CommunityApplications>
+  <Profile>
+Sylo is a multi-function Discord bot with a web dashboard, built for self-hosting on Unraid.
+
+It has a per-guild module system — moderation with warning thresholds, server logging, tickets/modmail answered from the dashboard, reaction roles &amp; autoroles, welcome/leave messages, sticky messages, auto-moderation (invite/link/flood/mention/caps/word filters), a counting mini-game, and a message/embed creator — plus per-server slash-command management and Battlefield-series player stats via the public gametools.network API. State lives in a single SQLite file on a mounted volume and survives updates.
+
+**Support:** open an issue at https://github.com/Ferdinand99/Sylo/issues
+  </Profile>
+  <Icon>https://raw.githubusercontent.com/Ferdinand99/Sylo/main/unraid/sylo-icon.png</Icon>
+  <WebPage>https://github.com/Ferdinand99/Sylo</WebPage>
+</CommunityApplications>

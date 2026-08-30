@@ -220,12 +220,18 @@ environment variables pre-defined. It needs a **published image** first:
      `https://raw.githubusercontent.com/Ferdinand99/Sylo/main/unraid/sylo.xml`, or
    - drop the file in `/boot/config/plugins/dockerMan/templates-user/` and pick
      `Sylo` from the **User templates** dropdown.
-4. **To list it in the public CA store**, submit the repo to
-   [community-applications](https://github.com/Squidly271/community.applications)
-   (the *Add to CA* thread / template-repo process).
+4. **To list it in the public CA store**, use the submission portal at
+   [ca.unraid.net/submit](https://ca.unraid.net/submit): sign in with GitHub,
+   point it at this repo, then run **Validate** → **Scan** → **Submit** for
+   moderator review. Requirements: a public repo with an OSI license (MIT, at
+   the root ✓), a root `ca_profile.xml` with a filled `<Profile>` (✓), and a
+   template XML with `<Repository>`, `<Registry>`, `<Overview>`, `<Support>`,
+   `<Project>`, `<Icon>` and `<TemplateURL>` (all in `unraid/sylo.xml`). Once
+   accepted, template edits pushed to `main` propagate automatically via
+   `<TemplateURL>`.
 
-Edit `Repository`, `Support`, `Project`, `TemplateURL`, and `Icon` in the XML if
-your GitHub username or repo name differ.
+Edit `Repository`, `Support`, `Project`, `TemplateURL`, and `Icon` in the XML
+(and the URLs in `ca_profile.xml`) if your GitHub username or repo name differ.
 
 ## Releases & CI
 
