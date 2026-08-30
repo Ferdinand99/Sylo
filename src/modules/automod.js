@@ -27,12 +27,16 @@ export const AUTOMOD_ACTIONS = ['delete', 'warn', 'timeout'];
 
 /** [key, label, hint] for each filter — drives the settings panel. */
 export const AUTOMOD_RULES = [
-  ['invites', 'Discord invites', 'Blocks messages containing a discord.gg / invite link.'],
-  ['links', 'Links', 'Blocks URLs. List allowed domains to permit only those.'],
-  ['spam', 'Message flood', 'One user sending too many messages in a short window.'],
-  ['mentions', 'Mass mentions', 'More than N user/role mentions in a single message.'],
+  ['words', 'Bad words', 'Blocks messages containing any listed word or phrase.'],
+  ['repeat', 'Repeated text', 'Blocks messages that are mostly one repeated word or character.'],
+  ['invites', 'Server invites', 'Blocks messages containing a discord.gg / invite link.'],
+  ['links', 'External links', 'Blocks URLs. List allowed domains to permit only those.'],
   ['caps', 'Excessive caps', 'Messages that are mostly uppercase.'],
-  ['words', 'Banned words', 'Blocks messages containing any listed word or phrase.'],
+  ['emojis', 'Excessive emojis', 'More than N emojis in a single message.'],
+  ['spoilers', 'Excessive spoilers', 'More than N spoiler tags in a single message.'],
+  ['mentions', 'Excessive mentions', 'More than N user/role mentions in a single message.'],
+  ['zalgo', 'Zalgo', 'Corrupted / combining-character text spam.'],
+  ['spam', 'Anti-spam', 'One user sending too many messages in a short window.'],
 ];
 
 const RULE_KEYS = AUTOMOD_RULES.map(([k]) => k);
@@ -95,6 +99,18 @@ export function normaliseAutomodConfig(raw = {}) {
         action: action(r.words?.action),
         list: termList(r.words?.list),
       },
+      emojis: {
+        enabled: Boolean(r.emojis?.enabled),
+        action: action(r.emojis?.action),
+        max: clampInt(r.emojis?.max, 1, 50, 8),
+      },
+      spoilers: {
+        enabled: Boolean(r.spoilers?.enabled),
+        action: action(r.spoilers?.action),
+        max: clampInt(r.spoilers?.max, 1, 30, 4),
+      },
+      zalgo: { enabled: Boolean(r.zalgo?.enabled), action: action(r.zalgo?.action) },
+      repeat: { enabled: Boolean(r.repeat?.enabled), action: action(r.repeat?.action) },
     },
   };
 }
@@ -161,6 +177,30 @@ export function exceedsCaps(content, rule) {
   return (upper / letters.length) * 100 >= rule.percent;
 }
 
+const EMOJI_RE = /<a?:\w+:\d+>|\p{Extended_Pictographic}/gu;
+const ZALGO_RE = /[̀-ͯ҃-҉፝-፟᪰-᫿᷀-᷿⃐-⃿︠-︯]/g;
+
+export function countEmojis(s) {
+  return (String(s).match(EMOJI_RE) || []).length;
+}
+export function countSpoilers(s) {
+  return (String(s).match(/\|\|[^|]+\|\|/g) || []).length;
+}
+export function isZalgo(s) {
+  const str = String(s);
+  if (str.length < 8) return false;
+  const marks = (str.match(ZALGO_RE) || []).length;
+  return marks / str.length > 0.28;
+}
+export function isRepeatedText(s) {
+  const t = String(s).trim();
+  if (t.length < 12) return false;
+  if (/(.)\1{9,}/u.test(t)) return true; // 10+ of the same character in a row
+  const words = t.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length >= 6 && new Set(words).size / words.length <= 0.34) return true;
+  return false;
+}
+
 export function matchWord(content, list) {
   const lc = content.toLowerCase();
   for (const term of list) {
@@ -210,6 +250,20 @@ async function scan(message, config, opts) {
   }
   if (rules.caps.enabled && exceedsCaps(content, rules.caps)) {
     return act(message, member, rules.caps, 'excessive caps', cfg);
+  }
+  if (rules.emojis.enabled) {
+    const n = countEmojis(content);
+    if (n > rules.emojis.max) return act(message, member, rules.emojis, `${n} emojis`, cfg);
+  }
+  if (rules.spoilers.enabled) {
+    const n = countSpoilers(content);
+    if (n > rules.spoilers.max) return act(message, member, rules.spoilers, `${n} spoilers`, cfg);
+  }
+  if (rules.zalgo.enabled && isZalgo(content)) {
+    return act(message, member, rules.zalgo, 'zalgo text', cfg);
+  }
+  if (rules.repeat.enabled && isRepeatedText(content)) {
+    return act(message, member, rules.repeat, 'repeated text', cfg);
   }
   if (rules.words.enabled) {
     const hit = matchWord(content, rules.words.list);

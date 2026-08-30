@@ -27,3 +27,17 @@ test('normaliseLevelingConfig: publicLeaderboard and stackRewards default true, 
   assert.equal(normaliseLevelingConfig({ publicLeaderboard: false }).publicLeaderboard, false);
   assert.equal(normaliseLevelingConfig({ stackRewards: false }).stackRewards, false);
 });
+
+test('normaliseLevelingConfig: xpRate snapped to a valid step, defaults 1', () => {
+  assert.equal(normaliseLevelingConfig({}).xpRate, 1);
+  assert.equal(normaliseLevelingConfig({ xpRate: '2.5' }).xpRate, 2.5);
+  assert.equal(normaliseLevelingConfig({ xpRate: 7 }).xpRate, 1); // not a valid step
+});
+
+test('normaliseLevelingConfig: no-XP modes + removeRewardsOnXpLoss', () => {
+  const c = normaliseLevelingConfig({ noXpRolesMode: 'deny', noXpChannelsMode: 'nonsense', removeRewardsOnXpLoss: true });
+  assert.equal(c.noXpRolesMode, 'deny');
+  assert.equal(c.noXpChannelsMode, 'allow'); // unknown -> default
+  assert.equal(c.removeRewardsOnXpLoss, true);
+  assert.equal(normaliseLevelingConfig({}).removeRewardsOnXpLoss, false);
+});

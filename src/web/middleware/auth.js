@@ -9,6 +9,8 @@ import cookieSession from 'cookie-session';
 import { config } from '../../config.js';
 import { runtime } from '../../runtime.js';
 import { BUILD } from '../../bot/lib/buildInfo.js';
+import { buildSidebar } from '../lib/sidebarNav.js';
+import { getBotMasterRoles } from '../../db/guildSettings.js';
 import { rateLimit } from './rateLimit.js';
 
 const DISCORD_API = 'https://discord.com/api/v10';
@@ -87,7 +89,25 @@ export function requireAuth(req, res, next) {
   res.redirect('/auth/discord/login');
 }
 
-/** Require the signed-in user to be an admin of req.params.guildId. */
+/** A "bot master" — holds one of the guild's designated dashboard-admin roles. */
+async function isBotMaster(guildId, userId) {
+  const roles = getBotMasterRoles(guildId);
+  if (!roles.length) return false;
+  const guild = runtime.client?.guilds.cache.get(guildId);
+  if (!guild) return false;
+  const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+  return Boolean(member && member.roles.cache.hasAny(...roles));
+}
+
+function forbidGuild(res) {
+  res.status(403).render('error', {
+    title: 'Forbidden',
+    heading: 'Not an admin',
+    message: 'You need Manage Server (or a bot-master role) in this server to manage it here.',
+  });
+}
+
+/** Require the signed-in user to be an admin (or bot master) of req.params.guildId. */
 export function requireGuildAdmin(req, res, next) {
   if (!config.authEnabled) return next();
   if (!req.session?.user) {
@@ -95,11 +115,9 @@ export function requireGuildAdmin(req, res, next) {
     return res.redirect('/auth/discord/login');
   }
   if (adminGuildIds(req).has(req.params.guildId)) return next();
-  res.status(403).render('error', {
-    title: 'Forbidden',
-    heading: 'Not an admin',
-    message: 'You need Manage Server (or Administrator) in this server to manage it here.',
-  });
+  isBotMaster(req.params.guildId, req.session.user.id)
+    .then((ok) => (ok ? next() : forbidGuild(res)))
+    .catch(() => forbidGuild(res));
 }
 
 /** Kept for backwards compatibility with earlier route code. */
@@ -129,8 +147,21 @@ export function mountAuth(app) {
     res.locals.authEnabled = config.authEnabled;
     res.locals.syloVersion = BUILD.version;
     res.locals.user = currentUser(req);
-    res.locals.manageableGuilds = res.locals.user ? manageableGuilds(req) : [];
-    res.locals.currentGuildId = (req.path.match(/^\/guilds\/(\d{17,20})/) || [])[1] || null;
+    const mg = res.locals.user ? manageableGuilds(req) : [];
+    res.locals.manageableGuilds = mg;
+
+    const urlGuildId = (req.path.match(/^\/guilds\/(\d{17,20})/) || [])[1] || null;
+    res.locals.currentGuildId = urlGuildId;
+
+    // A server is always "in view": URL guild, else the remembered one, else the
+    // first manageable one. Keeps the sidebar stable across bot-wide pages.
+    const remembered = req.session?.lastGuild;
+    res.locals.activeGuildId =
+      urlGuildId ||
+      (mg.some((g) => g.id === remembered) ? remembered : null) ||
+      mg[0]?.id ||
+      null;
+    res.locals.sidebar = buildSidebar(req, res.locals.activeGuildId);
     next();
   });
 

@@ -1,9 +1,44 @@
-<%- include('partials/header', { title: 'Sylo — Settings' }) %>
+<%- include('partials/header', { title: 'Sylo — Bot Personalizer' }) %>
 
-<h1 class="page-title">Settings</h1>
-<p class="muted">Bot-wide settings for <%= botTag || 'Sylo' %>. These apply everywhere the bot runs.</p>
+<h1 class="page-title">Bot Personalizer</h1>
+<p class="muted">Change the bot's username, avatar, banner and activity. These are bot-wide — they apply in
+  every server<% if (bot) { %> (currently <strong><%= bot.tag %></strong>)<% } %>.</p>
 
-<% if (saved) { %><div class="banner ok">Presence updated.</div><% } %>
+<% if (typeof m !== 'undefined' && m) { %>
+  <div class="banner <%= ok ? 'ok' : 'bad' %>"><%= m %></div>
+<% } %>
+
+<% if (!bot) { %>
+  <section class="card"><p class="muted">The bot is not connected right now. Reload once it is online.</p></section>
+<% } else { %>
+
+<section class="card">
+  <h2>Identity</h2>
+  <form method="POST" action="/settings/identity" class="stack" style="max-width:560px">
+    <div class="bp-identity">
+      <div class="bp-avatar">
+        <img src="<%= bot.avatar %>" alt="bot avatar" />
+      </div>
+      <div class="stack" style="flex:1;gap:8px">
+        <label class="small">Avatar image URL <span class="muted">— https, PNG/JPG/GIF, ≤ 10 MB</span></label>
+        <input type="url" name="avatarUrl" placeholder="https://…/avatar.png" />
+        <label class="checkline"><input type="checkbox" name="resetAvatar" /> Reset avatar to the default Discord icon</label>
+      </div>
+    </div>
+
+    <label class="small" style="margin-top:6px">Banner image URL <span class="muted">— optional; not all bots can set one</span></label>
+    <input type="url" name="bannerUrl" placeholder="https://…/banner.png" />
+    <% if (bot.banner) { %><img src="<%= bot.banner %>" alt="current banner" class="bp-banner" /><% } %>
+
+    <label class="small" style="margin-top:6px">Username</label>
+    <input type="text" name="username" maxlength="32" value="<%= bot.username %>" />
+    <p class="muted small">Discord only allows about <strong>2 username changes per hour</strong>. Leave it as-is to skip.</p>
+
+    <div style="margin-top:10px"><button type="submit">Save identity</button></div>
+  </form>
+</section>
+
+<% } %>
 
 <section class="card">
   <h2>Presence / activity</h2>
@@ -28,12 +63,12 @@
         <option value="<%= t %>" <%= t === presence.type ? 'selected' : '' %>><%= t %></option>
       <% }) %>
     </select>
-    <p class="muted small">“Custom” shows the text as-is; the others prefix it with Playing / Listening to / Watching / Competing in.</p>
+    <p class="muted small">"Custom" shows the text as-is; the others prefix it with Playing / Listening to / Watching / Competing in.</p>
 
     <label>Text</label>
     <input type="text" name="text" maxlength="128" value="<%= presence.text %>" placeholder="e.g. over {servers} servers" />
 
-    <div style="margin-top:10px"><button type="submit">Save</button></div>
+    <div style="margin-top:10px"><button type="submit">Save presence</button></div>
   </form>
 </section>
 

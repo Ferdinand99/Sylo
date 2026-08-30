@@ -11,7 +11,14 @@ import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags
 import { getModule } from '../../modules/registry.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { getCommandOverrides, setCommandOverride } from '../../db/commandOverrides.js';
-import { getGuildSettings, setModlogChannel } from '../../db/guildSettings.js';
+import {
+  getGuildSettings,
+  setModlogChannel,
+  getBotMasterRoles,
+  setBotMasterRoles,
+  setEmbedColor,
+  guildEmbedColor,
+} from '../../db/guildSettings.js';
 import { listGuildWarnings, addWarning } from '../../db/warnings.js';
 import { notifyTarget, MOD_COLOR } from '../../bot/lib/moderation.js';
 import { postModLog } from '../../bot/lib/modlog.js';
@@ -20,7 +27,8 @@ import { LOG_EVENTS } from '../../modules/logging.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { applyWarnThresholds, normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
 import { normaliseAutomodConfig, AUTOMOD_RULES, AUTOMOD_ACTIONS } from '../../modules/automod.js';
-import { parseEmoji, createReactionMessage } from '../../modules/roles.js';
+import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
+import { normaliseEmbedSpec } from '../../modules/welcomeChannel.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
 import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
@@ -28,6 +36,13 @@ import { normaliseVerificationConfig, VERIFY_MODES, ensureVerifyMessage } from '
 import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
 import { normaliseAppealsConfig, decideAndNotify } from '../../modules/appeals.js';
 import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
+import {
+  WC_PRESETS,
+  normaliseWelcomeChannelConfig,
+  publishWelcome,
+  unpublishWelcome,
+  createWelcomeChannel,
+} from '../../modules/welcomeChannel.js';
 import { listAppeals, getAppeal } from '../../db/appeals.js';
 import { config as appConfig } from '../../config.js';
 import {
@@ -44,7 +59,8 @@ import {
   MAX_INTERVAL_MINUTES,
 } from '../../modules/scheduledMessages.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
-import { normaliseLevelingConfig, ANNOUNCE_MODES } from '../../modules/leveling.js';
+import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '../../modules/leveling.js';
+import { levelFromXp } from '../../modules/lib/levels.js';
 import { topMembers, memberCount, setXp, resetGuildLeveling } from '../../db/leveling.js';
 import { recordAudit, listAudit } from '../../db/audit.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
@@ -56,7 +72,7 @@ const router = Router();
 const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
   'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder', 'verification',
-  'afk', 'server-stats', 'free-games', 'appeals', 'temp-voice',
+  'afk', 'server-stats', 'free-games', 'appeals', 'temp-voice', 'welcome-channel',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -79,6 +95,8 @@ function loadGuild(req, res, next) {
     res.status(404).render('guild-missing', { guildId: req.params.guildId });
     return;
   }
+  // Remember this server so "/" and the sidebar land back here next visit.
+  if (req.session) req.session.lastGuild = req.guild.id;
   next();
 }
 router.use('/:guildId', loadGuild, requireGuildAdmin);
@@ -102,13 +120,61 @@ router.get('/:guildId/overview', (req, res) => {
   res.render('guild', { ...baseContext(req.guild, 'overview'), overview: buildOverview(req.guild) });
 });
 
-router.get('/:guildId/general', (req, res) => {
-  const settings = getGuildSettings(req.guild.id);
+// Old bookmark → the renamed Settings panel.
+router.get('/:guildId/general', (req, res) => res.redirect(`/guilds/${req.guild.id}/settings`));
+
+router.get('/:guildId/settings', (req, res) => {
+  const guild = req.guild;
+  const settings = getGuildSettings(guild.id);
+  const color = guildEmbedColor(guild.id);
+
+  const roleView = (r) => ({ id: r.id, name: r.name, color: r.hexColor === '#000000' ? null : r.hexColor });
+  const usable = [...guild.roles.cache.values()]
+    .filter((r) => r.id !== guild.id && !r.managed)
+    .sort((a, b) => b.position - a.position);
+  const adminRoles = usable.filter((r) => r.permissions.has(PermissionFlagsBits.Administrator));
+  const adminIds = new Set(adminRoles.map((r) => r.id));
+  const stored = getBotMasterRoles(guild.id).filter((id) => !adminIds.has(id));
+  const storedSet = new Set(stored);
+
   res.render('guild', {
-    ...baseContext(req.guild, 'general'),
+    ...baseContext(guild, 'settings'),
     modlogChannelId: settings?.modlog_channel_id ?? '',
+    embedColorHex: '#' + color.toString(16).padStart(6, '0'),
+    adminRoles: adminRoles.map(roleView),
+    botMasters: stored.map((id) => {
+      const r = guild.roles.cache.get(id);
+      return r ? roleView(r) : { id, name: id, color: null };
+    }),
+    rolePool: usable.filter((r) => !adminIds.has(r.id) && !storedSet.has(r.id)).map(roleView),
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
   });
+});
+
+router.post('/:guildId/settings', (req, res) => {
+  const guild = req.guild;
+  const back = `/guilds/${guild.id}/settings`;
+
+  // Mod-log channel (empty = off).
+  const channelId = String(req.body.modlogChannelId ?? '').trim();
+  if (channelId === '') {
+    setModlogChannel(guild.id, null);
+  } else if (guildTextChannels(guild).some((c) => c.id === channelId)) {
+    setModlogChannel(guild.id, channelId);
+  } else {
+    return res.redirect(`${back}?msg=badchannel`);
+  }
+
+  // Bot masters.
+  setBotMasterRoles(guild.id, [].concat(req.body.botMasterRoles ?? []));
+
+  // Default embed colour.
+  const hex = String(req.body.embedColor ?? '').replace('#', '');
+  if (req.body.embedColorReset === 'on' || hex === '') setEmbedColor(guild.id, null);
+  else if (/^[0-9a-fA-F]{6}$/.test(hex)) setEmbedColor(guild.id, parseInt(hex, 16));
+
+  recordAudit(guild.id, { actor: moderatorDisplayName(req), action: 'settings:server', detail: 'saved' });
+  res.redirect(`${back}?msg=saved`);
 });
 
 router.get('/:guildId/commands', (req, res) => {
@@ -176,6 +242,20 @@ router.get(
       bansError = 'The bot is missing the "Ban Members" permission in this server.';
     }
 
+    const overrides = getCommandOverrides(guild.id);
+    const commands = [...(runtime.client?.commands?.values() ?? [])]
+      .map(({ data }) => {
+        const ov = overrides.get(data.name);
+        return {
+          name: data.name,
+          description: data.description,
+          enabled: ov ? ov.enabled : true,
+          allowedChannels: ov?.allowedChannels ?? [],
+          allowedRoles: ov?.allowedRoles ?? [],
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+
     res.render('guild', {
       ...baseContext(guild, 'moderation'),
       warnings,
@@ -186,6 +266,14 @@ router.get(
       bansShown: bans.length,
       bansError,
       banLimit: BAN_DISPLAY_LIMIT,
+      automodConfig: getGuildModule(guild.id, 'automod').config,
+      moderationCfg: getGuildModule(guild.id, 'moderation').config,
+      loggingCfg: getGuildModule(guild.id, 'logging').config,
+      commands,
+      roles: assignableRoles(guild),
+      automodRules: AUTOMOD_RULES,
+      thresholdActions: THRESHOLD_ACTIONS,
+      logEvents: LOG_EVENTS,
       msg: typeof req.query.msg === 'string' ? req.query.msg : null,
     });
   })
@@ -250,6 +338,88 @@ router.post(
   })
 );
 
+// Leaderboard settings: the public-leaderboard switch + a top-members preview.
+router.get(
+  '/:guildId/leaderboard',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const { enabled, config } = getGuildModule(guild.id, 'leveling');
+    const cfg = normaliseLevelingConfig(config);
+    const rows = topMembers(guild.id, 10);
+    const tags = await resolveUserTags(runtime.client, rows.map((r) => r.user_id));
+    res.render('guild', {
+      ...baseContext(guild, 'leaderboard'),
+      levelingEnabled: enabled,
+      publicLeaderboard: cfg.publicLeaderboard,
+      board: {
+        total: memberCount(guild.id),
+        rows: rows.map((r, i) => ({
+          rank: i + 1,
+          name: tags.get(r.user_id) ?? r.user_id,
+          level: r.level,
+          xp: r.xp,
+          messages: r.messages,
+        })),
+      },
+      msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+    });
+  })
+);
+
+// Flip only the public-leaderboard flag on the leveling module.
+router.post('/:guildId/leaderboard/public', (req, res) => {
+  const prev = getGuildModule(req.guild.id, 'leveling').config;
+  const publicLeaderboard = req.body.publicLeaderboard === 'on';
+  setGuildModule(req.guild.id, 'leveling', { config: { ...prev, publicLeaderboard } });
+  recordAudit(req.guild.id, {
+    actor: moderatorDisplayName(req),
+    action: 'leveling:leaderboard',
+    detail: publicLeaderboard ? 'made public' : 'made private',
+  });
+  res.redirect(`/guilds/${req.guild.id}/leaderboard?msg=saved`);
+});
+
+// Moderator → Admin tab: immunity roles (patch just automod's exemptRoles).
+router.post('/:guildId/m/automod/immunity', (req, res) => {
+  const prev = getGuildModule(req.guild.id, 'automod').config;
+  const roles = [].concat(req.body.immunityRoles ?? []).filter((r) => /^\d{17,20}$/.test(r));
+  setGuildModule(req.guild.id, 'automod', {
+    config: normaliseAutomodConfig({ ...prev, exemptRoles: roles }),
+  });
+  recordAudit(req.guild.id, {
+    actor: moderatorDisplayName(req),
+    action: 'module:automod',
+    detail: `immunity roles (${roles.length})`,
+  });
+  res.redirect(`/guilds/${req.guild.id}/moderation?msg=saved`);
+});
+
+// Welcome Channel: create a read-only #welcome channel.
+router.post(
+  '/:guildId/m/welcome-channel/create-channel',
+  asyncHandler(async (req, res) => {
+    const back = `/guilds/${req.guild.id}/m/welcome-channel`;
+    const r = await createWelcomeChannel(req.guild);
+    if (!r.ok) return res.redirect(`${back}?msg=wc-fail`);
+    const cfg = normaliseWelcomeChannelConfig(getGuildModule(req.guild.id, 'welcome-channel').config);
+    setGuildModule(req.guild.id, 'welcome-channel', { config: { ...cfg, channelId: r.channelId } });
+    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'module:welcome-channel', detail: 'created #welcome' });
+    res.redirect(`${back}?msg=wc-channel`);
+  })
+);
+
+// Welcome Channel: remove the published message.
+router.post(
+  '/:guildId/m/welcome-channel/unpublish',
+  asyncHandler(async (req, res) => {
+    const back = `/guilds/${req.guild.id}/m/welcome-channel`;
+    const cfg = normaliseWelcomeChannelConfig(getGuildModule(req.guild.id, 'welcome-channel').config);
+    await unpublishWelcome(req.guild, cfg);
+    setGuildModule(req.guild.id, 'welcome-channel', { config: { ...cfg, messageId: '' } });
+    res.redirect(`${back}?msg=wc-unpub`);
+  })
+);
+
 // Per-module settings panel.
 router.get('/:guildId/m/:moduleId', (req, res) => {
   const mod = getModule(req.params.moduleId);
@@ -265,8 +435,13 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
-    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification', 'free-games'].includes(mod.id)
+    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification', 'free-games', 'welcome'].includes(mod.id)
       ? assignableRoles(req.guild)
+      : [],
+    welcomeAutoroles: mod.id === 'welcome' ? getGuildModule(req.guild.id, 'roles').config.autoroles ?? [] : [],
+    verificationEnabled: mod.id === 'welcome' ? getGuildModule(req.guild.id, 'verification').enabled : false,
+    wcPresets: mod.id === 'welcome-channel'
+      ? WC_PRESETS.map((p) => ({ id: p.id, label: p.label, kind: p.kind, defaults: p.make() }))
       : [],
     automodRules: AUTOMOD_RULES,
     automodActions: AUTOMOD_ACTIONS,
@@ -294,6 +469,23 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     schedulePresets: SCHEDULE_PRESETS,
     scheduleUnits: SCHEDULE_UNITS,
     announceModes: ANNOUNCE_MODES,
+    xpRates: XP_RATES,
+    levelingCommands: mod.id === 'leveling'
+      ? ['rank', 'leaderboard']
+          .map((name) => {
+            const cmd = runtime.client?.commands?.get(name);
+            if (!cmd) return null;
+            const ov = getCommandOverrides(req.guild.id).get(name);
+            return {
+              name,
+              description: cmd.data.description,
+              enabled: ov ? ov.enabled : true,
+              allowedChannels: ov?.allowedChannels ?? [],
+              allowedRoles: ov?.allowedRoles ?? [],
+            };
+          })
+          .filter(Boolean)
+      : [],
     levelingBoard: mod.id === 'leveling'
       ? {
           total: memberCount(req.guild.id),
@@ -311,7 +503,7 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
 });
 
 // Save a module's settings.
-router.post('/:guildId/m/:moduleId/config', (req, res) => {
+router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
   const mod = getModule(req.params.moduleId);
   if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
   const back = `/guilds/${req.guild.id}/m/${mod.id}`;
@@ -338,14 +530,27 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
     };
   } else if (mod.id === 'welcome') {
     const chan = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
+    const joinOn = req.body.enable_join === 'on';
+    const dmOn = req.body.enable_dm === 'on';
+    const leaveOn = req.body.enable_leave === 'on';
     config = {
-      joinChannel: chan(req.body.joinChannel),
-      joinMessage: String(req.body.joinMessage ?? '').slice(0, 1500),
-      leaveChannel: chan(req.body.leaveChannel),
-      leaveMessage: String(req.body.leaveMessage ?? '').slice(0, 1500),
-      dmMessage: String(req.body.dmMessage ?? '').slice(0, 1500),
+      joinChannel: joinOn ? chan(req.body.joinChannel) : '',
+      joinMessage: joinOn ? String(req.body.joinMessage ?? '').slice(0, 1500) : '',
+      leaveChannel: leaveOn ? chan(req.body.leaveChannel) : '',
+      leaveMessage: leaveOn ? String(req.body.leaveMessage ?? '').slice(0, 1500) : '',
+      dmMessage: dmOn ? String(req.body.dmMessage ?? '').slice(0, 1500) : '',
       useEmbed: req.body.useEmbed === 'on',
     };
+    // "Give roles to new members" here writes the Reaction roles & autoroles module.
+    const autoOn = req.body.enable_autorole === 'on';
+    const newRoles = autoOn
+      ? [].concat(req.body.newRoles ?? []).filter((r) => /^\d{17,20}$/.test(r))
+      : [];
+    const rolesMod = getGuildModule(req.guild.id, 'roles');
+    setGuildModule(req.guild.id, 'roles', {
+      enabled: rolesMod.enabled || newRoles.length > 0,
+      config: { ...rolesMod.config, autoroles: newRoles },
+    });
   } else if (mod.id === 'roles') {
     const existing = getGuildModule(req.guild.id, 'roles').config;
     const autoroles = [].concat(req.body.autoroles ?? []).filter((r) => /^\d{17,20}$/.test(r));
@@ -372,15 +577,18 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
     };
   } else if (mod.id === 'automod') {
     const b = req.body;
-    const rule = (key) => ({
-      enabled: b[`r_${key}_enabled`] === 'on',
-      action: b[`r_${key}_action`],
-    });
+    const prevAutomod = getGuildModule(req.guild.id, 'automod').config;
+    // MEE6-style: one dropdown per rule — off | delete | warn | timeout.
+    const rule = (key) => {
+      const m = b[`r_${key}_mode`];
+      return { enabled: Boolean(m) && m !== 'off', action: m === 'off' || !m ? 'delete' : m };
+    };
     config = normaliseAutomodConfig({
-      deleteMessage: b.deleteMessage === 'on',
+      deleteMessage: true,
       timeoutMinutes: b.timeoutMinutes,
       exemptChannels: [].concat(b.exemptChannels ?? []),
-      exemptRoles: [].concat(b.exemptRoles ?? []),
+      // Immunity roles are managed on the Admin tab — keep whatever is stored.
+      exemptRoles: prevAutomod.exemptRoles ?? [],
       rules: {
         invites: rule('invites'),
         links: { ...rule('links'), allowed: b.r_links_allowed },
@@ -388,6 +596,10 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
         mentions: { ...rule('mentions'), max: b.r_mentions_max },
         caps: { ...rule('caps'), minLength: b.r_caps_minLength, percent: b.r_caps_percent },
         words: { ...rule('words'), list: b.r_words_list },
+        emojis: { ...rule('emojis'), max: b.r_emojis_max },
+        spoilers: { ...rule('spoilers'), max: b.r_spoilers_max },
+        zalgo: rule('zalgo'),
+        repeat: rule('repeat'),
       },
     });
   } else if (mod.id === 'counting') {
@@ -418,15 +630,21 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
   } else if (mod.id === 'leveling') {
     const levels = [].concat(req.body.rw_level ?? []);
     const roleIds = [].concat(req.body.rw_role ?? []);
+    const prevLvl = getGuildModule(req.guild.id, 'leveling').config;
     config = normaliseLevelingConfig({
       cooldownSeconds: req.body.cooldownSeconds,
+      xpRate: req.body.xpRate,
       announce: req.body.announce,
       announceChannel: req.body.announceChannel,
       announceMessage: req.body.announceMessage,
       noXpChannels: [].concat(req.body.noXpChannels ?? []),
+      noXpChannelsMode: req.body.noXpChannelsMode,
       noXpRoles: [].concat(req.body.noXpRoles ?? []),
+      noXpRolesMode: req.body.noXpRolesMode,
       stackRewards: req.body.stackRewards === 'on',
-      publicLeaderboard: req.body.publicLeaderboard === 'on',
+      removeRewardsOnXpLoss: req.body.removeRewardsOnXpLoss === 'on',
+      // The public-leaderboard toggle lives on the Leaderboard page — keep it.
+      publicLeaderboard: prevLvl.publicLeaderboard !== false,
       rewards: levels.map((level, i) => ({ level, roleId: roleIds[i] ?? '' })),
     });
   } else if (mod.id === 'autoresponder') {
@@ -505,6 +723,15 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
       logChannelId: req.body.logChannelId,
       kickAfterMinutes: req.body.kickAfterMinutes,
     });
+  } else if (mod.id === 'welcome-channel') {
+    const prev = getGuildModule(req.guild.id, 'welcome-channel').config;
+    let spec = {};
+    try {
+      spec = JSON.parse(req.body.spec || '{}');
+    } catch {
+      spec = {};
+    }
+    config = normaliseWelcomeChannelConfig({ channelId: req.body.channelId, messageId: prev.messageId, spec });
   } else {
     return res.redirect(back);
   }
@@ -521,8 +748,17 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
       console.error('[verification] ensure message after save failed:', err.message)
     );
   }
+  if (mod.id === 'welcome-channel' && req.body.action === 'publish') {
+    const cfg = normaliseWelcomeChannelConfig(getGuildModule(req.guild.id, 'welcome-channel').config);
+    const r = await publishWelcome(req.guild, cfg);
+    if (r.ok) {
+      setGuildModule(req.guild.id, 'welcome-channel', { enabled: true, config: { ...cfg, messageId: r.messageId } });
+      return res.redirect(`${back}?msg=wc-published`);
+    }
+    return res.redirect(`${back}?msg=wc-fail`);
+  }
   res.redirect(`${back}?msg=saved`);
-});
+}));
 
 // Counting: correct the running number (or reset it) from the dashboard.
 router.post('/:guildId/m/counting/count', (req, res) => {
@@ -542,22 +778,31 @@ router.post('/:guildId/m/counting/count', (req, res) => {
 });
 
 // Leveling: set a member's XP, or wipe the whole guild leaderboard.
-router.post('/:guildId/m/leveling/xp', (req, res) => {
-  const back = `/guilds/${req.guild.id}/m/leveling`;
-  if (req.body.reset === 'true') {
-    resetGuildLeveling(req.guild.id);
-    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'leveling:reset', detail: 'all XP wiped' });
-    return res.redirect(`${back}?msg=lvl-reset`);
-  }
-  const userId = parseUserId(req.body.userId);
-  const xp = Number(req.body.xp);
-  if (!userId || !Number.isInteger(xp) || xp < 0 || xp > 1e12) {
-    return res.redirect(`${back}?msg=lvl-bad`);
-  }
-  setXp(req.guild.id, userId, xp);
-  recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'leveling:setxp', detail: `${userId} → ${xp} XP` });
-  res.redirect(`${back}?msg=lvl-set`);
-});
+router.post(
+  '/:guildId/m/leveling/xp',
+  asyncHandler(async (req, res) => {
+    const back = `/guilds/${req.guild.id}/m/leveling`;
+    if (req.body.reset === 'true') {
+      resetGuildLeveling(req.guild.id);
+      recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'leveling:reset', detail: 'all XP wiped' });
+      return res.redirect(`${back}?msg=lvl-reset`);
+    }
+    const userId = parseUserId(req.body.userId);
+    const xp = Number(req.body.xp);
+    if (!userId || !Number.isInteger(xp) || xp < 0 || xp > 1e12) {
+      return res.redirect(`${back}?msg=lvl-bad`);
+    }
+    setXp(req.guild.id, userId, xp);
+    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'leveling:setxp', detail: `${userId} → ${xp} XP` });
+
+    // Reconcile reward roles for the new level (adds/strips per config).
+    const cfg = normaliseLevelingConfig(getGuildModule(req.guild.id, 'leveling').config);
+    const member = await req.guild.members.fetch(userId).catch(() => null);
+    if (member) await syncRewards(member, levelFromXp(xp), cfg).catch(() => {});
+
+    res.redirect(`${back}?msg=lvl-set`);
+  })
+);
 
 // --- Scheduled messages: one job per row, managed here (not in module config) ---
 router.post('/:guildId/m/scheduled-messages/job', (req, res) => {
@@ -591,60 +836,112 @@ router.post('/:guildId/m/scheduled-messages/job/:id/toggle', (req, res) => {
   res.redirect(`/guilds/${req.guild.id}/m/scheduled-messages?msg=saved`);
 });
 
-// Create a reaction-role message: the bot posts it and adds the reactions.
+// --- Reaction-role builder (MEE6-style) ---------------------------------
+
+function renderRrBuilder(req, res, rm) {
+  res.render('rr-builder', {
+    ...baseContext(req.guild, 'm/roles'),
+    channels: guildTextChannels(req.guild),
+    roles: assignableRoles(req.guild),
+    guildId: req.guild.id,
+    isNew: !rm,
+    rm: rm || {
+      id: '',
+      channelId: '',
+      messageId: '',
+      message: 'React to this message to get your roles!',
+      embed: { kind: 'embed', color: '#5865f2', description: 'React to this message to get your roles!' },
+      exclusive: false,
+      mode: 'default',
+      pairs: [],
+    },
+  });
+}
+
+router.get('/:guildId/m/roles/rr/new', (req, res) => renderRrBuilder(req, res, null));
+
+router.get('/:guildId/m/roles/rr/:id', (req, res) => {
+  const list = getGuildModule(req.guild.id, 'roles').config.reactionMessages ?? [];
+  renderRrBuilder(req, res, list.find((x) => String(x.id) === req.params.id) || null);
+});
+
 router.post(
-  '/:guildId/m/roles/reaction-message',
+  '/:guildId/m/roles/rr',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const back = `/guilds/${guild.id}/m/roles`;
-    const channelId = String(req.body.channelId ?? '');
-    if (!/^\d{17,20}$/.test(channelId)) return res.redirect(`${back}?msg=badchannel`);
+    const cfg = getGuildModule(guild.id, 'roles').config;
+    const list = Array.isArray(cfg.reactionMessages) ? cfg.reactionMessages : [];
 
-    const emojis = [].concat(req.body.re_emoji ?? []);
-    const roleIds = [].concat(req.body.re_role ?? []);
-    const pairs = [];
-    for (let i = 0; i < emojis.length; i += 1) {
-      const parsed = parseEmoji(emojis[i], guild);
-      if (parsed && /^\d{17,20}$/.test(roleIds[i] ?? '')) {
-        pairs.push({ ...parsed, roleId: roleIds[i] });
-      }
+    const channelId = /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '';
+    if (!channelId) return res.redirect(`${back}?msg=badchannel`);
+
+    let embed = {};
+    try {
+      embed = JSON.parse(req.body.embed || '{}');
+    } catch {
+      embed = {};
     }
+
+    const emojis = [].concat(req.body.rr_emoji ?? []);
+    const roleIds = [].concat(req.body.rr_role ?? []);
+    const pairs = [];
+    emojis.forEach((raw, i) => {
+      const parsed = parseEmoji(raw, guild);
+      if (parsed && /^\d{17,20}$/.test(roleIds[i] ?? '')) pairs.push({ ...parsed, roleId: roleIds[i] });
+    });
     if (pairs.length === 0) return res.redirect(`${back}?msg=needpair`);
 
-    const colorHex = String(req.body.color ?? '').replace('#', '');
+    const id = /^\d+$/.test(req.body.id ?? '') ? req.body.id : String(Date.now());
+    const existing = list.find((x) => String(x.id) === id);
+    const rm = {
+      id,
+      channelId,
+      messageId: existing?.messageId || '',
+      message: String(req.body.message ?? '').slice(0, 2000),
+      embed: normaliseEmbedSpec(embed),
+      exclusive: req.body.exclusive === 'on',
+      mode: req.body.mode === 'reverse' ? 'reverse' : 'default',
+      pairs,
+    };
+
+    let ok = false;
     try {
-      const record = await createReactionMessage(guild, {
-        channelId,
-        title: String(req.body.title ?? '').slice(0, 240),
-        description: String(req.body.description ?? '').slice(0, 1500),
-        color: /^[0-9a-fA-F]{6}$/.test(colorHex) ? parseInt(colorHex, 16) : undefined,
-        pairs,
-      });
-      const cfg = getGuildModule(guild.id, 'roles').config;
-      cfg.reactionMessages = [...(cfg.reactionMessages ?? []), record];
-      // Turn the module on — a reaction message is useless while it's disabled.
-      setGuildModule(guild.id, 'roles', { enabled: true, config: cfg });
-      res.redirect(`${back}?msg=saved`);
+      rm.messageId = await publishReactionMessage(guild, rm);
+      ok = true;
     } catch (err) {
-      console.error('[roles] create reaction message failed:', err.message);
-      res.redirect(`${back}?msg=rrfail`);
+      console.error('[roles] publish reaction message failed:', err.message);
     }
+
+    const next = existing ? list.map((x) => (String(x.id) === id ? rm : x)) : [...list, rm];
+    setGuildModule(guild.id, 'roles', { enabled: true, config: { ...cfg, reactionMessages: next } });
+    recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:roles',
+      detail: `${existing ? 'updated' : 'created'} reaction-role set`,
+    });
+    res.redirect(`${back}?msg=${ok ? 'saved' : 'rrfail'}`);
   })
 );
 
-// Remove a reaction-role message from config (leaves the Discord message).
-router.post('/:guildId/m/roles/reaction-message/:index/delete', (req, res) => {
-  const guild = req.guild;
-  const back = `/guilds/${guild.id}/m/roles`;
-  const cfg = getGuildModule(guild.id, 'roles').config;
-  const list = cfg.reactionMessages ?? [];
-  const idx = Number(req.params.index);
-  if (Number.isInteger(idx) && idx >= 0 && idx < list.length) {
-    list.splice(idx, 1);
-    setGuildModule(guild.id, 'roles', { config: { ...cfg, reactionMessages: list } });
-  }
-  res.redirect(`${back}?msg=saved`);
-});
+router.post(
+  '/:guildId/m/roles/rr/:id/delete',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const cfg = getGuildModule(guild.id, 'roles').config;
+    const list = Array.isArray(cfg.reactionMessages) ? cfg.reactionMessages : [];
+    const rm = list.find((x) => String(x.id) === req.params.id);
+    if (rm?.messageId && rm.channelId) {
+      const ch = guild.channels.cache.get(rm.channelId);
+      const m = ch && (await ch.messages.fetch(rm.messageId).catch(() => null));
+      if (m) await m.delete().catch(() => {});
+    }
+    setGuildModule(guild.id, 'roles', {
+      config: { ...cfg, reactionMessages: list.filter((x) => String(x.id) !== req.params.id) },
+    });
+    res.redirect(`/guilds/${guild.id}/m/roles?msg=saved`);
+  })
+);
 
 // --- Actions -------------------------------------------------------------
 

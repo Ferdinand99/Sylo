@@ -73,6 +73,15 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'welcome-channel',
+    name: 'Welcome channel',
+    description: 'Build one rich, pinned message for a dedicated read-only welcome channel.',
+    icon: '📢',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
+  {
     id: 'custom-commands',
     name: 'Custom commands',
     description: 'Per-server prefix commands that reply with text or an embed.',

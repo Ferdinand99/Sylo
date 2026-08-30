@@ -4,14 +4,20 @@
 //   {
 //     autoroles: ["<roleId>", ...],
 //     reactionMessages: [
-//       { channelId, messageId, mode: "toggle",
-//         pairs: [{ key, display, roleId }] }
+//       {
+//         id, channelId, messageId,
+//         message: "",                 // plain text above the embed
+//         embed: { ...embed spec },    // built with the WYSIWYG editor
+//         exclusive: false,            // only one role from this set at a time
+//         mode: "default" | "reverse", // reverse = reacting removes the role
+//         pairs: [{ key, display, react, roleId }],
+//       }
 //     ]
 //   }
 // `key` is what identifies the reaction: a custom emoji id, or the unicode char.
-import { EmbedBuilder } from 'discord.js';
 import { on } from './dispatch.js';
 import { runtime } from '../runtime.js';
+import { sendComposed, editComposed } from './messageCreator.js';
 
 // --- emoji parsing --------------------------------------------------------
 
@@ -42,34 +48,39 @@ export function parseEmoji(raw, guild) {
   return { key: s, display: s, react: s };
 }
 
-// --- dashboard helper: build a reaction-role message ------------------
+// --- dashboard helper: publish / re-publish a reaction-role message ------
 
 /**
- * Post a reaction-role message (as an embed) and add its reactions.
- * @returns {Promise<{ channelId, messageId, mode, pairs }>}
+ * Send (or edit) the reaction-role message and reconcile its reactions.
+ * @param {import('discord.js').Guild} guild
+ * @param {object} rm  reaction-message entry (see config shape above)
+ * @returns {Promise<string>} the message id
  */
-export async function createReactionMessage(guild, { channelId, title, description, color, pairs }) {
-  const channel = guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId));
-  if (!channel?.isTextBased()) throw new Error('Channel not found or not text-based.');
+export async function publishReactionMessage(guild, rm) {
+  const embed = rm.embed && (rm.embed.title || rm.embed.description || rm.embed.image || (rm.embed.fields || []).length)
+    ? rm.embed
+    : { ...(rm.embed || {}), description: rm.pairs.map((p) => `${p.display} — <@&${p.roleId}>`).join('\n') };
+  const spec = { content: rm.message || '', embeds: [embed] };
 
-  const list = pairs.map((p) => `${p.display} — <@&${p.roleId}>`).join('\n');
-  const embed = new EmbedBuilder()
-    .setColor(Number.isInteger(color) ? color : 0x4aa3df)
-    .setDescription([description, description && list ? '' : null, list].filter((x) => x != null).join('\n') || list);
-  if (title) embed.setTitle(title);
-
-  const message = await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
-  for (const p of pairs) {
-    await message.react(p.react).catch((err) => {
-      console.warn(`[roles] could not react with ${p.display}: ${err.message}`);
-    });
+  let message = null;
+  if (rm.messageId) {
+    message = await editComposed(guild, rm.channelId, rm.messageId, spec).catch(() => null);
   }
-  return {
-    channelId,
-    messageId: message.id,
-    mode: 'toggle',
-    pairs: pairs.map((p) => ({ key: p.key, display: p.display, roleId: p.roleId })),
-  };
+  if (!message) message = await sendComposed(guild, rm.channelId, spec);
+
+  const wanted = new Set(rm.pairs.map((p) => p.key));
+  try {
+    for (const rx of message.reactions.cache.values()) {
+      const k = rx.emoji.id || rx.emoji.name;
+      if (!wanted.has(k)) await rx.remove().catch(() => {});
+    }
+  } catch {
+    /* best-effort */
+  }
+  for (const p of rm.pairs) {
+    await message.react(p.react).catch((err) => console.warn(`[roles] react ${p.display}: ${err.message}`));
+  }
+  return message.id;
 }
 
 // --- runtime handlers --------------------------------------------------
@@ -121,18 +132,41 @@ on('roles', 'reactionAdd', async (payload, config, guildId) => {
     console.warn(`[roles] cannot assign "${role.name}" in ${guild.name}: bot lacks Manage Roles or is ranked below it`);
     return;
   }
+
+  if (hit.rm.mode === 'reverse') {
+    await member.roles.remove(role, 'Reaction role (reverse)').catch((e) => console.warn(`[roles] remove failed: ${e.message}`));
+    return;
+  }
+
   await member.roles.add(role, 'Reaction role').catch((err) => console.warn(`[roles] add role failed: ${err.message}`));
+
+  if (hit.rm.exclusive) {
+    const others = hit.rm.pairs
+      .filter((p) => p.roleId !== hit.pair.roleId && member.roles.cache.has(p.roleId))
+      .map((p) => p.roleId);
+    if (others.length) await member.roles.remove(others, 'Reaction role (exclusive)').catch(() => {});
+    // drop the member's other reactions on this message so it reflects the switch
+    for (const rx of r.reaction.message.reactions.cache.values()) {
+      if ((rx.emoji.id || rx.emoji.name) !== (r.reaction.emoji.id || r.reaction.emoji.name)) {
+        rx.users.remove(r.user.id).catch(() => {});
+      }
+    }
+  }
 });
 
 on('roles', 'reactionRemove', async (payload, config, guildId) => {
   const r = await resolveReaction(payload);
   if (!r) return;
   const hit = findPair(config, r.reaction);
-  if (!hit || hit.rm.mode !== 'toggle') return;
+  if (!hit) return;
   const guild = runtime.client.guilds.cache.get(guildId);
   const member = await guild.members.fetch(r.user.id).catch(() => null);
   const role = guild.roles.cache.get(hit.pair.roleId);
-  if (member && role && role.editable) {
+  if (!member || !role || !role.editable) return;
+
+  if (hit.rm.mode === 'reverse') {
+    await member.roles.add(role, 'Reaction role (reverse, un-react)').catch(() => {});
+  } else if (!hit.rm.exclusive) {
     await member.roles.remove(role, 'Reaction role removed').catch(() => {});
   }
 });

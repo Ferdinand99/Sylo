@@ -32,7 +32,7 @@ const KEY_PERMS = [
 const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
   { title: 'Moderation & filtering', ids: ['automod', 'verification', 'appeals', 'logging'] },
-  { title: 'Engagement', ids: ['welcome', 'roles', 'counting', 'leveling', 'sticky'] },
+  { title: 'Engagement', ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'sticky'] },
   { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'autoresponder', 'afk', 'server-stats', 'temp-voice', 'free-games'] },
 ];
 
@@ -174,6 +174,15 @@ function moduleLines(id, guild, cfg) {
         review ? on('Review channel', `#${review}`) : neutral('Review channel', 'not set'),
       ];
     }
+    case 'welcome-channel': {
+      const ch = channelName(guild, cfg.channelId);
+      const els = cfg.spec && Array.isArray(cfg.spec.embeds) ? cfg.spec.embeds.length : 0;
+      return [
+        ch ? on('Channel', `#${ch}`) : off('Channel', 'not set'),
+        els ? on('Elements', String(els)) : off('Elements', 'none'),
+        cfg.messageId ? on('Published', 'yes') : off('Published', 'no'),
+      ];
+    }
     case 'welcome': {
       const join = channelName(guild, cfg.joinChannel);
       const leave = channelName(guild, cfg.leaveChannel);
@@ -275,14 +284,14 @@ function generalCard(guild, settings) {
   return {
     kind: 'link',
     id: 'general',
-    name: 'General',
+    name: 'Settings',
     icon: '⚙️',
-    description: 'Server-wide settings for Sylo.',
+    description: 'Bot masters, mod-log channel, embed colour, backup.',
     hasToggle: false,
     enabled: null,
     missingIntents: [],
     status: 'link',
-    href: `/guilds/${guild.id}/general`,
+    href: `/guilds/${guild.id}/settings`,
     lines: [modlog ? on('Mod-log channel', `#${modlog}`) : off('Mod-log channel', 'not set')],
   };
 }

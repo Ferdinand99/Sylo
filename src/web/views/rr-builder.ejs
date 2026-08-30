@@ -1,0 +1,64 @@
+<%- include('partials/header', { title: `Sylo — ${isNew ? 'New' : 'Edit'} reaction role` }) %>
+
+<p class="muted"><a href="/guilds/<%= guildId %>/m/roles">&larr; Reaction roles</a></p>
+
+<div class="rr-builder-head">
+  <h1 class="page-title"><%= isNew ? 'New reaction role' : 'Edit reaction role' %></h1>
+  <div class="rr-actions">
+    <a class="btn" href="/guilds/<%= guildId %>/m/roles">Discard</a>
+    <button type="submit" form="rr-form" class="btn btn-primary">Publish</button>
+  </div>
+</div>
+
+<form method="POST" action="/guilds/<%= guildId %>/m/roles/rr" id="rr-form">
+  <input type="hidden" name="id" value="<%= rm.id %>" />
+  <input type="hidden" name="embed" id="rr-embed-spec" />
+
+  <section class="card">
+    <h2>Channel</h2>
+    <select name="channelId" required style="max-width:420px">
+      <option value="">— select a channel —</option>
+      <% channels.forEach(function (c) { %>
+        <option value="<%= c.id %>" <%= c.id === rm.channelId ? 'selected' : '' %>>#<%= c.name %></option>
+      <% }) %>
+    </select>
+  </section>
+
+  <section class="card">
+    <h2>Message</h2>
+    <label class="small">Message text <span class="muted">— optional, above the embed</span></label>
+    <textarea id="rr-content" name="message" rows="2" placeholder="React to this message to get your roles!"><%= rm.message || '' %></textarea>
+    <div id="rr-embed" class="wc-stage" style="margin-top:8px"></div>
+  </section>
+
+  <section class="card">
+    <h2>Reactions &amp; roles <span class="muted small">(<span id="rr-count">0</span> / 20)</span></h2>
+    <label class="checkline">
+      <input type="checkbox" name="exclusive" <%= rm.exclusive ? 'checked' : '' %> />
+      Only one role from this set at a time (picking one removes the others)
+    </label>
+    <div id="rr-rows" class="rr-rows"></div>
+    <button type="button" id="rr-add" class="secondary">＋ Add reaction</button>
+  </section>
+
+  <section class="card">
+    <h2>Reaction mode</h2>
+    <label class="rr-mode">
+      <input type="radio" name="mode" value="default" <%= rm.mode !== 'reverse' ? 'checked' : '' %> />
+      <span><strong>Default</strong> — reacting adds the role, removing the reaction takes it away.</span>
+    </label>
+    <label class="rr-mode">
+      <input type="radio" name="mode" value="reverse" <%= rm.mode === 'reverse' ? 'checked' : '' %> />
+      <span><strong>Reverse</strong> — reacting <em>removes</em> the role (an opt-out), un-reacting gives it back.</span>
+    </label>
+  </section>
+</form>
+
+<script>
+  window.RR = <%- JSON.stringify(rm).replace(/</g, '\\u003c') %>;
+  window.RR_ROLES = <%- JSON.stringify(roles).replace(/</g, '\\u003c') %>;
+  window.RR_GUILD = "<%= guildId %>";
+</script>
+<script src="/reaction-role.js"></script>
+
+<%- include('partials/footer') %>

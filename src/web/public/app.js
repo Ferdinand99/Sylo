@@ -43,13 +43,102 @@
       const data = await window.syloAction(`/guilds/${guild}/modules/${moduleId}`, { enabled: t.checked });
       t.checked = data.enabled;
       toast(`${moduleId} ${data.enabled ? 'enabled' : 'disabled'}`);
-      const dot = t.closest('.mod-link')?.querySelector('.dot');
-      if (dot) dot.classList.toggle('on', data.enabled), dot.classList.toggle('off', !data.enabled);
+      // Reflect the new state on the sidebar link's status dot.
+      const dot = document.querySelector(`.sb-link[data-module="${moduleId}"] .sb-dot`);
+      if (dot) {
+        dot.classList.toggle('on', data.enabled);
+        dot.classList.toggle('off', !data.enabled);
+      }
     } catch {
       t.checked = !t.checked; // revert
     } finally {
       t.disabled = false;
     }
+  });
+
+  // --- plugin-grid "Enable" buttons (overview) ------------------------
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.plugin-btn.enable');
+    if (!btn) return;
+    e.preventDefault();
+    const { guild, module: moduleId, config } = btn.dataset;
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+      const data = await window.syloAction(`/guilds/${guild}/modules/${moduleId}`, { enabled: true });
+      if (data.enabled) {
+        const link = document.createElement('a');
+        link.className = 'plugin-btn active';
+        link.href = config || `/guilds/${guild}/m/${moduleId}`;
+        link.textContent = '✓ Active';
+        btn.replaceWith(link);
+        btn.closest('.plugin-card')?.classList.add('is-on');
+        const dot = document.querySelector(`.sb-link[data-module="${moduleId}"] .sb-dot`);
+        if (dot) { dot.classList.add('on'); dot.classList.remove('off'); }
+        toast(`${moduleId} enabled`);
+      }
+    } catch {
+      btn.disabled = false;
+      btn.textContent = '+ Enable';
+    }
+  });
+
+  // --- chip picker (chips + add-dropdown, à la MEE6) — roles or channels ---
+  function makeRoleChip(id, name, color, field, kind) {
+    const chip = document.createElement('span');
+    chip.className = 'role-chip';
+    chip.dataset.id = id;
+    chip.dataset.name = name;
+    chip.dataset.color = color || '';
+    let lead;
+    if (kind === 'channel') {
+      lead = document.createElement('span');
+      lead.className = 'chip-hash';
+      lead.textContent = '#';
+    } else {
+      lead = document.createElement('span');
+      lead.className = 'role-dot';
+      lead.style.background = color || 'var(--muted)';
+    }
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'role-chip-x';
+    x.setAttribute('aria-label', 'Remove');
+    x.textContent = '×';
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = field || 'botMasterRoles';
+    input.value = id;
+    chip.append(lead, document.createTextNode(name), x, input);
+    return chip;
+  }
+
+  document.addEventListener('change', (e) => {
+    const sel = e.target.closest('.role-picker-add');
+    if (!sel || !sel.value) return;
+    const picker = sel.closest('.role-picker');
+    const opt = sel.selectedOptions[0];
+    picker.querySelector('[data-role-chips]').appendChild(
+      makeRoleChip(sel.value, opt.dataset.name || opt.textContent, opt.dataset.color, picker.dataset.field, picker.dataset.kind)
+    );
+    opt.remove();
+    sel.value = '';
+  });
+
+  document.addEventListener('click', (e) => {
+    const x = e.target.closest('.role-chip-x');
+    if (!x) return;
+    const chip = x.closest('.role-chip');
+    const sel = chip.closest('.role-picker')?.querySelector('.role-picker-add');
+    if (sel) {
+      const o = document.createElement('option');
+      o.value = chip.dataset.id;
+      o.textContent = chip.dataset.name;
+      o.dataset.name = chip.dataset.name;
+      o.dataset.color = chip.dataset.color || '';
+      sel.appendChild(o);
+    }
+    chip.remove();
   });
 
   // --- emoji picker ----------------------------------------------------

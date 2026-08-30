@@ -7,7 +7,42 @@ import {
   exceedsCaps,
   matchWord,
   normaliseAutomodConfig,
+  countEmojis,
+  countSpoilers,
+  isZalgo,
+  isRepeatedText,
 } from '../src/modules/automod.js';
+
+test('countEmojis / countSpoilers: count unicode + custom emoji and spoiler tags', () => {
+  assert.equal(countEmojis('hi 😀😀 <:blob:123> ❤️'), 4);
+  assert.equal(countEmojis('no emoji here'), 0);
+  assert.equal(countSpoilers('||one|| plain ||two||'), 2);
+});
+
+test('isZalgo / isRepeatedText: flag corrupted and repetitive text', () => {
+  assert.equal(isZalgo('normal sentence, nothing weird'), false);
+  assert.equal(isZalgo('z̸̢̛a̵l̶g̷o̴ ̶t̸e̵x̷t̶ ̸h̴e̵r̶e̸ ̴n̵o̶w̷'), true);
+  assert.equal(isRepeatedText('aaaaaaaaaaaaaa'), true);
+  assert.equal(isRepeatedText('spam spam spam spam spam spam'), true);
+  assert.equal(isRepeatedText('this is a perfectly normal message'), false);
+});
+
+test('normaliseAutomodConfig: includes the new rules with clamped params', () => {
+  const c = normaliseAutomodConfig({
+    rules: {
+      emojis: { enabled: true, action: 'timeout', max: 999 },
+      spoilers: { enabled: true, max: 0 },
+      zalgo: { enabled: true, action: 'warn' },
+      repeat: { enabled: true },
+    },
+  });
+  assert.equal(c.rules.emojis.enabled, true);
+  assert.equal(c.rules.emojis.action, 'timeout');
+  assert.equal(c.rules.emojis.max, 50);
+  assert.equal(c.rules.spoilers.max, 1);
+  assert.equal(c.rules.zalgo.action, 'warn');
+  assert.equal(c.rules.repeat.enabled, true);
+});
 
 test('containsInvite: matches common invite forms', () => {
   assert.ok(containsInvite('join here discord.gg/abc123'));

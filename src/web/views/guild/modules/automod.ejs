@@ -3,84 +3,62 @@
   var R = cfg.rules || {};
   var exC = Array.isArray(cfg.exemptChannels) ? cfg.exemptChannels : [];
   var exR = Array.isArray(cfg.exemptRoles) ? cfg.exemptRoles : [];
-  function ract(key) { return (R[key] && R[key].action) || 'delete'; }
-  function ron(key) { return !!(R[key] && R[key].enabled); }
+  var immunePool = (typeof roles !== 'undefined' ? roles : []).filter(function (r) { return !exR.includes(r.id); });
+  function mode(key) { return (R[key] && R[key].enabled) ? ((R[key].action) || 'delete') : 'off'; }
+  var MODES = [['off', 'Disabled'], ['delete', 'Delete message'], ['warn', 'Delete + Warn'], ['timeout', 'Delete + Timeout']];
+  var withParams = { links: 1, spam: 1, mentions: 1, caps: 1, words: 1, emojis: 1, spoilers: 1 };
 %>
 
 <p class="muted small">
-  Each filter scans new and edited messages and acts on the first match. Administrators
-  (and anyone in the exempt channels/roles below) are always skipped — add your mod roles
-  to the exempt list if you don't want automod touching them.
-  Actions are logged to the mod-log channel set under <a href="/guilds/<%= guild.id %>/general">General</a>.
+  Each check scans new and edited messages and acts on the first match. Administrators and members
+  with an <strong>immunity role</strong> (set on the <em>Admin</em> tab) are always skipped. Actions are
+  logged to the mod-log channel (set under <a href="/guilds/<%= guild.id %>/settings">Settings</a>).
+  Sylo never acts on other bots.
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/automod/config" class="stack" style="max-width:640px">
-  <table class="thresholds" style="width:100%">
-    <thead><tr><th>Filter</th><th>On</th><th>Action</th><th>Settings</th></tr></thead>
-    <tbody>
-      <% automodRules.forEach(function (pair) { var key = pair[0], label = pair[1], hint = pair[2]; %>
-        <tr>
-          <td><strong><%= label %></strong><br /><span class="muted small"><%= hint %></span></td>
-          <td>
-            <label class="switch">
-              <input type="checkbox" name="r_<%= key %>_enabled" <%= ron(key) ? 'checked' : '' %> />
-              <span class="slider"></span>
-            </label>
-          </td>
-          <td>
-            <select name="r_<%= key %>_action">
-              <% automodActions.forEach(function (a) { %>
-                <option value="<%= a %>" <%= a === ract(key) ? 'selected' : '' %>><%= a %></option>
-              <% }) %>
-            </select>
-          </td>
-          <td>
+<form method="POST" action="/guilds/<%= guild.id %>/m/automod/config" class="stack" style="max-width:700px">
+  <div class="am-rules">
+    <% automodRules.forEach(function (pair) { var key = pair[0], label = pair[1], hint = pair[2]; %>
+      <div class="am-rule">
+        <div class="am-rule-main">
+          <div><strong><%= label %></strong><p class="muted small" style="margin:2px 0 0"><%= hint %></p></div>
+          <select name="r_<%= key %>_mode">
+            <% MODES.forEach(function (m) { %><option value="<%= m[0] %>" <%= m[0] === mode(key) ? 'selected' : '' %>><%= m[1] %></option><% }) %>
+          </select>
+        </div>
+        <% if (withParams[key]) { %>
+          <details class="am-rule-cfg">
+            <summary>Settings</summary>
             <% if (key === 'links') { %>
-              <label class="small">Allowed domains (blank = block all links)</label>
+              <label class="small">Allowed domains <span class="muted">— blank blocks all links</span></label>
               <textarea name="r_links_allowed" rows="2" placeholder="youtube.com, twitch.tv"><%= (R.links && Array.isArray(R.links.allowed)) ? R.links.allowed.join(', ') : '' %></textarea>
             <% } else if (key === 'spam') { %>
-              <label class="small">Max <input type="number" name="r_spam_max" min="2" max="30" style="width:64px" value="<%= (R.spam && R.spam.max) || 5 %>" />
-              messages per <input type="number" name="r_spam_seconds" min="1" max="60" style="width:64px" value="<%= (R.spam && R.spam.seconds) || 5 %>" /> s</label>
+              <label class="small">Max <input type="number" name="r_spam_max" min="2" max="30" style="width:60px" value="<%= (R.spam && R.spam.max) || 5 %>" /> messages per <input type="number" name="r_spam_seconds" min="1" max="60" style="width:60px" value="<%= (R.spam && R.spam.seconds) || 5 %>" /> s</label>
             <% } else if (key === 'mentions') { %>
-              <label class="small">Max mentions <input type="number" name="r_mentions_max" min="1" max="50" style="width:64px" value="<%= (R.mentions && R.mentions.max) || 5 %>" /></label>
+              <label class="small">Max mentions <input type="number" name="r_mentions_max" min="1" max="50" style="width:60px" value="<%= (R.mentions && R.mentions.max) || 5 %>" /></label>
             <% } else if (key === 'caps') { %>
-              <label class="small">At least <input type="number" name="r_caps_minLength" min="4" max="200" style="width:64px" value="<%= (R.caps && R.caps.minLength) || 10 %>" />
-              letters, <input type="number" name="r_caps_percent" min="50" max="100" style="width:64px" value="<%= (R.caps && R.caps.percent) || 70 %>" />% uppercase</label>
+              <label class="small">At least <input type="number" name="r_caps_minLength" min="4" max="200" style="width:60px" value="<%= (R.caps && R.caps.minLength) || 10 %>" /> letters, <input type="number" name="r_caps_percent" min="50" max="100" style="width:60px" value="<%= (R.caps && R.caps.percent) || 70 %>" />% uppercase</label>
+            <% } else if (key === 'emojis') { %>
+              <label class="small">Max emojis <input type="number" name="r_emojis_max" min="1" max="50" style="width:60px" value="<%= (R.emojis && R.emojis.max) || 8 %>" /></label>
+            <% } else if (key === 'spoilers') { %>
+              <label class="small">Max spoiler tags <input type="number" name="r_spoilers_max" min="1" max="30" style="width:60px" value="<%= (R.spoilers && R.spoilers.max) || 4 %>" /></label>
             <% } else if (key === 'words') { %>
-              <label class="small">Words / phrases (comma or newline separated)</label>
+              <label class="small">Words / phrases <span class="muted">— comma or newline separated</span></label>
               <textarea name="r_words_list" rows="2" placeholder="badword, another phrase"><%= (R.words && Array.isArray(R.words.list)) ? R.words.list.join(', ') : '' %></textarea>
-            <% } else { %>
-              <span class="muted small">—</span>
             <% } %>
-          </td>
-        </tr>
-      <% }) %>
-    </tbody>
-  </table>
+          </details>
+        <% } %>
+      </div>
+    <% }) %>
+  </div>
 
   <hr class="sep" />
 
-  <label class="check">
-    <input type="checkbox" name="deleteMessage" <%= cfg.deleteMessage !== false ? 'checked' : '' %> />
-    Delete the offending message
-  </label>
-
-  <label class="small" style="margin-top:6px">Timeout length for the “timeout” action (minutes)</label>
+  <label class="small">Timeout length for the "Delete + Timeout" action (minutes)</label>
   <input type="number" name="timeoutMinutes" min="1" max="40320" style="width:100px" value="<%= cfg.timeoutMinutes || 10 %>" />
 
   <label style="margin-top:10px">Exempt channels <span class="muted small">— automod never acts here</span></label>
-  <select name="exemptChannels" multiple size="5">
-    <% channels.forEach(function (c) { %>
-      <option value="<%= c.id %>" <%= exC.includes(c.id) ? 'selected' : '' %>>#<%= c.name %></option>
-    <% }) %>
-  </select>
+  <%- include('../../partials/chip-picker', { field: 'exemptChannels', kind: 'channel', items: channels, selected: exC }) %>
 
-  <label style="margin-top:6px">Exempt roles <span class="muted small">— members with any of these are skipped</span></label>
-  <select name="exemptRoles" multiple size="5">
-    <% roles.forEach(function (r) { %>
-      <option value="<%= r.id %>" <%= exR.includes(r.id) ? 'selected' : '' %>><%= r.name %></option>
-    <% }) %>
-  </select>
-
-  <div style="margin-top:12px"><button type="submit">Save</button></div>
+  <div style="margin-top:14px"><button type="submit">Save automod</button></div>
 </form>

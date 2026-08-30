@@ -1,0 +1,52 @@
+<% var cfg = moduleConfig || {}; %>
+<% var spec = (cfg.spec && typeof cfg.spec === 'object') ? cfg.spec : { content: '', embeds: [] }; %>
+
+<div class="wc-top">
+  <p class="muted small" style="margin:0">
+    Build one rich message for a dedicated <strong>read-only</strong> channel. Click any text to edit it in
+    place; click a picture area to set an image URL. Placeholders: <code>{server}</code>, <code>{memberCount}</code>.
+  </p>
+  <button type="button" id="wc-reset" class="link-btn">↺ Reset to default</button>
+</div>
+
+<div class="wc-channel-row">
+  <form method="POST" action="/guilds/<%= guild.id %>/m/welcome-channel/config" id="wc-form" class="stack" style="flex:1">
+    <label class="small">Channel</label>
+    <select name="channelId">
+      <option value="">— select a channel —</option>
+      <% channels.forEach(function (c) { %>
+        <option value="<%= c.id %>" <%= c.id === (cfg.channelId || '') ? 'selected' : '' %>>#<%= c.name %></option>
+      <% }) %>
+    </select>
+    <input type="hidden" name="spec" id="wc-spec" />
+  </form>
+  <form method="POST" action="/guilds/<%= guild.id %>/m/welcome-channel/create-channel">
+    <button type="submit" class="secondary">Create read-only #welcome</button>
+  </form>
+</div>
+
+<label class="small" style="margin-top:6px">Message text <span class="muted">— optional, shown above the embeds</span></label>
+<textarea id="wc-content" rows="2" placeholder="Welcome to {server}!"><%= spec.content || '' %></textarea>
+
+<div id="wc-stage" class="wc-stage"></div>
+
+<div class="wc-add-bar">
+  <div class="wc-add-head">Add element</div>
+  <div class="wc-add-grid" id="wc-add-grid"></div>
+</div>
+
+<div class="wc-actions">
+  <button type="submit" form="wc-form" name="action" value="save">Save draft</button>
+  <button type="submit" form="wc-form" name="action" value="publish" class="btn-primary">Publish to channel</button>
+  <% if (cfg.messageId) { %>
+    <form method="POST" action="/guilds/<%= guild.id %>/m/welcome-channel/unpublish" style="display:inline">
+      <button type="submit" class="danger">Remove published message</button>
+    </form>
+  <% } %>
+</div>
+
+<script>
+  window.WC_SPEC = <%- JSON.stringify(spec).replace(/</g, '\\u003c') %>;
+  window.WC_PRESETS = <%- JSON.stringify(wcPresets).replace(/</g, '\\u003c') %>;
+</script>
+<script src="/welcome-channel.js"></script>

@@ -1,22 +1,31 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Eighteen per-guild modules
-(moderation, logging, tickets, reaction roles, verification, welcome, sticky
-messages, auto-moderation, counting, custom commands, autoresponder, scheduled
-messages, leveling, AFK, server statistics, free games, ban appeals, temporary
-voice channels), Discord OAuth2 login, a public leveling leaderboard, and
+for self-hosting on an **Unraid server via Docker**. Nineteen per-guild modules
+(moderation, logging, tickets, reaction roles, verification, welcome, welcome
+channel, sticky messages, auto-moderation, counting, custom commands,
+autoresponder, scheduled messages, leveling, AFK, server statistics, free games,
+ban appeals, temporary voice channels), Discord OAuth2 login, a public leveling
+leaderboard, and
 **Battlefield-series** player stats via the public
 [gametools.network](https://gametools.network) API.
 
 ## What's new since 2.0
 
-- **Seven more modules**: Verification (button or Cloudflare Turnstile captcha),
+- **MEE6-style dashboard redesign** — a fixed left sidebar with a server switcher
+  and collapsible plugin categories; the dashboard is a plugin grid; a
+  **Bot Personalizer** (username / avatar / banner / presence), a per-server
+  **Settings** page (bot-master roles, mod-log channel, embed colour, backup), a
+  **Leaderboard** page, and a tabbed **Moderator** page (automod, warning
+  auto-actions, infractions, immunity roles, audit logging, command
+  permissions). Welcome Channel and Reaction Roles get a WYSIWYG embed editor.
+- **Eight more modules**: Verification (button or Cloudflare Turnstile captcha),
   Autoresponder, AFK, Server statistics (live count voice channels), Free games
   (Epic + IsThereAnyDeal), Ban appeals (DM'd appeal link → dashboard review →
-  decision shown on the link, with a single-use rejoin invite on accept), and
-  Temporary voice channels (join a hub to spawn your own VC, auto-deleted empty)
-- Every module is functional and configurable from the dashboard — 18 in total
+  decision shown on the link, with a single-use rejoin invite on accept),
+  Temporary voice channels (join a hub to spawn your own VC, auto-deleted empty),
+  and Welcome Channel (a builder for one pinned message in a read-only channel)
+  — all functional and configurable from the dashboard (19 in total)
 - Editable Discord **presence / activity** from the dashboard (`/settings`)
 - 2.0 groundwork still current: custom commands (prefix **and** `/slash`),
   scheduled messages, full leveling with a public leaderboard, auto-moderation,
@@ -44,7 +53,7 @@ voice channels), Discord OAuth2 login, a public leveling leaderboard, and
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 18 feature groups, each toggled and configured from the
+- **Per-guild modules** — 19 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -52,12 +61,20 @@ voice channels), Discord OAuth2 login, a public leveling leaderboard, and
   - **Verification** — gate new members behind a Verify button, or a Cloudflare
     Turnstile captcha on the dashboard, before granting a role; optional
     auto-kick of unverified members
-  - **Welcome & leave** — join/leave messages with placeholders, optional DM
+  - **Welcome & leave** — join/leave messages with placeholders, optional DM,
+    plus a shared "give roles to new members" picker
+  - **Welcome channel** — a MEE6-style builder for one rich, pinned message in a
+    dedicated read-only channel (welcome / rules / links / banner elements, live
+    preview); can create the `#welcome` channel for you and publish/update it
   - **Sticky messages** — keep a message pinned to the bottom of a channel
   - **Tickets (modmail)** — members DM the bot; staff read and reply from the
     dashboard (replies arrive as an anonymous "Staff" DM)
-  - **Auto-moderation** — invite / link / flood / mass-mention / caps / banned-word
-    filters, each with a delete / warn / timeout action and channel/role exemptions
+  - **Moderator** — a tabbed page consolidating **Auto-moderation** (bad words,
+    repeated text, invites, links, caps, emojis, spoilers, mentions, zalgo,
+    anti-spam — each Disabled / Delete / Delete + Warn / Delete + Timeout),
+    **auto-actions** (warning-count thresholds → timeout/kick/ban), **infractions**
+    (warnings + ban manager), **immunity roles** (skip automod + auto-actions),
+    **audit logging** (server events → a channel), and per-command permissions
   - **Counting** — members count upward one number per message in a chosen channel;
     correct or reset the running number from the dashboard
   - **Custom commands** — text/embed replies triggered by a chat prefix and,
@@ -95,10 +112,11 @@ voice channels), Discord OAuth2 login, a public leveling leaderboard, and
 - **Web dashboard** (Express + EJS, no frontend framework)
   - `GET /health` — JSON status (uptime, guild count, last error) for healthchecks
   - `/` — bot status, activity stats and module adoption; topbar server switcher
-  - `/commands` — slash-command reference · `/stats` — cached lookups
-  - `/settings` — bot-wide Discord presence / activity
-  - `/guilds/<id>` — per-server control panel: a combined overview, General
-    settings, Commands, Moderation (warnings + bans), Tickets, Ban appeals,
+  - `/stats` — cached lookups · `/health` — status page (JSON for monitors)
+  - `/settings` — **Bot Personalizer**: bot username / avatar / banner + presence
+  - `/guilds/<id>` — per-server control panel: a MEE6-style plugin grid, a
+    **Leaderboard** page, **Settings** (bot-master roles, mod-log channel, embed
+    colour, backup), Commands, Moderation (warnings + bans), Tickets, Ban appeals,
     Message Creator, an audit log, and a settings panel per module
   - **Discord OAuth2 login** (optional) — gate the dashboard to server admins
     (and configurable staff roles for tickets); runs open on a trusted LAN when
@@ -196,9 +214,11 @@ trusted LAN. To lock it down:
    the public URL and set `DASHBOARD_URL` to match.
 3. Set a long random `SESSION_SECRET` so sessions survive restarts.
 
-With `DISCORD_CLIENT_SECRET` set, every page except `/health` requires "Log in
-with Discord", and per-server pages require **Manage Server** (or Administrator /
-owner) in that server. `/health` stays public for the container healthcheck.
+With `DISCORD_CLIENT_SECRET` set, every page except the `/health` JSON requires
+"Log in with Discord", and per-server pages require **Manage Server** (or
+Administrator / owner) in that server — or one of the **bot-master roles** set on
+that server's *Settings* page. `/health` returns JSON publicly for the container
+healthcheck (browsers get the status page, gated by login).
 
 ## Discord application setup
 

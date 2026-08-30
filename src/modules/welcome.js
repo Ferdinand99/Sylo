@@ -4,6 +4,7 @@
 import { EmbedBuilder } from 'discord.js';
 import { on } from './dispatch.js';
 import { sendToChannel } from './lib/send.js';
+import { guildEmbedColor } from '../db/guildSettings.js';
 
 export const WELCOME_PLACEHOLDERS = ['{user}', '{user.tag}', '{user.name}', '{user.id}', '{server}', '{memberCount}'];
 
@@ -23,7 +24,7 @@ function payloadFor(text, member, useEmbed) {
   return {
     embeds: [
       new EmbedBuilder()
-        .setColor(0x4aa3df)
+        .setColor(guildEmbedColor(member.guild.id))
         .setDescription(text)
         .setThumbnail(member.user.displayAvatarURL())
         .setTimestamp(Date.now()),

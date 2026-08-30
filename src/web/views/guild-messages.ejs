@@ -11,8 +11,7 @@
   <div class="banner <%= (msg === 'sent' || msg === 'updated' || msg === 'deleted') ? 'ok' : (msg === 'removed' ? 'info' : 'bad') %>"><%= text %></div>
 <% } %>
 
-<div class="guild-layout">
-  <%- include('guild/_nav') %>
+<div class="guild-wrap">
   <section class="guild-panel mc-panel">
     <div class="mc-grid">
       <form method="POST" action="<%= editing ? `/guilds/${guild.id}/messages/${editing.id}` : `/guilds/${guild.id}/messages` %>" id="mc-form" class="mc-editor">

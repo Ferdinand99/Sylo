@@ -3,8 +3,7 @@
 <p class="muted"><a href="/guilds/<%= guild.id %>/overview">&larr; <%= guild.name %></a></p>
 <h1 class="page-title">Tickets</h1>
 
-<div class="guild-layout">
-  <%- include('guild/_nav') %>
+<div class="guild-wrap">
   <section class="guild-panel">
     <h2>Open <span class="muted">(<%= open.length %>)</span></h2>
     <% if (open.length === 0) { %>

@@ -44,6 +44,9 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
   if (!rule) return;
 
   const member = await guild.members.fetch(targetUser.id).catch(() => null);
+  // Immunity roles (shared with Auto-moderation) are never auto-punished.
+  const immune = getGuildModule(guild.id, 'automod').config.exemptRoles;
+  if (member && Array.isArray(immune) && immune.some((r) => member.roles.cache.has(r))) return;
   const reason = `Auto: reached ${warnCount} warning(s) (rule at ${rule.count})`;
   let done = null;
 

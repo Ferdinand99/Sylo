@@ -36,85 +36,104 @@
        'appeal-denied-nodm': 'Appeal denied. Sylo could not DM the member (no shared server) — they will see the decision on their appeal link.',
        'appeal-gone': 'That appeal was already decided or withdrawn.',
        'appeal-bad': 'Choose accept or deny.',
+       'wc-published': 'Welcome message published to the channel.',
+       'wc-channel': 'Created a read-only #welcome channel.',
+       'wc-unpub': 'Removed the published welcome message.',
+       'wc-fail': 'That did not work — check the bot has Send Messages / Embed Links (and Manage Channels to create one).',
      };
-     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied'].includes(msg);
+     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');
 %>
   <div class="banner <%= cls %>"><%= messages[msg] || 'Done.' %></div>
 <% } %>
 
-<div class="guild-layout">
-  <%- include('guild/_nav') %>
+<div class="guild-wrap">
+  <% if (panel === 'overview') { %>
+    <% var h = overview.health; %>
+    <% var issues = []; %>
+    <% if (!h.perms.ok) { issues.push('Missing bot permission: ' + h.perms.missing.join(', ')); } %>
+    <% if (h.intents.membersBlocking || h.intents.contentBlocking) { issues.push('An enabled plugin needs a privileged intent that is turned off'); } %>
+    <% if (!h.modlog.set) { issues.push('No mod-log channel set (General settings)'); } %>
 
-  <section class="guild-panel">
-    <% if (panel === 'overview') { %>
-      <h2>Combined overview</h2>
-      <p class="muted">Everything Sylo does in this server at a glance. Toggle a module here, or open it to change its settings.</p>
+    <div class="plugin-head">
+      <p class="muted"><%= h.modules.enabled %> of <%= h.modules.total %> plugins enabled<% if (h.tickets.open) { %> &middot; <%= h.tickets.open %> open ticket<%= h.tickets.open === 1 ? '' : 's' %><% } %></p>
+      <a class="plugin-head-link" href="/health">Bot health &rarr;</a>
+    </div>
 
-      <% var h = overview.health; %>
-      <div class="ov-health">
-        <div class="ov-h-item <%= h.perms.ok ? 'state-on' : 'state-off' %>">
-          <span class="ov-h-k">Bot permissions</span>
-          <span class="ov-h-v"><%= h.perms.ok ? 'All key permissions granted' : ('Missing: ' + h.perms.missing.join(', ')) %></span>
-        </div>
-        <div class="ov-h-item <%= (h.intents.membersBlocking || h.intents.contentBlocking) ? 'state-off' : 'state-neutral' %>">
-          <span class="ov-h-k">Privileged intents</span>
-          <span class="ov-h-v">
-            Server Members <%= h.intents.members ? '✓' : '—' %> ·
-            Message Content <%= h.intents.content ? '✓' : '—' %>
-            <% if (h.intents.membersBlocking || h.intents.contentBlocking) { %>(an enabled module needs one that is off)<% } %>
-          </span>
-        </div>
-        <div class="ov-h-item <%= h.modlog.set ? 'state-on' : 'state-off' %>">
-          <span class="ov-h-k">Mod-log channel</span>
-          <span class="ov-h-v"><%= h.modlog.set ? ('#' + h.modlog.name) : 'not set' %></span>
-        </div>
-        <div class="ov-h-item state-neutral">
-          <span class="ov-h-k">Open tickets</span>
-          <span class="ov-h-v"><%= h.tickets.open %><% if (h.tickets.unread) { %> · <%= h.tickets.unread %> unread<% } %></span>
-        </div>
-        <div class="ov-h-item state-neutral">
-          <span class="ov-h-k">Modules enabled</span>
-          <span class="ov-h-v"><%= h.modules.enabled %> of <%= h.modules.total %></span>
-        </div>
+    <% if (issues.length) { %>
+      <div class="banner bad plugin-issues">
+        <strong>Needs attention</strong>
+        <ul><% issues.forEach(function (t) { %><li><%= t %></li><% }) %></ul>
       </div>
+    <% } %>
 
-      <% overview.groups.forEach(function (group) { %>
-        <h3 class="ov-group"><%= group.title %></h3>
-        <div class="ov-grid">
-          <% group.cards.forEach(function (c) { %>
-            <div class="ov-card is-<%= c.status %>">
-              <div class="ov-card-head">
-                <span class="ov-card-title"><span class="module-icon"><%= c.icon %></span> <%= c.name %></span>
-                <% if (c.hasToggle) { %>
-                  <label class="switch">
-                    <input type="checkbox" class="module-toggle" data-guild="<%= guild.id %>" data-module="<%= c.id %>"
-                      <%= c.enabled ? 'checked' : '' %> <%= c.missingIntents.length ? 'disabled' : '' %> />
-                    <span class="slider"></span>
-                  </label>
-                <% } else { %>
-                  <span class="pill">panel</span>
-                <% } %>
-              </div>
-              <p class="muted small ov-card-desc"><%= c.description %></p>
-              <ul class="ov-lines">
-                <% c.lines.forEach(function (ln) { %>
-                  <li><span class="ov-k"><%= ln.label %></span><span class="ov-v state-<%= ln.state %>"><%= ln.value %></span></li>
-                <% }) %>
-              </ul>
-              <% if (c.missingIntents && c.missingIntents.length) { %>
-                <p class="warn-text small">Needs intent: <%= c.missingIntents.join(', ') %></p>
+    <% overview.groups.forEach(function (group) { %>
+      <h3 class="plugin-group"><%= group.title %></h3>
+      <div class="plugin-grid">
+        <% group.cards.forEach(function (c) { %>
+          <div class="plugin-card is-<%= c.status %>">
+            <a class="plugin-hit" href="<%= c.href %>" aria-label="<%= c.name %>"></a>
+            <span class="plugin-ico"><%= c.icon %></span>
+            <span class="plugin-name"><%= c.name %></span>
+            <span class="plugin-desc"><%= c.description %></span>
+            <span class="plugin-cta" data-guild="<%= guild.id %>" data-module="<%= c.id %>">
+              <% if (c.status === 'blocked') { %>
+                <span class="plugin-btn blocked" title="Needs the <%= c.missingIntents.join(', ') %> intent">Needs intent</span>
+              <% } else if (!c.hasToggle) { %>
+                <span class="plugin-btn open">Open &rarr;</span>
+              <% } else if (c.enabled) { %>
+                <a class="plugin-btn active" href="<%= c.href %>">✓ Active</a>
+              <% } else { %>
+                <button type="button" class="plugin-btn enable" data-guild="<%= guild.id %>" data-module="<%= c.id %>" data-config="<%= c.href %>">+ Enable</button>
               <% } %>
-              <a class="ov-card-link" href="<%= c.href %>">Change settings here &rarr;</a>
-            </div>
+            </span>
+          </div>
+        <% }) %>
+      </div>
+    <% }) %>
+
+  <% } else { %>
+  <section class="guild-panel">
+    <% if (panel === 'settings') { %>
+      <h2>Settings</h2>
+      <p class="muted">Server-wide settings for Sylo. Bot-identity (name, avatar, activity) lives in <a href="/settings">Bot Personalizer</a>.</p>
+
+      <form method="POST" action="/guilds/<%= guild.id %>/settings" class="stack" style="max-width:560px">
+        <h3 style="margin:14px 0 2px">Bot masters</h3>
+        <p class="muted small">Roles that can manage Sylo's dashboard for this server — full control, so give it
+          only to trusted staff. They reach the dashboard via a direct link.</p>
+
+        <label class="small">Administrator roles <span class="muted">— automatic</span></label>
+        <div class="role-chips is-readonly">
+          <% if (adminRoles.length === 0) { %>
+            <span class="muted small">No role has the Administrator permission.</span>
+          <% } %>
+          <% adminRoles.forEach(function (r) { %>
+            <span class="role-chip"><span class="role-dot" style="background:<%= r.color || 'var(--muted)' %>"></span><%= r.name %></span>
           <% }) %>
         </div>
-      <% }) %>
+        <p class="muted small">Any role with the Administrator permission is always a bot master.</p>
 
-    <% } else if (panel === 'general') { %>
-      <h2>General</h2>
-      <form method="POST" action="/guilds/<%= guild.id %>/general" class="stack">
-        <label>Moderation log channel</label>
+        <label class="small" style="margin-top:8px">Additional bot master roles</label>
+        <div class="role-picker" data-field="botMasterRoles">
+          <div class="role-chips" data-role-chips>
+            <% botMasters.forEach(function (r) { %>
+              <span class="role-chip" data-id="<%= r.id %>" data-name="<%= r.name %>" data-color="<%= r.color || '' %>">
+                <span class="role-dot" style="background:<%= r.color || 'var(--muted)' %>"></span><%= r.name %>
+                <button type="button" class="role-chip-x" aria-label="Remove">&times;</button>
+                <input type="hidden" name="botMasterRoles" value="<%= r.id %>" />
+              </span>
+            <% }) %>
+          </div>
+          <select class="role-picker-add">
+            <option value="">+ Add a role…</option>
+            <% rolePool.forEach(function (r) { %>
+              <option value="<%= r.id %>" data-name="<%= r.name %>" data-color="<%= r.color || '' %>"><%= r.name %></option>
+            <% }) %>
+          </select>
+        </div>
+
+        <h3 style="margin:16px 0 2px">Moderation log channel</h3>
         <select name="modlogChannelId">
           <option value="">— disabled —</option>
           <% channels.forEach(function (c) { %>
@@ -122,7 +141,14 @@
           <% }) %>
         </select>
 
-        <div><button type="submit">Save</button></div>
+        <h3 style="margin:16px 0 2px">Default embed colour</h3>
+        <p class="muted small">Used for Sylo's branded embeds (welcome messages and more).</p>
+        <div class="settings-color">
+          <input type="color" name="embedColor" value="<%= embedColorHex %>" />
+          <label class="checkline"><input type="checkbox" name="embedColorReset" /> Reset to Sylo blue</label>
+        </div>
+
+        <div style="margin-top:14px"><button type="submit">Save settings</button></div>
       </form>
 
       <hr class="sep" />
@@ -153,31 +179,100 @@
 
     <% } else if (panel === 'commands') { %>
       <h2>Commands</h2>
-      <p class="muted">Disable a command in this server, or restrict it to channels / roles. Administrators always bypass these limits.</p>
-      <% commands.forEach(function (c) { %>
-        <form method="POST" action="/guilds/<%= guild.id %>/commands/<%= c.name %>" class="cmd-override">
-          <div class="cmd-override-head">
-            <code>/<%= c.name %></code>
-            <label class="switch">
-              <input type="checkbox" name="enabled" <%= c.enabled ? 'checked' : '' %> />
-              <span class="slider"></span>
-            </label>
-          </div>
-          <p class="muted small"><%= c.description %></p>
-          <label class="small">Limit to channels (comma-separated IDs, blank = all)</label>
-          <input type="text" name="channels" value="<%= c.allowedChannels.join(',') %>" placeholder="e.g. 123, 456" />
-          <label class="small">Limit to roles</label>
-          <select name="roles" multiple size="4">
-            <% roles.forEach(function (r) { %>
-              <option value="<%= r.id %>" <%= c.allowedRoles.includes(r.id) ? 'selected' : '' %>><%= r.name %></option>
-            <% }) %>
-          </select>
-          <div><button type="submit">Save</button></div>
-        </form>
-      <% }) %>
+      <%- include('guild/commands', { guild: guild, commands: commands, roles: roles, channels: channels }) %>
 
     <% } else if (panel === 'moderation') { %>
-      <%- include('guild/moderation', { guild: guild, warnings: warnings, warningTotal: warningTotal, warningShown: warningShown, bans: bans, bansTotal: bansTotal, bansShown: bansShown, bansError: bansError, banLimit: banLimit }) %>
+      <h2>Moderator</h2>
+      <p class="muted">Auto-moderation, warning auto-actions, infractions, immunity, audit logging and command permissions.</p>
+
+      <div class="mod-tabbed">
+        <input type="radio" name="mtab" id="mt-automod" checked />
+        <input type="radio" name="mtab" id="mt-actions" />
+        <input type="radio" name="mtab" id="mt-admin" />
+        <input type="radio" name="mtab" id="mt-infr" />
+        <input type="radio" name="mtab" id="mt-log" />
+        <input type="radio" name="mtab" id="mt-cmd" />
+        <div class="mod-tablabels">
+          <label for="mt-automod">Automod</label>
+          <label for="mt-actions">Auto-actions</label>
+          <label for="mt-admin">Admin</label>
+          <label for="mt-infr">Infractions</label>
+          <label for="mt-log">Audit logging</label>
+          <label for="mt-cmd">Commands</label>
+        </div>
+        <div class="mod-panels">
+          <div class="mod-panel" data-tab="automod">
+            <%- include('guild/modules/automod', { guild: guild, channels: channels, roles: roles, moduleConfig: automodConfig, automodRules: automodRules }) %>
+          </div>
+          <div class="mod-panel" data-tab="admin">
+            <h3 style="margin-top:0">Immunity roles</h3>
+            <p class="muted small">Members with one of these roles are never touched by Auto-moderation or the
+              warning auto-actions. Administrators, the server owner and bot-master roles are immune by default.</p>
+            <form method="POST" action="/guilds/<%= guild.id %>/m/automod/immunity" class="stack" style="max-width:520px">
+              <%- include('partials/chip-picker', { field: 'immunityRoles', kind: 'role', items: roles, selected: (automodConfig && automodConfig.exemptRoles) ? automodConfig.exemptRoles : [] }) %>
+              <div style="margin-top:12px"><button type="submit">Save immunity roles</button></div>
+            </form>
+          </div>
+          <div class="mod-panel" data-tab="actions">
+            <p class="muted small">Automatically time out / kick / ban a member when their warning count hits a threshold. Immunity roles are skipped.</p>
+            <%- include('guild/modules/moderation', { guild: guild, moduleConfig: moderationCfg, thresholdActions: thresholdActions }) %>
+          </div>
+          <div class="mod-panel" data-tab="infr">
+            <%- include('guild/moderation', { guild: guild, warnings: warnings, warningTotal: warningTotal, warningShown: warningShown, bans: bans, bansTotal: bansTotal, bansShown: bansShown, bansError: bansError, banLimit: banLimit }) %>
+          </div>
+          <div class="mod-panel" data-tab="log">
+            <p class="muted small">Send server events to a channel. Set the mod-log channel (for moderation actions) under <a href="/guilds/<%= guild.id %>/settings">Settings</a>.</p>
+            <%- include('guild/modules/logging', { guild: guild, channels: channels, moduleConfig: loggingCfg, logEvents: logEvents }) %>
+          </div>
+          <div class="mod-panel" data-tab="cmd">
+            <%- include('guild/commands', { guild: guild, commands: commands, roles: roles, channels: channels }) %>
+          </div>
+        </div>
+      </div>
+
+    <% } else if (panel === 'leaderboard') { %>
+      <div class="module-panel-head">
+        <h2>🏆 Leaderboard</h2>
+        <a class="btn btn-primary" href="/leaderboard/<%= guild.id %>" target="_blank" rel="noopener">See leaderboard &rarr;</a>
+      </div>
+      <p class="muted">Every minute a member is chatting they earn a random amount of XP. Rankings come from the <a href="/guilds/<%= guild.id %>/m/leveling">Leveling</a> module.</p>
+      <% if (!levelingEnabled) { %>
+        <div class="banner info">Leveling is off — <a href="/guilds/<%= guild.id %>/m/leveling">enable it</a> to track XP and publish a leaderboard.</div>
+      <% } %>
+
+      <hr class="sep" />
+      <form method="POST" action="/guilds/<%= guild.id %>/leaderboard/public" class="lb-public">
+        <div>
+          <strong>Make this server's leaderboard public</strong>
+          <p class="muted small">Anyone with the link can view it at <code>/leaderboard/<%= guild.id %></code> — no login. Search engines may index it.</p>
+        </div>
+        <label class="switch">
+          <input type="checkbox" name="publicLeaderboard" onchange="this.form.submit()" <%= publicLeaderboard ? 'checked' : '' %> />
+          <span class="slider"></span>
+        </label>
+        <noscript><button type="submit">Save</button></noscript>
+      </form>
+
+      <hr class="sep" />
+      <h3 style="margin-bottom:6px">Top members <span class="muted small">(<%= board.total %> tracked)</span></h3>
+      <% if (board.rows.length === 0) { %>
+        <p class="muted">No XP recorded yet.</p>
+      <% } else { %>
+        <table>
+          <thead><tr><th>#</th><th>Member</th><th class="num">Level</th><th class="num">XP</th><th class="num">Messages</th></tr></thead>
+          <tbody>
+            <% board.rows.forEach(function (r) { %>
+              <tr>
+                <td><%= r.rank %></td>
+                <td><%= r.name %></td>
+                <td class="num"><%= r.level %></td>
+                <td class="num"><%= r.xp.toLocaleString('en') %></td>
+                <td class="num"><%= r.messages.toLocaleString('en') %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      <% } %>
 
     <% } else if (panel === 'appeals') { %>
       <h2>⚖️ Ban appeals</h2>
@@ -236,9 +331,10 @@
       <% } %>
       <% if (!mrow.enabled) { %><p class="muted small">Enable the module (toggle above) for these settings to take effect.</p><% } %>
       <hr class="sep" />
-      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, roles: (typeof roles !== 'undefined' ? roles : []), logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []), thresholdActions: (typeof thresholdActions !== 'undefined' ? thresholdActions : []), automodRules: (typeof automodRules !== 'undefined' ? automodRules : []), automodActions: (typeof automodActions !== 'undefined' ? automodActions : []), countingState: (typeof countingState !== 'undefined' ? countingState : null), ccPlaceholders: (typeof ccPlaceholders !== 'undefined' ? ccPlaceholders : []), arPlaceholders: (typeof arPlaceholders !== 'undefined' ? arPlaceholders : []), arMatchModes: (typeof arMatchModes !== 'undefined' ? arMatchModes : []), scheduledJobs: (typeof scheduledJobs !== 'undefined' ? scheduledJobs : []), schedulePresets: (typeof schedulePresets !== 'undefined' ? schedulePresets : []), scheduleUnits: (typeof scheduleUnits !== 'undefined' ? scheduleUnits : []), announceModes: (typeof announceModes !== 'undefined' ? announceModes : []), levelingBoard: (typeof levelingBoard !== 'undefined' ? levelingBoard : null), verifyModes: (typeof verifyModes !== 'undefined' ? verifyModes : []), turnstileEnabled: (typeof turnstileEnabled !== 'undefined' ? turnstileEnabled : false), voiceChannels: (typeof voiceChannels !== 'undefined' ? voiceChannels : []), categories: (typeof categories !== 'undefined' ? categories : []), statTypes: (typeof statTypes !== 'undefined' ? statTypes : []), dashboardUrlSet: (typeof dashboardUrlSet !== 'undefined' ? dashboardUrlSet : false) }) %>
+      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, roles: (typeof roles !== 'undefined' ? roles : []), logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []), thresholdActions: (typeof thresholdActions !== 'undefined' ? thresholdActions : []), automodRules: (typeof automodRules !== 'undefined' ? automodRules : []), automodActions: (typeof automodActions !== 'undefined' ? automodActions : []), countingState: (typeof countingState !== 'undefined' ? countingState : null), ccPlaceholders: (typeof ccPlaceholders !== 'undefined' ? ccPlaceholders : []), arPlaceholders: (typeof arPlaceholders !== 'undefined' ? arPlaceholders : []), arMatchModes: (typeof arMatchModes !== 'undefined' ? arMatchModes : []), scheduledJobs: (typeof scheduledJobs !== 'undefined' ? scheduledJobs : []), schedulePresets: (typeof schedulePresets !== 'undefined' ? schedulePresets : []), scheduleUnits: (typeof scheduleUnits !== 'undefined' ? scheduleUnits : []), announceModes: (typeof announceModes !== 'undefined' ? announceModes : []), xpRates: (typeof xpRates !== 'undefined' ? xpRates : []), levelingCommands: (typeof levelingCommands !== 'undefined' ? levelingCommands : []), levelingBoard: (typeof levelingBoard !== 'undefined' ? levelingBoard : null), verifyModes: (typeof verifyModes !== 'undefined' ? verifyModes : []), turnstileEnabled: (typeof turnstileEnabled !== 'undefined' ? turnstileEnabled : false), voiceChannels: (typeof voiceChannels !== 'undefined' ? voiceChannels : []), categories: (typeof categories !== 'undefined' ? categories : []), statTypes: (typeof statTypes !== 'undefined' ? statTypes : []), dashboardUrlSet: (typeof dashboardUrlSet !== 'undefined' ? dashboardUrlSet : false), welcomeAutoroles: (typeof welcomeAutoroles !== 'undefined' ? welcomeAutoroles : []), verificationEnabled: (typeof verificationEnabled !== 'undefined' ? verificationEnabled : false), wcPresets: (typeof wcPresets !== 'undefined' ? wcPresets : []) }) %>
     <% } %>
   </section>
+  <% } %>
 </div>
 
 <%- include('partials/footer') %>

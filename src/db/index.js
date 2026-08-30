@@ -278,6 +278,15 @@ const MIGRATIONS = [
       CREATE INDEX idx_temp_voice_guild ON temp_voice_channels (guild_id);
     `);
   },
+
+  // Server Settings page: extra dashboard-admin roles ("bot masters") and a
+  // default embed colour for the guild.
+  (database) => {
+    database.exec(`
+      ALTER TABLE guild_settings ADD COLUMN bot_master_roles TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE guild_settings ADD COLUMN embed_color INTEGER;
+    `);
+  },
 ];
 
 /**

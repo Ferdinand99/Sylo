@@ -11,7 +11,8 @@ import { addXp } from '../db/leveling.js';
 import { sendToChannel } from './lib/send.js';
 
 export const ANNOUNCE_MODES = ['channel', 'reply', 'dm', 'off'];
-const DEFAULT_MESSAGE = '🎉 {user} just reached **level {level}**!';
+export const XP_RATES = [0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3];
+const DEFAULT_MESSAGE = 'GG {player}, you just advanced to level {level}!';
 const XP_MIN = 15;
 const XP_MAX = 25;
 
@@ -24,12 +25,16 @@ const idList = (v) => [...new Set((Array.isArray(v) ? v : [v]).filter((x) => /^\
 export function normaliseLevelingConfig(raw = {}) {
   return {
     cooldownSeconds: clampInt(raw.cooldownSeconds, 0, 3600, 60),
+    xpRate: XP_RATES.includes(Number(raw.xpRate)) ? Number(raw.xpRate) : 1,
     announce: ANNOUNCE_MODES.includes(raw.announce) ? raw.announce : 'channel',
     announceChannel: /^\d{17,20}$/.test(raw.announceChannel ?? '') ? raw.announceChannel : '',
-    announceMessage: String(raw.announceMessage ?? '').slice(0, 500) || DEFAULT_MESSAGE,
+    announceMessage: String(raw.announceMessage ?? '').slice(0, 2000) || DEFAULT_MESSAGE,
     noXpChannels: idList(raw.noXpChannels),
+    noXpChannelsMode: raw.noXpChannelsMode === 'deny' ? 'deny' : 'allow',
     noXpRoles: idList(raw.noXpRoles),
+    noXpRolesMode: raw.noXpRolesMode === 'deny' ? 'deny' : 'allow',
     stackRewards: raw.stackRewards !== false,
+    removeRewardsOnXpLoss: Boolean(raw.removeRewardsOnXpLoss),
     publicLeaderboard: raw.publicLeaderboard !== false,
     rewards: (Array.isArray(raw.rewards) ? raw.rewards : [])
       .map((r) => ({ level: Math.floor(Number(r.level)), roleId: String(r.roleId ?? '') }))
@@ -48,6 +53,7 @@ setInterval(() => {
 
 function fillMessage(template, member, level) {
   return String(template || DEFAULT_MESSAGE)
+    .replaceAll('{player}', `<@${member.id}>`)
     .replaceAll('{user}', `<@${member.id}>`)
     .replaceAll('{username}', member.user.username)
     .replaceAll('{server}', member.guild.name)
@@ -58,15 +64,18 @@ on('leveling', 'messageCreate', async (message, rawConfig, guildId) => {
   if (!message.member || message.author?.bot) return;
   const config = normaliseLevelingConfig(rawConfig);
 
-  if (config.noXpChannels.includes(message.channelId)) return;
-  if (config.noXpRoles.some((r) => message.member.roles.cache.has(r))) return;
+  const inChanList = config.noXpChannels.includes(message.channelId);
+  if (config.noXpChannelsMode === 'deny' ? !inChanList : inChanList) return;
+  const inRoleList = config.noXpRoles.some((r) => message.member.roles.cache.has(r));
+  if (config.noXpRolesMode === 'deny' ? !inRoleList : inRoleList) return;
 
   const key = `${guildId}:${message.author.id}`;
   const now = Date.now();
   if (now - (cooldowns.get(key) ?? 0) < config.cooldownSeconds * 1000) return;
   cooldowns.set(key, now);
 
-  const gain = XP_MIN + Math.floor(Math.random() * (XP_MAX - XP_MIN + 1));
+  const base = XP_MIN + Math.floor(Math.random() * (XP_MAX - XP_MIN + 1));
+  const gain = Math.max(1, Math.round(base * config.xpRate));
   const { level, leveledUp } = addXp(guildId, message.author.id, gain, now);
   if (!leveledUp) return;
 
@@ -84,8 +93,21 @@ on('leveling', 'messageCreate', async (message, rawConfig, guildId) => {
     /* announcement is best-effort */
   }
 
-  await applyRewards(message.member, level, config).catch(() => {});
+  await syncRewards(message.member, level, config).catch(() => {});
 });
+
+/** Add roles the member now qualifies for and (optionally) strip ones above their level. */
+export async function syncRewards(member, level, config) {
+  await applyRewards(member, level, config).catch(() => {});
+  if (!config.removeRewardsOnXpLoss) return;
+  const me = member.guild.members.me;
+  if (!me?.permissions.has('ManageRoles')) return;
+  const strip = (config.rewards || [])
+    .filter((r) => r.level > level && member.roles.cache.has(r.roleId))
+    .map((r) => r.roleId)
+    .filter((id) => member.guild.roles.cache.get(id)?.editable);
+  if (strip.length) await member.roles.remove(strip, 'Leveling reward removed (XP dropped)').catch(() => {});
+}
 
 async function applyRewards(member, level, config) {
   const earned = config.rewards.filter((r) => level >= r.level);

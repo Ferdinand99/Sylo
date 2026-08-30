@@ -1,30 +1,94 @@
-<form method="POST" action="/guilds/<%= guild.id %>/m/welcome/config" class="stack" style="max-width:560px">
+<% var cfg = moduleConfig || {}; %>
+<% var joinOn = !!(cfg.joinChannel && String(cfg.joinMessage || '').trim()); %>
+<% var dmOn = !!String(cfg.dmMessage || '').trim(); %>
+<% var leaveOn = !!(cfg.leaveChannel && String(cfg.leaveMessage || '').trim()); %>
+<% var picked = Array.isArray(welcomeAutoroles) ? welcomeAutoroles : []; %>
+<% var autoOn = picked.length > 0; %>
+<% var pool = roles.filter(function (r) { return !picked.includes(r.id); }); %>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/welcome/config" class="stack" style="max-width:640px">
   <p class="muted small">Placeholders: <% welcomePlaceholders.forEach(function (p) { %><code><%= p %></code> <% }) %></p>
 
-  <label>Welcome channel</label>
-  <select name="joinChannel">
-    <option value="">— none —</option>
-    <% channels.forEach(function (c) { %>
-      <option value="<%= c.id %>" <%= c.id === (moduleConfig.joinChannel || '') ? 'selected' : '' %>>#<%= c.name %></option>
-    <% }) %>
-  </select>
-  <label>Welcome message</label>
-  <textarea name="joinMessage" rows="2" placeholder="Welcome {user} to {server}!"><%= moduleConfig.joinMessage || '' %></textarea>
+  <div class="mee-row">
+    <input type="checkbox" class="mee-check" id="w-join" name="enable_join" <%= joinOn ? 'checked' : '' %> />
+    <label class="mee-head" for="w-join">
+      <span class="mee-title">Send a message when a member joins the server</span>
+      <span class="switch-visual" aria-hidden="true"></span>
+    </label>
+    <div class="mee-body stack">
+      <label class="small">Channel</label>
+      <select name="joinChannel">
+        <option value="">— select a channel —</option>
+        <% channels.forEach(function (c) { %><option value="<%= c.id %>" <%= c.id === (cfg.joinChannel || '') ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
+      </select>
+      <label class="small">Message</label>
+      <textarea name="joinMessage" rows="3" placeholder="Welcome {user} to {server}!"><%= cfg.joinMessage || '' %></textarea>
+      <label class="checkline"><input type="checkbox" name="useEmbed" <%= cfg.useEmbed ? 'checked' : '' %> /> Send as an embed (uses the server's default embed colour)</label>
+    </div>
+  </div>
 
-  <label style="margin-top:6px">Leave channel</label>
-  <select name="leaveChannel">
-    <option value="">— none —</option>
-    <% channels.forEach(function (c) { %>
-      <option value="<%= c.id %>" <%= c.id === (moduleConfig.leaveChannel || '') ? 'selected' : '' %>>#<%= c.name %></option>
-    <% }) %>
-  </select>
-  <label>Leave message</label>
-  <textarea name="leaveMessage" rows="2" placeholder="{user.tag} left the server."><%= moduleConfig.leaveMessage || '' %></textarea>
+  <div class="mee-row">
+    <input type="checkbox" class="mee-check" id="w-dm" name="enable_dm" <%= dmOn ? 'checked' : '' %> />
+    <label class="mee-head" for="w-dm">
+      <span class="mee-title">Send a private message to new members</span>
+      <span class="switch-visual" aria-hidden="true"></span>
+    </label>
+    <div class="mee-body stack">
+      <label class="small">DM text</label>
+      <textarea name="dmMessage" rows="3" placeholder="Hi {user.name}, welcome to {server}!"><%= cfg.dmMessage || '' %></textarea>
+    </div>
+  </div>
 
-  <label style="margin-top:6px">DM to new members (optional)</label>
-  <textarea name="dmMessage" rows="2" placeholder="Hi {user.name}, welcome to {server}!"><%= moduleConfig.dmMessage || '' %></textarea>
+  <div class="mee-row">
+    <input type="checkbox" class="mee-check" id="w-leave" name="enable_leave" <%= leaveOn ? 'checked' : '' %> />
+    <label class="mee-head" for="w-leave">
+      <span class="mee-title">Send a message when a member leaves the server</span>
+      <span class="switch-visual" aria-hidden="true"></span>
+    </label>
+    <div class="mee-body stack">
+      <label class="small">Channel</label>
+      <select name="leaveChannel">
+        <option value="">— select a channel —</option>
+        <% channels.forEach(function (c) { %><option value="<%= c.id %>" <%= c.id === (cfg.leaveChannel || '') ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
+      </select>
+      <label class="small">Message</label>
+      <textarea name="leaveMessage" rows="3" placeholder="{user.tag} left the server."><%= cfg.leaveMessage || '' %></textarea>
+    </div>
+  </div>
 
-  <label class="check"><input type="checkbox" name="useEmbed" <%= moduleConfig.useEmbed ? 'checked' : '' %> /> Send as an embed</label>
+  <div class="mee-row">
+    <input type="checkbox" class="mee-check" id="w-auto" name="enable_autorole" <%= autoOn ? 'checked' : '' %> />
+    <label class="mee-head" for="w-auto">
+      <span class="mee-title">Give roles to new members</span>
+      <span class="switch-visual" aria-hidden="true"></span>
+    </label>
+    <div class="mee-body stack">
+      <p class="muted small">Assigned automatically on join. Shared with the
+        <a href="/guilds/<%= guild.id %>/m/roles">Reaction roles &amp; autoroles</a> module.</p>
+      <div class="role-picker" data-field="newRoles">
+        <div class="role-chips" data-role-chips>
+          <% picked.forEach(function (id) { var r = roles.find(function (x) { return x.id === id; }); %>
+            <span class="role-chip" data-id="<%= id %>" data-name="<%= r ? r.name : id %>" data-color="">
+              <span class="role-dot" style="background:var(--muted)"></span><%= r ? r.name : id %>
+              <button type="button" class="role-chip-x" aria-label="Remove">&times;</button>
+              <input type="hidden" name="newRoles" value="<%= id %>" />
+            </span>
+          <% }) %>
+        </div>
+        <select class="role-picker-add">
+          <option value="">+ Add a role…</option>
+          <% pool.forEach(function (r) { %><option value="<%= r.id %>" data-name="<%= r.name %>"><%= r.name %></option><% }) %>
+        </select>
+      </div>
+    </div>
+  </div>
 
-  <div><button type="submit">Save</button></div>
+  <div style="margin-top:12px"><button type="submit">Save</button></div>
 </form>
+
+<div class="mee-row is-link">
+  <div class="mee-head">
+    <span class="mee-title">Verify new members with a captcha</span>
+    <a class="mee-link" href="/guilds/<%= guild.id %>/m/verification"><%= verificationEnabled ? 'On — configure' : 'Set up' %> &rarr;</a>
+  </div>
+</div>

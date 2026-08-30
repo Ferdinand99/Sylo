@@ -1,0 +1,27 @@
+<%
+  // params: field (input name), kind ('role' | 'channel'), items [{id,name,color?}], selected [ids]
+  var _sel = selected || [];
+  var _items = items || [];
+  var _kind = (typeof kind !== 'undefined' && kind === 'channel') ? 'channel' : 'role';
+  var _byId = {};
+  _items.forEach(function (i) { _byId[i.id] = i; });
+  var _selSet = {};
+  _sel.forEach(function (id) { _selSet[id] = true; });
+%>
+<div class="role-picker" data-field="<%= field %>"<% if (_kind === 'channel') { %> data-kind="channel"<% } %>>
+  <div class="role-chips" data-role-chips>
+    <% _sel.forEach(function (id) { var it = _byId[id]; %>
+      <span class="role-chip" data-id="<%= id %>" data-name="<%= it ? it.name : id %>" data-color="<%= (it && it.color) || '' %>">
+        <% if (_kind === 'channel') { %><span class="chip-hash">#</span><% } else { %><span class="role-dot" style="background:<%= (it && it.color) || 'var(--muted)' %>"></span><% } %><%= it ? it.name : id %>
+        <button type="button" class="role-chip-x" aria-label="Remove">&times;</button>
+        <input type="hidden" name="<%= field %>" value="<%= id %>" />
+      </span>
+    <% }) %>
+  </div>
+  <select class="role-picker-add">
+    <option value="">+ Add <%= _kind === 'channel' ? 'a channel' : 'a role' %>…</option>
+    <% _items.forEach(function (it) { if (_selSet[it.id]) return; %>
+      <option value="<%= it.id %>" data-name="<%= it.name %>"<% if (it.color) { %> data-color="<%= it.color %>"<% } %>><%= _kind === 'channel' ? ('#' + it.name) : it.name %></option>
+    <% }) %>
+  </select>
+</div>
