@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.0](https://github.com/Ferdinand99/Sylo/compare/v2.6.0...v2.7.0) (2026-08-30)
+
+
+### Features
+
+* MEE6-style dashboard redesign + temp voice & welcome channel modules ([a832d5f](https://github.com/Ferdinand99/Sylo/commit/a832d5fdc670c963fc4da64ec3469b956a29ba13))
+
 ## [2.6.0](https://github.com/Ferdinand99/Sylo/compare/v2.5.1...v2.6.0) (2026-08-30)
 
 
