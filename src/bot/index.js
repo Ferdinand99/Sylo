@@ -16,6 +16,7 @@ function buildIntents() {
     GatewayIntentBits.GuildModeration, // ban add/remove, audit-log-adjacent events
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMessageReactions, // reaction roles
+    GatewayIntentBits.GuildVoiceStates, // temporary "join to create" voice channels
     GatewayIntentBits.DirectMessages, // ticket / modmail
   ];
   if (config.intentGuildMembers) intents.push(GatewayIntentBits.GuildMembers);

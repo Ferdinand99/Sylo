@@ -263,6 +263,21 @@ const MIGRATIONS = [
   (database) => {
     database.exec('ALTER TABLE appeals ADD COLUMN invite_url TEXT;');
   },
+
+  // Temporary voice channels ("join to create"): track the channels Sylo spawns
+  // so it can delete them when empty and survive a restart.
+  (database) => {
+    database.exec(`
+      CREATE TABLE temp_voice_channels (
+        channel_id TEXT PRIMARY KEY,
+        guild_id   TEXT NOT NULL,
+        hub_id     TEXT NOT NULL,
+        owner_id   TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_temp_voice_guild ON temp_voice_channels (guild_id);
+    `);
+  },
 ];
 
 /**

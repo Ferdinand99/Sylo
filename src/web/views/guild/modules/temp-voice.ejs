@@ -1,0 +1,60 @@
+<% var cfg = moduleConfig || {}; var hubs = Array.isArray(cfg.hubs) ? cfg.hubs : []; %>
+
+<p class="muted small">
+  Pick a <strong>hub voice channel</strong> ("Join to create"). When a member joins it, Sylo makes them
+  their own voice channel, moves them in, and deletes it once everyone leaves. The member gets
+  <strong>Manage Channel</strong> on their own channel so they can rename it or set a limit in Discord.
+  Name tokens: <code>{user}</code>, <code>{username}</code>, <code>{count}</code>.
+  Sylo needs <strong>Manage Channels</strong> and <strong>Move Members</strong>.
+</p>
+
+<% if (guild == null || voiceChannels.length === 0) { %>
+  <p class="warn-text small">This server has no voice channels — create the hub channel first.</p>
+<% } %>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/temp-voice/config" class="stack" style="max-width:680px">
+  <div id="tv-rows">
+    <% (hubs.length ? hubs : [{ hubChannelId: '', categoryId: '', nameTemplate: "{user}'s channel", userLimit: 0 }]).forEach(function (h) { %>
+      <div class="row-form">
+        <select name="tv_hub" style="min-width:170px">
+          <option value="">— hub channel —</option>
+          <% voiceChannels.forEach(function (c) { %>
+            <option value="<%= c.id %>" <%= c.id === h.hubChannelId ? 'selected' : '' %>>🔊 <%= c.name %></option>
+          <% }) %>
+        </select>
+        <select name="tv_category" style="min-width:150px">
+          <option value="">— same category —</option>
+          <% categories.forEach(function (c) { %>
+            <option value="<%= c.id %>" <%= c.id === h.categoryId ? 'selected' : '' %>><%= c.name %></option>
+          <% }) %>
+        </select>
+        <input type="text" name="tv_name" class="grow" placeholder="{user}'s channel" value="<%= h.nameTemplate || '' %>" />
+        <input type="number" name="tv_limit" min="0" max="99" style="width:70px" title="User limit (0 = none)" value="<%= h.userLimit || 0 %>" />
+        <button type="button" class="link-btn" onclick="this.closest('.row-form').remove()">remove</button>
+      </div>
+    <% }) %>
+  </div>
+  <div><button type="button" class="secondary" id="tv-add">+ Add hub</button></div>
+  <div style="margin-top:10px"><button type="submit">Save</button></div>
+</form>
+
+<template id="tv-template">
+  <div class="row-form">
+    <select name="tv_hub" style="min-width:170px">
+      <option value="">— hub channel —</option>
+      <% voiceChannels.forEach(function (c) { %><option value="<%= c.id %>">🔊 <%= c.name %></option><% }) %>
+    </select>
+    <select name="tv_category" style="min-width:150px">
+      <option value="">— same category —</option>
+      <% categories.forEach(function (c) { %><option value="<%= c.id %>"><%= c.name %></option><% }) %>
+    </select>
+    <input type="text" name="tv_name" class="grow" placeholder="{user}'s channel" />
+    <input type="number" name="tv_limit" min="0" max="99" style="width:70px" value="0" />
+    <button type="button" class="link-btn" onclick="this.closest('.row-form').remove()">remove</button>
+  </div>
+</template>
+<script>
+  document.getElementById('tv-add')?.addEventListener('click', () => {
+    document.getElementById('tv-rows').appendChild(document.getElementById('tv-template').content.cloneNode(true));
+  });
+</script>

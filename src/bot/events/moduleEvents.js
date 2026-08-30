@@ -16,6 +16,11 @@ export function register(client) {
   client.on(Events.GuildBanAdd, (ban) => dispatch('guildBanAdd', ban.guild?.id, ban));
   client.on(Events.GuildBanRemove, (ban) => dispatch('guildBanRemove', ban.guild?.id, ban));
 
+  client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+    const guildId = newState.guild?.id ?? oldState.guild?.id;
+    dispatch('voiceStateUpdate', guildId, { old: oldState, new: newState });
+  });
+
   client.on(Events.MessageDelete, (message) => {
     if (message.guildId) dispatch('messageDelete', message.guildId, message);
   });

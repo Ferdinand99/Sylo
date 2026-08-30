@@ -1,20 +1,22 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Seventeen per-guild modules
+for self-hosting on an **Unraid server via Docker**. Eighteen per-guild modules
 (moderation, logging, tickets, reaction roles, verification, welcome, sticky
 messages, auto-moderation, counting, custom commands, autoresponder, scheduled
-messages, leveling, AFK, server statistics, free games, ban appeals), Discord OAuth2
-login, a public leveling leaderboard, and **Battlefield-series** player stats via the
-public [gametools.network](https://gametools.network) API.
+messages, leveling, AFK, server statistics, free games, ban appeals, temporary
+voice channels), Discord OAuth2 login, a public leveling leaderboard, and
+**Battlefield-series** player stats via the public
+[gametools.network](https://gametools.network) API.
 
 ## What's new since 2.0
 
-- **Six more modules**: Verification (button or Cloudflare Turnstile captcha),
+- **Seven more modules**: Verification (button or Cloudflare Turnstile captcha),
   Autoresponder, AFK, Server statistics (live count voice channels), Free games
-  (Epic + IsThereAnyDeal), and Ban appeals (DM'd appeal link → dashboard review
-  → decision shown on the link, with a single-use rejoin invite on accept)
-- Every module is functional and configurable from the dashboard — 17 in total
+  (Epic + IsThereAnyDeal), Ban appeals (DM'd appeal link → dashboard review →
+  decision shown on the link, with a single-use rejoin invite on accept), and
+  Temporary voice channels (join a hub to spawn your own VC, auto-deleted empty)
+- Every module is functional and configurable from the dashboard — 18 in total
 - Editable Discord **presence / activity** from the dashboard (`/settings`)
 - 2.0 groundwork still current: custom commands (prefix **and** `/slash`),
   scheduled messages, full leveling with a public leaderboard, auto-moderation,
@@ -42,7 +44,7 @@ public [gametools.network](https://gametools.network) API.
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 17 feature groups, each toggled and configured from the
+- **Per-guild modules** — 18 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -81,6 +83,10 @@ public [gametools.network](https://gametools.network) API.
     depends on the DM. Configurable questions, post-denial cooldown, and an
     optional "appeals server" invite so Sylo can DM the outcome too; needs
     `DASHBOARD_URL` set
+  - **Temporary voice channels** — members join a "hub" voice channel and Sylo
+    spawns them their own VC (name template, optional user limit), moves them in,
+    grants them Manage Channel on it, and deletes it once everyone leaves.
+    Multiple hubs per server; survives a restart via a startup sweep
 - **Command management** — disable a command per server or restrict it to
   channels / roles (admins bypass).
 - **Operations** — per-server config **audit log** and JSON **config export**,
@@ -123,11 +129,12 @@ src/
     moderation.js logging.js tickets.js roles.js welcome.js sticky.js
     counting.js automod.js customCommands.js autoresponder.js verification.js
     scheduledMessages.js leveling.js afk.js serverStats.js freeGames.js appeals.js
+    tempVoice.js
   adapters/games/       gameAdapter, registry, battlefield
   db/
     index.js            SQLite connection + migrations
     cache guildSettings modules commandOverrides warnings tickets
-    composedMessages counting scheduledMessages leveling appeals
+    composedMessages counting scheduledMessages leveling appeals tempVoice
   web/
     server.js           Express app
     routes/             health, dashboard, commands, stats, guilds, guildTickets,
@@ -209,6 +216,7 @@ owner) in that server. `/health` stays public for the container healthcheck.
    - **Kick Members**, **Ban Members**, **Moderate Members**, **Manage Messages**,
      **Manage Channels** — moderation
    - **Manage Roles** — reaction roles / autoroles
+   - **Manage Channels** + **Move Members** — temporary voice channels
 
    Open the generated URL to invite the bot. Tickets (modmail) need no extra
    permission — just leave the bot able to receive DMs.

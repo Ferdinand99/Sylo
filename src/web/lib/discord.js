@@ -27,6 +27,14 @@ export function guildVoiceChannels(guild) {
     .map((c) => ({ id: c.id, name: c.name }));
 }
 
+/** Category channels — used by the Temporary voice channels module. */
+export function guildCategories(guild) {
+  return [...guild.channels.cache.values()]
+    .filter((c) => c.type === ChannelType.GuildCategory)
+    .sort((a, b) => a.rawPosition - b.rawPosition)
+    .map((c) => ({ id: c.id, name: c.name }));
+}
+
 /**
  * Resolve a set of user IDs to `{ id, tag }`, using the cache and falling back
  * to a REST fetch. Unknown IDs map to their raw id.

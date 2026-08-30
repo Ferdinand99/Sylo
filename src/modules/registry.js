@@ -171,6 +171,15 @@ export const MODULES = [
     defaultEnabled: false,
     configurable: true,
   },
+  {
+    id: 'temp-voice',
+    name: 'Temporary voice channels',
+    description: 'Members join a hub channel to spawn their own voice channel; it is deleted when empty.',
+    icon: '🎙️',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
 ];
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));

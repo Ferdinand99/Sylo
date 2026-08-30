@@ -7,7 +7,7 @@ import { runtime } from '../../runtime.js';
 import { requireGuildAdmin, currentUser } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
-import { guildTextChannels, guildVoiceChannels, resolveUserTags } from '../lib/discord.js';
+import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { getModule } from '../../modules/registry.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { getCommandOverrides, setCommandOverride } from '../../db/commandOverrides.js';
@@ -27,6 +27,7 @@ import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../m
 import { normaliseVerificationConfig, VERIFY_MODES, ensureVerifyMessage } from '../../modules/verification.js';
 import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
 import { normaliseAppealsConfig, decideAndNotify } from '../../modules/appeals.js';
+import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
 import { listAppeals, getAppeal } from '../../db/appeals.js';
 import { config as appConfig } from '../../config.js';
 import {
@@ -55,7 +56,7 @@ const router = Router();
 const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
   'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder', 'verification',
-  'afk', 'server-stats', 'free-games', 'appeals',
+  'afk', 'server-stats', 'free-games', 'appeals', 'temp-voice',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -272,7 +273,8 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     verifyModes: VERIFY_MODES,
     turnstileEnabled: appConfig.turnstileEnabled,
     dashboardUrlSet: Boolean(appConfig.dashboardUrl),
-    voiceChannels: mod.id === 'server-stats' ? guildVoiceChannels(req.guild) : [],
+    voiceChannels: ['server-stats', 'temp-voice'].includes(mod.id) ? guildVoiceChannels(req.guild) : [],
+    categories: mod.id === 'temp-voice' ? guildCategories(req.guild) : [],
     statTypes: STAT_TYPES,
     countingState: mod.id === 'counting' ? getCounting(req.guild.id) : null,
     ccPlaceholders: CC_PLACEHOLDERS,
@@ -466,6 +468,19 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
         channelId,
         type: types[i],
         template: templates[i] ?? '',
+      })),
+    });
+  } else if (mod.id === 'temp-voice') {
+    const hubs = [].concat(req.body.tv_hub ?? []);
+    const cats = [].concat(req.body.tv_category ?? []);
+    const names = [].concat(req.body.tv_name ?? []);
+    const limits = [].concat(req.body.tv_limit ?? []);
+    config = normaliseTempVoiceConfig({
+      hubs: hubs.map((hubChannelId, i) => ({
+        hubChannelId,
+        categoryId: cats[i] ?? '',
+        nameTemplate: names[i] ?? '',
+        userLimit: limits[i] ?? 0,
       })),
     });
   } else if (mod.id === 'appeals') {

@@ -33,7 +33,7 @@ const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
   { title: 'Moderation & filtering', ids: ['automod', 'verification', 'appeals', 'logging'] },
   { title: 'Engagement', ids: ['welcome', 'roles', 'counting', 'leveling', 'sticky'] },
-  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'autoresponder', 'afk', 'server-stats', 'free-games'] },
+  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'autoresponder', 'afk', 'server-stats', 'temp-voice', 'free-games'] },
 ];
 
 const line = (label, value, state) => ({ label, value, state });
@@ -220,6 +220,15 @@ function moduleLines(id, guild, cfg) {
         n ? on('Stat channels', String(n)) : off('Stat channels', 'none'),
         neutral('Refresh', `every ${cfg.refreshMinutes || 10} min`),
       ];
+    }
+    case 'temp-voice': {
+      const hubs = Array.isArray(cfg.hubs) ? cfg.hubs.filter((h) => h.hubChannelId) : [];
+      if (!hubs.length) return [off('Hub channels', 'none')];
+      const names = hubs
+        .map((h) => channelName(guild, h.hubChannelId))
+        .filter(Boolean)
+        .map((nm) => `🔊 ${nm}`);
+      return [on('Hub channels', names.length ? names.join(', ') : String(hubs.length))];
     }
     case 'free-games': {
       const ch = channelName(guild, cfg.channelId);
