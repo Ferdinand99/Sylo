@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/Ferdinand99/Sylo/compare/v2.5.1...v2.6.0) (2026-08-30)
+
+
+### Features
+
+* add temporary voice channels module ([61f0b7d](https://github.com/Ferdinand99/Sylo/commit/61f0b7da32fa04d5cb67fa129a8da7766688639b))
+
 ## [2.5.1](https://github.com/Ferdinand99/Sylo/compare/v2.5.0...v2.5.1) (2026-08-30)
 
 
