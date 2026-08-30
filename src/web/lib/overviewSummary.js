@@ -32,7 +32,7 @@ const KEY_PERMS = [
 const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
   { title: 'Moderation & filtering', ids: ['automod', 'verification', 'appeals', 'logging'] },
-  { title: 'Engagement', ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'sticky'] },
+  { title: 'Engagement', ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'starboard', 'sticky'] },
   { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'autoresponder', 'afk', 'server-stats', 'temp-voice', 'free-games'] },
 ];
 
@@ -228,6 +228,19 @@ function moduleLines(id, guild, cfg) {
       return [
         n ? on('Stat channels', String(n)) : off('Stat channels', 'none'),
         neutral('Refresh', `every ${cfg.refreshMinutes || 10} min`),
+      ];
+    }
+    case 'starboard': {
+      const boards = Array.isArray(cfg.boards) ? cfg.boards : [];
+      const ready = boards.filter((b) => b.channelId);
+      if (!boards.length) return [off('Boards', 'none')];
+      const names = ready
+        .map((b) => channelName(guild, b.channelId))
+        .filter(Boolean)
+        .map((nm) => `#${nm}`);
+      return [
+        on('Boards', `${boards.length}${ready.length < boards.length ? ` · ${boards.length - ready.length} unconfigured` : ''}`),
+        names.length ? neutral('Channels', names.join(', ')) : off('Channels', 'not set'),
       ];
     }
     case 'temp-voice': {

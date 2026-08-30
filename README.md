@@ -1,17 +1,22 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Nineteen per-guild modules
+for self-hosting on an **Unraid server via Docker**. Twenty per-guild modules
 (moderation, logging, tickets, reaction roles, verification, welcome, welcome
 channel, sticky messages, auto-moderation, counting, custom commands,
 autoresponder, scheduled messages, leveling, AFK, server statistics, free games,
-ban appeals, temporary voice channels), Discord OAuth2 login, a public leveling
-leaderboard, and
+ban appeals, temporary voice channels, starboard), Discord OAuth2 login, a public
+leveling leaderboard, and
 **Battlefield-series** player stats via the public
 [gametools.network](https://gametools.network) API.
 
 ## What's new since 2.0
 
+- **Starboard** — react to a message enough times and Sylo re-posts it into a
+  highlights channel. MEE6-style per-server boards: pick the emoji(s) and
+  threshold, auto-react on the post, remove it if it drops back below the bar or
+  the original is deleted, ignore self-stars and bot messages, and restrict which
+  roles' reactions count and which channels a board watches.
 - **MEE6-style dashboard redesign** — a fixed left sidebar with a server switcher
   and collapsible plugin categories; the dashboard is a plugin grid; a
   **Bot Personalizer** (username / avatar / banner / presence), a per-server
@@ -25,7 +30,7 @@ leaderboard, and
   decision shown on the link, with a single-use rejoin invite on accept),
   Temporary voice channels (join a hub to spawn your own VC, auto-deleted empty),
   and Welcome Channel (a builder for one pinned message in a read-only channel)
-  — all functional and configurable from the dashboard (19 in total)
+  — all functional and configurable from the dashboard (20 in total)
 - Editable Discord **presence / activity** from the dashboard (`/settings`)
 - 2.0 groundwork still current: custom commands (prefix **and** `/slash`),
   scheduled messages, full leveling with a public leaderboard, auto-moderation,
@@ -53,7 +58,7 @@ leaderboard, and
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 19 feature groups, each toggled and configured from the
+- **Per-guild modules** — 20 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -104,6 +109,11 @@ leaderboard, and
     spawns them their own VC (name template, optional user limit), moves them in,
     grants them Manage Channel on it, and deletes it once everyone leaves.
     Multiple hubs per server; survives a restart via a startup sweep
+  - **Starboard** — when a message gets enough of a chosen reaction, Sylo re-posts
+    it (as an embed with a jump link) into a highlights channel and keeps the
+    count live. Per-server boards: custom emoji(s) and threshold, auto-react on
+    the post, remove-below-threshold and remove-on-delete, self-star and bot
+    filtering, message-age limits, and role / channel restrictions
 - **Command management** — disable a command per server or restrict it to
   channels / roles (admins bypass).
 - **Operations** — per-server config **audit log** and JSON **config export**,

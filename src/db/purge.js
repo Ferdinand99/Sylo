@@ -18,6 +18,7 @@ const GUILD_TABLES = [
   'free_games_posted',
   'appeals',
   'temp_voice_channels',
+  'starboard_posts',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE guild_id = ?`));

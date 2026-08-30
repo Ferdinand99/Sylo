@@ -1,0 +1,40 @@
+<% var cfg = moduleConfig || {}; %>
+<% var boards = Array.isArray(cfg.boards) ? cfg.boards : []; %>
+<% var chName = function (id) { var c = channels.find(function (x) { return x.id === id; }); return c ? c.name : id; }; %>
+<% var emojiLabel = function (e) { return /^\d+$/.test(e) ? ':custom:' : e; }; %>
+
+<p class="muted small">
+  When a message gets enough of a reaction, Sylo re-posts it into a highlights channel — like a
+  community pin board. Each board has its own emoji, threshold and rules.
+</p>
+
+<div class="rr-list-head">
+  <h3 style="margin:0">Boards</h3>
+  <a class="btn btn-primary" href="/guilds/<%= guild.id %>/m/starboard/sb/new">＋ New board</a>
+</div>
+
+<% if (boards.length === 0) { %>
+  <p class="muted small">No boards yet — create one to start highlighting messages.</p>
+<% } else { %>
+  <% boards.forEach(function (b) { %>
+    <div class="cmd-override">
+      <div class="cmd-override-head">
+        <span>
+          <strong><%= b.name || 'Starboard' %></strong>
+          <span class="muted small">
+            · <%= (b.emojis || []).map(emojiLabel).join(' ') || '⭐' %>
+            · <%= b.threshold %>+
+            · <%= b.channelId ? ('#' + chName(b.channelId)) : 'no channel' %>
+          </span>
+        </span>
+        <span class="pill <%= b.channelId ? 'on' : 'off' %>"><%= b.channelId ? 'ready' : 'needs channel' %></span>
+      </div>
+      <div class="btn-row">
+        <a class="plugin-btn" href="/guilds/<%= guild.id %>/m/starboard/sb/<%= b.id %>">Edit</a>
+        <form method="POST" action="/guilds/<%= guild.id %>/m/starboard/sb/<%= b.id %>/delete" style="display:inline">
+          <button type="submit" class="danger" data-confirm="Delete this board? Existing starred posts stay in the channel.">Delete</button>
+        </form>
+      </div>
+    </div>
+  <% }) %>
+<% } %>

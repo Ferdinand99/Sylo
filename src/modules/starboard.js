@@ -7,7 +7,13 @@
 //   removeBotReactions, minAgeMinutes, maxAgeMinutes, roleMode: 'allow'|'deny',
 //   roleList: [], channelMode, channelList: [] } ] }
 // `key` for an emoji is its custom id, or the unicode character. [] = any emoji.
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+  PermissionsBitField,
+} from 'discord.js';
 import { on } from './dispatch.js';
 import { runtime } from '../runtime.js';
 import {
@@ -167,6 +173,103 @@ async function fetchPost(guild, channelId, msgId) {
   const ch = guild.channels.cache.get(channelId);
   if (!ch?.isTextBased() || !msgId) return null;
   return ch.messages.fetch(msgId).catch(() => null);
+}
+
+// --- backfill on save ------------------------------------------------
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Which non-thread text channels a board should look at, honouring its
+// channel restriction and the bot's read permissions.
+function watchedChannels(guild, board) {
+  const me = guild.members.me;
+  const need = [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory];
+  return [...guild.channels.cache.values()].filter((c) => {
+    if (!c.isTextBased?.() || (typeof c.isThread === 'function' && c.isThread())) return false;
+    if (c.id === board.channelId) return false;
+    if (me && !c.permissionsFor(me)?.has(need)) return false;
+    if (board.channelList.length) {
+      const inList = board.channelList.includes(c.id);
+      if (board.channelMode === 'deny' ? !inList : inList) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Sweep the last ~100 messages of every watched channel and post anything that
+ * already clears the threshold but isn't on the board yet. Runs after a board is
+ * saved so lowering the bar (or first setup) catches up on existing reactions.
+ * @returns {Promise<{ scanned: number, posted: number }>}
+ */
+export async function rescanBoard(guild, board) {
+  if (!/^\d{17,20}$/.test(board.channelId)) return { scanned: 0, posted: 0 };
+  const dest = guild.channels.cache.get(board.channelId);
+  if (!dest?.isTextBased()) return { scanned: 0, posted: 0 };
+
+  const now = Date.now();
+  let scanned = 0;
+  let posted = 0;
+
+  for (const ch of watchedChannels(guild, board)) {
+    let msgs;
+    try {
+      msgs = await ch.messages.fetch({ limit: 100 });
+    } catch {
+      continue;
+    }
+    for (const message of msgs.values()) {
+      scanned += 1;
+      if (message.author?.bot && board.ignoreBotMessages) continue;
+
+      const age = now - message.createdTimestamp;
+      if (board.minAgeMinutes && age < board.minAgeMinutes * 60_000) continue;
+      if (board.maxAgeMinutes && age > board.maxAgeMinutes * 60_000) continue;
+
+      if (getStarboardEntry(guild.id, board.id, message.id)?.post_msg_id) continue;
+
+      const hasMatch = [...message.reactions.cache.values()].some(
+        (rx) => !board.emojis.length || board.emojis.includes(rx.emoji.id || rx.emoji.name)
+      );
+      if (!hasMatch) continue;
+
+      const count = await computeStars(message, board, guild);
+      if (count < board.threshold) {
+        if (count > 0) {
+          upsertStarboardEntry({
+            guildId: guild.id,
+            boardId: board.id,
+            sourceMsgId: message.id,
+            sourceChanId: message.channelId,
+            starCount: count,
+          });
+        }
+        continue;
+      }
+
+      const sent = await dest.send(renderPost(message, board, count, guild)).catch(() => null);
+      if (!sent) continue;
+      posted += 1;
+      upsertStarboardEntry({
+        guildId: guild.id,
+        boardId: board.id,
+        sourceMsgId: message.id,
+        sourceChanId: message.channelId,
+        starCount: count,
+      });
+      setStarboardPost(guild.id, board.id, message.id, sent.id, Date.now());
+
+      if (board.autoReact) {
+        const src = board.emojis.length ? board.emojis : ['⭐'];
+        for (const em of board.autoReactFirstOnly ? src.slice(0, 1) : src) {
+          const tok = reactToken(em, guild);
+          if (tok) sent.react(tok).catch(() => {});
+        }
+      }
+      await sleep(800); // stay well under the channel send rate limit
+    }
+  }
+  return { scanned, posted };
 }
 
 // --- runtime state (per process) -------------------------------------

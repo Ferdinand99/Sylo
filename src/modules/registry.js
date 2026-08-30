@@ -189,6 +189,15 @@ export const MODULES = [
     defaultEnabled: false,
     configurable: true,
   },
+  {
+    id: 'starboard',
+    name: 'Starboard',
+    description: 'Re-post messages that get enough of a reaction into a highlights channel.',
+    icon: '⭐',
+    requiredIntents: ['MessageContent'],
+    defaultEnabled: false,
+    configurable: true,
+  },
 ];
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));

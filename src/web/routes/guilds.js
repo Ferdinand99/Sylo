@@ -36,6 +36,8 @@ import { normaliseVerificationConfig, VERIFY_MODES, ensureVerifyMessage } from '
 import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
 import { normaliseAppealsConfig, decideAndNotify } from '../../modules/appeals.js';
 import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
+import { normaliseStarboard, rescanBoard } from '../../modules/starboard.js';
+import { deleteBoardEntries } from '../../db/starboard.js';
 import {
   WC_PRESETS,
   normaliseWelcomeChannelConfig,
@@ -72,7 +74,7 @@ const router = Router();
 const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
   'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder', 'verification',
-  'afk', 'server-stats', 'free-games', 'appeals', 'temp-voice', 'welcome-channel',
+  'afk', 'server-stats', 'free-games', 'appeals', 'temp-voice', 'welcome-channel', 'starboard',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -435,7 +437,7 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
-    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification', 'free-games', 'welcome'].includes(mod.id)
+    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification', 'free-games', 'welcome', 'starboard'].includes(mod.id)
       ? assignableRoles(req.guild)
       : [],
     welcomeAutoroles: mod.id === 'welcome' ? getGuildModule(req.guild.id, 'roles').config.autoroles ?? [] : [],
@@ -942,6 +944,126 @@ router.post(
     res.redirect(`/guilds/${guild.id}/m/roles?msg=saved`);
   })
 );
+
+// --- Starboard builder (MEE6-style) -----------------------------------
+
+function starboardBoards(guildId) {
+  return normaliseStarboard(getGuildModule(guildId, 'starboard').config).boards;
+}
+
+function renderSbBuilder(req, res, board) {
+  const emojiText = board
+    ? board.emojis
+        .map((e) => {
+          if (!/^\d+$/.test(e)) return e;
+          const ge = req.guild.emojis.cache.get(e);
+          return ge ? ge.toString() : `<:emoji:${e}>`;
+        })
+        .join(' ')
+    : '⭐';
+  res.render('sb-builder', {
+    ...baseContext(req.guild, 'm/starboard'),
+    channels: guildTextChannels(req.guild),
+    roles: assignableRoles(req.guild),
+    guildId: req.guild.id,
+    isNew: !board,
+    emojiText,
+    board: board || {
+      id: '',
+      name: 'Starboard',
+      channelId: '',
+      emojis: ['⭐'],
+      threshold: 3,
+      multiPerUser: false,
+      autoReact: true,
+      autoReactFirstOnly: false,
+      removeOnUnstar: true,
+      repostCooldown: false,
+      removeOnDelete: true,
+      ignoreSelfStars: true,
+      removeSelfStarReactions: false,
+      ignoreBotMessages: true,
+      removeBotReactions: false,
+      minAgeMinutes: 0,
+      maxAgeMinutes: 0,
+      roleMode: 'allow',
+      roleList: [],
+      channelMode: 'allow',
+      channelList: [],
+    },
+  });
+}
+
+router.get('/:guildId/m/starboard/sb/new', (req, res) => renderSbBuilder(req, res, null));
+
+router.get('/:guildId/m/starboard/sb/:id', (req, res) => {
+  const board = starboardBoards(req.guild.id).find((b) => b.id === req.params.id);
+  if (!board) return res.redirect(`/guilds/${req.guild.id}/m/starboard`);
+  renderSbBuilder(req, res, board);
+});
+
+router.post('/:guildId/m/starboard/sb', (req, res) => {
+  const back = `/guilds/${req.guild.id}/m/starboard`;
+  const b = req.body;
+  const channelId = /^\d{17,20}$/.test(b.channelId ?? '') ? b.channelId : '';
+  if (!channelId) return res.redirect(`${back}?msg=badchannel`);
+
+  const prev = normaliseStarboard(getGuildModule(req.guild.id, 'starboard').config);
+  const list = prev.boards;
+  const id = /^\d+$/.test(b.id ?? '') ? b.id : String(Date.now());
+  const existing = list.find((x) => x.id === id);
+
+  const board = {
+    id,
+    name: String(b.name ?? 'Starboard').slice(0, 60),
+    channelId,
+    emojis: String(b.emojis ?? '⭐'),
+    threshold: b.threshold,
+    multiPerUser: b.multiPerUser === 'on',
+    autoReact: b.autoReact === 'on',
+    autoReactFirstOnly: b.autoReactFirstOnly === 'on',
+    removeOnUnstar: b.removeOnUnstar === 'on',
+    repostCooldown: b.repostCooldown === 'on',
+    removeOnDelete: b.removeOnDelete === 'on',
+    ignoreSelfStars: b.ignoreSelfStars === 'on',
+    removeSelfStarReactions: b.removeSelfStarReactions === 'on',
+    ignoreBotMessages: b.ignoreBotMessages === 'on',
+    removeBotReactions: b.removeBotReactions === 'on',
+    minAgeMinutes: b.minAgeMinutes,
+    maxAgeMinutes: b.maxAgeMinutes,
+    roleMode: b.roleMode === 'deny' ? 'deny' : 'allow',
+    roleList: [].concat(b.roleList ?? []).filter((r) => /^\d{17,20}$/.test(r)),
+    channelMode: b.channelMode === 'deny' ? 'deny' : 'allow',
+    channelList: [].concat(b.channelList ?? []).filter((c) => /^\d{17,20}$/.test(c)),
+  };
+
+  const nextBoards = existing ? list.map((x) => (x.id === id ? board : x)) : [...list, board];
+  const config = normaliseStarboard({ boards: nextBoards });
+  setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
+  recordAudit(req.guild.id, {
+    actor: moderatorDisplayName(req),
+    action: 'module:starboard',
+    detail: `${existing ? 'updated' : 'created'} board "${board.name}"`,
+  });
+
+  // Catch up on messages that already clear the (possibly just-lowered) bar.
+  const saved = config.boards.find((x) => x.id === id);
+  if (saved) {
+    rescanBoard(req.guild, saved)
+      .then((r) => console.log(`[starboard] rescan ${req.guild.id}/${id}: scanned ${r.scanned}, posted ${r.posted}`))
+      .catch((err) => console.error('[starboard] rescan failed:', err.message));
+  }
+  res.redirect(`${back}?msg=sb-saved`);
+});
+
+router.post('/:guildId/m/starboard/sb/:id/delete', (req, res) => {
+  const prev = normaliseStarboard(getGuildModule(req.guild.id, 'starboard').config);
+  const config = normaliseStarboard({ boards: prev.boards.filter((b) => b.id !== req.params.id) });
+  setGuildModule(req.guild.id, 'starboard', { config });
+  deleteBoardEntries(req.guild.id, req.params.id);
+  recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'module:starboard', detail: 'deleted a board' });
+  res.redirect(`/guilds/${req.guild.id}/m/starboard?msg=saved`);
+});
 
 // --- Actions -------------------------------------------------------------
 

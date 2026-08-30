@@ -1,0 +1,128 @@
+<%- include('partials/header', { title: `Sylo — ${isNew ? 'New' : 'Edit'} starboard` }) %>
+
+<p class="muted"><a href="/guilds/<%= guildId %>/m/starboard">&larr; Starboard</a></p>
+
+<div class="rr-builder-head">
+  <h1 class="page-title"><%= isNew ? 'New board' : 'Edit board' %></h1>
+  <div class="rr-actions">
+    <a class="btn" href="/guilds/<%= guildId %>/m/starboard">Discard</a>
+    <button type="submit" form="sb-form" class="btn btn-primary">Save</button>
+  </div>
+</div>
+
+<form method="POST" action="/guilds/<%= guildId %>/m/starboard/sb" id="sb-form" class="stack" style="max-width:640px">
+  <input type="hidden" name="id" value="<%= board.id %>" />
+
+  <section class="card stack">
+    <h2>Board</h2>
+    <label class="small">Name <span class="muted">— shown on the dashboard only</span></label>
+    <input type="text" name="name" maxlength="60" value="<%= board.name %>" placeholder="Starboard" />
+
+    <label class="small">Starboard channel</label>
+    <select name="channelId" required>
+      <option value="">— select a channel —</option>
+      <% channels.forEach(function (c) { %>
+        <option value="<%= c.id %>" <%= c.id === board.channelId ? 'selected' : '' %>>#<%= c.name %></option>
+      <% }) %>
+    </select>
+    <p class="muted small">Make this read-only for members — Sylo only needs to post there.</p>
+  </section>
+
+  <section class="card stack">
+    <h2>Reactions</h2>
+    <label class="small">Emoji(s)</label>
+    <input type="text" name="emojis" value="<%= emojiText %>" placeholder="⭐" />
+    <p class="muted small">
+      Space-separated. Paste custom emojis directly (e.g. <code>&lt;:star:123456789012345678&gt;</code>).
+      Leave a single <code>⭐</code> for the classic starboard. First emoji is the one shown on the post.
+    </p>
+
+    <label class="small">Reactions needed</label>
+    <input type="number" name="threshold" min="1" max="100" value="<%= board.threshold %>" style="max-width:120px" />
+
+    <label class="checkline">
+      <input type="checkbox" name="multiPerUser" <%= board.multiPerUser ? 'checked' : '' %> />
+      Count every matching emoji from a user, not just one (only matters with multiple emojis)
+    </label>
+  </section>
+
+  <section class="card stack">
+    <h2>Behaviour</h2>
+    <label class="checkline">
+      <input type="checkbox" name="autoReact" <%= board.autoReact ? 'checked' : '' %> />
+      React to the starboard post with the board emoji(s)
+    </label>
+    <label class="checkline">
+      <input type="checkbox" name="autoReactFirstOnly" <%= board.autoReactFirstOnly ? 'checked' : '' %> />
+      …but only with the first emoji
+    </label>
+    <label class="checkline">
+      <input type="checkbox" name="removeOnDelete" <%= board.removeOnDelete ? 'checked' : '' %> />
+      Delete the starboard post if the original message is deleted
+    </label>
+    <label class="checkline">
+      <input type="checkbox" name="removeOnUnstar" <%= board.removeOnUnstar ? 'checked' : '' %> />
+      Remove the post if it drops back below the threshold
+    </label>
+    <label class="checkline">
+      <input type="checkbox" name="repostCooldown" <%= board.repostCooldown ? 'checked' : '' %> />
+      After a post is removed, wait a minute before it can return
+    </label>
+  </section>
+
+  <section class="card stack">
+    <h2>Anti-abuse</h2>
+    <label class="checkline">
+      <input type="checkbox" name="ignoreSelfStars" <%= board.ignoreSelfStars ? 'checked' : '' %> />
+      Don't count the author reacting to their own message
+    </label>
+    <label class="checkline">
+      <input type="checkbox" name="removeSelfStarReactions" <%= board.removeSelfStarReactions ? 'checked' : '' %> />
+      …and remove that reaction when they do
+    </label>
+    <label class="checkline">
+      <input type="checkbox" name="ignoreBotMessages" <%= board.ignoreBotMessages ? 'checked' : '' %> />
+      Ignore messages posted by bots
+    </label>
+    <label class="checkline">
+      <input type="checkbox" name="removeBotReactions" <%= board.removeBotReactions ? 'checked' : '' %> />
+      …and clear reactions members add to bot messages
+    </label>
+
+    <div class="star-age">
+      <div class="stack">
+        <label class="small">Ignore messages younger than (minutes)</label>
+        <input type="number" name="minAgeMinutes" min="0" value="<%= board.minAgeMinutes %>" style="max-width:140px" />
+      </div>
+      <div class="stack">
+        <label class="small">Ignore messages older than (minutes)</label>
+        <input type="number" name="maxAgeMinutes" min="0" value="<%= board.maxAgeMinutes %>" style="max-width:140px" />
+        <span class="muted small">0 = no limit</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card stack">
+    <h2>Restrictions</h2>
+
+    <label class="small">Whose reactions count</label>
+    <select name="roleMode" style="max-width:280px">
+      <option value="allow" <%= board.roleMode !== 'deny' ? 'selected' : '' %>>Everyone except the roles below</option>
+      <option value="deny" <%= board.roleMode === 'deny' ? 'selected' : '' %>>Only members with a role below</option>
+    </select>
+    <%- include('partials/chip-picker', { field: 'roleList', kind: 'role', items: roles, selected: board.roleList }) %>
+    <p class="muted small">Leave empty to let everyone's reactions count.</p>
+
+    <label class="small" style="margin-top:8px">Which channels this board watches</label>
+    <select name="channelMode" style="max-width:280px">
+      <option value="allow" <%= board.channelMode !== 'deny' ? 'selected' : '' %>>Every channel except the ones below</option>
+      <option value="deny" <%= board.channelMode === 'deny' ? 'selected' : '' %>>Only the channels below</option>
+    </select>
+    <%- include('partials/chip-picker', { field: 'channelList', kind: 'channel', items: channels, selected: board.channelList }) %>
+    <p class="muted small">Leave empty to watch the whole server.</p>
+  </section>
+
+  <div><button type="submit">Save board</button></div>
+</form>
+
+<%- include('partials/footer') %>

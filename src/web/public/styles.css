@@ -727,6 +727,7 @@ label.checkline input { width: auto; }
 .rr-mode { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; font-size: 13.5px; }
 .rr-mode input { margin-top: 3px; flex: none; }
 .rr-mode span { color: var(--muted); }
+.star-age { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; }
 .rr-mode strong { color: var(--text); }
 
 /* Moderator page — CSS radio tabs */

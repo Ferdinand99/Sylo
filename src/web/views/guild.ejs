@@ -40,8 +40,9 @@
        'wc-channel': 'Created a read-only #welcome channel.',
        'wc-unpub': 'Removed the published welcome message.',
        'wc-fail': 'That did not work — check the bot has Send Messages / Embed Links (and Manage Channels to create one).',
+       'sb-saved': 'Board saved — scanning recent messages for anything that already clears the threshold.',
      };
-     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub'].includes(msg);
+     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');
 %>
   <div class="banner <%= cls %>"><%= messages[msg] || 'Done.' %></div>

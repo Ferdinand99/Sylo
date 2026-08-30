@@ -30,6 +30,7 @@ const CATEGORIES = [
       { module: 'verification' },
       { page: 'moderation', dotModule: 'moderation', emoji: '🛡️', label: 'Moderator' },
       { module: 'leveling', label: 'Levels' },
+      { module: 'starboard', label: 'Starboard' },
     ],
   },
   {

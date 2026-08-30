@@ -16,4 +16,5 @@ import './serverStats.js';
 import './freeGames.js';
 import './appeals.js';
 import './tempVoice.js';
+import './starboard.js';
 // moderation.js has no event handlers (called from the warn flow) — not imported here.
