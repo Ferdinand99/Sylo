@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/Ferdinand99/Sylo/compare/v2.0.0...v2.0.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* **ci:** give the test job placeholder Discord env vars ([ae3a308](https://github.com/Ferdinand99/Sylo/commit/ae3a3081780237e394f30fcf6ea91bc02861cb85))
+
 ## [2.0.0](https://github.com/Ferdinand99/Sylo/compare/v1.15.0...v2.0.0) (2026-08-30)
 
 
