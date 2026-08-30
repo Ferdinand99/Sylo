@@ -4,4 +4,6 @@ import './logging.js';
 import './welcome.js';
 import './roles.js';
 import './sticky.js';
+import './counting.js';
+import './automod.js';
 // moderation.js has no event handlers (called from the warn flow) — not imported here.

@@ -29,15 +29,20 @@ self-hosting on an **Unraid server via Docker**.
   - **Sticky messages** — keep a message pinned to the bottom of a channel
   - **Tickets (modmail)** — members DM the bot; staff read and reply from the
     dashboard (replies arrive as an anonymous "Staff" DM)
-  - Placeholders for custom commands, scheduled messages, leveling and automod
+  - **Auto-moderation** — invite / link / flood / mass-mention / caps / banned-word
+    filters, each with a delete / warn / timeout action and channel/role exemptions
+  - **Counting** — members count upward one number per message in a chosen channel;
+    correct or reset the running number from the dashboard
+  - Placeholders for custom commands, scheduled messages and leveling
 - **Command management** — disable a command per server or restrict it to
   channels / roles (admins bypass).
 - **Web dashboard** (Express + EJS, no frontend framework)
   - `GET /health` — JSON status (uptime, guild count, last error) for healthchecks
-  - `/` — bot online/offline, server list, recently queried stats
+  - `/` — bot status, activity stats and module adoption; topbar server switcher
   - `/commands` — slash-command reference · `/stats` — cached lookups
-  - `/guilds/<id>` — per-server control panel: module sidebar, General settings,
-    Commands, Moderation (warnings + bans), and Tickets
+  - `/guilds/<id>` — per-server control panel: a combined overview, General
+    settings, Commands, Moderation (warnings + bans), Tickets, Message Creator,
+    and a settings panel per module
   - **Discord OAuth2 login** (optional) — gate the dashboard to server admins
     (and configurable staff roles for tickets); runs open on a trusted LAN when
     unconfigured. See *Dashboard authentication*.

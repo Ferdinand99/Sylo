@@ -133,6 +133,20 @@ const MIGRATIONS = [
       CREATE INDEX idx_composed_guild ON composed_messages (guild_id, updated_at DESC);
     `);
   },
+
+  // Counting mini-game: per-guild running count, record, and who counted last.
+  (database) => {
+    database.exec(`
+      CREATE TABLE counting (
+        guild_id        TEXT PRIMARY KEY,
+        current         INTEGER NOT NULL DEFAULT 0,
+        record          INTEGER NOT NULL DEFAULT 0,
+        last_user_id    TEXT,
+        last_message_id TEXT,
+        updated_at      INTEGER NOT NULL
+      );
+    `);
+  },
 ];
 
 /**

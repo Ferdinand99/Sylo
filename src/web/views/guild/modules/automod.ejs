@@ -1,0 +1,86 @@
+<%
+  var cfg = moduleConfig || {};
+  var R = cfg.rules || {};
+  var exC = Array.isArray(cfg.exemptChannels) ? cfg.exemptChannels : [];
+  var exR = Array.isArray(cfg.exemptRoles) ? cfg.exemptRoles : [];
+  function ract(key) { return (R[key] && R[key].action) || 'delete'; }
+  function ron(key) { return !!(R[key] && R[key].enabled); }
+%>
+
+<p class="muted small">
+  Each filter scans new and edited messages and acts on the first match. Administrators
+  (and anyone in the exempt channels/roles below) are always skipped — add your mod roles
+  to the exempt list if you don't want automod touching them.
+  Actions are logged to the mod-log channel set under <a href="/guilds/<%= guild.id %>/general">General</a>.
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/automod/config" class="stack" style="max-width:640px">
+  <table class="thresholds" style="width:100%">
+    <thead><tr><th>Filter</th><th>On</th><th>Action</th><th>Settings</th></tr></thead>
+    <tbody>
+      <% automodRules.forEach(function (pair) { var key = pair[0], label = pair[1], hint = pair[2]; %>
+        <tr>
+          <td><strong><%= label %></strong><br /><span class="muted small"><%= hint %></span></td>
+          <td>
+            <label class="switch">
+              <input type="checkbox" name="r_<%= key %>_enabled" <%= ron(key) ? 'checked' : '' %> />
+              <span class="slider"></span>
+            </label>
+          </td>
+          <td>
+            <select name="r_<%= key %>_action">
+              <% automodActions.forEach(function (a) { %>
+                <option value="<%= a %>" <%= a === ract(key) ? 'selected' : '' %>><%= a %></option>
+              <% }) %>
+            </select>
+          </td>
+          <td>
+            <% if (key === 'links') { %>
+              <label class="small">Allowed domains (blank = block all links)</label>
+              <textarea name="r_links_allowed" rows="2" placeholder="youtube.com, twitch.tv"><%= (R.links && Array.isArray(R.links.allowed)) ? R.links.allowed.join(', ') : '' %></textarea>
+            <% } else if (key === 'spam') { %>
+              <label class="small">Max <input type="number" name="r_spam_max" min="2" max="30" style="width:64px" value="<%= (R.spam && R.spam.max) || 5 %>" />
+              messages per <input type="number" name="r_spam_seconds" min="1" max="60" style="width:64px" value="<%= (R.spam && R.spam.seconds) || 5 %>" /> s</label>
+            <% } else if (key === 'mentions') { %>
+              <label class="small">Max mentions <input type="number" name="r_mentions_max" min="1" max="50" style="width:64px" value="<%= (R.mentions && R.mentions.max) || 5 %>" /></label>
+            <% } else if (key === 'caps') { %>
+              <label class="small">At least <input type="number" name="r_caps_minLength" min="4" max="200" style="width:64px" value="<%= (R.caps && R.caps.minLength) || 10 %>" />
+              letters, <input type="number" name="r_caps_percent" min="50" max="100" style="width:64px" value="<%= (R.caps && R.caps.percent) || 70 %>" />% uppercase</label>
+            <% } else if (key === 'words') { %>
+              <label class="small">Words / phrases (comma or newline separated)</label>
+              <textarea name="r_words_list" rows="2" placeholder="badword, another phrase"><%= (R.words && Array.isArray(R.words.list)) ? R.words.list.join(', ') : '' %></textarea>
+            <% } else { %>
+              <span class="muted small">—</span>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+  <hr class="sep" />
+
+  <label class="check">
+    <input type="checkbox" name="deleteMessage" <%= cfg.deleteMessage !== false ? 'checked' : '' %> />
+    Delete the offending message
+  </label>
+
+  <label class="small" style="margin-top:6px">Timeout length for the “timeout” action (minutes)</label>
+  <input type="number" name="timeoutMinutes" min="1" max="40320" style="width:100px" value="<%= cfg.timeoutMinutes || 10 %>" />
+
+  <label style="margin-top:10px">Exempt channels <span class="muted small">— automod never acts here</span></label>
+  <select name="exemptChannels" multiple size="5">
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= exC.includes(c.id) ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+
+  <label style="margin-top:6px">Exempt roles <span class="muted small">— members with any of these are skipped</span></label>
+  <select name="exemptRoles" multiple size="5">
+    <% roles.forEach(function (r) { %>
+      <option value="<%= r.id %>" <%= exR.includes(r.id) ? 'selected' : '' %>><%= r.name %></option>
+    <% }) %>
+  </select>
+
+  <div style="margin-top:12px"><button type="submit">Save</button></div>
+</form>

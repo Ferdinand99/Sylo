@@ -24,8 +24,11 @@
        notbanned: 'That user is not banned.',
        needpair: 'Add at least one emoji → role pair.',
        rrfail: 'Could not post the reaction-role message (check the bot\'s permissions in that channel).',
+       'count-set': 'Counting number updated.',
+       'count-reset': 'Counting reset to 0.',
+       'count-bad': 'Enter a whole number of 0 or more.',
      };
-     const ok = ['saved', 'cleared', 'warned', 'unbanned'].includes(msg);
+     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' ? 'info' : 'bad');
 %>
   <div class="banner <%= cls %>"><%= messages[msg] || 'Done.' %></div>
@@ -165,7 +168,7 @@
       <% } %>
       <% if (!mrow.enabled) { %><p class="muted small">Enable the module (toggle above) for these settings to take effect.</p><% } %>
       <hr class="sep" />
-      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []) }) %>
+      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, roles: (typeof roles !== 'undefined' ? roles : []), logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []), thresholdActions: (typeof thresholdActions !== 'undefined' ? thresholdActions : []), automodRules: (typeof automodRules !== 'undefined' ? automodRules : []), automodActions: (typeof automodActions !== 'undefined' ? automodActions : []), countingState: (typeof countingState !== 'undefined' ? countingState : null) }) %>
     <% } %>
   </section>
 </div>

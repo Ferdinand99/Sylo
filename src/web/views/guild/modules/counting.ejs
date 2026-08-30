@@ -1,0 +1,47 @@
+<% var cfg = moduleConfig || {}; var st = countingState || { current: 0, record: 0, last_user_id: null }; %>
+
+<p class="muted small">
+  Members count upward in the chosen channel — one number per message. A wrong number
+  <% if (cfg.resetOnFail === false) { %>is rejected and deleted.<% } else { %>breaks the streak and it starts over from 1.<% } %>
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/counting/config" class="stack" style="max-width:560px">
+  <label>Counting channel</label>
+  <select name="channelId">
+    <option value="">— none —</option>
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= c.id === (cfg.channelId || '') ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+
+  <label class="check" style="margin-top:8px">
+    <input type="checkbox" name="react" <%= cfg.react !== false ? 'checked' : '' %> />
+    React with ✅ on a correct count (🎉 on a new record)
+  </label>
+  <label class="check">
+    <input type="checkbox" name="allowSameUser" <%= cfg.allowSameUser ? 'checked' : '' %> />
+    Allow the same person to count twice in a row
+  </label>
+  <label class="check">
+    <input type="checkbox" name="resetOnFail" <%= cfg.resetOnFail !== false ? 'checked' : '' %> />
+    Reset to 0 when someone posts the wrong number
+  </label>
+
+  <div style="margin-top:10px"><button type="submit">Save</button></div>
+</form>
+
+<hr class="sep" />
+
+<h3 style="margin-bottom:4px">Current game</h3>
+<p class="muted small">
+  Count is at <strong><%= st.current %></strong> · best streak <strong><%= st.record %></strong>
+  <% if (st.last_user_id) { %> · last number by <span class="mono">&lt;@<%= st.last_user_id %>&gt;</span><% } %>
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/counting/count" class="row-form" style="margin-top:6px">
+  <label class="small">Set the count to</label>
+  <input type="number" name="current" min="0" value="<%= st.current %>" style="width:120px" />
+  <button type="submit">Update</button>
+  <button type="submit" name="reset" value="true" class="secondary" data-confirm="Reset the count to 0?">Reset to 0</button>
+</form>
+<p class="muted small" style="margin-top:6px">The next number posted in the channel must be one higher than this. The last-counter lock is cleared, so anyone may post it.</p>

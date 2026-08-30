@@ -20,13 +20,15 @@ import { BF_TITLE_CHOICES } from '../../bot/commands/stats.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { applyWarnThresholds, normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
+import { normaliseAutomodConfig, AUTOMOD_RULES, AUTOMOD_ACTIONS } from '../../modules/automod.js';
 import { parseEmoji, createReactionMessage } from '../../modules/roles.js';
+import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 
 const router = Router();
 
 // Module ids that have a real settings partial (views/guild/modules/<id>.ejs).
-const CONFIG_VIEWS = new Set(['moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets']);
+const CONFIG_VIEWS = new Set(['moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting']);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
 
@@ -177,7 +179,10 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
-    roles: (mod.id === 'roles' || mod.id === 'tickets') ? assignableRoles(req.guild) : [],
+    roles: (mod.id === 'roles' || mod.id === 'tickets' || mod.id === 'automod') ? assignableRoles(req.guild) : [],
+    automodRules: AUTOMOD_RULES,
+    automodActions: AUTOMOD_ACTIONS,
+    countingState: mod.id === 'counting' ? getCounting(req.guild.id) : null,
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
   });
 });
@@ -242,12 +247,54 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
       notifyChannel: /^\d{17,20}$/.test(req.body.notifyChannel ?? '') ? req.body.notifyChannel : '',
       staffRoles: [].concat(req.body.staffRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)),
     };
+  } else if (mod.id === 'automod') {
+    const b = req.body;
+    const rule = (key) => ({
+      enabled: b[`r_${key}_enabled`] === 'on',
+      action: b[`r_${key}_action`],
+    });
+    config = normaliseAutomodConfig({
+      deleteMessage: b.deleteMessage === 'on',
+      timeoutMinutes: b.timeoutMinutes,
+      exemptChannels: [].concat(b.exemptChannels ?? []),
+      exemptRoles: [].concat(b.exemptRoles ?? []),
+      rules: {
+        invites: rule('invites'),
+        links: { ...rule('links'), allowed: b.r_links_allowed },
+        spam: { ...rule('spam'), max: b.r_spam_max, seconds: b.r_spam_seconds },
+        mentions: { ...rule('mentions'), max: b.r_mentions_max },
+        caps: { ...rule('caps'), minLength: b.r_caps_minLength, percent: b.r_caps_percent },
+        words: { ...rule('words'), list: b.r_words_list },
+      },
+    });
+  } else if (mod.id === 'counting') {
+    config = {
+      channelId: /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '',
+      allowSameUser: req.body.allowSameUser === 'on',
+      resetOnFail: req.body.resetOnFail === 'on',
+      react: req.body.react === 'on',
+    };
   } else {
     return res.redirect(back);
   }
 
   setGuildModule(req.guild.id, mod.id, { config });
   res.redirect(`${back}?msg=saved`);
+});
+
+// Counting: correct the running number (or reset it) from the dashboard.
+router.post('/:guildId/m/counting/count', (req, res) => {
+  const back = `/guilds/${req.guild.id}/m/counting`;
+  if (req.body.reset === 'true') {
+    resetCount(req.guild.id);
+    return res.redirect(`${back}?msg=count-reset`);
+  }
+  const n = Number(req.body.current);
+  if (!Number.isInteger(n) || n < 0 || n > 1e12) {
+    return res.redirect(`${back}?msg=count-bad`);
+  }
+  setCount(req.guild.id, n);
+  res.redirect(`${back}?msg=count-set`);
 });
 
 // Create a reaction-role message: the bot posts it and adds the reactions.

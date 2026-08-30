@@ -91,6 +91,15 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'counting',
+    name: 'Counting',
+    description: 'Members count upward one number at a time in a dedicated channel.',
+    icon: '🔢',
+    requiredIntents: ['MessageContent'],
+    defaultEnabled: false,
+    configurable: true,
+  },
+  {
     id: 'leveling',
     name: 'Leveling',
     description: 'XP and levels from activity, with role rewards and a leaderboard.',
@@ -106,7 +115,7 @@ export const MODULES = [
     icon: '🚦',
     requiredIntents: ['MessageContent'],
     defaultEnabled: false,
-    configurable: false,
+    configurable: true,
   },
 ];
 

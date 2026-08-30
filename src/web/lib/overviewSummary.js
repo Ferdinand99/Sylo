@@ -10,8 +10,10 @@ import { getGuildSettings } from '../../db/guildSettings.js';
 import { getCommandOverrides } from '../../db/commandOverrides.js';
 import { openTicketCount, unreadTicketCount } from '../../db/tickets.js';
 import { listComposed } from '../../db/composedMessages.js';
+import { getCounting } from '../../db/counting.js';
 import { BF_TITLE_CHOICES } from '../../bot/commands/stats.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
+import { AUTOMOD_RULES } from '../../modules/automod.js';
 
 // Permissions Sylo relies on for its core moderation / role / logging features.
 const KEY_PERMS = [
@@ -28,7 +30,7 @@ const KEY_PERMS = [
 const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
   { title: 'Moderation & filtering', ids: ['automod', 'logging'] },
-  { title: 'Engagement', ids: ['welcome', 'roles', 'leveling', 'sticky'] },
+  { title: 'Engagement', ids: ['welcome', 'roles', 'counting', 'leveling', 'sticky'] },
   { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands'] },
 ];
 
@@ -164,6 +166,26 @@ function moduleLines(id, guild, cfg) {
     case 'sticky': {
       const n = Array.isArray(cfg.stickies) ? cfg.stickies.length : 0;
       return [n ? on('Active sticky messages', String(n)) : off('Active sticky messages', 'none')];
+    }
+    case 'counting': {
+      const ch = channelName(guild, cfg.channelId);
+      const st = getCounting(guild.id);
+      return [
+        ch ? on('Channel', `#${ch}`) : off('Channel', 'not set'),
+        neutral('Count', String(st.current)),
+        neutral('Best streak', String(st.record)),
+      ];
+    }
+    case 'automod': {
+      const rules = cfg.rules || {};
+      const active = AUTOMOD_RULES.filter(([k]) => rules[k]?.enabled).length;
+      const exempt = (cfg.exemptRoles?.length ?? 0) + (cfg.exemptChannels?.length ?? 0);
+      return [
+        active
+          ? on('Active filters', `${active} of ${AUTOMOD_RULES.length}`)
+          : off('Active filters', 'none'),
+        exempt ? on('Exemptions', String(exempt)) : neutral('Exemptions', '0'),
+      ];
     }
     default:
       return [neutral('Settings', 'coming soon')];
