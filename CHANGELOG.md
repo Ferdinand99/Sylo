@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.0](https://github.com/Ferdinand99/Sylo/compare/v2.4.0...v2.5.0) (2026-08-30)
+
+
+### Features
+
+* add ban appeal system ([80ce8a3](https://github.com/Ferdinand99/Sylo/commit/80ce8a37c4ed9202e4052edb836b3ca1dff2704f))
+
 ## [2.4.0](https://github.com/Ferdinand99/Sylo/compare/v2.3.0...v2.4.0) (2026-08-30)
 
 
