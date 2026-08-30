@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0](https://github.com/Ferdinand99/Sylo/compare/v2.2.1...v2.3.0) (2026-08-30)
+
+
+### Features
+
+* add AFK and Server statistics modules ([0264182](https://github.com/Ferdinand99/Sylo/commit/0264182cda5ccc7b45efc2b19c9f3869714054d7))
+
 ## [2.2.1](https://github.com/Ferdinand99/Sylo/compare/v2.2.0...v2.2.1) (2026-08-30)
 
 
