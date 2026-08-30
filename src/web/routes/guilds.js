@@ -7,7 +7,7 @@ import { runtime } from '../../runtime.js';
 import { requireGuildAdmin, currentUser } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
-import { guildTextChannels, resolveUserTags } from '../lib/discord.js';
+import { guildTextChannels, guildVoiceChannels, resolveUserTags } from '../lib/discord.js';
 import { getModule } from '../../modules/registry.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { getCommandOverrides, setCommandOverride } from '../../db/commandOverrides.js';
@@ -25,6 +25,7 @@ import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
 import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
 import { normaliseVerificationConfig, VERIFY_MODES, ensureVerifyMessage } from '../../modules/verification.js';
+import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
 import { config as appConfig } from '../../config.js';
 import {
   listScheduled,
@@ -52,6 +53,7 @@ const router = Router();
 const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
   'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder', 'verification',
+  'afk', 'server-stats',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -208,6 +210,8 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     automodActions: AUTOMOD_ACTIONS,
     verifyModes: VERIFY_MODES,
     turnstileEnabled: appConfig.turnstileEnabled,
+    voiceChannels: mod.id === 'server-stats' ? guildVoiceChannels(req.guild) : [],
+    statTypes: STAT_TYPES,
     countingState: mod.id === 'counting' ? getCounting(req.guild.id) : null,
     ccPlaceholders: CC_PLACEHOLDERS,
     arPlaceholders: AR_PLACEHOLDERS,
@@ -377,6 +381,23 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
         response: responses[i] ?? '',
         embed: asEmbed[i] === 'embed',
         deleteTrigger: del[i] === 'delete',
+      })),
+    });
+  } else if (mod.id === 'afk') {
+    config = {
+      setNickname: req.body.setNickname === 'on',
+      mentionReply: req.body.mentionReply === 'on',
+      ignoreChannels: [].concat(req.body.ignoreChannels ?? []).filter((c) => /^\d{17,20}$/.test(c)),
+    };
+  } else if (mod.id === 'server-stats') {
+    const chans = [].concat(req.body.ss_channel ?? []);
+    const types = [].concat(req.body.ss_type ?? []);
+    const templates = [].concat(req.body.ss_template ?? []);
+    config = normaliseServerStats({
+      channels: chans.map((channelId, i) => ({
+        channelId,
+        type: types[i],
+        template: templates[i] ?? '',
       })),
     });
   } else if (mod.id === 'verification') {

@@ -1,0 +1,54 @@
+<% var cfg = moduleConfig || {}; var list = Array.isArray(cfg.channels) ? cfg.channels : []; %>
+
+<p class="muted small">
+  Pick a <strong>voice channel</strong> (make one, lock it so nobody can join) and Sylo renames it to
+  show a live count every ~10 minutes. Use <code>{count}</code> in the name, e.g. <code>Members: {count}</code>.
+  Sylo needs <strong>Manage Channels</strong> on each one. Discord rate-limits renames, so don't add too many.
+</p>
+
+<% if (guild == null || voiceChannels.length === 0) { %>
+  <p class="warn-text small">This server has no voice channels — create one first.</p>
+<% } %>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/server-stats/config" class="stack" style="max-width:640px">
+  <div id="ss-rows">
+    <% (list.length ? list : [{ channelId: '', type: 'members', template: 'Members: {count}' }]).forEach(function (s) { %>
+      <div class="row-form">
+        <select name="ss_channel" style="min-width:180px">
+          <option value="">— voice channel —</option>
+          <% voiceChannels.forEach(function (c) { %>
+            <option value="<%= c.id %>" <%= c.id === s.channelId ? 'selected' : '' %>>🔊 <%= c.name %></option>
+          <% }) %>
+        </select>
+        <select name="ss_type" style="width:150px">
+          <% statTypes.forEach(function (t) { %>
+            <option value="<%= t[0] %>" <%= t[0] === s.type ? 'selected' : '' %>><%= t[1] %></option>
+          <% }) %>
+        </select>
+        <input type="text" name="ss_template" class="grow" placeholder="Members: {count}" value="<%= s.template || '' %>" />
+        <button type="button" class="link-btn" onclick="this.closest('.row-form').remove()">remove</button>
+      </div>
+    <% }) %>
+  </div>
+  <div><button type="button" class="secondary" id="ss-add">+ Add stat channel</button></div>
+  <div style="margin-top:10px"><button type="submit">Save</button></div>
+</form>
+
+<template id="ss-template">
+  <div class="row-form">
+    <select name="ss_channel" style="min-width:180px">
+      <option value="">— voice channel —</option>
+      <% voiceChannels.forEach(function (c) { %><option value="<%= c.id %>">🔊 <%= c.name %></option><% }) %>
+    </select>
+    <select name="ss_type" style="width:150px">
+      <% statTypes.forEach(function (t) { %><option value="<%= t[0] %>"><%= t[1] %></option><% }) %>
+    </select>
+    <input type="text" name="ss_template" class="grow" placeholder="Members: {count}" />
+    <button type="button" class="link-btn" onclick="this.closest('.row-form').remove()">remove</button>
+  </div>
+</template>
+<script>
+  document.getElementById('ss-add')?.addEventListener('click', () => {
+    document.getElementById('ss-rows').appendChild(document.getElementById('ss-template').content.cloneNode(true));
+  });
+</script>

@@ -32,7 +32,7 @@ const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
   { title: 'Moderation & filtering', ids: ['automod', 'verification', 'logging'] },
   { title: 'Engagement', ids: ['welcome', 'roles', 'counting', 'leveling', 'sticky'] },
-  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'autoresponder'] },
+  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'autoresponder', 'afk', 'server-stats'] },
 ];
 
 const line = (label, value, state) => ({ label, value, state });
@@ -196,6 +196,16 @@ function moduleLines(id, guild, cfg) {
     case 'autoresponder': {
       const n = Array.isArray(cfg.responders) ? cfg.responders.length : 0;
       return [n ? on('Responders', String(n)) : off('Responders', 'none')];
+    }
+    case 'afk': {
+      return [
+        cfg.setNickname !== false ? on('Nickname tag', 'on') : off('Nickname tag', 'off'),
+        cfg.mentionReply !== false ? on('Mention reply', 'on') : off('Mention reply', 'off'),
+      ];
+    }
+    case 'server-stats': {
+      const n = Array.isArray(cfg.channels) ? cfg.channels.length : 0;
+      return [n ? on('Stat channels', String(n)) : off('Stat channels', 'none')];
     }
     case 'scheduled-messages': {
       const jobs = listScheduled(guild.id);

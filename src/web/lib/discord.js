@@ -19,6 +19,14 @@ export function guildTextChannels(guild) {
     .map((c) => ({ id: c.id, name: c.name }));
 }
 
+/** Voice / stage channels — used by the Server statistics module. */
+export function guildVoiceChannels(guild) {
+  return [...guild.channels.cache.values()]
+    .filter((c) => c.type === ChannelType.GuildVoice || c.type === ChannelType.GuildStageVoice)
+    .sort((a, b) => a.rawPosition - b.rawPosition)
+    .map((c) => ({ id: c.id, name: c.name }));
+}
+
 /**
  * Resolve a set of user IDs to `{ id, tag }`, using the cache and falling back
  * to a REST fetch. Unknown IDs map to their raw id.

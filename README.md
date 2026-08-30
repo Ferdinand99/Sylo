@@ -1,11 +1,11 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Thirteen per-guild modules
+for self-hosting on an **Unraid server via Docker**. Fifteen per-guild modules
 (moderation, logging, tickets, reaction roles, verification, welcome, sticky
 messages, auto-moderation, counting, custom commands, autoresponder, scheduled
-messages, leveling), Discord OAuth2 login, a public leveling leaderboard, and
-**Battlefield-series** player stats via the public
+messages, leveling, AFK, server statistics), Discord OAuth2 login, a public
+leveling leaderboard, and **Battlefield-series** player stats via the public
 [gametools.network](https://gametools.network) API.
 
 ## What's new in 2.0
@@ -40,7 +40,7 @@ messages, leveling), Discord OAuth2 login, a public leveling leaderboard, and
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 13 feature groups, each toggled and configured from the
+- **Per-guild modules** — 15 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -64,6 +64,10 @@ messages, leveling), Discord OAuth2 login, a public leveling leaderboard, and
     4 weeks, with pause/resume
   - **Leveling** — 15–25 XP per message on a MEE6-style curve, level-up
     announcements, per-level role rewards, `/rank` and `/leaderboard`
+  - **AFK** — `/afk [reason]`; Sylo replies to anyone who mentions an away
+    member and clears the status when they next speak
+  - **Server statistics** — keep chosen voice channels named with a live
+    member / role / boost count
 - **Command management** — disable a command per server or restrict it to
   channels / roles (admins bypass).
 - **Operations** — per-server config **audit log** and JSON **config export**,
@@ -94,7 +98,7 @@ src/
     index.js            Discord client bootstrap (intents, partials)
     loadCommands.js / registerCommands.js
     commands/           help, ping, about, version, stats, rank, leaderboard, forget,
-                        kick/ban/unban/timeout/untimeout/purge/slowmode/warn/modlog
+                        afk, kick/ban/unban/timeout/untimeout/purge/slowmode/warn/modlog
     events/             ready, interactionCreate, moduleEvents (gateway → modules),
                         dmTickets (DM → ticket), guildDelete (purge on leave)
     embeds/ lib/        embed builders; duration, moderation, modlog, custom-command sync
@@ -104,7 +108,7 @@ src/
     index.js            loads module implementations
     moderation.js logging.js tickets.js roles.js welcome.js sticky.js
     counting.js automod.js customCommands.js autoresponder.js verification.js
-    scheduledMessages.js leveling.js
+    scheduledMessages.js leveling.js afk.js serverStats.js
   adapters/games/       gameAdapter, registry, battlefield
   db/
     index.js            SQLite connection + migrations

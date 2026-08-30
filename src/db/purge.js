@@ -14,6 +14,7 @@ const GUILD_TABLES = [
   'scheduled_messages',
   'leveling',
   'config_audit',
+  'afk',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE guild_id = ?`));

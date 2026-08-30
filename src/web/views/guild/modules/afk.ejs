@@ -1,0 +1,26 @@
+<% var cfg = moduleConfig || {}; var ig = Array.isArray(cfg.ignoreChannels) ? cfg.ignoreChannels : []; %>
+
+<p class="muted small">
+  Members run <code>/afk [reason]</code>. Sylo replies to anyone who mentions them, and clears the
+  status automatically when they next send a message.
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/afk/config" class="stack" style="max-width:520px">
+  <label class="check">
+    <input type="checkbox" name="setNickname" <%= cfg.setNickname !== false ? 'checked' : '' %> />
+    Prefix their nickname with <code>[AFK]</code> (needs Manage Nicknames)
+  </label>
+  <label class="check">
+    <input type="checkbox" name="mentionReply" <%= cfg.mentionReply !== false ? 'checked' : '' %> />
+    Reply in-channel when an AFK member is mentioned
+  </label>
+
+  <label style="margin-top:8px">Ignore channels <span class="muted small">— AFK isn't cleared or announced here</span></label>
+  <select name="ignoreChannels" multiple size="4">
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= ig.includes(c.id) ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+
+  <div style="margin-top:12px"><button type="submit">Save</button></div>
+</form>

@@ -135,6 +135,24 @@ export const MODULES = [
     defaultEnabled: false,
     configurable: true,
   },
+  {
+    id: 'afk',
+    name: 'AFK',
+    description: 'Members mark themselves away; Sylo replies to anyone who mentions them.',
+    icon: '💤',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
+  {
+    id: 'server-stats',
+    name: 'Server statistics',
+    description: 'Keep voice channels named with live member / role / boost counts.',
+    icon: '📊',
+    requiredIntents: ['GuildMembers'],
+    defaultEnabled: false,
+    configurable: true,
+  },
 ];
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));

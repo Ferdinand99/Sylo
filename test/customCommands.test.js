@@ -1,3 +1,4 @@
+import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normaliseCustomCommands, buildCustomReply, usesArgs } from '../src/modules/customCommands.js';

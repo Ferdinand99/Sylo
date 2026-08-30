@@ -208,6 +208,20 @@ const MIGRATIONS = [
       );
     `);
   },
+
+  // AFK: members mark themselves away; Sylo replies to anyone who mentions them.
+  (database) => {
+    database.exec(`
+      CREATE TABLE afk (
+        guild_id  TEXT NOT NULL,
+        user_id   TEXT NOT NULL,
+        reason    TEXT NOT NULL DEFAULT 'AFK',
+        since     INTEGER NOT NULL,
+        old_nick  TEXT,
+        PRIMARY KEY (guild_id, user_id)
+      );
+    `);
+  },
 ];
 
 /**
