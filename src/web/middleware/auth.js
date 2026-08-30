@@ -17,6 +17,24 @@ const DISCORD_API = 'https://discord.com/api/v10';
 const OAUTH_SCOPES = 'identify guilds';
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
+// "Add new server" bot-invite link. Scopes + a permission set that covers every
+// module: moderation (kick/ban/timeout), roles, channels & webhooks, reactions,
+// invites, audit log, nickname management and voice moves for temp channels.
+const BOT_INVITE_SCOPES = 'bot applications.commands';
+const BOT_INVITE_PERMISSIONS = [0, 1, 2, 4, 6, 7, 10, 11, 13, 14, 15, 16, 20, 24, 27, 28, 29, 40]
+  .reduce((acc, bit) => acc | (1n << BigInt(bit)), 0n)
+  .toString();
+
+/** Discord bot-invite URL for adding Sylo to another server. */
+export function botInviteUrl() {
+  const params = new URLSearchParams({
+    client_id: config.discordClientId,
+    scope: BOT_INVITE_SCOPES,
+    permissions: BOT_INVITE_PERMISSIONS,
+  });
+  return `https://discord.com/oauth2/authorize?${params}`;
+}
+
 // Permission bits (Discord). Admin or Manage Server, or being the owner, counts.
 const PERM_ADMINISTRATOR = 1n << 3n;
 const PERM_MANAGE_GUILD = 1n << 5n;
@@ -146,6 +164,7 @@ export function mountAuth(app) {
   app.use((req, res, next) => {
     res.locals.authEnabled = config.authEnabled;
     res.locals.syloVersion = BUILD.version;
+    res.locals.botInviteUrl = botInviteUrl();
     res.locals.user = currentUser(req);
     const mg = res.locals.user ? manageableGuilds(req) : [];
     res.locals.manageableGuilds = mg;

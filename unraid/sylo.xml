@@ -69,7 +69,7 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Name="DISCORD_GUILD_ID"
     Target="DISCORD_GUILD_ID"
     Default=""
-    Description="Optional. Set to a server ID to register slash commands to that one guild instantly (useful for testing). Leave blank to register globally (can take up to ~1 hour the first time)."
+    Description="Optional. Set to a server ID (or several, comma-separated) to register slash commands to those guild(s) instantly (useful for testing). Leave blank to register globally (can take up to ~1 hour the first time)."
     Type="Variable"
     Display="always"
     Required="false"

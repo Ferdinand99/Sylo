@@ -22,6 +22,11 @@ export function checkActable({ interaction, target, action }) {
   const { guild, member: moderator } = interaction;
   const me = guild.members.me;
 
+  // No bot member on this guild (e.g. the app is user-installed but not added
+  // to the server) — nothing we can act on.
+  if (!me) return `I'm not a member of this server, so I can't ${action} anyone here.`;
+  if (!moderator) return `I couldn't read your roles — try again in a moment.`;
+
   if (target.id === moderator.id) return `You can't ${action} yourself.`;
   if (target.id === me.id) return `I can't ${action} myself.`;
   if (target.id === guild.ownerId) return `You can't ${action} the server owner.`;

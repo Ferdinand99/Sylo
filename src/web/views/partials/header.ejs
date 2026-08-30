@@ -40,7 +40,9 @@
     </a>
 
     <% var curG = sb.guild || (mg.length ? mg.find(function (g) { return g.id === (typeof activeGuildId !== 'undefined' ? activeGuildId : null); }) : null); %>
-    <% if (mg.length) { %>
+    <% var loggedIn = typeof user !== 'undefined' && user && !user.open; %>
+    <% var inviteUrl = typeof botInviteUrl !== 'undefined' ? botInviteUrl : ''; %>
+    <% if (mg.length || loggedIn) { %>
       <details class="srv-switch">
         <summary>
           <span class="srv-switch-face">
@@ -56,6 +58,12 @@
               <span><%= g.name %></span>
             </a>
           <% }) %>
+          <% if (inviteUrl) { %>
+            <a class="srv-switch-add" href="<%= inviteUrl %>" target="_blank" rel="noopener">
+              <span class="srv-switch-dot" aria-hidden="true">＋</span>
+              <span>Add new server</span>
+            </a>
+          <% } %>
         </div>
       </details>
     <% } %>

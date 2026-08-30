@@ -60,6 +60,19 @@ if (!Number.isInteger(webPort) || webPort <= 0 || webPort > 65535) {
   process.exit(1);
 }
 
+// DISCORD_GUILD_ID accepts one id or a comma/space-separated list. Each listed
+// guild gets slash commands registered instantly; an unset/empty value means
+// global registration.
+const discordGuildIds = (optionalOrNull('DISCORD_GUILD_ID') ?? '')
+  .split(/[\s,]+/)
+  .map((s) => s.trim())
+  .filter(Boolean);
+const badGuildIds = discordGuildIds.filter((id) => !/^\d{17,20}$/.test(id));
+if (badGuildIds.length) {
+  console.error(`[config] DISCORD_GUILD_ID has invalid id(s): ${badGuildIds.join(', ')}`);
+  process.exit(1);
+}
+
 // Dashboard auth. When DISCORD_CLIENT_SECRET is set, the dashboard requires
 // "Log in with Discord" and gates actions to guild admins. When unset, the
 // dashboard runs in open mode (localhost / trusted LAN only).
@@ -85,9 +98,11 @@ export const config = Object.freeze({
   // Discord
   discordToken: required('DISCORD_TOKEN'),
   discordClientId: required('DISCORD_CLIENT_ID'),
-  // Optional: register slash commands to a single guild for instant availability during development.
-  // When unset, commands are registered globally (can take up to ~1 hour to propagate).
-  discordGuildId: optionalOrNull('DISCORD_GUILD_ID'),
+  // Optional: register slash commands to these guild(s) for instant availability
+  // during development (one id, or a comma/space-separated list). When empty,
+  // commands are registered globally (can take up to ~1 hour to propagate).
+  discordGuildIds,
+  discordGuildId: discordGuildIds[0] ?? null, // back-compat: first listed guild
 
   // Web dashboard
   webPort,

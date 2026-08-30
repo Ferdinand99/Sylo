@@ -188,8 +188,9 @@ npm start
 ```
 
 For fast iteration, set `DISCORD_GUILD_ID` in `.env` to a test server's ID —
-commands then register instantly instead of taking up to ~1 hour globally.
-`npm run register` re-syncs commands without a restart.
+commands then register instantly instead of taking up to ~1 hour globally. Pass
+several ids comma-separated (`DISCORD_GUILD_ID=id1,id2`) to cover more than one
+test server. `npm run register` re-syncs commands without a restart.
 
 ### Environment variables
 
@@ -197,7 +198,7 @@ commands then register instantly instead of taking up to ~1 hour globally.
 |---------------------------|:--------:|--------------------------------|-------------|
 | `DISCORD_TOKEN`           | yes      | —                              | Bot token |
 | `DISCORD_CLIENT_ID`       | yes      | —                              | Application (client) ID |
-| `DISCORD_GUILD_ID`        | no       | —                              | Register commands to one guild (dev) instead of globally |
+| `DISCORD_GUILD_ID`        | no       | —                              | Register commands instantly to one guild, or several (comma-separated), instead of globally |
 | `WEB_PORT`                | no       | `3000`                         | Dashboard HTTP port |
 | `DISCORD_CLIENT_SECRET`   | no       | —                              | Set to require "Log in with Discord" on the dashboard (see below) |
 | `SESSION_SECRET`          | no       | random                         | Signs the session cookie; pin it so logins survive restarts |
