@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0](https://github.com/Ferdinand99/Sylo/compare/v1.14.0...v1.15.0) (2026-08-30)
+
+
+### Features
+
+* make the Leveling module functional with a public leaderboard ([babde97](https://github.com/Ferdinand99/Sylo/commit/babde9707afd371e173254ad992e781c49aca53d))
+
 ## [1.14.0](https://github.com/Ferdinand99/Sylo/compare/v1.13.0...v1.14.0) (2026-08-30)
 
 
