@@ -38,6 +38,8 @@ import {
   MAX_INTERVAL_MINUTES,
 } from '../../modules/scheduledMessages.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
+import { normaliseLevelingConfig, ANNOUNCE_MODES } from '../../modules/leveling.js';
+import { topMembers, memberCount, setXp, resetGuildLeveling } from '../../db/leveling.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 
 const router = Router();
@@ -45,7 +47,7 @@ const router = Router();
 // Module ids that have a real settings partial (views/guild/modules/<id>.ejs).
 const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
-  'custom-commands', 'scheduled-messages',
+  'custom-commands', 'scheduled-messages', 'leveling',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -197,7 +199,7 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
-    roles: (mod.id === 'roles' || mod.id === 'tickets' || mod.id === 'automod') ? assignableRoles(req.guild) : [],
+    roles: ['roles', 'tickets', 'automod', 'leveling'].includes(mod.id) ? assignableRoles(req.guild) : [],
     automodRules: AUTOMOD_RULES,
     automodActions: AUTOMOD_ACTIONS,
     countingState: mod.id === 'counting' ? getCounting(req.guild.id) : null,
@@ -215,6 +217,19 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
       : [],
     schedulePresets: SCHEDULE_PRESETS,
     scheduleUnits: SCHEDULE_UNITS,
+    announceModes: ANNOUNCE_MODES,
+    levelingBoard: mod.id === 'leveling'
+      ? {
+          total: memberCount(req.guild.id),
+          rows: topMembers(req.guild.id, 15).map((r, i) => ({
+            rank: i + 1,
+            userId: r.user_id,
+            level: r.level,
+            xp: r.xp,
+            messages: r.messages,
+          })),
+        }
+      : null,
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
   });
 });
@@ -324,6 +339,20 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
         embedColor: colors[i] ?? '',
       })),
     });
+  } else if (mod.id === 'leveling') {
+    const levels = [].concat(req.body.rw_level ?? []);
+    const roleIds = [].concat(req.body.rw_role ?? []);
+    config = normaliseLevelingConfig({
+      cooldownSeconds: req.body.cooldownSeconds,
+      announce: req.body.announce,
+      announceChannel: req.body.announceChannel,
+      announceMessage: req.body.announceMessage,
+      noXpChannels: [].concat(req.body.noXpChannels ?? []),
+      noXpRoles: [].concat(req.body.noXpRoles ?? []),
+      stackRewards: req.body.stackRewards === 'on',
+      publicLeaderboard: req.body.publicLeaderboard === 'on',
+      rewards: levels.map((level, i) => ({ level, roleId: roleIds[i] ?? '' })),
+    });
   } else {
     return res.redirect(back);
   }
@@ -350,6 +379,22 @@ router.post('/:guildId/m/counting/count', (req, res) => {
   }
   setCount(req.guild.id, n);
   res.redirect(`${back}?msg=count-set`);
+});
+
+// Leveling: set a member's XP, or wipe the whole guild leaderboard.
+router.post('/:guildId/m/leveling/xp', (req, res) => {
+  const back = `/guilds/${req.guild.id}/m/leveling`;
+  if (req.body.reset === 'true') {
+    resetGuildLeveling(req.guild.id);
+    return res.redirect(`${back}?msg=lvl-reset`);
+  }
+  const userId = parseUserId(req.body.userId);
+  const xp = Number(req.body.xp);
+  if (!userId || !Number.isInteger(xp) || xp < 0 || xp > 1e12) {
+    return res.redirect(`${back}?msg=lvl-bad`);
+  }
+  setXp(req.guild.id, userId, xp);
+  res.redirect(`${back}?msg=lvl-set`);
 });
 
 // --- Scheduled messages: one job per row, managed here (not in module config) ---

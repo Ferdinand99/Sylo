@@ -166,6 +166,22 @@ const MIGRATIONS = [
       CREATE INDEX idx_sched_guild ON scheduled_messages (guild_id, created_at);
     `);
   },
+
+  // Leveling: per-member XP / level from chat activity.
+  (database) => {
+    database.exec(`
+      CREATE TABLE leveling (
+        guild_id    TEXT NOT NULL,
+        user_id     TEXT NOT NULL,
+        xp          INTEGER NOT NULL DEFAULT 0,
+        level       INTEGER NOT NULL DEFAULT 0,
+        messages    INTEGER NOT NULL DEFAULT 0,
+        last_msg_at INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE INDEX idx_leveling_rank ON leveling (guild_id, xp DESC);
+    `);
+  },
 ];
 
 /**

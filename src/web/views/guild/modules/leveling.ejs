@@ -1,0 +1,132 @@
+<%
+  var cfg = moduleConfig || {};
+  var rewards = Array.isArray(cfg.rewards) ? cfg.rewards : [];
+  var noXpC = Array.isArray(cfg.noXpChannels) ? cfg.noXpChannels : [];
+  var noXpR = Array.isArray(cfg.noXpRoles) ? cfg.noXpRoles : [];
+  var board = levelingBoard || { total: 0, rows: [] };
+%>
+
+<p class="muted small">
+  Members earn 15–25 XP per message (once per cooldown). Curve is MEE6-style —
+  <code>5·L² + 50·L + 100</code> XP to clear level L. Use <code>/rank</code> and <code>/leaderboard</code> in Discord.
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/leveling/config" class="stack" style="max-width:620px">
+  <label>Level-up announcement</label>
+  <select name="announce">
+    <% announceModes.forEach(function (m) { %>
+      <option value="<%= m %>" <%= m === (cfg.announce || 'channel') ? 'selected' : '' %>>
+        <%= ({channel:'In a channel', reply:'Reply to their message', dm:'Direct message', off:'Off'})[m] || m %>
+      </option>
+    <% }) %>
+  </select>
+
+  <label class="small">Announcement channel <span class="muted">— for “In a channel”; blank = the channel they levelled up in</span></label>
+  <select name="announceChannel">
+    <option value="">— same channel —</option>
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= c.id === (cfg.announceChannel || '') ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+
+  <label class="small">Message <span class="muted">— <code>{user}</code> <code>{username}</code> <code>{server}</code> <code>{level}</code></span></label>
+  <textarea name="announceMessage" rows="2" placeholder="🎉 {user} just reached level {level}!"><%= cfg.announceMessage || '' %></textarea>
+
+  <label class="small" style="margin-top:6px">XP cooldown (seconds)</label>
+  <input type="number" name="cooldownSeconds" min="0" max="3600" value="<%= cfg.cooldownSeconds != null ? cfg.cooldownSeconds : 60 %>" style="width:100px" />
+
+  <label class="check" style="margin-top:6px">
+    <input type="checkbox" name="stackRewards" <%= cfg.stackRewards !== false ? 'checked' : '' %> />
+    Keep lower reward roles when a higher one is earned (uncheck to swap)
+  </label>
+  <label class="check">
+    <input type="checkbox" name="publicLeaderboard" <%= cfg.publicLeaderboard !== false ? 'checked' : '' %> />
+    Public web leaderboard — anyone with the link can view <code>/leaderboard/<%= guild.id %></code>
+  </label>
+
+  <label style="margin-top:8px">Reward roles</label>
+  <table class="thresholds">
+    <thead><tr><th>At level</th><th>Give role</th><th></th></tr></thead>
+    <tbody id="rw-rows">
+      <% rewards.forEach(function (r) { %>
+        <tr>
+          <td><input type="number" name="rw_level" min="1" max="1000" value="<%= r.level %>" style="width:80px" /></td>
+          <td>
+            <select name="rw_role">
+              <% roles.forEach(function (role) { %>
+                <option value="<%= role.id %>" <%= role.id === r.roleId ? 'selected' : '' %>><%= role.name %></option>
+              <% }) %>
+            </select>
+          </td>
+          <td><button type="button" class="link-btn" onclick="this.closest('tr').remove()">remove</button></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <div><button type="button" class="secondary" id="rw-add">+ Add reward</button></div>
+
+  <label style="margin-top:10px">No-XP channels</label>
+  <select name="noXpChannels" multiple size="4">
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= noXpC.includes(c.id) ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+  <label style="margin-top:6px">No-XP roles</label>
+  <select name="noXpRoles" multiple size="4">
+    <% roles.forEach(function (r) { %>
+      <option value="<%= r.id %>" <%= noXpR.includes(r.id) ? 'selected' : '' %>><%= r.name %></option>
+    <% }) %>
+  </select>
+
+  <div style="margin-top:12px"><button type="submit">Save</button></div>
+</form>
+
+<template id="rw-template">
+  <tr>
+    <td><input type="number" name="rw_level" min="1" max="1000" value="5" style="width:80px" /></td>
+    <td>
+      <select name="rw_role">
+        <% roles.forEach(function (role) { %><option value="<%= role.id %>"><%= role.name %></option><% }) %>
+      </select>
+    </td>
+    <td><button type="button" class="link-btn" onclick="this.closest('tr').remove()">remove</button></td>
+  </tr>
+</template>
+<script>
+  document.getElementById('rw-add')?.addEventListener('click', () => {
+    document.getElementById('rw-rows').appendChild(document.getElementById('rw-template').content.cloneNode(true));
+  });
+</script>
+
+<hr class="sep" />
+
+<h3 style="margin-bottom:4px">Leaderboard <span class="muted small">(<%= board.total %> tracked)</span></h3>
+<% if (cfg.publicLeaderboard !== false) { %>
+  <p class="muted small"><a href="/leaderboard/<%= guild.id %>" target="_blank" rel="noopener">Open the public leaderboard &rarr;</a></p>
+<% } %>
+<% if (board.rows.length === 0) { %>
+  <p class="muted">No XP earned yet.</p>
+<% } else { %>
+  <table>
+    <thead><tr><th>#</th><th>Member</th><th class="num">Level</th><th class="num">XP</th><th class="num">Messages</th></tr></thead>
+    <tbody>
+      <% board.rows.forEach(function (r) { %>
+        <tr>
+          <td><%= r.rank %></td>
+          <td class="mono">&lt;@<%= r.userId %>&gt;</td>
+          <td class="num"><%= r.level %></td>
+          <td class="num"><%= r.xp %></td>
+          <td class="num"><%= r.messages %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/leveling/xp" class="row-form" style="margin-top:10px">
+  <label class="small">Set XP for user</label>
+  <input type="text" name="userId" placeholder="user ID or @mention" style="width:200px" />
+  <input type="number" name="xp" min="0" placeholder="xp" style="width:110px" />
+  <button type="submit">Update</button>
+  <button type="submit" name="reset" value="true" class="secondary" data-confirm="Wipe ALL leveling data for this server?">Reset all</button>
+</form>

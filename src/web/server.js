@@ -6,6 +6,7 @@ import express from 'express';
 import { setLastError } from '../runtime.js';
 import { mountAuth, requireAuth } from './middleware/auth.js';
 import healthRouter from './routes/health.js';
+import leaderboardRouter from './routes/leaderboard.js';
 import dashboardRouter from './routes/dashboard.js';
 import statsRouter from './routes/stats.js';
 import commandsRouter from './routes/commands.js';
@@ -28,8 +29,9 @@ export function createApp() {
   // Session + res.locals + /auth/* routes. No-op guards in open mode.
   mountAuth(app);
 
-  // Public: healthcheck only.
+  // Public routes: healthcheck and the shareable per-guild leaderboard.
   app.use('/health', healthRouter);
+  app.use('/leaderboard', leaderboardRouter);
 
   // Everything below requires a signed-in user when auth is enabled.
   app.use(requireAuth);

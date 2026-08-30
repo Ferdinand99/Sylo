@@ -12,6 +12,7 @@ import { openTicketCount, unreadTicketCount } from '../../db/tickets.js';
 import { listComposed } from '../../db/composedMessages.js';
 import { getCounting } from '../../db/counting.js';
 import { listScheduled } from '../../db/scheduledMessages.js';
+import { memberCount as levelingMemberCount } from '../../db/leveling.js';
 import { BF_TITLE_CHOICES } from '../../bot/commands/stats.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
@@ -189,6 +190,15 @@ function moduleLines(id, guild, cfg) {
       const active = jobs.filter((j) => j.enabled === 1).length;
       return [
         jobs.length ? on('Jobs', `${active} active${jobs.length > active ? ` · ${jobs.length - active} paused` : ''}`) : off('Jobs', 'none'),
+      ];
+    }
+    case 'leveling': {
+      const rewards = Array.isArray(cfg.rewards) ? cfg.rewards.length : 0;
+      const announce = cfg.announce || 'channel';
+      return [
+        neutral('Announce', announce),
+        rewards ? on('Reward roles', String(rewards)) : off('Reward roles', 'none'),
+        neutral('Ranked members', String(levelingMemberCount(guild.id))),
       ];
     }
     case 'automod': {

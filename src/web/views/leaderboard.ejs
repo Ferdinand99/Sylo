@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title><%= guild.name %> — Leaderboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="lb-wrap">
+    <header class="lb-head">
+      <% if (guild.icon) { %><img class="lb-guild-icon" src="<%= guild.icon %>" alt="" /><% } %>
+      <div>
+        <h1 class="page-title"><%= guild.name %></h1>
+        <p class="muted">Leveling leaderboard · <%= total %> ranked member<%= total === 1 ? '' : 's' %></p>
+      </div>
+    </header>
+
+    <% if (members.length === 0) { %>
+      <div class="card"><p class="muted">No one has earned any XP yet.</p></div>
+    <% } else { %>
+      <ol class="lb-list">
+        <% members.forEach(function (m) { %>
+          <li class="lb-row<%= m.rank <= 3 ? ' lb-top' : '' %>">
+            <span class="lb-rank">#<%= m.rank %></span>
+            <% if (m.avatar) { %><img class="lb-avatar" src="<%= m.avatar %>" alt="" /><% } else { %><span class="lb-avatar lb-avatar-blank"></span><% } %>
+            <div class="lb-main">
+              <div class="lb-name<%= m.left ? ' muted' : '' %>"><%= m.name %></div>
+              <div class="lb-bar"><span style="width:<%= m.pct %>%"></span></div>
+            </div>
+            <div class="lb-stats">
+              <span class="lb-level">Level <%= m.level %></span>
+              <span class="muted small"><%= m.xp.toLocaleString('en') %> XP · <%= m.messages.toLocaleString('en') %> msgs</span>
+            </div>
+          </li>
+        <% }) %>
+      </ol>
+
+      <% if (pages > 1) { %>
+        <nav class="lb-pager">
+          <% if (page > 1) { %><a href="?page=<%= page - 1 %>">&larr; Prev</a><% } else { %><span class="lb-pager-off">&larr; Prev</span><% } %>
+          <span class="muted">Page <%= page %> of <%= pages %></span>
+          <% if (page < pages) { %><a href="?page=<%= page + 1 %>">Next &rarr;</a><% } else { %><span class="lb-pager-off">Next &rarr;</span><% } %>
+        </nav>
+      <% } %>
+    <% } %>
+
+    <p class="lb-foot muted small">Powered by Sylo</p>
+  </main>
+</body>
+</html>

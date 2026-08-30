@@ -28,8 +28,11 @@
        'count-reset': 'Counting reset to 0.',
        'count-bad': 'Enter a whole number of 0 or more.',
        'sched-bad': 'Enter a message and an interval between 1 minute and 4 weeks.',
+       'lvl-set': 'Member XP updated.',
+       'lvl-reset': 'Leveling data cleared for this server.',
+       'lvl-bad': 'Enter a valid user ID (or @mention) and an XP amount of 0 or more.',
      };
-     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset'].includes(msg);
+     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' ? 'info' : 'bad');
 %>
   <div class="banner <%= cls %>"><%= messages[msg] || 'Done.' %></div>
@@ -169,7 +172,7 @@
       <% } %>
       <% if (!mrow.enabled) { %><p class="muted small">Enable the module (toggle above) for these settings to take effect.</p><% } %>
       <hr class="sep" />
-      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, roles: (typeof roles !== 'undefined' ? roles : []), logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []), thresholdActions: (typeof thresholdActions !== 'undefined' ? thresholdActions : []), automodRules: (typeof automodRules !== 'undefined' ? automodRules : []), automodActions: (typeof automodActions !== 'undefined' ? automodActions : []), countingState: (typeof countingState !== 'undefined' ? countingState : null), ccPlaceholders: (typeof ccPlaceholders !== 'undefined' ? ccPlaceholders : []), scheduledJobs: (typeof scheduledJobs !== 'undefined' ? scheduledJobs : []), schedulePresets: (typeof schedulePresets !== 'undefined' ? schedulePresets : []), scheduleUnits: (typeof scheduleUnits !== 'undefined' ? scheduleUnits : []) }) %>
+      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, roles: (typeof roles !== 'undefined' ? roles : []), logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []), thresholdActions: (typeof thresholdActions !== 'undefined' ? thresholdActions : []), automodRules: (typeof automodRules !== 'undefined' ? automodRules : []), automodActions: (typeof automodActions !== 'undefined' ? automodActions : []), countingState: (typeof countingState !== 'undefined' ? countingState : null), ccPlaceholders: (typeof ccPlaceholders !== 'undefined' ? ccPlaceholders : []), scheduledJobs: (typeof scheduledJobs !== 'undefined' ? scheduledJobs : []), schedulePresets: (typeof schedulePresets !== 'undefined' ? schedulePresets : []), scheduleUnits: (typeof scheduleUnits !== 'undefined' ? scheduleUnits : []), announceModes: (typeof announceModes !== 'undefined' ? announceModes : []), levelingBoard: (typeof levelingBoard !== 'undefined' ? levelingBoard : null) }) %>
     <% } %>
   </section>
 </div>

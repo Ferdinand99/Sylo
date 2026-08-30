@@ -8,4 +8,5 @@ import './counting.js';
 import './automod.js';
 import './customCommands.js';
 import './scheduledMessages.js';
+import './leveling.js';
 // moderation.js has no event handlers (called from the warn flow) — not imported here.

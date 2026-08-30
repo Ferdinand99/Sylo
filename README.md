@@ -11,6 +11,7 @@ self-hosting on an **Unraid server via Docker**.
   - `/ping` — health check with gateway + round-trip latency
   - `/version` — the release this instance is running · `/about` — version,
     uptime and runtime info
+  - `/rank` · `/leaderboard` — leveling progress (when the module is enabled)
   - `/stats battlefield <title> <username> <platform>` — player stats as an embed
     (K/D, win rate, time played, KPM/SPM, best class, …)
   - Friendly, non-crashing error handling (unknown player, API down, rate-limited)
@@ -21,7 +22,8 @@ self-hosting on an **Unraid server via Docker**.
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — toggle and configure feature groups from the dashboard:
+- **Per-guild modules** — 11 feature groups, each toggled and configured from the
+  dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
   - **Reaction roles & autoroles** — dashboard-built reaction-role embeds; roles on join
@@ -33,7 +35,12 @@ self-hosting on an **Unraid server via Docker**.
     filters, each with a delete / warn / timeout action and channel/role exemptions
   - **Counting** — members count upward one number per message in a chosen channel;
     correct or reset the running number from the dashboard
-  - Placeholders for custom commands, scheduled messages and leveling
+  - **Custom commands** — text/embed replies triggered by a chat prefix and,
+    optionally, as `/name` slash commands synced to Discord
+  - **Scheduled messages** — recurring posts to a channel, every minute to every
+    4 weeks, with pause/resume
+  - **Leveling** — 15–25 XP per message on a MEE6-style curve, level-up
+    announcements, per-level role rewards, `/rank` and `/leaderboard`
 - **Command management** — disable a command per server or restrict it to
   channels / roles (admins bypass).
 - **Web dashboard** (Express + EJS, no frontend framework)
@@ -69,11 +76,13 @@ src/
     registry.js         module catalogue (id, intents, defaults)
     dispatch.js         fans gateway events out to enabled modules
     index.js            loads module implementations
-    logging.js welcome.js roles.js sticky.js moderation.js tickets.js
+    moderation.js logging.js tickets.js roles.js welcome.js sticky.js
+    counting.js automod.js customCommands.js scheduledMessages.js leveling.js
   adapters/games/       gameAdapter, registry, battlefield
   db/
     index.js            SQLite connection + migrations
-    cache, guildSettings, modules, commandOverrides, warnings, tickets
+    cache guildSettings modules commandOverrides warnings tickets
+    composedMessages counting scheduledMessages leveling
   web/
     server.js           Express app
     routes/             health, dashboard, commands, stats, guilds, guildTickets
@@ -141,7 +150,8 @@ owner) in that server. `/health` stays public for the container healthcheck.
 2. **Bot** tab → **Reset Token** → copy into `DISCORD_TOKEN`. Under *Privileged
    Gateway Intents* enable **Server Members** and **Message Content** if you want
    the member/message-driven modules (logging, welcome, autoroles, leveling,
-   automod); a verified bot may need Discord's approval for Message Content.
+   auto-moderation, counting, custom commands); a verified bot may need Discord's
+   approval for Message Content.
    Otherwise set `INTENT_GUILD_MEMBERS=false` / `INTENT_MESSAGE_CONTENT=false`.
 3. **General Information** → copy **Application ID** into `DISCORD_CLIENT_ID`.
 4. **OAuth2 → URL Generator** → scopes `bot` + `applications.commands`. Bot

@@ -291,6 +291,35 @@ td.num, th.num { text-align: right; }
 .ov-v.state-neutral { color: var(--text); }
 .ov-card-link { margin-top: auto; font-size: 12.5px; font-weight: 600; }
 
+/* --- Public leaderboard --- */
+.lb-wrap { max-width: 720px; }
+.lb-head { display: flex; align-items: center; gap: 14px; margin: 8px 0 18px; }
+.lb-guild-icon { width: 52px; height: 52px; border-radius: 14px; border: 1px solid var(--border); }
+.lb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.lb-row {
+  display: grid; grid-template-columns: 44px 40px 1fr auto; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 10px 14px; box-shadow: var(--shadow-1);
+}
+.lb-row.lb-top { border-color: var(--border-strong); }
+.lb-rank { font-weight: 800; color: var(--muted); font-size: 14px; }
+.lb-top .lb-rank { color: var(--accent); }
+.lb-avatar { width: 40px; height: 40px; border-radius: 50%; }
+.lb-avatar-blank { background: var(--surface-3); display: inline-block; }
+.lb-main { min-width: 0; }
+.lb-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-bar { margin-top: 5px; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.lb-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-strong)); }
+.lb-stats { text-align: right; display: flex; flex-direction: column; gap: 2px; }
+.lb-level { font-weight: 700; font-size: 13px; }
+.lb-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; font-size: 13px; }
+.lb-pager-off { color: color-mix(in srgb, var(--muted) 55%, transparent); }
+.lb-foot { text-align: center; margin-top: 22px; }
+@media (max-width: 520px) {
+  .lb-row { grid-template-columns: 32px 34px 1fr; }
+  .lb-stats { grid-column: 2 / -1; text-align: left; flex-direction: row; gap: 10px; align-items: baseline; }
+}
+
 .stack { display: flex; flex-direction: column; gap: 8px; max-width: 460px; }
 .stack label { font-size: 13px; color: var(--muted); }
 

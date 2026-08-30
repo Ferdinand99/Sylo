@@ -106,7 +106,7 @@ export const MODULES = [
     icon: '📈',
     requiredIntents: ['GuildMembers'],
     defaultEnabled: false,
-    configurable: false,
+    configurable: true,
   },
   {
     id: 'automod',
