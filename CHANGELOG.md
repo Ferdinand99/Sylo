@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.1](https://github.com/Ferdinand99/Sylo/compare/v2.5.0...v2.5.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* make server statistics refresh interval configurable ([74ce4f9](https://github.com/Ferdinand99/Sylo/commit/74ce4f986df79748beb870a70192140c83972358))
+
 ## [2.5.0](https://github.com/Ferdinand99/Sylo/compare/v2.4.0...v2.5.0) (2026-08-30)
 
 
