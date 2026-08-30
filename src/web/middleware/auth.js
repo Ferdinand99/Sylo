@@ -3,10 +3,12 @@
 // Enabled when DISCORD_CLIENT_SECRET is set. Otherwise the dashboard runs in
 // "open mode" — every guard passes through — which is only safe on localhost or
 // a trusted LAN. A banner in the UI makes the mode obvious.
+import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import cookieSession from 'cookie-session';
 import { config } from '../../config.js';
 import { runtime } from '../../runtime.js';
+import { rateLimit } from './rateLimit.js';
 
 const DISCORD_API = 'https://discord.com/api/v10';
 const OAUTH_SCOPES = 'identify guilds';
@@ -115,6 +117,8 @@ export function mountAuth(app) {
         maxAge: SESSION_MAX_AGE,
         httpOnly: true,
         sameSite: 'lax',
+        // Mark the cookie Secure when the operator has declared an HTTPS dashboard.
+        secure: Boolean(config.dashboardUrl?.startsWith('https://')),
       })
     );
   }
@@ -130,9 +134,12 @@ export function mountAuth(app) {
 
   const router = Router();
 
+  // Throttle the OAuth endpoints (state-token guessing / callback hammering).
+  router.use('/discord', rateLimit({ windowMs: 60_000, max: 20 }));
+
   router.get('/discord/login', (req, res) => {
     if (!config.authEnabled) return res.redirect('/');
-    const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const state = randomUUID();
     req.session.oauthState = state;
     const params = new URLSearchParams({
       client_id: config.discordClientId,

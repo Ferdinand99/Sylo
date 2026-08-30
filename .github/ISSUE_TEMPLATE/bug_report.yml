@@ -1,0 +1,43 @@
+name: Bug report
+description: Something in Sylo isn't working as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Sylo version
+      description: From `/version`, `/about`, or the `:X.Y.Z` image tag you run.
+      placeholder: "2.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: how-run
+    attributes:
+      label: How are you running it?
+      options:
+        - Docker / docker compose
+        - Unraid (Community Applications)
+        - node directly (npm start)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Container logs around the problem. Redact tokens/secrets.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: The relevant module is enabled for the server
+        - label: The bot has the permissions and intents the feature needs

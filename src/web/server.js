@@ -4,7 +4,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { setLastError } from '../runtime.js';
+import { config } from '../config.js';
 import { mountAuth, requireAuth } from './middleware/auth.js';
+import { rateLimit } from './middleware/rateLimit.js';
 import healthRouter from './routes/health.js';
 import leaderboardRouter from './routes/leaderboard.js';
 import dashboardRouter from './routes/dashboard.js';
@@ -20,18 +22,23 @@ const here = dirname(fileURLToPath(import.meta.url));
 export function createApp() {
   const app = express();
 
+  // Behind a reverse proxy (DASHBOARD_URL set) trust one hop so req.ip is the
+  // real client for rate limiting and X-Forwarded-Proto for redirects.
+  if (config.dashboardUrl) app.set('trust proxy', 1);
+
   app.set('view engine', 'ejs');
   app.set('views', join(here, 'views'));
+  app.disable('x-powered-by');
   app.use(express.static(join(here, 'public')));
-  app.use(express.urlencoded({ extended: false }));
-  app.use(express.json());
+  app.use(express.urlencoded({ extended: false, limit: '256kb' }));
+  app.use(express.json({ limit: '256kb' }));
 
   // Session + res.locals + /auth/* routes. No-op guards in open mode.
   mountAuth(app);
 
   // Public routes: healthcheck and the shareable per-guild leaderboard.
   app.use('/health', healthRouter);
-  app.use('/leaderboard', leaderboardRouter);
+  app.use('/leaderboard', rateLimit({ windowMs: 60_000, max: 40 }), leaderboardRouter);
 
   // Everything below requires a signed-in user when auth is enabled.
   app.use(requireAuth);

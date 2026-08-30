@@ -182,6 +182,21 @@ const MIGRATIONS = [
       CREATE INDEX idx_leveling_rank ON leveling (guild_id, xp DESC);
     `);
   },
+
+  // Config audit log: who changed what from the dashboard.
+  (database) => {
+    database.exec(`
+      CREATE TABLE config_audit (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id   TEXT NOT NULL,
+        actor      TEXT NOT NULL,
+        action     TEXT NOT NULL,
+        detail     TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_config_audit_guild ON config_audit (guild_id, created_at DESC);
+    `);
+  },
 ];
 
 /**
@@ -205,6 +220,16 @@ export function migrate() {
 // ESM import graph is evaluated before the entrypoint's body runs — so the
 // schema must exist here, not later in main().
 migrate();
+
+// Surface a corrupt database file at startup rather than mid-request.
+try {
+  const check = db.pragma('quick_check', { simple: true });
+  if (check !== 'ok') {
+    console.error(`[db] Integrity check failed: ${check}. Restore data/ from a backup.`);
+  }
+} catch (err) {
+  console.error('[db] Could not run integrity check:', err.message);
+}
 
 /** Close the database. Best-effort; used on shutdown paths. */
 export function closeDb() {

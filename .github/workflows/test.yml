@@ -1,0 +1,45 @@
+name: Test
+
+# Reusable: called by docker-publish.yml and release-please.yml so no image is
+# ever built or published without the test suite passing.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Syntax check every source file
+        run: find src scripts test -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: EJS templates compile
+        run: |
+          node -e "
+            const fs=require('fs'), path=require('path'), ejs=require('ejs');
+            const dir='src/web/views';
+            const walk=(d)=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>{
+              const p=path.join(d,e.name);
+              return e.isDirectory()?walk(p):(e.name.endsWith('.ejs')?[p]:[]);
+            });
+            let bad=0;
+            for(const f of walk(dir)){
+              try{ ejs.compile(fs.readFileSync(f,'utf8'),{filename:f}); }
+              catch(err){ bad++; console.error('FAIL',f,err.message); }
+            }
+            process.exit(bad?1:0);
+          "

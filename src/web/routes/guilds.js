@@ -11,12 +11,11 @@ import { guildTextChannels, resolveUserTags } from '../lib/discord.js';
 import { getModule } from '../../modules/registry.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { getCommandOverrides, setCommandOverride } from '../../db/commandOverrides.js';
-import { getGuildSettings, setModlogChannel, setDefaultTitle } from '../../db/guildSettings.js';
+import { getGuildSettings, setModlogChannel } from '../../db/guildSettings.js';
 import { listGuildWarnings, addWarning } from '../../db/warnings.js';
 import { notifyTarget, MOD_COLOR } from '../../bot/lib/moderation.js';
 import { postModLog } from '../../bot/lib/modlog.js';
 import { timeAgo } from '../lib/format.js';
-import { BF_TITLE_CHOICES } from '../../bot/commands/stats.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { applyWarnThresholds, normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
@@ -40,6 +39,8 @@ import {
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { normaliseLevelingConfig, ANNOUNCE_MODES } from '../../modules/leveling.js';
 import { topMembers, memberCount, setXp, resetGuildLeveling } from '../../db/leveling.js';
+import { recordAudit, listAudit } from '../../db/audit.js';
+import { exportGuildConfig } from '../../db/exportConfig.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 
 const router = Router();
@@ -97,9 +98,7 @@ router.get('/:guildId/general', (req, res) => {
   const settings = getGuildSettings(req.guild.id);
   res.render('guild', {
     ...baseContext(req.guild, 'general'),
-    defaultTitle: settings?.default_title ?? '',
     modlogChannelId: settings?.modlog_channel_id ?? '',
-    titleChoices: BF_TITLE_CHOICES,
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
   });
 });
@@ -358,6 +357,7 @@ router.post('/:guildId/m/:moduleId/config', (req, res) => {
   }
 
   setGuildModule(req.guild.id, mod.id, { config });
+  recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: `module:${mod.id}`, detail: 'settings saved' });
   if (mod.id === 'custom-commands') {
     syncGuildCustomCommands(req.guild).catch((err) =>
       console.error('[custom-commands] sync after save failed:', err.message)
@@ -371,6 +371,7 @@ router.post('/:guildId/m/counting/count', (req, res) => {
   const back = `/guilds/${req.guild.id}/m/counting`;
   if (req.body.reset === 'true') {
     resetCount(req.guild.id);
+    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'counting:reset', detail: 'count set to 0' });
     return res.redirect(`${back}?msg=count-reset`);
   }
   const n = Number(req.body.current);
@@ -378,6 +379,7 @@ router.post('/:guildId/m/counting/count', (req, res) => {
     return res.redirect(`${back}?msg=count-bad`);
   }
   setCount(req.guild.id, n);
+  recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'counting:set', detail: `count = ${n}` });
   res.redirect(`${back}?msg=count-set`);
 });
 
@@ -386,6 +388,7 @@ router.post('/:guildId/m/leveling/xp', (req, res) => {
   const back = `/guilds/${req.guild.id}/m/leveling`;
   if (req.body.reset === 'true') {
     resetGuildLeveling(req.guild.id);
+    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'leveling:reset', detail: 'all XP wiped' });
     return res.redirect(`${back}?msg=lvl-reset`);
   }
   const userId = parseUserId(req.body.userId);
@@ -394,6 +397,7 @@ router.post('/:guildId/m/leveling/xp', (req, res) => {
     return res.redirect(`${back}?msg=lvl-bad`);
   }
   setXp(req.guild.id, userId, xp);
+  recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'leveling:setxp', detail: `${userId} → ${xp} XP` });
   res.redirect(`${back}?msg=lvl-set`);
 });
 
@@ -521,6 +525,11 @@ router.post('/:guildId/modules/:moduleId', (req, res) => {
   if (!mod) return res.status(404).json({ error: 'Unknown module' });
   const enabled = Boolean(req.body?.enabled);
   setGuildModule(req.guild.id, mod.id, { enabled });
+  recordAudit(req.guild.id, {
+    actor: moderatorDisplayName(req),
+    action: `module:${mod.id}`,
+    detail: enabled ? 'enabled' : 'disabled',
+  });
   if (mod.id === 'custom-commands') {
     syncGuildCustomCommands(req.guild).catch((err) =>
       console.error('[custom-commands] sync after toggle failed:', err.message)
@@ -529,22 +538,35 @@ router.post('/:guildId/modules/:moduleId', (req, res) => {
   res.json({ enabled });
 });
 
+// Download the guild's configuration as JSON (backup / "export my setup").
+router.get('/:guildId/export', (req, res) => {
+  const data = exportGuildConfig(req.guild.id);
+  res.setHeader('Content-Disposition', `attachment; filename="sylo-${req.guild.id}-config.json"`);
+  res.type('application/json').send(JSON.stringify(data, null, 2));
+});
+
+// Config change history.
+router.get('/:guildId/audit', (req, res) => {
+  res.render('guild', {
+    ...baseContext(req.guild, 'audit'),
+    audit: listAudit(req.guild.id, 150).map((a) => ({
+      actor: a.actor,
+      action: a.action,
+      detail: a.detail,
+      ago: timeAgo(a.created_at),
+    })),
+  });
+});
+
 router.post('/:guildId/general', (req, res) => {
   const guild = req.guild;
   const back = `/guilds/${guild.id}/general`;
-
-  // Default Battlefield title (empty = none).
-  const rawTitle = String(req.body.defaultTitle ?? '').trim();
-  const title = rawTitle === '' ? null : rawTitle;
-  if (title && !BF_TITLE_CHOICES.some((c) => c.value === title)) {
-    return res.redirect(`${back}?msg=badtitle`);
-  }
-  setDefaultTitle(guild.id, title);
 
   // Mod-log channel (empty = disabled).
   const channelId = String(req.body.modlogChannelId ?? '').trim();
   if (channelId === '') {
     setModlogChannel(guild.id, null);
+    recordAudit(guild.id, { actor: moderatorDisplayName(req), action: 'settings:modlog', detail: 'disabled' });
     return res.redirect(`${back}?msg=saved`);
   }
   const channel = guild.channels.cache.get(channelId);
@@ -555,6 +577,7 @@ router.post('/:guildId/general', (req, res) => {
     return res.redirect(`${back}?msg=perms`);
   }
   setModlogChannel(guild.id, channelId);
+  recordAudit(guild.id, { actor: moderatorDisplayName(req), action: 'settings:modlog', detail: `#${channel.name}` });
   res.redirect(`${back}?msg=saved`);
 });
 
@@ -570,10 +593,16 @@ router.post('/:guildId/commands/:command', (req, res) => {
       .map((s) => String(s).trim())
       .filter((s) => /^\d{17,20}$/.test(s));
 
+  const on = req.body.enabled === 'on' || req.body.enabled === 'true';
   setCommandOverride(guild.id, command, {
-    enabled: req.body.enabled === 'on' || req.body.enabled === 'true',
+    enabled: on,
     allowedChannels: toIds(req.body.channels),
     allowedRoles: toIds(req.body.roles),
+  });
+  recordAudit(guild.id, {
+    actor: moderatorDisplayName(req),
+    action: `command:/${command}`,
+    detail: on ? 'updated limits' : 'disabled',
   });
   res.redirect(`/guilds/${guild.id}/commands?msg=saved`);
 });

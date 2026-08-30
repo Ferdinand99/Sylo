@@ -13,7 +13,6 @@ import { listComposed } from '../../db/composedMessages.js';
 import { getCounting } from '../../db/counting.js';
 import { listScheduled } from '../../db/scheduledMessages.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
-import { BF_TITLE_CHOICES } from '../../bot/commands/stats.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
 
@@ -213,28 +212,24 @@ function moduleLines(id, guild, cfg) {
       ];
     }
     default:
-      return [neutral('Settings', 'coming soon')];
+      return [neutral('Status', 'enabled')];
   }
 }
 
 function generalCard(guild, settings) {
-  const title = BF_TITLE_CHOICES.find((c) => c.value === settings?.default_title);
   const modlog = channelName(guild, settings?.modlog_channel_id);
   return {
     kind: 'link',
     id: 'general',
     name: 'General',
     icon: '⚙️',
-    description: 'Server-wide defaults for Sylo.',
+    description: 'Server-wide settings for Sylo.',
     hasToggle: false,
     enabled: null,
     missingIntents: [],
     status: 'link',
     href: `/guilds/${guild.id}/general`,
-    lines: [
-      title ? on('Default BF title', title.name) : neutral('Default BF title', 'none'),
-      modlog ? on('Mod-log channel', `#${modlog}`) : off('Mod-log channel', 'not set'),
-    ],
+    lines: [modlog ? on('Mod-log channel', `#${modlog}`) : off('Mod-log channel', 'not set')],
   };
 }
 

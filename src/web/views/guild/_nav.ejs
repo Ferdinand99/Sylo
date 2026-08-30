@@ -8,6 +8,7 @@
     <% if (typeof openTickets !== 'undefined' && openTickets > 0) { %><span class="nav-badge"><%= openTickets %></span><% } %>
   </a>
   <a href="/guilds/<%= guild.id %>/messages" class="<%= panel === 'messages' ? 'active' : '' %>">Message Creator</a>
+  <a href="/guilds/<%= guild.id %>/audit" class="<%= panel === 'audit' ? 'active' : '' %>">Audit log</a>
   <div class="guild-nav-sep">Modules</div>
   <% modules.forEach(function (m) { %>
     <a href="/guilds/<%= guild.id %>/m/<%= m.id %>" class="mod-link <%= panel === ('m/' + m.id) ? 'active' : '' %>">

@@ -13,7 +13,6 @@
      const messages = {
        saved: 'Saved.', cleared: 'Mod-log logging disabled.',
        badchannel: 'That channel is not a usable text channel.',
-       badtitle: 'Unknown Battlefield title.',
        badcommand: 'Unknown command.',
        perms: 'The bot lacks View Channel / Send Messages / Embed Links there.',
        warned: 'Warning added.',
@@ -109,14 +108,6 @@
     <% } else if (panel === 'general') { %>
       <h2>General</h2>
       <form method="POST" action="/guilds/<%= guild.id %>/general" class="stack">
-        <label>Default Battlefield title <span class="muted small">— used by <code>/stats</code> when none is given (coming soon)</span></label>
-        <select name="defaultTitle">
-          <option value="">— none —</option>
-          <% titleChoices.forEach(function (t) { %>
-            <option value="<%= t.value %>" <%= t.value === defaultTitle ? 'selected' : '' %>><%= t.name %></option>
-          <% }) %>
-        </select>
-
         <label>Moderation log channel</label>
         <select name="modlogChannelId">
           <option value="">— disabled —</option>
@@ -127,6 +118,32 @@
 
         <div><button type="submit">Save</button></div>
       </form>
+
+      <hr class="sep" />
+      <h3 style="margin-bottom:4px">Backup</h3>
+      <p class="muted small">Download this server's module configuration as JSON. Member data (warnings, XP, tickets) is not included.</p>
+      <p><a href="/guilds/<%= guild.id %>/export">Export configuration &rarr;</a></p>
+
+    <% } else if (panel === 'audit') { %>
+      <h2>Audit log</h2>
+      <p class="muted">Configuration changes made from this dashboard. Keeps the most recent 500 per server.</p>
+      <% if (audit.length === 0) { %>
+        <p class="muted">Nothing recorded yet.</p>
+      <% } else { %>
+        <table>
+          <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr></thead>
+          <tbody>
+            <% audit.forEach(function (a) { %>
+              <tr>
+                <td class="muted"><%= a.ago %></td>
+                <td><%= a.actor %></td>
+                <td class="mono"><%= a.action %></td>
+                <td class="muted"><%= a.detail %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      <% } %>
 
     <% } else if (panel === 'commands') { %>
       <h2>Commands</h2>

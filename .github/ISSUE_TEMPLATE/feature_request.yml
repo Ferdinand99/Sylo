@@ -1,0 +1,22 @@
+name: Feature request
+description: Suggest a module, command, or dashboard improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The use case or problem — not just the proposed solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Sylo to do?
+    validations:
+      required: true
+  - type: input
+    id: prior-art
+    attributes:
+      label: Prior art
+      description: How another bot (MEE6, Dyno, YAGPDB, …) handles this, if relevant.

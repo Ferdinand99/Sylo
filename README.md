@@ -1,9 +1,24 @@
 # Sylo
 
-Multi-function Discord bot with a web dashboard and an extensible game-stats
-module. v1 ships **Battlefield-series** player stats (via the public
-[gametools.network](https://gametools.network) API) and is packaged for
-self-hosting on an **Unraid server via Docker**.
+Multi-function Discord bot with a server-management **web dashboard**, packaged
+for self-hosting on an **Unraid server via Docker**. Eleven per-guild modules
+(moderation, logging, tickets, reaction roles, welcome, sticky messages,
+auto-moderation, counting, custom commands, scheduled messages, leveling),
+Discord OAuth2 login, a public leveling leaderboard, and **Battlefield-series**
+player stats via the public [gametools.network](https://gametools.network) API.
+
+## What's new in 2.0
+
+- All eleven modules are functional and configurable from the dashboard
+- Custom commands (prefix **and** optional `/slash`), scheduled messages
+  (1 min – 4 weeks), and a full leveling system with `/rank`, `/leaderboard`
+  and a shareable public leaderboard page
+- Auto-moderation, a Counting mini-game, a YAGPDB-style combined overview, and a
+  topbar server switcher
+- `/forget` for self-service data deletion; automatic data purge when Sylo
+  leaves a server; a per-server config **audit log** and JSON **config export**
+- CI now runs the test suite before any image is built or published;
+  rate-limited public and auth endpoints; a database integrity check on boot
 
 ## Features
 
@@ -12,6 +27,7 @@ self-hosting on an **Unraid server via Docker**.
   - `/version` — the release this instance is running · `/about` — version,
     uptime and runtime info
   - `/rank` · `/leaderboard` — leveling progress (when the module is enabled)
+  - `/forget` — delete the data Sylo stores about you in the current server
   - `/stats battlefield <title> <username> <platform>` — player stats as an embed
     (K/D, win rate, time played, KPM/SPM, best class, …)
   - Friendly, non-crashing error handling (unknown player, API down, rate-limited)
@@ -43,6 +59,9 @@ self-hosting on an **Unraid server via Docker**.
     announcements, per-level role rewards, `/rank` and `/leaderboard`
 - **Command management** — disable a command per server or restrict it to
   channels / roles (admins bypass).
+- **Operations** — per-server config **audit log** and JSON **config export**,
+  `/forget` self-service data deletion, automatic data purge on guild removal,
+  a database integrity check at startup, and rate-limited public / auth routes.
 - **Web dashboard** (Express + EJS, no frontend framework)
   - `GET /health` — JSON status (uptime, guild count, last error) for healthchecks
   - `/` — bot status, activity stats and module adoption; topbar server switcher
@@ -67,11 +86,11 @@ src/
   bot/
     index.js            Discord client bootstrap (intents, partials)
     loadCommands.js / registerCommands.js
-    commands/           ping, stats, kick/ban/unban/timeout/untimeout/
-                        purge/slowmode/warn/modlog
+    commands/           ping, about, version, stats, rank, leaderboard, forget,
+                        kick/ban/unban/timeout/untimeout/purge/slowmode/warn/modlog
     events/             ready, interactionCreate, moduleEvents (gateway → modules),
-                        dmTickets (DM → ticket)
-    embeds/ lib/        embed builders; duration, moderation, modlog helpers
+                        dmTickets (DM → ticket), guildDelete (purge on leave)
+    embeds/ lib/        embed builders; duration, moderation, modlog, custom-command sync
   modules/
     registry.js         module catalogue (id, intents, defaults)
     dispatch.js         fans gateway events out to enabled modules
@@ -181,6 +200,17 @@ persists in `./data` on the host.
 > If `better-sqlite3` ever fails to build on Alpine for your platform, change the
 > two `FROM node:20-alpine` lines in the `Dockerfile` to `node:20-slim`.
 
+### Backups
+
+All state is in the single SQLite file under the mounted data directory
+(`./data/sylo.db`, plus `-wal` / `-shm` sidecars). To back it up, stop the
+container briefly and copy the whole `data/` folder, or run
+`sqlite3 data/sylo.db ".backup data/sylo-backup.db"` while it runs. Restore by
+putting the file back and starting the container — migrations only ever move the
+schema forward, and Sylo runs a `quick_check` on boot and logs if the file is
+corrupt. Each server's module configuration can also be exported as JSON from
+**General → Backup** in the dashboard.
+
 ## Unraid deployment
 
 **Option A — docker compose** (via the *Compose Manager* plugin): copy the repo
@@ -245,10 +275,13 @@ Edit `Repository`, `Support`, `Project`, `TemplateURL`, and `Icon` in the XML
 
 ## Releases & CI
 
-Two GitHub Actions workflows drive the images on GHCR:
+Three GitHub Actions workflows drive the images on GHCR. `test.yml` runs the
+suite (`npm test` + syntax + template compile) and is a required dependency of
+every image build — nothing publishes on a red suite.
 
 | Workflow | Trigger | Publishes |
 |---|---|---|
+| `.github/workflows/test.yml` | called by the two below | — (gate only) |
 | `.github/workflows/docker-publish.yml` | every push to `main` (PRs build only) | `:main`, `:sha-<short>` — rolling dev image |
 | `.github/workflows/release-please.yml` | merging a **release PR** | `:latest`, `:X.Y.Z`, `:X.Y` — stable release |
 

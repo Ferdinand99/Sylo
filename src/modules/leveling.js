@@ -32,8 +32,8 @@ export function normaliseLevelingConfig(raw = {}) {
     stackRewards: raw.stackRewards !== false,
     publicLeaderboard: raw.publicLeaderboard !== false,
     rewards: (Array.isArray(raw.rewards) ? raw.rewards : [])
-      .map((r) => ({ level: clampInt(r.level, 1, 1000, 0), roleId: String(r.roleId ?? '') }))
-      .filter((r) => r.level >= 1 && /^\d{17,20}$/.test(r.roleId))
+      .map((r) => ({ level: Math.floor(Number(r.level)), roleId: String(r.roleId ?? '') }))
+      .filter((r) => Number.isInteger(r.level) && r.level >= 1 && r.level <= 1000 && /^\d{17,20}$/.test(r.roleId))
       .sort((a, b) => a.level - b.level)
       .slice(0, 50),
   };
