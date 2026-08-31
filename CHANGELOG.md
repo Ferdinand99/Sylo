@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.2](https://github.com/Ferdinand99/Sylo/compare/v2.9.1...v2.9.2) (2026-08-31)
+
+
+### Bug Fixes
+
+* distinguish missing-permission from untrackable in the invite tracker ([a49413a](https://github.com/Ferdinand99/Sylo/commit/a49413a2705f3443e9a2ae1d34e880cd0b8839cf))
+
 ## [2.9.1](https://github.com/Ferdinand99/Sylo/compare/v2.9.0...v2.9.1) (2026-08-31)
 
 
