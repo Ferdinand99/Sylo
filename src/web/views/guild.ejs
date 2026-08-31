@@ -80,7 +80,7 @@
         <% group.cards.forEach(function (c) { %>
           <div class="plugin-card is-<%= c.status %>">
             <a class="plugin-hit" href="<%= c.href %>" aria-label="<%= c.name %>"></a>
-            <span class="plugin-ico"><%= c.icon %></span>
+            <span class="plugin-ico"><svg class="plugin-ico-svg" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-<%= c.icon %>"/></svg></span>
             <span class="plugin-name"><%= c.name %></span>
             <span class="plugin-desc"><%= c.description %></span>
             <span class="plugin-cta" data-guild="<%= guild.id %>" data-module="<%= c.id %>">

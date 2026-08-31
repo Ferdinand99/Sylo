@@ -6,40 +6,16 @@
 import { runtime } from '../../runtime.js';
 import { getModule } from '../../modules/registry.js';
 import { getGuildModules } from '../../db/modules.js';
+import { MODULE_ICONS } from './moduleIcons.js';
 
-// module id / page slug -> `#i-<name>` symbol id.
+// module id / page slug -> `#i-<name>` symbol id. Module rows come from the
+// shared MODULE_ICONS map (also used by the overview grid); the extras here are
+// sidebar-only pages that aren't modules.
 const ICONS = {
-  // top group
+  ...MODULE_ICONS,
   leaderboard: 'trophy',
   personalizer: 'id',
-  // essentials
-  welcome: 'users',
-  'welcome-channel': 'megaphone',
-  roles: 'smile',
-  verification: 'shield-check',
-  moderation: 'shield',
-  leveling: 'trending-up',
-  starboard: 'star',
-  // server management
-  appeals: 'gavel',
-  tickets: 'ticket',
-  'custom-commands': 'command',
-  'invite-tracker': 'user-plus',
-  sticky: 'pin',
   audit: 'list',
-  // utilities
-  messages: 'message-square',
-  counting: 'hash',
-  polls: 'bar-chart',
-  'scheduled-messages': 'bell',
-  autoresponder: 'message-circle',
-  afk: 'moon',
-  'server-stats': 'activity',
-  'temp-voice': 'mic',
-  'free-games': 'gamepad',
-  // social alerts
-  'twitch-alerts': 'twitch',
-  'youtube-alerts': 'youtube',
 };
 
 // Top group — special pages, no dot.

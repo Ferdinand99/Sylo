@@ -18,6 +18,7 @@ import { guildPollCount } from '../../db/polls.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
+import { moduleIcon } from './moduleIcons.js';
 
 // Permissions Sylo relies on for its core moderation / role / logging features.
 const KEY_PERMS = [
@@ -111,7 +112,7 @@ function buildCard(id, guild, settings, state) {
     kind: 'module',
     id,
     name: def.name,
-    icon: def.icon,
+    icon: moduleIcon(id),
     description: def.description,
     hasToggle: true,
     enabled,
@@ -332,7 +333,7 @@ function generalCard(guild, settings) {
     kind: 'link',
     id: 'general',
     name: 'Settings',
-    icon: '⚙️',
+    icon: moduleIcon('general'),
     description: 'Bot masters, mod-log channel, embed colour, backup.',
     hasToggle: false,
     enabled: null,
@@ -352,7 +353,7 @@ function commandsCard(guild) {
     kind: 'link',
     id: 'commands',
     name: 'Commands',
-    icon: '⌘',
+    icon: moduleIcon('commands'),
     description: 'Enable, disable or restrict slash commands per server.',
     hasToggle: false,
     enabled: null,
@@ -373,7 +374,7 @@ function messagesCard(guild) {
     kind: 'link',
     id: 'messages',
     name: 'Embed messages',
-    icon: '🖼️',
+    icon: moduleIcon('messages'),
     description: 'Build rich embed messages and publish them to a channel as the bot.',
     hasToggle: false,
     enabled: null,

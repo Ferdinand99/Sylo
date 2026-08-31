@@ -557,7 +557,9 @@ label.checkline input { width: auto; }
   display: grid; place-items: center; font-size: 19px;
   background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
 }
+.plugin-ico-svg { width: 20px; height: 20px; color: var(--accent); }
 .plugin-card.is-on .plugin-ico { background: color-mix(in srgb, var(--ok) 16%, var(--surface-2)); }
+.plugin-card.is-on .plugin-ico-svg { color: var(--ok); }
 .plugin-name { font-weight: 700; font-size: 14.5px; letter-spacing: -0.01em; }
 .plugin-desc {
   font-size: 12.5px; color: var(--muted); line-height: 1.45; flex: 1;
