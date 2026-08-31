@@ -1,24 +1,60 @@
 // Left-sidebar navigation model, MEE6-style: an unlabelled top group, then
 // collapsible category groups whose rows each carry a leading enable-state dot
 // (modules) or a spacer (plain pages). A server is always in view — the id is
-// resolved in auth.js and passed in here.
+// resolved in auth.js and passed in here. Every row uses an inline SVG icon
+// (the `#i-*` symbols in partials/header.ejs), never an emoji.
 import { runtime } from '../../runtime.js';
 import { getModule } from '../../modules/registry.js';
 import { getGuildModules } from '../../db/modules.js';
 
+// module id / page slug -> `#i-<name>` symbol id.
+const ICONS = {
+  // top group
+  leaderboard: 'trophy',
+  personalizer: 'id',
+  // essentials
+  welcome: 'users',
+  'welcome-channel': 'megaphone',
+  roles: 'smile',
+  verification: 'shield-check',
+  moderation: 'shield',
+  leveling: 'trending-up',
+  starboard: 'star',
+  // server management
+  appeals: 'gavel',
+  tickets: 'ticket',
+  'custom-commands': 'command',
+  'invite-tracker': 'user-plus',
+  sticky: 'pin',
+  audit: 'list',
+  // utilities
+  messages: 'message-square',
+  counting: 'hash',
+  polls: 'bar-chart',
+  'scheduled-messages': 'bell',
+  autoresponder: 'message-circle',
+  afk: 'moon',
+  'server-stats': 'activity',
+  'temp-voice': 'mic',
+  'free-games': 'gamepad',
+  // social alerts
+  'twitch-alerts': 'twitch',
+  'youtube-alerts': 'youtube',
+};
+
 // Top group — special pages, no dot.
 const TOP = [
   { key: 'dashboard', label: 'Dashboard', icon: 'grid', guild: (g) => `/guilds/${g}/overview`, noGuild: '/' },
-  { key: 'leaderboard', label: 'Leaderboard', emoji: '🏆', guild: (g) => `/guilds/${g}/leaderboard`, noGuild: '/' },
-  { key: 'personalizer', label: 'Bot Personalizer', emoji: '🪪', href: '/settings' },
+  { key: 'leaderboard', label: 'Leaderboard', icon: ICONS.leaderboard, guild: (g) => `/guilds/${g}/leaderboard`, noGuild: '/' },
+  { key: 'personalizer', label: 'Bot Personalizer', icon: ICONS.personalizer, href: '/settings' },
   { key: 'settings', label: 'Settings', icon: 'gear', guild: (g) => `/guilds/${g}/settings`, noGuild: '/' },
   { key: 'health', label: 'Health', icon: 'pulse', href: '/health' },
 ];
 
 // Category groups. Each item is one of:
-//   { module: '<id>' [, label] }                 -> config page + enable dot
-//   { page: '<slug>', emoji, label }             -> plain page, no dot
-//   { page: '<slug>', dotModule: '<id>', emoji, label } -> page + a module's dot
+//   { module: '<id>' [, label] }                          -> config page + enable dot
+//   { page: '<slug>', label }                             -> plain page, no dot
+//   { page: '<slug>', dotModule: '<id>', label }          -> page + a module's dot
 const CATEGORIES = [
   {
     key: 'essentials',
@@ -28,7 +64,7 @@ const CATEGORIES = [
       { module: 'welcome-channel', label: 'Welcome channel' },
       { module: 'roles', label: 'Reaction roles' },
       { module: 'verification' },
-      { page: 'moderation', dotModule: 'moderation', emoji: '🛡️', label: 'Moderator' },
+      { page: 'moderation', dotModule: 'moderation', label: 'Moderator' },
       { module: 'leveling', label: 'Levels' },
       { module: 'starboard', label: 'Starboard' },
     ],
@@ -37,19 +73,19 @@ const CATEGORIES = [
     key: 'management',
     title: 'Server management',
     items: [
-      { page: 'appeals', dotModule: 'appeals', emoji: '⚖️', label: 'Ban appeals' },
-      { page: 'tickets', emoji: '🎫', label: 'Tickets' },
+      { page: 'appeals', dotModule: 'appeals', label: 'Ban appeals' },
+      { page: 'tickets', label: 'Tickets' },
       { module: 'custom-commands' },
       { module: 'invite-tracker', label: 'Invite tracker' },
       { module: 'sticky' },
-      { page: 'audit', emoji: '📜', label: 'Audit log' },
+      { page: 'audit', label: 'Audit log' },
     ],
   },
   {
     key: 'utilities',
     title: 'Utilities',
     items: [
-      { page: 'messages', emoji: '🖼️', label: 'Embed messages' },
+      { page: 'messages', label: 'Embed messages' },
       { module: 'counting' },
       { module: 'polls' },
       { module: 'scheduled-messages', label: 'Reminders' },
@@ -64,8 +100,8 @@ const CATEGORIES = [
     key: 'social',
     title: 'Social alerts',
     items: [
-      { module: 'twitch-alerts', label: 'Twitch alerts', svg: 'twitch' },
-      { module: 'youtube-alerts', label: 'YouTube alerts', svg: 'youtube' },
+      { module: 'twitch-alerts', label: 'Twitch alerts' },
+      { module: 'youtube-alerts', label: 'YouTube alerts' },
     ],
   },
 ];
@@ -85,7 +121,7 @@ export function buildSidebar(req, gid = null) {
     else if (t.key === 'leaderboard') active = !!guild && path === `/guilds/${gid}/leaderboard`;
     else if (t.key === 'settings') active = !!guild && path.startsWith(`/guilds/${gid}/settings`);
     else active = path === t.href || path.startsWith(`${t.href}/`);
-    return { label: t.label, icon: t.icon, emoji: t.emoji, href, active };
+    return { label: t.label, icon: t.icon, href, active };
   });
 
   if (!guild) return { top, guild: null, categories: [] };
@@ -101,8 +137,7 @@ export function buildSidebar(req, gid = null) {
       return {
         id: it.module,
         label: it.label || def.name,
-        emoji: it.svg ? undefined : def.icon,
-        icon: it.svg || undefined,
+        icon: ICONS[it.module] || 'sliders',
         href,
         dot: enabled.get(it.module) ?? def.defaultEnabled ? 'on' : 'off',
         active: path === href,
@@ -116,7 +151,7 @@ export function buildSidebar(req, gid = null) {
       id = it.dotModule;
       dot = (enabled.get(it.dotModule) ?? def?.defaultEnabled) ? 'on' : 'off';
     }
-    return { id, label: it.label, emoji: it.emoji, href, dot, active: path === href };
+    return { id, label: it.label, icon: ICONS[it.page] || 'list', href, dot, active: path === href };
   };
 
   const categories = CATEGORIES.map((c) => ({
