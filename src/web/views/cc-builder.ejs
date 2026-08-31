@@ -1,0 +1,72 @@
+<%- include('partials/header', { title: `Sylo — ${isNew ? 'New' : 'Edit'} custom command` }) %>
+
+<p class="muted"><a href="/guilds/<%= guildId %>/m/custom-commands">&larr; Custom commands</a></p>
+
+<div class="rr-builder-head">
+  <h1 class="page-title"><%= isNew ? 'New custom command' : 'Edit custom command' %></h1>
+  <div class="rr-actions">
+    <a class="btn" href="/guilds/<%= guildId %>/m/custom-commands">Discard</a>
+    <button type="submit" form="cc-form" class="btn btn-primary">Save &amp; close</button>
+  </div>
+</div>
+
+<form method="POST" action="/guilds/<%= guildId %>/m/custom-commands/cmd" id="cc-form" class="stack" style="max-width:680px">
+  <input type="hidden" name="id" value="<%= cmd.id %>" />
+  <input type="hidden" name="actions" id="cc-actions-json" />
+
+  <section class="card stack">
+    <h2>Command</h2>
+    <label class="small">Name</label>
+    <div class="cc-name-wrap">
+      <span class="cc-slash">/</span>
+      <input type="text" name="name" value="<%= cmd.name %>" maxlength="32" pattern="[a-z0-9_-]{1,32}"
+             placeholder="my-command" required />
+    </div>
+    <p class="muted small">Lowercase letters, numbers, <code>-</code> and <code>_</code>. This is the slash command.</p>
+
+    <label class="small">Description <span class="muted">— shown in Discord's command list</span></label>
+    <input type="text" name="description" value="<%= cmd.description %>" maxlength="100" placeholder="What this command does" />
+  </section>
+
+  <section class="card">
+    <div class="cc-actions-head">
+      <h2 style="margin:0">Command actions</h2>
+    </div>
+    <p class="muted small">Actions run in order — use the ↑ ↓ buttons to reorder.</p>
+    <div id="cc-actions"></div>
+    <button type="button" id="cc-add-action" class="secondary">＋ Add another action</button>
+  </section>
+
+  <details class="card cc-advanced">
+    <summary><strong>Advanced options and permissions</strong> <span class="muted small">— optional</span></summary>
+    <div class="stack" style="margin-top:12px">
+      <label class="small">Only these roles may use it <span class="muted">— empty = everyone</span></label>
+      <%- include('partials/chip-picker', { field: 'allowedRoles', kind: 'role', items: roles, selected: cmd.allowedRoles }) %>
+
+      <label class="small" style="margin-top:8px">Only in these channels <span class="muted">— empty = anywhere</span></label>
+      <%- include('partials/chip-picker', { field: 'allowedChannels', kind: 'channel', items: channels, selected: cmd.allowedChannels }) %>
+
+      <label class="small" style="margin-top:8px">Per-user cooldown (seconds)</label>
+      <input type="number" name="cooldownSeconds" min="0" max="86400" value="<%= cmd.cooldownSeconds || 0 %>" style="max-width:120px" />
+    </div>
+  </details>
+</form>
+
+<%
+  var actionTypeMeta = [
+    { type: 'reply', title: 'Bot responds with a message in the current channel' },
+    { type: 'send', title: 'Bot sends a message to a chosen channel' },
+    { type: 'add-role', title: 'Bot gives the member a role' },
+    { type: 'remove-role', title: 'Bot removes a role from the member' },
+  ];
+%>
+<script>
+  window.CC = <%- JSON.stringify(cmd).replace(/</g, '\\u003c') %>;
+  window.CC_ROLES = <%- JSON.stringify(roles).replace(/</g, '\\u003c') %>;
+  window.CC_CHANNELS = <%- JSON.stringify(channels).replace(/</g, '\\u003c') %>;
+  window.CC_ACTION_TYPES = <%- JSON.stringify(actionTypeMeta).replace(/</g, '\\u003c') %>;
+  window.CC_PLACEHOLDERS = <%- JSON.stringify(ccPlaceholders).replace(/</g, '\\u003c') %>;
+</script>
+<script src="/cc-builder.js"></script>
+
+<%- include('partials/footer') %>

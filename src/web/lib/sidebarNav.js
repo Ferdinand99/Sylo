@@ -40,6 +40,7 @@ const CATEGORIES = [
       { page: 'appeals', dotModule: 'appeals', emoji: '⚖️', label: 'Ban appeals' },
       { page: 'tickets', emoji: '🎫', label: 'Tickets' },
       { module: 'custom-commands' },
+      { module: 'invite-tracker', label: 'Invite tracker' },
       { module: 'scheduled-messages' },
       { module: 'sticky' },
       { page: 'audit', emoji: '📜', label: 'Audit log' },

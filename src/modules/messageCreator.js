@@ -28,7 +28,7 @@ const trimOr = (v, max, fallback = undefined) => {
 const isUrl = (v) => /^https?:\/\/\S+$/i.test(String(v ?? ''));
 
 /** Build one embed from a spec object, or null if it would be empty. */
-function buildEmbed(e) {
+export function buildEmbed(e) {
   const eb = new EmbedBuilder();
   let hasContent = false;
 

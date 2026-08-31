@@ -19,6 +19,9 @@ const GUILD_TABLES = [
   'appeals',
   'temp_voice_channels',
   'starboard_posts',
+  'invite_counts',
+  'invite_joins',
+  'invite_personal',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -51,6 +54,12 @@ const userStmts = {
   `),
   tickets: db.prepare('DELETE FROM tickets WHERE guild_id = ? AND user_id = ?'),
   appeals: db.prepare('DELETE FROM appeals WHERE guild_id = ? AND user_id = ?'),
+  inviteCounts: db.prepare('DELETE FROM invite_counts WHERE guild_id = ? AND user_id = ?'),
+  inviteJoins: db.prepare('DELETE FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
+  inviteJoinsAsInviter: db.prepare(
+    "UPDATE invite_joins SET inviter_id = NULL, source = 'unknown', counted = 0 WHERE guild_id = ? AND inviter_id = ?"
+  ),
+  invitePersonal: db.prepare('DELETE FROM invite_personal WHERE guild_id = ? AND user_id = ?'),
 };
 
 const forgetUserTxn = db.transaction((guildId, userId) => {
@@ -60,12 +69,17 @@ const forgetUserTxn = db.transaction((guildId, userId) => {
   const ticketMsgs = userStmts.ticketMsgs.run(guildId, userId).changes;
   const tickets = userStmts.tickets.run(guildId, userId).changes;
   const appeals = userStmts.appeals.run(guildId, userId).changes;
-  return { warnings, leveling, tickets, ticketMessages: ticketMsgs, appeals };
+  const invites =
+    userStmts.inviteCounts.run(guildId, userId).changes +
+    userStmts.inviteJoins.run(guildId, userId).changes +
+    userStmts.inviteJoinsAsInviter.run(guildId, userId).changes +
+    userStmts.invitePersonal.run(guildId, userId).changes;
+  return { warnings, leveling, tickets, ticketMessages: ticketMsgs, appeals, invites };
 });
 
 /**
  * Erase a single member's data within one guild.
- * @returns {{ warnings: number, leveling: number, tickets: number, ticketMessages: number, appeals: number }}
+ * @returns {{ warnings: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, invites: number }}
  */
 export function forgetUser(guildId, userId) {
   return forgetUserTxn(guildId, userId);

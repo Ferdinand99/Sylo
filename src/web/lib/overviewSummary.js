@@ -13,6 +13,7 @@ import { listComposed } from '../../db/composedMessages.js';
 import { getCounting } from '../../db/counting.js';
 import { listScheduled } from '../../db/scheduledMessages.js';
 import { countOpenAppeals } from '../../db/appeals.js';
+import { inviterCount } from '../../db/inviteTracker.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
@@ -33,7 +34,7 @@ const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
   { title: 'Moderation & filtering', ids: ['automod', 'verification', 'appeals', 'logging'] },
   { title: 'Engagement', ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'starboard', 'sticky'] },
-  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'autoresponder', 'afk', 'server-stats', 'temp-voice', 'free-games'] },
+  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'invite-tracker', 'autoresponder', 'afk', 'server-stats', 'temp-voice', 'free-games'] },
 ];
 
 const line = (label, value, state) => ({ label, value, state });
@@ -207,10 +208,18 @@ function moduleLines(id, guild, cfg) {
       ];
     }
     case 'custom-commands': {
-      const n = Array.isArray(cfg.commands) ? cfg.commands.length : 0;
+      const cmds = Array.isArray(cfg.commands) ? cfg.commands : [];
+      const actions = cmds.reduce((sum, c) => sum + (Array.isArray(c.actions) ? c.actions.length : 0), 0);
       return [
-        neutral('Prefix', cfg.prefix || '!'),
-        n ? on('Commands', String(n)) : off('Commands', 'none'),
+        cmds.length ? on('Commands', String(cmds.length)) : off('Commands', 'none'),
+        cmds.length ? neutral('Actions', String(actions)) : neutral('Actions', '0'),
+      ];
+    }
+    case 'invite-tracker': {
+      const log = channelName(guild, cfg.joinLogChannelId);
+      return [
+        neutral('Inviters ranked', String(inviterCount(guild.id))),
+        log ? on('Join log', `#${log}`) : off('Join log', 'off'),
       ];
     }
     case 'autoresponder': {

@@ -1,60 +1,49 @@
 <% var cfg = moduleConfig || {}; var cmds = Array.isArray(cfg.commands) ? cfg.commands : []; %>
+<% var chName = function (id) { var c = channels.find(function (x) { return x.id === id; }); return c ? c.name : id; }; %>
+<%
+  var actionLabel = function (a) {
+    if (a.type === 'reply') return a.private ? 'private reply' : 'reply';
+    if (a.type === 'send') return 'post to #' + chName(a.channelId);
+    if (a.type === 'add-role') return 'add a role';
+    if (a.type === 'remove-role') return 'remove a role';
+    return a.type;
+  };
+%>
 
 <p class="muted small">
-  Commands work in chat as <code><%= cfg.prefix || '!' %>name</code><% if (cfg.slash) { %> and as <code>/name</code><% } %>.
-  Placeholders in the response / embed title:
-  <%= ccPlaceholders.map(function (p) { return '<code>' + p + '</code>'; }).join(' ') %>
-  (<code>{args}</code> = text after the command name; for a slash command it becomes a <code>text:</code> option).
+  Each command is a <code>/slash</code> command that runs an ordered list of actions —
+  reply in the channel, post to another channel, or add / remove a role. Commands sync to
+  Discord on save. Placeholders: <% ccPlaceholders.forEach(function (p) { %><code><%= p %></code> <% }) %>
+  (<code>{args}</code> becomes a <code>text:</code> option).
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/custom-commands/config" class="stack" style="max-width:680px">
-  <label>Prefix</label>
-  <input type="text" name="prefix" maxlength="5" value="<%= cfg.prefix || '!' %>" style="width:80px" />
+<div class="rr-list-head">
+  <h3 style="margin:0">Your commands <span class="muted small"><%= cmds.length %> / 200</span></h3>
+  <a class="btn btn-primary" href="/guilds/<%= guild.id %>/m/custom-commands/cmd/new">＋ New custom command</a>
+</div>
 
-  <label class="check" style="margin-top:6px">
-    <input type="checkbox" name="slash" <%= cfg.slash ? 'checked' : '' %> />
-    Also register these as slash commands (<code>/name</code>) — synced to Discord on save
-  </label>
-
-  <label style="margin-top:8px">Commands</label>
-  <div id="cc-rows">
-    <% (cmds.length ? cmds : [{ name: '', response: '', embed: false, embedTitle: '', embedColor: '5b7cfa' }]).forEach(function (c) { %>
-      <div class="sticky-row">
-        <div class="row-form">
-          <input type="text" name="cc_name" placeholder="name" value="<%= c.name || '' %>" style="width:150px" />
-          <select name="cc_type" style="width:110px">
-            <option value="text" <%= c.embed ? '' : 'selected' %>>Text</option>
-            <option value="embed" <%= c.embed ? 'selected' : '' %>>Embed</option>
-          </select>
-          <input type="text" name="cc_embedTitle" placeholder="embed title (optional)" value="<%= c.embedTitle || '' %>" class="grow" />
-          <input type="color" name="cc_embedColor" value="#<%= (c.embedColor || '5b7cfa').replace('#','') %>" title="Embed colour" />
-          <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove</button>
-        </div>
-        <textarea name="cc_response" rows="2" placeholder="Reply text…"><%= c.response || '' %></textarea>
+<% if (cmds.length === 0) { %>
+  <p class="muted small">None yet — create one to add a <code>/command</code> to this server.</p>
+<% } else { %>
+  <% cmds.forEach(function (c) { %>
+    <div class="cmd-override">
+      <div class="cmd-override-head">
+        <span>
+          <strong>/<%= c.name %></strong>
+          <span class="muted small">
+            · <%= (c.actions || []).map(actionLabel).join(' → ') || 'no actions' %>
+            <% if (c.cooldownSeconds) { %> · <%= c.cooldownSeconds %>s cooldown<% } %>
+            <% if ((c.allowedRoles || []).length) { %> · role-limited<% } %>
+            <% if ((c.allowedChannels || []).length) { %> · channel-limited<% } %>
+          </span>
+        </span>
       </div>
-    <% }) %>
-  </div>
-  <div><button type="button" class="secondary" id="cc-add">+ Add command</button></div>
-  <div style="margin-top:10px"><button type="submit">Save</button></div>
-</form>
-
-<template id="cc-template">
-  <div class="sticky-row">
-    <div class="row-form">
-      <input type="text" name="cc_name" placeholder="name" style="width:150px" />
-      <select name="cc_type" style="width:110px">
-        <option value="text" selected>Text</option>
-        <option value="embed">Embed</option>
-      </select>
-      <input type="text" name="cc_embedTitle" placeholder="embed title (optional)" class="grow" />
-      <input type="color" name="cc_embedColor" value="#5b7cfa" title="Embed colour" />
-      <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove</button>
+      <div class="btn-row">
+        <a class="plugin-btn" href="/guilds/<%= guild.id %>/m/custom-commands/cmd/<%= c.id %>">Edit</a>
+        <form method="POST" action="/guilds/<%= guild.id %>/m/custom-commands/cmd/<%= c.id %>/delete" style="display:inline">
+          <button type="submit" class="danger" data-confirm="Delete /<%= c.name %>? It is removed from Discord too.">Delete</button>
+        </form>
+      </div>
     </div>
-    <textarea name="cc_response" rows="2" placeholder="Reply text…"></textarea>
-  </div>
-</template>
-<script>
-  document.getElementById('cc-add')?.addEventListener('click', () => {
-    document.getElementById('cc-rows').appendChild(document.getElementById('cc-template').content.cloneNode(true));
-  });
-</script>
+  <% }) %>
+<% } %>

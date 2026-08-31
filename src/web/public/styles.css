@@ -735,6 +735,66 @@ label.checkline input { width: auto; }
 .star-age { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; }
 .rr-mode strong { color: var(--text); }
 
+/* custom-command builder */
+.cc-name-wrap { display: flex; align-items: center; gap: 0; max-width: 320px; }
+.cc-slash {
+  padding: 8px 10px; border: 1px solid var(--border); border-right: 0;
+  border-radius: var(--r-sm) 0 0 var(--r-sm); background: var(--surface-2); color: var(--muted); font-weight: 700;
+}
+.cc-name-wrap input { border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.cc-actions-head { display: flex; align-items: center; justify-content: space-between; }
+#cc-actions { display: flex; flex-direction: column; gap: 12px; margin: 10px 0; }
+.cc-action { border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2); }
+.cc-action-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 12px; border-bottom: 1px solid var(--border);
+}
+.cc-action-title { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; }
+.cc-badge {
+  width: 20px; height: 20px; border-radius: 6px; flex: none; display: grid; place-items: center;
+  background: var(--surface-3); color: var(--muted); font-size: 11px; font-weight: 700;
+}
+.cc-action-tools { display: flex; gap: 4px; }
+.cc-iconbtn {
+  width: 26px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--muted); cursor: pointer; font-size: 12px;
+}
+.cc-iconbtn:hover:not(:disabled) { color: var(--text); border-color: var(--border-strong); }
+.cc-iconbtn:disabled { opacity: .35; cursor: default; }
+.cc-iconbtn.danger:hover { color: var(--bad); border-color: var(--bad); }
+.cc-action-body { padding: 12px; }
+.cc-msgs { display: flex; flex-direction: column; gap: 10px; }
+.cc-msg { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 10px; background: var(--surface); }
+.cc-msg-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.cc-msg-tools { display: flex; gap: 10px; }
+.cc-embed {
+  margin-top: 8px; border-left: 3px solid var(--cc-color, #5865f2);
+  border-radius: 4px; background: var(--surface-2); padding: 10px; display: flex; flex-direction: column; gap: 8px;
+}
+.cc-embed-top { display: flex; align-items: center; gap: 8px; }
+.cc-embed-top .cc-e-title { flex: 1; }
+.cc-colorwrap { width: 28px; height: 28px; flex: none; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+.cc-colorwrap input { width: 140%; height: 140%; margin: -6px 0 0 -6px; padding: 0; border: 0; background: none; cursor: pointer; }
+.cc-embed-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; align-items: center; }
+.cc-urlbtn {
+  padding: 6px 8px; border: 1px dashed var(--border-strong); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--muted); cursor: pointer; font-size: 12px;
+}
+.cc-urlbtn.has { border-style: solid; color: var(--accent); border-color: var(--accent); }
+.cc-embed-fields { display: flex; flex-direction: column; gap: 6px; }
+.cc-embed-field { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: center; }
+.cc-typepicker {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 10px;
+  padding: 10px; border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface-2);
+}
+.cc-typepicker button:not(.link-btn) {
+  text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text); cursor: pointer; font-size: 13px;
+}
+.cc-typepicker button:not(.link-btn):hover { border-color: var(--accent); }
+.cc-advanced summary { cursor: pointer; }
+.cc-advanced summary::-webkit-details-marker { display: none; }
+
 /* Moderator page — CSS radio tabs */
 .mod-tabbed > input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
 .mod-tablabels { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin: 8px 0 18px; flex-wrap: wrap; }

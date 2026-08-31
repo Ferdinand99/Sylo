@@ -1,17 +1,28 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Twenty per-guild modules
+for self-hosting on an **Unraid server via Docker**. Twenty-one per-guild modules
 (moderation, logging, tickets, reaction roles, verification, welcome, welcome
 channel, sticky messages, auto-moderation, counting, custom commands,
 autoresponder, scheduled messages, leveling, AFK, server statistics, free games,
-ban appeals, temporary voice channels, starboard), Discord OAuth2 login, a public
-leveling leaderboard, and
+ban appeals, temporary voice channels, starboard, invite tracker), Discord OAuth2
+login, a public leveling leaderboard, and
 **Battlefield-series** player stats via the public
 [gametools.network](https://gametools.network) API.
 
 ## What's new since 2.0
 
+- **Invite tracker** — credits the member whose invite link each new joiner used,
+  keeps a per-member tally (joined / left / bonus), and ranks everyone.
+  `/invites` (your count + a personal link), `/inviter`, `/invites-leaderboard`;
+  optional join/leave log channel; a fake-invite grace window so a quick leave
+  removes the credit. Needs the **Manage Server** permission.
+- **Custom commands, rebuilt MEE6-style** — each command is now a `/slash`
+  command that runs an ordered list of actions: reply in the channel (text /
+  embed, optionally private, or a random pick from several messages), post to
+  another channel, or add / remove a role. Per-command role and channel
+  restrictions and a cooldown. Existing text/embed commands migrate automatically
+  (they become a single reply action); the chat-prefix trigger is retired.
 - **Starboard** — react to a message enough times and Sylo re-posts it into a
   highlights channel. MEE6-style per-server boards: pick the emoji(s) and
   threshold, auto-react on the post, remove it if it drops back below the bar or
@@ -30,9 +41,9 @@ leveling leaderboard, and
   decision shown on the link, with a single-use rejoin invite on accept),
   Temporary voice channels (join a hub to spawn your own VC, auto-deleted empty),
   and Welcome Channel (a builder for one pinned message in a read-only channel)
-  — all functional and configurable from the dashboard (20 in total)
+  — all functional and configurable from the dashboard (21 in total)
 - Editable Discord **presence / activity** from the dashboard (`/settings`)
-- 2.0 groundwork still current: custom commands (prefix **and** `/slash`),
+- 2.0 groundwork still current: action-based custom `/slash` commands,
   scheduled messages, full leveling with a public leaderboard, auto-moderation,
   the Counting mini-game, a YAGPDB-style combined overview and a topbar server
   switcher; `/forget` + guild-leave data purge; per-server **audit log** and
@@ -58,7 +69,7 @@ leveling leaderboard, and
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 20 feature groups, each toggled and configured from the
+- **Per-guild modules** — 21 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -82,8 +93,16 @@ leveling leaderboard, and
     **audit logging** (server events → a channel), and per-command permissions
   - **Counting** — members count upward one number per message in a chosen channel;
     correct or reset the running number from the dashboard
-  - **Custom commands** — text/embed replies triggered by a chat prefix and,
-    optionally, as `/name` slash commands synced to Discord
+  - **Custom commands** — MEE6-style `/slash` commands built from an ordered list
+    of actions: reply in the channel (text and/or embed, optionally private, or a
+    random pick from several messages), post a message to another channel, or add
+    / remove a role. Per-command role/channel restrictions and cooldown; synced
+    to Discord on save
+  - **Invite tracker** — attributes each new member to the invite link they used
+    and ranks inviters. `/invites` gives a member a personal invite link plus
+    their count, `/inviter` looks up who invited someone, `/invites-leaderboard`
+    ranks the server. Optional join/leave log channel and a fake-invite grace
+    window (a join that leaves inside it doesn't count). Needs Manage Server
   - **Autoresponder** — auto-reply when a message matches a trigger (contains /
     exact / starts-with / whole-word), optionally deleting the trigger
   - **Scheduled messages** — recurring posts to a channel, every minute to every
@@ -237,7 +256,7 @@ healthcheck (browsers get the status page, gated by login).
 2. **Bot** tab → **Reset Token** → copy into `DISCORD_TOKEN`. Under *Privileged
    Gateway Intents* enable **Server Members** and **Message Content** if you want
    the member/message-driven modules (logging, welcome, autoroles, leveling,
-   auto-moderation, counting, custom commands); a verified bot may need Discord's
+   auto-moderation, counting); a verified bot may need Discord's
    approval for Message Content.
    Otherwise set `INTENT_GUILD_MEMBERS=false` / `INTENT_MESSAGE_CONTENT=false`.
 3. **General Information** → copy **Application ID** into `DISCORD_CLIENT_ID`.

@@ -41,6 +41,12 @@
        'wc-unpub': 'Removed the published welcome message.',
        'wc-fail': 'That did not work — check the bot has Send Messages / Embed Links (and Manage Channels to create one).',
        'sb-saved': 'Board saved — scanning recent messages for anything that already clears the threshold.',
+       'cc-bad': 'The command could not be read — please try again.',
+       'cc-name': 'Enter a name with only lowercase letters, numbers, - and _ (max 32).',
+       'cc-reserved': 'That name is a built-in Sylo command — pick another.',
+       'cc-dupe': 'A custom command with that name already exists in this server.',
+       'cc-empty': 'Add at least one action that replies, posts a message, or changes a role.',
+       'inv-bad': 'Enter a valid member ID (or @mention) and a whole-number bonus.',
      };
      const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');

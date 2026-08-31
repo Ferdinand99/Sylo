@@ -37,6 +37,10 @@ export function register(client) {
   client.on(Events.GuildRoleCreate, (role) => dispatch('roleCreate', role.guild?.id, role));
   client.on(Events.GuildRoleDelete, (role) => dispatch('roleDelete', role.guild?.id, role));
 
+  client.on(Events.InviteCreate, (invite) => dispatch('inviteCreate', invite.guild?.id, invite));
+  client.on(Events.InviteDelete, (invite) => dispatch('inviteDelete', invite.guild?.id, invite));
+  client.on(Events.GuildCreate, (guild) => dispatch('guildCreate', guild.id, guild));
+
   client.on(Events.ChannelCreate, (channel) => {
     if (channel.guildId) dispatch('channelCreate', channel.guildId, channel);
   });

@@ -38,6 +38,8 @@ import { normaliseAppealsConfig, decideAndNotify } from '../../modules/appeals.j
 import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
 import { normaliseStarboard, rescanBoard } from '../../modules/starboard.js';
 import { deleteBoardEntries } from '../../db/starboard.js';
+import { normaliseInviteTrackerConfig, primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
+import { topInviters, inviterCount, setBonus } from '../../db/inviteTracker.js';
 import {
   WC_PRESETS,
   normaliseWelcomeChannelConfig,
@@ -75,6 +77,7 @@ const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
   'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder', 'verification',
   'afk', 'server-stats', 'free-games', 'appeals', 'temp-voice', 'welcome-channel', 'starboard',
+  'invite-tracker',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -500,6 +503,20 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
           })),
         }
       : null,
+    inviteBoard: mod.id === 'invite-tracker'
+      ? {
+          total: inviterCount(req.guild.id),
+          canReadInvites: Boolean(req.guild.members.me?.permissions.has(PermissionFlagsBits.ManageGuild)),
+          rows: topInviters(req.guild.id, 15).map((r, i) => ({
+            rank: i + 1,
+            userId: r.user_id,
+            net: r.net,
+            regular: r.regular,
+            leaves: r.leaves,
+            bonus: r.bonus,
+          })),
+        }
+      : null,
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
   });
 });
@@ -611,24 +628,6 @@ router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
       resetOnFail: req.body.resetOnFail === 'on',
       react: req.body.react === 'on',
     };
-  } else if (mod.id === 'custom-commands') {
-    // Repeating rows: cc_name[], cc_response[], cc_type[], cc_embedTitle[], cc_embedColor[].
-    const names = [].concat(req.body.cc_name ?? []);
-    const responses = [].concat(req.body.cc_response ?? []);
-    const types = [].concat(req.body.cc_type ?? []);
-    const titles = [].concat(req.body.cc_embedTitle ?? []);
-    const colors = [].concat(req.body.cc_embedColor ?? []);
-    config = normaliseCustomCommands({
-      prefix: req.body.prefix,
-      slash: req.body.slash === 'on',
-      commands: names.map((name, i) => ({
-        name,
-        response: responses[i] ?? '',
-        embed: types[i] === 'embed',
-        embedTitle: titles[i] ?? '',
-        embedColor: colors[i] ?? '',
-      })),
-    });
   } else if (mod.id === 'leveling') {
     const levels = [].concat(req.body.rw_level ?? []);
     const roleIds = [].concat(req.body.rw_role ?? []);
@@ -725,6 +724,11 @@ router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
       logChannelId: req.body.logChannelId,
       kickAfterMinutes: req.body.kickAfterMinutes,
     });
+  } else if (mod.id === 'invite-tracker') {
+    config = normaliseInviteTrackerConfig({
+      joinLogChannelId: req.body.joinLogChannelId,
+      graceHours: req.body.graceHours,
+    });
   } else if (mod.id === 'welcome-channel') {
     const prev = getGuildModule(req.guild.id, 'welcome-channel').config;
     let spec = {};
@@ -740,9 +744,9 @@ router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
 
   setGuildModule(req.guild.id, mod.id, { config });
   recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: `module:${mod.id}`, detail: 'settings saved' });
-  if (mod.id === 'custom-commands') {
-    syncGuildCustomCommands(req.guild).catch((err) =>
-      console.error('[custom-commands] sync after save failed:', err.message)
+  if (mod.id === 'invite-tracker') {
+    primeInviteCache(req.guild).catch((err) =>
+      console.error('[invite-tracker] cache prime after save failed:', err.message)
     );
   }
   if (mod.id === 'verification') {
@@ -1065,6 +1069,116 @@ router.post('/:guildId/m/starboard/sb/:id/delete', (req, res) => {
   res.redirect(`/guilds/${req.guild.id}/m/starboard?msg=saved`);
 });
 
+// --- Custom-command builder (MEE6-style actions) ----------------------
+
+function ccCommands(guildId) {
+  return normaliseCustomCommands(getGuildModule(guildId, 'custom-commands').config).commands;
+}
+
+function renderCcBuilder(req, res, cmd) {
+  res.render('cc-builder', {
+    ...baseContext(req.guild, 'm/custom-commands'),
+    channels: guildTextChannels(req.guild),
+    roles: assignableRoles(req.guild),
+    guildId: req.guild.id,
+    ccPlaceholders: CC_PLACEHOLDERS,
+    isNew: !cmd,
+    cmd: cmd || {
+      id: '',
+      name: '',
+      description: '',
+      actions: [{ type: 'reply', private: false, messages: [{ content: '', embed: null }] }],
+      allowedRoles: [],
+      allowedChannels: [],
+      cooldownSeconds: 0,
+    },
+  });
+}
+
+router.get('/:guildId/m/custom-commands/cmd/new', (req, res) => renderCcBuilder(req, res, null));
+
+router.get('/:guildId/m/custom-commands/cmd/:id', (req, res) => {
+  const cmd = ccCommands(req.guild.id).find((c) => c.id === req.params.id);
+  if (!cmd) return res.redirect(`/guilds/${req.guild.id}/m/custom-commands`);
+  renderCcBuilder(req, res, cmd);
+});
+
+router.post(
+  '/:guildId/m/custom-commands/cmd',
+  asyncHandler(async (req, res) => {
+    const back = `/guilds/${req.guild.id}/m/custom-commands`;
+
+    let actions = [];
+    try {
+      actions = JSON.parse(req.body.actions || '[]');
+    } catch {
+      return res.redirect(`${back}?msg=cc-bad`);
+    }
+    if (!Array.isArray(actions)) actions = [];
+
+    const name = String(req.body.name ?? '').trim().toLowerCase();
+    if (!/^[a-z0-9_-]{1,32}$/.test(name)) return res.redirect(`${back}?msg=cc-name`);
+    if (runtime.client?.commands?.has(name)) return res.redirect(`${back}?msg=cc-reserved`);
+
+    const prev = normaliseCustomCommands(getGuildModule(req.guild.id, 'custom-commands').config);
+    const id = /^\d+$/.test(req.body.id ?? '') ? String(req.body.id) : String(Date.now());
+    const existing = prev.commands.find((c) => c.id === id);
+    if (prev.commands.some((c) => c.name === name && c.id !== id)) {
+      return res.redirect(`${back}?msg=cc-dupe`);
+    }
+
+    const merged = {
+      id,
+      name,
+      description: req.body.description ?? '',
+      actions,
+      allowedRoles: [].concat(req.body.allowedRoles ?? []),
+      allowedChannels: [].concat(req.body.allowedChannels ?? []),
+      cooldownSeconds: req.body.cooldownSeconds ?? 0,
+    };
+    const nextList = existing
+      ? prev.commands.map((c) => (c.id === id ? merged : c))
+      : [...prev.commands, merged];
+    const config = normaliseCustomCommands({ commands: nextList });
+
+    if (!config.commands.some((c) => c.id === id)) {
+      // The command was dropped by normalisation — every action was empty.
+      return res.redirect(`${back}?msg=cc-empty`);
+    }
+
+    setGuildModule(req.guild.id, 'custom-commands', { enabled: true, config });
+    recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:custom-commands',
+      detail: `${existing ? 'updated' : 'created'} /${name}`,
+    });
+    await syncGuildCustomCommands(req.guild).catch((err) =>
+      console.error('[custom-commands] sync after save failed:', err.message)
+    );
+    res.redirect(`${back}?msg=saved`);
+  })
+);
+
+router.post(
+  '/:guildId/m/custom-commands/cmd/:id/delete',
+  asyncHandler(async (req, res) => {
+    const prev = normaliseCustomCommands(getGuildModule(req.guild.id, 'custom-commands').config);
+    const config = normaliseCustomCommands({
+      commands: prev.commands.filter((c) => c.id !== req.params.id),
+    });
+    setGuildModule(req.guild.id, 'custom-commands', { config });
+    recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:custom-commands',
+      detail: 'deleted a command',
+    });
+    await syncGuildCustomCommands(req.guild).catch((err) =>
+      console.error('[custom-commands] sync after delete failed:', err.message)
+    );
+    res.redirect(`/guilds/${req.guild.id}/m/custom-commands?msg=saved`);
+  })
+);
+
 // --- Actions -------------------------------------------------------------
 
 // Lift a ban from the moderation panel.
@@ -1112,7 +1226,29 @@ router.post('/:guildId/modules/:moduleId', (req, res) => {
       console.error('[custom-commands] sync after toggle failed:', err.message)
     );
   }
+  if (mod.id === 'invite-tracker' && enabled) {
+    primeInviteCache(req.guild).catch((err) =>
+      console.error('[invite-tracker] cache prime after enable failed:', err.message)
+    );
+  }
   res.json({ enabled });
+});
+
+// Invite tracker: nudge a member's bonus invites from the dashboard.
+router.post('/:guildId/m/invite-tracker/bonus', (req, res) => {
+  const back = `/guilds/${req.guild.id}/m/invite-tracker`;
+  const userId = parseUserId(req.body.userId);
+  const bonus = Number(req.body.bonus);
+  if (!userId || !Number.isInteger(bonus) || bonus < -100000 || bonus > 100000) {
+    return res.redirect(`${back}?msg=inv-bad`);
+  }
+  setBonus(req.guild.id, userId, bonus);
+  recordAudit(req.guild.id, {
+    actor: moderatorDisplayName(req),
+    action: 'module:invite-tracker',
+    detail: `${userId} bonus → ${bonus}`,
+  });
+  res.redirect(`${back}?msg=saved`);
 });
 
 // Download the guild's configuration as JSON (backup / "export my setup").

@@ -1,6 +1,7 @@
 // Fires once when the Discord client has finished connecting.
 import { Events } from 'discord.js';
 import { syncAllGuildCustomCommands } from '../lib/customCommandSync.js';
+import { primeAllInviteCaches } from '../../modules/inviteTracker.js';
 import { applyPresence } from '../lib/presence.js';
 
 export const name = Events.ClientReady;
@@ -19,5 +20,11 @@ export function execute(client) {
   // built-in command registration in startBot()).
   syncAllGuildCustomCommands(client).catch((err) =>
     console.error('[custom-commands] startup slash sync failed:', err.message)
+  );
+
+  // Cache each guild's current invite uses so the first join after a restart is
+  // still attributable.
+  primeAllInviteCaches(client).catch((err) =>
+    console.error('[invite-tracker] startup invite cache prime failed:', err.message)
   );
 }

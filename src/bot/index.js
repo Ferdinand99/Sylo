@@ -17,6 +17,7 @@ function buildIntents() {
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMessageReactions, // reaction roles
     GatewayIntentBits.GuildVoiceStates, // temporary "join to create" voice channels
+    GatewayIntentBits.GuildInvites, // invite tracker
     GatewayIntentBits.DirectMessages, // ticket / modmail
   ];
   if (config.intentGuildMembers) intents.push(GatewayIntentBits.GuildMembers);

@@ -305,6 +305,40 @@ const MIGRATIONS = [
       CREATE INDEX idx_starboard_guild ON starboard_posts (guild_id, board_id);
     `);
   },
+
+  // Invite tracker: per-member tallies and a record of who invited each joiner.
+  (database) => {
+    database.exec(`
+      CREATE TABLE invite_counts (
+        guild_id  TEXT NOT NULL,
+        user_id   TEXT NOT NULL,
+        regular   INTEGER NOT NULL DEFAULT 0,
+        leaves    INTEGER NOT NULL DEFAULT 0,
+        bonus     INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE TABLE invite_joins (
+        guild_id   TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        inviter_id TEXT,
+        code       TEXT,
+        source     TEXT NOT NULL DEFAULT 'unknown',
+        joined_at  INTEGER NOT NULL,
+        counted    INTEGER NOT NULL DEFAULT 1,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      -- The personal invite Sylo minted for a member via /invites, so joins on
+      -- that (bot-created) code are still credited to that member.
+      CREATE TABLE invite_personal (
+        guild_id TEXT NOT NULL,
+        user_id  TEXT NOT NULL,
+        code     TEXT NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE INDEX idx_invite_counts_guild ON invite_counts (guild_id);
+      CREATE INDEX idx_invite_personal_code ON invite_personal (guild_id, code);
+    `);
+  },
 ];
 
 /**
