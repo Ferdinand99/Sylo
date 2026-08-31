@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.1](https://github.com/Ferdinand99/Sylo/compare/v2.9.0...v2.9.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* clearer permission feedback in /invites ([5e5e248](https://github.com/Ferdinand99/Sylo/commit/5e5e2482a220ff58bd3f7678946a60c2beeaa9c6))
+
 ## [2.9.0](https://github.com/Ferdinand99/Sylo/compare/v2.8.1...v2.9.0) (2026-08-31)
 
 
