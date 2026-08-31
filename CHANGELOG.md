@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.11.0](https://github.com/Ferdinand99/Sylo/compare/v2.10.0...v2.11.0) (2026-08-31)
+
+
+### Features
+
+* add Twitch and YouTube alert modules ([af67f5b](https://github.com/Ferdinand99/Sylo/commit/af67f5be6b18c82fc3b3788da2f532ab2596625a))
+* add Twitch and YouTube alert modules ([f8b4035](https://github.com/Ferdinand99/Sylo/commit/f8b4035aa0b8fb04f522b08c4e9680f308c97368))
+* add Twitch and YouTube alert modules ([8591faf](https://github.com/Ferdinand99/Sylo/commit/8591faf4c14ef062fdaa21323db0a0614596c8c8))
+* rebuild Temporary voice channels as MEE6-style hubs with /voice-* commands ([5d64607](https://github.com/Ferdinand99/Sylo/commit/5d64607b15f59bb880b7108be322d52cccf41791))
+* rework Scheduled messages into MEE6-style Reminders ([a93ff51](https://github.com/Ferdinand99/Sylo/commit/a93ff51430c45ff226a019231b2bc1f0cf9b35c9))
+
 ## [2.10.0](https://github.com/Ferdinand99/Sylo/compare/v2.9.2...v2.10.0) (2026-08-31)
 
 
