@@ -95,7 +95,9 @@ on('invite-tracker', 'guildMemberAdd', async (member, rawConfig, guildId) => {
 
   let inviterId = null;
   let code = null;
-  let source = 'unknown';
+  // 'no-access' = couldn't read this guild's invites at all (missing Manage
+  // Server); 'unknown' = read them fine but nothing matched.
+  let source = after ? 'unknown' : 'no-access';
 
   if (before && after) {
     for (const [c, data] of after.codes) {
@@ -138,6 +140,8 @@ on('invite-tracker', 'guildMemberAdd', async (member, rawConfig, guildId) => {
       tail = 'joined through the server’s vanity URL';
     } else if (source === 'bot') {
       tail = 'was added by a bot';
+    } else if (source === 'no-access') {
+      tail = "I can't track invites here without the **Manage Server** permission";
     } else {
       tail = 'I could not tell who invited them';
     }

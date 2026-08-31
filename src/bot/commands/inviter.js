@@ -29,6 +29,8 @@ export async function execute(interaction) {
     msg = `**${target.tag}** joined through the server’s vanity URL.`;
   } else if (join.source === 'bot') {
     msg = `**${target.tag}** was added by a bot / OAuth2.`;
+  } else if (join.source === 'no-access') {
+    msg = `I couldn't read this server's invites when **${target.tag}** joined (missing the Manage Server permission).`;
   } else {
     msg = `I could not determine who invited **${target.tag}**.`;
   }
