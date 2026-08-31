@@ -359,6 +359,11 @@ const MIGRATIONS = [
       CREATE INDEX idx_polls_ends ON polls (ends_at);
     `);
   },
+
+  // Embed messages: give each saved composition a name.
+  (database) => {
+    database.exec("ALTER TABLE composed_messages ADD COLUMN name TEXT NOT NULL DEFAULT ''");
+  },
 ];
 
 /**

@@ -1,0 +1,57 @@
+<%- include('partials/header', { title: `Sylo — ${isNew ? 'New' : 'Edit'} embed message` }) %>
+
+<p class="muted"><a href="/guilds/<%= guildId %>/messages">&larr; Embed messages</a></p>
+
+<div class="rr-builder-head">
+  <input type="text" form="mb-form" name="name" class="mb-name" maxlength="100"
+         value="<%= rec.name || '' %>" placeholder="Untitled embed" />
+  <div class="rr-actions">
+    <a class="btn" href="/guilds/<%= guildId %>/messages">Discard</a>
+    <button type="submit" form="mb-form" name="action" value="save" class="btn">Save draft</button>
+    <button type="submit" form="mb-form" name="action" value="publish" class="btn btn-primary">
+      <%= rec.message_id ? 'Update published' : 'Publish' %>
+    </button>
+  </div>
+</div>
+
+<% if (typeof msg !== 'undefined' && msg) { %>
+  <div class="banner <%= (['saved','sent','updated'].indexOf(msg) >= 0) ? 'ok' : (msg === 'unpublished' ? 'info' : 'bad') %>">
+    <%= ({ saved:'Draft saved.', sent:'Published to the channel.', updated:'Published message updated.', unpublished:'Unpublished — draft kept.', bad:'Could not read the editor.', nochannel:'Pick a channel before publishing.' })[msg] || (function(){ try { return decodeURIComponent(msg); } catch(e){ return msg; } })() %>
+  </div>
+<% } %>
+
+<form method="POST" action="/guilds/<%= guildId %>/messages/<%= isNew ? 'new' : rec.id %>" id="mb-form" class="stack" style="max-width:680px">
+  <input type="hidden" name="spec" id="mb-spec" />
+
+  <section class="card stack">
+    <label class="small">Channel</label>
+    <select name="channelId" style="max-width:420px">
+      <option value="">— select a channel —</option>
+      <% channels.forEach(function (c) { %>
+        <option value="<%= c.id %>" <%= c.id === rec.channel_id ? 'selected' : '' %>>#<%= c.name %></option>
+      <% }) %>
+    </select>
+    <% if (rec.message_id) { %><p class="muted small">Published — “Update published” edits the posted message; changing the channel posts a fresh one.</p><% } %>
+  </section>
+
+  <section class="card">
+    <h2 style="margin:0 0 6px">Message</h2>
+    <label class="small">Text above the embeds <span class="muted">— optional</span></label>
+    <textarea id="mb-content" rows="2" placeholder="Write your message here…"><%= rec.spec && rec.spec.content ? rec.spec.content : '' %></textarea>
+    <div id="mb-stage" class="wc-stage" style="margin-top:10px"></div>
+    <button type="button" id="mb-add" class="secondary" style="margin-top:10px">＋ Add embed</button>
+  </section>
+
+  <section class="card">
+    <h2 style="margin:0 0 6px">Link buttons <span class="muted small">— optional, up to 5</span></h2>
+    <div id="mb-links" class="stack"></div>
+    <button type="button" id="mb-addlink" class="secondary">＋ Add link button</button>
+  </section>
+</form>
+
+<script>
+  window.MB = <%- JSON.stringify(rec.spec || {}).replace(/</g, '\\u003c') %>;
+</script>
+<script src="/msg-builder.js"></script>
+
+<%- include('partials/footer') %>

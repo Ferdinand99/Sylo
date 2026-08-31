@@ -50,7 +50,7 @@ const CATEGORIES = [
     key: 'utilities',
     title: 'Utilities',
     items: [
-      { page: 'messages', emoji: '✉️', label: 'Message Creator' },
+      { page: 'messages', emoji: '🖼️', label: 'Embed messages' },
       { module: 'counting' },
       { module: 'polls' },
       { module: 'autoresponder' },

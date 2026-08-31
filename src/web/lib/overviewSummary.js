@@ -356,14 +356,14 @@ function messagesCard(guild) {
   return {
     kind: 'link',
     id: 'messages',
-    name: 'Message Creator',
-    icon: '✉️',
-    description: 'Compose and send messages or embeds as the bot.',
+    name: 'Embed messages',
+    icon: '🖼️',
+    description: 'Build rich embed messages and publish them to a channel as the bot.',
     hasToggle: false,
     enabled: null,
     missingIntents: [],
     status: 'link',
     href: `/guilds/${guild.id}/messages`,
-    lines: [n ? on('Composed messages', String(n)) : neutral('Composed messages', 'none')],
+    lines: [n ? on('Saved embeds', String(n)) : neutral('Saved embeds', 'none')],
   };
 }

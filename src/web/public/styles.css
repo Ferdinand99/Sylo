@@ -736,6 +736,15 @@ label.checkline input { width: auto; }
 }
 .poll-vars button:hover { border-color: var(--accent); }
 
+/* Embed-message builder */
+.mb-name {
+  font-size: 22px; font-weight: 800; letter-spacing: -0.01em; color: var(--text);
+  background: transparent; border: 0; border-bottom: 1px dashed var(--border-strong);
+  padding: 2px 2px 6px; min-width: 240px; max-width: 420px;
+}
+.mb-name:focus { outline: none; border-bottom-color: var(--accent); }
+.mb-link { display: grid; grid-template-columns: 1fr 70px 2fr auto; gap: 6px; align-items: center; }
+
 /* Reaction-role builder */
 .rr-builder-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .rr-actions { display: flex; gap: 10px; }
