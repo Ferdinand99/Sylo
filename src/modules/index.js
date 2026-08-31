@@ -19,4 +19,6 @@ import './tempVoice.js';
 import './starboard.js';
 import './inviteTracker.js';
 import './polls.js';
+import './twitchAlerts.js';
+import './youtubeAlerts.js';
 // moderation.js has no event handlers (called from the warn flow) — not imported here.

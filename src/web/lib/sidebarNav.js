@@ -60,6 +60,14 @@ const CATEGORIES = [
       { module: 'free-games' },
     ],
   },
+  {
+    key: 'social',
+    title: 'Social alerts',
+    items: [
+      { module: 'twitch-alerts', label: 'Twitch alerts', svg: 'twitch' },
+      { module: 'youtube-alerts', label: 'YouTube alerts', svg: 'youtube' },
+    ],
+  },
 ];
 
 /**
@@ -93,7 +101,8 @@ export function buildSidebar(req, gid = null) {
       return {
         id: it.module,
         label: it.label || def.name,
-        emoji: def.icon,
+        emoji: it.svg ? undefined : def.icon,
+        icon: it.svg || undefined,
         href,
         dot: enabled.get(it.module) ?? def.defaultEnabled ? 'on' : 'off',
         active: path === href,

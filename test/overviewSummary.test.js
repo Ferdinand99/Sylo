@@ -16,13 +16,13 @@ function stubGuild(id) {
   };
 }
 
-test('buildOverview returns health + four groups covering every module', () => {
+test('buildOverview returns health + grouped cards covering every module', () => {
   setGuildModule(G, 'automod', { enabled: true, config: { rules: { invites: { enabled: true } } } });
 
   const ov = buildOverview(stubGuild(G));
 
   assert.ok(ov.health.perms.missing.includes('Ban Members'), 'missing perms detected');
-  assert.equal(ov.groups.length, 4);
+  assert.ok(ov.groups.length >= 4);
 
   const ids = ov.groups.flatMap((g) => g.cards.map((c) => c.id));
   for (const m of ['moderation', 'automod', 'logging', 'welcome', 'roles', 'counting', 'leveling', 'sticky', 'tickets', 'custom-commands', 'scheduled-messages']) {

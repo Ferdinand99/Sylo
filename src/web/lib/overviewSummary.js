@@ -36,6 +36,7 @@ const LAYOUT = [
   { title: 'Moderation & filtering', ids: ['automod', 'verification', 'appeals', 'logging'] },
   { title: 'Engagement', ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'starboard', 'sticky'] },
   { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'invite-tracker', 'polls', 'autoresponder', 'afk', 'server-stats', 'temp-voice', 'free-games'] },
+  { title: 'Social alerts', ids: ['twitch-alerts', 'youtube-alerts'] },
 ];
 
 const line = (label, value, state) => ({ label, value, state });
@@ -221,6 +222,21 @@ function moduleLines(id, guild, cfg) {
       return [
         neutral('Inviters ranked', String(inviterCount(guild.id))),
         log ? on('Join log', `#${log}`) : off('Join log', 'off'),
+      ];
+    }
+    case 'twitch-alerts': {
+      const alerts = Array.isArray(cfg.alerts) ? cfg.alerts.filter((a) => a.login && a.channelId) : [];
+      return [
+        alerts.length ? on('Streamers', String(alerts.length)) : off('Streamers', 'none'),
+        config.twitchEnabled ? neutral('API', 'connected') : off('API', 'TWITCH_CLIENT_ID/SECRET not set'),
+      ];
+    }
+    case 'youtube-alerts': {
+      const alerts = Array.isArray(cfg.alerts) ? cfg.alerts.filter((a) => a.ytChannelId && a.discordChannelId) : [];
+      const live = alerts.filter((a) => a.onLive).length;
+      return [
+        alerts.length ? on('Channels', String(alerts.length)) : off('Channels', 'none'),
+        alerts.length ? neutral('Live alerts', live ? `${live} of ${alerts.length}` : 'off') : neutral('Live alerts', 'off'),
       ];
     }
     case 'polls': {

@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/Ferdinand99/Sylo/issues</Support>
   <Project>https://github.com/Ferdinand99/Sylo</Project>
-  <Overview>Sylo is a multi-function Discord bot with a web dashboard. It has a per-guild module system (22 modules) - moderation with warning thresholds, server logging, tickets/modmail answered from the dashboard, reaction roles &amp; autoroles, verification (Verify button or Cloudflare Turnstile captcha), welcome/leave messages, a Welcome Channel builder, sticky messages, auto-moderation (invite/link/flood/mention/caps/word filters), a counting mini-game, action-based custom slash commands, an autoresponder, scheduled messages, leveling with a public leaderboard, AFK, server statistics (live-count voice channels), a free games notifier (Epic Games Store, plus more stores with an IsThereAnyDeal key), ban appeals (banned members get a DM'd link to an appeal form; staff accept/deny from the dashboard), MEE6-style temporary voice channels ("join to create" hubs plus /voice-* control commands), a starboard (re-posts messages that get enough of a reaction into a highlights channel), an invite tracker (credits who invited each member and ranks inviters), reaction polls (/poll with a timer or vote cap), and a message/embed creator - plus per-server command management, an editable Discord presence/activity, and Battlefield-series player stats (BF1, BF3, BF4, BFV, Hardline, and best-effort BF2042/BF6) via the public gametools.network API. State is stored in a single SQLite file under /app/data and survives updates.
+  <Overview>Sylo is a multi-function Discord bot with a web dashboard. It has a per-guild module system (24 modules) - moderation with warning thresholds, server logging, tickets/modmail answered from the dashboard, reaction roles &amp; autoroles, verification (Verify button or Cloudflare Turnstile captcha), welcome/leave messages, a Welcome Channel builder, sticky messages, auto-moderation (invite/link/flood/mention/caps/word filters), a counting mini-game, action-based custom slash commands, an autoresponder, scheduled messages, leveling with a public leaderboard, AFK, server statistics (live-count voice channels), a free games notifier (Epic Games Store, plus more stores with an IsThereAnyDeal key), ban appeals (banned members get a DM'd link to an appeal form; staff accept/deny from the dashboard), MEE6-style temporary voice channels ("join to create" hubs plus /voice-* control commands), a starboard (re-posts messages that get enough of a reaction into a highlights channel), an invite tracker (credits who invited each member and ranks inviters), reaction polls (/poll with a timer or vote cap), Twitch and YouTube go-live / new-video alerts, and a message/embed creator - plus per-server command management, an editable Discord presence/activity, and Battlefield-series player stats (BF1, BF3, BF4, BFV, Hardline, and best-effort BF2042/BF6) via the public gametools.network API. State is stored in a single SQLite file under /app/data and survives updates.
 
 Setup: create a Discord application at https://discord.com/developers/applications, then set DISCORD_TOKEN (Bot tab) and DISCORD_CLIENT_ID (General Information). Invite the bot with the scopes "bot" and "applications.commands".
 
@@ -142,6 +142,24 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Target="ITAD_API_KEY"
     Default=""
     Description="Optional. IsThereAnyDeal API key (free at isthereanydeal.com/apps) — broadens the Free games module beyond the Epic Games Store to Steam, GOG, Fanatical, Humble and more. Without it, Free games is Epic-only."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"/>
+  <Config
+    Name="TWITCH_CLIENT_ID"
+    Target="TWITCH_CLIENT_ID"
+    Default=""
+    Description="Optional. Twitch application client id for the Twitch alerts module ('go live' notifications). Free app at dev.twitch.tv/console. Needs TWITCH_CLIENT_SECRET too; without both, the module's poll loop does nothing."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+  <Config
+    Name="TWITCH_CLIENT_SECRET"
+    Target="TWITCH_CLIENT_SECRET"
+    Default=""
+    Description="Optional. Twitch application client secret, paired with TWITCH_CLIENT_ID for the Twitch alerts module."
     Type="Variable"
     Display="advanced"
     Required="false"

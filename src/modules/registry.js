@@ -216,6 +216,24 @@ export const MODULES = [
     defaultEnabled: false,
     configurable: true,
   },
+  {
+    id: 'twitch-alerts',
+    name: 'Twitch alerts',
+    description: 'Announce in a channel when a Twitch streamer goes live.',
+    icon: '📺',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
+  {
+    id: 'youtube-alerts',
+    name: 'YouTube alerts',
+    description: 'Announce a channel\'s new uploads and when it goes live.',
+    icon: '▶️',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
 ];
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));

@@ -41,6 +41,13 @@ import { deleteBoardEntries } from '../../db/starboard.js';
 import { normaliseInviteTrackerConfig, primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { topInviters, inviterCount, setBonus } from '../../db/inviteTracker.js';
 import { normalisePollsConfig } from '../../modules/polls.js';
+import { normaliseTwitchConfig, DEFAULT_MESSAGE as TWITCH_DEFAULT_MESSAGE } from '../../modules/twitchAlerts.js';
+import {
+  normaliseYoutubeConfig,
+  resolveYtChannel,
+  DEFAULT_VIDEO_MESSAGE as YT_VIDEO_MSG,
+  DEFAULT_LIVE_MESSAGE as YT_LIVE_MSG,
+} from '../../modules/youtubeAlerts.js';
 import {
   WC_PRESETS,
   normaliseWelcomeChannelConfig,
@@ -80,7 +87,7 @@ const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
   'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder', 'verification',
   'afk', 'server-stats', 'free-games', 'appeals', 'temp-voice', 'welcome-channel', 'starboard',
-  'invite-tracker', 'polls',
+  'invite-tracker', 'polls', 'twitch-alerts', 'youtube-alerts',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -443,7 +450,7 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
-    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification', 'free-games', 'welcome', 'starboard', 'polls'].includes(mod.id)
+    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification', 'free-games', 'welcome', 'starboard', 'polls', 'twitch-alerts', 'youtube-alerts'].includes(mod.id)
       ? assignableRoles(req.guild)
       : [],
     welcomeAutoroles: mod.id === 'welcome' ? getGuildModule(req.guild.id, 'roles').config.autoroles ?? [] : [],
@@ -455,6 +462,10 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     automodActions: AUTOMOD_ACTIONS,
     verifyModes: VERIFY_MODES,
     turnstileEnabled: appConfig.turnstileEnabled,
+    twitchEnabled: appConfig.twitchEnabled,
+    twitchDefaultMessage: TWITCH_DEFAULT_MESSAGE,
+    ytVideoMessage: YT_VIDEO_MSG,
+    ytLiveMessage: YT_LIVE_MSG,
     dashboardUrlSet: Boolean(appConfig.dashboardUrl),
     voiceChannels: ['server-stats', 'temp-voice'].includes(mod.id) ? guildVoiceChannels(req.guild) : [],
     categories: mod.id === 'temp-voice' ? guildCategories(req.guild) : [],
@@ -718,6 +729,50 @@ router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
     config = normaliseInviteTrackerConfig({
       joinLogChannelId: req.body.joinLogChannelId,
       graceHours: req.body.graceHours,
+    });
+  } else if (mod.id === 'youtube-alerts') {
+    const inputs = [].concat(req.body.yt_input ?? []);
+    const prevId = [].concat(req.body.yt_resolvedId ?? []);
+    const prevName = [].concat(req.body.yt_resolvedName ?? []);
+    const chans = [].concat(req.body.yt_channel ?? []);
+    const rolez = [].concat(req.body.yt_role ?? []);
+    const notify = [].concat(req.body.yt_notify ?? []); // 'both' | 'video' | 'live'
+    const vMsg = [].concat(req.body.yt_videoMessage ?? []);
+    const lMsg = [].concat(req.body.yt_liveMessage ?? []);
+
+    const alerts = [];
+    for (let i = 0; i < inputs.length; i += 1) {
+      const input = String(inputs[i] ?? '').trim();
+      if (!input && !prevId[i]) continue;
+      let resolved = /^UC[\w-]{20,}$/.test(prevId[i] ?? '') && !input ? { channelId: prevId[i], name: prevName[i] || '' } : null;
+      if (!resolved) resolved = (await resolveYtChannel(input || prevId[i])) || null;
+      if (!resolved && /^UC[\w-]{20,}$/.test(prevId[i] ?? '')) resolved = { channelId: prevId[i], name: prevName[i] || '' };
+      if (!resolved) continue;
+      const n = notify[i] || 'both';
+      alerts.push({
+        ytChannelId: resolved.channelId,
+        name: resolved.name || prevName[i] || '',
+        discordChannelId: chans[i] ?? '',
+        roleId: rolez[i] ?? '',
+        onVideo: n === 'both' || n === 'video',
+        onLive: n === 'both' || n === 'live',
+        videoMessage: vMsg[i] ?? '',
+        liveMessage: lMsg[i] ?? '',
+      });
+    }
+    config = normaliseYoutubeConfig({ alerts });
+  } else if (mod.id === 'twitch-alerts') {
+    const logins = [].concat(req.body.tw_login ?? []);
+    const chans = [].concat(req.body.tw_channel ?? []);
+    const rolez = [].concat(req.body.tw_role ?? []);
+    const msgs = [].concat(req.body.tw_message ?? []);
+    config = normaliseTwitchConfig({
+      alerts: logins.map((login, i) => ({
+        login,
+        channelId: chans[i] ?? '',
+        roleId: rolez[i] ?? '',
+        message: msgs[i] ?? '',
+      })),
     });
   } else if (mod.id === 'polls') {
     const msg = (raw) => {

@@ -1,17 +1,25 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Twenty-two per-guild modules
+for self-hosting on an **Unraid server via Docker**. Twenty-four per-guild modules
 (moderation, logging, tickets, reaction roles, verification, welcome, welcome
 channel, sticky messages, auto-moderation, counting, custom commands,
 autoresponder, scheduled messages, leveling, AFK, server statistics, free games,
-ban appeals, temporary voice channels, starboard, invite tracker, polls), Discord
-OAuth2 login, a public leveling leaderboard, and
+ban appeals, temporary voice channels, starboard, invite tracker, polls, Twitch
+alerts, YouTube alerts), Discord OAuth2 login, a public leveling leaderboard, and
 **Battlefield-series** player stats via the public
 [gametools.network](https://gametools.network) API.
 
 ## What's new since 2.0
 
+- **YouTube alerts** — announce a channel's new uploads and when it goes live.
+  Add channels by URL or `@handle` (resolved on save); new videos come from
+  YouTube's public feed and live status from a light page check — no API key
+  needed. Per-channel Discord channel, ping role and custom messages.
+- **Twitch alerts** — announce in a channel when a streamer goes live. Add
+  streamers on the dashboard (channel + optional ping role + custom message with
+  `{name}`/`{title}`/`{game}`/`{url}` placeholders); Sylo polls the Twitch API
+  ~once a minute. Needs a free `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET`.
 - **Polls** — members run `/poll question:… choices:A | B | C` (optional
   `duration`, `multiple`, `max_votes`); people vote by reacting with the option
   letter. Auto-closes on its timer or vote cap, posts a results embed with a
@@ -46,7 +54,7 @@ OAuth2 login, a public leveling leaderboard, and
   decision shown on the link, with a single-use rejoin invite on accept),
   Temporary voice channels (MEE6-style hubs + 13 /voice-* control commands),
   and Welcome Channel (a builder for one pinned message in a read-only channel)
-  — all functional and configurable from the dashboard (22 in total)
+  — all functional and configurable from the dashboard (24 in total)
 - Editable Discord **presence / activity** from the dashboard (`/settings`)
 - 2.0 groundwork still current: action-based custom `/slash` commands,
   scheduled messages, full leveling with a public leaderboard, auto-moderation,
@@ -74,7 +82,7 @@ OAuth2 login, a public leveling leaderboard, and
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 22 feature groups, each toggled and configured from the
+- **Per-guild modules** — 24 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -112,6 +120,16 @@ OAuth2 login, a public leveling leaderboard, and
     `multiple` and `max_votes`; members vote by reacting with the option letter.
     Auto-closes on the timer or vote cap and posts a bar-chart results embed;
     `/poll-end` closes one early. Optional allow/deny role list for voters
+  - **Twitch alerts** — post a "go live" notification to a channel when a Twitch
+    streamer starts streaming. Per-streamer channel, optional ping role and a
+    custom message (`{name}` `{title}` `{game}` `{url}` `{viewers}`). Polls the
+    Twitch Helix API ~once a minute; needs `TWITCH_CLIENT_ID` /
+    `TWITCH_CLIENT_SECRET` (free app at dev.twitch.tv)
+  - **YouTube alerts** — announce a channel's new uploads and/or "went live" in a
+    Discord channel. Add channels by URL or `@handle` (Sylo resolves them on
+    save); new videos read from YouTube's public Atom feed, live status from a
+    light `/live` page check — no API key. Per-channel ping role and custom
+    messages (`{name}` `{title}` `{url}`); polled every ~3 minutes
   - **Autoresponder** — auto-reply when a message matches a trigger (contains /
     exact / starts-with / whole-word), optionally deleting the trigger
   - **Scheduled messages** — recurring posts to a channel, every minute to every

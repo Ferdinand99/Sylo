@@ -23,6 +23,9 @@ const GUILD_TABLES = [
   'invite_joins',
   'invite_personal',
   'polls',
+  'twitch_live',
+  'youtube_video_seen',
+  'youtube_live',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE guild_id = ?`));

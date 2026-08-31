@@ -80,6 +80,8 @@ const discordClientSecret = optionalOrNull('DISCORD_CLIENT_SECRET');
 const turnstileSiteKey = optionalOrNull('TURNSTILE_SITE_KEY');
 const turnstileSecretKey = optionalOrNull('TURNSTILE_SECRET_KEY');
 const itadApiKey = optionalOrNull('ITAD_API_KEY');
+const twitchClientId = optionalOrNull('TWITCH_CLIENT_ID');
+const twitchClientSecret = optionalOrNull('TWITCH_CLIENT_SECRET');
 // Signs session cookies and short-lived tokens (e.g. verification links), so it
 // must always exist. When unset we generate one; that only matters for
 // persistence when the dashboard login is enabled.
@@ -126,6 +128,12 @@ export const config = Object.freeze({
   // key from isthereanydeal.com/apps. When unset, Free games is Epic-only.
   itadApiKey,
   itadEnabled: Boolean(itadApiKey),
+
+  // Twitch API app credentials — power the Twitch alerts module. Free app at
+  // dev.twitch.tv/console. When unset, the module's poll loop no-ops.
+  twitchClientId,
+  twitchClientSecret,
+  twitchEnabled: Boolean(twitchClientId && twitchClientSecret),
 
   // Game stats
   gametoolsApiBase: optional('GAMETOOLS_API_BASE', 'https://api.gametools.network').replace(/\/+$/, ''),

@@ -390,6 +390,40 @@ const MIGRATIONS = [
       ALTER TABLE temp_voice_channels ADD COLUMN empty_since INTEGER;
     `);
   },
+
+  // Twitch alerts: which stream we've already announced per (guild, login).
+  (database) => {
+    database.exec(`
+      CREATE TABLE twitch_live (
+        guild_id  TEXT NOT NULL,
+        login     TEXT NOT NULL,
+        stream_id TEXT NOT NULL,
+        posted_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, login)
+      );
+    `);
+  },
+
+  // YouTube alerts: announced videos, and current-live state per (guild, channel).
+  (database) => {
+    database.exec(`
+      CREATE TABLE youtube_video_seen (
+        guild_id   TEXT NOT NULL,
+        yt_channel TEXT NOT NULL,
+        video_id   TEXT NOT NULL,
+        seen_at    INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, yt_channel, video_id)
+      );
+      CREATE INDEX idx_yt_seen_chan ON youtube_video_seen (guild_id, yt_channel);
+      CREATE TABLE youtube_live (
+        guild_id   TEXT NOT NULL,
+        yt_channel TEXT NOT NULL,
+        video_id   TEXT NOT NULL,
+        posted_at  INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, yt_channel)
+      );
+    `);
+  },
 ];
 
 /**

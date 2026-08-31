@@ -1,0 +1,77 @@
+<% var cfg = moduleConfig || {}; var alerts = Array.isArray(cfg.alerts) ? cfg.alerts : []; %>
+<% var tEnabled = typeof twitchEnabled !== 'undefined' ? twitchEnabled : false; %>
+<% var defMsg = typeof twitchDefaultMessage !== 'undefined' ? twitchDefaultMessage : '🔴 **{name}** is live on Twitch!'; %>
+
+<p class="muted small">
+  Sylo checks each streamer about once a minute and posts to the chosen channel when they go live.
+  Message placeholders: <code>{name}</code> <code>{title}</code> <code>{game}</code> <code>{url}</code> <code>{viewers}</code>.
+</p>
+
+<% if (!tEnabled) { %>
+  <div class="banner bad">
+    Set <code>TWITCH_CLIENT_ID</code> and <code>TWITCH_CLIENT_SECRET</code> (a free app at
+    <a href="https://dev.twitch.tv/console" target="_blank" rel="noopener">dev.twitch.tv/console</a>) for alerts to actually fire.
+    You can still configure them here.
+  </div>
+<% } %>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/twitch-alerts/config" class="stack" style="max-width:680px">
+  <div id="tw-rows">
+    <% (alerts.length ? alerts : [{ login: '', channelId: '', roleId: '', message: '' }]).forEach(function (a) { %>
+      <div class="tw-row card stack">
+        <div class="star-age">
+          <div class="stack" style="flex:1">
+            <label class="small">Twitch username</label>
+            <input type="text" name="tw_login" value="<%= a.login || '' %>" placeholder="ninja" maxlength="25" />
+          </div>
+          <div class="stack" style="flex:1">
+            <label class="small">Announce in</label>
+            <select name="tw_channel">
+              <option value="">— select a channel —</option>
+              <% channels.forEach(function (c) { %>
+                <option value="<%= c.id %>" <%= c.id === a.channelId ? 'selected' : '' %>>#<%= c.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="stack" style="flex:1">
+            <label class="small">Ping role <span class="muted">— optional</span></label>
+            <select name="tw_role">
+              <option value="">— none —</option>
+              <% roles.forEach(function (r) { %>
+                <option value="<%= r.id %>" <%= r.id === a.roleId ? 'selected' : '' %>><%= r.name %></option>
+              <% }) %>
+            </select>
+          </div>
+        </div>
+        <label class="small">Message</label>
+        <textarea name="tw_message" rows="2" maxlength="1500" placeholder="<%= defMsg %>"><%= a.message || '' %></textarea>
+        <div><button type="button" class="link-btn" onclick="this.closest('.tw-row').remove()">remove</button></div>
+      </div>
+    <% }) %>
+  </div>
+  <div><button type="button" class="secondary" id="tw-add">＋ Add streamer</button></div>
+  <div style="margin-top:10px"><button type="submit">Save</button></div>
+</form>
+
+<template id="tw-template">
+  <div class="tw-row card stack">
+    <div class="star-age">
+      <div class="stack" style="flex:1"><label class="small">Twitch username</label>
+        <input type="text" name="tw_login" placeholder="ninja" maxlength="25" /></div>
+      <div class="stack" style="flex:1"><label class="small">Announce in</label>
+        <select name="tw_channel"><option value="">— select a channel —</option>
+          <% channels.forEach(function (c) { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %></select></div>
+      <div class="stack" style="flex:1"><label class="small">Ping role</label>
+        <select name="tw_role"><option value="">— none —</option>
+          <% roles.forEach(function (r) { %><option value="<%= r.id %>"><%= r.name %></option><% }) %></select></div>
+    </div>
+    <label class="small">Message</label>
+    <textarea name="tw_message" rows="2" maxlength="1500" placeholder="<%= defMsg %>"></textarea>
+    <div><button type="button" class="link-btn" onclick="this.closest('.tw-row').remove()">remove</button></div>
+  </div>
+</template>
+<script>
+  document.getElementById('tw-add')?.addEventListener('click', function () {
+    document.getElementById('tw-rows').appendChild(document.getElementById('tw-template').content.cloneNode(true));
+  });
+</script>
