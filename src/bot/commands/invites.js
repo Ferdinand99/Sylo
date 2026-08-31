@@ -20,18 +20,19 @@ function pickInviteChannel(guild) {
     .sort((a, b) => a.rawPosition - b.rawPosition)[0] ?? null;
 }
 
+// -> { url } on success, or { error } describing what permission is missing.
 async function personalLink(guild, userId) {
   let all;
   try {
     all = await guild.invites.fetch();
   } catch {
-    return null;
+    return { error: 'I need the **Manage Server** permission to hand out invite links.' };
   }
   const existing = getPersonalCode(guild.id, userId);
-  if (existing && all.has(existing)) return `https://discord.gg/${existing}`;
+  if (existing && all.has(existing)) return { url: `https://discord.gg/${existing}` };
 
   const channel = pickInviteChannel(guild);
-  if (!channel) return null;
+  if (!channel) return { error: 'I need the **Create Invite** permission in at least one channel.' };
   try {
     const invite = await channel.createInvite({
       maxAge: 0,
@@ -40,9 +41,9 @@ async function personalLink(guild, userId) {
     });
     setPersonalCode(guild.id, userId, invite.code);
     await primeGuild(guild); // teach the cache about the new code
-    return invite.url;
+    return { url: invite.url };
   } catch {
-    return null;
+    return { error: 'I could not create an invite link — check my channel permissions.' };
   }
 }
 
@@ -67,7 +68,9 @@ export async function execute(interaction) {
       { name: 'Rank', value: `#${inviterRank(interaction.guildId, target.id)} of ${inviterCount(interaction.guildId)}`, inline: true },
       {
         name: 'Breakdown',
-        value: `${c.regular} joined · ${c.leaves} left · ${c.bonus >= 0 ? '+' : ''}${c.bonus} bonus`,
+        value:
+          `${c.regular} joined · ${c.leaves} left` +
+          (c.bonus ? ` · ${c.bonus > 0 ? '+' : ''}${c.bonus} bonus` : ''),
       }
     );
 
@@ -75,8 +78,8 @@ export async function execute(interaction) {
 
   if (isSelf) {
     const link = await personalLink(interaction.guild, target.id);
-    if (link) embed.addFields({ name: 'Your invite link', value: link });
-    else embed.setFooter({ text: 'I need the Create Invite permission to make you a link.' });
+    if (link.url) embed.addFields({ name: 'Your invite link', value: link.url });
+    else embed.addFields({ name: 'Your invite link', value: link.error });
   }
 
   await interaction.editReply({ embeds: [embed] });
