@@ -339,6 +339,26 @@ const MIGRATIONS = [
       CREATE INDEX idx_invite_personal_code ON invite_personal (guild_id, code);
     `);
   },
+
+  // Polls: one row per active poll message, ended polls are deleted.
+  (database) => {
+    database.exec(`
+      CREATE TABLE polls (
+        message_id  TEXT PRIMARY KEY,
+        guild_id    TEXT NOT NULL,
+        channel_id  TEXT NOT NULL,
+        question    TEXT NOT NULL,
+        options     TEXT NOT NULL,
+        multiple    INTEGER NOT NULL DEFAULT 0,
+        max_votes   INTEGER NOT NULL DEFAULT 0,
+        ends_at     INTEGER,
+        created_by  TEXT NOT NULL,
+        created_at  INTEGER NOT NULL
+      );
+      CREATE INDEX idx_polls_guild ON polls (guild_id);
+      CREATE INDEX idx_polls_ends ON polls (ends_at);
+    `);
+  },
 ];
 
 /**

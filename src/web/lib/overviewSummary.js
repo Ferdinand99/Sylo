@@ -14,6 +14,7 @@ import { getCounting } from '../../db/counting.js';
 import { listScheduled } from '../../db/scheduledMessages.js';
 import { countOpenAppeals } from '../../db/appeals.js';
 import { inviterCount } from '../../db/inviteTracker.js';
+import { guildPollCount } from '../../db/polls.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
@@ -34,7 +35,7 @@ const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
   { title: 'Moderation & filtering', ids: ['automod', 'verification', 'appeals', 'logging'] },
   { title: 'Engagement', ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'starboard', 'sticky'] },
-  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'invite-tracker', 'autoresponder', 'afk', 'server-stats', 'temp-voice', 'free-games'] },
+  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'invite-tracker', 'polls', 'autoresponder', 'afk', 'server-stats', 'temp-voice', 'free-games'] },
 ];
 
 const line = (label, value, state) => ({ label, value, state });
@@ -220,6 +221,14 @@ function moduleLines(id, guild, cfg) {
       return [
         neutral('Inviters ranked', String(inviterCount(guild.id))),
         log ? on('Join log', `#${log}`) : off('Join log', 'off'),
+      ];
+    }
+    case 'polls': {
+      const open = guildPollCount(guild.id);
+      const restricted = Array.isArray(cfg.voteRoles) && cfg.voteRoles.length;
+      return [
+        open ? on('Open polls', String(open)) : neutral('Open polls', '0'),
+        restricted ? on('Vote restriction', `${cfg.voteRoleMode === 'deny' ? 'deny' : 'allow'} ${cfg.voteRoles.length} role(s)`) : neutral('Vote restriction', 'everyone'),
       ];
     }
     case 'autoresponder': {

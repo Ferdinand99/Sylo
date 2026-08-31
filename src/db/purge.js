@@ -22,6 +22,7 @@ const GUILD_TABLES = [
   'invite_counts',
   'invite_joins',
   'invite_personal',
+  'polls',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE guild_id = ?`));

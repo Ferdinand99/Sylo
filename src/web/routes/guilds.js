@@ -40,6 +40,7 @@ import { normaliseStarboard, rescanBoard } from '../../modules/starboard.js';
 import { deleteBoardEntries } from '../../db/starboard.js';
 import { normaliseInviteTrackerConfig, primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { topInviters, inviterCount, setBonus } from '../../db/inviteTracker.js';
+import { normalisePollsConfig } from '../../modules/polls.js';
 import {
   WC_PRESETS,
   normaliseWelcomeChannelConfig,
@@ -77,7 +78,7 @@ const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
   'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder', 'verification',
   'afk', 'server-stats', 'free-games', 'appeals', 'temp-voice', 'welcome-channel', 'starboard',
-  'invite-tracker',
+  'invite-tracker', 'polls',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -440,7 +441,7 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
-    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification', 'free-games', 'welcome', 'starboard'].includes(mod.id)
+    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification', 'free-games', 'welcome', 'starboard', 'polls'].includes(mod.id)
       ? assignableRoles(req.guild)
       : [],
     welcomeAutoroles: mod.id === 'welcome' ? getGuildModule(req.guild.id, 'roles').config.autoroles ?? [] : [],
@@ -728,6 +729,21 @@ router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
     config = normaliseInviteTrackerConfig({
       joinLogChannelId: req.body.joinLogChannelId,
       graceHours: req.body.graceHours,
+    });
+  } else if (mod.id === 'polls') {
+    const msg = (raw) => {
+      try {
+        const o = JSON.parse(raw || '{}');
+        return o && typeof o === 'object' ? o : {};
+      } catch {
+        return {};
+      }
+    };
+    config = normalisePollsConfig({
+      voteRoleMode: req.body.voteRoleMode,
+      voteRoles: [].concat(req.body.voteRoles ?? []),
+      pollMessage: msg(req.body.pm_json),
+      resultsMessage: msg(req.body.rm_json),
     });
   } else if (mod.id === 'welcome-channel') {
     const prev = getGuildModule(req.guild.id, 'welcome-channel').config;

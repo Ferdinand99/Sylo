@@ -1,0 +1,74 @@
+<% var cfg = moduleConfig || {}; %>
+<% var mode = cfg.voteRoleMode === 'deny' ? 'deny' : 'allow'; %>
+<% var voteRoles = Array.isArray(cfg.voteRoles) ? cfg.voteRoles : []; %>
+<% var pm = cfg.pollMessage || {}; %>
+<% var rm = cfg.resultsMessage || {}; %>
+<% var LETTERS = ['🇦','🇧','🇨','🇩','🇪','🇫','🇬','🇭','🇮','🇯','🇰','🇱','🇲','🇳','🇴','🇵','🇶','🇷','🇸','🇹']; %>
+
+<p class="muted small">
+  Members create polls with <code>/poll</code> and vote by reacting with the letter of their choice.
+  A poll closes on its timer, when it hits its vote cap, or when someone runs <code>/poll-end</code>.
+</p>
+
+<section class="card">
+  <h3 style="margin:0 0 8px">Commands</h3>
+  <ul class="muted small" style="margin:0; padding-left:18px; line-height:1.7">
+    <li><code>/poll question:… choices:A | B | C</code> — plus optional <code>duration:</code> (e.g. <code>2h</code>),
+      <code>multiple:</code> (allow more than one vote) and <code>max_votes:</code>.</li>
+    <li><code>/poll-end [message]</code> — closes the latest poll in the channel (or a specific one) and posts results.
+      Creator or Manage Messages only.</li>
+  </ul>
+  <p class="small" style="margin:8px 0 0">Votes are cast with these reactions:
+    <span style="letter-spacing:2px"><% LETTERS.forEach(function (l) { %><%= l %><% }) %></span>
+  </p>
+</section>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/polls/config" id="polls-form" class="stack" style="max-width:600px">
+  <input type="hidden" name="pm_json" id="pm-json" />
+  <input type="hidden" name="rm_json" id="rm-json" />
+
+  <section class="card stack">
+    <h3 style="margin:0">Who can vote</h3>
+    <select name="voteRoleMode" style="max-width:320px">
+      <option value="allow" <%= mode !== 'deny' ? 'selected' : '' %>>Everyone except the roles below</option>
+      <option value="deny" <%= mode === 'deny' ? 'selected' : '' %>>Only members with a role below</option>
+    </select>
+    <%- include('../../partials/chip-picker', { field: 'voteRoles', kind: 'role', items: roles, selected: voteRoles }) %>
+    <p class="muted small">Leave empty to let everyone vote. Disallowed reactions are removed automatically.</p>
+  </section>
+
+  <section class="card">
+    <h3 style="margin:0 0 2px">Polls message</h3>
+    <p class="muted small">How a live poll looks. Click a field to edit it; Sylo fills the greyed-out body.</p>
+    <div id="pm-stage" class="wc-stage"></div>
+    <div class="poll-vars" data-for="pm">Insert:
+      <button type="button" data-var="{question}">question</button>
+      <button type="button" data-var="{choices}">choices</button>
+      <button type="button" data-var="{ends}">ends</button>
+      <button type="button" data-var="{mode}">mode</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3 style="margin:0 0 2px">Results message</h3>
+    <p class="muted small">Posted when a poll closes.</p>
+    <div id="rm-stage" class="wc-stage"></div>
+    <div class="poll-vars" data-for="rm">Insert:
+      <button type="button" data-var="{question}">question</button>
+      <button type="button" data-var="{results}">results</button>
+      <button type="button" data-var="{total}">total</button>
+      <button type="button" data-var="{winner}">winner</button>
+      <button type="button" data-var="{mode}">mode</button>
+    </div>
+  </section>
+
+  <div><button type="submit">Save</button></div>
+</form>
+
+<script>
+  window.POLLS = {
+    pm: <%- JSON.stringify(pm).replace(/</g, '\\u003c') %>,
+    rm: <%- JSON.stringify(rm).replace(/</g, '\\u003c') %>,
+  };
+</script>
+<script src="/polls.js"></script>

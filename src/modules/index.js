@@ -18,4 +18,5 @@ import './appeals.js';
 import './tempVoice.js';
 import './starboard.js';
 import './inviteTracker.js';
+import './polls.js';
 // moderation.js has no event handlers (called from the warn flow) — not imported here.

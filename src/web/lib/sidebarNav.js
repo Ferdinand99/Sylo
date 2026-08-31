@@ -52,6 +52,7 @@ const CATEGORIES = [
     items: [
       { page: 'messages', emoji: '✉️', label: 'Message Creator' },
       { module: 'counting' },
+      { module: 'polls' },
       { module: 'autoresponder' },
       { module: 'afk' },
       { module: 'server-stats' },

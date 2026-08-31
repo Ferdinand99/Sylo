@@ -207,6 +207,15 @@ export const MODULES = [
     defaultEnabled: false,
     configurable: true,
   },
+  {
+    id: 'polls',
+    name: 'Polls',
+    description: 'Members create reaction polls with /poll; they auto-close on a timer or vote cap.',
+    icon: '🗳️',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
 ];
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));

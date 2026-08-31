@@ -1,17 +1,22 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Twenty-one per-guild modules
+for self-hosting on an **Unraid server via Docker**. Twenty-two per-guild modules
 (moderation, logging, tickets, reaction roles, verification, welcome, welcome
 channel, sticky messages, auto-moderation, counting, custom commands,
 autoresponder, scheduled messages, leveling, AFK, server statistics, free games,
-ban appeals, temporary voice channels, starboard, invite tracker), Discord OAuth2
-login, a public leveling leaderboard, and
+ban appeals, temporary voice channels, starboard, invite tracker, polls), Discord
+OAuth2 login, a public leveling leaderboard, and
 **Battlefield-series** player stats via the public
 [gametools.network](https://gametools.network) API.
 
 ## What's new since 2.0
 
+- **Polls** — members run `/poll question:… choices:A | B | C` (optional
+  `duration`, `multiple`, `max_votes`); people vote by reacting with the option
+  letter. Auto-closes on its timer or vote cap, posts a results embed with a
+  bar chart, and `/poll-end` closes one early. Optional allow/deny role list for
+  who may vote — disallowed reactions are removed.
 - **Invite tracker** — credits the member whose invite link each new joiner used,
   keeps a per-member tally (joined / left / bonus), and ranks everyone.
   `/invites` (your count + a personal link), `/inviter`, `/invites-leaderboard`;
@@ -41,7 +46,7 @@ login, a public leveling leaderboard, and
   decision shown on the link, with a single-use rejoin invite on accept),
   Temporary voice channels (join a hub to spawn your own VC, auto-deleted empty),
   and Welcome Channel (a builder for one pinned message in a read-only channel)
-  — all functional and configurable from the dashboard (21 in total)
+  — all functional and configurable from the dashboard (22 in total)
 - Editable Discord **presence / activity** from the dashboard (`/settings`)
 - 2.0 groundwork still current: action-based custom `/slash` commands,
   scheduled messages, full leveling with a public leaderboard, auto-moderation,
@@ -69,7 +74,7 @@ login, a public leveling leaderboard, and
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 21 feature groups, each toggled and configured from the
+- **Per-guild modules** — 22 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -103,6 +108,10 @@ login, a public leveling leaderboard, and
     their count, `/inviter` looks up who invited someone, `/invites-leaderboard`
     ranks the server. Optional join/leave log channel and a fake-invite grace
     window (a join that leaves inside it doesn't count). Needs Manage Server
+  - **Polls** — `/poll question:… choices:A | B | C` with optional `duration`,
+    `multiple` and `max_votes`; members vote by reacting with the option letter.
+    Auto-closes on the timer or vote cap and posts a bar-chart results embed;
+    `/poll-end` closes one early. Optional allow/deny role list for voters
   - **Autoresponder** — auto-reply when a message matches a trigger (contains /
     exact / starts-with / whole-word), optionally deleting the trigger
   - **Scheduled messages** — recurring posts to a channel, every minute to every
