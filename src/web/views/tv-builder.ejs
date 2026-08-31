@@ -1,0 +1,108 @@
+<%- include('partials/header', { title: `Sylo — ${isNew ? 'New' : 'Edit'} hub` }) %>
+
+<p class="muted"><a href="/guilds/<%= guildId %>/m/temp-voice">&larr; Temporary voice channels</a></p>
+
+<div class="rr-builder-head">
+  <h1 class="page-title"><%= isNew ? 'New hub' : 'Edit hub' %></h1>
+  <div class="rr-actions">
+    <a class="btn" href="/guilds/<%= guildId %>/m/temp-voice">Discard</a>
+    <button type="submit" form="tv-form" class="btn btn-primary">Save</button>
+  </div>
+</div>
+
+<% if (typeof msg !== 'undefined' && msg) { %>
+  <div class="banner <%= msg === 'saved' ? 'ok' : 'bad' %>"><%= msg === 'saved' ? 'Saved.' : (msg === 'badchannel' ? 'Pick a hub voice channel.' : msg) %></div>
+<% } %>
+
+<form method="POST" action="/guilds/<%= guildId %>/m/temp-voice/hub" id="tv-form" class="stack" style="max-width:680px">
+  <input type="hidden" name="id" value="<%= hub.id %>" />
+
+  <section class="card stack">
+    <h2 style="margin:0">Hub</h2>
+    <label class="small">"Join to create" voice channel</label>
+    <select name="hubChannelId" required style="max-width:320px">
+      <option value="">— select a voice channel —</option>
+      <% voiceChannels.forEach(function (c) { %>
+        <option value="<%= c.id %>" <%= c.id === hub.hubChannelId ? 'selected' : '' %>>🔊 <%= c.name %></option>
+      <% }) %>
+    </select>
+
+    <label class="small">Category for the temporary channels</label>
+    <select name="categoryId" style="max-width:320px">
+      <option value="">— same category as the hub —</option>
+      <% categories.forEach(function (c) { %>
+        <option value="<%= c.id %>" <%= c.id === hub.categoryId ? 'selected' : '' %>><%= c.name %></option>
+      <% }) %>
+    </select>
+
+    <label class="small">Temporary channel name</label>
+    <input type="text" name="nameTemplate" id="tv-name" maxlength="95" value="<%= hub.nameTemplate || '' %>" placeholder="#{index} - {username}'s Channel" />
+    <p class="muted small">Tokens: <code>{index}</code> (Nth channel), <code>{username}</code>. Preview:
+      <span id="tv-preview" class="mono"></span></p>
+  </section>
+
+  <section class="card stack">
+    <h2 style="margin:0">Settings</h2>
+    <div class="star-age">
+      <div class="stack"><label class="small">User limit <span class="muted">— 0 = ∞</span></label>
+        <input type="number" name="userLimit" min="0" max="99" value="<%= hub.userLimit || 0 %>" style="max-width:120px" /></div>
+      <div class="stack"><label class="small">Bitrate (kbps) <span class="muted">— 0 = default</span></label>
+        <input type="number" name="bitrate" min="0" max="384" step="8" value="<%= hub.bitrate || 0 %>" style="max-width:120px" /></div>
+    </div>
+    <label class="small">Keep alive after empty</label>
+    <select name="keepAliveMinutes" style="max-width:200px">
+      <option value="-1" <%= hub.keepAliveMinutes < 0 ? 'selected' : '' %>>Never delete</option>
+      <option value="0" <%= hub.keepAliveMinutes === 0 ? 'selected' : '' %>>Delete immediately</option>
+      <% for (var m = 1; m <= 10; m++) { %>
+        <option value="<%= m %>" <%= hub.keepAliveMinutes === m ? 'selected' : '' %>><%= m %> minute<%= m === 1 ? '' : 's' %></option>
+      <% } %>
+    </select>
+    <label class="checkline"><input type="checkbox" name="ownershipLock" <%= hub.ownershipLock ? 'checked' : '' %> />
+      Ownership lock — don't auto-transfer if the owner leaves (they can <code>/voice-claim</code> it back)</label>
+  </section>
+
+  <section class="card stack">
+    <h2 style="margin:0">Permissions</h2>
+    <label class="checkline"><input type="checkbox" name="syncCategory" <%= hub.syncCategory ? 'checked' : '' %> />
+      Synchronize permissions with the hub's category</label>
+    <label class="checkline"><input type="checkbox" name="syncChannel" <%= hub.syncChannel ? 'checked' : '' %> />
+      Synchronize permissions with the hub channel</label>
+
+    <label class="small" style="margin-top:6px">Who can join</label>
+    <select name="roleMode" style="max-width:320px">
+      <option value="allow" <%= hub.roleMode !== 'deny' ? 'selected' : '' %>>Everyone except the roles below</option>
+      <option value="deny" <%= hub.roleMode === 'deny' ? 'selected' : '' %>>Only members with a role below</option>
+    </select>
+    <%- include('partials/chip-picker', { field: 'roleList', kind: 'role', items: roles, selected: hub.roleList }) %>
+    <label class="checkline"><input type="checkbox" name="useRolesForAccess" <%= hub.useRolesForAccess ? 'checked' : '' %> />
+      Also use these roles to gate access to the temporary channels</label>
+
+    <label class="small" style="margin-top:8px">Ignored roles <span class="muted">— not affected by <code>/voice-*</code></span></label>
+    <%- include('partials/chip-picker', { field: 'ignoredRoles', kind: 'role', items: roles, selected: hub.ignoredRoles }) %>
+
+    <label class="small" style="margin-top:8px">Moderator roles <span class="muted">— can run <code>/voice-*</code> on any temp channel</span></label>
+    <%- include('partials/chip-picker', { field: 'moderatorRoles', kind: 'role', items: roles, selected: hub.moderatorRoles }) %>
+  </section>
+
+  <section class="card stack">
+    <h2 style="margin:0">Owner permissions</h2>
+    <p class="muted small">What the member who created the channel can do to it in Discord directly.</p>
+    <label class="checkline"><input type="checkbox" name="op_manageChannels" <%= hub.ownerPerms.manageChannels ? 'checked' : '' %> /> Manage Channel (rename, user limit)</label>
+    <label class="checkline"><input type="checkbox" name="op_managePermissions" <%= hub.ownerPerms.managePermissions ? 'checked' : '' %> /> Manage Permissions</label>
+    <label class="checkline"><input type="checkbox" name="op_prioritySpeaker" <%= hub.ownerPerms.prioritySpeaker ? 'checked' : '' %> /> Priority Speaker</label>
+    <label class="checkline"><input type="checkbox" name="op_moveMembers" <%= hub.ownerPerms.moveMembers ? 'checked' : '' %> /> Move Members</label>
+  </section>
+
+  <section class="card stack">
+    <h2 style="margin:0">Text channel</h2>
+    <label class="checkline"><input type="checkbox" name="tc_enabled" <%= hub.textChannel.enabled ? 'checked' : '' %> /> Create a paired temporary text channel</label>
+    <label class="checkline"><input type="checkbox" name="tc_restrict" <%= hub.textChannel.restrict ? 'checked' : '' %> /> Only connected members (and mods) can read it</label>
+    <label class="checkline"><input type="checkbox" name="tc_pinUsages" <%= hub.textChannel.pinUsages ? 'checked' : '' %> /> Pin a message listing the <code>/voice-*</code> commands</label>
+    <label class="checkline"><input type="checkbox" name="tc_restrictCommands" <%= hub.textChannel.restrictCommands ? 'checked' : '' %> /> Only allow <code>/voice-*</code> in this text channel</label>
+  </section>
+</form>
+
+<script>window.TV_NAME = <%- JSON.stringify(hub.nameTemplate || '').replace(/</g, '\\u003c') %>;</script>
+<script src="/tv-builder.js"></script>
+
+<%- include('partials/footer') %>

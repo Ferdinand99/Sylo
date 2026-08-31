@@ -378,6 +378,18 @@ const MIGRATIONS = [
       ALTER TABLE scheduled_messages ADD COLUMN run_at INTEGER;
     `);
   },
+
+  // Temporary voice channels: per-channel runtime state for the /voice-* commands.
+  (database) => {
+    database.exec(`
+      ALTER TABLE temp_voice_channels ADD COLUMN name TEXT NOT NULL DEFAULT '';
+      ALTER TABLE temp_voice_channels ADD COLUMN locked INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE temp_voice_channels ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE temp_voice_channels ADD COLUMN bans TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE temp_voice_channels ADD COLUMN text_channel_id TEXT;
+      ALTER TABLE temp_voice_channels ADD COLUMN empty_since INTEGER;
+    `);
+  },
 ];
 
 /**

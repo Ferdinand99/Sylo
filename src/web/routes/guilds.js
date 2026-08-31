@@ -692,19 +692,6 @@ router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
         template: templates[i] ?? '',
       })),
     });
-  } else if (mod.id === 'temp-voice') {
-    const hubs = [].concat(req.body.tv_hub ?? []);
-    const cats = [].concat(req.body.tv_category ?? []);
-    const names = [].concat(req.body.tv_name ?? []);
-    const limits = [].concat(req.body.tv_limit ?? []);
-    config = normaliseTempVoiceConfig({
-      hubs: hubs.map((hubChannelId, i) => ({
-        hubChannelId,
-        categoryId: cats[i] ?? '',
-        nameTemplate: names[i] ?? '',
-        userLimit: limits[i] ?? 0,
-      })),
-    });
   } else if (mod.id === 'appeals') {
     config = normaliseAppealsConfig({
       questions: [].concat(req.body.q ?? []),
@@ -949,6 +936,110 @@ router.post('/:guildId/m/scheduled-messages/r/:id(\\d+)/toggle', (req, res) => {
   const rec = getScheduled(req.guild.id, Number(req.params.id));
   if (rec) setScheduledEnabled(req.guild.id, rec.id, rec.enabled !== 1);
   res.redirect(`/guilds/${req.guild.id}/${REM_BASE}?msg=saved`);
+});
+
+// --- Temporary voice "hub" builder (MEE6-style) ---------------------
+
+function tvHubs(guildId) {
+  return normaliseTempVoiceConfig(getGuildModule(guildId, 'temp-voice').config).hubs;
+}
+
+function renderTvBuilder(req, res, hub) {
+  res.render('tv-builder', {
+    ...baseContext(req.guild, 'm/temp-voice'),
+    guildId: req.guild.id,
+    voiceChannels: guildVoiceChannels(req.guild),
+    categories: guildCategories(req.guild),
+    roles: assignableRoles(req.guild),
+    isNew: !hub,
+    hub: hub || {
+      id: '',
+      hubChannelId: '',
+      categoryId: '',
+      nameTemplate: "#{index} - {username}'s Channel",
+      userLimit: 0,
+      bitrate: 0,
+      keepAliveMinutes: 0,
+      ownershipLock: false,
+      syncCategory: false,
+      syncChannel: false,
+      roleMode: 'allow',
+      roleList: [],
+      useRolesForAccess: false,
+      ignoredRoles: [],
+      moderatorRoles: [],
+      ownerPerms: { manageChannels: true, managePermissions: false, prioritySpeaker: false, moveMembers: false },
+      textChannel: { enabled: false, restrictCommands: false, pinUsages: false, restrict: false },
+    },
+    msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+  });
+}
+
+router.get('/:guildId/m/temp-voice/hub/new', (req, res) => renderTvBuilder(req, res, null));
+
+router.get('/:guildId/m/temp-voice/hub/:id', (req, res) => {
+  const hub = tvHubs(req.guild.id).find((h) => h.id === req.params.id);
+  if (!hub) return res.redirect(`/guilds/${req.guild.id}/m/temp-voice`);
+  renderTvBuilder(req, res, hub);
+});
+
+router.post('/:guildId/m/temp-voice/hub', (req, res) => {
+  const back = `/guilds/${req.guild.id}/m/temp-voice`;
+  const b = req.body;
+  if (!/^\d{17,20}$/.test(b.hubChannelId ?? '')) return res.redirect(`${back}?msg=badchannel`);
+
+  const prev = tvHubs(req.guild.id);
+  const id = /^\d+$/.test(b.id ?? '') ? b.id : String(Date.now());
+  const existing = prev.find((h) => h.id === id);
+  const hub = {
+    id,
+    hubChannelId: b.hubChannelId,
+    categoryId: b.categoryId ?? '',
+    nameTemplate: b.nameTemplate ?? '',
+    userLimit: b.userLimit,
+    bitrate: b.bitrate,
+    keepAliveMinutes: b.keepAliveMinutes,
+    ownershipLock: b.ownershipLock === 'on',
+    syncCategory: b.syncCategory === 'on',
+    syncChannel: b.syncChannel === 'on',
+    roleMode: b.roleMode === 'deny' ? 'deny' : 'allow',
+    roleList: [].concat(b.roleList ?? []),
+    useRolesForAccess: b.useRolesForAccess === 'on',
+    ignoredRoles: [].concat(b.ignoredRoles ?? []),
+    moderatorRoles: [].concat(b.moderatorRoles ?? []),
+    ownerPerms: {
+      manageChannels: b.op_manageChannels === 'on',
+      managePermissions: b.op_managePermissions === 'on',
+      prioritySpeaker: b.op_prioritySpeaker === 'on',
+      moveMembers: b.op_moveMembers === 'on',
+    },
+    textChannel: {
+      enabled: b.tc_enabled === 'on',
+      restrictCommands: b.tc_restrictCommands === 'on',
+      pinUsages: b.tc_pinUsages === 'on',
+      restrict: b.tc_restrict === 'on',
+    },
+  };
+  const next = existing ? prev.map((h) => (h.id === id ? hub : h)) : [...prev, hub];
+  setGuildModule(req.guild.id, 'temp-voice', {
+    enabled: true,
+    config: normaliseTempVoiceConfig({ hubs: next }),
+  });
+  recordAudit(req.guild.id, {
+    actor: moderatorDisplayName(req),
+    action: 'module:temp-voice',
+    detail: `${existing ? 'updated' : 'created'} a hub`,
+  });
+  res.redirect(`${back}?msg=saved`);
+});
+
+router.post('/:guildId/m/temp-voice/hub/:id/delete', (req, res) => {
+  const prev = tvHubs(req.guild.id);
+  setGuildModule(req.guild.id, 'temp-voice', {
+    config: normaliseTempVoiceConfig({ hubs: prev.filter((h) => h.id !== req.params.id) }),
+  });
+  recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'module:temp-voice', detail: 'deleted a hub' });
+  res.redirect(`/guilds/${req.guild.id}/m/temp-voice?msg=saved`);
 });
 
 // --- Reaction-role builder (MEE6-style) ---------------------------------

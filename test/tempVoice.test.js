@@ -27,21 +27,25 @@ test('normaliseTempVoiceConfig: validates ids, clamps limit, defaults name, drop
   assert.equal(c.hubs.length, 1);
   assert.equal(c.hubs[0].hubChannelId, HUB);
   assert.equal(c.hubs[0].categoryId, ''); // invalid id cleared
-  assert.equal(c.hubs[0].nameTemplate, "{user}'s channel"); // blank -> default
+  assert.equal(c.hubs[0].nameTemplate, "#{index} - {username}'s Channel"); // blank -> default
   assert.equal(c.hubs[0].userLimit, 99); // clamped
+  assert.equal(c.hubs[0].roleMode, 'allow');
+  assert.equal(c.hubs[0].keepAliveMinutes, 0);
+  assert.equal(c.hubs[0].ownerPerms.manageChannels, true);
 });
 
-test('normaliseTempVoiceConfig: caps at 10 hubs', () => {
-  const many = Array.from({ length: 15 }, (_, i) => ({ hubChannelId: String(1e17 + i) }));
-  assert.equal(normaliseTempVoiceConfig({ hubs: many }).hubs.length, 10);
+test('normaliseTempVoiceConfig: caps at 25 hubs', () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ hubChannelId: String(1e17 + i) }));
+  assert.equal(normaliseTempVoiceConfig({ hubs: many }).hubs.length, 25);
 });
 
-test('renderName: substitutes tokens and trims to 100 chars', () => {
+test('renderName: substitutes {index}/{username} (and legacy {user}/{count}), trims to 100', () => {
   const member = { displayName: 'Ferd', user: { username: 'ferd99' } };
-  assert.equal(renderName('{user}’s room', { member, count: 3 }), 'Ferd’s room');
-  assert.equal(renderName('{username} #{count}', { member, count: 3 }), 'ferd99 #3');
-  assert.equal(renderName('{user}', { member: null, count: 1 }), 'Player');
-  assert.ok(renderName('x'.repeat(200), { member, count: 1 }).length === 100);
+  assert.equal(renderName("{user}'s room", { member, index: 3 }), "Ferd's room");
+  assert.equal(renderName('{username} #{index}', { member, index: 3 }), 'ferd99 #3');
+  assert.equal(renderName('#{count} - {username}', { member, index: 5 }), '#5 - ferd99');
+  assert.equal(renderName('{username}', { member: null, index: 1 }), 'player');
+  assert.ok(renderName('x'.repeat(200), { member, index: 1 }).length === 100);
 });
 
 test('db: track a temp channel, find it by owner+hub, count, and remove', () => {

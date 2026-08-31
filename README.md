@@ -44,7 +44,7 @@ OAuth2 login, a public leveling leaderboard, and
   Autoresponder, AFK, Server statistics (live count voice channels), Free games
   (Epic + IsThereAnyDeal), Ban appeals (DM'd appeal link → dashboard review →
   decision shown on the link, with a single-use rejoin invite on accept),
-  Temporary voice channels (join a hub to spawn your own VC, auto-deleted empty),
+  Temporary voice channels (MEE6-style hubs + 13 /voice-* control commands),
   and Welcome Channel (a builder for one pinned message in a read-only channel)
   — all functional and configurable from the dashboard (22 in total)
 - Editable Discord **presence / activity** from the dashboard (`/settings`)
@@ -133,10 +133,14 @@ OAuth2 login, a public leveling leaderboard, and
     depends on the DM. Configurable questions, post-denial cooldown, and an
     optional "appeals server" invite so Sylo can DM the outcome too; needs
     `DASHBOARD_URL` set
-  - **Temporary voice channels** — members join a "hub" voice channel and Sylo
-    spawns them their own VC (name template, optional user limit), moves them in,
-    grants them Manage Channel on it, and deletes it once everyone leaves.
-    Multiple hubs per server; survives a restart via a startup sweep
+  - **Temporary voice channels** — MEE6-style hubs: a member joins a "join to
+    create" voice channel and Sylo spawns their own VC (name template with
+    `{index}`/`{username}`, user limit, bitrate, keep-alive delay, ownership
+    lock, permission sync, role allow/deny + moderator/ignored roles, owner
+    permissions, an optional paired text channel). Owners and voice moderators
+    control it with 13 `/voice-*` commands (lock/unlock, hide/reveal, limit,
+    rename, kick, ban/unban, claim/transfer, owner, clean). Multiple hubs;
+    survives a restart via a sweep
   - **Starboard** — when a message gets enough of a chosen reaction, Sylo re-posts
     it (as an embed with a jump link) into a highlights channel and keeps the
     count live. Per-server boards: custom emoji(s) and threshold, auto-react on

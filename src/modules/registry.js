@@ -183,7 +183,7 @@ export const MODULES = [
   {
     id: 'temp-voice',
     name: 'Temporary voice channels',
-    description: 'Members join a hub channel to spawn their own voice channel; it is deleted when empty.',
+    description: 'MEE6-style hubs: join to spawn your own voice (and text) channel, controlled with /voice-* commands.',
     icon: '🎙️',
     requiredIntents: [],
     defaultEnabled: false,
