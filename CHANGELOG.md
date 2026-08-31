@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.10.0](https://github.com/Ferdinand99/Sylo/compare/v2.9.2...v2.10.0) (2026-08-31)
+
+
+### Features
+
+* add a Polls module ([aca2672](https://github.com/Ferdinand99/Sylo/commit/aca2672ec784ec03714a9c1c92527e91123f39ed))
+* rebuild the Message Creator as MEE6-style Embed Messages ([92d4801](https://github.com/Ferdinand99/Sylo/commit/92d48010cabf04648142c583c102f301ad3c6840))
+
 ## [2.9.2](https://github.com/Ferdinand99/Sylo/compare/v2.9.1...v2.9.2) (2026-08-31)
 
 
