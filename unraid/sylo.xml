@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>Sylo</Name>
-  <Repository>ghcr.io/ferdinand99/sylo:latest</Repository>
-  <Registry>https://github.com/Ferdinand99/Sylo/pkgs/container/sylo</Registry>
+  <Repository>docker.io/iwgamin/sylo:latest</Repository>
+  <Registry>https://hub.docker.com/r/iwgamin/sylo</Registry>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>sh</Shell>

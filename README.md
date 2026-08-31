@@ -309,7 +309,7 @@ to `/mnt/user/appdata/sylo`, add your `.env`, and `docker compose up -d`.
 | Field            | Value |
 |------------------|-------|
 | Name             | `Sylo` |
-| Repository       | your built/pushed image, e.g. `ghcr.io/ferdinand99/sylo:latest` |
+| Repository       | `docker.io/iwgamin/sylo:latest` (or `ghcr.io/ferdinand99/sylo:latest`) |
 | Network Type     | `bridge` |
 | Port             | Container `3000` → Host `3000` (`WEB_PORT`) |
 | Path             | Container `/app/data` → Host `/mnt/user/appdata/sylo/data` (read/write) |
@@ -333,14 +333,15 @@ no manual `chmod`/`chown` needed. If you still see `SQLITE_CANTOPEN`, run once:
 `unraid/sylo.xml` is a ready-made CA template with all ports, paths, and
 environment variables pre-defined. It needs a **published image** first:
 
-1. **Publish the image.** CI does this automatically (see
-   [Releases & CI](#releases--ci) below) — push to `main` and, once the package
-   exists, set its visibility to **Public** (GitHub → your profile → Packages →
-   `sylo` → Package settings). To publish once by hand instead:
+1. **Publish the image.** CI does this automatically on every release (see
+   [Releases & CI](#releases--ci) below), pushing to both
+   `docker.io/iwgamin/sylo` and `ghcr.io/ferdinand99/sylo`. The Docker Hub repo
+   is public; the GHCR package's visibility is set once under GitHub → your
+   profile → Packages → `sylo` → Package settings. To publish once by hand:
    ```bash
-   echo $GITHUB_TOKEN | docker login ghcr.io -u Ferdinand99 --password-stdin
-   docker build -t ghcr.io/ferdinand99/sylo:latest .
-   docker push ghcr.io/ferdinand99/sylo:latest
+   docker login -u iwgamin                 # Docker Hub personal access token
+   docker build -t iwgamin/sylo:latest .
+   docker push iwgamin/sylo:latest
    ```
 2. **Add a 256×256 icon** at `unraid/sylo-icon.png` (the template references it).
 3. **Use the template** on Unraid — either:
@@ -363,15 +364,15 @@ Edit `Repository`, `Support`, `Project`, `TemplateURL`, and `Icon` in the XML
 
 ## Releases & CI
 
-Three GitHub Actions workflows drive the images on GHCR. `test.yml` runs the
-suite (`npm test` + syntax + template compile) and is a required dependency of
-every image build — nothing publishes on a red suite.
+Three GitHub Actions workflows drive the images. `test.yml` runs the suite
+(`npm test` + syntax + template compile) and is a required dependency of every
+image build — nothing publishes on a red suite.
 
 | Workflow | Trigger | Publishes |
 |---|---|---|
 | `.github/workflows/test.yml` | called by the two below | — (gate only) |
-| `.github/workflows/docker-publish.yml` | every push to `main` (PRs build only) | `:main`, `:sha-<short>` — rolling dev image |
-| `.github/workflows/release-please.yml` | merging a **release PR** | `:latest`, `:X.Y.Z`, `:X.Y` — stable release |
+| `.github/workflows/docker-publish.yml` | every push to `main` (PRs build only) | GHCR `:main`, `:sha-<short>` — rolling dev image |
+| `.github/workflows/release-please.yml` | merging a **release PR** | Docker Hub **and** GHCR `:latest`, `:X.Y.Z`, `:X.Y` — stable release |
 
 **Cutting a release** is automated with
 [release-please](https://github.com/googleapis/release-please):
@@ -385,18 +386,21 @@ every image build — nothing publishes on a red suite.
    bumps `package.json` + `CHANGELOG.md`, then builds and pushes the versioned
    images — including `:latest`, which is what the Unraid template tracks.
 
-No secrets to configure — both workflows use the built-in `GITHUB_TOKEN`.
-Note that a tag/Release created by CI does **not** trigger other workflows, which
-is why `release-please.yml` builds the image itself rather than relying on the
-tag trigger.
+`docker-publish.yml` needs no secrets (built-in `GITHUB_TOKEN`). `release-please.yml`
+also pushes to Docker Hub, so it needs a repo **variable** `DOCKERHUB_USERNAME`
+(e.g. `iwgamin`) and a repo **secret** `DOCKERHUB_TOKEN` (a Docker Hub personal
+access token with Read & Write). Set both under Settings → Secrets and variables →
+Actions. Note that a tag/Release created by CI does **not** trigger other
+workflows, which is why `release-please.yml` builds the image itself rather than
+relying on the tag trigger.
 
 For a clean starting point, tag the current commit once so release-please has a
 baseline: `git tag v1.0.0 && git push origin v1.0.0`
 (keep `.release-please-manifest.json` at `1.0.0`).
 
 Unraid users who want the bleeding edge can point the container at
-`ghcr.io/ferdinand99/sylo:main` instead of `:latest`; pin to `:X.Y.Z` to freeze a
-version.
+`ghcr.io/ferdinand99/sylo:main` (dev images are GHCR-only) instead of `:latest`;
+pin to `:X.Y.Z` on either registry to freeze a version.
 
 ## Adding another game
 
