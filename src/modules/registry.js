@@ -101,8 +101,8 @@ export const MODULES = [
   },
   {
     id: 'scheduled-messages',
-    name: 'Scheduled messages',
-    description: 'Post a message to a channel on a repeating interval.',
+    name: 'Reminders',
+    description: 'Post a text or embed message to a channel — once, or on a repeating schedule.',
     icon: '⏰',
     requiredIntents: [],
     defaultEnabled: false,

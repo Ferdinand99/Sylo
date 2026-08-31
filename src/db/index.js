@@ -364,6 +364,20 @@ const MIGRATIONS = [
   (database) => {
     database.exec("ALTER TABLE composed_messages ADD COLUMN name TEXT NOT NULL DEFAULT ''");
   },
+
+  // Reminders (was "scheduled messages"): a name, an optional embed, and
+  // single-vs-recurring scheduling with a start/end window and weekday filter.
+  (database) => {
+    database.exec(`
+      ALTER TABLE scheduled_messages ADD COLUMN name TEXT NOT NULL DEFAULT '';
+      ALTER TABLE scheduled_messages ADD COLUMN spec TEXT;
+      ALTER TABLE scheduled_messages ADD COLUMN mode TEXT NOT NULL DEFAULT 'multiple';
+      ALTER TABLE scheduled_messages ADD COLUMN days TEXT NOT NULL DEFAULT '0,1,2,3,4,5,6';
+      ALTER TABLE scheduled_messages ADD COLUMN start_at INTEGER;
+      ALTER TABLE scheduled_messages ADD COLUMN end_at INTEGER;
+      ALTER TABLE scheduled_messages ADD COLUMN run_at INTEGER;
+    `);
+  },
 ];
 
 /**

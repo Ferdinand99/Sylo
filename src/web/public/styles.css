@@ -745,6 +745,23 @@ label.checkline input { width: auto; }
 .mb-name:focus { outline: none; border-bottom-color: var(--accent); }
 .mb-link { display: grid; grid-template-columns: 1fr 70px 2fr auto; gap: 6px; align-items: center; }
 
+/* Reminder builder */
+.is-hidden { display: none !important; }
+.rem-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-sm); background: var(--surface-2); margin-bottom: 10px; }
+.rem-tabs button {
+  padding: 6px 14px; border: 0; border-radius: 6px; background: transparent; color: var(--muted);
+  cursor: pointer; font-size: 13px; font-weight: 600;
+}
+.rem-tabs button.active { background: var(--surface); color: var(--text); }
+.rem-days { display: flex; flex-wrap: wrap; gap: 6px; }
+.rem-day {
+  display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--muted);
+  font-size: 12.5px; cursor: pointer; user-select: none;
+}
+.rem-day input { display: none; }
+.rem-day.on { border-color: var(--ok); color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+
 /* Reaction-role builder */
 .rr-builder-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .rr-actions { display: flex; gap: 10px; }

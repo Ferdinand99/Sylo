@@ -282,7 +282,7 @@ function moduleLines(id, guild, cfg) {
       const jobs = listScheduled(guild.id);
       const active = jobs.filter((j) => j.enabled === 1).length;
       return [
-        jobs.length ? on('Jobs', `${active} active${jobs.length > active ? ` · ${jobs.length - active} paused` : ''}`) : off('Jobs', 'none'),
+        jobs.length ? on('Reminders', `${active} active${jobs.length > active ? ` · ${jobs.length - active} off` : ''}`) : off('Reminders', 'none'),
       ];
     }
     case 'leveling': {

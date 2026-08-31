@@ -52,17 +52,19 @@ import { listAppeals, getAppeal } from '../../db/appeals.js';
 import { config as appConfig } from '../../config.js';
 import {
   listScheduled,
-  createScheduled,
+  createReminder,
+  updateReminder,
   deleteScheduled,
   setScheduledEnabled,
   getScheduled,
 } from '../../db/scheduledMessages.js';
 import {
   SCHEDULE_PRESETS,
-  SCHEDULE_UNITS,
+  WEEKDAYS,
   MIN_INTERVAL_MINUTES,
   MAX_INTERVAL_MINUTES,
 } from '../../modules/scheduledMessages.js';
+import { sendComposed } from '../../modules/messageCreator.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '../../modules/leveling.js';
 import { levelFromXp } from '../../modules/lib/levels.js';
@@ -461,19 +463,19 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     ccPlaceholders: CC_PLACEHOLDERS,
     arPlaceholders: AR_PLACEHOLDERS,
     arMatchModes: AR_MATCH_MODES,
-    scheduledJobs: mod.id === 'scheduled-messages'
+    reminders: mod.id === 'scheduled-messages'
       ? listScheduled(req.guild.id).map((j) => ({
           id: j.id,
+          name: j.name || (j.spec?.embeds?.[0]?.title || j.content || 'Untitled reminder').slice(0, 60),
           channel: guildTextChannels(req.guild).find((c) => c.id === j.channel_id)?.name ?? j.channel_id,
-          content: j.content,
+          mode: j.mode,
           intervalMinutes: j.interval_minutes,
+          runAt: j.run_at,
           enabled: j.enabled === 1,
-          nextRun: j.enabled === 1 ? new Date(j.next_run_at).toISOString() : null,
           lastRun: j.last_run_at ? timeAgo(j.last_run_at) : null,
         }))
       : [],
     schedulePresets: SCHEDULE_PRESETS,
-    scheduleUnits: SCHEDULE_UNITS,
     announceModes: ANNOUNCE_MODES,
     xpRates: XP_RATES,
     levelingCommands: mod.id === 'leveling'
@@ -826,36 +828,127 @@ router.post(
   })
 );
 
-// --- Scheduled messages: one job per row, managed here (not in module config) ---
-router.post('/:guildId/m/scheduled-messages/job', (req, res) => {
-  const back = `/guilds/${req.guild.id}/m/scheduled-messages`;
-  const channelId = String(req.body.channelId ?? '');
-  const content = String(req.body.content ?? '').trim();
-  const customVal = String(req.body.customValue ?? '').trim();
-  const unitMult = Number(req.body.customUnit) || 1;
-  const minutes = Math.floor(
-    customVal !== '' ? Number(customVal) * unitMult : Number(req.body.intervalMinutes)
-  );
+// --- Reminders builder (MEE6-style) ----------------------------------
 
-  if (!guildTextChannels(req.guild).some((c) => c.id === channelId)) {
-    return res.redirect(`${back}?msg=badchannel`);
-  }
-  if (content === '' || !Number.isFinite(minutes) || minutes < MIN_INTERVAL_MINUTES || minutes > MAX_INTERVAL_MINUTES) {
-    return res.redirect(`${back}?msg=sched-bad`);
-  }
-  createScheduled(req.guild.id, { channelId, content: content.slice(0, 2000), intervalMinutes: minutes });
-  res.redirect(`${back}?msg=saved`);
+const REM_BASE = 'm/scheduled-messages';
+
+function toMs(v) {
+  const t = new Date(String(v ?? '')).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+function renderReminderBuilder(req, res, rec) {
+  res.render('reminder-builder', {
+    ...baseContext(req.guild, REM_BASE),
+    channels: guildTextChannels(req.guild),
+    roles: assignableRoles(req.guild),
+    guildId: req.guild.id,
+    schedulePresets: SCHEDULE_PRESETS,
+    weekdays: WEEKDAYS,
+    isNew: !rec,
+    rec: rec || {
+      id: '',
+      name: '',
+      channel_id: '',
+      spec: { content: '', embeds: [] },
+      mode: 'multiple',
+      interval_minutes: 60,
+      dayList: [0, 1, 2, 3, 4, 5, 6],
+      start_at: null,
+      end_at: null,
+      run_at: null,
+      enabled: 1,
+    },
+    msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+  });
+}
+
+router.get('/:guildId/m/scheduled-messages/r/new', (req, res) => renderReminderBuilder(req, res, null));
+
+router.get('/:guildId/m/scheduled-messages/r/:id(\\d+)', (req, res) => {
+  const rec = getScheduled(req.guild.id, Number(req.params.id));
+  if (!rec) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
+  renderReminderBuilder(req, res, rec);
 });
 
-router.post('/:guildId/m/scheduled-messages/job/:id/delete', (req, res) => {
+router.post(
+  '/:guildId/m/scheduled-messages/r/:id(new|\\d+)',
+  asyncHandler(async (req, res) => {
+    const b = req.body;
+    const existing = req.params.id === 'new' ? null : getScheduled(req.guild.id, Number(req.params.id));
+    if (req.params.id !== 'new' && !existing) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
+    const back = `/guilds/${req.guild.id}/${REM_BASE}/r/${existing ? existing.id : 'new'}`;
+
+    const channelId = /^\d{17,20}$/.test(b.channelId ?? '') ? b.channelId : '';
+    if (!channelId) return res.redirect(`${back}?msg=badchannel`);
+
+    let embed = null;
+    if (b.msgType === 'embed') {
+      try {
+        embed = normaliseEmbedSpec(JSON.parse(b.embed || '{}'));
+      } catch {
+        embed = null;
+      }
+    }
+    const spec = { content: String(b.content ?? '').slice(0, 2000), embeds: embed ? [embed] : [] };
+    if (!spec.content.trim() && !spec.embeds.length) return res.redirect(`${back}?msg=rem-empty`);
+
+    const mode = b.mode === 'single' ? 'single' : 'multiple';
+    const intervalMinutes = Math.min(
+      MAX_INTERVAL_MINUTES,
+      Math.max(MIN_INTERVAL_MINUTES, Math.floor(Number(b.intervalMinutes) || 60))
+    );
+    const days = WEEKDAYS.map(([n]) => n).filter((n) => b[`day_${n}`] === 'on');
+    const runAt = mode === 'single' ? toMs(b.runAt) : null;
+    if (mode === 'single' && !runAt) return res.redirect(`${back}?msg=rem-when`);
+
+    const data = {
+      name: String(b.name ?? '').trim().slice(0, 100) || 'Untitled reminder',
+      channelId,
+      spec,
+      mode,
+      intervalMinutes,
+      days: days.length ? days : [0, 1, 2, 3, 4, 5, 6],
+      startAt: b.enableStart === 'on' ? toMs(b.startAt) : null,
+      endAt: b.enableEnd === 'on' ? toMs(b.endAt) : null,
+      runAt,
+    };
+
+    // "Send test message" — post the message now, don't save schedule changes.
+    if (b.action === 'test') {
+      try {
+        await sendComposed(req.guild, channelId, spec);
+        return res.redirect(`${back}${existing ? '' : ''}?msg=rem-test`);
+      } catch (err) {
+        return res.redirect(`${back}?msg=${encodeURIComponent(err.message).slice(0, 100)}`);
+      }
+    }
+
+    let id;
+    if (existing) {
+      updateReminder(req.guild.id, existing.id, data);
+      id = existing.id;
+    } else {
+      id = createReminder(req.guild.id, data);
+    }
+    recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:reminders',
+      detail: `${existing ? 'updated' : 'created'} "${data.name}"`,
+    });
+    res.redirect(`/guilds/${req.guild.id}/${REM_BASE}/r/${id}?msg=saved`);
+  })
+);
+
+router.post('/:guildId/m/scheduled-messages/r/:id(\\d+)/delete', (req, res) => {
   deleteScheduled(req.guild.id, Number(req.params.id));
-  res.redirect(`/guilds/${req.guild.id}/m/scheduled-messages?msg=saved`);
+  res.redirect(`/guilds/${req.guild.id}/${REM_BASE}?msg=saved`);
 });
 
-router.post('/:guildId/m/scheduled-messages/job/:id/toggle', (req, res) => {
-  const job = getScheduled(req.guild.id, Number(req.params.id));
-  if (job) setScheduledEnabled(req.guild.id, job.id, job.enabled !== 1);
-  res.redirect(`/guilds/${req.guild.id}/m/scheduled-messages?msg=saved`);
+router.post('/:guildId/m/scheduled-messages/r/:id(\\d+)/toggle', (req, res) => {
+  const rec = getScheduled(req.guild.id, Number(req.params.id));
+  if (rec) setScheduledEnabled(req.guild.id, rec.id, rec.enabled !== 1);
+  res.redirect(`/guilds/${req.guild.id}/${REM_BASE}?msg=saved`);
 });
 
 // --- Reaction-role builder (MEE6-style) ---------------------------------

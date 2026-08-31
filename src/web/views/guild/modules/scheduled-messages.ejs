@@ -1,77 +1,50 @@
+<% var list = typeof reminders !== 'undefined' ? reminders : []; %>
 <%
   function humanInterval(min) {
-    if (min % 10080 === 0) return (min / 10080) + 'w';
-    if (min % 1440 === 0) return (min / 1440) + 'd';
-    if (min % 60 === 0) return (min / 60) + 'h';
-    return min + 'm';
+    if (min % 10080 === 0) return 'every ' + (min / 10080) + 'w';
+    if (min % 1440 === 0) return 'every ' + (min / 1440) + 'd';
+    if (min % 60 === 0) return 'every ' + (min / 60) + 'h';
+    return 'every ' + min + 'm';
+  }
+  function summary(r) {
+    if (r.mode === 'single') {
+      return r.runAt ? 'once · ' + new Date(r.runAt).toLocaleString() : 'once';
+    }
+    return humanInterval(r.intervalMinutes);
   }
 %>
 
 <p class="muted small">
-  Each job posts its message to a channel on a fixed interval. The first post happens one
-  interval after you add it. Role and <code>@everyone</code> mentions in the text are allowed.
+  Post a text or embed message to a channel — once at a set time, or on a repeating schedule with an
+  optional start/end window and a weekday filter. Role and <code>@everyone</code> mentions are allowed.
 </p>
 
-<% if (scheduledJobs.length === 0) { %>
-  <p class="muted">No scheduled messages yet.</p>
+<div class="rr-list-head">
+  <h3 style="margin:0">Your reminders <span class="muted small"><%= list.length %> / 100</span></h3>
+  <a class="btn btn-primary" href="/guilds/<%= guild.id %>/m/scheduled-messages/r/new">＋ New reminder</a>
+</div>
+
+<% if (list.length === 0) { %>
+  <p class="muted small">None yet — create one to post on a schedule.</p>
 <% } else { %>
-  <table>
-    <thead><tr><th>Channel</th><th>Message</th><th>Every</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-      <% scheduledJobs.forEach(function (j) { %>
-        <tr>
-          <td class="muted">#<%= j.channel %></td>
-          <td><%= j.content.length > 80 ? j.content.slice(0, 79) + '…' : j.content %></td>
-          <td><%= humanInterval(j.intervalMinutes) %></td>
-          <td>
-            <% if (j.enabled) { %><span class="pill ok">on</span><% } else { %><span class="pill stale">paused</span><% } %>
-            <% if (j.lastRun) { %><span class="muted small">· last <%= j.lastRun %></span><% } %>
-          </td>
-          <td class="num">
-            <form method="POST" action="/guilds/<%= guild.id %>/m/scheduled-messages/job/<%= j.id %>/toggle" style="display:inline">
-              <button type="submit" class="link-btn"><%= j.enabled ? 'pause' : 'resume' %></button>
-            </form>
-            <form method="POST" action="/guilds/<%= guild.id %>/m/scheduled-messages/job/<%= j.id %>/delete" style="display:inline" data-confirm="Delete this scheduled message?">
-              <button type="submit" class="link-btn">delete</button>
-            </form>
-          </td>
-        </tr>
-      <% }) %>
-    </tbody>
-  </table>
+  <% list.forEach(function (r) { %>
+    <div class="cmd-override">
+      <div class="cmd-override-head">
+        <span>
+          <strong><%= r.name %></strong>
+          <span class="muted small">· #<%= r.channel %> · <%= summary(r) %><% if (r.lastRun) { %> · last <%= r.lastRun %><% } %></span>
+        </span>
+        <span class="pill <%= r.enabled ? 'on' : 'off' %>"><%= r.enabled ? 'on' : 'off' %></span>
+      </div>
+      <div class="btn-row">
+        <a class="plugin-btn" href="/guilds/<%= guild.id %>/m/scheduled-messages/r/<%= r.id %>">Edit</a>
+        <form method="POST" action="/guilds/<%= guild.id %>/m/scheduled-messages/r/<%= r.id %>/toggle" style="display:inline">
+          <button type="submit"><%= r.enabled ? 'Pause' : 'Resume' %></button>
+        </form>
+        <form method="POST" action="/guilds/<%= guild.id %>/m/scheduled-messages/r/<%= r.id %>/delete" style="display:inline">
+          <button type="submit" class="danger" data-confirm="Delete this reminder?">Delete</button>
+        </form>
+      </div>
+    </div>
+  <% }) %>
 <% } %>
-
-<hr class="sep" />
-
-<h3 style="margin-bottom:4px">Add a scheduled message</h3>
-<form method="POST" action="/guilds/<%= guild.id %>/m/scheduled-messages/job" class="stack" style="max-width:560px">
-  <label>Channel</label>
-  <select name="channelId" required>
-    <option value="">— select —</option>
-    <% channels.forEach(function (c) { %>
-      <option value="<%= c.id %>">#<%= c.name %></option>
-    <% }) %>
-  </select>
-
-  <label>Interval</label>
-  <div class="row-form">
-    <select name="intervalMinutes">
-      <% schedulePresets.forEach(function (p) { %>
-        <option value="<%= p[0] %>"><%= p[1] %></option>
-      <% }) %>
-    </select>
-    <span class="muted small">or custom: every</span>
-    <input type="number" name="customValue" min="1" placeholder="e.g. 2" style="width:90px" />
-    <select name="customUnit">
-      <% scheduleUnits.forEach(function (u) { %>
-        <option value="<%= u[0] %>"><%= u[1] %></option>
-      <% }) %>
-    </select>
-  </div>
-  <p class="muted small">Custom overrides the preset when filled. Minimum 1 minute, maximum 4 weeks.</p>
-
-  <label>Message</label>
-  <textarea name="content" rows="3" maxlength="2000" placeholder="Text to post…" required></textarea>
-
-  <div><button type="submit">Add</button></div>
-</form>
