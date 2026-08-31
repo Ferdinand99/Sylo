@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.0](https://github.com/Ferdinand99/Sylo/compare/v2.8.1...v2.9.0) (2026-08-31)
+
+
+### Features
+
+* rebuild custom commands and add an invite tracker ([e892630](https://github.com/Ferdinand99/Sylo/commit/e892630c8e563d544b38f09d4e51fd83b38ecd4f))
+
 ## [2.8.1](https://github.com/Ferdinand99/Sylo/compare/v2.8.0...v2.8.1) (2026-08-30)
 
 
