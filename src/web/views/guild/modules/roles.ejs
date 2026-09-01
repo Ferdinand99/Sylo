@@ -35,22 +35,6 @@
 <h3 style="margin:4px 0">Autoroles on join</h3>
 <p class="muted small">Given automatically when a member joins. Also editable on the <a href="/guilds/<%= guild.id %>/m/welcome">Welcome &amp; goodbye</a> page.</p>
 <form method="POST" action="/guilds/<%= guild.id %>/m/roles/config" hx-post="/guilds/<%= guild.id %>/m/roles/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:520px">
-  <div class="role-picker" data-field="autoroles">
-    <div class="role-chips" data-role-chips>
-      <% autoroles.forEach(function (id) { var r = roles.find(function (x) { return x.id === id; }); %>
-        <span class="role-chip" data-id="<%= id %>" data-name="<%= r ? r.name : id %>" data-color="">
-          <span class="role-dot" style="background:var(--muted)"></span><%= r ? r.name : id %>
-          <button type="button" class="role-chip-x" aria-label="Remove">&times;</button>
-          <input type="hidden" name="autoroles" value="<%= id %>" />
-        </span>
-      <% }) %>
-    </div>
-    <select class="role-picker-add">
-      <option value="">+ Add a role…</option>
-      <% roles.filter(function (r) { return !autoroles.includes(r.id); }).forEach(function (r) { %>
-        <option value="<%= r.id %>" data-name="<%= r.name %>"><%= r.name %></option>
-      <% }) %>
-    </select>
-  </div>
+  <%- include('../../partials/chip-picker', { field: 'autoroles', kind: 'role', items: roles, selected: autoroles }) %>
   <div style="margin-top:10px"><button type="submit">Save autoroles</button></div>
 </form>

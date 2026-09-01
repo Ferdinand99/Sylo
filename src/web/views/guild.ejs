@@ -129,23 +129,7 @@
         <p class="muted small">Any role with the Administrator permission is always a bot master.</p>
 
         <label class="small" style="margin-top:8px">Additional bot master roles</label>
-        <div class="role-picker" data-field="botMasterRoles">
-          <div class="role-chips" data-role-chips>
-            <% botMasters.forEach(function (r) { %>
-              <span class="role-chip" data-id="<%= r.id %>" data-name="<%= r.name %>" data-color="<%= r.color || '' %>">
-                <span class="role-dot" style="background:<%= r.color || 'var(--muted)' %>"></span><%= r.name %>
-                <button type="button" class="role-chip-x" aria-label="Remove">&times;</button>
-                <input type="hidden" name="botMasterRoles" value="<%= r.id %>" />
-              </span>
-            <% }) %>
-          </div>
-          <select class="role-picker-add">
-            <option value="">+ Add a role…</option>
-            <% rolePool.forEach(function (r) { %>
-              <option value="<%= r.id %>" data-name="<%= r.name %>" data-color="<%= r.color || '' %>"><%= r.name %></option>
-            <% }) %>
-          </select>
-        </div>
+        <%- include('partials/chip-picker', { field: 'botMasterRoles', kind: 'role', items: botMasters.concat(rolePool), selected: botMasters.map(function (r) { return r.id; }) }) %>
 
         <h3 style="margin:16px 0 2px">Moderation log channel</h3>
         <select name="modlogChannelId">

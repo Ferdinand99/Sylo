@@ -69,63 +69,8 @@
   // are handled by htmx now — see _module-toggle.ejs / _plugin-cta.ejs and the
   // moduleToggled listener in htmx-setup.js.
 
-  // --- chip picker (chips + add-dropdown, à la MEE6) — roles or channels ---
-  function makeRoleChip(id, name, color, field, kind) {
-    const chip = document.createElement('span');
-    chip.className = 'role-chip';
-    chip.dataset.id = id;
-    chip.dataset.name = name;
-    chip.dataset.color = color || '';
-    let lead;
-    if (kind === 'channel') {
-      lead = document.createElement('span');
-      lead.className = 'chip-hash';
-      lead.textContent = '#';
-    } else {
-      lead = document.createElement('span');
-      lead.className = 'role-dot';
-      lead.style.background = color || 'var(--muted)';
-    }
-    const x = document.createElement('button');
-    x.type = 'button';
-    x.className = 'role-chip-x';
-    x.setAttribute('aria-label', 'Remove');
-    x.textContent = '×';
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = field || 'botMasterRoles';
-    input.value = id;
-    chip.append(lead, document.createTextNode(name), x, input);
-    return chip;
-  }
-
-  document.addEventListener('change', (e) => {
-    const sel = e.target.closest('.role-picker-add');
-    if (!sel || !sel.value) return;
-    const picker = sel.closest('.role-picker');
-    const opt = sel.selectedOptions[0];
-    picker.querySelector('[data-role-chips]').appendChild(
-      makeRoleChip(sel.value, opt.dataset.name || opt.textContent, opt.dataset.color, picker.dataset.field, picker.dataset.kind)
-    );
-    opt.remove();
-    sel.value = '';
-  });
-
-  document.addEventListener('click', (e) => {
-    const x = e.target.closest('.role-chip-x');
-    if (!x) return;
-    const chip = x.closest('.role-chip');
-    const sel = chip.closest('.role-picker')?.querySelector('.role-picker-add');
-    if (sel) {
-      const o = document.createElement('option');
-      o.value = chip.dataset.id;
-      o.textContent = chip.dataset.name;
-      o.dataset.name = chip.dataset.name;
-      o.dataset.color = chip.dataset.color || '';
-      sel.appendChild(o);
-    }
-    chip.remove();
-  });
+  // The chips + add-dropdown picker is an Alpine component now
+  // (chipPicker in alpine-components.js, markup in partials/chip-picker.ejs).
 
   // --- emoji picker ----------------------------------------------------
   const COMMON_EMOJI = (
