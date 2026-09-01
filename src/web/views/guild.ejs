@@ -336,7 +336,9 @@
     <% } else if (panel.indexOf('m/') === 0 && typeof activeModule !== 'undefined') { %>
       <% var mrow = modules.find(function (x) { return x.id === activeModule.id; }); %>
       <div class="mod-hero">
-        <span class="mod-hero-ico" aria-hidden="true"><%= activeModule.icon %></span>
+        <span class="mod-hero-ico">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-<%= typeof moduleIconName !== 'undefined' ? moduleIconName : 'sliders' %>"/></svg>
+        </span>
         <div class="mod-hero-text">
           <h2><%= activeModule.name %></h2>
           <p class="muted"><%= activeModule.description %></p>

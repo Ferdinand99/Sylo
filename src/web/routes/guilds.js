@@ -84,6 +84,7 @@ import { topMembers, memberCount, setXp, resetGuildLeveling } from '../../db/lev
 import { recordAudit, listAudit } from '../../db/audit.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
 import { buildOverview } from '../lib/overviewSummary.js';
+import { moduleIcon } from '../lib/moduleIcons.js';
 
 const router = Router();
 
@@ -472,6 +473,7 @@ function moduleViewLocals(mod, req, configOverride) {
   return {
     ...baseContext(req.guild, `m/${mod.id}`),
     activeModule: mod,
+    moduleIconName: moduleIcon(mod.id),
     moduleEnabled: enabled,
     moduleConfig: configOverride ?? config,
     configView: hasView ? `guild/modules/${mod.id}` : 'guild/modules/stub',

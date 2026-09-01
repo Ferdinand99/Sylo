@@ -341,9 +341,11 @@ colour, full-card hit area).
 
 Done so far:
 - **Module-page hero** — `guild.ejs` module branch now renders a `.mod-hero`:
-  emoji in a tinted 44px chip, title + description stacked beside it, the enable
-  toggle right-aligned (replaces the bare `<h2>` + loose `<p>`). All 26 module
-  pages inherit it via the shared shell.
+  the module's **SVG icon** (from the shared `MODULE_ICONS` map, via a new
+  `moduleIconName` local) in a tinted 44px chip, title + description stacked
+  beside it, enable toggle right-aligned. Replaces the bare `<h2>` + loose `<p>`
+  and drops the mismatched registry emoji — the hero icon now matches the
+  sidebar and overview grid exactly. All 26 module pages inherit it.
 - **Empty-state component** — `.empty` (dashed border, centred, muted). Applied
   to the "None yet …" boxes on reminders / roles / custom-commands / starboard /
   temp-voice.
