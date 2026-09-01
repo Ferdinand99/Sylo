@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.0](https://github.com/Ferdinand99/Sylo/compare/v3.0.0...v3.1.0) (2026-09-01)
+
+
+### Features
+
+* icon hero on all guild sub-pages; match sidebar icons ([b88403f](https://github.com/Ferdinand99/Sylo/commit/b88403ff21a455c2441e6b1f9feeeb87379a6736))
+* module-page hero header and empty-state component ([d177530](https://github.com/Ferdinand99/Sylo/commit/d1775307e27b009e9aec7b40bf319fcb9436a6cc))
+
 ## [3.0.0](https://github.com/Ferdinand99/Sylo/compare/v2.14.0...v3.0.0) (2026-09-01)
 
 
