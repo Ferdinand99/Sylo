@@ -428,6 +428,12 @@ router.post('/:guildId/m/automod/immunity', (req, res) => {
     action: 'module:automod',
     detail: `immunity roles (${roles.length})`,
   });
+  if (req.get('HX-Request')) {
+    return res
+      .status(204)
+      .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Immunity roles saved', kind: 'ok' } }))
+      .end();
+  }
   res.redirect(`/guilds/${req.guild.id}/moderation?msg=saved`);
 });
 

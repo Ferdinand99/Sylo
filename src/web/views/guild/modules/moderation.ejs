@@ -1,6 +1,8 @@
 <% var cfg = moduleConfig || {}; var rules = Array.isArray(cfg.warnThresholds) ? cfg.warnThresholds : []; %>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/moderation/config" class="stack" style="max-width:600px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/moderation/config"
+      hx-post="/guilds/<%= guild.id %>/m/moderation/config" hx-target="this" hx-swap="none"
+      class="stack" style="max-width:600px">
   <label class="check">
     <input type="checkbox" name="dmOnPunish" <%= cfg.dmOnPunish !== false ? 'checked' : '' %> />
     DM the user when they are punished

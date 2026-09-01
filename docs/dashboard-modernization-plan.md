@@ -131,13 +131,26 @@ appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
 - **Both dead `app.js` blocks removed** (`.module-toggle` change handler +
   `.plugin-btn.enable` click handler). `syloAction` / `toast` remain for Phase 3.
 
+### Done (commit 5 — Moderator page settings tabs)
+
+- The Automod, Auto-actions and Immunity forms on the tabbed `panel === 'moderation'`
+  page now save via htmx. Shared partials (`automod.ejs`, `logging.ejs`) take
+  optional `fragTarget` / `fragSwap` locals: default `#module-config` /
+  `outerHTML` (module page), `this` / `none` when included on the Moderator page —
+  so on the Moderator page the save just fires + toasts (the tab's visible state
+  is already what the user set). Only new route work: `/m/automod/immunity` got a
+  `204 + HX-Trigger toast` branch; automod/moderation config ride the existing
+  generic `/config` HX-Request branch (response discarded under `hx-swap="none"`).
+- This also fixes the batch-2 edge where `logging.ejs`'s hard-coded
+  `hx-target="#module-config"` failed on the Moderator page.
+
 ### Still to do
 
-- **Not yet converted, need special handling:** `polls` and `welcome-channel`
-  (submit-time JS populates hidden fields — do with the Phase 2 builders);
-  `welcome-channel` publish also early-returns a redirect; `moderation` /
-  `automod` render inside the tabbed `panel === 'moderation'` view, not the
-  `#module-config` wrapper — that panel needs its own fragment treatment.
+- Moderator page **Infractions** tab (warn / remove-ban forms) and **Commands**
+  tab (per-command overrides) — still full-reload; lower priority.
+- **`polls` and `welcome-channel` config forms:** submit-time JS populates hidden
+  fields — finish these with the Phase 2 builders (`welcome-channel` publish also
+  early-returns a redirect).
 - Convert the standalone builder pages (rr / sb / cc / msg / reminder / tv).
 - Convert module enable/disable toggles + plugin-grid "Enable" from the
   `syloAction` fetch to `hx-post` returning the updated card/dot.

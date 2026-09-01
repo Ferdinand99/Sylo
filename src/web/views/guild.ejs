@@ -216,13 +216,15 @@
         </div>
         <div class="mod-panels">
           <div class="mod-panel" data-tab="automod">
-            <%- include('guild/modules/automod', { guild: guild, channels: channels, roles: roles, moduleConfig: automodConfig, automodRules: automodRules }) %>
+            <%- include('guild/modules/automod', { guild: guild, channels: channels, roles: roles, moduleConfig: automodConfig, automodRules: automodRules, fragTarget: 'this', fragSwap: 'none' }) %>
           </div>
           <div class="mod-panel" data-tab="admin">
             <h3 style="margin-top:0">Immunity roles</h3>
             <p class="muted small">Members with one of these roles are never touched by Auto-moderation or the
               warning auto-actions. Administrators, the server owner and bot-master roles are immune by default.</p>
-            <form method="POST" action="/guilds/<%= guild.id %>/m/automod/immunity" class="stack" style="max-width:520px">
+            <form method="POST" action="/guilds/<%= guild.id %>/m/automod/immunity"
+                  hx-post="/guilds/<%= guild.id %>/m/automod/immunity" hx-target="this" hx-swap="none"
+                  class="stack" style="max-width:520px">
               <%- include('partials/chip-picker', { field: 'immunityRoles', kind: 'role', items: roles, selected: (automodConfig && automodConfig.exemptRoles) ? automodConfig.exemptRoles : [] }) %>
               <div style="margin-top:12px"><button type="submit">Save immunity roles</button></div>
             </form>
@@ -236,7 +238,7 @@
           </div>
           <div class="mod-panel" data-tab="log">
             <p class="muted small">Send server events to a channel. Set the mod-log channel (for moderation actions) under <a href="/guilds/<%= guild.id %>/settings">Settings</a>.</p>
-            <%- include('guild/modules/logging', { guild: guild, channels: channels, moduleConfig: loggingCfg, logEvents: logEvents }) %>
+            <%- include('guild/modules/logging', { guild: guild, channels: channels, moduleConfig: loggingCfg, logEvents: logEvents, fragTarget: 'this', fragSwap: 'none' }) %>
           </div>
           <div class="mod-panel" data-tab="cmd">
             <%- include('guild/commands', { guild: guild, commands: commands, roles: roles, channels: channels }) %>

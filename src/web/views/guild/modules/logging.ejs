@@ -1,4 +1,8 @@
-<form method="POST" action="/guilds/<%= guild.id %>/m/logging/config" hx-post="/guilds/<%= guild.id %>/m/logging/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:520px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/logging/config"
+      hx-post="/guilds/<%= guild.id %>/m/logging/config"
+      hx-target="<%= typeof fragTarget !== 'undefined' ? fragTarget : '#module-config' %>"
+      hx-swap="<%= typeof fragSwap !== 'undefined' ? fragSwap : 'outerHTML' %>"
+      class="stack" style="max-width:520px">
   <label>Log channel</label>
   <select name="channel">
     <option value="">— none —</option>

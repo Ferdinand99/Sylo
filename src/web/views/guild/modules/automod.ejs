@@ -16,7 +16,11 @@
   Sylo never acts on other bots.
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/automod/config" class="stack" style="max-width:700px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/automod/config"
+      hx-post="/guilds/<%= guild.id %>/m/automod/config"
+      hx-target="<%= typeof fragTarget !== 'undefined' ? fragTarget : '#module-config' %>"
+      hx-swap="<%= typeof fragSwap !== 'undefined' ? fragSwap : 'outerHTML' %>"
+      class="stack" style="max-width:700px">
   <div class="am-rules">
     <% automodRules.forEach(function (pair) { var key = pair[0], label = pair[1], hint = pair[2]; %>
       <div class="am-rule">
