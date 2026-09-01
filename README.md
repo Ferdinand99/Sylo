@@ -7,8 +7,10 @@
 **Multi-function Discord bot with a MEE6-style web dashboard — self-hosted on Unraid via Docker.**
 
 [![Test](https://github.com/Ferdinand99/Sylo/actions/workflows/test.yml/badge.svg)](https://github.com/Ferdinand99/Sylo/actions/workflows/test.yml)
-[![Release](https://img.shields.io/github/v/release/Ferdinand99/Sylo?sort=semver)](https://github.com/Ferdinand99/Sylo/releases)
-[![Container](https://img.shields.io/badge/ghcr.io-Ferdinand99%2FSylo-2496ED?logo=docker&logoColor=white)](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)
+[![Release](https://img.shields.io/github/v/release/Ferdinand99/Sylo?sort=semver&label=release)](https://github.com/Ferdinand99/Sylo/releases)
+[![Docker Hub](https://img.shields.io/docker/v/iwgamin/sylo?sort=semver&logo=docker&logoColor=white&label=docker%20hub)](https://hub.docker.com/r/iwgamin/sylo)
+[![Pulls](https://img.shields.io/docker/pulls/iwgamin/sylo?logo=docker&logoColor=white&label=pulls)](https://hub.docker.com/r/iwgamin/sylo)
+[![GHCR](https://img.shields.io/badge/ghcr.io-Ferdinand99%2FSylo-2496ED?logo=github&logoColor=white)](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/github/license/Ferdinand99/Sylo)](LICENSE)
 
@@ -422,6 +424,20 @@ persists in `./data` on the host.
 
 > If `better-sqlite3` ever fails to build on Alpine for your platform, change the
 > two `FROM node:22-alpine` lines in the `Dockerfile` to `node:22-slim`.
+
+### Prebuilt images
+
+CI publishes `linux/amd64` images to two registries — use either:
+
+| Tag | Registry | What it is |
+| --- | --- | --- |
+| `iwgamin/sylo:latest`, `:X.Y.Z`, `:X.Y` | [Docker Hub](https://hub.docker.com/r/iwgamin/sylo) · [GHCR](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo) | Stable releases (release-please). What the Unraid template pulls. |
+| `ghcr.io/ferdinand99/sylo:main`, `:sha-<short>` | GHCR only | Rolling build of `main` — every push. |
+
+```bash
+docker run -d --name sylo -p 3000:3000 --env-file .env \
+  -v "$PWD/data:/app/data" iwgamin/sylo:latest
+```
 
 ### Backups
 
