@@ -207,18 +207,24 @@ are an action page (Infractions) and two forms blocked on Phase 2.
   `polls.ejs` both `include('partials/embed-editor', …)`; this also finishes the
   Phase-1-deferred `polls` config form (now `hx-post` to `#module-config`).
 
-- **welcome-channel builder** → `embedList` in `alpine-components.js`;
-  `welcome-channel.ejs` is one `x-data="embedList(…)"` block: `x-model` textarea,
-  `x-for` over `items` (embed / banner blocks gated by sibling `<template x-if>`,
-  no wrapper — keeps the CSS grid children direct), `x-for` preset cards, reorder
-  via splice, `reset()`/`move()`/`remove()`/`addPreset()`/`add`+`removeField()`.
-  `$watch('items'|'content')` writes `<input name="spec">` (form stays full-nav —
-  Save reloads the panel, Publish early-returns a redirect). **`welcome-channel.js`
-  deleted.**
+- **welcome-channel + msg-builder** → shared `embedList` in `alpine-components.js`
+  + `partials/embed-block.ejs` (one `.wc-embed` preview row, `banner` flag adds the
+  banner-kind branch as sibling `<template x-if>` so the CSS grid children stay
+  direct). `embedList` owns `content` + an ordered `items` list: `x-model`
+  textarea, `x-for` rows, splice reorder, `move`/`remove`/`addEmbed`/`addPreset`/
+  `add`+`removeField`/`pickImg(row,key)`. `$watch('items'|'content'|'links')`
+  writes the surrounding form's `<input name="spec">` (+ an init pass so an
+  untouched Save round-trips). Form lookup is generic (`$el` is the form, or the
+  first `<form>` under `$root`).
+  - welcome-channel: `banner: true`, preset "Add element" cards, `reset()`; form
+    stays full-nav (Save reloads the panel, Publish early-returns a redirect).
+  - msg-builder: `banner: false`, plain "Add embed", plus `links: true` — a
+    `links` sub-list (max 5, `x-model` inputs) serialised as a `{type:'buttons'}`
+    row alongside preserved non-link `keepRows`; output is `{content, embeds, rows}`.
+  **`welcome-channel.js` and `msg-builder.js` deleted.**
 
-**Still to do:** `msg-builder` (multiple embeds + link buttons + role rows),
-`reminder-builder` (scheduling UI is separate), `temp-voice` builder (`tv-builder.js`,
-14 lines — trivial).
+**Still to do:** `reminder-builder` (scheduling UI is separate), `temp-voice`
+builder (`tv-builder.js`, 14 lines — trivial).
 
 **Done when:** every builder runs on Alpine; the old builder scripts are gone.
 

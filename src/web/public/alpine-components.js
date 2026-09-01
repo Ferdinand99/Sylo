@@ -173,15 +173,36 @@ document.addEventListener('alpine:init', function () {
     };
   });
 
-  // Welcome Channel builder: an ordered list of embed / banner blocks (max 10)
-  // plus the message text. Same ".wc-*" preview look as `embedEditor`, but the
-  // spec is a list with reorder + "Add element" presets, so it is its own
-  // component. Serialises { content, embeds:[…] } into <input name="spec">.
+  // Ordered list of embed / banner blocks (max 10) plus the message text. Same
+  // ".wc-*" preview look as `embedEditor`, but the spec is a list with reorder,
+  // so it is its own component. Drives the markup in partials/embed-block.ejs.
+  // Serialises into the surrounding <form>'s <input name="spec">:
+  //   { content, embeds:[…] }              — welcome-channel
+  //   { content, embeds:[…], rows:[…] }    — msg-builder (cfg.links: true)
+  // cfg: { spec, max, presets?, links? }.
   window.Alpine.data('embedList', function (cfg) {
     var HEX = /^#[0-9a-f]{6}$/i;
     var URL_RE = /^https?:\/\/\S+$/i;
     cfg = cfg || {};
     var spec = cfg.spec && typeof cfg.spec === 'object' ? cfg.spec : { content: '', embeds: [] };
+    var specRows = Array.isArray(spec.rows) ? spec.rows : [];
+    // Keep every component row that isn't purely link buttons; the link editor
+    // owns the rest.
+    var keepRows = specRows.filter(function (r) {
+      return r.type !== 'buttons' || (r.buttons || []).some(function (b) {
+        return b.style !== 'link';
+      });
+    });
+    var linkSeed = specRows
+      .flatMap(function (r) {
+        return r.type === 'buttons' ? r.buttons || [] : [];
+      })
+      .filter(function (b) {
+        return b.style === 'link' || b.url;
+      })
+      .map(function (b) {
+        return { label: b.label || '', url: b.url || '', emoji: b.emoji || '' };
+      });
     var uid = 0;
     function normEmbed(e) {
       e = e && typeof e === 'object' ? e : {};
@@ -204,21 +225,32 @@ document.addEventListener('alpine:init', function () {
     }
     return {
       max: cfg.max || 10,
+      maxLinks: 5,
       presets: Array.isArray(cfg.presets) ? cfg.presets : [],
+      hasLinks: !!cfg.links,
+      keepRows: keepRows,
       content: String(spec.content || ''),
       items: (Array.isArray(spec.embeds) ? spec.embeds : []).map(normEmbed),
+      links: linkSeed,
       _form: null,
       init() {
-        this._form = this.$root.querySelector('#wc-form');
+        this._form =
+          this.$el.matches && this.$el.matches('form')
+            ? this.$el
+            : this.$root.querySelector('form') || this.$el.closest('form');
         if (this._form) {
           this._form.addEventListener('submit', () => this.serialize());
           this.serialize();
           this.$watch('items', () => this.serialize());
           this.$watch('content', () => this.serialize());
+          this.$watch('links', () => this.serialize());
         }
       },
       get full() {
         return this.items.length >= this.max;
+      },
+      addEmbed() {
+        if (!this.full) this.items.push(normEmbed({}));
       },
       addPreset(id) {
         if (this.full) return;
@@ -227,6 +259,12 @@ document.addEventListener('alpine:init', function () {
         });
         if (!p) return;
         this.items.push(normEmbed(JSON.parse(JSON.stringify(p.defaults || { kind: 'embed' }))));
+      },
+      addLink() {
+        if (this.links.length < this.maxLinks) this.links.push({ label: '', url: '', emoji: '' });
+      },
+      removeLink(i) {
+        this.links.splice(i, 1);
       },
       remove(i) {
         this.items.splice(i, 1);
@@ -255,7 +293,7 @@ document.addEventListener('alpine:init', function () {
         row[key] = URL_RE.test(u) ? u : '';
       },
       get serialized() {
-        return {
+        var out = {
           content: this.content,
           embeds: this.items.map(function (e) {
             return {
@@ -279,6 +317,22 @@ document.addEventListener('alpine:init', function () {
             };
           }),
         };
+        if (this.hasLinks) {
+          var buttons = this.links
+            .map(function (b) {
+              return {
+                style: 'link',
+                label: String(b.label || '').trim(),
+                emoji: String(b.emoji || '').trim(),
+                url: String(b.url || '').trim(),
+              };
+            })
+            .filter(function (b) {
+              return b.url && (b.label || b.emoji);
+            });
+          out.rows = buttons.length ? this.keepRows.concat([{ type: 'buttons', buttons: buttons }]) : this.keepRows;
+        }
+        return out;
       },
       serialize() {
         if (!this._form) return;
