@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.13.0](https://github.com/Ferdinand99/Sylo/compare/v2.12.0...v2.13.0) (2026-09-01)
+
+
+### Features
+
+* button and dropdown styles for self-assign roles ([af6c642](https://github.com/Ferdinand99/Sylo/commit/af6c6428e7a23ed3842c565b189ee0a996bd923d))
+* render /rank and /leaderboard as image cards ([12a687c](https://github.com/Ferdinand99/Sylo/commit/12a687ce259d1f4839cb3937f4a1d65d9d20a786))
+
 ## [2.12.0](https://github.com/Ferdinand99/Sylo/compare/v2.11.0...v2.12.0) (2026-09-01)
 
 
