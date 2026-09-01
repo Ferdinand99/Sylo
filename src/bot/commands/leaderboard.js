@@ -40,19 +40,26 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
 
-  const entries = [];
-  for (let i = 0; i < rows.length; i += 1) {
-    const r = rows[i];
-    const member = await interaction.guild.members.fetch(r.user_id).catch(() => null);
-    const user = member?.user ?? (await interaction.client.users.fetch(r.user_id).catch(() => null));
-    entries.push({
+  // One bulk fetch for all rows; members who left the guild just won't be in it.
+  const ids = rows.map((r) => r.user_id);
+  const members = await interaction.guild.members.fetch({ user: ids }).catch(() => new Map());
+  const missing = ids.filter((id) => !members.has(id));
+  const users = new Map(
+    (await Promise.all(missing.map((id) => interaction.client.users.fetch(id).catch(() => null))))
+      .filter(Boolean)
+      .map((u) => [u.id, u])
+  );
+
+  const entries = rows.map((r, i) => {
+    const who = members.get(r.user_id) ?? users.get(r.user_id) ?? null;
+    return {
       rank: i + 1,
-      name: member?.displayName || user?.username || r.user_id,
-      avatarUrl: (member ?? user)?.displayAvatarURL?.({ extension: 'png', size: 64, forceStatic: true }) || '',
+      name: who?.displayName || who?.username || r.user_id,
+      avatarUrl: who?.displayAvatarURL?.({ extension: 'png', size: 64, forceStatic: true }) || '',
       level: r.level,
       xp: r.xp,
-    });
-  }
+    };
+  });
 
   const yourRank = memberRank(interaction.guildId, interaction.user.id);
   const cfg = getGuildModule(interaction.guildId, 'leveling').config;

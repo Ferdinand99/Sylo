@@ -30,6 +30,11 @@ export const MAX_MS = 60 * 86_400_000; // 60 days
 export const MAX_WINNERS = 20;
 const ACCENT = 0xf0b232;
 
+// Coalesced "N entries" footer refreshes — at most one message edit per
+// COUNT_REFRESH_MS per giveaway (see scheduleCountRefresh). Keyed by giveaway id.
+const COUNT_REFRESH_MS = 5000;
+const pendingCountRefresh = new Map();
+
 export function normaliseGiveawaysConfig(raw = {}) {
   return {
     ping: ['here', 'everyone'].includes(raw.ping) ? raw.ping : 'none',
@@ -137,6 +142,12 @@ export async function endGiveaway(id, opts = {}) {
   const fresh = getGiveaway(id);
   const entryCount = giveawayEntryCount(id);
 
+  const pending = pendingCountRefresh.get(id);
+  if (pending) {
+    clearTimeout(pending);
+    pendingCountRefresh.delete(id);
+  }
+
   if (channel?.isTextBased?.() && g.message_id) {
     const msg = await channel.messages.fetch(g.message_id).catch(() => null);
     if (msg) await msg.edit(buildGiveawayPayload(fresh, { entryCount })).catch(() => {});
@@ -144,17 +155,17 @@ export async function endGiveaway(id, opts = {}) {
 
   if (channel?.isTextBased?.()) {
     const cfg = normaliseGiveawaysConfig(getGuildModule(g.guild_id, 'giveaways').config);
-    const lead = cfg.ping === 'everyone' ? '@everyone ' : cfg.ping === 'here' ? '@here ' : '';
+    // A reroll never re-pings the whole channel — only the original draw does.
+    const pinging = !opts.rerollCount && cfg.ping !== 'none';
+    const lead = pinging ? (cfg.ping === 'everyone' ? '@everyone ' : '@here ') : '';
     const body = winners.length
       ? `${lead}🎉 Congratulations ${winners.map((w) => `<@${w}>`).join(', ')} — you won **${g.prize}**!`
       : `Nobody entered **${g.prize}**, so there is no winner.`;
     await channel
       .send({
         content: body,
-        allowedMentions: {
-          users: winners,
-          parse: cfg.ping === 'everyone' ? ['everyone'] : [],
-        },
+        // 'everyone' parse covers both @everyone and @here.
+        allowedMentions: { users: winners, parse: pinging ? ['everyone'] : [] },
       })
       .catch(() => {});
 
@@ -172,6 +183,19 @@ export async function endGiveaway(id, opts = {}) {
 }
 
 // --- entry button -----------------------------------------------------
+
+/** Queue a trailing footer refresh; a burst of clicks yields one edit / 5s. */
+function scheduleCountRefresh(message, id) {
+  if (pendingCountRefresh.has(id)) return;
+  const t = setTimeout(() => {
+    pendingCountRefresh.delete(id);
+    const g = getGiveaway(id);
+    if (!g || g.ended) return;
+    message.edit(buildGiveawayPayload(g, { entryCount: giveawayEntryCount(id) })).catch(() => {});
+  }, COUNT_REFRESH_MS);
+  t.unref?.();
+  pendingCountRefresh.set(id, t);
+}
 
 async function handleEnter(interaction, id) {
   const g = getGiveaway(id);
@@ -198,11 +222,8 @@ async function handleEnter(interaction, id) {
     joined = true;
   }
 
-  // Refresh the entry count on the message (best-effort, non-blocking).
-  const entryCount = giveawayEntryCount(id);
-  interaction.message
-    .edit(buildGiveawayPayload(getGiveaway(id), { entryCount }))
-    .catch(() => {});
+  // Refresh the "N entries" footer — coalesced so a click burst can't spam edits.
+  scheduleCountRefresh(interaction.message, id);
 
   return interaction.reply({
     content: joined ? "You're in! 🎉  Click again to leave." : "You've left this giveaway.",
