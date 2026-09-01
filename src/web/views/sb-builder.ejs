@@ -10,7 +10,7 @@
   </div>
 </div>
 
-<form method="POST" action="/guilds/<%= guildId %>/m/starboard/sb" id="sb-form" class="stack" style="max-width:640px">
+<form method="POST" action="/guilds/<%= guildId %>/m/starboard/sb" id="sb-form" class="stack u-mw-xl">
   <input type="hidden" name="id" value="<%= board.id %>" />
 
   <section class="card stack">
@@ -38,7 +38,7 @@
     </p>
 
     <label class="small">Reactions needed</label>
-    <input type="number" name="threshold" min="1" max="100" value="<%= board.threshold %>" style="max-width:120px" />
+    <input class="u-w-field-sm" type="number" name="threshold" min="1" max="100" value="<%= board.threshold %>" />
 
     <label class="checkline">
       <input type="checkbox" name="multiPerUser" <%= board.multiPerUser ? 'checked' : '' %> />
@@ -92,11 +92,11 @@
     <div class="star-age">
       <div class="stack">
         <label class="small">Ignore messages younger than (minutes)</label>
-        <input type="number" name="minAgeMinutes" min="0" value="<%= board.minAgeMinutes %>" style="max-width:140px" />
+        <input class="u-w-field-sm" type="number" name="minAgeMinutes" min="0" value="<%= board.minAgeMinutes %>" />
       </div>
       <div class="stack">
         <label class="small">Ignore messages older than (minutes)</label>
-        <input type="number" name="maxAgeMinutes" min="0" value="<%= board.maxAgeMinutes %>" style="max-width:140px" />
+        <input class="u-w-field-sm" type="number" name="maxAgeMinutes" min="0" value="<%= board.maxAgeMinutes %>" />
         <span class="muted small">0 = no limit</span>
       </div>
     </div>
@@ -106,15 +106,15 @@
     <h2>Restrictions</h2>
 
     <label class="small">Whose reactions count</label>
-    <select name="roleMode" style="max-width:280px">
+    <select class="u-mw-xs" name="roleMode">
       <option value="allow" <%= board.roleMode !== 'deny' ? 'selected' : '' %>>Everyone except the roles below</option>
       <option value="deny" <%= board.roleMode === 'deny' ? 'selected' : '' %>>Only members with a role below</option>
     </select>
     <%- include('partials/chip-picker', { field: 'roleList', kind: 'role', items: roles, selected: board.roleList }) %>
     <p class="muted small">Leave empty to let everyone's reactions count.</p>
 
-    <label class="small" style="margin-top:8px">Which channels this board watches</label>
-    <select name="channelMode" style="max-width:280px">
+    <label class="small u-mt-2">Which channels this board watches</label>
+    <select class="u-mw-xs" name="channelMode">
       <option value="allow" <%= board.channelMode !== 'deny' ? 'selected' : '' %>>Every channel except the ones below</option>
       <option value="deny" <%= board.channelMode === 'deny' ? 'selected' : '' %>>Only the channels below</option>
     </select>

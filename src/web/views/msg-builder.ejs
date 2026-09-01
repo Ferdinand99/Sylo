@@ -20,12 +20,13 @@
   </div>
 <% } %>
 
-<form method="POST" action="/guilds/<%= guildId %>/messages/<%= isNew ? 'new' : rec.id %>" id="mb-form" class="stack" style="max-width:680px">
+<form method="POST" action="/guilds/<%= guildId %>/messages/<%= isNew ? 'new' : rec.id %>" id="mb-form" class="stack u-mw-xl"
+      x-data="embedList(<%= JSON.stringify({ max: 10, links: true, spec: (rec.spec || { content: '', embeds: [], rows: [] }) }) %>)">
   <input type="hidden" name="spec" id="mb-spec" />
 
   <section class="card stack">
     <label class="small">Channel</label>
-    <select name="channelId" style="max-width:420px">
+    <select class="u-mw-md" name="channelId">
       <option value="">— select a channel —</option>
       <% channels.forEach(function (c) { %>
         <option value="<%= c.id %>" <%= c.id === rec.channel_id ? 'selected' : '' %>>#<%= c.name %></option>
@@ -35,23 +36,34 @@
   </section>
 
   <section class="card">
-    <h2 style="margin:0 0 6px">Message</h2>
+    <h2 class="u-m0 u-mb-2">Message</h2>
     <label class="small">Text above the embeds <span class="muted">— optional</span></label>
-    <textarea id="mb-content" rows="2" placeholder="Write your message here…"><%= rec.spec && rec.spec.content ? rec.spec.content : '' %></textarea>
-    <div id="mb-stage" class="wc-stage" style="margin-top:10px"></div>
-    <button type="button" id="mb-add" class="secondary" style="margin-top:10px">＋ Add embed</button>
+    <textarea x-model="content" rows="2" placeholder="Write your message here…"></textarea>
+    <div class="wc-stage u-mt-3">
+      <template x-if="!items.length">
+        <p class="muted wc-empty">No embeds yet — “Add embed” below.</p>
+      </template>
+      <template x-for="(row, i) in items" :key="row.id">
+        <%- include('partials/embed-block', { banner: false }) %>
+      </template>
+    </div>
+    <button type="button" class="secondary u-mt-3" @click="addEmbed()" :disabled="full">＋ Add embed</button>
   </section>
 
   <section class="card">
-    <h2 style="margin:0 0 6px">Link buttons <span class="muted small">— optional, up to 5</span></h2>
-    <div id="mb-links" class="stack"></div>
-    <button type="button" id="mb-addlink" class="secondary">＋ Add link button</button>
+    <h2 class="u-m0 u-mb-2">Link buttons <span class="muted small">— optional, up to 5</span></h2>
+    <div id="mb-links" class="stack">
+      <template x-for="(link, i) in links" :key="i">
+        <div class="mb-link">
+          <input type="text" class="mb-l-label" placeholder="Label" maxlength="80" x-model="link.label" />
+          <input type="text" class="mb-l-emoji" placeholder="emoji" maxlength="64" x-model="link.emoji" />
+          <input type="text" class="mb-l-url" placeholder="https://…" x-model="link.url" />
+          <button type="button" class="wc-x" @click="removeLink(i)" title="Remove">&times;</button>
+        </div>
+      </template>
+    </div>
+    <button type="button" class="secondary" @click="addLink()" :disabled="links.length >= maxLinks">＋ Add link button</button>
   </section>
 </form>
-
-<script>
-  window.MB = <%- JSON.stringify(rec.spec || {}).replace(/</g, '\\u003c') %>;
-</script>
-<script src="/msg-builder.js"></script>
 
 <%- include('partials/footer') %>

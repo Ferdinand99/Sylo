@@ -18,12 +18,12 @@
 </p>
 
 <div class="rr-list-head">
-  <h3 style="margin:0">Your commands <span class="muted small"><%= cmds.length %> / 200</span></h3>
+  <h3 class="u-m0">Your commands <span class="muted small"><%= cmds.length %> / 200</span></h3>
   <a class="btn btn-primary" href="/guilds/<%= guild.id %>/m/custom-commands/cmd/new">＋ New custom command</a>
 </div>
 
 <% if (cmds.length === 0) { %>
-  <p class="muted small">None yet — create one to add a <code>/command</code> to this server.</p>
+  <p class="empty">None yet — create one to add a <code>/command</code> to this server.</p>
 <% } else { %>
   <% cmds.forEach(function (c) { %>
     <div class="cmd-override">
@@ -40,7 +40,7 @@
       </div>
       <div class="btn-row">
         <a class="plugin-btn" href="/guilds/<%= guild.id %>/m/custom-commands/cmd/<%= c.id %>">Edit</a>
-        <form method="POST" action="/guilds/<%= guild.id %>/m/custom-commands/cmd/<%= c.id %>/delete" style="display:inline">
+        <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/m/custom-commands/cmd/<%= c.id %>/delete">
           <button type="submit" class="danger" data-confirm="Delete /<%= c.name %>? It is removed from Discord too.">Delete</button>
         </form>
       </div>

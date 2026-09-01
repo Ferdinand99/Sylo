@@ -1,0 +1,4 @@
+<%# The swappable module-settings fragment. Rendered inside guild.ejs on a full
+    page load, and on its own as the htmx target for GET nav / config POST.
+    Reads everything from inherited locals (see moduleViewLocals in guilds.js). %>
+<div id="module-config"><%- include(configPartialRel) %></div>

@@ -8,8 +8,8 @@
 </p>
 
 <section class="card">
-  <h3 style="margin:0 0 8px">Command</h3>
-  <ul class="muted small" style="margin:0; padding-left:18px; line-height:1.7">
+  <h3 class="u-m0 u-mb-2">Command</h3>
+  <ul class="muted small u-list">
     <li><code>/stats battlefield title:… username:… platform:…</code></li>
     <li>Titles: BF1, BF3, BF4, BFV, Hardline — plus best-effort BF2042 and BF6.</li>
     <li>Results are cached for <code>STATS_CACHE_TTL_MINUTES</code> (default 5) to spare the upstream API.</li>
@@ -17,7 +17,7 @@
 </section>
 
 <section class="card">
-  <h3 style="margin:0 0 8px">Recently queried stats</h3>
+  <h3 class="u-m0 u-mb-2">Recently queried stats</h3>
   <% if (recent.length === 0) { %>
     <p class="muted small">Nothing cached yet — run <code>/stats battlefield</code> in Discord.</p>
   <% } else { %>
@@ -36,7 +36,7 @@
       </tbody>
     </table>
   <% } %>
-  <p class="muted small" style="margin:8px 0 0">
+  <p class="muted small u-m0 u-mt-2">
     The lookup cache is shared across every server this bot is in.
     <a href="/stats">Full cache view &rarr;</a>
   </p>

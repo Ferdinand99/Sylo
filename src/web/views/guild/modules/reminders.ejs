@@ -20,12 +20,12 @@
 </p>
 
 <div class="rr-list-head">
-  <h3 style="margin:0">Your reminders <span class="muted small"><%= list.length %> / 100</span></h3>
+  <h3 class="u-m0">Your reminders <span class="muted small"><%= list.length %> / 100</span></h3>
   <a class="btn btn-primary" href="/guilds/<%= guild.id %>/m/reminders/r/new">＋ New reminder</a>
 </div>
 
 <% if (list.length === 0) { %>
-  <p class="muted small">None yet — create one to post on a schedule.</p>
+  <p class="empty">None yet — create one to post on a schedule.</p>
 <% } else { %>
   <% list.forEach(function (r) { %>
     <div class="cmd-override">
@@ -38,10 +38,10 @@
       </div>
       <div class="btn-row">
         <a class="plugin-btn" href="/guilds/<%= guild.id %>/m/reminders/r/<%= r.id %>">Edit</a>
-        <form method="POST" action="/guilds/<%= guild.id %>/m/reminders/r/<%= r.id %>/toggle" style="display:inline">
+        <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/m/reminders/r/<%= r.id %>/toggle">
           <button type="submit"><%= r.enabled ? 'Pause' : 'Resume' %></button>
         </form>
-        <form method="POST" action="/guilds/<%= guild.id %>/m/reminders/r/<%= r.id %>/delete" style="display:inline">
+        <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/m/reminders/r/<%= r.id %>/delete">
           <button type="submit" class="danger" data-confirm="Delete this reminder?">Delete</button>
         </form>
       </div>

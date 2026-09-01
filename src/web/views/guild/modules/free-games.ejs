@@ -6,7 +6,9 @@
   DLC is filtered out of announcements; <code>/freegames dlc:true</code> shows free DLC on demand.
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/free-games/config" class="stack" style="max-width:520px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/free-games/config"
+      hx-post="/guilds/<%= guild.id %>/m/free-games/config" hx-target="#module-config" hx-swap="outerHTML"
+      class="stack u-mw-lg">
   <label>Announcement channel</label>
   <select name="channelId" required>
     <option value="">— select —</option>
@@ -15,7 +17,7 @@
     <% }) %>
   </select>
 
-  <label style="margin-top:6px">Ping role <span class="muted small">— optional</span></label>
+  <label class="u-mt-2">Ping role <span class="muted small">— optional</span></label>
   <select name="roleId">
     <option value="">— none —</option>
     <% roles.forEach(function (r) { %>
@@ -23,7 +25,7 @@
     <% }) %>
   </select>
 
-  <div style="margin-top:12px"><button type="submit">Save</button></div>
+  <div class="u-mt-3"><button type="submit">Save</button></div>
 </form>
 
-<p class="muted small" style="margin-top:12px">Sylo needs View Channel / Send Messages / Embed Links in that channel.</p>
+<p class="muted small u-mt-3">Sylo needs View Channel / Send Messages / Embed Links in that channel.</p>
