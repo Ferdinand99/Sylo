@@ -1,15 +1,54 @@
+<div align="center">
+
+<img src="unraid/sylo-icon.png" alt="Sylo" width="96" />
+
 # Sylo
 
-Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Twenty-six per-guild modules
-(moderation, logging, tickets, reaction roles, verification, welcome, welcome
-channel, sticky messages, auto-moderation, counting, custom commands,
-autoresponder, reminders, leveling, AFK, server statistics, free games, ban
-appeals, temporary voice channels, starboard, invite tracker, polls, giveaways,
-game stats, Twitch alerts, YouTube alerts), Discord OAuth2 login, a public
-leveling leaderboard, and — via the optional **Game stats** module —
-**Battlefield-series** player lookups through the public
-[gametools.network](https://gametools.network) API.
+**Multi-function Discord bot with a MEE6-style web dashboard — self-hosted on Unraid via Docker.**
+
+[![Test](https://github.com/Ferdinand99/Sylo/actions/workflows/test.yml/badge.svg)](https://github.com/Ferdinand99/Sylo/actions/workflows/test.yml)
+[![Release](https://img.shields.io/github/v/release/Ferdinand99/Sylo?sort=semver)](https://github.com/Ferdinand99/Sylo/releases)
+[![Container](https://img.shields.io/badge/ghcr.io-Ferdinand99%2FSylo-2496ED?logo=docker&logoColor=white)](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org)
+[![License: MIT](https://img.shields.io/github/license/Ferdinand99/Sylo)](LICENSE)
+
+</div>
+
+Twenty-six per-guild **modules**, Discord **OAuth2 login**, a public leveling
+**leaderboard**, and — via the optional Game stats module — **Battlefield-series**
+player lookups through the public [gametools.network](https://gametools.network) API.
+Everything runs in **one Node process, one container, no build step**.
+
+<details>
+<summary>The 26 modules</summary>
+
+moderation · logging · tickets · reaction roles · verification · welcome ·
+welcome channel · sticky messages · auto-moderation · counting · custom commands ·
+autoresponder · reminders · leveling · AFK · server statistics · free games ·
+ban appeals · temporary voice channels · starboard · invite tracker · polls ·
+giveaways · game stats · Twitch alerts · YouTube alerts
+
+</details>
+
+## Contents
+
+- [What's new](#whats-new-since-20) · [Features](#features) · [Screenshots](#screenshots)
+- [Project structure](#project-structure) · [Local setup](#local-setup) · [Environment variables](#environment-variables)
+- [Discord application setup](#discord-application-setup) · [Docker](#docker) · [Unraid deployment](#unraid-deployment)
+- [Releases & CI](#releases--ci) · [Tests](#tests) · [Adding another game](#adding-another-game)
+- [Legal](#legal) · [License](#license)
+
+## Screenshots
+
+The dashboard is server-rendered EJS with a small htmx + Alpine layer (no build
+step): a fixed sidebar with a server switcher, a MEE6-style plugin grid, and a
+settings panel per module — saves swap in place with a toast.
+
+<!-- Drop PNGs in docs/screenshots/ and uncomment:
+![Overview](docs/screenshots/overview.png)
+![Module page](docs/screenshots/module-page.png)
+![Embed builder](docs/screenshots/embed-builder.png)
+-->
 
 ## Breaking changes in 3.0
 
@@ -214,15 +253,22 @@ leveling leaderboard, and — via the optional **Game stats** module —
 - **Operations** — per-server config **audit log** and JSON **config export**,
   `/forget` self-service data deletion, automatic data purge on guild removal,
   a database integrity check at startup, and rate-limited public / auth routes.
-- **Web dashboard** (Express + EJS, no frontend framework)
+- **Web dashboard** (Express + EJS, server-rendered) — **htmx 2** and
+  **Alpine.js 3** are vendored as static files under `src/web/public/vendor/`
+  (pinned, no CDN, no build step). Settings saves swap a page fragment in place
+  with a toast; every route keeps a no-JS fallback (full render + redirect). The
+  builders (embed editor, reaction roles, custom commands, welcome channel, …)
+  are Alpine components. The public pages below stay framework-free.
   - `GET /health` — JSON status (uptime, guild count, last error) for healthchecks
-  - `/` — bot status, activity stats and module adoption; topbar server switcher
+  - `/` — bot status, activity stats and module adoption; sidebar server switcher
   - `/stats` — cached lookups · `/health` — status page (JSON for monitors)
   - `/settings` — **Bot Personalizer**: bot username / avatar / banner + presence
   - `/guilds/<id>` — per-server control panel: a MEE6-style plugin grid, a
     **Leaderboard** page, **Settings** (bot-master roles, mod-log channel, embed
-    colour, backup), Commands, Moderation (warnings + bans), Tickets, Ban appeals,
-    Message Creator, an audit log, and a settings panel per module
+    colour, backup), Commands, Moderator (auto-mod + warnings/bans), Tickets,
+    Ban appeals, Embed messages, an audit log, and a settings panel per module
+  - **public, zero-JS pages** — the shareable leaderboard (`/leaderboard/:id`,
+    `/lb/:slug`), member verification (`/verify`) and ban-appeal forms (`/appeal`)
   - **Discord OAuth2 login** (optional) — gate the dashboard to server admins
     (and configurable staff roles for tickets); runs open on a trusted LAN when
     unconfigured. See *Dashboard authentication*.
@@ -251,23 +297,29 @@ src/
     registry.js         module catalogue (id, intents, defaults)
     dispatch.js         fans gateway events out to enabled modules
     index.js            loads module implementations
-    moderation.js logging.js tickets.js roles.js welcome.js sticky.js
-    counting.js automod.js customCommands.js autoresponder.js verification.js
-    scheduledMessages.js leveling.js afk.js serverStats.js freeGames.js appeals.js
-    tempVoice.js
+    moderation automod logging tickets roles welcome welcomeChannel sticky
+    counting customCommands autoresponder verification scheduledMessages
+    leveling afk serverStats freeGames appeals tempVoice polls giveaways
+    starboard inviteTracker twitchAlerts youtubeAlerts messageCreator
   adapters/games/       gameAdapter, registry, battlefield
   db/
     index.js            SQLite connection + migrations
-    cache guildSettings modules commandOverrides warnings tickets
+    cache guildSettings modules commandOverrides warnings tickets audit
     composedMessages counting scheduledMessages leveling appeals tempVoice
+    polls giveaways starboard inviteTracker twitchAlerts youtubeAlerts
+    leaderboardVanity backup exportConfig purge
   web/
-    server.js           Express app
-    routes/             health, dashboard, commands, stats, guilds, guildTickets,
-                        verify + appeal (public), leaderboard (public)
-    middleware/         auth (OAuth2), ticketAccess
-    lib/ views/ public/ helpers; EJS templates; styles.css, app.js
+    server.js           Express app (createApp() is exported for tests)
+    routes/             health, dashboard, commands, stats, settings, guilds,
+                        guildTickets, guildMessages,
+                        verify + appeal + leaderboard (public, framework-free)
+    middleware/         auth (OAuth2), csrf, rateLimit, ticketAccess
+    lib/                guildContext, sidebarNav, moduleIcons, overviewSummary, …
+    views/              EJS templates; guild.ejs + guild/_*.ejs fragment partials
+    public/             styles.css, app.js (CSRF + confirm), htmx-setup.js,
+                        alpine-components.js, vendor/{htmx,alpine}.min.js
 scripts/register-commands.js
-test/                   battlefield.adapter.test.js, duration.test.js
+test/                   node --test; unit tests + dashboardRoutes.test.js (HTTP)
 data/                   SQLite file lives here (git-ignored, volume-mounted)
 ```
 
@@ -521,8 +573,10 @@ pin to `:X.Y.Z` on either registry to freeze a version.
 npm test
 ```
 
-Runs the `node:test` suite for the Battlefield adapter (parsing + error
-handling, `fetch` stubbed — no network).
+Runs the `node:test` suite — module normalisers and helpers, the CSRF
+middleware, and `dashboardRoutes.test.js`, which boots `createApp()` over HTTP to
+assert the htmx fragment contract. No network: `fetch` is stubbed where adapters
+need it, and DB tests write to a throwaway SQLite file.
 
 ## Legal
 
