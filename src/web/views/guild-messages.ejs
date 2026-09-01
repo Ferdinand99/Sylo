@@ -3,7 +3,7 @@
 <p class="muted"><a href="/guilds/<%= guild.id %>/overview">&larr; <%= guild.name %></a></p>
 
 <div class="rr-builder-head">
-  <h1 class="page-title">Embed messages</h1>
+  <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'message-square', title: 'Embed messages', lg: true }) %></div>
   <a class="btn btn-primary" href="/guilds/<%= guild.id %>/messages/new">＋ New embed message</a>
 </div>
 <p class="muted small">Build rich embed messages with a live editor, then publish them to a channel as Sylo — and re-publish to edit the posted message in place.</p>
@@ -21,7 +21,7 @@
 </div>
 
 <% if (items.length === 0) { %>
-  <p class="muted small">None yet — create one to post an embed to a channel.</p>
+  <p class="empty">None yet — create one to post an embed to a channel.</p>
 <% } else { %>
   <% items.forEach(function (it) { %>
     <div class="cmd-override">

@@ -109,7 +109,7 @@
   <% } else { %>
   <section class="guild-panel">
     <% if (panel === 'settings') { %>
-      <h2>Settings</h2>
+      <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'gear', title: 'Settings' }) %></div>
       <p class="muted">Server-wide settings for Sylo. Bot-identity (name, avatar, activity) lives in <a href="/settings">Bot Personalizer</a>.</p>
 
       <form method="POST" action="/guilds/<%= guild.id %>/settings" class="stack u-mw-lg">
@@ -155,10 +155,10 @@
       <p><a href="/guilds/<%= guild.id %>/export">Export configuration &rarr;</a></p>
 
     <% } else if (panel === 'audit') { %>
-      <h2>Audit log</h2>
+      <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'list', title: 'Audit log' }) %></div>
       <p class="muted">Configuration changes made from this dashboard. Keeps the most recent 500 per server.</p>
       <% if (audit.length === 0) { %>
-        <p class="muted">Nothing recorded yet.</p>
+        <p class="empty">Nothing recorded yet.</p>
       <% } else { %>
         <table>
           <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr></thead>
@@ -176,11 +176,11 @@
       <% } %>
 
     <% } else if (panel === 'commands') { %>
-      <h2>Commands</h2>
+      <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'command', title: 'Commands' }) %></div>
       <%- include('guild/commands', { guild: guild, commands: commands, roles: roles, channels: channels }) %>
 
     <% } else if (panel === 'moderation') { %>
-      <h2>Moderator</h2>
+      <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'shield', title: 'Moderator' }) %></div>
       <p class="muted">Auto-moderation, warning auto-actions, infractions, immunity, audit logging and command permissions.</p>
 
       <div class="mod-tabbed">
@@ -231,8 +231,8 @@
       </div>
 
     <% } else if (panel === 'leaderboard') { %>
-      <div class="module-panel-head">
-        <h2>🏆 Leaderboard</h2>
+      <div class="mod-hero">
+        <%- include('guild/_hero-inner', { icon: 'trophy', title: 'Leaderboard' }) %>
         <a class="btn btn-primary" href="/leaderboard/<%= guild.id %>" target="_blank" rel="noopener">See leaderboard &rarr;</a>
       </div>
       <p class="muted">Every minute a member is chatting they earn a random amount of XP. Rankings come from the <a href="/guilds/<%= guild.id %>/m/leveling">Leveling</a> module.</p>
@@ -293,14 +293,14 @@
       <% } %>
 
     <% } else if (panel === 'appeals') { %>
-      <h2>⚖️ Ban appeals</h2>
+      <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'gavel', title: 'Ban appeals' }) %></div>
       <p class="muted">Banned members are DM'd a link to an appeal form. Accept or deny each one with a reason — Sylo DMs the member the outcome, and accepting lifts the ban automatically when that option is on.</p>
       <% if (!appealsModuleEnabled) { %>
         <div class="banner info">The <strong>Ban appeals</strong> module is off. <a href="/guilds/<%= guild.id %>/m/appeals">Enable and configure it</a> to start collecting appeals.</div>
       <% } %>
 
       <% if (appeals.length === 0) { %>
-        <p class="muted">No appeals yet.</p>
+        <p class="empty">No appeals yet.</p>
       <% } else { %>
         <% appeals.forEach(function (a) { %>
           <div class="cmd-override">
@@ -336,15 +336,10 @@
     <% } else if (panel.indexOf('m/') === 0 && typeof activeModule !== 'undefined') { %>
       <% var mrow = modules.find(function (x) { return x.id === activeModule.id; }); %>
       <div class="mod-hero">
-        <span class="mod-hero-ico">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-<%= typeof moduleIconName !== 'undefined' ? moduleIconName : 'sliders' %>"/></svg>
-        </span>
-        <div class="mod-hero-text">
-          <h2><%= activeModule.name %></h2>
-          <p class="muted"><%= activeModule.description %></p>
-        </div>
+        <%- include('guild/_hero-inner', { icon: (typeof moduleIconName !== 'undefined' ? moduleIconName : 'sliders'), title: activeModule.name }) %>
         <%- include('guild/_module-toggle', { guild: guild, activeModule: activeModule, moduleEnabled: mrow.enabled, toggleDisabled: mrow.missingIntents.length > 0 }) %>
       </div>
+      <p class="muted"><%= activeModule.description %></p>
       <% if (mrow.missingIntents.length) { %>
         <p class="warn-text small">Needs intent: <%= mrow.missingIntents.join(', ') %> — enable it in the Discord Developer Portal.</p>
       <% } %>

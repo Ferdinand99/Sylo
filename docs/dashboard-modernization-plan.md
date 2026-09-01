@@ -340,12 +340,14 @@ target (icon chips, 3-line clamped descriptions, hover lift, on/off border
 colour, full-card hit area).
 
 Done so far:
-- **Module-page hero** — `guild.ejs` module branch now renders a `.mod-hero`:
-  the module's **SVG icon** (from the shared `MODULE_ICONS` map, via a new
-  `moduleIconName` local) in a tinted 44px chip, title + description stacked
-  beside it, enable toggle right-aligned. Replaces the bare `<h2>` + loose `<p>`
-  and drops the mismatched registry emoji — the hero icon now matches the
-  sidebar and overview grid exactly. All 26 module pages inherit it.
+- **Page/panel hero** — new `guild/_hero-inner.ejs` partial (icon chip + title,
+  `lg` flag for page-level titles). Applied everywhere a guild sub-page had a
+  bare `<h2>`/`<h1>`: the 26 module config pages (SVG icon from the shared
+  `MODULE_ICONS` map via a new `moduleIconName` local, + enable toggle), plus
+  Settings, Audit log, Commands, Moderator, Leaderboard, Ban appeals (all in
+  `guild.ejs`) and the standalone Embed messages / Tickets pages. Every hero icon
+  now matches that page's sidebar row; the old registry/emoji icons are gone.
+  `.mod-hero` CSS unified (`--lg` modifier, trailing toggle/button slot).
 - **Empty-state component** — `.empty` (dashed border, centred, muted). Applied
   to the "None yet …" boxes on reminders / roles / custom-commands / starboard /
   temp-voice.

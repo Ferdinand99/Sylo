@@ -1,0 +1,10 @@
+<%
+  // Icon chip + title for a page/panel hero (.mod-hero wrapper is supplied by
+  // the caller, which may also add a trailing element such as a toggle/button).
+  // params: icon (#i-<name> symbol), title, lg (bool — larger, for page titles)
+  var _lg = typeof lg !== 'undefined' && lg;
+%>
+<span class="mod-hero-ico<%= _lg ? ' mod-hero-ico--lg' : '' %>">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-<%= icon %>"/></svg>
+</span>
+<h2 class="mod-hero-title<%= _lg ? ' mod-hero-title--lg' : '' %>"><%= title %></h2>
