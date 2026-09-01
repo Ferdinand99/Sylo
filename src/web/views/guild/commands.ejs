@@ -1,6 +1,8 @@
 <p class="muted">Disable a command in this server, or restrict it to channels / roles. Administrators always bypass these limits.</p>
 <% commands.forEach(function (c) { %>
-  <form method="POST" action="/guilds/<%= guild.id %>/commands/<%= c.name %>" class="cmd-override">
+  <form method="POST" action="/guilds/<%= guild.id %>/commands/<%= c.name %>"
+        hx-post="/guilds/<%= guild.id %>/commands/<%= c.name %>" hx-target="this" hx-swap="none"
+        class="cmd-override">
     <div class="cmd-override-head">
       <code>/<%= c.name %></code>
       <label class="switch">

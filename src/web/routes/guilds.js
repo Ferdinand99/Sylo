@@ -1691,7 +1691,14 @@ router.post('/:guildId/general', (req, res) => {
 router.post('/:guildId/commands/:command', (req, res) => {
   const guild = req.guild;
   const command = req.params.command;
+  const hx = Boolean(req.get('HX-Request'));
   if (!runtime.client?.commands?.has(command)) {
+    if (hx) {
+      return res
+        .status(404)
+        .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Unknown command', kind: 'bad' } }))
+        .end();
+    }
     return res.redirect(`/guilds/${guild.id}/commands?msg=badcommand`);
   }
   // Accepts an array (multi-select) or a comma/space-separated string of ids.
@@ -1711,6 +1718,12 @@ router.post('/:guildId/commands/:command', (req, res) => {
     action: `command:/${command}`,
     detail: on ? 'updated limits' : 'disabled',
   });
+  if (hx) {
+    return res
+      .status(204)
+      .set('HX-Trigger', JSON.stringify({ toast: { msg: `/${command} updated`, kind: 'ok' } }))
+      .end();
+  }
   res.redirect(`/guilds/${guild.id}/commands?msg=saved`);
 });
 

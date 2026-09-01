@@ -80,7 +80,7 @@ appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
 
 ---
 
-## Phase 1 — Route/view refactor for fragments — IN PROGRESS
+## Phase 1 — Route/view refactor for fragments — DONE (bar 2 Phase-2-blocked forms)
 
 **Goal:** module-config pages save without a full reload.
 
@@ -144,13 +144,27 @@ appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
 - This also fixes the batch-2 edge where `logging.ejs`'s hard-coded
   `hx-target="#module-config"` failed on the Moderator page.
 
+### Done (commit 6 — command overrides)
+
+- `guild/commands.ejs` per-command forms (`POST /guilds/:id/commands/:command`)
+  post via htmx (`hx-target="this" hx-swap="none"`); the route returns
+  `204 + HX-Trigger toast` (and a `404 + bad toast` for an unknown command).
+  Covers both the standalone `/commands` page and the Moderator → Commands tab.
+
 ### Still to do
 
-- Moderator page **Infractions** tab (warn / remove-ban forms) and **Commands**
-  tab (per-command overrides) — still full-reload; lower priority.
+- **Moderator → Infractions tab** (warn a member / remove a ban) — still
+  full-reload. Intentional: these are *actions* with Discord side effects
+  (mod-log embed, real unban) and the warnings/bans list needs to refresh, so a
+  reload is fine feedback. Convert later by re-rendering the tab partial if
+  wanted.
 - **`polls` and `welcome-channel` config forms:** submit-time JS populates hidden
-  fields — finish these with the Phase 2 builders (`welcome-channel` publish also
-  early-returns a redirect).
+  fields — finished as part of the Phase 2 builder ports (`welcome-channel`
+  publish also early-returns a redirect).
+
+**Phase 1 is effectively done** — every settings save on the dashboard is now a
+fragment swap + toast, with the no-JS fallback intact. The two remaining items
+are an action page (Infractions) and two forms blocked on Phase 2.
 - Convert the standalone builder pages (rr / sb / cc / msg / reminder / tv).
 - Convert module enable/disable toggles + plugin-grid "Enable" from the
   `syloAction` fetch to `hx-post` returning the updated card/dot.
