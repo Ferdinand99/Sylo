@@ -10,9 +10,26 @@
   </div>
 </div>
 
-<form method="POST" action="/guilds/<%= guildId %>/m/custom-commands/cmd" id="cc-form" class="stack" style="max-width:680px">
+<%
+  var actionTypeMeta = [
+    { type: 'reply', title: 'Bot responds with a message in the current channel' },
+    { type: 'send', title: 'Bot sends a message to a chosen channel' },
+    { type: 'add-role', title: 'Bot gives the member a role' },
+    { type: 'remove-role', title: 'Bot removes a role from the member' },
+  ];
+  var _cc = {
+    actions: cmd.actions || [],
+    types: actionTypeMeta,
+    roles: (roles || []).map(function (r) { return { id: String(r.id), name: r.name }; }),
+    channels: (channels || []).map(function (c) { return { id: String(c.id), name: c.name }; }),
+    placeholders: ccPlaceholders || [],
+  };
+%>
+
+<form method="POST" action="/guilds/<%= guildId %>/m/custom-commands/cmd" id="cc-form" class="stack" style="max-width:680px"
+      x-data="ccBuilder(<%= JSON.stringify(_cc) %>)">
   <input type="hidden" name="id" value="<%= cmd.id %>" />
-  <input type="hidden" name="actions" id="cc-actions-json" />
+  <input type="hidden" name="actions" />
 
   <section class="card stack">
     <h2>Command</h2>
@@ -33,8 +50,108 @@
       <h2 style="margin:0">Command actions</h2>
     </div>
     <p class="muted small">Actions run in order — use the ↑ ↓ buttons to reorder.</p>
-    <div id="cc-actions"></div>
-    <button type="button" id="cc-add-action" class="secondary">＋ Add another action</button>
+
+    <div id="cc-actions">
+      <template x-for="(a, ai) in actions" :key="a.id">
+        <div class="cc-action">
+          <div class="cc-action-head">
+            <span class="cc-action-title"><span class="cc-badge" x-text="ai + 1"></span> <span x-text="title(a.type)"></span></span>
+            <span class="cc-action-tools">
+              <button type="button" class="cc-iconbtn" @click="moveAction(ai, -1)" :disabled="ai === 0" title="Move up">↑</button>
+              <button type="button" class="cc-iconbtn" @click="moveAction(ai, 1)" :disabled="ai === actions.length - 1" title="Move down">↓</button>
+              <button type="button" class="cc-iconbtn danger" @click="removeAction(ai)" title="Remove action">✕</button>
+            </span>
+          </div>
+          <div class="cc-action-body stack">
+            <template x-if="a.type === 'add-role' || a.type === 'remove-role'">
+              <div style="display:contents">
+                <label class="small">Role</label>
+                <select x-model="a.roleId">
+                  <option value="">— select a role —</option>
+                  <template x-for="r in roles" :key="r.id"><option :value="r.id" x-text="r.name"></option></template>
+                </select>
+                <p class="muted small">Applied to whoever ran the command.</p>
+              </div>
+            </template>
+
+            <template x-if="a.type === 'reply' || a.type === 'send'">
+              <div style="display:contents">
+                <template x-if="a.type === 'send'">
+                  <div style="display:contents">
+                    <label class="small">Channel</label>
+                    <select x-model="a.channelId">
+                      <option value="">— select a channel —</option>
+                      <template x-for="c in channels" :key="c.id"><option :value="c.id" x-text="'#' + c.name"></option></template>
+                    </select>
+                  </div>
+                </template>
+                <template x-if="a.type === 'reply'">
+                  <label class="checkline"><input type="checkbox" x-model="a.private" /> Private — only the person who ran it sees the reply</label>
+                </template>
+
+                <div class="cc-msgs">
+                  <template x-for="(m, mi) in a.messages" :key="m.id">
+                    <div class="cc-msg">
+                      <div class="cc-msg-head">
+                        <span class="muted small">Message <span x-text="mi + 1"></span></span>
+                        <span class="cc-msg-tools">
+                          <template x-if="!m.embed"><button type="button" class="link-btn" @click="addEmbed(m)">＋ Add embed</button></template>
+                          <template x-if="a.messages.length > 1"><button type="button" class="link-btn" @click="removeMsg(a, mi)">remove</button></template>
+                        </span>
+                      </div>
+                      <textarea class="cc-content" rows="2" x-model="m.content"
+                                placeholder="Write your message here… (leave blank for embed-only)"></textarea>
+
+                      <template x-if="m.embed">
+                        <div class="cc-embed" :style="'--cc-color:' + m.embed.color">
+                          <div class="cc-embed-top">
+                            <label class="cc-colorwrap" title="Embed colour"><input type="color" x-model="m.embed.color" /></label>
+                            <input type="text" class="cc-e-title" x-model="m.embed.title" placeholder="Embed title" />
+                            <button type="button" class="link-btn" @click="removeEmbed(m)">remove embed</button>
+                          </div>
+                          <textarea rows="2" x-model="m.embed.description" placeholder="Embed description"></textarea>
+                          <div class="cc-embed-grid">
+                            <input type="text" x-model="m.embed.authorName" placeholder="Author name" />
+                            <button type="button" class="cc-urlbtn" :class="{ has: m.embed.authorIcon }" @click="pickUrl(m, 'authorIcon')">Author icon…</button>
+                            <button type="button" class="cc-urlbtn" :class="{ has: m.embed.image }" @click="pickUrl(m, 'image')">Image…</button>
+                            <button type="button" class="cc-urlbtn" :class="{ has: m.embed.thumbnail }" @click="pickUrl(m, 'thumbnail')">Thumbnail…</button>
+                            <input type="text" x-model="m.embed.footerText" placeholder="Footer text" />
+                            <label class="checkline"><input type="checkbox" x-model="m.embed.timestamp" /> Timestamp</label>
+                          </div>
+                          <div class="cc-embed-fields">
+                            <template x-for="(f, fi) in m.embed.fields" :key="f.id">
+                              <div class="cc-embed-field">
+                                <input type="text" x-model="f.name" placeholder="Field name" />
+                                <input type="text" x-model="f.value" placeholder="Field value" />
+                                <button type="button" class="link-btn" @click="removeField(m, fi)">remove</button>
+                              </div>
+                            </template>
+                          </div>
+                          <button type="button" class="link-btn" @click="addField(m)">＋ Add field</button>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+                <button type="button" class="link-btn" @click="addMsg(a)">＋ Add a message (the bot picks one at random)</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="placeholders.length">
+        <p class="muted small">Placeholders: <template x-for="p in placeholders" :key="p"><code x-text="p"></code> </template></p>
+      </template>
+    </div>
+
+    <button type="button" id="cc-add-action" class="secondary" x-show="!picking" @click="picking = true">＋ Add another action</button>
+    <div class="cc-typepicker" x-show="picking">
+      <template x-for="t in types" :key="t.type">
+        <button type="button" @click="addAction(t.type)" x-text="t.title"></button>
+      </template>
+      <button type="button" class="link-btn" @click="picking = false">cancel</button>
+    </div>
   </section>
 
   <details class="card cc-advanced">
@@ -51,22 +168,5 @@
     </div>
   </details>
 </form>
-
-<%
-  var actionTypeMeta = [
-    { type: 'reply', title: 'Bot responds with a message in the current channel' },
-    { type: 'send', title: 'Bot sends a message to a chosen channel' },
-    { type: 'add-role', title: 'Bot gives the member a role' },
-    { type: 'remove-role', title: 'Bot removes a role from the member' },
-  ];
-%>
-<script>
-  window.CC = <%- JSON.stringify(cmd).replace(/</g, '\\u003c') %>;
-  window.CC_ROLES = <%- JSON.stringify(roles).replace(/</g, '\\u003c') %>;
-  window.CC_CHANNELS = <%- JSON.stringify(channels).replace(/</g, '\\u003c') %>;
-  window.CC_ACTION_TYPES = <%- JSON.stringify(actionTypeMeta).replace(/</g, '\\u003c') %>;
-  window.CC_PLACEHOLDERS = <%- JSON.stringify(ccPlaceholders).replace(/</g, '\\u003c') %>;
-</script>
-<script src="/cc-builder.js"></script>
 
 <%- include('partials/footer') %>

@@ -239,11 +239,21 @@ are an action page (Infractions) and two forms blocked on Phase 2.
   `x-data="tvName(…)"` with `x-model` + `x-text="preview"`. **`tv-builder.js` and
   `window.TV_NAME` deleted.**
 
-**Still to do:** `cc-builder.js` (273 lines — custom-command action tree: typed
-action cards + compact embed editor + pickers). Biggest remaining port; can reuse
-`embed-editor` / `chip-picker` per action card.
+- **cc-builder** (custom-command action tree) → `ccBuilder` in
+  `alpine-components.js`. Reactive `actions` list (synthetic ids for `:key`);
+  `x-for` action cards → `x-if` per type (`reply`/`send` vs `add-role`/
+  `remove-role`), nested `x-for` message blocks, nested `x-for` embed fields; all
+  fields are `x-model` (the compact `.cc-*` form-style embed editor, not the
+  WYSIWYG one), `pickUrl()` prompts for image URLs, `title()` maps type→label,
+  `picking` toggles the add-action type picker. `$watch('actions')` + submit +
+  init write `<input name="actions">`. Type-branch wrappers use
+  `style="display:contents"` so the `.stack` grid stays flat. The advanced-options
+  `chip-picker`s are unchanged. **`cc-builder.js` + its 5 `window.CC*` globals
+  deleted.**
 
-**Done when:** every builder runs on Alpine; the old builder scripts are gone.
+**Done — every builder runs on Alpine; all per-builder scripts are gone.** Only
+`app.js` (Phase 3 target), `htmx-setup.js` and `alpine-components.js` remain in
+`src/web/public/`.
 
 ---
 
