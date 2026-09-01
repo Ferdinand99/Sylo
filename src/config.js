@@ -60,6 +60,21 @@ if (!Number.isInteger(webPort) || webPort <= 0 || webPort > 65535) {
   process.exit(1);
 }
 
+// Automatic database backups: compacted single-file snapshots written via
+// SQLite "VACUUM INTO" to BACKUP_DIR (default <db dir>/backups). A snapshot is
+// also taken automatically just before any schema migration. Set the interval
+// to 0 to turn off the scheduled backup (pre-migration + manual still run).
+const backupIntervalHours = Number(optional('BACKUP_INTERVAL_HOURS', '24'));
+if (!Number.isFinite(backupIntervalHours) || backupIntervalHours < 0) {
+  console.error('[config] BACKUP_INTERVAL_HOURS must be 0 or a positive number.');
+  process.exit(1);
+}
+const backupRetention = Number(optional('BACKUP_RETENTION', '14'));
+if (!Number.isInteger(backupRetention) || backupRetention < 1) {
+  console.error('[config] BACKUP_RETENTION must be a whole number of 1 or more.');
+  process.exit(1);
+}
+
 // DISCORD_GUILD_ID accepts one id or a comma/space-separated list. Each listed
 // guild gets slash commands registered instantly; an unset/empty value means
 // global registration.
@@ -142,6 +157,11 @@ export const config = Object.freeze({
 
   // Persistence
   databasePath: optional('DATABASE_PATH', './data/sylo.db'),
+  // Database backups. backupDir null => <db dir>/backups. intervalHours 0 =>
+  // scheduled backup off. retention = how many snapshots to keep.
+  backupDir: optionalOrNull('BACKUP_DIR'),
+  backupIntervalHours,
+  backupRetention,
 
   // Privileged gateway intents. Enable the matching toggles in the Discord
   // Developer Portal (Bot page). Verified bots may also need Discord's approval.

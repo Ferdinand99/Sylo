@@ -17,6 +17,19 @@ export function timeAgo(ms) {
 }
 
 /**
+ * Human-readable byte size, e.g. "4.2 MB".
+ * @param {number} bytes
+ * @returns {string}
+ */
+export function formatBytes(bytes) {
+  if (!bytes || bytes < 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  const value = bytes / 1024 ** i;
+  return `${i === 0 ? value : value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
+}
+
+/**
  * Format a duration in seconds as e.g. "3d 04h 12m".
  * @param {number} totalSeconds
  * @returns {string}

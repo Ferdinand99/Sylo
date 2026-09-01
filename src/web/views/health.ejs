@@ -72,6 +72,85 @@
 </section>
 
 <section class="card">
+  <h2>Database &amp; backups</h2>
+  <% if (backupMsg) { %><div class="banner ok">Backup created: <code><%= backupMsg %></code></div><% } %>
+  <% if (backupErr) { %><div class="banner bad">Backup failed: <%= backupErr %></div><% } %>
+  <% if (importMsg) { %><div class="banner ok">Imported <code><%= importMsg %></code> — use <strong>Restore</strong> on that row to load it.</div><% } %>
+  <% if (importErr) { %><div class="banner bad">Import rejected: <%= importErr %></div><% } %>
+  <% if (restoreErr) { %><div class="banner bad">Restore rejected: <%= restoreErr %></div><% } %>
+  <p class="muted">
+    Database <strong><%= db.size %></strong> (WAL <%= db.wal %>).
+    <% if (db.intervalHours > 0) { %>
+      Automatic snapshot every <%= db.intervalHours %>h, keeping the newest <%= db.retention %>.
+    <% } else { %>
+      Scheduled backups are off — a snapshot is still taken before every schema migration.
+    <% } %>
+    Snapshots are written to <code>&lt;data&gt;/backups</code> on the mounted volume.
+  </p>
+  <div class="btn-row" style="margin:10px 0 4px">
+    <form method="POST" action="/health/backups">
+      <button type="submit">Create backup now</button>
+    </form>
+    <span id="db-import">
+      <input type="file" id="db-import-file" accept=".db,.sqlite,.sqlite3,application/octet-stream" />
+      <button type="button" id="db-import-btn" class="secondary" disabled>Import .db file…</button>
+    </span>
+  </div>
+  <p class="muted small">Importing stores the file as a snapshot; you then <strong>Restore</strong> it.
+    Restoring replaces the live database and restarts the bot (a <code>prerestore</code> snapshot is taken first).</p>
+  <% if (backups.length === 0) { %>
+    <p class="muted">No snapshots yet.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>File</th><th class="num">Size</th><th>Age</th><th></th></tr></thead>
+      <tbody>
+        <% backups.forEach(function (b) { %>
+          <tr>
+            <td><a href="/health/backups/<%= encodeURIComponent(b.name) %>"><%= b.name %></a></td>
+            <td class="num"><%= b.size %></td>
+            <td class="muted"><%= b.ago %></td>
+            <td class="num">
+              <div class="btn-row" style="justify-content:flex-end;margin:0">
+                <form method="POST" action="/health/backups/<%= encodeURIComponent(b.name) %>/restore"
+                      data-confirm="Restore the database from &quot;<%= b.name %>&quot;? This replaces all current data and restarts the bot.">
+                  <button type="submit">Restore</button>
+                </form>
+                <form method="POST" action="/health/backups/<%= encodeURIComponent(b.name) %>/delete" data-confirm="Delete this backup permanently?">
+                  <button type="submit" class="danger">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<script>
+  (function () {
+    var input = document.getElementById('db-import-file');
+    var btn = document.getElementById('db-import-btn');
+    if (!input || !btn) return;
+    input.addEventListener('change', function () { btn.disabled = !input.files.length; });
+    btn.addEventListener('click', function () {
+      var file = input.files[0];
+      if (!file) return;
+      if (!window.confirm('Upload "' + file.name + '" as a backup snapshot?')) return;
+      btn.disabled = true;
+      btn.textContent = 'Uploading…';
+      fetch('/health/backups/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: file,
+      })
+        .then(function (r) { location.href = r.url || '/health'; })
+        .catch(function () { location.href = '/health?importerr=upload%20failed'; });
+    });
+  })();
+</script>
+
+<section class="card">
   <h2>Recently queried stats</h2>
   <% if (recent.length === 0) { %>
     <p class="muted">Nothing cached yet — run <code>/stats battlefield</code> in Discord.</p>

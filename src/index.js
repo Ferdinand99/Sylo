@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { setLastError } from './runtime.js';
 // Importing db/index.js opens the SQLite connection and runs migrations.
 import { closeDb } from './db/index.js';
+import { startBackupSchedule } from './db/backup.js';
 import { startBot } from './bot/index.js';
 import { startWeb } from './web/server.js';
 
@@ -36,6 +37,7 @@ async function main() {
   console.log(`[sylo] Starting in ${config.nodeEnv} mode`);
   await startBot();
   await startWeb(config.webPort);
+  startBackupSchedule();
   console.log('[sylo] Up and running');
 }
 

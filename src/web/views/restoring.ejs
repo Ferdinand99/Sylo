@@ -1,0 +1,41 @@
+<%- include('partials/header', { title: 'Sylo — Restoring' }) %>
+
+<section class="card">
+  <h2>Restoring the database…</h2>
+  <p class="muted">
+    Sylo is replacing its database with <code><%= name %></code> and restarting.
+    A <code>prerestore</code> snapshot of the previous database was saved first, so
+    this can be undone.
+  </p>
+  <p class="muted">The bot will be briefly offline. This page returns to
+    <a href="/health">Health</a> automatically once it is back.</p>
+  <p id="rs-status" class="muted small">Waiting for the bot to come back online…</p>
+</section>
+
+<script>
+  (function () {
+    var status = document.getElementById('rs-status');
+    var tries = 0;
+    function poll() {
+      tries += 1;
+      fetch('/health', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          if (j && j.discord && j.discord.ready) {
+            status.textContent = 'Back online — reloading…';
+            location.href = '/health';
+          } else {
+            schedule();
+          }
+        })
+        .catch(schedule);
+    }
+    function schedule() {
+      if (tries > 60) { status.textContent = 'Still restarting — reload this page in a moment.'; return; }
+      setTimeout(poll, 2000);
+    }
+    setTimeout(poll, 3000);
+  })();
+</script>
+
+<%- include('partials/footer') %>

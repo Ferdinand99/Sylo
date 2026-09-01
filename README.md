@@ -12,6 +12,15 @@ alerts, YouTube alerts), Discord OAuth2 login, a public leveling leaderboard, an
 
 ## What's new since 2.0
 
+- **Automatic database backups + restore** — Sylo writes compacted single-file
+  snapshots of `sylo.db` to `<data>/backups`: just before every schema migration,
+  shortly after boot, and on a schedule (`BACKUP_INTERVAL_HOURS`, default 24;
+  keeps `BACKUP_RETENTION`, default 14). The dashboard's **Health** page lists
+  them and can create, download, **import** (upload a `.db` from elsewhere, with
+  validation), and **restore** one — restore snapshots the current database
+  first, then swaps the file and restarts the bot on the restored data. A WAL
+  checkpoint runs alongside each backup and on shutdown so the `-wal` sidecar
+  stays small.
 - **YouTube alerts** — announce a channel's new uploads and when it goes live.
   Add channels by URL or `@handle` (resolved on save); new videos come from
   YouTube's public feed and live status from a light page check — no API key
@@ -261,6 +270,9 @@ test server. `npm run register` re-syncs commands without a restart.
 | `GAMETOOLS_API_BASE`      | no       | `https://api.gametools.network`| Stats API base URL |
 | `STATS_CACHE_TTL_MINUTES` | no       | `5`                            | How long stats lookups are cached |
 | `DATABASE_PATH`           | no       | `./data/sylo.db`               | SQLite file path |
+| `BACKUP_INTERVAL_HOURS`   | no       | `24`                           | Scheduled DB snapshot interval; `0` disables it (pre-migration + manual still run) |
+| `BACKUP_RETENTION`        | no       | `14`                           | How many DB snapshots to keep in `<data>/backups` |
+| `BACKUP_DIR`              | no       | `<db dir>/backups`             | Where DB snapshots are written |
 | `NODE_ENV`                | no       | `development`                  | Set to `production` in deployment |
 
 ### Dashboard authentication
@@ -322,12 +334,32 @@ persists in `./data` on the host.
 ### Backups
 
 All state is in the single SQLite file under the mounted data directory
-(`./data/sylo.db`, plus `-wal` / `-shm` sidecars). To back it up, stop the
-container briefly and copy the whole `data/` folder, or run
-`sqlite3 data/sylo.db ".backup data/sylo-backup.db"` while it runs. Restore by
-putting the file back and starting the container — migrations only ever move the
-schema forward, and Sylo runs a `quick_check` on boot and logs if the file is
-corrupt. Each server's module configuration can also be exported as JSON from
+(`./data/sylo.db`, plus `-wal` / `-shm` sidecars).
+
+**Automatic snapshots.** Sylo writes compacted copies of the database to
+`data/backups/` — one right before any schema migration, one shortly after
+start, and one every `BACKUP_INTERVAL_HOURS` (default 24), keeping the newest
+`BACKUP_RETENTION` (default 14). Set `BACKUP_INTERVAL_HOURS=0` to keep only the
+pre-migration and manual snapshots.
+
+**From the Health page** you can:
+
+- see every snapshot with its size and age;
+- **Create backup now**, or **Import .db file…** to upload one from another
+  machine (it is validated — SQLite header, `integrity_check`, and a schema no
+  newer than this build — then stored as a snapshot);
+- **download** any snapshot;
+- **Restore** from any snapshot: Sylo takes a `prerestore` snapshot of the
+  current database, swaps the file, and exits so the container restarts on the
+  restored data (needs a restart policy — `unless-stopped` in the bundled
+  compose file / Unraid template). The page waits for the bot and returns.
+
+Manual restore still works too: stop the container, copy a snapshot over
+`data/sylo.db` (delete the `-wal` / `-shm` sidecars first), and start again.
+Migrations only ever move the schema forward, and Sylo runs a `quick_check` on
+boot and logs if the file is corrupt.
+
+Each server's module configuration can also be exported as JSON from
 **General → Backup** in the dashboard.
 
 ## Unraid deployment

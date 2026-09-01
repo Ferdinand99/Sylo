@@ -6,7 +6,8 @@ import { mkdirSync } from 'node:fs';
 import Database from 'better-sqlite3';
 import { config } from '../config.js';
 
-const dbPath = resolve(process.cwd(), config.databasePath);
+/** Absolute path to the live SQLite file. */
+export const dbPath = resolve(process.cwd(), config.databasePath);
 
 // Ensure the parent directory (e.g. ./data) exists before opening the file.
 mkdirSync(dirname(dbPath), { recursive: true });
@@ -426,12 +427,51 @@ const MIGRATIONS = [
   },
 ];
 
+/** Highest schema version this build knows how to run. */
+export const SCHEMA_VERSION = MIGRATIONS.length;
+
+/** Timestamp slug for backup filenames, e.g. "2026-09-01-14-30-05-123" (ms keeps it unique). */
+export function fileStamp(d = new Date()) {
+  return d.toISOString().slice(0, 23).replace(/[:T.]/g, '-');
+}
+
+/** Force a WAL checkpoint, truncating the -wal sidecar. Best-effort. */
+export function checkpoint() {
+  try {
+    db.pragma('wal_checkpoint(TRUNCATE)');
+  } catch (err) {
+    console.error('[db] WAL checkpoint failed:', err.message);
+  }
+}
+
+/** Write a compacted single-file snapshot of the database to destPath (sync). */
+export function vacuumInto(destPath) {
+  db.exec(`VACUUM INTO '${String(destPath).replace(/'/g, "''")}'`);
+}
+
+/** Snapshot the DB before a schema change so an aborted migration is recoverable. */
+function preMigrationBackup(fromVersion) {
+  try {
+    const dir = config.backupDir
+      ? resolve(process.cwd(), config.backupDir)
+      : resolve(dirname(dbPath), 'backups');
+    mkdirSync(dir, { recursive: true });
+    const dest = resolve(dir, `sylo-premigrate-v${fromVersion}-${fileStamp()}.db`);
+    vacuumInto(dest);
+    console.log(`[db] Pre-migration backup written: ${dest}`);
+  } catch (err) {
+    console.error('[db] Pre-migration backup failed (continuing):', err.message);
+  }
+}
+
 /**
  * Apply any migrations newer than the database's current `user_version`.
  * Runs inside a transaction per migration. Idempotent.
  */
 export function migrate() {
   const current = db.pragma('user_version', { simple: true });
+  // Only when there is existing data to protect — a brand-new DB has none.
+  if (current > 0 && current < MIGRATIONS.length) preMigrationBackup(current);
   for (let version = current; version < MIGRATIONS.length; version += 1) {
     const run = db.transaction(() => {
       MIGRATIONS[version](db);
@@ -461,6 +501,7 @@ try {
 /** Close the database. Best-effort; used on shutdown paths. */
 export function closeDb() {
   try {
+    checkpoint();
     db.close();
   } catch {
     // Ignore — we are shutting down anyway.
