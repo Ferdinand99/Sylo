@@ -109,8 +109,21 @@ appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
   forget side-effects but no early `res.redirect`, so the shared `HX-Request`
   branch handles them.
 
+### Done (commit 3 — module-page toggle)
+
+- The enable/disable switch on a module's settings page is now
+  `views/guild/_module-toggle.ejs`: an htmx checkbox that posts to
+  `/guilds/:id/modules/:id` on change and swaps itself with the server-truth
+  state. `POST /:guildId/modules/:moduleId` gains an `HX-Request` branch that
+  renders that fragment + `HX-Trigger: {moduleToggled, toast}`; the JSON response
+  stays for any non-htmx caller. `htmx-setup.js` listens for `moduleToggled` and
+  updates the sidebar dot. app.js's `.module-toggle` handler is now dead (the
+  fragment dropped that class) — removed in Phase 3.
+
 ### Still to do
 
+- Plugin-grid "Enable" buttons on the overview (still use `syloAction`) — a
+  follow-up; the overview grid isn't a fragment partial yet.
 - **Not yet converted, need special handling:** `polls` and `welcome-channel`
   (submit-time JS populates hidden fields — do with the Phase 2 builders);
   `welcome-channel` publish also early-returns a redirect; `moderation` /

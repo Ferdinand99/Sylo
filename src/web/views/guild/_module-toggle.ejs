@@ -1,0 +1,10 @@
+<%# The module enable/disable switch on a module's settings page. htmx posts on
+    change and swaps itself with the server-truth state; an HX-Trigger
+    "moduleToggled" updates the sidebar dot (see htmx-setup.js). %>
+<label class="switch" id="module-toggle">
+  <input type="checkbox" name="enabled"
+    hx-post="/guilds/<%= guild.id %>/modules/<%= activeModule.id %>"
+    hx-target="#module-toggle" hx-swap="outerHTML"
+    <%= moduleEnabled ? 'checked' : '' %> <%= toggleDisabled ? 'disabled' : '' %> />
+  <span class="slider"></span>
+</label>

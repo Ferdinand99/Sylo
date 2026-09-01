@@ -21,6 +21,16 @@
     if (window.syloToast) window.syloToast(d.msg || 'Done.', d.kind || 'ok');
   });
 
+  // A module was enabled/disabled somewhere — reflect it on the sidebar dot.
+  document.addEventListener('moduleToggled', function (evt) {
+    var d = evt.detail || {};
+    var dot = document.querySelector('.sb-link[data-module="' + d.id + '"] .sb-dot');
+    if (dot) {
+      dot.classList.toggle('on', !!d.enabled);
+      dot.classList.toggle('off', !d.enabled);
+    }
+  });
+
   document.addEventListener('htmx:responseError', function (evt) {
     var status = evt.detail && evt.detail.xhr ? evt.detail.xhr.status : 0;
     if (window.syloToast) {

@@ -348,11 +348,7 @@
       <% var mrow = modules.find(function (x) { return x.id === activeModule.id; }); %>
       <div class="module-panel-head">
         <h2><%= activeModule.icon %> <%= activeModule.name %></h2>
-        <label class="switch">
-          <input type="checkbox" class="module-toggle" data-guild="<%= guild.id %>" data-module="<%= activeModule.id %>"
-            <%= mrow.enabled ? 'checked' : '' %> <%= mrow.missingIntents.length ? 'disabled' : '' %> />
-          <span class="slider"></span>
-        </label>
+        <%- include('guild/_module-toggle', { guild: guild, activeModule: activeModule, moduleEnabled: mrow.enabled, toggleDisabled: mrow.missingIntents.length > 0 }) %>
       </div>
       <p class="muted"><%= activeModule.description %></p>
       <% if (mrow.missingIntents.length) { %>

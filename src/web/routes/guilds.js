@@ -8,7 +8,7 @@ import { requireGuildAdmin, currentUser } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
-import { getModule } from '../../modules/registry.js';
+import { getModule, missingIntents } from '../../modules/registry.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { getCommandOverrides, setCommandOverride } from '../../db/commandOverrides.js';
 import {
@@ -1599,6 +1599,22 @@ router.post('/:guildId/modules/:moduleId', (req, res) => {
     primeInviteCache(req.guild).catch((err) =>
       log.error('invite-tracker', 'cache prime after enable failed:', err.message)
     );
+  }
+  if (req.get('HX-Request')) {
+    return res
+      .set(
+        'HX-Trigger',
+        JSON.stringify({
+          moduleToggled: { id: mod.id, enabled },
+          toast: { msg: `${mod.name} ${enabled ? 'enabled' : 'disabled'}`, kind: 'ok' },
+        })
+      )
+      .render('guild/_module-toggle', {
+        guild: req.guild,
+        activeModule: mod,
+        moduleEnabled: enabled,
+        toggleDisabled: missingIntents(mod).length > 0,
+      });
   }
   res.json({ enabled });
 });
