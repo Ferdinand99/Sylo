@@ -187,6 +187,16 @@ are an action page (Infractions) and two forms blocked on Phase 2.
   embed editor** (longest pole, last).
 - Delete the corresponding `src/web/public/*.js` as each is ported.
 
+**Done:**
+- **chip-picker** → `chipPicker` in `alpine-components.js`; `partials/chip-picker.ejs`
+  is x-for driven; the 3 hand-written `.role-picker` blocks now use the partial;
+  `makeRoleChip` + the two chip handlers gone from `app.js`.
+- **reaction-role builder rows + style toggle** → `rrRows` in
+  `alpine-components.js`; `rr-builder.ejs` rows/style radios/conditional sections
+  are `x-model` / `x-for` / `x-show`. `reaction-role.js` shrank to just the shared
+  embed editor + the submit handler (177 → 103 lines). The emoji picker in
+  `app.js` now dispatches an `input` event so `x-model` sees the pick.
+
 **Done when:** every builder runs on Alpine; the old builder scripts are gone.
 
 ---

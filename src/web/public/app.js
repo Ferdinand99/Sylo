@@ -138,6 +138,7 @@
     const cellBtn = e.target.closest('.emoji-cell');
     if (cellBtn && pickerTarget) {
       pickerTarget.value = cellBtn.dataset.value;
+      pickerTarget.dispatchEvent(new Event('input', { bubbles: true })); // let Alpine x-model see it
       closePicker();
       return;
     }

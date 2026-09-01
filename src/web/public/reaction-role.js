@@ -7,8 +7,6 @@
 
   const rr = window.RR || {};
   const embed = rr.embed && typeof rr.embed === 'object' ? rr.embed : { kind: 'embed', color: '#5865f2' };
-  const rolesList = window.RR_ROLES || [];
-  const guildId = window.RR_GUILD || '';
   const HEX = /^#[0-9a-f]{6}$/i;
 
   const esc = (s) =>
@@ -94,79 +92,6 @@
       renderEmbed();
     }
   });
-
-  // --- style toggle (reactions / buttons / dropdown) ------------------
-  const rowsEl = document.getElementById('rr-rows');
-  const countEl = document.getElementById('rr-count');
-  const maxEl = document.getElementById('rr-max');
-  const rowsTitle = document.getElementById('rr-rows-title');
-  const addBtn = document.getElementById('rr-add');
-  const roleOptions = rolesList.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
-  const BTN_STYLES = ['secondary', 'primary', 'success', 'danger'];
-
-  const styleOf = () => form.dataset.style || 'reaction';
-  const maxRows = () => (styleOf() === 'reaction' ? 20 : 25);
-
-  function applyStyle() {
-    const s = styleOf();
-    maxEl.textContent = maxRows();
-    rowsTitle.textContent = s === 'reaction' ? 'Reactions & roles' : s === 'buttons' ? 'Buttons & roles' : 'Menu options';
-    addBtn.textContent = s === 'reaction' ? '＋ Add reaction' : s === 'buttons' ? '＋ Add button' : '＋ Add option';
-    document.querySelectorAll('[class*="rr-when-"]').forEach((el) => {
-      el.hidden = ![...el.classList].some((c) => c === `rr-when-${s}`);
-    });
-    rowsEl.querySelectorAll('.rr-row').forEach((row) => decorateRow(row, s));
-  }
-
-  function decorateRow(row, s) {
-    row.querySelector('.rr-emoji').placeholder = s === 'reaction' ? '👋 (required)' : '👋 (optional)';
-    row.querySelector('.rr-row-label').hidden = s === 'reaction';
-    row.querySelector('.rr-row-btnstyle').hidden = s !== 'buttons';
-  }
-
-  form.querySelectorAll('input[name="rr_style"]').forEach((r) =>
-    r.addEventListener('change', () => {
-      if (r.checked) {
-        form.dataset.style = r.value;
-        applyStyle();
-      }
-    })
-  );
-
-  // --- emoji / label / role rows -------------------------------------
-  const updateCount = () => {
-    countEl.textContent = rowsEl.children.length;
-  };
-  function addRow(p = {}) {
-    if (rowsEl.children.length >= maxRows()) return;
-    const row = document.createElement('div');
-    row.className = 'rr-row';
-    row.innerHTML = `
-      <input type="text" name="rr_emoji" class="rr-emoji" value="${esc(p.display || '')}" />
-      <button type="button" class="emoji-btn" data-guild="${esc(guildId)}">😀</button>
-      <input type="text" name="rr_label" class="rr-row-label" value="${esc(p.label || '')}" placeholder="Button label (optional)" maxlength="80" hidden />
-      <select name="rr_role"><option value="">— select a role —</option>${roleOptions}</select>
-      <select name="rr_btnstyle" class="rr-row-btnstyle" hidden>${BTN_STYLES.map(
-        (b) => `<option value="${b}"${(p.btnStyle || 'secondary') === b ? ' selected' : ''}>${b}</option>`
-      ).join('')}</select>
-      <button type="button" class="wc-x" data-delrow title="Remove">×</button>`;
-    if (p.roleId) row.querySelector('select[name="rr_role"]').value = p.roleId;
-    rowsEl.appendChild(row);
-    decorateRow(row, styleOf());
-    updateCount();
-  }
-  rowsEl.addEventListener('click', (e) => {
-    const d = e.target.closest('[data-delrow]');
-    if (d) {
-      d.closest('.rr-row').remove();
-      updateCount();
-    }
-  });
-  addBtn.addEventListener('click', () => addRow());
-
-  (rr.pairs || []).forEach((p) => addRow(p));
-  if (!(rr.pairs || []).length) addRow();
-  applyStyle();
 
   form.addEventListener('submit', () => {
     collectEmbed();

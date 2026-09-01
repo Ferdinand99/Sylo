@@ -42,4 +42,38 @@ document.addEventListener('alpine:init', function () {
       },
     };
   });
+
+  // Reaction-role builder: the style toggle + the emoji/label/role rows.
+  // (The in-place embed editor on the same page stays in reaction-role.js.)
+  window.Alpine.data('rrRows', function (cfg) {
+    return {
+      style: cfg.style === 'buttons' || cfg.style === 'select' ? cfg.style : 'reaction',
+      roles: Array.isArray(cfg.roles) ? cfg.roles : [],
+      btnStyles: ['secondary', 'primary', 'success', 'danger'],
+      rows: (Array.isArray(cfg.pairs) && cfg.pairs.length ? cfg.pairs : [{}]).map(function (p) {
+        return {
+          emoji: p.display || '',
+          label: p.label || '',
+          roleId: p.roleId ? String(p.roleId) : '',
+          btnStyle: p.btnStyle || 'secondary',
+        };
+      }),
+      get max() {
+        return this.style === 'reaction' ? 20 : 25;
+      },
+      get rowsTitle() {
+        return this.style === 'reaction' ? 'Reactions & roles' : this.style === 'buttons' ? 'Buttons & roles' : 'Menu options';
+      },
+      get addLabel() {
+        return this.style === 'reaction' ? '＋ Add reaction' : this.style === 'buttons' ? '＋ Add button' : '＋ Add option';
+      },
+      addRow() {
+        if (this.rows.length < this.max) this.rows.push({ emoji: '', label: '', roleId: '', btnStyle: 'secondary' });
+      },
+      removeRow(i) {
+        this.rows.splice(i, 1);
+        if (!this.rows.length) this.addRow();
+      },
+    };
+  });
 });

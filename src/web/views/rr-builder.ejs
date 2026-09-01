@@ -10,7 +10,16 @@
   </div>
 </div>
 
-<form method="POST" action="/guilds/<%= guildId %>/m/roles/rr" id="rr-form" data-style="<%= rm.style || 'reaction' %>">
+<%
+  var _rr = {
+    style: rm.style || 'reaction',
+    pairs: (rm.pairs || []).map(function (p) {
+      return { display: p.display || '', label: p.label || '', roleId: p.roleId || '', btnStyle: p.btnStyle || 'secondary' };
+    }),
+    roles: (roles || []).map(function (r) { return { id: String(r.id), name: r.name }; }),
+  };
+%>
+<form method="POST" action="/guilds/<%= guildId %>/m/roles/rr" id="rr-form" x-data="rrRows(<%= JSON.stringify(_rr) %>)">
   <input type="hidden" name="id" value="<%= rm.id %>" />
   <input type="hidden" name="embed" id="rr-embed-spec" />
 
@@ -18,15 +27,15 @@
     <h2>Style</h2>
     <div class="rr-style">
       <label class="rr-mode">
-        <input type="radio" name="rr_style" value="reaction" <%= (rm.style || 'reaction') === 'reaction' ? 'checked' : '' %> />
+        <input type="radio" name="rr_style" value="reaction" x-model="style" />
         <span><strong>Reactions</strong> — members react with an emoji. Needs Add Reactions permission.</span>
       </label>
       <label class="rr-mode">
-        <input type="radio" name="rr_style" value="buttons" <%= rm.style === 'buttons' ? 'checked' : '' %> />
+        <input type="radio" name="rr_style" value="buttons" x-model="style" />
         <span><strong>Buttons</strong> — members click a button. Up to 25, no reaction permission needed.</span>
       </label>
       <label class="rr-mode">
-        <input type="radio" name="rr_style" value="select" <%= rm.style === 'select' ? 'checked' : '' %> />
+        <input type="radio" name="rr_style" value="select" x-model="style" />
         <span><strong>Dropdown</strong> — members pick from a select menu. Best for long lists.</span>
       </label>
     </div>
@@ -50,13 +59,13 @@
   </section>
 
   <section class="card">
-    <h2><span id="rr-rows-title">Reactions &amp; roles</span> <span class="muted small">(<span id="rr-count">0</span> / <span id="rr-max">20</span>)</span></h2>
+    <h2><span x-text="rowsTitle">Reactions &amp; roles</span> <span class="muted small">(<span x-text="rows.length">0</span> / <span x-text="max">20</span>)</span></h2>
     <label class="checkline">
       <input type="checkbox" name="exclusive" <%= rm.exclusive ? 'checked' : '' %> />
       Only one role from this set at a time (picking one removes the others)
     </label>
 
-    <div class="rr-when-select" hidden style="margin-top:8px">
+    <div x-show="style === 'select'" style="margin-top:8px">
       <label class="small">Dropdown placeholder</label>
       <input type="text" name="rr_placeholder" value="<%= rm.placeholder || '' %>" placeholder="Pick your roles" maxlength="150" style="max-width:420px" />
       <div class="rr-selrange">
@@ -65,12 +74,30 @@
       </div>
     </div>
 
-    <div id="rr-rows" class="rr-rows"></div>
-    <button type="button" id="rr-add" class="secondary">＋ Add role</button>
+    <div class="rr-rows">
+      <template x-for="(row, i) in rows" :key="i">
+        <div class="rr-row">
+          <input type="text" name="rr_emoji" class="rr-emoji" x-model="row.emoji"
+                 :placeholder="style === 'reaction' ? '👋 (required)' : '👋 (optional)'" />
+          <button type="button" class="emoji-btn" data-guild="<%= guildId %>">😀</button>
+          <input type="text" name="rr_label" class="rr-row-label" x-model="row.label"
+                 placeholder="Button label (optional)" maxlength="80" x-show="style !== 'reaction'" />
+          <select name="rr_role" x-model="row.roleId">
+            <option value="">— select a role —</option>
+            <template x-for="r in roles" :key="r.id"><option :value="r.id" x-text="r.name"></option></template>
+          </select>
+          <select name="rr_btnstyle" class="rr-row-btnstyle" x-model="row.btnStyle" x-show="style === 'buttons'">
+            <template x-for="b in btnStyles" :key="b"><option :value="b" x-text="b"></option></template>
+          </select>
+          <button type="button" class="wc-x" @click="removeRow(i)" title="Remove">×</button>
+        </div>
+      </template>
+    </div>
+    <button type="button" class="secondary" @click="addRow()" x-text="addLabel">＋ Add role</button>
   </section>
 
-  <section class="card rr-when-reaction rr-when-buttons">
-    <h2 id="rr-mode-title">Reaction mode</h2>
+  <section class="card" x-show="style !== 'select'">
+    <h2>Reaction mode</h2>
     <label class="rr-mode">
       <input type="radio" name="mode" value="default" <%= rm.mode !== 'reverse' ? 'checked' : '' %> />
       <span><strong>Default</strong> — the interaction adds the role; undoing it takes the role away.</span>
@@ -84,8 +111,6 @@
 
 <script>
   window.RR = <%- JSON.stringify(rm).replace(/</g, '\\u003c') %>;
-  window.RR_ROLES = <%- JSON.stringify(roles).replace(/</g, '\\u003c') %>;
-  window.RR_GUILD = "<%= guildId %>";
 </script>
 <script src="/reaction-role.js"></script>
 
