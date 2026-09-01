@@ -27,6 +27,7 @@ const GUILD_TABLES = [
   'youtube_video_seen',
   'youtube_live',
   'giveaways',
+  'leaderboard_vanity',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE guild_id = ?`));

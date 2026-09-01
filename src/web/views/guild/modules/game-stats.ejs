@@ -1,3 +1,5 @@
+<% var recent = Array.isArray(gameStatsRecent) ? gameStatsRecent : []; %>
+
 <p class="muted small">
   Adds <code>/stats battlefield</code> — Battlefield-series player stat lookups (K/D, win rate,
   time played, KPM/SPM, best class, …) via the public
@@ -12,7 +14,30 @@
     <li>Titles: BF1, BF3, BF4, BFV, Hardline — plus best-effort BF2042 and BF6.</li>
     <li>Results are cached for <code>STATS_CACHE_TTL_MINUTES</code> (default 5) to spare the upstream API.</li>
   </ul>
-  <p class="small" style="margin:8px 0 0">
-    Recent lookups across the whole bot: <a href="/stats">/stats</a>.
+</section>
+
+<section class="card">
+  <h3 style="margin:0 0 8px">Recently queried stats</h3>
+  <% if (recent.length === 0) { %>
+    <p class="muted small">Nothing cached yet — run <code>/stats battlefield</code> in Discord.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>Game</th><th>Title</th><th>Player</th><th>Platform</th><th>When</th></tr></thead>
+      <tbody>
+        <% recent.forEach(function (r) { %>
+          <tr>
+            <td><%= r.game %></td>
+            <td><%= r.title %></td>
+            <td><%= r.username %></td>
+            <td><%= r.platform %></td>
+            <td class="muted"><%= r.ago %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+  <p class="muted small" style="margin:8px 0 0">
+    The lookup cache is shared across every server this bot is in.
+    <a href="/stats">Full cache view &rarr;</a>
   </p>
 </section>

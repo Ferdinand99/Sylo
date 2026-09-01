@@ -9,7 +9,7 @@ import { mountAuth, requireAuth } from './middleware/auth.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { csrf } from './middleware/csrf.js';
 import healthRouter from './routes/health.js';
-import leaderboardRouter from './routes/leaderboard.js';
+import leaderboardRouter, { vanityRouter } from './routes/leaderboard.js';
 import verifyRouter from './routes/verify.js';
 import appealRouter from './routes/appeal.js';
 import dashboardRouter from './routes/dashboard.js';
@@ -47,6 +47,7 @@ export function createApp() {
   // Public routes: healthcheck, the shareable leaderboard, and member verification.
   app.use('/health', healthRouter);
   app.use('/leaderboard', rateLimit({ windowMs: 60_000, max: 40 }), leaderboardRouter);
+  app.use('/lb', rateLimit({ windowMs: 60_000, max: 40 }), vanityRouter);
   app.use('/verify', rateLimit({ windowMs: 60_000, max: 20 }), verifyRouter);
   app.use('/appeal', rateLimit({ windowMs: 60_000, max: 15 }), appealRouter);
 

@@ -2,12 +2,11 @@
 //  - non-browser request  -> machine-readable JSON for the Docker healthcheck /
 //    uptime monitors (200 when the Discord client is connected, 503 otherwise).
 //  - browser request       -> the human status page (bot state, module adoption,
-//    database + backups, recent stat lookups). Gated by auth when auth is enabled.
+//    database + backups). Gated by auth when auth is enabled.
 import { Router, raw } from 'express';
 import { createRequire } from 'node:module';
 import { config } from '../../config.js';
 import { runtime, uptimeSeconds, isDiscordReady, guildCount } from '../../runtime.js';
-import { recentLookups } from '../../db/cache.js';
 import { dashboardStats, moduleUsage } from '../../db/dashboardStats.js';
 import {
   listBackups,
@@ -79,7 +78,6 @@ router.get('/', (req, res) => {
     gatewayPing: typeof gatewayPing === 'number' && gatewayPing >= 0 ? Math.round(gatewayPing) : null,
     stats: dashboardStats(),
     modules,
-    recent: recentLookups(10).map((r) => ({ ...r, ago: timeAgo(r.created_at) })),
     lastError: runtime.lastError,
     lastErrorAgo: runtime.lastError ? timeAgo(runtime.lastError.at) : null,
     errors: runtime.errors.slice(0, 25).map((e) => ({

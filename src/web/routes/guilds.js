@@ -30,6 +30,8 @@ import { normaliseAutomodConfig, AUTOMOD_RULES, AUTOMOD_ACTIONS } from '../../mo
 import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
 import { activeGiveaways, endedGiveaways, giveawayEntryCount, getGiveawayInGuild } from '../../db/giveaways.js';
 import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
+import { recentLookups } from '../../db/cache.js';
+import { getVanitySlug, setVanitySlug, clearVanitySlug } from '../../db/leaderboardVanity.js';
 import { normaliseEmbedSpec } from '../../modules/welcomeChannel.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
@@ -369,6 +371,8 @@ router.get(
       ...baseContext(guild, 'leaderboard'),
       levelingEnabled: enabled,
       publicLeaderboard: cfg.publicLeaderboard,
+      vanitySlug: getVanitySlug(guild.id),
+      vanityBase: (appConfig.dashboardUrl ? appConfig.dashboardUrl.replace(/\/+$/, '') : '') + '/lb/',
       board: {
         total: memberCount(guild.id),
         rows: rows.map((r, i) => ({
@@ -395,6 +399,21 @@ router.post('/:guildId/leaderboard/public', (req, res) => {
     detail: publicLeaderboard ? 'made public' : 'made private',
   });
   res.redirect(`/guilds/${req.guild.id}/leaderboard?msg=saved`);
+});
+
+// Vanity URL for the public leaderboard (blank slug clears it).
+router.post('/:guildId/leaderboard/vanity', (req, res) => {
+  const back = `/guilds/${req.guild.id}/leaderboard`;
+  const raw = String(req.body.slug ?? '').trim();
+  if (raw === '') {
+    clearVanitySlug(req.guild.id);
+    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'leveling:vanity', detail: 'cleared' });
+    return res.redirect(`${back}?msg=vanity-cleared`);
+  }
+  const r = setVanitySlug(req.guild.id, raw);
+  if (!r.ok) return res.redirect(`${back}?msg=vanity-${r.error}`);
+  recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'leveling:vanity', detail: `/lb/${r.slug}` });
+  res.redirect(`${back}?msg=vanity-set`);
 });
 
 // Moderator → Admin tab: immunity roles (patch just automod's exemptRoles).
@@ -534,6 +553,15 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
           })),
         }
       : null,
+    gameStatsRecent: mod.id === 'game-stats'
+      ? recentLookups(15).map((r) => ({
+          game: r.game,
+          title: r.title,
+          username: r.username,
+          platform: r.platform,
+          ago: timeAgo(r.created_at),
+        }))
+      : [],
     giveaways: mod.id === 'giveaways'
       ? [
           ...activeGiveaways(req.guild.id).map((g) => ({ ...g, state: 'active' })),

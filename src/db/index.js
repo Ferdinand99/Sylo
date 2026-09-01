@@ -461,6 +461,17 @@ const MIGRATIONS = [
       .prepare("UPDATE guild_modules SET module_id = 'reminders' WHERE module_id = 'scheduled-messages'")
       .run();
   },
+
+  // Vanity URL for a guild's public leaderboard (MEE6-style short link).
+  (database) => {
+    database.exec(`
+      CREATE TABLE leaderboard_vanity (
+        guild_id   TEXT PRIMARY KEY,
+        slug       TEXT NOT NULL UNIQUE,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

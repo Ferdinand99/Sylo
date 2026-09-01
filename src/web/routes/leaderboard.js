@@ -1,12 +1,14 @@
 // Public (no-auth) leveling leaderboard for a guild — MEE6-style shareable page.
-// Mounted before requireAuth in server.js.
+// Reachable at /leaderboard/<guildId> and, when set, at /lb/<vanity-slug>
+// (the vanity URL is served directly, not redirected). Mounted before
+// requireAuth in server.js.
 import { Router } from 'express';
 import { runtime } from '../../runtime.js';
 import { getGuildModule } from '../../db/modules.js';
 import { topMembers, memberCount } from '../../db/leveling.js';
 import { levelProgress } from '../../modules/lib/levels.js';
+import { guildForVanity } from '../../db/leaderboardVanity.js';
 
-const router = Router();
 const PAGE_SIZE = 25;
 
 function notFound(res, message) {
@@ -17,11 +19,13 @@ function notFound(res, message) {
   });
 }
 
-router.get('/:guildId', async (req, res, next) => {
+/**
+ * Render the public leaderboard for a guild. `canonical` is the stable
+ * /leaderboard/<id> path, emitted as <link rel="canonical"> so a vanity URL and
+ * the id URL don't get indexed as duplicates.
+ */
+async function renderLeaderboard(req, res, next, guildId, canonical) {
   try {
-    const { guildId } = req.params;
-    if (!/^\d{17,20}$/.test(guildId)) return notFound(res, 'Unknown server.');
-
     const guild = runtime.client?.guilds.cache.get(guildId);
     if (!guild) return notFound(res, 'Sylo is not in that server.');
 
@@ -84,10 +88,27 @@ router.get('/:guildId', async (req, res, next) => {
       page,
       pages,
       total,
+      canonical: canonical || null,
     });
   } catch (err) {
     next(err);
   }
+}
+
+// /leaderboard/<guildId>
+const router = Router();
+router.get('/:guildId', (req, res, next) => {
+  const { guildId } = req.params;
+  if (!/^\d{17,20}$/.test(guildId)) return notFound(res, 'Unknown server.');
+  return renderLeaderboard(req, res, next, guildId);
+});
+
+// /lb/<vanity-slug> — same page, served at the vanity URL.
+export const vanityRouter = Router();
+vanityRouter.get('/:slug', (req, res, next) => {
+  const guildId = guildForVanity(req.params.slug);
+  if (!guildId) return notFound(res, 'That leaderboard link is not in use.');
+  return renderLeaderboard(req, res, next, guildId, `/leaderboard/${guildId}`);
 });
 
 export default router;

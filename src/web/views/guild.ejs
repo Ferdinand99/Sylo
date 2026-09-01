@@ -47,8 +47,12 @@
        'cc-dupe': 'A custom command with that name already exists in this server.',
        'cc-empty': 'Add at least one action that replies, posts a message, or changes a role.',
        'inv-bad': 'Enter a valid member ID (or @mention) and a whole-number bonus.',
+       'vanity-set': 'Vanity URL saved.',
+       'vanity-cleared': 'Vanity URL removed.',
+       'vanity-invalid': 'Use 3–32 characters: lowercase letters, numbers and hyphens (no leading/trailing hyphen).',
+       'vanity-taken': 'That URL is already used by another server — pick a different one.',
      };
-     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved'].includes(msg);
+     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');
 %>
   <div class="banner <%= cls %>"><%= messages[msg] || 'Done.' %></div>
@@ -261,6 +265,24 @@
       </form>
 
       <hr class="sep" />
+      <div class="lb-vanity">
+        <strong>Vanity URL</strong>
+        <p class="muted small">A short, memorable link to this leaderboard. Only works while the public
+          toggle above is on. 3–32 characters: lowercase letters, numbers and hyphens.</p>
+        <form method="POST" action="/guilds/<%= guild.id %>/leaderboard/vanity" class="row-form">
+          <span class="muted mono"><%= vanityBase %></span>
+          <input type="text" name="slug" value="<%= vanitySlug || '' %>" placeholder="my-server"
+                 maxlength="32" pattern="[a-z0-9]([a-z0-9-]{1,30}[a-z0-9])" autocapitalize="off" spellcheck="false" />
+          <button type="submit">Save</button>
+        </form>
+        <% if (vanitySlug) { %>
+          <p class="muted small" style="margin-top:6px">Live at
+            <a href="/lb/<%= vanitySlug %>" target="_blank" rel="noopener"><code><%= vanityBase %><%= vanitySlug %></code></a>.
+            Clear the box and save to remove it.</p>
+        <% } %>
+      </div>
+
+      <hr class="sep" />
       <h3 style="margin-bottom:6px">Top members <span class="muted small">(<%= board.total %> tracked)</span></h3>
       <% if (board.rows.length === 0) { %>
         <p class="muted">No XP recorded yet.</p>
@@ -338,7 +360,7 @@
       <% } %>
       <% if (!mrow.enabled) { %><p class="muted small">Enable the module (toggle above) for these settings to take effect.</p><% } %>
       <hr class="sep" />
-      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, roles: (typeof roles !== 'undefined' ? roles : []), logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []), thresholdActions: (typeof thresholdActions !== 'undefined' ? thresholdActions : []), automodRules: (typeof automodRules !== 'undefined' ? automodRules : []), automodActions: (typeof automodActions !== 'undefined' ? automodActions : []), countingState: (typeof countingState !== 'undefined' ? countingState : null), ccPlaceholders: (typeof ccPlaceholders !== 'undefined' ? ccPlaceholders : []), arPlaceholders: (typeof arPlaceholders !== 'undefined' ? arPlaceholders : []), arMatchModes: (typeof arMatchModes !== 'undefined' ? arMatchModes : []), reminders: (typeof reminders !== 'undefined' ? reminders : []), schedulePresets: (typeof schedulePresets !== 'undefined' ? schedulePresets : []), announceModes: (typeof announceModes !== 'undefined' ? announceModes : []), xpRates: (typeof xpRates !== 'undefined' ? xpRates : []), levelingCommands: (typeof levelingCommands !== 'undefined' ? levelingCommands : []), levelingBoard: (typeof levelingBoard !== 'undefined' ? levelingBoard : null), verifyModes: (typeof verifyModes !== 'undefined' ? verifyModes : []), turnstileEnabled: (typeof turnstileEnabled !== 'undefined' ? turnstileEnabled : false), twitchEnabled: (typeof twitchEnabled !== 'undefined' ? twitchEnabled : false), twitchDefaultMessage: (typeof twitchDefaultMessage !== 'undefined' ? twitchDefaultMessage : ''), ytVideoMessage: (typeof ytVideoMessage !== 'undefined' ? ytVideoMessage : ''), ytLiveMessage: (typeof ytLiveMessage !== 'undefined' ? ytLiveMessage : ''), voiceChannels: (typeof voiceChannels !== 'undefined' ? voiceChannels : []), categories: (typeof categories !== 'undefined' ? categories : []), statTypes: (typeof statTypes !== 'undefined' ? statTypes : []), dashboardUrlSet: (typeof dashboardUrlSet !== 'undefined' ? dashboardUrlSet : false), welcomeAutoroles: (typeof welcomeAutoroles !== 'undefined' ? welcomeAutoroles : []), verificationEnabled: (typeof verificationEnabled !== 'undefined' ? verificationEnabled : false), wcPresets: (typeof wcPresets !== 'undefined' ? wcPresets : []), giveaways: (typeof giveaways !== 'undefined' ? giveaways : []) }) %>
+      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, roles: (typeof roles !== 'undefined' ? roles : []), logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []), thresholdActions: (typeof thresholdActions !== 'undefined' ? thresholdActions : []), automodRules: (typeof automodRules !== 'undefined' ? automodRules : []), automodActions: (typeof automodActions !== 'undefined' ? automodActions : []), countingState: (typeof countingState !== 'undefined' ? countingState : null), ccPlaceholders: (typeof ccPlaceholders !== 'undefined' ? ccPlaceholders : []), arPlaceholders: (typeof arPlaceholders !== 'undefined' ? arPlaceholders : []), arMatchModes: (typeof arMatchModes !== 'undefined' ? arMatchModes : []), reminders: (typeof reminders !== 'undefined' ? reminders : []), schedulePresets: (typeof schedulePresets !== 'undefined' ? schedulePresets : []), announceModes: (typeof announceModes !== 'undefined' ? announceModes : []), xpRates: (typeof xpRates !== 'undefined' ? xpRates : []), levelingCommands: (typeof levelingCommands !== 'undefined' ? levelingCommands : []), levelingBoard: (typeof levelingBoard !== 'undefined' ? levelingBoard : null), verifyModes: (typeof verifyModes !== 'undefined' ? verifyModes : []), turnstileEnabled: (typeof turnstileEnabled !== 'undefined' ? turnstileEnabled : false), twitchEnabled: (typeof twitchEnabled !== 'undefined' ? twitchEnabled : false), twitchDefaultMessage: (typeof twitchDefaultMessage !== 'undefined' ? twitchDefaultMessage : ''), ytVideoMessage: (typeof ytVideoMessage !== 'undefined' ? ytVideoMessage : ''), ytLiveMessage: (typeof ytLiveMessage !== 'undefined' ? ytLiveMessage : ''), voiceChannels: (typeof voiceChannels !== 'undefined' ? voiceChannels : []), categories: (typeof categories !== 'undefined' ? categories : []), statTypes: (typeof statTypes !== 'undefined' ? statTypes : []), dashboardUrlSet: (typeof dashboardUrlSet !== 'undefined' ? dashboardUrlSet : false), welcomeAutoroles: (typeof welcomeAutoroles !== 'undefined' ? welcomeAutoroles : []), verificationEnabled: (typeof verificationEnabled !== 'undefined' ? verificationEnabled : false), wcPresets: (typeof wcPresets !== 'undefined' ? wcPresets : []), giveaways: (typeof giveaways !== 'undefined' ? giveaways : []), gameStatsRecent: (typeof gameStatsRecent !== 'undefined' ? gameStatsRecent : []) }) %>
     <% } %>
   </section>
   <% } %>
