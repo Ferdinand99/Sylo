@@ -221,8 +221,10 @@ main { width: 100%; max-width: 1200px; margin: 28px auto; padding: 0 28px; }
   margin-bottom: 16px;
   box-shadow: var(--shadow-1);
 }
+form > .card:last-child, .stack > .card:last-child { margin-bottom: 0; }
 
 .card h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
+.card h3 { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 6px; }
 .big { font-size: 30px; font-weight: 800; margin: 2px 0; letter-spacing: -0.02em; }
 .muted { color: var(--muted); }
 .muted.small, .small { font-size: 12px; }
@@ -241,34 +243,48 @@ a:hover { color: var(--accent-strong); text-decoration: underline; text-underlin
 .warn-text { color: var(--warn); }
 
 /* form controls */
-input[type="text"], input[type="number"], input[type="url"], input[type="password"], textarea, select {
+input[type="text"], input[type="number"], input[type="url"], input[type="password"], input[type="datetime-local"], textarea, select {
   background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   padding: 8px 11px;
   font: inherit;
-  transition: border-color .15s, box-shadow .15s;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
 }
+select { cursor: pointer; }
 input:hover, textarea:hover, select:hover { border-color: var(--border-strong); }
+input:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; }
+input:disabled, textarea:disabled, select:disabled { opacity: 0.55; cursor: not-allowed; }
 input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--muted) 75%, transparent); }
 
 /* buttons */
 button, .btn {
   font: inherit; cursor: pointer; border-radius: var(--r-sm);
-  transition: filter .15s, background .15s, border-color .15s, transform .05s;
+  transition: filter var(--dur-1) var(--ease), background var(--dur-1) var(--ease),
+              border-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
 button:active, .btn:active { transform: translateY(1px); }
+button:disabled, .btn:disabled, button[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+/* ghost / neutral — the default for .btn (used on <a>) and .secondary */
+.btn, button.secondary, .btn-secondary {
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+  padding: 8px 16px; font-weight: 600; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.btn:hover, button.secondary:hover, .btn-secondary:hover {
+  border-color: var(--accent); background: var(--surface-3); color: var(--text); text-decoration: none;
+}
+
+/* primary — ordered after ghost so .btn.btn-primary resolves to primary */
 button[type="submit"], .row-form button, .btn-primary {
   background: linear-gradient(180deg, var(--accent), var(--accent-strong));
   color: var(--on-accent); border: 0; padding: 9px 18px; font-weight: 700;
 }
-button[type="submit"]:hover, .row-form button:hover { filter: brightness(1.06); }
-button.secondary, .btn-secondary {
-  background: var(--surface-2); color: var(--text); border: 1px solid var(--border); padding: 8px 14px;
-}
-button.secondary:hover { border-color: var(--accent); background: var(--surface-3); }
-.link-btn { background: none; border: 0; color: var(--accent); padding: 0; }
+button[type="submit"]:hover, .row-form button:hover, .btn-primary:hover { filter: brightness(1.06); }
+
+.link-btn { background: none; border: 0; color: var(--accent); padding: 0; font-weight: 500; }
 .link-btn:hover { color: var(--accent-strong); text-decoration: underline; }
 
 .row-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }

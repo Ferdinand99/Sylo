@@ -313,11 +313,28 @@ once.
   or genuine one-offs. Done with a char-scanning script (regex over-matched EJS
   islands on the first try).
 
-### 4b — components (next)
+### 4b — component polish — DONE
 
-`.card` / `.btn` system / form controls / `.table` / `.switch` / empty-state;
-consistent focus/hover/transition via the motion tokens. Then restyle the
-**overview** and the **module-page shell** so the 26 module pages inherit.
+Conservative, no-markup-churn tightening in `styles.css` (applies to every page by
+inheritance):
+
+- **Utility block moved to end of file** so `.u-mw-*` etc. win over component
+  rules — fixes forms that `.stack`'s `max-width:460px` was clipping after the 4a
+  sweep (reminder/automod/settings/polls/tv/msg builders). Added `.u-stack`.
+- **Form controls:** `:focus` now sets an accent border (not just the global
+  `:focus-visible` ring); `:disabled` dims to 0.55 + not-allowed; `select` gets
+  `cursor:pointer`; `datetime-local` picks up the shared control styling;
+  transitions use the motion tokens.
+- **Buttons:** `.btn` (bare, on `<a>` "Discard" links) now has a real ghost look
+  (surface bg, border, inline-flex) instead of rendering as plain link text;
+  grouped with `button.secondary` / `.btn-secondary`. Primary rule re-ordered
+  after ghost so `.btn.btn-primary` still resolves to the gradient. Added
+  `:disabled` opacity to the base.
+- **Cards:** `.card h3` normalised (14px/700); last card in a form/stack drops its
+  bottom margin.
+
+The **overview** and **module-page shell** were reviewed and left as-is — already
+close to the target (sticky nav card, health strip, coloured plugin cards).
 
 ---
 
