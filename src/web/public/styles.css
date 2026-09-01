@@ -372,6 +372,25 @@ td.num, th.num { text-align: right; }
 
 .module-icon { font-size: 22px; }
 
+/* module-page hero (icon chip + title/description + enable toggle) */
+.mod-hero { display: flex; align-items: flex-start; gap: 14px; }
+.mod-hero-ico {
+  width: 44px; height: 44px; flex: none; border-radius: 12px;
+  display: grid; place-items: center; font-size: 22px; line-height: 1;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+}
+.mod-hero-text { flex: 1; min-width: 0; }
+.mod-hero-text h2 { margin: 0 0 3px; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.mod-hero-text p { margin: 0; font-size: 13px; line-height: 1.5; }
+.mod-hero .switch { flex: none; margin-top: 6px; }
+
+/* empty state — "nothing here yet" boxes */
+.empty {
+  margin: 0; padding: 22px 16px; text-align: center;
+  border: 1px dashed var(--border-strong); border-radius: var(--r);
+  color: var(--muted); font-size: 13px; background: color-mix(in srgb, var(--surface-2) 50%, transparent);
+}
+
 /* --- Combined overview --- */
 .ov-health {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1px;

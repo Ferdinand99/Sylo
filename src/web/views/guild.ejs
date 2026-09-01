@@ -335,11 +335,14 @@
 
     <% } else if (panel.indexOf('m/') === 0 && typeof activeModule !== 'undefined') { %>
       <% var mrow = modules.find(function (x) { return x.id === activeModule.id; }); %>
-      <div class="module-panel-head">
-        <h2><%= activeModule.icon %> <%= activeModule.name %></h2>
+      <div class="mod-hero">
+        <span class="mod-hero-ico" aria-hidden="true"><%= activeModule.icon %></span>
+        <div class="mod-hero-text">
+          <h2><%= activeModule.name %></h2>
+          <p class="muted"><%= activeModule.description %></p>
+        </div>
         <%- include('guild/_module-toggle', { guild: guild, activeModule: activeModule, moduleEnabled: mrow.enabled, toggleDisabled: mrow.missingIntents.length > 0 }) %>
       </div>
-      <p class="muted"><%= activeModule.description %></p>
       <% if (mrow.missingIntents.length) { %>
         <p class="warn-text small">Needs intent: <%= mrow.missingIntents.join(', ') %> — enable it in the Discord Developer Portal.</p>
       <% } %>

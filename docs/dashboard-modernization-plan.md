@@ -333,8 +333,23 @@ inheritance):
 - **Cards:** `.card h3` normalised (14px/700); last card in a form/stack drops its
   bottom margin.
 
-The **overview** and **module-page shell** were reviewed and left as-is — already
-close to the target (sticky nav card, health strip, coloured plugin cards).
+### 4c — templates (started)
+
+The **overview** (`.plugin-*` grid) was reviewed and kept — it is already on
+target (icon chips, 3-line clamped descriptions, hover lift, on/off border
+colour, full-card hit area).
+
+Done so far:
+- **Module-page hero** — `guild.ejs` module branch now renders a `.mod-hero`:
+  emoji in a tinted 44px chip, title + description stacked beside it, the enable
+  toggle right-aligned (replaces the bare `<h2>` + loose `<p>`). All 26 module
+  pages inherit it via the shared shell.
+- **Empty-state component** — `.empty` (dashed border, centred, muted). Applied
+  to the "None yet …" boxes on reminders / roles / custom-commands / starboard /
+  temp-voice.
+
+Still open for a later pass: a consistency sweep over the 26 module bodies
+(heading rhythm, `.stack` vs bare, button placement), sidebar micro-polish.
 
 ---
 
