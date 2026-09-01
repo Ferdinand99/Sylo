@@ -65,55 +65,9 @@
     }
   });
 
-  // --- module enable/disable toggles ---------------------------------
-  document.addEventListener('change', async (e) => {
-    const t = e.target;
-    if (!t.classList.contains('module-toggle')) return;
-    const { guild, module: moduleId } = t.dataset;
-    t.disabled = true;
-    try {
-      const data = await window.syloAction(`/guilds/${guild}/modules/${moduleId}`, { enabled: t.checked });
-      t.checked = data.enabled;
-      toast(`${moduleId} ${data.enabled ? 'enabled' : 'disabled'}`);
-      // Reflect the new state on the sidebar link's status dot.
-      const dot = document.querySelector(`.sb-link[data-module="${moduleId}"] .sb-dot`);
-      if (dot) {
-        dot.classList.toggle('on', data.enabled);
-        dot.classList.toggle('off', !data.enabled);
-      }
-    } catch {
-      t.checked = !t.checked; // revert
-    } finally {
-      t.disabled = false;
-    }
-  });
-
-  // --- plugin-grid "Enable" buttons (overview) ------------------------
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('.plugin-btn.enable');
-    if (!btn) return;
-    e.preventDefault();
-    const { guild, module: moduleId, config } = btn.dataset;
-    btn.disabled = true;
-    btn.textContent = '…';
-    try {
-      const data = await window.syloAction(`/guilds/${guild}/modules/${moduleId}`, { enabled: true });
-      if (data.enabled) {
-        const link = document.createElement('a');
-        link.className = 'plugin-btn active';
-        link.href = config || `/guilds/${guild}/m/${moduleId}`;
-        link.textContent = '✓ Active';
-        btn.replaceWith(link);
-        btn.closest('.plugin-card')?.classList.add('is-on');
-        const dot = document.querySelector(`.sb-link[data-module="${moduleId}"] .sb-dot`);
-        if (dot) { dot.classList.add('on'); dot.classList.remove('off'); }
-        toast(`${moduleId} enabled`);
-      }
-    } catch {
-      btn.disabled = false;
-      btn.textContent = '+ Enable';
-    }
-  });
+  // Module enable/disable (settings page) and the plugin-grid "Enable" buttons
+  // are handled by htmx now — see _module-toggle.ejs / _plugin-cta.ejs and the
+  // moduleToggled listener in htmx-setup.js.
 
   // --- chip picker (chips + add-dropdown, à la MEE6) — roles or channels ---
   function makeRoleChip(id, name, color, field, kind) {

@@ -82,7 +82,7 @@
       <h3 class="plugin-group"><%= group.title %></h3>
       <div class="plugin-grid">
         <% group.cards.forEach(function (c) { %>
-          <div class="plugin-card is-<%= c.status %>">
+          <div class="plugin-card is-<%= c.status %>" id="plugin-card-<%= c.id %>">
             <a class="plugin-hit" href="<%= c.href %>" aria-label="<%= c.name %>"></a>
             <span class="plugin-ico"><svg class="plugin-ico-svg" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-<%= c.icon %>"/></svg></span>
             <span class="plugin-name"><%= c.name %></span>
@@ -95,7 +95,10 @@
               <% } else if (c.enabled) { %>
                 <a class="plugin-btn active" href="<%= c.href %>">✓ Active</a>
               <% } else { %>
-                <button type="button" class="plugin-btn enable" data-guild="<%= guild.id %>" data-module="<%= c.id %>" data-config="<%= c.href %>">+ Enable</button>
+                <button type="button" class="plugin-btn enable"
+                  hx-post="/guilds/<%= guild.id %>/modules/<%= c.id %>"
+                  hx-vals='{"enabled":"true","view":"grid"}'
+                  hx-target="this" hx-swap="outerHTML">+ Enable</button>
               <% } %>
             </span>
           </div>

@@ -1601,20 +1601,23 @@ router.post('/:guildId/modules/:moduleId', (req, res) => {
     );
   }
   if (req.get('HX-Request')) {
-    return res
-      .set(
-        'HX-Trigger',
-        JSON.stringify({
-          moduleToggled: { id: mod.id, enabled },
-          toast: { msg: `${mod.name} ${enabled ? 'enabled' : 'disabled'}`, kind: 'ok' },
-        })
-      )
-      .render('guild/_module-toggle', {
-        guild: req.guild,
-        activeModule: mod,
-        moduleEnabled: enabled,
-        toggleDisabled: missingIntents(mod).length > 0,
-      });
+    res.set(
+      'HX-Trigger',
+      JSON.stringify({
+        moduleToggled: { id: mod.id, enabled },
+        toast: { msg: `${mod.name} ${enabled ? 'enabled' : 'disabled'}`, kind: 'ok' },
+      })
+    );
+    // Two callers: the plugin-grid "Enable" button and the settings-page switch.
+    if (req.body.view === 'grid') {
+      return res.render('guild/_plugin-cta', { href: `/guilds/${req.guild.id}/m/${mod.id}` });
+    }
+    return res.render('guild/_module-toggle', {
+      guild: req.guild,
+      activeModule: mod,
+      moduleEnabled: enabled,
+      toggleDisabled: missingIntents(mod).length > 0,
+    });
   }
   res.json({ enabled });
 });

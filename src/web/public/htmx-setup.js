@@ -21,7 +21,8 @@
     if (window.syloToast) window.syloToast(d.msg || 'Done.', d.kind || 'ok');
   });
 
-  // A module was enabled/disabled somewhere — reflect it on the sidebar dot.
+  // A module was enabled/disabled somewhere — reflect it on the sidebar dot and
+  // (on the overview) the plugin card.
   document.addEventListener('moduleToggled', function (evt) {
     var d = evt.detail || {};
     var dot = document.querySelector('.sb-link[data-module="' + d.id + '"] .sb-dot');
@@ -29,6 +30,8 @@
       dot.classList.toggle('on', !!d.enabled);
       dot.classList.toggle('off', !d.enabled);
     }
+    var card = document.getElementById('plugin-card-' + d.id);
+    if (card) card.classList.toggle('is-on', !!d.enabled);
   });
 
   document.addEventListener('htmx:responseError', function (evt) {

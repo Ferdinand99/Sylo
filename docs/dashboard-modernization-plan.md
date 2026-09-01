@@ -120,10 +120,19 @@ appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
   updates the sidebar dot. app.js's `.module-toggle` handler is now dead (the
   fragment dropped that class) — removed in Phase 3.
 
+### Done (commit 4 — plugin-grid Enable buttons)
+
+- Overview "+ Enable" buttons post via htmx (`hx-vals` carries
+  `enabled:true, view:grid`); the shared `POST /:guildId/modules/:moduleId`
+  HX-Request branch renders `guild/_plugin-cta.ejs` (the "✓ Active" link) for
+  `view=grid`, `_module-toggle.ejs` otherwise. Cards got
+  `id="plugin-card-<id>"`; the `moduleToggled` listener toggles their `is-on`
+  class alongside the sidebar dot.
+- **Both dead `app.js` blocks removed** (`.module-toggle` change handler +
+  `.plugin-btn.enable` click handler). `syloAction` / `toast` remain for Phase 3.
+
 ### Still to do
 
-- Plugin-grid "Enable" buttons on the overview (still use `syloAction`) — a
-  follow-up; the overview grid isn't a fragment partial yet.
 - **Not yet converted, need special handling:** `polls` and `welcome-channel`
   (submit-time JS populates hidden fields — do with the Phase 2 builders);
   `welcome-channel` publish also early-returns a redirect; `moderation` /
