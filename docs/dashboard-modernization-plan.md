@@ -359,11 +359,25 @@ Still open for a later pass: a consistency sweep over the 26 module bodies
 
 ## Phase 5 — Verify + docs
 
-- Public pages (`/lb`, `/verify`, `/appeal`) still work with JS disabled.
-- CSRF enforced on htmx requests.
-- Add route tests via `createApp()` (also on the 3.0 backlog): a few
-  `HX-Request` fragment assertions.
-- Update the README dashboard/architecture section.
+- **Dev scaffolding removed** — `GET/POST /__htmx-check` in `dashboard.js` and
+  its two views (`htmx-check.ejs`, `partials/htmx-check-body.ejs`) deleted; the
+  now-unused `config` import in `dashboard.js` dropped.
+- **Public pages framework-free** — confirmed `leaderboard.ejs` (serves both
+  `/leaderboard/:id` and `/lb/:slug`), `verify.ejs`, `appeal.ejs` keep their own
+  `<head>` with only `styles.css` (+ Turnstile on the verify challenge), no
+  `partials/header.ejs`, no `hx-*` / `x-data` / `<script>`. They render and
+  submit with JS disabled.
+- **Route tests** — `test/dashboardRoutes.test.js` boots `createApp()` on an
+  ephemeral port against a minimal fake `runtime.client` and asserts, for
+  `/m/afk`: full page vs `#module-config` fragment on `HX-Request`; POST
+  redirects without the header, returns the fragment + an `HX-Trigger` toast with
+  it. New `test/helpers/openMode.js` pins the app to open mode (assigns `""` so
+  `dotenv/config` can't repopulate from a local `.env`). Suite: 164 pass.
+- CSRF: middleware behaviour already covered by `test/csrf.test.js` (open-mode
+  pass-through, session mints a token, header/body token accepted).
+
+**Still to do:** update the README dashboard/architecture section, then flip
+PR #40 to Ready → merge → release-please cuts 3.1.0.
 
 ---
 
