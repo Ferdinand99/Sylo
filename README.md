@@ -12,6 +12,11 @@ alerts, YouTube alerts), Discord OAuth2 login, a public leveling leaderboard, an
 
 ## What's new since 2.0
 
+- **Image rank & leaderboard cards** — `/rank` replies with a rendered card
+  (avatar, level, server rank, XP bar, message count) and `/leaderboard` with a
+  rendered top-10 (medal badges, avatars, level, XP), both drawn in-process with
+  `@napi-rs/canvas`. Each falls back to the old embed automatically if the image
+  renderer is unavailable on the host.
 - **Button & dropdown self-assign roles** — a reaction-role message can now use
   clickable **buttons** or a **select menu** instead of emoji reactions (pick the
   style in the builder). Buttons/dropdowns need no Add Reactions permission and
@@ -204,6 +209,8 @@ alerts, YouTube alerts), Discord OAuth2 login, a public leveling leaderboard, an
 - **SQLite persistence** (`better-sqlite3`) — guild settings, module config,
   warnings, tickets and a TTL stats cache, in a single volume-mounted file.
 - **Lean Docker image** — multi-stage `node:20-alpine`, non-root, `HEALTHCHECK`.
+  Ships prebuilt native modules (`better-sqlite3`, `@napi-rs/canvas` for the rank
+  card) and the DejaVu fonts the card needs.
 
 ## Project structure
 

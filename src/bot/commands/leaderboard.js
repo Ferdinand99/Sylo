@@ -1,7 +1,9 @@
-// /leaderboard — top members by leveling XP, with a link to the web leaderboard.
+// /leaderboard — top members by leveling XP as an image card (falls back to a
+// text embed), plus a link to the web leaderboard.
 import {
   SlashCommandBuilder,
   EmbedBuilder,
+  AttachmentBuilder,
   MessageFlags,
   ActionRowBuilder,
   ButtonBuilder,
@@ -10,7 +12,8 @@ import {
 import { config } from '../../config.js';
 import { isModuleEnabled, getGuildModule } from '../../db/modules.js';
 import { topMembers, memberRank } from '../../db/leveling.js';
-import { resolveUserTags } from '../../web/lib/discord.js';
+import { renderLeaderboardCard } from '../lib/rankCard.js';
+import { log } from '../../lib/log.js';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -35,33 +38,60 @@ export async function execute(interaction) {
     return interaction.reply({ content: 'No one has earned any XP yet.', flags: MessageFlags.Ephemeral });
   }
 
-  const tags = await resolveUserTags(interaction.client, rows.map((r) => r.user_id));
-  const lines = rows.map((r, i) => {
-    const rankMark = MEDALS[i] ?? `\`#${i + 1}\``;
-    return `${rankMark} **${tags.get(r.user_id) ?? r.user_id}** — level ${r.level} · ${r.xp} XP`;
-  });
+  await interaction.deferReply();
+
+  const entries = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const r = rows[i];
+    const member = await interaction.guild.members.fetch(r.user_id).catch(() => null);
+    const user = member?.user ?? (await interaction.client.users.fetch(r.user_id).catch(() => null));
+    entries.push({
+      rank: i + 1,
+      name: member?.displayName || user?.username || r.user_id,
+      avatarUrl: (member ?? user)?.displayAvatarURL?.({ extension: 'png', size: 64, forceStatic: true }) || '',
+      level: r.level,
+      xp: r.xp,
+    });
+  }
+
+  const yourRank = memberRank(interaction.guildId, interaction.user.id);
+  const cfg = getGuildModule(interaction.guildId, 'leveling').config;
+  const components =
+    config.dashboardUrl && cfg.publicLeaderboard !== false
+      ? [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setStyle(ButtonStyle.Link)
+              .setLabel('Full leaderboard')
+              .setURL(`${config.dashboardUrl}/leaderboard/${interaction.guildId}`)
+          ),
+        ]
+      : undefined;
+
+  try {
+    const png = await renderLeaderboardCard({
+      title: `Leaderboard — ${interaction.guild.name}`,
+      iconUrl: interaction.guild.iconURL({ extension: 'png', size: 128 }) || null,
+      rows: entries,
+      footer: `Your rank: #${yourRank}`,
+    });
+    if (png) {
+      return interaction.editReply({
+        files: [new AttachmentBuilder(png, { name: 'leaderboard.png' })],
+        components,
+      });
+    }
+  } catch (err) {
+    log.warn('leaderboard-card', 'render failed — falling back to embed', err.message);
+  }
 
   const embed = new EmbedBuilder()
     .setColor(0x5b7cfa)
     .setTitle(`Leaderboard — ${interaction.guild.name}`)
-    .setDescription(lines.join('\n'))
-    .setFooter({ text: `Your rank: #${memberRank(interaction.guildId, interaction.user.id)}` });
+    .setDescription(
+      entries.map((e) => `${MEDALS[e.rank - 1] ?? `\`#${e.rank}\``} **${e.name}** — level ${e.level} · ${e.xp} XP`).join('\n')
+    )
+    .setFooter({ text: `Your rank: #${yourRank}` });
 
-  const reply = { embeds: [embed] };
-
-  // Link to the public web leaderboard when the dashboard has a public URL and
-  // the guild hasn't turned its leaderboard off.
-  const cfg = getGuildModule(interaction.guildId, 'leveling').config;
-  if (config.dashboardUrl && cfg.publicLeaderboard !== false) {
-    reply.components = [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setStyle(ButtonStyle.Link)
-          .setLabel('Full leaderboard')
-          .setURL(`${config.dashboardUrl}/leaderboard/${interaction.guildId}`)
-      ),
-    ];
-  }
-
-  return interaction.reply(reply);
+  return interaction.editReply({ embeds: [embed], components });
 }

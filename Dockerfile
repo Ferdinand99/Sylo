@@ -23,7 +23,8 @@ WORKDIR /app
 
 # su-exec: drop from root to the unprivileged user after fixing volume ownership.
 # tzdata: makes the TZ env var actually resolve for local-time formatting.
-RUN apk add --no-cache su-exec tzdata \
+# font-dejavu: text for the /rank image card (@napi-rs/canvas has no bundled font).
+RUN apk add --no-cache su-exec tzdata font-dejavu \
   && addgroup -S sylo && adduser -S sylo -G sylo \
   && mkdir -p /app/data && chown -R sylo:sylo /app
 
