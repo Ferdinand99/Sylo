@@ -426,6 +426,33 @@ const MIGRATIONS = [
       );
     `);
   },
+
+  // Giveaways: one row per giveaway plus a row per entrant.
+  (database) => {
+    database.exec(`
+      CREATE TABLE giveaways (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id         TEXT NOT NULL,
+        channel_id       TEXT NOT NULL,
+        message_id       TEXT,
+        prize            TEXT NOT NULL,
+        winners          INTEGER NOT NULL DEFAULT 1,
+        host_id          TEXT NOT NULL,
+        required_role_id TEXT,
+        ends_at          INTEGER NOT NULL,
+        ended            INTEGER NOT NULL DEFAULT 0,
+        won_ids          TEXT NOT NULL DEFAULT '[]',
+        created_at       INTEGER NOT NULL
+      );
+      CREATE INDEX idx_giveaways_guild ON giveaways (guild_id, ended, ends_at);
+      CREATE TABLE giveaway_entries (
+        giveaway_id INTEGER NOT NULL,
+        user_id     TEXT NOT NULL,
+        entered_at  INTEGER NOT NULL,
+        PRIMARY KEY (giveaway_id, user_id)
+      );
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

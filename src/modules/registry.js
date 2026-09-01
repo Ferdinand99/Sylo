@@ -234,6 +234,15 @@ export const MODULES = [
     defaultEnabled: false,
     configurable: true,
   },
+  {
+    id: 'giveaways',
+    name: 'Giveaways',
+    description: 'Run prize giveaways with an Enter button; winners drawn automatically at the end time.',
+    icon: '🎉',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
 ];
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));

@@ -28,6 +28,8 @@ import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { applyWarnThresholds, normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
 import { normaliseAutomodConfig, AUTOMOD_RULES, AUTOMOD_ACTIONS } from '../../modules/automod.js';
 import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
+import { activeGiveaways, endedGiveaways, giveawayEntryCount, getGiveawayInGuild } from '../../db/giveaways.js';
+import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
 import { normaliseEmbedSpec } from '../../modules/welcomeChannel.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
@@ -88,7 +90,7 @@ const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
   'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder', 'verification',
   'afk', 'server-stats', 'free-games', 'appeals', 'temp-voice', 'welcome-channel', 'starboard',
-  'invite-tracker', 'polls', 'twitch-alerts', 'youtube-alerts',
+  'invite-tracker', 'polls', 'twitch-alerts', 'youtube-alerts', 'giveaways',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -451,7 +453,7 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
-    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification', 'free-games', 'welcome', 'starboard', 'polls', 'twitch-alerts', 'youtube-alerts'].includes(mod.id)
+    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification', 'free-games', 'welcome', 'starboard', 'polls', 'twitch-alerts', 'youtube-alerts', 'giveaways'].includes(mod.id)
       ? assignableRoles(req.guild)
       : [],
     welcomeAutoroles: mod.id === 'welcome' ? getGuildModule(req.guild.id, 'roles').config.autoroles ?? [] : [],
@@ -532,6 +534,22 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
           })),
         }
       : null,
+    giveaways: mod.id === 'giveaways'
+      ? [
+          ...activeGiveaways(req.guild.id).map((g) => ({ ...g, state: 'active' })),
+          ...endedGiveaways(req.guild.id, 8).map((g) => ({ ...g, state: 'ended' })),
+        ].map((g) => ({
+          id: g.id,
+          prize: g.prize,
+          state: g.state,
+          winners: g.winners,
+          endsAt: g.ends_at,
+          entries: giveawayEntryCount(g.id),
+          wonIds: g.wonIds,
+          channel: guildTextChannels(req.guild).find((c) => c.id === g.channel_id)?.name ?? g.channel_id,
+          requiredRoleId: g.required_role_id,
+        }))
+      : [],
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
   });
 });
@@ -799,6 +817,8 @@ router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
       spec = {};
     }
     config = normaliseWelcomeChannelConfig({ channelId: req.body.channelId, messageId: prev.messageId, spec });
+  } else if (mod.id === 'giveaways') {
+    config = normaliseGiveawaysConfig({ ping: req.body.ping, dmWinners: req.body.dmWinners === 'on' });
   } else {
     return res.redirect(back);
   }
@@ -823,6 +843,24 @@ router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
       return res.redirect(`${back}?msg=wc-published`);
     }
     return res.redirect(`${back}?msg=wc-fail`);
+  }
+  res.redirect(`${back}?msg=saved`);
+}));
+
+// Giveaways: end / reroll from the dashboard.
+router.post('/:guildId/m/giveaways/:id/:action', asyncHandler(async (req, res) => {
+  const back = `/guilds/${req.guild.id}/m/giveaways`;
+  const id = Number(req.params.id);
+  const g = getGiveawayInGuild(id, req.guild.id);
+  if (!g) return res.redirect(`${back}?msg=badcommand`);
+
+  if (req.params.action === 'end' && !g.ended) {
+    await endGiveaway(id);
+    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'module:giveaways', detail: `ended #${id}` });
+  } else if (req.params.action === 'reroll' && g.ended) {
+    const count = Math.max(1, Math.min(Number(req.body.count) || 1, 20));
+    await endGiveaway(id, { rerollCount: count });
+    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'module:giveaways', detail: `rerolled #${id}` });
   }
   res.redirect(`${back}?msg=saved`);
 }));

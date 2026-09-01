@@ -26,6 +26,7 @@ export const MODULE_ICONS = {
   'temp-voice': 'mic',
   'free-games': 'gamepad',
   'scheduled-messages': 'bell',
+  giveaways: 'gift',
   'twitch-alerts': 'twitch',
   'youtube-alerts': 'youtube',
   // synthetic overview cards

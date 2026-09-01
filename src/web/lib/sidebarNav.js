@@ -64,6 +64,7 @@ const CATEGORIES = [
       { page: 'messages', label: 'Embed messages' },
       { module: 'counting' },
       { module: 'polls' },
+      { module: 'giveaways' },
       { module: 'scheduled-messages', label: 'Reminders' },
       { module: 'autoresponder' },
       { module: 'afk' },

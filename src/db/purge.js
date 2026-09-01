@@ -26,15 +26,20 @@ const GUILD_TABLES = [
   'twitch_live',
   'youtube_video_seen',
   'youtube_live',
+  'giveaways',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
 const ticketMsgStmt = db.prepare(
   'DELETE FROM ticket_messages WHERE ticket_id IN (SELECT id FROM tickets WHERE guild_id = ?)'
 );
+const giveawayEntryStmt = db.prepare(
+  'DELETE FROM giveaway_entries WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)'
+);
 
 const purgeGuildTxn = db.transaction((guildId) => {
   ticketMsgStmt.run(guildId); // before `tickets`, which the subquery reads
+  giveawayEntryStmt.run(guildId); // before `giveaways`, which the subquery reads
   for (const stmt of simpleStmts) stmt.run(guildId);
 });
 

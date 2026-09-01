@@ -1,17 +1,25 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Twenty-four per-guild modules
+for self-hosting on an **Unraid server via Docker**. Twenty-five per-guild modules
 (moderation, logging, tickets, reaction roles, verification, welcome, welcome
 channel, sticky messages, auto-moderation, counting, custom commands,
 autoresponder, scheduled messages, leveling, AFK, server statistics, free games,
-ban appeals, temporary voice channels, starboard, invite tracker, polls, Twitch
-alerts, YouTube alerts), Discord OAuth2 login, a public leveling leaderboard, and
+ban appeals, temporary voice channels, starboard, invite tracker, polls,
+giveaways, Twitch alerts, YouTube alerts), Discord OAuth2 login, a public
+leveling leaderboard, and
 **Battlefield-series** player stats via the public
 [gametools.network](https://gametools.network) API.
 
 ## What's new since 2.0
 
+- **Giveaways** — `/giveaway start prize:… duration:30m` posts an embed with a
+  **🎉 Enter** button; members join with one click (click again to leave). Winners
+  are drawn automatically at the end time — no reactions, no Message Content
+  intent. Optional `winners:` count and `required_role:`. `/giveaway end`,
+  `/giveaway reroll` (excludes previous winners) and `/giveaway list`, plus an
+  End / Reroll list on the dashboard. Winner ping (@here / @everyone) and
+  optional winner DMs are configurable.
 - **Image rank & leaderboard cards** — `/rank` replies with a rendered card
   (avatar, level, server rank, XP bar, message count) and `/leaderboard` with a
   rendered top-10 (medal badges, avatars, level, XP), both drawn in-process with
@@ -79,7 +87,7 @@ alerts, YouTube alerts), Discord OAuth2 login, a public leveling leaderboard, an
   decision shown on the link, with a single-use rejoin invite on accept),
   Temporary voice channels (MEE6-style hubs + 13 /voice-* control commands),
   and Welcome Channel (a builder for one pinned message in a read-only channel)
-  — all functional and configurable from the dashboard (24 in total)
+  — all functional and configurable from the dashboard (25 in total)
 - Editable Discord **presence / activity** from the dashboard (`/settings`)
 - 2.0 groundwork still current: action-based custom `/slash` commands,
   scheduled messages, full leveling with a public leaderboard, auto-moderation,
@@ -107,7 +115,7 @@ alerts, YouTube alerts), Discord OAuth2 login, a public leveling leaderboard, an
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 24 feature groups, each toggled and configured from the
+- **Per-guild modules** — 25 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel

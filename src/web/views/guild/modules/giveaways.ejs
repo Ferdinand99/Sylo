@@ -1,0 +1,90 @@
+<% var cfg = moduleConfig || {}; %>
+<% var ping = ['here', 'everyone'].includes(cfg.ping) ? cfg.ping : 'none'; %>
+<% var list = Array.isArray(giveaways) ? giveaways : []; %>
+<% var active = list.filter(function (g) { return g.state === 'active'; }); %>
+<% var ended = list.filter(function (g) { return g.state === 'ended'; }); %>
+<% function rel(ms) { var s = Math.round((ms - Date.now()) / 1000); var a = Math.abs(s); var u = a < 60 ? [a, 's'] : a < 3600 ? [Math.round(a/60), 'm'] : a < 86400 ? [Math.round(a/3600), 'h'] : [Math.round(a/86400), 'd']; return (s < 0 ? '' : 'in ') + u[0] + u[1] + (s < 0 ? ' ago' : ''); } %>
+
+<p class="muted small">
+  Staff start giveaways with <code>/giveaway start</code>; members join by clicking the <strong>🎉 Enter</strong>
+  button. Winners are drawn automatically at the end time — no reactions, no Message Content intent.
+</p>
+
+<section class="card">
+  <h3 style="margin:0 0 8px">Commands</h3>
+  <ul class="muted small" style="margin:0; padding-left:18px; line-height:1.7">
+    <li><code>/giveaway start prize:… duration:30m</code> — plus optional <code>winners:</code> and <code>required_role:</code>.</li>
+    <li><code>/giveaway end id:…</code> — draw the winners now.</li>
+    <li><code>/giveaway reroll id:… [count:]</code> — pick new winners for a finished giveaway (excludes the previous ones).</li>
+    <li><code>/giveaway list</code> — the active giveaways and their ids.</li>
+  </ul>
+</section>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/giveaways/config" class="stack" style="max-width:520px">
+  <section class="card stack">
+    <h3 style="margin:0">Winner announcement</h3>
+    <label class="small">Ping with the winner message</label>
+    <select name="ping" style="max-width:260px">
+      <option value="none" <%= ping === 'none' ? 'selected' : '' %>>No ping</option>
+      <option value="here" <%= ping === 'here' ? 'selected' : '' %>>@here</option>
+      <option value="everyone" <%= ping === 'everyone' ? 'selected' : '' %>>@everyone</option>
+    </select>
+    <label class="checkline">
+      <input type="checkbox" name="dmWinners" <%= cfg.dmWinners ? 'checked' : '' %> /> Also DM each winner
+    </label>
+    <div style="margin-top:6px"><button type="submit">Save</button></div>
+  </section>
+</form>
+
+<section class="card">
+  <h3 style="margin:0 0 8px">Active giveaways <span class="muted small">(<%= active.length %>)</span></h3>
+  <% if (!active.length) { %>
+    <p class="muted small">None running. Start one with <code>/giveaway start</code>.</p>
+  <% } else { %>
+    <div class="stack">
+      <% active.forEach(function (g) { %>
+        <div class="cmd-override">
+          <div class="cmd-override-head">
+            <span>
+              <strong>#<%= g.id %> · <%= g.prize %></strong>
+              <span class="muted small">· #<%= g.channel %> · <%= g.winners %> winner<%= g.winners === 1 ? '' : 's' %>
+                · <%= g.entries %> entr<%= g.entries === 1 ? 'y' : 'ies' %> · ends <%= rel(g.endsAt) %><% if (g.requiredRoleId) { %> · role-gated<% } %></span>
+            </span>
+          </div>
+          <div class="btn-row">
+            <form method="POST" action="/guilds/<%= guild.id %>/m/giveaways/<%= g.id %>/end"
+                  data-confirm="End giveaway #<%= g.id %> now and draw the winners?">
+              <button type="submit">End now</button>
+            </form>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+</section>
+
+<% if (ended.length) { %>
+<section class="card">
+  <h3 style="margin:0 0 8px">Recently ended</h3>
+  <div class="stack">
+    <% ended.forEach(function (g) { %>
+      <div class="cmd-override">
+        <div class="cmd-override-head">
+          <span>
+            <strong>#<%= g.id %> · <%= g.prize %></strong>
+            <span class="muted small">· <%= g.entries %> entr<%= g.entries === 1 ? 'y' : 'ies' %> ·
+              <% if (g.wonIds && g.wonIds.length) { %>won by <%= g.wonIds.map(function (id) { return '@' + id; }).join(', ') %><% } else { %>no winner<% } %></span>
+          </span>
+        </div>
+        <div class="btn-row">
+          <form method="POST" action="/guilds/<%= guild.id %>/m/giveaways/<%= g.id %>/reroll" class="btn-row" style="margin:0"
+                data-confirm="Reroll giveaway #<%= g.id %>?">
+            <input type="number" name="count" value="1" min="1" max="20" style="width:64px" />
+            <button type="submit">Reroll</button>
+          </form>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+</section>
+<% } %>
