@@ -12,6 +12,11 @@ alerts, YouTube alerts), Discord OAuth2 login, a public leveling leaderboard, an
 
 ## What's new since 2.0
 
+- **Button & dropdown self-assign roles** — a reaction-role message can now use
+  clickable **buttons** or a **select menu** instead of emoji reactions (pick the
+  style in the builder). Buttons/dropdowns need no Add Reactions permission and
+  no Message Content intent, handle up to 25 roles, and still honour the
+  *exclusive* / *reverse* options. Emoji reactions remain the default.
 - **Structured logging + error history** — every log line is now
   `<ISO timestamp>  LEVEL  scope  message`; set `LOG_LEVEL` (`debug`/`info`/
   `warn`/`error`) and `LOG_FORMAT=json` (or `LOG_JSON=1`) for machine-readable

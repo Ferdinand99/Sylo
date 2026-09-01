@@ -16,7 +16,7 @@
       <div class="cmd-override-head">
         <span>
           <strong><%= (rm.embed && rm.embed.title) || (rm.message || '').slice(0, 60) || 'Reaction role' %></strong>
-          <span class="muted small">· #<%= chName(rm.channelId) %> · <%= (rm.pairs || []).length %> role(s) · <%= rm.mode || 'default' %><%= rm.exclusive ? ' · exclusive' : '' %></span>
+          <span class="muted small">· #<%= chName(rm.channelId) %> · <%= (rm.pairs || []).length %> role(s) · <%= rm.style || 'reaction' %><% if ((rm.style || 'reaction') !== 'select') { %> · <%= rm.mode || 'default' %><% } %><%= rm.exclusive ? ' · exclusive' : '' %></span>
         </span>
         <span class="pill <%= rm.messageId ? 'on' : 'off' %>"><%= rm.messageId ? 'published' : 'draft' %></span>
       </div>

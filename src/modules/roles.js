@@ -6,19 +6,38 @@
 //     reactionMessages: [
 //       {
 //         id, channelId, messageId,
+//         style: "reaction" | "buttons" | "select",   // how members pick a role
 //         message: "",                 // plain text above the embed
 //         embed: { ...embed spec },    // built with the WYSIWYG editor
 //         exclusive: false,            // only one role from this set at a time
-//         mode: "default" | "reverse", // reverse = reacting removes the role
-//         pairs: [{ key, display, react, roleId }],
+//         mode: "default" | "reverse", // reverse = the interaction removes the role
+//         placeholder: "",             // select-menu placeholder (style: select)
+//         pairs: [{ key, display, react, roleId, label?, btnStyle? }],
 //       }
 //     ]
 //   }
-// `key` is what identifies the reaction: a custom emoji id, or the unicode char.
+// `key` identifies a reaction (custom emoji id or unicode char). For the button
+// and select styles the emoji is optional; `label` / `btnStyle` drive the button.
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+  StringSelectMenuBuilder,
+} from 'discord.js';
 import { on } from './dispatch.js';
 import { runtime } from '../runtime.js';
-import { sendComposed, editComposed } from './messageCreator.js';
+import { getGuildModule } from '../db/modules.js';
+import { buildEmbed, sendComposed, editComposed } from './messageCreator.js';
 import { log } from '../lib/log.js';
+
+const BTN_STYLE = {
+  primary: ButtonStyle.Primary,
+  secondary: ButtonStyle.Secondary,
+  success: ButtonStyle.Success,
+  danger: ButtonStyle.Danger,
+};
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, Number.isFinite(+n) ? +n : lo));
 
 // --- emoji parsing --------------------------------------------------------
 
@@ -49,39 +68,214 @@ export function parseEmoji(raw, guild) {
   return { key: s, display: s, react: s };
 }
 
-// --- dashboard helper: publish / re-publish a reaction-role message ------
+// --- components (button / select styles) --------------------------------
+
+/** An emoji value setEmoji() accepts: a custom-emoji id, or a unicode char. */
+function emojiForPair(p) {
+  if (!p || !p.key) return null;
+  return /^\d+$/.test(String(p.key)) ? String(p.key) : p.display || p.key;
+}
+
+const validPairs = (rm) => (rm.pairs || []).filter((p) => /^\d{17,20}$/.test(p.roleId || ''));
 
 /**
- * Send (or edit) the reaction-role message and reconcile its reactions.
+ * Build the button rows or select menu for a button/select-style message.
+ * @returns {import('discord.js').ActionRowBuilder[]}
+ */
+export function buildRoleComponents(guild, rm) {
+  const pairs = validPairs(rm);
+  if (!pairs.length) return [];
+  const nameOf = (id) => guild.roles.cache.get(id)?.name ?? 'role';
+
+  if (rm.style === 'select') {
+    const options = pairs.slice(0, 25).map((p) => {
+      const opt = { label: (p.label || nameOf(p.roleId)).slice(0, 100) || 'role', value: p.roleId };
+      const emoji = emojiForPair(p);
+      if (emoji) opt.emoji = emoji;
+      return opt;
+    });
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`rrsel:${rm.id}`)
+      .setPlaceholder((rm.placeholder || 'Pick your roles').slice(0, 150))
+      .setMinValues(rm.exclusive ? 0 : clamp(rm.selMin, 0, options.length))
+      .setMaxValues(rm.exclusive ? 1 : clamp(rm.selMax || options.length, 1, options.length))
+      .addOptions(options);
+    return [new ActionRowBuilder().addComponents(menu)];
+  }
+
+  const rows = [];
+  for (let i = 0; i < pairs.length && rows.length < 5; i += 5) {
+    const row = new ActionRowBuilder();
+    for (const p of pairs.slice(i, i + 5)) {
+      const btn = new ButtonBuilder()
+        .setCustomId(`rr:${rm.id}:${p.roleId}`)
+        .setStyle(BTN_STYLE[p.btnStyle] || ButtonStyle.Secondary)
+        .setLabel((p.label || nameOf(p.roleId)).slice(0, 80) || 'role');
+      const emoji = emojiForPair(p);
+      if (emoji) {
+        try {
+          btn.setEmoji(emoji);
+        } catch {
+          /* ignore an emoji Discord won't accept */
+        }
+      }
+      row.addComponents(btn);
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+// --- dashboard helper: publish / re-publish a role message --------------
+
+/** The embed spec for a role message — the configured embed, or an auto list. */
+function roleMessageEmbedSpec(rm) {
+  const e = rm.embed || {};
+  const hasContent = e.title || e.description || e.image || (e.fields || []).length;
+  if (hasContent) return e;
+  const lines = validPairs(rm)
+    .map((p) => `${p.display ? `${p.display} ` : ''}<@&${p.roleId}>`)
+    .join('\n');
+  return { ...e, description: lines };
+}
+
+/**
+ * Send (or edit) a role message. For the "reaction" style it also reconciles the
+ * message's reactions; for "buttons"/"select" it attaches the components.
  * @param {import('discord.js').Guild} guild
- * @param {object} rm  reaction-message entry (see config shape above)
+ * @param {object} rm  entry from config.reactionMessages (see shape above)
  * @returns {Promise<string>} the message id
  */
 export async function publishReactionMessage(guild, rm) {
-  const embed = rm.embed && (rm.embed.title || rm.embed.description || rm.embed.image || (rm.embed.fields || []).length)
-    ? rm.embed
-    : { ...(rm.embed || {}), description: rm.pairs.map((p) => `${p.display} — <@&${p.roleId}>`).join('\n') };
-  const spec = { content: rm.message || '', embeds: [embed] };
+  const style = rm.style === 'buttons' || rm.style === 'select' ? rm.style : 'reaction';
+  const embedSpec = roleMessageEmbedSpec(rm);
 
-  let message = null;
-  if (rm.messageId) {
-    message = await editComposed(guild, rm.channelId, rm.messageId, spec).catch(() => null);
-  }
-  if (!message) message = await sendComposed(guild, rm.channelId, spec);
-
-  const wanted = new Set(rm.pairs.map((p) => p.key));
-  try {
-    for (const rx of message.reactions.cache.values()) {
-      const k = rx.emoji.id || rx.emoji.name;
-      if (!wanted.has(k)) await rx.remove().catch(() => {});
+  if (style === 'reaction') {
+    const spec = { content: rm.message || '', embeds: [embedSpec] };
+    let message = null;
+    if (rm.messageId) {
+      message = await editComposed(guild, rm.channelId, rm.messageId, spec).catch(() => null);
     }
-  } catch {
-    /* best-effort */
+    if (!message) message = await sendComposed(guild, rm.channelId, spec);
+
+    const wanted = new Set(rm.pairs.map((p) => p.key));
+    try {
+      for (const rx of message.reactions.cache.values()) {
+        const k = rx.emoji.id || rx.emoji.name;
+        if (!wanted.has(k)) await rx.remove().catch(() => {});
+      }
+    } catch {
+      /* best-effort */
+    }
+    for (const p of rm.pairs) {
+      if (p.react) {
+        await message.react(p.react).catch((err) => log.warn('roles', `react ${p.display}: ${err.message}`));
+      }
+    }
+    return message.id;
   }
-  for (const p of rm.pairs) {
-    await message.react(p.react).catch((err) => log.warn('roles', `react ${p.display}: ${err.message}`));
+
+  // button / select style — send the components directly (own customId namespace).
+  const channel = guild.channels.cache.get(rm.channelId) || (await guild.channels.fetch(rm.channelId).catch(() => null));
+  if (!channel?.isTextBased?.()) throw new Error('channel not found or not a text channel');
+  const payload = {
+    content: rm.message || '',
+    embeds: [buildEmbed(embedSpec)].filter(Boolean),
+    components: buildRoleComponents(guild, rm),
+    allowedMentions: { parse: [] },
+  };
+
+  let message = rm.messageId ? await channel.messages.fetch(rm.messageId).catch(() => null) : null;
+  if (message) {
+    await message.edit(payload);
+    await message.reactions.removeAll().catch(() => {}); // in case it used to be reaction-style
+  } else {
+    message = await channel.send(payload);
   }
   return message.id;
+}
+
+// --- component interaction handlers (button / select styles) -----------
+
+/** Look up a still-configured, still-enabled role message by id. */
+function roleMessageById(guildId, rmId) {
+  const mod = getGuildModule(guildId, 'roles');
+  if (!mod.enabled) return null;
+  return (mod.config.reactionMessages || []).find((x) => String(x.id) === String(rmId)) || null;
+}
+
+const ephemeral = (interaction, content) =>
+  interaction.reply({ content, flags: MessageFlags.Ephemeral });
+
+async function handleRoleButton(interaction, rmId, roleId) {
+  const rm = roleMessageById(interaction.guildId, rmId);
+  if (!rm || !(rm.pairs || []).some((p) => p.roleId === roleId)) {
+    return ephemeral(interaction, 'This role menu is no longer configured.');
+  }
+  const role = interaction.guild.roles.cache.get(roleId);
+  const member = interaction.member;
+  if (!role || !role.editable) {
+    return ephemeral(interaction, "I can't assign that role — I'm missing Manage Roles or ranked below it.");
+  }
+  const has = member.roles.cache.has(roleId);
+
+  if (rm.mode === 'reverse') {
+    await member.roles[has ? 'add' : 'remove'](role, 'Reaction role button (reverse)');
+    return ephemeral(interaction, has ? `Restored **${role.name}**.` : `Removed **${role.name}**.`);
+  }
+  if (has) {
+    await member.roles.remove(role, 'Reaction role button');
+    return ephemeral(interaction, `Removed **${role.name}**.`);
+  }
+  await member.roles.add(role, 'Reaction role button');
+  if (rm.exclusive) {
+    const others = validPairs(rm)
+      .filter((p) => p.roleId !== roleId && member.roles.cache.has(p.roleId))
+      .map((p) => p.roleId);
+    if (others.length) await member.roles.remove(others, 'Reaction role button (exclusive)').catch(() => {});
+  }
+  return ephemeral(interaction, `Added **${role.name}**.`);
+}
+
+async function handleRoleSelect(interaction, rmId) {
+  const rm = roleMessageById(interaction.guildId, rmId);
+  if (!rm) return ephemeral(interaction, 'This role menu is no longer configured.');
+  const menuRoleIds = validPairs(rm).map((p) => p.roleId);
+  const picked = new Set(interaction.values);
+  const me = interaction.guild.members.me;
+  const member = interaction.member;
+  const add = [];
+  const remove = [];
+  for (const id of menuRoleIds) {
+    const role = interaction.guild.roles.cache.get(id);
+    if (!role || !role.editable || me.roles.highest.comparePositionTo(role) <= 0) continue;
+    if (picked.has(id) && !member.roles.cache.has(id)) add.push(id);
+    if (!picked.has(id) && member.roles.cache.has(id)) remove.push(id);
+  }
+  if (add.length) await member.roles.add(add, 'Reaction role menu');
+  if (remove.length) await member.roles.remove(remove, 'Reaction role menu');
+  return ephemeral(interaction, add.length || remove.length ? 'Roles updated.' : 'No changes.');
+}
+
+/** @param {import('discord.js').Client} client */
+export function registerRoleComponentHandlers(client) {
+  client.on('interactionCreate', async (interaction) => {
+    try {
+      if (interaction.isButton() && interaction.customId.startsWith('rr:')) {
+        const [, rmId, roleId] = interaction.customId.split(':');
+        await handleRoleButton(interaction, rmId, roleId);
+      } else if (interaction.isStringSelectMenu() && interaction.customId.startsWith('rrsel:')) {
+        await handleRoleSelect(interaction, interaction.customId.slice('rrsel:'.length));
+      }
+    } catch (err) {
+      log.error('roles', 'component handler failed:', err.message);
+      if (interaction.isRepliable() && !interaction.replied) {
+        interaction
+          .reply({ content: 'Something went wrong updating your roles.', flags: MessageFlags.Ephemeral })
+          .catch(() => {});
+      }
+    }
+  });
 }
 
 // --- runtime handlers --------------------------------------------------

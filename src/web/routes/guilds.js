@@ -1111,10 +1111,14 @@ function renderRrBuilder(req, res, rm) {
       id: '',
       channelId: '',
       messageId: '',
+      style: 'reaction',
       message: 'React to this message to get your roles!',
       embed: { kind: 'embed', color: '#5865f2', description: 'React to this message to get your roles!' },
       exclusive: false,
       mode: 'default',
+      placeholder: '',
+      selMin: 0,
+      selMax: 0,
       pairs: [],
     },
   });
@@ -1145,12 +1149,25 @@ router.post(
       embed = {};
     }
 
+    const style = ['buttons', 'select'].includes(req.body.rr_style) ? req.body.rr_style : 'reaction';
     const emojis = [].concat(req.body.rr_emoji ?? []);
     const roleIds = [].concat(req.body.rr_role ?? []);
+    const labels = [].concat(req.body.rr_label ?? []);
+    const btnStyles = [].concat(req.body.rr_btnstyle ?? []);
     const pairs = [];
-    emojis.forEach((raw, i) => {
-      const parsed = parseEmoji(raw, guild);
-      if (parsed && /^\d{17,20}$/.test(roleIds[i] ?? '')) pairs.push({ ...parsed, roleId: roleIds[i] });
+    roleIds.forEach((rid, i) => {
+      if (!/^\d{17,20}$/.test(rid ?? '')) return;
+      const parsed = parseEmoji(emojis[i] ?? '', guild);
+      // The reaction style needs a usable emoji; button / select styles don't.
+      if (style === 'reaction' && !parsed) return;
+      pairs.push({
+        ...(parsed || { key: '', display: '', react: '' }),
+        roleId: rid,
+        label: String(labels[i] ?? '').slice(0, 80),
+        btnStyle: ['primary', 'secondary', 'success', 'danger'].includes(btnStyles[i])
+          ? btnStyles[i]
+          : 'secondary',
+      });
     });
     if (pairs.length === 0) return res.redirect(`${back}?msg=needpair`);
 
@@ -1160,12 +1177,24 @@ router.post(
       id,
       channelId,
       messageId: existing?.messageId || '',
+      style,
       message: String(req.body.message ?? '').slice(0, 2000),
       embed: normaliseEmbedSpec(embed),
       exclusive: req.body.exclusive === 'on',
       mode: req.body.mode === 'reverse' ? 'reverse' : 'default',
+      placeholder: String(req.body.rr_placeholder ?? '').slice(0, 150),
+      selMin: Number.parseInt(req.body.rr_selmin, 10) || 0,
+      selMax: Number.parseInt(req.body.rr_selmax, 10) || 0,
       pairs,
     };
+    // Re-publishing after a style change: drop the old message so the new one is
+    // posted cleanly (components vs reactions differ enough that editing is messy).
+    if (existing && existing.style && existing.style !== style && existing.messageId) {
+      const oldCh = guild.channels.cache.get(existing.channelId);
+      const oldMsg = oldCh && (await oldCh.messages.fetch(existing.messageId).catch(() => null));
+      if (oldMsg) await oldMsg.delete().catch(() => {});
+      rm.messageId = '';
+    }
 
     let ok = false;
     try {

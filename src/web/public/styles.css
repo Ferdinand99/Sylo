@@ -769,9 +769,16 @@ label.checkline input { width: auto; }
 .rr-actions { display: flex; gap: 10px; }
 .rr-list-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .rr-rows { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
-.rr-row { display: grid; grid-template-columns: 90px auto 1fr auto; gap: 8px; align-items: center; }
-.rr-row .rr-emoji { width: 90px; }
-.rr-row .emoji-btn { padding: 4px 8px; }
+.rr-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rr-row .rr-emoji { width: 90px; flex: none; }
+.rr-row .emoji-btn { padding: 4px 8px; flex: none; }
+.rr-row select[name="rr_role"] { flex: 1; min-width: 160px; }
+.rr-row .rr-row-label { flex: 1; min-width: 140px; }
+.rr-row .rr-row-btnstyle { flex: none; text-transform: capitalize; }
+.rr-row [hidden], .rr-selrange[hidden], .rr-when-reaction[hidden], .rr-when-buttons[hidden], .rr-when-select[hidden] { display: none !important; }
+.rr-style { display: flex; flex-direction: column; gap: 4px; }
+.rr-selrange { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+.rr-selrange label { display: flex; align-items: center; gap: 6px; }
 .rr-mode { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; font-size: 13.5px; }
 .rr-mode input { margin-top: 3px; flex: none; }
 .rr-mode span { color: var(--muted); }

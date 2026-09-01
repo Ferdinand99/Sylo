@@ -1,18 +1,36 @@
-<%- include('partials/header', { title: `Sylo — ${isNew ? 'New' : 'Edit'} reaction role` }) %>
+<%- include('partials/header', { title: `Sylo — ${isNew ? 'New' : 'Edit'} self-assign roles` }) %>
 
 <p class="muted"><a href="/guilds/<%= guildId %>/m/roles">&larr; Reaction roles</a></p>
 
 <div class="rr-builder-head">
-  <h1 class="page-title"><%= isNew ? 'New reaction role' : 'Edit reaction role' %></h1>
+  <h1 class="page-title"><%= isNew ? 'New self-assign roles' : 'Edit self-assign roles' %></h1>
   <div class="rr-actions">
     <a class="btn" href="/guilds/<%= guildId %>/m/roles">Discard</a>
     <button type="submit" form="rr-form" class="btn btn-primary">Publish</button>
   </div>
 </div>
 
-<form method="POST" action="/guilds/<%= guildId %>/m/roles/rr" id="rr-form">
+<form method="POST" action="/guilds/<%= guildId %>/m/roles/rr" id="rr-form" data-style="<%= rm.style || 'reaction' %>">
   <input type="hidden" name="id" value="<%= rm.id %>" />
   <input type="hidden" name="embed" id="rr-embed-spec" />
+
+  <section class="card">
+    <h2>Style</h2>
+    <div class="rr-style">
+      <label class="rr-mode">
+        <input type="radio" name="rr_style" value="reaction" <%= (rm.style || 'reaction') === 'reaction' ? 'checked' : '' %> />
+        <span><strong>Reactions</strong> — members react with an emoji. Needs Add Reactions permission.</span>
+      </label>
+      <label class="rr-mode">
+        <input type="radio" name="rr_style" value="buttons" <%= rm.style === 'buttons' ? 'checked' : '' %> />
+        <span><strong>Buttons</strong> — members click a button. Up to 25, no reaction permission needed.</span>
+      </label>
+      <label class="rr-mode">
+        <input type="radio" name="rr_style" value="select" <%= rm.style === 'select' ? 'checked' : '' %> />
+        <span><strong>Dropdown</strong> — members pick from a select menu. Best for long lists.</span>
+      </label>
+    </div>
+  </section>
 
   <section class="card">
     <h2>Channel</h2>
@@ -27,29 +45,39 @@
   <section class="card">
     <h2>Message</h2>
     <label class="small">Message text <span class="muted">— optional, above the embed</span></label>
-    <textarea id="rr-content" name="message" rows="2" placeholder="React to this message to get your roles!"><%= rm.message || '' %></textarea>
+    <textarea id="rr-content" name="message" rows="2" placeholder="Pick your roles below!"><%= rm.message || '' %></textarea>
     <div id="rr-embed" class="wc-stage" style="margin-top:8px"></div>
   </section>
 
   <section class="card">
-    <h2>Reactions &amp; roles <span class="muted small">(<span id="rr-count">0</span> / 20)</span></h2>
+    <h2><span id="rr-rows-title">Reactions &amp; roles</span> <span class="muted small">(<span id="rr-count">0</span> / <span id="rr-max">20</span>)</span></h2>
     <label class="checkline">
       <input type="checkbox" name="exclusive" <%= rm.exclusive ? 'checked' : '' %> />
       Only one role from this set at a time (picking one removes the others)
     </label>
+
+    <div class="rr-when-select" hidden style="margin-top:8px">
+      <label class="small">Dropdown placeholder</label>
+      <input type="text" name="rr_placeholder" value="<%= rm.placeholder || '' %>" placeholder="Pick your roles" maxlength="150" style="max-width:420px" />
+      <div class="rr-selrange">
+        <label class="small">Min picks <input type="number" name="rr_selmin" min="0" max="25" value="<%= rm.selMin || 0 %>" style="width:70px" /></label>
+        <label class="small">Max picks <input type="number" name="rr_selmax" min="0" max="25" value="<%= rm.selMax || 0 %>" style="width:70px" /> <span class="muted">— 0 = no limit</span></label>
+      </div>
+    </div>
+
     <div id="rr-rows" class="rr-rows"></div>
-    <button type="button" id="rr-add" class="secondary">＋ Add reaction</button>
+    <button type="button" id="rr-add" class="secondary">＋ Add role</button>
   </section>
 
-  <section class="card">
-    <h2>Reaction mode</h2>
+  <section class="card rr-when-reaction rr-when-buttons">
+    <h2 id="rr-mode-title">Reaction mode</h2>
     <label class="rr-mode">
       <input type="radio" name="mode" value="default" <%= rm.mode !== 'reverse' ? 'checked' : '' %> />
-      <span><strong>Default</strong> — reacting adds the role, removing the reaction takes it away.</span>
+      <span><strong>Default</strong> — the interaction adds the role; undoing it takes the role away.</span>
     </label>
     <label class="rr-mode">
       <input type="radio" name="mode" value="reverse" <%= rm.mode === 'reverse' ? 'checked' : '' %> />
-      <span><strong>Reverse</strong> — reacting <em>removes</em> the role (an opt-out), un-reacting gives it back.</span>
+      <span><strong>Reverse</strong> — the interaction <em>removes</em> the role (an opt-out); undoing it gives the role back.</span>
     </label>
   </section>
 </form>
