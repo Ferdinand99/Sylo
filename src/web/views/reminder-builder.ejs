@@ -4,13 +4,13 @@
 <% var msgType = e0 ? 'embed' : 'text'; %>
 <% function localDT(ms) { if (!ms) return ''; var d = new Date(ms - new Date(ms).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); } %>
 
-<p class="muted"><a href="/guilds/<%= guildId %>/m/scheduled-messages">&larr; Reminders</a></p>
+<p class="muted"><a href="/guilds/<%= guildId %>/m/reminders">&larr; Reminders</a></p>
 
 <div class="rr-builder-head">
   <input type="text" form="rem-form" name="name" class="mb-name" maxlength="100"
          value="<%= rec.name || '' %>" placeholder="my new reminder" />
   <div class="rr-actions">
-    <a class="btn" href="/guilds/<%= guildId %>/m/scheduled-messages">Discard</a>
+    <a class="btn" href="/guilds/<%= guildId %>/m/reminders">Discard</a>
     <button type="submit" form="rem-form" name="action" value="save" class="btn btn-primary">Save &amp; close</button>
   </div>
 </div>
@@ -21,7 +21,7 @@
   </div>
 <% } %>
 
-<form method="POST" action="/guilds/<%= guildId %>/m/scheduled-messages/r/<%= isNew ? 'new' : rec.id %>" id="rem-form" class="stack" style="max-width:640px">
+<form method="POST" action="/guilds/<%= guildId %>/m/reminders/r/<%= isNew ? 'new' : rec.id %>" id="rem-form" class="stack" style="max-width:640px">
   <input type="hidden" name="embed" id="rem-embed-spec" />
 
   <section class="card stack">

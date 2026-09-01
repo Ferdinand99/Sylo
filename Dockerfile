@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- builder: install production dependencies ----
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Toolchain for compiling better-sqlite3 if no prebuilt binary matches.
@@ -14,7 +14,7 @@ RUN npm ci --omit=dev
 COPY . .
 
 # ---- runtime: minimal image ----
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
 # Default timezone (used for transcript timestamps). Override via the TZ env var,
 # e.g. TZ=Europe/Oslo or TZ=UTC.

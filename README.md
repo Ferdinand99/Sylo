@@ -1,15 +1,27 @@
 # Sylo
 
 Multi-function Discord bot with a server-management **web dashboard**, packaged
-for self-hosting on an **Unraid server via Docker**. Twenty-five per-guild modules
+for self-hosting on an **Unraid server via Docker**. Twenty-six per-guild modules
 (moderation, logging, tickets, reaction roles, verification, welcome, welcome
 channel, sticky messages, auto-moderation, counting, custom commands,
-autoresponder, scheduled messages, leveling, AFK, server statistics, free games,
-ban appeals, temporary voice channels, starboard, invite tracker, polls,
-giveaways, Twitch alerts, YouTube alerts), Discord OAuth2 login, a public
-leveling leaderboard, and
-**Battlefield-series** player stats via the public
+autoresponder, reminders, leveling, AFK, server statistics, free games, ban
+appeals, temporary voice channels, starboard, invite tracker, polls, giveaways,
+game stats, Twitch alerts, YouTube alerts), Discord OAuth2 login, a public
+leveling leaderboard, and — via the optional **Game stats** module —
+**Battlefield-series** player lookups through the public
 [gametools.network](https://gametools.network) API.
+
+## Breaking changes in 3.0
+
+- **Node 22** is now required (Node 20 is end-of-life). The Docker image is
+  `node:22-alpine`.
+- **`DISCORD_GUILD_ID` → `DISCORD_DEV_GUILD_IDS`.** The old name still works but
+  logs a deprecation warning on boot — rename it in your `.env`.
+- **Battlefield stats is now the "Game stats" module**, off by default. Enable it
+  per server on the dashboard before `/stats battlefield` will respond.
+- **The "Reminders" module's id changed** from `scheduled-messages` to
+  `reminders`. A migration updates existing servers automatically; only matters
+  if you script against the module id or a config-export JSON.
 
 ## What's new since 2.0
 
@@ -87,7 +99,7 @@ leveling leaderboard, and
   decision shown on the link, with a single-use rejoin invite on accept),
   Temporary voice channels (MEE6-style hubs + 13 /voice-* control commands),
   and Welcome Channel (a builder for one pinned message in a read-only channel)
-  — all functional and configurable from the dashboard (25 in total)
+  — all functional and configurable from the dashboard (26 in total)
 - Editable Discord **presence / activity** from the dashboard (`/settings`)
 - 2.0 groundwork still current: action-based custom `/slash` commands,
   scheduled messages, full leveling with a public leaderboard, auto-moderation,
@@ -115,7 +127,7 @@ leveling leaderboard, and
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 25 feature groups, each toggled and configured from the
+- **Per-guild modules** — 26 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -216,7 +228,7 @@ leveling leaderboard, and
     unconfigured. See *Dashboard authentication*.
 - **SQLite persistence** (`better-sqlite3`) — guild settings, module config,
   warnings, tickets and a TTL stats cache, in a single volume-mounted file.
-- **Lean Docker image** — multi-stage `node:20-alpine`, non-root, `HEALTHCHECK`.
+- **Lean Docker image** — multi-stage `node:22-alpine`, non-root, `HEALTHCHECK`.
   Ships prebuilt native modules (`better-sqlite3`, `@napi-rs/canvas` for the rank
   card) and the DejaVu fonts the card needs.
 
@@ -272,9 +284,9 @@ npm test                 # optional: run the adapter test suite
 npm start
 ```
 
-For fast iteration, set `DISCORD_GUILD_ID` in `.env` to a test server's ID —
+For fast iteration, set `DISCORD_DEV_GUILD_IDS` in `.env` to a test server's ID —
 commands then register instantly instead of taking up to ~1 hour globally. Pass
-several ids comma-separated (`DISCORD_GUILD_ID=id1,id2`) to cover more than one
+several ids comma-separated (`DISCORD_DEV_GUILD_IDS=id1,id2`) to cover more than one
 test server. `npm run register` re-syncs commands without a restart.
 
 ### Environment variables
@@ -283,7 +295,7 @@ test server. `npm run register` re-syncs commands without a restart.
 |---------------------------|:--------:|--------------------------------|-------------|
 | `DISCORD_TOKEN`           | yes      | —                              | Bot token |
 | `DISCORD_CLIENT_ID`       | yes      | —                              | Application (client) ID |
-| `DISCORD_GUILD_ID`        | no       | —                              | Register commands instantly to one guild, or several (comma-separated), instead of globally |
+| `DISCORD_DEV_GUILD_IDS`   | no       | —                              | Register commands instantly to one or more servers (comma/space-separated), instead of globally. Old name `DISCORD_GUILD_ID` still works (warns). |
 | `WEB_PORT`                | no       | `3000`                         | Dashboard HTTP port |
 | `DISCORD_CLIENT_SECRET`   | no       | —                              | Set to require "Log in with Discord" on the dashboard (see below) |
 | `SESSION_SECRET`          | no       | random                         | Signs the session cookie; pin it so logins survive restarts |
@@ -357,7 +369,7 @@ The dashboard is then on `http://<host>:${WEB_PORT:-3000}`. The SQLite database
 persists in `./data` on the host.
 
 > If `better-sqlite3` ever fails to build on Alpine for your platform, change the
-> two `FROM node:20-alpine` lines in the `Dockerfile` to `node:20-slim`.
+> two `FROM node:22-alpine` lines in the `Dockerfile` to `node:22-slim`.
 
 ### Backups
 

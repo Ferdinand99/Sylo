@@ -16,6 +16,7 @@ import { countOpenAppeals } from '../../db/appeals.js';
 import { inviterCount } from '../../db/inviteTracker.js';
 import { guildPollCount } from '../../db/polls.js';
 import { activeGiveaways } from '../../db/giveaways.js';
+import { recentLookups } from '../../db/cache.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
@@ -37,7 +38,7 @@ const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
   { title: 'Moderation & filtering', ids: ['automod', 'verification', 'appeals', 'logging'] },
   { title: 'Engagement', ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'starboard', 'sticky'] },
-  { title: 'Utilities', ids: ['tickets', 'messages', 'scheduled-messages', 'custom-commands', 'invite-tracker', 'polls', 'giveaways', 'autoresponder', 'afk', 'server-stats', 'temp-voice', 'free-games'] },
+  { title: 'Utilities', ids: ['tickets', 'messages', 'reminders', 'custom-commands', 'invite-tracker', 'polls', 'giveaways', 'autoresponder', 'afk', 'server-stats', 'temp-voice', 'free-games', 'game-stats'] },
   { title: 'Social alerts', ids: ['twitch-alerts', 'youtube-alerts'] },
 ];
 
@@ -241,6 +242,13 @@ function moduleLines(id, guild, cfg) {
         alerts.length ? neutral('Live alerts', live ? `${live} of ${alerts.length}` : 'off') : neutral('Live alerts', 'off'),
       ];
     }
+    case 'game-stats': {
+      const cached = recentLookups(50).length;
+      return [
+        neutral('Command', '/stats battlefield'),
+        cached ? on('Cached lookups', String(cached)) : neutral('Cached lookups', '0'),
+      ];
+    }
     case 'giveaways': {
       const active = activeGiveaways(guild.id);
       const ping = cfg.ping === 'everyone' ? '@everyone' : cfg.ping === 'here' ? '@here' : 'none';
@@ -304,7 +312,7 @@ function moduleLines(id, guild, cfg) {
         role ? on('Ping role', `@${role.name}`) : neutral('Ping role', 'none'),
       ];
     }
-    case 'scheduled-messages': {
+    case 'reminders': {
       const jobs = listScheduled(guild.id);
       const active = jobs.filter((j) => j.enabled === 1).length;
       return [

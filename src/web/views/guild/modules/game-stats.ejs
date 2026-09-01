@@ -1,0 +1,18 @@
+<p class="muted small">
+  Adds <code>/stats battlefield</code> — Battlefield-series player stat lookups (K/D, win rate,
+  time played, KPM/SPM, best class, …) via the public
+  <a href="https://gametools.network" target="_blank" rel="noopener">gametools.network</a> API.
+  Enable this module here to make the command available in this server.
+</p>
+
+<section class="card">
+  <h3 style="margin:0 0 8px">Command</h3>
+  <ul class="muted small" style="margin:0; padding-left:18px; line-height:1.7">
+    <li><code>/stats battlefield title:… username:… platform:…</code></li>
+    <li>Titles: BF1, BF3, BF4, BFV, Hardline — plus best-effort BF2042 and BF6.</li>
+    <li>Results are cached for <code>STATS_CACHE_TTL_MINUTES</code> (default 5) to spare the upstream API.</li>
+  </ul>
+  <p class="small" style="margin:8px 0 0">
+    Recent lookups across the whole bot: <a href="/stats">/stats</a>.
+  </p>
+</section>

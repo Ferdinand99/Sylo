@@ -88,9 +88,9 @@ const router = Router();
 // Module ids that have a real settings partial (views/guild/modules/<id>.ejs).
 const CONFIG_VIEWS = new Set([
   'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
-  'custom-commands', 'scheduled-messages', 'leveling', 'autoresponder', 'verification',
+  'custom-commands', 'reminders', 'leveling', 'autoresponder', 'verification',
   'afk', 'server-stats', 'free-games', 'appeals', 'temp-voice', 'welcome-channel', 'starboard',
-  'invite-tracker', 'polls', 'twitch-alerts', 'youtube-alerts', 'giveaways',
+  'invite-tracker', 'polls', 'twitch-alerts', 'youtube-alerts', 'giveaways', 'game-stats',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -477,7 +477,7 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
     ccPlaceholders: CC_PLACEHOLDERS,
     arPlaceholders: AR_PLACEHOLDERS,
     arMatchModes: AR_MATCH_MODES,
-    reminders: mod.id === 'scheduled-messages'
+    reminders: mod.id === 'reminders'
       ? listScheduled(req.guild.id).map((j) => ({
           id: j.id,
           name: j.name || (j.spec?.embeds?.[0]?.title || j.content || 'Untitled reminder').slice(0, 60),
@@ -911,7 +911,7 @@ router.post(
 
 // --- Reminders builder (MEE6-style) ----------------------------------
 
-const REM_BASE = 'm/scheduled-messages';
+const REM_BASE = 'm/reminders';
 
 function toMs(v) {
   const t = new Date(String(v ?? '')).getTime();
@@ -944,16 +944,16 @@ function renderReminderBuilder(req, res, rec) {
   });
 }
 
-router.get('/:guildId/m/scheduled-messages/r/new', (req, res) => renderReminderBuilder(req, res, null));
+router.get('/:guildId/m/reminders/r/new', (req, res) => renderReminderBuilder(req, res, null));
 
-router.get('/:guildId/m/scheduled-messages/r/:id(\\d+)', (req, res) => {
+router.get('/:guildId/m/reminders/r/:id(\\d+)', (req, res) => {
   const rec = getScheduled(req.guild.id, Number(req.params.id));
   if (!rec) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
   renderReminderBuilder(req, res, rec);
 });
 
 router.post(
-  '/:guildId/m/scheduled-messages/r/:id(new|\\d+)',
+  '/:guildId/m/reminders/r/:id(new|\\d+)',
   asyncHandler(async (req, res) => {
     const b = req.body;
     const existing = req.params.id === 'new' ? null : getScheduled(req.guild.id, Number(req.params.id));
@@ -1021,12 +1021,12 @@ router.post(
   })
 );
 
-router.post('/:guildId/m/scheduled-messages/r/:id(\\d+)/delete', (req, res) => {
+router.post('/:guildId/m/reminders/r/:id(\\d+)/delete', (req, res) => {
   deleteScheduled(req.guild.id, Number(req.params.id));
   res.redirect(`/guilds/${req.guild.id}/${REM_BASE}?msg=saved`);
 });
 
-router.post('/:guildId/m/scheduled-messages/r/:id(\\d+)/toggle', (req, res) => {
+router.post('/:guildId/m/reminders/r/:id(\\d+)/toggle', (req, res) => {
   const rec = getScheduled(req.guild.id, Number(req.params.id));
   if (rec) setScheduledEnabled(req.guild.id, rec.id, rec.enabled !== 1);
   res.redirect(`/guilds/${req.guild.id}/${REM_BASE}?msg=saved`);

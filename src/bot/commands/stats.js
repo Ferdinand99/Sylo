@@ -1,11 +1,12 @@
-// /stats — game statistics lookups.
+// /stats — game statistics lookups, gated by the "Game stats" module.
 //
-// v1 ships the `battlefield` subcommand. Adding another game later means adding
-// a sibling subcommand here plus its adapter file; the shared runStatsLookup()
+// Ships the `battlefield` subcommand. Adding another game later means adding a
+// sibling subcommand here plus its adapter file; the shared runStatsLookup()
 // helper stays the same because it only talks to the adapter registry.
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, InteractionContextType, MessageFlags } from 'discord.js';
 import { getAdapter } from '../../adapters/games/index.js';
 import { AdapterError } from '../../adapters/games/gameAdapter.js';
+import { isModuleEnabled } from '../../db/modules.js';
 import { cacheKey, getCached, setCached } from '../../db/cache.js';
 import { buildBattlefieldStatsEmbed } from '../embeds/battlefieldStats.js';
 import { log } from '../../lib/log.js';
@@ -38,6 +39,7 @@ const BF_PLATFORMS = [
 export const data = new SlashCommandBuilder()
   .setName('stats')
   .setDescription('Look up player statistics for a supported game.')
+  .setContexts(InteractionContextType.Guild)
   .addSubcommand((sub) =>
     sub
       .setName('battlefield')
@@ -75,6 +77,12 @@ async function runStatsLookup(game, title, username, platform) {
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
+  if (!isModuleEnabled(interaction.guildId, 'game-stats')) {
+    return interaction.reply({
+      content: 'The **Game stats** module is not enabled in this server.',
+      flags: MessageFlags.Ephemeral,
+    });
+  }
   const sub = interaction.options.getSubcommand();
   await interaction.deferReply();
 

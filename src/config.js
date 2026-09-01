@@ -75,16 +75,21 @@ if (!Number.isInteger(backupRetention) || backupRetention < 1) {
   process.exit(1);
 }
 
-// DISCORD_GUILD_ID accepts one id or a comma/space-separated list. Each listed
-// guild gets slash commands registered instantly; an unset/empty value means
-// global registration.
-const discordGuildIds = (optionalOrNull('DISCORD_GUILD_ID') ?? '')
+// DISCORD_DEV_GUILD_IDS: one id or a comma/space-separated list of servers that
+// get slash commands registered instantly (a dev convenience). Empty = global
+// registration. DISCORD_GUILD_ID is the pre-3.0 name — still honoured, with a
+// warning.
+const legacyGuildId = optionalOrNull('DISCORD_GUILD_ID');
+if (legacyGuildId) {
+  console.warn('[config] DISCORD_GUILD_ID is deprecated — rename it to DISCORD_DEV_GUILD_IDS.');
+}
+const discordGuildIds = (optionalOrNull('DISCORD_DEV_GUILD_IDS') ?? legacyGuildId ?? '')
   .split(/[\s,]+/)
   .map((s) => s.trim())
   .filter(Boolean);
 const badGuildIds = discordGuildIds.filter((id) => !/^\d{17,20}$/.test(id));
 if (badGuildIds.length) {
-  console.error(`[config] DISCORD_GUILD_ID has invalid id(s): ${badGuildIds.join(', ')}`);
+  console.error(`[config] DISCORD_DEV_GUILD_IDS has invalid id(s): ${badGuildIds.join(', ')}`);
   process.exit(1);
 }
 

@@ -453,6 +453,14 @@ const MIGRATIONS = [
       );
     `);
   },
+
+  // 3.0: the "Reminders" module's stable id changes from the legacy
+  // "scheduled-messages" to "reminders" (the name shown in the UI all along).
+  (database) => {
+    database
+      .prepare("UPDATE guild_modules SET module_id = 'reminders' WHERE module_id = 'scheduled-messages'")
+      .run();
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

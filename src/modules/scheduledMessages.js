@@ -45,7 +45,7 @@ export const MIN_INTERVAL_MINUTES = 1;
 export const MAX_INTERVAL_MINUTES = 40320; // 4 weeks
 const TICK_MS = 20_000;
 
-const MODULE_ID = 'scheduled-messages';
+const MODULE_ID = 'reminders';
 
 function payloadFor(reminder) {
   const { payload, empty } = buildPayload(reminder.spec || { content: reminder.content ?? '' });
