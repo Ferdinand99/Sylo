@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.14.0](https://github.com/Ferdinand99/Sylo/compare/v2.13.0...v2.14.0) (2026-09-01)
+
+
+### Features
+
+* add a Giveaways module ([8a6869b](https://github.com/Ferdinand99/Sylo/commit/8a6869ba75481be863a884feb9e6546486b17a6c))
+
+
+### Bug Fixes
+
+* debounce giveaway entry edits, stop reroll re-pinging, batch leaderboard fetch ([ca0eb2d](https://github.com/Ferdinand99/Sylo/commit/ca0eb2d44cb60f8ed379c492021324878303eade))
+
 ## [2.13.0](https://github.com/Ferdinand99/Sylo/compare/v2.12.0...v2.13.0) (2026-09-01)
 
 
