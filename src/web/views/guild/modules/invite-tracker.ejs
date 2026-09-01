@@ -21,7 +21,7 @@
   </ul>
 </section>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/invite-tracker/config" class="card stack" style="max-width:560px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/invite-tracker/config" hx-post="/guilds/<%= guild.id %>/m/invite-tracker/config" hx-target="#module-config" hx-swap="outerHTML" class="card stack" style="max-width:560px">
   <h3 style="margin:0">Settings</h3>
 
   <label class="small">Join / leave log channel <span class="muted">— optional</span></label>

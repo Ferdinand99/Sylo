@@ -12,7 +12,7 @@
   <p class="warn-text small">This server has no voice channels — create one first.</p>
 <% } %>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/server-stats/config" class="stack" style="max-width:640px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/server-stats/config" hx-post="/guilds/<%= guild.id %>/m/server-stats/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:640px">
   <div id="ss-rows">
     <% (list.length ? list : [{ channelId: '', type: 'members', template: 'Members: {count}' }]).forEach(function (s) { %>
       <div class="row-form">

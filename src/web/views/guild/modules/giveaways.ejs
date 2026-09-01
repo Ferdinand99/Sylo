@@ -20,7 +20,7 @@
   </ul>
 </section>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/giveaways/config" class="stack" style="max-width:520px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/giveaways/config" hx-post="/guilds/<%= guild.id %>/m/giveaways/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:520px">
   <section class="card stack">
     <h3 style="margin:0">Winner announcement</h3>
     <label class="small">Ping with the winner message</label>

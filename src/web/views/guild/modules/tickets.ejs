@@ -5,7 +5,7 @@
   anonymous “Staff” DM. Manage the queue under <a href="/guilds/<%= guild.id %>/tickets">Tickets</a>.
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/tickets/config" class="stack" style="max-width:600px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/tickets/config" hx-post="/guilds/<%= guild.id %>/m/tickets/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:600px">
   <label>Greeting sent when a ticket opens <span class="muted small">— {server} is replaced</span></label>
   <textarea name="greeting" rows="2" placeholder="Thanks for contacting the staff of {server}…"><%= cfg.greeting || '' %></textarea>
 

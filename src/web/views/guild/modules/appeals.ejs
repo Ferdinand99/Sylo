@@ -16,7 +16,7 @@
   <% } %>
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/appeals/config" class="stack" style="max-width:600px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/appeals/config" hx-post="/guilds/<%= guild.id %>/m/appeals/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:600px">
   <label>Appeal form questions <span class="muted small">— 1 to 5; blank rows are dropped</span></label>
   <% for (var i = 0; i < 5; i++) { %>
     <input type="text" name="q" maxlength="200" value="<%= questions[i] || '' %>"

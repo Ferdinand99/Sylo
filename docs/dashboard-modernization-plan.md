@@ -100,16 +100,22 @@ appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
 - **`POST /:guildId/m/:moduleId/config`**: on `HX-Request` → re-render the
   fragment + `HX-Trigger: {"toast":{"msg":"Saved","kind":"ok"}}`; otherwise the
   existing `res.redirect('?msg=saved')`.
-- Forms in **`counting.ejs`, `afk.ejs`, `free-games.ejs`** got
-  `hx-post` / `hx-target="#module-config"` / `hx-swap="outerHTML"` (the
-  `method`/`action` stay as the no-JS fallback).
+- **Converted so far (17 module config forms):** counting, afk, free-games
+  (commit 1); sticky, server-stats, autoresponder, logging, tickets,
+  invite-tracker, verification, leveling, giveaways, twitch-alerts,
+  youtube-alerts, roles, appeals, welcome (commit 2). All: `hx-post` /
+  `hx-target="#module-config"` / `hx-swap="outerHTML"`; `method`/`action` stay as
+  the no-JS fallback. verification / invite-tracker / welcome have fire-and-
+  forget side-effects but no early `res.redirect`, so the shared `HX-Request`
+  branch handles them.
 
 ### Still to do
 
-- Roll the `hx-post` attrs through the remaining ~22 module config forms
-  (~2–3 per commit). Watch for handlers with early `res.redirect` on special
-  cases (welcome-channel publish, verification, invite-tracker) — those need an
-  `HX-Request` branch too.
+- **Not yet converted, need special handling:** `polls` and `welcome-channel`
+  (submit-time JS populates hidden fields — do with the Phase 2 builders);
+  `welcome-channel` publish also early-returns a redirect; `moderation` /
+  `automod` render inside the tabbed `panel === 'moderation'` view, not the
+  `#module-config` wrapper — that panel needs its own fragment treatment.
 - Convert the standalone builder pages (rr / sb / cc / msg / reminder / tv).
 - Convert module enable/disable toggles + plugin-grid "Enable" from the
   `syloAction` fetch to `hx-post` returning the updated card/dot.

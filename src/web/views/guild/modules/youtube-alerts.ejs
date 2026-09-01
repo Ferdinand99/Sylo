@@ -9,7 +9,7 @@
   Checks run about every 3 minutes. Message placeholders: <code>{name}</code> <code>{title}</code> <code>{url}</code>.
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/youtube-alerts/config" class="stack" style="max-width:680px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/youtube-alerts/config" hx-post="/guilds/<%= guild.id %>/m/youtube-alerts/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:680px">
   <div id="yt-rows">
     <% (alerts.length ? alerts : [{ ytChannelId: '', name: '', discordChannelId: '', roleId: '', onVideo: true, onLive: false, videoMessage: '', liveMessage: '' }]).forEach(function (a) { %>
       <div class="tw-row card stack">

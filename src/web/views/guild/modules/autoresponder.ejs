@@ -11,7 +11,7 @@
   Deleting the trigger needs the <strong>Manage Messages</strong> permission.
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/autoresponder/config" class="stack" style="max-width:720px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/autoresponder/config" hx-post="/guilds/<%= guild.id %>/m/autoresponder/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:720px">
   <label>Per-channel cooldown (seconds)</label>
   <input type="number" name="cooldownSeconds" min="0" max="300" value="<%= cfg.cooldownSeconds != null ? cfg.cooldownSeconds : 2 %>" style="width:100px" />
 

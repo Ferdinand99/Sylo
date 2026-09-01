@@ -15,7 +15,7 @@
   </div>
 <% } %>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/twitch-alerts/config" class="stack" style="max-width:680px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/twitch-alerts/config" hx-post="/guilds/<%= guild.id %>/m/twitch-alerts/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:680px">
   <div id="tw-rows">
     <% (alerts.length ? alerts : [{ login: '', channelId: '', roleId: '', message: '' }]).forEach(function (a) { %>
       <div class="tw-row card stack">

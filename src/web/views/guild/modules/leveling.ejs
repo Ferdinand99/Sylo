@@ -14,7 +14,7 @@
   The public web leaderboard toggle is on the <a href="/guilds/<%= guild.id %>/leaderboard">Leaderboard</a> page.
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/leveling/config">
+<form method="POST" action="/guilds/<%= guild.id %>/m/leveling/config" hx-post="/guilds/<%= guild.id %>/m/leveling/config" hx-target="#module-config" hx-swap="outerHTML">
   <details class="lvl-sec" open>
     <summary>Leveling up<span class="lvl-chev">▾</span></summary>
     <p class="muted small">Whenever a member gains a level, Sylo can send a personalised message.</p>

@@ -10,7 +10,7 @@
   <% } %>
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/verification/config" class="stack" style="max-width:560px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/verification/config" hx-post="/guilds/<%= guild.id %>/m/verification/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:560px">
   <label>Mode</label>
   <select name="mode">
     <% verifyModes.forEach(function (m) { %>

@@ -34,7 +34,7 @@
 
 <h3 style="margin:4px 0">Autoroles on join</h3>
 <p class="muted small">Given automatically when a member joins. Also editable on the <a href="/guilds/<%= guild.id %>/m/welcome">Welcome &amp; goodbye</a> page.</p>
-<form method="POST" action="/guilds/<%= guild.id %>/m/roles/config" class="stack" style="max-width:520px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/roles/config" hx-post="/guilds/<%= guild.id %>/m/roles/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:520px">
   <div class="role-picker" data-field="autoroles">
     <div class="role-chips" data-role-chips>
       <% autoroles.forEach(function (id) { var r = roles.find(function (x) { return x.id === id; }); %>
