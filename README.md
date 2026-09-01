@@ -214,15 +214,22 @@ leveling leaderboard, and — via the optional **Game stats** module —
 - **Operations** — per-server config **audit log** and JSON **config export**,
   `/forget` self-service data deletion, automatic data purge on guild removal,
   a database integrity check at startup, and rate-limited public / auth routes.
-- **Web dashboard** (Express + EJS, no frontend framework)
+- **Web dashboard** (Express + EJS, server-rendered) — **htmx 2** and
+  **Alpine.js 3** are vendored as static files under `src/web/public/vendor/`
+  (pinned, no CDN, no build step). Settings saves swap a page fragment in place
+  with a toast; every route keeps a no-JS fallback (full render + redirect). The
+  builders (embed editor, reaction roles, custom commands, welcome channel, …)
+  are Alpine components. The public pages below stay framework-free.
   - `GET /health` — JSON status (uptime, guild count, last error) for healthchecks
-  - `/` — bot status, activity stats and module adoption; topbar server switcher
+  - `/` — bot status, activity stats and module adoption; sidebar server switcher
   - `/stats` — cached lookups · `/health` — status page (JSON for monitors)
   - `/settings` — **Bot Personalizer**: bot username / avatar / banner + presence
   - `/guilds/<id>` — per-server control panel: a MEE6-style plugin grid, a
     **Leaderboard** page, **Settings** (bot-master roles, mod-log channel, embed
-    colour, backup), Commands, Moderation (warnings + bans), Tickets, Ban appeals,
-    Message Creator, an audit log, and a settings panel per module
+    colour, backup), Commands, Moderator (auto-mod + warnings/bans), Tickets,
+    Ban appeals, Embed messages, an audit log, and a settings panel per module
+  - **public, zero-JS pages** — the shareable leaderboard (`/leaderboard/:id`,
+    `/lb/:slug`), member verification (`/verify`) and ban-appeal forms (`/appeal`)
   - **Discord OAuth2 login** (optional) — gate the dashboard to server admins
     (and configurable staff roles for tickets); runs open on a trusted LAN when
     unconfigured. See *Dashboard authentication*.
@@ -251,23 +258,29 @@ src/
     registry.js         module catalogue (id, intents, defaults)
     dispatch.js         fans gateway events out to enabled modules
     index.js            loads module implementations
-    moderation.js logging.js tickets.js roles.js welcome.js sticky.js
-    counting.js automod.js customCommands.js autoresponder.js verification.js
-    scheduledMessages.js leveling.js afk.js serverStats.js freeGames.js appeals.js
-    tempVoice.js
+    moderation automod logging tickets roles welcome welcomeChannel sticky
+    counting customCommands autoresponder verification scheduledMessages
+    leveling afk serverStats freeGames appeals tempVoice polls giveaways
+    starboard inviteTracker twitchAlerts youtubeAlerts messageCreator
   adapters/games/       gameAdapter, registry, battlefield
   db/
     index.js            SQLite connection + migrations
-    cache guildSettings modules commandOverrides warnings tickets
+    cache guildSettings modules commandOverrides warnings tickets audit
     composedMessages counting scheduledMessages leveling appeals tempVoice
+    polls giveaways starboard inviteTracker twitchAlerts youtubeAlerts
+    leaderboardVanity backup exportConfig purge
   web/
-    server.js           Express app
-    routes/             health, dashboard, commands, stats, guilds, guildTickets,
-                        verify + appeal (public), leaderboard (public)
-    middleware/         auth (OAuth2), ticketAccess
-    lib/ views/ public/ helpers; EJS templates; styles.css, app.js
+    server.js           Express app (createApp() is exported for tests)
+    routes/             health, dashboard, commands, stats, settings, guilds,
+                        guildTickets, guildMessages,
+                        verify + appeal + leaderboard (public, framework-free)
+    middleware/         auth (OAuth2), csrf, rateLimit, ticketAccess
+    lib/                guildContext, sidebarNav, moduleIcons, overviewSummary, …
+    views/              EJS templates; guild.ejs + guild/_*.ejs fragment partials
+    public/             styles.css, app.js (CSRF + confirm), htmx-setup.js,
+                        alpine-components.js, vendor/{htmx,alpine}.min.js
 scripts/register-commands.js
-test/                   battlefield.adapter.test.js, duration.test.js
+test/                   node --test; unit tests + dashboardRoutes.test.js (HTTP)
 data/                   SQLite file lives here (git-ignored, volume-mounted)
 ```
 
@@ -521,8 +534,10 @@ pin to `:X.Y.Z` on either registry to freeze a version.
 npm test
 ```
 
-Runs the `node:test` suite for the Battlefield adapter (parsing + error
-handling, `fetch` stubbed — no network).
+Runs the `node:test` suite — module normalisers and helpers, the CSRF
+middleware, and `dashboardRoutes.test.js`, which boots `createApp()` over HTTP to
+assert the htmx fragment contract. No network: `fetch` is stubbed where adapters
+need it, and DB tests write to a throwaway SQLite file.
 
 ## Legal
 
