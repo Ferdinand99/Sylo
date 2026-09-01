@@ -27,7 +27,7 @@
   <p class="muted small">Remove or clear warnings from Discord with <code>/warn remove</code> and <code>/warn clear</code>.</p>
 <% } %>
 
-<h2 style="margin-top:24px">Bans <span class="muted">(<%= bansShown %><%= bansTotal > bansShown ? ` of ${bansTotal}, first ${banLimit}` : '' %>)</span></h2>
+<h2 class="u-mt-6">Bans <span class="muted">(<%= bansShown %><%= bansTotal > bansShown ? ` of ${bansTotal}, first ${banLimit}` : '' %>)</span></h2>
 <% if (bansError) { %>
   <p class="warn-text">⚠️ <%= bansError %></p>
 <% } else if (bans.length === 0) { %>
@@ -42,7 +42,7 @@
           <td class="mono"><%= b.id %></td>
           <td><%= b.reason %></td>
           <td class="num">
-            <form method="POST" action="/guilds/<%= guild.id %>/unban" data-confirm="Unban <%= b.tag %>?" style="display:inline">
+            <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/unban" data-confirm="Unban <%= b.tag %>?">
               <input type="hidden" name="userId" value="<%= b.id %>" />
               <button type="submit" class="link-btn">unban</button>
             </form>

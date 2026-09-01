@@ -1,0 +1,104 @@
+<%
+  // Shared WYSIWYG embed editor (Alpine `embedEditor`). Params:
+  //   hidden       – name of the hidden <input> in the form to write JSON into (required)
+  //   spec         – the current embed spec object (default {})
+  //   content      – show a "message above the embed" field (serialised as `content`)
+  //   author/description/fields/thumb/footerIcon – parts to show (default true)
+  //   footerKey    – serialised footer key: 'footerText' (default) or 'footer'
+  //   defaultColor – hex used when the spec has none (default '#5865f2')
+  //   fixedBody    – raw HTML shown greyed inside the embed body (e.g. poll preview)
+  //   vars         – [{ token, label }] insert-token buttons
+  //   ph           – { content, author, title, description, footer } placeholder overrides
+  var _ee = {
+    hidden: hidden,
+    spec: spec || {},
+    content: typeof content !== 'undefined' && !!content,
+    author: typeof author === 'undefined' ? true : !!author,
+    description: typeof description === 'undefined' ? true : !!description,
+    fields: typeof fields === 'undefined' ? true : !!fields,
+    thumb: typeof thumb === 'undefined' ? true : !!thumb,
+    footerIcon: typeof footerIcon === 'undefined' ? true : !!footerIcon,
+    footerKey: (typeof footerKey !== 'undefined' && footerKey) || 'footerText',
+    defaultColor: (typeof defaultColor !== 'undefined' && defaultColor) || '#5865f2',
+  };
+  var _eeVars = typeof vars !== 'undefined' && Array.isArray(vars) ? vars : [];
+  var _eeBody = typeof fixedBody !== 'undefined' && fixedBody ? fixedBody : '';
+  var _p = (typeof ph !== 'undefined' && ph) || {};
+%>
+<div class="wc-stage" x-data="embedEditor(<%= JSON.stringify(_ee) %>)">
+  <% if (_ee.content) { %>
+    <div class="wc-ed poll-content" contenteditable="plaintext-only"
+         data-ph="<%= _p.content || 'Message above the embed — optional' %>"
+         x-init="$el.textContent = e.content" @input="e.content = $el.textContent"></div>
+  <% } %>
+
+  <div class="wc-embed" :style="'--wc-color:' + e.color">
+    <label class="wc-colorwrap" title="Embed colour"><input type="color" class="wc-color" x-model="e.color" /></label>
+
+    <% if (_ee.thumb) { %>
+      <button type="button" class="wc-thumb" :class="{ has: e.thumbnail }" @click="pickImg('thumbnail')">
+        <template x-if="e.thumbnail"><img :src="e.thumbnail" alt="" /></template>
+        <template x-if="!e.thumbnail"><span>thumb</span></template>
+      </button>
+    <% } %>
+
+    <div class="wc-embed-body">
+      <% if (_ee.author) { %>
+        <div class="wc-row">
+          <button type="button" class="wc-icon" :class="{ has: e.authorIcon }"
+                  :style="{ backgroundImage: e.authorIcon ? ('url(' + JSON.stringify(e.authorIcon) + ')') : '' }"
+                  @click="pickImg('authorIcon')"></button>
+          <div class="wc-ed" contenteditable="plaintext-only" data-ph="<%= _p.author || 'Header' %>"
+               x-init="$el.textContent = e.authorName" @input="e.authorName = $el.textContent"></div>
+        </div>
+      <% } %>
+
+      <div class="wc-ed wc-title" contenteditable="plaintext-only" data-ph="<%= _p.title || 'Title' %>"
+           x-init="$el.textContent = e.title" @input="e.title = $el.textContent"></div>
+
+      <% if (_ee.description) { %>
+        <div class="wc-ed wc-desc" contenteditable="plaintext-only" data-ph="<%= _p.description || 'Description' %>"
+             x-init="$el.textContent = e.description" @input="e.description = $el.textContent"></div>
+      <% } %>
+
+      <%- _eeBody %>
+
+      <% if (_ee.fields) { %>
+        <div class="wc-fields">
+          <template x-for="(f, i) in e.fields" :key="f.id">
+            <div class="wc-field">
+              <div class="wc-ed wc-fname" contenteditable="plaintext-only" data-ph="Field name"
+                   x-init="$el.textContent = f.name" @input="f.name = $el.textContent"></div>
+              <div class="wc-ed wc-fval" contenteditable="plaintext-only" data-ph="Field value"
+                   x-init="$el.textContent = f.value" @input="f.value = $el.textContent"></div>
+              <button type="button" class="wc-x" @click="removeField(i)" title="Remove field">&times;</button>
+            </div>
+          </template>
+        </div>
+        <button type="button" class="wc-addfield" @click="addField()">+ Add new field</button>
+      <% } %>
+
+      <button type="button" class="wc-image" :class="{ has: e.image }" @click="pickImg('image')">
+        <template x-if="e.image"><img :src="e.image" alt="" /></template>
+        <template x-if="!e.image"><span>＋ Add an image</span></template>
+      </button>
+
+      <div class="wc-row wc-footrow">
+        <% if (_ee.footerIcon) { %>
+          <button type="button" class="wc-icon" :class="{ has: e.footerIcon }"
+                  :style="{ backgroundImage: e.footerIcon ? ('url(' + JSON.stringify(e.footerIcon) + ')') : '' }"
+                  @click="pickImg('footerIcon')"></button>
+        <% } %>
+        <div class="wc-ed" contenteditable="plaintext-only" data-ph="<%= _p.footer || 'Footer' %>"
+             x-init="$el.textContent = e.footer" @input="e.footer = $el.textContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <% if (_eeVars.length) { %>
+    <div class="poll-vars">Insert:
+      <% _eeVars.forEach(function (v) { %><button type="button" @click="insertVar('<%= v.token %>')"><%= v.label %></button>
+      <% }) %>
+    </div>
+  <% } %>
+</div>

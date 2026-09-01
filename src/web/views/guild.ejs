@@ -82,7 +82,7 @@
       <h3 class="plugin-group"><%= group.title %></h3>
       <div class="plugin-grid">
         <% group.cards.forEach(function (c) { %>
-          <div class="plugin-card is-<%= c.status %>">
+          <div class="plugin-card is-<%= c.status %>" id="plugin-card-<%= c.id %>">
             <a class="plugin-hit" href="<%= c.href %>" aria-label="<%= c.name %>"></a>
             <span class="plugin-ico"><svg class="plugin-ico-svg" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-<%= c.icon %>"/></svg></span>
             <span class="plugin-name"><%= c.name %></span>
@@ -95,7 +95,10 @@
               <% } else if (c.enabled) { %>
                 <a class="plugin-btn active" href="<%= c.href %>">✓ Active</a>
               <% } else { %>
-                <button type="button" class="plugin-btn enable" data-guild="<%= guild.id %>" data-module="<%= c.id %>" data-config="<%= c.href %>">+ Enable</button>
+                <button type="button" class="plugin-btn enable"
+                  hx-post="/guilds/<%= guild.id %>/modules/<%= c.id %>"
+                  hx-vals='{"enabled":"true","view":"grid"}'
+                  hx-target="this" hx-swap="outerHTML">+ Enable</button>
               <% } %>
             </span>
           </div>
@@ -106,11 +109,11 @@
   <% } else { %>
   <section class="guild-panel">
     <% if (panel === 'settings') { %>
-      <h2>Settings</h2>
+      <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'gear', title: 'Settings' }) %></div>
       <p class="muted">Server-wide settings for Sylo. Bot-identity (name, avatar, activity) lives in <a href="/settings">Bot Personalizer</a>.</p>
 
-      <form method="POST" action="/guilds/<%= guild.id %>/settings" class="stack" style="max-width:560px">
-        <h3 style="margin:14px 0 2px">Bot masters</h3>
+      <form method="POST" action="/guilds/<%= guild.id %>/settings" class="stack u-mw-lg">
+        <h3 class="u-m0 u-mt-4">Bot masters</h3>
         <p class="muted small">Roles that can manage Sylo's dashboard for this server — full control, so give it
           only to trusted staff. They reach the dashboard via a direct link.</p>
 
@@ -125,26 +128,10 @@
         </div>
         <p class="muted small">Any role with the Administrator permission is always a bot master.</p>
 
-        <label class="small" style="margin-top:8px">Additional bot master roles</label>
-        <div class="role-picker" data-field="botMasterRoles">
-          <div class="role-chips" data-role-chips>
-            <% botMasters.forEach(function (r) { %>
-              <span class="role-chip" data-id="<%= r.id %>" data-name="<%= r.name %>" data-color="<%= r.color || '' %>">
-                <span class="role-dot" style="background:<%= r.color || 'var(--muted)' %>"></span><%= r.name %>
-                <button type="button" class="role-chip-x" aria-label="Remove">&times;</button>
-                <input type="hidden" name="botMasterRoles" value="<%= r.id %>" />
-              </span>
-            <% }) %>
-          </div>
-          <select class="role-picker-add">
-            <option value="">+ Add a role…</option>
-            <% rolePool.forEach(function (r) { %>
-              <option value="<%= r.id %>" data-name="<%= r.name %>" data-color="<%= r.color || '' %>"><%= r.name %></option>
-            <% }) %>
-          </select>
-        </div>
+        <label class="small u-mt-2">Additional bot master roles</label>
+        <%- include('partials/chip-picker', { field: 'botMasterRoles', kind: 'role', items: botMasters.concat(rolePool), selected: botMasters.map(function (r) { return r.id; }) }) %>
 
-        <h3 style="margin:16px 0 2px">Moderation log channel</h3>
+        <h3 class="u-m0 u-mt-4">Moderation log channel</h3>
         <select name="modlogChannelId">
           <option value="">— disabled —</option>
           <% channels.forEach(function (c) { %>
@@ -152,26 +139,26 @@
           <% }) %>
         </select>
 
-        <h3 style="margin:16px 0 2px">Default embed colour</h3>
+        <h3 class="u-m0 u-mt-4">Default embed colour</h3>
         <p class="muted small">Used for Sylo's branded embeds (welcome messages and more).</p>
         <div class="settings-color">
           <input type="color" name="embedColor" value="<%= embedColorHex %>" />
           <label class="checkline"><input type="checkbox" name="embedColorReset" /> Reset to Sylo blue</label>
         </div>
 
-        <div style="margin-top:14px"><button type="submit">Save settings</button></div>
+        <div class="u-mt-4"><button type="submit">Save settings</button></div>
       </form>
 
       <hr class="sep" />
-      <h3 style="margin-bottom:4px">Backup</h3>
+      <h3 class="u-mb-1">Backup</h3>
       <p class="muted small">Download this server's module configuration as JSON. Member data (warnings, XP, tickets) is not included.</p>
       <p><a href="/guilds/<%= guild.id %>/export">Export configuration &rarr;</a></p>
 
     <% } else if (panel === 'audit') { %>
-      <h2>Audit log</h2>
+      <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'list', title: 'Audit log' }) %></div>
       <p class="muted">Configuration changes made from this dashboard. Keeps the most recent 500 per server.</p>
       <% if (audit.length === 0) { %>
-        <p class="muted">Nothing recorded yet.</p>
+        <p class="empty">Nothing recorded yet.</p>
       <% } else { %>
         <table>
           <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr></thead>
@@ -189,11 +176,11 @@
       <% } %>
 
     <% } else if (panel === 'commands') { %>
-      <h2>Commands</h2>
+      <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'command', title: 'Commands' }) %></div>
       <%- include('guild/commands', { guild: guild, commands: commands, roles: roles, channels: channels }) %>
 
     <% } else if (panel === 'moderation') { %>
-      <h2>Moderator</h2>
+      <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'shield', title: 'Moderator' }) %></div>
       <p class="muted">Auto-moderation, warning auto-actions, infractions, immunity, audit logging and command permissions.</p>
 
       <div class="mod-tabbed">
@@ -213,15 +200,17 @@
         </div>
         <div class="mod-panels">
           <div class="mod-panel" data-tab="automod">
-            <%- include('guild/modules/automod', { guild: guild, channels: channels, roles: roles, moduleConfig: automodConfig, automodRules: automodRules }) %>
+            <%- include('guild/modules/automod', { guild: guild, channels: channels, roles: roles, moduleConfig: automodConfig, automodRules: automodRules, fragTarget: 'this', fragSwap: 'none' }) %>
           </div>
           <div class="mod-panel" data-tab="admin">
-            <h3 style="margin-top:0">Immunity roles</h3>
+            <h3 class="u-mt-0">Immunity roles</h3>
             <p class="muted small">Members with one of these roles are never touched by Auto-moderation or the
               warning auto-actions. Administrators, the server owner and bot-master roles are immune by default.</p>
-            <form method="POST" action="/guilds/<%= guild.id %>/m/automod/immunity" class="stack" style="max-width:520px">
+            <form method="POST" action="/guilds/<%= guild.id %>/m/automod/immunity"
+                  hx-post="/guilds/<%= guild.id %>/m/automod/immunity" hx-target="this" hx-swap="none"
+                  class="stack u-mw-lg">
               <%- include('partials/chip-picker', { field: 'immunityRoles', kind: 'role', items: roles, selected: (automodConfig && automodConfig.exemptRoles) ? automodConfig.exemptRoles : [] }) %>
-              <div style="margin-top:12px"><button type="submit">Save immunity roles</button></div>
+              <div class="u-mt-3"><button type="submit">Save immunity roles</button></div>
             </form>
           </div>
           <div class="mod-panel" data-tab="actions">
@@ -233,7 +222,7 @@
           </div>
           <div class="mod-panel" data-tab="log">
             <p class="muted small">Send server events to a channel. Set the mod-log channel (for moderation actions) under <a href="/guilds/<%= guild.id %>/settings">Settings</a>.</p>
-            <%- include('guild/modules/logging', { guild: guild, channels: channels, moduleConfig: loggingCfg, logEvents: logEvents }) %>
+            <%- include('guild/modules/logging', { guild: guild, channels: channels, moduleConfig: loggingCfg, logEvents: logEvents, fragTarget: 'this', fragSwap: 'none' }) %>
           </div>
           <div class="mod-panel" data-tab="cmd">
             <%- include('guild/commands', { guild: guild, commands: commands, roles: roles, channels: channels }) %>
@@ -242,8 +231,8 @@
       </div>
 
     <% } else if (panel === 'leaderboard') { %>
-      <div class="module-panel-head">
-        <h2>🏆 Leaderboard</h2>
+      <div class="mod-hero">
+        <%- include('guild/_hero-inner', { icon: 'trophy', title: 'Leaderboard' }) %>
         <a class="btn btn-primary" href="/leaderboard/<%= guild.id %>" target="_blank" rel="noopener">See leaderboard &rarr;</a>
       </div>
       <p class="muted">Every minute a member is chatting they earn a random amount of XP. Rankings come from the <a href="/guilds/<%= guild.id %>/m/leveling">Leveling</a> module.</p>
@@ -276,14 +265,14 @@
           <button type="submit">Save</button>
         </form>
         <% if (vanitySlug) { %>
-          <p class="muted small" style="margin-top:6px">Live at
+          <p class="muted small u-mt-2">Live at
             <a href="/lb/<%= vanitySlug %>" target="_blank" rel="noopener"><code><%= vanityBase %><%= vanitySlug %></code></a>.
             Clear the box and save to remove it.</p>
         <% } %>
       </div>
 
       <hr class="sep" />
-      <h3 style="margin-bottom:6px">Top members <span class="muted small">(<%= board.total %> tracked)</span></h3>
+      <h3 class="u-mb-2">Top members <span class="muted small">(<%= board.total %> tracked)</span></h3>
       <% if (board.rows.length === 0) { %>
         <p class="muted">No XP recorded yet.</p>
       <% } else { %>
@@ -304,14 +293,14 @@
       <% } %>
 
     <% } else if (panel === 'appeals') { %>
-      <h2>⚖️ Ban appeals</h2>
+      <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'gavel', title: 'Ban appeals' }) %></div>
       <p class="muted">Banned members are DM'd a link to an appeal form. Accept or deny each one with a reason — Sylo DMs the member the outcome, and accepting lifts the ban automatically when that option is on.</p>
       <% if (!appealsModuleEnabled) { %>
         <div class="banner info">The <strong>Ban appeals</strong> module is off. <a href="/guilds/<%= guild.id %>/m/appeals">Enable and configure it</a> to start collecting appeals.</div>
       <% } %>
 
       <% if (appeals.length === 0) { %>
-        <p class="muted">No appeals yet.</p>
+        <p class="empty">No appeals yet.</p>
       <% } else { %>
         <% appeals.forEach(function (a) { %>
           <div class="cmd-override">
@@ -346,13 +335,9 @@
 
     <% } else if (panel.indexOf('m/') === 0 && typeof activeModule !== 'undefined') { %>
       <% var mrow = modules.find(function (x) { return x.id === activeModule.id; }); %>
-      <div class="module-panel-head">
-        <h2><%= activeModule.icon %> <%= activeModule.name %></h2>
-        <label class="switch">
-          <input type="checkbox" class="module-toggle" data-guild="<%= guild.id %>" data-module="<%= activeModule.id %>"
-            <%= mrow.enabled ? 'checked' : '' %> <%= mrow.missingIntents.length ? 'disabled' : '' %> />
-          <span class="slider"></span>
-        </label>
+      <div class="mod-hero">
+        <%- include('guild/_hero-inner', { icon: (typeof moduleIconName !== 'undefined' ? moduleIconName : 'sliders'), title: activeModule.name }) %>
+        <%- include('guild/_module-toggle', { guild: guild, activeModule: activeModule, moduleEnabled: mrow.enabled, toggleDisabled: mrow.missingIntents.length > 0 }) %>
       </div>
       <p class="muted"><%= activeModule.description %></p>
       <% if (mrow.missingIntents.length) { %>
@@ -360,7 +345,7 @@
       <% } %>
       <% if (!mrow.enabled) { %><p class="muted small">Enable the module (toggle above) for these settings to take effect.</p><% } %>
       <hr class="sep" />
-      <%- include(configView, { guild: guild, channels: channels, moduleConfig: moduleConfig, activeModule: activeModule, roles: (typeof roles !== 'undefined' ? roles : []), logEvents: (typeof logEvents !== 'undefined' ? logEvents : []), welcomePlaceholders: (typeof welcomePlaceholders !== 'undefined' ? welcomePlaceholders : []), thresholdActions: (typeof thresholdActions !== 'undefined' ? thresholdActions : []), automodRules: (typeof automodRules !== 'undefined' ? automodRules : []), automodActions: (typeof automodActions !== 'undefined' ? automodActions : []), countingState: (typeof countingState !== 'undefined' ? countingState : null), ccPlaceholders: (typeof ccPlaceholders !== 'undefined' ? ccPlaceholders : []), arPlaceholders: (typeof arPlaceholders !== 'undefined' ? arPlaceholders : []), arMatchModes: (typeof arMatchModes !== 'undefined' ? arMatchModes : []), reminders: (typeof reminders !== 'undefined' ? reminders : []), schedulePresets: (typeof schedulePresets !== 'undefined' ? schedulePresets : []), announceModes: (typeof announceModes !== 'undefined' ? announceModes : []), xpRates: (typeof xpRates !== 'undefined' ? xpRates : []), levelingCommands: (typeof levelingCommands !== 'undefined' ? levelingCommands : []), levelingBoard: (typeof levelingBoard !== 'undefined' ? levelingBoard : null), verifyModes: (typeof verifyModes !== 'undefined' ? verifyModes : []), turnstileEnabled: (typeof turnstileEnabled !== 'undefined' ? turnstileEnabled : false), twitchEnabled: (typeof twitchEnabled !== 'undefined' ? twitchEnabled : false), twitchDefaultMessage: (typeof twitchDefaultMessage !== 'undefined' ? twitchDefaultMessage : ''), ytVideoMessage: (typeof ytVideoMessage !== 'undefined' ? ytVideoMessage : ''), ytLiveMessage: (typeof ytLiveMessage !== 'undefined' ? ytLiveMessage : ''), voiceChannels: (typeof voiceChannels !== 'undefined' ? voiceChannels : []), categories: (typeof categories !== 'undefined' ? categories : []), statTypes: (typeof statTypes !== 'undefined' ? statTypes : []), dashboardUrlSet: (typeof dashboardUrlSet !== 'undefined' ? dashboardUrlSet : false), welcomeAutoroles: (typeof welcomeAutoroles !== 'undefined' ? welcomeAutoroles : []), verificationEnabled: (typeof verificationEnabled !== 'undefined' ? verificationEnabled : false), wcPresets: (typeof wcPresets !== 'undefined' ? wcPresets : []), giveaways: (typeof giveaways !== 'undefined' ? giveaways : []), gameStatsRecent: (typeof gameStatsRecent !== 'undefined' ? gameStatsRecent : []) }) %>
+      <%- include('guild/_module-config') %>
     <% } %>
   </section>
   <% } %>

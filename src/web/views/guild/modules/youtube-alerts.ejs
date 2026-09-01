@@ -9,19 +9,19 @@
   Checks run about every 3 minutes. Message placeholders: <code>{name}</code> <code>{title}</code> <code>{url}</code>.
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/youtube-alerts/config" class="stack" style="max-width:680px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/youtube-alerts/config" hx-post="/guilds/<%= guild.id %>/m/youtube-alerts/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-xl">
   <div id="yt-rows">
     <% (alerts.length ? alerts : [{ ytChannelId: '', name: '', discordChannelId: '', roleId: '', onVideo: true, onLive: false, videoMessage: '', liveMessage: '' }]).forEach(function (a) { %>
       <div class="tw-row card stack">
         <input type="hidden" name="yt_resolvedId" value="<%= a.ytChannelId || '' %>" />
         <input type="hidden" name="yt_resolvedName" value="<%= a.name || '' %>" />
         <div class="star-age">
-          <div class="stack" style="flex:1">
+          <div class="stack u-grow">
             <label class="small">YouTube channel <span class="muted">— URL or @handle</span></label>
             <input type="text" name="yt_input" value="<%= a.ytChannelId ? ('@' + (a.name || a.ytChannelId)) : '' %>" placeholder="@MrBeast or a channel URL" />
             <% if (a.ytChannelId) { %><span class="muted small mono">resolved: <%= a.ytChannelId %></span><% } %>
           </div>
-          <div class="stack" style="flex:1">
+          <div class="stack u-grow">
             <label class="small">Announce in</label>
             <select name="yt_channel">
               <option value="">— select a channel —</option>
@@ -32,7 +32,7 @@
           </div>
         </div>
         <div class="star-age">
-          <div class="stack" style="flex:1">
+          <div class="stack u-grow">
             <label class="small">Notify on</label>
             <select name="yt_notify">
               <option value="both" <%= notifyVal(a) === 'both' ? 'selected' : '' %>>New videos &amp; going live</option>
@@ -40,7 +40,7 @@
               <option value="live" <%= notifyVal(a) === 'live' ? 'selected' : '' %>>Going live only</option>
             </select>
           </div>
-          <div class="stack" style="flex:1">
+          <div class="stack u-grow">
             <label class="small">Ping role <span class="muted">— optional</span></label>
             <select name="yt_role">
               <option value="">— none —</option>
@@ -59,7 +59,7 @@
     <% }) %>
   </div>
   <div><button type="button" class="secondary" id="yt-add">＋ Add channel</button></div>
-  <div style="margin-top:10px"><button type="submit">Save</button></div>
+  <div class="u-mt-3"><button type="submit">Save</button></div>
 </form>
 
 <template id="yt-template">
@@ -67,16 +67,16 @@
     <input type="hidden" name="yt_resolvedId" value="" />
     <input type="hidden" name="yt_resolvedName" value="" />
     <div class="star-age">
-      <div class="stack" style="flex:1"><label class="small">YouTube channel <span class="muted">— URL or @handle</span></label>
+      <div class="stack u-grow"><label class="small">YouTube channel <span class="muted">— URL or @handle</span></label>
         <input type="text" name="yt_input" placeholder="@MrBeast or a channel URL" /></div>
-      <div class="stack" style="flex:1"><label class="small">Announce in</label>
+      <div class="stack u-grow"><label class="small">Announce in</label>
         <select name="yt_channel"><option value="">— select a channel —</option>
           <% channels.forEach(function (c) { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %></select></div>
     </div>
     <div class="star-age">
-      <div class="stack" style="flex:1"><label class="small">Notify on</label>
+      <div class="stack u-grow"><label class="small">Notify on</label>
         <select name="yt_notify"><option value="both">New videos &amp; going live</option><option value="video">New videos only</option><option value="live">Going live only</option></select></div>
-      <div class="stack" style="flex:1"><label class="small">Ping role</label>
+      <div class="stack u-grow"><label class="small">Ping role</label>
         <select name="yt_role"><option value="">— none —</option>
           <% roles.forEach(function (r) { %><option value="<%= r.id %>"><%= r.name %></option><% }) %></select></div>
     </div>

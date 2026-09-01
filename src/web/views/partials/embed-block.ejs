@@ -1,0 +1,77 @@
+<%
+  // One ".wc-embed" preview row for the `embedList` Alpine component. Goes inside
+  //   <template x-for="(row, i) in items" :key="row.id"> … </template>
+  // and calls the component methods move / remove / pickImg / addField /
+  // removeField. Param: `banner` (bool) — also render the banner-kind branch.
+  var _banner = typeof banner !== 'undefined' && !!banner;
+  var _embedIf = _banner ? "row.kind !== 'banner'" : 'true';
+%>
+<div class="wc-embed" :class="{ 'wc-isbanner': <%= _banner ? "row.kind === 'banner'" : 'false' %> }"
+     :style="'--wc-color:' + row.color">
+  <div class="wc-tools">
+    <button type="button" @click="move(i, -1)" title="Move up">▲</button>
+    <button type="button" @click="move(i, 1)" title="Move down">▼</button>
+    <button type="button" @click="remove(i)" title="Delete">✕</button>
+  </div>
+
+  <% if (_banner) { %>
+    <template x-if="row.kind === 'banner'">
+      <button type="button" class="wc-image wc-image-lg" :class="{ has: row.image }" @click="pickImg(row, 'image')">
+        <template x-if="row.image"><img :src="row.image" alt="" /></template>
+        <template x-if="!row.image"><span>＋ Add a banner image</span></template>
+      </button>
+    </template>
+    <template x-if="row.kind === 'banner'">
+      <div class="wc-ed" contenteditable="plaintext-only" data-ph="Caption (optional)"
+           x-init="$el.textContent = row.description" @input="row.description = $el.textContent"></div>
+    </template>
+  <% } %>
+
+  <template x-if="<%= _embedIf %>">
+    <label class="wc-colorwrap" title="Embed colour"><input type="color" class="wc-color" x-model="row.color" /></label>
+  </template>
+  <template x-if="<%= _embedIf %>">
+    <button type="button" class="wc-thumb" :class="{ has: row.thumbnail }" @click="pickImg(row, 'thumbnail')">
+      <template x-if="row.thumbnail"><img :src="row.thumbnail" alt="" /></template>
+      <template x-if="!row.thumbnail"><span>thumb</span></template>
+    </button>
+  </template>
+  <template x-if="<%= _embedIf %>">
+    <div class="wc-embed-body">
+      <div class="wc-row">
+        <button type="button" class="wc-icon" :class="{ has: row.authorIcon }"
+                :style="{ backgroundImage: row.authorIcon ? ('url(' + JSON.stringify(row.authorIcon) + ')') : '' }"
+                @click="pickImg(row, 'authorIcon')"></button>
+        <div class="wc-ed" contenteditable="plaintext-only" data-ph="Header"
+             x-init="$el.textContent = row.authorName" @input="row.authorName = $el.textContent"></div>
+      </div>
+      <div class="wc-ed wc-title" contenteditable="plaintext-only" data-ph="Title"
+           x-init="$el.textContent = row.title" @input="row.title = $el.textContent"></div>
+      <div class="wc-ed wc-desc" contenteditable="plaintext-only" data-ph="Description"
+           x-init="$el.textContent = row.description" @input="row.description = $el.textContent"></div>
+      <div class="wc-fields">
+        <template x-for="(f, fi) in row.fields" :key="f.id">
+          <div class="wc-field">
+            <div class="wc-ed wc-fname" contenteditable="plaintext-only" data-ph="Field name"
+                 x-init="$el.textContent = f.name" @input="f.name = $el.textContent"></div>
+            <div class="wc-ed wc-fval" contenteditable="plaintext-only" data-ph="Field value"
+                 x-init="$el.textContent = f.value" @input="f.value = $el.textContent"></div>
+            <button type="button" class="wc-x" @click="removeField(row, fi)" title="Remove field">&times;</button>
+          </div>
+        </template>
+      </div>
+      <button type="button" class="wc-addfield" @click="addField(row)">+ Add new field</button>
+      <button type="button" class="wc-image" :class="{ has: row.image }" @click="pickImg(row, 'image')">
+        <template x-if="row.image"><img :src="row.image" alt="" /></template>
+        <template x-if="!row.image"><span>＋ Add an image</span></template>
+      </button>
+      <div class="wc-row wc-footrow">
+        <button type="button" class="wc-icon" :class="{ has: row.footerIcon }"
+                :style="{ backgroundImage: row.footerIcon ? ('url(' + JSON.stringify(row.footerIcon) + ')') : '' }"
+                @click="pickImg(row, 'footerIcon')"></button>
+        <div class="wc-ed" contenteditable="plaintext-only" data-ph="Footer"
+             x-init="$el.textContent = row.footerText" @input="row.footerText = $el.textContent"></div>
+      </div>
+    </div>
+  </template>
+</div>

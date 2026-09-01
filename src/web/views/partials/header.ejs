@@ -6,6 +6,10 @@
   <title><%= typeof title !== 'undefined' ? title : 'Sylo' %></title>
   <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><meta name="csrf-token" content="<%= csrfToken %>" /><% } %>
   <link rel="stylesheet" href="/styles.css" />
+  <script src="/vendor/htmx.min.js" defer></script>
+  <script src="/htmx-setup.js" defer></script>
+  <script src="/alpine-components.js" defer></script>
+  <script src="/vendor/alpine.min.js" defer></script>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -69,7 +73,7 @@
     <% var loggedIn = typeof user !== 'undefined' && user && !user.open; %>
     <% var inviteUrl = typeof botInviteUrl !== 'undefined' ? botInviteUrl : ''; %>
     <% if (mg.length || loggedIn) { %>
-      <details class="srv-switch">
+      <details class="srv-switch" x-data @click.outside="$el.open = false" @keydown.escape.window="$el.open = false">
         <summary>
           <span class="srv-switch-face">
             <% if (curG && curG.icon) { %><img class="srv-switch-icon" src="<%= curG.icon %>" alt="" /><% } else { %><span class="srv-switch-ph"><%= curG ? curG.name.charAt(0) : '+' %></span><% } %>

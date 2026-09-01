@@ -12,8 +12,8 @@
 <% } %>
 
 <section class="card">
-  <h3 style="margin:0 0 8px">How does it work?</h3>
-  <ul class="muted small" style="margin:0; padding-left:18px; line-height:1.7">
+  <h3 class="u-m0 u-mb-2">How does it work?</h3>
+  <ul class="muted small u-list">
     <li>Members get a personal invite link with <code>/invites</code> — that link is credited to them.</li>
     <li>When someone joins through a member's link, that member's invite count goes up.</li>
     <li><code>/inviter</code> shows who invited a given member; <code>/invites-leaderboard</code> ranks everyone.</li>
@@ -21,8 +21,8 @@
   </ul>
 </section>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/invite-tracker/config" class="card stack" style="max-width:560px">
-  <h3 style="margin:0">Settings</h3>
+<form method="POST" action="/guilds/<%= guild.id %>/m/invite-tracker/config" hx-post="/guilds/<%= guild.id %>/m/invite-tracker/config" hx-target="#module-config" hx-swap="outerHTML" class="card stack u-mw-lg">
+  <h3 class="u-m0">Settings</h3>
 
   <label class="small">Join / leave log channel <span class="muted">— optional</span></label>
   <select name="joinLogChannelId">
@@ -34,14 +34,14 @@
   <p class="muted small">Sylo posts a line here each time someone joins or leaves, with who invited them.</p>
 
   <label class="small">Fake-invite grace window (hours)</label>
-  <input type="number" name="graceHours" min="0" max="168" value="<%= grace %>" style="max-width:120px" />
+  <input class="u-w-field-sm" type="number" name="graceHours" min="0" max="168" value="<%= grace %>" />
   <p class="muted small">A join that leaves inside this window is not counted. <code>0</code> disables the guard.</p>
 
   <div><button type="submit">Save</button></div>
 </form>
 
 <section class="card">
-  <h3 style="margin:0 0 8px">Leaderboard <span class="muted small"><%= board.total %> inviter<%= board.total === 1 ? '' : 's' %></span></h3>
+  <h3 class="u-m0 u-mb-2">Leaderboard <span class="muted small"><%= board.total %> inviter<%= board.total === 1 ? '' : 's' %></span></h3>
   <% if (board.rows.length === 0) { %>
     <p class="muted small">No invites tracked yet.</p>
   <% } else { %>
@@ -63,12 +63,12 @@
   <% } %>
 </section>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/invite-tracker/bonus" class="card stack" style="max-width:420px">
-  <h3 style="margin:0">Adjust bonus invites</h3>
+<form method="POST" action="/guilds/<%= guild.id %>/m/invite-tracker/bonus" class="card stack u-mw-md">
+  <h3 class="u-m0">Adjust bonus invites</h3>
   <p class="muted small">Add or subtract from a member's total (e.g. to reward a giveaway). Sets the bonus outright.</p>
   <label class="small">Member ID or @mention</label>
   <input type="text" name="userId" placeholder="123456789012345678" required />
   <label class="small">Bonus value</label>
-  <input type="number" name="bonus" value="0" required style="max-width:120px" />
+  <input class="u-w-field-sm" type="number" name="bonus" value="0" required />
   <div><button type="submit">Set bonus</button></div>
 </form>

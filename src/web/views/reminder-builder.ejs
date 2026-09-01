@@ -2,6 +2,7 @@
 
 <% var e0 = (rec.spec && rec.spec.embeds && rec.spec.embeds[0]) || null; %>
 <% var msgType = e0 ? 'embed' : 'text'; %>
+<% var schedMode = rec.mode === 'single' ? 'single' : 'multiple'; %>
 <% function localDT(ms) { if (!ms) return ''; var d = new Date(ms - new Date(ms).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); } %>
 
 <p class="muted"><a href="/guilds/<%= guildId %>/m/reminders">&larr; Reminders</a></p>
@@ -21,12 +22,13 @@
   </div>
 <% } %>
 
-<form method="POST" action="/guilds/<%= guildId %>/m/reminders/r/<%= isNew ? 'new' : rec.id %>" id="rem-form" class="stack" style="max-width:640px">
-  <input type="hidden" name="embed" id="rem-embed-spec" />
+<form method="POST" action="/guilds/<%= guildId %>/m/reminders/r/<%= isNew ? 'new' : rec.id %>" id="rem-form" class="stack u-mw-xl"
+      x-data="reminderBuilder(<%= JSON.stringify({ msgType: msgType, mode: schedMode, enableStart: !!rec.start_at, enableEnd: !!rec.end_at }) %>)">
+  <input type="hidden" name="embed" />
 
   <section class="card stack">
-    <h2 style="margin:0">Channel</h2>
-    <select name="channelId" required style="max-width:420px">
+    <h2 class="u-m0">Channel</h2>
+    <select class="u-mw-md" name="channelId" required>
       <option value="">— select a channel —</option>
       <% channels.forEach(function (c) { %>
         <option value="<%= c.id %>" <%= c.id === rec.channel_id ? 'selected' : '' %>>#<%= c.name %></option>
@@ -35,70 +37,69 @@
   </section>
 
   <section class="card">
-    <h2 style="margin:0 0 8px">Message</h2>
-    <div class="rem-tabs" id="rem-tabs">
-      <button type="button" data-tab="text" class="<%= msgType === 'text' ? 'active' : '' %>">Text message</button>
-      <button type="button" data-tab="embed" class="<%= msgType === 'embed' ? 'active' : '' %>">Embed message</button>
+    <h2 class="u-m0 u-mb-2">Message</h2>
+    <div class="rem-tabs">
+      <button type="button" @click="msgType = 'text'" :class="{ active: msgType === 'text' }">Text message</button>
+      <button type="button" @click="msgType = 'embed'" :class="{ active: msgType === 'embed' }">Embed message</button>
     </div>
-    <input type="hidden" name="msgType" id="rem-msgtype" value="<%= msgType %>" />
+    <input type="hidden" name="msgType" :value="msgType" />
 
     <% var curContent = rec.spec && rec.spec.content ? rec.spec.content : ''; %>
-    <div data-pane="text" class="<%= msgType === 'embed' ? 'is-hidden' : '' %>">
-      <textarea name="content" rows="3" maxlength="2000" placeholder="Hey, I'm a reminder!" <%= msgType === 'embed' ? 'disabled' : '' %>><%= msgType === 'text' ? curContent : '' %></textarea>
+    <div class="u-stack u-mt-2" x-show="msgType === 'text'">
+      <textarea name="content" rows="3" maxlength="2000" placeholder="Hey, I'm a reminder!"
+                :disabled="msgType !== 'text'" <%= msgType === 'embed' ? 'disabled' : '' %>><%= msgType === 'text' ? curContent : '' %></textarea>
     </div>
-    <div data-pane="embed" class="<%= msgType === 'text' ? 'is-hidden' : '' %>">
+    <div class="u-stack u-mt-2" x-show="msgType === 'embed'">
       <label class="small">Text above the embed <span class="muted">— optional</span></label>
-      <textarea name="content" rows="2" placeholder="Optional message above the embed…" <%= msgType === 'text' ? 'disabled' : '' %>><%= msgType === 'embed' ? curContent : '' %></textarea>
-      <div id="rem-embed" class="wc-stage" style="margin-top:8px"></div>
+      <textarea name="content" rows="2" placeholder="Optional message above the embed…"
+                :disabled="msgType !== 'embed'" <%= msgType === 'text' ? 'disabled' : '' %>><%= msgType === 'embed' ? curContent : '' %></textarea>
+      <%- include('partials/embed-editor', { hidden: 'embed', spec: e0 || {} }) %>
     </div>
 
-    <div style="margin-top:10px">
+    <div class="u-mt-3">
       <button type="submit" name="action" value="test" class="secondary">Send test message</button>
     </div>
   </section>
 
   <section class="card stack">
-    <h2 style="margin:0">Reminder</h2>
-    <div class="rem-tabs" id="rem-mode">
-      <button type="button" data-mode="single" class="<%= rec.mode === 'single' ? 'active' : '' %>">Single</button>
-      <button type="button" data-mode="multiple" class="<%= rec.mode !== 'single' ? 'active' : '' %>">Multiple</button>
+    <h2 class="u-m0">Reminder</h2>
+    <div class="rem-tabs">
+      <button type="button" @click="mode = 'single'" :class="{ active: mode === 'single' }">Single</button>
+      <button type="button" @click="mode = 'multiple'" :class="{ active: mode === 'multiple' }">Multiple</button>
     </div>
-    <input type="hidden" name="mode" id="rem-mode-val" value="<%= rec.mode === 'single' ? 'single' : 'multiple' %>" />
+    <input type="hidden" name="mode" :value="mode" />
 
-    <div data-modepane="single" class="stack <%= rec.mode === 'single' ? '' : 'is-hidden' %>">
+    <div class="stack" x-show="mode === 'single'">
       <label class="small">Send once at</label>
       <input type="datetime-local" name="runAt" value="<%= localDT(rec.run_at) %>" />
     </div>
 
-    <div data-modepane="multiple" class="stack <%= rec.mode === 'single' ? 'is-hidden' : '' %>">
+    <div class="stack" x-show="mode === 'multiple'">
       <label class="small">Every</label>
-      <select name="intervalMinutes" style="max-width:280px">
+      <select class="u-mw-xs" name="intervalMinutes">
         <% schedulePresets.forEach(function (p) { %>
           <option value="<%= p[0] %>" <%= Number(p[0]) === rec.interval_minutes ? 'selected' : '' %>><%= p[1] %></option>
         <% }) %>
       </select>
 
-      <label class="checkline"><input type="checkbox" name="enableStart" id="rem-es" <%= rec.start_at ? 'checked' : '' %> /> Add start time</label>
-      <input type="datetime-local" name="startAt" id="rem-start" value="<%= localDT(rec.start_at) %>" <%= rec.start_at ? '' : 'disabled' %> style="max-width:280px" />
+      <label class="checkline"><input type="checkbox" name="enableStart" x-model="enableStart" /> Add start time</label>
+      <input class="u-mw-xs" type="datetime-local" name="startAt" :disabled="!enableStart"
+             value="<%= localDT(rec.start_at) %>" />
 
-      <label class="checkline"><input type="checkbox" name="enableEnd" id="rem-ee" <%= rec.end_at ? 'checked' : '' %> /> Add end time</label>
-      <input type="datetime-local" name="endAt" id="rem-end" value="<%= localDT(rec.end_at) %>" <%= rec.end_at ? '' : 'disabled' %> style="max-width:280px" />
+      <label class="checkline"><input type="checkbox" name="enableEnd" x-model="enableEnd" /> Add end time</label>
+      <input class="u-mw-xs" type="datetime-local" name="endAt" :disabled="!enableEnd"
+             value="<%= localDT(rec.end_at) %>" />
 
-      <label class="small" style="margin-top:6px">Day of the week</label>
+      <label class="small u-mt-2">Day of the week</label>
       <div class="rem-days">
         <% weekdays.forEach(function (d) { var on = (rec.dayList || []).indexOf(d[0]) !== -1; %>
-          <label class="rem-day <%= on ? 'on' : '' %>">
-            <input type="checkbox" name="day_<%= d[0] %>" <%= on ? 'checked' : '' %> /> <%= d[1] %>
+          <label class="rem-day <%= on ? 'on' : '' %>" x-data="{ on: <%= on ? 'true' : 'false' %> }" :class="{ on }">
+            <input type="checkbox" name="day_<%= d[0] %>" <%= on ? 'checked' : '' %> @change="on = $event.target.checked" /> <%= d[1] %>
           </label>
         <% }) %>
       </div>
     </div>
   </section>
 </form>
-
-<script>
-  window.REM_EMBED = <%- JSON.stringify(e0 || { color: '#5865f2' }).replace(/</g, '\\u003c') %>;
-</script>
-<script src="/reminder-builder.js"></script>
 
 <%- include('partials/footer') %>

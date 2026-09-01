@@ -15,16 +15,16 @@
   </div>
 <% } %>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/twitch-alerts/config" class="stack" style="max-width:680px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/twitch-alerts/config" hx-post="/guilds/<%= guild.id %>/m/twitch-alerts/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-xl">
   <div id="tw-rows">
     <% (alerts.length ? alerts : [{ login: '', channelId: '', roleId: '', message: '' }]).forEach(function (a) { %>
       <div class="tw-row card stack">
         <div class="star-age">
-          <div class="stack" style="flex:1">
+          <div class="stack u-grow">
             <label class="small">Twitch username</label>
             <input type="text" name="tw_login" value="<%= a.login || '' %>" placeholder="ninja" maxlength="25" />
           </div>
-          <div class="stack" style="flex:1">
+          <div class="stack u-grow">
             <label class="small">Announce in</label>
             <select name="tw_channel">
               <option value="">— select a channel —</option>
@@ -33,7 +33,7 @@
               <% }) %>
             </select>
           </div>
-          <div class="stack" style="flex:1">
+          <div class="stack u-grow">
             <label class="small">Ping role <span class="muted">— optional</span></label>
             <select name="tw_role">
               <option value="">— none —</option>
@@ -50,18 +50,18 @@
     <% }) %>
   </div>
   <div><button type="button" class="secondary" id="tw-add">＋ Add streamer</button></div>
-  <div style="margin-top:10px"><button type="submit">Save</button></div>
+  <div class="u-mt-3"><button type="submit">Save</button></div>
 </form>
 
 <template id="tw-template">
   <div class="tw-row card stack">
     <div class="star-age">
-      <div class="stack" style="flex:1"><label class="small">Twitch username</label>
+      <div class="stack u-grow"><label class="small">Twitch username</label>
         <input type="text" name="tw_login" placeholder="ninja" maxlength="25" /></div>
-      <div class="stack" style="flex:1"><label class="small">Announce in</label>
+      <div class="stack u-grow"><label class="small">Announce in</label>
         <select name="tw_channel"><option value="">— select a channel —</option>
           <% channels.forEach(function (c) { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %></select></div>
-      <div class="stack" style="flex:1"><label class="small">Ping role</label>
+      <div class="stack u-grow"><label class="small">Ping role</label>
         <select name="tw_role"><option value="">— none —</option>
           <% roles.forEach(function (r) { %><option value="<%= r.id %>"><%= r.name %></option><% }) %></select></div>
     </div>

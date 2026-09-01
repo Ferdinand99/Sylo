@@ -10,7 +10,16 @@
   </div>
 </div>
 
-<form method="POST" action="/guilds/<%= guildId %>/m/roles/rr" id="rr-form" data-style="<%= rm.style || 'reaction' %>">
+<%
+  var _rr = {
+    style: rm.style || 'reaction',
+    pairs: (rm.pairs || []).map(function (p) {
+      return { display: p.display || '', label: p.label || '', roleId: p.roleId || '', btnStyle: p.btnStyle || 'secondary' };
+    }),
+    roles: (roles || []).map(function (r) { return { id: String(r.id), name: r.name }; }),
+  };
+%>
+<form method="POST" action="/guilds/<%= guildId %>/m/roles/rr" id="rr-form" x-data="rrRows(<%= JSON.stringify(_rr) %>)">
   <input type="hidden" name="id" value="<%= rm.id %>" />
   <input type="hidden" name="embed" id="rr-embed-spec" />
 
@@ -18,15 +27,15 @@
     <h2>Style</h2>
     <div class="rr-style">
       <label class="rr-mode">
-        <input type="radio" name="rr_style" value="reaction" <%= (rm.style || 'reaction') === 'reaction' ? 'checked' : '' %> />
+        <input type="radio" name="rr_style" value="reaction" x-model="style" />
         <span><strong>Reactions</strong> — members react with an emoji. Needs Add Reactions permission.</span>
       </label>
       <label class="rr-mode">
-        <input type="radio" name="rr_style" value="buttons" <%= rm.style === 'buttons' ? 'checked' : '' %> />
+        <input type="radio" name="rr_style" value="buttons" x-model="style" />
         <span><strong>Buttons</strong> — members click a button. Up to 25, no reaction permission needed.</span>
       </label>
       <label class="rr-mode">
-        <input type="radio" name="rr_style" value="select" <%= rm.style === 'select' ? 'checked' : '' %> />
+        <input type="radio" name="rr_style" value="select" x-model="style" />
         <span><strong>Dropdown</strong> — members pick from a select menu. Best for long lists.</span>
       </label>
     </div>
@@ -34,7 +43,7 @@
 
   <section class="card">
     <h2>Channel</h2>
-    <select name="channelId" required style="max-width:420px">
+    <select class="u-mw-md" name="channelId" required>
       <option value="">— select a channel —</option>
       <% channels.forEach(function (c) { %>
         <option value="<%= c.id %>" <%= c.id === rm.channelId ? 'selected' : '' %>>#<%= c.name %></option>
@@ -46,31 +55,71 @@
     <h2>Message</h2>
     <label class="small">Message text <span class="muted">— optional, above the embed</span></label>
     <textarea id="rr-content" name="message" rows="2" placeholder="Pick your roles below!"><%= rm.message || '' %></textarea>
-    <div id="rr-embed" class="wc-stage" style="margin-top:8px"></div>
+    <div class="u-mt-2">
+      <%- include('partials/embed-editor', { hidden: 'embed', spec: rm.embed || {} }) %>
+    </div>
   </section>
 
   <section class="card">
-    <h2><span id="rr-rows-title">Reactions &amp; roles</span> <span class="muted small">(<span id="rr-count">0</span> / <span id="rr-max">20</span>)</span></h2>
+    <h2><span x-text="rowsTitle">Reactions &amp; roles</span> <span class="muted small">(<span x-text="rows.length">0</span> / <span x-text="max">20</span>)</span></h2>
     <label class="checkline">
       <input type="checkbox" name="exclusive" <%= rm.exclusive ? 'checked' : '' %> />
       Only one role from this set at a time (picking one removes the others)
     </label>
 
-    <div class="rr-when-select" hidden style="margin-top:8px">
+    <div class="u-mt-2" x-show="style === 'select'">
       <label class="small">Dropdown placeholder</label>
-      <input type="text" name="rr_placeholder" value="<%= rm.placeholder || '' %>" placeholder="Pick your roles" maxlength="150" style="max-width:420px" />
+      <input class="u-mw-md" type="text" name="rr_placeholder" value="<%= rm.placeholder || '' %>" placeholder="Pick your roles" maxlength="150" />
       <div class="rr-selrange">
-        <label class="small">Min picks <input type="number" name="rr_selmin" min="0" max="25" value="<%= rm.selMin || 0 %>" style="width:70px" /></label>
-        <label class="small">Max picks <input type="number" name="rr_selmax" min="0" max="25" value="<%= rm.selMax || 0 %>" style="width:70px" /> <span class="muted">— 0 = no limit</span></label>
+        <label class="small">Min picks <input class="u-w-num" type="number" name="rr_selmin" min="0" max="25" value="<%= rm.selMin || 0 %>" /></label>
+        <label class="small">Max picks <input class="u-w-num" type="number" name="rr_selmax" min="0" max="25" value="<%= rm.selMax || 0 %>" /> <span class="muted">— 0 = no limit</span></label>
       </div>
     </div>
 
-    <div id="rr-rows" class="rr-rows"></div>
-    <button type="button" id="rr-add" class="secondary">＋ Add role</button>
+    <div class="rr-rows">
+      <template x-for="(row, i) in rows" :key="i">
+        <div class="rr-row">
+          <span class="emoji-cellwrap" x-data="emojiPicker('<%= guildId %>')" @emoji-pick="row.emoji = $event.detail">
+            <input type="text" name="rr_emoji" class="rr-emoji" x-model="row.emoji"
+                   :placeholder="style === 'reaction' ? '👋 (required)' : '👋 (optional)'" />
+            <button type="button" class="emoji-btn" @click="toggle()">😀</button>
+            <div class="emoji-pop" x-show="open" @click.outside="open = false" x-cloak>
+              <template x-if="custom.length">
+                <div>
+                  <div class="emoji-sec">Server</div>
+                  <div class="emoji-grid">
+                    <template x-for="ce in custom" :key="ce.display">
+                      <button type="button" class="emoji-cell" @click="pick(ce.display)"><img :src="ce.url" alt="" /></button>
+                    </template>
+                  </div>
+                </div>
+              </template>
+              <div class="emoji-sec">Emoji</div>
+              <div class="emoji-grid">
+                <template x-for="ee in common" :key="ee">
+                  <button type="button" class="emoji-cell" @click="pick(ee)" x-text="ee"></button>
+                </template>
+              </div>
+            </div>
+          </span>
+          <input type="text" name="rr_label" class="rr-row-label" x-model="row.label"
+                 placeholder="Button label (optional)" maxlength="80" x-show="style !== 'reaction'" />
+          <select name="rr_role" x-model="row.roleId">
+            <option value="">— select a role —</option>
+            <template x-for="r in roles" :key="r.id"><option :value="r.id" x-text="r.name"></option></template>
+          </select>
+          <select name="rr_btnstyle" class="rr-row-btnstyle" x-model="row.btnStyle" x-show="style === 'buttons'">
+            <template x-for="b in btnStyles" :key="b"><option :value="b" x-text="b"></option></template>
+          </select>
+          <button type="button" class="wc-x" @click="removeRow(i)" title="Remove">×</button>
+        </div>
+      </template>
+    </div>
+    <button type="button" class="secondary" @click="addRow()" x-text="addLabel">＋ Add role</button>
   </section>
 
-  <section class="card rr-when-reaction rr-when-buttons">
-    <h2 id="rr-mode-title">Reaction mode</h2>
+  <section class="card" x-show="style !== 'select'">
+    <h2>Reaction mode</h2>
     <label class="rr-mode">
       <input type="radio" name="mode" value="default" <%= rm.mode !== 'reverse' ? 'checked' : '' %> />
       <span><strong>Default</strong> — the interaction adds the role; undoing it takes the role away.</span>
@@ -81,12 +130,5 @@
     </label>
   </section>
 </form>
-
-<script>
-  window.RR = <%- JSON.stringify(rm).replace(/</g, '\\u003c') %>;
-  window.RR_ROLES = <%- JSON.stringify(roles).replace(/</g, '\\u003c') %>;
-  window.RR_GUILD = "<%= guildId %>";
-</script>
-<script src="/reaction-role.js"></script>
 
 <%- include('partials/footer') %>

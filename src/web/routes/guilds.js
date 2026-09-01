@@ -8,7 +8,7 @@ import { requireGuildAdmin, currentUser } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
-import { getModule } from '../../modules/registry.js';
+import { getModule, missingIntents } from '../../modules/registry.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { getCommandOverrides, setCommandOverride } from '../../db/commandOverrides.js';
 import {
@@ -84,6 +84,7 @@ import { topMembers, memberCount, setXp, resetGuildLeveling } from '../../db/lev
 import { recordAudit, listAudit } from '../../db/audit.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
 import { buildOverview } from '../lib/overviewSummary.js';
+import { moduleIcon } from '../lib/moduleIcons.js';
 
 const router = Router();
 
@@ -428,6 +429,12 @@ router.post('/:guildId/m/automod/immunity', (req, res) => {
     action: 'module:automod',
     detail: `immunity roles (${roles.length})`,
   });
+  if (req.get('HX-Request')) {
+    return res
+      .status(204)
+      .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Immunity roles saved', kind: 'ok' } }))
+      .end();
+  }
   res.redirect(`/guilds/${req.guild.id}/moderation?msg=saved`);
 });
 
@@ -457,17 +464,20 @@ router.post(
   })
 );
 
-// Per-module settings panel.
-router.get('/:guildId/m/:moduleId', (req, res) => {
-  const mod = getModule(req.params.moduleId);
-  if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
+// Full render context for a module's settings panel. Shared by the GET page,
+// the htmx fragment render, and the config-POST re-render — so every module
+// partial can read what it needs straight from locals (no per-include passthrough).
+function moduleViewLocals(mod, req, configOverride) {
   const { enabled, config } = getGuildModule(req.guild.id, mod.id);
-  res.render('guild', {
+  const hasView = CONFIG_VIEWS.has(mod.id);
+  return {
     ...baseContext(req.guild, `m/${mod.id}`),
     activeModule: mod,
+    moduleIconName: moduleIcon(mod.id),
     moduleEnabled: enabled,
-    moduleConfig: config,
-    configView: CONFIG_VIEWS.has(mod.id) ? `guild/modules/${mod.id}` : 'guild/modules/stub',
+    moduleConfig: configOverride ?? config,
+    configView: hasView ? `guild/modules/${mod.id}` : 'guild/modules/stub',
+    configPartialRel: hasView ? `modules/${mod.id}` : 'modules/stub',
     logEvents: LOG_EVENTS,
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
@@ -579,7 +589,16 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
         }))
       : [],
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
-  });
+  };
+}
+
+router.get('/:guildId/m/:moduleId', (req, res) => {
+  const mod = getModule(req.params.moduleId);
+  if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
+  const locals = moduleViewLocals(mod, req);
+  // htmx fragment nav (Phase 1): render just the config panel.
+  if (req.get('HX-Request')) return res.render('guild/_module-config', locals);
+  res.render('guild', locals);
 });
 
 // Save a module's settings.
@@ -871,6 +890,13 @@ router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
       return res.redirect(`${back}?msg=wc-published`);
     }
     return res.redirect(`${back}?msg=wc-fail`);
+  }
+
+  // htmx: swap the re-rendered panel + fire a toast instead of a full reload.
+  if (req.get('HX-Request')) {
+    return res
+      .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Saved', kind: 'ok' } }))
+      .render('guild/_module-config', moduleViewLocals(mod, req, config));
   }
   res.redirect(`${back}?msg=saved`);
 }));
@@ -1561,7 +1587,8 @@ router.post(
   })
 );
 
-// Toggle a module on/off (JSON, called from app.js).
+// Toggle a module on/off. Driven by htmx (see _module-toggle.ejs / _plugin-cta.ejs);
+// still answers plain JSON for the no-JS / programmatic path.
 router.post('/:guildId/modules/:moduleId', (req, res) => {
   const mod = getModule(req.params.moduleId);
   if (!mod) return res.status(404).json({ error: 'Unknown module' });
@@ -1581,6 +1608,25 @@ router.post('/:guildId/modules/:moduleId', (req, res) => {
     primeInviteCache(req.guild).catch((err) =>
       log.error('invite-tracker', 'cache prime after enable failed:', err.message)
     );
+  }
+  if (req.get('HX-Request')) {
+    res.set(
+      'HX-Trigger',
+      JSON.stringify({
+        moduleToggled: { id: mod.id, enabled },
+        toast: { msg: `${mod.name} ${enabled ? 'enabled' : 'disabled'}`, kind: 'ok' },
+      })
+    );
+    // Two callers: the plugin-grid "Enable" button and the settings-page switch.
+    if (req.body.view === 'grid') {
+      return res.render('guild/_plugin-cta', { href: `/guilds/${req.guild.id}/m/${mod.id}` });
+    }
+    return res.render('guild/_module-toggle', {
+      guild: req.guild,
+      activeModule: mod,
+      moduleEnabled: enabled,
+      toggleDisabled: missingIntents(mod).length > 0,
+    });
   }
   res.json({ enabled });
 });
@@ -1648,7 +1694,14 @@ router.post('/:guildId/general', (req, res) => {
 router.post('/:guildId/commands/:command', (req, res) => {
   const guild = req.guild;
   const command = req.params.command;
+  const hx = Boolean(req.get('HX-Request'));
   if (!runtime.client?.commands?.has(command)) {
+    if (hx) {
+      return res
+        .status(404)
+        .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Unknown command', kind: 'bad' } }))
+        .end();
+    }
     return res.redirect(`/guilds/${guild.id}/commands?msg=badcommand`);
   }
   // Accepts an array (multi-select) or a comma/space-separated string of ids.
@@ -1668,6 +1721,12 @@ router.post('/:guildId/commands/:command', (req, res) => {
     action: `command:/${command}`,
     detail: on ? 'updated limits' : 'disabled',
   });
+  if (hx) {
+    return res
+      .status(204)
+      .set('HX-Trigger', JSON.stringify({ toast: { msg: `/${command} updated`, kind: 'ok' } }))
+      .end();
+  }
   res.redirect(`/guilds/${guild.id}/commands?msg=saved`);
 });
 

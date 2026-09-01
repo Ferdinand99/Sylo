@@ -21,10 +21,10 @@
             <label class="small"><%= q %></label>
             <textarea name="a" rows="3" maxlength="2000" <%= i === 0 ? 'required' : '' %>></textarea>
           <% }) %>
-          <div style="margin-top:12px"><button type="submit">Submit appeal</button></div>
+          <div class="u-mt-3"><button type="submit">Submit appeal</button></div>
         </form>
         <% if (serverInvite) { %>
-          <p class="muted small" style="margin-top:12px">📩 Want the decision by DM too? Join <a href="<%= serverInvite %>"><%= serverInvite %></a> so Sylo shares a server with you.</p>
+          <p class="muted small u-mt-3">📩 Want the decision by DM too? Join <a href="<%= serverInvite %>"><%= serverInvite %></a> so Sylo shares a server with you.</p>
         <% } %>
 
       <% } else if (state === 'submitted' || state === 'pending') { %>
@@ -41,7 +41,7 @@
           <p>Your ban appeal<% if (guildName) { %> for <strong><%= guildName %></strong><% } %> was accepted.</p>
           <p><strong>Note from the moderators:</strong> <%= decisionReason %></p>
           <% if (rejoinInvite) { %>
-            <p style="margin-top:14px"><a class="btn" href="<%= rejoinInvite %>">Rejoin<% if (guildName) { %> <%= guildName %><% } %> &rarr;</a></p>
+            <p class="u-mt-4"><a class="btn" href="<%= rejoinInvite %>">Rejoin<% if (guildName) { %> <%= guildName %><% } %> &rarr;</a></p>
             <p class="muted small">This invite is single-use — don't share it.</p>
           <% } else { %>
             <p class="muted small">Your ban has been lifted. Use any normal invite to rejoin, or ask a moderator for one.</p>

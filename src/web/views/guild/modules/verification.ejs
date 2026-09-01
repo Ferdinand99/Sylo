@@ -10,7 +10,7 @@
   <% } %>
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/verification/config" class="stack" style="max-width:560px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/verification/config" hx-post="/guilds/<%= guild.id %>/m/verification/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-lg">
   <label>Mode</label>
   <select name="mode">
     <% verifyModes.forEach(function (m) { %>
@@ -36,7 +36,7 @@
     <% }) %>
   </select>
 
-  <label class="small" style="margin-top:6px">Message title</label>
+  <label class="small u-mt-2">Message title</label>
   <input type="text" name="title" maxlength="200" value="<%= cfg.title || 'Verification' %>" />
 
   <label class="small">Message body</label>
@@ -45,7 +45,7 @@
   <label class="small">Reply after verifying</label>
   <input type="text" name="successMessage" maxlength="1000" value="<%= cfg.successMessage || 'You are verified — welcome!' %>" />
 
-  <label style="margin-top:6px">Log channel <span class="muted small">— optional</span></label>
+  <label class="u-mt-2">Log channel <span class="muted small">— optional</span></label>
   <select name="logChannelId">
     <option value="">— none —</option>
     <% channels.forEach(function (c) { %>
@@ -53,13 +53,13 @@
     <% }) %>
   </select>
 
-  <label class="small" style="margin-top:6px">Kick members who don't verify within (minutes, 0 = never)</label>
-  <input type="number" name="kickAfterMinutes" min="0" max="10080" value="<%= cfg.kickAfterMinutes || 0 %>" style="width:100px" />
+  <label class="small u-mt-2">Kick members who don't verify within (minutes, 0 = never)</label>
+  <input class="u-w-field-sm" type="number" name="kickAfterMinutes" min="0" max="10080" value="<%= cfg.kickAfterMinutes || 0 %>" />
 
-  <div style="margin-top:12px"><button type="submit">Save</button></div>
+  <div class="u-mt-3"><button type="submit">Save</button></div>
 </form>
 
-<p class="muted small" style="margin-top:12px">
+<p class="muted small u-mt-3">
   Saving (re)posts the verify message. Sylo needs <strong>Manage Roles</strong>, and — for the
   kick option — <strong>Kick Members</strong>.
 </p>

@@ -1,12 +1,14 @@
 <% var cfg = moduleConfig || {}; var rules = Array.isArray(cfg.warnThresholds) ? cfg.warnThresholds : []; %>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/moderation/config" class="stack" style="max-width:600px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/moderation/config"
+      hx-post="/guilds/<%= guild.id %>/m/moderation/config" hx-target="this" hx-swap="none"
+      class="stack u-mw-lg">
   <label class="check">
     <input type="checkbox" name="dmOnPunish" <%= cfg.dmOnPunish !== false ? 'checked' : '' %> />
     DM the user when they are punished
   </label>
 
-  <label style="margin-top:8px">Warning thresholds</label>
+  <label class="u-mt-2">Warning thresholds</label>
   <p class="muted small">When a member reaches a warning count, apply an action automatically. The strictest matching rule wins.</p>
 
   <table class="thresholds">
@@ -30,10 +32,10 @@
   </table>
   <div><button type="button" class="secondary" id="add-threshold">+ Add rule</button></div>
 
-  <div style="margin-top:10px"><button type="submit">Save</button></div>
+  <div class="u-mt-3"><button type="submit">Save</button></div>
 </form>
 
-<p class="muted small" style="margin-top:14px">
+<p class="muted small u-mt-4">
   The moderation log channel is set under <a href="/guilds/<%= guild.id %>/general">General</a>.
   Warnings and bans are managed under <a href="/guilds/<%= guild.id %>/moderation">Moderation</a>.
 </p>

@@ -1,27 +1,29 @@
 <%
   // params: field (input name), kind ('role' | 'channel'), items [{id,name,color?}], selected [ids]
-  var _sel = selected || [];
-  var _items = items || [];
   var _kind = (typeof kind !== 'undefined' && kind === 'channel') ? 'channel' : 'role';
-  var _byId = {};
-  _items.forEach(function (i) { _byId[i.id] = i; });
-  var _selSet = {};
-  _sel.forEach(function (id) { _selSet[id] = true; });
+  var _cfg = {
+    field: field,
+    kind: _kind,
+    items: (items || []).map(function (i) { return { id: String(i.id), name: i.name, color: i.color || '' }; }),
+    selected: (selected || []).map(String),
+  };
 %>
-<div class="role-picker" data-field="<%= field %>"<% if (_kind === 'channel') { %> data-kind="channel"<% } %>>
-  <div class="role-chips" data-role-chips>
-    <% _sel.forEach(function (id) { var it = _byId[id]; %>
-      <span class="role-chip" data-id="<%= id %>" data-name="<%= it ? it.name : id %>" data-color="<%= (it && it.color) || '' %>">
-        <% if (_kind === 'channel') { %><span class="chip-hash">#</span><% } else { %><span class="role-dot" style="background:<%= (it && it.color) || 'var(--muted)' %>"></span><% } %><%= it ? it.name : id %>
-        <button type="button" class="role-chip-x" aria-label="Remove">&times;</button>
-        <input type="hidden" name="<%= field %>" value="<%= id %>" />
+<div class="role-picker" x-data="chipPicker(<%= JSON.stringify(_cfg) %>)">
+  <div class="role-chips">
+    <template x-for="chip in chips" :key="chip.id">
+      <span class="role-chip">
+        <template x-if="kind === 'channel'"><span class="chip-hash">#</span></template>
+        <template x-if="kind !== 'channel'"><span class="role-dot" :style="'background:' + (chip.color || 'var(--muted)')"></span></template>
+        <span x-text="chip.name"></span>
+        <button type="button" class="role-chip-x" aria-label="Remove" @click="remove(chip.id)">&times;</button>
+        <input type="hidden" :name="field" :value="chip.id" />
       </span>
-    <% }) %>
+    </template>
   </div>
-  <select class="role-picker-add">
+  <select class="role-picker-add" x-model="pick" @change="add()">
     <option value="">+ Add <%= _kind === 'channel' ? 'a channel' : 'a role' %>…</option>
-    <% _items.forEach(function (it) { if (_selSet[it.id]) return; %>
-      <option value="<%= it.id %>" data-name="<%= it.name %>"<% if (it.color) { %> data-color="<%= it.color %>"<% } %>><%= _kind === 'channel' ? ('#' + it.name) : it.name %></option>
-    <% }) %>
+    <template x-for="opt in available" :key="opt.id">
+      <option :value="opt.id" x-text="(kind === 'channel' ? '#' : '') + opt.name"></option>
+    </template>
   </select>
 </div>

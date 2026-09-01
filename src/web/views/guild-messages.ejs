@@ -3,7 +3,7 @@
 <p class="muted"><a href="/guilds/<%= guild.id %>/overview">&larr; <%= guild.name %></a></p>
 
 <div class="rr-builder-head">
-  <h1 class="page-title">Embed messages</h1>
+  <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'message-square', title: 'Embed messages', lg: true }) %></div>
   <a class="btn btn-primary" href="/guilds/<%= guild.id %>/messages/new">＋ New embed message</a>
 </div>
 <p class="muted small">Build rich embed messages with a live editor, then publish them to a channel as Sylo — and re-publish to edit the posted message in place.</p>
@@ -16,12 +16,12 @@
   <div class="banner <%= (['saved','sent','updated','deleted'].indexOf(msg) >= 0) ? 'ok' : (['unpublished','removed'].indexOf(msg) >= 0 ? 'info' : 'bad') %>"><%= text %></div>
 <% } %>
 
-<div class="rr-list-head" style="margin-top:12px">
-  <h3 style="margin:0">Your embed messages <span class="muted small"><%= items.length %> / 200</span></h3>
+<div class="rr-list-head u-mt-3">
+  <h3 class="u-m0">Your embed messages <span class="muted small"><%= items.length %> / 200</span></h3>
 </div>
 
 <% if (items.length === 0) { %>
-  <p class="muted small">None yet — create one to post an embed to a channel.</p>
+  <p class="empty">None yet — create one to post an embed to a channel.</p>
 <% } else { %>
   <% items.forEach(function (it) { %>
     <div class="cmd-override">
@@ -35,11 +35,11 @@
       <div class="btn-row">
         <a class="plugin-btn" href="/guilds/<%= guild.id %>/messages/<%= it.id %>">Edit</a>
         <% if (it.published) { %>
-          <form method="POST" action="/guilds/<%= guild.id %>/messages/<%= it.id %>/unpublish" style="display:inline">
+          <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/messages/<%= it.id %>/unpublish">
             <button type="submit" data-confirm="Delete the posted message? The draft stays here.">Unpublish</button>
           </form>
         <% } %>
-        <form method="POST" action="/guilds/<%= guild.id %>/messages/<%= it.id %>/delete" style="display:inline">
+        <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/messages/<%= it.id %>/delete">
           <button type="submit" class="danger" data-confirm="Delete this embed message (and the posted message, if any)?">Delete</button>
         </form>
       </div>

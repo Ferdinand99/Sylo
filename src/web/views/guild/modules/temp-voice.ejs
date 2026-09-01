@@ -13,12 +13,12 @@
 <% } %>
 
 <div class="rr-list-head">
-  <h3 style="margin:0">Your hubs <span class="muted small"><%= hubs.length %> / 25</span></h3>
+  <h3 class="u-m0">Your hubs <span class="muted small"><%= hubs.length %> / 25</span></h3>
   <a class="btn btn-primary" href="/guilds/<%= guild.id %>/m/temp-voice/hub/new">＋ New hub</a>
 </div>
 
 <% if (hubs.length === 0) { %>
-  <p class="muted small">No hubs yet — create one to enable "join to create" voice channels.</p>
+  <p class="empty">No hubs yet — create one to enable "join to create" voice channels.</p>
 <% } else { %>
   <% hubs.forEach(function (h) { %>
     <div class="cmd-override">
@@ -34,7 +34,7 @@
       </div>
       <div class="btn-row">
         <a class="plugin-btn" href="/guilds/<%= guild.id %>/m/temp-voice/hub/<%= h.id %>">Edit</a>
-        <form method="POST" action="/guilds/<%= guild.id %>/m/temp-voice/hub/<%= h.id %>/delete" style="display:inline">
+        <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/m/temp-voice/hub/<%= h.id %>/delete">
           <button type="submit" class="danger" data-confirm="Delete this hub? Existing temp channels stay until empty.">Delete</button>
         </form>
       </div>
@@ -43,7 +43,7 @@
 <% } %>
 
 <hr class="sep" />
-<h3 style="margin:4px 0">Commands</h3>
+<h3 class="u-my-1">Commands</h3>
 <p class="muted small">Available to the channel owner and voice moderators. Restrict them per server on the
   <a href="/guilds/<%= guild.id %>/commands">Commands</a> page.</p>
 <ul class="muted small" style="columns:2; margin:0; padding-left:18px; line-height:1.8">

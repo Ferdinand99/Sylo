@@ -1,6 +1,8 @@
 # Dashboard modernization plan
 
-Status: **not started** · Owner: Ferdinand99 · Created 2026-09-01 (Sylo 3.0.0)
+Status: **Phase 0 done** · Owner: Ferdinand99 · Created 2026-09-01 (Sylo 3.0.0)
+
+Branch: `feat/dashboard-htmx-alpine`.
 
 ## Goal
 
@@ -37,7 +39,10 @@ phase.
 - `src/web/public/app.js` — vanilla JS: toasts, confirm-on-submit, module
   enable/disable via a `syloAction()` fetch helper, chip picker, emoji picker,
   server switcher. Plus per-builder scripts: `reaction-role.js`, `polls.js`,
-  `tv-builder.js`, `msg-builder.js`, `reminder-builder.js`.
+  `tv-builder.js`, `msg-builder.js`, `reminder-builder.js`, `cc-builder.js`.
+  *(Phase 2 update: all ported to Alpine and deleted except `cc-builder.js`;
+  `alpine-components.js` now holds `chipPicker` / `rrRows` / `embedEditor` /
+  `embedList` / `reminderBuilder` / `tvName`.)*
 - CSRF: `src/web/middleware/csrf.js`; token in `<meta name="csrf-token">`;
   `app.js` injects `_csrf` into forms and an `x-csrf-token` header on fetch.
 - Public, zero-JS pages that must stay server-rendered and framework-free:
@@ -45,51 +50,137 @@ phase.
 
 ---
 
-## Phase 0 — Foundations (~½ day)
+## Phase 0 — Foundations — DONE
 
 **Goal:** htmx + Alpine loaded, CSRF works over htmx, conventions decided. No
 behaviour change yet.
 
-- Vendor `htmx.min.js` + `alpine.min.js` (pin versions) into
-  `src/web/public/vendor/`. Add `<script defer>` tags to `partials/header.ejs`.
-- `src/web/public/htmx-setup.js`: on `htmx:configRequest`, add `X-CSRF-Token`
-  from the meta tag to every htmx request.
-- Decide the response convention: a module-config POST returns the re-rendered
-  panel fragment (`hx-target="#guild-panel"`, `hx-swap="outerHTML"`) plus a toast
-  via an `HX-Trigger: {"toast":{"msg":"Saved","kind":"ok"}}` response header. A
-  small client listener renders the toast — this replaces the `?msg=` querystring
-  dance.
-- `app.js` and htmx coexist during the migration.
+Shipped:
 
-**Done when:** a throwaway route can return a fragment htmx swaps in, with CSRF
-and a toast.
+- `src/web/public/vendor/{htmx.min.js@2.0.4, alpine.min.js@3.14.8}` + a
+  `vendor/README.md` with source URLs and the upgrade command.
+- `partials/header.ejs`: `<script defer>` for `/vendor/htmx.min.js`,
+  `/htmx-setup.js`, `/vendor/alpine.min.js` (in that order). Only dashboard pages
+  use this partial; the public pages (`/leaderboard`, `/lb`, `/verify`,
+  `/appeal`) have their own `<head>` and stay framework-free.
+- `src/web/public/htmx-setup.js`: adds `X-CSRF-Token` (from the meta tag) to every
+  htmx request via `htmx:configRequest`; bridges an `HX-Trigger` `toast` event to
+  `window.syloToast`; surfaces `htmx:responseError` / `htmx:sendError` as a bad
+  toast so a failed save is never silent.
+- **Convention decided:** a config POST responds — on `HX-Request` — with the
+  re-rendered panel/card fragment (`hx-target` on the panel wrapper,
+  `hx-swap="outerHTML"`) and sets
+  `HX-Trigger: {"toast":{"msg":"…","kind":"ok|bad|info"}}`. Non-htmx requests keep
+  the `res.redirect('?msg=…')` fallback. This replaces the `?msg=` banner dance.
+- **Dev-only sanity route** `GET/POST /__htmx-check` (in `dashboard.js`, gated on
+  `NODE_ENV !== 'production'`) + `views/htmx-check.ejs` +
+  `partials/htmx-check-body.ejs`. Clicking *Bump* swaps the fragment with no
+  reload, pops a toast, and reports that the CSRF header reached the server; an
+  Alpine `x-data` counter is on the same page. **Remove in Phase 5.**
+
+**Verify:** open `/__htmx-check` while logged in → Bump swaps the box, toast
+appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
 
 ---
 
-## Phase 1 — Route/view refactor for fragments (bulk, ~1 week spread)
+## Phase 1 — Route/view refactor for fragments — DONE (bar 2 Phase-2-blocked forms)
 
 **Goal:** module-config pages save without a full reload.
 
-- **Split `guild.ejs`** so each panel (`overview`, `settings`, `m/<id>`,
-  `leaderboard`, …) is an includable partial that can render standalone.
-- **Remove the `include(configView, {30 keys})` passthrough:** move the
-  per-module context vars into `res.locals` in the route so partials read them
-  directly. (Already on the 3.0 backlog — do it here as a prerequisite.)
-- Route checks `req.header('HX-Request')`: htmx → render just the partial; normal
-  request → the full page (progressive enhancement preserved).
-- POST handlers: on `HX-Request`, respond with the re-rendered partial +
-  `HX-Trigger` toast instead of `res.redirect('?msg=…')`. Keep the redirect path
-  as the no-JS fallback.
-- **Module by module.** Start with 3 simple ones (`counting`, `afk`,
-  `free-games`), prove the pattern, then roll through the rest (~2–3 per session).
-- Convert module toggles + plugin-grid "Enable" buttons from the `syloAction`
-  fetch to `hx-post` returning the updated card/dot.
+### Done (commit 1 — pattern established)
+
+- **`moduleViewLocals(mod, req, configOverride)`** in `guilds.js`: one function
+  builds the full render context for a module panel (all keys, defaulted).
+  Replaces the ~30-key `include(configView, {…})` passthrough in `guild.ejs` —
+  EJS 3 bare `include()` inherits all parent locals, so the passthrough was pure
+  ceremony. Used by the GET page, the htmx fragment render, and the config-POST
+  re-render.
+- **`views/guild/_module-config.ejs`**: `<div id="module-config">` wrapper around
+  `include(configPartialRel)`. `guild.ejs` includes it; the routes render it
+  standalone.
+- **`GET /:guildId/m/:moduleId`**: on `HX-Request` → `res.render('guild/_module-config')`
+  (fragment only); otherwise the full page.
+- **`POST /:guildId/m/:moduleId/config`**: on `HX-Request` → re-render the
+  fragment + `HX-Trigger: {"toast":{"msg":"Saved","kind":"ok"}}`; otherwise the
+  existing `res.redirect('?msg=saved')`.
+- **Converted so far (17 module config forms):** counting, afk, free-games
+  (commit 1); sticky, server-stats, autoresponder, logging, tickets,
+  invite-tracker, verification, leveling, giveaways, twitch-alerts,
+  youtube-alerts, roles, appeals, welcome (commit 2). All: `hx-post` /
+  `hx-target="#module-config"` / `hx-swap="outerHTML"`; `method`/`action` stay as
+  the no-JS fallback. verification / invite-tracker / welcome have fire-and-
+  forget side-effects but no early `res.redirect`, so the shared `HX-Request`
+  branch handles them.
+
+### Done (commit 3 — module-page toggle)
+
+- The enable/disable switch on a module's settings page is now
+  `views/guild/_module-toggle.ejs`: an htmx checkbox that posts to
+  `/guilds/:id/modules/:id` on change and swaps itself with the server-truth
+  state. `POST /:guildId/modules/:moduleId` gains an `HX-Request` branch that
+  renders that fragment + `HX-Trigger: {moduleToggled, toast}`; the JSON response
+  stays for any non-htmx caller. `htmx-setup.js` listens for `moduleToggled` and
+  updates the sidebar dot. app.js's `.module-toggle` handler is now dead (the
+  fragment dropped that class) — removed in Phase 3.
+
+### Done (commit 4 — plugin-grid Enable buttons)
+
+- Overview "+ Enable" buttons post via htmx (`hx-vals` carries
+  `enabled:true, view:grid`); the shared `POST /:guildId/modules/:moduleId`
+  HX-Request branch renders `guild/_plugin-cta.ejs` (the "✓ Active" link) for
+  `view=grid`, `_module-toggle.ejs` otherwise. Cards got
+  `id="plugin-card-<id>"`; the `moduleToggled` listener toggles their `is-on`
+  class alongside the sidebar dot.
+- **Both dead `app.js` blocks removed** (`.module-toggle` change handler +
+  `.plugin-btn.enable` click handler). `syloAction` / `toast` remain for Phase 3.
+
+### Done (commit 5 — Moderator page settings tabs)
+
+- The Automod, Auto-actions and Immunity forms on the tabbed `panel === 'moderation'`
+  page now save via htmx. Shared partials (`automod.ejs`, `logging.ejs`) take
+  optional `fragTarget` / `fragSwap` locals: default `#module-config` /
+  `outerHTML` (module page), `this` / `none` when included on the Moderator page —
+  so on the Moderator page the save just fires + toasts (the tab's visible state
+  is already what the user set). Only new route work: `/m/automod/immunity` got a
+  `204 + HX-Trigger toast` branch; automod/moderation config ride the existing
+  generic `/config` HX-Request branch (response discarded under `hx-swap="none"`).
+- This also fixes the batch-2 edge where `logging.ejs`'s hard-coded
+  `hx-target="#module-config"` failed on the Moderator page.
+
+### Done (commit 6 — command overrides)
+
+- `guild/commands.ejs` per-command forms (`POST /guilds/:id/commands/:command`)
+  post via htmx (`hx-target="this" hx-swap="none"`); the route returns
+  `204 + HX-Trigger toast` (and a `404 + bad toast` for an unknown command).
+  Covers both the standalone `/commands` page and the Moderator → Commands tab.
+
+### Still to do
+
+- **Moderator → Infractions tab** (warn a member / remove a ban) — still
+  full-reload. Intentional: these are *actions* with Discord side effects
+  (mod-log embed, real unban) and the warnings/bans list needs to refresh, so a
+  reload is fine feedback. Convert later by re-rendering the tab partial if
+  wanted.
+- **`polls` config form:** done — Phase 2 embed-editor port added `hx-post` to
+  `#module-config`. **`welcome-channel`:** ported to `embedList` in Phase 2; the
+  form stays full-nav (Save reloads the panel, Publish early-returns a redirect),
+  which is fine for a heavy builder page.
+
+**Phase 1 is effectively done** — every settings save on the dashboard is now a
+fragment swap + toast, with the no-JS fallback intact. The two remaining items
+are an action page (Infractions) and two forms blocked on Phase 2.
+- Convert the standalone builder pages (rr / sb / cc / msg / reminder / tv).
+- Convert module enable/disable toggles + plugin-grid "Enable" from the
+  `syloAction` fetch to `hx-post` returning the updated card/dot.
+- Split the other `guild.ejs` panels (`overview`, `settings`, `leaderboard`,
+  `appeals`, `moderation`, `audit`, `commands`) into standalone partials for
+  fragment nav — optional, lower priority.
 
 **Done when:** all 26 module pages + overview save via htmx, no-JS fallback intact.
 
 ---
 
-## Phase 2 — Alpine for the builders (~3–4 days)
+## Phase 2 — Alpine for the builders
 
 **Goal:** replace hand-rolled DOM JS with declarative reactive state.
 
@@ -100,21 +191,95 @@ and a toast.
   embed editor** (longest pole, last).
 - Delete the corresponding `src/web/public/*.js` as each is ported.
 
-**Done when:** every builder runs on Alpine; the old builder scripts are gone.
+**Done:**
+- **chip-picker** → `chipPicker` in `alpine-components.js`; `partials/chip-picker.ejs`
+  is x-for driven; the 3 hand-written `.role-picker` blocks now use the partial;
+  `makeRoleChip` + the two chip handlers gone from `app.js`.
+- **reaction-role builder rows + style toggle** → `rrRows` in
+  `alpine-components.js`; `rr-builder.ejs` rows/style radios/conditional sections
+  are `x-model` / `x-for` / `x-show`. The emoji picker in `app.js` now dispatches
+  an `input` event so `x-model` sees the pick.
+- **shared WYSIWYG embed editor** → `embedEditor` in `alpine-components.js` +
+  `partials/embed-editor.ejs`. One config-driven component: feature flags
+  (`content` / `author` / `description` / `fields` / `thumb` / `footerIcon`),
+  `footerKey` (`footerText` vs `footer`), `fixedBody` (greyed poll preview),
+  `vars` (insert-token buttons), `ph` (placeholder overrides). Contenteditable
+  fields use `x-init` (seed once) + `@input` (write-only) — no cursor jump. A
+  `$watch('e')` keeps the hidden `<input>` populated so htmx serialisation sees
+  it. **`reaction-role.js` and `polls.js` deleted.** `rr-builder.ejs` and
+  `polls.ejs` both `include('partials/embed-editor', …)`; this also finishes the
+  Phase-1-deferred `polls` config form (now `hx-post` to `#module-config`).
+
+- **welcome-channel + msg-builder** → shared `embedList` in `alpine-components.js`
+  + `partials/embed-block.ejs` (one `.wc-embed` preview row, `banner` flag adds the
+  banner-kind branch as sibling `<template x-if>` so the CSS grid children stay
+  direct). `embedList` owns `content` + an ordered `items` list: `x-model`
+  textarea, `x-for` rows, splice reorder, `move`/`remove`/`addEmbed`/`addPreset`/
+  `add`+`removeField`/`pickImg(row,key)`. `$watch('items'|'content'|'links')`
+  writes the surrounding form's `<input name="spec">` (+ an init pass so an
+  untouched Save round-trips). Form lookup is generic (`$el` is the form, or the
+  first `<form>` under `$root`).
+  - welcome-channel: `banner: true`, preset "Add element" cards, `reset()`; form
+    stays full-nav (Save reloads the panel, Publish early-returns a redirect).
+  - msg-builder: `banner: false`, plain "Add embed", plus `links: true` — a
+    `links` sub-list (max 5, `x-model` inputs) serialised as a `{type:'buttons'}`
+    row alongside preserved non-link `keepRows`; output is `{content, embeds, rows}`.
+  **`welcome-channel.js` and `msg-builder.js` deleted.**
+
+- **reminder-builder** → `reminderBuilder` in `alpine-components.js` (tiny: just
+  `msgType` / `mode` / `enableStart` / `enableEnd` toggle state). Tabs are
+  `@click` + `:class`, panes `x-show`, the two `name="content"` textareas use
+  `:disabled` so only the active one submits, the hidden `msgType` / `mode`
+  inputs are `:value`-bound, start/end datetime inputs `:disabled="!enable…"`,
+  weekday chips carry their own `x-data="{ on }"` for the `.on` highlight. The
+  in-place embed editor is now `include('partials/embed-editor', { hidden:'embed' })`.
+  **`reminder-builder.js` deleted.**
+- **temp-voice builder** → `tvName` in `alpine-components.js` (one getter for the
+  live name preview); `tv-builder.ejs` wraps the input + preview in
+  `x-data="tvName(…)"` with `x-model` + `x-text="preview"`. **`tv-builder.js` and
+  `window.TV_NAME` deleted.**
+
+- **cc-builder** (custom-command action tree) → `ccBuilder` in
+  `alpine-components.js`. Reactive `actions` list (synthetic ids for `:key`);
+  `x-for` action cards → `x-if` per type (`reply`/`send` vs `add-role`/
+  `remove-role`), nested `x-for` message blocks, nested `x-for` embed fields; all
+  fields are `x-model` (the compact `.cc-*` form-style embed editor, not the
+  WYSIWYG one), `pickUrl()` prompts for image URLs, `title()` maps type→label,
+  `picking` toggles the add-action type picker. `$watch('actions')` + submit +
+  init write `<input name="actions">`. Type-branch wrappers use
+  `style="display:contents"` so the `.stack` grid stays flat. The advanced-options
+  `chip-picker`s are unchanged. **`cc-builder.js` + its 5 `window.CC*` globals
+  deleted.**
+
+**Done — every builder runs on Alpine; all per-builder scripts are gone.** Only
+`app.js` (Phase 3 target), `htmx-setup.js` and `alpine-components.js` remain in
+`src/web/public/`.
 
 ---
 
-## Phase 3 — Trim `app.js` (~½ day)
+## Phase 3 — Trim `app.js` — DONE
 
-- After Phases 1–2 `app.js` is nearly empty. `syloAction` → gone (htmx).
-  confirm-on-submit → `hx-confirm`. chip/emoji picker → Alpine. Server switcher +
-  toasts → `htmx-setup.js` / small Alpine directives.
-- Keep the `_csrf` form injection only for the remaining plain forms (public
-  pages).
+`app.js` 176 → 52 lines. It now holds only the CSRF plumbing (`_csrf` hidden-input
+injection on plain-form submit + a `window.fetch` wrapper that adds the header for
+raw `fetch` callers like `/health` backup import) and the `data-confirm`
+confirm-on-submit/click handler (~16 plain delete/reset forms opt in; not worth
+converting to htmx).
+
+- **`syloAction`** — deleted (zero callers; htmx replaced it).
+- **toasts** (`window.syloToast` + the toast DOM builder) → moved into
+  `htmx-setup.js`, which was already its only consumer.
+- **emoji picker** → `emojiPicker(guildId)` Alpine component + inline markup in
+  `rr-builder.ejs`. Wrapper carries `x-data` + `@emoji-pick`; the component
+  `$dispatch('emoji-pick', value)` on choose so the wrapper writes `row.emoji`.
+  `@click.outside` closes it; custom emoji fetched once per picker on first open.
+- **server switcher** close-on-outside/Escape → `x-data @click.outside …
+  @keydown.escape.window` on the `<details class="srv-switch">` in `header.ejs`.
+- Added `[x-cloak]{display:none!important}` to `styles.css` and `position:relative`
+  to `.emoji-cellwrap`.
 
 ---
 
-## Phase 4 — Design system + cleanup (~1 week, iterative)
+## Phase 4 — Design system + cleanup
 
 **Goal:** "clean like MEE6". Now the interaction patterns are stable, style them
 once.
@@ -130,18 +295,89 @@ once.
   (htmx `transition:true` / View Transitions API).
 - Do the template pages first (overview + one module-page template) so the 26
   module pages inherit.
-- Optional: Tailwind play-CDN for utility consistency without a real build —
-  otherwise disciplined hand-written CSS with the tokens.
+- Decision: **hand-written CSS + tokens** (no Tailwind). Dark-only for now, but
+  every colour routes through a semantic token so a light palette is a later
+  drop-in. No theme toggle added.
+
+### 4a — foundation — DONE
+
+- **Tokens** added to `:root` in `styles.css`: a 4px spacing scale (`--sp-1..6`),
+  standard field/content widths (`--w-num`, `--w-field-sm`, `--w-field`,
+  `--mw-xs..2xl`), motion (`--dur-1/2`, `--ease`).
+- **Utility layer** (`.u-*`): `u-m0`, `u-mt-0..6`, `u-mb-1..3`, `u-my-1`,
+  `u-grow`, `u-inline`, `u-nowrap`, `u-text-right`, `u-w-num/-field-sm/-field`,
+  `u-mw-xs..2xl`, `u-list`. Plus `[x-cloak]{display:none!important}` (from 3).
+- **Inline-style sweep:** 243 of 265 `style=""` attributes across 42 views
+  replaced with utility classes (values snapped to the scale — 6/10/14px → 8/12/16).
+  The 22 kept are dynamic (`:style` / `<%= %>`), structural (`display:contents`),
+  or genuine one-offs. Done with a char-scanning script (regex over-matched EJS
+  islands on the first try).
+
+### 4b — component polish — DONE
+
+Conservative, no-markup-churn tightening in `styles.css` (applies to every page by
+inheritance):
+
+- **Utility block moved to end of file** so `.u-mw-*` etc. win over component
+  rules — fixes forms that `.stack`'s `max-width:460px` was clipping after the 4a
+  sweep (reminder/automod/settings/polls/tv/msg builders). Added `.u-stack`.
+- **Form controls:** `:focus` now sets an accent border (not just the global
+  `:focus-visible` ring); `:disabled` dims to 0.55 + not-allowed; `select` gets
+  `cursor:pointer`; `datetime-local` picks up the shared control styling;
+  transitions use the motion tokens.
+- **Buttons:** `.btn` (bare, on `<a>` "Discard" links) now has a real ghost look
+  (surface bg, border, inline-flex) instead of rendering as plain link text;
+  grouped with `button.secondary` / `.btn-secondary`. Primary rule re-ordered
+  after ghost so `.btn.btn-primary` still resolves to the gradient. Added
+  `:disabled` opacity to the base.
+- **Cards:** `.card h3` normalised (14px/700); last card in a form/stack drops its
+  bottom margin.
+
+### 4c — templates (started)
+
+The **overview** (`.plugin-*` grid) was reviewed and kept — it is already on
+target (icon chips, 3-line clamped descriptions, hover lift, on/off border
+colour, full-card hit area).
+
+Done so far:
+- **Page/panel hero** — new `guild/_hero-inner.ejs` partial (icon chip + title,
+  `lg` flag for page-level titles). Applied everywhere a guild sub-page had a
+  bare `<h2>`/`<h1>`: the 26 module config pages (SVG icon from the shared
+  `MODULE_ICONS` map via a new `moduleIconName` local, + enable toggle), plus
+  Settings, Audit log, Commands, Moderator, Leaderboard, Ban appeals (all in
+  `guild.ejs`) and the standalone Embed messages / Tickets pages. Every hero icon
+  now matches that page's sidebar row; the old registry/emoji icons are gone.
+  `.mod-hero` CSS unified (`--lg` modifier, trailing toggle/button slot).
+- **Empty-state component** — `.empty` (dashed border, centred, muted). Applied
+  to the "None yet …" boxes on reminders / roles / custom-commands / starboard /
+  temp-voice.
+
+Still open for a later pass: a consistency sweep over the 26 module bodies
+(heading rhythm, `.stack` vs bare, button placement), sidebar micro-polish.
 
 ---
 
-## Phase 5 — Verify + docs (~1 day)
+## Phase 5 — Verify + docs
 
-- Public pages (`/lb`, `/verify`, `/appeal`) still work with JS disabled.
-- CSRF enforced on htmx requests.
-- Add route tests via `createApp()` (also on the 3.0 backlog): a few
-  `HX-Request` fragment assertions.
-- Update the README dashboard/architecture section.
+- **Dev scaffolding removed** — `GET/POST /__htmx-check` in `dashboard.js` and
+  its two views (`htmx-check.ejs`, `partials/htmx-check-body.ejs`) deleted; the
+  now-unused `config` import in `dashboard.js` dropped.
+- **Public pages framework-free** — confirmed `leaderboard.ejs` (serves both
+  `/leaderboard/:id` and `/lb/:slug`), `verify.ejs`, `appeal.ejs` keep their own
+  `<head>` with only `styles.css` (+ Turnstile on the verify challenge), no
+  `partials/header.ejs`, no `hx-*` / `x-data` / `<script>`. They render and
+  submit with JS disabled.
+- **Route tests** — `test/dashboardRoutes.test.js` boots `createApp()` on an
+  ephemeral port against a minimal fake `runtime.client` and asserts, for
+  `/m/afk`: full page vs `#module-config` fragment on `HX-Request`; POST
+  redirects without the header, returns the fragment + an `HX-Trigger` toast with
+  it. New `test/helpers/openMode.js` pins the app to open mode (assigns `""` so
+  `dotenv/config` can't repopulate from a local `.env`). Suite: 164 pass.
+- CSRF: middleware behaviour already covered by `test/csrf.test.js` (open-mode
+  pass-through, session mints a token, header/body token accepted).
+
+**Still to do:** update the README dashboard/architecture section, then flip
+PR #40 to Ready → merge → release-please cuts 3.1.0.
 
 ---
 
