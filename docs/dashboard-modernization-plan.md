@@ -1,6 +1,8 @@
 # Dashboard modernization plan
 
-Status: **not started** · Owner: Ferdinand99 · Created 2026-09-01 (Sylo 3.0.0)
+Status: **Phase 0 done** · Owner: Ferdinand99 · Created 2026-09-01 (Sylo 3.0.0)
+
+Branch: `feat/dashboard-htmx-alpine`.
 
 ## Goal
 
@@ -45,24 +47,36 @@ phase.
 
 ---
 
-## Phase 0 — Foundations (~½ day)
+## Phase 0 — Foundations (~½ day) — DONE
 
 **Goal:** htmx + Alpine loaded, CSRF works over htmx, conventions decided. No
 behaviour change yet.
 
-- Vendor `htmx.min.js` + `alpine.min.js` (pin versions) into
-  `src/web/public/vendor/`. Add `<script defer>` tags to `partials/header.ejs`.
-- `src/web/public/htmx-setup.js`: on `htmx:configRequest`, add `X-CSRF-Token`
-  from the meta tag to every htmx request.
-- Decide the response convention: a module-config POST returns the re-rendered
-  panel fragment (`hx-target="#guild-panel"`, `hx-swap="outerHTML"`) plus a toast
-  via an `HX-Trigger: {"toast":{"msg":"Saved","kind":"ok"}}` response header. A
-  small client listener renders the toast — this replaces the `?msg=` querystring
-  dance.
-- `app.js` and htmx coexist during the migration.
+Shipped:
 
-**Done when:** a throwaway route can return a fragment htmx swaps in, with CSRF
-and a toast.
+- `src/web/public/vendor/{htmx.min.js@2.0.4, alpine.min.js@3.14.8}` + a
+  `vendor/README.md` with source URLs and the upgrade command.
+- `partials/header.ejs`: `<script defer>` for `/vendor/htmx.min.js`,
+  `/htmx-setup.js`, `/vendor/alpine.min.js` (in that order). Only dashboard pages
+  use this partial; the public pages (`/leaderboard`, `/lb`, `/verify`,
+  `/appeal`) have their own `<head>` and stay framework-free.
+- `src/web/public/htmx-setup.js`: adds `X-CSRF-Token` (from the meta tag) to every
+  htmx request via `htmx:configRequest`; bridges an `HX-Trigger` `toast` event to
+  `window.syloToast`; surfaces `htmx:responseError` / `htmx:sendError` as a bad
+  toast so a failed save is never silent.
+- **Convention decided:** a config POST responds — on `HX-Request` — with the
+  re-rendered panel/card fragment (`hx-target` on the panel wrapper,
+  `hx-swap="outerHTML"`) and sets
+  `HX-Trigger: {"toast":{"msg":"…","kind":"ok|bad|info"}}`. Non-htmx requests keep
+  the `res.redirect('?msg=…')` fallback. This replaces the `?msg=` banner dance.
+- **Dev-only sanity route** `GET/POST /__htmx-check` (in `dashboard.js`, gated on
+  `NODE_ENV !== 'production'`) + `views/htmx-check.ejs` +
+  `partials/htmx-check-body.ejs`. Clicking *Bump* swaps the fragment with no
+  reload, pops a toast, and reports that the CSRF header reached the server; an
+  Alpine `x-data` counter is on the same page. **Remove in Phase 5.**
+
+**Verify:** open `/__htmx-check` while logged in → Bump swaps the box, toast
+appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
 
 ---
 

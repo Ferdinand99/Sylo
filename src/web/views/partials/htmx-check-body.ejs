@@ -1,0 +1,10 @@
+<div id="htmx-check-body">
+  <p>Count: <strong><%= count %></strong></p>
+  <% if (csrfSeen !== null) { %>
+    <p>Server received the <code>X-CSRF-Token</code> header: <strong><%= csrfSeen %></strong></p>
+  <% } %>
+  <form hx-post="/__htmx-check" hx-target="#htmx-check-body" hx-swap="outerHTML">
+    <input type="hidden" name="count" value="<%= count %>" />
+    <button type="submit">Bump (htmx)</button>
+  </form>
+</div>

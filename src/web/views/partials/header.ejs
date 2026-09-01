@@ -6,6 +6,9 @@
   <title><%= typeof title !== 'undefined' ? title : 'Sylo' %></title>
   <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><meta name="csrf-token" content="<%= csrfToken %>" /><% } %>
   <link rel="stylesheet" href="/styles.css" />
+  <script src="/vendor/htmx.min.js" defer></script>
+  <script src="/htmx-setup.js" defer></script>
+  <script src="/vendor/alpine.min.js" defer></script>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
