@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.12.0](https://github.com/Ferdinand99/Sylo/compare/v2.11.0...v2.12.0) (2026-09-01)
+
+
+### Features
+
+* automatic database backups, restore and WAL checkpointing ([d3394c3](https://github.com/Ferdinand99/Sylo/commit/d3394c3297443f8135e2bee155c7d1afafb1f1ac))
+* structured logging, /health error history, and CSRF protection ([ee51021](https://github.com/Ferdinand99/Sylo/commit/ee51021f0ae932ad7438ddff13f6f18d8144c9d5))
+
 ## [2.11.0](https://github.com/Ferdinand99/Sylo/compare/v2.10.0...v2.11.0) (2026-08-31)
 
 
