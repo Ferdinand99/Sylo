@@ -6,7 +6,7 @@
 <% var autoOn = picked.length > 0; %>
 <% var pool = roles.filter(function (r) { return !picked.includes(r.id); }); %>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/welcome/config" hx-post="/guilds/<%= guild.id %>/m/welcome/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:640px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/welcome/config" hx-post="/guilds/<%= guild.id %>/m/welcome/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-xl">
   <p class="muted small">Placeholders: <% welcomePlaceholders.forEach(function (p) { %><code><%= p %></code> <% }) %></p>
 
   <div class="mee-row">
@@ -69,7 +69,7 @@
     </div>
   </div>
 
-  <div style="margin-top:12px"><button type="submit">Save</button></div>
+  <div class="u-mt-3"><button type="submit">Save</button></div>
 </form>
 
 <div class="mee-row is-link">

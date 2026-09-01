@@ -23,7 +23,7 @@
     <% } %>
 
     <% if (closed.length) { %>
-      <h2 style="margin-top:20px">Recently closed</h2>
+      <h2 class="u-mt-5">Recently closed</h2>
       <ul class="ticket-list closed">
         <% closed.forEach(function (t) { %>
           <li><a href="/guilds/<%= guild.id %>/tickets/<%= t.id %>">

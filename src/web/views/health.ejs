@@ -30,7 +30,7 @@
       <tbody>
         <% errors.forEach(function (e) { %>
           <tr>
-            <td class="muted" style="white-space:nowrap"><%= e.ago %></td>
+            <td class="muted u-nowrap"><%= e.ago %></td>
             <td class="mono"><%= e.scope || '—' %></td>
             <td><%= e.message %></td>
           </tr>
@@ -98,7 +98,7 @@
     <% } %>
     Snapshots are written to <code>&lt;data&gt;/backups</code> on the mounted volume.
   </p>
-  <div class="btn-row" style="margin:10px 0 4px">
+  <div class="btn-row u-m0 u-mt-3">
     <form method="POST" action="/health/backups">
       <button type="submit">Create backup now</button>
     </form>

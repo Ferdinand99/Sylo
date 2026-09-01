@@ -27,7 +27,7 @@
       <% }) %>
     </select>
 
-    <label class="small" style="margin-top:8px">Announcement channel <span class="muted">— for "In a channel"; blank = wherever they levelled up</span></label>
+    <label class="small u-mt-2">Announcement channel <span class="muted">— for "In a channel"; blank = wherever they levelled up</span></label>
     <select name="announceChannel">
       <option value="">— current channel —</option>
       <% channels.forEach(function (c) { %>
@@ -35,12 +35,12 @@
       <% }) %>
     </select>
 
-    <label class="small" style="margin-top:8px">Level-up announcement message <span class="muted">— <code>{player}</code> <code>{level}</code> <code>{username}</code> <code>{server}</code></span></label>
+    <label class="small u-mt-2">Level-up announcement message <span class="muted">— <code>{player}</code> <code>{level}</code> <code>{username}</code> <code>{server}</code></span></label>
     <textarea name="announceMessage" rows="3" maxlength="2000" id="lvl-msg" placeholder="GG {player}, you just advanced to level {level}!"><%= cfg.announceMessage || '' %></textarea>
-    <div class="muted small" style="text-align:right"><span id="lvl-msg-count">0</span> / 2000</div>
+    <div class="muted small u-text-right"><span id="lvl-msg-count">0</span> / 2000</div>
 
-    <label class="small" style="margin-top:6px">XP cooldown (seconds)</label>
-    <input type="number" name="cooldownSeconds" min="0" max="3600" value="<%= cfg.cooldownSeconds != null ? cfg.cooldownSeconds : 60 %>" style="width:100px" />
+    <label class="small u-mt-2">XP cooldown (seconds)</label>
+    <input class="u-w-field-sm" type="number" name="cooldownSeconds" min="0" max="3600" value="<%= cfg.cooldownSeconds != null ? cfg.cooldownSeconds : 60 %>" />
   </details>
 
   <details class="lvl-sec" open>
@@ -50,13 +50,13 @@
     <label class="rr-mode"><input type="radio" name="stackRewards" value="on" <%= cfg.stackRewards !== false ? 'checked' : '' %> /> <span><strong>Stack previous rewards</strong> — a member can hold several reward roles at once.</span></label>
     <label class="rr-mode"><input type="radio" name="stackRewards" value="" <%= cfg.stackRewards === false ? 'checked' : '' %> /> <span><strong>Remove previous rewards</strong> — a member only keeps the highest reward role.</span></label>
 
-    <label class="small" style="margin-top:8px">Role rewards</label>
+    <label class="small u-mt-2">Role rewards</label>
     <table class="thresholds">
       <thead><tr><th>At level</th><th>Give role</th><th></th></tr></thead>
       <tbody id="rw-rows">
         <% rewards.forEach(function (r) { %>
           <tr>
-            <td><input type="number" name="rw_level" min="1" max="1000" value="<%= r.level %>" style="width:80px" /></td>
+            <td><input class="u-w-num" type="number" name="rw_level" min="1" max="1000" value="<%= r.level %>" /></td>
             <td>
               <select name="rw_role">
                 <% roles.forEach(function (role) { %><option value="<%= role.id %>" <%= role.id === r.roleId ? 'selected' : '' %>><%= role.name %></option><% }) %>
@@ -69,7 +69,7 @@
     </table>
     <div><button type="button" class="secondary" id="rw-add">＋ Add role reward</button></div>
 
-    <label class="checkline" style="margin-top:10px">
+    <label class="checkline u-mt-3">
       <input type="checkbox" name="removeRewardsOnXpLoss" <%= cfg.removeRewardsOnXpLoss ? 'checked' : '' %> />
       Remove a reward role when a member drops below its level (e.g. after Set XP / reset)
     </label>
@@ -101,11 +101,11 @@
     <%- include('../../partials/chip-picker', { field: 'noXpChannels', kind: 'channel', items: channels, selected: noXpC }) %>
   </details>
 
-  <div style="margin-top:14px"><button type="submit">Save leveling settings</button></div>
+  <div class="u-mt-4"><button type="submit">Save leveling settings</button></div>
 </form>
 
 <% if (typeof levelingCommands !== 'undefined' && levelingCommands.length) { %>
-  <details class="lvl-sec" open style="margin-top:16px">
+  <details class="lvl-sec u-mt-4" open>
     <summary>Commands<span class="lvl-chev">▾</span></summary>
     <%- include('../commands', { guild: guild, commands: levelingCommands, roles: roles, channels: channels }) %>
   </details>
@@ -113,7 +113,7 @@
 
 <hr class="sep" />
 
-<h3 style="margin-bottom:4px">Leaderboard preview <span class="muted small">(<%= board.total %> tracked)</span></h3>
+<h3 class="u-mb-1">Leaderboard preview <span class="muted small">(<%= board.total %> tracked)</span></h3>
 <% if (board.rows.length === 0) { %>
   <p class="muted">No XP earned yet.</p>
 <% } else { %>
@@ -133,17 +133,17 @@
   </table>
 <% } %>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/leveling/xp" class="row-form" style="margin-top:10px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/leveling/xp" class="row-form u-mt-3">
   <label class="small">Set XP for user</label>
-  <input type="text" name="userId" placeholder="user ID or @mention" style="width:200px" />
-  <input type="number" name="xp" min="0" placeholder="xp" style="width:110px" />
+  <input class="u-w-field" type="text" name="userId" placeholder="user ID or @mention" />
+  <input class="u-w-field-sm" type="number" name="xp" min="0" placeholder="xp" />
   <button type="submit">Update</button>
   <button type="submit" name="reset" value="true" class="secondary" data-confirm="Wipe ALL leveling data for this server?">Reset all</button>
 </form>
 
 <template id="rw-template">
   <tr>
-    <td><input type="number" name="rw_level" min="1" max="1000" value="5" style="width:80px" /></td>
+    <td><input class="u-w-num" type="number" name="rw_level" min="1" max="1000" value="5" /></td>
     <td>
       <select name="rw_role">
         <% roles.forEach(function (role) { %><option value="<%= role.id %>"><%= role.name %></option><% }) %>

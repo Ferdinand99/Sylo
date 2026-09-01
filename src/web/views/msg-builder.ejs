@@ -20,13 +20,13 @@
   </div>
 <% } %>
 
-<form method="POST" action="/guilds/<%= guildId %>/messages/<%= isNew ? 'new' : rec.id %>" id="mb-form" class="stack" style="max-width:680px"
+<form method="POST" action="/guilds/<%= guildId %>/messages/<%= isNew ? 'new' : rec.id %>" id="mb-form" class="stack u-mw-xl"
       x-data="embedList(<%= JSON.stringify({ max: 10, links: true, spec: (rec.spec || { content: '', embeds: [], rows: [] }) }) %>)">
   <input type="hidden" name="spec" id="mb-spec" />
 
   <section class="card stack">
     <label class="small">Channel</label>
-    <select name="channelId" style="max-width:420px">
+    <select class="u-mw-md" name="channelId">
       <option value="">— select a channel —</option>
       <% channels.forEach(function (c) { %>
         <option value="<%= c.id %>" <%= c.id === rec.channel_id ? 'selected' : '' %>>#<%= c.name %></option>
@@ -36,10 +36,10 @@
   </section>
 
   <section class="card">
-    <h2 style="margin:0 0 6px">Message</h2>
+    <h2 class="u-m0 u-mb-2">Message</h2>
     <label class="small">Text above the embeds <span class="muted">— optional</span></label>
     <textarea x-model="content" rows="2" placeholder="Write your message here…"></textarea>
-    <div class="wc-stage" style="margin-top:10px">
+    <div class="wc-stage u-mt-3">
       <template x-if="!items.length">
         <p class="muted wc-empty">No embeds yet — “Add embed” below.</p>
       </template>
@@ -47,11 +47,11 @@
         <%- include('partials/embed-block', { banner: false }) %>
       </template>
     </div>
-    <button type="button" class="secondary" style="margin-top:10px" @click="addEmbed()" :disabled="full">＋ Add embed</button>
+    <button type="button" class="secondary u-mt-3" @click="addEmbed()" :disabled="full">＋ Add embed</button>
   </section>
 
   <section class="card">
-    <h2 style="margin:0 0 6px">Link buttons <span class="muted small">— optional, up to 5</span></h2>
+    <h2 class="u-m0 u-mb-2">Link buttons <span class="muted small">— optional, up to 5</span></h2>
     <div id="mb-links" class="stack">
       <template x-for="(link, i) in links" :key="i">
         <div class="mb-link">

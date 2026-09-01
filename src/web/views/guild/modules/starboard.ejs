@@ -9,7 +9,7 @@
 </p>
 
 <div class="rr-list-head">
-  <h3 style="margin:0">Boards</h3>
+  <h3 class="u-m0">Boards</h3>
   <a class="btn btn-primary" href="/guilds/<%= guild.id %>/m/starboard/sb/new">＋ New board</a>
 </div>
 
@@ -31,7 +31,7 @@
       </div>
       <div class="btn-row">
         <a class="plugin-btn" href="/guilds/<%= guild.id %>/m/starboard/sb/<%= b.id %>">Edit</a>
-        <form method="POST" action="/guilds/<%= guild.id %>/m/starboard/sb/<%= b.id %>/delete" style="display:inline">
+        <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/m/starboard/sb/<%= b.id %>/delete">
           <button type="submit" class="danger" data-confirm="Delete this board? Existing starred posts stay in the channel.">Delete</button>
         </form>
       </div>

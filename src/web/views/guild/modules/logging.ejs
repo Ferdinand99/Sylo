@@ -2,7 +2,7 @@
       hx-post="/guilds/<%= guild.id %>/m/logging/config"
       hx-target="<%= typeof fragTarget !== 'undefined' ? fragTarget : '#module-config' %>"
       hx-swap="<%= typeof fragSwap !== 'undefined' ? fragSwap : 'outerHTML' %>"
-      class="stack" style="max-width:520px">
+      class="stack u-mw-lg">
   <label>Log channel</label>
   <select name="channel">
     <option value="">— none —</option>
@@ -11,7 +11,7 @@
     <% }) %>
   </select>
 
-  <label style="margin-top:6px">Events to log</label>
+  <label class="u-mt-2">Events to log</label>
   <div class="check-grid">
     <% logEvents.forEach(function (pair) { var key = pair[0], name = pair[1]; %>
       <label class="check">

@@ -1,6 +1,6 @@
 <% var stickies = (moduleConfig && Array.isArray(moduleConfig.stickies)) ? moduleConfig.stickies : []; %>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/sticky/config" hx-post="/guilds/<%= guild.id %>/m/sticky/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:600px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/sticky/config" hx-post="/guilds/<%= guild.id %>/m/sticky/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-lg">
   <p class="muted small">Each channel can have one sticky message. It is re-posted at the bottom whenever someone else writes in that channel.</p>
 
   <div id="sticky-rows">
@@ -18,7 +18,7 @@
     <% }) %>
   </div>
   <div><button type="button" class="secondary" id="sticky-add">+ Add channel</button></div>
-  <div style="margin-top:8px"><button type="submit">Save</button></div>
+  <div class="u-mt-2"><button type="submit">Save</button></div>
 </form>
 
 <template id="sticky-template">

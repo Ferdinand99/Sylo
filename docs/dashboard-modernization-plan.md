@@ -295,8 +295,29 @@ once.
   (htmx `transition:true` / View Transitions API).
 - Do the template pages first (overview + one module-page template) so the 26
   module pages inherit.
-- Optional: Tailwind play-CDN for utility consistency without a real build —
-  otherwise disciplined hand-written CSS with the tokens.
+- Decision: **hand-written CSS + tokens** (no Tailwind). Dark-only for now, but
+  every colour routes through a semantic token so a light palette is a later
+  drop-in. No theme toggle added.
+
+### 4a — foundation — DONE
+
+- **Tokens** added to `:root` in `styles.css`: a 4px spacing scale (`--sp-1..6`),
+  standard field/content widths (`--w-num`, `--w-field-sm`, `--w-field`,
+  `--mw-xs..2xl`), motion (`--dur-1/2`, `--ease`).
+- **Utility layer** (`.u-*`): `u-m0`, `u-mt-0..6`, `u-mb-1..3`, `u-my-1`,
+  `u-grow`, `u-inline`, `u-nowrap`, `u-text-right`, `u-w-num/-field-sm/-field`,
+  `u-mw-xs..2xl`, `u-list`. Plus `[x-cloak]{display:none!important}` (from 3).
+- **Inline-style sweep:** 243 of 265 `style=""` attributes across 42 views
+  replaced with utility classes (values snapped to the scale — 6/10/14px → 8/12/16).
+  The 22 kept are dynamic (`:style` / `<%= %>`), structural (`display:contents`),
+  or genuine one-offs. Done with a char-scanning script (regex over-matched EJS
+  islands on the first try).
+
+### 4b — components (next)
+
+`.card` / `.btn` system / form controls / `.table` / `.switch` / empty-state;
+consistent focus/hover/transition via the motion tokens. Then restyle the
+**overview** and the **module-page shell** so the 26 module pages inherit.
 
 ---
 

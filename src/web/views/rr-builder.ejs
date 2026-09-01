@@ -43,7 +43,7 @@
 
   <section class="card">
     <h2>Channel</h2>
-    <select name="channelId" required style="max-width:420px">
+    <select class="u-mw-md" name="channelId" required>
       <option value="">— select a channel —</option>
       <% channels.forEach(function (c) { %>
         <option value="<%= c.id %>" <%= c.id === rm.channelId ? 'selected' : '' %>>#<%= c.name %></option>
@@ -55,7 +55,7 @@
     <h2>Message</h2>
     <label class="small">Message text <span class="muted">— optional, above the embed</span></label>
     <textarea id="rr-content" name="message" rows="2" placeholder="Pick your roles below!"><%= rm.message || '' %></textarea>
-    <div style="margin-top:8px">
+    <div class="u-mt-2">
       <%- include('partials/embed-editor', { hidden: 'embed', spec: rm.embed || {} }) %>
     </div>
   </section>
@@ -67,12 +67,12 @@
       Only one role from this set at a time (picking one removes the others)
     </label>
 
-    <div x-show="style === 'select'" style="margin-top:8px">
+    <div class="u-mt-2" x-show="style === 'select'">
       <label class="small">Dropdown placeholder</label>
-      <input type="text" name="rr_placeholder" value="<%= rm.placeholder || '' %>" placeholder="Pick your roles" maxlength="150" style="max-width:420px" />
+      <input class="u-mw-md" type="text" name="rr_placeholder" value="<%= rm.placeholder || '' %>" placeholder="Pick your roles" maxlength="150" />
       <div class="rr-selrange">
-        <label class="small">Min picks <input type="number" name="rr_selmin" min="0" max="25" value="<%= rm.selMin || 0 %>" style="width:70px" /></label>
-        <label class="small">Max picks <input type="number" name="rr_selmax" min="0" max="25" value="<%= rm.selMax || 0 %>" style="width:70px" /> <span class="muted">— 0 = no limit</span></label>
+        <label class="small">Min picks <input class="u-w-num" type="number" name="rr_selmin" min="0" max="25" value="<%= rm.selMin || 0 %>" /></label>
+        <label class="small">Max picks <input class="u-w-num" type="number" name="rr_selmax" min="0" max="25" value="<%= rm.selMax || 0 %>" /> <span class="muted">— 0 = no limit</span></label>
       </div>
     </div>
 

@@ -11,8 +11,8 @@
 </p>
 
 <section class="card">
-  <h3 style="margin:0 0 8px">Commands</h3>
-  <ul class="muted small" style="margin:0; padding-left:18px; line-height:1.7">
+  <h3 class="u-m0 u-mb-2">Commands</h3>
+  <ul class="muted small u-list">
     <li><code>/giveaway start prize:… duration:30m</code> — plus optional <code>winners:</code> and <code>required_role:</code>.</li>
     <li><code>/giveaway end id:…</code> — draw the winners now.</li>
     <li><code>/giveaway reroll id:… [count:]</code> — pick new winners for a finished giveaway (excludes the previous ones).</li>
@@ -20,11 +20,11 @@
   </ul>
 </section>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/giveaways/config" hx-post="/guilds/<%= guild.id %>/m/giveaways/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:520px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/giveaways/config" hx-post="/guilds/<%= guild.id %>/m/giveaways/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-lg">
   <section class="card stack">
-    <h3 style="margin:0">Winner announcement</h3>
+    <h3 class="u-m0">Winner announcement</h3>
     <label class="small">Ping with the winner message</label>
-    <select name="ping" style="max-width:260px">
+    <select class="u-mw-xs" name="ping">
       <option value="none" <%= ping === 'none' ? 'selected' : '' %>>No ping</option>
       <option value="here" <%= ping === 'here' ? 'selected' : '' %>>@here</option>
       <option value="everyone" <%= ping === 'everyone' ? 'selected' : '' %>>@everyone</option>
@@ -32,12 +32,12 @@
     <label class="checkline">
       <input type="checkbox" name="dmWinners" <%= cfg.dmWinners ? 'checked' : '' %> /> Also DM each winner
     </label>
-    <div style="margin-top:6px"><button type="submit">Save</button></div>
+    <div class="u-mt-2"><button type="submit">Save</button></div>
   </section>
 </form>
 
 <section class="card">
-  <h3 style="margin:0 0 8px">Active giveaways <span class="muted small">(<%= active.length %>)</span></h3>
+  <h3 class="u-m0 u-mb-2">Active giveaways <span class="muted small">(<%= active.length %>)</span></h3>
   <% if (!active.length) { %>
     <p class="muted small">None running. Start one with <code>/giveaway start</code>.</p>
   <% } else { %>
@@ -65,7 +65,7 @@
 
 <% if (ended.length) { %>
 <section class="card">
-  <h3 style="margin:0 0 8px">Recently ended</h3>
+  <h3 class="u-m0 u-mb-2">Recently ended</h3>
   <div class="stack">
     <% ended.forEach(function (g) { %>
       <div class="cmd-override">
@@ -77,9 +77,9 @@
           </span>
         </div>
         <div class="btn-row">
-          <form method="POST" action="/guilds/<%= guild.id %>/m/giveaways/<%= g.id %>/reroll" class="btn-row" style="margin:0"
+          <form method="POST" action="/guilds/<%= guild.id %>/m/giveaways/<%= g.id %>/reroll" class="btn-row u-m0"
                 data-confirm="Reroll giveaway #<%= g.id %>?">
-            <input type="number" name="count" value="1" min="1" max="20" style="width:64px" />
+            <input class="u-w-num" type="number" name="count" value="1" min="1" max="20" />
             <button type="submit">Reroll</button>
           </form>
         </div>

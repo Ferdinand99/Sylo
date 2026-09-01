@@ -4,7 +4,7 @@
 <% var chName = function (id) { var c = channels.find(function (x) { return x.id === id; }); return c ? c.name : id; }; %>
 
 <div class="rr-list-head">
-  <h3 style="margin:0">Reaction roles</h3>
+  <h3 class="u-m0">Reaction roles</h3>
   <a class="btn btn-primary" href="/guilds/<%= guild.id %>/m/roles/rr/new">＋ New reaction role</a>
 </div>
 
@@ -22,7 +22,7 @@
       </div>
       <div class="btn-row">
         <a class="plugin-btn" href="/guilds/<%= guild.id %>/m/roles/rr/<%= rm.id %>">Edit</a>
-        <form method="POST" action="/guilds/<%= guild.id %>/m/roles/rr/<%= rm.id %>/delete" style="display:inline">
+        <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/m/roles/rr/<%= rm.id %>/delete">
           <button type="submit" class="danger" data-confirm="Delete this reaction-role set and its message?">Delete</button>
         </form>
       </div>
@@ -32,9 +32,9 @@
 
 <hr class="sep" />
 
-<h3 style="margin:4px 0">Autoroles on join</h3>
+<h3 class="u-my-1">Autoroles on join</h3>
 <p class="muted small">Given automatically when a member joins. Also editable on the <a href="/guilds/<%= guild.id %>/m/welcome">Welcome &amp; goodbye</a> page.</p>
-<form method="POST" action="/guilds/<%= guild.id %>/m/roles/config" hx-post="/guilds/<%= guild.id %>/m/roles/config" hx-target="#module-config" hx-swap="outerHTML" class="stack" style="max-width:520px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/roles/config" hx-post="/guilds/<%= guild.id %>/m/roles/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-lg">
   <%- include('../../partials/chip-picker', { field: 'autoroles', kind: 'role', items: roles, selected: autoroles }) %>
-  <div style="margin-top:10px"><button type="submit">Save autoroles</button></div>
+  <div class="u-mt-3"><button type="submit">Save autoroles</button></div>
 </form>

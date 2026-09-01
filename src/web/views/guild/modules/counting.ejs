@@ -7,7 +7,7 @@
 
 <form method="POST" action="/guilds/<%= guild.id %>/m/counting/config"
       hx-post="/guilds/<%= guild.id %>/m/counting/config" hx-target="#module-config" hx-swap="outerHTML"
-      class="stack" style="max-width:560px">
+      class="stack u-mw-lg">
   <label>Counting channel</label>
   <select name="channelId">
     <option value="">— none —</option>
@@ -16,7 +16,7 @@
     <% }) %>
   </select>
 
-  <label class="check" style="margin-top:8px">
+  <label class="check u-mt-2">
     <input type="checkbox" name="react" <%= cfg.react !== false ? 'checked' : '' %> />
     React with ✅ on a correct count (🎉 on a new record)
   </label>
@@ -29,21 +29,21 @@
     Reset to 0 when someone posts the wrong number
   </label>
 
-  <div style="margin-top:10px"><button type="submit">Save</button></div>
+  <div class="u-mt-3"><button type="submit">Save</button></div>
 </form>
 
 <hr class="sep" />
 
-<h3 style="margin-bottom:4px">Current game</h3>
+<h3 class="u-mb-1">Current game</h3>
 <p class="muted small">
   Count is at <strong><%= st.current %></strong> · best streak <strong><%= st.record %></strong>
   <% if (st.last_user_id) { %> · last number by <span class="mono">&lt;@<%= st.last_user_id %>&gt;</span><% } %>
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/counting/count" class="row-form" style="margin-top:6px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/counting/count" class="row-form u-mt-2">
   <label class="small">Set the count to</label>
-  <input type="number" name="current" min="0" value="<%= st.current %>" style="width:120px" />
+  <input class="u-w-field-sm" type="number" name="current" min="0" value="<%= st.current %>" />
   <button type="submit">Update</button>
   <button type="submit" name="reset" value="true" class="secondary" data-confirm="Reset the count to 0?">Reset to 0</button>
 </form>
-<p class="muted small" style="margin-top:6px">The next number posted in the channel must be one higher than this. The last-counter lock is cleared, so anyone may post it.</p>
+<p class="muted small u-mt-2">The next number posted in the channel must be one higher than this. The last-counter lock is cleared, so anyone may post it.</p>

@@ -7,7 +7,7 @@
 
 <form method="POST" action="/guilds/<%= guild.id %>/m/afk/config"
       hx-post="/guilds/<%= guild.id %>/m/afk/config" hx-target="#module-config" hx-swap="outerHTML"
-      class="stack" style="max-width:520px">
+      class="stack u-mw-lg">
   <label class="check">
     <input type="checkbox" name="setNickname" <%= cfg.setNickname !== false ? 'checked' : '' %> />
     Prefix their nickname with <code>[AFK]</code> (needs Manage Nicknames)
@@ -17,12 +17,12 @@
     Reply in-channel when an AFK member is mentioned
   </label>
 
-  <label style="margin-top:8px">Ignore channels <span class="muted small">— AFK isn't cleared or announced here</span></label>
+  <label class="u-mt-2">Ignore channels <span class="muted small">— AFK isn't cleared or announced here</span></label>
   <select name="ignoreChannels" multiple size="4">
     <% channels.forEach(function (c) { %>
       <option value="<%= c.id %>" <%= ig.includes(c.id) ? 'selected' : '' %>>#<%= c.name %></option>
     <% }) %>
   </select>
 
-  <div style="margin-top:12px"><button type="submit">Save</button></div>
+  <div class="u-mt-3"><button type="submit">Save</button></div>
 </form>

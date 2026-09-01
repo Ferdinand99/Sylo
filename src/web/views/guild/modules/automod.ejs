@@ -20,12 +20,12 @@
       hx-post="/guilds/<%= guild.id %>/m/automod/config"
       hx-target="<%= typeof fragTarget !== 'undefined' ? fragTarget : '#module-config' %>"
       hx-swap="<%= typeof fragSwap !== 'undefined' ? fragSwap : 'outerHTML' %>"
-      class="stack" style="max-width:700px">
+      class="stack u-mw-2xl">
   <div class="am-rules">
     <% automodRules.forEach(function (pair) { var key = pair[0], label = pair[1], hint = pair[2]; %>
       <div class="am-rule">
         <div class="am-rule-main">
-          <div><strong><%= label %></strong><p class="muted small" style="margin:2px 0 0"><%= hint %></p></div>
+          <div><strong><%= label %></strong><p class="muted small u-m0 u-mt-1"><%= hint %></p></div>
           <select name="r_<%= key %>_mode">
             <% MODES.forEach(function (m) { %><option value="<%= m[0] %>" <%= m[0] === mode(key) ? 'selected' : '' %>><%= m[1] %></option><% }) %>
           </select>
@@ -37,15 +37,15 @@
               <label class="small">Allowed domains <span class="muted">— blank blocks all links</span></label>
               <textarea name="r_links_allowed" rows="2" placeholder="youtube.com, twitch.tv"><%= (R.links && Array.isArray(R.links.allowed)) ? R.links.allowed.join(', ') : '' %></textarea>
             <% } else if (key === 'spam') { %>
-              <label class="small">Max <input type="number" name="r_spam_max" min="2" max="30" style="width:60px" value="<%= (R.spam && R.spam.max) || 5 %>" /> messages per <input type="number" name="r_spam_seconds" min="1" max="60" style="width:60px" value="<%= (R.spam && R.spam.seconds) || 5 %>" /> s</label>
+              <label class="small">Max <input class="u-w-num" type="number" name="r_spam_max" min="2" max="30" value="<%= (R.spam && R.spam.max) || 5 %>" /> messages per <input class="u-w-num" type="number" name="r_spam_seconds" min="1" max="60" value="<%= (R.spam && R.spam.seconds) || 5 %>" /> s</label>
             <% } else if (key === 'mentions') { %>
-              <label class="small">Max mentions <input type="number" name="r_mentions_max" min="1" max="50" style="width:60px" value="<%= (R.mentions && R.mentions.max) || 5 %>" /></label>
+              <label class="small">Max mentions <input class="u-w-num" type="number" name="r_mentions_max" min="1" max="50" value="<%= (R.mentions && R.mentions.max) || 5 %>" /></label>
             <% } else if (key === 'caps') { %>
-              <label class="small">At least <input type="number" name="r_caps_minLength" min="4" max="200" style="width:60px" value="<%= (R.caps && R.caps.minLength) || 10 %>" /> letters, <input type="number" name="r_caps_percent" min="50" max="100" style="width:60px" value="<%= (R.caps && R.caps.percent) || 70 %>" />% uppercase</label>
+              <label class="small">At least <input class="u-w-num" type="number" name="r_caps_minLength" min="4" max="200" value="<%= (R.caps && R.caps.minLength) || 10 %>" /> letters, <input class="u-w-num" type="number" name="r_caps_percent" min="50" max="100" value="<%= (R.caps && R.caps.percent) || 70 %>" />% uppercase</label>
             <% } else if (key === 'emojis') { %>
-              <label class="small">Max emojis <input type="number" name="r_emojis_max" min="1" max="50" style="width:60px" value="<%= (R.emojis && R.emojis.max) || 8 %>" /></label>
+              <label class="small">Max emojis <input class="u-w-num" type="number" name="r_emojis_max" min="1" max="50" value="<%= (R.emojis && R.emojis.max) || 8 %>" /></label>
             <% } else if (key === 'spoilers') { %>
-              <label class="small">Max spoiler tags <input type="number" name="r_spoilers_max" min="1" max="30" style="width:60px" value="<%= (R.spoilers && R.spoilers.max) || 4 %>" /></label>
+              <label class="small">Max spoiler tags <input class="u-w-num" type="number" name="r_spoilers_max" min="1" max="30" value="<%= (R.spoilers && R.spoilers.max) || 4 %>" /></label>
             <% } else if (key === 'words') { %>
               <label class="small">Words / phrases <span class="muted">— comma or newline separated</span></label>
               <textarea name="r_words_list" rows="2" placeholder="badword, another phrase"><%= (R.words && Array.isArray(R.words.list)) ? R.words.list.join(', ') : '' %></textarea>
@@ -59,10 +59,10 @@
   <hr class="sep" />
 
   <label class="small">Timeout length for the "Delete + Timeout" action (minutes)</label>
-  <input type="number" name="timeoutMinutes" min="1" max="40320" style="width:100px" value="<%= cfg.timeoutMinutes || 10 %>" />
+  <input class="u-w-field-sm" type="number" name="timeoutMinutes" min="1" max="40320" value="<%= cfg.timeoutMinutes || 10 %>" />
 
-  <label style="margin-top:10px">Exempt channels <span class="muted small">— automod never acts here</span></label>
+  <label class="u-mt-3">Exempt channels <span class="muted small">— automod never acts here</span></label>
   <%- include('../../partials/chip-picker', { field: 'exemptChannels', kind: 'channel', items: channels, selected: exC }) %>
 
-  <div style="margin-top:14px"><button type="submit">Save automod</button></div>
+  <div class="u-mt-4"><button type="submit">Save automod</button></div>
 </form>

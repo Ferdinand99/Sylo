@@ -8,13 +8,13 @@
   var PM_BODY = '<div class="poll-body">' +
     '<div class="poll-body-q">{question}</div>' +
     '<div>🇦&nbsp; First option</div><div>🇧&nbsp; Second option</div><div>🇨&nbsp; …</div>' +
-    '<div class="muted small" style="margin-top:6px">Sylo fills the question &amp; choices here</div>' +
+    '<div class="muted small u-mt-2">Sylo fills the question &amp; choices here</div>' +
     '</div>';
   var RM_BODY = '<div class="poll-body">' +
     '<div class="poll-body-q">{question}</div>' +
     '<div>🇦&nbsp; <b>First option</b><br>██████░░░░  60.0% · 6 votes</div>' +
     '<div>🇧&nbsp; <b>Second option</b><br>████░░░░░░  40.0% · 4 votes</div>' +
-    '<div class="muted small" style="margin-top:6px">Sylo fills the results here</div>' +
+    '<div class="muted small u-mt-2">Sylo fills the results here</div>' +
     '</div>';
   var EMBED_OPTS = { content: true, author: false, description: false, fields: false, thumb: false, footerIcon: false, footerKey: 'footer', defaultColor: '#5b7cfa' };
 %>
@@ -25,26 +25,26 @@
 </p>
 
 <section class="card">
-  <h3 style="margin:0 0 8px">Commands</h3>
-  <ul class="muted small" style="margin:0; padding-left:18px; line-height:1.7">
+  <h3 class="u-m0 u-mb-2">Commands</h3>
+  <ul class="muted small u-list">
     <li><code>/poll question:… choices:A | B | C</code> — plus optional <code>duration:</code> (e.g. <code>2h</code>),
       <code>multiple:</code> (allow more than one vote) and <code>max_votes:</code>.</li>
     <li><code>/poll-end [message]</code> — closes the latest poll in the channel (or a specific one) and posts results.
       Creator or Manage Messages only.</li>
   </ul>
-  <p class="small" style="margin:8px 0 0">Votes are cast with these reactions:
+  <p class="small u-m0 u-mt-2">Votes are cast with these reactions:
     <span style="letter-spacing:2px"><% LETTERS.forEach(function (l) { %><%= l %><% }) %></span>
   </p>
 </section>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/polls/config" id="polls-form" class="stack" style="max-width:600px"
+<form method="POST" action="/guilds/<%= guild.id %>/m/polls/config" id="polls-form" class="stack u-mw-lg"
       hx-post="/guilds/<%= guild.id %>/m/polls/config" hx-target="#module-config" hx-swap="outerHTML">
   <input type="hidden" name="pm_json" id="pm-json" />
   <input type="hidden" name="rm_json" id="rm-json" />
 
   <section class="card stack">
-    <h3 style="margin:0">Who can vote</h3>
-    <select name="voteRoleMode" style="max-width:320px">
+    <h3 class="u-m0">Who can vote</h3>
+    <select class="u-mw-sm" name="voteRoleMode">
       <option value="allow" <%= mode !== 'deny' ? 'selected' : '' %>>Everyone except the roles below</option>
       <option value="deny" <%= mode === 'deny' ? 'selected' : '' %>>Only members with a role below</option>
     </select>
@@ -53,7 +53,7 @@
   </section>
 
   <section class="card">
-    <h3 style="margin:0 0 2px">Polls message</h3>
+    <h3 class="u-m0">Polls message</h3>
     <p class="muted small">How a live poll looks. Click a field to edit it; Sylo fills the greyed-out body.</p>
     <%- include('../../partials/embed-editor', Object.assign({
       hidden: 'pm_json', spec: pm, fixedBody: PM_BODY,
@@ -68,7 +68,7 @@
   </section>
 
   <section class="card">
-    <h3 style="margin:0 0 2px">Results message</h3>
+    <h3 class="u-m0">Results message</h3>
     <p class="muted small">Posted when a poll closes.</p>
     <%- include('../../partials/embed-editor', Object.assign({
       hidden: 'rm_json', spec: rm, fixedBody: RM_BODY,

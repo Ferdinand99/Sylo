@@ -26,7 +26,7 @@
   };
 %>
 
-<form method="POST" action="/guilds/<%= guildId %>/m/custom-commands/cmd" id="cc-form" class="stack" style="max-width:680px"
+<form method="POST" action="/guilds/<%= guildId %>/m/custom-commands/cmd" id="cc-form" class="stack u-mw-xl"
       x-data="ccBuilder(<%= JSON.stringify(_cc) %>)">
   <input type="hidden" name="id" value="<%= cmd.id %>" />
   <input type="hidden" name="actions" />
@@ -47,7 +47,7 @@
 
   <section class="card">
     <div class="cc-actions-head">
-      <h2 style="margin:0">Command actions</h2>
+      <h2 class="u-m0">Command actions</h2>
     </div>
     <p class="muted small">Actions run in order — use the ↑ ↓ buttons to reorder.</p>
 
@@ -156,15 +156,15 @@
 
   <details class="card cc-advanced">
     <summary><strong>Advanced options and permissions</strong> <span class="muted small">— optional</span></summary>
-    <div class="stack" style="margin-top:12px">
+    <div class="stack u-mt-3">
       <label class="small">Only these roles may use it <span class="muted">— empty = everyone</span></label>
       <%- include('partials/chip-picker', { field: 'allowedRoles', kind: 'role', items: roles, selected: cmd.allowedRoles }) %>
 
-      <label class="small" style="margin-top:8px">Only in these channels <span class="muted">— empty = anywhere</span></label>
+      <label class="small u-mt-2">Only in these channels <span class="muted">— empty = anywhere</span></label>
       <%- include('partials/chip-picker', { field: 'allowedChannels', kind: 'channel', items: channels, selected: cmd.allowedChannels }) %>
 
-      <label class="small" style="margin-top:8px">Per-user cooldown (seconds)</label>
-      <input type="number" name="cooldownSeconds" min="0" max="86400" value="<%= cmd.cooldownSeconds || 0 %>" style="max-width:120px" />
+      <label class="small u-mt-2">Per-user cooldown (seconds)</label>
+      <input class="u-w-field-sm" type="number" name="cooldownSeconds" min="0" max="86400" value="<%= cmd.cooldownSeconds || 0 %>" />
     </div>
   </details>
 </form>

@@ -18,7 +18,7 @@
         <form method="POST" action="/verify/<%= guildId %>" class="stack" style="align-items:center">
           <input type="hidden" name="t" value="<%= token %>" />
           <div class="cf-turnstile" data-sitekey="<%= siteKey %>" data-theme="dark"></div>
-          <div style="margin-top:10px"><button type="submit">Verify</button></div>
+          <div class="u-mt-3"><button type="submit">Verify</button></div>
         </form>
       <% } else if (state === 'done') { %>
         <h1 class="page-title">✅ Verified</h1>

@@ -14,7 +14,7 @@
 
 <section class="card">
   <h2>Identity</h2>
-  <form method="POST" action="/settings/identity" class="stack" style="max-width:560px">
+  <form method="POST" action="/settings/identity" class="stack u-mw-lg">
     <div class="bp-identity">
       <div class="bp-avatar">
         <img src="<%= bot.avatar %>" alt="bot avatar" />
@@ -26,15 +26,15 @@
       </div>
     </div>
 
-    <label class="small" style="margin-top:6px">Banner image URL <span class="muted">— optional; not all bots can set one</span></label>
+    <label class="small u-mt-2">Banner image URL <span class="muted">— optional; not all bots can set one</span></label>
     <input type="url" name="bannerUrl" placeholder="https://…/banner.png" />
     <% if (bot.banner) { %><img src="<%= bot.banner %>" alt="current banner" class="bp-banner" /><% } %>
 
-    <label class="small" style="margin-top:6px">Username</label>
+    <label class="small u-mt-2">Username</label>
     <input type="text" name="username" maxlength="32" value="<%= bot.username %>" />
     <p class="muted small">Discord only allows about <strong>2 username changes per hour</strong>. Leave it as-is to skip.</p>
 
-    <div style="margin-top:10px"><button type="submit">Save identity</button></div>
+    <div class="u-mt-3"><button type="submit">Save identity</button></div>
   </form>
 </section>
 
@@ -47,7 +47,7 @@
     are replaced with live counts and refreshed every 10 minutes.
   </p>
 
-  <form method="POST" action="/settings/presence" class="stack" style="max-width:520px">
+  <form method="POST" action="/settings/presence" class="stack u-mw-lg">
     <label>Online status</label>
     <select name="status">
       <% presenceStatuses.forEach(function (s) { %>
@@ -68,7 +68,7 @@
     <label>Text</label>
     <input type="text" name="text" maxlength="128" value="<%= presence.text %>" placeholder="e.g. over {servers} servers" />
 
-    <div style="margin-top:10px"><button type="submit">Save presence</button></div>
+    <div class="u-mt-3"><button type="submit">Save presence</button></div>
   </form>
 </section>
 

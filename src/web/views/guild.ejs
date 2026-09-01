@@ -112,8 +112,8 @@
       <h2>Settings</h2>
       <p class="muted">Server-wide settings for Sylo. Bot-identity (name, avatar, activity) lives in <a href="/settings">Bot Personalizer</a>.</p>
 
-      <form method="POST" action="/guilds/<%= guild.id %>/settings" class="stack" style="max-width:560px">
-        <h3 style="margin:14px 0 2px">Bot masters</h3>
+      <form method="POST" action="/guilds/<%= guild.id %>/settings" class="stack u-mw-lg">
+        <h3 class="u-m0 u-mt-4">Bot masters</h3>
         <p class="muted small">Roles that can manage Sylo's dashboard for this server — full control, so give it
           only to trusted staff. They reach the dashboard via a direct link.</p>
 
@@ -128,10 +128,10 @@
         </div>
         <p class="muted small">Any role with the Administrator permission is always a bot master.</p>
 
-        <label class="small" style="margin-top:8px">Additional bot master roles</label>
+        <label class="small u-mt-2">Additional bot master roles</label>
         <%- include('partials/chip-picker', { field: 'botMasterRoles', kind: 'role', items: botMasters.concat(rolePool), selected: botMasters.map(function (r) { return r.id; }) }) %>
 
-        <h3 style="margin:16px 0 2px">Moderation log channel</h3>
+        <h3 class="u-m0 u-mt-4">Moderation log channel</h3>
         <select name="modlogChannelId">
           <option value="">— disabled —</option>
           <% channels.forEach(function (c) { %>
@@ -139,18 +139,18 @@
           <% }) %>
         </select>
 
-        <h3 style="margin:16px 0 2px">Default embed colour</h3>
+        <h3 class="u-m0 u-mt-4">Default embed colour</h3>
         <p class="muted small">Used for Sylo's branded embeds (welcome messages and more).</p>
         <div class="settings-color">
           <input type="color" name="embedColor" value="<%= embedColorHex %>" />
           <label class="checkline"><input type="checkbox" name="embedColorReset" /> Reset to Sylo blue</label>
         </div>
 
-        <div style="margin-top:14px"><button type="submit">Save settings</button></div>
+        <div class="u-mt-4"><button type="submit">Save settings</button></div>
       </form>
 
       <hr class="sep" />
-      <h3 style="margin-bottom:4px">Backup</h3>
+      <h3 class="u-mb-1">Backup</h3>
       <p class="muted small">Download this server's module configuration as JSON. Member data (warnings, XP, tickets) is not included.</p>
       <p><a href="/guilds/<%= guild.id %>/export">Export configuration &rarr;</a></p>
 
@@ -203,14 +203,14 @@
             <%- include('guild/modules/automod', { guild: guild, channels: channels, roles: roles, moduleConfig: automodConfig, automodRules: automodRules, fragTarget: 'this', fragSwap: 'none' }) %>
           </div>
           <div class="mod-panel" data-tab="admin">
-            <h3 style="margin-top:0">Immunity roles</h3>
+            <h3 class="u-mt-0">Immunity roles</h3>
             <p class="muted small">Members with one of these roles are never touched by Auto-moderation or the
               warning auto-actions. Administrators, the server owner and bot-master roles are immune by default.</p>
             <form method="POST" action="/guilds/<%= guild.id %>/m/automod/immunity"
                   hx-post="/guilds/<%= guild.id %>/m/automod/immunity" hx-target="this" hx-swap="none"
-                  class="stack" style="max-width:520px">
+                  class="stack u-mw-lg">
               <%- include('partials/chip-picker', { field: 'immunityRoles', kind: 'role', items: roles, selected: (automodConfig && automodConfig.exemptRoles) ? automodConfig.exemptRoles : [] }) %>
-              <div style="margin-top:12px"><button type="submit">Save immunity roles</button></div>
+              <div class="u-mt-3"><button type="submit">Save immunity roles</button></div>
             </form>
           </div>
           <div class="mod-panel" data-tab="actions">
@@ -265,14 +265,14 @@
           <button type="submit">Save</button>
         </form>
         <% if (vanitySlug) { %>
-          <p class="muted small" style="margin-top:6px">Live at
+          <p class="muted small u-mt-2">Live at
             <a href="/lb/<%= vanitySlug %>" target="_blank" rel="noopener"><code><%= vanityBase %><%= vanitySlug %></code></a>.
             Clear the box and save to remove it.</p>
         <% } %>
       </div>
 
       <hr class="sep" />
-      <h3 style="margin-bottom:6px">Top members <span class="muted small">(<%= board.total %> tracked)</span></h3>
+      <h3 class="u-mb-2">Top members <span class="muted small">(<%= board.total %> tracked)</span></h3>
       <% if (board.rows.length === 0) { %>
         <p class="muted">No XP recorded yet.</p>
       <% } else { %>

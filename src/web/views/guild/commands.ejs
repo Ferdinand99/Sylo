@@ -13,8 +13,8 @@
     <p class="muted small"><%= c.description %></p>
     <label class="small">Limit to channels <span class="muted">— blank = all</span></label>
     <%- include('../partials/chip-picker', { field: 'channels', kind: 'channel', items: channels, selected: c.allowedChannels }) %>
-    <label class="small" style="margin-top:8px">Limit to roles <span class="muted">— blank = everyone</span></label>
+    <label class="small u-mt-2">Limit to roles <span class="muted">— blank = everyone</span></label>
     <%- include('../partials/chip-picker', { field: 'roles', kind: 'role', items: roles, selected: c.allowedRoles }) %>
-    <div style="margin-top:8px"><button type="submit">Save</button></div>
+    <div class="u-mt-2"><button type="submit">Save</button></div>
   </form>
 <% }) %>

@@ -3,7 +3,7 @@
 
 <div x-data="embedList(<%= JSON.stringify({ max: 10, presets: wcPresets, spec: spec }) %>)">
   <div class="wc-top">
-    <p class="muted small" style="margin:0">
+    <p class="muted small u-m0">
       Build one rich message for a dedicated <strong>read-only</strong> channel. Click any text to edit it in
       place; click a picture area to set an image URL. Placeholders: <code>{server}</code>, <code>{memberCount}</code>.
     </p>
@@ -11,7 +11,7 @@
   </div>
 
   <div class="wc-channel-row">
-    <form method="POST" action="/guilds/<%= guild.id %>/m/welcome-channel/config" id="wc-form" class="stack" style="flex:1">
+    <form method="POST" action="/guilds/<%= guild.id %>/m/welcome-channel/config" id="wc-form" class="stack u-grow">
       <label class="small">Channel</label>
       <select name="channelId">
         <option value="">— select a channel —</option>
@@ -26,7 +26,7 @@
     </form>
   </div>
 
-  <label class="small" style="margin-top:6px">Message text <span class="muted">— optional, shown above the embeds</span></label>
+  <label class="small u-mt-2">Message text <span class="muted">— optional, shown above the embeds</span></label>
   <textarea x-model="content" rows="2" placeholder="Welcome to {server}!"></textarea>
 
   <div class="wc-stage">
@@ -53,7 +53,7 @@
     <button type="submit" form="wc-form" name="action" value="save">Save draft</button>
     <button type="submit" form="wc-form" name="action" value="publish" class="btn-primary">Publish to channel</button>
     <% if (cfg.messageId) { %>
-      <form method="POST" action="/guilds/<%= guild.id %>/m/welcome-channel/unpublish" style="display:inline">
+      <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/m/welcome-channel/unpublish">
         <button type="submit" class="danger">Remove published message</button>
       </form>
     <% } %>
