@@ -35,10 +35,12 @@
       <% }) %>
     </select>
 
-    <label class="small">Temporary channel name</label>
-    <input type="text" name="nameTemplate" id="tv-name" maxlength="95" value="<%= hub.nameTemplate || '' %>" placeholder="#{index} - {username}'s Channel" />
-    <p class="muted small">Tokens: <code>{index}</code> (Nth channel), <code>{username}</code>. Preview:
-      <span id="tv-preview" class="mono"></span></p>
+    <div style="display:contents" x-data="tvName(<%= JSON.stringify(hub.nameTemplate || '') %>)">
+      <label class="small">Temporary channel name</label>
+      <input type="text" name="nameTemplate" maxlength="95" x-model="tpl" placeholder="#{index} - {username}'s Channel" />
+      <p class="muted small">Tokens: <code>{index}</code> (Nth channel), <code>{username}</code>. Preview:
+        <span class="mono" x-text="preview"></span></p>
+    </div>
   </section>
 
   <section class="card stack">
@@ -101,8 +103,5 @@
     <label class="checkline"><input type="checkbox" name="tc_restrictCommands" <%= hub.textChannel.restrictCommands ? 'checked' : '' %> /> Only allow <code>/voice-*</code> in this text channel</label>
   </section>
 </form>
-
-<script>window.TV_NAME = <%- JSON.stringify(hub.nameTemplate || '').replace(/</g, '\\u003c') %>;</script>
-<script src="/tv-builder.js"></script>
 
 <%- include('partials/footer') %>

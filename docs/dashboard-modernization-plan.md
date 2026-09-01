@@ -39,7 +39,10 @@ phase.
 - `src/web/public/app.js` — vanilla JS: toasts, confirm-on-submit, module
   enable/disable via a `syloAction()` fetch helper, chip picker, emoji picker,
   server switcher. Plus per-builder scripts: `reaction-role.js`, `polls.js`,
-  `tv-builder.js`, `msg-builder.js`, `reminder-builder.js`.
+  `tv-builder.js`, `msg-builder.js`, `reminder-builder.js`, `cc-builder.js`.
+  *(Phase 2 update: all ported to Alpine and deleted except `cc-builder.js`;
+  `alpine-components.js` now holds `chipPicker` / `rrRows` / `embedEditor` /
+  `embedList` / `reminderBuilder` / `tvName`.)*
 - CSRF: `src/web/middleware/csrf.js`; token in `<meta name="csrf-token">`;
   `app.js` injects `_csrf` into forms and an `x-csrf-token` header on fetch.
 - Public, zero-JS pages that must stay server-rendered and framework-free:
@@ -223,8 +226,22 @@ are an action page (Infractions) and two forms blocked on Phase 2.
     row alongside preserved non-link `keepRows`; output is `{content, embeds, rows}`.
   **`welcome-channel.js` and `msg-builder.js` deleted.**
 
-**Still to do:** `reminder-builder` (scheduling UI is separate), `temp-voice`
-builder (`tv-builder.js`, 14 lines — trivial).
+- **reminder-builder** → `reminderBuilder` in `alpine-components.js` (tiny: just
+  `msgType` / `mode` / `enableStart` / `enableEnd` toggle state). Tabs are
+  `@click` + `:class`, panes `x-show`, the two `name="content"` textareas use
+  `:disabled` so only the active one submits, the hidden `msgType` / `mode`
+  inputs are `:value`-bound, start/end datetime inputs `:disabled="!enable…"`,
+  weekday chips carry their own `x-data="{ on }"` for the `.on` highlight. The
+  in-place embed editor is now `include('partials/embed-editor', { hidden:'embed' })`.
+  **`reminder-builder.js` deleted.**
+- **temp-voice builder** → `tvName` in `alpine-components.js` (one getter for the
+  live name preview); `tv-builder.ejs` wraps the input + preview in
+  `x-data="tvName(…)"` with `x-model` + `x-text="preview"`. **`tv-builder.js` and
+  `window.TV_NAME` deleted.**
+
+**Still to do:** `cc-builder.js` (273 lines — custom-command action tree: typed
+action cards + compact embed editor + pickers). Biggest remaining port; can reuse
+`embed-editor` / `chip-picker` per action card.
 
 **Done when:** every builder runs on Alpine; the old builder scripts are gone.
 

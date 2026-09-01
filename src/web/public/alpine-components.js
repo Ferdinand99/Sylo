@@ -341,4 +341,33 @@ document.addEventListener('alpine:init', function () {
       },
     };
   });
+
+  // Temp-voice hub builder: a live preview of the channel-name template.
+  window.Alpine.data('tvName', function (tpl) {
+    var DEFAULT = "#{index} - {username}'s Channel";
+    return {
+      tpl: String(tpl || ''),
+      get preview() {
+        return (this.tpl.trim() || DEFAULT)
+          .replace(/\{index\}/g, '1')
+          .replace(/\{count\}/g, '1')
+          .replace(/\{username\}/g, 'ferdinand')
+          .replace(/\{user\}/g, 'Ferdinand')
+          .slice(0, 100);
+      },
+    };
+  });
+
+  // Reminder builder: just the toggle state (message-type tabs, single/recurring
+  // schedule, start/end time switches). The in-place embed editor on the same
+  // page is a nested `embedEditor`; weekday chips carry their own tiny x-data.
+  window.Alpine.data('reminderBuilder', function (cfg) {
+    cfg = cfg || {};
+    return {
+      msgType: cfg.msgType === 'embed' ? 'embed' : 'text',
+      mode: cfg.mode === 'single' ? 'single' : 'multiple',
+      enableStart: !!cfg.enableStart,
+      enableEnd: !!cfg.enableEnd,
+    };
+  });
 });
