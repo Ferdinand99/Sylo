@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.0.0](https://github.com/Ferdinand99/Sylo/compare/v2.14.0...v3.0.0) (2026-09-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* requires Node 22; DISCORD_GUILD_ID renamed to DISCORD_DEV_GUILD_IDS; /stats now requires the new Game stats module to be enabled; the reminders module id changed from scheduled-messages to reminders.
+
+### Features
+
+* leaderboard vanity URLs; move cached-stats list to the Game stats page ([21b3f07](https://github.com/Ferdinand99/Sylo/commit/21b3f07a8804421e8b829922b2770160ecf8de82))
+* Node 22, Game stats module, reminders module id, DISCORD_DEV_GUILD_IDS ([d309908](https://github.com/Ferdinand99/Sylo/commit/d309908e6501452c26fa97d0482d503a8771c4ff))
+
 ## [2.14.0](https://github.com/Ferdinand99/Sylo/compare/v2.13.0...v2.14.0) (2026-09-01)
 
 
