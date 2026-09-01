@@ -1,6 +1,40 @@
 // Alpine components for the dashboard (Phase 2 of the modernization). Registered
 // on alpine:init so load order relative to alpine.min.js doesn't matter.
 document.addEventListener('alpine:init', function () {
+  // Emoji popover for a text input. Put it on a wrapper that also holds the
+  // <input> and the trigger button; it $dispatch('emoji-pick', value) on choose,
+  // so the wrapper carries `@emoji-pick="…"` to write the value where it belongs.
+  window.Alpine.data('emojiPicker', function (guildId) {
+    var COMMON = (
+      '😀 😂 😍 😎 🤔 😴 🥳 😢 😡 👍 👎 👌 🙏 👏 🙌 💪 🔥 ✨ ⭐ 🌟 💯 ✅ ❌ ⚠️ ❗ ❓ 💡 🔔 📌 📢 ' +
+      '🎮 🕹️ 🎧 🎵 🎬 📷 💻 📱 🖥️ ⌨️ 🛠️ ⚙️ 🔧 🔒 🔑 🚀 🛰️ 🌍 🗺️ 🏆 🥇 🎯 🎲 ♠️ ♥️ ♦️ ♣️ ' +
+      '❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💖 💗 🎉 🎊 🎁 🍕 🍔 🍟 🌮 🍺 🍻 ☕ 🧊 🐶 🐱 🦊 🐸 🐼 🦁 🐢 🐧'
+    ).split(' ');
+    return {
+      guildId: String(guildId || ''),
+      open: false,
+      common: COMMON,
+      custom: [],
+      loaded: false,
+      async toggle() {
+        this.open = !this.open;
+        if (this.open && !this.loaded) {
+          this.loaded = true;
+          try {
+            var r = await fetch('/guilds/' + this.guildId + '/emojis');
+            this.custom = (await r.json()).custom || [];
+          } catch (_) {
+            this.custom = [];
+          }
+        }
+      },
+      pick(value) {
+        this.$dispatch('emoji-pick', value);
+        this.open = false;
+      },
+    };
+  });
+
   // Multi-select "chips + add dropdown" for roles / channels. Submits one hidden
   // <input name="<field>"> per selected id. Replaces the old app.js handlers.
   window.Alpine.data('chipPicker', function (cfg) {

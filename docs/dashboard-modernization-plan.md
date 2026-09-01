@@ -257,13 +257,25 @@ are an action page (Infractions) and two forms blocked on Phase 2.
 
 ---
 
-## Phase 3 — Trim `app.js`
+## Phase 3 — Trim `app.js` — DONE
 
-- After Phases 1–2 `app.js` is nearly empty. `syloAction` → gone (htmx).
-  confirm-on-submit → `hx-confirm`. chip/emoji picker → Alpine. Server switcher +
-  toasts → `htmx-setup.js` / small Alpine directives.
-- Keep the `_csrf` form injection only for the remaining plain forms (public
-  pages).
+`app.js` 176 → 52 lines. It now holds only the CSRF plumbing (`_csrf` hidden-input
+injection on plain-form submit + a `window.fetch` wrapper that adds the header for
+raw `fetch` callers like `/health` backup import) and the `data-confirm`
+confirm-on-submit/click handler (~16 plain delete/reset forms opt in; not worth
+converting to htmx).
+
+- **`syloAction`** — deleted (zero callers; htmx replaced it).
+- **toasts** (`window.syloToast` + the toast DOM builder) → moved into
+  `htmx-setup.js`, which was already its only consumer.
+- **emoji picker** → `emojiPicker(guildId)` Alpine component + inline markup in
+  `rr-builder.ejs`. Wrapper carries `x-data` + `@emoji-pick`; the component
+  `$dispatch('emoji-pick', value)` on choose so the wrapper writes `row.emoji`.
+  `@click.outside` closes it; custom emoji fetched once per picker on first open.
+- **server switcher** close-on-outside/Escape → `x-data @click.outside …
+  @keydown.escape.window` on the `<details class="srv-switch">` in `header.ejs`.
+- Added `[x-cloak]{display:none!important}` to `styles.css` and `position:relative`
+  to `.emoji-cellwrap`.
 
 ---
 

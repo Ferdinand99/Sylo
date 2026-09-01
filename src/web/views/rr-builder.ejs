@@ -79,9 +79,29 @@
     <div class="rr-rows">
       <template x-for="(row, i) in rows" :key="i">
         <div class="rr-row">
-          <input type="text" name="rr_emoji" class="rr-emoji" x-model="row.emoji"
-                 :placeholder="style === 'reaction' ? '👋 (required)' : '👋 (optional)'" />
-          <button type="button" class="emoji-btn" data-guild="<%= guildId %>">😀</button>
+          <span class="emoji-cellwrap" x-data="emojiPicker('<%= guildId %>')" @emoji-pick="row.emoji = $event.detail">
+            <input type="text" name="rr_emoji" class="rr-emoji" x-model="row.emoji"
+                   :placeholder="style === 'reaction' ? '👋 (required)' : '👋 (optional)'" />
+            <button type="button" class="emoji-btn" @click="toggle()">😀</button>
+            <div class="emoji-pop" x-show="open" @click.outside="open = false" x-cloak>
+              <template x-if="custom.length">
+                <div>
+                  <div class="emoji-sec">Server</div>
+                  <div class="emoji-grid">
+                    <template x-for="ce in custom" :key="ce.display">
+                      <button type="button" class="emoji-cell" @click="pick(ce.display)"><img :src="ce.url" alt="" /></button>
+                    </template>
+                  </div>
+                </div>
+              </template>
+              <div class="emoji-sec">Emoji</div>
+              <div class="emoji-grid">
+                <template x-for="ee in common" :key="ee">
+                  <button type="button" class="emoji-cell" @click="pick(ee)" x-text="ee"></button>
+                </template>
+              </div>
+            </div>
+          </span>
           <input type="text" name="rr_label" class="rr-row-label" x-model="row.label"
                  placeholder="Button label (optional)" maxlength="80" x-show="style !== 'reaction'" />
           <select name="rr_role" x-model="row.roleId">

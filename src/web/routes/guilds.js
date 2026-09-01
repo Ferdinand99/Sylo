@@ -1585,7 +1585,8 @@ router.post(
   })
 );
 
-// Toggle a module on/off (JSON, called from app.js).
+// Toggle a module on/off. Driven by htmx (see _module-toggle.ejs / _plugin-cta.ejs);
+// still answers plain JSON for the no-JS / programmatic path.
 router.post('/:guildId/modules/:moduleId', (req, res) => {
   const mod = getModule(req.params.moduleId);
   if (!mod) return res.status(404).json({ error: 'Unknown module' });

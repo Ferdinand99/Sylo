@@ -73,7 +73,7 @@
     <% var loggedIn = typeof user !== 'undefined' && user && !user.open; %>
     <% var inviteUrl = typeof botInviteUrl !== 'undefined' ? botInviteUrl : ''; %>
     <% if (mg.length || loggedIn) { %>
-      <details class="srv-switch">
+      <details class="srv-switch" x-data @click.outside="$el.open = false" @keydown.escape.window="$el.open = false">
         <summary>
           <span class="srv-switch-face">
             <% if (curG && curG.icon) { %><img class="srv-switch-icon" src="<%= curG.icon %>" alt="" /><% } else { %><span class="srv-switch-ph"><%= curG ? curG.name.charAt(0) : '+' %></span><% } %>
