@@ -22,10 +22,21 @@
   </div>
 </section>
 
-<% if (lastError) { %>
+<% if (errors && errors.length) { %>
   <section class="card warn">
-    <h2>Last error <span class="muted">(<%= lastErrorAgo %>)</span></h2>
-    <pre><%= lastError.message %></pre>
+    <h2>Recent errors <span class="muted">(<%= errors.length %> shown, newest first)</span></h2>
+    <table>
+      <thead><tr><th>When</th><th>Scope</th><th>Message</th></tr></thead>
+      <tbody>
+        <% errors.forEach(function (e) { %>
+          <tr>
+            <td class="muted" style="white-space:nowrap"><%= e.ago %></td>
+            <td class="mono"><%= e.scope || '—' %></td>
+            <td><%= e.message %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
   </section>
 <% } %>
 

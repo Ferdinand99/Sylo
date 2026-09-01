@@ -49,6 +49,7 @@ router.get('/', (req, res) => {
       uptimeSeconds: uptimeSeconds(),
       discord: { ready, guilds: guildCount() },
       lastError: runtime.lastError,
+      errorCount: runtime.errors.length,
     });
   }
 
@@ -81,6 +82,11 @@ router.get('/', (req, res) => {
     recent: recentLookups(10).map((r) => ({ ...r, ago: timeAgo(r.created_at) })),
     lastError: runtime.lastError,
     lastErrorAgo: runtime.lastError ? timeAgo(runtime.lastError.at) : null,
+    errors: runtime.errors.slice(0, 25).map((e) => ({
+      message: e.message,
+      scope: e.scope,
+      ago: timeAgo(e.at),
+    })),
     db: {
       size: formatBytes(dbInfo.size),
       wal: formatBytes(dbInfo.wal),

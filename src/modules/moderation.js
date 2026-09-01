@@ -11,6 +11,7 @@ import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget, MOD_COLOR } from '../bot/lib/moderation.js';
 import { sendPreBanAppealDm } from './appeals.js';
+import { log } from '../lib/log.js';
 
 export const THRESHOLD_ACTIONS = ['timeout', 'kick', 'ban'];
 const MAX_TIMEOUT_MS = 28 * 86_400_000;
@@ -72,7 +73,7 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
       done = 'banned';
     }
   } catch (err) {
-    console.error('[module:moderation] auto-action failed:', err.message);
+    log.error('module:moderation', 'auto-action failed:', err.message);
     return;
   }
   if (!done) return;

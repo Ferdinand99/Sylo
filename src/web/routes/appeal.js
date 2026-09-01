@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import { runtime } from '../../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../../db/modules.js';
+import { log } from '../../lib/log.js';
 import {
   verifyAppealToken,
   normaliseAppealsConfig,
@@ -192,9 +193,9 @@ router.post('/:guildId', async (req, res, next) => {
 
     const appeal = getAppeal(guild.id, appealId);
     announceNewAppeal(guild, appeal).catch((err) =>
-      console.error('[appeals] new-appeal notice failed:', err.message)
+      log.error('appeals', 'new-appeal notice failed:', err.message)
     );
-    console.log(`[appeals] ${parsed.userId} submitted appeal #${appealId} in ${guild.id}`);
+    log.info('appeals', `${parsed.userId} submitted appeal #${appealId} in ${guild.id}`);
 
     render(res, 'submitted', {
       guildName: guild.name,

@@ -5,6 +5,7 @@
 // registered globally (propagation can take up to ~1 hour).
 import { REST, Routes } from 'discord.js';
 import { config } from '../config.js';
+import { log } from '../lib/log.js';
 
 /**
  * @param {import('discord.js').Collection<string, { data: import('discord.js').SlashCommandBuilder }>} commands
@@ -18,7 +19,7 @@ export async function registerCommands(commands) {
   if (config.discordGuildIds.length) {
     for (const guildId of config.discordGuildIds) {
       await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body });
-      console.log(`[bot] Registered ${body.length} slash command(s) to guild ${guildId}`);
+      log.info('bot', `Registered ${body.length} slash command(s) to guild ${guildId}`);
     }
     // Guild-scoped registration is a dev convenience; wipe any global commands
     // so users don't see each command duplicated in the picker.
@@ -26,14 +27,14 @@ export async function registerCommands(commands) {
       const global = await rest.get(Routes.applicationCommands(clientId));
       if (Array.isArray(global) && global.length > 0) {
         await rest.put(Routes.applicationCommands(clientId), { body: [] });
-        console.log(`[bot] Cleared ${global.length} stale global command(s)`);
+        log.info('bot', `Cleared ${global.length} stale global command(s)`);
       }
     } catch (err) {
-      console.warn('[bot] Could not clear global commands:', err.message);
+      log.warn('bot', 'Could not clear global commands:', err.message);
     }
   } else {
     await rest.put(Routes.applicationCommands(clientId), { body });
-    console.log(`[bot] Registered ${body.length} slash command(s) globally`);
+    log.info('bot', `Registered ${body.length} slash command(s) globally`);
   }
 
   return body.length;

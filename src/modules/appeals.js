@@ -29,6 +29,7 @@ import { getGuildModule, isModuleEnabled } from '../db/modules.js';
 import { decideAppeal, setAppealInvite } from '../db/appeals.js';
 import { sendToChannel } from './lib/send.js';
 import { postModLog } from '../bot/lib/modlog.js';
+import { log } from '../lib/log.js';
 
 const TOKEN_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days — link must outlast a slow review
 const COLOR = 0xb4472b;
@@ -163,7 +164,7 @@ on('appeals', 'guildBanAdd', async (ban, rawConfig) => {
 
   const link = appealLink(ban.guild.id, user.id);
   if (!link) {
-    console.warn('[appeals] DASHBOARD_URL is not set — cannot build an appeal link.');
+    log.warn('appeals', 'DASHBOARD_URL is not set — cannot build an appeal link.');
     return;
   }
 

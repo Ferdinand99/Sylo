@@ -20,6 +20,7 @@ import {
   markNotLive,
 } from '../db/youtubeAlerts.js';
 import { sendToChannel } from './lib/send.js';
+import { log } from '../lib/log.js';
 
 const FEED = 'https://www.youtube.com/feeds/videos.xml?channel_id=';
 const COLOR = 0xff0000;
@@ -199,7 +200,7 @@ async function tick() {
       try {
         await runAlert(guild.id, alert);
       } catch (err) {
-        console.error(`[youtube-alerts] ${alert.ytChannelId}:`, err.message);
+        log.error('youtube-alerts', `${alert.ytChannelId}:`, err.message);
       }
     }
   }
@@ -244,7 +245,7 @@ async function runAlert(guildId, alert) {
 }
 
 const timer = setInterval(() => {
-  tick().catch((err) => console.error('[youtube-alerts] tick failed:', err.message));
+  tick().catch((err) => log.error('youtube-alerts', 'tick failed:', err.message));
 }, POLL_MS);
 timer.unref();
 setTimeout(() => tick().catch(() => {}), 40_000).unref();

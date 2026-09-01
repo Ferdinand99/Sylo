@@ -18,6 +18,7 @@
 import { on } from './dispatch.js';
 import { runtime } from '../runtime.js';
 import { sendComposed, editComposed } from './messageCreator.js';
+import { log } from '../lib/log.js';
 
 // --- emoji parsing --------------------------------------------------------
 
@@ -78,7 +79,7 @@ export async function publishReactionMessage(guild, rm) {
     /* best-effort */
   }
   for (const p of rm.pairs) {
-    await message.react(p.react).catch((err) => console.warn(`[roles] react ${p.display}: ${err.message}`));
+    await message.react(p.react).catch((err) => log.warn('roles', `react ${p.display}: ${err.message}`));
   }
   return message.id;
 }
@@ -129,16 +130,16 @@ on('roles', 'reactionAdd', async (payload, config, guildId) => {
   const role = guild.roles.cache.get(hit.pair.roleId);
   if (!member || !role) return;
   if (!role.editable) {
-    console.warn(`[roles] cannot assign "${role.name}" in ${guild.name}: bot lacks Manage Roles or is ranked below it`);
+    log.warn('roles', `cannot assign "${role.name}" in ${guild.name}: bot lacks Manage Roles or is ranked below it`);
     return;
   }
 
   if (hit.rm.mode === 'reverse') {
-    await member.roles.remove(role, 'Reaction role (reverse)').catch((e) => console.warn(`[roles] remove failed: ${e.message}`));
+    await member.roles.remove(role, 'Reaction role (reverse)').catch((e) => log.warn('roles', `remove failed: ${e.message}`));
     return;
   }
 
-  await member.roles.add(role, 'Reaction role').catch((err) => console.warn(`[roles] add role failed: ${err.message}`));
+  await member.roles.add(role, 'Reaction role').catch((err) => log.warn('roles', `add role failed: ${err.message}`));
 
   if (hit.rm.exclusive) {
     const others = hit.rm.pairs

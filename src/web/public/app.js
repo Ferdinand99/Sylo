@@ -1,5 +1,37 @@
 // Small progressive-enhancement helpers for the dashboard. No framework.
 (() => {
+  // --- CSRF: attach the session token to every same-origin mutating request --
+  const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  if (CSRF) {
+    document.addEventListener('submit', (e) => {
+      const form = e.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      if ((form.method || 'get').toLowerCase() === 'get') return;
+      if (!form.querySelector('input[name="_csrf"]')) {
+        const h = document.createElement('input');
+        h.type = 'hidden';
+        h.name = '_csrf';
+        h.value = CSRF;
+        form.appendChild(h);
+      }
+    });
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input, init = {}) => {
+      try {
+        const url = new URL(typeof input === 'string' ? input : input.url, location.origin);
+        const method = (init.method || (typeof input === 'object' && input.method) || 'GET').toUpperCase();
+        if (url.origin === location.origin && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+          const headers = new Headers(init.headers || {});
+          if (!headers.has('x-csrf-token')) headers.set('x-csrf-token', CSRF);
+          init = { ...init, headers };
+        }
+      } catch {
+        /* leave the request untouched */
+      }
+      return nativeFetch(input, init);
+    };
+  }
+
   // --- Toasts -------------------------------------------------------------
   let toastHost;
   function toast(message, kind = 'ok') {

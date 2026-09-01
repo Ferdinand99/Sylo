@@ -3,6 +3,7 @@
 // each handler whose module is enabled for that guild, passing the module's
 // stored config.
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
+import { log } from '../lib/log.js';
 
 /** @type {Map<string, Array<{ moduleId: string, fn: Function }>>} */
 const handlers = new Map();
@@ -31,7 +32,7 @@ export async function dispatch(eventName, guildId, payload) {
     try {
       await fn(payload, getGuildModule(guildId, moduleId).config, guildId);
     } catch (err) {
-      console.error(`[module:${moduleId}] ${eventName} handler failed:`, err);
+      log.error(`module:${moduleId}`, `${eventName} handler failed:`, err);
     }
   }
 }

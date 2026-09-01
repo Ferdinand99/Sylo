@@ -24,6 +24,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import Database from 'better-sqlite3';
 import { config } from '../config.js';
 import { checkpoint, db, dbPath as DB_PATH, fileStamp, SCHEMA_VERSION, vacuumInto } from './index.js';
+import { log } from '../lib/log.js';
 
 const NAME_RE = /^sylo-[A-Za-z0-9._-]+\.db$/;
 const SQLITE_MAGIC = 'SQLite format 3\0';
@@ -100,7 +101,7 @@ export function runBackup(reason = 'manual') {
   vacuumInto(dest);
   const { size } = statSync(dest);
   pruneBackups();
-  console.log(`[db] Backup written: ${basename(dest)} (${Math.round(size / 1024)} KiB)`);
+  log.info('db', `Backup written: ${basename(dest)} (${Math.round(size / 1024)} KiB)`);
   return { name: basename(dest), size };
 }
 
@@ -167,7 +168,7 @@ export function importBuffer(buf) {
     return { ok: false, error: check.error };
   }
   pruneBackups();
-  console.log(`[db] Imported backup: ${basename(dest)} (${Math.round(buf.length / 1024)} KiB)`);
+  log.info('db', `Imported backup: ${basename(dest)} (${Math.round(buf.length / 1024)} KiB)`);
   return { ok: true, name: basename(dest) };
 }
 
@@ -192,7 +193,7 @@ export function restoreFromBackup(name) {
   try {
     runBackup('prerestore');
   } catch (err) {
-    console.error('[db] Pre-restore snapshot failed — aborting restore:', err.message);
+    log.error('db', 'Pre-restore snapshot failed — aborting restore:', err.message);
     restoreArmed = false;
     return { ok: false, error: `could not snapshot current database: ${err.message}` };
   }
@@ -206,9 +207,9 @@ export function restoreFromBackup(name) {
     copyFileSync(full, DB_PATH);
     rmSync(`${DB_PATH}-wal`, { force: true });
     rmSync(`${DB_PATH}-shm`, { force: true });
-    console.log(`[db] Restored database from ${name} — exiting for restart`);
+    log.info('db', `Restored database from ${name} — exiting for restart`);
   } catch (err) {
-    console.error('[db] Restore failed mid-swap — check the prerestore snapshot:', err.message);
+    log.error('db', 'Restore failed mid-swap — check the prerestore snapshot:', err.message);
   }
   // The DB handle is unusable now regardless; hand off to the process manager.
   process.exit(0);
@@ -227,7 +228,7 @@ export function startBackupSchedule() {
 
   const hours = config.backupIntervalHours;
   if (hours <= 0) {
-    console.log('[db] Scheduled backups disabled (BACKUP_INTERVAL_HOURS=0)');
+    log.info('db', 'Scheduled backups disabled (BACKUP_INTERVAL_HOURS=0)');
     return;
   }
 
@@ -239,7 +240,7 @@ export function startBackupSchedule() {
       try {
         runBackup('startup');
       } catch (err) {
-        console.error('[db] Startup backup failed:', err.message);
+        log.error('db', 'Startup backup failed:', err.message);
       }
     }
   }, 30_000).unref();
@@ -248,9 +249,9 @@ export function startBackupSchedule() {
     try {
       runBackup('scheduled');
     } catch (err) {
-      console.error('[db] Scheduled backup failed:', err.message);
+      log.error('db', 'Scheduled backup failed:', err.message);
     }
   }, hours * HOUR).unref();
 
-  console.log(`[db] Scheduled backups every ${hours}h, keeping the newest ${config.backupRetention}`);
+  log.info('db', `Scheduled backups every ${hours}h, keeping the newest ${config.backupRetention}`);
 }

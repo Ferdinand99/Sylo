@@ -57,6 +57,7 @@ import {
 } from '../../modules/welcomeChannel.js';
 import { listAppeals, getAppeal } from '../../db/appeals.js';
 import { config as appConfig } from '../../config.js';
+import { log } from '../../lib/log.js';
 import {
   listScheduled,
   createReminder,
@@ -806,12 +807,12 @@ router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
   recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: `module:${mod.id}`, detail: 'settings saved' });
   if (mod.id === 'invite-tracker') {
     primeInviteCache(req.guild).catch((err) =>
-      console.error('[invite-tracker] cache prime after save failed:', err.message)
+      log.error('invite-tracker', 'cache prime after save failed:', err.message)
     );
   }
   if (mod.id === 'verification') {
     ensureVerifyMessage(req.guild, config).catch((err) =>
-      console.error('[verification] ensure message after save failed:', err.message)
+      log.error('verification', 'ensure message after save failed:', err.message)
     );
   }
   if (mod.id === 'welcome-channel' && req.body.action === 'publish') {
@@ -1171,7 +1172,7 @@ router.post(
       rm.messageId = await publishReactionMessage(guild, rm);
       ok = true;
     } catch (err) {
-      console.error('[roles] publish reaction message failed:', err.message);
+      log.error('roles', 'publish reaction message failed:', err.message);
     }
 
     const next = existing ? list.map((x) => (String(x.id) === id ? rm : x)) : [...list, rm];
@@ -1309,8 +1310,8 @@ router.post('/:guildId/m/starboard/sb', (req, res) => {
   const saved = config.boards.find((x) => x.id === id);
   if (saved) {
     rescanBoard(req.guild, saved)
-      .then((r) => console.log(`[starboard] rescan ${req.guild.id}/${id}: scanned ${r.scanned}, posted ${r.posted}`))
-      .catch((err) => console.error('[starboard] rescan failed:', err.message));
+      .then((r) => log.info('starboard', `rescan ${req.guild.id}/${id}: scanned ${r.scanned}, posted ${r.posted}`))
+      .catch((err) => log.error('starboard', 'rescan failed:', err.message));
   }
   res.redirect(`${back}?msg=sb-saved`);
 });
@@ -1408,7 +1409,7 @@ router.post(
       detail: `${existing ? 'updated' : 'created'} /${name}`,
     });
     await syncGuildCustomCommands(req.guild).catch((err) =>
-      console.error('[custom-commands] sync after save failed:', err.message)
+      log.error('custom-commands', 'sync after save failed:', err.message)
     );
     res.redirect(`${back}?msg=saved`);
   })
@@ -1428,7 +1429,7 @@ router.post(
       detail: 'deleted a command',
     });
     await syncGuildCustomCommands(req.guild).catch((err) =>
-      console.error('[custom-commands] sync after delete failed:', err.message)
+      log.error('custom-commands', 'sync after delete failed:', err.message)
     );
     res.redirect(`/guilds/${req.guild.id}/m/custom-commands?msg=saved`);
   })
@@ -1478,12 +1479,12 @@ router.post('/:guildId/modules/:moduleId', (req, res) => {
   });
   if (mod.id === 'custom-commands') {
     syncGuildCustomCommands(req.guild).catch((err) =>
-      console.error('[custom-commands] sync after toggle failed:', err.message)
+      log.error('custom-commands', 'sync after toggle failed:', err.message)
     );
   }
   if (mod.id === 'invite-tracker' && enabled) {
     primeInviteCache(req.guild).catch((err) =>
-      console.error('[invite-tracker] cache prime after enable failed:', err.message)
+      log.error('invite-tracker', 'cache prime after enable failed:', err.message)
     );
   }
   res.json({ enabled });

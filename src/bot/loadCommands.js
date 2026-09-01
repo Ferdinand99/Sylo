@@ -6,6 +6,7 @@ import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Collection } from 'discord.js';
+import { log } from '../lib/log.js';
 
 const commandsDir = join(dirname(fileURLToPath(import.meta.url)), 'commands');
 
@@ -19,7 +20,7 @@ export async function loadCommands() {
   for (const file of files) {
     const mod = await import(pathToFileURL(join(commandsDir, file)).href);
     if (!mod.data || typeof mod.execute !== 'function') {
-      console.warn(`[bot] Skipping ${file}: missing "data" or "execute" export`);
+      log.warn('bot', `Skipping ${file}: missing "data" or "execute" export`);
       continue;
     }
     commands.set(mod.data.name, { data: mod.data, execute: mod.execute });

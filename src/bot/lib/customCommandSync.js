@@ -6,6 +6,7 @@ import { MessageFlags } from 'discord.js';
 import { config } from '../../config.js';
 import { getGuildModule } from '../../db/modules.js';
 import { usesArgs, pickMessage, buildActionPayload } from '../../modules/customCommands.js';
+import { log } from '../../lib/log.js';
 
 function toSlashJSON(cmd) {
   let description = String(cmd.description || cmd.name || 'Custom command')
@@ -40,7 +41,7 @@ export async function syncGuildCustomCommands(guild) {
   try {
     await guild.commands.set([...builtins, ...customs]);
   } catch (err) {
-    console.error(`[custom-commands] slash sync failed for guild ${guild.id}:`, err.message);
+    log.error('custom-commands', `slash sync failed for guild ${guild.id}:`, err.message);
   }
 }
 
@@ -141,7 +142,7 @@ export async function handleCustomSlash(interaction) {
         else await member.roles.remove(action.roleId, 'Custom command');
       }
     } catch (err) {
-      console.error(`[custom-commands] "${cmd.name}" action "${action.type}" failed:`, err.message);
+      log.error('custom-commands', `"${cmd.name}" action "${action.type}" failed:`, err.message);
     }
   }
 

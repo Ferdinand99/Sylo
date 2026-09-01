@@ -1,9 +1,12 @@
 name: Test
 
-# Reusable: called by docker-publish.yml and release-please.yml so no image is
-# ever built or published without the test suite passing.
+# Runs as a PR/push gate, and is also reusable: called by docker-publish.yml and
+# release-please.yml so no image is ever built or published without it passing.
 on:
   workflow_call:
+  pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read

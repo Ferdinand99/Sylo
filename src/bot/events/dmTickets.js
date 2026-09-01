@@ -4,6 +4,7 @@
 import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
 import { ticketGuildsForUser, ingestUserDM } from '../../modules/tickets.js';
 import { getOpenTicket } from '../../db/tickets.js';
+import { log } from '../../lib/log.js';
 
 const SELECT_ID = 'ticket-guild';
 const pending = new Map(); // userId -> { content, attachments, at }
@@ -84,9 +85,9 @@ async function handleSelect(interaction) {
 /** @param {import('discord.js').Client} client */
 export function register(client) {
   client.on(Events.MessageCreate, (message) => {
-    handleDM(message).catch((err) => console.error('[tickets] DM handler failed:', err));
+    handleDM(message).catch((err) => log.error('tickets', 'DM handler failed:', err));
   });
   client.on(Events.InteractionCreate, (interaction) => {
-    handleSelect(interaction).catch((err) => console.error('[tickets] select handler failed:', err));
+    handleSelect(interaction).catch((err) => log.error('tickets', 'select handler failed:', err));
   });
 }

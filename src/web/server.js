@@ -3,10 +3,11 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
-import { setLastError } from '../runtime.js';
 import { config } from '../config.js';
+import { log } from '../lib/log.js';
 import { mountAuth, requireAuth } from './middleware/auth.js';
 import { rateLimit } from './middleware/rateLimit.js';
+import { csrf } from './middleware/csrf.js';
 import healthRouter from './routes/health.js';
 import leaderboardRouter from './routes/leaderboard.js';
 import verifyRouter from './routes/verify.js';
@@ -39,6 +40,10 @@ export function createApp() {
   // Session + res.locals + /auth/* routes. No-op guards in open mode.
   mountAuth(app);
 
+  // CSRF protection for state-changing requests (a no-op in open mode, which has
+  // no session). Exempts /auth, /verify and /appeal, which carry signed tokens.
+  app.use(csrf);
+
   // Public routes: healthcheck, the shareable leaderboard, and member verification.
   app.use('/health', healthRouter);
   app.use('/leaderboard', rateLimit({ windowMs: 60_000, max: 40 }), leaderboardRouter);
@@ -60,8 +65,7 @@ export function createApp() {
   // Central error handler — keep the server up, record the error for the dashboard.
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
-    setLastError(err);
-    console.error('[web] Request error:', err);
+    log.error('web', `${req.method} ${req.path}`, err);
     res.status(500).json({ error: 'Internal server error' });
   });
 
@@ -77,7 +81,7 @@ export function startWeb(port) {
   const app = createApp();
   return new Promise((resolve) => {
     const server = app.listen(port, () => {
-      console.log(`[web] Dashboard listening on http://localhost:${port}`);
+      log.info('web', `Dashboard listening on http://localhost:${port}`);
       resolve(server);
     });
   });

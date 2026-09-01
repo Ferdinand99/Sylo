@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { config } from '../../config.js';
 import { runtime } from '../../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../../db/modules.js';
+import { log } from '../../lib/log.js';
 import {
   verifyVerifyToken,
   normaliseVerificationConfig,
@@ -60,7 +61,7 @@ router.post('/:guildId', async (req, res, next) => {
     }).then((r) => r.json()).catch(() => ({ success: false }));
 
     if (!verifyRes.success) {
-      console.warn(`[verification] Turnstile failed for ${parsed.userId} in ${guildId}:`, verifyRes['error-codes'] ?? '');
+      log.warn('verification', `Turnstile failed for ${parsed.userId} in ${guildId}:`, verifyRes['error-codes'] ?? '');
       return fail(res, 'The captcha check failed. Go back and try again.');
     }
 
@@ -70,7 +71,7 @@ router.post('/:guildId', async (req, res, next) => {
     }
     const cfg = normaliseVerificationConfig(getGuildModule(guildId, 'verification').config);
     const result = await grantVerified(guild, parsed.userId, cfg);
-    console.log(`[verification] web verify ${parsed.userId} in ${guildId} -> ${result}`);
+    log.info('verification', `web verify ${parsed.userId} in ${guildId} -> ${result}`);
 
     if (result === 'ok' || result === 'already') {
       if (result === 'ok') {

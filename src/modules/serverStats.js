@@ -3,6 +3,7 @@
 // Discord rate-limits channel renames hard (~2 per 10 minutes per channel).
 import { runtime } from '../runtime.js';
 import { getGuildModule } from '../db/modules.js';
+import { log } from '../lib/log.js';
 
 /** [type, label] — {count} in the template is replaced with this number. */
 export const STAT_TYPES = [
@@ -96,13 +97,13 @@ async function tick() {
     lastRefresh.set(guild.id, now);
 
     await refreshGuild(guild, cfg).catch((err) =>
-      console.error(`[server-stats] refresh failed for ${guild.id}:`, err.message)
+      log.error('server-stats', `refresh failed for ${guild.id}:`, err.message)
     );
   }
 }
 
 setInterval(() => {
-  tick().catch((err) => console.error('[server-stats] tick failed:', err.message));
+  tick().catch((err) => log.error('server-stats', 'tick failed:', err.message));
 }, BASE_TICK_MS).unref();
 
 // First pass a minute after boot.

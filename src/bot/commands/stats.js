@@ -7,8 +7,8 @@ import { SlashCommandBuilder } from 'discord.js';
 import { getAdapter } from '../../adapters/games/index.js';
 import { AdapterError } from '../../adapters/games/gameAdapter.js';
 import { cacheKey, getCached, setCached } from '../../db/cache.js';
-import { setLastError } from '../../runtime.js';
 import { buildBattlefieldStatsEmbed } from '../embeds/battlefieldStats.js';
+import { log } from '../../lib/log.js';
 
 const BF_TITLES = [
   { name: 'Battlefield 1', value: 'bf1' },
@@ -93,8 +93,7 @@ export async function execute(interaction) {
         return;
       }
       // Unexpected — record it and show a generic message. Never rethrow.
-      setLastError(err);
-      console.error('[stats] Unexpected error:', err);
+      log.error('stats', 'Unexpected error:', err);
       await interaction.editReply({ content: '⚠️ Something went wrong fetching those stats. Please try again later.' });
     }
     return;

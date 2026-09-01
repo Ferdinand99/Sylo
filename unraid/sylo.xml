@@ -228,6 +228,15 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Required="false"
     Mask="false">production</Config>
   <Config
+    Name="LOG_LEVEL"
+    Target="LOG_LEVEL"
+    Default="info"
+    Description="Log verbosity: debug, info, warn or error. Set LOG_FORMAT=json (or LOG_JSON=1) for machine-readable log lines."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false">info</Config>
+  <Config
     Name="TZ"
     Target="TZ"
     Default="Europe/Oslo"

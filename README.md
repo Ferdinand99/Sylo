@@ -12,6 +12,12 @@ alerts, YouTube alerts), Discord OAuth2 login, a public leveling leaderboard, an
 
 ## What's new since 2.0
 
+- **Structured logging + error history** — every log line is now
+  `<ISO timestamp>  LEVEL  scope  message`; set `LOG_LEVEL` (`debug`/`info`/
+  `warn`/`error`) and `LOG_FORMAT=json` (or `LOG_JSON=1`) for machine-readable
+  output. The **Health** page shows the last ~25 errors (time, scope, message),
+  and `GET /health` reports an `errorCount`. Dashboard forms and JSON actions
+  now carry a CSRF token (enforced when "Log in with Discord" is enabled).
 - **Automatic database backups + restore** — Sylo writes compacted single-file
   snapshots of `sylo.db` to `<data>/backups`: just before every schema migration,
   shortly after boot, and on a schedule (`BACKUP_INTERVAL_HOURS`, default 24;
@@ -273,6 +279,8 @@ test server. `npm run register` re-syncs commands without a restart.
 | `BACKUP_INTERVAL_HOURS`   | no       | `24`                           | Scheduled DB snapshot interval; `0` disables it (pre-migration + manual still run) |
 | `BACKUP_RETENTION`        | no       | `14`                           | How many DB snapshots to keep in `<data>/backups` |
 | `BACKUP_DIR`              | no       | `<db dir>/backups`             | Where DB snapshots are written |
+| `LOG_LEVEL`               | no       | `info`                         | `debug` / `info` / `warn` / `error` |
+| `LOG_FORMAT`              | no       | `text`                         | `text` or `json` (`LOG_JSON=1` = json) |
 | `NODE_ENV`                | no       | `development`                  | Set to `production` in deployment |
 
 ### Dashboard authentication

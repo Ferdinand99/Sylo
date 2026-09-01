@@ -9,6 +9,7 @@ import { runtime } from '../runtime.js';
 import { getGuildModule } from '../db/modules.js';
 import { wasPosted, markPosted, pruneFreeGames } from '../db/freeGames.js';
 import { sendToChannel } from './lib/send.js';
+import { log } from '../lib/log.js';
 
 const EPIC_URL =
   'https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions?locale=en-US&country=US&allowCountries=US';
@@ -143,13 +144,13 @@ export async function getFreeGames({ kind = 'game' } = {}) {
   const results = [];
   if (kind === 'game') {
     results.push(await fetchEpic().catch((err) => {
-      console.error('[free-games] Epic fetch failed:', err.message);
+      log.error('free-games', 'Epic fetch failed:', err.message);
       return [];
     }));
   }
   if (config.itadApiKey) {
     results.push(await fetchItad(kind).catch((err) => {
-      console.error('[free-games] ITAD fetch failed:', err.message);
+      log.error('free-games', 'ITAD fetch failed:', err.message);
       return [];
     }));
   }
@@ -193,7 +194,7 @@ async function tick() {
   try {
     games = await getFreeGames();
   } catch (err) {
-    console.error('[free-games] tick fetch failed:', err.message);
+    log.error('free-games', 'tick fetch failed:', err.message);
     return;
   }
   if (games.length === 0) return;
@@ -222,7 +223,7 @@ async function tick() {
 }
 
 setInterval(() => {
-  tick().catch((err) => console.error('[free-games] tick failed:', err.message));
+  tick().catch((err) => log.error('free-games', 'tick failed:', err.message));
 }, POLL_MS).unref();
 
 setTimeout(() => tick().catch(() => {}), 90_000).unref();

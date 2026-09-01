@@ -1,6 +1,7 @@
 // Sylo was removed from (or left) a guild — drop everything stored for it.
 import { Events } from 'discord.js';
 import { purgeGuild } from '../../db/purge.js';
+import { log } from '../../lib/log.js';
 
 export const name = Events.GuildDelete;
 
@@ -10,8 +11,8 @@ export function execute(guild) {
   if (guild.available === false) return;
   try {
     purgeGuild(guild.id);
-    console.log(`[bot] Left guild ${guild.id} (${guild.name ?? 'unknown'}) — purged stored data`);
+    log.info('bot', `Left guild ${guild.id} (${guild.name ?? 'unknown'}) — purged stored data`);
   } catch (err) {
-    console.error(`[bot] Failed to purge data for guild ${guild.id}:`, err.message);
+    log.error('bot', `Failed to purge data for guild ${guild.id}:`, err.message);
   }
 }

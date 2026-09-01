@@ -5,9 +5,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { config } from '../config.js';
-import { setClient, setLastError } from '../runtime.js';
+import { setClient } from '../runtime.js';
 import { loadCommands } from './loadCommands.js';
 import { registerCommands } from './registerCommands.js';
+import { log } from '../lib/log.js';
 
 /** Build the gateway intent list from config. */
 function buildIntents() {
@@ -41,7 +42,7 @@ async function loadEvents(client) {
       continue;
     }
     if (!mod.name || typeof mod.execute !== 'function') {
-      console.warn(`[bot] Skipping event ${file}: missing "name"/"execute" or "register" export`);
+      log.warn('bot', `Skipping event ${file}: missing "name"/"execute" or "register" export`);
       continue;
     }
     if (mod.once) client.once(mod.name, (...args) => mod.execute(...args));
@@ -66,27 +67,26 @@ export async function startBot() {
   await loadEvents(client);
 
   // Surface library-level errors on the dashboard instead of letting them bubble.
-  client.on('error', (err) => setLastError(err));
-  client.on('shardError', (err) => setLastError(err));
+  client.on('error', (err) => log.error('bot', 'gateway client error', err));
+  client.on('shardError', (err) => log.error('bot', 'shard error', err));
 
   try {
     await registerCommands(commands);
   } catch (err) {
     // Non-fatal: the bot can still run with previously-registered commands.
-    setLastError(err);
-    console.error('[bot] Slash command registration failed:', err.message);
+    log.error('bot', 'Slash command registration failed:', err.message);
   }
 
   try {
     await client.login(config.discordToken);
   } catch (err) {
     if (err?.code === 'DisallowedIntents' || /disallowed intents/i.test(err?.message ?? '')) {
-      console.error(
-        '[bot] Login failed: this bot is requesting privileged intents that are not enabled.\n' +
-          '      Enable "Server Members Intent" and "Message Content Intent" on the Discord\n' +
-          '      Developer Portal (Bot page) for this application — verified bots may also need\n' +
-          '      Discord approval. To run without them for now, set INTENT_GUILD_MEMBERS=false\n' +
-          '      and/or INTENT_MESSAGE_CONTENT=false.'
+      log.error(
+        'bot',
+        'Login failed: this bot requests privileged intents that are not enabled. ' +
+          'Enable "Server Members Intent" and "Message Content Intent" on the Discord Developer ' +
+          'Portal (Bot page) for this application — verified bots may also need Discord approval. ' +
+          'To run without them for now, set INTENT_GUILD_MEMBERS=false and/or INTENT_MESSAGE_CONTENT=false.'
       );
     }
     throw err;

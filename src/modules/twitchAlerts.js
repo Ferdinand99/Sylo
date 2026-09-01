@@ -11,6 +11,7 @@ import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { announcedStreamId, markLive, markOffline } from '../db/twitchAlerts.js';
 import { sendToChannel } from './lib/send.js';
+import { log } from '../lib/log.js';
 
 const HELIX = 'https://api.twitch.tv/helix';
 const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
@@ -161,7 +162,7 @@ async function tick() {
     streams = await fetchLiveStreams(logins);
     users = await fetchUsers([...streams.keys()]);
   } catch (err) {
-    console.error('[twitch-alerts] poll failed:', err.message);
+    log.error('twitch-alerts', 'poll failed:', err.message);
     return;
   }
 
@@ -179,7 +180,7 @@ async function tick() {
 }
 
 const timer = setInterval(() => {
-  tick().catch((err) => console.error('[twitch-alerts] tick failed:', err.message));
+  tick().catch((err) => log.error('twitch-alerts', 'tick failed:', err.message));
 }, POLL_MS);
 timer.unref();
 setTimeout(() => tick().catch(() => {}), 25_000).unref();

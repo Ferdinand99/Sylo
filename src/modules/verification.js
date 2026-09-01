@@ -19,6 +19,7 @@ import { on } from './dispatch.js';
 import { config } from '../config.js';
 import { getGuildModule, setGuildModule, isModuleEnabled } from '../db/modules.js';
 import { sendToChannel } from './lib/send.js';
+import { log } from '../lib/log.js';
 
 export const VERIFY_MODES = ['button', 'captcha'];
 const TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -195,7 +196,7 @@ export function registerVerificationHandlers(client) {
             : "That didn't work — the bot may be missing Manage Roles, or its role is below the verified role.";
       return interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
     } catch (err) {
-      console.error('[verification] button handler failed:', err.message);
+      log.error('verification', 'button handler failed:', err.message);
       if (interaction.isRepliable() && !interaction.replied) {
         interaction.reply({ content: 'Something went wrong.', flags: MessageFlags.Ephemeral }).catch(() => {});
       }

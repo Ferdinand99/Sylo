@@ -9,6 +9,7 @@ import {
   StringSelectMenuBuilder,
 } from 'discord.js';
 import { getComposedByMessage } from '../db/composedMessages.js';
+import { log } from '../lib/log.js';
 
 const BUTTON_STYLE = {
   primary: ButtonStyle.Primary,
@@ -202,7 +203,7 @@ export function registerMessageComponentHandlers(client) {
         await applyRoleSelect(interaction, rec?.spec);
       }
     } catch (err) {
-      console.error('[messageCreator] component handler failed:', err.message);
+      log.error('messageCreator', 'component handler failed:', err.message);
       if (interaction.isRepliable() && !interaction.replied) {
         interaction.reply({ content: 'Something went wrong.', ephemeral: true }).catch(() => {});
       }

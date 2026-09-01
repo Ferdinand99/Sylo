@@ -3,9 +3,9 @@
 // Every command's execute() is wrapped so a thrown error is logged and shown to
 // the user without ever crashing the process.
 import { Events, MessageFlags, PermissionFlagsBits } from 'discord.js';
-import { setLastError } from '../../runtime.js';
 import { getCommandOverride } from '../../db/commandOverrides.js';
 import { handleCustomSlash } from '../lib/customCommandSync.js';
+import { log } from '../../lib/log.js';
 
 export const name = Events.InteractionCreate;
 
@@ -52,11 +52,10 @@ export async function execute(interaction) {
     try {
       if (await handleCustomSlash(interaction)) return;
     } catch (err) {
-      setLastError(err);
-      console.error(`[bot] Custom slash command "${interaction.commandName}" failed:`, err);
+      log.error('bot', `Custom slash command "${interaction.commandName}" failed:`, err);
       return;
     }
-    console.warn(`[bot] Received unknown command: ${interaction.commandName}`);
+    log.warn('bot', `Received unknown command: ${interaction.commandName}`);
     return;
   }
 
@@ -69,8 +68,7 @@ export async function execute(interaction) {
   try {
     await command.execute(interaction);
   } catch (err) {
-    setLastError(err);
-    console.error(`[bot] Command "${interaction.commandName}" threw:`, err);
+    log.error('bot', `Command "${interaction.commandName}" threw:`, err);
 
     const payload = {
       content: '⚠️ Something went wrong running that command. Please try again later.',

@@ -14,6 +14,7 @@ import { on } from './dispatch.js';
 import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { getPoll, duePolls, deletePoll } from '../db/polls.js';
+import { log } from '../lib/log.js';
 
 // Regional-indicator A … T — one per option, up to 20.
 export const LETTERS = Array.from({ length: 20 }, (_, i) => String.fromCodePoint(0x1f1e6 + i));
@@ -266,7 +267,7 @@ const timer = setInterval(() => {
   if (!runtime.client?.isReady()) return;
   for (const poll of duePolls(Date.now())) {
     if (isModuleEnabled(poll.guild_id, 'polls') && runtime.client.guilds.cache.has(poll.guild_id)) {
-      endPoll(poll.message_id).catch((err) => console.error('[module:polls] end failed:', err.message));
+      endPoll(poll.message_id).catch((err) => log.error('module:polls', 'end failed:', err.message));
     } else {
       deletePoll(poll.message_id); // module off or bot gone — just clear it
     }

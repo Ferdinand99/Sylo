@@ -22,6 +22,7 @@ import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget } from '../bot/lib/moderation.js';
 import { addWarning } from '../db/warnings.js';
 import { applyWarnThresholds } from './moderation.js';
+import { log } from '../lib/log.js';
 
 export const AUTOMOD_ACTIONS = ['delete', 'warn', 'timeout'];
 
@@ -312,7 +313,7 @@ async function act(message, member, rule, label, cfg) {
       });
     }
   } catch (err) {
-    console.error('[module:automod] action failed:', err.message);
+    log.error('module:automod', 'action failed:', err.message);
   }
 
   const preview = message.content.length > 300 ? `${message.content.slice(0, 299)}…` : message.content;

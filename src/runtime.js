@@ -4,27 +4,51 @@
 // the bot and web modules.
 
 /**
+ * @typedef {Object} ErrorEntry
+ * @property {string} message
+ * @property {string|null} scope
+ * @property {number} at             Epoch ms.
+ * @property {string|null} stack
+ */
+
+/**
  * @typedef {Object} RuntimeState
  * @property {number} startedAt          Epoch ms when the process booted.
  * @property {{ message: string, at: number } | null} lastError  Most recent unexpected error.
+ * @property {ErrorEntry[]} errors       Recent errors, most-recent-first, capped.
  * @property {import('discord.js').Client | null} client  The logged-in Discord client, once ready.
  */
+
+const MAX_ERRORS = 40;
 
 /** @type {RuntimeState} */
 export const runtime = {
   startedAt: Date.now(),
   lastError: null,
+  errors: [],
   client: null,
 };
 
 /**
- * Record the most recent unexpected error so it can be surfaced on the dashboard.
+ * Record an unexpected error so it can be surfaced on the /health page.
  * @param {unknown} err
+ * @param {string|null} [scope]
  */
-export function setLastError(err) {
+export function recordError(err, scope = null) {
   const message = err instanceof Error ? err.message : String(err);
-  runtime.lastError = { message, at: Date.now() };
+  const at = Date.now();
+  runtime.lastError = { message, at };
+  runtime.errors.unshift({
+    message,
+    scope: scope || null,
+    at,
+    stack: err instanceof Error ? err.stack ?? null : null,
+  });
+  if (runtime.errors.length > MAX_ERRORS) runtime.errors.length = MAX_ERRORS;
 }
+
+/** Back-compat alias for earlier call sites. */
+export const setLastError = recordError;
 
 /**
  * Attach the Discord client once it has logged in.

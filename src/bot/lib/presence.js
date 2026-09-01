@@ -1,6 +1,7 @@
 // Applies the dashboard-configured presence (status + activity) to the client.
 import { ActivityType } from 'discord.js';
 import { getPresenceConfig } from '../../db/appSettings.js';
+import { log } from '../../lib/log.js';
 
 const TYPE_MAP = {
   Playing: ActivityType.Playing,
@@ -37,6 +38,6 @@ export function applyPresence(client) {
 
     client.user.setPresence({ status: cfg.status, activities });
   } catch (err) {
-    console.error('[bot] Failed to apply presence:', err.message);
+    log.error('bot', 'Failed to apply presence:', err.message);
   }
 }

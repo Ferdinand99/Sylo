@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import Database from 'better-sqlite3';
 import { config } from '../config.js';
+import { log } from '../lib/log.js';
 
 /** Absolute path to the live SQLite file. */
 export const dbPath = resolve(process.cwd(), config.databasePath);
@@ -440,7 +441,7 @@ export function checkpoint() {
   try {
     db.pragma('wal_checkpoint(TRUNCATE)');
   } catch (err) {
-    console.error('[db] WAL checkpoint failed:', err.message);
+    log.error('db', 'WAL checkpoint failed:', err.message);
   }
 }
 
@@ -458,9 +459,9 @@ function preMigrationBackup(fromVersion) {
     mkdirSync(dir, { recursive: true });
     const dest = resolve(dir, `sylo-premigrate-v${fromVersion}-${fileStamp()}.db`);
     vacuumInto(dest);
-    console.log(`[db] Pre-migration backup written: ${dest}`);
+    log.info('db', `Pre-migration backup written: ${dest}`);
   } catch (err) {
-    console.error('[db] Pre-migration backup failed (continuing):', err.message);
+    log.error('db', 'Pre-migration backup failed (continuing):', err.message);
   }
 }
 
@@ -478,7 +479,7 @@ export function migrate() {
       db.pragma(`user_version = ${version + 1}`);
     });
     run();
-    console.log(`[db] Applied migration ${version + 1}`);
+    log.info('db', `Applied migration ${version + 1}`);
   }
 }
 
@@ -492,10 +493,10 @@ migrate();
 try {
   const check = db.pragma('quick_check', { simple: true });
   if (check !== 'ok') {
-    console.error(`[db] Integrity check failed: ${check}. Restore data/ from a backup.`);
+    log.error('db', `Integrity check failed: ${check}. Restore data/ from a backup.`);
   }
 } catch (err) {
-  console.error('[db] Could not run integrity check:', err.message);
+  log.error('db', 'Could not run integrity check:', err.message);
 }
 
 /** Close the database. Best-effort; used on shutdown paths. */

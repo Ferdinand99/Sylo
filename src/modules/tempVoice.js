@@ -15,6 +15,7 @@ import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
 import { runtime } from '../runtime.js';
 import { getGuildModule } from '../db/modules.js';
+import { log } from '../lib/log.js';
 import {
   addTempChannel,
   removeTempChannel,
@@ -188,7 +189,7 @@ async function handleJoin(guild, member, hub) {
       permissionOverwrites: overwrites,
     });
   } catch (err) {
-    console.error('[temp-voice] create failed:', err.message);
+    log.error('temp-voice', 'create failed:', err.message);
     return;
   }
 
@@ -223,7 +224,7 @@ async function handleJoin(guild, member, hub) {
           .catch(() => {});
       }
     } catch (err) {
-      console.error('[temp-voice] text channel create failed:', err.message);
+      log.error('temp-voice', 'text channel create failed:', err.message);
     }
   }
 
@@ -289,12 +290,12 @@ on('temp-voice', 'voiceStateUpdate', async ({ old: oldState, new: newState }, ra
   const cfg = normaliseTempVoiceConfig(rawConfig);
 
   if (oldState.channelId && oldState.channelId !== newState.channelId && isTempChannel(oldState.channelId)) {
-    await onLeaveTemp(guild, oldState.channelId).catch((e) => console.error('[temp-voice] leave:', e.message));
+    await onLeaveTemp(guild, oldState.channelId).catch((e) => log.error('temp-voice', 'leave:', e.message));
   }
   if (newState.channelId && newState.channelId !== oldState.channelId) {
     const hub = cfg.hubs.find((h) => h.hubChannelId === newState.channelId);
     if (hub && newState.member) {
-      await handleJoin(guild, newState.member, hub).catch((e) => console.error('[temp-voice] join:', e.message));
+      await handleJoin(guild, newState.member, hub).catch((e) => log.error('temp-voice', 'join:', e.message));
     }
   }
 });
@@ -326,7 +327,7 @@ async function sweep() {
   }
 }
 
-setInterval(() => sweep().catch((e) => console.error('[temp-voice] sweep:', e.message)), SWEEP_MS).unref();
+setInterval(() => sweep().catch((e) => log.error('temp-voice', 'sweep:', e.message)), SWEEP_MS).unref();
 setTimeout(() => sweep().catch(() => {}), 30_000).unref();
 
 // --- command helpers (used by bot/commands/voice-*.js) ---------------
