@@ -47,7 +47,7 @@ phase.
 
 ---
 
-## Phase 0 — Foundations (~½ day) — DONE
+## Phase 0 — Foundations — DONE
 
 **Goal:** htmx + Alpine loaded, CSRF works over htmx, conventions decided. No
 behaviour change yet.
@@ -80,30 +80,48 @@ appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
 
 ---
 
-## Phase 1 — Route/view refactor for fragments (bulk, ~1 week spread)
+## Phase 1 — Route/view refactor for fragments — IN PROGRESS
 
 **Goal:** module-config pages save without a full reload.
 
-- **Split `guild.ejs`** so each panel (`overview`, `settings`, `m/<id>`,
-  `leaderboard`, …) is an includable partial that can render standalone.
-- **Remove the `include(configView, {30 keys})` passthrough:** move the
-  per-module context vars into `res.locals` in the route so partials read them
-  directly. (Already on the 3.0 backlog — do it here as a prerequisite.)
-- Route checks `req.header('HX-Request')`: htmx → render just the partial; normal
-  request → the full page (progressive enhancement preserved).
-- POST handlers: on `HX-Request`, respond with the re-rendered partial +
-  `HX-Trigger` toast instead of `res.redirect('?msg=…')`. Keep the redirect path
-  as the no-JS fallback.
-- **Module by module.** Start with 3 simple ones (`counting`, `afk`,
-  `free-games`), prove the pattern, then roll through the rest (~2–3 per session).
-- Convert module toggles + plugin-grid "Enable" buttons from the `syloAction`
-  fetch to `hx-post` returning the updated card/dot.
+### Done (commit 1 — pattern established)
+
+- **`moduleViewLocals(mod, req, configOverride)`** in `guilds.js`: one function
+  builds the full render context for a module panel (all keys, defaulted).
+  Replaces the ~30-key `include(configView, {…})` passthrough in `guild.ejs` —
+  EJS 3 bare `include()` inherits all parent locals, so the passthrough was pure
+  ceremony. Used by the GET page, the htmx fragment render, and the config-POST
+  re-render.
+- **`views/guild/_module-config.ejs`**: `<div id="module-config">` wrapper around
+  `include(configPartialRel)`. `guild.ejs` includes it; the routes render it
+  standalone.
+- **`GET /:guildId/m/:moduleId`**: on `HX-Request` → `res.render('guild/_module-config')`
+  (fragment only); otherwise the full page.
+- **`POST /:guildId/m/:moduleId/config`**: on `HX-Request` → re-render the
+  fragment + `HX-Trigger: {"toast":{"msg":"Saved","kind":"ok"}}`; otherwise the
+  existing `res.redirect('?msg=saved')`.
+- Forms in **`counting.ejs`, `afk.ejs`, `free-games.ejs`** got
+  `hx-post` / `hx-target="#module-config"` / `hx-swap="outerHTML"` (the
+  `method`/`action` stay as the no-JS fallback).
+
+### Still to do
+
+- Roll the `hx-post` attrs through the remaining ~22 module config forms
+  (~2–3 per commit). Watch for handlers with early `res.redirect` on special
+  cases (welcome-channel publish, verification, invite-tracker) — those need an
+  `HX-Request` branch too.
+- Convert the standalone builder pages (rr / sb / cc / msg / reminder / tv).
+- Convert module enable/disable toggles + plugin-grid "Enable" from the
+  `syloAction` fetch to `hx-post` returning the updated card/dot.
+- Split the other `guild.ejs` panels (`overview`, `settings`, `leaderboard`,
+  `appeals`, `moderation`, `audit`, `commands`) into standalone partials for
+  fragment nav — optional, lower priority.
 
 **Done when:** all 26 module pages + overview save via htmx, no-JS fallback intact.
 
 ---
 
-## Phase 2 — Alpine for the builders (~3–4 days)
+## Phase 2 — Alpine for the builders
 
 **Goal:** replace hand-rolled DOM JS with declarative reactive state.
 
@@ -118,7 +136,7 @@ appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
 
 ---
 
-## Phase 3 — Trim `app.js` (~½ day)
+## Phase 3 — Trim `app.js`
 
 - After Phases 1–2 `app.js` is nearly empty. `syloAction` → gone (htmx).
   confirm-on-submit → `hx-confirm`. chip/emoji picker → Alpine. Server switcher +
@@ -128,7 +146,7 @@ appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
 
 ---
 
-## Phase 4 — Design system + cleanup (~1 week, iterative)
+## Phase 4 — Design system + cleanup
 
 **Goal:** "clean like MEE6". Now the interaction patterns are stable, style them
 once.
@@ -149,7 +167,7 @@ once.
 
 ---
 
-## Phase 5 — Verify + docs (~1 day)
+## Phase 5 — Verify + docs
 
 - Public pages (`/lb`, `/verify`, `/appeal`) still work with JS disabled.
 - CSRF enforced on htmx requests.

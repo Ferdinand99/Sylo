@@ -5,7 +5,9 @@
   <% if (cfg.resetOnFail === false) { %>is rejected and deleted.<% } else { %>breaks the streak and it starts over from 1.<% } %>
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/counting/config" class="stack" style="max-width:560px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/counting/config"
+      hx-post="/guilds/<%= guild.id %>/m/counting/config" hx-target="#module-config" hx-swap="outerHTML"
+      class="stack" style="max-width:560px">
   <label>Counting channel</label>
   <select name="channelId">
     <option value="">— none —</option>

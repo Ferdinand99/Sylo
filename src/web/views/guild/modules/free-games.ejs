@@ -6,7 +6,9 @@
   DLC is filtered out of announcements; <code>/freegames dlc:true</code> shows free DLC on demand.
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/free-games/config" class="stack" style="max-width:520px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/free-games/config"
+      hx-post="/guilds/<%= guild.id %>/m/free-games/config" hx-target="#module-config" hx-swap="outerHTML"
+      class="stack" style="max-width:520px">
   <label>Announcement channel</label>
   <select name="channelId" required>
     <option value="">— select —</option>

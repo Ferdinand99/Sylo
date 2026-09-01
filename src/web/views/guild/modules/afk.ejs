@@ -5,7 +5,9 @@
   status automatically when they next send a message.
 </p>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/afk/config" class="stack" style="max-width:520px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/afk/config"
+      hx-post="/guilds/<%= guild.id %>/m/afk/config" hx-target="#module-config" hx-swap="outerHTML"
+      class="stack" style="max-width:520px">
   <label class="check">
     <input type="checkbox" name="setNickname" <%= cfg.setNickname !== false ? 'checked' : '' %> />
     Prefix their nickname with <code>[AFK]</code> (needs Manage Nicknames)

@@ -457,17 +457,19 @@ router.post(
   })
 );
 
-// Per-module settings panel.
-router.get('/:guildId/m/:moduleId', (req, res) => {
-  const mod = getModule(req.params.moduleId);
-  if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
+// Full render context for a module's settings panel. Shared by the GET page,
+// the htmx fragment render, and the config-POST re-render — so every module
+// partial can read what it needs straight from locals (no per-include passthrough).
+function moduleViewLocals(mod, req, configOverride) {
   const { enabled, config } = getGuildModule(req.guild.id, mod.id);
-  res.render('guild', {
+  const hasView = CONFIG_VIEWS.has(mod.id);
+  return {
     ...baseContext(req.guild, `m/${mod.id}`),
     activeModule: mod,
     moduleEnabled: enabled,
-    moduleConfig: config,
-    configView: CONFIG_VIEWS.has(mod.id) ? `guild/modules/${mod.id}` : 'guild/modules/stub',
+    moduleConfig: configOverride ?? config,
+    configView: hasView ? `guild/modules/${mod.id}` : 'guild/modules/stub',
+    configPartialRel: hasView ? `modules/${mod.id}` : 'modules/stub',
     logEvents: LOG_EVENTS,
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
@@ -579,7 +581,16 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
         }))
       : [],
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
-  });
+  };
+}
+
+router.get('/:guildId/m/:moduleId', (req, res) => {
+  const mod = getModule(req.params.moduleId);
+  if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
+  const locals = moduleViewLocals(mod, req);
+  // htmx fragment nav (Phase 1): render just the config panel.
+  if (req.get('HX-Request')) return res.render('guild/_module-config', locals);
+  res.render('guild', locals);
 });
 
 // Save a module's settings.
@@ -871,6 +882,13 @@ router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
       return res.redirect(`${back}?msg=wc-published`);
     }
     return res.redirect(`${back}?msg=wc-fail`);
+  }
+
+  // htmx: swap the re-rendered panel + fire a toast instead of a full reload.
+  if (req.get('HX-Request')) {
+    return res
+      .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Saved', kind: 'ok' } }))
+      .render('guild/_module-config', moduleViewLocals(mod, req, config));
   }
   res.redirect(`${back}?msg=saved`);
 }));
