@@ -159,8 +159,9 @@ appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
   reload is fine feedback. Convert later by re-rendering the tab partial if
   wanted.
 - **`polls` config form:** done — Phase 2 embed-editor port added `hx-post` to
-  `#module-config`. **`welcome-channel`:** still submit-time JS; finishes with its
-  Phase 2 port (publish also early-returns a redirect).
+  `#module-config`. **`welcome-channel`:** ported to `embedList` in Phase 2; the
+  form stays full-nav (Save reloads the panel, Publish early-returns a redirect),
+  which is fine for a heavy builder page.
 
 **Phase 1 is effectively done** — every settings save on the dashboard is now a
 fragment swap + toast, with the no-JS fallback intact. The two remaining items
@@ -206,9 +207,18 @@ are an action page (Infractions) and two forms blocked on Phase 2.
   `polls.ejs` both `include('partials/embed-editor', …)`; this also finishes the
   Phase-1-deferred `polls` config form (now `hx-post` to `#module-config`).
 
-**Still to do:** `welcome-channel` (spec has multiple embeds/banners — needs a
-list wrapper around `embedEditor`), `msg-builder`, `reminder-builder`
-(scheduling UI is separate), `temp-voice` builder.
+- **welcome-channel builder** → `embedList` in `alpine-components.js`;
+  `welcome-channel.ejs` is one `x-data="embedList(…)"` block: `x-model` textarea,
+  `x-for` over `items` (embed / banner blocks gated by sibling `<template x-if>`,
+  no wrapper — keeps the CSS grid children direct), `x-for` preset cards, reorder
+  via splice, `reset()`/`move()`/`remove()`/`addPreset()`/`add`+`removeField()`.
+  `$watch('items'|'content')` writes `<input name="spec">` (form stays full-nav —
+  Save reloads the panel, Publish early-returns a redirect). **`welcome-channel.js`
+  deleted.**
+
+**Still to do:** `msg-builder` (multiple embeds + link buttons + role rows),
+`reminder-builder` (scheduling UI is separate), `temp-voice` builder (`tv-builder.js`,
+14 lines — trivial).
 
 **Done when:** every builder runs on Alpine; the old builder scripts are gone.
 

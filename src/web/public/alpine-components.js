@@ -172,4 +172,119 @@ document.addEventListener('alpine:init', function () {
       },
     };
   });
+
+  // Welcome Channel builder: an ordered list of embed / banner blocks (max 10)
+  // plus the message text. Same ".wc-*" preview look as `embedEditor`, but the
+  // spec is a list with reorder + "Add element" presets, so it is its own
+  // component. Serialises { content, embeds:[…] } into <input name="spec">.
+  window.Alpine.data('embedList', function (cfg) {
+    var HEX = /^#[0-9a-f]{6}$/i;
+    var URL_RE = /^https?:\/\/\S+$/i;
+    cfg = cfg || {};
+    var spec = cfg.spec && typeof cfg.spec === 'object' ? cfg.spec : { content: '', embeds: [] };
+    var uid = 0;
+    function normEmbed(e) {
+      e = e && typeof e === 'object' ? e : {};
+      return {
+        id: 'e' + uid++,
+        kind: e.kind === 'banner' ? 'banner' : 'embed',
+        color: HEX.test(e.color) ? e.color : '#5865f2',
+        authorName: String(e.authorName || ''),
+        authorIcon: String(e.authorIcon || ''),
+        title: String(e.title || ''),
+        description: String(e.description || ''),
+        image: String(e.image || ''),
+        thumbnail: String(e.thumbnail || ''),
+        footerText: String(e.footerText || ''),
+        footerIcon: String(e.footerIcon || ''),
+        fields: (Array.isArray(e.fields) ? e.fields : []).map(function (f) {
+          return { id: 'f' + uid++, name: String(f.name || ''), value: String(f.value || ''), inline: !!f.inline };
+        }),
+      };
+    }
+    return {
+      max: cfg.max || 10,
+      presets: Array.isArray(cfg.presets) ? cfg.presets : [],
+      content: String(spec.content || ''),
+      items: (Array.isArray(spec.embeds) ? spec.embeds : []).map(normEmbed),
+      _form: null,
+      init() {
+        this._form = this.$root.querySelector('#wc-form');
+        if (this._form) {
+          this._form.addEventListener('submit', () => this.serialize());
+          this.serialize();
+          this.$watch('items', () => this.serialize());
+          this.$watch('content', () => this.serialize());
+        }
+      },
+      get full() {
+        return this.items.length >= this.max;
+      },
+      addPreset(id) {
+        if (this.full) return;
+        var p = this.presets.find(function (x) {
+          return x.id === id;
+        });
+        if (!p) return;
+        this.items.push(normEmbed(JSON.parse(JSON.stringify(p.defaults || { kind: 'embed' }))));
+      },
+      remove(i) {
+        this.items.splice(i, 1);
+      },
+      move(i, d) {
+        var j = i + d;
+        if (j < 0 || j >= this.items.length) return;
+        var it = this.items.splice(i, 1)[0];
+        this.items.splice(j, 0, it);
+      },
+      reset() {
+        if (!window.confirm('Clear all elements and the message text?')) return;
+        this.items = [];
+        this.content = '';
+      },
+      addField(row) {
+        row.fields.push({ id: 'f' + uid++, name: '', value: '', inline: false });
+      },
+      removeField(row, fi) {
+        row.fields.splice(fi, 1);
+      },
+      pickImg(row, key) {
+        var u = window.prompt('Image URL (https://…). Leave blank to remove.', row[key] || '');
+        if (u === null) return;
+        u = String(u).trim();
+        row[key] = URL_RE.test(u) ? u : '';
+      },
+      get serialized() {
+        return {
+          content: this.content,
+          embeds: this.items.map(function (e) {
+            return {
+              kind: e.kind === 'banner' ? 'banner' : 'embed',
+              color: e.color,
+              authorName: e.authorName,
+              authorIcon: e.authorIcon,
+              title: e.title,
+              description: e.description,
+              image: e.image,
+              thumbnail: e.thumbnail,
+              footerText: e.footerText,
+              footerIcon: e.footerIcon,
+              fields: e.fields
+                .map(function (f) {
+                  return { name: f.name, value: f.value, inline: !!f.inline };
+                })
+                .filter(function (f) {
+                  return f.name || f.value;
+                }),
+            };
+          }),
+        };
+      },
+      serialize() {
+        if (!this._form) return;
+        var h = this._form.querySelector('input[name="spec"]');
+        if (h) h.value = JSON.stringify(this.serialized);
+      },
+    };
+  });
 });
