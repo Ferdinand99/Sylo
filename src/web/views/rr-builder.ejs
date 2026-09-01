@@ -55,7 +55,9 @@
     <h2>Message</h2>
     <label class="small">Message text <span class="muted">— optional, above the embed</span></label>
     <textarea id="rr-content" name="message" rows="2" placeholder="Pick your roles below!"><%= rm.message || '' %></textarea>
-    <div id="rr-embed" class="wc-stage" style="margin-top:8px"></div>
+    <div style="margin-top:8px">
+      <%- include('partials/embed-editor', { hidden: 'embed', spec: rm.embed || {} }) %>
+    </div>
   </section>
 
   <section class="card">
@@ -108,10 +110,5 @@
     </label>
   </section>
 </form>
-
-<script>
-  window.RR = <%- JSON.stringify(rm).replace(/</g, '\\u003c') %>;
-</script>
-<script src="/reaction-role.js"></script>
 
 <%- include('partials/footer') %>

@@ -4,6 +4,20 @@
 <% var pm = cfg.pollMessage || {}; %>
 <% var rm = cfg.resultsMessage || {}; %>
 <% var LETTERS = ['🇦','🇧','🇨','🇩','🇪','🇫','🇬','🇭','🇮','🇯','🇰','🇱','🇲','🇳','🇴','🇵','🇶','🇷','🇸','🇹']; %>
+<%
+  var PM_BODY = '<div class="poll-body">' +
+    '<div class="poll-body-q">{question}</div>' +
+    '<div>🇦&nbsp; First option</div><div>🇧&nbsp; Second option</div><div>🇨&nbsp; …</div>' +
+    '<div class="muted small" style="margin-top:6px">Sylo fills the question &amp; choices here</div>' +
+    '</div>';
+  var RM_BODY = '<div class="poll-body">' +
+    '<div class="poll-body-q">{question}</div>' +
+    '<div>🇦&nbsp; <b>First option</b><br>██████░░░░  60.0% · 6 votes</div>' +
+    '<div>🇧&nbsp; <b>Second option</b><br>████░░░░░░  40.0% · 4 votes</div>' +
+    '<div class="muted small" style="margin-top:6px">Sylo fills the results here</div>' +
+    '</div>';
+  var EMBED_OPTS = { content: true, author: false, description: false, fields: false, thumb: false, footerIcon: false, footerKey: 'footer', defaultColor: '#5b7cfa' };
+%>
 
 <p class="muted small">
   Members create polls with <code>/poll</code> and vote by reacting with the letter of their choice.
@@ -23,7 +37,8 @@
   </p>
 </section>
 
-<form method="POST" action="/guilds/<%= guild.id %>/m/polls/config" id="polls-form" class="stack" style="max-width:600px">
+<form method="POST" action="/guilds/<%= guild.id %>/m/polls/config" id="polls-form" class="stack" style="max-width:600px"
+      hx-post="/guilds/<%= guild.id %>/m/polls/config" hx-target="#module-config" hx-swap="outerHTML">
   <input type="hidden" name="pm_json" id="pm-json" />
   <input type="hidden" name="rm_json" id="rm-json" />
 
@@ -40,35 +55,33 @@
   <section class="card">
     <h3 style="margin:0 0 2px">Polls message</h3>
     <p class="muted small">How a live poll looks. Click a field to edit it; Sylo fills the greyed-out body.</p>
-    <div id="pm-stage" class="wc-stage"></div>
-    <div class="poll-vars" data-for="pm">Insert:
-      <button type="button" data-var="{question}">question</button>
-      <button type="button" data-var="{choices}">choices</button>
-      <button type="button" data-var="{ends}">ends</button>
-      <button type="button" data-var="{mode}">mode</button>
-    </div>
+    <%- include('../../partials/embed-editor', Object.assign({
+      hidden: 'pm_json', spec: pm, fixedBody: PM_BODY,
+      ph: { title: '📊 {question}', footer: '{ends} · {mode}' },
+      vars: [
+        { token: '{question}', label: 'question' },
+        { token: '{choices}', label: 'choices' },
+        { token: '{ends}', label: 'ends' },
+        { token: '{mode}', label: 'mode' },
+      ],
+    }, EMBED_OPTS)) %>
   </section>
 
   <section class="card">
     <h3 style="margin:0 0 2px">Results message</h3>
     <p class="muted small">Posted when a poll closes.</p>
-    <div id="rm-stage" class="wc-stage"></div>
-    <div class="poll-vars" data-for="rm">Insert:
-      <button type="button" data-var="{question}">question</button>
-      <button type="button" data-var="{results}">results</button>
-      <button type="button" data-var="{total}">total</button>
-      <button type="button" data-var="{winner}">winner</button>
-      <button type="button" data-var="{mode}">mode</button>
-    </div>
+    <%- include('../../partials/embed-editor', Object.assign({
+      hidden: 'rm_json', spec: rm, fixedBody: RM_BODY,
+      ph: { title: '📊 Results — {question}', footer: 'Winner: {winner} · {total} total votes' },
+      vars: [
+        { token: '{question}', label: 'question' },
+        { token: '{results}', label: 'results' },
+        { token: '{total}', label: 'total' },
+        { token: '{winner}', label: 'winner' },
+        { token: '{mode}', label: 'mode' },
+      ],
+    }, EMBED_OPTS)) %>
   </section>
 
   <div><button type="submit">Save</button></div>
 </form>
-
-<script>
-  window.POLLS = {
-    pm: <%- JSON.stringify(pm).replace(/</g, '\\u003c') %>,
-    rm: <%- JSON.stringify(rm).replace(/</g, '\\u003c') %>,
-  };
-</script>
-<script src="/polls.js"></script>

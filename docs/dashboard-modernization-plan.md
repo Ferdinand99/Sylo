@@ -158,9 +158,9 @@ appears, "Server received X-CSRF-Token: yes"; the Alpine button increments.
   (mod-log embed, real unban) and the warnings/bans list needs to refresh, so a
   reload is fine feedback. Convert later by re-rendering the tab partial if
   wanted.
-- **`polls` and `welcome-channel` config forms:** submit-time JS populates hidden
-  fields — finished as part of the Phase 2 builder ports (`welcome-channel`
-  publish also early-returns a redirect).
+- **`polls` config form:** done — Phase 2 embed-editor port added `hx-post` to
+  `#module-config`. **`welcome-channel`:** still submit-time JS; finishes with its
+  Phase 2 port (publish also early-returns a redirect).
 
 **Phase 1 is effectively done** — every settings save on the dashboard is now a
 fragment swap + toast, with the no-JS fallback intact. The two remaining items
@@ -193,9 +193,22 @@ are an action page (Infractions) and two forms blocked on Phase 2.
   `makeRoleChip` + the two chip handlers gone from `app.js`.
 - **reaction-role builder rows + style toggle** → `rrRows` in
   `alpine-components.js`; `rr-builder.ejs` rows/style radios/conditional sections
-  are `x-model` / `x-for` / `x-show`. `reaction-role.js` shrank to just the shared
-  embed editor + the submit handler (177 → 103 lines). The emoji picker in
-  `app.js` now dispatches an `input` event so `x-model` sees the pick.
+  are `x-model` / `x-for` / `x-show`. The emoji picker in `app.js` now dispatches
+  an `input` event so `x-model` sees the pick.
+- **shared WYSIWYG embed editor** → `embedEditor` in `alpine-components.js` +
+  `partials/embed-editor.ejs`. One config-driven component: feature flags
+  (`content` / `author` / `description` / `fields` / `thumb` / `footerIcon`),
+  `footerKey` (`footerText` vs `footer`), `fixedBody` (greyed poll preview),
+  `vars` (insert-token buttons), `ph` (placeholder overrides). Contenteditable
+  fields use `x-init` (seed once) + `@input` (write-only) — no cursor jump. A
+  `$watch('e')` keeps the hidden `<input>` populated so htmx serialisation sees
+  it. **`reaction-role.js` and `polls.js` deleted.** `rr-builder.ejs` and
+  `polls.ejs` both `include('partials/embed-editor', …)`; this also finishes the
+  Phase-1-deferred `polls` config form (now `hx-post` to `#module-config`).
+
+**Still to do:** `welcome-channel` (spec has multiple embeds/banners — needs a
+list wrapper around `embedEditor`), `msg-builder`, `reminder-builder`
+(scheduling UI is separate), `temp-voice` builder.
 
 **Done when:** every builder runs on Alpine; the old builder scripts are gone.
 
