@@ -1,0 +1,73 @@
+<% var cfg = moduleConfig || {}; var feeds = Array.isArray(cfg.feeds) ? cfg.feeds : []; %>
+<% var defTpl = typeof rssDefaultTemplate !== 'undefined' ? rssDefaultTemplate : '📰 **{title}**\n{link}'; %>
+
+<p class="muted small">
+  Sylo checks each feed every few minutes and posts new items to the chosen channel.
+  Works with RSS 2.0 and Atom — blogs, news sites, Reddit (<code>…/.rss</code>), Mastodon feeds,
+  GitHub releases (<code>…/releases.atom</code>), and so on. Template placeholders:
+  <code>{title}</code> <code>{link}</code> <code>{author}</code> <code>{feed}</code>.
+  The first check only remembers the current items; new ones after that are posted (up to 15 feeds).
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/rss/config" hx-post="/guilds/<%= guild.id %>/m/rss/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-xl">
+  <div id="rss-rows">
+    <% (feeds.length ? feeds : [{ id: '', url: '', channelId: '', roleId: '', template: '' }]).forEach(function (f) { %>
+      <div class="rss-row card stack">
+        <input type="hidden" name="rss_id" value="<%= f.id || '' %>" />
+        <div class="star-age">
+          <div class="stack u-grow">
+            <label class="small">Feed URL</label>
+            <input type="url" name="rss_url" value="<%= f.url || '' %>" placeholder="https://example.com/feed.xml" maxlength="500" />
+          </div>
+          <div class="stack u-grow">
+            <label class="small">Post in</label>
+            <select name="rss_channel">
+              <option value="">— select a channel —</option>
+              <% channels.forEach(function (c) { %>
+                <option value="<%= c.id %>" <%= c.id === f.channelId ? 'selected' : '' %>>#<%= c.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="stack u-grow">
+            <label class="small">Ping role <span class="muted">— optional</span></label>
+            <select name="rss_role">
+              <option value="">— none —</option>
+              <% roles.forEach(function (r) { %>
+                <option value="<%= r.id %>" <%= r.id === f.roleId ? 'selected' : '' %>><%= r.name %></option>
+              <% }) %>
+            </select>
+          </div>
+        </div>
+        <label class="small">Message template <span class="muted">— blank uses the default</span></label>
+        <textarea name="rss_template" rows="2" maxlength="1000" placeholder="<%= defTpl %>"><%= f.template || '' %></textarea>
+        <div><button type="button" class="link-btn" onclick="this.closest('.rss-row').remove()">remove</button></div>
+      </div>
+    <% }) %>
+  </div>
+  <div><button type="button" class="secondary" id="rss-add">＋ Add feed</button></div>
+  <div class="u-mt-3"><button type="submit">Save</button></div>
+</form>
+
+<template id="rss-template">
+  <div class="rss-row card stack">
+    <input type="hidden" name="rss_id" value="" />
+    <div class="star-age">
+      <div class="stack u-grow"><label class="small">Feed URL</label>
+        <input type="url" name="rss_url" placeholder="https://example.com/feed.xml" maxlength="500" /></div>
+      <div class="stack u-grow"><label class="small">Post in</label>
+        <select name="rss_channel"><option value="">— select a channel —</option>
+          <% channels.forEach(function (c) { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %></select></div>
+      <div class="stack u-grow"><label class="small">Ping role</label>
+        <select name="rss_role"><option value="">— none —</option>
+          <% roles.forEach(function (r) { %><option value="<%= r.id %>"><%= r.name %></option><% }) %></select></div>
+    </div>
+    <label class="small">Message template</label>
+    <textarea name="rss_template" rows="2" maxlength="1000" placeholder="<%= defTpl %>"></textarea>
+    <div><button type="button" class="link-btn" onclick="this.closest('.rss-row').remove()">remove</button></div>
+  </div>
+</template>
+<script>
+  document.getElementById('rss-add')?.addEventListener('click', function () {
+    document.getElementById('rss-rows').appendChild(document.getElementById('rss-template').content.cloneNode(true));
+  });
+</script>

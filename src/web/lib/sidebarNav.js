@@ -88,6 +88,7 @@ const CATEGORIES = [
       { module: 'twitch-alerts', label: 'Twitch alerts' },
       { module: 'youtube-alerts', label: 'YouTube alerts' },
       { module: 'kick-alerts', label: 'Kick alerts' },
+      { module: 'rss', label: 'RSS alerts' },
     ],
   },
 ];

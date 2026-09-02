@@ -255,6 +255,15 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'rss',
+    name: 'RSS alerts',
+    description: 'Post a message when a followed RSS or Atom feed publishes something new.',
+    icon: '📰',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
+  {
     id: 'giveaways',
     name: 'Giveaways',
     description: 'Run prize giveaways with an Enter button; winners drawn automatically at the end time.',

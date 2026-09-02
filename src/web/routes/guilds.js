@@ -73,6 +73,8 @@ import {
   DEFAULT_MESSAGE as TWITCH_DEFAULT_MESSAGE,
 } from '../../modules/twitchAlerts.js';
 import { normaliseKickConfig, DEFAULT_MESSAGE as KICK_DEFAULT_MESSAGE } from '../../modules/kickAlerts.js';
+import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TEMPLATE } from '../../modules/rss.js';
+import { clearScope } from '../../db/postedKeys.js';
 import {
   normaliseYoutubeConfig,
   resolveYtChannel,
@@ -155,6 +157,7 @@ const CONFIG_VIEWS = new Set([
   'twitch-alerts',
   'youtube-alerts',
   'kick-alerts',
+  'rss',
   'giveaways',
   'game-stats',
 ]);
@@ -725,6 +728,7 @@ function moduleViewLocals(mod, req, configOverride) {
       'twitch-alerts',
       'youtube-alerts',
       'kick-alerts',
+      'rss',
       'giveaways',
     ].includes(mod.id)
       ? assignableRoles(req.guild)
@@ -746,6 +750,7 @@ function moduleViewLocals(mod, req, configOverride) {
     twitchDefaultMessage: TWITCH_DEFAULT_MESSAGE,
     kickEnabled: appConfig.kickEnabled,
     kickDefaultMessage: KICK_DEFAULT_MESSAGE,
+    rssDefaultTemplate: RSS_DEFAULT_TEMPLATE,
     ytVideoMessage: YT_VIDEO_MSG,
     ytLiveMessage: YT_LIVE_MSG,
     dashboardUrlSet: Boolean(appConfig.dashboardUrl),
@@ -1156,6 +1161,28 @@ router.post(
           plainText: fmts[i] === 'text',
         })),
       });
+    } else if (mod.id === 'rss') {
+      const ids = [].concat(req.body.rss_id ?? []);
+      const urls = [].concat(req.body.rss_url ?? []);
+      const chans = [].concat(req.body.rss_channel ?? []);
+      const rolez = [].concat(req.body.rss_role ?? []);
+      const tpls = [].concat(req.body.rss_template ?? []);
+      const prevIds = new Set((getGuildModule(req.guild.id, 'rss').config.feeds ?? []).map((f) => f.id));
+      config = normaliseRssConfig({
+        feeds: urls.map((url, i) => ({
+          id: ids[i] ?? '',
+          url,
+          channelId: chans[i] ?? '',
+          roleId: rolez[i] ?? '',
+          template: tpls[i] ?? '',
+        })),
+      });
+      // Drop the dedup state for feeds that were removed, so re-adding the same
+      // URL later starts fresh rather than silently swallowing a backlog.
+      const keptIds = new Set(config.feeds.map((f) => f.id));
+      for (const id of prevIds) {
+        if (!keptIds.has(id)) clearScope(req.guild.id, `rss:${id}`);
+      }
     } else if (mod.id === 'polls') {
       const msg = (raw) => {
         try {

@@ -32,6 +32,7 @@ export const MODULE_ICONS = {
   'twitch-alerts': 'twitch',
   'youtube-alerts': 'youtube',
   'kick-alerts': 'kick',
+  rss: 'rss',
   // synthetic overview cards
   general: 'gear',
   commands: 'command',

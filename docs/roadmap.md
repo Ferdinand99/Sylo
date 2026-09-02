@@ -30,13 +30,13 @@ enforces it) and `forgetUser` / `describeUserData` if user-scoped; new module �
 | 4 | Native Discord AutoMod push | ✅ shipped in **3.8.0** |
 | 5a | `posted_keys` dedupe helper | ✅ shipped (`refactor:`, no bump, PR #79) |
 | — | **Kick.com alerts + plain-text alert mode** (unplanned, issue #78) | ✅ shipped in **3.9.0** |
-| 5b | RSS module | ⏳ next — now targets **3.10.0** |
-| 6 | Server insights page | targets **3.11.0** |
+| 5b | RSS module | ✅ shipped in **3.10.0** |
+| 6 | Server insights page | ⏳ next — targets **3.11.0** |
 | 7 | Express 5 spike + discord.js v15 watch | no bump, slot in anytime |
 
 The Kick-alerts feature (issue #78) was slotted in between 5a and 5b and took the
 **3.9.0** minor the RSS module was originally pencilled in for, so everything from
-5b down shifts one minor. Kick alerts is the 28th module, so **RSS is the 29th**.
+5b down shifted one minor. Kick alerts is the 28th module and **RSS the 29th**.
 
 ---
 
@@ -50,7 +50,7 @@ The Kick-alerts feature (issue #78) was slotted in between 5a and 5b and took th
 | 4 | Native Discord AutoMod push | `feat:` | M–L | **3.8.0** | ✅ 3.8.0 |
 | 5a | `posted_keys` dedupe helper | `refactor:` | M | no bump | ✅ no bump |
 | — | Kick.com alerts + plain-text mode (issue #78) | `feat:` | M | — | ✅ 3.9.0 |
-| 5b | RSS module | `feat:` | L | ~~3.9.0~~ **3.10.0** | — |
+| 5b | RSS module | `feat:` | L | ~~3.9.0~~ **3.10.0** | ✅ 3.10.0 |
 | 6 | Server insights page | `feat:` | L | ~~3.10.0~~ **3.11.0** | — |
 | 7 | Express 5 spike + discord.js v15 watch | `chore:` / spike | M | no bump | — |
 
@@ -240,29 +240,19 @@ Branch `feat/rss-alerts` for 5b (5a shipped on its own branch `refactor/posted-k
 > wrappers with unchanged exports; `GUILD_TABLES` swapped the four for
 > `posted_keys`; unused `clearGuild*` helpers removed.
 
-### 5b. RSS module (`feat:`) → 3.10.0 — **next**
-- New module `rss` (**29th**, since Kick alerts took the 28th slot):
-  `src/modules/rss.js`, `src/db/rssFeeds.js`, migration for
-  `rss_feeds(id, guild_id, url, channel_id, role_id, last_guid, template,
-  added_at)`, `src/web/views/guild/modules/rss.ejs`, all the new-module wiring
-  (registry, `modules/index.js`, `CONFIG_VIEWS`, `MODULE_ICONS` + `#i-rss`
-  sprite, `sidebarNav.js`, `overviewSummary.js`, `docs/modules/rss.md`,
-  `GUILD_TABLES`).
-- Parser: extract the hand-rolled Atom parser from `youtubeAlerts.js`
-  (`parseFeed`, currently `String(xml).split('<entry>')` + `grab(/…/)`) to
-  `src/bot/lib/feed.js` and generalise — RSS 2.0 `<item>` **and** Atom `<entry>`;
-  `guid` / `id` / `link` as the key. `youtubeAlerts.js` then uses the shared one.
-- A poll tick (`twitchAlerts.js` `setInterval` pattern), per feed: fetch, diff
-  new entries against `posted_keys` scope `rss:<feedId>` (helper is done),
-  post an embed (title, link, source, published), per-guild feed cap (~15) and a
-  global fetch budget. Fail soft per feed — a broken feed must not kill the tick.
-- Covers blogs, news, Reddit `.rss`, Mastodon feeds, GitHub releases `.atom`.
-  Twitter/X and TikTok proper are a later follow-up.
-- `/rss add|remove|list` optional — dashboard-only is fine for v1.
+### 5b. RSS module (`feat:`) → 3.10.0
 
-**Verify:** `npm test` (`feed.js` parser tests with sample RSS + Atom; existing
-`youtubeAlerts` tests stay green); add a real feed, confirm one post per new
-entry and no repeats across a restart.
+> ✅ **Shipped** (`feat/rss-alerts`). As-built: **no `rss_feeds` table** — feeds
+> live in the module's JSON config like `twitch-alerts` / `kick-alerts`, each with
+> a stable 8-hex `id` assigned on first save (so `posted_keys` scope
+> `rss:<feedId>` stays collision-free). Removing a feed clears its scope in the
+> save route. `src/bot/lib/feed.js` is the shared RSS 2.0 + Atom parser
+> (`guid` / `id` / `alternate link` / title as the key; also surfaces `author`
+> from `<dc:creator>` or `<author><name>` and a media/enclosure `image` + the raw
+> `block`); `youtubeAlerts.js` now maps it onto its videoId shape. `posted_keys`
+> gained `anySeen` + `pruneScopePrefixOlderThan`. Poll every ~5 min, global
+> fetch budget, first look at a feed only seeds, burst cap of 3 posts/feed/tick
+> (rest still marked seen). Module is the **29th**.
 
 ---
 
