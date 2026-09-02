@@ -32,7 +32,14 @@ import { timeAgo } from '../lib/format.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { applyWarnThresholds, normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
-import { normaliseAutomodConfig, AUTOMOD_RULES, AUTOMOD_ACTIONS } from '../../modules/automod.js';
+import {
+  normaliseAutomodConfig,
+  AUTOMOD_RULES,
+  AUTOMOD_ACTIONS,
+  NATIVE_MAPPABLE,
+  PRESET_KEYS,
+} from '../../modules/automod.js';
+import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
 import {
   activeGiveaways,
@@ -728,6 +735,8 @@ function moduleViewLocals(mod, req, configOverride) {
         : [],
     automodRules: AUTOMOD_RULES,
     automodActions: AUTOMOD_ACTIONS,
+    nativeMappable: NATIVE_MAPPABLE,
+    presetKeys: PRESET_KEYS,
     verifyModes: VERIFY_MODES,
     turnstileEnabled: appConfig.turnstileEnabled,
     twitchEnabled: appConfig.twitchEnabled,
@@ -962,6 +971,13 @@ router.post(
         exemptChannels: [].concat(b.exemptChannels ?? []),
         // Immunity roles are managed on the Admin tab — keep whatever is stored.
         exemptRoles: prevAutomod.exemptRoles ?? [],
+        native: {
+          enabled: b.native_enabled === 'on',
+          words: b.native_words === 'on',
+          mentions: b.native_mentions === 'on',
+          spam: b.native_spam === 'on',
+          presets: [].concat(b.native_presets ?? []),
+        },
         rules: {
           invites: rule('invites'),
           links: { ...rule('links'), allowed: b.r_links_allowed },
@@ -1175,6 +1191,20 @@ router.post(
         log.error('verification', 'ensure message after save failed:', err.message)
       );
     }
+    let nativeNote = '';
+    let nativeWarned = false;
+    if (mod.id === 'automod') {
+      const r = await syncGuildAutomod(req.guild, config);
+      if (r.skipped === 'missing-permission') {
+        nativeNote = ' - native rules skipped: Sylo needs the Manage Server permission';
+        nativeWarned = true;
+      } else if (r.skipped === 'fetch-failed' || r.errors.length) {
+        nativeNote = ' - some native rules could not be updated';
+        nativeWarned = true;
+      } else if (r.created || r.edited || r.removed) {
+        nativeNote = ` - native rules +${r.created} ~${r.edited} -${r.removed}`;
+      }
+    }
     if (mod.id === 'welcome-channel' && req.body.action === 'publish') {
       const cfg = normaliseWelcomeChannelConfig(getGuildModule(req.guild.id, 'welcome-channel').config);
       const r = await publishWelcome(req.guild, cfg);
@@ -1191,7 +1221,10 @@ router.post(
     // htmx: swap the re-rendered panel + fire a toast instead of a full reload.
     if (req.get('HX-Request')) {
       return res
-        .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Saved', kind: 'ok' } }))
+        .set(
+          'HX-Trigger',
+          JSON.stringify({ toast: { msg: `Saved${nativeNote}`, kind: nativeWarned ? 'warn' : 'ok' } })
+        )
         .render('guild/_module-config', moduleViewLocals(mod, req, config));
     }
     res.redirect(`${back}?msg=saved`);
@@ -2097,6 +2130,14 @@ router.post('/:guildId/modules/:moduleId', (req, res) => {
   if (mod.id === 'invite-tracker' && enabled) {
     primeInviteCache(req.guild).catch((err) =>
       log.error('invite-tracker', 'cache prime after enable failed:', err.message)
+    );
+  }
+  if (mod.id === 'automod') {
+    // Re-assert native rules when turned back on; tear them down when off.
+    const cfg = normaliseAutomodConfig(getGuildModule(req.guild.id, 'automod').config);
+    const target = enabled ? cfg : { ...cfg, native: { ...cfg.native, enabled: false } };
+    syncGuildAutomod(req.guild, target).catch((err) =>
+      log.error('automod', 'native sync after toggle failed:', err.message)
     );
   }
   if (req.get('HX-Request')) {

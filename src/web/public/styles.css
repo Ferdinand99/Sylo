@@ -1022,6 +1022,10 @@ label.checkline input { width: auto; }
 .am-rule-cfg { margin-top: 8px; }
 .am-rule-cfg > summary { font-size: 12px; color: var(--accent); cursor: pointer; list-style: none; }
 .am-rule-cfg > summary::-webkit-details-marker { display: none; }
+.am-native-master { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.am-native-opts { margin-top: 8px; padding-left: 24px; display: flex; flex-direction: column; gap: 6px; }
+.am-native-opts label { display: flex; align-items: center; gap: 8px; }
+.am-native-opts p { margin: 6px 0 2px; }
 
 /* Levels page — collapsible sections + XP rate */
 .lvl-sec { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r); padding: 4px 16px 16px; margin: 12px 0; }

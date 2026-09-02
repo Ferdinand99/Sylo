@@ -203,7 +203,10 @@ settings panel per module — saves swap in place with a toast.
     dashboard (replies arrive as an anonymous "Staff" DM)
   - **Moderator** — a tabbed page consolidating **Auto-moderation** (bad words,
     repeated text, invites, links, caps, emojis, spoilers, mentions, zalgo,
-    anti-spam — each Disabled / Delete / Delete + Warn / Delete + Timeout),
+    anti-spam — each Disabled / Delete / Delete + Warn / Delete + Timeout), with
+    an optional **push to Discord's native AutoMod** for the mappable checks
+    (bad words, mentions, anti-spam) plus Discord's profanity / sexual-content /
+    slurs preset lists — reconciled as `Sylo:`-named rules, needs Manage Server,
     **auto-actions** (warning-count thresholds → timeout/kick/ban), **infractions**
     (warnings + ban manager), **immunity roles** (skip automod + auto-actions),
     **audit logging** (server events → a channel), and per-command permissions
