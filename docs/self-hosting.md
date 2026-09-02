@@ -130,10 +130,14 @@ To require a login:
    URL behind a proxy).
 3. Set a long random `SESSION_SECRET`.
 
-With `DISCORD_CLIENT_SECRET` set, every page except the `/health` JSON requires
-"Log in with Discord". Per-server pages require **Manage Server** (or
-Administrator / owner) in that server, or one of the **bot-master roles** set on
-that server's *Settings* page.
+With `DISCORD_CLIENT_SECRET` set, every page except the `/health` JSON and the
+`/metrics` scrape endpoint requires "Log in with Discord". Per-server pages
+require **Manage Server** (or Administrator / owner) in that server, or one of the
+**bot-master roles** set on that server's *Settings* page.
+
+`/health` (JSON) and `/metrics` stay unauthenticated so a monitor or Prometheus
+can reach them — keep them on your LAN, or restrict them at the reverse proxy if
+the dashboard is public.
 
 ---
 

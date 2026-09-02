@@ -359,6 +359,7 @@ button[type="submit"]:hover, .row-form button:hover, .btn-primary:hover { filter
 .status.bad .big { color: var(--bad); }
 .card.warn { border-color: rgba(229, 181, 103, 0.4); }
 .card.warn pre { white-space: pre-wrap; overflow-x: auto; }
+.sparkline { display: block; width: 100%; max-width: 240px; height: 32px; margin: 6px 0 2px; color: var(--accent); }
 
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }

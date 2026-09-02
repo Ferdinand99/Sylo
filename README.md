@@ -94,9 +94,18 @@ settings panel per module — saves swap in place with a toast.
 - **Structured logging + error history** — every log line is now
   `<ISO timestamp>  LEVEL  scope  message`; set `LOG_LEVEL` (`debug`/`info`/
   `warn`/`error`) and `LOG_FORMAT=json` (or `LOG_JSON=1`) for machine-readable
-  output. The **Health** page shows the last ~25 errors (time, scope, message),
-  and `GET /health` reports an `errorCount`. Dashboard forms and JSON actions
-  now carry a CSRF token (enforced when "Log in with Discord" is enabled).
+  output. `LOG_LEVEL=debug` also emits one line per HTTP request
+  (`method path status durationMs`). The **Health** page shows the last ~25
+  errors (time, scope, message) and a gateway-ping sparkline; `GET /health`
+  reports `errorCount`, `errorsByScope`, `commands` and a ping history. Dashboard
+  forms and JSON actions now carry a CSRF token (enforced when "Log in with
+  Discord" is enabled).
+- **Prometheus metrics** — `GET /metrics` serves the standard text format
+  (unauthenticated, rate-limited, same trust level as the `/health` JSON):
+  `sylo_up`, `sylo_uptime_seconds`, `sylo_guilds`, `sylo_gateway_ping_ms`,
+  `sylo_db_bytes`, `sylo_module_enabled{module}`, plus counters
+  `sylo_commands_total{command}`, `sylo_component_interactions_total{scope}`,
+  `sylo_errors_total{scope}` and `sylo_http_requests_total{route,status}`.
 - **Automatic database backups + restore** — Sylo writes compacted single-file
   snapshots of `sylo.db` to `<data>/backups`: just before every schema migration,
   shortly after boot, and on a schedule (`BACKUP_INTERVAL_HOURS`, default 24;
@@ -269,7 +278,11 @@ settings panel per module — saves swap in place with a toast.
   with a toast; every route keeps a no-JS fallback (full render + redirect). The
   builders (embed editor, reaction roles, custom commands, welcome channel, …)
   are Alpine components. The public pages below stay framework-free.
-  - `GET /health` — JSON status (uptime, guild count, last error) for healthchecks
+  - `GET /health` — JSON status (uptime, guild count, gateway-ping history,
+    per-scope error counts, command counts) for healthchecks
+  - `GET /metrics` — Prometheus text exposition (uptime, guilds, gateway ping,
+    per-command / per-scope counters, module adoption), unauthenticated like
+    `/health`; scrape it from your LAN or your own proxy
   - `/` — bot status, activity stats and module adoption; sidebar server switcher
   - `/stats` — cached lookups · `/health` — status page (JSON for monitors)
   - `/settings` — **Bot Personalizer**: bot username / avatar / banner + presence

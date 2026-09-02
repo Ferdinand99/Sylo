@@ -4,6 +4,7 @@
 // the shared error handling. Mirrors modules/dispatch.js for gateway events.
 import { MessageFlags } from 'discord.js';
 import { log } from '../../lib/log.js';
+import { inc } from '../../lib/metrics.js';
 
 /** @type {Array<{ scope: string, prefix: string, fn: Function }>} */
 const routes = [];
@@ -32,6 +33,7 @@ export function _resetComponents() {
 export async function routeComponent(interaction) {
   const route = routes.find((r) => interaction.customId.startsWith(r.prefix));
   if (!route) return false;
+  inc('sylo_component_interactions_total', { scope: route.scope });
   try {
     await route.fn(interaction);
   } catch (err) {
