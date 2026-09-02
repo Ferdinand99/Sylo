@@ -23,7 +23,7 @@ test('GET /overview renders the plugin grid shell', async () => {
   const html = await res.text();
   assert.match(html, /^<!doctype html>/i);
   assert.match(html, /class="plugin-grid"/);
-  assert.match(html, /of 27 plugins/); // overview health line
+  assert.match(html, /of 28 plugins/); // overview health line
   assert.match(html, /data-bulk-url=/); // 3.6 bulk-select wiring present
 });
 
@@ -88,6 +88,21 @@ test('POST /m/:id/config — no-JS redirect and htmx fragment + toast', async ()
   assert.equal(hx.status, 200);
   assert.match((await hx.text()).trim(), /^<div id="module-config">/);
   assert.match(hx.headers.get('hx-trigger') || '', /toast/);
+});
+
+test('POST /m/kick-alerts/config stores a cleaned alert list', async () => {
+  const res = await post(
+    app.base,
+    `/guilds/${GID}/m/kick-alerts/config`,
+    { kc_slug: 'xQc', kc_channel: CH.general, kc_role: '', kc_message: '' },
+    { 'HX-Request': 'true' }
+  );
+  assert.equal(res.status, 200);
+  const { getGuildModule } = await import('../src/db/modules.js');
+  const stored = getGuildModule(GID, 'kick-alerts').config;
+  assert.equal(stored.alerts.length, 1);
+  assert.equal(stored.alerts[0].slug, 'xqc');
+  assert.equal(stored.alerts[0].channelId, CH.general);
 });
 
 test('POST /modules/:id single toggle (htmx grid path) returns the CTA fragment', async () => {
