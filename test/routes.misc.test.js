@@ -64,6 +64,13 @@ test('GET /health as a browser renders the status page', async () => {
   assert.match(html, /backup/i);
 });
 
+test('GET /health from an hx-boost click renders the page, not the JSON', async () => {
+  // htmx fetches with Accept: */* — the HX-Request header is what marks it a nav.
+  const res = await get('/health', { accept: '*/*', 'HX-Request': 'true' });
+  assert.equal(res.status, 200);
+  assert.match(await res.text(), /<!doctype html>/i);
+});
+
 test('POST /health/backups creates a snapshot', async () => {
   const res = await post(app.base, '/health/backups', {});
   assert.ok([200, 302].includes(res.status), `unexpected ${res.status}`);
