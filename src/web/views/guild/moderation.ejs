@@ -5,13 +5,18 @@
   <input type="text" name="reason" placeholder="Reason" maxlength="400" required class="grow" />
   <button type="submit">Add warning</button>
 </form>
-<p class="muted small">The user is DM'd and the action is sent to the mod-log (if set).</p>
+<form method="POST" action="/guilds/<%= guild.id %>/warnings/clear" class="row-form"
+      data-confirm="Delete every warning for that member?">
+  <input type="text" name="userId" placeholder="User ID or @mention" required />
+  <button type="submit" class="danger">Clear all for user</button>
+</form>
+<p class="muted small">The user is DM'd on a new warning and every change is sent to the mod-log (if set).</p>
 
 <% if (warnings.length === 0) { %>
   <p class="muted">No warnings recorded in this server.</p>
 <% } else { %>
   <table>
-    <thead><tr><th>ID</th><th>User</th><th>Moderator</th><th>Reason</th><th>When</th></tr></thead>
+    <thead><tr><th>ID</th><th>User</th><th>Moderator</th><th>Reason</th><th>When</th><th></th></tr></thead>
     <tbody>
       <% warnings.forEach(function (w) { %>
         <tr>
@@ -20,11 +25,18 @@
           <td><%= w.moderator %></td>
           <td><%= w.reason %></td>
           <td class="muted"><%= w.ago %></td>
+          <td class="num">
+            <form class="u-inline" method="POST"
+                  action="/guilds/<%= guild.id %>/warnings/<%= w.id %>/delete"
+                  data-confirm="Remove warning #<%= w.id %>?">
+              <button type="submit" class="link-btn">remove</button>
+            </form>
+          </td>
         </tr>
       <% }) %>
     </tbody>
   </table>
-  <p class="muted small">Remove or clear warnings from Discord with <code>/warn remove</code> and <code>/warn clear</code>.</p>
+  <p class="muted small">Same as <code>/warn remove</code> and <code>/warn clear</code> in Discord.</p>
 <% } %>
 
 <h2 class="u-mt-6">Bans <span class="muted">(<%= bansShown %><%= bansTotal > bansShown ? ` of ${bansTotal}, first ${banLimit}` : '' %>)</span></h2>

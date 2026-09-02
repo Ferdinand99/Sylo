@@ -19,7 +19,13 @@ import {
   setEmbedColor,
   guildEmbedColor,
 } from '../../db/guildSettings.js';
-import { listGuildWarnings, addWarning } from '../../db/warnings.js';
+import {
+  listGuildWarnings,
+  addWarning,
+  getWarning,
+  removeWarning,
+  clearWarnings,
+} from '../../db/warnings.js';
 import { notifyTarget, MOD_COLOR } from '../../bot/lib/moderation.js';
 import { postModLog } from '../../bot/lib/modlog.js';
 import { timeAgo } from '../lib/format.js';
@@ -2168,6 +2174,73 @@ router.post(
     const logged = await postModLog(guild, embed);
     await applyWarnThresholds(guild, user, count, moderatorDisplayName(req));
     res.redirect(`${back}?tab=infr&msg=${logged ? 'warned' : 'warned-nolog'}`);
+  })
+);
+
+// Delete one warning by its id (dashboard equivalent of /warn remove).
+router.post(
+  '/:guildId/warnings/:id/delete',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/moderation?tab=infr`;
+    const id = Number(req.params.id);
+
+    const existing = Number.isInteger(id) ? getWarning(guild.id, id) : null;
+    if (!existing || !removeWarning(guild.id, id)) return res.redirect(`${back}&msg=warn-gone`);
+
+    const target = await runtime.client.users.fetch(existing.user_id).catch(() => null);
+    const embed = new EmbedBuilder()
+      .setColor(MOD_COLOR)
+      .setTitle('Warning removed')
+      .addFields(
+        { name: 'Warning ID', value: `#${id}` },
+        {
+          name: 'User',
+          value: target ? `${target.tag} (\`${existing.user_id}\`)` : `\`${existing.user_id}\``,
+        },
+        { name: 'Original reason', value: existing.reason },
+        { name: 'Removed by', value: moderatorDisplayName(req) }
+      )
+      .setTimestamp(Date.now());
+    await postModLog(guild, embed);
+    recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'moderation:warn-remove',
+      detail: `#${id}`,
+    });
+    res.redirect(`${back}&msg=warn-removed`);
+  })
+);
+
+// Delete every warning for one member (dashboard equivalent of /warn clear).
+router.post(
+  '/:guildId/warnings/clear',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/moderation?tab=infr`;
+    const userId = parseUserId(req.body.userId);
+    if (!userId) return res.redirect(`${back}&msg=baduser`);
+
+    const n = clearWarnings(guild.id, userId);
+    if (n === 0) return res.redirect(`${back}&msg=warn-none`);
+
+    const target = await runtime.client.users.fetch(userId).catch(() => null);
+    const embed = new EmbedBuilder()
+      .setColor(MOD_COLOR)
+      .setTitle('Warnings cleared')
+      .addFields(
+        { name: 'User', value: target ? `${target.tag} (\`${userId}\`)` : `\`${userId}\`` },
+        { name: 'Removed', value: `${n} warning${n === 1 ? '' : 's'}` },
+        { name: 'Moderator', value: moderatorDisplayName(req) }
+      )
+      .setTimestamp(Date.now());
+    await postModLog(guild, embed);
+    recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'moderation:warn-clear',
+      detail: `${n} for ${userId}`,
+    });
+    res.redirect(`${back}&msg=warn-cleared`);
   })
 );
 
