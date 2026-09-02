@@ -317,10 +317,3 @@ Branch `chore/express5-spike` (spike — may not merge as-is).
 
 **Verify:** the full harness passes on Express 5; `docker compose up` healthy;
 every regex route still resolves.
-
----
-
-## Not in scope here (revisit after)
-
-Twitter/X + TikTok alerts (scraping / paid API), report-a-message + mod queue,
-Discord server backup/templates, voice XP, auto-publish announcement channels.
