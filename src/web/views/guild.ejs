@@ -197,12 +197,13 @@
       <p class="muted">Auto-moderation, warning auto-actions, infractions, immunity, audit logging and command permissions.</p>
 
       <div class="mod-tabbed">
-        <input type="radio" name="mtab" id="mt-automod" checked />
-        <input type="radio" name="mtab" id="mt-actions" />
-        <input type="radio" name="mtab" id="mt-admin" />
-        <input type="radio" name="mtab" id="mt-infr" />
-        <input type="radio" name="mtab" id="mt-log" />
-        <input type="radio" name="mtab" id="mt-cmd" />
+        <% var mtab = typeof modTab !== 'undefined' ? modTab : 'automod'; %>
+        <input type="radio" name="mtab" id="mt-automod" <%= mtab === 'automod' ? 'checked' : '' %> />
+        <input type="radio" name="mtab" id="mt-actions" <%= mtab === 'actions' ? 'checked' : '' %> />
+        <input type="radio" name="mtab" id="mt-admin" <%= mtab === 'admin' ? 'checked' : '' %> />
+        <input type="radio" name="mtab" id="mt-infr" <%= mtab === 'infr' ? 'checked' : '' %> />
+        <input type="radio" name="mtab" id="mt-log" <%= mtab === 'log' ? 'checked' : '' %> />
+        <input type="radio" name="mtab" id="mt-cmd" <%= mtab === 'cmd' ? 'checked' : '' %> />
         <div class="mod-tablabels">
           <label for="mt-automod">Automod</label>
           <label for="mt-actions">Auto-actions</label>

@@ -141,6 +141,9 @@ const CONFIG_VIEWS = new Set([
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
+// Tab ids for the Moderator page's CSS radio tabs; `?tab=` selects one on load
+// so a POST that redirects back doesn't always snap to the first tab.
+const MOD_TABS = ['automod', 'actions', 'admin', 'infr', 'log', 'cmd'];
 
 function webModeratorId(req) {
   return currentUser(req)?.id ?? WEB_MODERATOR;
@@ -452,6 +455,7 @@ router.get(
       automodRules: AUTOMOD_RULES,
       thresholdActions: THRESHOLD_ACTIONS,
       logEvents: LOG_EVENTS,
+      modTab: MOD_TABS.includes(req.query.tab) ? req.query.tab : 'automod',
       msg: typeof req.query.msg === 'string' ? req.query.msg : null,
     });
   })
@@ -1826,15 +1830,15 @@ router.post(
     const guild = req.guild;
     const back = `/guilds/${guild.id}/moderation`;
     const userId = parseUserId(req.body.userId);
-    if (!userId) return res.redirect(`${back}?msg=baduser`);
+    if (!userId) return res.redirect(`${back}?tab=infr&msg=baduser`);
 
     if (!guild.members.me?.permissions.has(PermissionFlagsBits.BanMembers)) {
-      return res.redirect(`${back}?msg=perms`);
+      return res.redirect(`${back}?tab=infr&msg=perms`);
     }
     const existing = await guild.bans.fetch(userId).catch(() => null);
     if (!existing) {
       clearTempBan(guild.id, userId); // stale timer for an already-lifted ban
-      return res.redirect(`${back}?msg=notbanned`);
+      return res.redirect(`${back}?tab=infr&msg=notbanned`);
     }
 
     await guild.bans.remove(userId, `${moderatorDisplayName(req)}: unbanned via dashboard`);
@@ -1848,7 +1852,7 @@ router.post(
       .setTimestamp(Date.now());
     await postModLog(guild, embed);
 
-    res.redirect(`${back}?msg=unbanned`);
+    res.redirect(`${back}?tab=infr&msg=unbanned`);
   })
 );
 
@@ -1888,7 +1892,7 @@ router.post(
       )
       .setTimestamp(Date.now());
     await postModLog(guild, embed);
-    res.redirect(`${back}?msg=locked-all`);
+    res.redirect(`${back}?tab=infr&msg=locked-all`);
   })
 );
 
@@ -1929,7 +1933,7 @@ router.post(
       )
       .setTimestamp(Date.now());
     await postModLog(guild, embed);
-    res.redirect(`${back}?msg=unlocked-all`);
+    res.redirect(`${back}?tab=infr&msg=unlocked-all`);
   })
 );
 
@@ -1941,16 +1945,16 @@ router.post(
     const back = `/guilds/${guild.id}/moderation`;
     const channelId = String(req.body.channelId ?? '');
     if (!/^\d{17,20}$/.test(channelId) || !isChannelLocked(guild.id, channelId)) {
-      return res.redirect(`${back}?msg=lock-gone`);
+      return res.redirect(`${back}?tab=infr&msg=lock-gone`);
     }
 
     const moderatorTag = moderatorDisplayName(req);
     const channel = guild.channels.cache.get(channelId);
     if (!channel) {
       clearChannelLock(guild.id, channelId);
-      return res.redirect(`${back}?msg=unlocked-one`);
+      return res.redirect(`${back}?tab=infr&msg=unlocked-one`);
     }
-    if (lockPreflight(channel)) return res.redirect(`${back}?msg=perms`);
+    if (lockPreflight(channel)) return res.redirect(`${back}?tab=infr&msg=perms`);
 
     await unlockChannel(channel, { moderatorTag });
     recordAudit(guild.id, {
@@ -1964,7 +1968,7 @@ router.post(
       .addFields({ name: 'Channel', value: `#${channel.name}` }, { name: 'Moderator', value: moderatorTag })
       .setTimestamp(Date.now());
     await postModLog(guild, embed);
-    res.redirect(`${back}?msg=unlocked-one`);
+    res.redirect(`${back}?tab=infr&msg=unlocked-one`);
   })
 );
 
@@ -2129,11 +2133,11 @@ router.post(
     const reason = String(req.body.reason ?? '')
       .trim()
       .slice(0, 400);
-    if (!userId || reason === '') return res.redirect(`${back}?msg=baduser`);
+    if (!userId || reason === '') return res.redirect(`${back}?tab=infr&msg=baduser`);
 
     const user = await runtime.client.users.fetch(userId).catch(() => null);
-    if (!user) return res.redirect(`${back}?msg=baduser`);
-    if (user.bot) return res.redirect(`${back}?msg=botuser`);
+    if (!user) return res.redirect(`${back}?tab=infr&msg=baduser`);
+    if (user.bot) return res.redirect(`${back}?tab=infr&msg=botuser`);
 
     const { id, count } = addWarning({
       guildId: guild.id,
@@ -2163,7 +2167,7 @@ router.post(
       .setTimestamp(Date.now());
     const logged = await postModLog(guild, embed);
     await applyWarnThresholds(guild, user, count, moderatorDisplayName(req));
-    res.redirect(`${back}?msg=${logged ? 'warned' : 'warned-nolog'}`);
+    res.redirect(`${back}?tab=infr&msg=${logged ? 'warned' : 'warned-nolog'}`);
   })
 );
 
