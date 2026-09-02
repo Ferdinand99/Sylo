@@ -123,14 +123,31 @@ function ownerAllowBits(hub) {
   return bits;
 }
 
-function buildOverwrites(guild, hub, ownerId, { forText = false } = {}) {
+// Copy role/member overwrites from the parent, but drop the parent's @everyone
+// entry — buildOverwrites emits the authoritative one. A "join to create" lobby
+// often denies @everyone Speak, and copying that onto the spawned channel shows
+// its own owner as server-muted.
+export function syncedOverwrites(source, guild) {
+  return [...source].filter((ow) => ow.id !== guild.id);
+}
+
+export function buildOverwrites(guild, hub, ownerId, { forText = false } = {}) {
   const view = forText ? P.ViewChannel : P.Connect;
   const overwrites = [];
+
+  // @everyone: one entry. For a voice channel, always allow Speak/Stream so an
+  // inherited category "no talking" rule can't leave members server-muted in
+  // their own temp channel. Role gating adjusts the view/connect bit.
+  const everyoneAllow = forText ? [] : [P.Speak, P.Stream];
+  const everyoneDeny = [];
+  if (hub.roleList.length && hub.roleMode === 'deny') everyoneDeny.push(view);
+  if (everyoneAllow.length || everyoneDeny.length) {
+    overwrites.push({ id: guild.id, allow: everyoneAllow, deny: everyoneDeny });
+  }
 
   // Role allow/deny gate.
   if (hub.roleList.length) {
     if (hub.roleMode === 'deny') {
-      overwrites.push({ id: guild.id, deny: [view] });
       for (const rid of hub.roleList) overwrites.push({ id: rid, allow: [view] });
     } else {
       for (const rid of hub.roleList) overwrites.push({ id: rid, deny: [view] });
@@ -175,12 +192,12 @@ async function handleJoin(guild, member, hub) {
   let overwrites;
   if (hub.syncChannel && hubChannel?.permissionOverwrites) {
     overwrites = [
-      ...hubChannel.permissionOverwrites.cache.values(),
+      ...syncedOverwrites(hubChannel.permissionOverwrites.cache.values(), guild),
       ...buildOverwrites(guild, hub, member.id),
     ];
   } else if (hub.syncCategory && parentCat?.permissionOverwrites) {
     overwrites = [
-      ...parentCat.permissionOverwrites.cache.values(),
+      ...syncedOverwrites(parentCat.permissionOverwrites.cache.values(), guild),
       ...buildOverwrites(guild, hub, member.id),
     ];
   } else {

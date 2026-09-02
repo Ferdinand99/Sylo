@@ -1,7 +1,13 @@
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normaliseTempVoiceConfig, renderName } from '../src/modules/tempVoice.js';
+import {
+  normaliseTempVoiceConfig,
+  renderName,
+  buildOverwrites,
+  syncedOverwrites,
+} from '../src/modules/tempVoice.js';
+import { PermissionFlagsBits as P, PermissionsBitField } from 'discord.js';
 import {
   addTempChannel,
   removeTempChannel,
@@ -67,4 +73,44 @@ test('db: track a temp channel, find it by owner+hub, count, and remove', () => 
 
   clearGuildTempVoice(G);
   assert.equal(countHubChannels(HUB), 0);
+});
+
+// --- overwrites: no "server muted" in your own temp channel -----------------
+
+const GUILD = { id: '999999999999999999', members: { me: { id: 'bot' } } };
+const hub = (over = {}) =>
+  normaliseTempVoiceConfig({ hubs: [{ hubChannelId: '111111111111111111', ...over }] }).hubs[0];
+const forId = (rows, id) => rows.find((r) => r.id === id);
+
+test('buildOverwrites: voice channel always lets @everyone Speak/Stream', () => {
+  const rows = buildOverwrites(GUILD, hub(), 'owner-id');
+  const everyone = forId(rows, GUILD.id);
+  assert.ok(everyone, '@everyone entry present');
+  assert.deepEqual(everyone.allow, [P.Speak, P.Stream]);
+  assert.deepEqual(everyone.deny, []);
+  assert.ok(forId(rows, 'owner-id').allow.includes(P.Speak), 'owner can speak');
+  assert.ok(forId(rows, 'bot'), 'bot keeps control');
+});
+
+test('buildOverwrites: role deny-mode still gates Connect on @everyone', () => {
+  const rows = buildOverwrites(GUILD, hub({ roleMode: 'deny', roleList: ['222222222222222222'] }), 'o');
+  const everyone = forId(rows, GUILD.id);
+  assert.deepEqual(everyone.allow, [P.Speak, P.Stream]);
+  assert.deepEqual(everyone.deny, [P.Connect]);
+  assert.deepEqual(forId(rows, '222222222222222222').allow, [P.Connect]);
+});
+
+test('buildOverwrites: text channel gets no Speak allow', () => {
+  const rows = buildOverwrites(GUILD, hub(), 'o', { forText: true });
+  assert.equal(forId(rows, GUILD.id), undefined); // nothing to say for @everyone
+});
+
+test('syncedOverwrites: drops the parent @everyone entry, keeps the rest', () => {
+  const parent = [
+    { id: GUILD.id, deny: new PermissionsBitField(P.Speak), allow: new PermissionsBitField(0n) },
+    { id: 'role-x', deny: new PermissionsBitField(0n), allow: new PermissionsBitField(P.Connect) },
+  ];
+  const kept = syncedOverwrites(parent, GUILD);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].id, 'role-x');
 });
