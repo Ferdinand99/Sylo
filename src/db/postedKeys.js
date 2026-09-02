@@ -7,6 +7,7 @@ import { db } from './index.js';
 
 const stmts = {
   get: db.prepare('SELECT value FROM posted_keys WHERE guild_id = ? AND scope = ? AND key = ?'),
+  anyInScope: db.prepare('SELECT 1 FROM posted_keys WHERE guild_id = ? AND scope = ? LIMIT 1'),
   anyMatch: db.prepare('SELECT 1 FROM posted_keys WHERE guild_id = ? AND scope = ? AND key GLOB ? LIMIT 1'),
   insert: db.prepare(`
     INSERT OR IGNORE INTO posted_keys (guild_id, scope, key, value, posted_at)
@@ -21,6 +22,7 @@ const stmts = {
   clearScope: db.prepare('DELETE FROM posted_keys WHERE guild_id = ? AND scope = ?'),
   clearGuild: db.prepare('DELETE FROM posted_keys WHERE guild_id = ?'),
   prune: db.prepare('DELETE FROM posted_keys WHERE scope = ? AND posted_at < ?'),
+  prunePrefix: db.prepare('DELETE FROM posted_keys WHERE scope LIKE ? AND posted_at < ?'),
 };
 
 /** Have we recorded this key? */
@@ -31,6 +33,11 @@ export function seen(guildId, scope, key) {
 /** The stored value for this key, or null (also null when the key is absent). */
 export function seenValue(guildId, scope, key) {
   return stmts.get.get(guildId, scope, key)?.value ?? null;
+}
+
+/** Has anything been recorded in this scope for this guild yet? */
+export function anySeen(guildId, scope) {
+  return stmts.anyInScope.get(guildId, scope) != null;
 }
 
 /**
@@ -72,4 +79,13 @@ export function clearGuildPostedKeys(guildId) {
 /** Drop keys in a scope older than `ms` milliseconds. */
 export function pruneScopeOlderThan(scope, ms) {
   stmts.prune.run(scope, Date.now() - ms);
+}
+
+/**
+ * Drop keys older than `ms` across every scope starting with `prefix` (a literal
+ * prefix; `%` and `_` in it are treated literally enough for our scope names).
+ * Used by RSS, whose scopes are `rss:<feedId>`.
+ */
+export function pruneScopePrefixOlderThan(prefix, ms) {
+  stmts.prunePrefix.run(`${prefix}%`, Date.now() - ms);
 }
