@@ -27,6 +27,33 @@ test('GET /health as a monitor returns the JSON status body', async () => {
   assert.equal(body.discord.ready, true);
   assert.equal(body.discord.guilds, 1);
   assert.equal(typeof body.uptimeSeconds, 'number');
+  // 3.7.0 observability additions
+  assert.ok('gatewayPingHistory' in body.discord);
+  assert.ok(Array.isArray(body.discord.gatewayPingHistory));
+  assert.equal(typeof body.errorsByScope, 'object');
+  assert.ok(Array.isArray(body.commands));
+});
+
+test('GET /metrics serves Prometheus text with the core gauges', async () => {
+  const res = await get('/metrics');
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type') || '', /text\/plain/);
+  const text = await res.text();
+  assert.match(text, /^# TYPE sylo_up gauge$/m);
+  assert.match(text, /^sylo_up 1$/m);
+  assert.match(text, /^sylo_guilds 1$/m);
+  assert.match(text, /^sylo_uptime_seconds \d+$/m);
+  assert.match(text, /^sylo_gateway_ping_ms -?\d+$/m);
+  assert.match(text, /^sylo_module_enabled\{module="welcome"\} \d+$/m);
+});
+
+test('GET /metrics reflects the HTTP request counter', async () => {
+  await get('/stats');
+  // the counter is bumped in the server's res 'finish' handler — let it settle
+  await new Promise((r) => setTimeout(r, 20));
+  const text = await (await get('/metrics')).text();
+  assert.match(text, /^# TYPE sylo_http_requests_total counter$/m);
+  assert.match(text, /sylo_http_requests_total\{route="\/stats",status="200"\} \d+/);
 });
 
 test('GET /health as a browser renders the status page', async () => {

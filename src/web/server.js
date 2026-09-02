@@ -8,7 +8,9 @@ import { log } from '../lib/log.js';
 import { mountAuth, requireAuth } from './middleware/auth.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { csrf } from './middleware/csrf.js';
+import { requestLog } from './middleware/requestLog.js';
 import healthRouter from './routes/health.js';
+import metricsRouter from './routes/metrics.js';
 import leaderboardRouter, { vanityRouter } from './routes/leaderboard.js';
 import verifyRouter from './routes/verify.js';
 import appealRouter from './routes/appeal.js';
@@ -33,6 +35,10 @@ export function createApp() {
   app.set('view engine', 'ejs');
   app.set('views', join(here, 'views'));
   app.disable('x-powered-by');
+
+  // First in the chain: per-request debug log + the HTTP request counter.
+  app.use(requestLog);
+
   app.use(express.static(join(here, 'public')));
   app.use(express.urlencoded({ extended: false, limit: '256kb' }));
   app.use(express.json({ limit: '256kb' }));
@@ -44,8 +50,10 @@ export function createApp() {
   // no session). Exempts /auth, /verify and /appeal, which carry signed tokens.
   app.use(csrf);
 
-  // Public routes: healthcheck, the shareable leaderboard, and member verification.
+  // Public routes: healthcheck, metrics, the shareable leaderboard, and member
+  // verification.
   app.use('/health', healthRouter);
+  app.use('/metrics', rateLimit({ windowMs: 60_000, max: 30 }), metricsRouter);
   app.use('/leaderboard', rateLimit({ windowMs: 60_000, max: 40 }), leaderboardRouter);
   app.use('/lb', rateLimit({ windowMs: 60_000, max: 40 }), vanityRouter);
   app.use('/verify', rateLimit({ windowMs: 60_000, max: 20 }), verifyRouter);

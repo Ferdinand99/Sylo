@@ -20,12 +20,17 @@
  */
 
 const MAX_ERRORS = 40;
+// One gateway-ping sample a minute (see src/bot/events/ready.js) — an hour of
+// history for the /health sparkline.
+const MAX_PING_SAMPLES = 60;
 
 /** @type {RuntimeState} */
 export const runtime = {
   startedAt: Date.now(),
   lastError: null,
   errors: [],
+  /** @type {number[]} Gateway ping in ms, oldest first, capped. */
+  pingHistory: [],
   client: null,
 };
 
@@ -49,6 +54,30 @@ export function recordError(err, scope = null) {
 
 /** Back-compat alias for earlier call sites. */
 export const setLastError = recordError;
+
+/**
+ * Count the errors currently in the ring buffer, grouped by scope.
+ * @returns {Record<string, number>}
+ */
+export function errorScopeCounts() {
+  const out = {};
+  for (const e of runtime.errors) {
+    const key = e.scope || 'unknown';
+    out[key] = (out[key] ?? 0) + 1;
+  }
+  return out;
+}
+
+/**
+ * Record a gateway-ping sample for the /health history. Ignores the -1 discord.js
+ * reports before the first heartbeat.
+ * @param {number} ms
+ */
+export function recordGatewayPing(ms) {
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return;
+  runtime.pingHistory.push(Math.round(ms));
+  if (runtime.pingHistory.length > MAX_PING_SAMPLES) runtime.pingHistory.shift();
+}
 
 /**
  * Attach the Discord client once it has logged in.
