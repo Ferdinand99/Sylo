@@ -1,12 +1,18 @@
 <%
   var cfg = moduleConfig || {};
   var R = cfg.rules || {};
+  var N = cfg.native || {};
+  var nativePresets = Array.isArray(N.presets) ? N.presets : [];
   var exC = Array.isArray(cfg.exemptChannels) ? cfg.exemptChannels : [];
   var exR = Array.isArray(cfg.exemptRoles) ? cfg.exemptRoles : [];
   var immunePool = (typeof roles !== 'undefined' ? roles : []).filter(function (r) { return !exR.includes(r.id); });
   function mode(key) { return (R[key] && R[key].enabled) ? ((R[key].action) || 'delete') : 'off'; }
   var MODES = [['off', 'Disabled'], ['delete', 'Delete message'], ['warn', 'Delete + Warn'], ['timeout', 'Delete + Timeout']];
   var withParams = { links: 1, spam: 1, mentions: 1, caps: 1, words: 1, emojis: 1, spoilers: 1 };
+  var nm = typeof nativeMappable !== 'undefined' ? nativeMappable : [];
+  var pk = typeof presetKeys !== 'undefined' ? presetKeys : [];
+  var PRESET_LABEL = { profanity: 'Profanity', sexual: 'Sexual content', slurs: 'Slurs' };
+  var hasModlog = typeof modlogChannelId !== 'undefined' && modlogChannelId;
 %>
 
 <p class="muted small">
@@ -54,6 +60,39 @@
         <% } %>
       </div>
     <% }) %>
+  </div>
+
+  <hr class="sep" />
+
+  <div class="am-native">
+    <strong>Native Discord AutoMod</strong>
+    <p class="muted small u-mt-1">
+      Push the mappable checks onto Discord's built-in AutoMod so they are enforced
+      <em>before</em> a message is posted, and keep working while Sylo is offline.
+      Needs the <strong>Manage Server</strong> permission. Sylo owns any rule named
+      <code>Sylo:&nbsp;…</code> — edit those here, not in Server Settings.
+      <% if (hasModlog) { %>Blocks are also posted to your mod-log channel.<% } %>
+    </p>
+    <label class="am-native-master">
+      <input type="checkbox" name="native_enabled" <%= N.enabled ? 'checked' : '' %> />
+      Enforce natively
+    </label>
+    <div class="am-native-opts">
+      <% nm.forEach(function (pair) { var key = pair[0], label = pair[1]; %>
+        <label class="small">
+          <input type="checkbox" name="native_<%= key %>" <%= N[key] ? 'checked' : '' %> />
+          <%= label %>
+          <% if (mode(key) === 'off') { %><span class="muted">— enable the check above first</span><% } %>
+        </label>
+      <% }) %>
+      <p class="small u-mt-2 u-mb-1">Discord keyword presets <span class="muted">— Discord-maintained word lists</span></p>
+      <% pk.forEach(function (p) { %>
+        <label class="small">
+          <input type="checkbox" name="native_presets" value="<%= p %>" <%= nativePresets.indexOf(p) !== -1 ? 'checked' : '' %> />
+          <%= PRESET_LABEL[p] || p %>
+        </label>
+      <% }) %>
+    </div>
   </div>
 
   <hr class="sep" />

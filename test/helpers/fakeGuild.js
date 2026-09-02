@@ -23,7 +23,28 @@ export const ROLE = {
 
 /** Records of side effects the routes produced during a test. */
 export function makeSink() {
-  return { dms: [], messages: [], channelEdits: [], created: [] };
+  return { dms: [], messages: [], channelEdits: [], created: [], automodRules: [] };
+}
+
+/** Minimal guild.autoModerationRules manager backed by sink.automodRules. */
+function fakeAutomodRules(sink) {
+  const store = sink.automodRules;
+  return {
+    fetch: async () => new Map(store.map((r) => [r.id, r])),
+    create: async (payload) => {
+      const rule = { id: `am-${store.length + 1}`, ...payload };
+      rule.edit = async (patch) => {
+        Object.assign(rule, patch);
+        return rule;
+      };
+      rule.delete = async () => {
+        const i = store.indexOf(rule);
+        if (i !== -1) store.splice(i, 1);
+      };
+      store.push(rule);
+      return rule;
+    },
+  };
 }
 
 function fakeChannel(sink, { id, name, type, position }) {
@@ -151,6 +172,7 @@ export function fakeGuild(opts = {}) {
       remove: async () => {},
     },
     emojis: { cache: new Map() },
+    autoModerationRules: fakeAutomodRules(sink),
   };
 
   for (const c of channels.values()) c.guild = guild;
