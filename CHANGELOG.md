@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.8.0](https://github.com/Ferdinand99/Sylo/compare/v3.7.0...v3.8.0) (2026-09-02)
+
+
+### Features
+
+* push mappable automod checks to native Discord AutoMod ([ec9b1bb](https://github.com/Ferdinand99/Sylo/commit/ec9b1bb433f5db8d5fb0b91185bc17d023976526))
+* push mappable automod checks to native Discord AutoMod ([7674ede](https://github.com/Ferdinand99/Sylo/commit/7674edeca73e9dce3385250e1748feb03d9fcc96))
+
 ## [3.7.0](https://github.com/Ferdinand99/Sylo/compare/v3.6.1...v3.7.0) (2026-09-02)
 
 
