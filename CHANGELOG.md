@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.11.0](https://github.com/Ferdinand99/Sylo/compare/v3.10.0...v3.11.0) (2026-09-02)
+
+
+### Features
+
+* server insights — daily activity charts ([0458032](https://github.com/Ferdinand99/Sylo/commit/04580324c5ba0ebcdcf68726098f37ed9262b5eb))
+* server insights — daily activity charts ([e32d387](https://github.com/Ferdinand99/Sylo/commit/e32d38716b5fbe9ad677c536c6456b5a418a1c6e))
+
 ## [3.10.0](https://github.com/Ferdinand99/Sylo/compare/v3.9.0...v3.10.0) (2026-09-02)
 
 
