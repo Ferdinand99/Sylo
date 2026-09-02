@@ -1,10 +1,12 @@
-// Routes incoming slash-command interactions to the matching command module,
-// applying per-guild command overrides (disabled / channel / role limits).
-// Every command's execute() is wrapped so a thrown error is logged and shown to
-// the user without ever crashing the process.
+// The single InteractionCreate listener. Message-component interactions
+// (buttons, selects) go to the component router; slash commands are routed to
+// their command module with per-guild overrides applied. Every handler is
+// wrapped so a thrown error is logged and shown to the user, never crashing the
+// process.
 import { Events, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { getCommandOverride } from '../../db/commandOverrides.js';
 import { handleCustomSlash } from '../lib/customCommandSync.js';
+import { routeComponent } from '../lib/components.js';
 import { log } from '../../lib/log.js';
 
 export const name = Events.InteractionCreate;
@@ -18,7 +20,7 @@ export const name = Events.InteractionCreate;
  * administrators.
  * @param {import('discord.js').ChatInputCommandInteraction} interaction
  */
-function overrideBlockReason(interaction) {
+export function overrideBlockReason(interaction) {
   if (!interaction.inGuild()) return null;
 
   const ov = getCommandOverride(interaction.guildId, interaction.commandName);
@@ -45,6 +47,10 @@ function overrideBlockReason(interaction) {
 
 /** @param {import('discord.js').Interaction} interaction */
 export async function execute(interaction) {
+  if (interaction.isMessageComponent()) {
+    await routeComponent(interaction);
+    return;
+  }
   if (!interaction.isChatInputCommand()) return;
 
   const command = interaction.client.commands.get(interaction.commandName);

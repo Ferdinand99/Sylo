@@ -4,6 +4,7 @@
 import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
 import { ticketGuildsForUser, ingestUserDM } from '../../modules/tickets.js';
 import { getOpenTicket } from '../../db/tickets.js';
+import { registerComponent } from '../lib/components.js';
 import { log } from '../../lib/log.js';
 
 const SELECT_ID = 'ticket-guild';
@@ -76,7 +77,6 @@ async function handleDM(message) {
 }
 
 async function handleSelect(interaction) {
-  if (!interaction.isStringSelectMenu() || interaction.customId !== SELECT_ID) return;
   const guild = interaction.client.guilds.cache.get(interaction.values[0]);
   const payload = takeStash(interaction.user.id);
   if (!guild || !payload) {
@@ -94,12 +94,11 @@ async function handleSelect(interaction) {
     .catch(() => {});
 }
 
+registerComponent('tickets', SELECT_ID, handleSelect);
+
 /** @param {import('discord.js').Client} client */
 export function register(client) {
   client.on(Events.MessageCreate, (message) => {
     handleDM(message).catch((err) => log.error('tickets', 'DM handler failed:', err));
-  });
-  client.on(Events.InteractionCreate, (interaction) => {
-    handleSelect(interaction).catch((err) => log.error('tickets', 'select handler failed:', err));
   });
 }

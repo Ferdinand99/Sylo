@@ -9,7 +9,7 @@ import {
   StringSelectMenuBuilder,
 } from 'discord.js';
 import { getComposedByMessage } from '../db/composedMessages.js';
-import { log } from '../lib/log.js';
+import { registerComponent } from '../bot/lib/components.js';
 
 const BUTTON_STYLE = {
   primary: ButtonStyle.Primary,
@@ -201,21 +201,10 @@ async function applyRoleSelect(interaction, composedSpecForMessage) {
   });
 }
 
-/** @param {import('discord.js').Client} client */
-export function registerMessageComponentHandlers(client) {
-  client.on('interactionCreate', async (interaction) => {
-    try {
-      if (interaction.isButton() && interaction.customId.startsWith('msgrole:')) {
-        await toggleRole(interaction, interaction.customId.slice('msgrole:'.length));
-      } else if (interaction.isStringSelectMenu() && interaction.customId === 'msgroles') {
-        const rec = getComposedByMessage(interaction.guildId, interaction.message.id);
-        await applyRoleSelect(interaction, rec?.spec);
-      }
-    } catch (err) {
-      log.error('messageCreator', 'component handler failed:', err.message);
-      if (interaction.isRepliable() && !interaction.replied) {
-        interaction.reply({ content: 'Something went wrong.', ephemeral: true }).catch(() => {});
-      }
-    }
-  });
-}
+registerComponent('messageCreator', 'msgrole:', (interaction) =>
+  toggleRole(interaction, interaction.customId.slice('msgrole:'.length))
+);
+registerComponent('messageCreator', 'msgroles', (interaction) => {
+  const rec = getComposedByMessage(interaction.guildId, interaction.message.id);
+  return applyRoleSelect(interaction, rec?.spec);
+});

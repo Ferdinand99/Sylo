@@ -26,6 +26,7 @@ import {
   StringSelectMenuBuilder,
 } from 'discord.js';
 import { on } from './dispatch.js';
+import { registerComponent } from '../bot/lib/components.js';
 import { runtime } from '../runtime.js';
 import { getGuildModule } from '../db/modules.js';
 import { buildEmbed, sendComposed, editComposed } from './messageCreator.js';
@@ -257,26 +258,13 @@ async function handleRoleSelect(interaction, rmId) {
   return ephemeral(interaction, add.length || remove.length ? 'Roles updated.' : 'No changes.');
 }
 
-/** @param {import('discord.js').Client} client */
-export function registerRoleComponentHandlers(client) {
-  client.on('interactionCreate', async (interaction) => {
-    try {
-      if (interaction.isButton() && interaction.customId.startsWith('rr:')) {
-        const [, rmId, roleId] = interaction.customId.split(':');
-        await handleRoleButton(interaction, rmId, roleId);
-      } else if (interaction.isStringSelectMenu() && interaction.customId.startsWith('rrsel:')) {
-        await handleRoleSelect(interaction, interaction.customId.slice('rrsel:'.length));
-      }
-    } catch (err) {
-      log.error('roles', 'component handler failed:', err.message);
-      if (interaction.isRepliable() && !interaction.replied) {
-        interaction
-          .reply({ content: 'Something went wrong updating your roles.', flags: MessageFlags.Ephemeral })
-          .catch(() => {});
-      }
-    }
-  });
-}
+registerComponent('roles', 'rr:', (interaction) => {
+  const [, rmId, roleId] = interaction.customId.split(':');
+  return handleRoleButton(interaction, rmId, roleId);
+});
+registerComponent('roles', 'rrsel:', (interaction) =>
+  handleRoleSelect(interaction, interaction.customId.slice('rrsel:'.length))
+);
 
 // --- runtime handlers --------------------------------------------------
 

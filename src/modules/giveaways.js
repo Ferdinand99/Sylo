@@ -5,6 +5,7 @@
 // config shape: { ping: 'none' | 'here' | 'everyone', dmWinners: boolean }
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { runtime } from '../runtime.js';
+import { registerComponent } from '../bot/lib/components.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import {
   getGiveaway,
@@ -234,22 +235,9 @@ async function handleEnter(interaction, id) {
   });
 }
 
-/** @param {import('discord.js').Client} client */
-export function registerGiveawayComponentHandlers(client) {
-  client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isButton() || !interaction.customId.startsWith('gaw:enter:')) return;
-    try {
-      await handleEnter(interaction, Number(interaction.customId.slice('gaw:enter:'.length)));
-    } catch (err) {
-      log.error('giveaways', 'entry button failed:', err.message);
-      if (interaction.isRepliable() && !interaction.replied) {
-        interaction
-          .reply({ content: 'Something went wrong.', flags: MessageFlags.Ephemeral })
-          .catch(() => {});
-      }
-    }
-  });
-}
+registerComponent('giveaways', 'gaw:enter:', (interaction) =>
+  handleEnter(interaction, Number(interaction.customId.slice('gaw:enter:'.length)))
+);
 
 // --- expiry loop ----------------------------------------------------
 
