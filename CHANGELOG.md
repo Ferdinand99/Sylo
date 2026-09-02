@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.7.0](https://github.com/Ferdinand99/Sylo/compare/v3.6.1...v3.7.0) (2026-09-02)
+
+
+### Features
+
+* Prometheus /metrics endpoint, request logging, and richer /health ([9e418f7](https://github.com/Ferdinand99/Sylo/commit/9e418f77135e45e34d5ae9dee53efefbde17f717))
+* Prometheus /metrics endpoint, request logging, and richer /health ([a12ef80](https://github.com/Ferdinand99/Sylo/commit/a12ef80a11c433c1f41bbdc1e42cf393feeda7c4))
+
 ## [3.6.1](https://github.com/Ferdinand99/Sylo/compare/v3.6.0...v3.6.1) (2026-09-02)
 
 
