@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.3.0](https://github.com/Ferdinand99/Sylo/compare/v3.2.0...v3.3.0) (2026-09-02)
+
+
+### Features
+
+* publish multi-arch (amd64 + arm64) Docker images ([b115906](https://github.com/Ferdinand99/Sylo/commit/b115906165c3e40b4961921e158e8dc924924e97))
+
+
+### Bug Fixes
+
+* harden the dashboard — open-mode CSRF, rate limits, clean shutdown ([603ac91](https://github.com/Ferdinand99/Sylo/commit/603ac9129630c8111cd000b5539d0a53db8e3675))
+
 ## [3.2.0](https://github.com/Ferdinand99/Sylo/compare/v3.1.0...v3.2.0) (2026-09-02)
 
 
