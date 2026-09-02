@@ -19,9 +19,10 @@ updates:
           - minor
           - patch
     ignore:
-      # Express 5 changes path-to-regexp; several routes use regex params
-      # (e.g. /:id(new|\d+)). Handled as a dedicated migration, not a bump.
-      - dependency-name: express
+      # discord.js v15 is not released yet and will be a breaking major
+      # (structures/builders split, intents changes). Do it as a dedicated
+      # migration once it ships, not an auto-bump.
+      - dependency-name: discord.js
         update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
