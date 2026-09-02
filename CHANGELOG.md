@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.4.0](https://github.com/Ferdinand99/Sylo/compare/v3.3.0...v3.4.0) (2026-09-02)
+
+
+### Features
+
+* channel lock/lockdown and temporary bans ([e76a031](https://github.com/Ferdinand99/Sylo/commit/e76a0314b3c486c2e0a8e30cb5b915ce068bc94c))
+* channel lock/lockdown and temporary bans ([c77b150](https://github.com/Ferdinand99/Sylo/commit/c77b1504cb31ed5585861064f90405befc674d3f))
+* remove and clear warnings from the dashboard ([1e4bed9](https://github.com/Ferdinand99/Sylo/commit/1e4bed989d8728756f0d241e4eeecfc69e9e9af8))
+* surface channel locks and temp-bans on the moderation page ([9ff5284](https://github.com/Ferdinand99/Sylo/commit/9ff52840a4f00d6d13718bd995d0575051f3cd2a))
+
+
+### Bug Fixes
+
+* keep the Infractions tab selected after a moderation action ([ace737f](https://github.com/Ferdinand99/Sylo/commit/ace737f7d0fe2d57874f5f116791e31478163f4f))
+
 ## [3.3.0](https://github.com/Ferdinand99/Sylo/compare/v3.2.0...v3.3.0) (2026-09-02)
 
 
