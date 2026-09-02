@@ -21,6 +21,14 @@
        botuser: "You can't warn a bot.",
        unbanned: 'Ban removed.',
        notbanned: 'That user is not banned.',
+       'locked-all': 'Every text channel is now locked.',
+       'unlocked-all': 'Lockdown ended — channels restored.',
+       'unlocked-one': 'Channel unlocked.',
+       'lock-gone': 'That channel is no longer locked.',
+       'warn-removed': 'Warning removed.',
+       'warn-cleared': "That member's warnings were cleared.",
+       'warn-gone': 'That warning no longer exists.',
+       'warn-none': 'That member has no warnings to clear.',
        needpair: 'Add at least one emoji → role pair.',
        rrfail: 'Could not post the reaction-role message (check the bot\'s permissions in that channel).',
        'count-set': 'Counting number updated.',
@@ -56,7 +64,7 @@
        noconfirm: 'Tick the confirmation box to delete the member\'s data.',
        'md-baduser': 'Enter a valid Discord user ID or @mention.',
      };
-     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
+     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'locked-all', 'unlocked-all', 'unlocked-one', 'warn-removed', 'warn-cleared', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' || msg === 'forgot-nodm' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');
 %>
   <div class="banner <%= cls %>"><%= messages[msg] || 'Done.' %></div>
@@ -193,12 +201,13 @@
       <p class="muted">Auto-moderation, warning auto-actions, infractions, immunity, audit logging and command permissions.</p>
 
       <div class="mod-tabbed">
-        <input type="radio" name="mtab" id="mt-automod" checked />
-        <input type="radio" name="mtab" id="mt-actions" />
-        <input type="radio" name="mtab" id="mt-admin" />
-        <input type="radio" name="mtab" id="mt-infr" />
-        <input type="radio" name="mtab" id="mt-log" />
-        <input type="radio" name="mtab" id="mt-cmd" />
+        <% var mtab = typeof modTab !== 'undefined' ? modTab : 'automod'; %>
+        <input type="radio" name="mtab" id="mt-automod" <%= mtab === 'automod' ? 'checked' : '' %> />
+        <input type="radio" name="mtab" id="mt-actions" <%= mtab === 'actions' ? 'checked' : '' %> />
+        <input type="radio" name="mtab" id="mt-admin" <%= mtab === 'admin' ? 'checked' : '' %> />
+        <input type="radio" name="mtab" id="mt-infr" <%= mtab === 'infr' ? 'checked' : '' %> />
+        <input type="radio" name="mtab" id="mt-log" <%= mtab === 'log' ? 'checked' : '' %> />
+        <input type="radio" name="mtab" id="mt-cmd" <%= mtab === 'cmd' ? 'checked' : '' %> />
         <div class="mod-tablabels">
           <label for="mt-automod">Automod</label>
           <label for="mt-actions">Auto-actions</label>
@@ -227,7 +236,7 @@
             <%- include('guild/modules/moderation', { guild: guild, moduleConfig: moderationCfg, thresholdActions: thresholdActions }) %>
           </div>
           <div class="mod-panel" data-tab="infr">
-            <%- include('guild/moderation', { guild: guild, warnings: warnings, warningTotal: warningTotal, warningShown: warningShown, bans: bans, bansTotal: bansTotal, bansShown: bansShown, bansError: bansError, banLimit: banLimit }) %>
+            <%- include('guild/moderation', { guild: guild, warnings: warnings, warningTotal: warningTotal, warningShown: warningShown, bans: bans, bansTotal: bansTotal, bansShown: bansShown, bansError: bansError, banLimit: banLimit, channelLocks: channelLocks, tempBans: tempBans, lockdownActive: lockdownActive }) %>
           </div>
           <div class="mod-panel" data-tab="log">
             <p class="muted small">Send server events to a channel. Set the mod-log channel (for moderation actions) under <a href="/guilds/<%= guild.id %>/settings">Settings</a>.</p>

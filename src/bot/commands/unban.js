@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags } from 'discord.js';
 import { resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
+import { clearTempBan } from '../../db/tempBans.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unban')
@@ -35,6 +36,7 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
   await guild.bans.remove(userId, `${interaction.user.tag}: ${reason}`);
+  clearTempBan(guild.id, userId); // in case this was a scheduled temporary ban
 
   const embed = resultEmbed({
     action: 'Ban removed',

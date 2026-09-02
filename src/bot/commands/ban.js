@@ -2,7 +2,12 @@
 import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags } from 'discord.js';
 import { checkActable, notifyTarget, resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
+import { parseDuration, formatDuration } from '../lib/duration.js';
+import { scheduleTempBan, clearTempBan } from '../../db/tempBans.js';
 import { sendPreBanAppealDm } from '../../modules/appeals.js';
+
+const MIN_TEMP_MS = 60_000; // 1 minute
+const MAX_TEMP_MS = 365 * 86_400_000; // 1 year
 
 const DELETE_CHOICES = [
   { name: "Don't delete any", value: 0 },
@@ -22,6 +27,12 @@ export const data = new SlashCommandBuilder()
   .addStringOption((o) =>
     o.setName('reason').setDescription('Reason (shown in the audit log)').setMaxLength(400)
   )
+  .addStringOption((o) =>
+    o
+      .setName('duration')
+      .setDescription('Auto-unban after this long, e.g. 2h, 7d, 1w. Leave blank for a permanent ban.')
+      .setMaxLength(20)
+  )
   .addIntegerOption((o) =>
     o
       .setName('delete_messages')
@@ -35,7 +46,20 @@ export async function execute(interaction) {
   const member = interaction.options.getMember('user'); // null if not in the guild
   const reason = interaction.options.getString('reason') ?? NO_REASON;
   const deleteMessageSeconds = interaction.options.getInteger('delete_messages') ?? 0;
+  const durationInput = interaction.options.getString('duration');
   const { guild } = interaction;
+
+  let tempMs = null;
+  if (durationInput != null) {
+    tempMs = parseDuration(durationInput);
+    if (tempMs == null || tempMs < MIN_TEMP_MS || tempMs > MAX_TEMP_MS) {
+      await interaction.reply({
+        content: '⚠️ Duration must be between `1m` and `1y` — e.g. `30m`, `2h`, `7d`, `1w`.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+  }
 
   if (user.id === interaction.user.id) {
     await interaction.reply({ content: "⚠️ You can't ban yourself.", flags: MessageFlags.Ephemeral });
@@ -87,10 +111,31 @@ export async function execute(interaction) {
     const appeal = await sendPreBanAppealDm(guild, user, reason);
     dmed =
       appeal === null
-        ? await notifyTarget(user, { guildName: guild.name, action: 'banned', reason })
+        ? await notifyTarget(user, {
+            guildName: guild.name,
+            action: 'banned',
+            reason,
+            extra: tempMs != null ? `Automatically lifted after ${formatDuration(tempMs)}.` : undefined,
+          })
         : appeal;
   }
   await guild.bans.create(user.id, { reason: `${interaction.user.tag}: ${reason}`, deleteMessageSeconds });
+
+  let expiryField;
+  if (tempMs != null) {
+    const unbanAt = Date.now() + tempMs;
+    scheduleTempBan({
+      guildId: guild.id,
+      userId: user.id,
+      modId: interaction.user.id,
+      reason,
+      unbanAt,
+    });
+    expiryField = `${formatDuration(tempMs)} · unbans <t:${Math.floor(unbanAt / 1000)}:R>`;
+  } else {
+    clearTempBan(guild.id, user.id); // a plain ban overrides any earlier temp-ban
+    expiryField = 'Permanent';
+  }
 
   const embed = resultEmbed({
     action: 'Member banned',
@@ -98,6 +143,7 @@ export async function execute(interaction) {
     moderator: interaction.user,
     reason,
     fields: [
+      { name: 'Duration', value: expiryField },
       {
         name: 'Message deletion',
         value: deleteMessageSeconds ? `${deleteMessageSeconds / 3600}h of messages` : 'None',

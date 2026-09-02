@@ -2,7 +2,7 @@
 // management, and the moderation panel (warnings + bans). Every route requires
 // the signed-in user to be an admin of that guild (pass-through in open mode).
 import { Router } from 'express';
-import { PermissionFlagsBits, EmbedBuilder } from 'discord.js';
+import { PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
 import { runtime } from '../../runtime.js';
 import { requireGuildAdmin, currentUser } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -19,7 +19,13 @@ import {
   setEmbedColor,
   guildEmbedColor,
 } from '../../db/guildSettings.js';
-import { listGuildWarnings, addWarning } from '../../db/warnings.js';
+import {
+  listGuildWarnings,
+  addWarning,
+  getWarning,
+  removeWarning,
+  clearWarnings,
+} from '../../db/warnings.js';
 import { notifyTarget, MOD_COLOR } from '../../bot/lib/moderation.js';
 import { postModLog } from '../../bot/lib/modlog.js';
 import { timeAgo } from '../lib/format.js';
@@ -95,6 +101,15 @@ import { levelFromXp } from '../../modules/lib/levels.js';
 import { topMembers, memberCount, setXp, resetGuildLeveling } from '../../db/leveling.js';
 import { recordAudit, listAudit } from '../../db/audit.js';
 import { forgetUser, describeUserData } from '../../db/purge.js';
+import {
+  guildChannelLocks,
+  lockdownChannelLocks,
+  isChannelLocked,
+  clearChannelLock,
+} from '../../db/channelLocks.js';
+import { guildTempBans, clearTempBan } from '../../db/tempBans.js';
+import { lockChannel, unlockChannel, lockPreflight } from '../../bot/lib/channelLock.js';
+import { formatDuration } from '../../bot/lib/duration.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
@@ -132,6 +147,9 @@ const CONFIG_VIEWS = new Set([
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
+// Tab ids for the Moderator page's CSS radio tabs; `?tab=` selects one on load
+// so a POST that redirects back doesn't always snap to the first tab.
+const MOD_TABS = ['automod', 'actions', 'admin', 'infr', 'log', 'cmd'];
 
 function webModeratorId(req) {
   return currentUser(req)?.id ?? WEB_MODERATOR;
@@ -402,6 +420,26 @@ router.get(
       })
       .sort((a, b) => a.name.localeCompare(b.name));
 
+    const channelLocks = guildChannelLocks(guild.id).map((r) => ({
+      channelId: r.channel_id,
+      name: guild.channels.cache.get(r.channel_id)?.name ?? null,
+      lockedBy: r.locked_by,
+      lockdown: r.lockdown === 1,
+      ago: timeAgo(r.locked_at),
+    }));
+    const tbRows = guildTempBans(guild.id);
+    const tbTags = await resolveUserTags(
+      runtime.client,
+      tbRows.map((r) => r.user_id)
+    );
+    const now = Date.now();
+    const tempBans = tbRows.map((r) => ({
+      userId: r.user_id,
+      tag: tbTags.get(r.user_id) ?? r.user_id,
+      reason: r.reason,
+      remaining: r.unban_at > now ? formatDuration(r.unban_at - now) : 'any moment now',
+    }));
+
     res.render('guild', {
       ...baseContext(guild, 'moderation'),
       warnings,
@@ -412,6 +450,9 @@ router.get(
       bansShown: bans.length,
       bansError,
       banLimit: BAN_DISPLAY_LIMIT,
+      channelLocks,
+      tempBans,
+      lockdownActive: channelLocks.some((l) => l.lockdown),
       automodConfig: getGuildModule(guild.id, 'automod').config,
       moderationCfg: getGuildModule(guild.id, 'moderation').config,
       loggingCfg: getGuildModule(guild.id, 'logging').config,
@@ -420,6 +461,7 @@ router.get(
       automodRules: AUTOMOD_RULES,
       thresholdActions: THRESHOLD_ACTIONS,
       logEvents: LOG_EVENTS,
+      modTab: MOD_TABS.includes(req.query.tab) ? req.query.tab : 'automod',
       msg: typeof req.query.msg === 'string' ? req.query.msg : null,
     });
   })
@@ -1794,15 +1836,19 @@ router.post(
     const guild = req.guild;
     const back = `/guilds/${guild.id}/moderation`;
     const userId = parseUserId(req.body.userId);
-    if (!userId) return res.redirect(`${back}?msg=baduser`);
+    if (!userId) return res.redirect(`${back}?tab=infr&msg=baduser`);
 
     if (!guild.members.me?.permissions.has(PermissionFlagsBits.BanMembers)) {
-      return res.redirect(`${back}?msg=perms`);
+      return res.redirect(`${back}?tab=infr&msg=perms`);
     }
     const existing = await guild.bans.fetch(userId).catch(() => null);
-    if (!existing) return res.redirect(`${back}?msg=notbanned`);
+    if (!existing) {
+      clearTempBan(guild.id, userId); // stale timer for an already-lifted ban
+      return res.redirect(`${back}?tab=infr&msg=notbanned`);
+    }
 
     await guild.bans.remove(userId, `${moderatorDisplayName(req)}: unbanned via dashboard`);
+    clearTempBan(guild.id, userId); // in case this was a scheduled temporary ban
 
     const embed = new EmbedBuilder()
       .setColor(MOD_COLOR)
@@ -1812,7 +1858,123 @@ router.post(
       .setTimestamp(Date.now());
     await postModLog(guild, embed);
 
-    res.redirect(`${back}?msg=unbanned`);
+    res.redirect(`${back}?tab=infr&msg=unbanned`);
+  })
+);
+
+const LOCKDOWN_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildForum];
+
+// Lock every text channel (dashboard equivalent of /lockdown start).
+router.post(
+  '/:guildId/moderation/lock-all',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/moderation`;
+    const moderatorTag = moderatorDisplayName(req);
+
+    let locked = 0;
+    for (const channel of guild.channels.cache.values()) {
+      if (!LOCKDOWN_TYPES.includes(channel.type)) continue;
+      if (isChannelLocked(guild.id, channel.id) || lockPreflight(channel)) continue;
+      try {
+        await lockChannel(channel, { moderatorTag, lockdown: true });
+        locked += 1;
+      } catch {
+        /* skip a channel we can't edit */
+      }
+    }
+
+    recordAudit(guild.id, {
+      actor: moderatorTag,
+      action: 'moderation:lockdown',
+      detail: `locked ${locked} channel(s)`,
+    });
+    const embed = new EmbedBuilder()
+      .setColor(MOD_COLOR)
+      .setTitle('🔒 Server lockdown started')
+      .addFields(
+        { name: 'Channels locked', value: String(locked) },
+        { name: 'Moderator', value: moderatorTag }
+      )
+      .setTimestamp(Date.now());
+    await postModLog(guild, embed);
+    res.redirect(`${back}?tab=infr&msg=locked-all`);
+  })
+);
+
+// End the lockdown — restore every channel /lockdown locked.
+router.post(
+  '/:guildId/moderation/unlock-all',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/moderation`;
+    const moderatorTag = moderatorDisplayName(req);
+
+    let unlocked = 0;
+    for (const row of lockdownChannelLocks(guild.id)) {
+      const channel = guild.channels.cache.get(row.channel_id);
+      if (!channel) {
+        clearChannelLock(guild.id, row.channel_id);
+        continue;
+      }
+      try {
+        await unlockChannel(channel, { moderatorTag });
+        unlocked += 1;
+      } catch {
+        /* skip */
+      }
+    }
+
+    recordAudit(guild.id, {
+      actor: moderatorTag,
+      action: 'moderation:lockdown',
+      detail: `unlocked ${unlocked} channel(s)`,
+    });
+    const embed = new EmbedBuilder()
+      .setColor(MOD_COLOR)
+      .setTitle('🔓 Server lockdown ended')
+      .addFields(
+        { name: 'Channels unlocked', value: String(unlocked) },
+        { name: 'Moderator', value: moderatorTag }
+      )
+      .setTimestamp(Date.now());
+    await postModLog(guild, embed);
+    res.redirect(`${back}?tab=infr&msg=unlocked-all`);
+  })
+);
+
+// Unlock a single channel.
+router.post(
+  '/:guildId/moderation/unlock-channel',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/moderation`;
+    const channelId = String(req.body.channelId ?? '');
+    if (!/^\d{17,20}$/.test(channelId) || !isChannelLocked(guild.id, channelId)) {
+      return res.redirect(`${back}?tab=infr&msg=lock-gone`);
+    }
+
+    const moderatorTag = moderatorDisplayName(req);
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel) {
+      clearChannelLock(guild.id, channelId);
+      return res.redirect(`${back}?tab=infr&msg=unlocked-one`);
+    }
+    if (lockPreflight(channel)) return res.redirect(`${back}?tab=infr&msg=perms`);
+
+    await unlockChannel(channel, { moderatorTag });
+    recordAudit(guild.id, {
+      actor: moderatorTag,
+      action: 'moderation:unlock',
+      detail: `#${channel.name}`,
+    });
+    const embed = new EmbedBuilder()
+      .setColor(MOD_COLOR)
+      .setTitle('Channel unlocked')
+      .addFields({ name: 'Channel', value: `#${channel.name}` }, { name: 'Moderator', value: moderatorTag })
+      .setTimestamp(Date.now());
+    await postModLog(guild, embed);
+    res.redirect(`${back}?tab=infr&msg=unlocked-one`);
   })
 );
 
@@ -1977,11 +2139,11 @@ router.post(
     const reason = String(req.body.reason ?? '')
       .trim()
       .slice(0, 400);
-    if (!userId || reason === '') return res.redirect(`${back}?msg=baduser`);
+    if (!userId || reason === '') return res.redirect(`${back}?tab=infr&msg=baduser`);
 
     const user = await runtime.client.users.fetch(userId).catch(() => null);
-    if (!user) return res.redirect(`${back}?msg=baduser`);
-    if (user.bot) return res.redirect(`${back}?msg=botuser`);
+    if (!user) return res.redirect(`${back}?tab=infr&msg=baduser`);
+    if (user.bot) return res.redirect(`${back}?tab=infr&msg=botuser`);
 
     const { id, count } = addWarning({
       guildId: guild.id,
@@ -2011,7 +2173,74 @@ router.post(
       .setTimestamp(Date.now());
     const logged = await postModLog(guild, embed);
     await applyWarnThresholds(guild, user, count, moderatorDisplayName(req));
-    res.redirect(`${back}?msg=${logged ? 'warned' : 'warned-nolog'}`);
+    res.redirect(`${back}?tab=infr&msg=${logged ? 'warned' : 'warned-nolog'}`);
+  })
+);
+
+// Delete one warning by its id (dashboard equivalent of /warn remove).
+router.post(
+  '/:guildId/warnings/:id/delete',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/moderation?tab=infr`;
+    const id = Number(req.params.id);
+
+    const existing = Number.isInteger(id) ? getWarning(guild.id, id) : null;
+    if (!existing || !removeWarning(guild.id, id)) return res.redirect(`${back}&msg=warn-gone`);
+
+    const target = await runtime.client.users.fetch(existing.user_id).catch(() => null);
+    const embed = new EmbedBuilder()
+      .setColor(MOD_COLOR)
+      .setTitle('Warning removed')
+      .addFields(
+        { name: 'Warning ID', value: `#${id}` },
+        {
+          name: 'User',
+          value: target ? `${target.tag} (\`${existing.user_id}\`)` : `\`${existing.user_id}\``,
+        },
+        { name: 'Original reason', value: existing.reason },
+        { name: 'Removed by', value: moderatorDisplayName(req) }
+      )
+      .setTimestamp(Date.now());
+    await postModLog(guild, embed);
+    recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'moderation:warn-remove',
+      detail: `#${id}`,
+    });
+    res.redirect(`${back}&msg=warn-removed`);
+  })
+);
+
+// Delete every warning for one member (dashboard equivalent of /warn clear).
+router.post(
+  '/:guildId/warnings/clear',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/moderation?tab=infr`;
+    const userId = parseUserId(req.body.userId);
+    if (!userId) return res.redirect(`${back}&msg=baduser`);
+
+    const n = clearWarnings(guild.id, userId);
+    if (n === 0) return res.redirect(`${back}&msg=warn-none`);
+
+    const target = await runtime.client.users.fetch(userId).catch(() => null);
+    const embed = new EmbedBuilder()
+      .setColor(MOD_COLOR)
+      .setTitle('Warnings cleared')
+      .addFields(
+        { name: 'User', value: target ? `${target.tag} (\`${userId}\`)` : `\`${userId}\`` },
+        { name: 'Removed', value: `${n} warning${n === 1 ? '' : 's'}` },
+        { name: 'Moderator', value: moderatorDisplayName(req) }
+      )
+      .setTimestamp(Date.now());
+    await postModLog(guild, embed);
+    recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'moderation:warn-clear',
+      detail: `${n} for ${userId}`,
+    });
+    res.redirect(`${back}&msg=warn-cleared`);
   })
 );
 
