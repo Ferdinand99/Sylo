@@ -64,6 +64,12 @@ const userStmts = {
   `),
   tickets: db.prepare('DELETE FROM tickets WHERE guild_id = ? AND user_id = ?'),
   appeals: db.prepare('DELETE FROM appeals WHERE guild_id = ? AND user_id = ?'),
+  afk: db.prepare('DELETE FROM afk WHERE guild_id = ? AND user_id = ?'),
+  giveawayEntries: db.prepare(`
+    DELETE FROM giveaway_entries
+    WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)
+      AND user_id = ?
+  `),
   inviteCounts: db.prepare('DELETE FROM invite_counts WHERE guild_id = ? AND user_id = ?'),
   inviteJoins: db.prepare('DELETE FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
   inviteJoinsAsInviter: db.prepare(
@@ -79,17 +85,22 @@ const forgetUserTxn = db.transaction((guildId, userId) => {
   const ticketMsgs = userStmts.ticketMsgs.run(guildId, userId).changes;
   const tickets = userStmts.tickets.run(guildId, userId).changes;
   const appeals = userStmts.appeals.run(guildId, userId).changes;
+  const afk = userStmts.afk.run(guildId, userId).changes;
+  const giveawayEntries = userStmts.giveawayEntries.run(guildId, userId).changes;
   const invites =
     userStmts.inviteCounts.run(guildId, userId).changes +
     userStmts.inviteJoins.run(guildId, userId).changes +
     userStmts.inviteJoinsAsInviter.run(guildId, userId).changes +
     userStmts.invitePersonal.run(guildId, userId).changes;
-  return { warnings, leveling, tickets, ticketMessages: ticketMsgs, appeals, invites };
+  return { warnings, leveling, tickets, ticketMessages: ticketMsgs, appeals, afk, giveawayEntries, invites };
 });
 
 /**
- * Erase a single member's data within one guild.
- * @returns {{ warnings: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, invites: number }}
+ * Erase a single member's data within one guild. Covers the tables that key on
+ * a Discord user id; a completed giveaway's host/winner list and the config
+ * audit log (which records a display name, not an id) are guild records and are
+ * only removed by {@link purgeGuild}.
+ * @returns {{ warnings: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, giveawayEntries: number, invites: number }}
  */
 export function forgetUser(guildId, userId) {
   return forgetUserTxn(guildId, userId);
