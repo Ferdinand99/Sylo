@@ -4,12 +4,25 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      dev-dependencies:
-        dependency-type: development
+    open-pull-requests-limit: 10
     labels:
       - dependencies
+    groups:
+      # One PR for all dev-tool bumps (eslint, prettier, …).
+      dev-dependencies:
+        dependency-type: development
+      # One PR for non-breaking runtime bumps; majors still get their own PR
+      # so each can be reviewed on its own.
+      production-minor:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Express 5 changes path-to-regexp; several routes use regex params
+      # (e.g. /:id(new|\d+)). Handled as a dedicated migration, not a bump.
+      - dependency-name: express
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
@@ -18,3 +31,8 @@ updates:
     labels:
       - dependencies
       - ci
+    groups:
+      # One PR for all workflow action bumps.
+      actions:
+        patterns:
+          - '*'
