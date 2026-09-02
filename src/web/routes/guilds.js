@@ -1411,16 +1411,24 @@ function renderReminderBuilder(req, res, rec) {
 
 router.get('/:guildId/m/reminders/r/new', (req, res) => renderReminderBuilder(req, res, null));
 
-router.get('/:guildId/m/reminders/r/:id(\\d+)', (req, res) => {
+// Express 5 dropped inline path regex — a numeric ("new" for the POST) id shape
+// is enforced in the handler instead.
+const isRemId = (v) => /^\d+$/.test(v ?? '');
+
+router.get('/:guildId/m/reminders/r/:id', (req, res) => {
+  if (!isRemId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
   const rec = getScheduled(req.guild.id, Number(req.params.id));
   if (!rec) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
   renderReminderBuilder(req, res, rec);
 });
 
 router.post(
-  '/:guildId/m/reminders/r/:id(new|\\d+)',
+  '/:guildId/m/reminders/r/:id',
   asyncHandler(async (req, res) => {
     const b = req.body;
+    if (req.params.id !== 'new' && !isRemId(req.params.id)) {
+      return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
+    }
     const existing = req.params.id === 'new' ? null : getScheduled(req.guild.id, Number(req.params.id));
     if (req.params.id !== 'new' && !existing) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
     const back = `/guilds/${req.guild.id}/${REM_BASE}/r/${existing ? existing.id : 'new'}`;
@@ -1489,13 +1497,13 @@ router.post(
   })
 );
 
-router.post('/:guildId/m/reminders/r/:id(\\d+)/delete', (req, res) => {
-  deleteScheduled(req.guild.id, Number(req.params.id));
+router.post('/:guildId/m/reminders/r/:id/delete', (req, res) => {
+  if (isRemId(req.params.id)) deleteScheduled(req.guild.id, Number(req.params.id));
   res.redirect(`/guilds/${req.guild.id}/${REM_BASE}?msg=saved`);
 });
 
-router.post('/:guildId/m/reminders/r/:id(\\d+)/toggle', (req, res) => {
-  const rec = getScheduled(req.guild.id, Number(req.params.id));
+router.post('/:guildId/m/reminders/r/:id/toggle', (req, res) => {
+  const rec = isRemId(req.params.id) ? getScheduled(req.guild.id, Number(req.params.id)) : null;
   if (rec) setScheduledEnabled(req.guild.id, rec.id, rec.enabled !== 1);
   res.redirect(`/guilds/${req.guild.id}/${REM_BASE}?msg=saved`);
 });

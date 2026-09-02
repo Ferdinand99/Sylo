@@ -8,7 +8,8 @@ its own minor — there is no single umbrella release. The first batch was scope
 a "**3.6 line**" and has run **3.6.0 → 3.9.0** so far (with one unplanned feature
 inserted); see **Progress** below.
 
-Base: `main` at **3.5.0**. `express@^4.21.2`, `discord.js@^14.16.3`.
+Base when this plan started: `main` at **3.5.0**, `express@^4.21.2`,
+`discord.js@^14.16.3`. (Now on 3.11.x, `express@^5.1.0`.)
 
 Working conventions unchanged: branch per workstream, PR into `main`; `npm test`
 + `npm run lint` + `npm run format:check` + `docker compose up -d --build`
@@ -20,7 +21,7 @@ enforces it) and `forgetUser` / `describeUserData` if user-scoped; new module �
 
 ---
 
-## Progress (as of 3.9.0)
+## Progress (3.6 line complete — through 3.11.1)
 
 | # | Workstream | Status |
 |---|---|---|
@@ -32,7 +33,9 @@ enforces it) and `forgetUser` / `describeUserData` if user-scoped; new module �
 | — | **Kick.com alerts + plain-text alert mode** (unplanned, issue #78) | ✅ shipped in **3.9.0** |
 | 5b | RSS module | ✅ shipped in **3.10.0** |
 | 6 | Server insights page | ✅ shipped in **3.11.0** |
-| 7 | Express 5 spike + discord.js v15 watch | ⏳ next — no bump, slot in anytime |
+| 7 | Express 5 spike + discord.js v15 watch | ✅ shipped (`chore:`, no bump) |
+
+**The 3.6 line is complete.** 3.11.1 (sticky fix) shipped between #6 and #7.
 
 The Kick-alerts feature (issue #78) was slotted in between 5a and 5b and took the
 **3.9.0** minor the RSS module was originally pencilled in for, so everything from
@@ -52,7 +55,7 @@ The Kick-alerts feature (issue #78) was slotted in between 5a and 5b and took th
 | — | Kick.com alerts + plain-text mode (issue #78) | `feat:` | M | — | ✅ 3.9.0 |
 | 5b | RSS module | `feat:` | L | ~~3.9.0~~ **3.10.0** | ✅ 3.10.0 |
 | 6 | Server insights page | `feat:` | L | ~~3.10.0~~ **3.11.0** | ✅ 3.11.0 |
-| 7 | Express 5 spike + discord.js v15 watch | `chore:` / spike | M | no bump | — |
+| 7 | Express 5 spike + discord.js v15 watch | `chore:` / spike | M | no bump | ✅ no bump |
 
 Rationale for the order: #1 is small and visible; #2 makes everything after it
 safer to change and should merge just before #3; #3–#4 are contained; #5–#6 are
@@ -314,6 +317,18 @@ joins, force a roll, check the page renders with real numbers in both themes.
 ---
 
 ## 7 — Express 5 spike + discord.js v15 watch → no bump
+
+> ✅ **Shipped** (`chore/express5-spike`, merged as-is — no rollback needed).
+> Bumped `express@^4.21.2` → `^5.1.0` (installed 5.2.1, path-to-regexp v8). The
+> **only** break was inline path regex — 8 routes (`guildMessages.js` ×4,
+> `reminders` ×4) used `/:id(\d+)` / `/:id(new|\d+)`; rewritten as plain `:id`
+> with a `/^\d+$/` (and `'new'`) guard in the handler. None of the other listed
+> concerns applied: no `res.redirect('back')`, no `app.del`, no `*` wildcards, no
+> `req.query`/`req.body` prototype assumptions. `asyncHandler` kept as-is. The #2
+> route harness caught the breakage immediately (4 test files failed to build the
+> app) and confirmed the fix (311/311 green on Express 5). discord.js v15: not
+> released — added a `dependabot.yml` ignore for its semver-major so it lands as a
+> dedicated migration when it ships.
 
 Branch `chore/express5-spike` (spike — may not merge as-is).
 
