@@ -14,7 +14,9 @@
   // --- Toasts ------------------------------------------------------------
   var toastHost;
   window.syloToast = function syloToast(message, kind) {
-    if (!toastHost) {
+    // hx-boost swaps <body>'s innerHTML, which detaches an earlier toast-host.
+    // Re-create / re-attach whenever it isn't in the document.
+    if (!toastHost || !toastHost.isConnected) {
       toastHost = document.createElement('div');
       toastHost.className = 'toast-host';
       document.body.appendChild(toastHost);
@@ -38,20 +40,20 @@
   // shown as a toast instead — one consistent "saved" cue everywhere, whether
   // the response came back over htmx or a full navigation. Persistent state
   // banners (plain .banner) are left alone.
-  function flashBannersToToast(root) {
-    (root || document).querySelectorAll('.banner-flash').forEach(function (el) {
+  function flashBannersToToast() {
+    // Scan the whole document, not just the swapped node — a boosted navigation
+    // can fire htmx:load with a target that doesn't contain the banner. Each is
+    // removed, so a second pass is a no-op.
+    document.querySelectorAll('.banner-flash').forEach(function (el) {
       var kind = el.classList.contains('bad') ? 'bad' : el.classList.contains('info') ? 'info' : 'ok';
       var text = (el.textContent || '').trim();
-      if (text && window.syloToast) window.syloToast(text, kind);
       el.remove();
+      if (text && window.syloToast) window.syloToast(text, kind);
     });
   }
-  document.addEventListener('DOMContentLoaded', function () {
-    flashBannersToToast(document);
-  });
-  document.addEventListener('htmx:load', function (evt) {
-    flashBannersToToast(evt.target);
-  });
+  document.addEventListener('DOMContentLoaded', flashBannersToToast);
+  document.addEventListener('htmx:load', flashBannersToToast);
+  document.addEventListener('htmx:afterSettle', flashBannersToToast);
 
   document.addEventListener('htmx:configRequest', function (evt) {
     if (token) evt.detail.headers['X-CSRF-Token'] = token;

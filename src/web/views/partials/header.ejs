@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><%= typeof title !== 'undefined' ? title : 'Sylo' %></title>
   <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><meta name="csrf-token" content="<%= csrfToken %>" /><% } %>
+  <%# With JS on, a result banner is shown as a toast — hide it up front so it
+      never flashes; htmx-setup.js still reads its text. No-JS keeps the banner. %>
+  <script>document.documentElement.classList.add('has-js');</script>
+  <style>.has-js .banner-flash{display:none}</style>
   <link rel="stylesheet" href="/styles.css" />
   <script src="/vendor/htmx.min.js" defer></script>
   <script src="/htmx-setup.js" defer></script>
