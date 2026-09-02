@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.2.0](https://github.com/Ferdinand99/Sylo/compare/v3.1.0...v3.2.0) (2026-09-02)
+
+
+### Features
+
+* Member data page — inspect and erase a member's data with a DM receipt ([2273def](https://github.com/Ferdinand99/Sylo/commit/2273def275de6d8db1337fcb46699aded5bd3553))
+
+
+### Bug Fixes
+
+* /forget also clears AFK status and giveaway entries ([1aaf451](https://github.com/Ferdinand99/Sylo/commit/1aaf4514471d7b3d6fa03f0b1e5786a5b1ab31f8))
+
 ## [3.1.0](https://github.com/Ferdinand99/Sylo/compare/v3.0.0...v3.1.0) (2026-09-01)
 
 
