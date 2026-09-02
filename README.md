@@ -22,13 +22,13 @@ player lookups through the public [gametools.network](https://gametools.network)
 Everything runs in **one Node process, one container, no build step**.
 
 <details>
-<summary>The 28 modules</summary>
+<summary>The 29 modules</summary>
 
 moderation · logging · tickets · reaction roles · verification · welcome ·
 welcome channel · birthdays · sticky messages · auto-moderation · counting · custom commands ·
 autoresponder · reminders · leveling · AFK · server statistics · free games ·
 ban appeals · temporary voice channels · starboard · invite tracker · polls ·
-giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts
+giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS alerts
 
 </details>
 
@@ -130,6 +130,10 @@ settings panel per module — saves swap in place with a toast.
 - Twitch and Kick alerts each have a per-streamer **Embed / Plain text** choice —
   plain text posts a normal message (link always appended) for channels bridged
   into another app that ignores embeds.
+- **RSS alerts** — follow any RSS 2.0 or Atom feed (blogs, news, Reddit `.rss`,
+  Mastodon, GitHub releases `.atom`) and post new items to a channel with a
+  `{title}`/`{link}`/`{author}`/`{feed}` template. Up to 15 feeds per server,
+  polled every ~5 minutes; the first check only seeds, so no backlog dump.
 - **Polls** — members run `/poll question:… choices:A | B | C` (optional
   `duration`, `multiple`, `max_votes`); people vote by reacting with the option
   letter. Auto-closes on its timer or vote cap, posts a results embed with a
@@ -248,6 +252,11 @@ settings panel per module — saves swap in place with a toast.
     (`{name}` `{title}` `{game}` `{url}` `{viewers}`). Polls the official Kick API
     ~once a minute; needs `KICK_CLIENT_ID` / `KICK_CLIENT_SECRET` (free app at
     kick.com/settings/developer)
+  - **RSS alerts** — follow up to 15 RSS 2.0 / Atom feeds per server and post new
+    items to a channel. Per-feed channel, optional ping role and a `{title}` /
+    `{link}` / `{author}` / `{feed}` template. No API key; polled every ~5
+    minutes; the first check only seeds so there is no backlog dump. Dedupe rides
+    on the shared `posted_keys` table (scope `rss:<feedId>`)
   - **Autoresponder** — auto-reply when a message matches a trigger (contains /
     exact / starts-with / whole-word), optionally deleting the trigger
   - **Scheduled messages** — recurring posts to a channel, every minute to every
@@ -338,7 +347,8 @@ src/
     moderation automod logging tickets roles welcome welcomeChannel sticky
     counting customCommands autoresponder verification scheduledMessages
     leveling afk serverStats freeGames appeals tempVoice polls giveaways
-    starboard inviteTracker twitchAlerts youtubeAlerts kickAlerts messageCreator
+    starboard inviteTracker twitchAlerts youtubeAlerts kickAlerts rss
+    messageCreator
   adapters/games/       gameAdapter, registry, battlefield
   db/
     index.js            SQLite connection + migrations
