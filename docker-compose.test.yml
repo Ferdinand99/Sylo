@@ -1,0 +1,39 @@
+# Test / staging instance of Sylo, deployed to a remote Docker host (an Unraid
+# box) over an SSH docker context — it runs 24/7 there, independent of any dev
+# session. Deploy a new build with:
+#
+#   docker --context sylo-test compose -f docker-compose.test.yml --env-file .env.test up -d --build
+#
+# Notes:
+#  - Named volume, not ./data: a bind-mount source path is resolved on the client
+#    and would be meaningless on the remote daemon.
+#  - Host port 3010 so it can sit next to the production container (3000).
+#  - Its own container name / image so it never collides with prod.
+services:
+  sylo-test:
+    build: .
+    image: sylo-test:latest
+    container_name: sylo-test
+    restart: unless-stopped
+    env_file: .env.test
+    environment:
+      # Pin the in-container port so it matches the mapping + healthcheck below,
+      # regardless of what .env.test says.
+      WEB_PORT: '3000'
+    ports:
+      - '3010:3000'
+    volumes:
+      - sylo-test-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  sylo-test-data:
