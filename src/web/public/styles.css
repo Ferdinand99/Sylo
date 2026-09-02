@@ -362,7 +362,9 @@ button[type="submit"]:hover, .row-form button:hover, .btn-primary:hover { filter
 .sparkline { display: block; width: 100%; max-width: 240px; height: 32px; margin: 6px 0 2px; color: var(--accent); }
 
 /* Server insights page */
-.ins-range { display: flex; gap: 6px; margin: 4px 0 14px; flex-wrap: wrap; }
+.ins-range { display: flex; gap: 6px; margin: 4px 0 6px; flex-wrap: wrap; align-items: center; }
+.ins-refresh { margin-left: auto; }
+.ins-refresh button { padding: 5px 12px; font-size: 12px; }
 .ins-tiles { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
 .ins-tile { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r); padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 110px; }
 .ins-n { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
@@ -372,6 +374,7 @@ button[type="submit"]:hover, .row-form button:hover, .btn-primary:hover { filter
 .ins-chart h3 { margin: 0 0 10px; font-size: 14px; }
 .ins-chart svg { display: block; width: 100%; height: 120px; }
 .ins-bar-msg { fill: var(--accent); }
+.ins-bar-voice { fill: var(--ok); }
 .ins-line-grow { stroke: var(--accent); stroke-width: 2; }
 .ins-line-join { stroke: var(--ok); stroke-width: 2; }
 .ins-line-leave { stroke: var(--bad); stroke-width: 2; }
@@ -383,6 +386,7 @@ button[type="submit"]:hover, .row-form button:hover, .btn-primary:hover { filter
 .ins-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .ins-bar-track { background: var(--surface-3); border-radius: 999px; height: 10px; overflow: hidden; }
 .ins-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.ins-bar-fill-voice { background: var(--ok); }
 .ins-bar-val { font-size: 12px; }
 
 table { width: 100%; border-collapse: collapse; }
