@@ -953,11 +953,15 @@ router.post(
       const prevById = new Map((prev.stickies ?? []).map((s) => [s.channelId, s]));
       const chans = [].concat(req.body.s_channel ?? []);
       const contents = [].concat(req.body.s_content ?? []);
+      const bots = [].concat(req.body.s_bots ?? []);
+      const cooldowns = [].concat(req.body.s_cooldown ?? []);
       const stickies = chans
         .map((channelId, i) => ({
           channelId,
           content: String(contents[i] ?? '').slice(0, 2000),
           lastMessageId: prevById.get(channelId)?.lastMessageId ?? null,
+          repostOnBots: bots[i] === 'on',
+          cooldownSeconds: Math.max(0, Math.min(3600, Math.floor(Number(cooldowns[i])) || 0)),
         }))
         .filter((s) => /^\d{17,20}$/.test(s.channelId) && s.content.trim() !== '');
       config = { stickies };
