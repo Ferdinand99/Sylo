@@ -431,6 +431,20 @@
         </section>
       <% } %>
 
+    <% } else if (panel === 'insights') { %>
+      <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'trending-up', title: 'Server insights' }) %></div>
+      <p class="muted">Messages, joins and leaves per day, aggregated from the moment the module was turned on. No message content is stored.</p>
+      <% if (!insightsEnabled) { %>
+        <div class="banner info">The <strong>Server insights</strong> module is off. <a href="/guilds/<%= guild.id %>/m/insights">Enable it</a> to start collecting activity data — charts fill in from that point on.</div>
+      <% } %>
+      <%- include('guild/insights', {
+        guild: guild,
+        range: insightsRange,
+        series: insightsSeries,
+        totals: insightsTotals,
+        topChannels: insightsTopChannels,
+      }) %>
+
     <% } else if (panel.indexOf('m/') === 0 && typeof activeModule !== 'undefined') { %>
       <% var mrow = modules.find(function (x) { return x.id === activeModule.id; }); %>
       <div class="mod-hero">

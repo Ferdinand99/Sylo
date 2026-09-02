@@ -23,7 +23,7 @@ test('GET /overview renders the plugin grid shell', async () => {
   const html = await res.text();
   assert.match(html, /^<!doctype html>/i);
   assert.match(html, /class="plugin-grid"/);
-  assert.match(html, /of 29 plugins/); // overview health line
+  assert.match(html, /of 30 plugins/); // overview health line
   assert.match(html, /data-bulk-url=/); // 3.6 bulk-select wiring present
 });
 
@@ -47,6 +47,22 @@ test('GET /moderation renders the tabbed moderator page', async () => {
   const html = await res.text();
   assert.match(html, /Infractions/);
   assert.match(html, /Channel locks/); // 3.4 addition
+});
+
+test('GET /insights renders the activity charts panel', async () => {
+  const { db } = await import('../src/db/index.js');
+  const { utcDay } = await import('../src/db/insights.js');
+  db.prepare(
+    'INSERT OR REPLACE INTO guild_daily (guild_id, day, joins, leaves, messages, active_members, channels) VALUES (?,?,?,?,?,?,?)'
+  ).run(GID, utcDay(), 3, 1, 42, 5, JSON.stringify({ [CH.general]: 30, [CH.bots]: 12 }));
+
+  const res = await get(`/guilds/${GID}/insights?range=7`);
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /Server insights/);
+  assert.match(html, /Messages per day/);
+  assert.match(html, /Top channels/);
+  assert.match(html, /#general/); // resolved channel name from the JSON map
 });
 
 test('GET /m/:id — full page, bare fragment, and hx-boost', async () => {
