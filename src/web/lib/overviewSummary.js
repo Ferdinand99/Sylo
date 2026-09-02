@@ -59,7 +59,7 @@ const LAYOUT = [
       'game-stats',
     ],
   },
-  { title: 'Social alerts', ids: ['twitch-alerts', 'youtube-alerts', 'kick-alerts'] },
+  { title: 'Social alerts', ids: ['twitch-alerts', 'youtube-alerts', 'kick-alerts', 'rss'] },
 ];
 
 const line = (label, value, state) => ({ label, value, state });
@@ -265,6 +265,10 @@ function moduleLines(id, guild, cfg) {
         alerts.length ? on('Streamers', String(alerts.length)) : off('Streamers', 'none'),
         config.kickEnabled ? neutral('API', 'connected') : off('API', 'KICK_CLIENT_ID/SECRET not set'),
       ];
+    }
+    case 'rss': {
+      const feeds = Array.isArray(cfg.feeds) ? cfg.feeds.filter((f) => f.url && f.channelId) : [];
+      return [feeds.length ? on('Feeds', String(feeds.length)) : off('Feeds', 'none')];
     }
     case 'youtube-alerts': {
       const alerts = Array.isArray(cfg.alerts)

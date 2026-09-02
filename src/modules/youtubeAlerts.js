@@ -20,6 +20,7 @@ import {
   markNotLive,
 } from '../db/youtubeAlerts.js';
 import { sendToChannel } from './lib/send.js';
+import { parseFeed as parseGenericFeed, grab, decodeEntities } from '../bot/lib/feed.js';
 import { log } from '../lib/log.js';
 
 const FEED = 'https://www.youtube.com/feeds/videos.xml?channel_id=';
@@ -59,8 +60,6 @@ export function normaliseYoutubeConfig(raw = {}) {
 
 // --- resolve a URL / @handle / UC id to a channel id + name --------------
 
-const grab = (re, s) => (s.match(re) || [])[1] || null;
-
 /** @returns {Promise<{ channelId: string, name: string } | null>} */
 export async function resolveYtChannel(input) {
   const raw = String(input ?? '').trim();
@@ -95,36 +94,28 @@ export async function resolveYtChannel(input) {
   }
 }
 
-function decodeEntities(s) {
-  return String(s ?? '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\\u0026/g, '&');
-}
-
 // --- feed (new videos) -------------------------------------------------
 
-/** Parse a YouTube Atom feed into recent entries, newest first. */
+/**
+ * Parse a YouTube Atom feed into recent entries, newest first. Uses the shared
+ * feed parser and maps it onto the YouTube-specific shape (videoId, watch URL,
+ * ytimg thumbnail fallback).
+ */
 export function parseFeed(xml) {
-  const author = grab(/<author>\s*<name>([^<]*)<\/name>/, String(xml)) || '';
-  const entries = [];
-  for (const block of String(xml).split('<entry>').slice(1)) {
-    const videoId = grab(/<yt:videoId>([^<]+)<\/yt:videoId>/, block);
-    if (!videoId) continue;
-    entries.push({
-      videoId,
-      title: decodeEntities(grab(/<title>([^<]*)<\/title>/, block) || 'New video'),
-      url: `https://www.youtube.com/watch?v=${videoId}`,
-      published: Date.parse(grab(/<published>([^<]+)<\/published>/, block) || '') || 0,
-      thumb:
-        grab(/<media:thumbnail url="([^"]+)"/, block) || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-      author: decodeEntities(grab(/<name>([^<]*)<\/name>/, block) || author),
-    });
-  }
-  return entries.sort((a, b) => b.published - a.published);
+  return parseGenericFeed(xml)
+    .map((e) => {
+      const videoId = grab(/<yt:videoId>([^<]+)<\/yt:videoId>/, e.block) || grab(/[?&]v=([\w-]{11})/, e.link);
+      if (!videoId) return null;
+      return {
+        videoId,
+        title: e.title === 'Untitled' ? 'New video' : e.title,
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        published: e.published,
+        thumb: e.image || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        author: e.author,
+      };
+    })
+    .filter(Boolean);
 }
 
 async function fetchFeed(ytChannelId) {
