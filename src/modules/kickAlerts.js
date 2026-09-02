@@ -3,8 +3,10 @@
 // KICK_CLIENT_SECRET (a free app at kick.com/settings/developer). When those are
 // unset the poll loop no-ops and the dashboard shows a note.
 //
-// config shape: { alerts: [ { id, slug, channelId, roleId, message } ] }
+// config shape: { alerts: [ { id, slug, channelId, roleId, message, plainText } ] }
 // message placeholders: {name} {title} {game} {url} {viewers}
+// plainText: send a plain message with no embed (for channels bridged elsewhere,
+// e.g. a RuneLite Discord->game-chat plugin that ignores embeds).
 import { EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { runtime } from '../runtime.js';
@@ -20,6 +22,9 @@ const POLL_MS = 60_000;
 const SCOPE = 'kick';
 
 export const DEFAULT_MESSAGE = '🟢 **{name}** is live on Kick!';
+// Plain-text mode has its own default: no markdown, and it carries the link
+// since there is no embed to hold it.
+export const DEFAULT_PLAIN_MESSAGE = '🟢 {name} is live on Kick! {title} — {url}';
 // Kick slugs are lowercase letters, digits, underscores and hyphens.
 const SLUG_RE = /^[a-z0-9_-]{2,25}$/;
 const isId = (v) => /^\d{17,20}$/.test(v ?? '');
@@ -38,6 +43,7 @@ export function normaliseKickConfig(raw = {}) {
         channelId: isId(a.channelId) ? a.channelId : '',
         roleId: isId(a.roleId) ? a.roleId : '',
         message: String(a.message ?? '').slice(0, 1500),
+        plainText: Boolean(a.plainText),
       }))
       .filter((a) => {
         if (!SLUG_RE.test(a.slug) || !a.channelId || seen.has(a.slug + a.channelId)) return false;
@@ -123,6 +129,16 @@ export function buildPayload(channel, alert) {
   const viewers = channel.stream?.viewer_count ?? 0;
   const thumb = channel.stream?.thumbnail || channel.category?.thumbnail || '';
 
+  const ping = alert.roleId ? `<@&${alert.roleId}> ` : '';
+  const allowedMentions = { roles: alert.roleId ? [alert.roleId] : [] };
+  const vars = { name, title: channel.stream_title, game: channel.category?.name, url, viewers };
+
+  if (alert.plainText) {
+    let content = `${ping}${fillMessage(alert.message || DEFAULT_PLAIN_MESSAGE, vars)}`.trim();
+    if (url && !content.includes(url)) content += `\n${url}`;
+    return { content: content || undefined, embeds: [], allowedMentions };
+  }
+
   const embed = new EmbedBuilder()
     .setColor(COLOR)
     .setAuthor({ name: `${name} is live on Kick`, url })
@@ -133,19 +149,8 @@ export function buildPayload(channel, alert) {
   if (channel.banner_picture) embed.setThumbnail(channel.banner_picture);
   if (thumb) embed.setImage(`${thumb}${thumb.includes('?') ? '&' : '?'}t=${Date.now()}`);
 
-  const content = fillMessage(alert.message, {
-    name,
-    title: channel.stream_title,
-    game: channel.category?.name,
-    url,
-    viewers,
-  }).trim();
-
-  return {
-    content: `${alert.roleId ? `<@&${alert.roleId}> ` : ''}${content}`.trim() || undefined,
-    embeds: [embed],
-    allowedMentions: { roles: alert.roleId ? [alert.roleId] : [] },
-  };
+  const content = `${ping}${fillMessage(alert.message, vars)}`.trim();
+  return { content: content || undefined, embeds: [embed], allowedMentions };
 }
 
 // --- poll loop -------------------------------------------------------

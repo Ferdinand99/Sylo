@@ -127,6 +127,9 @@ settings panel per module — saves swap in place with a toast.
   streamers (channel + optional ping role + `{name}`/`{title}`/`{game}`/`{url}`/`{viewers}`
   message). Sylo polls the official Kick API ~once a minute; needs a free
   `KICK_CLIENT_ID` / `KICK_CLIENT_SECRET` (kick.com/settings/developer).
+- Twitch and Kick alerts each have a per-streamer **Embed / Plain text** choice —
+  plain text posts a normal message (link always appended) for channels bridged
+  into another app that ignores embeds.
 - **Polls** — members run `/poll question:… choices:A | B | C` (optional
   `duration`, `multiple`, `max_votes`); people vote by reacting with the option
   letter. Auto-closes on its timer or vote cap, posts a results embed with a

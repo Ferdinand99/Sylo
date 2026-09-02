@@ -16,8 +16,12 @@ Announce in a channel when a [Kick.com](https://kick.com) streamer goes live.
 ## Settings
 
 - **Alerts** — a list of `{ Kick username, channel, optional ping role,
-  message }`. Up to 50.
+  message, post-as }`. Up to 50.
 - Message placeholders: `{name}` `{title}` `{game}` `{url}` `{viewers}`.
+- **Post as** — *Embed* (default) or *Plain text (no embed)*. Plain-text mode
+  posts a normal message and always appends the stream link, for channels that
+  are transcribed elsewhere (e.g. a RuneLite Discord→game-chat plugin that
+  ignores embeds).
 
 ## Notes
 

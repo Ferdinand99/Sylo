@@ -3,8 +3,10 @@
 // TWITCH_CLIENT_SECRET (free app at dev.twitch.tv/console). When those are
 // unset the poll loop no-ops and the dashboard shows a note.
 //
-// config shape: { alerts: [ { id, login, channelId, roleId, message } ] }
+// config shape: { alerts: [ { id, login, channelId, roleId, message, plainText } ] }
 // message placeholders: {name} {title} {game} {url} {viewers}
+// plainText: send a plain message with no embed (for channels bridged elsewhere,
+// e.g. a RuneLite Discord->game-chat plugin that ignores embeds).
 import { EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { runtime } from '../runtime.js';
@@ -19,6 +21,9 @@ const COLOR = 0x9146ff;
 const POLL_MS = 60_000;
 
 export const DEFAULT_MESSAGE = '🔴 **{name}** is live on Twitch!';
+// Plain-text mode has its own default: no markdown, and it carries the link
+// since there is no embed to hold it.
+export const DEFAULT_PLAIN_MESSAGE = '🔴 {name} is live on Twitch! {title} — {url}';
 const LOGIN_RE = /^[a-zA-Z0-9_]{3,25}$/;
 const isId = (v) => /^\d{17,20}$/.test(v ?? '');
 
@@ -35,6 +40,7 @@ export function normaliseTwitchConfig(raw = {}) {
         channelId: isId(a.channelId) ? a.channelId : '',
         roleId: isId(a.roleId) ? a.roleId : '',
         message: String(a.message ?? '').slice(0, 1500),
+        plainText: Boolean(a.plainText),
       }))
       .filter((a) => {
         if (!LOGIN_RE.test(a.login) || !a.channelId || seen.has(a.login + a.channelId)) return false;
@@ -114,12 +120,27 @@ export function fillMessage(tpl, { name, title, game, url, viewers }) {
     .replaceAll('{viewers}', String(viewers ?? 0));
 }
 
-function buildPayload(stream, user, alert) {
+export function buildPayload(stream, user, alert) {
   const login = stream.user_login.toLowerCase();
   const url = `https://twitch.tv/${login}`;
   const name = stream.user_name || user?.display_name || login;
-  const thumb = (stream.thumbnail_url || '').replace('{width}', '1280').replace('{height}', '720');
+  const vars = {
+    name,
+    title: stream.title,
+    game: stream.game_name,
+    url,
+    viewers: stream.viewer_count,
+  };
+  const ping = alert.roleId ? `<@&${alert.roleId}> ` : '';
+  const allowedMentions = { roles: alert.roleId ? [alert.roleId] : [] };
 
+  if (alert.plainText) {
+    let content = `${ping}${fillMessage(alert.message || DEFAULT_PLAIN_MESSAGE, vars)}`.trim();
+    if (url && !content.includes(url)) content += `\n${url}`;
+    return { content: content || undefined, embeds: [], allowedMentions };
+  }
+
+  const thumb = (stream.thumbnail_url || '').replace('{width}', '1280').replace('{height}', '720');
   const embed = new EmbedBuilder()
     .setColor(COLOR)
     .setAuthor({ name: `${name} is live on Twitch`, url, iconURL: user?.profile_image_url || undefined })
@@ -129,19 +150,8 @@ function buildPayload(stream, user, alert) {
     .setTimestamp(Date.parse(stream.started_at) || Date.now());
   if (thumb) embed.setImage(`${thumb}?t=${Date.now()}`);
 
-  const content = fillMessage(alert.message, {
-    name,
-    title: stream.title,
-    game: stream.game_name,
-    url,
-    viewers: stream.viewer_count,
-  }).trim();
-
-  return {
-    content: `${alert.roleId ? `<@&${alert.roleId}> ` : ''}${content}`.trim() || undefined,
-    embeds: [embed],
-    allowedMentions: { roles: alert.roleId ? [alert.roleId] : [] },
-  };
+  const content = `${ping}${fillMessage(alert.message, vars)}`.trim();
+  return { content: content || undefined, embeds: [embed], allowedMentions };
 }
 
 // --- poll loop -------------------------------------------------------

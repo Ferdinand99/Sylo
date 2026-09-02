@@ -53,23 +53,39 @@ test('streamKey uses the broadcast start time so a new stream re-announces', () 
   assert.equal(streamKey({}), 'live'); // tolerates a missing stream object
 });
 
+const CHANNEL = {
+  slug: 'xqc',
+  stream_title: 'ranked',
+  category: { name: 'Fortnite' },
+  banner_picture: 'https://files.kick.com/banner.jpg',
+  stream: {
+    is_live: true,
+    viewer_count: 4200,
+    start_time: '2026-09-02T20:00:00Z',
+    thumbnail: 'https://files.kick.com/thumb.jpg',
+    url: 'https://kick.com/xqc',
+  },
+};
+
 test('buildPayload: renders an embed + prepends the ping role', () => {
-  const channel = {
-    slug: 'xqc',
-    stream_title: 'ranked',
-    category: { name: 'Fortnite' },
-    banner_picture: 'https://files.kick.com/banner.jpg',
-    stream: {
-      is_live: true,
-      viewer_count: 4200,
-      start_time: '2026-09-02T20:00:00Z',
-      thumbnail: 'https://files.kick.com/thumb.jpg',
-      url: 'https://kick.com/xqc',
-    },
-  };
-  const payload = buildPayload(channel, { roleId: '123456789012345678', message: '{name} live!' });
+  const payload = buildPayload(CHANNEL, { roleId: '123456789012345678', message: '{name} live!' });
   assert.match(payload.content, /^<@&123456789012345678> xqc live!$/);
   assert.equal(payload.embeds[0].data.url, 'https://kick.com/xqc');
   assert.match(payload.embeds[0].data.description, /Fortnite.*4200 viewers/);
   assert.deepEqual(payload.allowedMentions, { roles: ['123456789012345678'] });
+});
+
+test('normaliseKickConfig: keeps the plainText flag', () => {
+  const c = normaliseKickConfig({
+    alerts: [{ slug: 'xqc', channelId: '123456789012345678', plainText: true }],
+  });
+  assert.equal(c.alerts[0].plainText, true);
+});
+
+test('buildPayload: plainText mode sends no embed and always includes the url', () => {
+  const p = buildPayload(CHANNEL, { roleId: '', message: '', plainText: true });
+  assert.deepEqual(p.embeds, []);
+  assert.match(p.content, /kick\.com\/xqc/);
+  const p2 = buildPayload(CHANNEL, { message: '{name} live now', plainText: true });
+  assert.match(p2.content, /^xqc live now\nhttps:\/\/kick\.com\/xqc$/);
 });

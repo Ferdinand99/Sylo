@@ -1131,12 +1131,14 @@ router.post(
       const chans = [].concat(req.body.tw_channel ?? []);
       const rolez = [].concat(req.body.tw_role ?? []);
       const msgs = [].concat(req.body.tw_message ?? []);
+      const fmts = [].concat(req.body.tw_format ?? []);
       config = normaliseTwitchConfig({
         alerts: logins.map((login, i) => ({
           login,
           channelId: chans[i] ?? '',
           roleId: rolez[i] ?? '',
           message: msgs[i] ?? '',
+          plainText: fmts[i] === 'text',
         })),
       });
     } else if (mod.id === 'kick-alerts') {
@@ -1144,12 +1146,14 @@ router.post(
       const chans = [].concat(req.body.kc_channel ?? []);
       const rolez = [].concat(req.body.kc_role ?? []);
       const msgs = [].concat(req.body.kc_message ?? []);
+      const fmts = [].concat(req.body.kc_format ?? []);
       config = normaliseKickConfig({
         alerts: slugs.map((slug, i) => ({
           slug,
           channelId: chans[i] ?? '',
           roleId: rolez[i] ?? '',
           message: msgs[i] ?? '',
+          plainText: fmts[i] === 'text',
         })),
       });
     } else if (mod.id === 'polls') {
