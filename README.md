@@ -427,12 +427,16 @@ persists in `./data` on the host.
 
 ### Prebuilt images
 
-CI publishes `linux/amd64` images to two registries — use either:
+CI publishes multi-arch (`linux/amd64` + `linux/arm64`) images to two registries
+— use either:
 
 | Tag | Registry | What it is |
 | --- | --- | --- |
 | `iwgamin/sylo:latest`, `:X.Y.Z`, `:X.Y` | [Docker Hub](https://hub.docker.com/r/iwgamin/sylo) · [GHCR](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo) | Stable releases (release-please). What the Unraid template pulls. |
 | `ghcr.io/ferdinand99/sylo:main`, `:sha-<short>` | GHCR only | Rolling build of `main` — every push. |
+
+`arm64` covers Raspberry Pi, ARM NAS boxes and Apple-Silicon hosts; Docker picks
+the right one automatically.
 
 ```bash
 docker run -d --name sylo -p 3000:3000 --env-file .env \
