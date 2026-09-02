@@ -62,6 +62,7 @@ test('GET /health as a browser renders the status page', async () => {
   const html = await res.text();
   assert.match(html, /<!doctype html>/i);
   assert.match(html, /backup/i);
+  assert.match(html, /<link rel="icon"/); // favicon present (fallback when no bot avatar)
 });
 
 test('GET /health from an hx-boost click renders the page, not the JSON', async () => {
