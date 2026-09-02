@@ -7,7 +7,8 @@ import { Router, raw } from 'express';
 import { createRequire } from 'node:module';
 import { config } from '../../config.js';
 import { rateLimit } from '../middleware/rateLimit.js';
-import { runtime, uptimeSeconds, isDiscordReady, guildCount } from '../../runtime.js';
+import { runtime, uptimeSeconds, isDiscordReady, guildCount, errorScopeCounts } from '../../runtime.js';
+import { byMetric } from '../../lib/metrics.js';
 import { dashboardStats, moduleUsage } from '../../db/dashboardStats.js';
 import {
   listBackups,
@@ -53,13 +54,23 @@ router.get('/', (req, res) => {
   const wantsHtml = (req.headers.accept || '').includes('text/html');
 
   if (!wantsHtml) {
+    const ping = runtime.client?.ws?.ping;
     return res.status(ready ? 200 : 503).json({
       status: ready ? 'ok' : 'degraded',
       version,
       uptimeSeconds: uptimeSeconds(),
-      discord: { ready, guilds: guildCount() },
+      discord: {
+        ready,
+        guilds: guildCount(),
+        gatewayPingMs: typeof ping === 'number' && ping >= 0 ? Math.round(ping) : null,
+        gatewayPingHistory: runtime.pingHistory.slice(),
+      },
       lastError: runtime.lastError,
       errorCount: runtime.errors.length,
+      errorsByScope: errorScopeCounts(),
+      commands: byMetric('sylo_commands_total')
+        .map((c) => ({ name: c.labels.command ?? 'unknown', count: c.value }))
+        .sort((a, b) => b.count - a.count),
     });
   }
 
@@ -87,6 +98,7 @@ router.get('/', (req, res) => {
     guildCount: guildCount(),
     memberReach,
     gatewayPing: typeof gatewayPing === 'number' && gatewayPing >= 0 ? Math.round(gatewayPing) : null,
+    pingHistory: runtime.pingHistory.slice(),
     stats: dashboardStats(),
     modules,
     lastError: runtime.lastError,

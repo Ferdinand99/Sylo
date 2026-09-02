@@ -13,6 +13,7 @@
 // its stack is shown at debug level / carried in JSON). `log.error(...)` also
 // records the event in the /health error history via runtime.recordError.
 import { recordError } from '../runtime.js';
+import { inc } from './metrics.js';
 
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
 
@@ -56,6 +57,7 @@ function emit(level, scope, msg, args) {
   if (level === 'error') {
     try {
       recordError(err || new Error(message), String(scope));
+      inc('sylo_errors_total', { scope: String(scope) });
     } catch {
       // runtime module not ready / unavailable — never let logging throw.
     }
