@@ -11,6 +11,7 @@ export const MODULE_ICONS = {
   appeals: 'gavel',
   tickets: 'ticket',
   welcome: 'users',
+  birthdays: 'cake',
   'welcome-channel': 'megaphone',
   roles: 'smile',
   counting: 'hash',

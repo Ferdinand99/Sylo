@@ -14,6 +14,7 @@ import { config } from '../../config.js';
 const GROUPS = [
   { name: 'General', commands: ['help', 'about', 'version', 'ping', 'stats'] },
   { name: 'Leveling', commands: ['rank', 'leaderboard'] },
+  { name: 'Community', commands: ['afk', 'birthday'] },
   {
     name: 'Moderation',
     commands: [

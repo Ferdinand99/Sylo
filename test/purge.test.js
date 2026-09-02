@@ -47,6 +47,9 @@ function seed(guildId, userId) {
     'brb',
     now
   );
+  db.prepare(
+    'INSERT OR REPLACE INTO birthdays (guild_id, user_id, month, day, year, created_at) VALUES (?,?,?,?,?,?)'
+  ).run(guildId, userId, 6, 15, null, now);
   const g = db
     .prepare(
       'INSERT INTO giveaways (guild_id, channel_id, prize, host_id, ends_at, created_at) VALUES (?,?,?,?,?,?)'
@@ -78,6 +81,7 @@ test('purgeGuild removes every guild-scoped row and leaves other guilds alone', 
     'scheduled_messages',
     'config_audit',
     'afk',
+    'birthdays',
     'giveaways',
   ]) {
     assert.equal(countFor(t, G), 0, `${t} should be empty for purged guild`);
@@ -102,7 +106,7 @@ test('purgeGuild removes every guild-scoped row and leaves other guilds alone', 
 
 test('forgetUser deletes only that member’s data in that guild', () => {
   db.exec(
-    'DELETE FROM leveling; DELETE FROM warnings; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM giveaways; DELETE FROM giveaway_entries;'
+    'DELETE FROM leveling; DELETE FROM warnings; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM birthdays; DELETE FROM giveaways; DELETE FROM giveaway_entries;'
   );
   seed(G, U);
   const KEEP = '444444444444444444';
@@ -129,6 +133,7 @@ test('forgetUser deletes only that member’s data in that guild', () => {
   assert.equal(result.tickets, 1);
   assert.equal(result.ticketMessages, 1);
   assert.equal(result.afk, 1);
+  assert.equal(result.birthdays, 1);
   assert.equal(result.giveawayEntries, 1);
   assert.equal(
     db.prepare('SELECT COUNT(*) AS n FROM leveling WHERE guild_id = ?').get(G).n,
@@ -154,7 +159,7 @@ test('forgetUser deletes only that member’s data in that guild', () => {
 
 test('describeUserData counts what forgetUser would remove, then reads zero after', () => {
   db.exec(
-    'DELETE FROM leveling; DELETE FROM warnings; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM giveaways; DELETE FROM giveaway_entries;'
+    'DELETE FROM leveling; DELETE FROM warnings; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM birthdays; DELETE FROM giveaways; DELETE FROM giveaway_entries;'
   );
   seed(G, U);
 
@@ -165,9 +170,10 @@ test('describeUserData counts what forgetUser would remove, then reads zero afte
   assert.equal(byKey.tickets, 1);
   assert.equal(byKey.ticketMessages, 1);
   assert.equal(byKey.afk, 1);
+  assert.equal(byKey.birthdays, 1);
   assert.equal(byKey.giveawayEntries, 1);
   assert.equal(byKey.countingLast, 1);
-  assert.ok(before.total >= 7);
+  assert.ok(before.total >= 8);
 
   forgetUser(G, U);
 

@@ -32,6 +32,7 @@ export const GUILD_TABLES = [
   'leaderboard_vanity',
   'temp_bans',
   'channel_locks',
+  'birthdays',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -67,6 +68,7 @@ const userStmts = {
   tickets: db.prepare('DELETE FROM tickets WHERE guild_id = ? AND user_id = ?'),
   appeals: db.prepare('DELETE FROM appeals WHERE guild_id = ? AND user_id = ?'),
   afk: db.prepare('DELETE FROM afk WHERE guild_id = ? AND user_id = ?'),
+  birthdays: db.prepare('DELETE FROM birthdays WHERE guild_id = ? AND user_id = ?'),
   giveawayEntries: db.prepare(`
     DELETE FROM giveaway_entries
     WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)
@@ -88,13 +90,24 @@ const forgetUserTxn = db.transaction((guildId, userId) => {
   const tickets = userStmts.tickets.run(guildId, userId).changes;
   const appeals = userStmts.appeals.run(guildId, userId).changes;
   const afk = userStmts.afk.run(guildId, userId).changes;
+  const birthdays = userStmts.birthdays.run(guildId, userId).changes;
   const giveawayEntries = userStmts.giveawayEntries.run(guildId, userId).changes;
   const invites =
     userStmts.inviteCounts.run(guildId, userId).changes +
     userStmts.inviteJoins.run(guildId, userId).changes +
     userStmts.inviteJoinsAsInviter.run(guildId, userId).changes +
     userStmts.invitePersonal.run(guildId, userId).changes;
-  return { warnings, leveling, tickets, ticketMessages: ticketMsgs, appeals, afk, giveawayEntries, invites };
+  return {
+    warnings,
+    leveling,
+    tickets,
+    ticketMessages: ticketMsgs,
+    appeals,
+    afk,
+    birthdays,
+    giveawayEntries,
+    invites,
+  };
 });
 
 /**
@@ -102,7 +115,7 @@ const forgetUserTxn = db.transaction((guildId, userId) => {
  * a Discord user id; a completed giveaway's host/winner list and the config
  * audit log (which records a display name, not an id) are guild records and are
  * only removed by {@link purgeGuild}.
- * @returns {{ warnings: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, giveawayEntries: number, invites: number }}
+ * @returns {{ warnings: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, invites: number }}
  */
 export function forgetUser(guildId, userId) {
   return forgetUserTxn(guildId, userId);
@@ -133,6 +146,12 @@ const describeStmts = [
   ],
   ['appeals', 'Ban appeals', 'SELECT COUNT(*) AS n FROM appeals WHERE guild_id = ? AND user_id = ?', 'gu'],
   ['afk', 'AFK status', 'SELECT COUNT(*) AS n FROM afk WHERE guild_id = ? AND user_id = ?', 'gu'],
+  [
+    'birthdays',
+    'Saved birthday',
+    'SELECT COUNT(*) AS n FROM birthdays WHERE guild_id = ? AND user_id = ?',
+    'gu',
+  ],
   [
     'giveawayEntries',
     'Giveaway entries',

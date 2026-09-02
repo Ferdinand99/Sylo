@@ -41,6 +41,7 @@ import {
   getGiveawayInGuild,
 } from '../../db/giveaways.js';
 import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
+import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { recentLookups } from '../../db/cache.js';
 import { getVanitySlug, setVanitySlug, clearVanitySlug } from '../../db/leaderboardVanity.js';
 import { normaliseEmbedSpec } from '../../modules/welcomeChannel.js';
@@ -110,6 +111,7 @@ import {
 import { guildTempBans, clearTempBan } from '../../db/tempBans.js';
 import { lockChannel, unlockChannel, lockPreflight } from '../../bot/lib/channelLock.js';
 import { formatDuration } from '../../bot/lib/duration.js';
+import { renderWelcomeCard } from '../../bot/lib/welcomeCard.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
@@ -121,6 +123,7 @@ const CONFIG_VIEWS = new Set([
   'moderation',
   'logging',
   'welcome',
+  'birthdays',
   'roles',
   'sticky',
   'tickets',
@@ -317,6 +320,7 @@ router.post(
         { name: 'Tickets', value: `${r.tickets} (${r.ticketMessages} msgs)`, inline: true },
         { name: 'Ban appeals', value: String(r.appeals), inline: true },
         { name: 'AFK status', value: String(r.afk), inline: true },
+        { name: 'Saved birthday', value: String(r.birthdays), inline: true },
         { name: 'Giveaway entries', value: String(r.giveawayEntries), inline: true },
         { name: 'Invite records', value: String(r.invites), inline: true },
         { name: 'Not affected', value: MEMBER_DATA_UNAFFECTED }
@@ -620,6 +624,25 @@ router.post('/:guildId/m/automod/immunity', (req, res) => {
   res.redirect(`/guilds/${req.guild.id}/moderation?msg=saved`);
 });
 
+// Welcome: a PNG preview of the welcome image, using a sample member and the
+// saved background. Cheap enough to render on demand; browser-cached via the
+// ?v= cache-buster the view appends.
+router.get(
+  '/:guildId/m/welcome/card-preview',
+  asyncHandler(async (req, res) => {
+    const cfg = getGuildModule(req.guild.id, 'welcome').config || {};
+    const png = await renderWelcomeCard({
+      name: 'New Member',
+      avatarUrl: runtime.client?.user?.displayAvatarURL({ extension: 'png', size: 256 }),
+      memberCount: req.guild.memberCount || 0,
+      accent: guildEmbedColor(req.guild.id),
+      backgroundUrl: cfg.cardBackground || undefined,
+    });
+    if (!png) return res.status(204).end(); // canvas unavailable on this host
+    res.set('Cache-Control', 'private, max-age=60').type('png').send(png);
+  })
+);
+
 // Welcome Channel: create a read-only #welcome channel.
 router.post(
   '/:guildId/m/welcome-channel/create-channel',
@@ -677,6 +700,7 @@ function moduleViewLocals(mod, req, configOverride) {
       'verification',
       'free-games',
       'welcome',
+      'birthdays',
       'starboard',
       'polls',
       'twitch-alerts',
@@ -846,6 +870,7 @@ router.post(
       const joinOn = req.body.enable_join === 'on';
       const dmOn = req.body.enable_dm === 'on';
       const leaveOn = req.body.enable_leave === 'on';
+      const cardBg = String(req.body.cardBackground ?? '').trim();
       config = {
         joinChannel: joinOn ? chan(req.body.joinChannel) : '',
         joinMessage: joinOn ? String(req.body.joinMessage ?? '').slice(0, 1500) : '',
@@ -853,6 +878,8 @@ router.post(
         leaveMessage: leaveOn ? String(req.body.leaveMessage ?? '').slice(0, 1500) : '',
         dmMessage: dmOn ? String(req.body.dmMessage ?? '').slice(0, 1500) : '',
         useEmbed: req.body.useEmbed === 'on',
+        card: req.body.enable_card === 'on',
+        cardBackground: /^https:\/\/\S+$/i.test(cardBg) ? cardBg.slice(0, 500) : '',
       };
       // "Give roles to new members" here writes the Reaction roles & autoroles module.
       const autoOn = req.body.enable_autorole === 'on';
@@ -1086,6 +1113,13 @@ router.post(
       });
     } else if (mod.id === 'giveaways') {
       config = normaliseGiveawaysConfig({ ping: req.body.ping, dmWinners: req.body.dmWinners === 'on' });
+    } else if (mod.id === 'birthdays') {
+      config = normaliseBirthdaysConfig({
+        channel: req.body.channel,
+        message: req.body.message,
+        roleId: [].concat(req.body.roleId ?? '')[0],
+        pingRole: req.body.pingRole === 'on',
+      });
     } else {
       return res.redirect(back);
     }

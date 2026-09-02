@@ -73,6 +73,15 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'birthdays',
+    name: 'Birthdays',
+    description: 'Members save their birthday; Sylo posts a greeting and can grant a role for the day.',
+    icon: '🎂',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
+  {
     id: 'welcome-channel',
     name: 'Welcome channel',
     description: 'Build one rich, pinned message for a dedicated read-only welcome channel.',
