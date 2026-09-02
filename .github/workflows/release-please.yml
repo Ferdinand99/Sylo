@@ -85,10 +85,14 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
     steps:
-      - name: Prepare platform slug
+      - name: Prepare build vars
         env:
           PLATFORM: ${{ matrix.platform }}
-        run: echo "PLATFORM_SLUG=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+        run: |
+          echo "PLATFORM_SLUG=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+          # GHCR rejects a non-lowercase repository in a canonical reference.
+          echo "DH_IMAGE=docker.io/${{ vars.DOCKERHUB_USERNAME }}/sylo" >> "$GITHUB_ENV"
+          echo "GHCR_IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v7
         with:
@@ -130,7 +134,7 @@ jobs:
           # Docker (schema 2) manifests, not OCI — Unraid's "check for updates"
           # can't parse OCI media types. push-by-digest: no tag here, the merge
           # job applies :latest / :X.Y.Z / :X.Y to the assembled list.
-          outputs: type=image,"name=docker.io/${{ vars.DOCKERHUB_USERNAME }}/sylo,ghcr.io/${{ github.repository }}",oci-mediatypes=false,push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,"name=${{ env.DH_IMAGE }},${{ env.GHCR_IMAGE }}",oci-mediatypes=false,push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
         run: |
