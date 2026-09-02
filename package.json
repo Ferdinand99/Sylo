@@ -28,7 +28,7 @@
   "license": "MIT",
   "dependencies": {
     "@napi-rs/canvas": "^1.0.8",
-    "better-sqlite3": "^12.2.0",
+    "better-sqlite3": "^13.0.3",
     "cookie-session": "^2.1.1",
     "discord.js": "^14.16.3",
     "dotenv": "^17.4.2",
