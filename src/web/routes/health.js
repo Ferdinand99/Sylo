@@ -1,8 +1,9 @@
 // GET /health
-//  - non-browser request  -> machine-readable JSON for the Docker healthcheck /
-//    uptime monitors (200 when the Discord client is connected, 503 otherwise).
-//  - browser request       -> the human status page (bot state, module adoption,
-//    database + backups). Gated by auth when auth is enabled.
+//  - machine request (Docker healthcheck, uptime monitor: no `Accept: text/html`,
+//    no htmx header) -> machine-readable JSON, 200 when the Discord client is
+//    connected, 503 otherwise.
+//  - browser request (a normal navigation *or* an hx-boost click from the
+//    dashboard sidebar) -> the human status page. Gated by auth when enabled.
 import { Router, raw } from 'express';
 import { createRequire } from 'node:module';
 import { config } from '../../config.js';
@@ -51,7 +52,9 @@ function requireUser(req, res, next) {
 
 router.get('/', (req, res) => {
   const ready = isDiscordReady();
-  const wantsHtml = (req.headers.accept || '').includes('text/html');
+  // htmx (hx-boost) navigations fetch with `Accept: */*`, so fall back to the
+  // HX-Request header — without this a boosted sidebar click renders the JSON.
+  const wantsHtml = (req.headers.accept || '').includes('text/html') || Boolean(req.get('HX-Request'));
 
   if (!wantsHtml) {
     const ping = runtime.client?.ws?.ping;
