@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.4.1](https://github.com/Ferdinand99/Sylo/compare/v3.4.0...v3.4.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* hx-boost dashboard nav and show every save as a toast ([79efafc](https://github.com/Ferdinand99/Sylo/commit/79efafcb3745a99c71b3e124daedce36796ca0d8))
+* hx-boost dashboard nav and show every save as a toast ([09f0e7c](https://github.com/Ferdinand99/Sylo/commit/09f0e7cfcdc7748365b804a0a58794a61c7a7c54))
+* toast reliably after hx-boost nav, no result-banner flash ([26db4d8](https://github.com/Ferdinand99/Sylo/commit/26db4d8a3226967b7ccf0475dad5ffa0a94638d6))
+
 ## [3.4.0](https://github.com/Ferdinand99/Sylo/compare/v3.3.0...v3.4.0) (2026-09-02)
 
 
