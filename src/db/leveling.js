@@ -10,12 +10,8 @@ const upsertStmt = db.prepare(`
     xp = excluded.xp, level = excluded.level,
     messages = excluded.messages, last_msg_at = excluded.last_msg_at
 `);
-const topStmt = db.prepare(
-  'SELECT * FROM leveling WHERE guild_id = ? ORDER BY xp DESC LIMIT ? OFFSET ?'
-);
-const rankStmt = db.prepare(
-  'SELECT COUNT(*) AS n FROM leveling WHERE guild_id = ? AND xp > ?'
-);
+const topStmt = db.prepare('SELECT * FROM leveling WHERE guild_id = ? ORDER BY xp DESC LIMIT ? OFFSET ?');
+const rankStmt = db.prepare('SELECT COUNT(*) AS n FROM leveling WHERE guild_id = ? AND xp > ?');
 const countStmt = db.prepare('SELECT COUNT(*) AS n FROM leveling WHERE guild_id = ?');
 const deleteGuildStmt = db.prepare('DELETE FROM leveling WHERE guild_id = ?');
 

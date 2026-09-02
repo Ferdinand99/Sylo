@@ -12,12 +12,7 @@ import {
   cooldownRemainingMs,
   announceNewAppeal,
 } from '../../modules/appeals.js';
-import {
-  getOpenAppeal,
-  getLatestAppeal,
-  createAppeal,
-  getAppeal,
-} from '../../db/appeals.js';
+import { getOpenAppeal, getLatestAppeal, createAppeal, getAppeal } from '../../db/appeals.js';
 
 const router = Router();
 
@@ -61,14 +56,18 @@ async function resolve(req) {
   if (getOpenAppeal(guildId, parsed.userId)) {
     return {
       state: 'pending',
-      message: 'Your appeal has been received and is waiting for a moderator to review it. Come back to this link to see the decision.',
+      message:
+        'Your appeal has been received and is waiting for a moderator to review it. Come back to this link to see the decision.',
       guild,
       cfg,
     };
   }
 
   const latest = getLatestAppeal(guildId, parsed.userId);
-  const banned = await guild.bans.fetch(parsed.userId).then(() => true).catch(() => false);
+  const banned = await guild.bans
+    .fetch(parsed.userId)
+    .then(() => true)
+    .catch(() => false);
 
   // Not banned any more → show the outcome of the last appeal, if there was one.
   if (!banned) {
@@ -167,7 +166,12 @@ router.post('/:guildId', async (req, res, next) => {
 
     const { guild, cfg, parsed } = r;
     const raw = [].concat(req.body.a ?? []);
-    const answers = cfg.questions.map((q, i) => ({ q, a: String(raw[i] ?? '').trim().slice(0, 2000) }));
+    const answers = cfg.questions.map((q, i) => ({
+      q,
+      a: String(raw[i] ?? '')
+        .trim()
+        .slice(0, 2000),
+    }));
     if (!answers.some((qa) => qa.a !== '')) {
       return render(res, 'form', {
         guildName: guild.name,
@@ -179,8 +183,14 @@ router.post('/:guildId', async (req, res, next) => {
       });
     }
 
-    const banReason = await guild.bans.fetch(parsed.userId).then((b) => b.reason ?? '').catch(() => '');
-    const userTag = await guild.client.users.fetch(parsed.userId).then((u) => u.tag).catch(() => '');
+    const banReason = await guild.bans
+      .fetch(parsed.userId)
+      .then((b) => b.reason ?? '')
+      .catch(() => '');
+    const userTag = await guild.client.users
+      .fetch(parsed.userId)
+      .then((u) => u.tag)
+      .catch(() => '');
 
     const appealId = createAppeal(guild.id, { userId: parsed.userId, userTag, banReason, answers });
     if (appealId == null) {

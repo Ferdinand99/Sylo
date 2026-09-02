@@ -13,13 +13,17 @@ const s = {
   getInGuild: db.prepare('SELECT * FROM giveaways WHERE id = ? AND guild_id = ?'),
   byMessage: db.prepare('SELECT * FROM giveaways WHERE message_id = ?'),
   active: db.prepare('SELECT * FROM giveaways WHERE guild_id = ? AND ended = 0 ORDER BY ends_at ASC'),
-  recentEnded: db.prepare('SELECT * FROM giveaways WHERE guild_id = ? AND ended = 1 ORDER BY ends_at DESC LIMIT ?'),
+  recentEnded: db.prepare(
+    'SELECT * FROM giveaways WHERE guild_id = ? AND ended = 1 ORDER BY ends_at DESC LIMIT ?'
+  ),
   due: db.prepare('SELECT * FROM giveaways WHERE ended = 0 AND ends_at <= ?'),
   markEnded: db.prepare('UPDATE giveaways SET ended = 1, won_ids = ? WHERE id = ?'),
   setWinners: db.prepare('UPDATE giveaways SET won_ids = ? WHERE id = ?'),
   delGuild: db.prepare('DELETE FROM giveaways WHERE guild_id = ?'),
 
-  addEntry: db.prepare('INSERT OR IGNORE INTO giveaway_entries (giveaway_id, user_id, entered_at) VALUES (?, ?, ?)'),
+  addEntry: db.prepare(
+    'INSERT OR IGNORE INTO giveaway_entries (giveaway_id, user_id, entered_at) VALUES (?, ?, ?)'
+  ),
   removeEntry: db.prepare('DELETE FROM giveaway_entries WHERE giveaway_id = ? AND user_id = ?'),
   hasEntry: db.prepare('SELECT 1 FROM giveaway_entries WHERE giveaway_id = ? AND user_id = ?'),
   countEntries: db.prepare('SELECT COUNT(*) AS n FROM giveaway_entries WHERE giveaway_id = ?'),
@@ -31,7 +35,7 @@ const s = {
 
 const hydrate = (row) => {
   if (!row) return null;
-  let won = [];
+  let won;
   try {
     won = JSON.parse(row.won_ids);
   } catch {

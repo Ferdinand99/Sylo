@@ -39,6 +39,34 @@ test('open mode (no session): passes through, no token', () => {
   assert.equal(res.locals.csrfToken, undefined);
 });
 
+test('same-origin guard runs even in open mode', () => {
+  // Cross-site Origin -> blocked.
+  const blocked = mk({
+    method: 'POST',
+    session: undefined,
+    headers: { host: 'sylo.lan', origin: 'https://evil.example' },
+  });
+  assert.equal(blocked.nexted, false);
+  assert.equal(blocked.res.statusCode, 403);
+  assert.match(blocked.res.body, /cross-origin/i);
+
+  // Same Origin -> allowed. Same-site Referer -> allowed. Neither (curl) -> allowed.
+  assert.equal(
+    mk({ method: 'POST', session: undefined, headers: { host: 'sylo.lan', origin: 'http://sylo.lan' } })
+      .nexted,
+    true
+  );
+  assert.equal(
+    mk({
+      method: 'POST',
+      session: undefined,
+      headers: { host: 'sylo.lan', referer: 'http://sylo.lan/guilds/1/settings' },
+    }).nexted,
+    true
+  );
+  assert.equal(mk({ method: 'POST', session: undefined }).nexted, true);
+});
+
 test('GET with a session: mints a token, exposes it, passes through', () => {
   const session = {};
   const { res, nexted } = mk({ method: 'GET', session });

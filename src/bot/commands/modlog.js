@@ -44,7 +44,10 @@ export async function execute(interaction) {
       return;
     }
     setModlogChannel(guildId, channel.id);
-    await interaction.reply({ content: `✅ Moderation actions will be logged in ${channel}.`, flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: `✅ Moderation actions will be logged in ${channel}.`,
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 

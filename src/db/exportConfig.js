@@ -3,9 +3,7 @@
 import { db } from './index.js';
 
 const q = {
-  settings: db.prepare(
-    'SELECT modlog_channel_id FROM guild_settings WHERE guild_id = ?'
-  ),
+  settings: db.prepare('SELECT modlog_channel_id FROM guild_settings WHERE guild_id = ?'),
   modules: db.prepare('SELECT module_id, enabled, config FROM guild_modules WHERE guild_id = ?'),
   overrides: db.prepare(
     'SELECT command_name, enabled, allowed_channels, allowed_roles FROM command_overrides WHERE guild_id = ?'

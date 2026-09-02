@@ -27,8 +27,12 @@ const updateStmt = db.prepare(`
 `);
 const deleteStmt = db.prepare('DELETE FROM scheduled_messages WHERE id = ? AND guild_id = ?');
 const setEnabledStmt = db.prepare('UPDATE scheduled_messages SET enabled = ? WHERE id = ? AND guild_id = ?');
-const advanceStmt = db.prepare('UPDATE scheduled_messages SET last_run_at = @now, next_run_at = @nextRunAt WHERE id = @id');
-const firedSingleStmt = db.prepare('UPDATE scheduled_messages SET last_run_at = @now, enabled = 0 WHERE id = @id');
+const advanceStmt = db.prepare(
+  'UPDATE scheduled_messages SET last_run_at = @now, next_run_at = @nextRunAt WHERE id = @id'
+);
+const firedSingleStmt = db.prepare(
+  'UPDATE scheduled_messages SET last_run_at = @now, enabled = 0 WHERE id = @id'
+);
 
 const ALL_DAYS = '0,1,2,3,4,5,6';
 
@@ -70,7 +74,7 @@ export function createReminder(guildId, r) {
   // keys off run_at) so park it at the run time or the far future.
   const firstRun =
     r.mode === 'single'
-      ? r.runAt ?? Number.MAX_SAFE_INTEGER
+      ? (r.runAt ?? Number.MAX_SAFE_INTEGER)
       : Math.max(now + r.intervalMinutes * 60_000, r.startAt ?? 0);
   return insertStmt.run({
     guildId,
@@ -95,7 +99,7 @@ export function updateReminder(guildId, id, r) {
   // keys off run_at) so park it at the run time or the far future.
   const firstRun =
     r.mode === 'single'
-      ? r.runAt ?? Number.MAX_SAFE_INTEGER
+      ? (r.runAt ?? Number.MAX_SAFE_INTEGER)
       : Math.max(now + r.intervalMinutes * 60_000, r.startAt ?? 0);
   updateStmt.run({
     guildId,

@@ -19,8 +19,14 @@ export async function execute(interaction) {
   const roleIds = [...(interaction.member.roles?.cache?.keys() ?? [])];
   const isMod =
     interaction.memberPermissions.has(PermissionFlagsBits.ManageChannels) ||
-    rows.some((r) => (hubForChannel(interaction.guildId, r.hub_id)?.moderatorRoles ?? []).some((x) => roleIds.includes(x)));
-  if (!isMod) return interaction.reply({ content: 'You need Manage Channels or a voice-moderator role.', ...ephemeral });
+    rows.some((r) =>
+      (hubForChannel(interaction.guildId, r.hub_id)?.moderatorRoles ?? []).some((x) => roleIds.includes(x))
+    );
+  if (!isMod)
+    return interaction.reply({
+      content: 'You need Manage Channels or a voice-moderator role.',
+      ...ephemeral,
+    });
 
   await interaction.deferReply(ephemeral);
   let n = 0;

@@ -3,14 +3,9 @@
 // plus the dashboard, call endGiveaway() directly.
 //
 // config shape: { ping: 'none' | 'here' | 'everyone', dmWinners: boolean }
-import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-  MessageFlags,
-} from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { runtime } from '../runtime.js';
+import { registerComponent } from '../bot/lib/components.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import {
   getGiveaway,
@@ -61,7 +56,10 @@ export function pickWinners(pool, n) {
 /** Message payload for a giveaway in its current state. */
 export function buildGiveawayPayload(g, { entryCount = 0 } = {}) {
   const endTs = Math.floor(g.ends_at / 1000);
-  const embed = new EmbedBuilder().setColor(ACCENT).setTitle(`🎉 ${g.prize}`).setTimestamp(g.created_at || Date.now());
+  const embed = new EmbedBuilder()
+    .setColor(ACCENT)
+    .setTitle(`🎉 ${g.prize}`)
+    .setTimestamp(g.created_at || Date.now());
 
   if (!g.ended) {
     embed.setDescription(
@@ -79,14 +77,18 @@ export function buildGiveawayPayload(g, { entryCount = 0 } = {}) {
     embed.setFooter({ text: `${entryCount} ${entryCount === 1 ? 'entry' : 'entries'}` });
   } else {
     const won = g.wonIds || [];
-    embed.setColor(0x4f545c).setDescription(
-      [
-        won.length ? `Winner${won.length === 1 ? '' : 's'}: ${won.map((id) => `<@${id}>`).join(', ')}` : 'No valid entries — no winner drawn.',
-        '',
-        `Ended: <t:${endTs}:R>`,
-        `Hosted by: <@${g.host_id}>`,
-      ].join('\n')
-    );
+    embed
+      .setColor(0x4f545c)
+      .setDescription(
+        [
+          won.length
+            ? `Winner${won.length === 1 ? '' : 's'}: ${won.map((id) => `<@${id}>`).join(', ')}`
+            : 'No valid entries — no winner drawn.',
+          '',
+          `Ended: <t:${endTs}:R>`,
+          `Hosted by: <@${g.host_id}>`,
+        ].join('\n')
+      );
     embed.setFooter({ text: `${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} · giveaway ended` });
   }
 
@@ -119,7 +121,8 @@ export async function endGiveaway(id, opts = {}) {
     markGiveawayEnded(id, []);
     return { ok: false, reason: 'no-guild' };
   }
-  const channel = guild.channels.cache.get(g.channel_id) ?? (await guild.channels.fetch(g.channel_id).catch(() => null));
+  const channel =
+    guild.channels.cache.get(g.channel_id) ?? (await guild.channels.fetch(g.channel_id).catch(() => null));
 
   // Eligible = entrants still in the guild (and still holding the required role).
   const entrants = giveawayEntrantIds(id);
@@ -172,9 +175,7 @@ export async function endGiveaway(id, opts = {}) {
     if (cfg.dmWinners && winners.length) {
       for (const w of winners) {
         const user = await runtime.client.users.fetch(w).catch(() => null);
-        await user
-          ?.send(`You won **${g.prize}** in ${guild.name}! 🎉`)
-          .catch(() => {});
+        await user?.send(`You won **${g.prize}** in ${guild.name}! 🎉`).catch(() => {});
       }
     }
   }
@@ -203,7 +204,10 @@ async function handleEnter(interaction, id) {
     return interaction.reply({ content: 'This giveaway has ended.', flags: MessageFlags.Ephemeral });
   }
   if (!isModuleEnabled(interaction.guildId, 'giveaways')) {
-    return interaction.reply({ content: 'Giveaways are disabled in this server.', flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: 'Giveaways are disabled in this server.',
+      flags: MessageFlags.Ephemeral,
+    });
   }
   if (g.required_role_id && !interaction.member.roles.cache.has(g.required_role_id)) {
     return interaction.reply({
@@ -231,20 +235,9 @@ async function handleEnter(interaction, id) {
   });
 }
 
-/** @param {import('discord.js').Client} client */
-export function registerGiveawayComponentHandlers(client) {
-  client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isButton() || !interaction.customId.startsWith('gaw:enter:')) return;
-    try {
-      await handleEnter(interaction, Number(interaction.customId.slice('gaw:enter:'.length)));
-    } catch (err) {
-      log.error('giveaways', 'entry button failed:', err.message);
-      if (interaction.isRepliable() && !interaction.replied) {
-        interaction.reply({ content: 'Something went wrong.', flags: MessageFlags.Ephemeral }).catch(() => {});
-      }
-    }
-  });
-}
+registerComponent('giveaways', 'gaw:enter:', (interaction) =>
+  handleEnter(interaction, Number(interaction.customId.slice('gaw:enter:'.length)))
+);
 
 // --- expiry loop ----------------------------------------------------
 

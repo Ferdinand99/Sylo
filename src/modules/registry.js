@@ -84,7 +84,8 @@ export const MODULES = [
   {
     id: 'custom-commands',
     name: 'Custom commands',
-    description: 'Build /slash commands from an ordered list of actions: reply, post to a channel, add or remove a role.',
+    description:
+      'Build /slash commands from an ordered list of actions: reply, post to a channel, add or remove a role.',
     icon: '⌨️',
     requiredIntents: [],
     defaultEnabled: false,
@@ -183,7 +184,8 @@ export const MODULES = [
   {
     id: 'temp-voice',
     name: 'Temporary voice channels',
-    description: 'MEE6-style hubs: join to spawn your own voice (and text) channel, controlled with /voice-* commands.',
+    description:
+      'MEE6-style hubs: join to spawn your own voice (and text) channel, controlled with /voice-* commands.',
     icon: '🎙️',
     requiredIntents: [],
     defaultEnabled: false,
@@ -228,7 +230,7 @@ export const MODULES = [
   {
     id: 'youtube-alerts',
     name: 'YouTube alerts',
-    description: 'Announce a channel\'s new uploads and when it goes live.',
+    description: "Announce a channel's new uploads and when it goes live.",
     icon: '▶️',
     requiredIntents: [],
     defaultEnabled: false,
@@ -246,7 +248,8 @@ export const MODULES = [
   {
     id: 'game-stats',
     name: 'Game stats',
-    description: 'Battlefield-series player stat lookups via /stats (BF1, BF3, BF4, BFV, Hardline, best-effort BF2042/BF6).',
+    description:
+      'Battlefield-series player stat lookups via /stats (BF1, BF3, BF4, BFV, Hardline, best-effort BF2042/BF6).',
     icon: '🎯',
     requiredIntents: [],
     defaultEnabled: false,

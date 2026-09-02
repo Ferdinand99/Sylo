@@ -16,7 +16,10 @@ export async function execute(interaction) {
     return interaction.reply({ content: 'Use this in a server.', flags: MessageFlags.Ephemeral });
   }
   if (!isModuleEnabled(interaction.guildId, 'afk')) {
-    return interaction.reply({ content: 'AFK is not enabled in this server.', flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: 'AFK is not enabled in this server.',
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   const reason = interaction.options.getString('reason')?.trim() || 'AFK';

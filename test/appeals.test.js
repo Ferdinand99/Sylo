@@ -41,7 +41,10 @@ test('normaliseAppealsConfig: defaults, question cap, clamps', () => {
 });
 
 test('normaliseAppealsConfig: rejects non-invite URLs in appealServerInvite', () => {
-  assert.equal(normaliseAppealsConfig({ appealServerInvite: 'https://evil.example/x' }).appealServerInvite, '');
+  assert.equal(
+    normaliseAppealsConfig({ appealServerInvite: 'https://evil.example/x' }).appealServerInvite,
+    ''
+  );
   assert.equal(normaliseAppealsConfig({ appealServerInvite: 'discord.gg/x' }).appealServerInvite, '');
   assert.equal(
     normaliseAppealsConfig({ appealServerInvite: 'https://discord.com/invite/Ab-9' }).appealServerInvite,

@@ -20,7 +20,10 @@ test('normaliseLevelingConfig: rewards need level>=1 and a snowflake role, sorte
       { level: 5, roleId: '223456789012345678' },
     ],
   });
-  assert.deepEqual(c.rewards.map((r) => r.level), [5, 10]);
+  assert.deepEqual(
+    c.rewards.map((r) => r.level),
+    [5, 10]
+  );
 });
 
 test('normaliseLevelingConfig: publicLeaderboard and stackRewards default true, off when false', () => {
@@ -35,7 +38,11 @@ test('normaliseLevelingConfig: xpRate snapped to a valid step, defaults 1', () =
 });
 
 test('normaliseLevelingConfig: no-XP modes + removeRewardsOnXpLoss', () => {
-  const c = normaliseLevelingConfig({ noXpRolesMode: 'deny', noXpChannelsMode: 'nonsense', removeRewardsOnXpLoss: true });
+  const c = normaliseLevelingConfig({
+    noXpRolesMode: 'deny',
+    noXpChannelsMode: 'nonsense',
+    removeRewardsOnXpLoss: true,
+  });
   assert.equal(c.noXpRolesMode, 'deny');
   assert.equal(c.noXpChannelsMode, 'allow'); // unknown -> default
   assert.equal(c.removeRewardsOnXpLoss, true);

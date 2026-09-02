@@ -3,7 +3,9 @@ import { db } from './index.js';
 import { MODULES, getModule } from '../modules/registry.js';
 
 const selectAllStmt = db.prepare('SELECT module_id, enabled, config FROM guild_modules WHERE guild_id = ?');
-const selectOneStmt = db.prepare('SELECT enabled, config FROM guild_modules WHERE guild_id = ? AND module_id = ?');
+const selectOneStmt = db.prepare(
+  'SELECT enabled, config FROM guild_modules WHERE guild_id = ? AND module_id = ?'
+);
 const upsertStmt = db.prepare(`
   INSERT INTO guild_modules (guild_id, module_id, enabled, config, updated_at)
   VALUES (@guildId, @moduleId, @enabled, @config, @updatedAt)

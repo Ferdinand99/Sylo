@@ -22,4 +22,5 @@ import './polls.js';
 import './twitchAlerts.js';
 import './youtubeAlerts.js';
 import './giveaways.js';
+import './messageCreator.js'; // registers the role-button / role-select component handlers
 // moderation.js has no event handlers (called from the warn flow) — not imported here.

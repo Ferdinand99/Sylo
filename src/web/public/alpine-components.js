@@ -96,13 +96,22 @@ document.addEventListener('alpine:init', function () {
         return this.style === 'reaction' ? 20 : 25;
       },
       get rowsTitle() {
-        return this.style === 'reaction' ? 'Reactions & roles' : this.style === 'buttons' ? 'Buttons & roles' : 'Menu options';
+        return this.style === 'reaction'
+          ? 'Reactions & roles'
+          : this.style === 'buttons'
+            ? 'Buttons & roles'
+            : 'Menu options';
       },
       get addLabel() {
-        return this.style === 'reaction' ? '＋ Add reaction' : this.style === 'buttons' ? '＋ Add button' : '＋ Add option';
+        return this.style === 'reaction'
+          ? '＋ Add reaction'
+          : this.style === 'buttons'
+            ? '＋ Add button'
+            : '＋ Add option';
       },
       addRow() {
-        if (this.rows.length < this.max) this.rows.push({ emoji: '', label: '', roleId: '', btnStyle: 'secondary' });
+        if (this.rows.length < this.max)
+          this.rows.push({ emoji: '', label: '', roleId: '', btnStyle: 'secondary' });
       },
       removeRow(i) {
         this.rows.splice(i, 1);
@@ -140,7 +149,12 @@ document.addEventListener('alpine:init', function () {
         footer: String(s[fk] || s.footer || s.footerText || ''),
         footerIcon: String(s.footerIcon || ''),
         fields: (Array.isArray(s.fields) ? s.fields : []).map(function (f) {
-          return { id: 'f' + fid++, name: String(f.name || ''), value: String(f.value || ''), inline: !!f.inline };
+          return {
+            id: 'f' + fid++,
+            name: String(f.name || ''),
+            value: String(f.value || ''),
+            inline: !!f.inline,
+          };
         }),
       },
       init() {
@@ -223,9 +237,12 @@ document.addEventListener('alpine:init', function () {
     // Keep every component row that isn't purely link buttons; the link editor
     // owns the rest.
     var keepRows = specRows.filter(function (r) {
-      return r.type !== 'buttons' || (r.buttons || []).some(function (b) {
-        return b.style !== 'link';
-      });
+      return (
+        r.type !== 'buttons' ||
+        (r.buttons || []).some(function (b) {
+          return b.style !== 'link';
+        })
+      );
     });
     var linkSeed = specRows
       .flatMap(function (r) {
@@ -253,7 +270,12 @@ document.addEventListener('alpine:init', function () {
         footerText: String(e.footerText || ''),
         footerIcon: String(e.footerIcon || ''),
         fields: (Array.isArray(e.fields) ? e.fields : []).map(function (f) {
-          return { id: 'f' + uid++, name: String(f.name || ''), value: String(f.value || ''), inline: !!f.inline };
+          return {
+            id: 'f' + uid++,
+            name: String(f.name || ''),
+            value: String(f.value || ''),
+            inline: !!f.inline,
+          };
         }),
       };
     }
@@ -364,7 +386,9 @@ document.addEventListener('alpine:init', function () {
             .filter(function (b) {
               return b.url && (b.label || b.emoji);
             });
-          out.rows = buttons.length ? this.keepRows.concat([{ type: 'buttons', buttons: buttons }]) : this.keepRows;
+          out.rows = buttons.length
+            ? this.keepRows.concat([{ type: 'buttons', buttons: buttons }])
+            : this.keepRows;
         }
         return out;
       },
@@ -420,8 +444,17 @@ document.addEventListener('alpine:init', function () {
     }
     function blankEmbed() {
       return {
-        color: '#5865f2', title: '', description: '', authorName: '', authorIcon: '',
-        image: '', thumbnail: '', footerText: '', footerIcon: '', timestamp: false, fields: [],
+        color: '#5865f2',
+        title: '',
+        description: '',
+        authorName: '',
+        authorIcon: '',
+        image: '',
+        thumbnail: '',
+        footerText: '',
+        footerIcon: '',
+        timestamp: false,
+        fields: [],
       };
     }
     function normEmbed(e) {

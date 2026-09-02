@@ -54,6 +54,7 @@
        forgot: 'Member data deleted. Sylo DM\'d the member a confirmation of what was removed.',
        'forgot-nodm': 'Member data deleted, but Sylo could not DM the member (no shared server or their DMs are closed) — let them know directly.',
        noconfirm: 'Tick the confirmation box to delete the member\'s data.',
+       'md-baduser': 'Enter a valid Discord user ID or @mention.',
      };
      const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' || msg === 'forgot-nodm' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');

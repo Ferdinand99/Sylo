@@ -1,10 +1,5 @@
 // /timeout <user> <duration> [reason] — temporarily mute a member (Discord timeout).
-import {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  InteractionContextType,
-  MessageFlags,
-} from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags } from 'discord.js';
 import { checkActable, notifyTarget, resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
 import { parseDuration, formatDuration } from '../lib/duration.js';
@@ -18,7 +13,9 @@ export const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .addUserOption((o) => o.setName('user').setDescription('Member to time out').setRequired(true))
   .addStringOption((o) => o.setName('duration').setDescription('e.g. 30s, 10m, 2h, 1d, 1w').setRequired(true))
-  .addStringOption((o) => o.setName('reason').setDescription('Reason (shown in the audit log)').setMaxLength(400));
+  .addStringOption((o) =>
+    o.setName('reason').setDescription('Reason (shown in the audit log)').setMaxLength(400)
+  );
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
@@ -31,11 +28,17 @@ export async function execute(interaction) {
     return;
   }
   if (ms == null || ms < 1000) {
-    await interaction.reply({ content: '⚠️ Invalid duration. Try `10m`, `2h`, `1d`, `1w`.', flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: '⚠️ Invalid duration. Try `10m`, `2h`, `1d`, `1w`.',
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
   if (ms > MAX_MS) {
-    await interaction.reply({ content: '⚠️ Timeouts can be at most 28 days.', flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: '⚠️ Timeouts can be at most 28 days.',
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
@@ -45,7 +48,10 @@ export async function execute(interaction) {
     return;
   }
   if (!target.moderatable) {
-    await interaction.reply({ content: "⚠️ I can't time out that member (missing permission or role hierarchy).", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: "⚠️ I can't time out that member (missing permission or role hierarchy).",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 

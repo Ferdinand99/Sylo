@@ -42,7 +42,7 @@ export function recordError(err, scope = null) {
     message,
     scope: scope || null,
     at,
-    stack: err instanceof Error ? err.stack ?? null : null,
+    stack: err instanceof Error ? (err.stack ?? null) : null,
   });
   if (runtime.errors.length > MAX_ERRORS) runtime.errors.length = MAX_ERRORS;
 }

@@ -53,7 +53,8 @@ function normAction(a = {}) {
     return { type, roleId: isId(a.roleId) ? a.roleId : '' };
   }
 
-  const raw = Array.isArray(a.messages) && a.messages.length ? a.messages : [{ content: a.content, embed: a.embed }];
+  const raw =
+    Array.isArray(a.messages) && a.messages.length ? a.messages : [{ content: a.content, embed: a.embed }];
   let messages = raw.map(normMessage).filter(messageHasContent).slice(0, 10);
   if (!messages.length) messages = [{ content: '', embed: null }];
 
@@ -64,9 +65,7 @@ function normAction(a = {}) {
 }
 
 const actionHasEffect = (a) =>
-  a.type === 'reply' || a.type === 'send'
-    ? a.messages.some(messageHasContent)
-    : isId(a.roleId);
+  a.type === 'reply' || a.type === 'send' ? a.messages.some(messageHasContent) : isId(a.roleId);
 
 /** Migrate a pre-actions command ({ response, embed, embedTitle, embedColor }). */
 function migrateLegacy(c) {
@@ -91,10 +90,18 @@ export function normaliseCustomCommands(raw = {}) {
       const actionsIn = Array.isArray(c.actions) ? c.actions : migrateLegacy(c);
       return {
         id: c.id ? String(c.id) : String(i),
-        name: String(c.name ?? '').trim().toLowerCase(),
-        description: String(c.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 100),
+        name: String(c.name ?? '')
+          .trim()
+          .toLowerCase(),
+        description: String(c.description ?? '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 100),
         actions: actionsIn.map(normAction).slice(0, 10),
-        allowedRoles: [...new Set((Array.isArray(c.allowedRoles) ? c.allowedRoles : []).filter(isId))].slice(0, 25),
+        allowedRoles: [...new Set((Array.isArray(c.allowedRoles) ? c.allowedRoles : []).filter(isId))].slice(
+          0,
+          25
+        ),
         allowedChannels: [
           ...new Set((Array.isArray(c.allowedChannels) ? c.allowedChannels : []).filter(isId)),
         ].slice(0, 25),
@@ -126,9 +133,7 @@ const REFERENCED = (m) => `${m.content ?? ''} ${JSON.stringify(m.embed ?? '')}`;
 
 /** Whether any message in the command references {args} (→ needs a `text` option). */
 export function usesArgs(cmd) {
-  return (cmd.actions ?? []).some((a) =>
-    (a.messages ?? []).some((m) => REFERENCED(m).includes('{args}'))
-  );
+  return (cmd.actions ?? []).some((a) => (a.messages ?? []).some((m) => REFERENCED(m).includes('{args}')));
 }
 
 /** Pick one message block from an action (random when it has several). */

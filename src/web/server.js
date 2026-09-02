@@ -53,6 +53,10 @@ export function createApp() {
 
   // Everything below requires a signed-in user when auth is enabled.
   app.use(requireAuth);
+  // Per-path ceiling on the authenticated dashboard — generous for normal
+  // clicking, but stops a stuck script or a compromised session from hammering
+  // config saves, backups, or "send as bot".
+  app.use(rateLimit({ windowMs: 60_000, max: 300 }));
   app.use('/', dashboardRouter);
   app.use('/stats', statsRouter);
   app.use('/commands', commandsRouter);
@@ -64,8 +68,9 @@ export function createApp() {
   app.use('/guilds', guildsRouter);
 
   // Central error handler — keep the server up, record the error for the dashboard.
-  // eslint-disable-next-line no-unused-vars
-  app.use((err, req, res, next) => {
+  // Express recognises an error handler by its 4-arg signature, so `_next` must
+  // be present even though it is unused.
+  app.use((err, req, res, _next) => {
     log.error('web', `${req.method} ${req.path}`, err);
     res.status(500).json({ error: 'Internal server error' });
   });

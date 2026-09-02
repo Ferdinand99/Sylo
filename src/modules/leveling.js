@@ -38,7 +38,9 @@ export function normaliseLevelingConfig(raw = {}) {
     publicLeaderboard: raw.publicLeaderboard !== false,
     rewards: (Array.isArray(raw.rewards) ? raw.rewards : [])
       .map((r) => ({ level: Math.floor(Number(r.level)), roleId: String(r.roleId ?? '') }))
-      .filter((r) => Number.isInteger(r.level) && r.level >= 1 && r.level <= 1000 && /^\d{17,20}$/.test(r.roleId))
+      .filter(
+        (r) => Number.isInteger(r.level) && r.level >= 1 && r.level <= 1000 && /^\d{17,20}$/.test(r.roleId)
+      )
       .sort((a, b) => a.level - b.level)
       .slice(0, 50),
   };
@@ -82,12 +84,18 @@ on('leveling', 'messageCreate', async (message, rawConfig, guildId) => {
   const text = fillMessage(config.announceMessage, message.member, level);
   try {
     if (config.announce === 'reply') {
-      await message.reply({ content: text, allowedMentions: { repliedUser: false, users: [message.author.id] } });
+      await message.reply({
+        content: text,
+        allowedMentions: { repliedUser: false, users: [message.author.id] },
+      });
     } else if (config.announce === 'dm') {
       await message.author.send({ content: `${text} (in ${message.guild.name})` }).catch(() => {});
     } else if (config.announce === 'channel') {
       const target = config.announceChannel || message.channelId;
-      await sendToChannel(guildId, target, { content: text, allowedMentions: { users: [message.author.id] } });
+      await sendToChannel(guildId, target, {
+        content: text,
+        allowedMentions: { users: [message.author.id] },
+      });
     }
   } catch {
     /* announcement is best-effort */

@@ -16,10 +16,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { on } from './dispatch.js';
+import { registerComponent } from '../bot/lib/components.js';
 import { config } from '../config.js';
 import { getGuildModule, setGuildModule, isModuleEnabled } from '../db/modules.js';
 import { sendToChannel } from './lib/send.js';
-import { log } from '../lib/log.js';
 
 export const VERIFY_MODES = ['button', 'captcha'];
 const TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -50,7 +50,8 @@ export function normaliseVerificationConfig(raw = {}) {
     messageId: id(raw.messageId),
     title: String(raw.title ?? DEFAULTS.title).slice(0, 200) || DEFAULTS.title,
     message: String(raw.message ?? DEFAULTS.message).slice(0, 1500) || DEFAULTS.message,
-    successMessage: String(raw.successMessage ?? DEFAULTS.successMessage).slice(0, 1000) || DEFAULTS.successMessage,
+    successMessage:
+      String(raw.successMessage ?? DEFAULTS.successMessage).slice(0, 1000) || DEFAULTS.successMessage,
     logChannelId: id(raw.logChannelId),
     kickAfterMinutes: clampInt(raw.kickAfterMinutes, 0, 10080, 0),
   };
@@ -102,7 +103,8 @@ function verifyButtonRow(label = 'Verify') {
 /** Make sure the guild's verify message exists; (re)post it and store the id. */
 export async function ensureVerifyMessage(guild, cfg) {
   if (!cfg.channelId || !cfg.verifiedRoleId) return;
-  const channel = guild.channels.cache.get(cfg.channelId) ?? (await guild.channels.fetch(cfg.channelId).catch(() => null));
+  const channel =
+    guild.channels.cache.get(cfg.channelId) ?? (await guild.channels.fetch(cfg.channelId).catch(() => null));
   if (!channel?.isTextBased()) return;
   const me = guild.members.me;
   if (!channel.permissionsFor(me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) return;
@@ -159,50 +161,48 @@ export async function grantVerified(guild, userId, cfg) {
 
 // --- interaction handler (Verify button) ---------------------------------
 
-export function registerVerificationHandlers(client) {
-  client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isButton() || interaction.customId !== 'verify:start') return;
-    try {
-      if (!interaction.inGuild() || !isModuleEnabled(interaction.guildId, 'verification')) {
-        return interaction.reply({ content: 'Verification is not active here.', flags: MessageFlags.Ephemeral });
-      }
-      const cfg = normaliseVerificationConfig(getGuildModule(interaction.guildId, 'verification').config);
-      if (!cfg.verifiedRoleId) {
-        return interaction.reply({ content: 'Verification is misconfigured — no role is set.', flags: MessageFlags.Ephemeral });
-      }
-      if (interaction.member.roles.cache.has(cfg.verifiedRoleId)) {
-        return interaction.reply({ content: 'You are already verified.', flags: MessageFlags.Ephemeral });
-      }
+async function handleVerifyButton(interaction) {
+  if (!interaction.inGuild() || !isModuleEnabled(interaction.guildId, 'verification')) {
+    return interaction.reply({
+      content: 'Verification is not active here.',
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+  const cfg = normaliseVerificationConfig(getGuildModule(interaction.guildId, 'verification').config);
+  if (!cfg.verifiedRoleId) {
+    return interaction.reply({
+      content: 'Verification is misconfigured — no role is set.',
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+  if (interaction.member.roles.cache.has(cfg.verifiedRoleId)) {
+    return interaction.reply({ content: 'You are already verified.', flags: MessageFlags.Ephemeral });
+  }
 
-      if (effectiveMode(cfg) === 'captcha' && config.dashboardUrl) {
-        const url = `${config.dashboardUrl}/verify/${interaction.guildId}?t=${signVerifyToken(interaction.guildId, interaction.user.id)}`;
-        return interaction.reply({
-          flags: MessageFlags.Ephemeral,
-          content: 'One quick check — open the link below to finish verifying. It expires in 15 minutes.',
-          components: [
-            new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Complete verification').setURL(url)
-            ),
-          ],
-        });
-      }
+  if (effectiveMode(cfg) === 'captcha' && config.dashboardUrl) {
+    const url = `${config.dashboardUrl}/verify/${interaction.guildId}?t=${signVerifyToken(interaction.guildId, interaction.user.id)}`;
+    return interaction.reply({
+      flags: MessageFlags.Ephemeral,
+      content: 'One quick check — open the link below to finish verifying. It expires in 15 minutes.',
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Complete verification').setURL(url)
+        ),
+      ],
+    });
+  }
 
-      const result = await grantVerified(interaction.guild, interaction.user.id, cfg);
-      const msg =
-        result === 'ok'
-          ? cfg.successMessage
-          : result === 'already'
-            ? 'You are already verified.'
-            : "That didn't work — the bot may be missing Manage Roles, or its role is below the verified role.";
-      return interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
-    } catch (err) {
-      log.error('verification', 'button handler failed:', err.message);
-      if (interaction.isRepliable() && !interaction.replied) {
-        interaction.reply({ content: 'Something went wrong.', flags: MessageFlags.Ephemeral }).catch(() => {});
-      }
-    }
-  });
+  const result = await grantVerified(interaction.guild, interaction.user.id, cfg);
+  const msg =
+    result === 'ok'
+      ? cfg.successMessage
+      : result === 'already'
+        ? 'You are already verified.'
+        : "That didn't work — the bot may be missing Manage Roles, or its role is below the verified role.";
+  return interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
 }
+
+registerComponent('verification', 'verify:start', handleVerifyButton);
 
 // --- kick unverified after a grace period -------------------------------
 

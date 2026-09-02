@@ -31,9 +31,15 @@ export const RESULTS_PLACEHOLDERS = ['{question}', '{results}', '{total}', '{win
 function normMsg(m = {}, legacyColor) {
   return {
     content: String(m.content ?? '').slice(0, 1500),
-    title: String(m.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 200),
+    title: String(m.title ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 200),
     color: hex(m.color) || hex(legacyColor) || DEFAULT_COLOR,
-    footer: String(m.footer ?? '').replace(/\s+/g, ' ').trim().slice(0, 300),
+    footer: String(m.footer ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 300),
     image: httpUrl(m.image),
   };
 }
@@ -163,8 +169,7 @@ async function tally(message, poll, config) {
     for (const [uid, user] of users) {
       if (user.bot) continue;
       const member =
-        message.guild.members.cache.get(uid) ??
-        (await message.guild.members.fetch(uid).catch(() => null));
+        message.guild.members.cache.get(uid) ?? (await message.guild.members.fetch(uid).catch(() => null));
       if (!allowedToVote(member, config)) continue;
       out[i].voters.add(uid);
       out[i].count += 1;
@@ -202,7 +207,7 @@ export async function endPoll(messageId) {
 
 // --- reaction handling ---------------------------------------------------
 
-on('polls', 'reactionAdd', async ({ reaction, user }, rawConfig, guildId) => {
+on('polls', 'reactionAdd', async ({ reaction, user }, rawConfig, _guildId) => {
   if (!user || user.bot) return;
   if (reaction.partial) {
     try {

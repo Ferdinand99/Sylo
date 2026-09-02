@@ -81,13 +81,19 @@ export class PlayerNotFoundError extends AdapterError {
 /** The upstream API rate-limited us. */
 export class RateLimitedError extends AdapterError {
   constructor() {
-    super('Upstream rate limit hit', `The stats service is rate-limiting requests right now. Please try again in a minute.`);
+    super(
+      'Upstream rate limit hit',
+      `The stats service is rate-limiting requests right now. Please try again in a minute.`
+    );
   }
 }
 
 /** The upstream API is down, timed out, or returned an unexpected error. */
 export class UpstreamUnavailableError extends AdapterError {
   constructor(detail) {
-    super(`Upstream unavailable: ${detail}`, `The stats service is unavailable right now. Please try again later.`);
+    super(
+      `Upstream unavailable: ${detail}`,
+      `The stats service is unavailable right now. Please try again later.`
+    );
   }
 }

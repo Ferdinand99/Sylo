@@ -7,12 +7,7 @@ import { currentUser } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { resolveUserTags } from '../lib/discord.js';
 import { timeAgo } from '../lib/format.js';
-import {
-  getTicket,
-  listTickets,
-  ticketMessages,
-  markStaffSeen,
-} from '../../db/tickets.js';
+import { getTicket, listTickets, ticketMessages, markStaffSeen } from '../../db/tickets.js';
 import { relayStaffReply, closeTicketWithNotice, buildTranscript } from '../../modules/tickets.js';
 
 const router = Router({ mergeParams: true });
@@ -30,7 +25,10 @@ router.get(
   asyncHandler(async (req, res) => {
     const open = listTickets(req.guild.id, 'open', 100);
     const closed = listTickets(req.guild.id, 'closed', 25);
-    const tags = await resolveUserTags(runtime.client, [...open, ...closed].map((t) => t.user_id));
+    const tags = await resolveUserTags(
+      runtime.client,
+      [...open, ...closed].map((t) => t.user_id)
+    );
     const shape = (t) => ({
       id: t.id,
       user: tags.get(t.user_id) ?? t.user_id,
@@ -71,7 +69,12 @@ router.get(
       messages: rows.map((m) => ({
         id: m.id,
         kind: m.author_kind,
-        who: m.author_kind === 'user' ? tags.get(ticket.user_id) ?? 'User' : m.author_kind === 'staff' ? 'Staff' : 'System',
+        who:
+          m.author_kind === 'user'
+            ? (tags.get(ticket.user_id) ?? 'User')
+            : m.author_kind === 'staff'
+              ? 'Staff'
+              : 'System',
         content: m.content,
         attachments: m.attachments,
         delivered: m.delivered === 1,
@@ -123,7 +126,9 @@ router.post(
     if (!ticket || ticket.guild_id !== req.guild.id) return res.redirect(`/guilds/${req.guild.id}/tickets`);
     if (ticket.status !== 'open') return res.redirect(`${back}?msg=closed`);
 
-    const content = String(req.body.content ?? '').trim().slice(0, 2000);
+    const content = String(req.body.content ?? '')
+      .trim()
+      .slice(0, 2000);
     if (!content) return res.redirect(`${back}?msg=empty`);
 
     const staffId = currentUser(req)?.id ?? 'web';
@@ -137,7 +142,9 @@ router.post(
   asyncHandler(async (req, res) => {
     const ticket = getTicket(Number(req.params.ticketId));
     if (ticket && ticket.guild_id === req.guild.id && ticket.status === 'open') {
-      const closingMessage = String(req.body.content ?? '').trim().slice(0, 2000);
+      const closingMessage = String(req.body.content ?? '')
+        .trim()
+        .slice(0, 2000);
       await closeTicketWithNotice(ticket, currentUser(req)?.id ?? 'web', closingMessage);
     }
     res.redirect(`/guilds/${req.guild.id}/tickets`);

@@ -28,7 +28,10 @@ export function normaliseTwitchConfig(raw = {}) {
     alerts: (Array.isArray(raw.alerts) ? raw.alerts : [])
       .map((a, i) => ({
         id: a.id ? String(a.id) : String(i),
-        login: String(a.login ?? '').trim().toLowerCase().replace(/^.*twitch\.tv\//, ''),
+        login: String(a.login ?? '')
+          .trim()
+          .toLowerCase()
+          .replace(/^.*twitch\.tv\//, ''),
         channelId: isId(a.channelId) ? a.channelId : '',
         roleId: isId(a.roleId) ? a.roleId : '',
         message: String(a.message ?? '').slice(0, 1500),

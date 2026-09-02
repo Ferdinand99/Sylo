@@ -22,7 +22,13 @@ const KEEP_PER_GUILD = 500;
  * @param {{ actor: string, action: string, detail?: string }} entry
  */
 export function recordAudit(guildId, { actor, action, detail = '' }) {
-  insertStmt.run(guildId, String(actor).slice(0, 100), String(action).slice(0, 80), String(detail).slice(0, 500), Date.now());
+  insertStmt.run(
+    guildId,
+    String(actor).slice(0, 100),
+    String(action).slice(0, 80),
+    String(detail).slice(0, 500),
+    Date.now()
+  );
   pruneStmt.run(guildId, guildId, KEEP_PER_GUILD);
 }
 

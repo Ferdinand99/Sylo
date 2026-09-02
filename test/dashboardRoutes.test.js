@@ -108,7 +108,9 @@ const MEMBER = '900000000000009999';
 
 test('GET /member-data with a user id renders the lookup + data table', async () => {
   const { db } = await import('../src/db/index.js');
-  db.prepare('INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at) VALUES (?,?,?,?,?)').run(GID, MEMBER, 'mod', 'test', Date.now());
+  db.prepare(
+    'INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at) VALUES (?,?,?,?,?)'
+  ).run(GID, MEMBER, 'mod', 'test', Date.now());
 
   const res = await fetch(`${base}/guilds/${GID}/member-data?user=${MEMBER}`);
   assert.equal(res.status, 200);
@@ -120,7 +122,9 @@ test('GET /member-data with a user id renders the lookup + data table', async ()
 
 test('POST /member-data/forget deletes the data, DMs the member, and redirects', async () => {
   const { db } = await import('../src/db/index.js');
-  const before = db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER).n;
+  const before = db
+    .prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND user_id = ?')
+    .get(GID, MEMBER).n;
   assert.ok(before >= 1);
   sentDms.length = 0;
 
@@ -132,7 +136,10 @@ test('POST /member-data/forget deletes the data, DMs the member, and redirects',
   });
   assert.equal(res.status, 302);
   assert.match(res.headers.get('location'), /msg=forgot/);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER).n, 0);
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER).n,
+    0
+  );
   assert.equal(sentDms.length, 1);
   assert.equal(sentDms[0].id, MEMBER);
 });

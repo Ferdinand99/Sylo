@@ -27,7 +27,9 @@ on('sticky', 'messageCreate', async (message, config, guildId) => {
   if (sticky.lastMessageId) {
     await channel.messages.delete(sticky.lastMessageId).catch(() => {});
   }
-  const posted = await channel.send({ content: sticky.content, allowedMentions: { parse: [] } }).catch(() => null);
+  const posted = await channel
+    .send({ content: sticky.content, allowedMentions: { parse: [] } })
+    .catch(() => null);
   if (!posted) return;
 
   // Persist the new message id (re-read config to avoid clobbering concurrent edits).

@@ -19,13 +19,23 @@ export const data = new SlashCommandBuilder()
   .setContexts(InteractionContextType.Guild)
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
   .addIntegerOption((o) =>
-    o.setName('seconds').setDescription('0-21600 (6h). 0 turns slowmode off.').setRequired(true).setMinValue(0).setMaxValue(MAX_SECONDS)
+    o
+      .setName('seconds')
+      .setDescription('0-21600 (6h). 0 turns slowmode off.')
+      .setRequired(true)
+      .setMinValue(0)
+      .setMaxValue(MAX_SECONDS)
   )
   .addChannelOption((o) =>
     o
       .setName('channel')
       .setDescription('Target channel (defaults to here)')
-      .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.PublicThread, ChannelType.PrivateThread)
+      .addChannelTypes(
+        ChannelType.GuildText,
+        ChannelType.GuildAnnouncement,
+        ChannelType.PublicThread,
+        ChannelType.PrivateThread
+      )
   );
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
@@ -35,7 +45,10 @@ export async function execute(interaction) {
 
   const me = interaction.guild.members.me;
   if (!channel.permissionsFor(me)?.has(PermissionFlagsBits.ManageChannels)) {
-    await interaction.reply({ content: `⚠️ I need **Manage Channels** in ${channel}.`, flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: `⚠️ I need **Manage Channels** in ${channel}.`,
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 

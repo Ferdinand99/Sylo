@@ -8,7 +8,13 @@ import { requireGuildAdmin } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { guildTextChannels } from '../lib/discord.js';
 import { timeAgo } from '../lib/format.js';
-import { listComposed, getComposed, createComposed, updateComposed, deleteComposed } from '../../db/composedMessages.js';
+import {
+  listComposed,
+  getComposed,
+  createComposed,
+  updateComposed,
+  deleteComposed,
+} from '../../db/composedMessages.js';
 import { sendComposed, editComposed } from '../../modules/messageCreator.js';
 
 const router = Router({ mergeParams: true });
@@ -27,7 +33,11 @@ function parseSpec(body) {
   try {
     const s = JSON.parse(body.spec ?? '{}');
     if (!s || typeof s !== 'object') return null;
-    return { content: String(s.content ?? ''), embeds: Array.isArray(s.embeds) ? s.embeds : [], rows: Array.isArray(s.rows) ? s.rows : [] };
+    return {
+      content: String(s.content ?? ''),
+      embeds: Array.isArray(s.embeds) ? s.embeds : [],
+      rows: Array.isArray(s.rows) ? s.rows : [],
+    };
   } catch {
     return null;
   }
@@ -59,7 +69,13 @@ function renderBuilder(req, res, rec) {
     roles: assignableRoles(req.guild),
     guildId: req.guild.id,
     isNew: !rec,
-    rec: rec || { id: '', name: '', channel_id: '', message_id: null, spec: { content: '', embeds: [], rows: [] } },
+    rec: rec || {
+      id: '',
+      name: '',
+      channel_id: '',
+      message_id: null,
+      spec: { content: '', embeds: [], rows: [] },
+    },
   });
 }
 
@@ -81,7 +97,10 @@ router.post(
     if (req.params.id !== 'new' && !existing) return res.redirect(base);
 
     const spec = parseSpec(req.body);
-    const name = String(req.body.name ?? '').trim().slice(0, 100) || 'Untitled embed';
+    const name =
+      String(req.body.name ?? '')
+        .trim()
+        .slice(0, 100) || 'Untitled embed';
     const channelId = isId(req.body.channelId) ? req.body.channelId : '';
     const publish = req.body.action === 'publish';
     if (!spec) return res.redirect(`${base}${existing ? `/${existing.id}` : '/new'}?msg=bad`);
@@ -108,7 +127,12 @@ router.post(
         res.redirect(`${dest}?msg=updated`);
       } else {
         const message = await sendComposed(req.guild, rec.channel_id, spec);
-        updateComposed(req.guild.id, rec.id, { name, channelId: rec.channel_id, messageId: message.id, spec });
+        updateComposed(req.guild.id, rec.id, {
+          name,
+          channelId: rec.channel_id,
+          messageId: message.id,
+          spec,
+        });
         res.redirect(`${dest}?msg=sent`);
       }
     } catch (err) {
@@ -127,12 +151,18 @@ router.post(
     if (!rec) return res.redirect(base);
     if (rec.message_id) {
       try {
-        const ch = req.guild.channels.cache.get(rec.channel_id) ?? (await req.guild.channels.fetch(rec.channel_id));
+        const ch =
+          req.guild.channels.cache.get(rec.channel_id) ?? (await req.guild.channels.fetch(rec.channel_id));
         await ch.messages.delete(rec.message_id);
       } catch {
         /* already gone */
       }
-      updateComposed(req.guild.id, rec.id, { name: rec.name, channelId: rec.channel_id, messageId: null, spec: rec.spec });
+      updateComposed(req.guild.id, rec.id, {
+        name: rec.name,
+        channelId: rec.channel_id,
+        messageId: null,
+        spec: rec.spec,
+      });
     }
     res.redirect(`${base}/${rec.id}?msg=unpublished`);
   })
@@ -148,7 +178,8 @@ router.post(
     if (rec) {
       if (rec.message_id) {
         try {
-          const ch = req.guild.channels.cache.get(rec.channel_id) ?? (await req.guild.channels.fetch(rec.channel_id));
+          const ch =
+            req.guild.channels.cache.get(rec.channel_id) ?? (await req.guild.channels.fetch(rec.channel_id));
           await ch.messages.delete(rec.message_id);
           msg = 'deleted';
         } catch {

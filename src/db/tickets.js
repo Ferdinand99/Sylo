@@ -1,16 +1,22 @@
 // Ticket (modmail) storage.
 import { db } from './index.js';
 
-const openByUserStmt = db.prepare("SELECT * FROM tickets WHERE guild_id = ? AND user_id = ? AND status = 'open'");
+const openByUserStmt = db.prepare(
+  "SELECT * FROM tickets WHERE guild_id = ? AND user_id = ? AND status = 'open'"
+);
 const getStmt = db.prepare('SELECT * FROM tickets WHERE id = ?');
 const createStmt = db.prepare(`
   INSERT INTO tickets (guild_id, user_id, status, created_at, last_at)
   VALUES (@guildId, @userId, 'open', @now, @now)
 `);
 const touchStmt = db.prepare('UPDATE tickets SET last_at = ? WHERE id = ?');
-const closeStmt = db.prepare("UPDATE tickets SET status = 'closed', closed_at = ?, closed_by = ? WHERE id = ?");
+const closeStmt = db.prepare(
+  "UPDATE tickets SET status = 'closed', closed_at = ?, closed_by = ? WHERE id = ?"
+);
 const seenStmt = db.prepare('UPDATE tickets SET staff_seen_at = ? WHERE id = ?');
-const listStmt = db.prepare('SELECT * FROM tickets WHERE guild_id = ? AND status = ? ORDER BY last_at DESC LIMIT ?');
+const listStmt = db.prepare(
+  'SELECT * FROM tickets WHERE guild_id = ? AND status = ? ORDER BY last_at DESC LIMIT ?'
+);
 const openCountStmt = db.prepare("SELECT COUNT(*) AS n FROM tickets WHERE guild_id = ? AND status = 'open'");
 const unreadCountStmt = db.prepare(
   "SELECT COUNT(*) AS n FROM tickets WHERE guild_id = ? AND status = 'open' AND last_at > staff_seen_at"

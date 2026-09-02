@@ -122,7 +122,10 @@ on('logging', 'guildMemberUpdate', ({ old: o, new: n }, config, guildId) => {
       embeds.push(
         base(COLORS.remove, 'Member timed out')
           .setDescription(`${n} (\`${n.id}\`)`)
-          .addFields({ name: 'Until', value: `<t:${Math.floor(n.communicationDisabledUntilTimestamp / 1000)}:F>` })
+          .addFields({
+            name: 'Until',
+            value: `<t:${Math.floor(n.communicationDisabledUntilTimestamp / 1000)}:F>`,
+          })
       );
     } else if (wasTimedOut && !isTimedOut) {
       embeds.push(base(COLORS.add, 'Timeout removed').setDescription(`${n} (\`${n.id}\`)`));
@@ -175,7 +178,9 @@ on('logging', 'messageDeleteBulk', ({ messages, channel }, config, guildId) => {
   return log(
     guildId,
     config,
-    base(COLORS.remove, 'Messages bulk-deleted').setDescription(`${messages.size} messages deleted in ${channel}`)
+    base(COLORS.remove, 'Messages bulk-deleted').setDescription(
+      `${messages.size} messages deleted in ${channel}`
+    )
   );
 });
 
@@ -187,14 +192,26 @@ on('logging', 'roleCreate', (role, config, guildId) => {
 });
 on('logging', 'roleDelete', (role, config, guildId) => {
   if (!want(config, 'roleCreateDelete')) return;
-  return log(guildId, config, base(COLORS.remove, 'Role deleted').setDescription(`**${role.name}** (\`${role.id}\`)`));
+  return log(
+    guildId,
+    config,
+    base(COLORS.remove, 'Role deleted').setDescription(`**${role.name}** (\`${role.id}\`)`)
+  );
 });
 
 on('logging', 'channelCreate', (channel, config, guildId) => {
   if (!want(config, 'channelCreateDelete')) return;
-  return log(guildId, config, base(COLORS.add, 'Channel created').setDescription(`${channel} (\`${channel.id}\`)`));
+  return log(
+    guildId,
+    config,
+    base(COLORS.add, 'Channel created').setDescription(`${channel} (\`${channel.id}\`)`)
+  );
 });
 on('logging', 'channelDelete', (channel, config, guildId) => {
   if (!want(config, 'channelCreateDelete')) return;
-  return log(guildId, config, base(COLORS.remove, 'Channel deleted').setDescription(`**#${channel.name}** (\`${channel.id}\`)`));
+  return log(
+    guildId,
+    config,
+    base(COLORS.remove, 'Channel deleted').setDescription(`**#${channel.name}** (\`${channel.id}\`)`)
+  );
 });

@@ -27,7 +27,7 @@ const stmts = {
 
 const hydrate = (row) => {
   if (!row) return null;
-  let bans = [];
+  let bans;
   try {
     bans = JSON.parse(row.bans || '[]');
   } catch {

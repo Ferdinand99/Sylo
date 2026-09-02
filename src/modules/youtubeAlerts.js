@@ -119,7 +119,8 @@ export function parseFeed(xml) {
       title: decodeEntities(grab(/<title>([^<]*)<\/title>/, block) || 'New video'),
       url: `https://www.youtube.com/watch?v=${videoId}`,
       published: Date.parse(grab(/<published>([^<]+)<\/published>/, block) || '') || 0,
-      thumb: grab(/<media:thumbnail url="([^"]+)"/, block) || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      thumb:
+        grab(/<media:thumbnail url="([^"]+)"/, block) || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       author: decodeEntities(grab(/<name>([^<]*)<\/name>/, block) || author),
     });
   }
@@ -127,7 +128,10 @@ export function parseFeed(xml) {
 }
 
 async function fetchFeed(ytChannelId) {
-  const res = await fetch(FEED + ytChannelId, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10_000) });
+  const res = await fetch(FEED + ytChannelId, {
+    headers: { 'User-Agent': UA },
+    signal: AbortSignal.timeout(10_000),
+  });
   if (!res.ok) throw new Error(`YT feed ${res.status}`);
   return parseFeed(await res.text());
 }
@@ -149,7 +153,11 @@ export async function checkLive(ytChannelId) {
     const videoId =
       grab(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})">/, html) ||
       grab(/"videoId":"([\w-]{11})"/, html);
-    const title = decodeEntities(grab(/"title":\s*{\s*"runs":\s*\[\s*{\s*"text":\s*"([^"]+)"/, html) || grab(/<meta name="title" content="([^"]+)">/, html) || 'Live now');
+    const title = decodeEntities(
+      grab(/"title":\s*{\s*"runs":\s*\[\s*{\s*"text":\s*"([^"]+)"/, html) ||
+        grab(/<meta name="title" content="([^"]+)">/, html) ||
+        'Live now'
+    );
     return videoId ? { live: true, videoId, title } : { live: false };
   } catch {
     return { live: false };
@@ -220,7 +228,11 @@ async function runAlert(guildId, alert) {
         if (isVideoSeen(guildId, c, e.videoId)) continue;
         markVideoSeen(guildId, c, e.videoId);
         const name = alert.name || e.author || 'A channel';
-        await sendToChannel(guildId, alert.discordChannelId, payload(alert, { name, title: e.title, url: e.url, thumb: e.thumb }, 'video'));
+        await sendToChannel(
+          guildId,
+          alert.discordChannelId,
+          payload(alert, { name, title: e.title, url: e.url, thumb: e.thumb }, 'video')
+        );
       }
     }
   }
@@ -236,7 +248,16 @@ async function runAlert(guildId, alert) {
       await sendToChannel(
         guildId,
         alert.discordChannelId,
-        payload(alert, { name, title: state.title || 'Live now', url, thumb: `https://i.ytimg.com/vi/${state.videoId}/hqdefault.jpg` }, 'live')
+        payload(
+          alert,
+          {
+            name,
+            title: state.title || 'Live now',
+            url,
+            thumb: `https://i.ytimg.com/vi/${state.videoId}/hqdefault.jpg`,
+          },
+          'live'
+        )
       );
     } else if (!state.live && known) {
       markNotLive(guildId, c);

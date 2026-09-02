@@ -12,6 +12,22 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: ESLint
+        run: npm run lint
+      - name: Prettier
+        run: npm run format:check
+      - name: npm audit (production deps)
+        run: npm audit --omit=dev --audit-level=high || true
+
   test:
     runs-on: ubuntu-latest
     # src/config.js requires these and exits without them; the suite only needs

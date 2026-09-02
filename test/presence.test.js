@@ -26,7 +26,15 @@ test('presence config: round-trips and sanitises', () => {
 
 test('fillPresenceText substitutes {servers} and {members}', () => {
   const client = {
-    guilds: { cache: new Map([['1', { memberCount: 10 }], ['2', { memberCount: 5 }]]) },
+    guilds: {
+      cache: new Map([
+        ['1', { memberCount: 10 }],
+        ['2', { memberCount: 5 }],
+      ]),
+    },
   };
-  assert.equal(fillPresenceText('in {servers} servers, {members} members', client), 'in 2 servers, 15 members');
+  assert.equal(
+    fillPresenceText('in {servers} servers, {members} members', client),
+    'in 2 servers, 15 members'
+  );
 });

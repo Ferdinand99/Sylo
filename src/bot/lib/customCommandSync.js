@@ -109,9 +109,7 @@ export async function handleCustomSlash(interaction) {
 
   const firstReply = cmd.actions.find((a) => a.type === 'reply');
   const deferEphemeral = firstReply ? firstReply.private : true;
-  await interaction
-    .deferReply(deferEphemeral ? { flags: MessageFlags.Ephemeral } : {})
-    .catch(() => {});
+  await interaction.deferReply(deferEphemeral ? { flags: MessageFlags.Ephemeral } : {}).catch(() => {});
 
   let answered = false;
   for (const action of cmd.actions) {

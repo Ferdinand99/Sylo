@@ -12,9 +12,18 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const ctx = resolveContext(interaction);
   if (ctx.error) return interaction.reply({ content: ctx.error, ...ephemeral });
-  if (!canControl(ctx)) return interaction.reply({ content: 'Only the channel owner or a voice moderator can do that.', ...ephemeral });
+  if (!canControl(ctx))
+    return interaction.reply({
+      content: 'Only the channel owner or a voice moderator can do that.',
+      ...ephemeral,
+    });
   const user = interaction.options.getUser('user', true);
-  if (!ctx.row.banList.includes(user.id)) return interaction.reply({ content: 'That member is not banned here.', ...ephemeral });
+  if (!ctx.row.banList.includes(user.id))
+    return interaction.reply({ content: 'That member is not banned here.', ...ephemeral });
   await unbanFromChannel(ctx.channel, ctx.row, user.id);
-  return interaction.reply({ content: `✅ Unbanned <@${user.id}>.`, allowedMentions: { parse: [] }, ...ephemeral });
+  return interaction.reply({
+    content: `✅ Unbanned <@${user.id}>.`,
+    allowedMentions: { parse: [] },
+    ...ephemeral,
+  });
 }

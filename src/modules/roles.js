@@ -26,6 +26,7 @@ import {
   StringSelectMenuBuilder,
 } from 'discord.js';
 import { on } from './dispatch.js';
+import { registerComponent } from '../bot/lib/components.js';
 import { runtime } from '../runtime.js';
 import { getGuildModule } from '../db/modules.js';
 import { buildEmbed, sendComposed, editComposed } from './messageCreator.js';
@@ -176,7 +177,8 @@ export async function publishReactionMessage(guild, rm) {
   }
 
   // button / select style — send the components directly (own customId namespace).
-  const channel = guild.channels.cache.get(rm.channelId) || (await guild.channels.fetch(rm.channelId).catch(() => null));
+  const channel =
+    guild.channels.cache.get(rm.channelId) || (await guild.channels.fetch(rm.channelId).catch(() => null));
   if (!channel?.isTextBased?.()) throw new Error('channel not found or not a text channel');
   const payload = {
     content: rm.message || '',
@@ -204,8 +206,7 @@ function roleMessageById(guildId, rmId) {
   return (mod.config.reactionMessages || []).find((x) => String(x.id) === String(rmId)) || null;
 }
 
-const ephemeral = (interaction, content) =>
-  interaction.reply({ content, flags: MessageFlags.Ephemeral });
+const ephemeral = (interaction, content) => interaction.reply({ content, flags: MessageFlags.Ephemeral });
 
 async function handleRoleButton(interaction, rmId, roleId) {
   const rm = roleMessageById(interaction.guildId, rmId);
@@ -257,26 +258,13 @@ async function handleRoleSelect(interaction, rmId) {
   return ephemeral(interaction, add.length || remove.length ? 'Roles updated.' : 'No changes.');
 }
 
-/** @param {import('discord.js').Client} client */
-export function registerRoleComponentHandlers(client) {
-  client.on('interactionCreate', async (interaction) => {
-    try {
-      if (interaction.isButton() && interaction.customId.startsWith('rr:')) {
-        const [, rmId, roleId] = interaction.customId.split(':');
-        await handleRoleButton(interaction, rmId, roleId);
-      } else if (interaction.isStringSelectMenu() && interaction.customId.startsWith('rrsel:')) {
-        await handleRoleSelect(interaction, interaction.customId.slice('rrsel:'.length));
-      }
-    } catch (err) {
-      log.error('roles', 'component handler failed:', err.message);
-      if (interaction.isRepliable() && !interaction.replied) {
-        interaction
-          .reply({ content: 'Something went wrong updating your roles.', flags: MessageFlags.Ephemeral })
-          .catch(() => {});
-      }
-    }
-  });
-}
+registerComponent('roles', 'rr:', (interaction) => {
+  const [, rmId, roleId] = interaction.customId.split(':');
+  return handleRoleButton(interaction, rmId, roleId);
+});
+registerComponent('roles', 'rrsel:', (interaction) =>
+  handleRoleSelect(interaction, interaction.customId.slice('rrsel:'.length))
+);
 
 // --- runtime handlers --------------------------------------------------
 
@@ -324,16 +312,23 @@ on('roles', 'reactionAdd', async (payload, config, guildId) => {
   const role = guild.roles.cache.get(hit.pair.roleId);
   if (!member || !role) return;
   if (!role.editable) {
-    log.warn('roles', `cannot assign "${role.name}" in ${guild.name}: bot lacks Manage Roles or is ranked below it`);
+    log.warn(
+      'roles',
+      `cannot assign "${role.name}" in ${guild.name}: bot lacks Manage Roles or is ranked below it`
+    );
     return;
   }
 
   if (hit.rm.mode === 'reverse') {
-    await member.roles.remove(role, 'Reaction role (reverse)').catch((e) => log.warn('roles', `remove failed: ${e.message}`));
+    await member.roles
+      .remove(role, 'Reaction role (reverse)')
+      .catch((e) => log.warn('roles', `remove failed: ${e.message}`));
     return;
   }
 
-  await member.roles.add(role, 'Reaction role').catch((err) => log.warn('roles', `add role failed: ${err.message}`));
+  await member.roles
+    .add(role, 'Reaction role')
+    .catch((err) => log.warn('roles', `add role failed: ${err.message}`));
 
   if (hit.rm.exclusive) {
     const others = hit.rm.pairs

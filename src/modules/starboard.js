@@ -7,13 +7,7 @@
 //   removeBotReactions, minAgeMinutes, maxAgeMinutes, roleMode: 'allow'|'deny',
 //   roleList: [], channelMode, channelList: [] } ] }
 // `key` for an emoji is its custom id, or the unicode character. [] = any emoji.
-import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-  PermissionsBitField,
-} from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionsBitField } from 'discord.js';
 import { on } from './dispatch.js';
 import { runtime } from '../runtime.js';
 import {
@@ -33,7 +27,8 @@ const clampInt = (v, min, max, dflt) => {
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : dflt;
 };
 const id = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
-const idList = (v) => [...new Set((Array.isArray(v) ? v : [v]).filter((x) => /^\d{17,20}$/.test(x)))].slice(0, 25);
+const idList = (v) =>
+  [...new Set((Array.isArray(v) ? v : [v]).filter((x) => /^\d{17,20}$/.test(x)))].slice(0, 25);
 
 function emojiList(v) {
   return [

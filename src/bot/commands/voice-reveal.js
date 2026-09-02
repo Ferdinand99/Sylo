@@ -11,7 +11,11 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const ctx = resolveContext(interaction);
   if (ctx.error) return interaction.reply({ content: ctx.error, ...ephemeral });
-  if (!canControl(ctx)) return interaction.reply({ content: 'Only the channel owner or a voice moderator can do that.', ...ephemeral });
+  if (!canControl(ctx))
+    return interaction.reply({
+      content: 'Only the channel owner or a voice moderator can do that.',
+      ...ephemeral,
+    });
   await setHidden(ctx.channel, interaction.guild, false);
   return interaction.reply({ content: '👁️ Channel revealed.', ...ephemeral });
 }

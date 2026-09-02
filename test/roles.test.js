@@ -43,9 +43,12 @@ test('select style: one menu, rrsel:<id>, options carry role ids', () => {
     { roleId: R(2), label: 'Two' },
     { roleId: R(3), label: 'Three' },
   ];
-  const [row] = buildRoleComponents(fakeGuild(), { id: '9', style: 'select', pairs, placeholder: 'Choose' }).map((r) =>
-    r.toJSON()
-  );
+  const [row] = buildRoleComponents(fakeGuild(), {
+    id: '9',
+    style: 'select',
+    pairs,
+    placeholder: 'Choose',
+  }).map((r) => r.toJSON());
   const menu = row.components[0];
   assert.equal(menu.custom_id, 'rrsel:9');
   assert.equal(menu.placeholder, 'Choose');
@@ -59,12 +62,15 @@ test('select style: one menu, rrsel:<id>, options carry role ids', () => {
 
 test('exclusive select clamps to a single pick', () => {
   const pairs = [{ roleId: R(1) }, { roleId: R(2) }];
-  const [row] = buildRoleComponents(fakeGuild(), { id: '3', style: 'select', exclusive: true, pairs }).map((r) =>
-    r.toJSON()
+  const [row] = buildRoleComponents(fakeGuild(), { id: '3', style: 'select', exclusive: true, pairs }).map(
+    (r) => r.toJSON()
   );
   assert.equal(row.components[0].max_values, 1);
 });
 
 test('invalid role ids are dropped; no valid pairs -> no components', () => {
-  assert.deepEqual(buildRoleComponents(fakeGuild(), { id: '1', style: 'buttons', pairs: [{ roleId: 'nope' }] }), []);
+  assert.deepEqual(
+    buildRoleComponents(fakeGuild(), { id: '1', style: 'buttons', pairs: [{ roleId: 'nope' }] }),
+    []
+  );
 });

@@ -28,7 +28,7 @@ on('counting', 'messageCreate', async (message, config, guildId) => {
     return fail(message, config, guildId, {
       brokeAt: state.current,
       record: state.record,
-      reason: sameUser ? 'you can\'t count twice in a row' : `the next number was **${expected}**`,
+      reason: sameUser ? "you can't count twice in a row" : `the next number was **${expected}**`,
     });
   }
 

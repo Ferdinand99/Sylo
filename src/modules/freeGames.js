@@ -19,22 +19,27 @@ const POLL_MS = 60 * 60 * 1000;
 
 /** Source-agnostic dedup key so the same title from Epic and ITAD collapses. */
 export function gameKey(title) {
-  return String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return String(title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
 }
 
 // --- Epic ---------------------------------------------------------------------
 
 const pickImage = (images = []) => {
   const byType = (t) => images.find((i) => i.type === t)?.url;
-  return byType('OfferImageWide') || byType('DieselStoreFrontWide') || byType('Thumbnail') || images[0]?.url || null;
+  return (
+    byType('OfferImageWide') ||
+    byType('DieselStoreFrontWide') ||
+    byType('Thumbnail') ||
+    images[0]?.url ||
+    null
+  );
 };
 
 const epicStoreUrl = (el) => {
   const slug =
-    el.catalogNs?.mappings?.[0]?.pageSlug ||
-    el.offerMappings?.[0]?.pageSlug ||
-    el.productSlug ||
-    el.urlSlug;
+    el.catalogNs?.mappings?.[0]?.pageSlug || el.offerMappings?.[0]?.pageSlug || el.productSlug || el.urlSlug;
   if (!slug) return 'https://store.epicgames.com/en-US/free-games';
   return `https://store.epicgames.com/en-US/p/${String(slug).replace(/\/home$/, '')}`;
 };
@@ -87,7 +92,8 @@ async function fetchEpic() {
 
 // --- IsThereAnyDeal ---------------------------------------------------------
 
-const money = (m) => (m && typeof m.amount === 'number' ? `${m.amount.toFixed(2)} ${m.currency || ''}`.trim() : null);
+const money = (m) =>
+  m && typeof m.amount === 'number' ? `${m.amount.toFixed(2)} ${m.currency || ''}`.trim() : null;
 
 /** @param {any} json  @param {'game'|'dlc'} kind */
 export function parseItadPayload(json, kind = 'game') {
@@ -143,16 +149,20 @@ async function fetchItad(kind = 'game') {
 export async function getFreeGames({ kind = 'game' } = {}) {
   const results = [];
   if (kind === 'game') {
-    results.push(await fetchEpic().catch((err) => {
-      log.error('free-games', 'Epic fetch failed:', err.message);
-      return [];
-    }));
+    results.push(
+      await fetchEpic().catch((err) => {
+        log.error('free-games', 'Epic fetch failed:', err.message);
+        return [];
+      })
+    );
   }
   if (config.itadApiKey) {
-    results.push(await fetchItad(kind).catch((err) => {
-      log.error('free-games', 'ITAD fetch failed:', err.message);
-      return [];
-    }));
+    results.push(
+      await fetchItad(kind).catch((err) => {
+        log.error('free-games', 'ITAD fetch failed:', err.message);
+        return [];
+      })
+    );
   }
 
   const seen = new Set();

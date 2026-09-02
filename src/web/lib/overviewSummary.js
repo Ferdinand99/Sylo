@@ -37,8 +37,28 @@ const KEY_PERMS = [
 const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
   { title: 'Moderation & filtering', ids: ['automod', 'verification', 'appeals', 'logging'] },
-  { title: 'Engagement', ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'starboard', 'sticky'] },
-  { title: 'Utilities', ids: ['tickets', 'messages', 'reminders', 'custom-commands', 'invite-tracker', 'polls', 'giveaways', 'autoresponder', 'afk', 'server-stats', 'temp-voice', 'free-games', 'game-stats'] },
+  {
+    title: 'Engagement',
+    ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'starboard', 'sticky'],
+  },
+  {
+    title: 'Utilities',
+    ids: [
+      'tickets',
+      'messages',
+      'reminders',
+      'custom-commands',
+      'invite-tracker',
+      'polls',
+      'giveaways',
+      'autoresponder',
+      'afk',
+      'server-stats',
+      'temp-voice',
+      'free-games',
+      'game-stats',
+    ],
+  },
   { title: 'Social alerts', ids: ['twitch-alerts', 'youtube-alerts'] },
 ];
 
@@ -94,7 +114,10 @@ function buildHealth(guild, settings, state) {
       membersBlocking: needMembers && !config.intentGuildMembers,
       contentBlocking: needContent && !config.intentMessageContent,
     },
-    modlog: { set: Boolean(settings?.modlog_channel_id), name: channelName(guild, settings?.modlog_channel_id) },
+    modlog: {
+      set: Boolean(settings?.modlog_channel_id),
+      name: channelName(guild, settings?.modlog_channel_id),
+    },
     tickets: { open: openTicketCount(guild.id), unread: unreadTicketCount(guild.id) },
     modules: { enabled: enabledCount, total: MODULES.length },
   };
@@ -130,7 +153,9 @@ function moduleLines(id, guild, cfg) {
     case 'moderation': {
       const rules = Array.isArray(cfg.warnThresholds) ? cfg.warnThresholds.length : 0;
       return [
-        rules ? on('Warning thresholds', `${rules} rule${rules === 1 ? '' : 's'}`) : off('Warning thresholds', 'none'),
+        rules
+          ? on('Warning thresholds', `${rules} rule${rules === 1 ? '' : 's'}`)
+          : off('Warning thresholds', 'none'),
         cfg.dmOnPunish ? on('DM on punishment', 'on') : off('DM on punishment', 'off'),
       ];
     }
@@ -235,11 +260,15 @@ function moduleLines(id, guild, cfg) {
       ];
     }
     case 'youtube-alerts': {
-      const alerts = Array.isArray(cfg.alerts) ? cfg.alerts.filter((a) => a.ytChannelId && a.discordChannelId) : [];
+      const alerts = Array.isArray(cfg.alerts)
+        ? cfg.alerts.filter((a) => a.ytChannelId && a.discordChannelId)
+        : [];
       const live = alerts.filter((a) => a.onLive).length;
       return [
         alerts.length ? on('Channels', String(alerts.length)) : off('Channels', 'none'),
-        alerts.length ? neutral('Live alerts', live ? `${live} of ${alerts.length}` : 'off') : neutral('Live alerts', 'off'),
+        alerts.length
+          ? neutral('Live alerts', live ? `${live} of ${alerts.length}` : 'off')
+          : neutral('Live alerts', 'off'),
       ];
     }
     case 'game-stats': {
@@ -262,7 +291,12 @@ function moduleLines(id, guild, cfg) {
       const restricted = Array.isArray(cfg.voteRoles) && cfg.voteRoles.length;
       return [
         open ? on('Open polls', String(open)) : neutral('Open polls', '0'),
-        restricted ? on('Vote restriction', `${cfg.voteRoleMode === 'deny' ? 'deny' : 'allow'} ${cfg.voteRoles.length} role(s)`) : neutral('Vote restriction', 'everyone'),
+        restricted
+          ? on(
+              'Vote restriction',
+              `${cfg.voteRoleMode === 'deny' ? 'deny' : 'allow'} ${cfg.voteRoles.length} role(s)`
+            )
+          : neutral('Vote restriction', 'everyone'),
       ];
     }
     case 'autoresponder': {
@@ -291,7 +325,10 @@ function moduleLines(id, guild, cfg) {
         .filter(Boolean)
         .map((nm) => `#${nm}`);
       return [
-        on('Boards', `${boards.length}${ready.length < boards.length ? ` · ${boards.length - ready.length} unconfigured` : ''}`),
+        on(
+          'Boards',
+          `${boards.length}${ready.length < boards.length ? ` · ${boards.length - ready.length} unconfigured` : ''}`
+        ),
         names.length ? neutral('Channels', names.join(', ')) : off('Channels', 'not set'),
       ];
     }
@@ -316,7 +353,9 @@ function moduleLines(id, guild, cfg) {
       const jobs = listScheduled(guild.id);
       const active = jobs.filter((j) => j.enabled === 1).length;
       return [
-        jobs.length ? on('Reminders', `${active} active${jobs.length > active ? ` · ${jobs.length - active} off` : ''}`) : off('Reminders', 'none'),
+        jobs.length
+          ? on('Reminders', `${active} active${jobs.length > active ? ` · ${jobs.length - active} off` : ''}`)
+          : off('Reminders', 'none'),
       ];
     }
     case 'leveling': {
@@ -333,9 +372,7 @@ function moduleLines(id, guild, cfg) {
       const active = AUTOMOD_RULES.filter(([k]) => rules[k]?.enabled).length;
       const exempt = (cfg.exemptRoles?.length ?? 0) + (cfg.exemptChannels?.length ?? 0);
       return [
-        active
-          ? on('Active filters', `${active} of ${AUTOMOD_RULES.length}`)
-          : off('Active filters', 'none'),
+        active ? on('Active filters', `${active} of ${AUTOMOD_RULES.length}`) : off('Active filters', 'none'),
         exempt ? on('Exemptions', String(exempt)) : neutral('Exemptions', '0'),
       ];
     }
@@ -365,7 +402,9 @@ function commandsCard(guild) {
   const overrides = [...getCommandOverrides(guild.id).values()];
   const total = runtime.client?.commands?.size ?? 0;
   const disabled = overrides.filter((o) => !o.enabled).length;
-  const limited = overrides.filter((o) => o.enabled && (o.allowedChannels.length || o.allowedRoles.length)).length;
+  const limited = overrides.filter(
+    (o) => o.enabled && (o.allowedChannels.length || o.allowedRoles.length)
+  ).length;
   return {
     kind: 'link',
     id: 'commands',

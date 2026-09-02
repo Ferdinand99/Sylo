@@ -51,11 +51,9 @@ export function targetActable(ctx, targetMember) {
   if (targetMember.id === ctx.row.owner_id && !ctx.isModerator) return "You can't target the channel owner.";
   if (targetMember.id === ctx.member.id) return "You can't target yourself.";
   const tRoles = [...(targetMember.roles?.cache?.keys() ?? [])];
-  if (ctx.hub.ignoredRoles?.some((r) => tRoles.includes(r))) return 'That member is exempt from voice commands.';
-  if (
-    !ctx.isModerator &&
-    ctx.hub.moderatorRoles?.some((r) => tRoles.includes(r))
-  ) {
+  if (ctx.hub.ignoredRoles?.some((r) => tRoles.includes(r)))
+    return 'That member is exempt from voice commands.';
+  if (!ctx.isModerator && ctx.hub.moderatorRoles?.some((r) => tRoles.includes(r))) {
     return "You can't target a voice moderator.";
   }
   return null;

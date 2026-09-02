@@ -41,10 +41,16 @@ test('normaliseWelcomeChannelConfig: validates ids, clamps, sanitises embeds', (
 
 test('substitutePlaceholders / resolveWelcomeSpec: fills server placeholders', () => {
   const guild = { name: 'Priv Stuff', id: '999', memberCount: 42 };
-  assert.equal(substitutePlaceholders('Welcome to {server} ({memberCount})', guild), 'Welcome to Priv Stuff (42)');
+  assert.equal(
+    substitutePlaceholders('Welcome to {server} ({memberCount})', guild),
+    'Welcome to Priv Stuff (42)'
+  );
 
   const cfg = normaliseWelcomeChannelConfig({
-    spec: { content: '{server}', embeds: [{ kind: 'embed', title: 'Hi {server}', description: '{memberCount} members' }] },
+    spec: {
+      content: '{server}',
+      embeds: [{ kind: 'embed', title: 'Hi {server}', description: '{memberCount} members' }],
+    },
   });
   const spec = resolveWelcomeSpec(cfg, guild);
   assert.equal(spec.content, 'Priv Stuff');

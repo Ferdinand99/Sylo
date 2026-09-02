@@ -4,7 +4,9 @@ import { db } from './index.js';
 
 const stmts = {
   seenAny: db.prepare('SELECT 1 FROM youtube_video_seen WHERE guild_id = ? AND yt_channel = ? LIMIT 1'),
-  isSeen: db.prepare('SELECT 1 FROM youtube_video_seen WHERE guild_id = ? AND yt_channel = ? AND video_id = ?'),
+  isSeen: db.prepare(
+    'SELECT 1 FROM youtube_video_seen WHERE guild_id = ? AND yt_channel = ? AND video_id = ?'
+  ),
   markSeen: db.prepare(
     'INSERT OR IGNORE INTO youtube_video_seen (guild_id, yt_channel, video_id, seen_at) VALUES (?, ?, ?, ?)'
   ),
