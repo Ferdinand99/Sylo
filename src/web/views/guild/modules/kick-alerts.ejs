@@ -1,0 +1,77 @@
+<% var cfg = moduleConfig || {}; var alerts = Array.isArray(cfg.alerts) ? cfg.alerts : []; %>
+<% var kEnabled = typeof kickEnabled !== 'undefined' ? kickEnabled : false; %>
+<% var defMsg = typeof kickDefaultMessage !== 'undefined' ? kickDefaultMessage : '🟢 **{name}** is live on Kick!'; %>
+
+<p class="muted small">
+  Sylo checks each streamer about once a minute and posts to the chosen channel when they go live.
+  Message placeholders: <code>{name}</code> <code>{title}</code> <code>{game}</code> <code>{url}</code> <code>{viewers}</code>.
+</p>
+
+<% if (!kEnabled) { %>
+  <div class="banner bad">
+    Set <code>KICK_CLIENT_ID</code> and <code>KICK_CLIENT_SECRET</code> (a free app under
+    <a href="https://kick.com/settings/developer" target="_blank" rel="noopener">kick.com/settings/developer</a>) for alerts to actually fire.
+    You can still configure them here.
+  </div>
+<% } %>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/kick-alerts/config" hx-post="/guilds/<%= guild.id %>/m/kick-alerts/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-xl">
+  <div id="kc-rows">
+    <% (alerts.length ? alerts : [{ slug: '', channelId: '', roleId: '', message: '' }]).forEach(function (a) { %>
+      <div class="kc-row card stack">
+        <div class="star-age">
+          <div class="stack u-grow">
+            <label class="small">Kick username</label>
+            <input type="text" name="kc_slug" value="<%= a.slug || '' %>" placeholder="xqc" maxlength="25" />
+          </div>
+          <div class="stack u-grow">
+            <label class="small">Announce in</label>
+            <select name="kc_channel">
+              <option value="">— select a channel —</option>
+              <% channels.forEach(function (c) { %>
+                <option value="<%= c.id %>" <%= c.id === a.channelId ? 'selected' : '' %>>#<%= c.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="stack u-grow">
+            <label class="small">Ping role <span class="muted">— optional</span></label>
+            <select name="kc_role">
+              <option value="">— none —</option>
+              <% roles.forEach(function (r) { %>
+                <option value="<%= r.id %>" <%= r.id === a.roleId ? 'selected' : '' %>><%= r.name %></option>
+              <% }) %>
+            </select>
+          </div>
+        </div>
+        <label class="small">Message</label>
+        <textarea name="kc_message" rows="2" maxlength="1500" placeholder="<%= defMsg %>"><%= a.message || '' %></textarea>
+        <div><button type="button" class="link-btn" onclick="this.closest('.kc-row').remove()">remove</button></div>
+      </div>
+    <% }) %>
+  </div>
+  <div><button type="button" class="secondary" id="kc-add">＋ Add streamer</button></div>
+  <div class="u-mt-3"><button type="submit">Save</button></div>
+</form>
+
+<template id="kc-template">
+  <div class="kc-row card stack">
+    <div class="star-age">
+      <div class="stack u-grow"><label class="small">Kick username</label>
+        <input type="text" name="kc_slug" placeholder="xqc" maxlength="25" /></div>
+      <div class="stack u-grow"><label class="small">Announce in</label>
+        <select name="kc_channel"><option value="">— select a channel —</option>
+          <% channels.forEach(function (c) { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %></select></div>
+      <div class="stack u-grow"><label class="small">Ping role</label>
+        <select name="kc_role"><option value="">— none —</option>
+          <% roles.forEach(function (r) { %><option value="<%= r.id %>"><%= r.name %></option><% }) %></select></div>
+    </div>
+    <label class="small">Message</label>
+    <textarea name="kc_message" rows="2" maxlength="1500" placeholder="<%= defMsg %>"></textarea>
+    <div><button type="button" class="link-btn" onclick="this.closest('.kc-row').remove()">remove</button></div>
+  </div>
+</template>
+<script>
+  document.getElementById('kc-add')?.addEventListener('click', function () {
+    document.getElementById('kc-rows').appendChild(document.getElementById('kc-template').content.cloneNode(true));
+  });
+</script>

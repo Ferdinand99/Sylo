@@ -102,6 +102,8 @@ const turnstileSecretKey = optionalOrNull('TURNSTILE_SECRET_KEY');
 const itadApiKey = optionalOrNull('ITAD_API_KEY');
 const twitchClientId = optionalOrNull('TWITCH_CLIENT_ID');
 const twitchClientSecret = optionalOrNull('TWITCH_CLIENT_SECRET');
+const kickClientId = optionalOrNull('KICK_CLIENT_ID');
+const kickClientSecret = optionalOrNull('KICK_CLIENT_SECRET');
 // Signs session cookies and short-lived tokens (e.g. verification links), so it
 // must always exist. When unset we generate one; that only matters for
 // persistence when the dashboard login is enabled.
@@ -154,6 +156,12 @@ export const config = Object.freeze({
   twitchClientId,
   twitchClientSecret,
   twitchEnabled: Boolean(twitchClientId && twitchClientSecret),
+
+  // Kick API app credentials — power the Kick alerts module. Free app under
+  // kick.com/settings/developer. When unset, the module's poll loop no-ops.
+  kickClientId,
+  kickClientSecret,
+  kickEnabled: Boolean(kickClientId && kickClientSecret),
 
   // Game stats
   gametoolsApiBase: optional('GAMETOOLS_API_BASE', 'https://api.gametools.network').replace(/\/+$/, ''),

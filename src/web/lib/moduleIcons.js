@@ -31,6 +31,7 @@ export const MODULE_ICONS = {
   'game-stats': 'target',
   'twitch-alerts': 'twitch',
   'youtube-alerts': 'youtube',
+  'kick-alerts': 'kick',
   // synthetic overview cards
   general: 'gear',
   commands: 'command',

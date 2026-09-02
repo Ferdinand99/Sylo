@@ -22,13 +22,13 @@ player lookups through the public [gametools.network](https://gametools.network)
 Everything runs in **one Node process, one container, no build step**.
 
 <details>
-<summary>The 27 modules</summary>
+<summary>The 28 modules</summary>
 
 moderation · logging · tickets · reaction roles · verification · welcome ·
 welcome channel · birthdays · sticky messages · auto-moderation · counting · custom commands ·
 autoresponder · reminders · leveling · AFK · server statistics · free games ·
 ban appeals · temporary voice channels · starboard · invite tracker · polls ·
-giveaways · game stats · Twitch alerts · YouTube alerts
+giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts
 
 </details>
 
@@ -123,6 +123,10 @@ settings panel per module — saves swap in place with a toast.
   streamers on the dashboard (channel + optional ping role + custom message with
   `{name}`/`{title}`/`{game}`/`{url}` placeholders); Sylo polls the Twitch API
   ~once a minute. Needs a free `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET`.
+- **Kick alerts** — the same "go live" notification for [Kick.com](https://kick.com)
+  streamers (channel + optional ping role + `{name}`/`{title}`/`{game}`/`{url}`/`{viewers}`
+  message). Sylo polls the official Kick API ~once a minute; needs a free
+  `KICK_CLIENT_ID` / `KICK_CLIENT_SECRET` (kick.com/settings/developer).
 - **Polls** — members run `/poll question:… choices:A | B | C` (optional
   `duration`, `multiple`, `max_votes`); people vote by reacting with the option
   letter. Auto-closes on its timer or vote cap, posts a results embed with a
@@ -236,6 +240,11 @@ settings panel per module — saves swap in place with a toast.
     save); new videos read from YouTube's public Atom feed, live status from a
     light `/live` page check — no API key. Per-channel ping role and custom
     messages (`{name}` `{title}` `{url}`); polled every ~3 minutes
+  - **Kick alerts** — post a "go live" notification when a Kick.com streamer
+    starts. Per-streamer channel, optional ping role and a custom message
+    (`{name}` `{title}` `{game}` `{url}` `{viewers}`). Polls the official Kick API
+    ~once a minute; needs `KICK_CLIENT_ID` / `KICK_CLIENT_SECRET` (free app at
+    kick.com/settings/developer)
   - **Autoresponder** — auto-reply when a message matches a trigger (contains /
     exact / starts-with / whole-word), optionally deleting the trigger
   - **Scheduled messages** — recurring posts to a channel, every minute to every
@@ -326,7 +335,7 @@ src/
     moderation automod logging tickets roles welcome welcomeChannel sticky
     counting customCommands autoresponder verification scheduledMessages
     leveling afk serverStats freeGames appeals tempVoice polls giveaways
-    starboard inviteTracker twitchAlerts youtubeAlerts messageCreator
+    starboard inviteTracker twitchAlerts youtubeAlerts kickAlerts messageCreator
   adapters/games/       gameAdapter, registry, battlefield
   db/
     index.js            SQLite connection + migrations
