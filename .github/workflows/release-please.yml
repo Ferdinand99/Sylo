@@ -72,6 +72,9 @@ jobs:
   # pushes by digest only; the merge job assembles the tagged manifest list.
   build:
     needs: resolve
+    # resolve uses if: always(), so downstream jobs need an explicit status
+    # check or GitHub skips them.
+    if: always() && needs.resolve.result == 'success'
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -155,6 +158,7 @@ jobs:
   # manifest list, which Unraid's update check can read.
   merge:
     needs: [resolve, build]
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
