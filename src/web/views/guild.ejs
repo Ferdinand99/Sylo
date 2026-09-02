@@ -29,6 +29,11 @@
        'warn-cleared': "That member's warnings were cleared.",
        'warn-gone': 'That warning no longer exists.',
        'warn-none': 'That member has no warnings to clear.',
+       'bulk-on': 'Selected plugins enabled.',
+       'bulk-off': 'Selected plugins disabled.',
+       'test-sent': 'Test message sent.',
+       'test-nochan': 'Set a channel for this module first.',
+       'test-fail': 'Send failed — check the bot has access to that channel.',
        needpair: 'Add at least one emoji → role pair.',
        rrfail: 'Could not post the reaction-role message (check the bot\'s permissions in that channel).',
        'count-set': 'Counting number updated.',
@@ -64,7 +69,7 @@
        noconfirm: 'Tick the confirmation box to delete the member\'s data.',
        'md-baduser': 'Enter a valid Discord user ID or @mention.',
      };
-     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'locked-all', 'unlocked-all', 'unlocked-one', 'warn-removed', 'warn-cleared', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
+     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'locked-all', 'unlocked-all', 'unlocked-one', 'warn-removed', 'warn-cleared', 'bulk-on', 'bulk-off', 'test-sent', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' || msg === 'forgot-nodm' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');
 %>
   <div class="banner banner-flash <%= cls %>"><%= messages[msg] || 'Done.' %></div>
@@ -90,11 +95,33 @@
       </div>
     <% } %>
 
+    <div class="plugin-filter" x-data="overviewGrid()" :class="{ 'is-selecting': selecting }"
+         data-bulk-url="/guilds/<%= guild.id %>/modules/bulk">
+      <div class="plugin-toolbar">
+        <input type="search" placeholder="Filter plugins&hellip;" x-model="q"
+               @input.debounce.120ms="filter()" aria-label="Filter plugins" />
+        <button type="button" class="secondary" @click="toggleSelect()"
+                x-text="selecting ? 'Cancel' : 'Select'"></button>
+        <template x-if="selecting">
+          <span class="plugin-bulk">
+            <span class="muted small" x-text="sel.size + ' selected'"></span>
+            <button type="button" @click="apply(true)" :disabled="!sel.size || busy">Enable</button>
+            <button type="button" class="danger" @click="apply(false)" :disabled="!sel.size || busy">Disable</button>
+          </span>
+        </template>
+      </div>
     <% overview.groups.forEach(function (group) { %>
+      <div data-mod-group>
       <h3 class="plugin-group"><%= group.title %></h3>
       <div class="plugin-grid">
         <% group.cards.forEach(function (c) { %>
-          <div class="plugin-card is-<%= c.status %>" id="plugin-card-<%= c.id %>">
+          <div class="plugin-card is-<%= c.status %>" id="plugin-card-<%= c.id %>" data-mod-name="<%= c.name %>">
+            <% if (c.hasToggle && c.status !== 'blocked') { %>
+              <label class="plugin-pick" @click.stop>
+                <input type="checkbox" @change="pick('<%= c.id %>', $event.target.checked)"
+                       aria-label="Select <%= c.name %>" />
+              </label>
+            <% } %>
             <a class="plugin-hit" href="<%= c.href %>" aria-label="<%= c.name %>"></a>
             <span class="plugin-ico"><svg class="plugin-ico-svg" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-<%= c.icon %>"/></svg></span>
             <span class="plugin-name"><%= c.name %></span>
@@ -116,7 +143,9 @@
           </div>
         <% }) %>
       </div>
+      </div>
     <% }) %>
+    </div>
 
   <% } else { %>
   <section class="guild-panel">
@@ -413,6 +442,13 @@
         <p class="warn-text small">Needs intent: <%= mrow.missingIntents.join(', ') %> — enable it in the Discord Developer Portal.</p>
       <% } %>
       <% if (!mrow.enabled) { %><p class="muted small">Enable the module (toggle above) for these settings to take effect.</p><% } %>
+      <% if (typeof moduleTestable !== 'undefined' && moduleTestable) { %>
+        <form method="POST" action="/guilds/<%= guild.id %>/m/<%= activeModule.id %>/test"
+              hx-post="/guilds/<%= guild.id %>/m/<%= activeModule.id %>/test" hx-swap="none" class="u-mt-2">
+          <button type="submit" class="secondary">Send a test message</button>
+          <span class="muted small">Posts a sample to this module's channel.</span>
+        </form>
+      <% } %>
       <hr class="sep" />
       <%- include('guild/_module-config') %>
     <% } %>

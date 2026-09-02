@@ -112,6 +112,7 @@ import { guildTempBans, clearTempBan } from '../../db/tempBans.js';
 import { lockChannel, unlockChannel, lockPreflight } from '../../bot/lib/channelLock.js';
 import { formatDuration } from '../../bot/lib/duration.js';
 import { renderWelcomeCard } from '../../bot/lib/welcomeCard.js';
+import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
@@ -196,7 +197,11 @@ router.get('/:guildId/emojis', (req, res) => {
 // --- Panels ----------------------------------------------------------------
 
 router.get('/:guildId/overview', (req, res) => {
-  res.render('guild', { ...baseContext(req.guild, 'overview'), overview: buildOverview(req.guild) });
+  res.render('guild', {
+    ...baseContext(req.guild, 'overview'),
+    overview: buildOverview(req.guild),
+    msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+  });
 });
 
 // Old bookmark → the renamed Settings panel.
@@ -684,6 +689,7 @@ function moduleViewLocals(mod, req, configOverride) {
     activeModule: mod,
     moduleIconName: moduleIcon(mod.id),
     moduleEnabled: enabled,
+    moduleTestable: enabled && TESTABLE.has(mod.id),
     moduleConfig: configOverride ?? config,
     configView: hasView ? `guild/modules/${mod.id}` : 'guild/modules/stub',
     configPartialRel: hasView ? `modules/${mod.id}` : 'modules/stub',
@@ -836,6 +842,31 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
   }
   res.render('guild', locals);
 });
+
+// Send a representative test message for a module to its configured channel.
+router.post(
+  '/:guildId/m/:moduleId/test',
+  asyncHandler(async (req, res) => {
+    const id = req.params.moduleId;
+    const back = `/guilds/${req.guild.id}/m/${id}`;
+    const r = TESTABLE.has(id) ? await sendModuleTest(req.guild, id) : { ok: false, reason: 'no-channel' };
+
+    const toast = r.ok
+      ? { msg: `Test sent to #${r.channelName}`, kind: 'ok' }
+      : {
+          msg:
+            r.reason === 'no-channel'
+              ? 'Set a channel for this module first.'
+              : 'Send failed — check the bot has access to that channel.',
+          kind: 'bad',
+        };
+    if (req.get('HX-Request')) {
+      return res.status(204).set('HX-Trigger', JSON.stringify({ toast })).end();
+    }
+    const msg = r.ok ? 'test-sent' : r.reason === 'no-channel' ? 'test-nochan' : 'test-fail';
+    res.redirect(`${back}?msg=${msg}`);
+  })
+);
 
 // Save a module's settings.
 router.post(
@@ -2015,6 +2046,32 @@ router.post(
     res.redirect(`${back}?tab=infr&msg=unlocked-one`);
   })
 );
+
+// Bulk enable/disable from the overview "select mode". Client reloads on 200.
+// Registered before the `:moduleId` route so "bulk" isn't read as a module id.
+router.post('/:guildId/modules/bulk', (req, res) => {
+  const ids = [...new Set([].concat(req.body.ids ?? []))].filter((id) => getModule(id));
+  const enabled = Boolean(req.body.enabled);
+  for (const id of ids) {
+    setGuildModule(req.guild.id, id, { enabled });
+    if (id === 'custom-commands') {
+      syncGuildCustomCommands(req.guild).catch((err) =>
+        log.error('custom-commands', 'sync after bulk toggle failed:', err.message)
+      );
+    }
+    if (id === 'invite-tracker' && enabled) {
+      primeInviteCache(req.guild).catch((err) =>
+        log.error('invite-tracker', 'cache prime after bulk enable failed:', err.message)
+      );
+    }
+  }
+  recordAudit(req.guild.id, {
+    actor: moderatorDisplayName(req),
+    action: 'module:bulk',
+    detail: `${enabled ? 'enabled' : 'disabled'} ${ids.length} module(s)`,
+  });
+  res.json({ ok: true, count: ids.length, enabled });
+});
 
 // Toggle a module on/off. Driven by htmx (see _module-toggle.ejs / _plugin-cta.ejs);
 // still answers plain JSON for the no-JS / programmatic path.
