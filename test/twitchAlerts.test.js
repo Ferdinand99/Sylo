@@ -1,7 +1,7 @@
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normaliseTwitchConfig, fillMessage } from '../src/modules/twitchAlerts.js';
+import { normaliseTwitchConfig, fillMessage, buildPayload } from '../src/modules/twitchAlerts.js';
 
 test('normaliseTwitchConfig: cleans logins, requires a channel, dedupes, caps', () => {
   const c = normaliseTwitchConfig({
@@ -41,4 +41,36 @@ test('fillMessage: substitutes placeholders and falls back to the default', () =
     'Ninja is live: ranked grind (Fortnite) https://twitch.tv/ninja · 4200'
   );
   assert.match(fillMessage('', { name: 'x' }), /is live on Twitch/);
+});
+
+const STREAM = {
+  user_login: 'Ninja',
+  user_name: 'Ninja',
+  title: 'ranked grind',
+  game_name: 'Fortnite',
+  viewer_count: 4200,
+  started_at: '2026-09-02T20:00:00Z',
+};
+
+test('normaliseTwitchConfig: keeps the plainText flag', () => {
+  const c = normaliseTwitchConfig({
+    alerts: [{ login: 'ninja', channelId: '123456789012345678', plainText: true }],
+  });
+  assert.equal(c.alerts[0].plainText, true);
+});
+
+test('buildPayload: embed mode by default', () => {
+  const p = buildPayload(STREAM, {}, { message: '', roleId: '' });
+  assert.equal(p.embeds.length, 1);
+  assert.match(p.content, /Ninja/);
+});
+
+test('buildPayload: plainText mode sends no embed and always includes the url', () => {
+  const p = buildPayload(STREAM, {}, { message: '', roleId: '999999999999999999', plainText: true });
+  assert.deepEqual(p.embeds, []);
+  assert.match(p.content, /^<@&999999999999999999> /);
+  assert.match(p.content, /twitch\.tv\/ninja/);
+  // a custom template that omits {url} still gets the link appended
+  const p2 = buildPayload(STREAM, {}, { message: '{name} live now', plainText: true });
+  assert.match(p2.content, /^Ninja live now\nhttps:\/\/twitch\.tv\/ninja$/);
 });
