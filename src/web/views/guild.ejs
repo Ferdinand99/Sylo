@@ -51,9 +51,12 @@
        'vanity-cleared': 'Vanity URL removed.',
        'vanity-invalid': 'Use 3–32 characters: lowercase letters, numbers and hyphens (no leading/trailing hyphen).',
        'vanity-taken': 'That URL is already used by another server — pick a different one.',
+       forgot: 'Member data deleted. Sylo DM\'d the member a confirmation of what was removed.',
+       'forgot-nodm': 'Member data deleted, but Sylo could not DM the member (no shared server or their DMs are closed) — let them know directly.',
+       noconfirm: 'Tick the confirmation box to delete the member\'s data.',
      };
-     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared'].includes(msg);
-     const cls = ok ? 'ok' : (msg === 'warned-nolog' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');
+     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
+     const cls = ok ? 'ok' : (msg === 'warned-nolog' || msg === 'forgot-nodm' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');
 %>
   <div class="banner <%= cls %>"><%= messages[msg] || 'Done.' %></div>
 <% } %>
@@ -153,6 +156,11 @@
       <h3 class="u-mb-1">Backup</h3>
       <p class="muted small">Download this server's module configuration as JSON. Member data (warnings, XP, tickets) is not included.</p>
       <p><a href="/guilds/<%= guild.id %>/export">Export configuration &rarr;</a></p>
+
+      <hr class="sep" />
+      <h3 class="u-mb-1">Member data</h3>
+      <p class="muted small">Look up and delete the data Sylo stores about a specific member — for data-subject and erasure requests. The member is DM'd a confirmation.</p>
+      <p><a href="/guilds/<%= guild.id %>/member-data">Manage member data &rarr;</a></p>
 
     <% } else if (panel === 'audit') { %>
       <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'list', title: 'Audit log' }) %></div>
@@ -331,6 +339,57 @@
             <% } %>
           </div>
         <% }) %>
+      <% } %>
+
+    <% } else if (panel === 'member-data') { %>
+      <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'file-text', title: 'Member data' }) %></div>
+      <p class="muted">Look up what Sylo has stored about a member in this server and delete it on request
+        (for example a data-erasure request). Deletion is permanent, and Sylo DMs the member a confirmation
+        of exactly what was removed.</p>
+
+      <form method="GET" action="/guilds/<%= guild.id %>/member-data" class="row-form u-mt-3">
+        <input type="text" name="user" required placeholder="User ID or @mention"
+               value="<%= lookup && lookup.raw ? lookup.raw : (lookup && lookup.profile ? lookup.profile.id : '') %>" />
+        <button type="submit">Look up</button>
+      </form>
+
+      <% if (lookup && lookup.error === 'notanid') { %>
+        <div class="banner bad u-mt-3">“<%= lookup.raw %>” is not a valid Discord user ID or mention.</div>
+      <% } else if (lookup && lookup.data) { %>
+        <section class="card u-mt-3">
+          <div class="guild-head">
+            <% if (lookup.profile.avatar) { %><img class="guild-icon" src="<%= lookup.profile.avatar %>" alt="" /><% } %>
+            <div>
+              <h2 class="u-m0"><%= lookup.profile.tag || 'Unknown user' %></h2>
+              <p class="muted mono small u-m0"><%= lookup.profile.id %></p>
+            </div>
+          </div>
+
+          <% if (lookup.data.total === 0) { %>
+            <p class="empty u-mt-3">Sylo has no stored data for this member in this server.</p>
+          <% } else { %>
+            <table class="u-mt-3">
+              <thead><tr><th>Data</th><th class="num">Rows</th></tr></thead>
+              <tbody>
+                <% lookup.data.items.forEach(function (i) { if (i.count > 0) { %>
+                  <tr><td><%= i.label %></td><td class="num"><%= i.count %></td></tr>
+                <% } }) %>
+              </tbody>
+            </table>
+            <p class="muted small u-mt-2">Not shown here: messages already posted to channels, a completed
+              giveaway’s winner list, and the config-change log (which records a display name, not an ID).
+              Deleting also anonymises this member as an inviter and as “last counter” where applicable.</p>
+
+            <form method="POST" action="/guilds/<%= guild.id %>/member-data/forget" class="stack u-mt-3">
+              <input type="hidden" name="userId" value="<%= lookup.profile.id %>" />
+              <label class="small">Note to the member <span class="muted">— optional, added to the DM</span></label>
+              <textarea name="reason" rows="2" maxlength="500" placeholder="e.g. Processed at your request."></textarea>
+              <label class="checkline"><input type="checkbox" name="confirm" /> I confirm this permanently deletes the member’s data.</label>
+              <div><button type="submit" class="danger"
+                data-confirm="Permanently delete all stored data for <%= lookup.profile.tag || lookup.profile.id %> in this server? Sylo will DM them a confirmation.">Delete this member’s data</button></div>
+            </form>
+          <% } %>
+        </section>
       <% } %>
 
     <% } else if (panel.indexOf('m/') === 0 && typeof activeModule !== 'undefined') { %>

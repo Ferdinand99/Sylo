@@ -29,8 +29,23 @@ function fakeGuild() {
 let server;
 let base;
 
+const sentDms = [];
+
 test.before(async () => {
-  runtime.client = { guilds: { cache: new Map([[GID, fakeGuild()]]) } };
+  runtime.client = {
+    guilds: { cache: new Map([[GID, fakeGuild()]]) },
+    users: {
+      cache: new Map(),
+      fetch: async (id) => ({
+        id,
+        tag: `user-${id.slice(-4)}`,
+        displayAvatarURL: () => null,
+        send: async (payload) => {
+          sentDms.push({ id, payload });
+        },
+      }),
+    },
+  };
   const app = createApp();
   await new Promise((resolve) => {
     server = app.listen(0, resolve);
@@ -85,4 +100,50 @@ test('POST /m/afk/config with HX-Request returns the fragment + a toast trigger'
   assert.match(html, /^<div id="module-config">/);
   const trigger = res.headers.get('hx-trigger') || '';
   assert.match(trigger, /toast/);
+});
+
+// --- Member data (data-subject requests) --------------------------------
+
+const MEMBER = '900000000000009999';
+
+test('GET /member-data with a user id renders the lookup + data table', async () => {
+  const { db } = await import('../src/db/index.js');
+  db.prepare('INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at) VALUES (?,?,?,?,?)').run(GID, MEMBER, 'mod', 'test', Date.now());
+
+  const res = await fetch(`${base}/guilds/${GID}/member-data?user=${MEMBER}`);
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /Member data/);
+  assert.match(html, new RegExp(MEMBER));
+  assert.match(html, /Warnings/);
+});
+
+test('POST /member-data/forget deletes the data, DMs the member, and redirects', async () => {
+  const { db } = await import('../src/db/index.js');
+  const before = db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER).n;
+  assert.ok(before >= 1);
+  sentDms.length = 0;
+
+  const res = await fetch(`${base}/guilds/${GID}/member-data/forget`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: `userId=${MEMBER}&confirm=on&reason=at+their+request`,
+    redirect: 'manual',
+  });
+  assert.equal(res.status, 302);
+  assert.match(res.headers.get('location'), /msg=forgot/);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER).n, 0);
+  assert.equal(sentDms.length, 1);
+  assert.equal(sentDms[0].id, MEMBER);
+});
+
+test('POST /member-data/forget without the confirm box does nothing', async () => {
+  const res = await fetch(`${base}/guilds/${GID}/member-data/forget`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: `userId=${MEMBER}`,
+    redirect: 'manual',
+  });
+  assert.equal(res.status, 302);
+  assert.match(res.headers.get('location'), /msg=noconfirm/);
 });
