@@ -16,29 +16,37 @@
 
 </div>
 
-Twenty-six per-guild **modules**, Discord **OAuth2 login**, a public leveling
+Twenty-seven per-guild **modules**, Discord **OAuth2 login**, a public leveling
 **leaderboard**, and — via the optional Game stats module — **Battlefield-series**
 player lookups through the public [gametools.network](https://gametools.network) API.
 Everything runs in **one Node process, one container, no build step**.
 
 <details>
-<summary>The 26 modules</summary>
+<summary>The 27 modules</summary>
 
 moderation · logging · tickets · reaction roles · verification · welcome ·
-welcome channel · sticky messages · auto-moderation · counting · custom commands ·
+welcome channel · birthdays · sticky messages · auto-moderation · counting · custom commands ·
 autoresponder · reminders · leveling · AFK · server statistics · free games ·
 ban appeals · temporary voice channels · starboard · invite tracker · polls ·
 giveaways · game stats · Twitch alerts · YouTube alerts
 
 </details>
 
+## Documentation
+
+- **[docs/modules/](docs/modules/README.md)** — a page per module: what it does,
+  the permissions and intents it needs, its settings, and its commands.
+- **[docs/self-hosting.md](docs/self-hosting.md)** — install, environment
+  variables, reverse proxy, Docker, Unraid, backups, upgrades and rollback,
+  troubleshooting.
+- [Privacy policy](docs/privacy-policy.md) · [Terms of service](docs/terms-of-service.md)
+
 ## Contents
 
 - [What's new](#whats-new-since-20) · [Features](#features) · [Screenshots](#screenshots)
-- [Project structure](#project-structure) · [Local setup](#local-setup) · [Environment variables](#environment-variables)
-- [Discord application setup](#discord-application-setup) · [Docker](#docker) · [Unraid deployment](#unraid-deployment)
-- [Releases & CI](#releases--ci) · [Tests](#tests) · [Adding another game](#adding-another-game)
-- [Legal](#legal) · [License](#license)
+- [Project structure](#project-structure) · [Local setup](#local-setup)
+- [Self-hosting](#self-hosting) · [Releases & CI](#releases--ci) · [Tests](#tests)
+- [Adding another game](#adding-another-game) · [Legal](#legal) · [License](#license)
 
 ## Screenshots
 
@@ -327,13 +335,13 @@ data/                   SQLite file lives here (git-ignored, volume-mounted)
 
 ## Local setup
 
-Requires **Node.js 20+** and a Discord application with a bot.
+Requires **Node.js 22+** and a Discord application with a bot.
 
 ```bash
 git clone <this repo>
 cd Sylo
 npm install
-cp .env.example .env     # then edit .env (see below)
+cp .env.example .env     # then edit .env (see docs/self-hosting.md)
 npm test                 # optional: run the adapter test suite
 npm start
 ```
@@ -343,199 +351,45 @@ commands then register instantly instead of taking up to ~1 hour globally. Pass
 several ids comma-separated (`DISCORD_DEV_GUILD_IDS=id1,id2`) to cover more than one
 test server. `npm run register` re-syncs commands without a restart.
 
-### Environment variables
+## Self-hosting
 
-| Variable                  | Required | Default                        | Description |
-|---------------------------|:--------:|--------------------------------|-------------|
-| `DISCORD_TOKEN`           | yes      | —                              | Bot token |
-| `DISCORD_CLIENT_ID`       | yes      | —                              | Application (client) ID |
-| `DISCORD_DEV_GUILD_IDS`   | no       | —                              | Register commands instantly to one or more servers (comma/space-separated), instead of globally. Old name `DISCORD_GUILD_ID` still works (warns). |
-| `WEB_PORT`                | no       | `3000`                         | Dashboard HTTP port |
-| `DISCORD_CLIENT_SECRET`   | no       | —                              | Set to require "Log in with Discord" on the dashboard (see below) |
-| `SESSION_SECRET`          | no       | random                         | Signs the session cookie; pin it so logins survive restarts |
-| `DASHBOARD_URL`           | no       | derived                        | Public dashboard URL; needed behind a reverse proxy and for verification-captcha / ban-appeal links |
-| `TURNSTILE_SITE_KEY`      | no       | —                              | Cloudflare Turnstile site key — enables the Verification captcha mode |
-| `TURNSTILE_SECRET_KEY`    | no       | —                              | Cloudflare Turnstile secret key (pair with the site key) |
-| `ITAD_API_KEY`            | no       | —                              | IsThereAnyDeal key — adds non-Epic stores to the Free games module |
-| `INTENT_GUILD_MEMBERS`    | no       | `true`                         | Request the Server Members privileged intent |
-| `INTENT_MESSAGE_CONTENT`  | no       | `true`                         | Request the Message Content privileged intent |
-| `GAMETOOLS_API_BASE`      | no       | `https://api.gametools.network`| Stats API base URL |
-| `STATS_CACHE_TTL_MINUTES` | no       | `5`                            | How long stats lookups are cached |
-| `DATABASE_PATH`           | no       | `./data/sylo.db`               | SQLite file path |
-| `BACKUP_INTERVAL_HOURS`   | no       | `24`                           | Scheduled DB snapshot interval; `0` disables it (pre-migration + manual still run) |
-| `BACKUP_RETENTION`        | no       | `14`                           | How many DB snapshots to keep in `<data>/backups` |
-| `BACKUP_DIR`              | no       | `<db dir>/backups`             | Where DB snapshots are written |
-| `LOG_LEVEL`               | no       | `info`                         | `debug` / `info` / `warn` / `error` |
-| `LOG_FORMAT`              | no       | `text`                         | `text` or `json` (`LOG_JSON=1` = json) |
-| `NODE_ENV`                | no       | `development`                  | Set to `production` in deployment |
+The full guide — every environment variable, Discord application setup, running
+behind a reverse proxy, Docker, Unraid, backups, upgrades and rollback, and a
+troubleshooting table — is in **[docs/self-hosting.md](docs/self-hosting.md)**.
 
-### Dashboard authentication
+Only two variables are required:
 
-By default the dashboard runs **open** (no login) — only safe on `localhost` or a
-trusted LAN. To lock it down:
+| Variable | Description |
+|---|---|
+| `DISCORD_TOKEN` | Bot token (Developer Portal → Bot → Reset Token) |
+| `DISCORD_CLIENT_ID` | Application ID (Developer Portal → General Information) |
 
-1. Discord Developer Portal → your app → **OAuth2** → copy the **Client Secret**
-   into `DISCORD_CLIENT_SECRET`.
-2. Same page → **Redirects** → add `http://<host>:<WEB_PORT>/auth/discord/callback`
-   (e.g. `http://192.168.1.10:3000/auth/discord/callback`). Behind a reverse proxy, use
-   the public URL and set `DASHBOARD_URL` to match.
-3. Set a long random `SESSION_SECRET` so sessions survive restarts.
+The dashboard runs **open** (no login) until you set `DISCORD_CLIENT_SECRET` —
+only expose it beyond `localhost` / a trusted LAN after you do. Both privileged
+gateway intents default on; disable the ones you don't need with
+`INTENT_GUILD_MEMBERS=false` / `INTENT_MESSAGE_CONTENT=false`.
 
-With `DISCORD_CLIENT_SECRET` set, every page except the `/health` JSON requires
-"Log in with Discord", and per-server pages require **Manage Server** (or
-Administrator / owner) in that server — or one of the **bot-master roles** set on
-that server's *Settings* page. `/health` returns JSON publicly for the container
-healthcheck (browsers get the status page, gated by login).
-
-## Discord application setup
-
-1. <https://discord.com/developers/applications> → **New Application**.
-2. **Bot** tab → **Reset Token** → copy into `DISCORD_TOKEN`. Under *Privileged
-   Gateway Intents* enable **Server Members** and **Message Content** if you want
-   the member/message-driven modules (logging, welcome, autoroles, leveling,
-   auto-moderation, counting); a verified bot may need Discord's
-   approval for Message Content.
-   Otherwise set `INTENT_GUILD_MEMBERS=false` / `INTENT_MESSAGE_CONTENT=false`.
-3. **General Information** → copy **Application ID** into `DISCORD_CLIENT_ID`.
-4. **OAuth2 → URL Generator** → scopes `bot` + `applications.commands`. Bot
-   permissions:
-   - **Send Messages**, **Embed Links** — always
-   - **Kick Members**, **Ban Members**, **Moderate Members**, **Manage Messages**,
-     **Manage Channels** — moderation
-   - **Manage Roles** — reaction roles / autoroles
-   - **Manage Channels** + **Move Members** — temporary voice channels
-
-   Open the generated URL to invite the bot. Tickets (modmail) need no extra
-   permission — just leave the bot able to receive DMs.
-5. For moderation to work, drag **Sylo's role above the roles of the members it
-   should manage** in *Server Settings → Roles*. The bot can never kick/ban/timeout
-   someone whose highest role sits above its own.
-
-## Docker
+### Docker
 
 ```bash
-cp .env.example .env     # fill in DISCORD_TOKEN and DISCORD_CLIENT_ID
+cp .env.example .env      # DISCORD_TOKEN + DISCORD_CLIENT_ID
 docker compose up -d --build
-docker compose logs -f sylo
 ```
 
-The dashboard is then on `http://<host>:${WEB_PORT:-3000}`. The SQLite database
-persists in `./data` on the host.
+Or a prebuilt multi-arch image (`linux/amd64` + `linux/arm64`):
 
-> If `better-sqlite3` ever fails to build on Alpine for your platform, change the
-> two `FROM node:22-alpine` lines in the `Dockerfile` to `node:22-slim`.
+| Tag | What it is |
+| --- | --- |
+| `iwgamin/sylo:latest`, `:X.Y.Z`, `:X.Y` ([Docker Hub](https://hub.docker.com/r/iwgamin/sylo) · [GHCR](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)) | Stable releases. What the Unraid template pulls. |
+| `ghcr.io/ferdinand99/sylo:main`, `:sha-<short>` (GHCR) | Rolling build of `main`. |
 
-### Prebuilt images
+### Unraid
 
-CI publishes multi-arch (`linux/amd64` + `linux/arm64`) images to two registries
-— use either:
-
-| Tag | Registry | What it is |
-| --- | --- | --- |
-| `iwgamin/sylo:latest`, `:X.Y.Z`, `:X.Y` | [Docker Hub](https://hub.docker.com/r/iwgamin/sylo) · [GHCR](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo) | Stable releases (release-please). What the Unraid template pulls. |
-| `ghcr.io/ferdinand99/sylo:main`, `:sha-<short>` | GHCR only | Rolling build of `main` — every push. |
-
-`arm64` covers Raspberry Pi, ARM NAS boxes and Apple-Silicon hosts; Docker picks
-the right one automatically.
-
-```bash
-docker run -d --name sylo -p 3000:3000 --env-file .env \
-  -v "$PWD/data:/app/data" iwgamin/sylo:latest
-```
-
-### Backups
-
-All state is in the single SQLite file under the mounted data directory
-(`./data/sylo.db`, plus `-wal` / `-shm` sidecars).
-
-**Automatic snapshots.** Sylo writes compacted copies of the database to
-`data/backups/` — one right before any schema migration, one shortly after
-start, and one every `BACKUP_INTERVAL_HOURS` (default 24), keeping the newest
-`BACKUP_RETENTION` (default 14). Set `BACKUP_INTERVAL_HOURS=0` to keep only the
-pre-migration and manual snapshots.
-
-**From the Health page** you can:
-
-- see every snapshot with its size and age;
-- **Create backup now**, or **Import .db file…** to upload one from another
-  machine (it is validated — SQLite header, `integrity_check`, and a schema no
-  newer than this build — then stored as a snapshot);
-- **download** any snapshot;
-- **Restore** from any snapshot: Sylo takes a `prerestore` snapshot of the
-  current database, swaps the file, and exits so the container restarts on the
-  restored data (needs a restart policy — `unless-stopped` in the bundled
-  compose file / Unraid template). The page waits for the bot and returns.
-
-Manual restore still works too: stop the container, copy a snapshot over
-`data/sylo.db` (delete the `-wal` / `-shm` sidecars first), and start again.
-Migrations only ever move the schema forward, and Sylo runs a `quick_check` on
-boot and logs if the file is corrupt.
-
-Each server's module configuration can also be exported as JSON from
-**General → Backup** in the dashboard.
-
-## Unraid deployment
-
-**Option A — docker compose** (via the *Compose Manager* plugin): copy the repo
-to `/mnt/user/appdata/sylo`, add your `.env`, and `docker compose up -d`.
-
-**Option B — Docker tab → Add Container** (manual):
-
-| Field            | Value |
-|------------------|-------|
-| Name             | `Sylo` |
-| Repository       | `docker.io/iwgamin/sylo:latest` (or `ghcr.io/ferdinand99/sylo:latest`) |
-| Network Type     | `bridge` |
-| Port             | Container `3000` → Host `3000` (`WEB_PORT`) |
-| Path             | Container `/app/data` → Host `/mnt/user/appdata/sylo/data` (read/write) |
-| Variable         | `DISCORD_TOKEN` = *your token* |
-| Variable         | `DISCORD_CLIENT_ID` = *your client id* |
-| Variable         | `NODE_ENV` = `production` |
-| Variable (opt.)  | `STATS_CACHE_TTL_MINUTES` = `5` |
-
-The image's `HEALTHCHECK` hits `/health`, so Unraid shows the container health
-once it is up. To build the image on the Unraid box itself:
-`docker build -t sylo:latest /mnt/user/appdata/sylo`.
-
-The image starts as root only long enough for its entrypoint to fix ownership of
-the mounted data directory, then runs the Node process as an unprivileged user
-(`sylo`, uid 100). So a fresh, root-owned `appdata` folder works out of the box —
-no manual `chmod`/`chown` needed. If you still see `SQLITE_CANTOPEN`, run once:
-`chown -R 100:101 /mnt/user/appdata/sylo/data`.
-
-### Option C — Unraid Community Applications template
-
-`unraid/sylo.xml` is a ready-made CA template with all ports, paths, and
-environment variables pre-defined. It needs a **published image** first:
-
-1. **Publish the image.** CI does this automatically on every release (see
-   [Releases & CI](#releases--ci) below), pushing to both
-   `docker.io/iwgamin/sylo` and `ghcr.io/ferdinand99/sylo`. The Docker Hub repo
-   is public; the GHCR package's visibility is set once under GitHub → your
-   profile → Packages → `sylo` → Package settings. To publish once by hand:
-   ```bash
-   docker login -u iwgamin                 # Docker Hub personal access token
-   docker build -t iwgamin/sylo:latest .
-   docker push iwgamin/sylo:latest
-   ```
-2. **Add a 256×256 icon** at `unraid/sylo-icon.png` (the template references it).
-3. **Use the template** on Unraid — either:
-   - *Docker tab → Add Container → Template:* paste the raw URL
-     `https://raw.githubusercontent.com/Ferdinand99/Sylo/main/unraid/sylo.xml`, or
-   - drop the file in `/boot/config/plugins/dockerMan/templates-user/` and pick
-     `Sylo` from the **User templates** dropdown.
-4. **To list it in the public CA store**, use the submission portal at
-   [ca.unraid.net/submit](https://ca.unraid.net/submit): sign in with GitHub,
-   point it at this repo, then run **Validate** → **Scan** → **Submit** for
-   moderator review. Requirements: a public repo with an OSI license (MIT, at
-   the root ✓), a root `ca_profile.xml` with a filled `<Profile>` (✓), and a
-   template XML with `<Repository>`, `<Registry>`, `<Overview>`, `<Support>`,
-   `<Project>`, `<Icon>` and `<TemplateURL>` (all in `unraid/sylo.xml`). Once
-   accepted, template edits pushed to `main` propagate automatically via
-   `<TemplateURL>`.
-
-Edit `Repository`, `Support`, `Project`, `TemplateURL`, and `Icon` in the XML
-(and the URLs in `ca_profile.xml`) if your GitHub username or repo name differ.
+Sylo is in **Community Applications** — search "Sylo". Put the data directory on
+a real local disk (e.g. `/mnt/cache/appdata/sylo`), **not** `/mnt/user` — SQLite
+in WAL mode needs working file locks. See
+[docs/self-hosting.md](docs/self-hosting.md#unraid) for the container fields and
+[the SQLite-on-a-network-mount note](docs/self-hosting.md#sqlite-on-a-network-mount).
 
 ## Releases & CI
 
