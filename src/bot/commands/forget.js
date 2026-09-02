@@ -28,7 +28,7 @@ export async function execute(interaction) {
       flags: MessageFlags.Ephemeral,
       content:
         `This permanently deletes your **warnings**, **XP / level**, **ticket history**, **ban appeals**, ` +
-        `**invite records**, **AFK status** and **giveaway entries** in **${interaction.guild.name}**. ` +
+        `**invite records**, **AFK status**, **saved birthday** and **giveaway entries** in **${interaction.guild.name}**. ` +
         `Messages already posted to channels, a completed giveaway's winner list, and the server's ` +
         `config-change log are not affected, and Sylo will still store new data going forward.` +
         `\n\nRun \`/forget confirm:True\` to proceed.`,
@@ -47,6 +47,7 @@ export async function execute(interaction) {
       { name: 'Ban appeals', value: String(r.appeals), inline: true },
       { name: 'Invite records', value: String(r.invites), inline: true },
       { name: 'AFK status', value: String(r.afk), inline: true },
+      { name: 'Saved birthday', value: String(r.birthdays), inline: true },
       { name: 'Giveaway entries', value: String(r.giveawayEntries), inline: true }
     );
   return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });

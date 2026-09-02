@@ -1,0 +1,33 @@
+<% var cfg = moduleConfig || {}; %>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/birthdays/config"
+      hx-post="/guilds/<%= guild.id %>/m/birthdays/config" hx-target="#module-config" hx-swap="outerHTML"
+      class="stack u-mw-lg">
+  <p class="muted small">Members save their own date with <code>/birthday set</code>. Sylo checks once a day
+    and posts here. Placeholders: <code>{user}</code> <code>{age}</code> (blank unless a year was given).</p>
+
+  <label class="small">Announcement channel</label>
+  <select name="channel">
+    <option value="">— none (no message) —</option>
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= c.id === (cfg.channel || '') ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+
+  <label class="small u-mt-2">Message</label>
+  <textarea name="message" rows="2" placeholder="🎂 Happy birthday {user}! 🎉"><%= cfg.message || '' %></textarea>
+
+  <label class="small u-mt-2">Birthday role <span class="muted">(optional — granted for the day, removed after)</span></label>
+  <select name="roleId">
+    <option value="">— none —</option>
+    <% roles.forEach(function (r) { %>
+      <option value="<%= r.id %>" <%= r.id === (cfg.roleId || '') ? 'selected' : '' %>>@<%= r.name %></option>
+    <% }) %>
+  </select>
+  <p class="muted small">Sylo's highest role must sit above this one, and it needs <strong>Manage Roles</strong>.</p>
+
+  <label class="checkline"><input type="checkbox" name="pingRole" <%= cfg.pingRole ? 'checked' : '' %> />
+    Ping the birthday role in the announcement</label>
+
+  <div class="u-mt-3"><button type="submit">Save</button></div>
+</form>

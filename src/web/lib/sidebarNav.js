@@ -44,6 +44,7 @@ const CATEGORIES = [
     items: [
       { module: 'welcome', label: 'Welcome & goodbye' },
       { module: 'welcome-channel', label: 'Welcome channel' },
+      { module: 'birthdays' },
       { module: 'roles', label: 'Reaction roles' },
       { module: 'verification' },
       { page: 'moderation', dotModule: 'moderation', label: 'Moderator' },

@@ -1,4 +1,5 @@
 <% var cfg = moduleConfig || {}; %>
+<% var cardOn = !!cfg.card; %>
 <% var joinOn = !!(cfg.joinChannel && String(cfg.joinMessage || '').trim()); %>
 <% var dmOn = !!String(cfg.dmMessage || '').trim(); %>
 <% var leaveOn = !!(cfg.leaveChannel && String(cfg.leaveMessage || '').trim()); %>
@@ -24,6 +25,24 @@
       <label class="small">Message</label>
       <textarea name="joinMessage" rows="3" placeholder="Welcome {user} to {server}!"><%= cfg.joinMessage || '' %></textarea>
       <label class="checkline"><input type="checkbox" name="useEmbed" <%= cfg.useEmbed ? 'checked' : '' %> /> Send as an embed (uses the server's default embed colour)</label>
+    </div>
+  </div>
+
+  <div class="mee-row">
+    <input type="checkbox" class="mee-check" id="w-card" name="enable_card" <%= cardOn ? 'checked' : '' %> />
+    <label class="mee-head" for="w-card">
+      <span class="mee-title">Attach a welcome image</span>
+      <span class="switch-visual" aria-hidden="true"></span>
+    </label>
+    <div class="mee-body stack">
+      <p class="muted small">A generated banner with the member's avatar, name and member number, posted with
+        the join message above. Turn on <em>“Send a message when a member joins”</em> for this to show.</p>
+      <label class="small">Background image URL <span class="muted">(optional — https, PNG/JPG)</span></label>
+      <input type="url" name="cardBackground" placeholder="https://…/banner.png" value="<%= cfg.cardBackground || '' %>" />
+      <img src="/guilds/<%= guild.id %>/m/welcome/card-preview?v=<%= Date.now() %>" alt="Welcome image preview"
+           class="wc-card-preview" loading="lazy"
+           style="max-width:520px;width:100%;border-radius:12px;margin-top:.5rem" />
+      <p class="muted small">Preview uses a sample member — save to apply a new background.</p>
     </div>
   </div>
 

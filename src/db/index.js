@@ -501,6 +501,22 @@ const MIGRATIONS = [
       );
     `);
   },
+
+  // 3.5: Birthdays module — one row per member per guild.
+  (database) => {
+    database.exec(`
+      CREATE TABLE birthdays (
+        guild_id   TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        month      INTEGER NOT NULL,
+        day        INTEGER NOT NULL,
+        year       INTEGER,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE INDEX idx_birthdays_md ON birthdays (month, day);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */
