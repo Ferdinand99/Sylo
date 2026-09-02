@@ -79,9 +79,14 @@ function renderBuilder(req, res, rec) {
   });
 }
 
+// Express 5 / path-to-regexp v8 has no inline regex in the path — the numeric
+// (and "new") id shape is checked in the handler instead.
+const numericId = (v) => /^\d+$/.test(v ?? '');
+
 router.get('/new', (req, res) => renderBuilder(req, res, null));
 
-router.get('/:id(\\d+)', (req, res) => {
+router.get('/:id', (req, res) => {
+  if (!numericId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/messages`);
   const rec = getComposed(req.guild.id, Number(req.params.id));
   if (!rec) return res.redirect(`/guilds/${req.guild.id}/messages`);
   renderBuilder(req, res, rec);
@@ -90,9 +95,10 @@ router.get('/:id(\\d+)', (req, res) => {
 // --- save / publish --------------------------------------------------
 
 router.post(
-  '/:id(new|\\d+)',
+  '/:id',
   asyncHandler(async (req, res) => {
     const base = `/guilds/${req.guild.id}/messages`;
+    if (req.params.id !== 'new' && !numericId(req.params.id)) return res.redirect(base);
     const existing = req.params.id === 'new' ? null : getComposed(req.guild.id, Number(req.params.id));
     if (req.params.id !== 'new' && !existing) return res.redirect(base);
 
@@ -144,10 +150,11 @@ router.post(
 // --- unpublish (delete the posted message, keep the draft) ------------
 
 router.post(
-  '/:id(\\d+)/unpublish',
+  '/:id/unpublish',
   asyncHandler(async (req, res) => {
-    const rec = getComposed(req.guild.id, Number(req.params.id));
     const base = `/guilds/${req.guild.id}/messages`;
+    if (!numericId(req.params.id)) return res.redirect(base);
+    const rec = getComposed(req.guild.id, Number(req.params.id));
     if (!rec) return res.redirect(base);
     if (rec.message_id) {
       try {
@@ -171,8 +178,9 @@ router.post(
 // --- delete ----------------------------------------------------------
 
 router.post(
-  '/:id(\\d+)/delete',
+  '/:id/delete',
   asyncHandler(async (req, res) => {
+    if (!numericId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/messages`);
     const rec = getComposed(req.guild.id, Number(req.params.id));
     let msg = 'removed';
     if (rec) {
