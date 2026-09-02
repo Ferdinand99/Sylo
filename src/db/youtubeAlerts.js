@@ -1,50 +1,34 @@
-// Dedup state for YouTube alerts: video ids already announced per (guild,
-// channel), and current-live state (one row while a channel is live).
-import { db } from './index.js';
+// Dedup state for YouTube alerts, over posted_keys:
+//   scope 'yt-video'  key '<ytChannel>:<videoId>'  — every announced video
+//   scope 'yt-live'   key '<ytChannel>'  value '<videoId>'  — one row while live
+import { seen, seenValue, anySeenMatching, markSeen, forget, pruneScopeOlderThan } from './postedKeys.js';
 
-const stmts = {
-  seenAny: db.prepare('SELECT 1 FROM youtube_video_seen WHERE guild_id = ? AND yt_channel = ? LIMIT 1'),
-  isSeen: db.prepare(
-    'SELECT 1 FROM youtube_video_seen WHERE guild_id = ? AND yt_channel = ? AND video_id = ?'
-  ),
-  markSeen: db.prepare(
-    'INSERT OR IGNORE INTO youtube_video_seen (guild_id, yt_channel, video_id, seen_at) VALUES (?, ?, ?, ?)'
-  ),
-  pruneSeen: db.prepare('DELETE FROM youtube_video_seen WHERE seen_at < ?'),
-  getLive: db.prepare('SELECT video_id FROM youtube_live WHERE guild_id = ? AND yt_channel = ?'),
-  setLive: db.prepare(`
-    INSERT INTO youtube_live (guild_id, yt_channel, video_id, posted_at) VALUES (@g, @c, @v, @now)
-    ON CONFLICT (guild_id, yt_channel) DO UPDATE SET video_id = excluded.video_id, posted_at = excluded.posted_at
-  `),
-  clearLive: db.prepare('DELETE FROM youtube_live WHERE guild_id = ? AND yt_channel = ?'),
-  clearGuildSeen: db.prepare('DELETE FROM youtube_video_seen WHERE guild_id = ?'),
-  clearGuildLive: db.prepare('DELETE FROM youtube_live WHERE guild_id = ?'),
-};
-
+const VIDEO = 'yt-video';
+const LIVE = 'yt-live';
 const KEEP_MS = 45 * 24 * 60 * 60 * 1000;
 
+const videoKey = (ytChannel, videoId) => `${ytChannel}:${videoId}`;
+
 export function hasSeenAny(guildId, ytChannel) {
-  return stmts.seenAny.get(guildId, ytChannel) != null;
+  // YouTube channel ids are [A-Za-z0-9_-], so the ':' separator makes an
+  // index-usable literal prefix.
+  return anySeenMatching(guildId, VIDEO, `${ytChannel}:*`);
 }
 export function isVideoSeen(guildId, ytChannel, videoId) {
-  return stmts.isSeen.get(guildId, ytChannel, videoId) != null;
+  return seen(guildId, VIDEO, videoKey(ytChannel, videoId));
 }
 export function markVideoSeen(guildId, ytChannel, videoId) {
-  stmts.markSeen.run(guildId, ytChannel, videoId, Date.now());
+  markSeen(guildId, VIDEO, videoKey(ytChannel, videoId));
 }
 export function pruneYoutube() {
-  stmts.pruneSeen.run(Date.now() - KEEP_MS);
+  pruneScopeOlderThan(VIDEO, KEEP_MS);
 }
 export function liveVideoId(guildId, ytChannel) {
-  return stmts.getLive.get(guildId, ytChannel)?.video_id ?? null;
+  return seenValue(guildId, LIVE, ytChannel);
 }
 export function markLive(guildId, ytChannel, videoId) {
-  stmts.setLive.run({ g: guildId, c: ytChannel, v: videoId, now: Date.now() });
+  markSeen(guildId, LIVE, ytChannel, videoId, { upsert: true });
 }
 export function markNotLive(guildId, ytChannel) {
-  stmts.clearLive.run(guildId, ytChannel);
-}
-export function clearGuildYoutube(guildId) {
-  stmts.clearGuildSeen.run(guildId);
-  stmts.clearGuildLive.run(guildId);
+  forget(guildId, LIVE, ytChannel);
 }

@@ -24,7 +24,7 @@ db.pragma('foreign_keys = ON');
  * and safe to run on every startup.
  * @type {Array<(database: import('better-sqlite3').Database) => void>}
  */
-const MIGRATIONS = [
+export const MIGRATIONS = [
   (database) => {
     database.exec(`
       CREATE TABLE guild_settings (
@@ -515,6 +515,39 @@ const MIGRATIONS = [
         PRIMARY KEY (guild_id, user_id)
       );
       CREATE INDEX idx_birthdays_md ON birthdays (month, day);
+    `);
+  },
+
+  // 3.9: fold the scattered "have we posted this already" tables
+  // (free_games_posted, twitch_live, youtube_live, youtube_video_seen) into one
+  // generic posted_keys table, keyed by (guild_id, scope, key) with an optional
+  // value (e.g. the announced stream/video id). Starboard keeps its own table —
+  // it stores mutable state (star counts, the posted message id), not just a key.
+  (database) => {
+    database.exec(`
+      CREATE TABLE posted_keys (
+        guild_id  TEXT NOT NULL,
+        scope     TEXT NOT NULL,
+        key       TEXT NOT NULL,
+        value     TEXT,
+        posted_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, scope, key)
+      );
+      CREATE INDEX idx_posted_keys_prune ON posted_keys (scope, posted_at);
+
+      INSERT INTO posted_keys (guild_id, scope, key, value, posted_at)
+        SELECT guild_id, 'free-games', game_key, NULL, posted_at FROM free_games_posted;
+      INSERT INTO posted_keys (guild_id, scope, key, value, posted_at)
+        SELECT guild_id, 'twitch', login, stream_id, posted_at FROM twitch_live;
+      INSERT INTO posted_keys (guild_id, scope, key, value, posted_at)
+        SELECT guild_id, 'yt-live', yt_channel, video_id, posted_at FROM youtube_live;
+      INSERT OR IGNORE INTO posted_keys (guild_id, scope, key, value, posted_at)
+        SELECT guild_id, 'yt-video', yt_channel || ':' || video_id, NULL, seen_at FROM youtube_video_seen;
+
+      DROP TABLE free_games_posted;
+      DROP TABLE twitch_live;
+      DROP TABLE youtube_live;
+      DROP TABLE youtube_video_seen;
     `);
   },
 ];
