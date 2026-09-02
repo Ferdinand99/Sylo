@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.9.0](https://github.com/Ferdinand99/Sylo/compare/v3.8.0...v3.9.0) (2026-09-02)
+
+
+### Features
+
+* Kick.com live alerts ([6557685](https://github.com/Ferdinand99/Sylo/commit/65576854b92cbbdc2637a984a79f027e70f30b1e))
+* Kick.com live alerts ([7b13cc7](https://github.com/Ferdinand99/Sylo/commit/7b13cc70caec58886a38e3d79b984feafcac3afb))
+* plain-text (no embed) option for Twitch and Kick alerts ([c694b8d](https://github.com/Ferdinand99/Sylo/commit/c694b8d95506500e37ee535b8429900f7f17a494))
+
 ## [3.8.0](https://github.com/Ferdinand99/Sylo/compare/v3.7.0...v3.8.0) (2026-09-02)
 
 
