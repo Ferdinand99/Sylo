@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.6.0](https://github.com/Ferdinand99/Sylo/compare/v3.5.0...v3.6.0) (2026-09-02)
+
+
+### Features
+
+* dashboard module filter, light theme, per-module test, bulk toggle ([3b9fbc3](https://github.com/Ferdinand99/Sylo/commit/3b9fbc3feea50d627b6cd17aa182e9cad35506f8))
+* dashboard module filter, light theme, per-module test, bulk toggle ([de4d23c](https://github.com/Ferdinand99/Sylo/commit/de4d23cc05e1f6f2c1f28fa2a6654f503166ce63))
+
 ## [3.5.0](https://github.com/Ferdinand99/Sylo/compare/v3.4.1...v3.5.0) (2026-09-02)
 
 
