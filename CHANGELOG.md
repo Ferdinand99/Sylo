@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.6.1](https://github.com/Ferdinand99/Sylo/compare/v3.6.0...v3.6.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* temp-voice hub 404 on edit/delete and server-mute in spawned cha… ([38e0c75](https://github.com/Ferdinand99/Sylo/commit/38e0c758a40303bb9b6294ab11d17ef8c8269ea8))
+* temp-voice hub 404 on edit/delete and server-mute in spawned channels ([c3af795](https://github.com/Ferdinand99/Sylo/commit/c3af795a26d2e62f6ba38d2bca898b69feca67a5))
+
 ## [3.6.0](https://github.com/Ferdinand99/Sylo/compare/v3.5.0...v3.6.0) (2026-09-02)
 
 
