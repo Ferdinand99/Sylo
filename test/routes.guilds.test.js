@@ -178,3 +178,38 @@ test('POST /moderation/lock-all locks the text channels via the fake overwrites'
   assert.equal(res.status, 302);
   assert.ok(app.sink.channelEdits.length >= 1, 'at least one channel overwrite edited');
 });
+
+test('POST /m/automod/config pushes and later removes native AutoMod rules', async () => {
+  app.sink.automodRules.length = 0;
+
+  // Turn the words check on and mirror it natively.
+  const on = await post(
+    app.base,
+    `/guilds/${GID}/m/automod/config`,
+    { r_words_mode: 'delete', r_words_list: 'badword, another', native_enabled: 'on', native_words: 'on' },
+    { 'HX-Request': 'true' }
+  );
+  assert.equal(on.status, 200);
+  assert.match(on.headers.get('hx-trigger') || '', /native rules \+1/);
+  assert.equal(app.sink.automodRules.length, 1);
+  assert.equal(app.sink.automodRules[0].name, 'Sylo: bad words');
+  assert.deepEqual(app.sink.automodRules[0].triggerMetadata.keywordFilter, ['*badword*', '*another*']);
+
+  // Saving again with no change is a no-op.
+  await post(
+    app.base,
+    `/guilds/${GID}/m/automod/config`,
+    { r_words_mode: 'delete', r_words_list: 'badword, another', native_enabled: 'on', native_words: 'on' },
+    { 'HX-Request': 'true' }
+  );
+  assert.equal(app.sink.automodRules.length, 1);
+
+  // Turning native enforcement off tears the rule down.
+  await post(
+    app.base,
+    `/guilds/${GID}/m/automod/config`,
+    { r_words_mode: 'delete', r_words_list: 'badword, another' },
+    { 'HX-Request': 'true' }
+  );
+  assert.equal(app.sink.automodRules.length, 0);
+});

@@ -106,7 +106,8 @@ Discord's approval for Message Content.
    - **Manage Channels** — `/lock`, `/lockdown`, `/slowmode`, temporary voice
    - **Manage Roles** — reaction roles, autoroles, verification, leveling rewards, birthday role
    - **Move Members** — temporary voice channels
-   - **Manage Server** — invite tracker (needs to read the invite list)
+   - **Manage Server** — invite tracker (reads the invite list) and the automod
+     push to native Discord AutoMod (creates/edits `Sylo:`-named rules)
 
    Open the generated URL to invite the bot. Tickets (modmail) need no extra
    permission — just leave the bot able to receive DMs.
