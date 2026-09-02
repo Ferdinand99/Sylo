@@ -550,6 +550,25 @@ export const MIGRATIONS = [
       DROP TABLE youtube_video_seen;
     `);
   },
+
+  // 3.11: Server insights — one aggregate row per guild per UTC day. `channels`
+  // is a JSON map of channelId -> message count for that day (for the "top
+  // channels" chart). Populated only while the `insights` module is enabled.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_daily (
+        guild_id       TEXT NOT NULL,
+        day            TEXT NOT NULL,
+        joins          INTEGER NOT NULL DEFAULT 0,
+        leaves         INTEGER NOT NULL DEFAULT 0,
+        messages       INTEGER NOT NULL DEFAULT 0,
+        active_members INTEGER NOT NULL DEFAULT 0,
+        channels       TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY (guild_id, day)
+      );
+      CREATE INDEX idx_guild_daily_day ON guild_daily (day);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */
