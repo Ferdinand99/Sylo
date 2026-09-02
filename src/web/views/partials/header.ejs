@@ -4,6 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><%= typeof title !== 'undefined' ? title : 'Sylo' %></title>
+  <%# Favicon: the bot's own Discord avatar when the client is ready, else a
+      plain fallback mark so tabs are never icon-less (e.g. during startup). %>
+  <% if (typeof botAvatarUrl !== 'undefined' && botAvatarUrl) { %>
+    <link rel="icon" type="image/png" href="<%= botAvatarUrl %>" />
+  <% } else { %>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234c6ef5'/%3E%3Ctext x='16' y='23' font-size='21' font-family='system-ui,sans-serif' font-weight='700' text-anchor='middle' fill='white'%3ES%3C/text%3E%3C/svg%3E" />
+  <% } %>
   <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><meta name="csrf-token" content="<%= csrfToken %>" /><% } %>
   <%# With JS on, a result banner is shown as a toast — hide it up front so it
       never flashes; htmx-setup.js still reads its text. No-JS keeps the banner.
