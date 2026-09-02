@@ -1,0 +1,107 @@
+<%
+  var S = Array.isArray(series) ? series : [];
+  var W = 600, H = 120, PAD = 4;
+  var n = S.length || 1;
+  var bandW = W / n;
+
+  function niceMax(v) { return v <= 0 ? 1 : v; }
+
+  // Bars for one numeric key.
+  function bars(key, cls) {
+    var max = niceMax(Math.max.apply(null, S.map(function (d) { return d[key]; }).concat(0)));
+    return S.map(function (d, i) {
+      var h = (d[key] / max) * (H - PAD * 2);
+      var x = i * bandW + Math.max(0.5, bandW * 0.12);
+      var w = Math.max(1, bandW * 0.76);
+      return '<rect class="' + cls + '" x="' + x.toFixed(1) + '" y="' + (H - PAD - h).toFixed(1) +
+        '" width="' + w.toFixed(1) + '" height="' + Math.max(0, h).toFixed(1) + '" rx="1"/>';
+    }).join('');
+  }
+
+  // Polyline for one numeric key (shared y-scale across the given keys).
+  function line(key, keys, cls) {
+    var max = niceMax(Math.max.apply(null, S.map(function (d) {
+      return Math.max.apply(null, keys.map(function (k) { return d[k]; }));
+    }).concat(0)));
+    var pts = S.map(function (d, i) {
+      var x = i * bandW + bandW / 2;
+      var y = H - PAD - (d[key] / max) * (H - PAD * 2);
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+    return '<polyline class="' + cls + '" fill="none" points="' + pts + '"/>';
+  }
+
+  // Cumulative net-member line, zeroed at the start of the window.
+  function growthLine() {
+    var run = 0;
+    var vals = S.map(function (d) { run += d.joins - d.leaves; return run; });
+    var lo = Math.min.apply(null, vals.concat(0)), hi = Math.max.apply(null, vals.concat(0));
+    var span = (hi - lo) || 1;
+    var pts = vals.map(function (v, i) {
+      var x = i * bandW + bandW / 2;
+      var y = H - PAD - ((v - lo) / span) * (H - PAD * 2);
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+    return { pts: pts, lo: lo, hi: hi, end: vals.length ? vals[vals.length - 1] : 0 };
+  }
+
+  var g = growthLine();
+  var topMax = topChannels.length ? Math.max.apply(null, topChannels.map(function (c) { return c.messages; })) : 1;
+  var ranges = [7, 30, 90];
+%>
+
+<div class="ins-range">
+  <% ranges.forEach(function (r) { %>
+    <a href="/guilds/<%= guild.id %>/insights?range=<%= r %>" class="pill <%= r === range ? 'on' : '' %>">Last <%= r %> days</a>
+  <% }) %>
+</div>
+
+<div class="ins-tiles">
+  <div class="ins-tile"><span class="ins-n"><%= totals.messages.toLocaleString('en') %></span><span class="muted small">messages</span></div>
+  <div class="ins-tile"><span class="ins-n"><%= totals.net >= 0 ? '+' : '' %><%= totals.net %></span><span class="muted small">net members</span></div>
+  <div class="ins-tile"><span class="ins-n ins-ok"><%= totals.joins %></span><span class="muted small">joins</span></div>
+  <div class="ins-tile"><span class="ins-n ins-bad"><%= totals.leaves %></span><span class="muted small">leaves</span></div>
+  <div class="ins-tile"><span class="ins-n"><%= totals.peakActive %></span><span class="muted small">peak active / day</span></div>
+</div>
+
+<div class="ins-grid">
+  <section class="card ins-chart">
+    <h3>Messages per day</h3>
+    <svg viewBox="0 0 <%= W %> <%= H %>" preserveAspectRatio="none" role="img" aria-label="Messages per day">
+      <%- bars('messages', 'ins-bar-msg') %>
+    </svg>
+  </section>
+
+  <section class="card ins-chart">
+    <h3>Member growth <span class="muted small">(cumulative, <%= g.end >= 0 ? '+' : '' %><%= g.end %> over range)</span></h3>
+    <svg viewBox="0 0 <%= W %> <%= H %>" preserveAspectRatio="none" role="img" aria-label="Cumulative member growth">
+      <polyline class="ins-line-grow" fill="none" points="<%= g.pts %>"/>
+    </svg>
+  </section>
+
+  <section class="card ins-chart">
+    <h3>Joins vs leaves</h3>
+    <svg viewBox="0 0 <%= W %> <%= H %>" preserveAspectRatio="none" role="img" aria-label="Joins versus leaves per day">
+      <%- line('joins', ['joins', 'leaves'], 'ins-line-join') %>
+      <%- line('leaves', ['joins', 'leaves'], 'ins-line-leave') %>
+    </svg>
+    <p class="muted small"><span class="ins-key ins-ok">▮</span> joins &nbsp; <span class="ins-key ins-bad">▮</span> leaves</p>
+  </section>
+
+  <section class="card ins-chart">
+    <h3>Top channels <span class="muted small">(last <%= range %> days)</span></h3>
+    <% if (!topChannels.length) { %>
+      <p class="empty">No message activity recorded yet.</p>
+    <% } else { %>
+      <ul class="ins-bars">
+        <% topChannels.forEach(function (c) { %>
+          <li>
+            <span class="ins-bar-label">#<%= c.name %></span>
+            <span class="ins-bar-track"><span class="ins-bar-fill" style="width: <%= Math.max(3, (c.messages / topMax) * 100).toFixed(1) %>%"></span></span>
+            <span class="ins-bar-val muted"><%= c.messages.toLocaleString('en') %></span>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+</div>

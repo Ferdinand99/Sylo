@@ -264,6 +264,15 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'insights',
+    name: 'Server insights',
+    description: 'Track messages, joins and leaves per day and chart server activity over time.',
+    icon: '📈',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: false,
+  },
+  {
     id: 'giveaways',
     name: 'Giveaways',
     description: 'Run prize giveaways with an Enter button; winners drawn automatically at the end time.',

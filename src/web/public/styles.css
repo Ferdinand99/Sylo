@@ -361,6 +361,30 @@ button[type="submit"]:hover, .row-form button:hover, .btn-primary:hover { filter
 .card.warn pre { white-space: pre-wrap; overflow-x: auto; }
 .sparkline { display: block; width: 100%; max-width: 240px; height: 32px; margin: 6px 0 2px; color: var(--accent); }
 
+/* Server insights page */
+.ins-range { display: flex; gap: 6px; margin: 4px 0 14px; flex-wrap: wrap; }
+.ins-tiles { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.ins-tile { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r); padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 110px; }
+.ins-n { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.ins-ok { color: var(--ok); }
+.ins-bad { color: var(--bad); }
+.ins-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.ins-chart h3 { margin: 0 0 10px; font-size: 14px; }
+.ins-chart svg { display: block; width: 100%; height: 120px; }
+.ins-bar-msg { fill: var(--accent); }
+.ins-line-grow { stroke: var(--accent); stroke-width: 2; }
+.ins-line-join { stroke: var(--ok); stroke-width: 2; }
+.ins-line-leave { stroke: var(--bad); stroke-width: 2; }
+.ins-key { font-size: 11px; }
+.ins-key.ins-ok { color: var(--ok); }
+.ins-key.ins-bad { color: var(--bad); }
+.ins-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ins-bars li { display: grid; grid-template-columns: minmax(80px, 30%) 1fr auto; align-items: center; gap: 10px; }
+.ins-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.ins-bar-track { background: var(--surface-3); border-radius: 999px; height: 10px; overflow: hidden; }
+.ins-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.ins-bar-val { font-size: 12px; }
+
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
 th { color: var(--muted); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; }

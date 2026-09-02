@@ -22,11 +22,11 @@ player lookups through the public [gametools.network](https://gametools.network)
 Everything runs in **one Node process, one container, no build step**.
 
 <details>
-<summary>The 29 modules</summary>
+<summary>The 30 modules</summary>
 
 moderation · logging · tickets · reaction roles · verification · welcome ·
 welcome channel · birthdays · sticky messages · auto-moderation · counting · custom commands ·
-autoresponder · reminders · leveling · AFK · server statistics · free games ·
+autoresponder · reminders · leveling · AFK · server statistics · server insights · free games ·
 ban appeals · temporary voice channels · starboard · invite tracker · polls ·
 giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS alerts
 
@@ -267,6 +267,10 @@ settings panel per module — saves swap in place with a toast.
     member and clears the status when they next speak
   - **Server statistics** — keep chosen voice channels named with a live
     member / role / boost count, on a configurable 5–60 minute refresh
+  - **Server insights** — daily charts of messages, joins and leaves, member
+    growth and the busiest channels (7 / 30 / 90-day range). Off by default;
+    enabling it starts the counting. Only aggregate counts are stored — never
+    message content or per-user rows — with ~180-day retention
   - **Free games** — announces games that become free to claim (hourly poll):
     the Epic Games Store, plus Steam / GOG / Fanatical / Humble and more with an
     `ITAD_API_KEY`. Optional ping role; `/freegames [dlc]` on demand
@@ -346,7 +350,7 @@ src/
     index.js            loads module implementations
     moderation automod logging tickets roles welcome welcomeChannel sticky
     counting customCommands autoresponder verification scheduledMessages
-    leveling afk serverStats freeGames appeals tempVoice polls giveaways
+    leveling afk serverStats insights freeGames appeals tempVoice polls giveaways
     starboard inviteTracker twitchAlerts youtubeAlerts kickAlerts rss
     messageCreator
   adapters/games/       gameAdapter, registry, battlefield
