@@ -246,6 +246,15 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'kick-alerts',
+    name: 'Kick alerts',
+    description: 'Announce in a channel when a Kick.com streamer goes live.',
+    icon: '🟢',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
+  {
     id: 'giveaways',
     name: 'Giveaways',
     description: 'Run prize giveaways with an Enter button; winners drawn automatically at the end time.',

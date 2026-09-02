@@ -72,6 +72,7 @@ import {
   normaliseTwitchConfig,
   DEFAULT_MESSAGE as TWITCH_DEFAULT_MESSAGE,
 } from '../../modules/twitchAlerts.js';
+import { normaliseKickConfig, DEFAULT_MESSAGE as KICK_DEFAULT_MESSAGE } from '../../modules/kickAlerts.js';
 import {
   normaliseYoutubeConfig,
   resolveYtChannel,
@@ -153,6 +154,7 @@ const CONFIG_VIEWS = new Set([
   'polls',
   'twitch-alerts',
   'youtube-alerts',
+  'kick-alerts',
   'giveaways',
   'game-stats',
 ]);
@@ -722,6 +724,7 @@ function moduleViewLocals(mod, req, configOverride) {
       'polls',
       'twitch-alerts',
       'youtube-alerts',
+      'kick-alerts',
       'giveaways',
     ].includes(mod.id)
       ? assignableRoles(req.guild)
@@ -741,6 +744,8 @@ function moduleViewLocals(mod, req, configOverride) {
     turnstileEnabled: appConfig.turnstileEnabled,
     twitchEnabled: appConfig.twitchEnabled,
     twitchDefaultMessage: TWITCH_DEFAULT_MESSAGE,
+    kickEnabled: appConfig.kickEnabled,
+    kickDefaultMessage: KICK_DEFAULT_MESSAGE,
     ytVideoMessage: YT_VIDEO_MSG,
     ytLiveMessage: YT_LIVE_MSG,
     dashboardUrlSet: Boolean(appConfig.dashboardUrl),
@@ -1126,12 +1131,29 @@ router.post(
       const chans = [].concat(req.body.tw_channel ?? []);
       const rolez = [].concat(req.body.tw_role ?? []);
       const msgs = [].concat(req.body.tw_message ?? []);
+      const fmts = [].concat(req.body.tw_format ?? []);
       config = normaliseTwitchConfig({
         alerts: logins.map((login, i) => ({
           login,
           channelId: chans[i] ?? '',
           roleId: rolez[i] ?? '',
           message: msgs[i] ?? '',
+          plainText: fmts[i] === 'text',
+        })),
+      });
+    } else if (mod.id === 'kick-alerts') {
+      const slugs = [].concat(req.body.kc_slug ?? []);
+      const chans = [].concat(req.body.kc_channel ?? []);
+      const rolez = [].concat(req.body.kc_role ?? []);
+      const msgs = [].concat(req.body.kc_message ?? []);
+      const fmts = [].concat(req.body.kc_format ?? []);
+      config = normaliseKickConfig({
+        alerts: slugs.map((slug, i) => ({
+          slug,
+          channelId: chans[i] ?? '',
+          roleId: rolez[i] ?? '',
+          message: msgs[i] ?? '',
+          plainText: fmts[i] === 'text',
         })),
       });
     } else if (mod.id === 'polls') {

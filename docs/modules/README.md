@@ -34,6 +34,7 @@ intents it needs, its settings, and any slash commands.
 | [Server statistics](server-stats.md) | Voice channels named with live member/role/boost counts | off | Server Members |
 | [Twitch alerts](twitch-alerts.md) | Announce when a Twitch streamer goes live | off | — |
 | [YouTube alerts](youtube-alerts.md) | Announce a channel's new uploads and going live | off | — |
+| [Kick alerts](kick-alerts.md) | Announce when a Kick.com streamer goes live | off | — |
 | [Free games](free-games.md) | Announce games free to claim on the Epic Games Store | off | — |
 | [Game stats](game-stats.md) | Battlefield-series player lookups via `/stats` | off | — |
 
