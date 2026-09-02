@@ -23,6 +23,7 @@ import './twitchAlerts.js';
 import './youtubeAlerts.js';
 import './kickAlerts.js';
 import './rss.js';
+import './insights.js';
 import './giveaways.js';
 import './messageCreator.js'; // registers the role-button / role-select component handlers
 import './moderation.js'; // no gateway handlers, but runs the temporary-ban expiry loop

@@ -31,8 +31,8 @@ enforces it) and `forgetUser` / `describeUserData` if user-scoped; new module �
 | 5a | `posted_keys` dedupe helper | ✅ shipped (`refactor:`, no bump, PR #79) |
 | — | **Kick.com alerts + plain-text alert mode** (unplanned, issue #78) | ✅ shipped in **3.9.0** |
 | 5b | RSS module | ✅ shipped in **3.10.0** |
-| 6 | Server insights page | ⏳ next — targets **3.11.0** |
-| 7 | Express 5 spike + discord.js v15 watch | no bump, slot in anytime |
+| 6 | Server insights page | ✅ shipped in **3.11.0** |
+| 7 | Express 5 spike + discord.js v15 watch | ⏳ next — no bump, slot in anytime |
 
 The Kick-alerts feature (issue #78) was slotted in between 5a and 5b and took the
 **3.9.0** minor the RSS module was originally pencilled in for, so everything from
@@ -51,7 +51,7 @@ The Kick-alerts feature (issue #78) was slotted in between 5a and 5b and took th
 | 5a | `posted_keys` dedupe helper | `refactor:` | M | no bump | ✅ no bump |
 | — | Kick.com alerts + plain-text mode (issue #78) | `feat:` | M | — | ✅ 3.9.0 |
 | 5b | RSS module | `feat:` | L | ~~3.9.0~~ **3.10.0** | ✅ 3.10.0 |
-| 6 | Server insights page | `feat:` | L | ~~3.10.0~~ **3.11.0** | — |
+| 6 | Server insights page | `feat:` | L | ~~3.10.0~~ **3.11.0** | ✅ 3.11.0 |
 | 7 | Express 5 spike + discord.js v15 watch | `chore:` / spike | M | no bump | — |
 
 Rationale for the order: #1 is small and visible; #2 makes everything after it
@@ -277,6 +277,19 @@ Branch `feat/rss-alerts` for 5b (5a shipped on its own branch `refactor/posted-k
 ---
 
 ## 6 — Server insights page → 3.11.0
+
+> ✅ **Shipped** (`feat/insights`). As-built: `guild_daily` also has a `channels`
+> JSON column (channelId → daily message count) so "top channels" needs no second
+> table. `insights` is a `configurable: false` module — its overview card and
+> sidebar row link straight to `/guilds/:id/insights` (the data page), there is
+> no `/m/insights` config panel. Counting needs **no** privileged intent — only
+> the message count, author id and channel id are read, never content — so the
+> roadmap's "respects the Message Content intent" note doesn't apply. `active_members`
+> is a running `MAX` of the in-memory distinct-sender set (a mid-day restart can
+> undercount slightly). Charts are inline `<svg>` built in `guild/insights.ejs`
+> (messages bars, cumulative growth line, joins-vs-leaves lines) + CSS bars for
+> top channels; 7/30/90-day range switch. No `forgetUser` — rows are aggregate,
+> no per-user data. Module is the 30th.
 
 Branch `feat/insights`.
 

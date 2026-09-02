@@ -32,6 +32,7 @@ intents it needs, its settings, and any slash commands.
 | [AFK](afk.md) | Members mark themselves away; Sylo replies to mentions | off | — |
 | [Temporary voice channels](temp-voice.md) | Join-to-create voice hubs controlled with `/voice-*` | off | — |
 | [Server statistics](server-stats.md) | Voice channels named with live member/role/boost counts | off | Server Members |
+| [Server insights](insights.md) | Daily activity charts — messages, joins/leaves, top channels | off | — |
 | [Twitch alerts](twitch-alerts.md) | Announce when a Twitch streamer goes live | off | — |
 | [YouTube alerts](youtube-alerts.md) | Announce a channel's new uploads and going live | off | — |
 | [Kick alerts](kick-alerts.md) | Announce when a Kick.com streamer goes live | off | — |

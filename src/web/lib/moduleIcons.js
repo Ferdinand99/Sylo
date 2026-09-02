@@ -33,6 +33,7 @@ export const MODULE_ICONS = {
   'youtube-alerts': 'youtube',
   'kick-alerts': 'kick',
   rss: 'rss',
+  insights: 'trending-up',
   // synthetic overview cards
   general: 'gear',
   commands: 'command',

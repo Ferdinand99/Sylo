@@ -61,6 +61,7 @@ const CATEGORIES = [
       { module: 'custom-commands' },
       { module: 'invite-tracker', label: 'Invite tracker' },
       { module: 'sticky' },
+      { page: 'insights', dotModule: 'insights', label: 'Insights' },
       { page: 'audit', label: 'Audit log' },
     ],
   },

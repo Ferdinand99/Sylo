@@ -111,6 +111,7 @@ import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '
 import { levelFromXp } from '../../modules/lib/levels.js';
 import { topMembers, memberCount, setXp, resetGuildLeveling } from '../../db/leveling.js';
 import { recordAudit, listAudit } from '../../db/audit.js';
+import { dailySeries, topChannels } from '../../db/insights.js';
 import { forgetUser, describeUserData } from '../../db/purge.js';
 import {
   guildChannelLocks,
@@ -2244,6 +2245,31 @@ router.get('/:guildId/audit', (req, res) => {
       action: a.action,
       detail: a.detail,
       ago: timeAgo(a.created_at),
+    })),
+  });
+});
+
+// Server insights — activity charts from the guild_daily rollup.
+router.get('/:guildId/insights', (req, res) => {
+  const days = req.query.range === '7' ? 7 : req.query.range === '90' ? 90 : 30;
+  const series = dailySeries(req.guild.id, days);
+  const chans = guildTextChannels(req.guild);
+  const nameOf = (id) => chans.find((c) => c.id === id)?.name ?? id;
+  res.render('guild', {
+    ...baseContext(req.guild, 'insights'),
+    insightsEnabled: getGuildModule(req.guild.id, 'insights').enabled,
+    insightsRange: days,
+    insightsSeries: series,
+    insightsTotals: {
+      messages: series.reduce((t, d) => t + d.messages, 0),
+      joins: series.reduce((t, d) => t + d.joins, 0),
+      leaves: series.reduce((t, d) => t + d.leaves, 0),
+      net: series.reduce((t, d) => t + d.joins - d.leaves, 0),
+      peakActive: series.reduce((m, d) => Math.max(m, d.activeMembers), 0),
+    },
+    insightsTopChannels: topChannels(req.guild.id, days, 6).map((t) => ({
+      name: nameOf(t.channelId),
+      messages: t.messages,
     })),
   });
 });

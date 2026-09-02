@@ -17,6 +17,7 @@ import { inviterCount } from '../../db/inviteTracker.js';
 import { guildPollCount } from '../../db/polls.js';
 import { activeGiveaways } from '../../db/giveaways.js';
 import { recentLookups } from '../../db/cache.js';
+import { dailySeries } from '../../db/insights.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
@@ -54,6 +55,7 @@ const LAYOUT = [
       'autoresponder',
       'afk',
       'server-stats',
+      'insights',
       'temp-voice',
       'free-games',
       'game-stats',
@@ -143,7 +145,12 @@ function buildCard(id, guild, settings, state) {
     enabled,
     missingIntents: missing,
     status: missing.length ? 'blocked' : enabled ? 'on' : 'off',
-    href: id === 'moderation' ? `/guilds/${guild.id}/m/moderation` : `/guilds/${guild.id}/m/${id}`,
+    href:
+      id === 'insights'
+        ? `/guilds/${guild.id}/insights`
+        : id === 'moderation'
+          ? `/guilds/${guild.id}/m/moderation`
+          : `/guilds/${guild.id}/m/${id}`,
     lines: moduleLines(id, guild, row?.config ?? {}),
   };
 }
@@ -325,6 +332,15 @@ function moduleLines(id, guild, cfg) {
       return [
         n ? on('Stat channels', String(n)) : off('Stat channels', 'none'),
         neutral('Refresh', `every ${cfg.refreshMinutes || 10} min`),
+      ];
+    }
+    case 'insights': {
+      const week = dailySeries(guild.id, 7);
+      const msgs = week.reduce((t, d) => t + d.messages, 0);
+      const net = week.reduce((t, d) => t + d.joins - d.leaves, 0);
+      return [
+        neutral('Messages (7d)', msgs.toLocaleString('en')),
+        neutral('Net members (7d)', `${net >= 0 ? '+' : ''}${net}`),
       ];
     }
     case 'starboard': {

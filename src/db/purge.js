@@ -30,6 +30,7 @@ export const GUILD_TABLES = [
   'temp_bans',
   'channel_locks',
   'birthdays',
+  'guild_daily',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
