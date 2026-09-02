@@ -37,16 +37,30 @@
   }
 
   // --- Confirm-on-submit / confirm-on-click ---------------------------------
-  // Plain (non-htmx) forms and links opt in with data-confirm="…".
-  document.addEventListener('submit', (e) => {
-    // data-confirm may sit on the <form> or on the submitter <button>.
-    const msg = e.submitter?.getAttribute('data-confirm') || e.target.getAttribute('data-confirm');
-    if (msg && !window.confirm(msg)) e.preventDefault();
-  });
-  document.addEventListener('click', (e) => {
-    const link = e.target.closest('[data-confirm]');
-    if (link && link.tagName === 'A' && !window.confirm(link.getAttribute('data-confirm'))) {
-      e.preventDefault();
-    }
-  });
+  // Forms and links opt in with data-confirm="…". Registered in the *capture*
+  // phase so the prompt resolves before hx-boost's own handler on the element
+  // fires; stopPropagation on a decline keeps htmx from issuing the request.
+  document.addEventListener(
+    'submit',
+    (e) => {
+      // data-confirm may sit on the <form> or on the submitter <button>.
+      const msg = e.submitter?.getAttribute('data-confirm') || e.target.getAttribute('data-confirm');
+      if (msg && !window.confirm(msg)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    true
+  );
+  document.addEventListener(
+    'click',
+    (e) => {
+      const link = e.target.closest('[data-confirm]');
+      if (link && link.tagName === 'A' && !window.confirm(link.getAttribute('data-confirm'))) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    true
+  );
 })();

@@ -26,7 +26,7 @@
   };
 %>
 
-<form method="POST" action="/guilds/<%= guildId %>/m/custom-commands/cmd" id="cc-form" class="stack u-mw-xl"
+<form method="POST" action="/guilds/<%= guildId %>/m/custom-commands/cmd" id="cc-form" hx-boost="false" class="stack u-mw-xl"
       x-data="ccBuilder(<%= JSON.stringify(_cc) %>)">
   <input type="hidden" name="id" value="<%= cmd.id %>" />
   <input type="hidden" name="actions" />

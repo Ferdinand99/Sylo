@@ -11,10 +11,10 @@
 </div>
 
 <% if (typeof msg !== 'undefined' && msg) { %>
-  <div class="banner <%= msg === 'saved' ? 'ok' : 'bad' %>"><%= msg === 'saved' ? 'Saved.' : (msg === 'badchannel' ? 'Pick a hub voice channel.' : msg) %></div>
+  <div class="banner banner-flash <%= msg === 'saved' ? 'ok' : 'bad' %>"><%= msg === 'saved' ? 'Saved.' : (msg === 'badchannel' ? 'Pick a hub voice channel.' : msg) %></div>
 <% } %>
 
-<form method="POST" action="/guilds/<%= guildId %>/m/temp-voice/hub" id="tv-form" class="stack u-mw-xl">
+<form method="POST" action="/guilds/<%= guildId %>/m/temp-voice/hub" id="tv-form" hx-boost="false" class="stack u-mw-xl">
   <input type="hidden" name="id" value="<%= hub.id %>" />
 
   <section class="card stack">

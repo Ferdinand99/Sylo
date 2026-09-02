@@ -804,8 +804,12 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
   const mod = getModule(req.params.moduleId);
   if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
   const locals = moduleViewLocals(mod, req);
-  // htmx fragment nav (Phase 1): render just the config panel.
-  if (req.get('HX-Request')) return res.render('guild/_module-config', locals);
+  // A bare htmx GET (explicit hx-get to #module-config) wants just the panel;
+  // an hx-boost navigation (HX-Boosted) is a full-page swap and needs the whole
+  // document.
+  if (req.get('HX-Request') && !req.get('HX-Boosted')) {
+    return res.render('guild/_module-config', locals);
+  }
   res.render('guild', locals);
 });
 

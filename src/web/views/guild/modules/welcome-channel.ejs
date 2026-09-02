@@ -11,7 +11,7 @@
   </div>
 
   <div class="wc-channel-row">
-    <form method="POST" action="/guilds/<%= guild.id %>/m/welcome-channel/config" id="wc-form" class="stack u-grow">
+    <form method="POST" action="/guilds/<%= guild.id %>/m/welcome-channel/config" id="wc-form" hx-boost="false" class="stack u-grow">
       <label class="small">Channel</label>
       <select name="channelId">
         <option value="">— select a channel —</option>

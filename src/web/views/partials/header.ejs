@@ -8,10 +8,15 @@
   <link rel="stylesheet" href="/styles.css" />
   <script src="/vendor/htmx.min.js" defer></script>
   <script src="/htmx-setup.js" defer></script>
+  <script src="/app.js" defer></script>
+  <script src="/sidebar.js" defer></script>
   <script src="/alpine-components.js" defer></script>
   <script src="/vendor/alpine.min.js" defer></script>
 </head>
-<body>
+<!-- hx-boost: in-app navigation is an AJAX body swap (no full reload). Forms
+     with their own hx-* keep their behaviour; the heavy builder forms opt out
+     with hx-boost="false". -->
+<body hx-boost="true">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
   <g id="i-grid" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></g>
   <g id="i-command" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 8 4 12 8 16"/><polyline points="16 8 20 12 16 16"/><line x1="14" y1="5" x2="10" y2="19"/></g>
@@ -114,10 +119,10 @@
         <div class="sb-user">
           <% if (user.avatar) { %><img class="avatar" src="<%= user.avatar %>" alt="" /><% } %>
           <span class="sb-user-name"><%= user.name %></span>
-          <a href="/auth/logout" title="Log out">Log out</a>
+          <a href="/auth/logout" title="Log out" hx-boost="false">Log out</a>
         </div>
       <% } else if (typeof authEnabled !== 'undefined' && authEnabled) { %>
-        <a class="sb-login" href="/auth/discord/login">Log in with Discord</a>
+        <a class="sb-login" href="/auth/discord/login" hx-boost="false">Log in with Discord</a>
       <% } else { %>
         <span class="tag-open">open mode — no auth</span>
       <% } %>

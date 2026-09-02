@@ -19,7 +19,7 @@
     roles: (roles || []).map(function (r) { return { id: String(r.id), name: r.name }; }),
   };
 %>
-<form method="POST" action="/guilds/<%= guildId %>/m/roles/rr" id="rr-form" x-data="rrRows(<%= JSON.stringify(_rr) %>)">
+<form method="POST" action="/guilds/<%= guildId %>/m/roles/rr" id="rr-form" hx-boost="false" x-data="rrRows(<%= JSON.stringify(_rr) %>)">
   <input type="hidden" name="id" value="<%= rm.id %>" />
   <input type="hidden" name="embed" id="rr-embed-spec" />
 

@@ -10,7 +10,7 @@
 
 <% if (msg) { %>
   <% var m = { sent: 'Reply sent.', undelivered: 'Saved, but the user could not be DMed (DMs closed or bot blocked).', empty: 'Write something first.', closed: 'This ticket is closed.' }; %>
-  <div class="banner <%= msg === 'sent' ? 'ok' : (msg === 'undelivered' ? 'info' : 'bad') %>"><%= m[msg] || 'Done.' %></div>
+  <div class="banner banner-flash <%= msg === 'sent' ? 'ok' : (msg === 'undelivered' ? 'info' : 'bad') %>"><%= m[msg] || 'Done.' %></div>
 <% } %>
 
 <div class="chat" id="chat" data-status="<%= ticket.status %>" data-last="<%= lastId %>" data-poll="/guilds/<%= guild.id %>/tickets/<%= ticket.id %>/messages.json">
@@ -24,7 +24,7 @@
 </div>
 
 <% if (ticket.status === 'open') { %>
-  <form method="POST" action="/guilds/<%= guild.id %>/tickets/<%= ticket.id %>/reply" class="reply-form">
+  <form method="POST" action="/guilds/<%= guild.id %>/tickets/<%= ticket.id %>/reply" class="reply-form" hx-boost="false">
     <textarea name="content" rows="3" maxlength="2000" placeholder="Reply as Staff…" required></textarea>
     <div class="reply-actions">
       <button type="submit">Send reply</button>
@@ -46,6 +46,8 @@
     let last = Number(chat.dataset.last) || 0;
     const url = chat.dataset.poll;
     const timer = setInterval(async () => {
+      // hx-boost navigation swaps the page out from under us — stop polling.
+      if (!document.body.contains(chat)) { clearInterval(timer); return; }
       try {
         const r = await fetch(url + '?after=' + last);
         if (!r.ok) return;

@@ -34,6 +34,25 @@
     }, 4000);
   };
 
+  // A server-rendered result banner (.banner-flash, from a ?msg= redirect) is
+  // shown as a toast instead — one consistent "saved" cue everywhere, whether
+  // the response came back over htmx or a full navigation. Persistent state
+  // banners (plain .banner) are left alone.
+  function flashBannersToToast(root) {
+    (root || document).querySelectorAll('.banner-flash').forEach(function (el) {
+      var kind = el.classList.contains('bad') ? 'bad' : el.classList.contains('info') ? 'info' : 'ok';
+      var text = (el.textContent || '').trim();
+      if (text && window.syloToast) window.syloToast(text, kind);
+      el.remove();
+    });
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    flashBannersToToast(document);
+  });
+  document.addEventListener('htmx:load', function (evt) {
+    flashBannersToToast(evt.target);
+  });
+
   document.addEventListener('htmx:configRequest', function (evt) {
     if (token) evt.detail.headers['X-CSRF-Token'] = token;
   });

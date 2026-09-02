@@ -77,6 +77,19 @@ test('GET /m/afk with HX-Request returns only the #module-config fragment', asyn
   assert.match(html, /name="mentionReply"/); // the afk view rendered inside
 });
 
+test('GET /m/afk with an hx-boost navigation returns the full page', async () => {
+  // hx-boost sends HX-Request + HX-Boosted; it is a whole-document swap, so the
+  // route must not hand it the bare fragment.
+  const res = await fetch(`${base}/guilds/${GID}/m/afk`, {
+    headers: { 'HX-Request': 'true', 'HX-Boosted': 'true' },
+  });
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /^<!doctype html>/i);
+  assert.match(html, /class="sidebar"/);
+  assert.match(html, /id="module-config"/);
+});
+
 test('POST /m/afk/config without HX-Request redirects (no-JS fallback)', async () => {
   const res = await fetch(`${base}/guilds/${GID}/m/afk/config`, {
     method: 'POST',
