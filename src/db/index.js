@@ -472,6 +472,35 @@ const MIGRATIONS = [
       );
     `);
   },
+
+  // 3.4: temporary bans that auto-expire, and saved channel-lock state so
+  // /unlock restores the exact prior @everyone overwrite (not just "allow").
+  (database) => {
+    database.exec(`
+      CREATE TABLE temp_bans (
+        guild_id   TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        mod_id     TEXT NOT NULL,
+        reason     TEXT NOT NULL,
+        unban_at   INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE INDEX idx_temp_bans_due ON temp_bans (unban_at);
+
+      CREATE TABLE channel_locks (
+        guild_id      TEXT NOT NULL,
+        channel_id    TEXT NOT NULL,
+        prev_allow    TEXT NOT NULL DEFAULT '0',
+        prev_deny     TEXT NOT NULL DEFAULT '0',
+        had_overwrite INTEGER NOT NULL DEFAULT 0,
+        locked_by     TEXT NOT NULL,
+        locked_at     INTEGER NOT NULL,
+        lockdown      INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (guild_id, channel_id)
+      );
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

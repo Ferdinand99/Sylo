@@ -7,9 +7,12 @@
 //     warnThresholds: [ { count, action: 'timeout'|'kick'|'ban', durationMinutes? } ]
 //   }
 import { EmbedBuilder } from 'discord.js';
+import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
+import { dueTempBans, clearTempBan } from '../db/tempBans.js';
 import { postModLog } from '../bot/lib/modlog.js';
-import { notifyTarget, MOD_COLOR } from '../bot/lib/moderation.js';
+import { notifyTarget, MOD_COLOR, INFO_COLOR } from '../bot/lib/moderation.js';
+import { formatDuration } from '../bot/lib/duration.js';
 import { sendPreBanAppealDm } from './appeals.js';
 import { log } from '../lib/log.js';
 
@@ -90,3 +93,38 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
     .setTimestamp(Date.now());
   await postModLog(guild, embed);
 }
+
+// --- temporary-ban expiry loop ------------------------------------------
+// Mirrors the giveaways expiry loop: a slow tick that lifts bans whose
+// `unban_at` has passed. /ban duration:… schedules the rows (src/db/tempBans.js).
+
+const TEMP_BAN_TICK_MS = 30_000;
+
+async function settleTempBan(row) {
+  clearTempBan(row.guild_id, row.user_id); // clear first so a throw can't loop
+  const guild = runtime.client?.guilds.cache.get(row.guild_id);
+  if (!guild?.members.me?.permissions.has('BanMembers')) return;
+
+  const existing = await guild.bans.fetch(row.user_id).catch(() => null);
+  if (!existing) return; // already unbanned (manually or by Discord)
+
+  await guild.bans.remove(row.user_id, 'Temporary ban expired');
+  const embed = new EmbedBuilder()
+    .setColor(INFO_COLOR)
+    .setTitle('Temporary ban expired')
+    .addFields(
+      { name: 'User', value: `<@${row.user_id}> (\`${row.user_id}\`)` },
+      { name: 'Original reason', value: row.reason },
+      { name: 'Ban length', value: formatDuration(row.unban_at - row.created_at) || 'unknown' }
+    )
+    .setTimestamp(Date.now());
+  await postModLog(guild, embed);
+}
+
+const tempBanTimer = setInterval(() => {
+  if (!runtime.client?.isReady()) return;
+  for (const row of dueTempBans(Date.now())) {
+    settleTempBan(row).catch((err) => log.error('module:moderation', 'temp-unban failed:', err.message));
+  }
+}, TEMP_BAN_TICK_MS);
+tempBanTimer.unref();

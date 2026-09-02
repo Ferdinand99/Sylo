@@ -30,6 +30,8 @@ export const GUILD_TABLES = [
   'youtube_live',
   'giveaways',
   'leaderboard_vanity',
+  'temp_bans',
+  'channel_locks',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE guild_id = ?`));

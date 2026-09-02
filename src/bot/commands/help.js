@@ -16,7 +16,20 @@ const GROUPS = [
   { name: 'Leveling', commands: ['rank', 'leaderboard'] },
   {
     name: 'Moderation',
-    commands: ['kick', 'ban', 'unban', 'timeout', 'untimeout', 'purge', 'slowmode', 'warn', 'modlog'],
+    commands: [
+      'kick',
+      'ban',
+      'unban',
+      'timeout',
+      'untimeout',
+      'purge',
+      'slowmode',
+      'lock',
+      'unlock',
+      'lockdown',
+      'warn',
+      'modlog',
+    ],
   },
   { name: 'Privacy', commands: ['forget'] },
 ];
