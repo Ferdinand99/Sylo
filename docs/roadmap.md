@@ -1,347 +1,168 @@
-# Roadmap
+# Roadmap — the 3.6 line (complete)
 
-The living post-3.5.0 roadmap. The original 5-release plan (3.1.1 → 3.5.0) and the
-documentation pass are done; this file tracks the backlog after that.
+The post-3.5.0 backlog, run as one branch/PR per workstream into `main`. It
+shipped across **3.6.0 → 3.11.1** and is done. This file is now the record: what
+shipped, and the design decisions and deviations behind each piece. New work
+gets its own plan — not this file.
 
-Each `feat:` workstream below is its own branch → PR → release-please, so it cuts
-its own minor — there is no single umbrella release. The first batch was scoped as
-a "**3.6 line**" and has run **3.6.0 → 3.9.0** so far (with one unplanned feature
-inserted); see **Progress** below.
+Conventions used (still current):
 
-Base when this plan started: `main` at **3.5.0**, `express@^4.21.2`,
-`discord.js@^14.16.3`. (Now on 3.11.x, `express@^5.1.0`.)
+- Branch per workstream → PR into `main`; `npm test` + `npm run lint` +
+  `docker compose up -d --build` green before a PR is ready; one commit per chunk
+  with a Conventional-Commit summary (release-please derives the version).
+- New module ⇒ `registry.js` + `modules/index.js` + config view + `CONFIG_VIEWS`
+  + `MODULE_ICONS` + `#i-<name>` sprite + `sidebarNav.js` + `overviewSummary.js`
+  + `docs/modules/`.
+- New guild-scoped table ⇒ `GUILD_TABLES` (a test enforces it); add to
+  `forgetUser` / `describeUserData` if it holds per-user data.
 
-Working conventions unchanged: branch per workstream, PR into `main`; `npm test`
-+ `npm run lint` + `npm run format:check` + `docker compose up -d --build`
-healthy before a PR is marked ready; one commit per chunk with a
-Conventional-Commit summary; new guild-scoped table ⇒ `GUILD_TABLES` (a test
-enforces it) and `forgetUser` / `describeUserData` if user-scoped; new module ⇒
-`registry.js` + `modules/index.js` + config view + `CONFIG_VIEWS` + `MODULE_ICONS`
-+ `#i-<name>` sprite + `sidebarNav.js` + `overviewSummary.js` + `docs/modules/`.
-
----
-
-## Progress (3.6 line complete — through 3.11.1)
-
-| # | Workstream | Status |
-|---|---|---|
-| 1 | Dashboard UX polish | ✅ shipped in **3.6.0** |
-| 2 | Route-test harness | ✅ shipped (no bump, PR #73) |
-| 3 | Observability | ✅ shipped in **3.7.0** |
-| 4 | Native Discord AutoMod push | ✅ shipped in **3.8.0** |
-| 5a | `posted_keys` dedupe helper | ✅ shipped (`refactor:`, no bump, PR #79) |
-| — | **Kick.com alerts + plain-text alert mode** (unplanned, issue #78) | ✅ shipped in **3.9.0** |
-| 5b | RSS module | ✅ shipped in **3.10.0** |
-| 6 | Server insights page | ✅ shipped in **3.11.0** |
-| 7 | Express 5 spike + discord.js v15 watch | ✅ shipped (`chore:`, no bump) |
-
-**The 3.6 line is complete.** 3.11.1 (sticky fix) shipped between #6 and #7.
-
-The Kick-alerts feature (issue #78) was slotted in between 5a and 5b and took the
-**3.9.0** minor the RSS module was originally pencilled in for, so everything from
-5b down shifted one minor. Kick alerts is the 28th module and **RSS the 29th**.
+Runtime at kickoff: `express@^4.21.2`, `discord.js@^14.16.3`. Now: `express@^5.1.0`,
+`discord.js@^14` (v15 not yet released — a `dependabot.yml` ignore keeps its major
+out of auto-bumps).
 
 ---
 
-## Order & sizing
+## What shipped
 
-| # | Workstream | Type | Size | Expected | Actual |
-|---|---|---|---|---|---|
-| 1 | Dashboard UX polish | `feat:` | M | **3.6.0** | ✅ 3.6.0 |
-| 2 | Route-test harness | `test:` | M | no bump (merge just before #3) | ✅ no bump |
-| 3 | Observability | `feat:` | M | **3.7.0** | ✅ 3.7.0 |
-| 4 | Native Discord AutoMod push | `feat:` | M–L | **3.8.0** | ✅ 3.8.0 |
-| 5a | `posted_keys` dedupe helper | `refactor:` | M | no bump | ✅ no bump |
-| — | Kick.com alerts + plain-text mode (issue #78) | `feat:` | M | — | ✅ 3.9.0 |
-| 5b | RSS module | `feat:` | L | ~~3.9.0~~ **3.10.0** | ✅ 3.10.0 |
-| 6 | Server insights page | `feat:` | L | ~~3.10.0~~ **3.11.0** | ✅ 3.11.0 |
-| 7 | Express 5 spike + discord.js v15 watch | `chore:` / spike | M | no bump | ✅ no bump |
+| #   | Workstream                                                     | Type       | Result           |
+| --- | ------------------------------------------------------------- | ---------- | ---------------- |
+| 1   | Dashboard UX polish                                          | `feat:`    | **3.6.0**        |
+| 2   | Route-test harness                                          | `test:`    | no bump (PR #73) |
+| 3   | Observability — `/metrics`, request log, richer `/health`   | `feat:`    | **3.7.0**        |
+| 4   | Native Discord AutoMod push                                 | `feat:`    | **3.8.0**        |
+| 5a  | `posted_keys` dedupe helper                                 | `refactor:`| no bump (PR #79) |
+| —   | Kick.com alerts + plain-text alert mode (issue #78)         | `feat:`    | **3.9.0**        |
+| 5b  | RSS / Atom feed alerts                                      | `feat:`    | **3.10.0**       |
+| 6   | Server insights page                                        | `feat:`    | **3.11.0**       |
+| —   | Sticky messages: bump for other apps + cooldown (issue #85) | `fix:`     | **3.11.1**       |
+| 7   | Express 5 upgrade + discord.js v15 watch                    | `chore:`   | no bump          |
 
-Rationale for the order: #1 is small and visible; #2 makes everything after it
-safer to change and should merge just before #3; #3–#4 are contained; #5–#6 are
-the big ones; #7 is infra housekeeping that can slot in whenever.
-
----
-
-## 1 — Dashboard UX polish → 3.6.0
-
-> ✅ **Shipped in 3.6.0** (`feat/dashboard-ux`). All four pieces as planned.
-
-Branch `feat/dashboard-ux`. Four independent pieces; ship together.
-
-### 1a. Module search / filter
-- On the overview grid and the sidebar: a small Alpine component filtering
-  `.plugin-card` (overview) and `.sb-link[data-module]` (sidebar) by name
-  substring, live as you type.
-- New `x-data="moduleFilter"` in `alpine-components.js`; a search `<input>` above
-  the grid in `guild.ejs` (overview panel) and one in `partials/header.ejs` above
-  `.sb-nav`. Non-matching cards/rows hidden via `x-show` / a class.
-- Optionally persist the last query in `localStorage` (`sylo:modfilter`).
-- No route changes.
-
-### 1b. Light theme + toggle
-- `styles.css` already routes every colour through semantic tokens on `:root`
-  (`--bg`, `--surface`, `--text`, `--border`, `--accent`, …) — dark-first.
-- Add `:root[data-theme="light"] { … }` redefining only those tokens for a light
-  palette, plus `@media (prefers-color-scheme: light)` guarded as
-  `:root:not([data-theme="dark"])` so "system" works.
-- Header toggle in `.sb-foot` that flips `document.documentElement.dataset.theme`
-  and writes `localStorage` `sylo:theme`. Read it in the existing inline `<head>`
-  script (the one that adds `has-js`) so there's no flash.
-- Check toast, banner, plugin-card, table and embed-preview colours in both.
-- `styles.css` is in `.prettierignore` (no format gate); still do the visual
-  pass in the container.
-
-### 1c. Per-module "Send test"
-- A "Send test" button on `guild/_module-config.ejs` (or per applicable partial)
-  that fires the module's output once with sample data — welcome message,
-  birthday greeting, log-event embed, autoresponder reply, twitch/yt alert,
-  starboard post, reminder.
-- New route `POST /:guildId/m/:moduleId/test` → `switch (moduleId)` calling the
-  module's send path with a fabricated payload; returns `204 + HX-Trigger` toast
-  ("Test sent to #channel" / "Nothing to test — set a channel first").
-- Only wire modules where a test is meaningful (skip counting, afk, temp-voice,
-  game-stats). Guard on the module being configured.
-
-### 1d. Bulk enable / disable
-- Overview: a "select mode" showing a checkbox on each `.plugin-card`, then
-  "Enable selected" / "Disable selected".
-- New route `POST /:guildId/modules/bulk` taking `ids[]` + `enabled` → loops
-  `setGuildModule`, runs the same post-toggle side-effects the single route does
-  (invite-cache prime, custom-command sync), returns the re-rendered grid
-  fragment + one toast.
-- Alpine `x-data="bulkModules"` on the grid manages the selection set.
-
-**Verify:** `npm test`; toggle the theme and eyeball every panel; send a test for
-each wired module into a real channel; bulk-enable 3 modules and confirm the
-sidebar dots + cards update without a reload.
+Kick alerts (issue #78) was slotted between 5a and 5b and took the 3.9.0 minor RSS
+had been pencilled in for, so 5b onward each shifted one minor. The module count
+went 27 → 30 (Kick = 28th, RSS = 29th, insights = 30th).
 
 ---
 
-## 2 — Route-test harness → no bump (merge just before #3)
+## Design notes
 
-> ✅ **Shipped** (`test/route-harness`, PR #73). `test/helpers/webApp.js` +
-> `test/helpers/fakeGuild.js`; new `test/routes.guilds.test.js` and
-> `test/routes.misc.test.js`; `dashboardRoutes.test.js` migrated onto the shared
-> harness. Suite 205 → 243.
+### 1 — Dashboard UX polish → 3.6.0 (`feat/dashboard-ux`)
 
-Branch `test/route-harness`. Grow `test/dashboardRoutes.test.js` (~169 lines,
-covers `/m/afk` + member-data only) into a real harness.
+Four independent pieces, shipped together, all as planned: module search/filter
+(Alpine, on the overview grid and the sidebar), a light theme + header toggle
+(`:root[data-theme]` + `prefers-color-scheme`, remembered in `localStorage`, read
+in the no-flash `<head>` script), a per-module **Send test** button
+(`POST /:guildId/m/:moduleId/test`), and bulk enable/disable on the overview
+(`POST /:guildId/modules/bulk`).
 
-- `test/helpers/webApp.js`: builds the Express app in open mode with a
-  fully-faked `runtime.client` (guilds, channels, roles, members, users, bans)
-  and returns `{ base, close, sentDms, sentMessages }`. Factor the fake out of
-  the current test file.
-- `test/helpers/fakeGuild.js`: a richer fake guild factory (channels of each
-  type, a role list, `members.me` with permissions, `bans.fetch`).
-- Cover, per route file, the happy path + the main guard:
-  - `guilds.js`: `GET /overview`, `GET /settings`, `POST /settings`,
-    `GET /moderation`, `POST /warnings` + `/warnings/:id/delete` + `/unban` +
-    `/moderation/lock-all` (fake channel), a couple of `/m/:id/config` round-trips
-    (fragment + toast), `GET /m/:id/card-preview` (204 when canvas absent is
-    fine), `GET /member-data`.
-  - `health.js`: `GET /health` JSON shape; `POST /backups` create (temp dir).
-  - `settings.js`: identity + presence POST validation.
-  - `guildTickets.js` / `guildMessages.js`: list + one action each.
-  - `commands.js`, `stats.js`, `leaderboard.js`, `verify.js`, `appeal.js`:
-    render + 404 / invalid-token paths.
-- Assert the `hx-boost` guard from 3.4.1 stays: `GET /m/:id` with
-  `HX-Request` + `HX-Boosted` → full document.
+### 2 — Route-test harness → no bump (`test/route-harness`, PR #73)
 
-**Verify:** `npm test` — the suite roughly doubles; run on an idle machine
-(`node --test --test-timeout=20000`).
+`test/helpers/webApp.js` (boots the Express app in open mode with a faked Discord
+client + a sink) and `test/helpers/fakeGuild.js` (snowflake-shaped fake
+Guild/Client). New `test/routes.guilds.test.js` and `test/routes.misc.test.js`;
+`dashboardRoutes.test.js` migrated onto the shared harness. Suite 205 → 243. This
+harness is what caught the Express 5 breakage in #7 immediately.
 
----
+### 3 — Observability → 3.7.0 (`feat/observability`)
 
-## 3 — Observability → 3.7.0
+`src/lib/metrics.js` is a counters-only registry (`inc` + `renderCounters`); live
+gauges are computed in the `/metrics` route, not stored. Series went slightly
+beyond plan — added `sylo_component_interactions_total{scope}` and
+`sylo_errors_recorded`. `/health` JSON gained `errorsByScope`, `commands`,
+`discord.gatewayPingMs` and `gatewayPingHistory`; the status page shows an inline
+`<svg>` ping sparkline. Request-log middleware (`method path status durationMs`,
+`debug` level, mounted first) also feeds `sylo_http_requests_total{route,status}`.
 
-> ✅ **Shipped in 3.7.0** (`feat/observability`). As-built notes: the registry
-> (`src/lib/metrics.js`) is counters-only (`inc` + `renderCounters`); live gauges
-> are computed in the `/metrics` route, not stored. Added
-> `sylo_component_interactions_total{scope}` and `sylo_errors_recorded` beyond
-> the planned series. `/health` JSON gained `errorsByScope`, `commands`,
-> `discord.gatewayPingMs` + `gatewayPingHistory`; status page shows an inline
-> `<svg>` sparkline.
+### 4 — Native Discord AutoMod push → 3.8.0 (`feat/automod-native`)
 
-Branch `feat/observability`.
+A master `native_enabled` switch plus per-check toggles for the mappable rules
+(`words` → Keyword, `mentions` → MentionSpam, `spam` → Spam) and a keyword-preset
+multi-select (profanity / sexual / slurs). Reconcile logic lives in
+`src/bot/lib/automodSync.js` (`desiredRules` + `planSync` + `syncGuildAutomod`)
+and owns only `Sylo:`-named rules. No `AutoModerationActionExecution` bridge —
+native blocks show in Discord's audit log and an optional `SendAlertMessage` to
+the mod-log channel; `warn` does not escalate for natively-enforced checks.
+Unmappable checks (repeat, zalgo, caps, emojis, spoilers, invites, links) stay in
+the in-process scanner. Needs **Manage Server**; degrades to a toast without it.
 
-### 3a. Request-logging middleware
-- `src/web/middleware/requestLog.js`: logs `method path status durationMs` at
-  `debug` (off by default), skips `/health` and static assets, one line per
-  response via `res.on('finish')`. Mount first in `createApp()`.
+### 5a — `posted_keys` dedupe helper → no bump (`refactor/posted-keys`, PR #79)
 
-### 3b. `/metrics` endpoint
-- `GET /metrics` (new `src/web/routes/metrics.js`), Prometheus text format, no
-  auth (same as the `/health` JSON), rate-limited.
-- Series: `sylo_up`, `sylo_uptime_seconds`, `sylo_guilds`, `sylo_gateway_ping_ms`,
-  `sylo_commands_total{command}`, `sylo_errors_total{scope}`, `sylo_db_bytes`,
-  `sylo_module_enabled{module}` (sum across guilds),
-  `sylo_http_requests_total{route,status}` (bucketed by mount).
-- In-memory registry `src/lib/metrics.js`: `inc(name, labels)`, `set(name,
-  value)`, `render()`. Wire `inc` into the command dispatcher, the component
-  router, `log.error`, and the request-log middleware.
+One `posted_keys(guild_id, scope, key, value, posted_at)` table replaces four
+near-identical dedupe tables. The `value` column carries the announced Twitch
+stream id / YouTube live video id. Migration 30 folds in `free_games_posted`,
+`twitch_live`, `youtube_live`, `youtube_video_seen` and drops them. **`starboard_posts`
+was kept** — it holds mutable state (star counts, the posted message id, a reverse
+lookup), not a plain key. `src/db/{twitchAlerts,youtubeAlerts,freeGames}.js` are
+now thin wrappers with unchanged exports, so the alert modules were untouched.
+`GUILD_TABLES` swapped the four for `posted_keys`; unused `clearGuild*` helpers
+removed.
 
-### 3c. Richer `/health` JSON
-- Add per-scope error counts, command counts, and a gateway-ping history
-  (last N) to the JSON body. The status page can show the ping history as a
-  sparkline (plain inline `<svg>` unless the `dataviz` skill's approach is
-  clearly worth it).
+### Kick.com alerts + plain-text alert mode → 3.9.0 (`feat/kick-alerts`, PRs #80/#81)
 
-**Verify:** `npm test` (metrics render + counter unit tests); `curl /metrics`
-scrapes cleanly; `LOG_LEVEL=debug` shows request lines; `/health` JSON diff.
+Unplanned (issue #78), slotted between 5a and 5b because it reused the new
+`posted_keys` helper directly.
 
----
-
-## 4 — Native Discord AutoMod push → 3.8.0
-
-> ✅ **Shipped in 3.8.0** (`feat/automod-native`). As-built: a master
-> `native_enabled` switch plus per-check toggles for the mappable rules
-> (`words` → Keyword, `mentions` → MentionSpam, `spam` → Spam) and a
-> keyword-preset multi-select (profanity / sexual / slurs). Reconcile lives in
-> `src/bot/lib/automodSync.js` (`desiredRules` + `planSync` + `syncGuildAutomod`),
-> owning only `Sylo:`-named rules. No `AutoModerationActionExecution` bridge —
-> native blocks are visible via Discord's audit log + an optional
-> `SendAlertMessage` to the mod-log channel; `warn` does not escalate for
-> natively-enforced checks (documented).
-
-Branch `feat/automod-native`.
-
-- Map Sylo's `AUTOMOD_RULES` onto `guild.autoModerationRules` where Discord has a
-  native equivalent: **keyword** (bad words), **keyword-preset** (profanity /
-  slurs / sexual), **mention-spam**, **spam**. Sylo-only checks (`repeat`,
-  `zalgo`, `caps`, `emojis`, `spoilers`, invite/link nuance) stay in the
-  in-process scanner and are flagged "scan-only" in the UI.
-- `automod.ejs`: an "Also enforce natively" toggle per mappable rule + a global
-  one. On save, `src/modules/automod.js` reconciles: create/update/delete the
-  managed rules (tagged by name prefix `Sylo:`), never touch rules it didn't
-  create.
-- New `src/bot/lib/automodSync.js` with the reconcile logic + `test/automodSync.test.js`
-  (pure diff: desired vs existing → create / patch / delete lists).
-- Needs **Manage Server**; degrade gracefully (toast) without it.
-- Keep the in-process action (delete + timeout + mod-log) for non-native rules
-  and as a fallback.
-
-**Verify:** `npm test`; enable native enforcement, check the rules appear in
-*Server Settings → AutoMod*, edit one in Discord and confirm Sylo doesn't stomp
-it, disable the toggle and confirm only the `Sylo:`-tagged rules are removed.
-
----
-
-## 5 — Alerts: RSS + a dedupe helper
-
-Branch `feat/rss-alerts` for 5b (5a shipped on its own branch `refactor/posted-keys`).
-
-### 5a. "Posted keys" helper (`refactor:`, no behaviour change)
-
-> ✅ **Shipped** (`refactor/posted-keys`, PR #79, no bump). As-built:
-> `posted_keys(guild_id, scope, key, value, posted_at)` — a `value` column was
-> added to carry the announced Twitch stream id / YouTube live video id.
-> Migration 30 folds in `free_games_posted`, `twitch_live`, `youtube_live`,
-> `youtube_video_seen` and drops them. **`starboard_posts` was kept** — it stores
-> mutable state (star counts, the posted message id, a reverse lookup), not a
-> plain key. `src/db/{twitchAlerts,youtubeAlerts,freeGames}.js` are now thin
-> wrappers with unchanged exports; `GUILD_TABLES` swapped the four for
-> `posted_keys`; unused `clearGuild*` helpers removed.
-
-### 5b. RSS module (`feat:`) → 3.10.0
-
-> ✅ **Shipped** (`feat/rss-alerts`). As-built: **no `rss_feeds` table** — feeds
-> live in the module's JSON config like `twitch-alerts` / `kick-alerts`, each with
-> a stable 8-hex `id` assigned on first save (so `posted_keys` scope
-> `rss:<feedId>` stays collision-free). Removing a feed clears its scope in the
-> save route. `src/bot/lib/feed.js` is the shared RSS 2.0 + Atom parser
-> (`guid` / `id` / `alternate link` / title as the key; also surfaces `author`
-> from `<dc:creator>` or `<author><name>` and a media/enclosure `image` + the raw
-> `block`); `youtubeAlerts.js` now maps it onto its videoId shape. `posted_keys`
-> gained `anySeen` + `pruneScopePrefixOlderThan`. Poll every ~5 min, global
-> fetch budget, first look at a feed only seeds, burst cap of 3 posts/feed/tick
-> (rest still marked seen). Module is the **29th**.
-
----
-
-## Unplanned — Kick.com alerts + plain-text alert mode → 3.9.0
-
-> ✅ **Shipped in 3.9.0** (`feat/kick-alerts`, PRs #80/#81). Requested in issue
-> #78, slotted in between 5a and 5b because it directly reused the new
-> `posted_keys` helper.
-
-- **`kick-alerts` module** (28th) — a clone of `twitch-alerts` for Kick.com.
+- **`kick-alerts`** (28th module) — a clone of `twitch-alerts` for Kick.com.
   Official Kick API: app token from `id.kick.com/oauth/token` (client
   credentials), live check `GET api.kick.com/public/v1/channels?slug=…` (≤50).
   `KICK_CLIENT_ID` / `KICK_CLIENT_SECRET`; poll no-ops when unset. Dedupe via
   `posted_keys` scope `kick`, keyed by slug with the broadcast `start_time` as
-  the value (Kick has no per-stream id).
-- **Plain-text alert mode** — a per-streamer "Post as: Embed / Plain text"
-  choice on **both** Twitch and Kick alerts. Plain mode sends no embed and always
+  the value (Kick exposes no per-stream id).
+- **Plain-text alert mode** — a per-streamer "Post as: Embed / Plain text" choice
+  on **both** Twitch and Kick alerts. Plain mode sends no embed and always
   appends the stream link, for channels transcribed into another app (e.g. a
-  RuneLite Discord→game-chat plugin). `buildPayload` exported from both modules
-  and branches on `alert.plainText`; markdown-free `DEFAULT_PLAIN_MESSAGE`.
+  RuneLite Discord→game-chat plugin). `buildPayload` is exported from both
+  modules and branches on `alert.plainText`; markdown-free `DEFAULT_PLAIN_MESSAGE`.
 
----
+### 5b — RSS / Atom feed alerts → 3.10.0 (`feat/rss-alerts`)
 
-## 6 — Server insights page → 3.11.0
+**No `rss_feeds` table** — feeds live in the module's JSON config like
+`twitch-alerts` / `kick-alerts`, each with a stable 8-hex `id` assigned on first
+save so `posted_keys` scope `rss:<feedId>` stays collision-free. Removing a feed
+clears its scope in the save route. `src/bot/lib/feed.js` is the shared RSS 2.0 +
+Atom parser (`guid` / `id` / alternate-link / title as the key; also surfaces
+`author` from `<dc:creator>` or `<author><name>`, a media/enclosure `image`, and
+the raw entry `block`); `youtubeAlerts.js` now maps it onto its videoId shape.
+`posted_keys` gained `anySeen` + `pruneScopePrefixOlderThan`. Poll every ~5 min
+with a global fetch budget; the first look at a feed only seeds (no backlog
+dump); a burst is capped at 3 posts/feed/tick (the rest still marked seen). 29th
+module.
 
-> ✅ **Shipped** (`feat/insights`). As-built: `guild_daily` also has a `channels`
-> JSON column (channelId → daily message count) so "top channels" needs no second
-> table. `insights` is a `configurable: false` module — its overview card and
-> sidebar row link straight to `/guilds/:id/insights` (the data page), there is
-> no `/m/insights` config panel. Counting needs **no** privileged intent — only
-> the message count, author id and channel id are read, never content — so the
-> roadmap's "respects the Message Content intent" note doesn't apply. `active_members`
-> is a running `MAX` of the in-memory distinct-sender set (a mid-day restart can
-> undercount slightly). Charts are inline `<svg>` built in `guild/insights.ejs`
-> (messages bars, cumulative growth line, joins-vs-leaves lines) + CSS bars for
-> top channels; 7/30/90-day range switch. No `forgetUser` — rows are aggregate,
-> no per-user data. Module is the 30th.
+### 6 — Server insights page → 3.11.0 (`feat/insights`)
 
-Branch `feat/insights`.
+`guild_daily(guild_id, day, joins, leaves, messages, active_members, channels)` —
+`channels` is a JSON map of channelId → daily message count, so "top channels"
+needs no second table. `insights` is a `configurable: false` module: its overview
+card and sidebar row link straight to `/guilds/:id/insights` (the data page);
+there is no `/m/insights` config panel. Counting needs **no privileged intent** —
+only the message count, author id and channel id are read, never content.
+`active_members` is a running `MAX` of the in-memory distinct-sender set (a
+mid-day restart can undercount slightly). Counters flush hourly and on the UTC
+day roll. Charts are inline `<svg>` in `guild/insights.ejs` (message bars,
+cumulative growth line, joins-vs-leaves lines) plus CSS bars for top channels,
+with a 7/30/90-day range switch. No `forgetUser` — rows are aggregate. 30th
+module.
 
-- **Rollup table** `guild_daily(guild_id, day TEXT, joins, leaves, messages,
-  active_members, PRIMARY KEY(guild_id, day))` + `GUILD_TABLES`.
-- **Aggregation tick** (`src/modules/insights.js`): once a day, roll the previous
-  day's counters. Message counts from a `messageCreate` handler (gated on the
-  module being on — respects the Message Content intent); joins/leaves from
-  `guildMemberAdd` / `Remove`. Keep it cheap: an in-memory `Map<guildId,
-  {messages, …}>` flushed hourly + on the daily roll.
-- **Page** `GET /guilds/:id/insights` → new panel in `guild.ejs` + sidebar entry
-  (`page: 'insights'`, `#i-trending-up`). Charts: member growth (cumulative),
-  daily messages, joins vs leaves, top channels (last 30d). Inline `<svg>`
-  server-side or a tiny Alpine chart — no chart library (no build step, CSP).
-- Retention: keep ~180 days, prune in the daily tick.
-- It's a **module** (`insights`, off by default) so a server opts in to the
-  message counting.
+### Sticky messages: other-app bump + cooldown → 3.11.1 (`fix/sticky-app-messages`)
 
-**Verify:** `npm test` (rollup math + prune); enable it, send messages / simulate
-joins, force a roll, check the page renders with real numbers in both themes.
+Issue #85. Sticky messages never saw other apps' messages because the module
+dispatcher drops all bot messages before any module runs. Added a
+`messageCreateAny` dispatch event that also carries bot/app/webhook messages
+(only the sticky module opts in; `messageCreate` stays human-only). Each sticky
+gains **repostOnBots** (default off — when on, other apps _and_ Sylo's own
+non-sticky messages bump it) and **cooldownSeconds** (0 = 4s default, clamped
+3–3600). "Our own message" is specifically the sticky Sylo last posted (matched
+by message id), so the repost never loops. Existing stickies unchanged until
+re-saved.
 
----
+### 7 — Express 5 upgrade + discord.js v15 watch → no bump (`chore/express5-spike`)
 
-## 7 — Express 5 spike + discord.js v15 watch → no bump
-
-> ✅ **Shipped** (`chore/express5-spike`, merged as-is — no rollback needed).
-> Bumped `express@^4.21.2` → `^5.1.0` (installed 5.2.1, path-to-regexp v8). The
-> **only** break was inline path regex — 8 routes (`guildMessages.js` ×4,
-> `reminders` ×4) used `/:id(\d+)` / `/:id(new|\d+)`; rewritten as plain `:id`
-> with a `/^\d+$/` (and `'new'`) guard in the handler. None of the other listed
-> concerns applied: no `res.redirect('back')`, no `app.del`, no `*` wildcards, no
-> `req.query`/`req.body` prototype assumptions. `asyncHandler` kept as-is. The #2
-> route harness caught the breakage immediately (4 test files failed to build the
-> app) and confirmed the fix (311/311 green on Express 5). discord.js v15: not
-> released — added a `dependabot.yml` ignore for its semver-major so it lands as a
-> dedicated migration when it ships.
-
-Branch `chore/express5-spike` (spike — may not merge as-is).
-
-- Express 5 changes: `path-to-regexp@6` (no inline `/:id(\\d+)` — Sylo uses these
-  in the `reminders` routes; rewrite as validated params), `req.query` / `req.body`
-  are `null`-proto objects, `res.redirect('back')` removed, `app.del` removed,
-  rejected promises in middleware auto-forwarded to `next(err)` (can simplify
-  `asyncHandler`).
-- Approach: bump `express@5`, run the #2 harness (this is *why* #2 comes first),
-  fix each break, keep `asyncHandler` for clarity even if redundant. Land as
-  `chore:` once green.
-- discord.js v15: no release yet. Add a note + a dependabot ignore for the major;
-  revisit when it ships.
-
-**Verify:** the full harness passes on Express 5; `docker compose up` healthy;
-every regex route still resolves.
+Bumped `express@^4.21.2` → `^5.1.0` (resolved to 5.2.1, path-to-regexp v8), merged
+as-is. The **only** break was inline path regex — 8 routes (`guildMessages.js` ×4,
+reminders ×4) used `/:id(\d+)` / `/:id(new|\d+)`; rewritten as plain `:id` with a
+`/^\d+$/` (and `'new'`) guard in the handler. None of the other Express 5 concerns
+applied: no `res.redirect('back')`, no `app.del`, no `*` wildcards, no
+`req.query` / `req.body` prototype assumptions. `asyncHandler` kept as-is. The #2
+route harness surfaced the breakage instantly (4 test files failed to build the
+app) and confirmed the fix (311/311 green on Express 5). discord.js v15 is not
+released — a `dependabot.yml` ignore holds its semver-major for a dedicated
+migration when it ships.
