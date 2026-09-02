@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.12.0](https://github.com/Ferdinand99/Sylo/compare/v3.11.2...v3.12.0) (2026-09-02)
+
+
+### Features
+
+* use the bot's avatar as the dashboard favicon ([92ba0c9](https://github.com/Ferdinand99/Sylo/commit/92ba0c99e881551b7e1afc4144f4c8dcb868e2c3))
+* use the bot's avatar as the dashboard favicon ([fa85eec](https://github.com/Ferdinand99/Sylo/commit/fa85eec81ab6eb01f5a504ddc949030572a66156))
+
 ## [3.11.2](https://github.com/Ferdinand99/Sylo/compare/v3.11.1...v3.11.2) (2026-09-02)
 
 
