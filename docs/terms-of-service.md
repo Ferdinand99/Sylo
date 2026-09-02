@@ -1,7 +1,7 @@
 # Terms of Service — Sylo
 
-**Effective date:** 29 August 2026
-**Last updated:** 29 August 2026
+**Effective date:** 2 September 2026
+**Last updated:** 2 September 2026
 
 These Terms of Service ("Terms") govern your use of the **Sylo** Discord
 application and its test instance **Sylo - Test** (each, and together, the
@@ -24,17 +24,29 @@ or older where local law requires) and comply with the
 
 ## 2. What the Bot does
 
-Sylo provides:
+Sylo is a multi-purpose server bot. Its features are organised into modules that
+each server's administrators turn on and configure. They include:
 
-- **Game statistics** — on request, it looks up Battlefield-series player
-  statistics from the third-party public API at `api.gametools.network` and
-  displays them in Discord.
-- **Moderation tools** — server staff with the appropriate Discord permissions
-  can use commands such as kick, ban, timeout, purge, slowmode and warnings, and
-  can configure a moderation-log channel.
-- **A web dashboard** — an optional interface for server administrators to view
-  and manage the Bot's per-server data (warnings, bans, mod-log channel and
-  related settings).
+- **Moderation** — kick, ban, timeout, purge, slowmode and a warnings log with
+  configurable auto-actions, plus a moderation-log channel.
+- **Auto-moderation** — real-time message filtering (links, invites, spam, caps,
+  banned words, and similar).
+- **Engagement** — leveling and XP with rank cards and a public leaderboard,
+  reaction roles, welcome/goodbye messages, a welcome channel, starboard,
+  counting, polls, giveaways, AFK, and custom slash commands.
+- **Utility** — modmail tickets, ban appeals, invite tracking, autoresponders,
+  sticky messages, reminders / scheduled posts, temporary ("join to create")
+  voice channels, server-statistics channels, and member verification (optionally
+  captcha-gated).
+- **Notifications** — Twitch and YouTube live/upload alerts and free-game
+  announcements.
+- **Game statistics** — on request, Battlefield-series player statistics looked
+  up from the third-party public API at `api.gametools.network`.
+- **A web dashboard** — an interface for server administrators to enable and
+  configure modules and to view the Bot's per-server data.
+
+Not every module is enabled on every server, and features may be added, changed,
+or removed between versions (see section 4).
 
 ## 3. Acceptable use
 
@@ -68,9 +80,12 @@ accuracy, or conduct.
 
 ## 6. Data
 
-The Bot stores a limited amount of data needed to function (for example warning
-records and per-server settings). How that data is handled is described in the
-[Privacy Policy](./privacy-policy.md), which forms part of these Terms.
+The Bot stores the data its enabled modules need to function — for example
+per-server settings, warnings and appeals, leveling and invite records, and
+modmail transcripts. What is stored, how long it is kept, and how to delete it
+(the `/forget` command, and automatic deletion when the Bot leaves a server) is
+described in the [Privacy Policy](./privacy-policy.md), which forms part of these
+Terms.
 
 ## 7. Disclaimer of warranties
 
@@ -108,4 +123,6 @@ the Bot after a change constitutes acceptance of the revised Terms.
 ## 11. Contact
 
 Questions, requests, or reports: open an issue at
-<https://github.com/Ferdinand99/Sylo/issues>.
+<https://github.com/Ferdinand99/Sylo/issues>. For suspected security
+vulnerabilities, use GitHub's private vulnerability reporting on the repository
+rather than a public issue.
