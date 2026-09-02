@@ -10,7 +10,7 @@
   </div>
 </div>
 
-<form method="POST" action="/guilds/<%= guildId %>/m/starboard/sb" id="sb-form" class="stack u-mw-xl">
+<form method="POST" action="/guilds/<%= guildId %>/m/starboard/sb" id="sb-form" hx-boost="false" class="stack u-mw-xl">
   <input type="hidden" name="id" value="<%= board.id %>" />
 
   <section class="card stack">

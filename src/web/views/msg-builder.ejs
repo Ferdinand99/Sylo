@@ -15,12 +15,12 @@
 </div>
 
 <% if (typeof msg !== 'undefined' && msg) { %>
-  <div class="banner <%= (['saved','sent','updated'].indexOf(msg) >= 0) ? 'ok' : (msg === 'unpublished' ? 'info' : 'bad') %>">
+  <div class="banner banner-flash <%= (['saved','sent','updated'].indexOf(msg) >= 0) ? 'ok' : (msg === 'unpublished' ? 'info' : 'bad') %>">
     <%= ({ saved:'Draft saved.', sent:'Published to the channel.', updated:'Published message updated.', unpublished:'Unpublished — draft kept.', bad:'Could not read the editor.', nochannel:'Pick a channel before publishing.' })[msg] || (function(){ try { return decodeURIComponent(msg); } catch(e){ return msg; } })() %>
   </div>
 <% } %>
 
-<form method="POST" action="/guilds/<%= guildId %>/messages/<%= isNew ? 'new' : rec.id %>" id="mb-form" class="stack u-mw-xl"
+<form method="POST" action="/guilds/<%= guildId %>/messages/<%= isNew ? 'new' : rec.id %>" id="mb-form" hx-boost="false" class="stack u-mw-xl"
       x-data="embedList(<%= JSON.stringify({ max: 10, links: true, spec: (rec.spec || { content: '', embeds: [], rows: [] }) }) %>)">
   <input type="hidden" name="spec" id="mb-spec" />
 

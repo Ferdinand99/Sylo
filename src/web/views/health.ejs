@@ -84,11 +84,11 @@
 
 <section class="card">
   <h2>Database &amp; backups</h2>
-  <% if (backupMsg) { %><div class="banner ok">Backup created: <code><%= backupMsg %></code></div><% } %>
-  <% if (backupErr) { %><div class="banner bad">Backup failed: <%= backupErr %></div><% } %>
-  <% if (importMsg) { %><div class="banner ok">Imported <code><%= importMsg %></code> — use <strong>Restore</strong> on that row to load it.</div><% } %>
-  <% if (importErr) { %><div class="banner bad">Import rejected: <%= importErr %></div><% } %>
-  <% if (restoreErr) { %><div class="banner bad">Restore rejected: <%= restoreErr %></div><% } %>
+  <% if (backupMsg) { %><div class="banner banner-flash ok">Backup created: <code><%= backupMsg %></code></div><% } %>
+  <% if (backupErr) { %><div class="banner banner-flash bad">Backup failed: <%= backupErr %></div><% } %>
+  <% if (importMsg) { %><div class="banner banner-flash ok">Imported <code><%= importMsg %></code> — use <strong>Restore</strong> on that row to load it.</div><% } %>
+  <% if (importErr) { %><div class="banner banner-flash bad">Import rejected: <%= importErr %></div><% } %>
+  <% if (restoreErr) { %><div class="banner banner-flash bad">Restore rejected: <%= restoreErr %></div><% } %>
   <p class="muted">
     Database <strong><%= db.size %></strong> (WAL <%= db.wal %>).
     <% if (db.intervalHours > 0) { %>
@@ -99,7 +99,7 @@
     Snapshots are written to <code>&lt;data&gt;/backups</code> on the mounted volume.
   </p>
   <div class="btn-row u-m0 u-mt-3">
-    <form method="POST" action="/health/backups">
+    <form method="POST" action="/health/backups" hx-boost="false">
       <button type="submit">Create backup now</button>
     </form>
     <span id="db-import">
@@ -122,11 +122,11 @@
             <td class="muted"><%= b.ago %></td>
             <td class="num">
               <div class="btn-row" style="justify-content:flex-end;margin:0">
-                <form method="POST" action="/health/backups/<%= encodeURIComponent(b.name) %>/restore"
+                <form method="POST" action="/health/backups/<%= encodeURIComponent(b.name) %>/restore" hx-boost="false"
                       data-confirm="Restore the database from &quot;<%= b.name %>&quot;? This replaces all current data and restarts the bot.">
                   <button type="submit">Restore</button>
                 </form>
-                <form method="POST" action="/health/backups/<%= encodeURIComponent(b.name) %>/delete" data-confirm="Delete this backup permanently?">
+                <form method="POST" action="/health/backups/<%= encodeURIComponent(b.name) %>/delete" hx-boost="false" data-confirm="Delete this backup permanently?">
                   <button type="submit" class="danger">Delete</button>
                 </form>
               </div>

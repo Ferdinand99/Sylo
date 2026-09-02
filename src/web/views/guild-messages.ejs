@@ -13,7 +13,7 @@
      var text = known[msg];
      if (!text) { try { text = decodeURIComponent(msg); } catch (_) { text = msg; } }
 %>
-  <div class="banner <%= (['saved','sent','updated','deleted'].indexOf(msg) >= 0) ? 'ok' : (['unpublished','removed'].indexOf(msg) >= 0 ? 'info' : 'bad') %>"><%= text %></div>
+  <div class="banner banner-flash <%= (['saved','sent','updated','deleted'].indexOf(msg) >= 0) ? 'ok' : (['unpublished','removed'].indexOf(msg) >= 0 ? 'info' : 'bad') %>"><%= text %></div>
 <% } %>
 
 <div class="rr-list-head u-mt-3">

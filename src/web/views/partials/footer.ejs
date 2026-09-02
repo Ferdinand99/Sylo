@@ -4,28 +4,5 @@
     </footer>
   </div>
 </div>
-<script>
-  (function () {
-    var body = document.body;
-    var open = function () { body.classList.add('nav-open'); };
-    var close = function () { body.classList.remove('nav-open'); };
-    document.querySelector('.sb-toggle')?.addEventListener('click', open);
-    document.querySelector('.sb-scrim')?.addEventListener('click', close);
-    document.querySelector('.sidebar')?.addEventListener('click', function (e) {
-      if (e.target.closest('a.sb-link, .srv-switch-menu a')) close();
-    });
-    addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
-
-    // Remember which sidebar categories are collapsed.
-    document.querySelectorAll('.sb-modgroup[data-k]').forEach(function (d) {
-      var k = 'sb:' + d.dataset.k;
-      try { if (localStorage.getItem(k) === '0') d.open = false; } catch (_) {}
-      d.addEventListener('toggle', function () {
-        try { localStorage.setItem(k, d.open ? '1' : '0'); } catch (_) {}
-      });
-    });
-  })();
-</script>
-<script src="/app.js"></script>
 </body>
 </html>

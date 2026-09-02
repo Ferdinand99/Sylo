@@ -5,7 +5,7 @@
   every server<% if (bot) { %> (currently <strong><%= bot.tag %></strong>)<% } %>.</p>
 
 <% if (typeof m !== 'undefined' && m) { %>
-  <div class="banner <%= ok ? 'ok' : 'bad' %>"><%= m %></div>
+  <div class="banner banner-flash <%= ok ? 'ok' : 'bad' %>"><%= m %></div>
 <% } %>
 
 <% if (!bot) { %>

@@ -17,12 +17,12 @@
 </div>
 
 <% if (typeof msg !== 'undefined' && msg) { %>
-  <div class="banner <%= (['saved','rem-test'].indexOf(msg) >= 0) ? 'ok' : 'bad' %>">
+  <div class="banner banner-flash <%= (['saved','rem-test'].indexOf(msg) >= 0) ? 'ok' : 'bad' %>">
     <%= ({ saved:'Saved.', 'rem-test':'Test message sent to the channel.', badchannel:'Pick a channel.', 'rem-empty':'Add a message (text or embed).', 'rem-when':'Pick a date and time for the single reminder.' })[msg] || (function(){ try { return decodeURIComponent(msg); } catch(e){ return msg; } })() %>
   </div>
 <% } %>
 
-<form method="POST" action="/guilds/<%= guildId %>/m/reminders/r/<%= isNew ? 'new' : rec.id %>" id="rem-form" class="stack u-mw-xl"
+<form method="POST" action="/guilds/<%= guildId %>/m/reminders/r/<%= isNew ? 'new' : rec.id %>" id="rem-form" hx-boost="false" class="stack u-mw-xl"
       x-data="reminderBuilder(<%= JSON.stringify({ msgType: msgType, mode: schedMode, enableStart: !!rec.start_at, enableEnd: !!rec.end_at }) %>)">
   <input type="hidden" name="embed" />
 

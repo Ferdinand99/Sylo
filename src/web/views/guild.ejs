@@ -67,7 +67,7 @@
      const ok = ['saved', 'cleared', 'warned', 'unbanned', 'locked-all', 'unlocked-all', 'unlocked-one', 'warn-removed', 'warn-cleared', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' || msg === 'forgot-nodm' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');
 %>
-  <div class="banner <%= cls %>"><%= messages[msg] || 'Done.' %></div>
+  <div class="banner banner-flash <%= cls %>"><%= messages[msg] || 'Done.' %></div>
 <% } %>
 
 <div class="guild-wrap">
