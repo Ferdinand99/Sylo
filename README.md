@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="unraid/sylo-icon.png" alt="Sylo" width="96" />
+<img src="unraid/sylo.jpg" alt="Sylo" width="96" />
 
 # Sylo
 
