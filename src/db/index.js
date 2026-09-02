@@ -569,6 +569,32 @@ export const MIGRATIONS = [
       CREATE INDEX idx_guild_daily_day ON guild_daily (day);
     `);
   },
+
+  // 3.13: Server insights — voice-channel usage on the daily row, and a parallel
+  // per-UTC-hour rollup (`guild_hourly`) so the dashboard can show the last
+  // 24 / 48 hours. The hourly table is pruned aggressively (a few days).
+  (database) => {
+    database.exec(`
+      ALTER TABLE guild_daily ADD COLUMN voice_minutes INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE guild_daily ADD COLUMN voice_active_members INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE guild_daily ADD COLUMN voice_peak INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE guild_daily ADD COLUMN voice_channels TEXT NOT NULL DEFAULT '{}';
+
+      CREATE TABLE guild_hourly (
+        guild_id             TEXT NOT NULL,
+        hour                 TEXT NOT NULL,
+        joins                INTEGER NOT NULL DEFAULT 0,
+        leaves               INTEGER NOT NULL DEFAULT 0,
+        messages             INTEGER NOT NULL DEFAULT 0,
+        active_members       INTEGER NOT NULL DEFAULT 0,
+        voice_minutes        INTEGER NOT NULL DEFAULT 0,
+        voice_active_members INTEGER NOT NULL DEFAULT 0,
+        voice_peak           INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (guild_id, hour)
+      );
+      CREATE INDEX idx_guild_hourly_hour ON guild_hourly (hour);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

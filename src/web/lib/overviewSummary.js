@@ -338,9 +338,11 @@ function moduleLines(id, guild, cfg) {
       const week = dailySeries(guild.id, 7);
       const msgs = week.reduce((t, d) => t + d.messages, 0);
       const net = week.reduce((t, d) => t + d.joins - d.leaves, 0);
+      const voiceH = Math.round(week.reduce((t, d) => t + d.voiceMinutes, 0) / 60);
       return [
         neutral('Messages (7d)', msgs.toLocaleString('en')),
         neutral('Net members (7d)', `${net >= 0 ? '+' : ''}${net}`),
+        neutral('Voice (7d)', `${voiceH.toLocaleString('en')} h`),
       ];
     }
     case 'starboard': {

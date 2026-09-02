@@ -440,9 +440,11 @@
       <%- include('guild/insights', {
         guild: guild,
         range: insightsRange,
+        granularity: insightsGranularity,
         series: insightsSeries,
         totals: insightsTotals,
-        topChannels: insightsTopChannels,
+        insightsTopChannels: insightsTopChannels,
+        insightsTopVoice: insightsTopVoice,
       }) %>
 
     <% } else if (panel.indexOf('m/') === 0 && typeof activeModule !== 'undefined') { %>
