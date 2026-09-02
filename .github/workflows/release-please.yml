@@ -54,17 +54,34 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.pick.outputs.tag }}
+      ref: ${{ steps.pick.outputs.ref }}
     steps:
       - id: pick
         env:
-          DISPATCH_TAG: ${{ github.event.inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ inputs.tag }}
           RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
-          if [ "${{ github.event_name }}" = 'workflow_dispatch' ]; then
-            echo "tag=$DISPATCH_TAG" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
+            raw="$DISPATCH_TAG"
           else
-            echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+            raw="$RELEASE_TAG"
           fi
+          raw="$(echo "$raw" | tr -d '[:space:]')"
+          if [ -z "$raw" ]; then
+            echo "::error::No tag to build (dispatch input empty / no release created)."
+            exit 1
+          fi
+          # Accept "3.3.0" or "v3.3.0"; the git tags are v-prefixed.
+          tag="v${raw#v}"
+          if ! git ls-remote --exit-code --tags "https://github.com/${GITHUB_REPOSITORY}.git" "refs/tags/${tag}" >/dev/null; then
+            echo "::error::Tag ${tag} does not exist in this repository."
+            exit 1
+          fi
+          echo "Resolved image tag: ${tag} (ref refs/tags/${tag})"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "ref=refs/tags/${tag}" >> "$GITHUB_OUTPUT"
 
   # Build each architecture on its own native runner. QEMU emulation of arm64
   # crashes compiling better-sqlite3 (musl has no prebuilt binary), so amd64
@@ -99,7 +116,7 @@ jobs:
 
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.ref }}
 
       - uses: docker/setup-buildx-action@v4
 
