@@ -42,6 +42,55 @@
   --dur-1: 0.12s;
   --dur-2: 0.2s;
   --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  color-scheme: dark;
+}
+
+/* Light theme. Only the colour tokens are redefined — spacing, radii and motion
+   stay shared. The Discord-preview components (.dc-*, .wc-*, .poll-*, .bubble)
+   keep their own dark palette on purpose: they mimic what Discord renders.
+   The toggle in the sidebar sets [data-theme]; the media query covers a
+   "system" light preference unless the user explicitly chose dark. */
+:root[data-theme="light"] {
+  --bg: #eef1f7;
+  --surface: #ffffff;
+  --surface-2: #f4f6fb;
+  --surface-3: #e9edf4;
+  --border: rgba(17, 24, 39, 0.1);
+  --border-strong: rgba(17, 24, 39, 0.18);
+  --text: #1b2230;
+  --muted: #5b6472;
+  --accent: #4c6ef5;
+  --accent-strong: #3b5bdb;
+  --on-accent: #ffffff;
+  --ok: #1f9d57;
+  --bad: #d63b41;
+  --warn: #b26a12;
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.08), 0 12px 28px -14px rgba(16, 24, 40, 0.22);
+  --ring: 0 0 0 2px rgba(76, 110, 245, 0.4);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eef1f7;
+    --surface: #ffffff;
+    --surface-2: #f4f6fb;
+    --surface-3: #e9edf4;
+    --border: rgba(17, 24, 39, 0.1);
+    --border-strong: rgba(17, 24, 39, 0.18);
+    --text: #1b2230;
+    --muted: #5b6472;
+    --accent: #4c6ef5;
+    --accent-strong: #3b5bdb;
+    --on-accent: #ffffff;
+    --ok: #1f9d57;
+    --bad: #d63b41;
+    --warn: #b26a12;
+    --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.08), 0 12px 28px -14px rgba(16, 24, 40, 0.22);
+    --ring: 0 0 0 2px rgba(76, 110, 245, 0.4);
+    color-scheme: light;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -176,6 +225,21 @@ body {
 .sb-modgroup[open] > summary .sb-chev { transform: rotate(180deg); }
 
 .sb-foot { border-top: 1px solid var(--border); margin-top: 6px; padding: 10px 6px 2px; }
+.sb-theme {
+  display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 6px;
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface-2); color: var(--muted); font: inherit; font-size: 12.5px;
+  font-weight: 600; cursor: pointer; transition: color var(--dur-1), border-color var(--dur-1);
+}
+.sb-theme:hover { color: var(--text); border-color: var(--border-strong); }
+.sb-theme .sb-ico { width: 16px; height: 16px; flex: none; }
+.sb-theme .sb-theme-light { display: none; }
+:root[data-theme="light"] .sb-theme .sb-theme-dark { display: none; }
+:root[data-theme="light"] .sb-theme .sb-theme-light { display: inline; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .sb-theme .sb-theme-dark { display: none; }
+  :root:not([data-theme="dark"]) .sb-theme .sb-theme-light { display: inline; }
+}
 .sb-user { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
 .sb-user .avatar { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border); flex: none; }
 .sb-user-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
@@ -586,6 +650,28 @@ label.checkline input { width: auto; }
 .plugin-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 2px 0 14px; }
 .plugin-head-link { font-size: 13px; color: var(--muted); text-decoration: none; }
 .plugin-head-link:hover { color: var(--text); }
+
+/* Live module filter + bulk-select (overview grid) + sidebar filter */
+.filtered-out { display: none !important; }
+.plugin-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; }
+.plugin-toolbar input[type="search"] {
+  flex: 1; min-width: 200px; max-width: var(--mw-md); padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface-2); color: var(--text); font: inherit; font-size: 13.5px;
+}
+.plugin-toolbar input[type="search"]:focus-visible { border-color: var(--accent); }
+.plugin-bulk { display: inline-flex; align-items: center; gap: 8px; }
+.plugin-pick { position: absolute; top: 10px; right: 10px; z-index: 2; display: none; }
+.plugin-filter.is-selecting .plugin-pick { display: block; }
+.plugin-filter.is-selecting .plugin-hit { pointer-events: none; }
+.plugin-pick input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+.sb-filter { padding: 4px 4px 6px; }
+.sb-filter input {
+  width: 100%; padding: 6px 9px; font: inherit; font-size: 12.5px;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface-2); color: var(--text);
+}
+.sb-filter input:focus-visible { border-color: var(--accent); }
 .plugin-issues { display: block; }
 .plugin-issues ul { margin: 6px 0 0; padding-left: 18px; }
 .plugin-issues li { margin: 2px 0; }
@@ -594,7 +680,7 @@ label.checkline input { width: auto; }
   margin: 22px 0 10px; font-size: 12px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
 }
-.plugin-group:first-of-type { margin-top: 4px; }
+.plugin-filter > [data-mod-group]:first-of-type .plugin-group { margin-top: 4px; }
 
 .plugin-grid {
   display: grid; gap: 14px;
@@ -614,7 +700,7 @@ label.checkline input { width: auto; }
 
 .plugin-hit { position: absolute; inset: 0; z-index: 0; border-radius: var(--r); }
 .plugin-card > :not(.plugin-hit) { position: relative; z-index: 1; pointer-events: none; }
-.plugin-cta, .plugin-cta * { pointer-events: auto; }
+.plugin-cta, .plugin-cta *, .plugin-pick, .plugin-pick * { pointer-events: auto; }
 
 .plugin-ico {
   width: 38px; height: 38px; border-radius: 10px; margin-bottom: 6px;

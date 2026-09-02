@@ -31,6 +31,24 @@
       });
     }
 
+    var theme = document.querySelector('.sb-theme');
+    if (theme && !theme.dataset.bound) {
+      theme.dataset.bound = '1';
+      theme.addEventListener('click', function () {
+        var root = document.documentElement;
+        var current =
+          root.dataset.theme ||
+          (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        var next = current === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        try {
+          localStorage.setItem('sylo:theme', next);
+        } catch (_) {
+          /* storage disabled */
+        }
+      });
+    }
+
     document.querySelectorAll('.sb-modgroup[data-k]').forEach(function (d) {
       if (d.dataset.bound) return;
       d.dataset.bound = '1';

@@ -6,8 +6,9 @@
   <title><%= typeof title !== 'undefined' ? title : 'Sylo' %></title>
   <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><meta name="csrf-token" content="<%= csrfToken %>" /><% } %>
   <%# With JS on, a result banner is shown as a toast — hide it up front so it
-      never flashes; htmx-setup.js still reads its text. No-JS keeps the banner. %>
-  <script>document.documentElement.classList.add('has-js');</script>
+      never flashes; htmx-setup.js still reads its text. No-JS keeps the banner.
+      Also apply the saved theme before first paint so there's no flash. %>
+  <script>(function(){var d=document.documentElement;d.classList.add('has-js');try{var t=localStorage.getItem('sylo:theme');if(t==='light'||t==='dark')d.dataset.theme=t;}catch(e){}})();</script>
   <style>.has-js .banner-flash{display:none}</style>
   <link rel="stylesheet" href="/styles.css" />
   <script src="/vendor/htmx.min.js" defer></script>
@@ -51,6 +52,7 @@
   <g id="i-bar-chart" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></g>
   <g id="i-bell" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></g>
   <g id="i-moon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></g>
+  <g id="i-sun" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></g>
   <g id="i-activity" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></g>
   <g id="i-mic" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></g>
   <g id="i-gamepad" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="11" y2="11"/><line x1="8" x2="8" y1="9" y2="13"/><line x1="15" x2="15.01" y1="12" y2="12"/><line x1="18" x2="18.01" y1="10" y2="10"/><rect width="20" height="12" x="2" y="6" rx="4"/></g>
@@ -65,7 +67,7 @@
 <% var mg = typeof manageableGuilds !== 'undefined' ? manageableGuilds : []; %>
 <% function ico(n) { return n ? '<svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-' + n + '"/></svg>' : ''; } %>
 <% function navrow(i) { %>
-  <a class="sb-link <%= i.active ? 'active' : '' %>" href="<%= i.href %>"<% if (i.id) { %> data-module="<%= i.id %>"<% } %>>
+  <a class="sb-link <%= i.active ? 'active' : '' %>" href="<%= i.href %>" data-mod-name="<%= i.label %>"<% if (i.id) { %> data-module="<%= i.id %>"<% } %>>
     <% if (typeof i.dot !== 'undefined') { %><span class="sb-dot <%= i.dot %>"></span><% } %>
     <%- ico(i.icon) %>
     <span><%= i.label %></span>
@@ -108,11 +110,17 @@
       </details>
     <% } %>
 
-    <nav class="sb-nav">
+    <nav class="sb-nav" x-data="moduleFilter">
+      <% if (sb.categories.length) { %>
+        <div class="sb-filter">
+          <input type="search" placeholder="Filter&hellip;" x-model="q"
+                 @input.debounce.120ms="filter()" aria-label="Filter the menu" />
+        </div>
+      <% } %>
       <% sb.top.forEach(function (i) { navrow(i); }); %>
 
       <% sb.categories.forEach(function (cat) { %>
-        <details class="sb-modgroup" data-k="<%= cat.key %>" open>
+        <details class="sb-modgroup" data-k="<%= cat.key %>" data-mod-group open>
           <summary class="sb-cat"><span><%= cat.title %></span><span class="sb-chev">▾</span></summary>
           <% cat.items.forEach(function (it) { navrow(it); }); %>
         </details>
@@ -120,6 +128,11 @@
     </nav>
 
     <div class="sb-foot">
+      <button type="button" class="sb-theme" aria-label="Toggle light and dark theme" title="Toggle theme">
+        <svg class="sb-ico sb-theme-dark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sun"/></svg>
+        <svg class="sb-ico sb-theme-light" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moon"/></svg>
+        <span>Theme</span>
+      </button>
       <% if (typeof user !== 'undefined' && user && !user.open) { %>
         <div class="sb-user">
           <% if (user.avatar) { %><img class="avatar" src="<%= user.avatar %>" alt="" /><% } %>

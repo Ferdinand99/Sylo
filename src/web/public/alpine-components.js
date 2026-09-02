@@ -1,6 +1,84 @@
 // Alpine components for the dashboard (Phase 2 of the modernization). Registered
 // on alpine:init so load order relative to alpine.min.js doesn't matter.
 document.addEventListener('alpine:init', function () {
+  // Live filter for a list of modules (the overview plugin grid or the sidebar).
+  // Put x-data="moduleFilter" on a wrapper that contains the search <input>
+  // (x-model="q", @input.debounce.120ms="filter()") and the items, which carry
+  // data-mod-name; optional data-mod-group wrappers are hidden when they empty.
+  function applyFilter(root, needle) {
+    root.querySelectorAll('[data-mod-name]').forEach(function (el) {
+      var hit = !needle || el.dataset.modName.toLowerCase().indexOf(needle) !== -1;
+      el.classList.toggle('filtered-out', !hit);
+    });
+    root.querySelectorAll('[data-mod-group]').forEach(function (g) {
+      g.classList.toggle('filtered-out', !g.querySelector('[data-mod-name]:not(.filtered-out)'));
+    });
+  }
+
+  window.Alpine.data('moduleFilter', function () {
+    return {
+      q: '',
+      filter() {
+        applyFilter(this.$root, this.q.trim().toLowerCase());
+      },
+    };
+  });
+
+  // Overview plugin grid: live filter + a "select mode" for bulk enable/disable.
+  window.Alpine.data('overviewGrid', function () {
+    return {
+      q: '',
+      selecting: false,
+      sel: new Set(),
+      busy: false,
+      filter() {
+        applyFilter(this.$root, this.q.trim().toLowerCase());
+      },
+      toggleSelect() {
+        this.selecting = !this.selecting;
+        if (!this.selecting) {
+          this.sel.clear();
+          this.$root.querySelectorAll('.plugin-pick input').forEach(function (i) {
+            i.checked = false;
+          });
+        }
+      },
+      pick(id, on) {
+        if (on) this.sel.add(id);
+        else this.sel.delete(id);
+      },
+      apply(enabled) {
+        if (!this.sel.size || this.busy) return;
+        this.busy = true;
+        var body = new URLSearchParams();
+        this.sel.forEach(function (id) {
+          body.append('ids', id);
+        });
+        if (enabled) body.append('enabled', '1');
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta && meta.content) body.append('_csrf', meta.content);
+        var self = this;
+        fetch(this.$root.dataset.bulkUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body,
+        })
+          .then(function (r) {
+            if (r.ok)
+              window.location.assign(window.location.pathname + '?msg=bulk-' + (enabled ? 'on' : 'off'));
+            else {
+              self.busy = false;
+              if (window.syloToast) window.syloToast('Bulk change failed.', 'bad');
+            }
+          })
+          .catch(function () {
+            self.busy = false;
+            if (window.syloToast) window.syloToast('Network error.', 'bad');
+          });
+      },
+    };
+  });
+
   // Emoji popover for a text input. Put it on a wrapper that also holds the
   // <input> and the trigger button; it $dispatch('emoji-pick', value) on choose,
   // so the wrapper carries `@emoji-pick="…"` to write the value where it belongs.
