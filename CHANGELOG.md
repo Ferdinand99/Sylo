@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.11.2](https://github.com/Ferdinand99/Sylo/compare/v3.11.1...v3.11.2) (2026-09-02)
+
+
+### Bug Fixes
+
+* /health rendered JSON instead of the page on an hx-boost sidebar click ([3f18e70](https://github.com/Ferdinand99/Sylo/commit/3f18e707470231d60434833dcb8e90972b14b64f))
+* /health rendered JSON instead of the page on an hx-boost sidebar… ([9e66533](https://github.com/Ferdinand99/Sylo/commit/9e6653371be8f75151f784e8de9e56762f4f6133))
+
 ## [3.11.1](https://github.com/Ferdinand99/Sylo/compare/v3.11.0...v3.11.1) (2026-09-02)
 
 
