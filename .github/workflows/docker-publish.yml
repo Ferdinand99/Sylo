@@ -60,10 +60,13 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
     steps:
-      - name: Prepare platform slug
+      - name: Prepare build vars
         env:
           PLATFORM: ${{ matrix.platform }}
-        run: echo "PLATFORM_SLUG=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+        run: |
+          echo "PLATFORM_SLUG=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+          # GHCR rejects a non-lowercase repository in a canonical reference.
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v7
 
@@ -80,7 +83,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ env.IMAGE }}
 
       - name: Build and push by digest
         id: build
@@ -92,7 +95,7 @@ jobs:
           cache-from: type=gha,scope=main-${{ env.PLATFORM_SLUG }}
           cache-to: type=gha,mode=max,scope=main-${{ env.PLATFORM_SLUG }}
           provenance: false
-          outputs: type=image,name=${{ env.IMAGE_NAME }},oci-mediatypes=false,push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.IMAGE }},oci-mediatypes=false,push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
         run: |
