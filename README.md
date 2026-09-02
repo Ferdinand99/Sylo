@@ -209,7 +209,9 @@ settings panel per module — saves swap in place with a toast.
   - **Welcome channel** — a MEE6-style builder for one rich, pinned message in a
     dedicated read-only channel (welcome / rules / links / banner elements, live
     preview); can create the `#welcome` channel for you and publish/update it
-  - **Sticky messages** — keep a message pinned to the bottom of a channel
+  - **Sticky messages** — keep a message pinned to the bottom of a channel;
+    per-channel option to also bump it for other bots/webhooks and a configurable
+    minimum gap between reposts
   - **Tickets (modmail)** — members DM the bot; staff read and reply from the
     dashboard (replies arrive as an anonymous "Staff" DM)
   - **Moderator** — a tabbed page consolidating **Auto-moderation** (bad words,

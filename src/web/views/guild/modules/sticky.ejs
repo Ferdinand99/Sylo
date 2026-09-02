@@ -4,7 +4,7 @@
   <p class="muted small">Each channel can have one sticky message. It is re-posted at the bottom whenever someone else writes in that channel.</p>
 
   <div id="sticky-rows">
-    <% (stickies.length ? stickies : [{ channelId: '', content: '' }]).forEach(function (s) { %>
+    <% (stickies.length ? stickies : [{ channelId: '', content: '', repostOnBots: false, cooldownSeconds: 0 }]).forEach(function (s) { %>
       <div class="sticky-row">
         <select name="s_channel">
           <option value="">— channel —</option>
@@ -13,6 +13,18 @@
           <% }) %>
         </select>
         <textarea name="s_content" rows="3" placeholder="Message to keep at the bottom…"><%= s.content || '' %></textarea>
+        <div class="sticky-opts">
+          <label class="small">Other apps / webhooks
+            <select name="s_bots">
+              <option value="off" <%= s.repostOnBots ? '' : 'selected' %>>Ignore</option>
+              <option value="on" <%= s.repostOnBots ? 'selected' : '' %>>Bump the sticky too</option>
+            </select>
+          </label>
+          <label class="small">Min seconds between reposts
+            <input type="number" name="s_cooldown" class="u-w-num" min="0" max="3600" value="<%= s.cooldownSeconds || 0 %>" />
+            <span class="muted">0 = default (4s)</span>
+          </label>
+        </div>
         <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove</button>
       </div>
     <% }) %>
@@ -28,6 +40,15 @@
       <% channels.forEach(function (c) { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %>
     </select>
     <textarea name="s_content" rows="3" placeholder="Message to keep at the bottom…"></textarea>
+    <div class="sticky-opts">
+      <label class="small">Other apps / webhooks
+        <select name="s_bots"><option value="off" selected>Ignore</option><option value="on">Bump the sticky too</option></select>
+      </label>
+      <label class="small">Min seconds between reposts
+        <input type="number" name="s_cooldown" class="u-w-num" min="0" max="3600" value="0" />
+        <span class="muted">0 = default (4s)</span>
+      </label>
+    </div>
     <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove</button>
   </div>
 </template>

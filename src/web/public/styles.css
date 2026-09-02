@@ -582,6 +582,8 @@ td.num, th.num { text-align: right; }
 .rr-msg { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
 .sticky-row { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
 .sticky-row select { align-self: flex-start; }
+.sticky-opts { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.sticky-opts label { display: flex; align-items: center; gap: 6px; }
 
 [x-cloak] { display: none !important; }
 

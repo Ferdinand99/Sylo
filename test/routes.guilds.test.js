@@ -106,6 +106,20 @@ test('POST /m/:id/config — no-JS redirect and htmx fragment + toast', async ()
   assert.match(hx.headers.get('hx-trigger') || '', /toast/);
 });
 
+test('POST /m/sticky/config keeps the per-channel app + cooldown options', async () => {
+  await post(app.base, `/guilds/${GID}/m/sticky/config`, {
+    s_channel: CH.general,
+    s_content: 'read the rules',
+    s_bots: 'on',
+    s_cooldown: '90',
+  });
+  const { getGuildModule } = await import('../src/db/modules.js');
+  const [row] = getGuildModule(GID, 'sticky').config.stickies;
+  assert.equal(row.channelId, CH.general);
+  assert.equal(row.repostOnBots, true);
+  assert.equal(row.cooldownSeconds, 90);
+});
+
 test('POST /m/kick-alerts/config stores a cleaned alert list', async () => {
   const res = await post(
     app.base,

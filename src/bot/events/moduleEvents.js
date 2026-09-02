@@ -31,7 +31,11 @@ export function register(client) {
     if (newMsg.guildId) dispatch('messageUpdate', newMsg.guildId, { old: oldMsg, new: newMsg });
   });
   client.on(Events.MessageCreate, (message) => {
-    if (message.guildId && !message.author?.bot) dispatch('messageCreate', message.guildId, message);
+    if (!message.guildId) return;
+    // `messageCreateAny` also carries bot / app / webhook messages — only the
+    // sticky module opts into those. `messageCreate` stays human-only.
+    dispatch('messageCreateAny', message.guildId, message);
+    if (!message.author?.bot) dispatch('messageCreate', message.guildId, message);
   });
 
   client.on(Events.GuildRoleCreate, (role) => dispatch('roleCreate', role.guild?.id, role));
