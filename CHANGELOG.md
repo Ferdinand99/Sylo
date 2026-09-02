@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.5.0](https://github.com/Ferdinand99/Sylo/compare/v3.4.1...v3.5.0) (2026-09-02)
+
+
+### Features
+
+* welcome images and a Birthdays module ([c2fb9f8](https://github.com/Ferdinand99/Sylo/commit/c2fb9f8fdf38bf04108941335593d864abb7cfa1))
+* welcome images and a Birthdays module ([774d731](https://github.com/Ferdinand99/Sylo/commit/774d731e312a3ef7e4f30974b925e8f536374bba))
+
 ## [3.4.1](https://github.com/Ferdinand99/Sylo/compare/v3.4.0...v3.4.1) (2026-09-02)
 
 
