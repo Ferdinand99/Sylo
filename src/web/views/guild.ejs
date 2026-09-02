@@ -21,6 +21,10 @@
        botuser: "You can't warn a bot.",
        unbanned: 'Ban removed.',
        notbanned: 'That user is not banned.',
+       'locked-all': 'Every text channel is now locked.',
+       'unlocked-all': 'Lockdown ended — channels restored.',
+       'unlocked-one': 'Channel unlocked.',
+       'lock-gone': 'That channel is no longer locked.',
        needpair: 'Add at least one emoji → role pair.',
        rrfail: 'Could not post the reaction-role message (check the bot\'s permissions in that channel).',
        'count-set': 'Counting number updated.',
@@ -56,7 +60,7 @@
        noconfirm: 'Tick the confirmation box to delete the member\'s data.',
        'md-baduser': 'Enter a valid Discord user ID or @mention.',
      };
-     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
+     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'locked-all', 'unlocked-all', 'unlocked-one', 'count-set', 'count-reset', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' || msg === 'forgot-nodm' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');
 %>
   <div class="banner <%= cls %>"><%= messages[msg] || 'Done.' %></div>
@@ -227,7 +231,7 @@
             <%- include('guild/modules/moderation', { guild: guild, moduleConfig: moderationCfg, thresholdActions: thresholdActions }) %>
           </div>
           <div class="mod-panel" data-tab="infr">
-            <%- include('guild/moderation', { guild: guild, warnings: warnings, warningTotal: warningTotal, warningShown: warningShown, bans: bans, bansTotal: bansTotal, bansShown: bansShown, bansError: bansError, banLimit: banLimit }) %>
+            <%- include('guild/moderation', { guild: guild, warnings: warnings, warningTotal: warningTotal, warningShown: warningShown, bans: bans, bansTotal: bansTotal, bansShown: bansShown, bansError: bansError, banLimit: banLimit, channelLocks: channelLocks, tempBans: tempBans, lockdownActive: lockdownActive }) %>
           </div>
           <div class="mod-panel" data-tab="log">
             <p class="muted small">Send server events to a channel. Set the mod-log channel (for moderation actions) under <a href="/guilds/<%= guild.id %>/settings">Settings</a>.</p>

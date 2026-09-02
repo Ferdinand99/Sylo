@@ -52,3 +52,72 @@
     </tbody>
   </table>
 <% } %>
+
+<h2 class="u-mt-6">Channel locks</h2>
+<p class="muted small">
+  A lock denies @everyone the send-message permissions on a channel; unlocking restores the exact
+  overwrite that was there before. Also available as <code>/lock</code>, <code>/unlock</code> and
+  <code>/lockdown</code>.
+</p>
+<div class="row-form">
+  <% if (lockdownActive) { %>
+    <form method="POST" action="/guilds/<%= guild.id %>/moderation/unlock-all"
+          data-confirm="End the lockdown and unlock every channel it locked?">
+      <button type="submit">End lockdown</button>
+    </form>
+  <% } else { %>
+    <form method="POST" action="/guilds/<%= guild.id %>/moderation/lock-all"
+          data-confirm="Lock every text channel in this server?">
+      <button type="submit" class="danger">Lock all channels</button>
+    </form>
+  <% } %>
+</div>
+<% if (channelLocks.length === 0) { %>
+  <p class="muted">No channels are locked.</p>
+<% } else { %>
+  <table>
+    <thead><tr><th>Channel</th><th>By</th><th>When</th><th>Via</th><th></th></tr></thead>
+    <tbody>
+      <% channelLocks.forEach(function (l) { %>
+        <tr>
+          <td><%= l.name ? '#' + l.name : '(deleted)' %> <span class="muted mono"><%= l.channelId %></span></td>
+          <td><%= l.lockedBy %></td>
+          <td class="muted"><%= l.ago %></td>
+          <td class="muted"><%= l.lockdown ? 'lockdown' : '/lock' %></td>
+          <td class="num">
+            <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/moderation/unlock-channel">
+              <input type="hidden" name="channelId" value="<%= l.channelId %>" />
+              <button type="submit" class="link-btn">unlock</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<h2 class="u-mt-6">Scheduled temporary bans</h2>
+<% if (tempBans.length === 0) { %>
+  <p class="muted">No temporary bans are pending. Use <code>/ban duration:…</code> to set one.</p>
+<% } else { %>
+  <table>
+    <thead><tr><th>User</th><th>ID</th><th>Reason</th><th>Unbans in</th><th></th></tr></thead>
+    <tbody>
+      <% tempBans.forEach(function (t) { %>
+        <tr>
+          <td><%= t.tag %></td>
+          <td class="mono"><%= t.userId %></td>
+          <td><%= t.reason %></td>
+          <td class="muted"><%= t.remaining %></td>
+          <td class="num">
+            <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/unban"
+                  data-confirm="Lift the ban on <%= t.tag %> now?">
+              <input type="hidden" name="userId" value="<%= t.userId %>" />
+              <button type="submit" class="link-btn">lift now</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
