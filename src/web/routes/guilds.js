@@ -684,13 +684,17 @@ router.post(
 function moduleViewLocals(mod, req, configOverride) {
   const { enabled, config } = getGuildModule(req.guild.id, mod.id);
   const hasView = CONFIG_VIEWS.has(mod.id);
+  // The temp-voice view renders each hub's id straight into an Edit/Delete URL;
+  // a hub saved by an older build can lack `id`, producing an empty path
+  // segment and a 404. Normalise on read so every hub has an id + defaults.
+  const viewConfig = mod.id === 'temp-voice' ? normaliseTempVoiceConfig(config) : config;
   return {
     ...baseContext(req.guild, `m/${mod.id}`),
     activeModule: mod,
     moduleIconName: moduleIcon(mod.id),
     moduleEnabled: enabled,
     moduleTestable: enabled && TESTABLE.has(mod.id),
-    moduleConfig: configOverride ?? config,
+    moduleConfig: configOverride ?? viewConfig,
     configView: hasView ? `guild/modules/${mod.id}` : 'guild/modules/stub',
     configPartialRel: hasView ? `modules/${mod.id}` : 'modules/stub',
     logEvents: LOG_EVENTS,
