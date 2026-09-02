@@ -3,6 +3,14 @@ name: Release
 on:
   push:
     branches: [main]
+  # Manual re-publish: build and push images for a tag that already exists
+  # (e.g. a release whose image job failed). Skips release-please entirely.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to (re)build & publish images for (e.g. v3.3.0)
+        required: true
+        type: string
 
 # Least privilege by default; jobs opt into what they need.
 permissions: {}
@@ -15,6 +23,7 @@ jobs:
   # Maintains a "release PR" from Conventional Commits. Merging that PR tags the
   # commit, publishes a GitHub Release, and updates package.json + CHANGELOG.md.
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -32,25 +41,58 @@ jobs:
   # Test gate for the release image (the release PR itself is not run through
   # PR checks because it is opened with GITHUB_TOKEN).
   test:
+    if: github.event_name == 'push'
     permissions:
       contents: read
     uses: ./.github/workflows/test.yml
 
-  # Runs only on the push that merges a release PR. Builds the just-released
-  # commit and publishes :latest + :X.Y.Z + :X.Y to Docker Hub and GHCR.
-  # The Unraid template points at Docker Hub (so CA shows "Last updated");
-  # GHCR stays a mirror for anyone already pulling from it.
-  publish-image:
+  # Decide which tag the image build should use, and whether it runs at all:
+  # a freshly merged release PR, or a manual re-publish.
+  resolve:
     needs: [release-please, test]
-    if: needs.release-please.outputs.release_created == 'true'
+    if: always() && (github.event_name == 'workflow_dispatch' || (needs.release-please.outputs.release_created == 'true' && needs.test.result == 'success'))
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.pick.outputs.tag }}
+    steps:
+      - id: pick
+        env:
+          DISPATCH_TAG: ${{ github.event.inputs.tag }}
+          RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          if [ "${{ github.event_name }}" = 'workflow_dispatch' ]; then
+            echo "tag=$DISPATCH_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Build each architecture on its own native runner. QEMU emulation of arm64
+  # crashes compiling better-sqlite3 (musl has no prebuilt binary), so amd64
+  # runs on ubuntu-latest and arm64 on the GitHub-hosted ARM runner. Each leg
+  # pushes by digest only; the merge job assembles the tagged manifest list.
+  build:
+    needs: resolve
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v7
+      - name: Prepare platform slug
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: echo "PLATFORM_SLUG=${PLATFORM//\//-}" >> "$GITHUB_ENV"
 
-      - uses: docker/setup-qemu-action@v3
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
 
       - uses: docker/setup-buildx-action@v4
 
@@ -67,7 +109,76 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Derive image tags and labels
+      - name: Derive labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: |
+            docker.io/${{ vars.DOCKERHUB_USERNAME }}/sylo
+            ghcr.io/${{ github.repository }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=release-${{ env.PLATFORM_SLUG }}
+          cache-to: type=gha,mode=max,scope=release-${{ env.PLATFORM_SLUG }}
+          provenance: false
+          # Docker (schema 2) manifests, not OCI — Unraid's "check for updates"
+          # can't parse OCI media types. push-by-digest: no tag here, the merge
+          # job applies :latest / :X.Y.Z / :X.Y to the assembled list.
+          outputs: type=image,"name=docker.io/${{ vars.DOCKERHUB_USERNAME }}/sylo,ghcr.io/${{ github.repository }}",oci-mediatypes=false,push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          digest='${{ steps.build.outputs.digest }}'
+          touch "$RUNNER_TEMP/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ env.PLATFORM_SLUG }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Stitch the per-arch digests into one multi-arch tag on both registries.
+  # `docker manifest` (not `buildx imagetools`) so the list is a Docker v2
+  # manifest list, which Unraid's update check can read.
+  merge:
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Derive tags
         id: meta
         uses: docker/metadata-action@v6
         with:
@@ -76,19 +187,25 @@ jobs:
             ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=latest
-            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag_name }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag_name }}
+            type=semver,pattern={{version}},value=${{ needs.resolve.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.resolve.outputs.tag }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: false
-          # Push Docker (schema 2) media types, not OCI — Unraid's "check for
-          # updates" can't parse application/vnd.oci.image.manifest.v1+json.
-          outputs: type=image,oci-mediatypes=false,push=true
+      - name: Assemble and push manifest lists
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          DOCKER_CLI_EXPERIMENTAL: enabled
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+        run: |
+          set -euo pipefail
+          digests=(*)
+          echo "Per-arch digests: ${digests[*]}"
+          for image in "docker.io/${DOCKERHUB_USERNAME}/sylo" "ghcr.io/${GITHUB_REPOSITORY,,}"; do
+            sources=()
+            for d in "${digests[@]}"; do sources+=("${image}@sha256:${d}"); done
+            while IFS= read -r tag; do
+              echo "==> $tag"
+              docker manifest rm "$tag" >/dev/null 2>&1 || true
+              docker manifest create "$tag" "${sources[@]}"
+              docker manifest push "$tag"
+            done < <(jq -r --arg img "$image" '.tags[] | select(startswith($img + ":"))' <<<"$DOCKER_METADATA_OUTPUT_JSON")
+          done
