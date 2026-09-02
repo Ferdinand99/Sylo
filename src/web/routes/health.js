@@ -6,6 +6,7 @@
 import { Router, raw } from 'express';
 import { createRequire } from 'node:module';
 import { config } from '../../config.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 import { runtime, uptimeSeconds, isDiscordReady, guildCount } from '../../runtime.js';
 import { dashboardStats, moduleUsage } from '../../db/dashboardStats.js';
 import {
@@ -26,6 +27,16 @@ const require = createRequire(import.meta.url);
 const { version } = require('../../../package.json');
 
 const router = Router();
+
+// Backup create / import / restore / delete write files or swap the live DB.
+// Cap the rate even behind auth — a stuck script shouldn't be able to fill the
+// disk or thrash restarts. All /health routes share one bucket (keyed on the
+// mount path); the GET healthcheck is not wrapped, so monitors are unaffected.
+const backupLimit = rateLimit({
+  windowMs: 60_000,
+  max: 12,
+  message: 'Too many backup operations — wait a minute.',
+});
 
 /** Require a signed-in user for the admin actions (pass-through in open mode). */
 function requireUser(req, res, next) {
@@ -107,7 +118,7 @@ router.get('/', (req, res) => {
 });
 
 // Create a snapshot now.
-router.post('/backups', requireUser, (req, res) => {
+router.post('/backups', requireUser, backupLimit, (req, res) => {
   try {
     const { name } = runBackup('manual');
     res.redirect(`/health?backup=${encodeURIComponent(name)}`);
@@ -127,22 +138,28 @@ router.get('/backups/:name', requireUser, (req, res) => {
 });
 
 // Delete a snapshot.
-router.post('/backups/:name/delete', requireUser, (req, res) => {
+router.post('/backups/:name/delete', requireUser, backupLimit, (req, res) => {
   deleteBackup(req.params.name);
   res.redirect('/health');
 });
 
 // Import (upload) a .db file — stored as a snapshot the operator can then restore.
 // The browser posts the raw file as the request body (see the Health page script).
-router.post('/backups/import', requireUser, raw({ type: () => true, limit: '512mb' }), (req, res) => {
-  const result = importBuffer(req.body);
-  if (!result.ok) return res.redirect(`/health?importerr=${encodeURIComponent(result.error)}`);
-  res.redirect(`/health?imported=${encodeURIComponent(result.name)}`);
-});
+router.post(
+  '/backups/import',
+  requireUser,
+  backupLimit,
+  raw({ type: () => true, limit: '128mb' }),
+  (req, res) => {
+    const result = importBuffer(req.body);
+    if (!result.ok) return res.redirect(`/health?importerr=${encodeURIComponent(result.error)}`);
+    res.redirect(`/health?imported=${encodeURIComponent(result.name)}`);
+  }
+);
 
 // Restore the database from a snapshot, then exit so the process manager restarts
 // Sylo on the restored data. A "prerestore" snapshot is taken first.
-router.post('/backups/:name/restore', requireUser, (req, res) => {
+router.post('/backups/:name/restore', requireUser, backupLimit, (req, res) => {
   const name = req.params.name;
   const full = resolveBackup(name);
   if (!full) return res.redirect('/health?restoreerr=no%20such%20backup');

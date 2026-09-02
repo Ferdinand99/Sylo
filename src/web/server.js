@@ -53,6 +53,10 @@ export function createApp() {
 
   // Everything below requires a signed-in user when auth is enabled.
   app.use(requireAuth);
+  // Per-path ceiling on the authenticated dashboard — generous for normal
+  // clicking, but stops a stuck script or a compromised session from hammering
+  // config saves, backups, or "send as bot".
+  app.use(rateLimit({ windowMs: 60_000, max: 300 }));
   app.use('/', dashboardRouter);
   app.use('/stats', statsRouter);
   app.use('/commands', commandsRouter);

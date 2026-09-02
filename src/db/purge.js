@@ -2,8 +2,10 @@
 // and by the /forget data-deletion command.
 import { db } from './index.js';
 
-// Tables keyed directly by guild_id.
-const GUILD_TABLES = [
+// Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
+// this stays in sync with the schema so new guild data can't escape /forget or
+// the guild-leave purge.
+export const GUILD_TABLES = [
   'guild_settings',
   'guild_modules',
   'command_overrides',
