@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.11.1](https://github.com/Ferdinand99/Sylo/compare/v3.11.0...v3.11.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* sticky messages can bump for other apps' messages, with a per-ch… ([568e937](https://github.com/Ferdinand99/Sylo/commit/568e937c992f56bc3a6cf326e11c075220f8a8f4))
+* sticky messages can bump for other apps' messages, with a per-channel cooldown ([1fc1c11](https://github.com/Ferdinand99/Sylo/commit/1fc1c11bbda137529fa58d14d162c6f0b175340c))
+
 ## [3.11.0](https://github.com/Ferdinand99/Sylo/compare/v3.10.0...v3.11.0) (2026-09-02)
 
 
