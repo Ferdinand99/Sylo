@@ -19,6 +19,24 @@
     <h2>Uptime</h2>
     <p class="big"><%= uptime %></p>
     <p class="muted">gateway ping <%= gatewayPing === null ? '—' : gatewayPing + ' ms' %></p>
+    <%
+      var hist = typeof pingHistory !== 'undefined' && pingHistory ? pingHistory : [];
+      if (hist.length > 1) {
+        var w = 240, h = 32, lo = Math.min.apply(null, hist), hi = Math.max.apply(null, hist);
+        var span = Math.max(1, hi - lo);
+        var pts = hist.map(function (v, i) {
+          var x = (i / (hist.length - 1)) * w;
+          var y = h - 2 - ((v - lo) / span) * (h - 4);
+          return x.toFixed(1) + ',' + y.toFixed(1);
+        }).join(' ');
+    %>
+    <svg class="sparkline" viewBox="0 0 <%= w %> <%= h %>" width="<%= w %>" height="<%= h %>"
+         preserveAspectRatio="none" role="img"
+         aria-label="Gateway ping, last <%= hist.length %> samples, <%= lo %> to <%= hi %> ms">
+      <polyline fill="none" stroke="currentColor" stroke-width="1.5" points="<%= pts %>" />
+    </svg>
+    <p class="muted"><%= lo %>–<%= hi %> ms over the last <%= hist.length %> min</p>
+    <% } %>
   </div>
 </section>
 

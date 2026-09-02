@@ -8,6 +8,7 @@ import { getCommandOverride } from '../../db/commandOverrides.js';
 import { handleCustomSlash } from '../lib/customCommandSync.js';
 import { routeComponent } from '../lib/components.js';
 import { log } from '../../lib/log.js';
+import { inc } from '../../lib/metrics.js';
 
 export const name = Events.InteractionCreate;
 
@@ -52,6 +53,8 @@ export async function execute(interaction) {
     return;
   }
   if (!interaction.isChatInputCommand()) return;
+
+  inc('sylo_commands_total', { command: interaction.commandName });
 
   const command = interaction.client.commands.get(interaction.commandName);
   if (!command) {
