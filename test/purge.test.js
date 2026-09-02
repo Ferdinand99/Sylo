@@ -2,7 +2,7 @@ import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../src/db/index.js';
-import { purgeGuild, forgetUser } from '../src/db/purge.js';
+import { purgeGuild, forgetUser, describeUserData } from '../src/db/purge.js';
 
 const G = '111111111111111111';
 const OTHER = '222222222222222222';
@@ -71,4 +71,24 @@ test('forgetUser deletes only that member’s data in that guild', () => {
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM afk WHERE guild_id = ?').get(G).n, 1, 'other member afk kept');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM giveaway_entries').get().n, 1, 'other member giveaway entry kept');
   assert.equal(db.prepare('SELECT last_user_id FROM counting WHERE guild_id = ?').get(G).last_user_id, null, 'counting lock cleared');
+});
+
+test('describeUserData counts what forgetUser would remove, then reads zero after', () => {
+  db.exec('DELETE FROM leveling; DELETE FROM warnings; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM giveaways; DELETE FROM giveaway_entries;');
+  seed(G, U);
+
+  const before = describeUserData(G, U);
+  const byKey = Object.fromEntries(before.items.map((i) => [i.key, i.count]));
+  assert.equal(byKey.warnings, 1);
+  assert.equal(byKey.leveling, 1);
+  assert.equal(byKey.tickets, 1);
+  assert.equal(byKey.ticketMessages, 1);
+  assert.equal(byKey.afk, 1);
+  assert.equal(byKey.giveawayEntries, 1);
+  assert.equal(byKey.countingLast, 1);
+  assert.ok(before.total >= 7);
+
+  forgetUser(G, U);
+
+  assert.equal(describeUserData(G, U).total, 0, 'nothing left after forgetUser');
 });

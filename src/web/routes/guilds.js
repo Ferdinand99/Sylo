@@ -82,6 +82,7 @@ import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '
 import { levelFromXp } from '../../modules/lib/levels.js';
 import { topMembers, memberCount, setXp, resetGuildLeveling } from '../../db/leveling.js';
 import { recordAudit, listAudit } from '../../db/audit.js';
+import { forgetUser, describeUserData } from '../../db/purge.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
@@ -197,6 +198,89 @@ router.post('/:guildId/settings', (req, res) => {
   recordAudit(guild.id, { actor: moderatorDisplayName(req), action: 'settings:server', detail: 'saved' });
   res.redirect(`${back}?msg=saved`);
 });
+
+// --- Member data (data-subject requests) ---------------------------------
+
+/** Fetch a Discord user's tag + avatar for display; falls back to the raw id. */
+async function lookupProfile(userId) {
+  try {
+    const u = await runtime.client.users.fetch(userId);
+    return { id: u.id, tag: u.tag, avatar: u.displayAvatarURL({ size: 64, extension: 'png' }) };
+  } catch {
+    return { id: userId, tag: null, avatar: null };
+  }
+}
+
+const MEMBER_DATA_UNAFFECTED =
+  "Messages already posted to channels, a completed giveaway’s winner list, and the server’s config-change log are not affected.";
+
+router.get(
+  '/:guildId/member-data',
+  asyncHandler(async (req, res) => {
+    const raw = String(req.query.user ?? '').trim();
+    const userId = raw ? parseUserId(raw) : null;
+    let lookup = null;
+    if (raw && !userId) {
+      lookup = { error: 'notanid', raw };
+    } else if (userId) {
+      lookup = {
+        profile: await lookupProfile(userId),
+        data: describeUserData(req.guild.id, userId),
+      };
+    }
+    res.render('guild', {
+      ...baseContext(req.guild, 'member-data'),
+      lookup,
+      msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+    });
+  })
+);
+
+router.post(
+  '/:guildId/member-data/forget',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const userId = parseUserId(req.body.userId);
+    const reason = String(req.body.reason ?? '').trim().slice(0, 500);
+    const back = `/guilds/${guild.id}/member-data`;
+
+    if (!userId) return res.redirect(`${back}?msg=baduser`);
+    if (req.body.confirm !== 'on') return res.redirect(`${back}?user=${userId}&msg=noconfirm`);
+
+    const r = forgetUser(guild.id, userId);
+
+    const dm = new EmbedBuilder()
+      .setColor(0x58d68d)
+      .setTitle(`Your data in ${guild.name} was deleted`)
+      .setDescription('A server administrator deleted the data Sylo had stored about you in this server, at your request.')
+      .addFields(
+        { name: 'Warnings', value: String(r.warnings), inline: true },
+        { name: 'Leveling record', value: String(r.leveling), inline: true },
+        { name: 'Tickets', value: `${r.tickets} (${r.ticketMessages} msgs)`, inline: true },
+        { name: 'Ban appeals', value: String(r.appeals), inline: true },
+        { name: 'AFK status', value: String(r.afk), inline: true },
+        { name: 'Giveaway entries', value: String(r.giveawayEntries), inline: true },
+        { name: 'Invite records', value: String(r.invites), inline: true },
+        { name: 'Not affected', value: MEMBER_DATA_UNAFFECTED }
+      )
+      .setTimestamp(Date.now());
+    if (reason) dm.addFields({ name: 'Note from staff', value: reason });
+
+    const dmDelivered = await runtime.client.users
+      .fetch(userId)
+      .then((u) => u.send({ embeds: [dm] }))
+      .then(() => true)
+      .catch(() => false);
+
+    recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'privacy:member-data',
+      detail: `deleted data for ${userId}${reason ? ` — ${reason}` : ''}${dmDelivered ? '' : ' (DM failed)'}`,
+    });
+
+    res.redirect(`${back}?user=${userId}&msg=${dmDelivered ? 'forgot' : 'forgot-nodm'}`);
+  })
+);
 
 router.get('/:guildId/commands', (req, res) => {
   const overrides = getCommandOverrides(req.guild.id);

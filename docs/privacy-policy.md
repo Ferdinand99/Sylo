@@ -131,6 +131,10 @@ No other third parties receive your data.
   invite records, AFK status and giveaway entries. It does **not** remove
   messages already posted to channels, a completed giveaway's winner list, or the
   display name recorded in that server's config audit log.
+- **Admin-assisted erasure** — a server's administrators can look up and delete a
+  specific member's data from the Dashboard's **Member data** page (same scope as
+  `/forget`). When they do, Sylo sends that member a direct message confirming
+  what was removed.
 - **Removing the Bot from a server** immediately stops processing and
   **automatically deletes every stored row for that server** (all of section 2).
 - **Game-stat cache** entries expire automatically and hold only public game

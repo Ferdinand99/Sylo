@@ -105,3 +105,46 @@ const forgetUserTxn = db.transaction((guildId, userId) => {
 export function forgetUser(guildId, userId) {
   return forgetUserTxn(guildId, userId);
 }
+
+// --- read-only inventory (dashboard "Member data" page) --------------------
+
+// [key, label, sql, args] — args says how to bind (guildId, userId) for this sql.
+const describeStmts = [
+  ['warnings', 'Warnings', 'SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND user_id = ?', 'gu'],
+  ['leveling', 'Leveling record (XP / level / message count)', 'SELECT COUNT(*) AS n FROM leveling WHERE guild_id = ? AND user_id = ?', 'gu'],
+  ['tickets', 'Modmail tickets they opened', 'SELECT COUNT(*) AS n FROM tickets WHERE guild_id = ? AND user_id = ?', 'gu'],
+  [
+    'ticketMessages',
+    'Modmail messages they sent',
+    "SELECT COUNT(*) AS n FROM ticket_messages WHERE author_kind = 'user' AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ? AND user_id = ?)",
+    'gu',
+  ],
+  ['appeals', 'Ban appeals', 'SELECT COUNT(*) AS n FROM appeals WHERE guild_id = ? AND user_id = ?', 'gu'],
+  ['afk', 'AFK status', 'SELECT COUNT(*) AS n FROM afk WHERE guild_id = ? AND user_id = ?', 'gu'],
+  [
+    'giveawayEntries',
+    'Giveaway entries',
+    'SELECT COUNT(*) AS n FROM giveaway_entries WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)',
+    'ug',
+  ],
+  ['inviteCounts', 'Invite tally', 'SELECT COUNT(*) AS n FROM invite_counts WHERE guild_id = ? AND user_id = ?', 'gu'],
+  ['inviteJoins', 'Join-via-invite record', 'SELECT COUNT(*) AS n FROM invite_joins WHERE guild_id = ? AND user_id = ?', 'gu'],
+  ['invitedOthers', 'Members they are credited with inviting', 'SELECT COUNT(*) AS n FROM invite_joins WHERE guild_id = ? AND inviter_id = ?', 'gu'],
+  ['invitePersonal', 'Personal invite code', 'SELECT COUNT(*) AS n FROM invite_personal WHERE guild_id = ? AND user_id = ?', 'gu'],
+  ['countingLast', 'Named as the last counter', 'SELECT COUNT(*) AS n FROM counting WHERE guild_id = ? AND last_user_id = ?', 'gu'],
+].map(([key, label, sql, order]) => ({ key, label, stmt: db.prepare(sql), order }));
+
+/**
+ * Count, without deleting, everything {@link forgetUser} would remove for a
+ * member in a guild. `invitedOthers` and `countingLast` are references that get
+ * anonymised (not row-deleted) but are shown so an admin sees the full picture.
+ * @returns {{ items: Array<{ key: string, label: string, count: number }>, total: number }}
+ */
+export function describeUserData(guildId, userId) {
+  const items = describeStmts.map(({ key, label, stmt, order }) => ({
+    key,
+    label,
+    count: stmt.get(...(order === 'ug' ? [userId, guildId] : [guildId, userId])).n,
+  }));
+  return { items, total: items.reduce((sum, i) => sum + i.count, 0) };
+}
