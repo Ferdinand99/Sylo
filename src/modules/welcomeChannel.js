@@ -13,7 +13,12 @@ const BRAND = '#5865f2';
 // "Add element" presets. `kind` is a UI hint; everything is stored as an embed
 // spec (a "banner" is just an embed with a big image).
 export const WC_PRESETS = [
-  { id: 'advanced-embed', label: 'Advanced embed', kind: 'embed', make: () => ({ kind: 'embed', color: BRAND }) },
+  {
+    id: 'advanced-embed',
+    label: 'Advanced embed',
+    kind: 'embed',
+    make: () => ({ kind: 'embed', color: BRAND }),
+  },
   {
     id: 'welcome-embed',
     label: 'Welcome embed',
@@ -42,23 +47,48 @@ export const WC_PRESETS = [
     id: 'invite-embed',
     label: 'Invite embed',
     kind: 'embed',
-    make: () => ({ kind: 'embed', color: BRAND, title: '🔗 Invite your friends', description: 'Enjoying it here? Bring a friend along and help the server grow.' }),
+    make: () => ({
+      kind: 'embed',
+      color: BRAND,
+      title: '🔗 Invite your friends',
+      description: 'Enjoying it here? Bring a friend along and help the server grow.',
+    }),
   },
   {
     id: 'mods-embed',
     label: 'Staff embed',
     kind: 'embed',
-    make: () => ({ kind: 'embed', color: BRAND, title: '🛡️ Staff', description: 'Need help? Mention a staff member or open a ticket.' }),
+    make: () => ({
+      kind: 'embed',
+      color: BRAND,
+      title: '🛡️ Staff',
+      description: 'Need help? Mention a staff member or open a ticket.',
+    }),
   },
   {
     id: 'links-embed',
     label: 'Links embed',
     kind: 'embed',
-    make: () => ({ kind: 'embed', color: BRAND, title: '🌐 Links', description: '• Website — https://\n• Twitter — https://\n• YouTube — https://' }),
+    make: () => ({
+      kind: 'embed',
+      color: BRAND,
+      title: '🌐 Links',
+      description: '• Website — https://\n• Twitter — https://\n• YouTube — https://',
+    }),
   },
-  { id: 'welcome-banner', label: 'Welcome banner', kind: 'banner', make: () => ({ kind: 'banner', image: '' }) },
+  {
+    id: 'welcome-banner',
+    label: 'Welcome banner',
+    kind: 'banner',
+    make: () => ({ kind: 'banner', image: '' }),
+  },
   { id: 'rules-banner', label: 'Rules banner', kind: 'banner', make: () => ({ kind: 'banner', image: '' }) },
-  { id: 'invite-banner', label: 'Invite banner', kind: 'banner', make: () => ({ kind: 'banner', image: '' }) },
+  {
+    id: 'invite-banner',
+    label: 'Invite banner',
+    kind: 'banner',
+    make: () => ({ kind: 'banner', image: '' }),
+  },
   { id: 'links-banner', label: 'Links banner', kind: 'banner', make: () => ({ kind: 'banner', image: '' }) },
 ];
 
@@ -178,7 +208,11 @@ export async function createWelcomeChannel(guild) {
         },
         {
           id: me.id,
-          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks],
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.EmbedLinks,
+          ],
         },
       ],
     });

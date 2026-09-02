@@ -32,7 +32,12 @@ const clampInt = (v, min, max, dflt) => {
 
 export function normaliseServerStats(raw = {}) {
   return {
-    refreshMinutes: clampInt(raw.refreshMinutes, REFRESH_MIN_MINUTES, REFRESH_MAX_MINUTES, REFRESH_DEFAULT_MINUTES),
+    refreshMinutes: clampInt(
+      raw.refreshMinutes,
+      REFRESH_MIN_MINUTES,
+      REFRESH_MAX_MINUTES,
+      REFRESH_DEFAULT_MINUTES
+    ),
     channels: (Array.isArray(raw.channels) ? raw.channels : [])
       .map((c) => ({
         channelId: /^\d{17,20}$/.test(c.channelId ?? '') ? c.channelId : '',

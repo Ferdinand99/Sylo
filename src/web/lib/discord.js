@@ -1,10 +1,7 @@
 // Helpers for reading Discord state from the shared client in web routes.
 import { ChannelType } from 'discord.js';
 
-const TEXTY = new Set([
-  ChannelType.GuildText,
-  ChannelType.GuildAnnouncement,
-]);
+const TEXTY = new Set([ChannelType.GuildText, ChannelType.GuildAnnouncement]);
 
 /**
  * Text channels of a guild that the bot could post logs to, sorted the way

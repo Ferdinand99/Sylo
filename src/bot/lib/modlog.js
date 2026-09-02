@@ -13,8 +13,7 @@ export async function postModLog(guild, embed) {
   if (!channelId) return false;
 
   try {
-    const channel =
-      guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId));
+    const channel = guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId));
     if (!channel?.isTextBased()) return false;
 
     const me = guild.members.me;

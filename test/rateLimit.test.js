@@ -31,14 +31,18 @@ test('rateLimit allows up to max, then 429s with Retry-After', () => {
   let passed = 0;
   for (let i = 0; i < 3; i += 1) {
     const res = fakeRes();
-    mw(req, res, () => { passed += 1; });
+    mw(req, res, () => {
+      passed += 1;
+    });
     assert.equal(res.statusCode, 200);
   }
   assert.equal(passed, 3);
 
   const res = fakeRes();
   let nextCalled = false;
-  mw(req, res, () => { nextCalled = true; });
+  mw(req, res, () => {
+    nextCalled = true;
+  });
   assert.equal(nextCalled, false);
   assert.equal(res.statusCode, 429);
   assert.ok(res.headers['retry-after']);

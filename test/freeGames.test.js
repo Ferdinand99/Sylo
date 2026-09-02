@@ -17,7 +17,11 @@ function element(overrides = {}) {
       promotionalOffers: [
         {
           promotionalOffers: [
-            { startDate: iso(now - 3600e3), endDate: iso(now + 3600e3), discountSetting: { discountPercentage: 0 } },
+            {
+              startDate: iso(now - 3600e3),
+              endDate: iso(now + 3600e3),
+              discountSetting: { discountPercentage: 0 },
+            },
           ],
         },
       ],
@@ -50,7 +54,11 @@ test('parseEpicPayload: skips games whose promo window is not active', () => {
       promotionalOffers: [
         {
           promotionalOffers: [
-            { startDate: iso(now + 86400e3), endDate: iso(now + 2 * 86400e3), discountSetting: { discountPercentage: 0 } },
+            {
+              startDate: iso(now + 86400e3),
+              endDate: iso(now + 2 * 86400e3),
+              discountSetting: { discountPercentage: 0 },
+            },
           ],
         },
       ],
@@ -96,8 +104,14 @@ test('parseItadPayload: keeps 100%-off games, maps store/price/expiry', () => {
 
 test('parseItadPayload: filters DLC vs game by "kind"', () => {
   const rows = [itadRow(), itadRow({ title: 'Some DLC', type: 'dlc' })];
-  assert.deepEqual(parseItadPayload(itad(rows), 'game').map((g) => g.title), ['Deal Game']);
-  assert.deepEqual(parseItadPayload(itad(rows), 'dlc').map((g) => g.title), ['Some DLC']);
+  assert.deepEqual(
+    parseItadPayload(itad(rows), 'game').map((g) => g.title),
+    ['Deal Game']
+  );
+  assert.deepEqual(
+    parseItadPayload(itad(rows), 'dlc').map((g) => g.title),
+    ['Some DLC']
+  );
 });
 
 test('parseItadPayload: skips deals that are not free', () => {

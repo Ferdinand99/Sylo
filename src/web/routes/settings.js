@@ -4,7 +4,12 @@
 import { Router } from 'express';
 import { runtime } from '../../runtime.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { getPresenceConfig, setPresenceConfig, PRESENCE_TYPES, PRESENCE_STATUSES } from '../../db/appSettings.js';
+import {
+  getPresenceConfig,
+  setPresenceConfig,
+  PRESENCE_TYPES,
+  PRESENCE_STATUSES,
+} from '../../db/appSettings.js';
 import { applyPresence } from '../../bot/lib/presence.js';
 
 const router = Router();

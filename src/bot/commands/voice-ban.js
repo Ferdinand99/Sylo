@@ -13,7 +13,10 @@ export async function execute(interaction) {
   const ctx = resolveContext(interaction);
   if (ctx.error) return interaction.reply({ content: ctx.error, ...ephemeral });
   if (!canControl(ctx)) {
-    return interaction.reply({ content: 'Only the channel owner or a voice moderator can do that.', ...ephemeral });
+    return interaction.reply({
+      content: 'Only the channel owner or a voice moderator can do that.',
+      ...ephemeral,
+    });
   }
 
   const user = interaction.options.getUser('user', true);

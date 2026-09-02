@@ -34,7 +34,10 @@ test('pickWinners: distinct, capped, order-independent', () => {
 
 test('normaliseGiveawaysConfig: defaults and validation', () => {
   assert.deepEqual(normaliseGiveawaysConfig(), { ping: 'none', dmWinners: false });
-  assert.deepEqual(normaliseGiveawaysConfig({ ping: 'everyone', dmWinners: 1 }), { ping: 'everyone', dmWinners: true });
+  assert.deepEqual(normaliseGiveawaysConfig({ ping: 'everyone', dmWinners: 1 }), {
+    ping: 'everyone',
+    dmWinners: true,
+  });
   assert.equal(normaliseGiveawaysConfig({ ping: 'nonsense' }).ping, 'none');
 });
 
@@ -72,8 +75,22 @@ test('giveaway lifecycle: create, enter, count, end', () => {
 
 test('dueGiveaways returns only past, un-ended rows; clearGuild wipes everything', () => {
   clearGuildGiveaways(G);
-  const past = createGiveaway({ guildId: G, channelId: '1', prize: 'p', winners: 1, hostId: 'h', endsAt: Date.now() - 1000 });
-  const future = createGiveaway({ guildId: G, channelId: '1', prize: 'f', winners: 1, hostId: 'h', endsAt: Date.now() + 60_000 });
+  const past = createGiveaway({
+    guildId: G,
+    channelId: '1',
+    prize: 'p',
+    winners: 1,
+    hostId: 'h',
+    endsAt: Date.now() - 1000,
+  });
+  const future = createGiveaway({
+    guildId: G,
+    channelId: '1',
+    prize: 'f',
+    winners: 1,
+    hostId: 'h',
+    endsAt: Date.now() + 60_000,
+  });
   const due = dueGiveaways(Date.now());
   assert.ok(due.some((g) => g.id === past.id));
   assert.ok(!due.some((g) => g.id === future.id));

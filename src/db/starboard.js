@@ -2,9 +2,7 @@
 import { db } from './index.js';
 
 const stmts = {
-  get: db.prepare(
-    'SELECT * FROM starboard_posts WHERE guild_id = ? AND board_id = ? AND source_msg_id = ?'
-  ),
+  get: db.prepare('SELECT * FROM starboard_posts WHERE guild_id = ? AND board_id = ? AND source_msg_id = ?'),
   byPost: db.prepare('SELECT * FROM starboard_posts WHERE post_msg_id = ?'),
   upsert: db.prepare(`
     INSERT INTO starboard_posts (guild_id, board_id, source_msg_id, source_chan_id, post_msg_id, star_count, posted_at)
@@ -21,9 +19,7 @@ const stmts = {
   setCount: db.prepare(
     'UPDATE starboard_posts SET star_count = @starCount WHERE guild_id = @guildId AND board_id = @boardId AND source_msg_id = @sourceMsgId'
   ),
-  del: db.prepare(
-    'DELETE FROM starboard_posts WHERE guild_id = ? AND board_id = ? AND source_msg_id = ?'
-  ),
+  del: db.prepare('DELETE FROM starboard_posts WHERE guild_id = ? AND board_id = ? AND source_msg_id = ?'),
   delBoard: db.prepare('DELETE FROM starboard_posts WHERE guild_id = ? AND board_id = ?'),
   delGuild: db.prepare('DELETE FROM starboard_posts WHERE guild_id = ?'),
 };
@@ -46,7 +42,13 @@ export function upsertStarboardEntry(e) {
   });
 }
 export function setStarboardPost(guildId, boardId, sourceMsgId, postMsgId, postedAt) {
-  stmts.setPost.run({ guildId, boardId, sourceMsgId, postMsgId: postMsgId ?? null, postedAt: postedAt ?? null });
+  stmts.setPost.run({
+    guildId,
+    boardId,
+    sourceMsgId,
+    postMsgId: postMsgId ?? null,
+    postedAt: postedAt ?? null,
+  });
 }
 export function setStarboardCount(guildId, boardId, sourceMsgId, starCount) {
   stmts.setCount.run({ guildId, boardId, sourceMsgId, starCount });

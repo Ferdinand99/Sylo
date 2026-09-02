@@ -18,7 +18,10 @@ test('names lowercased, invalid names dropped, action-less commands dropped', ()
       { name: 'gg-wp_1', actions: [{ type: 'reply', messages: [{ content: 'nice' }] }] },
     ],
   });
-  assert.deepEqual(commands.map((c) => c.name), ['rules', 'gg-wp_1']);
+  assert.deepEqual(
+    commands.map((c) => c.name),
+    ['rules', 'gg-wp_1']
+  );
 });
 
 test('duplicate names keep the first', () => {

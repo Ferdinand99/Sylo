@@ -34,7 +34,10 @@ test('normaliseAutoresponder: drops empty rows, clamps cooldown, defaults match 
     ],
   });
   assert.equal(c.cooldownSeconds, 300);
-  assert.deepEqual(c.responders.map((r) => r.trigger), ['gg', 'hi']);
+  assert.deepEqual(
+    c.responders.map((r) => r.trigger),
+    ['gg', 'hi']
+  );
   assert.equal(c.responders[0].match, 'contains');
   assert.equal(c.responders[1].embedColor, 'FF0000');
   assert.equal(c.responders[1].embed, true);

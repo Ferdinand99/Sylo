@@ -23,7 +23,10 @@ test('normaliseYoutubeConfig: needs a UC id + discord channel, dedupes, caps', (
 });
 
 test('normaliseYoutubeConfig: caps at 50', () => {
-  const many = Array.from({ length: 60 }, (_, i) => ({ ytChannelId: 'UC' + String(i).padStart(22, '0'), discordChannelId: CH }));
+  const many = Array.from({ length: 60 }, (_, i) => ({
+    ytChannelId: 'UC' + String(i).padStart(22, '0'),
+    discordChannelId: CH,
+  }));
   assert.equal(normaliseYoutubeConfig({ alerts: many }).alerts.length, 50);
 });
 
@@ -35,7 +38,10 @@ test('parseFeed: pulls entries newest-first with ids, titles, urls', () => {
     <entry><yt:videoId>bbbbbbbbbbb</yt:videoId><title>Newest</title>
       <published>2024-06-01T00:00:00+00:00</published></entry></feed>`;
   const out = parseFeed(xml);
-  assert.deepEqual(out.map((e) => e.videoId), ['bbbbbbbbbbb', 'aaaaaaaaaaa']);
+  assert.deepEqual(
+    out.map((e) => e.videoId),
+    ['bbbbbbbbbbb', 'aaaaaaaaaaa']
+  );
   assert.equal(out[1].title, 'Older & wiser');
   assert.equal(out[0].url, 'https://www.youtube.com/watch?v=bbbbbbbbbbb');
   assert.equal(out[1].thumb, 'https://img/a.jpg');

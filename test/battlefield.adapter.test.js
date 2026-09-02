@@ -58,7 +58,10 @@ test('happy path → normalized stats object', async () => {
 
   const stats = await battlefieldAdapter.getPlayerStats('ExamplePlayer', 'pc', { title: 'bf4' });
 
-  assert.equal(calledUrl, 'https://api.example.test/bf4/stats/?name=ExamplePlayer&platform=pc&format_values=true');
+  assert.equal(
+    calledUrl,
+    'https://api.example.test/bf4/stats/?name=ExamplePlayer&platform=pc&format_values=true'
+  );
   assert.equal(stats.game, 'battlefield');
   assert.equal(stats.title, 'bf4');
   assert.equal(stats.titleLabel, 'Battlefield 4');
@@ -83,10 +86,7 @@ test('HTTP 404 → PlayerNotFoundError', async () => {
 
 test('HTTP 429 → RateLimitedError', async () => {
   stubFetch(() => jsonResponse({}, { status: 429 }));
-  await assert.rejects(
-    battlefieldAdapter.getPlayerStats('x', 'pc', { title: 'bf1' }),
-    RateLimitedError
-  );
+  await assert.rejects(battlefieldAdapter.getPlayerStats('x', 'pc', { title: 'bf1' }), RateLimitedError);
 });
 
 test('HTTP 500 → UpstreamUnavailableError', async () => {
@@ -109,18 +109,12 @@ test('fetch throwing (network/timeout) → UpstreamUnavailableError', async () =
 
 test('error envelope with "not found" → PlayerNotFoundError', async () => {
   stubFetch(() => jsonResponse({ errors: ['player not found'] }));
-  await assert.rejects(
-    battlefieldAdapter.getPlayerStats('x', 'pc', { title: 'bf1' }),
-    PlayerNotFoundError
-  );
+  await assert.rejects(battlefieldAdapter.getPlayerStats('x', 'pc', { title: 'bf1' }), PlayerNotFoundError);
 });
 
 test('empty/identity-less payload → PlayerNotFoundError', async () => {
   stubFetch(() => jsonResponse({ someUnrelatedField: true }));
-  await assert.rejects(
-    battlefieldAdapter.getPlayerStats('x', 'pc', { title: 'bf1' }),
-    PlayerNotFoundError
-  );
+  await assert.rejects(battlefieldAdapter.getPlayerStats('x', 'pc', { title: 'bf1' }), PlayerNotFoundError);
 });
 
 test('invalid platform for the title → InvalidPlatformError (no fetch)', async () => {
@@ -130,10 +124,7 @@ test('invalid platform for the title → InvalidPlatformError (no fetch)', async
     return jsonResponse(OK_PAYLOAD);
   });
   // ps5 is not valid for BF4.
-  await assert.rejects(
-    battlefieldAdapter.getPlayerStats('x', 'ps5', { title: 'bf4' }),
-    InvalidPlatformError
-  );
+  await assert.rejects(battlefieldAdapter.getPlayerStats('x', 'ps5', { title: 'bf4' }), InvalidPlatformError);
   assert.equal(fetched, false);
 });
 

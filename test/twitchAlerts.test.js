@@ -13,13 +13,19 @@ test('normaliseTwitchConfig: cleans logins, requires a channel, dedupes, caps', 
       { login: 'ninja', channelId: '123456789012345678' }, // dropped: dupe login+channel
     ],
   });
-  assert.deepEqual(c.alerts.map((a) => a.login), ['ninja', 'shroud']);
+  assert.deepEqual(
+    c.alerts.map((a) => a.login),
+    ['ninja', 'shroud']
+  );
   assert.equal(c.alerts[0].roleId, '999999999999999999');
   assert.equal(c.alerts[1].roleId, ''); // invalid/absent role cleared
 });
 
 test('normaliseTwitchConfig: caps at 50 alerts', () => {
-  const many = Array.from({ length: 60 }, (_, i) => ({ login: `streamer${i}`, channelId: '123456789012345678' }));
+  const many = Array.from({ length: 60 }, (_, i) => ({
+    login: `streamer${i}`,
+    channelId: '123456789012345678',
+  }));
   assert.equal(normaliseTwitchConfig({ alerts: many }).alerts.length, 50);
 });
 

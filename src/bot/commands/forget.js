@@ -8,7 +8,10 @@ export const data = new SlashCommandBuilder()
   .setName('forget')
   .setDescription('Delete the data Sylo has stored about you in this server.')
   .addBooleanOption((o) =>
-    o.setName('confirm').setDescription('Tick to permanently delete — this cannot be undone.').setRequired(false)
+    o
+      .setName('confirm')
+      .setDescription('Tick to permanently delete — this cannot be undone.')
+      .setRequired(false)
   );
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */

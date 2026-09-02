@@ -38,7 +38,12 @@ export function baseContext(guild, panel) {
   }));
 
   return {
-    guild: { id: guild.id, name: guild.name, icon: guild.iconURL({ size: 64 }), memberCount: guild.memberCount ?? 0 },
+    guild: {
+      id: guild.id,
+      name: guild.name,
+      icon: guild.iconURL({ size: 64 }),
+      memberCount: guild.memberCount ?? 0,
+    },
     channels: guildTextChannels(guild),
     modules,
     openTickets: openTicketCount(guild.id),

@@ -38,7 +38,9 @@ async function handleDM(message) {
 
   const guilds = await ticketGuildsForUser(message.author);
   if (guilds.length === 0) {
-    await message.reply("I'm not set up to take messages for any server you're in right now.").catch(() => {});
+    await message
+      .reply("I'm not set up to take messages for any server you're in right now.")
+      .catch(() => {});
     return;
   }
 
@@ -61,10 +63,15 @@ async function handleDM(message) {
     .setCustomId(SELECT_ID)
     .setPlaceholder('Which server is this about?')
     .addOptions(
-      (openGuilds.length ? openGuilds : guilds).slice(0, 25).map((g) => ({ label: g.name.slice(0, 100), value: g.id }))
+      (openGuilds.length ? openGuilds : guilds)
+        .slice(0, 25)
+        .map((g) => ({ label: g.name.slice(0, 100), value: g.id }))
     );
   await message
-    .reply({ content: 'You can reach staff in more than one server. Pick one:', components: [new ActionRowBuilder().addComponents(menu)] })
+    .reply({
+      content: 'You can reach staff in more than one server. Pick one:',
+      components: [new ActionRowBuilder().addComponents(menu)],
+    })
     .catch(() => {});
 }
 
@@ -73,12 +80,17 @@ async function handleSelect(interaction) {
   const guild = interaction.client.guilds.cache.get(interaction.values[0]);
   const payload = takeStash(interaction.user.id);
   if (!guild || !payload) {
-    await interaction.update({ content: 'That request expired — send your message again.', components: [] }).catch(() => {});
+    await interaction
+      .update({ content: 'That request expired — send your message again.', components: [] })
+      .catch(() => {});
     return;
   }
   const ticket = await ingestUserDM(guild, interaction.user, payload);
   await interaction
-    .update({ content: `Opened ticket #${ticket.id} for **${guild.name}**. Just keep replying here.`, components: [] })
+    .update({
+      content: `Opened ticket #${ticket.id} for **${guild.name}**. Just keep replying here.`,
+      components: [],
+    })
     .catch(() => {});
 }
 

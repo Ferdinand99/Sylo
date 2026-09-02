@@ -43,7 +43,9 @@ function emit(level, scope, msg, args) {
   if (asJson) {
     const rec = { ts, level, scope: String(scope), msg: message, ...meta };
     if (err) rec.err = err.stack || String(err);
-    (level === 'error' || level === 'warn' ? process.stderr : process.stdout).write(`${JSON.stringify(rec)}\n`);
+    (level === 'error' || level === 'warn' ? process.stderr : process.stdout).write(
+      `${JSON.stringify(rec)}\n`
+    );
   } else {
     const withErr = err?.message ? `${message} ${err.message}`.trim() : message;
     const line = `${ts}  ${level.toUpperCase().padEnd(5)} ${scope}  ${withErr}`;

@@ -51,7 +51,10 @@ export function buildEmbed(e) {
     hasContent = true;
   }
   if (trimOr(e.footerText, 2048)) {
-    eb.setFooter({ text: trimOr(e.footerText, 2048), iconURL: isUrl(e.footerIcon) ? e.footerIcon : undefined });
+    eb.setFooter({
+      text: trimOr(e.footerText, 2048),
+      iconURL: isUrl(e.footerIcon) ? e.footerIcon : undefined,
+    });
     hasContent = true;
   }
   if (isUrl(e.thumbnail)) (eb.setThumbnail(e.thumbnail), (hasContent = true));
@@ -162,7 +165,10 @@ async function toggleRole(interaction, roleId) {
   const role = interaction.guild.roles.cache.get(roleId);
   if (!role) return interaction.reply({ content: 'That role no longer exists.', ephemeral: true });
   if (!role.editable) {
-    return interaction.reply({ content: "I can't assign that role (missing Manage Roles or ranked below it).", ephemeral: true });
+    return interaction.reply({
+      content: "I can't assign that role (missing Manage Roles or ranked below it).",
+      ephemeral: true,
+    });
   }
   const has = interaction.member.roles.cache.has(roleId);
   await interaction.member.roles[has ? 'remove' : 'add'](role, 'Message Creator role button');
@@ -171,8 +177,11 @@ async function toggleRole(interaction, roleId) {
 
 async function applyRoleSelect(interaction, composedSpecForMessage) {
   const row = (composedSpecForMessage?.rows ?? []).find((r) => r.type === 'roleselect');
-  const menuRoleIds = new Set((row?.options ?? []).map((o) => String(o.roleId)).filter((v) => /^\d{17,20}$/.test(v)));
-  if (menuRoleIds.size === 0) return interaction.reply({ content: 'This menu is no longer configured.', ephemeral: true });
+  const menuRoleIds = new Set(
+    (row?.options ?? []).map((o) => String(o.roleId)).filter((v) => /^\d{17,20}$/.test(v))
+  );
+  if (menuRoleIds.size === 0)
+    return interaction.reply({ content: 'This menu is no longer configured.', ephemeral: true });
 
   const picked = new Set(interaction.values);
   const me = interaction.guild.members.me;

@@ -1,7 +1,13 @@
 // /invites [user] — a member's invite tally, plus a personal invite link.
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { isModuleEnabled } from '../../db/modules.js';
-import { getInviteCount, inviterRank, inviterCount, getPersonalCode, setPersonalCode } from '../../db/inviteTracker.js';
+import {
+  getInviteCount,
+  inviterRank,
+  inviterCount,
+  getPersonalCode,
+  setPersonalCode,
+} from '../../db/inviteTracker.js';
 import { primeGuild } from '../../modules/inviteTracker.js';
 
 export const data = new SlashCommandBuilder()
@@ -15,9 +21,11 @@ function pickInviteChannel(guild) {
     ch?.isTextBased() && ch.permissionsFor(me)?.has(PermissionFlagsBits.CreateInstantInvite);
   if (usable(guild.systemChannel)) return guild.systemChannel;
   if (usable(guild.rulesChannel)) return guild.rulesChannel;
-  return [...guild.channels.cache.values()]
-    .filter((ch) => ch.type === 0 && usable(ch))
-    .sort((a, b) => a.rawPosition - b.rawPosition)[0] ?? null;
+  return (
+    [...guild.channels.cache.values()]
+      .filter((ch) => ch.type === 0 && usable(ch))
+      .sort((a, b) => a.rawPosition - b.rawPosition)[0] ?? null
+  );
 }
 
 // -> { url } on success, or { error } describing what permission is missing.
@@ -53,7 +61,10 @@ export async function execute(interaction) {
     return interaction.reply({ content: 'Use this in a server.', flags: MessageFlags.Ephemeral });
   }
   if (!isModuleEnabled(interaction.guildId, 'invite-tracker')) {
-    return interaction.reply({ content: 'Invite tracking is not enabled in this server.', flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: 'Invite tracking is not enabled in this server.',
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   const target = interaction.options.getUser('user') ?? interaction.user;
@@ -65,7 +76,11 @@ export async function execute(interaction) {
     .setAuthor({ name: `${target.tag} — invites`, iconURL: target.displayAvatarURL() })
     .addFields(
       { name: 'Invites', value: `**${c.net}**`, inline: true },
-      { name: 'Rank', value: `#${inviterRank(interaction.guildId, target.id)} of ${inviterCount(interaction.guildId)}`, inline: true },
+      {
+        name: 'Rank',
+        value: `#${inviterRank(interaction.guildId, target.id)} of ${inviterCount(interaction.guildId)}`,
+        inline: true,
+      },
       {
         name: 'Breakdown',
         value:

@@ -21,7 +21,13 @@ const ICONS = {
 // Top group — special pages, no dot.
 const TOP = [
   { key: 'dashboard', label: 'Dashboard', icon: 'grid', guild: (g) => `/guilds/${g}/overview`, noGuild: '/' },
-  { key: 'leaderboard', label: 'Leaderboard', icon: ICONS.leaderboard, guild: (g) => `/guilds/${g}/leaderboard`, noGuild: '/' },
+  {
+    key: 'leaderboard',
+    label: 'Leaderboard',
+    icon: ICONS.leaderboard,
+    guild: (g) => `/guilds/${g}/leaderboard`,
+    noGuild: '/',
+  },
   { key: 'personalizer', label: 'Bot Personalizer', icon: ICONS.personalizer, href: '/settings' },
   { key: 'settings', label: 'Settings', icon: 'gear', guild: (g) => `/guilds/${g}/settings`, noGuild: '/' },
   { key: 'health', label: 'Health', icon: 'pulse', href: '/health' },
@@ -94,7 +100,7 @@ export function buildSidebar(req, gid = null) {
 
   const top = TOP.map((t) => {
     const href = t.href ?? (guild ? t.guild(gid) : t.noGuild);
-    let active = false;
+    let active;
     if (t.key === 'dashboard') active = path === '/' || (!!guild && path === `/guilds/${gid}/overview`);
     else if (t.key === 'leaderboard') active = !!guild && path === `/guilds/${gid}/leaderboard`;
     else if (t.key === 'settings') active = !!guild && path.startsWith(`/guilds/${gid}/settings`);
@@ -117,7 +123,7 @@ export function buildSidebar(req, gid = null) {
         label: it.label || def.name,
         icon: ICONS[it.module] || 'sliders',
         href,
-        dot: enabled.get(it.module) ?? def.defaultEnabled ? 'on' : 'off',
+        dot: (enabled.get(it.module) ?? def.defaultEnabled) ? 'on' : 'off',
         active: path === href,
       };
     }

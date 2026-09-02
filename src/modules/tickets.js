@@ -16,8 +16,7 @@ import {
 const TICKET_COLOR = 0x4aa3df;
 export const DEFAULT_GREETING =
   'Thanks for contacting the staff of {server}. Your message has been received — a moderator will reply here shortly.';
-export const DEFAULT_CLOSE =
-  'This ticket has been closed. Send another message any time to open a new one.';
+export const DEFAULT_CLOSE = 'This ticket has been closed. Send another message any time to open a new one.';
 
 const fill = (t, guild) => String(t || '').replaceAll('{server}', guild?.name ?? 'the server');
 
@@ -69,7 +68,10 @@ export async function buildTextTranscript(ticket) {
     return lines.join('\n');
   });
 
-  return { filename: `ticket-${ticket.id}-transcript.txt`, text: header.join('\n') + body.join('\n\n') + '\n' };
+  return {
+    filename: `ticket-${ticket.id}-transcript.txt`,
+    text: header.join('\n') + body.join('\n\n') + '\n',
+  };
 }
 
 /**
@@ -86,7 +88,8 @@ export async function buildTranscript(ticket) {
 
   const bubbles = rows
     .map((m) => {
-      const who = m.author_kind === 'user' ? escHtml(userLabel) : m.author_kind === 'staff' ? 'Staff' : 'System';
+      const who =
+        m.author_kind === 'user' ? escHtml(userLabel) : m.author_kind === 'staff' ? 'Staff' : 'System';
       const atts = m.attachments.length
         ? `<div class="atts">${m.attachments.map((a) => `<a href="${escHtml(a)}">${escHtml(a)}</a>`).join('<br>')}</div>`
         : '';
@@ -161,7 +164,9 @@ export async function ingestUserDM(guild, user, payload) {
     attachments: payload.attachments ?? [],
   });
 
-  const link = config.dashboardUrl ? `\n<${config.dashboardUrl}/guilds/${guild.id}/tickets/${ticket.id}>` : '';
+  const link = config.dashboardUrl
+    ? `\n<${config.dashboardUrl}/guilds/${guild.id}/tickets/${ticket.id}>`
+    : '';
   if (isNew) {
     await user
       .send({
@@ -219,22 +224,34 @@ export async function closeTicketWithNotice(ticket, staffUserId, closingMessage)
   const user = await runtime.client?.users.fetch(ticket.user_id).catch(() => null);
 
   const text = (closingMessage ?? '').trim();
-  let delivered = Boolean(user);
 
   // Record the closing message + close now, so the transcript includes them.
   if (text) {
-    addTicketMessage(ticket.id, { authorId: staffUserId, authorKind: 'staff', content: text, delivered: true });
+    addTicketMessage(ticket.id, {
+      authorId: staffUserId,
+      authorKind: 'staff',
+      content: text,
+      delivered: true,
+    });
   }
   closeTicket(ticket.id, staffUserId);
-  addTicketMessage(ticket.id, { authorId: staffUserId, authorKind: 'system', content: 'Ticket closed by staff.' });
+  addTicketMessage(ticket.id, {
+    authorId: staffUserId,
+    authorKind: 'system',
+    content: 'Ticket closed by staff.',
+  });
 
   if (user) {
     const embed = new EmbedBuilder().setColor(0x8b95a1);
     if (text) {
       embed.setAuthor({ name: `Staff reply · ${guild?.name ?? 'server'}` }).setDescription(text);
-      embed.setFooter({ text: 'This ticket is now closed. Message again to open a new one. A transcript is attached.' });
+      embed.setFooter({
+        text: 'This ticket is now closed. Message again to open a new one. A transcript is attached.',
+      });
     } else {
-      embed.setDescription(`${fill(cfg.closeMessage || DEFAULT_CLOSE, guild)}\n\nA transcript of this conversation is attached.`);
+      embed.setDescription(
+        `${fill(cfg.closeMessage || DEFAULT_CLOSE, guild)}\n\nA transcript of this conversation is attached.`
+      );
     }
     const transcript = await buildTextTranscript(getTicket(ticket.id) ?? ticket);
     try {
@@ -243,7 +260,6 @@ export async function closeTicketWithNotice(ticket, staffUserId, closingMessage)
         files: [new AttachmentBuilder(Buffer.from(transcript.text, 'utf8'), { name: transcript.filename })],
       });
     } catch {
-      delivered = false;
       await user.send({ embeds: [embed] }).catch(() => {}); // retry without the file
     }
   }

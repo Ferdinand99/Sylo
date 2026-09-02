@@ -32,7 +32,9 @@ export function normaliseAutoresponder(raw = {}) {
     ignoreRoles: idList(raw.ignoreRoles),
     responders: (Array.isArray(raw.responders) ? raw.responders : [])
       .map((r) => ({
-        trigger: String(r.trigger ?? '').trim().slice(0, 200),
+        trigger: String(r.trigger ?? '')
+          .trim()
+          .slice(0, 200),
         match: AR_MATCH_MODES.includes(r.match) ? r.match : 'contains',
         response: String(r.response ?? '').slice(0, 2000),
         embed: Boolean(r.embed),

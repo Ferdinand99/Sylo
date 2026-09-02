@@ -48,7 +48,9 @@ export function getBotMasterRoles(guildId) {
   }
 }
 export function setBotMasterRoles(guildId, roleIds) {
-  const clean = [...new Set((Array.isArray(roleIds) ? roleIds : []).filter((r) => /^\d{17,20}$/.test(r)))].slice(0, 25);
+  const clean = [
+    ...new Set((Array.isArray(roleIds) ? roleIds : []).filter((r) => /^\d{17,20}$/.test(r))),
+  ].slice(0, 25);
   put(guildId, 'bot_master_roles', JSON.stringify(clean));
   return clean;
 }

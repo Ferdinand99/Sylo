@@ -28,8 +28,5 @@ export function csrf(req, res, next) {
   const sent = req.get('x-csrf-token') || (req.body && req.body._csrf);
   if (sent && sent === req.session.csrf) return next();
 
-  res
-    .status(403)
-    .type('text/plain')
-    .send('CSRF check failed — reload the page and try again.');
+  res.status(403).type('text/plain').send('CSRF check failed — reload the page and try again.');
 }

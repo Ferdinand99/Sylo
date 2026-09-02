@@ -54,7 +54,11 @@ const inviteUrl = (v) => {
 /** @param {object} raw */
 export function normaliseAppealsConfig(raw = {}) {
   const questions = (Array.isArray(raw.questions) ? raw.questions : [])
-    .map((q) => String(q ?? '').trim().slice(0, 200))
+    .map((q) =>
+      String(q ?? '')
+        .trim()
+        .slice(0, 200)
+    )
     .filter(Boolean)
     .slice(0, 5);
   return {
@@ -104,8 +108,15 @@ function banAppealEmbed(guildName, reason, link, cfg) {
     .setTitle(`You were banned from ${guildName}`)
     .addFields(
       { name: 'Reason', value: String(reason || 'No reason provided').slice(0, 1024) },
-      { name: 'Appeal this ban', value: `If you believe this was a mistake, submit an appeal here:\n${link}` },
-      { name: 'The decision', value: 'Reopen the link above at any time to see whether your appeal was accepted or denied. The link is valid for 60 days.' }
+      {
+        name: 'Appeal this ban',
+        value: `If you believe this was a mistake, submit an appeal here:\n${link}`,
+      },
+      {
+        name: 'The decision',
+        value:
+          'Reopen the link above at any time to see whether your appeal was accepted or denied. The link is valid for 60 days.',
+      }
     )
     .setTimestamp(Date.now());
   if (cfg.appealServerInvite) {
@@ -114,7 +125,8 @@ function banAppealEmbed(guildName, reason, link, cfg) {
       value: `Join ${cfg.appealServerInvite} so Sylo shares a server with you, and it will DM you the outcome too.`,
     });
   }
-  if (cfg.appealMessage) embed.addFields({ name: 'From the moderators', value: cfg.appealMessage.slice(0, 1024) });
+  if (cfg.appealMessage)
+    embed.addFields({ name: 'From the moderators', value: cfg.appealMessage.slice(0, 1024) });
   return embed;
 }
 
@@ -171,7 +183,10 @@ on('appeals', 'guildBanAdd', async (ban, rawConfig) => {
   // The event's reason is often null; the ban list carries it.
   let reason = ban.reason ?? null;
   if (!reason) {
-    reason = await ban.guild.bans.fetch(user.id).then((b) => b.reason).catch(() => null);
+    reason = await ban.guild.bans
+      .fetch(user.id)
+      .then((b) => b.reason)
+      .catch(() => null);
   }
   reason = reason || 'No reason recorded';
 
@@ -227,9 +242,7 @@ export async function createRejoinInvite(guild) {
   const target =
     (canInvite(guild.rulesChannel) && guild.rulesChannel) ||
     (canInvite(guild.systemChannel) && guild.systemChannel) ||
-    [...guild.channels.cache.values()]
-      .filter(canInvite)
-      .sort((a, b) => a.rawPosition - b.rawPosition)[0];
+    [...guild.channels.cache.values()].filter(canInvite).sort((a, b) => a.rawPosition - b.rawPosition)[0];
   if (!target) return null;
 
   try {
@@ -279,7 +292,11 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
 
   const dm = new EmbedBuilder()
     .setColor(accepted ? OK_COLOR : COLOR)
-    .setTitle(accepted ? `✅ Your ban appeal for ${guild.name} was accepted` : `❌ Your ban appeal for ${guild.name} was denied`)
+    .setTitle(
+      accepted
+        ? `✅ Your ban appeal for ${guild.name} was accepted`
+        : `❌ Your ban appeal for ${guild.name} was denied`
+    )
     .addFields({ name: 'Reason', value: String(reason || '—').slice(0, 1024) })
     .setTimestamp(Date.now());
   if (accepted) {
@@ -291,7 +308,10 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
     });
     if (inviteUrl) dm.addFields({ name: 'Rejoin link (single use)', value: inviteUrl });
   } else if (cfg.cooldownDays) {
-    dm.addFields({ name: 'Appealing again', value: `You can submit a new appeal in ${cfg.cooldownDays} day(s).` });
+    dm.addFields({
+      name: 'Appealing again',
+      value: `You can submit a new appeal in ${cfg.cooldownDays} day(s).`,
+    });
   }
 
   const dmDelivered = await guild.client.users
@@ -307,21 +327,28 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
     .addFields(
       { name: 'Decided by', value: decidedBy },
       { name: 'Reason', value: String(reason || '—').slice(0, 1024) },
-      { name: 'Ban lifted', value: accepted ? (unbanned ? 'Yes (automatic)' : 'No — do it manually') : 'n/a' },
+      {
+        name: 'Ban lifted',
+        value: accepted ? (unbanned ? 'Yes (automatic)' : 'No — do it manually') : 'n/a',
+      },
       {
         name: 'User notified',
-        value: dmDelivered
-          ? 'Yes (DM sent)'
-          : 'No DM (no shared server) — they see it on their appeal link',
+        value: dmDelivered ? 'Yes (DM sent)' : 'No DM (no shared server) — they see it on their appeal link',
       }
     )
     .setTimestamp(Date.now());
   if (accepted) {
-    logEmbed.addFields({ name: 'Rejoin invite', value: inviteUrl || 'Could not create one (missing Create Invite)' });
+    logEmbed.addFields({
+      name: 'Rejoin invite',
+      value: inviteUrl || 'Could not create one (missing Create Invite)',
+    });
   }
   await postModLog(guild, logEmbed);
   if (cfg.reviewChannelId) {
-    await sendToChannel(guild.id, cfg.reviewChannelId, { embeds: [logEmbed], allowedMentions: { parse: [] } });
+    await sendToChannel(guild.id, cfg.reviewChannelId, {
+      embeds: [logEmbed],
+      allowedMentions: { parse: [] },
+    });
   }
 
   return { recorded: true, unbanned, dmDelivered, inviteUrl };
@@ -339,7 +366,10 @@ export async function announceNewAppeal(guild, appeal) {
         name: String(qa.q || 'Question').slice(0, 256),
         value: String(qa.a || '—').slice(0, 1024),
       })),
-      { name: 'Review', value: `${config.dashboardUrl ? config.dashboardUrl.replace(/\/$/, '') : ''}/guilds/${guild.id}/appeals` }
+      {
+        name: 'Review',
+        value: `${config.dashboardUrl ? config.dashboardUrl.replace(/\/$/, '') : ''}/guilds/${guild.id}/appeals`,
+      }
     )
     .setTimestamp(Date.now());
   await postModLog(guild, embed);

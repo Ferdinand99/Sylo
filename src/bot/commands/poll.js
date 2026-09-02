@@ -12,7 +12,9 @@ export const data = new SlashCommandBuilder()
   .setName('poll')
   .setDescription('Create a poll people vote on with reactions.')
   .setContexts(InteractionContextType.Guild)
-  .addStringOption((o) => o.setName('question').setDescription('The poll question').setRequired(true).setMaxLength(240))
+  .addStringOption((o) =>
+    o.setName('question').setDescription('The poll question').setRequired(true).setMaxLength(240)
+  )
   .addStringOption((o) =>
     o
       .setName('choices')
@@ -24,13 +26,20 @@ export const data = new SlashCommandBuilder()
   )
   .addBooleanOption((o) => o.setName('multiple').setDescription('Allow voting for more than one option'))
   .addIntegerOption((o) =>
-    o.setName('max_votes').setDescription('Close automatically once this many people have voted').setMinValue(2).setMaxValue(100000)
+    o
+      .setName('max_votes')
+      .setDescription('Close automatically once this many people have voted')
+      .setMinValue(2)
+      .setMaxValue(100000)
   );
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
   if (!isModuleEnabled(interaction.guildId, 'polls')) {
-    return interaction.reply({ content: 'The Polls module is not enabled in this server.', flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: 'The Polls module is not enabled in this server.',
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   const question = interaction.options.getString('question', true).trim();
@@ -47,7 +56,10 @@ export async function execute(interaction) {
   if (durationRaw) {
     const ms = parseDuration(durationRaw);
     if (ms == null || ms < MIN_MS || ms > MAX_MS) {
-      return interaction.reply({ content: 'Duration must be between 1m and 30d (e.g. `2h`, `1d`).', flags: MessageFlags.Ephemeral });
+      return interaction.reply({
+        content: 'Duration must be between 1m and 30d (e.g. `2h`, `1d`).',
+        flags: MessageFlags.Ephemeral,
+      });
     }
     endsAt = Date.now() + ms;
   }

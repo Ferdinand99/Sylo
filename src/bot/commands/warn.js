@@ -21,19 +21,23 @@ export const data = new SlashCommandBuilder()
       .setName('add')
       .setDescription('Warn a member.')
       .addUserOption((o) => o.setName('user').setDescription('Member to warn').setRequired(true))
-      .addStringOption((o) => o.setName('reason').setDescription('What they did').setRequired(true).setMaxLength(400))
+      .addStringOption((o) =>
+        o.setName('reason').setDescription('What they did').setRequired(true).setMaxLength(400)
+      )
   )
   .addSubcommand((s) =>
     s
       .setName('list')
-      .setDescription('Show a member\'s warnings.')
+      .setDescription("Show a member's warnings.")
       .addUserOption((o) => o.setName('user').setDescription('Member to look up').setRequired(true))
   )
   .addSubcommand((s) =>
     s
       .setName('remove')
       .setDescription('Delete one warning by its ID.')
-      .addIntegerOption((o) => o.setName('id').setDescription('Warning ID (from /warn list)').setRequired(true).setMinValue(1))
+      .addIntegerOption((o) =>
+        o.setName('id').setDescription('Warning ID (from /warn list)').setRequired(true).setMinValue(1)
+      )
   )
   .addSubcommand((s) =>
     s
@@ -116,7 +120,10 @@ export async function execute(interaction) {
     const id = interaction.options.getInteger('id', true);
     const existing = getWarning(guildId, id);
     if (!existing || !removeWarning(guildId, id)) {
-      await interaction.reply({ content: `⚠️ No warning #${id} in this server.`, flags: MessageFlags.Ephemeral });
+      await interaction.reply({
+        content: `⚠️ No warning #${id} in this server.`,
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
 
@@ -127,7 +134,10 @@ export async function execute(interaction) {
       .setTitle('Warning removed')
       .addFields(
         { name: 'Warning ID', value: `#${id}` },
-        { name: 'User', value: target ? `${target.tag} (\`${existing.user_id}\`)` : `\`${existing.user_id}\`` },
+        {
+          name: 'User',
+          value: target ? `${target.tag} (\`${existing.user_id}\`)` : `\`${existing.user_id}\``,
+        },
         { name: 'Original reason', value: existing.reason },
         { name: 'Removed by', value: interaction.user.tag }
       )

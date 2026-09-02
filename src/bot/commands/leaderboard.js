@@ -96,7 +96,9 @@ export async function execute(interaction) {
     .setColor(0x5b7cfa)
     .setTitle(`Leaderboard — ${interaction.guild.name}`)
     .setDescription(
-      entries.map((e) => `${MEDALS[e.rank - 1] ?? `\`#${e.rank}\``} **${e.name}** — level ${e.level} · ${e.xp} XP`).join('\n')
+      entries
+        .map((e) => `${MEDALS[e.rank - 1] ?? `\`#${e.rank}\``} **${e.name}** — level ${e.level} · ${e.xp} XP`)
+        .join('\n')
     )
     .setFooter({ text: `Your rank: #${yourRank}` });
 

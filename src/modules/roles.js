@@ -176,7 +176,8 @@ export async function publishReactionMessage(guild, rm) {
   }
 
   // button / select style — send the components directly (own customId namespace).
-  const channel = guild.channels.cache.get(rm.channelId) || (await guild.channels.fetch(rm.channelId).catch(() => null));
+  const channel =
+    guild.channels.cache.get(rm.channelId) || (await guild.channels.fetch(rm.channelId).catch(() => null));
   if (!channel?.isTextBased?.()) throw new Error('channel not found or not a text channel');
   const payload = {
     content: rm.message || '',
@@ -204,8 +205,7 @@ function roleMessageById(guildId, rmId) {
   return (mod.config.reactionMessages || []).find((x) => String(x.id) === String(rmId)) || null;
 }
 
-const ephemeral = (interaction, content) =>
-  interaction.reply({ content, flags: MessageFlags.Ephemeral });
+const ephemeral = (interaction, content) => interaction.reply({ content, flags: MessageFlags.Ephemeral });
 
 async function handleRoleButton(interaction, rmId, roleId) {
   const rm = roleMessageById(interaction.guildId, rmId);
@@ -324,16 +324,23 @@ on('roles', 'reactionAdd', async (payload, config, guildId) => {
   const role = guild.roles.cache.get(hit.pair.roleId);
   if (!member || !role) return;
   if (!role.editable) {
-    log.warn('roles', `cannot assign "${role.name}" in ${guild.name}: bot lacks Manage Roles or is ranked below it`);
+    log.warn(
+      'roles',
+      `cannot assign "${role.name}" in ${guild.name}: bot lacks Manage Roles or is ranked below it`
+    );
     return;
   }
 
   if (hit.rm.mode === 'reverse') {
-    await member.roles.remove(role, 'Reaction role (reverse)').catch((e) => log.warn('roles', `remove failed: ${e.message}`));
+    await member.roles
+      .remove(role, 'Reaction role (reverse)')
+      .catch((e) => log.warn('roles', `remove failed: ${e.message}`));
     return;
   }
 
-  await member.roles.add(role, 'Reaction role').catch((err) => log.warn('roles', `add role failed: ${err.message}`));
+  await member.roles
+    .add(role, 'Reaction role')
+    .catch((err) => log.warn('roles', `add role failed: ${err.message}`));
 
   if (hit.rm.exclusive) {
     const others = hit.rm.pairs

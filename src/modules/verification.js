@@ -50,7 +50,8 @@ export function normaliseVerificationConfig(raw = {}) {
     messageId: id(raw.messageId),
     title: String(raw.title ?? DEFAULTS.title).slice(0, 200) || DEFAULTS.title,
     message: String(raw.message ?? DEFAULTS.message).slice(0, 1500) || DEFAULTS.message,
-    successMessage: String(raw.successMessage ?? DEFAULTS.successMessage).slice(0, 1000) || DEFAULTS.successMessage,
+    successMessage:
+      String(raw.successMessage ?? DEFAULTS.successMessage).slice(0, 1000) || DEFAULTS.successMessage,
     logChannelId: id(raw.logChannelId),
     kickAfterMinutes: clampInt(raw.kickAfterMinutes, 0, 10080, 0),
   };
@@ -102,7 +103,8 @@ function verifyButtonRow(label = 'Verify') {
 /** Make sure the guild's verify message exists; (re)post it and store the id. */
 export async function ensureVerifyMessage(guild, cfg) {
   if (!cfg.channelId || !cfg.verifiedRoleId) return;
-  const channel = guild.channels.cache.get(cfg.channelId) ?? (await guild.channels.fetch(cfg.channelId).catch(() => null));
+  const channel =
+    guild.channels.cache.get(cfg.channelId) ?? (await guild.channels.fetch(cfg.channelId).catch(() => null));
   if (!channel?.isTextBased()) return;
   const me = guild.members.me;
   if (!channel.permissionsFor(me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) return;
@@ -164,11 +166,17 @@ export function registerVerificationHandlers(client) {
     if (!interaction.isButton() || interaction.customId !== 'verify:start') return;
     try {
       if (!interaction.inGuild() || !isModuleEnabled(interaction.guildId, 'verification')) {
-        return interaction.reply({ content: 'Verification is not active here.', flags: MessageFlags.Ephemeral });
+        return interaction.reply({
+          content: 'Verification is not active here.',
+          flags: MessageFlags.Ephemeral,
+        });
       }
       const cfg = normaliseVerificationConfig(getGuildModule(interaction.guildId, 'verification').config);
       if (!cfg.verifiedRoleId) {
-        return interaction.reply({ content: 'Verification is misconfigured — no role is set.', flags: MessageFlags.Ephemeral });
+        return interaction.reply({
+          content: 'Verification is misconfigured — no role is set.',
+          flags: MessageFlags.Ephemeral,
+        });
       }
       if (interaction.member.roles.cache.has(cfg.verifiedRoleId)) {
         return interaction.reply({ content: 'You are already verified.', flags: MessageFlags.Ephemeral });
@@ -198,7 +206,9 @@ export function registerVerificationHandlers(client) {
     } catch (err) {
       log.error('verification', 'button handler failed:', err.message);
       if (interaction.isRepliable() && !interaction.replied) {
-        interaction.reply({ content: 'Something went wrong.', flags: MessageFlags.Ephemeral }).catch(() => {});
+        interaction
+          .reply({ content: 'Something went wrong.', flags: MessageFlags.Ephemeral })
+          .catch(() => {});
       }
     }
   });

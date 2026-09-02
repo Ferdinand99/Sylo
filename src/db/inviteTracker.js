@@ -70,8 +70,20 @@ export function inviterRank(guildId, userId) {
 export function inviterCount(guildId) {
   return stmts.inviterCount.get(guildId)?.n ?? 0;
 }
-export function recordJoin(guildId, userId, { inviterId = null, code = null, source = 'unknown', joinedAt, counted = 1 }) {
-  stmts.recordJoin.run({ guildId, userId, inviterId, code, source, joinedAt: joinedAt ?? Date.now(), counted });
+export function recordJoin(
+  guildId,
+  userId,
+  { inviterId = null, code = null, source = 'unknown', joinedAt, counted = 1 }
+) {
+  stmts.recordJoin.run({
+    guildId,
+    userId,
+    inviterId,
+    code,
+    source,
+    joinedAt: joinedAt ?? Date.now(),
+    counted,
+  });
 }
 export function getJoin(guildId, userId) {
   return stmts.getJoin.get(guildId, userId) ?? null;
@@ -83,7 +95,7 @@ export function getPersonalCode(guildId, userId) {
   return stmts.getPersonal.get(guildId, userId)?.code ?? null;
 }
 export function personalCodeOwner(guildId, code) {
-  return code ? stmts.ownerOfCode.get(guildId, code)?.user_id ?? null : null;
+  return code ? (stmts.ownerOfCode.get(guildId, code)?.user_id ?? null) : null;
 }
 export function setPersonalCode(guildId, userId, code) {
   stmts.setPersonal.run({ guildId, userId, code });

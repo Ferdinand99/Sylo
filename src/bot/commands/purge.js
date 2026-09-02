@@ -15,7 +15,12 @@ export const data = new SlashCommandBuilder()
   .setContexts(InteractionContextType.Guild)
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
   .addIntegerOption((o) =>
-    o.setName('amount').setDescription('How many messages to scan/delete (1-100)').setRequired(true).setMinValue(1).setMaxValue(100)
+    o
+      .setName('amount')
+      .setDescription('How many messages to scan/delete (1-100)')
+      .setRequired(true)
+      .setMinValue(1)
+      .setMaxValue(100)
   )
   .addUserOption((o) => o.setName('user').setDescription('Only delete messages from this user'));
 
@@ -27,7 +32,10 @@ export async function execute(interaction) {
 
   const me = interaction.guild.members.me;
   if (!channel.permissionsFor(me)?.has(PermissionFlagsBits.ManageMessages)) {
-    await interaction.reply({ content: "⚠️ I need the **Manage Messages** permission in this channel.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: '⚠️ I need the **Manage Messages** permission in this channel.',
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 

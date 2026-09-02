@@ -8,7 +8,9 @@ const q = {
   ticketsTotal: db.prepare('SELECT COUNT(*) AS n FROM tickets'),
   cachedLookups: db.prepare('SELECT COUNT(*) AS n FROM stats_cache'),
   composedTotal: db.prepare('SELECT COUNT(*) AS n FROM composed_messages'),
-  moduleUsage: db.prepare('SELECT module_id, COUNT(*) AS n FROM guild_modules WHERE enabled = 1 GROUP BY module_id'),
+  moduleUsage: db.prepare(
+    'SELECT module_id, COUNT(*) AS n FROM guild_modules WHERE enabled = 1 GROUP BY module_id'
+  ),
 };
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;

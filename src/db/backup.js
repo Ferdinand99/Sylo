@@ -31,9 +31,7 @@ const SQLITE_MAGIC = 'SQLite format 3\0';
 
 /** Absolute backups directory, created on first use. */
 export function backupDir() {
-  const dir = config.backupDir
-    ? resolve(process.cwd(), config.backupDir)
-    : join(dirname(DB_PATH), 'backups');
+  const dir = config.backupDir ? resolve(process.cwd(), config.backupDir) : join(dirname(DB_PATH), 'backups');
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -93,7 +91,11 @@ export function pruneBackups() {
  */
 export function runBackup(reason = 'manual') {
   const dir = backupDir();
-  const slug = String(reason).replace(/[^a-z0-9]+/gi, '').slice(0, 20).toLowerCase() || 'manual';
+  const slug =
+    String(reason)
+      .replace(/[^a-z0-9]+/gi, '')
+      .slice(0, 20)
+      .toLowerCase() || 'manual';
   const stamp = fileStamp();
   let dest = join(dir, `sylo-${slug}-${stamp}.db`);
   for (let n = 2; existsSync(dest); n += 1) dest = join(dir, `sylo-${slug}-${stamp}-${n}.db`);
@@ -123,9 +125,7 @@ export function inspectDbFile(filePath) {
     probe = new Database(filePath, { readonly: true, fileMustExist: true });
     const integrity = probe.pragma('integrity_check', { simple: true });
     const userVersion = probe.pragma('user_version', { simple: true });
-    const tables = probe
-      .prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table'")
-      .get().n;
+    const tables = probe.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table'").get().n;
     probe.close();
 
     if (integrity !== 'ok') return { ok: false, error: `integrity check failed: ${integrity}` };

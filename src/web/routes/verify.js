@@ -6,17 +6,15 @@ import { config } from '../../config.js';
 import { runtime } from '../../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../../db/modules.js';
 import { log } from '../../lib/log.js';
-import {
-  verifyVerifyToken,
-  normaliseVerificationConfig,
-  grantVerified,
-} from '../../modules/verification.js';
+import { verifyVerifyToken, normaliseVerificationConfig, grantVerified } from '../../modules/verification.js';
 
 const router = Router();
 const SITEVERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
 function fail(res, message) {
-  return res.status(400).render('verify', { state: 'error', message, siteKey: null, token: null, guildId: null });
+  return res
+    .status(400)
+    .render('verify', { state: 'error', message, siteKey: null, token: null, guildId: null });
 }
 
 router.get('/:guildId', (req, res) => {
@@ -58,10 +56,16 @@ router.post('/:guildId', async (req, res, next) => {
         response: cfResponse,
         remoteip: req.ip,
       }),
-    }).then((r) => r.json()).catch(() => ({ success: false }));
+    })
+      .then((r) => r.json())
+      .catch(() => ({ success: false }));
 
     if (!verifyRes.success) {
-      log.warn('verification', `Turnstile failed for ${parsed.userId} in ${guildId}:`, verifyRes['error-codes'] ?? '');
+      log.warn(
+        'verification',
+        `Turnstile failed for ${parsed.userId} in ${guildId}:`,
+        verifyRes['error-codes'] ?? ''
+      );
       return fail(res, 'The captcha check failed. Go back and try again.');
     }
 
@@ -89,7 +93,10 @@ router.post('/:guildId', async (req, res, next) => {
         guildId,
       });
     }
-    return fail(res, "Couldn't grant the role — the bot may be missing Manage Roles, or its highest role is below the verified role. Tell an admin.");
+    return fail(
+      res,
+      "Couldn't grant the role — the bot may be missing Manage Roles, or its highest role is below the verified role. Tell an admin."
+    );
   } catch (err) {
     next(err);
   }

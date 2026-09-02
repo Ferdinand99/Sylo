@@ -11,7 +11,11 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const ctx = resolveContext(interaction);
   if (ctx.error) return interaction.reply({ content: ctx.error, ...ephemeral });
-  if (!canControl(ctx)) return interaction.reply({ content: 'Only the channel owner or a voice moderator can do that.', ...ephemeral });
+  if (!canControl(ctx))
+    return interaction.reply({
+      content: 'Only the channel owner or a voice moderator can do that.',
+      ...ephemeral,
+    });
   const target = interaction.options.getMember('user');
   const bad = targetActable(ctx, target && ctx.channel.members.has(target.id) ? target : null);
   if (bad) return interaction.reply({ content: `⚠️ ${bad}`, ...ephemeral });

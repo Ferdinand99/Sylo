@@ -42,7 +42,8 @@ const clampInt = (v, min, max, dflt) => {
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : dflt;
 };
 const id = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
-const idList = (v) => [...new Set((Array.isArray(v) ? v : []).filter((x) => /^\d{17,20}$/.test(x)))].slice(0, 25);
+const idList = (v) =>
+  [...new Set((Array.isArray(v) ? v : []).filter((x) => /^\d{17,20}$/.test(x)))].slice(0, 25);
 const bool = (v) => Boolean(v);
 
 export const KEEPALIVE_OPTIONS = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -55,7 +56,10 @@ export function normaliseTempVoiceConfig(raw = {}) {
         id: h.id ? String(h.id) : String(i),
         hubChannelId: id(h.hubChannelId),
         categoryId: id(h.categoryId),
-        nameTemplate: String(h.nameTemplate ?? '').slice(0, 95).trim() || DEFAULT_NAME,
+        nameTemplate:
+          String(h.nameTemplate ?? '')
+            .slice(0, 95)
+            .trim() || DEFAULT_NAME,
         userLimit: clampInt(h.userLimit, 0, 99, 0),
         bitrate: clampInt(h.bitrate, 0, 384, 0), // kbps, 0 = server default
         keepAliveMinutes: KEEPALIVE_OPTIONS.includes(Math.trunc(Number(h.keepAliveMinutes)))
@@ -170,9 +174,15 @@ async function handleJoin(guild, member, hub) {
 
   let overwrites;
   if (hub.syncChannel && hubChannel?.permissionOverwrites) {
-    overwrites = [...hubChannel.permissionOverwrites.cache.values(), ...buildOverwrites(guild, hub, member.id)];
+    overwrites = [
+      ...hubChannel.permissionOverwrites.cache.values(),
+      ...buildOverwrites(guild, hub, member.id),
+    ];
   } else if (hub.syncCategory && parentCat?.permissionOverwrites) {
-    overwrites = [...parentCat.permissionOverwrites.cache.values(), ...buildOverwrites(guild, hub, member.id)];
+    overwrites = [
+      ...parentCat.permissionOverwrites.cache.values(),
+      ...buildOverwrites(guild, hub, member.id),
+    ];
   } else {
     overwrites = buildOverwrites(guild, hub, member.id);
   }
@@ -202,7 +212,10 @@ async function handleJoin(guild, member, hub) {
         parent: parent ?? undefined,
         reason: `Temp voice text for ${member.user.tag}`,
         permissionOverwrites: hub.textChannel.restrict
-          ? [{ id: guild.id, deny: [P.ViewChannel] }, ...buildOverwrites(guild, hub, member.id, { forText: true })]
+          ? [
+              { id: guild.id, deny: [P.ViewChannel] },
+              ...buildOverwrites(guild, hub, member.id, { forText: true }),
+            ]
           : buildOverwrites(guild, hub, member.id, { forText: true }),
       });
       textChannelId = t.id;
@@ -228,7 +241,10 @@ async function handleJoin(guild, member, hub) {
     }
   }
 
-  const moved = await member.voice.setChannel(channel).then(() => true).catch(() => false);
+  const moved = await member.voice
+    .setChannel(channel)
+    .then(() => true)
+    .catch(() => false);
   if (!moved) {
     await channel.delete('Temp voice: member never joined').catch(() => {});
     if (textChannelId) await guild.channels.delete(textChannelId).catch(() => {});
@@ -309,7 +325,9 @@ async function sweep() {
   for (const row of listAllTempChannels()) {
     const guild = client.guilds.cache.get(row.guild_id);
     if (!guild) continue;
-    const channel = guild.channels.cache.get(row.channel_id) ?? (await guild.channels.fetch(row.channel_id).catch(() => null));
+    const channel =
+      guild.channels.cache.get(row.channel_id) ??
+      (await guild.channels.fetch(row.channel_id).catch(() => null));
     if (!channel) {
       if (row.text_channel_id) await guild.channels.delete(row.text_channel_id).catch(() => {});
       removeTempChannel(row.channel_id);
@@ -348,7 +366,10 @@ export async function banFromChannel(channel, row, userId) {
   if (m) await m.voice.disconnect('Voice-banned from temp channel').catch(() => {});
 }
 export async function unbanFromChannel(channel, row, userId) {
-  setTempBans(channel.id, row.banList.filter((b) => b !== userId));
+  setTempBans(
+    channel.id,
+    row.banList.filter((b) => b !== userId)
+  );
   await channel.permissionOverwrites.delete(userId).catch(() => {});
 }
 export function renameTemp(channel, name) {

@@ -25,7 +25,19 @@ test('buildOverview returns health + grouped cards covering every module', () =>
   assert.ok(ov.groups.length >= 4);
 
   const ids = ov.groups.flatMap((g) => g.cards.map((c) => c.id));
-  for (const m of ['moderation', 'automod', 'logging', 'welcome', 'roles', 'counting', 'leveling', 'sticky', 'tickets', 'custom-commands', 'reminders']) {
+  for (const m of [
+    'moderation',
+    'automod',
+    'logging',
+    'welcome',
+    'roles',
+    'counting',
+    'leveling',
+    'sticky',
+    'tickets',
+    'custom-commands',
+    'reminders',
+  ]) {
     assert.ok(ids.includes(m), `overview should include a card for ${m}`);
   }
 

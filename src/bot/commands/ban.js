@@ -1,10 +1,5 @@
 // /ban <user> [reason] [delete_messages] — ban a member, or pre-ban a user by ID.
-import {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  InteractionContextType,
-  MessageFlags,
-} from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags } from 'discord.js';
 import { checkActable, notifyTarget, resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
 import { sendPreBanAppealDm } from '../../modules/appeals.js';
@@ -24,9 +19,14 @@ export const data = new SlashCommandBuilder()
   .setContexts(InteractionContextType.Guild)
   .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
   .addUserOption((o) => o.setName('user').setDescription('User to ban').setRequired(true))
-  .addStringOption((o) => o.setName('reason').setDescription('Reason (shown in the audit log)').setMaxLength(400))
+  .addStringOption((o) =>
+    o.setName('reason').setDescription('Reason (shown in the audit log)').setMaxLength(400)
+  )
   .addIntegerOption((o) =>
-    o.setName('delete_messages').setDescription('Delete this user\'s recent messages').addChoices(...DELETE_CHOICES)
+    o
+      .setName('delete_messages')
+      .setDescription("Delete this user's recent messages")
+      .addChoices(...DELETE_CHOICES)
   );
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
@@ -42,7 +42,10 @@ export async function execute(interaction) {
     return;
   }
   if (!guild.members.me) {
-    await interaction.reply({ content: "⚠️ I'm not a member of this server, so I can't ban anyone here.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: "⚠️ I'm not a member of this server, so I can't ban anyone here.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
   if (user.id === guild.members.me.id) {
@@ -61,7 +64,10 @@ export async function execute(interaction) {
       return;
     }
     if (!member.bannable) {
-      await interaction.reply({ content: "⚠️ I can't ban that member (missing permission or role hierarchy).", flags: MessageFlags.Ephemeral });
+      await interaction.reply({
+        content: "⚠️ I can't ban that member (missing permission or role hierarchy).",
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
   }
@@ -79,9 +85,10 @@ export async function execute(interaction) {
   let dmed = false;
   if (member) {
     const appeal = await sendPreBanAppealDm(guild, user, reason);
-    dmed = appeal === null
-      ? await notifyTarget(user, { guildName: guild.name, action: 'banned', reason })
-      : appeal;
+    dmed =
+      appeal === null
+        ? await notifyTarget(user, { guildName: guild.name, action: 'banned', reason })
+        : appeal;
   }
   await guild.bans.create(user.id, { reason: `${interaction.user.tag}: ${reason}`, deleteMessageSeconds });
 
@@ -91,7 +98,10 @@ export async function execute(interaction) {
     moderator: interaction.user,
     reason,
     fields: [
-      { name: 'Message deletion', value: deleteMessageSeconds ? `${deleteMessageSeconds / 3600}h of messages` : 'None' },
+      {
+        name: 'Message deletion',
+        value: deleteMessageSeconds ? `${deleteMessageSeconds / 3600}h of messages` : 'None',
+      },
       { name: 'Notified', value: dmed ? 'Yes (DM sent)' : member ? 'No (DMs closed)' : 'No (not in server)' },
     ],
   });

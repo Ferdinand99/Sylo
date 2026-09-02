@@ -10,18 +10,53 @@ const U = '333333333333333333';
 
 function seed(guildId, userId) {
   const now = Date.now();
-  db.prepare('INSERT OR REPLACE INTO guild_settings (guild_id, modlog_channel_id, updated_at) VALUES (?,?,?)').run(guildId, '9', now);
-  db.prepare('INSERT OR REPLACE INTO guild_modules (guild_id, module_id, enabled, config, updated_at) VALUES (?,?,?,?,?)').run(guildId, 'leveling', 1, '{}', now);
-  db.prepare('INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at) VALUES (?,?,?,?,?)').run(guildId, userId, 'mod', 'x', now);
-  db.prepare('INSERT OR REPLACE INTO leveling (guild_id, user_id, xp, level, messages, last_msg_at) VALUES (?,?,?,?,?,?)').run(guildId, userId, 500, 3, 20, now);
-  db.prepare('INSERT OR REPLACE INTO counting (guild_id, current, record, last_user_id, last_message_id, updated_at) VALUES (?,?,?,?,?,?)').run(guildId, 5, 9, userId, 'm', now);
-  const t = db.prepare('INSERT INTO tickets (guild_id, user_id, status, created_at, last_at) VALUES (?,?,?,?,?)').run(guildId, userId, 'open', now, now);
-  db.prepare('INSERT INTO ticket_messages (ticket_id, author_id, author_kind, content, created_at) VALUES (?,?,?,?,?)').run(t.lastInsertRowid, userId, 'user', 'hi', now);
-  db.prepare('INSERT INTO scheduled_messages (guild_id, channel_id, content, interval_minutes, next_run_at, created_at) VALUES (?,?,?,?,?,?)').run(guildId, '9', 'x', 60, now, now);
-  db.prepare('INSERT INTO config_audit (guild_id, actor, action, detail, created_at) VALUES (?,?,?,?,?)').run(guildId, 'a', 'x', '', now);
-  db.prepare('INSERT OR REPLACE INTO afk (guild_id, user_id, reason, since) VALUES (?,?,?,?)').run(guildId, userId, 'brb', now);
-  const g = db.prepare('INSERT INTO giveaways (guild_id, channel_id, prize, host_id, ends_at, created_at) VALUES (?,?,?,?,?,?)').run(guildId, '9', 'nitro', userId, now + 1000, now);
-  db.prepare('INSERT INTO giveaway_entries (giveaway_id, user_id, entered_at) VALUES (?,?,?)').run(g.lastInsertRowid, userId, now);
+  db.prepare(
+    'INSERT OR REPLACE INTO guild_settings (guild_id, modlog_channel_id, updated_at) VALUES (?,?,?)'
+  ).run(guildId, '9', now);
+  db.prepare(
+    'INSERT OR REPLACE INTO guild_modules (guild_id, module_id, enabled, config, updated_at) VALUES (?,?,?,?,?)'
+  ).run(guildId, 'leveling', 1, '{}', now);
+  db.prepare(
+    'INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at) VALUES (?,?,?,?,?)'
+  ).run(guildId, userId, 'mod', 'x', now);
+  db.prepare(
+    'INSERT OR REPLACE INTO leveling (guild_id, user_id, xp, level, messages, last_msg_at) VALUES (?,?,?,?,?,?)'
+  ).run(guildId, userId, 500, 3, 20, now);
+  db.prepare(
+    'INSERT OR REPLACE INTO counting (guild_id, current, record, last_user_id, last_message_id, updated_at) VALUES (?,?,?,?,?,?)'
+  ).run(guildId, 5, 9, userId, 'm', now);
+  const t = db
+    .prepare('INSERT INTO tickets (guild_id, user_id, status, created_at, last_at) VALUES (?,?,?,?,?)')
+    .run(guildId, userId, 'open', now, now);
+  db.prepare(
+    'INSERT INTO ticket_messages (ticket_id, author_id, author_kind, content, created_at) VALUES (?,?,?,?,?)'
+  ).run(t.lastInsertRowid, userId, 'user', 'hi', now);
+  db.prepare(
+    'INSERT INTO scheduled_messages (guild_id, channel_id, content, interval_minutes, next_run_at, created_at) VALUES (?,?,?,?,?,?)'
+  ).run(guildId, '9', 'x', 60, now, now);
+  db.prepare('INSERT INTO config_audit (guild_id, actor, action, detail, created_at) VALUES (?,?,?,?,?)').run(
+    guildId,
+    'a',
+    'x',
+    '',
+    now
+  );
+  db.prepare('INSERT OR REPLACE INTO afk (guild_id, user_id, reason, since) VALUES (?,?,?,?)').run(
+    guildId,
+    userId,
+    'brb',
+    now
+  );
+  const g = db
+    .prepare(
+      'INSERT INTO giveaways (guild_id, channel_id, prize, host_id, ends_at, created_at) VALUES (?,?,?,?,?,?)'
+    )
+    .run(guildId, '9', 'nitro', userId, now + 1000, now);
+  db.prepare('INSERT INTO giveaway_entries (giveaway_id, user_id, entered_at) VALUES (?,?,?)').run(
+    g.lastInsertRowid,
+    userId,
+    now
+  );
 }
 
 const countFor = (table, guildId) =>
@@ -33,7 +68,18 @@ test('purgeGuild removes every guild-scoped row and leaves other guilds alone', 
 
   purgeGuild(G);
 
-  for (const t of ['guild_settings', 'guild_modules', 'warnings', 'leveling', 'counting', 'tickets', 'scheduled_messages', 'config_audit', 'afk', 'giveaways']) {
+  for (const t of [
+    'guild_settings',
+    'guild_modules',
+    'warnings',
+    'leveling',
+    'counting',
+    'tickets',
+    'scheduled_messages',
+    'config_audit',
+    'afk',
+    'giveaways',
+  ]) {
     assert.equal(countFor(t, G), 0, `${t} should be empty for purged guild`);
   }
   for (const [table, sub] of [
@@ -41,7 +87,11 @@ test('purgeGuild removes every guild-scoped row and leaves other guilds alone', 
     ['giveaway_entries', 'giveaways'],
   ]) {
     assert.equal(
-      db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${table === 'ticket_messages' ? 'ticket_id' : 'giveaway_id'} IN (SELECT id FROM ${sub} WHERE guild_id = ?)`).get(G).n,
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM ${table} WHERE ${table === 'ticket_messages' ? 'ticket_id' : 'giveaway_id'} IN (SELECT id FROM ${sub} WHERE guild_id = ?)`
+        )
+        .get(G).n,
       0,
       `${table} should be gone`
     );
@@ -51,13 +101,26 @@ test('purgeGuild removes every guild-scoped row and leaves other guilds alone', 
 });
 
 test('forgetUser deletes only that member’s data in that guild', () => {
-  db.exec('DELETE FROM leveling; DELETE FROM warnings; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM giveaways; DELETE FROM giveaway_entries;');
+  db.exec(
+    'DELETE FROM leveling; DELETE FROM warnings; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM giveaways; DELETE FROM giveaway_entries;'
+  );
   seed(G, U);
   const KEEP = '444444444444444444';
-  db.prepare('INSERT OR REPLACE INTO leveling (guild_id, user_id, xp, level, messages, last_msg_at) VALUES (?,?,?,?,?,?)').run(G, KEEP, 10, 0, 1, Date.now());
-  db.prepare('INSERT OR REPLACE INTO afk (guild_id, user_id, reason, since) VALUES (?,?,?,?)').run(G, KEEP, 'x', Date.now());
+  db.prepare(
+    'INSERT OR REPLACE INTO leveling (guild_id, user_id, xp, level, messages, last_msg_at) VALUES (?,?,?,?,?,?)'
+  ).run(G, KEEP, 10, 0, 1, Date.now());
+  db.prepare('INSERT OR REPLACE INTO afk (guild_id, user_id, reason, since) VALUES (?,?,?,?)').run(
+    G,
+    KEEP,
+    'x',
+    Date.now()
+  );
   const gid = db.prepare('SELECT id FROM giveaways WHERE guild_id = ?').get(G).id;
-  db.prepare('INSERT INTO giveaway_entries (giveaway_id, user_id, entered_at) VALUES (?,?,?)').run(gid, KEEP, Date.now());
+  db.prepare('INSERT INTO giveaway_entries (giveaway_id, user_id, entered_at) VALUES (?,?,?)').run(
+    gid,
+    KEEP,
+    Date.now()
+  );
 
   const result = forgetUser(G, U);
 
@@ -67,14 +130,32 @@ test('forgetUser deletes only that member’s data in that guild', () => {
   assert.equal(result.ticketMessages, 1);
   assert.equal(result.afk, 1);
   assert.equal(result.giveawayEntries, 1);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM leveling WHERE guild_id = ?').get(G).n, 1, 'other member kept');
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM afk WHERE guild_id = ?').get(G).n, 1, 'other member afk kept');
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM giveaway_entries').get().n, 1, 'other member giveaway entry kept');
-  assert.equal(db.prepare('SELECT last_user_id FROM counting WHERE guild_id = ?').get(G).last_user_id, null, 'counting lock cleared');
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS n FROM leveling WHERE guild_id = ?').get(G).n,
+    1,
+    'other member kept'
+  );
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS n FROM afk WHERE guild_id = ?').get(G).n,
+    1,
+    'other member afk kept'
+  );
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS n FROM giveaway_entries').get().n,
+    1,
+    'other member giveaway entry kept'
+  );
+  assert.equal(
+    db.prepare('SELECT last_user_id FROM counting WHERE guild_id = ?').get(G).last_user_id,
+    null,
+    'counting lock cleared'
+  );
 });
 
 test('describeUserData counts what forgetUser would remove, then reads zero after', () => {
-  db.exec('DELETE FROM leveling; DELETE FROM warnings; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM giveaways; DELETE FROM giveaway_entries;');
+  db.exec(
+    'DELETE FROM leveling; DELETE FROM warnings; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM giveaways; DELETE FROM giveaway_entries;'
+  );
   seed(G, U);
 
   const before = describeUserData(G, U);

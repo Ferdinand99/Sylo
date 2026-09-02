@@ -73,7 +73,13 @@ test('buildPollPayload: default layout lists options + meta', () => {
 });
 
 test('buildPollPayload: templates substitute placeholders', () => {
-  const poll = { question: 'Pineapple on pizza?', options: ['Yes', 'No'], multiple: true, max_votes: 0, ends_at: null };
+  const poll = {
+    question: 'Pineapple on pizza?',
+    options: ['Yes', 'No'],
+    multiple: true,
+    max_votes: 0,
+    ends_at: null,
+  };
   const p = buildPollPayload(poll, {
     pollMessage: { content: 'Vote: {question}', title: 'POLL — {question}', footer: 'Mode: {mode}' },
   });

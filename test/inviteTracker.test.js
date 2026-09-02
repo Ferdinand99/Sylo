@@ -62,7 +62,10 @@ test('topInviters: only positive net, ordered desc; rank + count', () => {
   bumpLeaves(G, '333333333333333333', 5); // net -4, excluded
 
   const top = topInviters(G, 10);
-  assert.deepEqual(top.map((r) => r.user_id), ['111111111111111111', '222222222222222222']);
+  assert.deepEqual(
+    top.map((r) => r.user_id),
+    ['111111111111111111', '222222222222222222']
+  );
   assert.equal(inviterCount(G), 2);
   assert.equal(inviterRank(G, '222222222222222222'), 2);
   assert.equal(inviterRank(G, '111111111111111111'), 1);
@@ -71,7 +74,13 @@ test('topInviters: only positive net, ordered desc; rank + count', () => {
 test('join records: store, read, delete', () => {
   clearGuildInvites(G);
   const joiner = '444444444444444444';
-  recordJoin(G, joiner, { inviterId: '111111111111111111', code: 'abcd', source: 'invite', joinedAt: 1000, counted: 1 });
+  recordJoin(G, joiner, {
+    inviterId: '111111111111111111',
+    code: 'abcd',
+    source: 'invite',
+    joinedAt: 1000,
+    counted: 1,
+  });
   let j = getJoin(G, joiner);
   assert.equal(j.inviter_id, '111111111111111111');
   assert.equal(j.source, 'invite');

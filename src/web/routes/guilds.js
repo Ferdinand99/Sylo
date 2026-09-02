@@ -28,7 +28,12 @@ import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { applyWarnThresholds, normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
 import { normaliseAutomodConfig, AUTOMOD_RULES, AUTOMOD_ACTIONS } from '../../modules/automod.js';
 import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
-import { activeGiveaways, endedGiveaways, giveawayEntryCount, getGiveawayInGuild } from '../../db/giveaways.js';
+import {
+  activeGiveaways,
+  endedGiveaways,
+  giveawayEntryCount,
+  getGiveawayInGuild,
+} from '../../db/giveaways.js';
 import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
 import { recentLookups } from '../../db/cache.js';
 import { getVanitySlug, setVanitySlug, clearVanitySlug } from '../../db/leaderboardVanity.js';
@@ -36,7 +41,11 @@ import { normaliseEmbedSpec } from '../../modules/welcomeChannel.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
 import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
-import { normaliseVerificationConfig, VERIFY_MODES, ensureVerifyMessage } from '../../modules/verification.js';
+import {
+  normaliseVerificationConfig,
+  VERIFY_MODES,
+  ensureVerifyMessage,
+} from '../../modules/verification.js';
 import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
 import { normaliseAppealsConfig, decideAndNotify } from '../../modules/appeals.js';
 import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
@@ -45,7 +54,10 @@ import { deleteBoardEntries } from '../../db/starboard.js';
 import { normaliseInviteTrackerConfig, primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { topInviters, inviterCount, setBonus } from '../../db/inviteTracker.js';
 import { normalisePollsConfig } from '../../modules/polls.js';
-import { normaliseTwitchConfig, DEFAULT_MESSAGE as TWITCH_DEFAULT_MESSAGE } from '../../modules/twitchAlerts.js';
+import {
+  normaliseTwitchConfig,
+  DEFAULT_MESSAGE as TWITCH_DEFAULT_MESSAGE,
+} from '../../modules/twitchAlerts.js';
 import {
   normaliseYoutubeConfig,
   resolveYtChannel,
@@ -91,10 +103,32 @@ const router = Router();
 
 // Module ids that have a real settings partial (views/guild/modules/<id>.ejs).
 const CONFIG_VIEWS = new Set([
-  'moderation', 'logging', 'welcome', 'roles', 'sticky', 'tickets', 'automod', 'counting',
-  'custom-commands', 'reminders', 'leveling', 'autoresponder', 'verification',
-  'afk', 'server-stats', 'free-games', 'appeals', 'temp-voice', 'welcome-channel', 'starboard',
-  'invite-tracker', 'polls', 'twitch-alerts', 'youtube-alerts', 'giveaways', 'game-stats',
+  'moderation',
+  'logging',
+  'welcome',
+  'roles',
+  'sticky',
+  'tickets',
+  'automod',
+  'counting',
+  'custom-commands',
+  'reminders',
+  'leveling',
+  'autoresponder',
+  'verification',
+  'afk',
+  'server-stats',
+  'free-games',
+  'appeals',
+  'temp-voice',
+  'welcome-channel',
+  'starboard',
+  'invite-tracker',
+  'polls',
+  'twitch-alerts',
+  'youtube-alerts',
+  'giveaways',
+  'game-stats',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -106,7 +140,9 @@ function moderatorDisplayName(req) {
   return currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`;
 }
 function parseUserId(raw) {
-  const m = String(raw ?? '').trim().match(/^<@!?(\d{17,20})>$|^(\d{17,20})$/);
+  const m = String(raw ?? '')
+    .trim()
+    .match(/^<@!?(\d{17,20})>$|^(\d{17,20})$/);
   return m ? m[1] || m[2] : null;
 }
 
@@ -212,7 +248,7 @@ async function lookupProfile(userId) {
 }
 
 const MEMBER_DATA_UNAFFECTED =
-  "Messages already posted to channels, a completed giveaway’s winner list, and the server’s config-change log are not affected.";
+  'Messages already posted to channels, a completed giveaway’s winner list, and the server’s config-change log are not affected.';
 
 router.get(
   '/:guildId/member-data',
@@ -241,10 +277,12 @@ router.post(
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const userId = parseUserId(req.body.userId);
-    const reason = String(req.body.reason ?? '').trim().slice(0, 500);
+    const reason = String(req.body.reason ?? '')
+      .trim()
+      .slice(0, 500);
     const back = `/guilds/${guild.id}/member-data`;
 
-    if (!userId) return res.redirect(`${back}?msg=baduser`);
+    if (!userId) return res.redirect(`${back}?msg=md-baduser`);
     if (req.body.confirm !== 'on') return res.redirect(`${back}?user=${userId}&msg=noconfirm`);
 
     const r = forgetUser(guild.id, userId);
@@ -252,7 +290,9 @@ router.post(
     const dm = new EmbedBuilder()
       .setColor(0x58d68d)
       .setTitle(`Your data in ${guild.name} was deleted`)
-      .setDescription('A server administrator deleted the data Sylo had stored about you in this server, at your request.')
+      .setDescription(
+        'A server administrator deleted the data Sylo had stored about you in this server, at your request.'
+      )
       .addFields(
         { name: 'Warnings', value: String(r.warnings), inline: true },
         { name: 'Leveling record', value: String(r.leveling), inline: true },
@@ -323,7 +363,8 @@ router.get(
       id: w.id,
       user: tags.get(w.user_id) ?? w.user_id,
       userId: w.user_id,
-      moderator: w.moderator_id === WEB_MODERATOR ? 'Dashboard' : tags.get(w.moderator_id) ?? w.moderator_id,
+      moderator:
+        w.moderator_id === WEB_MODERATOR ? 'Dashboard' : (tags.get(w.moderator_id) ?? w.moderator_id),
       reason: w.reason,
       ago: timeAgo(w.created_at),
     }));
@@ -423,9 +464,13 @@ router.post(
     const appeal = getAppeal(guild.id, req.params.id);
     if (!appeal || appeal.status !== 'open') return res.redirect(`${back}?msg=appeal-gone`);
 
-    const decision = req.body.decision === 'accept' ? 'accepted' : req.body.decision === 'deny' ? 'denied' : null;
+    const decision =
+      req.body.decision === 'accept' ? 'accepted' : req.body.decision === 'deny' ? 'denied' : null;
     if (!decision) return res.redirect(`${back}?msg=appeal-bad`);
-    const reason = String(req.body.reason ?? '').trim().slice(0, 1000) || 'No reason given';
+    const reason =
+      String(req.body.reason ?? '')
+        .trim()
+        .slice(0, 1000) || 'No reason given';
 
     const result = await decideAndNotify(guild, appeal, {
       status: decision,
@@ -451,7 +496,10 @@ router.get(
     const { enabled, config } = getGuildModule(guild.id, 'leveling');
     const cfg = normaliseLevelingConfig(config);
     const rows = topMembers(guild.id, 10);
-    const tags = await resolveUserTags(runtime.client, rows.map((r) => r.user_id));
+    const tags = await resolveUserTags(
+      runtime.client,
+      rows.map((r) => r.user_id)
+    );
     res.render('guild', {
       ...baseContext(guild, 'leaderboard'),
       levelingEnabled: enabled,
@@ -492,12 +540,20 @@ router.post('/:guildId/leaderboard/vanity', (req, res) => {
   const raw = String(req.body.slug ?? '').trim();
   if (raw === '') {
     clearVanitySlug(req.guild.id);
-    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'leveling:vanity', detail: 'cleared' });
+    recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'leveling:vanity',
+      detail: 'cleared',
+    });
     return res.redirect(`${back}?msg=vanity-cleared`);
   }
   const r = setVanitySlug(req.guild.id, raw);
   if (!r.ok) return res.redirect(`${back}?msg=vanity-${r.error}`);
-  recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'leveling:vanity', detail: `/lb/${r.slug}` });
+  recordAudit(req.guild.id, {
+    actor: moderatorDisplayName(req),
+    action: 'leveling:vanity',
+    detail: `/lb/${r.slug}`,
+  });
   res.redirect(`${back}?msg=vanity-set`);
 });
 
@@ -531,7 +587,11 @@ router.post(
     if (!r.ok) return res.redirect(`${back}?msg=wc-fail`);
     const cfg = normaliseWelcomeChannelConfig(getGuildModule(req.guild.id, 'welcome-channel').config);
     setGuildModule(req.guild.id, 'welcome-channel', { config: { ...cfg, channelId: r.channelId } });
-    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'module:welcome-channel', detail: 'created #welcome' });
+    recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:welcome-channel',
+      detail: 'created #welcome',
+    });
     res.redirect(`${back}?msg=wc-channel`);
   })
 );
@@ -566,14 +626,30 @@ function moduleViewLocals(mod, req, configOverride) {
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
-    roles: ['roles', 'tickets', 'automod', 'leveling', 'autoresponder', 'verification', 'free-games', 'welcome', 'starboard', 'polls', 'twitch-alerts', 'youtube-alerts', 'giveaways'].includes(mod.id)
+    roles: [
+      'roles',
+      'tickets',
+      'automod',
+      'leveling',
+      'autoresponder',
+      'verification',
+      'free-games',
+      'welcome',
+      'starboard',
+      'polls',
+      'twitch-alerts',
+      'youtube-alerts',
+      'giveaways',
+    ].includes(mod.id)
       ? assignableRoles(req.guild)
       : [],
-    welcomeAutoroles: mod.id === 'welcome' ? getGuildModule(req.guild.id, 'roles').config.autoroles ?? [] : [],
+    welcomeAutoroles:
+      mod.id === 'welcome' ? (getGuildModule(req.guild.id, 'roles').config.autoroles ?? []) : [],
     verificationEnabled: mod.id === 'welcome' ? getGuildModule(req.guild.id, 'verification').enabled : false,
-    wcPresets: mod.id === 'welcome-channel'
-      ? WC_PRESETS.map((p) => ({ id: p.id, label: p.label, kind: p.kind, defaults: p.make() }))
-      : [],
+    wcPresets:
+      mod.id === 'welcome-channel'
+        ? WC_PRESETS.map((p) => ({ id: p.id, label: p.label, kind: p.kind, defaults: p.make() }))
+        : [],
     automodRules: AUTOMOD_RULES,
     automodActions: AUTOMOD_ACTIONS,
     verifyModes: VERIFY_MODES,
@@ -590,88 +666,94 @@ function moduleViewLocals(mod, req, configOverride) {
     ccPlaceholders: CC_PLACEHOLDERS,
     arPlaceholders: AR_PLACEHOLDERS,
     arMatchModes: AR_MATCH_MODES,
-    reminders: mod.id === 'reminders'
-      ? listScheduled(req.guild.id).map((j) => ({
-          id: j.id,
-          name: j.name || (j.spec?.embeds?.[0]?.title || j.content || 'Untitled reminder').slice(0, 60),
-          channel: guildTextChannels(req.guild).find((c) => c.id === j.channel_id)?.name ?? j.channel_id,
-          mode: j.mode,
-          intervalMinutes: j.interval_minutes,
-          runAt: j.run_at,
-          enabled: j.enabled === 1,
-          lastRun: j.last_run_at ? timeAgo(j.last_run_at) : null,
-        }))
-      : [],
+    reminders:
+      mod.id === 'reminders'
+        ? listScheduled(req.guild.id).map((j) => ({
+            id: j.id,
+            name: j.name || (j.spec?.embeds?.[0]?.title || j.content || 'Untitled reminder').slice(0, 60),
+            channel: guildTextChannels(req.guild).find((c) => c.id === j.channel_id)?.name ?? j.channel_id,
+            mode: j.mode,
+            intervalMinutes: j.interval_minutes,
+            runAt: j.run_at,
+            enabled: j.enabled === 1,
+            lastRun: j.last_run_at ? timeAgo(j.last_run_at) : null,
+          }))
+        : [],
     schedulePresets: SCHEDULE_PRESETS,
     announceModes: ANNOUNCE_MODES,
     xpRates: XP_RATES,
-    levelingCommands: mod.id === 'leveling'
-      ? ['rank', 'leaderboard']
-          .map((name) => {
-            const cmd = runtime.client?.commands?.get(name);
-            if (!cmd) return null;
-            const ov = getCommandOverrides(req.guild.id).get(name);
-            return {
-              name,
-              description: cmd.data.description,
-              enabled: ov ? ov.enabled : true,
-              allowedChannels: ov?.allowedChannels ?? [],
-              allowedRoles: ov?.allowedRoles ?? [],
-            };
-          })
-          .filter(Boolean)
-      : [],
-    levelingBoard: mod.id === 'leveling'
-      ? {
-          total: memberCount(req.guild.id),
-          rows: topMembers(req.guild.id, 15).map((r, i) => ({
-            rank: i + 1,
-            userId: r.user_id,
-            level: r.level,
-            xp: r.xp,
-            messages: r.messages,
-          })),
-        }
-      : null,
-    inviteBoard: mod.id === 'invite-tracker'
-      ? {
-          total: inviterCount(req.guild.id),
-          canReadInvites: Boolean(req.guild.members.me?.permissions.has(PermissionFlagsBits.ManageGuild)),
-          rows: topInviters(req.guild.id, 15).map((r, i) => ({
-            rank: i + 1,
-            userId: r.user_id,
-            net: r.net,
-            regular: r.regular,
-            leaves: r.leaves,
-            bonus: r.bonus,
-          })),
-        }
-      : null,
-    gameStatsRecent: mod.id === 'game-stats'
-      ? recentLookups(15).map((r) => ({
-          game: r.game,
-          title: r.title,
-          username: r.username,
-          platform: r.platform,
-          ago: timeAgo(r.created_at),
-        }))
-      : [],
-    giveaways: mod.id === 'giveaways'
-      ? [
-          ...activeGiveaways(req.guild.id).map((g) => ({ ...g, state: 'active' })),
-          ...endedGiveaways(req.guild.id, 8).map((g) => ({ ...g, state: 'ended' })),
-        ].map((g) => ({
-          id: g.id,
-          prize: g.prize,
-          state: g.state,
-          winners: g.winners,
-          endsAt: g.ends_at,
-          entries: giveawayEntryCount(g.id),
-          wonIds: g.wonIds,
-          channel: guildTextChannels(req.guild).find((c) => c.id === g.channel_id)?.name ?? g.channel_id,
-          requiredRoleId: g.required_role_id,
-        }))
-      : [],
+    levelingCommands:
+      mod.id === 'leveling'
+        ? ['rank', 'leaderboard']
+            .map((name) => {
+              const cmd = runtime.client?.commands?.get(name);
+              if (!cmd) return null;
+              const ov = getCommandOverrides(req.guild.id).get(name);
+              return {
+                name,
+                description: cmd.data.description,
+                enabled: ov ? ov.enabled : true,
+                allowedChannels: ov?.allowedChannels ?? [],
+                allowedRoles: ov?.allowedRoles ?? [],
+              };
+            })
+            .filter(Boolean)
+        : [],
+    levelingBoard:
+      mod.id === 'leveling'
+        ? {
+            total: memberCount(req.guild.id),
+            rows: topMembers(req.guild.id, 15).map((r, i) => ({
+              rank: i + 1,
+              userId: r.user_id,
+              level: r.level,
+              xp: r.xp,
+              messages: r.messages,
+            })),
+          }
+        : null,
+    inviteBoard:
+      mod.id === 'invite-tracker'
+        ? {
+            total: inviterCount(req.guild.id),
+            canReadInvites: Boolean(req.guild.members.me?.permissions.has(PermissionFlagsBits.ManageGuild)),
+            rows: topInviters(req.guild.id, 15).map((r, i) => ({
+              rank: i + 1,
+              userId: r.user_id,
+              net: r.net,
+              regular: r.regular,
+              leaves: r.leaves,
+              bonus: r.bonus,
+            })),
+          }
+        : null,
+    gameStatsRecent:
+      mod.id === 'game-stats'
+        ? recentLookups(15).map((r) => ({
+            game: r.game,
+            title: r.title,
+            username: r.username,
+            platform: r.platform,
+            ago: timeAgo(r.created_at),
+          }))
+        : [],
+    giveaways:
+      mod.id === 'giveaways'
+        ? [
+            ...activeGiveaways(req.guild.id).map((g) => ({ ...g, state: 'active' })),
+            ...endedGiveaways(req.guild.id, 8).map((g) => ({ ...g, state: 'ended' })),
+          ].map((g) => ({
+            id: g.id,
+            prize: g.prize,
+            state: g.state,
+            winners: g.winners,
+            endsAt: g.ends_at,
+            entries: giveawayEntryCount(g.id),
+            wonIds: g.wonIds,
+            channel: guildTextChannels(req.guild).find((c) => c.id === g.channel_id)?.name ?? g.channel_id,
+            requiredRoleId: g.required_role_id,
+          }))
+        : [],
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
   };
 }
@@ -686,329 +768,360 @@ router.get('/:guildId/m/:moduleId', (req, res) => {
 });
 
 // Save a module's settings.
-router.post('/:guildId/m/:moduleId/config', asyncHandler(async (req, res) => {
-  const mod = getModule(req.params.moduleId);
-  if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
-  const back = `/guilds/${req.guild.id}/m/${mod.id}`;
+router.post(
+  '/:guildId/m/:moduleId/config',
+  asyncHandler(async (req, res) => {
+    const mod = getModule(req.params.moduleId);
+    if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
+    const back = `/guilds/${req.guild.id}/m/${mod.id}`;
 
-  let config;
-  if (mod.id === 'moderation') {
-    // Threshold rows come as parallel arrays: t_count[], t_action[], t_duration[].
-    const counts = [].concat(req.body.t_count ?? []);
-    const actions = [].concat(req.body.t_action ?? []);
-    const durations = [].concat(req.body.t_duration ?? []);
-    const rows = counts.map((c, i) => ({
-      count: c,
-      action: actions[i],
-      durationMinutes: durations[i],
-    }));
-    config = {
-      dmOnPunish: req.body.dmOnPunish === 'on',
-      warnThresholds: normaliseThresholds(rows),
-    };
-  } else if (mod.id === 'logging') {
-    config = {
-      channel: /^\d{17,20}$/.test(req.body.channel ?? '') ? req.body.channel : '',
-      events: Object.fromEntries(LOG_EVENTS.map(([key]) => [key, req.body[`ev_${key}`] === 'on'])),
-    };
-  } else if (mod.id === 'welcome') {
-    const chan = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
-    const joinOn = req.body.enable_join === 'on';
-    const dmOn = req.body.enable_dm === 'on';
-    const leaveOn = req.body.enable_leave === 'on';
-    config = {
-      joinChannel: joinOn ? chan(req.body.joinChannel) : '',
-      joinMessage: joinOn ? String(req.body.joinMessage ?? '').slice(0, 1500) : '',
-      leaveChannel: leaveOn ? chan(req.body.leaveChannel) : '',
-      leaveMessage: leaveOn ? String(req.body.leaveMessage ?? '').slice(0, 1500) : '',
-      dmMessage: dmOn ? String(req.body.dmMessage ?? '').slice(0, 1500) : '',
-      useEmbed: req.body.useEmbed === 'on',
-    };
-    // "Give roles to new members" here writes the Reaction roles & autoroles module.
-    const autoOn = req.body.enable_autorole === 'on';
-    const newRoles = autoOn
-      ? [].concat(req.body.newRoles ?? []).filter((r) => /^\d{17,20}$/.test(r))
-      : [];
-    const rolesMod = getGuildModule(req.guild.id, 'roles');
-    setGuildModule(req.guild.id, 'roles', {
-      enabled: rolesMod.enabled || newRoles.length > 0,
-      config: { ...rolesMod.config, autoroles: newRoles },
-    });
-  } else if (mod.id === 'roles') {
-    const existing = getGuildModule(req.guild.id, 'roles').config;
-    const autoroles = [].concat(req.body.autoroles ?? []).filter((r) => /^\d{17,20}$/.test(r));
-    config = { autoroles, reactionMessages: existing.reactionMessages ?? [] };
-  } else if (mod.id === 'sticky') {
-    const prev = getGuildModule(req.guild.id, 'sticky').config;
-    const prevById = new Map((prev.stickies ?? []).map((s) => [s.channelId, s]));
-    const chans = [].concat(req.body.s_channel ?? []);
-    const contents = [].concat(req.body.s_content ?? []);
-    const stickies = chans
-      .map((channelId, i) => ({
-        channelId,
-        content: String(contents[i] ?? '').slice(0, 2000),
-        lastMessageId: prevById.get(channelId)?.lastMessageId ?? null,
-      }))
-      .filter((s) => /^\d{17,20}$/.test(s.channelId) && s.content.trim() !== '');
-    config = { stickies };
-  } else if (mod.id === 'tickets') {
-    config = {
-      greeting: String(req.body.greeting ?? '').slice(0, 1500),
-      closeMessage: String(req.body.closeMessage ?? '').slice(0, 1500),
-      notifyChannel: /^\d{17,20}$/.test(req.body.notifyChannel ?? '') ? req.body.notifyChannel : '',
-      staffRoles: [].concat(req.body.staffRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)),
-    };
-  } else if (mod.id === 'automod') {
-    const b = req.body;
-    const prevAutomod = getGuildModule(req.guild.id, 'automod').config;
-    // MEE6-style: one dropdown per rule — off | delete | warn | timeout.
-    const rule = (key) => {
-      const m = b[`r_${key}_mode`];
-      return { enabled: Boolean(m) && m !== 'off', action: m === 'off' || !m ? 'delete' : m };
-    };
-    config = normaliseAutomodConfig({
-      deleteMessage: true,
-      timeoutMinutes: b.timeoutMinutes,
-      exemptChannels: [].concat(b.exemptChannels ?? []),
-      // Immunity roles are managed on the Admin tab — keep whatever is stored.
-      exemptRoles: prevAutomod.exemptRoles ?? [],
-      rules: {
-        invites: rule('invites'),
-        links: { ...rule('links'), allowed: b.r_links_allowed },
-        spam: { ...rule('spam'), max: b.r_spam_max, seconds: b.r_spam_seconds },
-        mentions: { ...rule('mentions'), max: b.r_mentions_max },
-        caps: { ...rule('caps'), minLength: b.r_caps_minLength, percent: b.r_caps_percent },
-        words: { ...rule('words'), list: b.r_words_list },
-        emojis: { ...rule('emojis'), max: b.r_emojis_max },
-        spoilers: { ...rule('spoilers'), max: b.r_spoilers_max },
-        zalgo: rule('zalgo'),
-        repeat: rule('repeat'),
-      },
-    });
-  } else if (mod.id === 'counting') {
-    config = {
-      channelId: /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '',
-      allowSameUser: req.body.allowSameUser === 'on',
-      resetOnFail: req.body.resetOnFail === 'on',
-      react: req.body.react === 'on',
-    };
-  } else if (mod.id === 'leveling') {
-    const levels = [].concat(req.body.rw_level ?? []);
-    const roleIds = [].concat(req.body.rw_role ?? []);
-    const prevLvl = getGuildModule(req.guild.id, 'leveling').config;
-    config = normaliseLevelingConfig({
-      cooldownSeconds: req.body.cooldownSeconds,
-      xpRate: req.body.xpRate,
-      announce: req.body.announce,
-      announceChannel: req.body.announceChannel,
-      announceMessage: req.body.announceMessage,
-      noXpChannels: [].concat(req.body.noXpChannels ?? []),
-      noXpChannelsMode: req.body.noXpChannelsMode,
-      noXpRoles: [].concat(req.body.noXpRoles ?? []),
-      noXpRolesMode: req.body.noXpRolesMode,
-      stackRewards: req.body.stackRewards === 'on',
-      removeRewardsOnXpLoss: req.body.removeRewardsOnXpLoss === 'on',
-      // The public-leaderboard toggle lives on the Leaderboard page — keep it.
-      publicLeaderboard: prevLvl.publicLeaderboard !== false,
-      rewards: levels.map((level, i) => ({ level, roleId: roleIds[i] ?? '' })),
-    });
-  } else if (mod.id === 'autoresponder') {
-    const triggers = [].concat(req.body.ar_trigger ?? []);
-    const matches = [].concat(req.body.ar_match ?? []);
-    const responses = [].concat(req.body.ar_response ?? []);
-    const asEmbed = [].concat(req.body.ar_embed ?? []);
-    const del = [].concat(req.body.ar_delete ?? []);
-    config = normaliseAutoresponder({
-      cooldownSeconds: req.body.cooldownSeconds,
-      ignoreChannels: [].concat(req.body.ignoreChannels ?? []),
-      ignoreRoles: [].concat(req.body.ignoreRoles ?? []),
-      responders: triggers.map((trigger, i) => ({
-        trigger,
-        match: matches[i],
-        response: responses[i] ?? '',
-        embed: asEmbed[i] === 'embed',
-        deleteTrigger: del[i] === 'delete',
-      })),
-    });
-  } else if (mod.id === 'afk') {
-    config = {
-      setNickname: req.body.setNickname === 'on',
-      mentionReply: req.body.mentionReply === 'on',
-      ignoreChannels: [].concat(req.body.ignoreChannels ?? []).filter((c) => /^\d{17,20}$/.test(c)),
-    };
-  } else if (mod.id === 'free-games') {
-    config = {
-      channelId: /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '',
-      roleId: /^\d{17,20}$/.test(req.body.roleId ?? '') ? req.body.roleId : '',
-    };
-  } else if (mod.id === 'server-stats') {
-    const chans = [].concat(req.body.ss_channel ?? []);
-    const types = [].concat(req.body.ss_type ?? []);
-    const templates = [].concat(req.body.ss_template ?? []);
-    config = normaliseServerStats({
-      refreshMinutes: req.body.refreshMinutes,
-      channels: chans.map((channelId, i) => ({
-        channelId,
-        type: types[i],
-        template: templates[i] ?? '',
-      })),
-    });
-  } else if (mod.id === 'appeals') {
-    config = normaliseAppealsConfig({
-      questions: [].concat(req.body.q ?? []),
-      autoUnbanOnAccept: req.body.autoUnbanOnAccept === 'on',
-      reviewChannelId: req.body.reviewChannelId,
-      cooldownDays: req.body.cooldownDays,
-      appealMessage: req.body.appealMessage,
-      appealServerInvite: req.body.appealServerInvite,
-    });
-  } else if (mod.id === 'verification') {
-    const prev = getGuildModule(req.guild.id, 'verification').config;
-    config = normaliseVerificationConfig({
-      mode: req.body.mode,
-      verifiedRoleId: req.body.verifiedRoleId,
-      channelId: req.body.channelId,
-      messageId: prev.messageId, // bot-managed
-      title: req.body.title,
-      message: req.body.message,
-      successMessage: req.body.successMessage,
-      logChannelId: req.body.logChannelId,
-      kickAfterMinutes: req.body.kickAfterMinutes,
-    });
-  } else if (mod.id === 'invite-tracker') {
-    config = normaliseInviteTrackerConfig({
-      joinLogChannelId: req.body.joinLogChannelId,
-      graceHours: req.body.graceHours,
-    });
-  } else if (mod.id === 'youtube-alerts') {
-    const inputs = [].concat(req.body.yt_input ?? []);
-    const prevId = [].concat(req.body.yt_resolvedId ?? []);
-    const prevName = [].concat(req.body.yt_resolvedName ?? []);
-    const chans = [].concat(req.body.yt_channel ?? []);
-    const rolez = [].concat(req.body.yt_role ?? []);
-    const notify = [].concat(req.body.yt_notify ?? []); // 'both' | 'video' | 'live'
-    const vMsg = [].concat(req.body.yt_videoMessage ?? []);
-    const lMsg = [].concat(req.body.yt_liveMessage ?? []);
-
-    const alerts = [];
-    for (let i = 0; i < inputs.length; i += 1) {
-      const input = String(inputs[i] ?? '').trim();
-      if (!input && !prevId[i]) continue;
-      let resolved = /^UC[\w-]{20,}$/.test(prevId[i] ?? '') && !input ? { channelId: prevId[i], name: prevName[i] || '' } : null;
-      if (!resolved) resolved = (await resolveYtChannel(input || prevId[i])) || null;
-      if (!resolved && /^UC[\w-]{20,}$/.test(prevId[i] ?? '')) resolved = { channelId: prevId[i], name: prevName[i] || '' };
-      if (!resolved) continue;
-      const n = notify[i] || 'both';
-      alerts.push({
-        ytChannelId: resolved.channelId,
-        name: resolved.name || prevName[i] || '',
-        discordChannelId: chans[i] ?? '',
-        roleId: rolez[i] ?? '',
-        onVideo: n === 'both' || n === 'video',
-        onLive: n === 'both' || n === 'live',
-        videoMessage: vMsg[i] ?? '',
-        liveMessage: lMsg[i] ?? '',
+    let config;
+    if (mod.id === 'moderation') {
+      // Threshold rows come as parallel arrays: t_count[], t_action[], t_duration[].
+      const counts = [].concat(req.body.t_count ?? []);
+      const actions = [].concat(req.body.t_action ?? []);
+      const durations = [].concat(req.body.t_duration ?? []);
+      const rows = counts.map((c, i) => ({
+        count: c,
+        action: actions[i],
+        durationMinutes: durations[i],
+      }));
+      config = {
+        dmOnPunish: req.body.dmOnPunish === 'on',
+        warnThresholds: normaliseThresholds(rows),
+      };
+    } else if (mod.id === 'logging') {
+      config = {
+        channel: /^\d{17,20}$/.test(req.body.channel ?? '') ? req.body.channel : '',
+        events: Object.fromEntries(LOG_EVENTS.map(([key]) => [key, req.body[`ev_${key}`] === 'on'])),
+      };
+    } else if (mod.id === 'welcome') {
+      const chan = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
+      const joinOn = req.body.enable_join === 'on';
+      const dmOn = req.body.enable_dm === 'on';
+      const leaveOn = req.body.enable_leave === 'on';
+      config = {
+        joinChannel: joinOn ? chan(req.body.joinChannel) : '',
+        joinMessage: joinOn ? String(req.body.joinMessage ?? '').slice(0, 1500) : '',
+        leaveChannel: leaveOn ? chan(req.body.leaveChannel) : '',
+        leaveMessage: leaveOn ? String(req.body.leaveMessage ?? '').slice(0, 1500) : '',
+        dmMessage: dmOn ? String(req.body.dmMessage ?? '').slice(0, 1500) : '',
+        useEmbed: req.body.useEmbed === 'on',
+      };
+      // "Give roles to new members" here writes the Reaction roles & autoroles module.
+      const autoOn = req.body.enable_autorole === 'on';
+      const newRoles = autoOn ? [].concat(req.body.newRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)) : [];
+      const rolesMod = getGuildModule(req.guild.id, 'roles');
+      setGuildModule(req.guild.id, 'roles', {
+        enabled: rolesMod.enabled || newRoles.length > 0,
+        config: { ...rolesMod.config, autoroles: newRoles },
       });
-    }
-    config = normaliseYoutubeConfig({ alerts });
-  } else if (mod.id === 'twitch-alerts') {
-    const logins = [].concat(req.body.tw_login ?? []);
-    const chans = [].concat(req.body.tw_channel ?? []);
-    const rolez = [].concat(req.body.tw_role ?? []);
-    const msgs = [].concat(req.body.tw_message ?? []);
-    config = normaliseTwitchConfig({
-      alerts: logins.map((login, i) => ({
-        login,
-        channelId: chans[i] ?? '',
-        roleId: rolez[i] ?? '',
-        message: msgs[i] ?? '',
-      })),
-    });
-  } else if (mod.id === 'polls') {
-    const msg = (raw) => {
-      try {
-        const o = JSON.parse(raw || '{}');
-        return o && typeof o === 'object' ? o : {};
-      } catch {
-        return {};
+    } else if (mod.id === 'roles') {
+      const existing = getGuildModule(req.guild.id, 'roles').config;
+      const autoroles = [].concat(req.body.autoroles ?? []).filter((r) => /^\d{17,20}$/.test(r));
+      config = { autoroles, reactionMessages: existing.reactionMessages ?? [] };
+    } else if (mod.id === 'sticky') {
+      const prev = getGuildModule(req.guild.id, 'sticky').config;
+      const prevById = new Map((prev.stickies ?? []).map((s) => [s.channelId, s]));
+      const chans = [].concat(req.body.s_channel ?? []);
+      const contents = [].concat(req.body.s_content ?? []);
+      const stickies = chans
+        .map((channelId, i) => ({
+          channelId,
+          content: String(contents[i] ?? '').slice(0, 2000),
+          lastMessageId: prevById.get(channelId)?.lastMessageId ?? null,
+        }))
+        .filter((s) => /^\d{17,20}$/.test(s.channelId) && s.content.trim() !== '');
+      config = { stickies };
+    } else if (mod.id === 'tickets') {
+      config = {
+        greeting: String(req.body.greeting ?? '').slice(0, 1500),
+        closeMessage: String(req.body.closeMessage ?? '').slice(0, 1500),
+        notifyChannel: /^\d{17,20}$/.test(req.body.notifyChannel ?? '') ? req.body.notifyChannel : '',
+        staffRoles: [].concat(req.body.staffRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)),
+      };
+    } else if (mod.id === 'automod') {
+      const b = req.body;
+      const prevAutomod = getGuildModule(req.guild.id, 'automod').config;
+      // MEE6-style: one dropdown per rule — off | delete | warn | timeout.
+      const rule = (key) => {
+        const m = b[`r_${key}_mode`];
+        return { enabled: Boolean(m) && m !== 'off', action: m === 'off' || !m ? 'delete' : m };
+      };
+      config = normaliseAutomodConfig({
+        deleteMessage: true,
+        timeoutMinutes: b.timeoutMinutes,
+        exemptChannels: [].concat(b.exemptChannels ?? []),
+        // Immunity roles are managed on the Admin tab — keep whatever is stored.
+        exemptRoles: prevAutomod.exemptRoles ?? [],
+        rules: {
+          invites: rule('invites'),
+          links: { ...rule('links'), allowed: b.r_links_allowed },
+          spam: { ...rule('spam'), max: b.r_spam_max, seconds: b.r_spam_seconds },
+          mentions: { ...rule('mentions'), max: b.r_mentions_max },
+          caps: { ...rule('caps'), minLength: b.r_caps_minLength, percent: b.r_caps_percent },
+          words: { ...rule('words'), list: b.r_words_list },
+          emojis: { ...rule('emojis'), max: b.r_emojis_max },
+          spoilers: { ...rule('spoilers'), max: b.r_spoilers_max },
+          zalgo: rule('zalgo'),
+          repeat: rule('repeat'),
+        },
+      });
+    } else if (mod.id === 'counting') {
+      config = {
+        channelId: /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '',
+        allowSameUser: req.body.allowSameUser === 'on',
+        resetOnFail: req.body.resetOnFail === 'on',
+        react: req.body.react === 'on',
+      };
+    } else if (mod.id === 'leveling') {
+      const levels = [].concat(req.body.rw_level ?? []);
+      const roleIds = [].concat(req.body.rw_role ?? []);
+      const prevLvl = getGuildModule(req.guild.id, 'leveling').config;
+      config = normaliseLevelingConfig({
+        cooldownSeconds: req.body.cooldownSeconds,
+        xpRate: req.body.xpRate,
+        announce: req.body.announce,
+        announceChannel: req.body.announceChannel,
+        announceMessage: req.body.announceMessage,
+        noXpChannels: [].concat(req.body.noXpChannels ?? []),
+        noXpChannelsMode: req.body.noXpChannelsMode,
+        noXpRoles: [].concat(req.body.noXpRoles ?? []),
+        noXpRolesMode: req.body.noXpRolesMode,
+        stackRewards: req.body.stackRewards === 'on',
+        removeRewardsOnXpLoss: req.body.removeRewardsOnXpLoss === 'on',
+        // The public-leaderboard toggle lives on the Leaderboard page — keep it.
+        publicLeaderboard: prevLvl.publicLeaderboard !== false,
+        rewards: levels.map((level, i) => ({ level, roleId: roleIds[i] ?? '' })),
+      });
+    } else if (mod.id === 'autoresponder') {
+      const triggers = [].concat(req.body.ar_trigger ?? []);
+      const matches = [].concat(req.body.ar_match ?? []);
+      const responses = [].concat(req.body.ar_response ?? []);
+      const asEmbed = [].concat(req.body.ar_embed ?? []);
+      const del = [].concat(req.body.ar_delete ?? []);
+      config = normaliseAutoresponder({
+        cooldownSeconds: req.body.cooldownSeconds,
+        ignoreChannels: [].concat(req.body.ignoreChannels ?? []),
+        ignoreRoles: [].concat(req.body.ignoreRoles ?? []),
+        responders: triggers.map((trigger, i) => ({
+          trigger,
+          match: matches[i],
+          response: responses[i] ?? '',
+          embed: asEmbed[i] === 'embed',
+          deleteTrigger: del[i] === 'delete',
+        })),
+      });
+    } else if (mod.id === 'afk') {
+      config = {
+        setNickname: req.body.setNickname === 'on',
+        mentionReply: req.body.mentionReply === 'on',
+        ignoreChannels: [].concat(req.body.ignoreChannels ?? []).filter((c) => /^\d{17,20}$/.test(c)),
+      };
+    } else if (mod.id === 'free-games') {
+      config = {
+        channelId: /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '',
+        roleId: /^\d{17,20}$/.test(req.body.roleId ?? '') ? req.body.roleId : '',
+      };
+    } else if (mod.id === 'server-stats') {
+      const chans = [].concat(req.body.ss_channel ?? []);
+      const types = [].concat(req.body.ss_type ?? []);
+      const templates = [].concat(req.body.ss_template ?? []);
+      config = normaliseServerStats({
+        refreshMinutes: req.body.refreshMinutes,
+        channels: chans.map((channelId, i) => ({
+          channelId,
+          type: types[i],
+          template: templates[i] ?? '',
+        })),
+      });
+    } else if (mod.id === 'appeals') {
+      config = normaliseAppealsConfig({
+        questions: [].concat(req.body.q ?? []),
+        autoUnbanOnAccept: req.body.autoUnbanOnAccept === 'on',
+        reviewChannelId: req.body.reviewChannelId,
+        cooldownDays: req.body.cooldownDays,
+        appealMessage: req.body.appealMessage,
+        appealServerInvite: req.body.appealServerInvite,
+      });
+    } else if (mod.id === 'verification') {
+      const prev = getGuildModule(req.guild.id, 'verification').config;
+      config = normaliseVerificationConfig({
+        mode: req.body.mode,
+        verifiedRoleId: req.body.verifiedRoleId,
+        channelId: req.body.channelId,
+        messageId: prev.messageId, // bot-managed
+        title: req.body.title,
+        message: req.body.message,
+        successMessage: req.body.successMessage,
+        logChannelId: req.body.logChannelId,
+        kickAfterMinutes: req.body.kickAfterMinutes,
+      });
+    } else if (mod.id === 'invite-tracker') {
+      config = normaliseInviteTrackerConfig({
+        joinLogChannelId: req.body.joinLogChannelId,
+        graceHours: req.body.graceHours,
+      });
+    } else if (mod.id === 'youtube-alerts') {
+      const inputs = [].concat(req.body.yt_input ?? []);
+      const prevId = [].concat(req.body.yt_resolvedId ?? []);
+      const prevName = [].concat(req.body.yt_resolvedName ?? []);
+      const chans = [].concat(req.body.yt_channel ?? []);
+      const rolez = [].concat(req.body.yt_role ?? []);
+      const notify = [].concat(req.body.yt_notify ?? []); // 'both' | 'video' | 'live'
+      const vMsg = [].concat(req.body.yt_videoMessage ?? []);
+      const lMsg = [].concat(req.body.yt_liveMessage ?? []);
+
+      const alerts = [];
+      for (let i = 0; i < inputs.length; i += 1) {
+        const input = String(inputs[i] ?? '').trim();
+        if (!input && !prevId[i]) continue;
+        let resolved =
+          /^UC[\w-]{20,}$/.test(prevId[i] ?? '') && !input
+            ? { channelId: prevId[i], name: prevName[i] || '' }
+            : null;
+        if (!resolved) resolved = (await resolveYtChannel(input || prevId[i])) || null;
+        if (!resolved && /^UC[\w-]{20,}$/.test(prevId[i] ?? ''))
+          resolved = { channelId: prevId[i], name: prevName[i] || '' };
+        if (!resolved) continue;
+        const n = notify[i] || 'both';
+        alerts.push({
+          ytChannelId: resolved.channelId,
+          name: resolved.name || prevName[i] || '',
+          discordChannelId: chans[i] ?? '',
+          roleId: rolez[i] ?? '',
+          onVideo: n === 'both' || n === 'video',
+          onLive: n === 'both' || n === 'live',
+          videoMessage: vMsg[i] ?? '',
+          liveMessage: lMsg[i] ?? '',
+        });
       }
-    };
-    config = normalisePollsConfig({
-      voteRoleMode: req.body.voteRoleMode,
-      voteRoles: [].concat(req.body.voteRoles ?? []),
-      pollMessage: msg(req.body.pm_json),
-      resultsMessage: msg(req.body.rm_json),
+      config = normaliseYoutubeConfig({ alerts });
+    } else if (mod.id === 'twitch-alerts') {
+      const logins = [].concat(req.body.tw_login ?? []);
+      const chans = [].concat(req.body.tw_channel ?? []);
+      const rolez = [].concat(req.body.tw_role ?? []);
+      const msgs = [].concat(req.body.tw_message ?? []);
+      config = normaliseTwitchConfig({
+        alerts: logins.map((login, i) => ({
+          login,
+          channelId: chans[i] ?? '',
+          roleId: rolez[i] ?? '',
+          message: msgs[i] ?? '',
+        })),
+      });
+    } else if (mod.id === 'polls') {
+      const msg = (raw) => {
+        try {
+          const o = JSON.parse(raw || '{}');
+          return o && typeof o === 'object' ? o : {};
+        } catch {
+          return {};
+        }
+      };
+      config = normalisePollsConfig({
+        voteRoleMode: req.body.voteRoleMode,
+        voteRoles: [].concat(req.body.voteRoles ?? []),
+        pollMessage: msg(req.body.pm_json),
+        resultsMessage: msg(req.body.rm_json),
+      });
+    } else if (mod.id === 'welcome-channel') {
+      const prev = getGuildModule(req.guild.id, 'welcome-channel').config;
+      let spec;
+      try {
+        spec = JSON.parse(req.body.spec || '{}');
+      } catch {
+        spec = {};
+      }
+      config = normaliseWelcomeChannelConfig({
+        channelId: req.body.channelId,
+        messageId: prev.messageId,
+        spec,
+      });
+    } else if (mod.id === 'giveaways') {
+      config = normaliseGiveawaysConfig({ ping: req.body.ping, dmWinners: req.body.dmWinners === 'on' });
+    } else {
+      return res.redirect(back);
+    }
+
+    setGuildModule(req.guild.id, mod.id, { config });
+    recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: `module:${mod.id}`,
+      detail: 'settings saved',
     });
-  } else if (mod.id === 'welcome-channel') {
-    const prev = getGuildModule(req.guild.id, 'welcome-channel').config;
-    let spec = {};
-    try {
-      spec = JSON.parse(req.body.spec || '{}');
-    } catch {
-      spec = {};
+    if (mod.id === 'invite-tracker') {
+      primeInviteCache(req.guild).catch((err) =>
+        log.error('invite-tracker', 'cache prime after save failed:', err.message)
+      );
     }
-    config = normaliseWelcomeChannelConfig({ channelId: req.body.channelId, messageId: prev.messageId, spec });
-  } else if (mod.id === 'giveaways') {
-    config = normaliseGiveawaysConfig({ ping: req.body.ping, dmWinners: req.body.dmWinners === 'on' });
-  } else {
-    return res.redirect(back);
-  }
-
-  setGuildModule(req.guild.id, mod.id, { config });
-  recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: `module:${mod.id}`, detail: 'settings saved' });
-  if (mod.id === 'invite-tracker') {
-    primeInviteCache(req.guild).catch((err) =>
-      log.error('invite-tracker', 'cache prime after save failed:', err.message)
-    );
-  }
-  if (mod.id === 'verification') {
-    ensureVerifyMessage(req.guild, config).catch((err) =>
-      log.error('verification', 'ensure message after save failed:', err.message)
-    );
-  }
-  if (mod.id === 'welcome-channel' && req.body.action === 'publish') {
-    const cfg = normaliseWelcomeChannelConfig(getGuildModule(req.guild.id, 'welcome-channel').config);
-    const r = await publishWelcome(req.guild, cfg);
-    if (r.ok) {
-      setGuildModule(req.guild.id, 'welcome-channel', { enabled: true, config: { ...cfg, messageId: r.messageId } });
-      return res.redirect(`${back}?msg=wc-published`);
+    if (mod.id === 'verification') {
+      ensureVerifyMessage(req.guild, config).catch((err) =>
+        log.error('verification', 'ensure message after save failed:', err.message)
+      );
     }
-    return res.redirect(`${back}?msg=wc-fail`);
-  }
+    if (mod.id === 'welcome-channel' && req.body.action === 'publish') {
+      const cfg = normaliseWelcomeChannelConfig(getGuildModule(req.guild.id, 'welcome-channel').config);
+      const r = await publishWelcome(req.guild, cfg);
+      if (r.ok) {
+        setGuildModule(req.guild.id, 'welcome-channel', {
+          enabled: true,
+          config: { ...cfg, messageId: r.messageId },
+        });
+        return res.redirect(`${back}?msg=wc-published`);
+      }
+      return res.redirect(`${back}?msg=wc-fail`);
+    }
 
-  // htmx: swap the re-rendered panel + fire a toast instead of a full reload.
-  if (req.get('HX-Request')) {
-    return res
-      .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Saved', kind: 'ok' } }))
-      .render('guild/_module-config', moduleViewLocals(mod, req, config));
-  }
-  res.redirect(`${back}?msg=saved`);
-}));
+    // htmx: swap the re-rendered panel + fire a toast instead of a full reload.
+    if (req.get('HX-Request')) {
+      return res
+        .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Saved', kind: 'ok' } }))
+        .render('guild/_module-config', moduleViewLocals(mod, req, config));
+    }
+    res.redirect(`${back}?msg=saved`);
+  })
+);
 
 // Giveaways: end / reroll from the dashboard.
-router.post('/:guildId/m/giveaways/:id/:action', asyncHandler(async (req, res) => {
-  const back = `/guilds/${req.guild.id}/m/giveaways`;
-  const id = Number(req.params.id);
-  const g = getGiveawayInGuild(id, req.guild.id);
-  if (!g) return res.redirect(`${back}?msg=badcommand`);
+router.post(
+  '/:guildId/m/giveaways/:id/:action',
+  asyncHandler(async (req, res) => {
+    const back = `/guilds/${req.guild.id}/m/giveaways`;
+    const id = Number(req.params.id);
+    const g = getGiveawayInGuild(id, req.guild.id);
+    if (!g) return res.redirect(`${back}?msg=badcommand`);
 
-  if (req.params.action === 'end' && !g.ended) {
-    await endGiveaway(id);
-    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'module:giveaways', detail: `ended #${id}` });
-  } else if (req.params.action === 'reroll' && g.ended) {
-    const count = Math.max(1, Math.min(Number(req.body.count) || 1, 20));
-    await endGiveaway(id, { rerollCount: count });
-    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'module:giveaways', detail: `rerolled #${id}` });
-  }
-  res.redirect(`${back}?msg=saved`);
-}));
+    if (req.params.action === 'end' && !g.ended) {
+      await endGiveaway(id);
+      recordAudit(req.guild.id, {
+        actor: moderatorDisplayName(req),
+        action: 'module:giveaways',
+        detail: `ended #${id}`,
+      });
+    } else if (req.params.action === 'reroll' && g.ended) {
+      const count = Math.max(1, Math.min(Number(req.body.count) || 1, 20));
+      await endGiveaway(id, { rerollCount: count });
+      recordAudit(req.guild.id, {
+        actor: moderatorDisplayName(req),
+        action: 'module:giveaways',
+        detail: `rerolled #${id}`,
+      });
+    }
+    res.redirect(`${back}?msg=saved`);
+  })
+);
 
 // Counting: correct the running number (or reset it) from the dashboard.
 router.post('/:guildId/m/counting/count', (req, res) => {
   const back = `/guilds/${req.guild.id}/m/counting`;
   if (req.body.reset === 'true') {
     resetCount(req.guild.id);
-    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'counting:reset', detail: 'count set to 0' });
+    recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'counting:reset',
+      detail: 'count set to 0',
+    });
     return res.redirect(`${back}?msg=count-reset`);
   }
   const n = Number(req.body.current);
@@ -1016,7 +1129,11 @@ router.post('/:guildId/m/counting/count', (req, res) => {
     return res.redirect(`${back}?msg=count-bad`);
   }
   setCount(req.guild.id, n);
-  recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'counting:set', detail: `count = ${n}` });
+  recordAudit(req.guild.id, {
+    actor: moderatorDisplayName(req),
+    action: 'counting:set',
+    detail: `count = ${n}`,
+  });
   res.redirect(`${back}?msg=count-set`);
 });
 
@@ -1027,7 +1144,11 @@ router.post(
     const back = `/guilds/${req.guild.id}/m/leveling`;
     if (req.body.reset === 'true') {
       resetGuildLeveling(req.guild.id);
-      recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'leveling:reset', detail: 'all XP wiped' });
+      recordAudit(req.guild.id, {
+        actor: moderatorDisplayName(req),
+        action: 'leveling:reset',
+        detail: 'all XP wiped',
+      });
       return res.redirect(`${back}?msg=lvl-reset`);
     }
     const userId = parseUserId(req.body.userId);
@@ -1036,7 +1157,11 @@ router.post(
       return res.redirect(`${back}?msg=lvl-bad`);
     }
     setXp(req.guild.id, userId, xp);
-    recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'leveling:setxp', detail: `${userId} → ${xp} XP` });
+    recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'leveling:setxp',
+      detail: `${userId} → ${xp} XP`,
+    });
 
     // Reconcile reward roles for the new level (adds/strips per config).
     const cfg = normaliseLevelingConfig(getGuildModule(req.guild.id, 'leveling').config);
@@ -1122,7 +1247,10 @@ router.post(
     if (mode === 'single' && !runAt) return res.redirect(`${back}?msg=rem-when`);
 
     const data = {
-      name: String(b.name ?? '').trim().slice(0, 100) || 'Untitled reminder',
+      name:
+        String(b.name ?? '')
+          .trim()
+          .slice(0, 100) || 'Untitled reminder',
       channelId,
       spec,
       mode,
@@ -1200,7 +1328,12 @@ function renderTvBuilder(req, res, hub) {
       useRolesForAccess: false,
       ignoredRoles: [],
       moderatorRoles: [],
-      ownerPerms: { manageChannels: true, managePermissions: false, prioritySpeaker: false, moveMembers: false },
+      ownerPerms: {
+        manageChannels: true,
+        managePermissions: false,
+        prioritySpeaker: false,
+        moveMembers: false,
+      },
       textChannel: { enabled: false, restrictCommands: false, pinUsages: false, restrict: false },
     },
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
@@ -1270,7 +1403,11 @@ router.post('/:guildId/m/temp-voice/hub/:id/delete', (req, res) => {
   setGuildModule(req.guild.id, 'temp-voice', {
     config: normaliseTempVoiceConfig({ hubs: prev.filter((h) => h.id !== req.params.id) }),
   });
-  recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'module:temp-voice', detail: 'deleted a hub' });
+  recordAudit(req.guild.id, {
+    actor: moderatorDisplayName(req),
+    action: 'module:temp-voice',
+    detail: 'deleted a hub',
+  });
   res.redirect(`/guilds/${req.guild.id}/m/temp-voice?msg=saved`);
 });
 
@@ -1318,7 +1455,7 @@ router.post(
     const channelId = /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '';
     if (!channelId) return res.redirect(`${back}?msg=badchannel`);
 
-    let embed = {};
+    let embed;
     try {
       embed = JSON.parse(req.body.embed || '{}');
     } catch {
@@ -1515,7 +1652,9 @@ router.post('/:guildId/m/starboard/sb', (req, res) => {
   const saved = config.boards.find((x) => x.id === id);
   if (saved) {
     rescanBoard(req.guild, saved)
-      .then((r) => log.info('starboard', `rescan ${req.guild.id}/${id}: scanned ${r.scanned}, posted ${r.posted}`))
+      .then((r) =>
+        log.info('starboard', `rescan ${req.guild.id}/${id}: scanned ${r.scanned}, posted ${r.posted}`)
+      )
       .catch((err) => log.error('starboard', 'rescan failed:', err.message));
   }
   res.redirect(`${back}?msg=sb-saved`);
@@ -1526,7 +1665,11 @@ router.post('/:guildId/m/starboard/sb/:id/delete', (req, res) => {
   const config = normaliseStarboard({ boards: prev.boards.filter((b) => b.id !== req.params.id) });
   setGuildModule(req.guild.id, 'starboard', { config });
   deleteBoardEntries(req.guild.id, req.params.id);
-  recordAudit(req.guild.id, { actor: moderatorDisplayName(req), action: 'module:starboard', detail: 'deleted a board' });
+  recordAudit(req.guild.id, {
+    actor: moderatorDisplayName(req),
+    action: 'module:starboard',
+    detail: 'deleted a board',
+  });
   res.redirect(`/guilds/${req.guild.id}/m/starboard?msg=saved`);
 });
 
@@ -1569,7 +1712,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const back = `/guilds/${req.guild.id}/m/custom-commands`;
 
-    let actions = [];
+    let actions;
     try {
       actions = JSON.parse(req.body.actions || '[]');
     } catch {
@@ -1577,7 +1720,9 @@ router.post(
     }
     if (!Array.isArray(actions)) actions = [];
 
-    const name = String(req.body.name ?? '').trim().toLowerCase();
+    const name = String(req.body.name ?? '')
+      .trim()
+      .toLowerCase();
     if (!/^[a-z0-9_-]{1,32}$/.test(name)) return res.redirect(`${back}?msg=cc-name`);
     if (runtime.client?.commands?.has(name)) return res.redirect(`${back}?msg=cc-reserved`);
 
@@ -1760,7 +1905,11 @@ router.post('/:guildId/general', (req, res) => {
   const channelId = String(req.body.modlogChannelId ?? '').trim();
   if (channelId === '') {
     setModlogChannel(guild.id, null);
-    recordAudit(guild.id, { actor: moderatorDisplayName(req), action: 'settings:modlog', detail: 'disabled' });
+    recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'settings:modlog',
+      detail: 'disabled',
+    });
     return res.redirect(`${back}?msg=saved`);
   }
   const channel = guild.channels.cache.get(channelId);
@@ -1771,7 +1920,11 @@ router.post('/:guildId/general', (req, res) => {
     return res.redirect(`${back}?msg=perms`);
   }
   setModlogChannel(guild.id, channelId);
-  recordAudit(guild.id, { actor: moderatorDisplayName(req), action: 'settings:modlog', detail: `#${channel.name}` });
+  recordAudit(guild.id, {
+    actor: moderatorDisplayName(req),
+    action: 'settings:modlog',
+    detail: `#${channel.name}`,
+  });
   res.redirect(`${back}?msg=saved`);
 });
 
@@ -1821,7 +1974,9 @@ router.post(
     const back = `/guilds/${guild.id}/moderation`;
 
     const userId = parseUserId(req.body.userId);
-    const reason = String(req.body.reason ?? '').trim().slice(0, 400);
+    const reason = String(req.body.reason ?? '')
+      .trim()
+      .slice(0, 400);
     if (!userId || reason === '') return res.redirect(`${back}?msg=baduser`);
 
     const user = await runtime.client.users.fetch(userId).catch(() => null);

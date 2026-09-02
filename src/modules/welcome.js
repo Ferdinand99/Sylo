@@ -6,7 +6,14 @@ import { on } from './dispatch.js';
 import { sendToChannel } from './lib/send.js';
 import { guildEmbedColor } from '../db/guildSettings.js';
 
-export const WELCOME_PLACEHOLDERS = ['{user}', '{user.tag}', '{user.name}', '{user.id}', '{server}', '{memberCount}'];
+export const WELCOME_PLACEHOLDERS = [
+  '{user}',
+  '{user.tag}',
+  '{user.name}',
+  '{user.id}',
+  '{server}',
+  '{memberCount}',
+];
 
 function fill(template, member) {
   if (!template) return '';
@@ -34,7 +41,11 @@ function payloadFor(text, member, useEmbed) {
 
 on('welcome', 'guildMemberAdd', async (member, config, guildId) => {
   if (config.joinChannel && config.joinMessage) {
-    await sendToChannel(guildId, config.joinChannel, payloadFor(fill(config.joinMessage, member), member, config.useEmbed));
+    await sendToChannel(
+      guildId,
+      config.joinChannel,
+      payloadFor(fill(config.joinMessage, member), member, config.useEmbed)
+    );
   }
   if (config.dmMessage) {
     await member.send({ content: fill(config.dmMessage, member) }).catch(() => {});
@@ -43,5 +54,9 @@ on('welcome', 'guildMemberAdd', async (member, config, guildId) => {
 
 on('welcome', 'guildMemberRemove', (member, config, guildId) => {
   if (!config.leaveChannel || !config.leaveMessage) return;
-  return sendToChannel(guildId, config.leaveChannel, payloadFor(fill(config.leaveMessage, member), member, config.useEmbed));
+  return sendToChannel(
+    guildId,
+    config.leaveChannel,
+    payloadFor(fill(config.leaveMessage, member), member, config.useEmbed)
+  );
 });

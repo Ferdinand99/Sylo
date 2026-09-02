@@ -7,9 +7,7 @@ const stmts = {
     VALUES (@messageId, @guildId, @channelId, @question, @options, @multiple, @maxVotes, @endsAt, @createdBy, @createdAt)
   `),
   get: db.prepare('SELECT * FROM polls WHERE message_id = ?'),
-  inChannel: db.prepare(
-    'SELECT * FROM polls WHERE guild_id = ? AND channel_id = ? ORDER BY created_at DESC'
-  ),
+  inChannel: db.prepare('SELECT * FROM polls WHERE guild_id = ? AND channel_id = ? ORDER BY created_at DESC'),
   due: db.prepare('SELECT * FROM polls WHERE ends_at IS NOT NULL AND ends_at <= ?'),
   countGuild: db.prepare('SELECT COUNT(*) AS n FROM polls WHERE guild_id = ?'),
   del: db.prepare('DELETE FROM polls WHERE message_id = ?'),
@@ -18,7 +16,7 @@ const stmts = {
 
 const hydrate = (row) => {
   if (!row) return null;
-  let options = [];
+  let options;
   try {
     options = JSON.parse(row.options);
   } catch {

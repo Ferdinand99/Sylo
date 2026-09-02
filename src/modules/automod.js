@@ -179,7 +179,12 @@ export function exceedsCaps(content, rule) {
 }
 
 const EMOJI_RE = /<a?:\w+:\d+>|\p{Extended_Pictographic}/gu;
-const ZALGO_RE = /[̀-ͯ҃-҉፝-፟᪰-᫿᷀-᷿⃐-⃿︠-︯]/g;
+// Ranges of combining marks (diacriticals, Cyrillic, Ethiopic, Balinese, supplement,
+// symbols, half-marks). Zalgo detection deliberately counts *lone* combining marks,
+// which is exactly what no-misleading-character-class flags.
+// prettier-ignore
+// eslint-disable-next-line no-misleading-character-class
+const ZALGO_RE = /[\u0300-\u036F\u0483-\u0489\u135D-\u135F\u1AB0-\u1AFF\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]/gu;
 
 export function countEmojis(s) {
   return (String(s).match(EMOJI_RE) || []).length;
@@ -206,7 +211,8 @@ export function matchWord(content, list) {
   const lc = content.toLowerCase();
   for (const term of list) {
     if (/^[\p{L}\p{N}]+$/u.test(term)) {
-      if (new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(term)}(?![\\p{L}\\p{N}])`, 'iu').test(content)) return term;
+      if (new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(term)}(?![\\p{L}\\p{N}])`, 'iu').test(content))
+        return term;
     } else if (lc.includes(term)) {
       return term;
     }
@@ -228,8 +234,7 @@ async function scan(message, config, opts) {
   if (!anyEnabled(config)) return;
   const cfg = normaliseAutomodConfig(config);
 
-  const member =
-    message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
+  const member = message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
   if (!member || isExempt(member, message.channelId, cfg)) return;
 
   const { rules } = cfg;

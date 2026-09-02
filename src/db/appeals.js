@@ -7,19 +7,15 @@ const stmts = {
     INSERT INTO appeals (guild_id, user_id, user_tag, ban_reason, answers, status, created_at)
     VALUES (@guildId, @userId, @userTag, @banReason, @answers, 'open', @createdAt)
   `),
-  open: db.prepare(
-    "SELECT * FROM appeals WHERE guild_id = ? AND user_id = ? AND status = 'open'"
-  ),
+  open: db.prepare("SELECT * FROM appeals WHERE guild_id = ? AND user_id = ? AND status = 'open'"),
   latest: db.prepare(
     'SELECT * FROM appeals WHERE guild_id = ? AND user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1'
   ),
   byId: db.prepare('SELECT * FROM appeals WHERE guild_id = ? AND id = ?'),
   list: db.prepare(
-    'SELECT * FROM appeals WHERE guild_id = ? ORDER BY (status = \'open\') DESC, created_at DESC, id DESC LIMIT ?'
+    "SELECT * FROM appeals WHERE guild_id = ? ORDER BY (status = 'open') DESC, created_at DESC, id DESC LIMIT ?"
   ),
-  countOpen: db.prepare(
-    "SELECT COUNT(*) AS n FROM appeals WHERE guild_id = ? AND status = 'open'"
-  ),
+  countOpen: db.prepare("SELECT COUNT(*) AS n FROM appeals WHERE guild_id = ? AND status = 'open'"),
   decide: db.prepare(`
     UPDATE appeals
        SET status = @status, decided_by = @decidedBy, decision_reason = @reason, decided_at = @decidedAt
@@ -55,7 +51,7 @@ export function createAppeal(guildId, { userId, userTag = '', banReason = '', an
 
 const parseAnswers = (row) => {
   if (!row) return row;
-  let answers = [];
+  let answers;
   try {
     answers = JSON.parse(row.answers) || [];
   } catch {

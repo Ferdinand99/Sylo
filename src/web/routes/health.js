@@ -91,11 +91,13 @@ router.get('/', (req, res) => {
       intervalHours: config.backupIntervalHours,
       retention: config.backupRetention,
     },
-    backups: listBackups().slice(0, 25).map((b) => ({
-      name: b.name,
-      size: formatBytes(b.size),
-      ago: timeAgo(b.mtime),
-    })),
+    backups: listBackups()
+      .slice(0, 25)
+      .map((b) => ({
+        name: b.name,
+        size: formatBytes(b.size),
+        ago: timeAgo(b.mtime),
+      })),
     backupMsg: typeof req.query.backup === 'string' ? req.query.backup : null,
     backupErr: typeof req.query.backuperr === 'string' ? req.query.backuperr : null,
     importMsg: typeof req.query.imported === 'string' ? req.query.imported : null,

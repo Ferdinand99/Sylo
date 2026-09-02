@@ -167,11 +167,7 @@ on('invite-tracker', 'guildMemberRemove', async (member, rawConfig, guildId) => 
   }
 
   if (cfg.joinLogChannelId) {
-    await postLog(
-      member.guild,
-      cfg.joinLogChannelId,
-      `📤 **${member.user.tag}** left${note}.`
-    );
+    await postLog(member.guild, cfg.joinLogChannelId, `📤 **${member.user.tag}** left${note}.`);
   }
 });
 

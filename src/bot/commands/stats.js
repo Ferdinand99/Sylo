@@ -45,13 +45,21 @@ export const data = new SlashCommandBuilder()
       .setName('battlefield')
       .setDescription('Battlefield-series player stats (BF1, BF3, BF4, BFV, Hardline, and more).')
       .addStringOption((opt) =>
-        opt.setName('title').setDescription('Which Battlefield title').setRequired(true).addChoices(...BF_TITLES)
+        opt
+          .setName('title')
+          .setDescription('Which Battlefield title')
+          .setRequired(true)
+          .addChoices(...BF_TITLES)
       )
       .addStringOption((opt) =>
         opt.setName('username').setDescription('In-game player name').setRequired(true).setMaxLength(100)
       )
       .addStringOption((opt) =>
-        opt.setName('platform').setDescription('Player platform').setRequired(true).addChoices(...BF_PLATFORMS)
+        opt
+          .setName('platform')
+          .setDescription('Player platform')
+          .setRequired(true)
+          .addChoices(...BF_PLATFORMS)
       )
   );
 
@@ -102,7 +110,9 @@ export async function execute(interaction) {
       }
       // Unexpected — record it and show a generic message. Never rethrow.
       log.error('stats', 'Unexpected error:', err);
-      await interaction.editReply({ content: '⚠️ Something went wrong fetching those stats. Please try again later.' });
+      await interaction.editReply({
+        content: '⚠️ Something went wrong fetching those stats. Please try again later.',
+      });
     }
     return;
   }

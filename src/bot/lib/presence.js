@@ -29,11 +29,7 @@ export function applyPresence(client) {
     const text = fillPresenceText(cfg.text, client).trim();
 
     const activities = text
-      ? [
-          type === ActivityType.Custom
-            ? { name: 'custom', type, state: text }
-            : { name: text, type },
-        ]
+      ? [type === ActivityType.Custom ? { name: 'custom', type, state: text } : { name: text, type }]
       : [];
 
     client.user.setPresence({ status: cfg.status, activities });
