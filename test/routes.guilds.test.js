@@ -51,18 +51,52 @@ test('GET /moderation renders the tabbed moderator page', async () => {
 
 test('GET /insights renders the activity charts panel', async () => {
   const { db } = await import('../src/db/index.js');
-  const { utcDay } = await import('../src/db/insights.js');
+  const { utcDay, utcHour } = await import('../src/db/insights.js');
   db.prepare(
-    'INSERT OR REPLACE INTO guild_daily (guild_id, day, joins, leaves, messages, active_members, channels) VALUES (?,?,?,?,?,?,?)'
-  ).run(GID, utcDay(), 3, 1, 42, 5, JSON.stringify({ [CH.general]: 30, [CH.bots]: 12 }));
+    'INSERT OR REPLACE INTO guild_daily (guild_id, day, messages, active_members, voice_minutes, voice_peak, channels, voice_channels) VALUES (?,?,?,?,?,?,?,?)'
+  ).run(
+    GID,
+    utcDay(),
+    42,
+    5,
+    180,
+    4,
+    JSON.stringify({ [CH.general]: 30, [CH.bots]: 12 }),
+    JSON.stringify({ [CH.voice]: 180 })
+  );
+  db.prepare(
+    'INSERT OR REPLACE INTO guild_hourly (guild_id, hour, messages, voice_minutes) VALUES (?,?,?,?)'
+  ).run(GID, utcHour(), 7, 25);
 
-  const res = await get(`/guilds/${GID}/insights?range=7`);
-  assert.equal(res.status, 200);
-  const html = await res.text();
-  assert.match(html, /Server insights/);
-  assert.match(html, /Messages per day/);
-  assert.match(html, /Top channels/);
-  assert.match(html, /#general/); // resolved channel name from the JSON map
+  const daily = await (await get(`/guilds/${GID}/insights?range=7`)).text();
+  assert.match(daily, /Server insights/);
+  assert.match(daily, /Messages per day/);
+  assert.match(daily, /Voice minutes per day/);
+  assert.match(daily, /Top channels/);
+  assert.match(daily, /Top voice channels/);
+  assert.match(daily, /#general/);
+  assert.match(daily, /Voice/); // the "Voice" voice channel name in top-voice
+
+  const hourly = await get(`/guilds/${GID}/insights?range=24`);
+  assert.equal(hourly.status, 200);
+  assert.match(await hourly.text(), /Messages per hour/);
+});
+
+test('POST /insights/refresh flushes the buffer and redirects back', async () => {
+  const { _internals } = await import('../src/modules/insights.js');
+  const { db } = await import('../src/db/index.js');
+  const { utcDay } = await import('../src/db/insights.js');
+  _internals.buf.clear();
+  const s = _internals.slot(GID);
+  s.messages = 11;
+
+  const res = await post(app.base, `/guilds/${GID}/insights/refresh`, { range: '7' });
+  assert.equal(res.status, 302);
+  assert.match(res.headers.get('location'), /\/insights\?range=7$/);
+  const row = db
+    .prepare('SELECT messages FROM guild_daily WHERE guild_id = ? AND day = ?')
+    .get(GID, utcDay());
+  assert.ok(row.messages >= 11);
 });
 
 test('GET /m/:id — full page, bare fragment, and hx-boost', async () => {

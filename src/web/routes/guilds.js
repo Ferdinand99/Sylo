@@ -111,7 +111,8 @@ import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '
 import { levelFromXp } from '../../modules/lib/levels.js';
 import { topMembers, memberCount, setXp, resetGuildLeveling } from '../../db/leveling.js';
 import { recordAudit, listAudit } from '../../db/audit.js';
-import { dailySeries, topChannels } from '../../db/insights.js';
+import { dailySeries, hourlySeries, topChannels, topVoiceChannels } from '../../db/insights.js';
+import { flushGuild as flushGuildInsights } from '../../modules/insights.js';
 import { forgetUser, describeUserData } from '../../db/purge.js';
 import {
   guildChannelLocks,
@@ -2261,16 +2262,27 @@ router.get('/:guildId/audit', (req, res) => {
   });
 });
 
-// Server insights — activity charts from the guild_daily rollup.
+// Server insights — activity charts from the guild_daily / guild_hourly rollups.
 router.get('/:guildId/insights', (req, res) => {
-  const days = req.query.range === '7' ? 7 : req.query.range === '90' ? 90 : 30;
-  const series = dailySeries(req.guild.id, days);
-  const chans = guildTextChannels(req.guild);
+  // range: 24 / 48 hours (hourly buckets), or 7 / 30 / 90 days.
+  const HOURLY = { 24: 24, 48: 48 };
+  const DAILY = { 7: 7, 30: 30, 90: 90 };
+  const raw = String(req.query.range ?? '30');
+  const hourly = raw in HOURLY;
+  const range = hourly ? HOURLY[raw] : (DAILY[raw] ?? 30);
+  const series = hourly ? hourlySeries(req.guild.id, range) : dailySeries(req.guild.id, range);
+
+  // Per-channel totals ("top channels") are only kept daily; for an hourly
+  // window fall back to the last day.
+  const topDays = hourly ? 1 : range;
+  const chans = [...guildTextChannels(req.guild), ...guildVoiceChannels(req.guild)];
   const nameOf = (id) => chans.find((c) => c.id === id)?.name ?? id;
+
   res.render('guild', {
     ...baseContext(req.guild, 'insights'),
     insightsEnabled: getGuildModule(req.guild.id, 'insights').enabled,
-    insightsRange: days,
+    insightsRange: range,
+    insightsGranularity: hourly ? 'hour' : 'day',
     insightsSeries: series,
     insightsTotals: {
       messages: series.reduce((t, d) => t + d.messages, 0),
@@ -2278,12 +2290,29 @@ router.get('/:guildId/insights', (req, res) => {
       leaves: series.reduce((t, d) => t + d.leaves, 0),
       net: series.reduce((t, d) => t + d.joins - d.leaves, 0),
       peakActive: series.reduce((m, d) => Math.max(m, d.activeMembers), 0),
+      voiceMinutes: series.reduce((t, d) => t + d.voiceMinutes, 0),
+      voicePeak: series.reduce((m, d) => Math.max(m, d.voicePeak), 0),
     },
-    insightsTopChannels: topChannels(req.guild.id, days, 6).map((t) => ({
+    insightsTopChannels: topChannels(req.guild.id, topDays, 6).map((t) => ({
       name: nameOf(t.channelId),
       messages: t.messages,
     })),
+    insightsTopVoice: topVoiceChannels(req.guild.id, topDays, 6).map((t) => ({
+      name: nameOf(t.channelId),
+      minutes: t.minutes,
+    })),
   });
+});
+
+// "Refresh now" — flush the in-memory counters for this guild, then reload.
+router.post('/:guildId/insights/refresh', (req, res) => {
+  flushGuildInsights(req.guild.id);
+  const range = ['24', '48', '7', '30', '90'].includes(String(req.body.range))
+    ? String(req.body.range)
+    : '30';
+  const back = `/guilds/${req.guild.id}/insights?range=${range}`;
+  if (req.get('HX-Request')) return res.set('HX-Redirect', back).status(204).end();
+  res.redirect(back);
 });
 
 router.post('/:guildId/general', (req, res) => {

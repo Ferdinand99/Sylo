@@ -269,10 +269,12 @@ settings panel per module — saves swap in place with a toast.
     member and clears the status when they next speak
   - **Server statistics** — keep chosen voice channels named with a live
     member / role / boost count, on a configurable 5–60 minute refresh
-  - **Server insights** — daily charts of messages, joins and leaves, member
-    growth and the busiest channels (7 / 30 / 90-day range). Off by default;
-    enabling it starts the counting. Only aggregate counts are stored — never
-    message content or per-user rows — with ~180-day retention
+  - **Server insights** — charts of messages, joins and leaves, member growth,
+    voice-channel usage (minutes, peak in voice) and the busiest text/voice
+    channels, per hour or per day (24h / 48h / 7d / 30d / 90d range). Off by
+    default; enabling it starts the counting. Only aggregate counts are stored —
+    never message content or per-user rows — with ~180-day (hourly: ~3-day)
+    retention
   - **Free games** — announces games that become free to claim (hourly poll):
     the Epic Games Store, plus Steam / GOG / Fanatical / Humble and more with an
     `ITAD_API_KEY`. Optional ping role; `/freegames [dlc]` on demand
