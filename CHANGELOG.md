@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.10.0](https://github.com/Ferdinand99/Sylo/compare/v3.9.0...v3.10.0) (2026-09-02)
+
+
+### Features
+
+* RSS / Atom feed alerts ([834128e](https://github.com/Ferdinand99/Sylo/commit/834128e11be6fc05eb1f466cc78de385af9e6560))
+* RSS / Atom feed alerts ([58432c8](https://github.com/Ferdinand99/Sylo/commit/58432c8a7ff25913b095cf43cc1b16e34ac3c3f8))
+
 ## [3.9.0](https://github.com/Ferdinand99/Sylo/compare/v3.8.0...v3.9.0) (2026-09-02)
 
 
