@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.19.2](https://github.com/Ferdinand99/Sylo/compare/v3.19.1...v3.19.2) (2026-09-03)
+
+
+### Bug Fixes
+
+* build the YouTube resolver request from a literal youtube.com or… ([a4ec2c2](https://github.com/Ferdinand99/Sylo/commit/a4ec2c29ae3db712d86f937b557b71cff4713afe))
+
 ## [3.19.1](https://github.com/Ferdinand99/Sylo/compare/v3.19.0...v3.19.1) (2026-09-03)
 
 
