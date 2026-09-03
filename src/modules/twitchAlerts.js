@@ -38,7 +38,7 @@ export function normaliseTwitchConfig(raw = {}) {
         login: String(a.login ?? '')
           .trim()
           .toLowerCase()
-          .replace(/^.*twitch\.tv\//, ''),
+          .replace(/^(?:https?:\/\/)?(?:www\.)?twitch\.tv\//, ''),
         channelId: isId(a.channelId) ? a.channelId : '',
         roleId: isId(a.roleId) ? a.roleId : '',
         message: String(a.message ?? '').slice(0, 1500),

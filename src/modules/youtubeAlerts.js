@@ -74,10 +74,23 @@ export async function resolveYtChannel(input) {
   if (fromUrl) return { channelId: fromUrl, name: '' };
 
   // A handle, /c/, /user/ or bare name → fetch the page and read the channel id.
+  // Only ever fetch youtube.com itself — a pasted URL must not point us at an
+  // arbitrary (e.g. internal) host.
   let url;
-  if (/^https?:\/\//i.test(raw)) url = raw;
-  else if (raw.startsWith('@')) url = `https://www.youtube.com/${raw}`;
-  else url = `https://www.youtube.com/@${raw}`;
+  if (/^https?:\/\//i.test(raw)) {
+    let host;
+    try {
+      host = new URL(raw).hostname.toLowerCase().replace(/^www\./, '');
+    } catch {
+      return null;
+    }
+    if (host !== 'youtube.com' && host !== 'm.youtube.com') return null;
+    url = raw;
+  } else if (raw.startsWith('@')) {
+    url = `https://www.youtube.com/${raw}`;
+  } else {
+    url = `https://www.youtube.com/@${raw}`;
+  }
 
   try {
     const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10_000) });

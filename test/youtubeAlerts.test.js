@@ -1,7 +1,12 @@
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normaliseYoutubeConfig, parseFeed, fillMessage } from '../src/modules/youtubeAlerts.js';
+import {
+  normaliseYoutubeConfig,
+  parseFeed,
+  fillMessage,
+  resolveYtChannel,
+} from '../src/modules/youtubeAlerts.js';
 
 const UC = 'UC' + 'x'.repeat(22);
 const CH = '123456789012345678';
@@ -20,6 +25,31 @@ test('normaliseYoutubeConfig: needs a UC id + discord channel, dedupes, caps', (
   assert.equal(c.alerts[0].onVideo, true); // default
   assert.equal(c.alerts[0].onLive, true);
   assert.equal(c.alerts[0].roleId, '999999999999999999');
+});
+
+test('resolveYtChannel: a UC id or youtube.com URL resolves without a fetch', async () => {
+  assert.deepEqual(await resolveYtChannel(UC), { channelId: UC, name: '' });
+  assert.deepEqual(await resolveYtChannel(`https://www.youtube.com/channel/${UC}`), {
+    channelId: UC,
+    name: '',
+  });
+});
+
+test('resolveYtChannel: a non-youtube URL is rejected (SSRF guard), never fetched', async () => {
+  const realFetch = globalThis.fetch;
+  let fetched = false;
+  globalThis.fetch = async () => {
+    fetched = true;
+    return { ok: false };
+  };
+  try {
+    assert.equal(await resolveYtChannel('https://169.254.169.254/latest/meta-data/'), null);
+    assert.equal(await resolveYtChannel('http://evil.example/@x'), null);
+    assert.equal(await resolveYtChannel('https://youtube.evil.example/@x'), null);
+    assert.equal(fetched, false);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
 
 test('normaliseYoutubeConfig: caps at 50', () => {
