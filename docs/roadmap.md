@@ -315,3 +315,32 @@ commands and an editable dashboard view. Built exactly to the plan below.
 2. `/case delete` is **soft** (auditable) — no hard delete.
 3. Command shape: `/history` + a `/case {view,reason,delete,note}` group.
 4. `/unban` / `/untimeout` add a new case **and** mark the original inactive.
+
+---
+
+## Live-alert cleanup → done (`feat/live-alert-cleanup`, issue #110)
+
+One `feat` → **3.19.0**. Twitch / YouTube-live / Kick alerts now clean up the
+"went live" message after the stream ends. Built to the plan below.
+
+### As built
+
+- **Per-alert `onEnd` option** — `delete` (default) / `edit` / `keep`. `edit`
+  greys the embed and rewrites it to `⏹ {name} — stream ended · was live for …`;
+  `keep` is today's behaviour.
+- **Remember the posted message.** The alert-dedup rows already sit in
+  `posted_keys` (`value` = the announced stream / video id). Store
+  `<streamRef>|<channelId>|<messageId>` there instead; the existing
+  `announced*Id` readers take `split('|')[0]`, so old rows still parse. Duration
+  for the `edit` text comes from the row's `posted_at`.
+- **`src/modules/lib/send.js`** — add `postToChannel()` (returns
+  `{ channelId, messageId }`), plus `deleteChannelMessage()` /
+  `editChannelMessage()`. `sendToChannel()` stays as the boolean wrapper.
+- **Wire the three modules** — on the live→offline transition, act on the stored
+  message per `onEnd` before `forget()`. YouTube **upload** announcements are
+  untouched (only the live post is cleaned up). Missing message / lost channel
+  access is swallowed.
+- **Dashboard** — a "When the stream ends" `<select>` per alert row in the
+  twitch / kick / youtube alert views + the matching `guilds.js` POST branches.
+- **Tests** — the `value` parse/round-trip, `normalise*` `onEnd` clamping, and a
+  module-level offline-transition test using the fake client sink.

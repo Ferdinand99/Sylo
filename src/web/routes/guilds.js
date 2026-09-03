@@ -1142,6 +1142,7 @@ router.post(
       const chans = [].concat(req.body.yt_channel ?? []);
       const rolez = [].concat(req.body.yt_role ?? []);
       const notify = [].concat(req.body.yt_notify ?? []); // 'both' | 'video' | 'live'
+      const ytEnd = [].concat(req.body.yt_onEnd ?? []);
       const vMsg = [].concat(req.body.yt_videoMessage ?? []);
       const lMsg = [].concat(req.body.yt_liveMessage ?? []);
 
@@ -1165,6 +1166,7 @@ router.post(
           roleId: rolez[i] ?? '',
           onVideo: n === 'both' || n === 'video',
           onLive: n === 'both' || n === 'live',
+          onEnd: ytEnd[i] ?? 'delete',
           videoMessage: vMsg[i] ?? '',
           liveMessage: lMsg[i] ?? '',
         });
@@ -1176,6 +1178,7 @@ router.post(
       const rolez = [].concat(req.body.tw_role ?? []);
       const msgs = [].concat(req.body.tw_message ?? []);
       const fmts = [].concat(req.body.tw_format ?? []);
+      const twEnd = [].concat(req.body.tw_onEnd ?? []);
       config = normaliseTwitchConfig({
         alerts: logins.map((login, i) => ({
           login,
@@ -1183,6 +1186,7 @@ router.post(
           roleId: rolez[i] ?? '',
           message: msgs[i] ?? '',
           plainText: fmts[i] === 'text',
+          onEnd: twEnd[i] ?? 'delete',
         })),
       });
     } else if (mod.id === 'kick-alerts') {
@@ -1191,6 +1195,7 @@ router.post(
       const rolez = [].concat(req.body.kc_role ?? []);
       const msgs = [].concat(req.body.kc_message ?? []);
       const fmts = [].concat(req.body.kc_format ?? []);
+      const kcEnd = [].concat(req.body.kc_onEnd ?? []);
       config = normaliseKickConfig({
         alerts: slugs.map((slug, i) => ({
           slug,
@@ -1198,6 +1203,7 @@ router.post(
           roleId: rolez[i] ?? '',
           message: msgs[i] ?? '',
           plainText: fmts[i] === 'text',
+          onEnd: kcEnd[i] ?? 'delete',
         })),
       });
     } else if (mod.id === 'rss') {

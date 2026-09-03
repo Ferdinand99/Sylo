@@ -52,6 +52,13 @@
           </select>
           <span class="muted">— plain text for channels bridged to another app</span>
         </label>
+        <label class="small">When the stream ends
+          <select name="tw_onEnd" class="u-w-field-sm">
+            <option value="delete" <%= (a.onEnd || 'delete') === 'delete' ? 'selected' : '' %>>Delete the message</option>
+            <option value="edit" <%= a.onEnd === 'edit' ? 'selected' : '' %>>Mark it as ended</option>
+            <option value="keep" <%= a.onEnd === 'keep' ? 'selected' : '' %>>Leave it</option>
+          </select>
+        </label>
         <div><button type="button" class="link-btn" onclick="this.closest('.tw-row').remove()">remove</button></div>
       </div>
     <% }) %>
@@ -78,6 +85,13 @@
       <select name="tw_format" class="u-w-field-sm">
         <option value="embed" selected>Embed</option>
         <option value="text">Plain text (no embed)</option>
+      </select>
+    </label>
+    <label class="small">When the stream ends
+      <select name="tw_onEnd" class="u-w-field-sm">
+        <option value="delete" selected>Delete the message</option>
+        <option value="edit">Mark it as ended</option>
+        <option value="keep">Leave it</option>
       </select>
     </label>
     <div><button type="button" class="link-btn" onclick="this.closest('.tw-row').remove()">remove</button></div>

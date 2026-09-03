@@ -11,8 +11,10 @@ import { EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
-import { announcedStreamId, markLive, markOffline } from '../db/twitchAlerts.js';
-import { sendToChannel } from './lib/send.js';
+import { announcedStreamId, announcedPost, markLive, markOffline } from '../db/twitchAlerts.js';
+import { postToChannel } from './lib/send.js';
+import { settleEndedPost } from './lib/liveAlerts.js';
+import { normaliseOnEnd } from '../lib/liveValue.js';
 import { log } from '../lib/log.js';
 
 const HELIX = 'https://api.twitch.tv/helix';
@@ -41,6 +43,7 @@ export function normaliseTwitchConfig(raw = {}) {
         roleId: isId(a.roleId) ? a.roleId : '',
         message: String(a.message ?? '').slice(0, 1500),
         plainText: Boolean(a.plainText),
+        onEnd: normaliseOnEnd(a.onEnd),
       }))
       .filter((a) => {
         if (!LOGIN_RE.test(a.login) || !a.channelId || seen.has(a.login + a.channelId)) return false;
@@ -182,13 +185,28 @@ async function tick() {
   for (const { guildId, alert } of jobs) {
     const stream = streams.get(alert.login);
     if (!stream) {
-      if (announcedStreamId(guildId, alert.login)) markOffline(guildId, alert.login);
+      const post = announcedPost(guildId, alert.login);
+      if (post) {
+        markOffline(guildId, alert.login);
+        await settleEndedPost({
+          guildId,
+          onEnd: alert.onEnd,
+          post,
+          name: alert.login,
+          url: `https://twitch.tv/${alert.login}`,
+          plainText: alert.plainText,
+        });
+      }
       continue;
     }
     if (announcedStreamId(guildId, alert.login) === stream.id) continue; // already announced
 
-    markLive(guildId, alert.login, stream.id);
-    await sendToChannel(guildId, alert.channelId, buildPayload(stream, users.get(alert.login), alert));
+    const posted = await postToChannel(
+      guildId,
+      alert.channelId,
+      buildPayload(stream, users.get(alert.login), alert)
+    );
+    markLive(guildId, alert.login, stream.id, posted);
   }
 }
 

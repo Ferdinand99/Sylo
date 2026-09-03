@@ -1,7 +1,16 @@
 // Dedup state for YouTube alerts, over posted_keys:
 //   scope 'yt-video'  key '<ytChannel>:<videoId>'  — every announced video
 //   scope 'yt-live'   key '<ytChannel>'  value '<videoId>'  — one row while live
-import { seen, seenValue, anySeenMatching, markSeen, forget, pruneScopeOlderThan } from './postedKeys.js';
+import {
+  seen,
+  seenValue,
+  seenRow,
+  anySeenMatching,
+  markSeen,
+  forget,
+  pruneScopeOlderThan,
+} from './postedKeys.js';
+import { encodeLiveValue, decodeLiveValue } from '../lib/liveValue.js';
 
 const VIDEO = 'yt-video';
 const LIVE = 'yt-live';
@@ -24,10 +33,21 @@ export function pruneYoutube() {
   pruneScopeOlderThan(VIDEO, KEEP_MS);
 }
 export function liveVideoId(guildId, ytChannel) {
-  return seenValue(guildId, LIVE, ytChannel);
+  const v = seenValue(guildId, LIVE, ytChannel);
+  return v == null ? null : decodeLiveValue(v).ref;
 }
-export function markLive(guildId, ytChannel, videoId) {
-  markSeen(guildId, LIVE, ytChannel, videoId, { upsert: true });
+/** The announced live video id + the message we posted, or null. */
+export function livePost(guildId, ytChannel) {
+  const row = seenRow(guildId, LIVE, ytChannel);
+  if (!row) return null;
+  const { ref, channelId, messageId } = decodeLiveValue(row.value);
+  return { videoId: ref, channelId, messageId, postedAt: row.posted_at };
+}
+/** @param {{ channelId: string, messageId: string } | null} [post] */
+export function markLive(guildId, ytChannel, videoId, post = null) {
+  markSeen(guildId, LIVE, ytChannel, encodeLiveValue(videoId, post?.channelId, post?.messageId), {
+    upsert: true,
+  });
 }
 export function markNotLive(guildId, ytChannel) {
   forget(guildId, LIVE, ytChannel);

@@ -6,7 +6,7 @@
 import { db } from './index.js';
 
 const stmts = {
-  get: db.prepare('SELECT value FROM posted_keys WHERE guild_id = ? AND scope = ? AND key = ?'),
+  get: db.prepare('SELECT value, posted_at FROM posted_keys WHERE guild_id = ? AND scope = ? AND key = ?'),
   anyInScope: db.prepare('SELECT 1 FROM posted_keys WHERE guild_id = ? AND scope = ? LIMIT 1'),
   anyMatch: db.prepare('SELECT 1 FROM posted_keys WHERE guild_id = ? AND scope = ? AND key GLOB ? LIMIT 1'),
   insert: db.prepare(`
@@ -33,6 +33,11 @@ export function seen(guildId, scope, key) {
 /** The stored value for this key, or null (also null when the key is absent). */
 export function seenValue(guildId, scope, key) {
   return stmts.get.get(guildId, scope, key)?.value ?? null;
+}
+
+/** The full row (`{ value, posted_at }`) for this key, or null. */
+export function seenRow(guildId, scope, key) {
+  return stmts.get.get(guildId, scope, key) ?? null;
 }
 
 /** Has anything been recorded in this scope for this guild yet? */
