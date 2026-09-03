@@ -32,7 +32,7 @@ const GROUPS = [
       'modlog',
     ],
   },
-  { name: 'Privacy', commands: ['forget'] },
+  { name: 'Privacy', commands: ['mydata', 'forget'] },
 ];
 
 export const data = new SlashCommandBuilder()

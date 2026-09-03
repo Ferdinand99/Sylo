@@ -2,7 +2,7 @@ import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../src/db/index.js';
-import { purgeGuild, forgetUser, describeUserData } from '../src/db/purge.js';
+import { purgeGuild, forgetUser, describeUserData, exportUserData } from '../src/db/purge.js';
 
 const G = '111111111111111111';
 const OTHER = '222222222222222222';
@@ -178,4 +178,51 @@ test('describeUserData counts what forgetUser would remove, then reads zero afte
   forgetUser(G, U);
 
   assert.equal(describeUserData(G, U).total, 0, 'nothing left after forgetUser');
+});
+
+test('exportUserData exposes exactly the sources describeUserData counts', () => {
+  const exportKeys = Object.keys(exportUserData(G, U).data).sort();
+  const describeKeys = describeUserData(G, U)
+    .items.map((i) => i.key)
+    .sort();
+  assert.deepEqual(exportKeys, describeKeys);
+});
+
+test('exportUserData returns the rows, then reads empty after forgetUser', () => {
+  db.exec(
+    'DELETE FROM leveling; DELETE FROM leveling_periods; DELETE FROM infractions; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM birthdays; DELETE FROM giveaways; DELETE FROM giveaway_entries; DELETE FROM appeals; DELETE FROM invite_counts;'
+  );
+  seed(G, U);
+  db.prepare(
+    'INSERT INTO leveling_periods (guild_id, user_id, period, xp, messages, voice_xp) VALUES (?,?,?,?,?,?)'
+  ).run(G, U, 'w:2026-W01', 120, 8, 0);
+  db.prepare(
+    'INSERT INTO appeals (guild_id, user_id, user_tag, ban_reason, answers, status, created_at) VALUES (?,?,?,?,?,?,?)'
+  ).run(G, U, 'user#1', 'spam', '["sorry"]', 'open', Date.now());
+  db.prepare('INSERT INTO invite_counts (guild_id, user_id, regular, leaves, bonus) VALUES (?,?,?,?,?)').run(
+    G,
+    U,
+    3,
+    1,
+    0
+  );
+
+  const dump = exportUserData(G, U);
+  assert.equal(dump.guildId, G);
+  assert.equal(dump.userId, U);
+  assert.ok(dump.total >= 8, `expected several rows, got ${dump.total}`);
+  assert.equal(dump.data.warnings.length, 1);
+  assert.equal(dump.data.warnings[0].reason, 'x', 'carries the real row, not a count');
+  assert.equal(dump.data.leveling[0].xp, 500);
+  assert.equal(dump.data.levelingPeriods.length, 1);
+  assert.equal(dump.data.appeals[0].ban_reason, 'spam');
+  assert.equal(dump.data.inviteCounts[0].regular, 3);
+  assert.equal(dump.data.countingLast.length, 1, 'reference rows are included');
+  assert.ok(
+    dump.summary.some((s) => s.key === 'warnings' && s.label && s.count === 1),
+    'summary pairs a label with each count'
+  );
+
+  forgetUser(G, U);
+  assert.equal(exportUserData(G, U).total, 0, 'nothing left after forgetUser');
 });

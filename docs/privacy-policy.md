@@ -127,12 +127,13 @@ for modmail transcripts (section 1).
 | Game-stat cache | Serving `/stats` responses quickly without repeatedly querying the upstream provider |
 
 The Operator has weighed these interests against your rights: only identifiers
-and minimal per-feature data are processed, nothing is sold or profiled, and you
-can erase your data at any time with `/forget` (section 7). You can **object** to
-processing based on legitimate interests, and request **access**, **correction**
-or **erasure**, by contacting the Operator (section 9). On an objection or
-erasure request the data is deleted, except the minimum a server needs to keep to
-enforce an active ban or defend a moderation decision.
+and minimal per-feature data are processed, nothing is sold or profiled, you can
+get a copy of your data at any time with `/mydata` and erase it with `/forget`
+(section 7). You can also **object** to processing based on legitimate interests,
+and request **access**, **correction** or **erasure**, by contacting the Operator
+(section 9). On an objection or erasure request the data is deleted, except the
+minimum a server needs to keep to enforce an active ban or defend a moderation
+decision.
 
 Self-hosted instances must determine their own legal basis (section 10).
 
@@ -163,6 +164,10 @@ No other third parties receive your data.
 
 ## 7. Retention and deletion
 
+- **`/mydata`** — any member can run `/mydata` in a server to receive, by direct
+  message, a JSON file of everything Sylo has stored about their Discord account
+  in that server (the same scope as `/forget`, below). Nothing is deleted. Rate
+  limited to one export per member per server every few minutes.
 - **`/forget`** — any member can run `/forget confirm:True` in a server to delete
   the data Sylo keys to their Discord account **in that server**: infractions,
   leveling XP (including period rows), ticket history (including their ticket
@@ -245,6 +250,7 @@ version will be published at the same URL.
 
 - **4 September 2026** — added a legal-basis section (section 4) and a retention
   schedule (section 7); documented off-site backup retention; refreshed the data
-  inventory (case log, voice XP, birthdays, RSS/social notifier markers).
+  inventory (case log, voice XP, birthdays, RSS/social notifier markers); added
+  the `/mydata` self-service export (section 7).
 - **2 September 2026** — corrected the message-content section and expanded the
   data inventory to match the current feature set.

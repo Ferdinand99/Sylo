@@ -123,91 +123,158 @@ export function forgetUser(guildId, userId) {
   return forgetUserTxn(guildId, userId);
 }
 
-// --- read-only inventory (dashboard "Member data" page) --------------------
+// --- read-only inventory ("Member data" dashboard page, /mydata export) ----
 
-// [key, label, sql, args] — args says how to bind (guildId, userId) for this sql.
-const describeStmts = [
-  [
-    'warnings',
-    'Moderation cases',
-    'SELECT COUNT(*) AS n FROM infractions WHERE guild_id = ? AND user_id = ?',
-    'gu',
-  ],
-  [
-    'leveling',
-    'Leveling record (XP / level / message count)',
-    'SELECT COUNT(*) AS n FROM leveling WHERE guild_id = ? AND user_id = ?',
-    'gu',
-  ],
-  [
-    'tickets',
-    'Modmail tickets they opened',
-    'SELECT COUNT(*) AS n FROM tickets WHERE guild_id = ? AND user_id = ?',
-    'gu',
-  ],
-  [
-    'ticketMessages',
-    'Modmail messages they sent',
-    "SELECT COUNT(*) AS n FROM ticket_messages WHERE author_kind = 'user' AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ? AND user_id = ?)",
-    'gu',
-  ],
-  ['appeals', 'Ban appeals', 'SELECT COUNT(*) AS n FROM appeals WHERE guild_id = ? AND user_id = ?', 'gu'],
-  ['afk', 'AFK status', 'SELECT COUNT(*) AS n FROM afk WHERE guild_id = ? AND user_id = ?', 'gu'],
-  [
-    'birthdays',
-    'Saved birthday',
-    'SELECT COUNT(*) AS n FROM birthdays WHERE guild_id = ? AND user_id = ?',
-    'gu',
-  ],
-  [
-    'giveawayEntries',
-    'Giveaway entries',
-    'SELECT COUNT(*) AS n FROM giveaway_entries WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)',
-    'ug',
-  ],
-  [
-    'inviteCounts',
-    'Invite tally',
-    'SELECT COUNT(*) AS n FROM invite_counts WHERE guild_id = ? AND user_id = ?',
-    'gu',
-  ],
-  [
-    'inviteJoins',
-    'Join-via-invite record',
-    'SELECT COUNT(*) AS n FROM invite_joins WHERE guild_id = ? AND user_id = ?',
-    'gu',
-  ],
-  [
-    'invitedOthers',
-    'Members they are credited with inviting',
-    'SELECT COUNT(*) AS n FROM invite_joins WHERE guild_id = ? AND inviter_id = ?',
-    'gu',
-  ],
-  [
-    'invitePersonal',
-    'Personal invite code',
-    'SELECT COUNT(*) AS n FROM invite_personal WHERE guild_id = ? AND user_id = ?',
-    'gu',
-  ],
-  [
-    'countingLast',
-    'Named as the last counter',
-    'SELECT COUNT(*) AS n FROM counting WHERE guild_id = ? AND last_user_id = ?',
-    'gu',
-  ],
-].map(([key, label, sql, order]) => ({ key, label, stmt: db.prepare(sql), order }));
+// One entry per place Sylo keys data to a Discord user id within a guild.
+// describeUserData (counts, for the dashboard) and exportUserData (the rows
+// themselves, for /mydata) are both built from this list, so the two can't
+// drift and both stay in step with forgetUser above. `order` says how to bind
+// the two placeholders: 'gu' → (guildId, userId), 'ug' → (userId, guildId).
+// `invitedOthers` and `countingLast` are references that get anonymised (not
+// row-deleted) but are listed so the picture is complete.
+const USER_DATA_SOURCES = [
+  {
+    key: 'warnings',
+    label: 'Moderation cases',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM infractions WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM infractions WHERE guild_id = ? AND user_id = ? ORDER BY case_number',
+  },
+  {
+    key: 'leveling',
+    label: 'Leveling record (XP / level / message count)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM leveling WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM leveling WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'levelingPeriods',
+    label: 'Weekly / monthly leveling rows',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM leveling_periods WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM leveling_periods WHERE guild_id = ? AND user_id = ? ORDER BY period',
+  },
+  {
+    key: 'tickets',
+    label: 'Modmail tickets they opened',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM tickets WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM tickets WHERE guild_id = ? AND user_id = ? ORDER BY id',
+  },
+  {
+    key: 'ticketMessages',
+    label: 'Modmail messages they sent',
+    order: 'gu',
+    countSql:
+      "SELECT COUNT(*) AS n FROM ticket_messages WHERE author_kind = 'user' AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ? AND user_id = ?)",
+    rowsSql:
+      "SELECT * FROM ticket_messages WHERE author_kind = 'user' AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ? AND user_id = ?) ORDER BY id",
+  },
+  {
+    key: 'appeals',
+    label: 'Ban appeals',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM appeals WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM appeals WHERE guild_id = ? AND user_id = ? ORDER BY id',
+  },
+  {
+    key: 'afk',
+    label: 'AFK status',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM afk WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM afk WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'birthdays',
+    label: 'Saved birthday',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM birthdays WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM birthdays WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'giveawayEntries',
+    label: 'Giveaway entries',
+    order: 'ug',
+    countSql:
+      'SELECT COUNT(*) AS n FROM giveaway_entries WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)',
+    rowsSql:
+      'SELECT * FROM giveaway_entries WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?) ORDER BY entered_at',
+  },
+  {
+    key: 'inviteCounts',
+    label: 'Invite tally',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM invite_counts WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM invite_counts WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'inviteJoins',
+    label: 'Join-via-invite record',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM invite_joins WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM invite_joins WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'invitedOthers',
+    label: 'Members they are credited with inviting',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM invite_joins WHERE guild_id = ? AND inviter_id = ?',
+    rowsSql: 'SELECT * FROM invite_joins WHERE guild_id = ? AND inviter_id = ? ORDER BY joined_at',
+  },
+  {
+    key: 'invitePersonal',
+    label: 'Personal invite code',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM invite_personal WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM invite_personal WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'countingLast',
+    label: 'Named as the last counter',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM counting WHERE guild_id = ? AND last_user_id = ?',
+    rowsSql: 'SELECT * FROM counting WHERE guild_id = ? AND last_user_id = ?',
+  },
+].map((s) => ({ ...s, countStmt: db.prepare(s.countSql), rowsStmt: db.prepare(s.rowsSql) }));
+
+const bindArgs = (order, guildId, userId) => (order === 'ug' ? [userId, guildId] : [guildId, userId]);
 
 /**
- * Count, without deleting, everything {@link forgetUser} would remove for a
- * member in a guild. `invitedOthers` and `countingLast` are references that get
- * anonymised (not row-deleted) but are shown so an admin sees the full picture.
+ * Count, without deleting, everything {@link forgetUser} would remove or
+ * anonymise for a member in a guild.
  * @returns {{ items: Array<{ key: string, label: string, count: number }>, total: number }}
  */
 export function describeUserData(guildId, userId) {
-  const items = describeStmts.map(({ key, label, stmt, order }) => ({
+  const items = USER_DATA_SOURCES.map(({ key, label, countStmt, order }) => ({
     key,
     label,
-    count: stmt.get(...(order === 'ug' ? [userId, guildId] : [guildId, userId])).n,
+    count: countStmt.get(...bindArgs(order, guildId, userId)).n,
   }));
   return { items, total: items.reduce((sum, i) => sum + i.count, 0) };
+}
+
+/**
+ * The rows behind {@link describeUserData} — the data Sylo holds about a member
+ * in one guild, grouped by source, for the `/mydata` self-service export. Read
+ * only; nothing is deleted. Same scope as {@link forgetUser}.
+ * @returns {{ generatedAt: string, guildId: string, userId: string, total: number,
+ *   summary: Array<{ key: string, label: string, count: number }>,
+ *   data: Record<string, object[]> }}
+ */
+export function exportUserData(guildId, userId) {
+  const data = {};
+  const summary = [];
+  for (const { key, label, rowsStmt, order } of USER_DATA_SOURCES) {
+    const rows = rowsStmt.all(...bindArgs(order, guildId, userId));
+    data[key] = rows;
+    summary.push({ key, label, count: rows.length });
+  }
+  return {
+    generatedAt: new Date().toISOString(),
+    guildId,
+    userId,
+    total: summary.reduce((sum, s) => sum + s.count, 0),
+    summary,
+    data,
+  };
 }

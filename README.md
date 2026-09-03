@@ -183,7 +183,7 @@ settings panel per module — saves swap in place with a toast.
 - 2.0 groundwork still current: action-based custom `/slash` commands,
   scheduled messages, full leveling with a public leaderboard, auto-moderation,
   the Counting mini-game, a YAGPDB-style combined overview and a topbar server
-  switcher; `/forget` + guild-leave data purge; per-server **audit log** and
+  switcher; `/mydata` export + `/forget` + guild-leave data purge; per-server **audit log** and
   JSON **config export**; CI test gate before any image publish; rate-limited
   public/auth routes; a database integrity check on boot
 
@@ -195,7 +195,8 @@ settings panel per module — saves swap in place with a toast.
   - `/version` — the release this instance is running · `/about` — version,
     uptime and runtime info
   - `/rank` · `/leaderboard` — leveling progress (when the module is enabled)
-  - `/forget` — delete the data Sylo stores about you in the current server
+  - `/mydata` — DMs you a JSON export of the data Sylo stores about you in the
+    current server · `/forget` — delete it
   - `/stats game:<Battlefield … | Old School RuneScape | RuneScape 3> username:…
     [platform:…]` — player stats as an embed (Battlefield: K/D, win rate, best
     class, …; RuneScape: combat / total level, top skills, boss KCs)
