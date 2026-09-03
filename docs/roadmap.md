@@ -358,24 +358,21 @@ purge on kick (guarded by `test/guildTables.test.js`). These close the remaining
 gaps: a stated legal basis + retention schedule, a data-access/portability path,
 and enforceable retention limits.
 
-### 1 — Legal basis + retention table in `privacy-policy.md` (`docs:` — no bump)
+### 1 — Legal basis + retention table in `privacy-policy.md` → done (`docs:`, no bump, commit `05d6697`)
 
-Documentation only; no code.
+Documentation only; no code. As shipped:
 
-- Add a **legal basis** subsection to `docs/privacy-policy.md`: name the basis
-  per processing purpose (moderation records & audit log → legitimate interest;
-  leveling / birthdays / AFK / invite tracking → the member's use of the feature;
-  modmail transcripts → legitimate interest in handling the request). Note that
-  self-hosters must set their own (ties into §9).
-- Add a **retention schedule** table: for each data category (config, infractions,
-  leveling + periods, birthdays, AFK, invite graph, modmail transcripts, ban
-  appeals, insights aggregates, game-stat cache, logs) state the retention rule
-  and the deletion trigger (`/forget`, guild-leave purge, auto-prune once #3
-  lands, TTL, or "kept until changed").
-- Mention the **off-site backup** path (`BACKUP_WEBDAV_URL` / `BACKUP_WEBHOOK_URL`):
-  when enabled, the operator owns that destination as a processor, and snapshots
-  hold since-deleted rows until they rotate out (newest 7 kept).
-- Bump the "Last updated" date and add a line to §10.
+- New **section 4 — "Legal basis for processing"**: legitimate interests
+  (Art. 6(1)(f)) as the basis throughout, a purpose → interest table, an
+  interest-balancing paragraph covering the objection / access / erasure rights,
+  and a note that self-hosters set their own basis.
+- New **retention schedule** table under section 7 (19 data categories: retention
+  period + deletion trigger), plus a **Backups** paragraph on the off-site backup
+  path (`BACKUP_WEBDAV_URL` / `BACKUP_WEBHOOK_URL`) and since-deleted rows living
+  in snapshots until they rotate out.
+- Renumbered sections 4→11; refreshed the section 2 inventory (infractions/case
+  log, voice minutes + period rows, birthdays, RSS/social markers); named the
+  Operator as controller in the intro; `Last updated` → 4 Sep 2026 + a §11 line.
 
 ### 2 — `/mydata` self-service data export (`feat:` — minor)
 
@@ -397,7 +394,7 @@ a member a way to see their data without going through an admin.
 - Fall back to an ephemeral message with the JSON in a code block if the DM is
   closed (Discord attachment in an ephemeral interaction reply is fine up to
   the size cap; chunk or refuse politely past it).
-- Docs: new `docs/` note + a line in the privacy policy §6 next to `/forget`.
+- Docs: new `docs/` note + a line in the privacy policy §7 next to `/forget`.
 
 ### 3 — Configurable auto-prune for transcripts + old infractions (`feat:` — minor)
 
@@ -419,8 +416,7 @@ Turns "kept indefinitely" into a stated, enforced retention limit.
 
 ### Suggested order
 
-1. **#1 legal basis + retention table** — docs-only, unblocks the wording #2/#3
-   reference, ships immediately.
+1. ~~**#1 legal basis + retention table**~~ — done (commit `05d6697`).
 2. **#3 auto-prune** — makes the retention table's limits real.
 3. **#2 `/mydata` export** — largest surface; benefits from the `purge.js`
    refactor being settled first.
