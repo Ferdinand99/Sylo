@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.0](https://github.com/Ferdinand99/Sylo/compare/v3.16.0...v3.17.0) (2026-09-03)
+
+
+### Features
+
+* off-site database backups, a Grafana dashboard, and a route-test fix ([#106](https://github.com/Ferdinand99/Sylo/issues/106)) ([1d578af](https://github.com/Ferdinand99/Sylo/commit/1d578afe2da015103c75b3b8f6b4dc54000957c6))
+
 ## [3.16.0](https://github.com/Ferdinand99/Sylo/compare/v3.15.0...v3.16.0) (2026-09-03)
 
 
