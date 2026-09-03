@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.14.0](https://github.com/Ferdinand99/Sylo/compare/v3.13.0...v3.14.0) (2026-09-03)
+
+
+### Features
+
+* resolve Reddit, Mastodon and Bluesky handles in the RSS module ([7d263ef](https://github.com/Ferdinand99/Sylo/commit/7d263efb2ddab4fcdc1d4be914ca6ee3155b611d))
+* resolve Reddit, Mastodon and Bluesky handles in the RSS module ([b906183](https://github.com/Ferdinand99/Sylo/commit/b906183a750518245f0850b4209aaaad46b1370b))
+
 ## [3.13.0](https://github.com/Ferdinand99/Sylo/compare/v3.12.0...v3.13.0) (2026-09-02)
 
 
