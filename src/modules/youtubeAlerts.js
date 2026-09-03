@@ -74,26 +74,29 @@ export async function resolveYtChannel(input) {
   if (fromUrl) return { channelId: fromUrl, name: '' };
 
   // A handle, /c/, /user/ or bare name → fetch the page and read the channel id.
-  // Only ever fetch youtube.com itself — a pasted URL must not point us at an
-  // arbitrary (e.g. internal) host.
-  let url;
+  // The request is always built against a literal youtube.com origin — a pasted
+  // URL only contributes its path/query, so it can't retarget the fetch at an
+  // internal or unrelated host.
+  let path;
   if (/^https?:\/\//i.test(raw)) {
-    let host;
+    let parsed;
     try {
-      host = new URL(raw).hostname.toLowerCase().replace(/^www\./, '');
+      parsed = new URL(raw);
     } catch {
       return null;
     }
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
     if (host !== 'youtube.com' && host !== 'm.youtube.com') return null;
-    url = raw;
-  } else if (raw.startsWith('@')) {
-    url = `https://www.youtube.com/${raw}`;
+    path = `${parsed.pathname}${parsed.search}`;
   } else {
-    url = `https://www.youtube.com/@${raw}`;
+    path = `/@${encodeURIComponent(raw.replace(/^@/, ''))}`;
   }
 
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10_000) });
+    const res = await fetch(`https://www.youtube.com${path}`, {
+      headers: { 'User-Agent': UA },
+      signal: AbortSignal.timeout(10_000),
+    });
     if (!res.ok) return null;
     const html = await res.text();
     const channelId =
