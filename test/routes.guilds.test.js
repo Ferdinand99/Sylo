@@ -169,6 +169,29 @@ test('POST /m/kick-alerts/config stores a cleaned alert list', async () => {
   assert.equal(stored.alerts[0].channelId, CH.general);
 });
 
+test('POST /m/rss/config resolves a friendly handle to a feed URL', async () => {
+  const res = await post(
+    app.base,
+    `/guilds/${GID}/m/rss/config`,
+    {
+      rss_id: '',
+      rss_type: 'reddit',
+      rss_ref: 'r/programming',
+      rss_channel: CH.general,
+      rss_role: '',
+      rss_template: '',
+    },
+    { 'HX-Request': 'true' }
+  );
+  assert.equal(res.status, 200);
+  const { getGuildModule } = await import('../src/db/modules.js');
+  const [feed] = getGuildModule(GID, 'rss').config.feeds;
+  assert.equal(feed.type, 'reddit');
+  assert.equal(feed.ref, 'r/programming');
+  assert.equal(feed.url, 'https://www.reddit.com/r/programming/new/.rss');
+  assert.equal(feed.channelId, CH.general);
+});
+
 test('POST /modules/:id single toggle (htmx grid path) returns the CTA fragment', async () => {
   const res = await post(
     app.base,
