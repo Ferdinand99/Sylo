@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.18.0](https://github.com/Ferdinand99/Sylo/compare/v3.17.0...v3.18.0) (2026-09-03)
+
+
+### Features
+
+* numbered moderation case log with /history and /case ([#108](https://github.com/Ferdinand99/Sylo/issues/108)) ([cce1358](https://github.com/Ferdinand99/Sylo/commit/cce13587add241f2dda5e713581ab05655272afe))
+
 ## [3.17.0](https://github.com/Ferdinand99/Sylo/compare/v3.16.0...v3.17.0) (2026-09-03)
 
 
