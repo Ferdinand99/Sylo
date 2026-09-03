@@ -9,11 +9,11 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/Ferdinand99/Sylo/issues</Support>
   <Project>https://github.com/Ferdinand99/Sylo</Project>
-  <Overview>Sylo is a multi-function Discord bot with a web dashboard. It has a per-guild module system (26 modules) - moderation with warning thresholds, server logging, tickets/modmail answered from the dashboard, reaction roles &amp; autoroles, verification (Verify button or Cloudflare Turnstile captcha), welcome/leave messages, a Welcome Channel builder, sticky messages, auto-moderation (invite/link/flood/mention/caps/word filters), a counting mini-game, action-based custom slash commands, an autoresponder, reminders (one-off or recurring channel posts), leveling with a public leaderboard, AFK, server statistics (live-count voice channels), a free games notifier (Epic Games Store, plus more stores with an IsThereAnyDeal key), ban appeals (banned members get a DM'd link to an appeal form; staff accept/deny from the dashboard), MEE6-style temporary voice channels ("join to create" hubs plus /voice-* control commands), a starboard (re-posts messages that get enough of a reaction into a highlights channel), an invite tracker (credits who invited each member and ranks inviters), reaction polls (/poll with a timer or vote cap), prize giveaways (Enter button, auto-drawn winners), optional Battlefield-series player stats (/stats, gated by the Game stats module), Twitch and YouTube go-live / new-video alerts, and a message/embed creator - plus per-server command management and an editable Discord presence/activity. State is stored in a single SQLite file under /app/data and survives updates. The database is snapshotted automatically (before every schema migration and on a schedule) into /app/data/backups; from the dashboard's Health page you can also create, download, import and restore a snapshot (restore swaps the file and lets the container restart on the restored data).
+  <Overview>Sylo is a multi-function Discord bot with a web dashboard. It has a per-guild module system (30 modules) - moderation with warning thresholds, server logging, tickets/modmail answered from the dashboard, reaction roles &amp; autoroles, verification (Verify button or Cloudflare Turnstile captcha), welcome/leave messages, a Welcome Channel builder, birthday announcements, sticky messages, auto-moderation (invite/link/flood/mention/caps/word filters, optionally pushed to Discord's native AutoMod), a counting mini-game, action-based custom slash commands, an autoresponder, reminders (one-off or recurring channel posts), leveling with a public leaderboard, AFK, server statistics (live-count voice channels), server insights (activity charts - messages, joins/leaves and voice-channel usage over time), a free games notifier (Epic Games Store, plus more stores with an IsThereAnyDeal key), ban appeals (banned members get a DM'd link to an appeal form; staff accept/deny from the dashboard), MEE6-style temporary voice channels ("join to create" hubs plus /voice-* control commands), a starboard (re-posts messages that get enough of a reaction into a highlights channel), an invite tracker (credits who invited each member and ranks inviters), reaction polls (/poll with a timer or vote cap), prize giveaways (Enter button, auto-drawn winners), optional Battlefield-series player stats (/stats, gated by the Game stats module), Twitch / YouTube / Kick go-live &amp; new-video alerts, RSS/Atom feed alerts, and a message/embed creator - plus per-server command management, a Prometheus /metrics endpoint, and an editable Discord presence/activity. State is stored in a single SQLite file under /app/data and survives updates. The database is snapshotted automatically (before every schema migration and on a schedule) into /app/data/backups; from the dashboard's Health page you can also create, download, import and restore a snapshot (restore swaps the file and lets the container restart on the restored data).
 
 Setup: create a Discord application at https://discord.com/developers/applications, then set DISCORD_TOKEN (Bot tab) and DISCORD_CLIENT_ID (General Information). Invite the bot with the scopes "bot" and "applications.commands".
 
-Intents: the member/message-driven modules (logging, welcome, roles, verification, leveling, server statistics, auto-moderation, counting, autoresponder, starboard) need the "Server Members" and/or "Message Content" intents enabled on the Developer Portal Bot page. Leave INTENT_GUILD_MEMBERS / INTENT_MESSAGE_CONTENT at their defaults, or set one to false to boot without that intent (its modules stay unavailable).
+Intents: the member/message-driven modules (logging, welcome, reaction roles, verification, leveling, server statistics, invite tracker, auto-moderation, counting, autoresponder, starboard) need the "Server Members" and/or "Message Content" intents enabled on the Developer Portal Bot page. Leave INTENT_GUILD_MEMBERS / INTENT_MESSAGE_CONTENT at their defaults, or set one to false to boot without that intent (its modules stay unavailable).
 
 Dashboard: runs open by default (use only on a trusted LAN). To require "Log in with Discord" for server admins, set DISCORD_CLIENT_SECRET and add http://[UNRAID-IP]:[HOST-PORT]/auth/discord/callback to the app's OAuth2 Redirects.</Overview>
   <Category>Tools: Network:Messenger</Category>
@@ -87,7 +87,7 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Name="INTENT_GUILD_MEMBERS"
     Target="INTENT_GUILD_MEMBERS"
     Default="true"
-    Description="Whether to request the Server Members privileged intent (needed by logging, welcome, roles/autoroles and leveling). Must also be enabled on the Developer Portal Bot page. Set to false to boot without it - those modules then stay unavailable."
+    Description="Whether to request the Server Members privileged intent (needed by logging, welcome, reaction roles/autoroles, verification, leveling, server statistics and the invite tracker). Must also be enabled on the Developer Portal Bot page. Set to false to boot without it - those modules then stay unavailable."
     Type="Variable"
     Display="advanced"
     Required="false"
@@ -96,7 +96,7 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Name="INTENT_MESSAGE_CONTENT"
     Target="INTENT_MESSAGE_CONTENT"
     Default="true"
-    Description="Whether to request the Message Content privileged intent (needed by logging, auto-moderation and the counting game). Must also be enabled on the Developer Portal Bot page. Set to false to boot without it - those modules then stay unavailable."
+    Description="Whether to request the Message Content privileged intent (needed by logging, auto-moderation, the autoresponder, the counting game and the starboard). Must also be enabled on the Developer Portal Bot page. Set to false to boot without it - those modules then stay unavailable."
     Type="Variable"
     Display="advanced"
     Required="false"
@@ -165,6 +165,24 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Required="false"
     Mask="true"/>
   <Config
+    Name="KICK_CLIENT_ID"
+    Target="KICK_CLIENT_ID"
+    Default=""
+    Description="Optional. Kick application client id for the Kick alerts module ('go live' notifications). Free app at kick.com/settings/developer. Needs KICK_CLIENT_SECRET too; without both, the module's poll loop does nothing."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+  <Config
+    Name="KICK_CLIENT_SECRET"
+    Target="KICK_CLIENT_SECRET"
+    Default=""
+    Description="Optional. Kick application client secret, paired with KICK_CLIENT_ID for the Kick alerts module."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"/>
+  <Config
     Name="STATS_CACHE_TTL_MINUTES"
     Target="STATS_CACHE_TTL_MINUTES"
     Default="5"
@@ -210,6 +228,15 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Required="false"
     Mask="false">14</Config>
   <Config
+    Name="BACKUP_DIR"
+    Target="BACKUP_DIR"
+    Default=""
+    Description="Optional. Directory (inside the container) for database snapshots. Leave blank to use &lt;Data Directory&gt;/backups; must sit inside the Data Directory mount if set."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+  <Config
     Name="WEB_PORT"
     Target="WEB_PORT"
     Default="3000"
@@ -231,11 +258,20 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Name="LOG_LEVEL"
     Target="LOG_LEVEL"
     Default="info"
-    Description="Log verbosity: debug, info, warn or error. Set LOG_FORMAT=json (or LOG_JSON=1) for machine-readable log lines."
+    Description="Log verbosity: debug, info, warn or error. debug also emits one line per HTTP request."
     Type="Variable"
     Display="advanced"
     Required="false"
     Mask="false">info</Config>
+  <Config
+    Name="LOG_FORMAT"
+    Target="LOG_FORMAT"
+    Default="text"
+    Description="Log line format: text or json (LOG_JSON=1 is shorthand for json)."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false">text</Config>
   <Config
     Name="TZ"
     Target="TZ"
