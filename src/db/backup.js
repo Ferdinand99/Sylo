@@ -24,6 +24,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import Database from 'better-sqlite3';
 import { config } from '../config.js';
 import { checkpoint, db, dbPath as DB_PATH, fileStamp, SCHEMA_VERSION, vacuumInto } from './index.js';
+import { offsiteBackupConfigured, shipOffsiteBackup } from './offsiteBackup.js';
 import { log } from '../lib/log.js';
 
 const NAME_RE = /^sylo-[A-Za-z0-9._-]+\.db$/;
@@ -104,6 +105,10 @@ export function runBackup(reason = 'manual') {
   const { size } = statSync(dest);
   pruneBackups();
   log.info('db', `Backup written: ${basename(dest)} (${Math.round(size / 1024)} KiB)`);
+  if (offsiteBackupConfigured()) {
+    // Fire-and-forget: the local snapshot is done regardless of the upload.
+    shipOffsiteBackup(dest).catch((err) => log.error('db', `Off-site backup failed: ${err.message}`));
+  }
   return { name: basename(dest), size };
 }
 

@@ -75,6 +75,16 @@ if (!Number.isInteger(backupRetention) || backupRetention < 1) {
   process.exit(1);
 }
 
+// Off-site backup targets (optional). After every local snapshot a gzipped copy
+// is shipped to whichever of these is set. Both are best-effort.
+const backupWebdavUrl = optionalOrNull('BACKUP_WEBDAV_URL');
+const backupWebdavUser = optionalOrNull('BACKUP_WEBDAV_USER');
+const backupWebdavPass = optionalOrNull('BACKUP_WEBDAV_PASS');
+const backupWebhookUrl = optionalOrNull('BACKUP_WEBHOOK_URL');
+if (backupWebhookUrl && !/^https:\/\//i.test(backupWebhookUrl)) {
+  console.warn('[config] BACKUP_WEBHOOK_URL should be an https Discord webhook URL.');
+}
+
 // DISCORD_DEV_GUILD_IDS: one id or a comma/space-separated list of servers that
 // get slash commands registered instantly (a dev convenience). Empty = global
 // registration. DISCORD_GUILD_ID is the pre-3.0 name — still honoured, with a
@@ -175,6 +185,12 @@ export const config = Object.freeze({
   backupDir: optionalOrNull('BACKUP_DIR'),
   backupIntervalHours,
   backupRetention,
+  // Off-site backup targets. Any/all/none; a gzipped copy of each snapshot is
+  // pushed to whatever is set (best-effort, logged).
+  backupWebdavUrl,
+  backupWebdavUser,
+  backupWebdavPass,
+  backupWebhookUrl,
 
   // Privileged gateway intents. Enable the matching toggles in the Discord
   // Developer Portal (Bot page). Verified bots may also need Discord's approval.

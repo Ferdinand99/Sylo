@@ -115,6 +115,9 @@
       Scheduled backups are off — a snapshot is still taken before every schema migration.
     <% } %>
     Snapshots are written to <code>&lt;data&gt;/backups</code> on the mounted volume.
+    <% if (db.offsite) { %>
+      A gzipped copy of each is also shipped off-site (<strong><%= db.offsite %></strong>).
+    <% } %>
   </p>
   <div class="btn-row u-m0 u-mt-3">
     <form method="POST" action="/health/backups" hx-boost="false">

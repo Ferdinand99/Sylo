@@ -171,7 +171,7 @@ migration when it ships.
 
 ## Next — the 3.14 line
 
-In progress. Themes 1–3 have shipped; Theme 4 is a candidate. Same conventions as
+Complete. Themes 1–4 shipped across **3.14.0 → 3.17.0**. Same conventions as
 above (branch per workstream, `npm test` + `npm run lint` + compose build green,
 Conventional-Commit summary).
 
@@ -241,17 +241,30 @@ The biggest single MEE6-parity step in the module. One `feat` minor.
 Deferred Theme 3 ideas (not built): a `/history @user` moderation case log, and
 generated welcome banner images.
 
-### Theme 4 — Ops / self-hosting niceties (a small `chore` / `feat` bundle)
+### Theme 4 — Ops / self-hosting niceties → done (`feat/offsite-backups`)
 
-- A Grafana dashboard JSON in the repo for `/metrics` (the Unraid crowd will use it).
-- An off-box backup target (S3 / WebDAV / Discord webhook) alongside the local snapshots.
-- Fix the ~25s teardown hang in the route tests (faster CI).
+- **Off-site backups** — after every local snapshot, `src/db/offsiteBackup.js`
+  gzips it and pushes a copy to whatever env is set: `BACKUP_WEBDAV_URL`
+  (+ `_USER`/`_PASS`, an HTTP `PUT` — Nextcloud etc.) and/or `BACKUP_WEBHOOK_URL`
+  (a Discord webhook attachment, skipped over ~8 MiB). No new runtime deps —
+  `fetch` + `node:zlib`. Best-effort, logged, never blocks the local backup;
+  the Health page shows the active targets. S3 was left out — SigV4 without an
+  SDK is a lot of code, and WebDAV covers the self-host crowd.
+- **Grafana dashboard** — `docs/grafana-dashboard.json`, a 12-panel import
+  (gateway health, guilds, HTTP/command/error rates, DB size, module adoption)
+  wired to a `${DS_PROMETHEUS}` datasource variable.
+- **Route-test teardown** — the ~9s idle stall when running one `routes.*` file
+  by hand was undici client keep-alive; `test/helpers/webApp.js` now sets a
+  near-zero `keepAliveTimeout` global dispatcher (`undici` pinned as a
+  devDependency). The full `node --test` run was never affected (subprocess per
+  file), so CI was already fine.
 
 ### Suggested order for the line
 
 1. ~~**Social feeds** (Reddit + Bluesky + Mastodon)~~ — shipped (3.14.0).
 2. ~~**OSRS / RS3 adapter**~~ — shipped (3.15.0).
 3. ~~**Leveling upgrade** (voice XP + multipliers + period leaderboard)~~ — shipped.
-4. **Ops bundle** (Grafana JSON, off-box backup, test-teardown fix) — Theme 4. ← next
+4. ~~**Ops bundle** (Grafana JSON, off-site backup, test-teardown fix)~~ — shipped.
 
-Welcome images and moderation history are solid #4/#5 for a longer line.
+The 3.14 line is complete. Welcome images and a `/history @user` moderation case
+log are the strongest candidates for whatever comes next.

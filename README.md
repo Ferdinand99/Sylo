@@ -105,7 +105,9 @@ settings panel per module — saves swap in place with a toast.
   `sylo_up`, `sylo_uptime_seconds`, `sylo_guilds`, `sylo_gateway_ping_ms`,
   `sylo_db_bytes`, `sylo_module_enabled{module}`, plus counters
   `sylo_commands_total{command}`, `sylo_component_interactions_total{scope}`,
-  `sylo_errors_total{scope}` and `sylo_http_requests_total{route,status}`.
+  `sylo_errors_total{scope}` and `sylo_http_requests_total{route,status}`. Import
+  [`docs/grafana-dashboard.json`](docs/grafana-dashboard.json) for a ready-made
+  Grafana overview.
 - **Automatic database backups + restore** — Sylo writes compacted single-file
   snapshots of `sylo.db` to `<data>/backups`: just before every schema migration,
   shortly after boot, and on a schedule (`BACKUP_INTERVAL_HOURS`, default 24;
