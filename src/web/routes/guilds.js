@@ -1169,15 +1169,17 @@ router.post(
       });
     } else if (mod.id === 'rss') {
       const ids = [].concat(req.body.rss_id ?? []);
-      const urls = [].concat(req.body.rss_url ?? []);
+      const types = [].concat(req.body.rss_type ?? []);
+      const refs = [].concat(req.body.rss_ref ?? []);
       const chans = [].concat(req.body.rss_channel ?? []);
       const rolez = [].concat(req.body.rss_role ?? []);
       const tpls = [].concat(req.body.rss_template ?? []);
       const prevIds = new Set((getGuildModule(req.guild.id, 'rss').config.feeds ?? []).map((f) => f.id));
       config = normaliseRssConfig({
-        feeds: urls.map((url, i) => ({
+        feeds: refs.map((ref, i) => ({
           id: ids[i] ?? '',
-          url,
+          type: types[i] ?? 'url',
+          ref,
           channelId: chans[i] ?? '',
           roleId: rolez[i] ?? '',
           template: tpls[i] ?? '',

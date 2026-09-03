@@ -257,7 +257,7 @@ export const MODULES = [
   {
     id: 'rss',
     name: 'RSS alerts',
-    description: 'Post a message when a followed RSS or Atom feed publishes something new.',
+    description: 'Post new items from RSS/Atom feeds — plus Reddit, Mastodon and Bluesky handles.',
     icon: '📰',
     requiredIntents: [],
     defaultEnabled: false,
