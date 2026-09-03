@@ -2317,7 +2317,10 @@ router.get('/:guildId/insights', (req, res) => {
   // window fall back to the last day.
   const topDays = hourly ? 1 : range;
   const chans = [...guildTextChannels(req.guild), ...guildVoiceChannels(req.guild)];
-  const nameOf = (id) => chans.find((c) => c.id === id)?.name ?? id;
+  // A `name:` bucket already carries a captured channel name (temp voice, since
+  // deleted); a plain id resolves to the live channel, else it's since deleted.
+  const nameOf = (id) =>
+    id.startsWith('name:') ? id.slice(5) : (chans.find((c) => c.id === id)?.name ?? 'deleted channel');
 
   res.render('guild', {
     ...baseContext(req.guild, 'insights'),

@@ -167,6 +167,34 @@ test('module: voiceStateUpdate tracks minutes, settled on flush and on leave', (
   assert.ok(voiceMinsOf() >= 14 && voiceMinsOf() <= 16, `after +5m leave: ${voiceMinsOf()}`);
 });
 
+test('module: a temp voice channel is bucketed by its captured name, not its id', async () => {
+  _internals.buf.clear();
+  const { addTempChannel } = await import('../src/db/tempVoice.js');
+  const GT = '900000000000000006';
+  const SPAWN = '910000000000000002';
+  setGuildModule(GT, 'insights', { enabled: true });
+  addTempChannel({
+    channelId: SPAWN,
+    guildId: GT,
+    hubId: '910000000000000001',
+    ownerId: 'u1',
+    name: "Ferd's room",
+  });
+
+  const now = Date.now();
+  const guild = { id: GT, voiceStates: { cache: new Map() } };
+  const member = { id: 't-user', user: { bot: false } };
+  const vs = (channelId) => ({ guild, member, channelId });
+
+  dispatch('voiceStateUpdate', GT, { old: vs(null), new: vs(SPAWN) });
+  const s = _internals.buf.get(GT);
+  s.voiceStart.get('t-user').at = now - 6 * 60_000;
+  dispatch('voiceStateUpdate', GT, { old: vs(SPAWN), new: vs(null) });
+
+  assert.ok(s.voiceChannels.has("name:Ferd's room"), 'bucketed by name, not the spawn id');
+  assert.equal(s.voiceChannels.has(SPAWN), false);
+});
+
 test('flushGuild: writes one guild on demand, no-op for an unbuffered guild', () => {
   _internals.buf.clear();
   const GF = '900000000000000005';

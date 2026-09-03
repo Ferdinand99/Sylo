@@ -10,7 +10,18 @@
 // only its unflushed tail.
 import { on } from './dispatch.js';
 import { accrueDaily, accrueHourly, pruneInsights, utcDay, utcHour } from '../db/insights.js';
+import { getTempChannel } from '../db/tempVoice.js';
 import { log } from '../lib/log.js';
+
+// A "join to create" spawn is deleted within minutes, so its channel id is
+// meaningless on the dashboard later. Capture its name now (the row still
+// exists) and bucket by `name:<name>` instead — sessions in same-named temp
+// channels then roll up together. Real channels keep their id and resolve to a
+// live name at render time.
+function voiceBucket(channelId) {
+  const temp = getTempChannel(channelId);
+  return temp ? `name:${(temp.name || 'Temporary channel').slice(0, 80)}` : channelId;
+}
 
 const FLUSH_MS = 10 * 60_000; // every 10 minutes
 const RETENTION_DAYS = 180;
@@ -74,7 +85,8 @@ function settleVoice(s, now) {
     const mins = (now - sess.at) / 60_000;
     if (mins > 0) {
       s.voiceMinutes += mins;
-      s.voiceChannels.set(sess.channelId, (s.voiceChannels.get(sess.channelId) ?? 0) + mins);
+      const vb = voiceBucket(sess.channelId);
+      s.voiceChannels.set(vb, (s.voiceChannels.get(vb) ?? 0) + mins);
     }
     sess.at = now;
   }
@@ -190,7 +202,8 @@ on('insights', 'voiceStateUpdate', ({ old: before, new: after }) => {
     const mins = (now - sess.at) / 60_000;
     if (mins > 0) {
       s.voiceMinutes += mins;
-      s.voiceChannels.set(sess.channelId, (s.voiceChannels.get(sess.channelId) ?? 0) + mins);
+      const vb = voiceBucket(sess.channelId);
+      s.voiceChannels.set(vb, (s.voiceChannels.get(vb) ?? 0) + mins);
     }
     s.voiceStart.delete(member.id);
   }
