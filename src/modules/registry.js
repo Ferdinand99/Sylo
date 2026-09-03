@@ -285,7 +285,7 @@ export const MODULES = [
     id: 'game-stats',
     name: 'Game stats',
     description:
-      'Battlefield-series player stat lookups via /stats (BF1, BF3, BF4, BFV, Hardline, best-effort BF2042/BF6).',
+      'Player stat lookups via /stats: the Battlefield series, Old School RuneScape and RuneScape 3.',
     icon: '🎯',
     requiredIntents: [],
     defaultEnabled: false,
