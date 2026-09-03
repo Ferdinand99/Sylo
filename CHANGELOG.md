@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.19.0](https://github.com/Ferdinand99/Sylo/compare/v3.18.0...v3.19.0) (2026-09-03)
+
+
+### Features
+
+* clean up the "went live" alert message when a stream ends ([#110](https://github.com/Ferdinand99/Sylo/issues/110)) ([#111](https://github.com/Ferdinand99/Sylo/issues/111)) ([94cafe2](https://github.com/Ferdinand99/Sylo/commit/94cafe2add6f047574033dded81f341f8d99152f))
+
 ## [3.18.0](https://github.com/Ferdinand99/Sylo/compare/v3.17.0...v3.18.0) (2026-09-03)
 
 
