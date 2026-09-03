@@ -374,27 +374,24 @@ Documentation only; no code. As shipped:
   log, voice minutes + period rows, birthdays, RSS/social markers); named the
   Operator as controller in the intro; `Last updated` → 4 Sep 2026 + a §11 line.
 
-### 2 — `/mydata` self-service data export (`feat:` — minor)
+### 2 — `/mydata` self-service data export → done (`feat:`, minor, commit `5f7ec3d`)
 
 Covers GDPR Art. 15 (access) and Art. 20 (portability) in one command, and gives
-a member a way to see their data without going through an admin.
+a member a way to see their data without going through an admin. As shipped:
 
-- **`/mydata`** — ephemeral reply, DMs the caller a `sylo-<guildId>-<userId>.json`
-  attachment: every row Sylo keys to their Discord account **in that guild**,
-  grouped by source (infractions, leveling + period rows, birthdays, AFK, invite
-  counts + attribution, giveaway entries, modmail transcript text, ban appeals,
-  poll/temp-VC ownership). Same scope as `/forget`, read side.
-- **Reuse `purge.js`** — the per-user `userStmts` map already enumerates every
-  per-user table + column. Add a parallel `describeUserData(guildId, userId)` /
-  `exportUserData(...)` in the same file that `SELECT`s where those `DELETE`s
-  target, so the export and the erasure can never drift (a test asserts the two
-  key sets match, like `guildTables.test.js` does for `GUILD_TABLES`).
-- **Rate-limit** per user (cooldown in `posted_keys` or an in-memory map) — the
-  export is a DB read across ~12 tables plus a DM.
-- Fall back to an ephemeral message with the JSON in a code block if the DM is
-  closed (Discord attachment in an ephemeral interaction reply is fine up to
-  the size cap; chunk or refuse politely past it).
-- Docs: new `docs/` note + a line in the privacy policy §7 next to `/forget`.
+- **`exportUserData(guildId, userId)`** in `src/db/purge.js` — the rows behind
+  `describeUserData`. Both are now built from one shared `USER_DATA_SOURCES` list
+  (which also gained `leveling_periods`, previously missing from the dashboard
+  inventory), so counts, export and `forgetUser` can't drift. A test asserts the
+  export key set equals the describe key set; another checks the rows come back
+  and read empty after `forgetUser`.
+- **`/mydata`** (`src/bot/commands/mydata.js`) — DMs the caller a readable
+  summary embed (one compact line per category — level/XP, birthday date, who
+  invited them, latest case, …) plus `sylo-data-<guildId>-<userId>.json`, the
+  full copy keyed by readable labels with empty categories dropped. Falls back to
+  the ephemeral reply if DMs are closed; in-memory 10-min per-member cooldown;
+  7 MiB guard. Listed under `/help` → Privacy.
+- Docs: privacy policy §4 + §7 + §11; README command list + feature line.
 
 ### 3 — Configurable auto-prune for transcripts + old infractions (`feat:` — minor)
 
@@ -417,6 +414,5 @@ Turns "kept indefinitely" into a stated, enforced retention limit.
 ### Suggested order
 
 1. ~~**#1 legal basis + retention table**~~ — done (commit `05d6697`).
-2. **#3 auto-prune** — makes the retention table's limits real.
-3. **#2 `/mydata` export** — largest surface; benefits from the `purge.js`
-   refactor being settled first.
+2. ~~**#2 `/mydata` export**~~ — done (commit `5f7ec3d`).
+3. **#3 auto-prune** — makes the retention table's limits real.
