@@ -3,7 +3,7 @@
 The post-3.5.0 backlog, run as one branch/PR per workstream into `main`. It
 shipped across **3.6.0 → 3.11.1** and is done. This file is now the record: what
 shipped, and the design decisions and deviations behind each piece. New work
-gets its own plan — not this file.
+gets its own plan; the next candidate line is sketched at the end.
 
 Conventions used (still current):
 
@@ -166,3 +166,54 @@ route harness surfaced the breakage instantly (4 test files failed to build the
 app) and confirmed the fix (311/311 green on Express 5). discord.js v15 is not
 released — a `dependabot.yml` ignore holds its semver-major for a dedicated
 migration when it ships.
+
+---
+
+## Next — the 3.14 line (proposed)
+
+Not committed to yet — a sketch of candidate workstreams for the line after
+3.13.0. Same conventions as above (branch per workstream, `npm test` +
+`npm run lint` + compose build green, Conventional-Commit summary).
+
+### Theme 1 — Social feeds (builds straight on the feed parser + `posted_keys`)
+
+| Idea                                             | Why                                                          | Effort                                     |
+| ----------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------- |
+| **Reddit feed** (`/r/<sub>/new.json` or `.rss`) | MEE6 has it, Sylo doesn't, fits the parser 1:1              | Small — a new `feedSource` branch + panel |
+| **Bluesky / Mastodon feed**                     | Both expose open RSS/JSON endpoints; a real parity gap      | Small–medium                              |
+
+→ One `feat` minor (**3.14.0**). Low risk, reuses everything from the RSS module.
+Instagram / TikTok / X are out of scope — no usable free API, scraping too brittle.
+
+### Theme 2 — The game-stats pillar (Battlefield only today)
+
+**OSRS + RS3 adapter** — one file in `src/adapters/games/` (Wise Old Man /
+Hiscores + RuneMetrics). Self-contained, extends a core pillar without touching
+the rest. → `feat` minor.
+
+### Theme 3 — Close MEE6 gaps in existing modules
+
+- **Leveling**: no voice XP, no XP multipliers (per role / channel), no
+  weekly/monthly leaderboard. MEE6 has all three; the insights module already
+  tracks voice minutes, so the plumbing exists.
+- **Moderation**: `/history @user` with a case log — numbered cases across
+  warn / timeout / kick / ban, editable reason, delete case. Today there are
+  warnings + a mod-log channel but no single lookup.
+- **Welcome images**: a generated banner (avatar + text + background) via
+  `@napi-rs/canvas`, already a dependency for rank cards. MEE6's signature
+  feature.
+
+### Theme 4 — Ops / self-hosting niceties (a small `chore` / `feat` bundle)
+
+- A Grafana dashboard JSON in the repo for `/metrics` (the Unraid crowd will use it).
+- An off-box backup target (S3 / WebDAV / Discord webhook) alongside the local snapshots.
+- Fix the ~25s teardown hang in the route tests (faster CI).
+
+### Suggested order for the line
+
+1. **Social feeds** (Reddit + Bluesky + Mastodon) — cheapest, clearest parity win.
+2. **OSRS / RS3 adapter** — self-contained, already wanted.
+3. **Leveling upgrade** (voice XP + multipliers + period leaderboard) — the
+   biggest single step toward MEE6.
+
+Welcome images and moderation history are solid #4/#5 for a longer line.
