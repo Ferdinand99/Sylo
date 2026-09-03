@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.19.1](https://github.com/Ferdinand99/Sylo/compare/v3.19.0...v3.19.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* harden the feed parser, YouTube resolver and alert URL parsing (CodeQL) ([6240733](https://github.com/Ferdinand99/Sylo/commit/6240733d7d8bd38e5d47c5e53dd915bbae1ca7ac))
+* harden the feed parser, YouTube resolver and alert URL parsing (CodeQL) ([#113](https://github.com/Ferdinand99/Sylo/issues/113)) ([6240733](https://github.com/Ferdinand99/Sylo/commit/6240733d7d8bd38e5d47c5e53dd915bbae1ca7ac))
+
 ## [3.19.0](https://github.com/Ferdinand99/Sylo/compare/v3.18.0...v3.19.0) (2026-09-03)
 
 
