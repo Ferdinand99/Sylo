@@ -5,16 +5,14 @@
 
 ### Features
 
-* resolve Reddit, Mastodon and Bluesky handles in the RSS module ([7d263ef](https://github.com/Ferdinand99/Sylo/commit/7d263efb2ddab4fcdc1d4be914ca6ee3155b611d))
-* resolve Reddit, Mastodon and Bluesky handles in the RSS module ([b906183](https://github.com/Ferdinand99/Sylo/commit/b906183a750518245f0850b4209aaaad46b1370b))
+* resolve Reddit, Mastodon and Bluesky handles in the RSS module ([550bbbd](https://github.com/Ferdinand99/Sylo/commit/550bbbd2d7fbc5295c0cff2322e5249264f5ab39))
 
 ## [3.13.0](https://github.com/Ferdinand99/Sylo/compare/v3.12.0...v3.13.0) (2026-09-02)
 
 
 ### Features
 
-* insights — voice-channel usage, an hourly view, and on-demand r… ([ce6c850](https://github.com/Ferdinand99/Sylo/commit/ce6c8500e0c732fb1bde0a76520761541eba51c9))
-* insights — voice-channel usage, an hourly view, and on-demand refresh ([ebccedd](https://github.com/Ferdinand99/Sylo/commit/ebcceddfbca4565e327df1dd2aef833d275dc1db))
+* insights — voice-channel usage, an hourly view, and on-demand refresh ([9bb052e](https://github.com/Ferdinand99/Sylo/commit/9bb052e5b2505b7349bca8477133e4d90c76af5b))
 
 ## [3.12.0](https://github.com/Ferdinand99/Sylo/compare/v3.11.2...v3.12.0) (2026-09-02)
 
