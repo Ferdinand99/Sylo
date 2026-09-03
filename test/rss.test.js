@@ -1,7 +1,14 @@
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normaliseRssConfig, fillTemplate, feedSource, buildPayload } from '../src/modules/rss.js';
+import {
+  normaliseRssConfig,
+  fillTemplate,
+  feedSource,
+  buildPayload,
+  parseFeedRef,
+  sourceLabel,
+} from '../src/modules/rss.js';
 
 const CH = '123456789012345678';
 
@@ -19,6 +26,85 @@ test('normaliseRssConfig: validates url + channel, assigns/keeps ids, dedupes, c
   assert.equal(c.feeds[0].id, 'abcdef12'); // valid id kept
   assert.match(c.feeds[1].id, /^[0-9a-f]{8}$/); // fresh id assigned
   assert.equal(c.feeds[0].roleId, '999999999999999999');
+});
+
+test('normaliseRssConfig: back-compat — a feed with only `url` becomes type:url, ref:url', () => {
+  const c = normaliseRssConfig({ feeds: [{ url: 'https://a.com/feed', channelId: CH }] });
+  assert.equal(c.feeds[0].type, 'url');
+  assert.equal(c.feeds[0].ref, 'https://a.com/feed');
+  assert.equal(c.feeds[0].url, 'https://a.com/feed');
+});
+
+test('normaliseRssConfig: friendly types resolve ref -> url, bad refs drop', () => {
+  const c = normaliseRssConfig({
+    feeds: [
+      { type: 'reddit', ref: 'r/programming', channelId: CH },
+      { type: 'mastodon', ref: '@Gargron@mastodon.social', channelId: CH },
+      { type: 'bluesky', ref: 'no dots here', channelId: CH }, // unresolvable -> dropped
+    ],
+  });
+  assert.equal(c.feeds.length, 2);
+  assert.equal(c.feeds[0].url, 'https://www.reddit.com/r/programming/new/.rss');
+  assert.equal(c.feeds[1].url, 'https://mastodon.social/@Gargron.rss');
+});
+
+test('parseFeedRef: reddit forms', () => {
+  const want = 'https://www.reddit.com/r/webdev/new/.rss';
+  for (const ref of [
+    'r/webdev',
+    '/r/webdev',
+    'webdev',
+    'https://www.reddit.com/r/webdev/',
+    'https://old.reddit.com/r/webdev/comments/x',
+  ]) {
+    assert.equal(parseFeedRef('reddit', ref).url, want, ref);
+  }
+  assert.equal(parseFeedRef('reddit', 'u/spez').url, 'https://www.reddit.com/user/spez/new/.rss');
+  assert.equal(parseFeedRef('reddit', 'u/spez').label, 'u/spez');
+  assert.equal(parseFeedRef('reddit', '').url, '');
+});
+
+test('parseFeedRef: mastodon forms', () => {
+  const want = 'https://mastodon.social/@Gargron.rss';
+  for (const ref of [
+    '@Gargron@mastodon.social',
+    'Gargron@mastodon.social',
+    'https://mastodon.social/@Gargron',
+  ]) {
+    assert.equal(parseFeedRef('mastodon', ref).url, want, ref);
+  }
+  assert.equal(parseFeedRef('mastodon', '@Gargron@Mastodon.Social').label, '@Gargron@mastodon.social');
+  assert.equal(parseFeedRef('mastodon', 'not-an-account').url, '');
+});
+
+test('parseFeedRef: bluesky forms', () => {
+  const want = 'https://bsky.app/profile/jay.bsky.team/rss';
+  for (const ref of ['jay.bsky.team', '@jay.bsky.team', 'https://bsky.app/profile/jay.bsky.team']) {
+    assert.equal(parseFeedRef('bluesky', ref).url, want, ref);
+  }
+  assert.equal(
+    parseFeedRef('bluesky', 'did:plc:abcdefghijklmnop').url,
+    'https://bsky.app/profile/did:plc:abcdefghijklmnop/rss'
+  );
+  assert.equal(parseFeedRef('bluesky', 'nodot').url, ''); // handles need a dot
+});
+
+test('parseFeedRef: url passes valid through, rejects non-http', () => {
+  assert.equal(parseFeedRef('url', 'https://x.com/feed').url, 'https://x.com/feed');
+  assert.equal(parseFeedRef('url', 'ftp://x.com/feed').url, '');
+});
+
+test('sourceLabel: handle for friendly types, host for url', () => {
+  assert.equal(
+    sourceLabel({
+      type: 'reddit',
+      ref: 'r/programming',
+      url: 'https://www.reddit.com/r/programming/new/.rss',
+    }),
+    'r/programming'
+  );
+  assert.equal(sourceLabel({ type: 'bluesky', ref: '@jay.bsky.team', url: 'x' }), '@jay.bsky.team');
+  assert.equal(sourceLabel({ type: 'url', url: 'https://blog.example.com/feed' }), 'blog.example.com');
 });
 
 test('normaliseRssConfig: caps at 15 feeds', () => {
