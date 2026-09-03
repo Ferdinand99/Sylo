@@ -91,6 +91,8 @@ export async function resolveYtChannel(input) {
   } else {
     path = `/@${encodeURIComponent(raw.replace(/^@/, ''))}`;
   }
+  // Only a plain channel path — no protocol-relative "//host", no control chars.
+  if (!/^\/[A-Za-z0-9@%._~/?=&+-]{1,200}$/.test(path) || path.startsWith('//')) return null;
 
   try {
     const res = await fetch(`https://www.youtube.com${path}`, {
