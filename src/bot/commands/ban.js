@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags } from 'discord.js';
 import { checkActable, notifyTarget, resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
+import { addCase } from '../../db/modCases.js';
 import { parseDuration, formatDuration } from '../lib/duration.js';
 import { scheduleTempBan, clearTempBan } from '../../db/tempBans.js';
 import { sendPreBanAppealDm } from '../../modules/appeals.js';
@@ -137,12 +138,21 @@ export async function execute(interaction) {
     expiryField = 'Permanent';
   }
 
+  const { caseNumber } = addCase({
+    guildId: guild.id,
+    userId: user.id,
+    moderatorId: interaction.user.id,
+    action: 'ban',
+    reason,
+    detail: tempMs != null ? formatDuration(tempMs) : 'permanent',
+  });
   const embed = resultEmbed({
     action: 'Member banned',
     target: user,
     moderator: interaction.user,
     reason,
     fields: [
+      { name: 'Case', value: `#${caseNumber}` },
       { name: 'Duration', value: expiryField },
       {
         name: 'Message deletion',

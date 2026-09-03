@@ -10,6 +10,7 @@ import { EmbedBuilder } from 'discord.js';
 import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { dueTempBans, clearTempBan } from '../db/tempBans.js';
+import { addCase, deactivateLatest } from '../db/modCases.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget, MOD_COLOR, INFO_COLOR } from '../bot/lib/moderation.js';
 import { formatDuration } from '../bot/lib/duration.js';
@@ -81,11 +82,22 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
   }
   if (!done) return;
 
+  const caseAction = done.startsWith('timed out') ? 'timeout' : rule.action;
+  const { caseNumber } = addCase({
+    guildId: guild.id,
+    userId: targetUser.id,
+    moderatorId: 'auto',
+    action: caseAction,
+    reason,
+    detail: caseAction === 'timeout' ? `${rule.durationMinutes}m` : null,
+  });
+
   const embed = new EmbedBuilder()
     .setColor(MOD_COLOR)
     .setTitle('Automatic punishment')
     .setThumbnail(targetUser.displayAvatarURL())
     .addFields(
+      { name: 'Case', value: `#${caseNumber}` },
       { name: 'User', value: `${targetUser.tag} (\`${targetUser.id}\`)` },
       { name: 'Action', value: done },
       { name: 'Trigger', value: `Warning #${warnCount} · issued by ${moderatorLabel}` }
@@ -109,10 +121,19 @@ async function settleTempBan(row) {
   if (!existing) return; // already unbanned (manually or by Discord)
 
   await guild.bans.remove(row.user_id, 'Temporary ban expired');
+  const clearedCase = deactivateLatest(row.guild_id, row.user_id, 'ban');
+  const { caseNumber } = addCase({
+    guildId: row.guild_id,
+    userId: row.user_id,
+    moderatorId: 'auto',
+    action: 'unban',
+    reason: 'Temporary ban expired',
+  });
   const embed = new EmbedBuilder()
     .setColor(INFO_COLOR)
     .setTitle('Temporary ban expired')
     .addFields(
+      { name: 'Case', value: clearedCase ? `#${caseNumber} (clears #${clearedCase})` : `#${caseNumber}` },
       { name: 'User', value: `<@${row.user_id}> (\`${row.user_id}\`)` },
       { name: 'Original reason', value: row.reason },
       { name: 'Ban length', value: formatDuration(row.unban_at - row.created_at) || 'unknown' }

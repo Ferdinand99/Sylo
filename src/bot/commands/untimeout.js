@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags } from 'discord.js';
 import { resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
+import { addCase, deactivateLatest } from '../../db/modCases.js';
 
 export const data = new SlashCommandBuilder()
   .setName('untimeout')
@@ -40,11 +41,22 @@ export async function execute(interaction) {
   await interaction.deferReply();
   await target.timeout(null, `${interaction.user.tag}: ${reason}`);
 
+  const clearedCase = deactivateLatest(interaction.guild.id, target.id, 'timeout');
+  const { caseNumber } = addCase({
+    guildId: interaction.guild.id,
+    userId: target.id,
+    moderatorId: interaction.user.id,
+    action: 'untimeout',
+    reason,
+  });
   const embed = resultEmbed({
     action: 'Timeout removed',
     target: target.user,
     moderator: interaction.user,
     reason,
+    fields: [
+      { name: 'Case', value: clearedCase ? `#${caseNumber} (clears #${clearedCase})` : `#${caseNumber}` },
+    ],
   });
   await interaction.editReply({ embeds: [embed] });
   await postModLog(interaction.guild, embed);

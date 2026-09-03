@@ -2,8 +2,8 @@
 import { db } from './index.js';
 
 const q = {
-  warningsTotal: db.prepare('SELECT COUNT(*) AS n FROM warnings'),
-  warningsSince: db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE created_at > ?'),
+  warningsTotal: db.prepare("SELECT COUNT(*) AS n FROM infractions WHERE action = 'warn'"),
+  warningsSince: db.prepare("SELECT COUNT(*) AS n FROM infractions WHERE action = 'warn' AND created_at > ?"),
   openTickets: db.prepare("SELECT COUNT(*) AS n FROM tickets WHERE status = 'open'"),
   ticketsTotal: db.prepare('SELECT COUNT(*) AS n FROM tickets'),
   cachedLookups: db.prepare('SELECT COUNT(*) AS n FROM stats_cache'),

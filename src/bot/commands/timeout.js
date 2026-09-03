@@ -3,6 +3,7 @@ import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, Messa
 import { checkActable, notifyTarget, resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
 import { parseDuration, formatDuration } from '../lib/duration.js';
+import { addCase } from '../../db/modCases.js';
 
 const MAX_MS = 28 * 86_400_000; // Discord's hard limit.
 
@@ -65,12 +66,21 @@ export async function execute(interaction) {
   });
   await target.timeout(ms, `${interaction.user.tag}: ${reason}`);
 
+  const { caseNumber } = addCase({
+    guildId: interaction.guild.id,
+    userId: target.id,
+    moderatorId: interaction.user.id,
+    action: 'timeout',
+    reason,
+    detail: pretty,
+  });
   const embed = resultEmbed({
     action: 'Member timed out',
     target: target.user,
     moderator: interaction.user,
     reason,
     fields: [
+      { name: 'Case', value: `#${caseNumber}` },
       { name: 'Duration', value: pretty },
       { name: 'Expires', value: `<t:${Math.floor((Date.now() + ms) / 1000)}:R>` },
       { name: 'Notified', value: dmed ? 'Yes (DM sent)' : 'No (DMs closed)' },

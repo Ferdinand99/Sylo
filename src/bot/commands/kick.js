@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags } from 'discord.js';
 import { checkActable, notifyTarget, resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
+import { addCase } from '../../db/modCases.js';
 
 export const data = new SlashCommandBuilder()
   .setName('kick')
@@ -44,12 +45,22 @@ export async function execute(interaction) {
   });
   await target.kick(`${interaction.user.tag}: ${reason}`);
 
+  const { caseNumber } = addCase({
+    guildId: interaction.guild.id,
+    userId: target.id,
+    moderatorId: interaction.user.id,
+    action: 'kick',
+    reason,
+  });
   const embed = resultEmbed({
     action: 'Member kicked',
     target: target.user,
     moderator: interaction.user,
     reason,
-    fields: [{ name: 'Notified', value: dmed ? 'Yes (DM sent)' : 'No (DMs closed)' }],
+    fields: [
+      { name: 'Case', value: `#${caseNumber}` },
+      { name: 'Notified', value: dmed ? 'Yes (DM sent)' : 'No (DMs closed)' },
+    ],
   });
   await interaction.editReply({ embeds: [embed] });
   await postModLog(interaction.guild, embed);

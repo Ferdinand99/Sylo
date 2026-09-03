@@ -1,8 +1,9 @@
 # Moderation
 
-Warning records with automatic escalation, a moderation log, and channel
-lock tools. **On by default.** The moderation slash commands work even with the
-module off — the module adds the warning thresholds and the audit embed.
+A numbered **case log** covering every moderation action, with automatic warning
+escalation, a moderation log, and channel-lock tools. **On by default.** The
+moderation slash commands work even with the module off — the module adds the
+warning thresholds and the audit embed.
 
 **Dashboard:** `/guilds/<id>/moderation` (Moderator page — Automod, Auto-actions,
 Admin, Infractions, Audit logging, Commands tabs).
@@ -24,10 +25,22 @@ Admin, Infractions, Audit logging, Commands tabs).
 - **Mod-log channel** — set under *General*; every moderation action posts an
   embed there.
 
+## Case log
+
+Every action — `warn`, `note`, `timeout`, `untimeout`, `kick`, `ban`, `unban` —
+is recorded as an `infractions` row with a **per-server sequential case number**.
+`/unban` and `/untimeout` also mark the matching ban/timeout case inactive.
+`/case delete` is a **soft** delete: the row stays for audit but drops out of
+`/history` and the warning count. (Migration 35 folded the old flat `warnings`
+table in as `warn` cases.)
+
 ## Commands
 
 | Command | |
 |---|---|
+| `/history <user> [page]` | The member's case log, newest first (paginated, ephemeral). |
+| `/case view\|reason\|delete <#>` | Inspect a case, edit its reason, or soft-delete it. |
+| `/case note <user> <text>` | Attach a private note (a case with no DM / no punishment). |
 | `/warn add\|list\|remove\|clear` | Issue and manage warnings. Escalation runs after `add`. |
 | `/ban`, `/unban` | Ban a member or a user id; `/ban duration:2h` schedules an auto-unban. |
 | `/kick`, `/timeout`, `/untimeout` | Standard actions; `/timeout` takes `10m`, `2h`, `1d` (max 28d). |
@@ -37,5 +50,5 @@ Admin, Infractions, Audit logging, Commands tabs).
 | `/lockdown start\|end` | Lock or unlock every text channel at once. |
 | `/modlog set\|disable\|status` | Configure the mod-log channel from Discord. |
 
-Warnings and bans can also be added, removed, and cleared from the **Infractions**
-tab, along with a list of active channel locks and pending temporary bans.
+The **Infractions** tab lists every case with edit-reason and soft-delete/restore
+controls, alongside active bans, channel locks and pending temporary bans.

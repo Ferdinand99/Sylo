@@ -26,7 +26,7 @@ import { PRESET_KEYS } from '../bot/lib/automodSync.js';
 import { on } from './dispatch.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget } from '../bot/lib/moderation.js';
-import { addWarning } from '../db/warnings.js';
+import { addCase } from '../db/modCases.js';
 import { applyWarnThresholds } from './moderation.js';
 import { log } from '../lib/log.js';
 
@@ -319,20 +319,21 @@ async function act(message, member, rule, label, cfg) {
 
   try {
     if (rule.action === 'warn') {
-      const { count } = addWarning({
+      const { caseNumber, warnCount } = addCase({
         guildId: guild.id,
         userId: member.id,
         moderatorId: 'automod',
+        action: 'warn',
         reason,
       });
-      outcome.push(`warned (#${count})`);
+      outcome.push(`warned (case #${caseNumber}, ${warnCount} total)`);
       notified = await notifyTarget(member.user, {
         guildName: guild.name,
         action: 'warned',
         reason,
-        extra: `This is warning #${count}. Triggered automatically by Auto-moderation.`,
+        extra: `This is warning #${warnCount}. Triggered automatically by Auto-moderation.`,
       });
-      await applyWarnThresholds(guild, member.user, count, 'Automod');
+      await applyWarnThresholds(guild, member.user, warnCount, 'Automod');
     } else if (rule.action === 'timeout' && member.moderatable) {
       await member.timeout(cfg.timeoutMinutes * 60_000, reason);
       outcome.push(`timed out ${cfg.timeoutMinutes}m`);

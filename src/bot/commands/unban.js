@@ -3,6 +3,7 @@ import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, Messa
 import { resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
 import { clearTempBan } from '../../db/tempBans.js';
+import { addCase, deactivateLatest } from '../../db/modCases.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unban')
@@ -38,11 +39,22 @@ export async function execute(interaction) {
   await guild.bans.remove(userId, `${interaction.user.tag}: ${reason}`);
   clearTempBan(guild.id, userId); // in case this was a scheduled temporary ban
 
+  const clearedCase = deactivateLatest(guild.id, userId, 'ban');
+  const { caseNumber } = addCase({
+    guildId: guild.id,
+    userId,
+    moderatorId: interaction.user.id,
+    action: 'unban',
+    reason,
+  });
   const embed = resultEmbed({
     action: 'Ban removed',
     target: ban.user,
     moderator: interaction.user,
     reason,
+    fields: [
+      { name: 'Case', value: clearedCase ? `#${caseNumber} (clears #${clearedCase})` : `#${caseNumber}` },
+    ],
   });
   await interaction.editReply({ embeds: [embed] });
   await postModLog(guild, embed);

@@ -1,42 +1,59 @@
-<h2>Warnings <span class="muted">(<%= warningShown %><%= warningTotal > warningShown ? ` of ${warningTotal}` : '' %>)</span></h2>
+<% var ACTION_LABEL = { warn: 'Warn', note: 'Note', timeout: 'Timeout', untimeout: 'Timeout lifted', kick: 'Kick', ban: 'Ban', unban: 'Unban' }; %>
+<h2>Infractions <span class="muted">(<%= caseShown %><%= caseTotal > caseShown ? ` of ${caseTotal}` : '' %>)</span></h2>
 
 <form method="POST" action="/guilds/<%= guild.id %>/warnings" class="row-form">
   <input type="text" name="userId" placeholder="User ID or @mention" required />
   <input type="text" name="reason" placeholder="Reason" maxlength="400" required class="grow" />
   <button type="submit">Add warning</button>
 </form>
+<form method="POST" action="/guilds/<%= guild.id %>/cases/reason" class="row-form">
+  <input type="number" name="caseNumber" placeholder="Case #" min="1" required class="u-w-field-sm" />
+  <input type="text" name="reason" placeholder="New reason" maxlength="1000" required class="grow" />
+  <button type="submit">Edit reason</button>
+</form>
 <form method="POST" action="/guilds/<%= guild.id %>/warnings/clear" class="row-form"
       data-confirm="Delete every warning for that member?">
   <input type="text" name="userId" placeholder="User ID or @mention" required />
-  <button type="submit" class="danger">Clear all for user</button>
+  <button type="submit" class="danger">Clear warnings for user</button>
 </form>
-<p class="muted small">The user is DM'd on a new warning and every change is sent to the mod-log (if set).</p>
+<p class="muted small">
+  Every moderation action (warn, note, timeout, kick, ban, …) lands here as a numbered case.
+  In Discord: <code>/history @user</code>, <code>/case view #</code>, <code>/case reason # …</code>,
+  <code>/case delete #</code>, <code>/case note @user …</code>.
+</p>
 
-<% if (warnings.length === 0) { %>
-  <p class="muted">No warnings recorded in this server.</p>
+<% if (cases.length === 0) { %>
+  <p class="muted">No cases recorded in this server.</p>
 <% } else { %>
   <table>
-    <thead><tr><th>ID</th><th>User</th><th>Moderator</th><th>Reason</th><th>When</th><th></th></tr></thead>
+    <thead><tr><th>#</th><th>Type</th><th>User</th><th>Moderator</th><th>Reason</th><th>When</th><th></th></tr></thead>
     <tbody>
-      <% warnings.forEach(function (w) { %>
-        <tr>
-          <td>#<%= w.id %></td>
-          <td><%= w.user %> <span class="muted mono"><%= w.userId %></span></td>
-          <td><%= w.moderator %></td>
-          <td><%= w.reason %></td>
-          <td class="muted"><%= w.ago %></td>
+      <% cases.forEach(function (c) { %>
+        <tr<%= c.active ? '' : ' class="muted"' %>>
+          <td>#<%= c.caseNumber %></td>
+          <td><%= ACTION_LABEL[c.action] || c.action %><%= c.detail ? ' · ' + c.detail : '' %><%= c.active ? '' : ' · deleted' %></td>
+          <td><%= c.user %> <span class="muted mono"><%= c.userId %></span></td>
+          <td><%= c.moderator %></td>
+          <td><%= c.reason %></td>
+          <td class="muted"><%= c.ago %></td>
           <td class="num">
-            <form class="u-inline" method="POST"
-                  action="/guilds/<%= guild.id %>/warnings/<%= w.id %>/delete"
-                  data-confirm="Remove warning #<%= w.id %>?">
-              <button type="submit" class="link-btn">remove</button>
-            </form>
+            <% if (c.active) { %>
+              <form class="u-inline" method="POST"
+                    action="/guilds/<%= guild.id %>/cases/<%= c.caseNumber %>/delete"
+                    data-confirm="Delete case #<%= c.caseNumber %>? (kept for audit, hidden from /history)">
+                <button type="submit" class="link-btn">delete</button>
+              </form>
+            <% } else { %>
+              <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/cases/<%= c.caseNumber %>/restore">
+                <button type="submit" class="link-btn">restore</button>
+              </form>
+            <% } %>
           </td>
         </tr>
       <% }) %>
     </tbody>
   </table>
-  <p class="muted small">Same as <code>/warn remove</code> and <code>/warn clear</code> in Discord.</p>
+  <p class="muted small">Deleting is soft — the case stays for audit but drops out of <code>/history</code> and the warn count.</p>
 <% } %>
 
 <h2 class="u-mt-6">Bans <span class="muted">(<%= bansShown %><%= bansTotal > bansShown ? ` of ${bansTotal}, first ${banLimit}` : '' %>)</span></h2>

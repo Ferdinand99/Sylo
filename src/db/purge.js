@@ -9,7 +9,7 @@ export const GUILD_TABLES = [
   'guild_settings',
   'guild_modules',
   'command_overrides',
-  'warnings',
+  'infractions',
   'tickets',
   'composed_messages',
   'counting',
@@ -57,7 +57,7 @@ export function purgeGuild(guildId) {
 // --- per-user erasure (for /forget) -----------------------------------------
 
 const userStmts = {
-  warnings: db.prepare('DELETE FROM warnings WHERE guild_id = ? AND user_id = ?'),
+  warnings: db.prepare('DELETE FROM infractions WHERE guild_id = ? AND user_id = ?'),
   leveling: db.prepare('DELETE FROM leveling WHERE guild_id = ? AND user_id = ?'),
   levelingPeriods: db.prepare('DELETE FROM leveling_periods WHERE guild_id = ? AND user_id = ?'),
   counting: db.prepare('UPDATE counting SET last_user_id = NULL WHERE guild_id = ? AND last_user_id = ?'),
@@ -127,7 +127,12 @@ export function forgetUser(guildId, userId) {
 
 // [key, label, sql, args] — args says how to bind (guildId, userId) for this sql.
 const describeStmts = [
-  ['warnings', 'Warnings', 'SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND user_id = ?', 'gu'],
+  [
+    'warnings',
+    'Moderation cases',
+    'SELECT COUNT(*) AS n FROM infractions WHERE guild_id = ? AND user_id = ?',
+    'gu',
+  ],
   [
     'leveling',
     'Leveling record (XP / level / message count)',
