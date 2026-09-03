@@ -15,6 +15,7 @@ export const GUILD_TABLES = [
   'counting',
   'scheduled_messages',
   'leveling',
+  'leveling_periods',
   'config_audit',
   'afk',
   'posted_keys',
@@ -58,6 +59,7 @@ export function purgeGuild(guildId) {
 const userStmts = {
   warnings: db.prepare('DELETE FROM warnings WHERE guild_id = ? AND user_id = ?'),
   leveling: db.prepare('DELETE FROM leveling WHERE guild_id = ? AND user_id = ?'),
+  levelingPeriods: db.prepare('DELETE FROM leveling_periods WHERE guild_id = ? AND user_id = ?'),
   counting: db.prepare('UPDATE counting SET last_user_id = NULL WHERE guild_id = ? AND last_user_id = ?'),
   ticketMsgs: db.prepare(`
     DELETE FROM ticket_messages
@@ -83,7 +85,8 @@ const userStmts = {
 
 const forgetUserTxn = db.transaction((guildId, userId) => {
   const warnings = userStmts.warnings.run(guildId, userId).changes;
-  const leveling = userStmts.leveling.run(guildId, userId).changes;
+  const leveling =
+    userStmts.leveling.run(guildId, userId).changes + userStmts.levelingPeriods.run(guildId, userId).changes;
   userStmts.counting.run(guildId, userId);
   const ticketMsgs = userStmts.ticketMsgs.run(guildId, userId).changes;
   const tickets = userStmts.tickets.run(guildId, userId).changes;

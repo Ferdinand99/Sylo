@@ -42,6 +42,36 @@ test(
 );
 
 test(
+  'renderRankCard draws the chat/voice split when voiceXp > 0',
+  { skip: !rankCardAvailable && 'canvas not installed' },
+  async () => {
+    const plain = await renderRankCard({
+      name: 'x',
+      avatarUrl: '',
+      level: 3,
+      rank: 1,
+      xpInto: 10,
+      xpNeed: 100,
+      messages: 5,
+      totalXp: 310,
+    });
+    const withVoice = await renderRankCard({
+      name: 'x',
+      avatarUrl: '',
+      level: 3,
+      rank: 1,
+      xpInto: 10,
+      xpNeed: 100,
+      messages: 5,
+      totalXp: 310,
+      voiceXp: 120,
+    });
+    assert.deepEqual(withVoice.subarray(0, 4), PNG_MAGIC);
+    assert.ok(withVoice.length !== plain.length, 'the taller voice card differs from the plain one');
+  }
+);
+
+test(
   'renderLeaderboardCard produces a PNG for a full top-10',
   { skip: !rankCardAvailable && 'canvas not installed' },
   async () => {

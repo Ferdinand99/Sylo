@@ -42,6 +42,9 @@ export async function execute(interaction) {
       xpInto: p.into,
       xpNeed: p.need,
       messages: row.messages,
+      totalXp: row.xp,
+      voiceXp: row.voice_xp,
+      voiceMinutes: row.voice_minutes,
     });
     if (png) {
       return interaction.reply({ files: [new AttachmentBuilder(png, { name: 'rank.png' })] });
@@ -57,6 +60,15 @@ export async function execute(interaction) {
       { name: 'Level', value: String(p.level), inline: true },
       { name: 'Rank', value: `#${rank} of ${total}`, inline: true },
       { name: 'Messages', value: String(row.messages), inline: true },
+      ...(row.voice_xp > 0
+        ? [
+            {
+              name: 'XP source',
+              value: `${row.xp - row.voice_xp} chat · ${row.voice_xp} voice (${row.voice_minutes} min)`,
+              inline: true,
+            },
+          ]
+        : []),
       { name: `XP · ${p.into} / ${p.need}`, value: progressBar(p.pct) }
     );
 

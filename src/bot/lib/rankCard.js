@@ -41,6 +41,15 @@ if (canvasMod) {
 const nf = new Intl.NumberFormat('en-US');
 const fmt = (n) => nf.format(Math.max(0, Math.round(Number(n) || 0)));
 
+/** "45m" / "3h 12m" / "2d 4h" from a whole-minute count. */
+function humanMins(n) {
+  const m = Math.max(0, Math.round(Number(n) || 0));
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${m % 60}m`;
+  return `${Math.floor(h / 24)}d ${h % 24}h`;
+}
+
 function roundRect(ctx, x, y, w, h, r) {
   const rad = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
@@ -69,6 +78,9 @@ function ellipsize(ctx, text, maxWidth) {
  * @param {number} o.xpInto       XP earned within the current level.
  * @param {number} o.xpNeed       XP required to finish the current level.
  * @param {number} o.messages
+ * @param {number} [o.totalXp]      Lifetime XP total (for the chat/voice split).
+ * @param {number} [o.voiceXp]      XP earned in voice; a split line is drawn when > 0.
+ * @param {number} [o.voiceMinutes] Whole minutes spent in voice, shown next to voice XP.
  * @param {string} [o.accent]     Hex accent colour.
  * @returns {Promise<Buffer|null>}
  */
@@ -77,8 +89,11 @@ export async function renderRankCard(o) {
   const { createCanvas, loadImage } = canvasMod;
   const accent = /^#[0-9a-f]{6}$/i.test(o.accent || '') ? o.accent : '#5b7cfa';
 
+  const voiceXp = Math.max(0, Math.round(Number(o.voiceXp) || 0));
+  const hasVoice = voiceXp > 0;
+
   const W = 900;
-  const H = 260;
+  const H = hasVoice ? 296 : 260;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
@@ -153,6 +168,19 @@ export async function renderRankCard(o) {
   ctx.textAlign = 'right';
   ctx.fillStyle = '#8e9297';
   ctx.fillText(`${fmt(o.messages)} messages`, bx + bw, by + bh + 32);
+
+  if (hasVoice) {
+    const chatXp = Math.max(0, Math.round(Number(o.totalXp) || 0) - voiceXp);
+    const y2 = by + bh + 64;
+    ctx.font = `600 20px ${FONT}`;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#8e9297';
+    ctx.fillText(`Chat ${fmt(chatXp)} XP`, bx + 2, y2);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = accent;
+    const vmin = Math.round(Number(o.voiceMinutes) || 0);
+    ctx.fillText(`Voice ${fmt(voiceXp)} XP${vmin > 0 ? ` · ${humanMins(vmin)}` : ''}`, bx + bw, y2);
+  }
 
   return canvas.toBuffer('image/png');
 }

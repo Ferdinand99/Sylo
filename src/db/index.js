@@ -595,6 +595,33 @@ export const MIGRATIONS = [
       CREATE INDEX idx_guild_hourly_hour ON guild_hourly (hour);
     `);
   },
+
+  // 3.16: Leveling — voice XP folded into a member's total (kept broken out in
+  // `voice_xp` for display), and a parallel per-period rollup that powers the
+  // weekly / monthly leaderboards. `period` is `w:<ISO-year>-W<ww>` or
+  // `m:<year>-<mm>` (UTC). Old periods are pruned by the module.
+  (database) => {
+    database.exec(`
+      ALTER TABLE leveling ADD COLUMN voice_xp INTEGER NOT NULL DEFAULT 0;
+
+      CREATE TABLE leveling_periods (
+        guild_id TEXT NOT NULL,
+        user_id  TEXT NOT NULL,
+        period   TEXT NOT NULL,
+        xp       INTEGER NOT NULL DEFAULT 0,
+        messages INTEGER NOT NULL DEFAULT 0,
+        voice_xp INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (guild_id, user_id, period)
+      );
+      CREATE INDEX idx_leveling_periods ON leveling_periods (guild_id, period, xp DESC);
+    `);
+  },
+
+  // 3.16: leveling — also track total voice minutes per member, for display on
+  // the rank card next to voice XP.
+  (database) => {
+    database.exec(`ALTER TABLE leveling ADD COLUMN voice_minutes INTEGER NOT NULL DEFAULT 0;`);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

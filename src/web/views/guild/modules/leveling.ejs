@@ -10,8 +10,10 @@
 %>
 
 <p class="muted small">
-  Members earn 15–25 XP per message (scaled by the XP rate below), once per cooldown, on a MEE6-style curve.
-  The public web leaderboard toggle is on the <a href="/guilds/<%= guild.id %>/leaderboard">Leaderboard</a> page.
+  Members earn 15–25 XP per message (once per cooldown), plus optional voice XP, on a MEE6-style curve —
+  scaled by the XP rate and any role / channel multipliers below.
+  The public web leaderboard (with weekly / monthly views) toggle is on the
+  <a href="/guilds/<%= guild.id %>/leaderboard">Leaderboard</a> page.
 </p>
 
 <form method="POST" action="/guilds/<%= guild.id %>/m/leveling/config" hx-post="/guilds/<%= guild.id %>/m/leveling/config" hx-target="#module-config" hx-swap="outerHTML">
@@ -88,6 +90,51 @@
   </details>
 
   <details class="lvl-sec" open>
+    <summary>Voice XP<span class="lvl-chev">▾</span></summary>
+    <p class="muted small">Award XP for time spent in voice channels, on top of chat XP. Folded into the same level.</p>
+    <label class="checkline">
+      <input type="checkbox" name="voiceXpEnabled" <%= cfg.voiceXpEnabled ? 'checked' : '' %> />
+      Give XP for time in voice
+    </label>
+    <label class="small u-mt-2">XP per active voice-minute <span class="muted">— before the XP rate / multipliers</span></label>
+    <input class="u-w-field-sm" type="number" name="voiceXpPerMin" min="1" max="60" value="<%= cfg.voiceXpPerMin != null ? cfg.voiceXpPerMin : 10 %>" />
+    <label class="checkline u-mt-2">
+      <input type="checkbox" name="voiceAfkExcluded" <%= cfg.voiceAfkExcluded !== false ? 'checked' : '' %> />
+      Only when actually active — 2+ non-bot members in the channel, not deafened, not the AFK channel
+    </label>
+  </details>
+
+  <details class="lvl-sec" open>
+    <summary>XP multipliers<span class="lvl-chev">▾</span></summary>
+    <p class="muted small">
+      Boost (or slow) XP for a role or channel. The highest matching role factor is multiplied by
+      the channel factor; both default to 1×, and the result is capped at 10×. Applies to chat and voice XP.
+    </p>
+    <table class="thresholds">
+      <thead><tr><th>Role or channel</th><th>Factor</th><th></th></tr></thead>
+      <tbody id="mult-rows">
+        <% (Array.isArray(cfg.multipliers) ? cfg.multipliers : []).forEach(function (m) { %>
+          <tr>
+            <td>
+              <select name="mult_target">
+                <optgroup label="Roles">
+                  <% roles.forEach(function (role) { %><option value="role:<%= role.id %>" <%= m.type === 'role' && m.id === role.id ? 'selected' : '' %>>@<%= role.name %></option><% }) %>
+                </optgroup>
+                <optgroup label="Channels">
+                  <% channels.forEach(function (c) { %><option value="channel:<%= c.id %>" <%= m.type === 'channel' && m.id === c.id ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
+                </optgroup>
+              </select>
+            </td>
+            <td><input class="u-w-num" type="number" name="mult_factor" min="0.1" max="5" step="0.05" value="<%= m.factor %>" /></td>
+            <td><button type="button" class="link-btn" onclick="this.closest('tr').remove()">remove</button></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <div><button type="button" class="secondary" id="mult-add">＋ Add multiplier</button></div>
+  </details>
+
+  <details class="lvl-sec" open>
     <summary>No-XP roles<span class="lvl-chev">▾</span></summary>
     <label class="rr-mode"><input type="radio" name="noXpRolesMode" value="allow" <%= rMode === 'allow' ? 'checked' : '' %> /> <span><strong>Allow all roles to gain XP, except</strong> the ones below</span></label>
     <label class="rr-mode"><input type="radio" name="noXpRolesMode" value="deny" <%= rMode === 'deny' ? 'checked' : '' %> /> <span><strong>Deny all roles from gaining XP, except</strong> the ones below</span></label>
@@ -118,7 +165,7 @@
   <p class="muted">No XP earned yet.</p>
 <% } else { %>
   <table>
-    <thead><tr><th>#</th><th>Member</th><th class="num">Level</th><th class="num">XP</th><th class="num">Messages</th></tr></thead>
+    <thead><tr><th>#</th><th>Member</th><th class="num">Level</th><th class="num">XP</th><th class="num">Voice</th><th class="num">Messages</th></tr></thead>
     <tbody>
       <% board.rows.forEach(function (r) { %>
         <tr>
@@ -126,6 +173,7 @@
           <td class="mono">&lt;@<%= r.userId %>&gt;</td>
           <td class="num"><%= r.level %></td>
           <td class="num"><%= r.xp %></td>
+          <td class="num"><%= (r.voiceXp || 0) ? (r.voiceXp + ' XP · ' + (r.voiceMinutes || 0) + ' min') : '—' %></td>
           <td class="num"><%= r.messages %></td>
         </tr>
       <% }) %>
@@ -152,9 +200,29 @@
     <td><button type="button" class="link-btn" onclick="this.closest('tr').remove()">remove</button></td>
   </tr>
 </template>
+
+<template id="mult-template">
+  <tr>
+    <td>
+      <select name="mult_target">
+        <optgroup label="Roles">
+          <% roles.forEach(function (role) { %><option value="role:<%= role.id %>">@<%= role.name %></option><% }) %>
+        </optgroup>
+        <optgroup label="Channels">
+          <% channels.forEach(function (c) { %><option value="channel:<%= c.id %>">#<%= c.name %></option><% }) %>
+        </optgroup>
+      </select>
+    </td>
+    <td><input class="u-w-num" type="number" name="mult_factor" min="0.1" max="5" step="0.05" value="2" /></td>
+    <td><button type="button" class="link-btn" onclick="this.closest('tr').remove()">remove</button></td>
+  </tr>
+</template>
 <script>
   document.getElementById('rw-add')?.addEventListener('click', () => {
     document.getElementById('rw-rows').appendChild(document.getElementById('rw-template').content.cloneNode(true));
+  });
+  document.getElementById('mult-add')?.addEventListener('click', () => {
+    document.getElementById('mult-rows').appendChild(document.getElementById('mult-template').content.cloneNode(true));
   });
   (function () {
     var ta = document.getElementById('lvl-msg'), c = document.getElementById('lvl-msg-count');

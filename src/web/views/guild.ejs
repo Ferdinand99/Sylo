@@ -319,19 +319,26 @@
       </div>
 
       <hr class="sep" />
+      <% var lbPeriod = typeof leaderboardPeriod !== 'undefined' ? leaderboardPeriod : 'all'; %>
+      <div class="ins-range u-mb-2">
+        <% [['all','All time'],['week','This week'],['month','This month']].forEach(function (p) { %>
+          <a class="pill <%= lbPeriod === p[0] ? 'on' : '' %>" href="/guilds/<%= guild.id %>/leaderboard?period=<%= p[0] %>"><%= p[1] %></a>
+        <% }) %>
+      </div>
       <h3 class="u-mb-2">Top members <span class="muted small">(<%= board.total %> tracked)</span></h3>
       <% if (board.rows.length === 0) { %>
-        <p class="muted">No XP recorded yet.</p>
+        <p class="muted">No XP recorded <%= lbPeriod === 'all' ? 'yet' : 'in this period' %>.</p>
       <% } else { %>
         <table>
-          <thead><tr><th>#</th><th>Member</th><th class="num">Level</th><th class="num">XP</th><th class="num">Messages</th></tr></thead>
+          <thead><tr><th>#</th><th>Member</th><% if (lbPeriod === 'all') { %><th class="num">Level</th><% } %><th class="num">XP</th><% if (lbPeriod === 'all') { %><th class="num">Voice</th><% } %><th class="num">Messages</th></tr></thead>
           <tbody>
             <% board.rows.forEach(function (r) { %>
               <tr>
                 <td><%= r.rank %></td>
                 <td><%= r.name %></td>
-                <td class="num"><%= r.level %></td>
+                <% if (lbPeriod === 'all') { %><td class="num"><%= r.level %></td><% } %>
                 <td class="num"><%= r.xp.toLocaleString('en') %></td>
+                <% if (lbPeriod === 'all') { %><td class="num"><%= (r.voiceXp || 0) ? (r.voiceXp.toLocaleString('en') + ' XP · ' + (r.voiceMinutes || 0) + ' min') : '—' %></td><% } %>
                 <td class="num"><%= r.messages.toLocaleString('en') %></td>
               </tr>
             <% }) %>

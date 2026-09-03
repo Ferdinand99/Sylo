@@ -17,8 +17,17 @@
       </div>
     </header>
 
+    <% var lbPeriod = typeof period !== 'undefined' ? period : 'all'; %>
+    <% var pq = function (p) { return p === 'all' ? '?' : '?period=' + p; }; %>
+    <% var hm = function (m) { m = Math.max(0, Math.round(m || 0)); return m < 60 ? m + 'm' : (Math.floor(m / 60) + 'h ' + (m % 60) + 'm'); }; %>
+    <nav class="lb-periods">
+      <% [['all','All time'],['week','This week'],['month','This month']].forEach(function (p) { %>
+        <a class="<%= lbPeriod === p[0] ? 'on' : '' %>" href="<%= pq(p[0]) %>"><%= p[1] %></a>
+      <% }) %>
+    </nav>
+
     <% if (members.length === 0) { %>
-      <div class="card"><p class="muted">No one has earned any XP yet.</p></div>
+      <div class="card"><p class="muted"><%= lbPeriod === 'all' ? 'No one has earned any XP yet.' : 'No XP earned in this period yet.' %></p></div>
     <% } else { %>
       <ol class="lb-list">
         <% members.forEach(function (m) { %>
@@ -27,21 +36,25 @@
             <% if (m.avatar) { %><img class="lb-avatar" src="<%= m.avatar %>" alt="" /><% } else { %><span class="lb-avatar lb-avatar-blank"></span><% } %>
             <div class="lb-main">
               <div class="lb-name<%= m.left ? ' muted' : '' %>"><%= m.name %></div>
-              <div class="lb-bar"><span style="width:<%= m.pct %>%"></span></div>
+              <% if (m.level !== null) { %><div class="lb-bar"><span style="width:<%= m.pct %>%"></span></div><% } %>
             </div>
             <div class="lb-stats">
-              <span class="lb-level">Level <%= m.level %></span>
+              <% if (m.level !== null) { %><span class="lb-level">Level <%= m.level %></span><% } %>
               <span class="muted small"><%= m.xp.toLocaleString('en') %> XP · <%= m.messages.toLocaleString('en') %> msgs</span>
+              <% if (m.voiceXp > 0) { %>
+                <span class="muted small"><%= m.voiceXp.toLocaleString('en') %> voice XP<% if (m.voiceMinutes > 0) { %> · <%= hm(m.voiceMinutes) %><% } %></span>
+              <% } %>
             </div>
           </li>
         <% }) %>
       </ol>
 
       <% if (pages > 1) { %>
+        <% var pageHref = function (n) { return pq(lbPeriod) + (lbPeriod === 'all' ? 'page=' : '&page=') + n; }; %>
         <nav class="lb-pager">
-          <% if (page > 1) { %><a href="?page=<%= page - 1 %>">&larr; Prev</a><% } else { %><span class="lb-pager-off">&larr; Prev</span><% } %>
+          <% if (page > 1) { %><a href="<%= pageHref(page - 1) %>">&larr; Prev</a><% } else { %><span class="lb-pager-off">&larr; Prev</span><% } %>
           <span class="muted">Page <%= page %> of <%= pages %></span>
-          <% if (page < pages) { %><a href="?page=<%= page + 1 %>">Next &rarr;</a><% } else { %><span class="lb-pager-off">Next &rarr;</span><% } %>
+          <% if (page < pages) { %><a href="<%= pageHref(page + 1) %>">Next &rarr;</a><% } else { %><span class="lb-pager-off">Next &rarr;</span><% } %>
         </nav>
       <% } %>
     <% } %>

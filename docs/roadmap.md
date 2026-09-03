@@ -171,9 +171,9 @@ migration when it ships.
 
 ## Next — the 3.14 line
 
-In progress. Themes 1–2 have shipped; Themes 3–4 are candidates in the suggested
-order below. Same conventions as above (branch per workstream, `npm test` +
-`npm run lint` + compose build green, Conventional-Commit summary).
+In progress. Themes 1–3 have shipped; Theme 4 is a candidate. Same conventions as
+above (branch per workstream, `npm test` + `npm run lint` + compose build green,
+Conventional-Commit summary).
 
 ### Theme 1 — Social feeds → done (`feat/social-feeds`)
 
@@ -215,17 +215,31 @@ Second game after Battlefield. One `feat` minor.
   `platform` covers both console platforms and RS account types. This changes the
   command signature (re-registered on boot).
 
-### Theme 3 — Close MEE6 gaps in existing modules
+### Theme 3 — Leveling upgrade → done (`feat/leveling-voice-multipliers-periods`)
 
-- **Leveling**: no voice XP, no XP multipliers (per role / channel), no
-  weekly/monthly leaderboard. MEE6 has all three; the insights module already
-  tracks voice minutes, so the plumbing exists.
-- **Moderation**: `/history @user` with a case log — numbered cases across
-  warn / timeout / kick / ban, editable reason, delete case. Today there are
-  warnings + a mod-log channel but no single lookup.
-- **Welcome images**: a generated banner (avatar + text + background) via
-  `@napi-rs/canvas`, already a dependency for rank cards. MEE6's signature
-  feature.
+The biggest single MEE6-parity step in the module. One `feat` minor.
+
+- **Voice XP** — optional; a base XP-per-active-voice-minute, folded into the
+  same `xp`/level as chat. A new `voiceStateUpdate` handler opens per-member
+  sessions; a 3-minute interval settles open sessions so a long call levels a
+  member up mid-session, not only on disconnect. "Active" gate (default on):
+  2+ non-bot members in the channel, not deafened, not the AFK channel.
+- **XP multipliers** — up to 25 `{ role | channel, factor }` entries.
+  `resolveMultiplier()` = highest matching role factor × the channel factor
+  (each default 1×), capped at 10×; applies to chat and voice XP on top of the
+  global XP rate.
+- **Weekly / monthly leaderboards** — migration 33 adds `leveling_periods`
+  (`w:<ISO-year>-W<ww>` / `m:<year>-<mm>`, UTC). Every `addXp()` writes the
+  all-time row **and** upserts the current week + month rows; the module prunes
+  to ~10 weeks / ~6 months. `?period=week|month` on both the public leaderboard
+  and the dashboard Leaderboard page; the all-time totals are never reset.
+- `leveling.voice_xp` + `voice_minutes` columns keep voice contribution broken
+  out; the `/rank` card, the dashboard leaderboard previews and the public
+  `/lb` page all surface `{voice XP} · {time}`. `/forget` and the guild-leave
+  purge cover `leveling_periods`.
+
+Deferred Theme 3 ideas (not built): a `/history @user` moderation case log, and
+generated welcome banner images.
 
 ### Theme 4 — Ops / self-hosting niceties (a small `chore` / `feat` bundle)
 
@@ -236,8 +250,8 @@ Second game after Battlefield. One `feat` minor.
 ### Suggested order for the line
 
 1. ~~**Social feeds** (Reddit + Bluesky + Mastodon)~~ — shipped (3.14.0).
-2. ~~**OSRS / RS3 adapter**~~ — shipped.
-3. **Leveling upgrade** (voice XP + multipliers + period leaderboard) — the
-   biggest single step toward MEE6. ← next
+2. ~~**OSRS / RS3 adapter**~~ — shipped (3.15.0).
+3. ~~**Leveling upgrade** (voice XP + multipliers + period leaderboard)~~ — shipped.
+4. **Ops bundle** (Grafana JSON, off-box backup, test-teardown fix) — Theme 4. ← next
 
 Welcome images and moderation history are solid #4/#5 for a longer line.
