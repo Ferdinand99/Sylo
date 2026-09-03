@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/Ferdinand99/Sylo/issues</Support>
   <Project>https://github.com/Ferdinand99/Sylo</Project>
-  <Overview>Sylo is a multi-function Discord bot with a web dashboard. It has a per-guild module system (30 modules) - moderation with warning thresholds, server logging, tickets/modmail answered from the dashboard, reaction roles &amp; autoroles, verification (Verify button or Cloudflare Turnstile captcha), welcome/leave messages, a Welcome Channel builder, birthday announcements, sticky messages, auto-moderation (invite/link/flood/mention/caps/word filters, optionally pushed to Discord's native AutoMod), a counting mini-game, action-based custom slash commands, an autoresponder, reminders (one-off or recurring channel posts), leveling with a public leaderboard, AFK, server statistics (live-count voice channels), server insights (activity charts - messages, joins/leaves and voice-channel usage over time), a free games notifier (Epic Games Store, plus more stores with an IsThereAnyDeal key), ban appeals (banned members get a DM'd link to an appeal form; staff accept/deny from the dashboard), MEE6-style temporary voice channels ("join to create" hubs plus /voice-* control commands), a starboard (re-posts messages that get enough of a reaction into a highlights channel), an invite tracker (credits who invited each member and ranks inviters), reaction polls (/poll with a timer or vote cap), prize giveaways (Enter button, auto-drawn winners), optional Battlefield-series player stats (/stats, gated by the Game stats module), Twitch / YouTube / Kick go-live &amp; new-video alerts, RSS/Atom feed alerts, and a message/embed creator - plus per-server command management, a Prometheus /metrics endpoint, and an editable Discord presence/activity. State is stored in a single SQLite file under /app/data and survives updates. The database is snapshotted automatically (before every schema migration and on a schedule) into /app/data/backups; from the dashboard's Health page you can also create, download, import and restore a snapshot (restore swaps the file and lets the container restart on the restored data).
+  <Overview>Sylo is a multi-function Discord bot with a web dashboard. It has a per-guild module system (30 modules) - moderation with warning thresholds and a numbered case log (/history, /case), server logging, tickets/modmail answered from the dashboard, reaction roles &amp; autoroles, verification (Verify button or Cloudflare Turnstile captcha), welcome/leave messages, a Welcome Channel builder, birthday announcements, sticky messages, auto-moderation (invite/link/flood/mention/caps/word filters, optionally pushed to Discord's native AutoMod), a counting mini-game, action-based custom slash commands, an autoresponder, reminders (one-off or recurring channel posts), leveling (text + optional voice XP, per-role/channel multipliers, all-time/weekly/monthly public leaderboard), AFK, server statistics (live-count voice channels), server insights (activity charts - messages, joins/leaves and voice-channel usage over time), a free games notifier (Epic Games Store, plus more stores with an IsThereAnyDeal key), ban appeals (banned members get a DM'd link to an appeal form; staff accept/deny from the dashboard), MEE6-style temporary voice channels ("join to create" hubs plus /voice-* control commands), a starboard (re-posts messages that get enough of a reaction into a highlights channel), an invite tracker (credits who invited each member and ranks inviters), reaction polls (/poll with a timer or vote cap), prize giveaways (Enter button, auto-drawn winners), optional Battlefield-series and RuneScape (OSRS/RS3) player stats (/stats, gated by the Game stats module), Twitch / YouTube / Kick go-live &amp; new-video alerts (with an optional "delete the message when the stream ends" mode), RSS/Atom feed alerts (plus Reddit / Mastodon / Bluesky handles), and a message/embed creator - plus per-server command management, a Prometheus /metrics endpoint (a ready-made Grafana dashboard ships in the repo), and an editable Discord presence/activity. State is stored in a single SQLite file under /app/data and survives updates. The database is snapshotted automatically (before every schema migration and on a schedule) into /app/data/backups - optionally shipped off-site as well (WebDAV and/or a Discord webhook; see BACKUP_WEBDAV_URL / BACKUP_WEBHOOK_URL); from the dashboard's Health page you can also create, download, import and restore a snapshot (restore swaps the file and lets the container restart on the restored data).
 
 Setup: create a Discord application at https://discord.com/developers/applications, then set DISCORD_TOKEN (Bot tab) and DISCORD_CLIENT_ID (General Information). Invite the bot with the scopes "bot" and "applications.commands".
 
@@ -236,6 +236,42 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Display="advanced"
     Required="false"
     Mask="false"/>
+  <Config
+    Name="BACKUP_WEBDAV_URL"
+    Target="BACKUP_WEBDAV_URL"
+    Default=""
+    Description="Optional. Off-site backups: a WebDAV folder URL (e.g. a Nextcloud path like https://cloud.example.com/remote.php/dav/files/me/sylo-backups). After every local snapshot a gzipped copy is PUT to &lt;url&gt;/&lt;name&gt;.db.gz. Best-effort and logged; never blocks the local backup."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+  <Config
+    Name="BACKUP_WEBDAV_USER"
+    Target="BACKUP_WEBDAV_USER"
+    Default=""
+    Description="Optional. Username for BACKUP_WEBDAV_URL (HTTP basic auth). Use an app password, not your account password."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+  <Config
+    Name="BACKUP_WEBDAV_PASS"
+    Target="BACKUP_WEBDAV_PASS"
+    Default=""
+    Description="Optional. Password / app password for BACKUP_WEBDAV_URL."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"/>
+  <Config
+    Name="BACKUP_WEBHOOK_URL"
+    Target="BACKUP_WEBHOOK_URL"
+    Default=""
+    Description="Optional. Off-site backups: a Discord webhook URL. Each gzipped snapshot is uploaded as an attachment (skipped when it is over ~8 MiB — use WebDAV for a larger database)."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"/>
   <Config
     Name="WEB_PORT"
     Target="WEB_PORT"

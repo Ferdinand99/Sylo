@@ -16,10 +16,10 @@
 
 </div>
 
-Twenty-seven per-guild **modules**, Discord **OAuth2 login**, a public leveling
+Thirty per-guild **modules**, Discord **OAuth2 login**, a public leveling
 **leaderboard**, and — via the optional Game stats module — **Battlefield-series**
-player lookups through the public [gametools.network](https://gametools.network) API.
-Everything runs in **one Node process, one container, no build step**.
+and **RuneScape** (OSRS / RS3) player lookups. Everything runs in **one Node
+process, one container, no build step**.
 
 <details>
 <summary>The 30 modules</summary>
@@ -66,8 +66,9 @@ settings panel per module — saves swap in place with a toast.
   `node:22-alpine`.
 - **`DISCORD_GUILD_ID` → `DISCORD_DEV_GUILD_IDS`.** The old name still works but
   logs a deprecation warning on boot — rename it in your `.env`.
-- **Battlefield stats is now the "Game stats" module**, off by default. Enable it
-  per server on the dashboard before `/stats battlefield` will respond.
+- **Game stats module** (off by default) — enable it per server before `/stats`
+  responds. `/stats` is one flat command: pick the game (7 Battlefield titles,
+  Old School RuneScape, RuneScape 3) from the `game` dropdown.
 - **The "Reminders" module's id changed** from `scheduled-messages` to
   `reminders`. A migration updates existing servers automatically; only matters
   if you script against the module id or a config-export JSON.
@@ -116,7 +117,10 @@ settings panel per module — saves swap in place with a toast.
   validation), and **restore** one — restore snapshots the current database
   first, then swaps the file and restarts the bot on the restored data. A WAL
   checkpoint runs alongside each backup and on shutdown so the `-wal` sidecar
-  stays small.
+  stays small. Optionally each snapshot is also shipped **off-site** (gzipped) to
+  a WebDAV target (`BACKUP_WEBDAV_URL` + `_USER`/`_PASS`, e.g. a Nextcloud
+  folder) and/or a Discord webhook (`BACKUP_WEBHOOK_URL`) — best-effort, and the
+  Health page shows which targets are active.
 - **YouTube alerts** — announce a channel's new uploads and when it goes live.
   Add channels by URL or `@handle` (resolved on save); new videos come from
   YouTube's public feed and live status from a light page check — no API key
@@ -129,13 +133,14 @@ settings panel per module — saves swap in place with a toast.
   streamers (channel + optional ping role + `{name}`/`{title}`/`{game}`/`{url}`/`{viewers}`
   message). Sylo polls the official Kick API ~once a minute; needs a free
   `KICK_CLIENT_ID` / `KICK_CLIENT_SECRET` (kick.com/settings/developer).
-- Twitch and Kick alerts each have a per-streamer **Embed / Plain text** choice —
-  plain text posts a normal message (link always appended) for channels bridged
-  into another app that ignores embeds.
-- **RSS alerts** — follow any RSS 2.0 or Atom feed (blogs, news, Reddit `.rss`,
-  Mastodon, GitHub releases `.atom`) and post new items to a channel with a
-  `{title}`/`{link}`/`{author}`/`{feed}` template. Up to 15 feeds per server,
-  polled every ~5 minutes; the first check only seeds, so no backlog dump.
+- Twitch / YouTube / Kick alerts each have a per-streamer **Embed / Plain text**
+  choice, and a **when the stream ends** action — delete the "went live" message
+  (default), mark it as ended, or leave it.
+- **RSS alerts** — follow any RSS 2.0 or Atom feed, or give a **Reddit**,
+  **Mastodon** or **Bluesky** handle and Sylo resolves it to that platform's
+  feed. New items post to a channel with a `{title}`/`{link}`/`{author}`/`{feed}`
+  template. Up to 15 feeds per server, polled every ~5 minutes; the first check
+  only seeds, so no backlog dump.
 - **Polls** — members run `/poll question:… choices:A | B | C` (optional
   `duration`, `multiple`, `max_votes`); people vote by reacting with the option
   letter. Auto-closes on its timer or vote cap, posts a results embed with a
@@ -188,8 +193,10 @@ settings panel per module — saves swap in place with a toast.
     uptime and runtime info
   - `/rank` · `/leaderboard` — leveling progress (when the module is enabled)
   - `/forget` — delete the data Sylo stores about you in the current server
-  - `/stats battlefield <title> <username> <platform>` — player stats as an embed
-    (K/D, win rate, time played, KPM/SPM, best class, …)
+  - `/stats game:<Battlefield … | Old School RuneScape | RuneScape 3> username:…
+    [platform:…]` — player stats as an embed (Battlefield: K/D, win rate, best
+    class, …; RuneScape: combat / total level, top skills, boss KCs)
+  - `/history @user` · `/case view|reason|delete|note` — the moderation case log
   - Friendly, non-crashing error handling (unknown player, API down, rate-limited)
 - **Moderation** — `/kick`, `/ban`, `/unban`, `/timeout`, `/untimeout`, `/purge`,
   `/slowmode`, `/warn`, `/modlog`, plus a numbered **case log**: every action is a
@@ -199,7 +206,7 @@ settings panel per module — saves swap in place with a toast.
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 26 feature groups, each toggled and configured from the
+- **Per-guild modules** — 30 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -266,8 +273,10 @@ settings panel per module — saves swap in place with a toast.
     exact / starts-with / whole-word), optionally deleting the trigger
   - **Scheduled messages** — recurring posts to a channel, every minute to every
     4 weeks, with pause/resume
-  - **Leveling** — 15–25 XP per message on a MEE6-style curve, level-up
-    announcements, per-level role rewards, `/rank` and `/leaderboard`
+  - **Leveling** — 15–25 XP per message on a MEE6-style curve, optional **voice
+    XP**, per-role/channel **XP multipliers**, level-up announcements, per-level
+    role rewards, `/rank`, and a public leaderboard with all-time / weekly /
+    monthly views
   - **AFK** — `/afk [reason]`; Sylo replies to anyone who mentions an away
     member and clears the status when they next speak
   - **Server statistics** — keep chosen voice channels named with a live
@@ -360,10 +369,10 @@ src/
     leveling afk serverStats insights freeGames appeals tempVoice polls giveaways
     starboard inviteTracker twitchAlerts youtubeAlerts kickAlerts rss
     messageCreator
-  adapters/games/       gameAdapter, registry, battlefield
+  adapters/games/       gameAdapter, registry, battlefield, runescape
   db/
     index.js            SQLite connection + migrations
-    cache guildSettings modules commandOverrides warnings tickets audit
+    cache guildSettings modules commandOverrides modCases tickets audit
     composedMessages counting scheduledMessages leveling appeals tempVoice
     polls giveaways starboard inviteTracker twitchAlerts youtubeAlerts
     leaderboardVanity backup exportConfig purge
@@ -487,8 +496,9 @@ pin to `:X.Y.Z` on either registry to freeze a version.
    `getPlayerStats(username, platform, { title })` — throw the typed errors from
    `gameAdapter.js` for failure cases.
 2. Register it in `src/adapters/games/index.js` (one `import` + `register(...)`).
-3. Add a subcommand to `src/bot/commands/stats.js`. The shared
-   `runStatsLookup()` helper and the cache layer need no changes.
+3. Add a `game` choice (`<adapter>:<title>`) to `GAME_CHOICES` in
+   `src/bot/commands/stats.js`, and an embed builder if the stats shape differs.
+   The shared `runStatsLookup()` helper and the cache layer need no changes.
 
 ## Tests
 
