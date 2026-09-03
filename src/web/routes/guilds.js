@@ -109,7 +109,15 @@ import { sendComposed } from '../../modules/messageCreator.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '../../modules/leveling.js';
 import { levelFromXp } from '../../modules/lib/levels.js';
-import { topMembers, memberCount, setXp, resetGuildLeveling } from '../../db/leveling.js';
+import {
+  topMembers,
+  memberCount,
+  topMembersForPeriod,
+  memberCountForPeriod,
+  periodKeys,
+  setXp,
+  resetGuildLeveling,
+} from '../../db/leveling.js';
 import { recordAudit, listAudit } from '../../db/audit.js';
 import { dailySeries, hourlySeries, topChannels, topVoiceChannels } from '../../db/insights.js';
 import { flushGuild as flushGuildInsights } from '../../modules/insights.js';
@@ -560,7 +568,11 @@ router.get(
     const guild = req.guild;
     const { enabled, config } = getGuildModule(guild.id, 'leveling');
     const cfg = normaliseLevelingConfig(config);
-    const rows = topMembers(guild.id, 10);
+    const period = ['week', 'month'].includes(req.query.period) ? req.query.period : 'all';
+    const keys = periodKeys();
+    const rows =
+      period === 'all' ? topMembers(guild.id, 10) : topMembersForPeriod(guild.id, keys[period], 10);
+    const total = period === 'all' ? memberCount(guild.id) : memberCountForPeriod(guild.id, keys[period]);
     const tags = await resolveUserTags(
       runtime.client,
       rows.map((r) => r.user_id)
@@ -569,15 +581,18 @@ router.get(
       ...baseContext(guild, 'leaderboard'),
       levelingEnabled: enabled,
       publicLeaderboard: cfg.publicLeaderboard,
+      leaderboardPeriod: period,
       vanitySlug: getVanitySlug(guild.id),
       vanityBase: (appConfig.dashboardUrl ? appConfig.dashboardUrl.replace(/\/+$/, '') : '') + '/lb/',
       board: {
-        total: memberCount(guild.id),
+        total,
         rows: rows.map((r, i) => ({
           rank: i + 1,
           name: tags.get(r.user_id) ?? r.user_id,
-          level: r.level,
+          level: period === 'all' ? r.level : null,
           xp: r.xp,
+          voiceXp: r.voice_xp ?? 0,
+          voiceMinutes: r.voice_minutes ?? 0,
           messages: r.messages,
         })),
       },
@@ -805,6 +820,8 @@ function moduleViewLocals(mod, req, configOverride) {
               userId: r.user_id,
               level: r.level,
               xp: r.xp,
+              voiceXp: r.voice_xp,
+              voiceMinutes: r.voice_minutes,
               messages: r.messages,
             })),
           }
@@ -1017,6 +1034,8 @@ router.post(
     } else if (mod.id === 'leveling') {
       const levels = [].concat(req.body.rw_level ?? []);
       const roleIds = [].concat(req.body.rw_role ?? []);
+      const multTargets = [].concat(req.body.mult_target ?? []);
+      const multFactors = [].concat(req.body.mult_factor ?? []);
       const prevLvl = getGuildModule(req.guild.id, 'leveling').config;
       config = normaliseLevelingConfig({
         cooldownSeconds: req.body.cooldownSeconds,
@@ -1030,6 +1049,13 @@ router.post(
         noXpRolesMode: req.body.noXpRolesMode,
         stackRewards: req.body.stackRewards === 'on',
         removeRewardsOnXpLoss: req.body.removeRewardsOnXpLoss === 'on',
+        voiceXpEnabled: req.body.voiceXpEnabled === 'on',
+        voiceXpPerMin: req.body.voiceXpPerMin,
+        voiceAfkExcluded: req.body.voiceAfkExcluded === 'on',
+        multipliers: multTargets.map((target, i) => {
+          const [type, id] = String(target).split(':');
+          return { type, id, factor: multFactors[i] ?? '' };
+        }),
         // The public-leaderboard toggle lives on the Leaderboard page — keep it.
         publicLeaderboard: prevLvl.publicLeaderboard !== false,
         rewards: levels.map((level, i) => ({ level, roleId: roleIds[i] ?? '' })),

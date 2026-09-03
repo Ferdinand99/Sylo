@@ -5,7 +5,13 @@
 import { Router } from 'express';
 import { runtime } from '../../runtime.js';
 import { getGuildModule } from '../../db/modules.js';
-import { topMembers, memberCount } from '../../db/leveling.js';
+import {
+  topMembers,
+  memberCount,
+  topMembersForPeriod,
+  memberCountForPeriod,
+  periodKeys,
+} from '../../db/leveling.js';
 import { levelProgress } from '../../modules/lib/levels.js';
 import { guildForVanity } from '../../db/leaderboardVanity.js';
 
@@ -35,11 +41,16 @@ async function renderLeaderboard(req, res, next, guildId, canonical) {
       return notFound(res, 'This server has turned its public leaderboard off.');
     }
 
-    const total = memberCount(guildId);
+    const period = ['week', 'month'].includes(req.query.period) ? req.query.period : 'all';
+    const periodKey = period === 'all' ? null : periodKeys()[period];
+
+    const total = periodKey ? memberCountForPeriod(guildId, periodKey) : memberCount(guildId);
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
     const offset = (page - 1) * PAGE_SIZE;
-    const rows = topMembers(guildId, PAGE_SIZE, offset);
+    const rows = periodKey
+      ? topMembersForPeriod(guildId, periodKey, PAGE_SIZE, offset)
+      : topMembers(guildId, PAGE_SIZE, offset);
 
     // One bulk gateway fetch for display names + avatars; fall back per-miss.
     let fetched = new Map();
@@ -66,18 +77,20 @@ async function renderLeaderboard(req, res, next, guildId, canonical) {
             avatar = user.displayAvatarURL({ size: 64 });
           }
         }
-        const p = levelProgress(r.xp);
+        const p = periodKey ? null : levelProgress(r.xp);
         return {
           rank: offset + i + 1,
           name: name || 'Unknown member',
           avatar,
           left: !member && !name,
-          level: r.level,
+          level: periodKey ? null : r.level,
           xp: r.xp,
+          voiceXp: r.voice_xp ?? 0,
+          voiceMinutes: r.voice_minutes ?? 0, // only on all-time rows
           messages: r.messages,
-          into: p.into,
-          need: p.need,
-          pct: Math.round(p.pct * 100),
+          into: p ? p.into : 0,
+          need: p ? p.need : 0,
+          pct: p ? Math.round(p.pct * 100) : 0,
         };
       })
     );
@@ -88,6 +101,7 @@ async function renderLeaderboard(req, res, next, guildId, canonical) {
       page,
       pages,
       total,
+      period,
       canonical: canonical || null,
     });
   } catch (err) {
