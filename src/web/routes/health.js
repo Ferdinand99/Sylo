@@ -22,6 +22,7 @@ import {
   resolveBackup,
   inspectDbFile,
 } from '../../db/backup.js';
+import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
 import { MODULES } from '../../modules/registry.js';
 import { timeAgo, formatUptime, formatBytes } from '../lib/format.js';
 
@@ -116,6 +117,7 @@ router.get('/', (req, res) => {
       wal: formatBytes(dbInfo.wal),
       intervalHours: config.backupIntervalHours,
       retention: config.backupRetention,
+      offsite: offsiteBackupStatus(),
     },
     backups: listBackups()
       .slice(0, 25)

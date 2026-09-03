@@ -140,6 +140,18 @@ require **Manage Server** (or Administrator / owner) in that server, or one of t
 can reach them — keep them on your LAN, or restrict them at the reverse proxy if
 the dashboard is public.
 
+Point Prometheus at `<host>:<WEB_PORT>/metrics` and import
+`docs/grafana-dashboard.json` for a ready-made overview (gateway health, guild
+count, HTTP and command rates, DB size, module adoption).
+
+### Off-site backups
+
+Every local snapshot can also be shipped, gzipped, to a remote target — set any
+of `BACKUP_WEBDAV_URL` (+ `BACKUP_WEBDAV_USER` / `BACKUP_WEBDAV_PASS`, e.g. a
+Nextcloud folder) or `BACKUP_WEBHOOK_URL` (a Discord webhook; attachments over
+~8 MiB are skipped). Uploads are best-effort and logged; they never hold up the
+local backup. The Health page shows which targets are active.
+
 ---
 
 ## Behind a reverse proxy

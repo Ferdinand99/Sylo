@@ -2,9 +2,17 @@
 // route tests. Import order matters: tmpDb + openMode must run before config.js.
 import './tmpDb.js';
 import './openMode.js';
+import { setGlobalDispatcher, Agent } from 'undici';
 import { runtime } from '../../src/runtime.js';
 import { createApp } from '../../src/web/server.js';
 import { fakeGuild, makeSink } from './fakeGuild.js';
+
+// Route tests fire many fetch()es at the local server. undici's default
+// keep-alive then holds the client sockets open, so running one route file on
+// its own (`node --test test/routes.*.test.js`) idles ~9s after the last test
+// waiting them out. A near-zero keep-alive drops them immediately. (The full
+// `node --test` run isn't affected — it uses a subprocess per file.)
+setGlobalDispatcher(new Agent({ keepAliveTimeout: 10, keepAliveMaxTimeout: 100 }));
 
 /**
  * @returns {Promise<{
