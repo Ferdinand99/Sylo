@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.19.3](https://github.com/Ferdinand99/Sylo/compare/v3.19.2...v3.19.3) (2026-09-03)
+
+
+### Bug Fixes
+
+* show temp-voice channel names on the Insights top list ([c8885f8](https://github.com/Ferdinand99/Sylo/commit/c8885f8ebbfa2c584d1915c311222da7f3e5bd8a))
+
 ## [3.19.2](https://github.com/Ferdinand99/Sylo/compare/v3.19.1...v3.19.2) (2026-09-03)
 
 
