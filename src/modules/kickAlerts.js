@@ -40,7 +40,7 @@ export function normaliseKickConfig(raw = {}) {
         slug: String(a.slug ?? '')
           .trim()
           .toLowerCase()
-          .replace(/^.*kick\.com\//, '')
+          .replace(/^(?:https?:\/\/)?(?:www\.)?kick\.com\//, '')
           .replace(/^@/, ''),
         channelId: isId(a.channelId) ? a.channelId : '',
         roleId: isId(a.roleId) ? a.roleId : '',

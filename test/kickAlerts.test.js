@@ -75,6 +75,35 @@ test('buildPayload: renders an embed + prepends the ping role', () => {
   assert.deepEqual(payload.allowedMentions, { roles: ['123456789012345678'] });
 });
 
+test('normaliseKickConfig: only a real kick.com prefix is stripped', () => {
+  const ch = '123456789012345678';
+  const c = normaliseKickConfig({
+    alerts: [
+      { slug: 'https://www.kick.com/xqc', channelId: ch },
+      { slug: 'notkick.com/evil', channelId: ch }, // dropped — "notkick.com/evil" fails the slug regex
+    ],
+  });
+  assert.deepEqual(
+    c.alerts.map((a) => a.slug),
+    ['xqc']
+  );
+});
+
+test('normaliseKickConfig: onEnd defaults to delete, clamps unknown values', () => {
+  const ch = '123456789012345678';
+  const c = normaliseKickConfig({
+    alerts: [
+      { slug: 'aaa', channelId: ch },
+      { slug: 'bbb', channelId: ch, onEnd: 'keep' },
+      { slug: 'ccc', channelId: ch, onEnd: 'bogus' },
+    ],
+  });
+  assert.deepEqual(
+    c.alerts.map((a) => a.onEnd),
+    ['delete', 'keep', 'delete']
+  );
+});
+
 test('normaliseKickConfig: keeps the plainText flag', () => {
   const c = normaliseKickConfig({
     alerts: [{ slug: 'xqc', channelId: '123456789012345678', plainText: true }],

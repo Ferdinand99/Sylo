@@ -2,28 +2,41 @@
 // than a real XML parser: feeds in the wild are messy, but the handful of fields
 // we need sit shallow in each item/entry. Extracted from the YouTube-alerts
 // module and generalised so both it and the RSS module share one code path.
+//
+// Feed bodies are remote and untrusted, so every regex is bounded: `grab` caps
+// the string it scans, the lazy `[\s\S]` matches are length-limited, and
+// parseFeed() caps the whole document. That keeps a hostile or truncated feed
+// from turning a lazy match into quadratic backtracking.
 
-/** First capture group of `re` in `s`, or null. */
-export const grab = (re, s) => (String(s).match(re) || [])[1] || null;
+const MAX_DOC = 4_000_000; // ~4 MB — far above any real feed
+const MAX_SCAN = 300_000; // per grab() call
+const MAX_FIELD = 200_000; // per CDATA / tag-text capture
+
+/** First capture group of `re` in `s` (scanning at most MAX_SCAN chars), or null. */
+export const grab = (re, s) => (String(s).slice(0, MAX_SCAN).match(re) || [])[1] || null;
 
 /** Unwrap a single wrapping CDATA section, if present. */
 function stripCdata(s) {
-  const m = String(s ?? '').match(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/);
+  const m = String(s ?? '').match(/^\s*<!\[CDATA\[([\s\S]{0,200000}?)\]\]>\s*$/);
   return (m ? m[1] : String(s ?? '')).trim();
 }
 
-/** Decode the XML/HTML entities that show up in feed text. */
+const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+
+/**
+ * Decode the XML/HTML entities that show up in feed text — in a single pass, so
+ * `&amp;lt;` decodes to the literal `&lt;` and never to `<`.
+ */
 export function decodeEntities(s) {
   return String(s ?? '')
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => safeFromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, d) => safeFromCodePoint(parseInt(d, 10)))
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
     .replace(/\\u0026/g, '&')
-    .replace(/&amp;/g, '&'); // last: so "&amp;lt;" -> "&lt;" -> "<" doesn't over-decode
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, ent) => {
+      if (ent[0] === '#') {
+        const cp = /^#x/i.test(ent) ? parseInt(ent.slice(2), 16) : parseInt(ent.slice(1), 10);
+        return safeFromCodePoint(cp);
+      }
+      return NAMED_ENTITIES[ent.toLowerCase()] ?? whole;
+    });
 }
 
 function safeFromCodePoint(n) {
@@ -36,7 +49,10 @@ function safeFromCodePoint(n) {
 
 /** Text content of the first `<tag>…</tag>` in `block` (CDATA-aware, decoded). */
 function tagText(tag, block) {
-  const raw = grab(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'i'), block);
+  const raw = grab(
+    new RegExp(`<${tag}(?:\\s[^>]{0,10000})?>([\\s\\S]{0,${MAX_FIELD}}?)</${tag}>`, 'i'),
+    block
+  );
   return raw == null ? '' : decodeEntities(stripCdata(raw));
 }
 
@@ -80,7 +96,7 @@ function atomLink(block) {
  * @returns {FeedEntry[]}
  */
 export function parseFeed(xml) {
-  const s = String(xml ?? '');
+  const s = String(xml ?? '').slice(0, MAX_DOC);
   const atom = /<feed[\s>]/i.test(s) && !/<rss[\s>]/i.test(s);
   const feedAuthor = atom
     ? grab(/<feed[\s\S]*?<author>[\s\S]*?<name>([^<]*)<\/name>/i, s)
