@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.16.0](https://github.com/Ferdinand99/Sylo/compare/v3.15.0...v3.16.0) (2026-09-03)
+
+
+### Features
+
+* voice XP, XP multipliers, and weekly/monthly leaderboards for leveling ([#104](https://github.com/Ferdinand99/Sylo/issues/104)) ([1097b1d](https://github.com/Ferdinand99/Sylo/commit/1097b1d6bd9dbfc8eb0c16e3adc47539dc437ac7))
+
 ## [3.15.0](https://github.com/Ferdinand99/Sylo/compare/v3.14.0...v3.15.0) (2026-09-03)
 
 
