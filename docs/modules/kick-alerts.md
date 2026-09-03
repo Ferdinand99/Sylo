@@ -22,6 +22,8 @@ Announce in a channel when a [Kick.com](https://kick.com) streamer goes live.
   posts a normal message and always appends the stream link, for channels that
   are transcribed elsewhere (e.g. a RuneLite Discord→game-chat plugin that
   ignores embeds).
+- **When the stream ends** — *Delete the message* (default), *Mark it as ended*,
+  or *Leave it*.
 
 ## Notes
 

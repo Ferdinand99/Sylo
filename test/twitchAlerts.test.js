@@ -59,6 +59,21 @@ test('normaliseTwitchConfig: keeps the plainText flag', () => {
   assert.equal(c.alerts[0].plainText, true);
 });
 
+test('normaliseTwitchConfig: onEnd defaults to delete, clamps unknown values', () => {
+  const ch = '123456789012345678';
+  const c = normaliseTwitchConfig({
+    alerts: [
+      { login: 'aaa', channelId: ch },
+      { login: 'bbb', channelId: ch, onEnd: 'edit' },
+      { login: 'ccc', channelId: ch, onEnd: 'bogus' },
+    ],
+  });
+  assert.deepEqual(
+    c.alerts.map((a) => a.onEnd),
+    ['delete', 'edit', 'delete']
+  );
+});
+
 test('buildPayload: embed mode by default', () => {
   const p = buildPayload(STREAM, {}, { message: '', roleId: '' });
   assert.equal(p.embeds.length, 1);

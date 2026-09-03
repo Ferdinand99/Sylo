@@ -11,8 +11,10 @@ import { EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
-import { seenValue, markSeen, forget } from '../db/postedKeys.js';
-import { sendToChannel } from './lib/send.js';
+import { seenValue, seenRow, markSeen, forget } from '../db/postedKeys.js';
+import { postToChannel } from './lib/send.js';
+import { settleEndedPost } from './lib/liveAlerts.js';
+import { encodeLiveValue, decodeLiveValue, normaliseOnEnd } from '../lib/liveValue.js';
 import { log } from '../lib/log.js';
 
 const API = 'https://api.kick.com/public/v1';
@@ -44,6 +46,7 @@ export function normaliseKickConfig(raw = {}) {
         roleId: isId(a.roleId) ? a.roleId : '',
         message: String(a.message ?? '').slice(0, 1500),
         plainText: Boolean(a.plainText),
+        onEnd: normaliseOnEnd(a.onEnd),
       }))
       .filter((a) => {
         if (!SLUG_RE.test(a.slug) || !a.channelId || seen.has(a.slug + a.channelId)) return false;
@@ -178,14 +181,28 @@ async function tick() {
   for (const { guildId, alert } of jobs) {
     const channel = live.get(alert.slug);
     if (!channel) {
-      if (seenValue(guildId, SCOPE, alert.slug)) forget(guildId, SCOPE, alert.slug);
+      const row = seenRow(guildId, SCOPE, alert.slug);
+      if (row) {
+        forget(guildId, SCOPE, alert.slug);
+        const { channelId, messageId } = decodeLiveValue(row.value);
+        await settleEndedPost({
+          guildId,
+          onEnd: alert.onEnd,
+          post: { channelId, messageId, postedAt: row.posted_at },
+          name: alert.slug,
+          url: `https://kick.com/${alert.slug}`,
+          plainText: alert.plainText,
+        });
+      }
       continue;
     }
     const key = streamKey(channel);
-    if (seenValue(guildId, SCOPE, alert.slug) === key) continue; // already announced
+    if (decodeLiveValue(seenValue(guildId, SCOPE, alert.slug)).ref === key) continue; // already announced
 
-    markSeen(guildId, SCOPE, alert.slug, key, { upsert: true });
-    await sendToChannel(guildId, alert.channelId, buildPayload(channel, alert));
+    const posted = await postToChannel(guildId, alert.channelId, buildPayload(channel, alert));
+    markSeen(guildId, SCOPE, alert.slug, encodeLiveValue(key, posted?.channelId, posted?.messageId), {
+      upsert: true,
+    });
   }
 }
 

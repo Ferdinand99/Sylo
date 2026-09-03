@@ -16,10 +16,13 @@ import {
   markVideoSeen,
   pruneYoutube,
   liveVideoId,
+  livePost,
   markLive,
   markNotLive,
 } from '../db/youtubeAlerts.js';
-import { sendToChannel } from './lib/send.js';
+import { sendToChannel, postToChannel } from './lib/send.js';
+import { settleEndedPost } from './lib/liveAlerts.js';
+import { normaliseOnEnd } from '../lib/liveValue.js';
 import { parseFeed as parseGenericFeed, grab, decodeEntities } from '../bot/lib/feed.js';
 import { log } from '../lib/log.js';
 
@@ -45,6 +48,7 @@ export function normaliseYoutubeConfig(raw = {}) {
         roleId: isId(a.roleId) ? a.roleId : '',
         onVideo: a.onVideo !== false,
         onLive: Boolean(a.onLive),
+        onEnd: normaliseOnEnd(a.onEnd),
         videoMessage: String(a.videoMessage ?? '').slice(0, 1500),
         liveMessage: String(a.liveMessage ?? '').slice(0, 1500),
       }))
@@ -232,11 +236,10 @@ async function runAlert(guildId, alert) {
     const state = await checkLive(c);
     const known = liveVideoId(guildId, c);
     if (state.live && state.videoId !== known) {
-      markLive(guildId, c, state.videoId);
       markVideoSeen(guildId, c, state.videoId); // don't also fire a "new video" for the same stream
       const name = alert.name || 'A channel';
       const url = `https://www.youtube.com/watch?v=${state.videoId}`;
-      await sendToChannel(
+      const posted = await postToChannel(
         guildId,
         alert.discordChannelId,
         payload(
@@ -250,8 +253,17 @@ async function runAlert(guildId, alert) {
           'live'
         )
       );
+      markLive(guildId, c, state.videoId, posted);
     } else if (!state.live && known) {
+      const post = livePost(guildId, c);
       markNotLive(guildId, c);
+      await settleEndedPost({
+        guildId,
+        onEnd: alert.onEnd,
+        post,
+        name: alert.name || 'A channel',
+        url: post?.videoId ? `https://www.youtube.com/watch?v=${post.videoId}` : undefined,
+      });
     }
   }
 }
