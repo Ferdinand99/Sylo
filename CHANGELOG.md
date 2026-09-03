@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.13.0](https://github.com/Ferdinand99/Sylo/compare/v3.12.0...v3.13.0) (2026-09-02)
+
+
+### Features
+
+* insights — voice-channel usage, an hourly view, and on-demand r… ([ce6c850](https://github.com/Ferdinand99/Sylo/commit/ce6c8500e0c732fb1bde0a76520761541eba51c9))
+* insights — voice-channel usage, an hourly view, and on-demand refresh ([ebccedd](https://github.com/Ferdinand99/Sylo/commit/ebcceddfbca4565e327df1dd2aef833d275dc1db))
+
 ## [3.12.0](https://github.com/Ferdinand99/Sylo/compare/v3.11.2...v3.12.0) (2026-09-02)
 
 
