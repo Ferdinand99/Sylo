@@ -1,7 +1,13 @@
 # Game stats
 
-Battlefield-series player stat lookups via `/stats`. Full support for BF1, BF3,
-BF4, BFV and Battlefield Hardline; best-effort for BF2042 and BF6.
+Player stat lookups via `/stats`. Pick a game from the `game` dropdown:
+
+- **Battlefield** — BF1, BF3, BF4, BFV and Hardline are fully supported;
+  BF2042 and BF6 are best-effort. Data from the
+  [gametools.network](https://gametools.network) community API.
+- **RuneScape** — Old School (OSRS) and RuneScape 3 (RS3), from Jagex's official
+  Hiscores. `platform` optionally selects an Ironman account type
+  (`ironman` / `hardcore` / `ultimate`, OSRS only).
 
 **Dashboard:** `/guilds/<id>/m/game-stats` (just the on/off toggle — no settings).
 
@@ -9,16 +15,20 @@ BF4, BFV and Battlefield Hardline; best-effort for BF2042 and BF6.
 
 - **Send Messages**, **Embed Links**.
 - No privileged intents.
-- Data comes from the GameTools API (`GAMETOOLS_API_BASE`, overridable);
-  responses are cached for `STATS_CACHE_TTL_MINUTES` (default 5).
+- Battlefield data comes from `GAMETOOLS_API_BASE` (overridable); RuneScape data
+  from `secure.runescape.com`. Responses are cached for
+  `STATS_CACHE_TTL_MINUTES` (default 5).
 
 ## Commands
 
 | Command | |
 |---|---|
-| `/stats battlefield` | `game`, `platform`, `player` — returns an embed of K/D, W/L, playtime, top classes/weapons/vehicles. |
+| `/stats game:… username:… [platform:…]` | Returns a stats embed. Battlefield needs `platform`; RuneScape uses it for the Ironman account type (default: normal). |
 
 ## Notes
 
+- RuneScape combat level is computed from the combat skills — the Hiscores feed
+  doesn't include it.
 - This is the feature Sylo was originally built around; see
-  [Adding another game](../../README.md#adding-another-game) to extend it.
+  [Adding another game](../../README.md#adding-another-game) to extend it — a new
+  adapter file plus one `game` choice in `src/bot/commands/stats.js`.

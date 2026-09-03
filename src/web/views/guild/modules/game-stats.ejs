@@ -1,18 +1,20 @@
 <% var recent = Array.isArray(gameStatsRecent) ? gameStatsRecent : []; %>
 
 <p class="muted small">
-  Adds <code>/stats battlefield</code> — Battlefield-series player stat lookups (K/D, win rate,
-  time played, KPM/SPM, best class, …) via the public
-  <a href="https://gametools.network" target="_blank" rel="noopener">gametools.network</a> API.
-  Enable this module here to make the command available in this server.
+  Adds <code>/stats</code> — pick a game from the dropdown, give a player name, and Sylo
+  returns an embed of their stats. Battlefield data comes from the public
+  <a href="https://gametools.network" target="_blank" rel="noopener">gametools.network</a> API;
+  RuneScape data from Jagex's official Hiscores. Enable this module here to make the
+  command available in this server.
 </p>
 
 <section class="card">
   <h3 class="u-m0 u-mb-2">Command</h3>
   <ul class="muted small u-list">
-    <li><code>/stats battlefield title:… username:… platform:…</code></li>
-    <li>Titles: BF1, BF3, BF4, BFV, Hardline — plus best-effort BF2042 and BF6.</li>
-    <li>Results are cached for <code>STATS_CACHE_TTL_MINUTES</code> (default 5) to spare the upstream API.</li>
+    <li><code>/stats game:… username:… [platform:…]</code></li>
+    <li>Battlefield: BF1, BF3, BF4, BFV, Hardline, plus best-effort BF2042 / BF6 — <code>platform</code> required.</li>
+    <li>RuneScape: Old School and RS3 — <code>platform</code> optionally picks an Ironman account type.</li>
+    <li>Results are cached for <code>STATS_CACHE_TTL_MINUTES</code> (default 5) to spare the upstream APIs.</li>
   </ul>
 </section>
 

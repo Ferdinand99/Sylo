@@ -39,6 +39,15 @@
  * @property {string | null} accuracy
  * @property {string | null} headshots
  * @property {number} fetchedAt       Epoch ms when this was fetched upstream.
+ *
+ * Adapters may also set fields specific to their genre; consumers check the game
+ * id before reading them. The RuneScape adapter adds:
+ * @property {string | null} [combatLevel]
+ * @property {string | null} [totalLevel]
+ * @property {string | null} [totalXp]
+ * @property {string | null} [overallRank]
+ * @property {{ name: string, level: number, xp: number, rank: number }[]} [skills]
+ * @property {{ name: string, score: number, rank: number }[]} [activities]
  */
 
 /** Base class for errors that carry a user-friendly message for Discord replies. */

@@ -3,7 +3,9 @@
 // line below. Nothing else in the codebase needs to change.
 import { register } from './registry.js';
 import { battlefieldAdapter } from './battlefield.js';
+import { runescapeAdapter } from './runescape.js';
 
 register('battlefield', battlefieldAdapter);
+register('runescape', runescapeAdapter);
 
 export { getAdapter, listGames } from './registry.js';

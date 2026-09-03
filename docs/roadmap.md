@@ -169,27 +169,51 @@ migration when it ships.
 
 ---
 
-## Next — the 3.14 line (proposed)
+## Next — the 3.14 line
 
-Not committed to yet — a sketch of candidate workstreams for the line after
-3.13.0. Same conventions as above (branch per workstream, `npm test` +
+In progress. Themes 1–2 have shipped; Themes 3–4 are candidates in the suggested
+order below. Same conventions as above (branch per workstream, `npm test` +
 `npm run lint` + compose build green, Conventional-Commit summary).
 
-### Theme 1 — Social feeds (builds straight on the feed parser + `posted_keys`)
+### Theme 1 — Social feeds → done (`feat/social-feeds`)
 
-| Idea                                             | Why                                                          | Effort                                     |
-| ----------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------- |
-| **Reddit feed** (`/r/<sub>/new.json` or `.rss`) | MEE6 has it, Sylo doesn't, fits the parser 1:1              | Small — a new `feedSource` branch + panel |
-| **Bluesky / Mastodon feed**                     | Both expose open RSS/JSON endpoints; a real parity gap      | Small–medium                              |
+Reddit, Mastodon **and** Bluesky in one `feat` (→ **3.14.0**), all as an
+extension of the existing `rss` module — no new modules, count stays 30.
 
-→ One `feat` minor (**3.14.0**). Low risk, reuses everything from the RSS module.
-Instagram / TikTok / X are out of scope — no usable free API, scraping too brittle.
+- A per-feed **source type** (`url` / `reddit` / `mastodon` / `bluesky`).
+  `parseFeedRef(type, ref)` turns a handle into that platform's own RSS/Atom
+  URL, which the unchanged poll loop fetches:
+  - reddit → `https://www.reddit.com/r/<sub>/new/.rss` (also `u/<user>`, a bare
+    name, or any `reddit.com` link)
+  - mastodon → `https://<instance>/@<user>.rss` (`@user@instance`, `user@instance`,
+    or a profile URL)
+  - bluesky → `https://bsky.app/profile/<handle>/rss` (`handle.bsky.social`,
+    `@handle`, a `did:…`, or a `bsky.app/profile` link)
+- Feeds gained `type` + `ref` (the raw input); `{feed}` and the embed footer now
+  show the short handle (`r/programming`, `@user@instance`) rather than the host.
+- Back-compat: a pre-3.14 feed with only `url` reads as `type:'url'`, `ref:url`,
+  so existing configs keep working with no DB migration.
+- Instagram / TikTok / X stayed out — no usable free feed.
 
-### Theme 2 — The game-stats pillar (Battlefield only today)
+### Theme 2 — RuneScape stats adapter → done (`feat/runescape-stats`)
 
-**OSRS + RS3 adapter** — one file in `src/adapters/games/` (Wise Old Man /
-Hiscores + RuneMetrics). Self-contained, extends a core pillar without touching
-the rest. → `feat` minor.
+Second game after Battlefield. One `feat` minor.
+
+- New `src/adapters/games/runescape.js` — OSRS **and** RS3, off Jagex's official
+  Hiscores `index_lite.json` (no key). Same `{skills[], activities[]}` shape for
+  both; `-1` means unranked. Combat level isn't in the feed, so it's computed
+  (classic OSRS formula / post-EoC RS3 formula).
+- Reuses the **`platform` slot for the account type** — `main` / `ironman` /
+  `hardcore` / `ultimate` (OSRS only) — so `runStatsLookup`, the cache key and
+  the registry are untouched. Wise Old Man / RuneMetrics skipped: the Hiscores
+  are always available and need no pre-tracking.
+- Adapter returns the standard core plus RuneScape fields (`combatLevel`,
+  `totalLevel`, `totalXp`, `overallRank`, `skills[]`, `activities[]`); new
+  `src/bot/embeds/runescapeStats.js` renders them.
+- **`/stats` reworked to a flat command** — `game` is now a single dropdown
+  (7 Battlefield titles + OSRS + RS3) instead of a `battlefield` subcommand;
+  `platform` covers both console platforms and RS account types. This changes the
+  command signature (re-registered on boot).
 
 ### Theme 3 — Close MEE6 gaps in existing modules
 
@@ -211,9 +235,9 @@ the rest. → `feat` minor.
 
 ### Suggested order for the line
 
-1. **Social feeds** (Reddit + Bluesky + Mastodon) — cheapest, clearest parity win.
-2. **OSRS / RS3 adapter** — self-contained, already wanted.
+1. ~~**Social feeds** (Reddit + Bluesky + Mastodon)~~ — shipped (3.14.0).
+2. ~~**OSRS / RS3 adapter**~~ — shipped.
 3. **Leveling upgrade** (voice XP + multipliers + period leaderboard) — the
-   biggest single step toward MEE6.
+   biggest single step toward MEE6. ← next
 
 Welcome images and moderation history are solid #4/#5 for a longer line.
