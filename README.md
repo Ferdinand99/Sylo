@@ -192,8 +192,9 @@ settings panel per module — saves swap in place with a toast.
     (K/D, win rate, time played, KPM/SPM, best class, …)
   - Friendly, non-crashing error handling (unknown player, API down, rate-limited)
 - **Moderation** — `/kick`, `/ban`, `/unban`, `/timeout`, `/untimeout`, `/purge`,
-  `/slowmode`, `/warn` (add/list/remove/clear), and `/modlog` to send every action
-  to a log channel. Role-hierarchy and permission checks, optional DM to the
+  `/slowmode`, `/warn`, `/modlog`, plus a numbered **case log**: every action is a
+  case, browsable with `/history @user` and manageable with `/case`
+  (view / reason / delete / note). Role-hierarchy and permission checks, optional DM to the
   target, and per-command default permissions so Discord hides them from
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
@@ -346,7 +347,7 @@ src/
     index.js            Discord client bootstrap (intents, partials)
     loadCommands.js / registerCommands.js
     commands/           help, ping, about, version, stats, rank, leaderboard, forget,
-                        afk, freegames, kick/ban/unban/timeout/untimeout/purge/slowmode/warn/modlog
+                        afk, freegames, history, case, kick/ban/unban/timeout/untimeout/purge/slowmode/warn/modlog
     events/             ready, interactionCreate, moduleEvents (gateway → modules),
                         dmTickets (DM → ticket), guildDelete (purge on leave)
     embeds/ lib/        embed builders; duration, moderation, modlog, custom-command sync

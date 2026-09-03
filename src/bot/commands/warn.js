@@ -8,7 +8,7 @@ import {
 } from 'discord.js';
 import { MOD_COLOR, INFO_COLOR, notifyTarget, resultEmbed } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
-import { addWarning, listWarnings, getWarning, removeWarning, clearWarnings } from '../../db/warnings.js';
+import { addWarning, listWarnings, getWarning, removeWarning, clearWarnings } from '../../db/modCases.js';
 import { applyWarnThresholds } from '../../modules/moderation.js';
 
 export const data = new SlashCommandBuilder()

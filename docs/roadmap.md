@@ -266,5 +266,52 @@ generated welcome banner images.
 3. ~~**Leveling upgrade** (voice XP + multipliers + period leaderboard)~~ — shipped.
 4. ~~**Ops bundle** (Grafana JSON, off-site backup, test-teardown fix)~~ — shipped.
 
-The 3.14 line is complete. Welcome images and a `/history @user` moderation case
-log are the strongest candidates for whatever comes next.
+The 3.14 line is complete.
+
+---
+
+## Moderation case log → done (`feat/mod-case-log`)
+
+One `feat` → **3.18.0**. The flat `warnings` table is now a MEE6/Dyno-style,
+numbered case log covering every moderation action, with `/history` and `/case`
+commands and an editable dashboard view. Built exactly to the plan below.
+
+### As built
+
+- **Migration 35 — fold `warnings` into `infractions`.**
+  `infractions(guild_id, case_number, user_id, moderator_id, action, reason,
+  detail, active, created_at, PK(guild_id, case_number))`. `action` ∈
+  `warn | note | timeout | untimeout | kick | ban | unban`. The migration copies
+  every existing `warnings` row in as `action='warn'` with a per-guild
+  sequential `case_number`, then drops `warnings`. New rows take `MAX(case_number)
+  + 1` per guild inside the write transaction.
+- **`src/db/modCases.js`** (replaces `warnings.js`): `addCase`, `listUserCases`
+  (paginated), `getCase`, `editCaseReason`, `setCaseActive`, `listGuildCases`,
+  `clearUserCases`. `warnCount` = active `action='warn'` rows — still drives the
+  warn-threshold flow.
+- **`/history <user> [page]`** — paginated ephemeral embed, one line per case
+  (`#N · action · date · by @mod — reason`).
+- **`/case` group** — `view <n>`, `reason <n> <text>` (edit reason),
+  `delete <n>` (**soft** — `active=0`, drops out of `/history` and the warn
+  count, stays in the DB), `note <user> <text>` (a case with no enforcement / no
+  DM).
+- **Wire the existing actions**: `ban` / `kick` / `timeout` / `untimeout` /
+  `unban` / `warn`, the auto-threshold punishments, and the temp-ban expiry loop
+  each call `addCase(...)` next to their `postModLog(...)`; the result embed
+  gains a `Case #N` field. `/unban` and `/untimeout` also flip the original
+  ban/timeout case to `active=0`.
+- **Dashboard**: the moderation page's *Infractions* tab lists every case type
+  (not just warnings) with per-row edit-reason + soft-delete. `guilds.js` routes
+  + `moderation.ejs` + `purge.js` (`GUILD_TABLES`, `/forget`,
+  `describeUserData`) swap `warnings` → `infractions`.
+- **Tests**: `test/modCases.test.js` (sequential numbering, active-warn count,
+  edit/delete, pagination), a migration test (warnings → numbered cases), and
+  the moderation route round-trips.
+
+### Decisions (all as recommended)
+
+1. Fold `warnings` into one `infractions` table — single source of truth; `/warn`
+   keeps working, existing warnings become cases.
+2. `/case delete` is **soft** (auditable) — no hard delete.
+3. Command shape: `/history` + a `/case {view,reason,delete,note}` group.
+4. `/unban` / `/untimeout` add a new case **and** mark the original inactive.

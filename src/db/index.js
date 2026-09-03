@@ -622,6 +622,37 @@ export const MIGRATIONS = [
   (database) => {
     database.exec(`ALTER TABLE leveling ADD COLUMN voice_minutes INTEGER NOT NULL DEFAULT 0;`);
   },
+
+  // 3.18: fold the flat `warnings` table into a numbered moderation case log
+  // that covers every action (warn / note / timeout / kick / ban / …). Existing
+  // warnings become `action='warn'` cases, numbered per guild by age.
+  (database) => {
+    database.exec(`
+      CREATE TABLE infractions (
+        guild_id     TEXT NOT NULL,
+        case_number  INTEGER NOT NULL,
+        user_id      TEXT NOT NULL,
+        moderator_id TEXT NOT NULL DEFAULT '',
+        action       TEXT NOT NULL,
+        reason       TEXT NOT NULL DEFAULT '',
+        detail       TEXT,
+        active       INTEGER NOT NULL DEFAULT 1,
+        created_at   INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, case_number)
+      );
+      CREATE INDEX idx_infractions_user ON infractions (guild_id, user_id, case_number DESC);
+
+      INSERT INTO infractions
+        (guild_id, case_number, user_id, moderator_id, action, reason, detail, active, created_at)
+      SELECT guild_id,
+             ROW_NUMBER() OVER (PARTITION BY guild_id ORDER BY created_at, id),
+             user_id, moderator_id, 'warn', reason, NULL, 1, created_at
+      FROM warnings;
+
+      DROP INDEX IF EXISTS idx_warnings_guild_user;
+      DROP TABLE warnings;
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

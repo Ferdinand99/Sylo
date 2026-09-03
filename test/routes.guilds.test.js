@@ -247,8 +247,8 @@ test('POST /m/:id/test — "set a channel first" when unconfigured', async () =>
 test('GET /member-data lists a member’s stored data', async () => {
   const { db } = await import('../src/db/index.js');
   db.prepare(
-    'INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at) VALUES (?,?,?,?,?)'
-  ).run(GID, MEMBER_ID, 'mod', 'x', Date.now());
+    'INSERT INTO infractions (guild_id, case_number, user_id, moderator_id, action, reason, created_at) VALUES (?,?,?,?,?,?,?)'
+  ).run(GID, 1, MEMBER_ID, 'mod', 'warn', 'x', Date.now());
 
   const res = await get(`/guilds/${GID}/member-data?user=${MEMBER_ID}`);
   assert.equal(res.status, 200);
@@ -257,7 +257,7 @@ test('GET /member-data lists a member’s stored data', async () => {
   assert.match(html, new RegExp(MEMBER_ID));
 });
 
-test('POST /warnings adds one; POST /warnings/:id/delete removes it', async () => {
+test('POST /warnings adds a case; POST /cases/:n/delete soft-deletes it', async () => {
   const { db } = await import('../src/db/index.js');
   const add = await post(app.base, `/guilds/${GID}/warnings`, {
     userId: MEMBER_ID,
@@ -265,13 +265,20 @@ test('POST /warnings adds one; POST /warnings/:id/delete removes it', async () =
   });
   assert.equal(add.status, 302);
   const row = db
-    .prepare('SELECT id FROM warnings WHERE guild_id = ? AND user_id = ? ORDER BY id DESC')
+    .prepare(
+      "SELECT case_number AS n FROM infractions WHERE guild_id = ? AND user_id = ? AND action = 'warn' ORDER BY case_number DESC"
+    )
     .get(GID, MEMBER_ID);
   assert.ok(row);
 
-  const del = await post(app.base, `/guilds/${GID}/warnings/${row.id}/delete`, {});
+  const del = await post(app.base, `/guilds/${GID}/cases/${row.n}/delete`, {});
   assert.equal(del.status, 302);
   assert.match(del.headers.get('location'), /tab=infr/);
+  assert.equal(
+    db.prepare('SELECT active FROM infractions WHERE guild_id = ? AND case_number = ?').get(GID, row.n)
+      .active,
+    0
+  );
 });
 
 test('POST /moderation/lock-all locks the text channels via the fake overwrites', async () => {

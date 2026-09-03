@@ -265,7 +265,7 @@
             <%- include('guild/modules/moderation', { guild: guild, moduleConfig: moderationCfg, thresholdActions: thresholdActions }) %>
           </div>
           <div class="mod-panel" data-tab="infr">
-            <%- include('guild/moderation', { guild: guild, warnings: warnings, warningTotal: warningTotal, warningShown: warningShown, bans: bans, bansTotal: bansTotal, bansShown: bansShown, bansError: bansError, banLimit: banLimit, channelLocks: channelLocks, tempBans: tempBans, lockdownActive: lockdownActive }) %>
+            <%- include('guild/moderation', { guild: guild, cases: cases, caseTotal: caseTotal, caseShown: caseShown, bans: bans, bansTotal: bansTotal, bansShown: bansShown, bansError: bansError, banLimit: banLimit, channelLocks: channelLocks, tempBans: tempBans, lockdownActive: lockdownActive }) %>
           </div>
           <div class="mod-panel" data-tab="log">
             <p class="muted small">Send server events to a channel. Set the mod-log channel (for moderation actions) under <a href="/guilds/<%= guild.id %>/settings">Settings</a>.</p>

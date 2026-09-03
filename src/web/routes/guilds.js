@@ -20,12 +20,13 @@ import {
   guildEmbedColor,
 } from '../../db/guildSettings.js';
 import {
-  listGuildWarnings,
+  listGuildCases,
+  getCase,
+  editCaseReason,
+  setCaseActive,
   addWarning,
-  getWarning,
-  removeWarning,
   clearWarnings,
-} from '../../db/warnings.js';
+} from '../../db/modCases.js';
 import { notifyTarget, MOD_COLOR } from '../../bot/lib/moderation.js';
 import { postModLog } from '../../bot/lib/modlog.js';
 import { timeAgo } from '../lib/format.js';
@@ -342,7 +343,7 @@ router.post(
         'A server administrator deleted the data Sylo had stored about you in this server, at your request.'
       )
       .addFields(
-        { name: 'Warnings', value: String(r.warnings), inline: true },
+        { name: 'Moderation cases', value: String(r.warnings), inline: true },
         { name: 'Leveling record', value: String(r.leveling), inline: true },
         { name: 'Tickets', value: `${r.tickets} (${r.ticketMessages} msgs)`, inline: true },
         { name: 'Ban appeals', value: String(r.appeals), inline: true },
@@ -403,19 +404,25 @@ router.get(
   '/:guildId/moderation',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    const { rows: warningRows, total: warningTotal } = listGuildWarnings(guild.id, 200);
+    const { rows: caseRows, total: caseTotal } = listGuildCases(guild.id, 200);
     const tags = await resolveUserTags(
       runtime.client,
-      warningRows.flatMap((w) => [w.user_id, w.moderator_id]).filter((id) => /^\d+$/.test(id))
+      caseRows.flatMap((c) => [c.user_id, c.moderator_id]).filter((id) => /^\d+$/.test(id))
     );
-    const warnings = warningRows.map((w) => ({
-      id: w.id,
-      user: tags.get(w.user_id) ?? w.user_id,
-      userId: w.user_id,
+    const modLabels = { web: 'Dashboard', automod: 'AutoMod', auto: 'auto-threshold', '': 'system' };
+    const cases = caseRows.map((c) => ({
+      caseNumber: c.case_number,
+      action: c.action,
+      active: c.active === 1,
+      user: tags.get(c.user_id) ?? c.user_id,
+      userId: c.user_id,
       moderator:
-        w.moderator_id === WEB_MODERATOR ? 'Dashboard' : (tags.get(w.moderator_id) ?? w.moderator_id),
-      reason: w.reason,
-      ago: timeAgo(w.created_at),
+        c.moderator_id === WEB_MODERATOR
+          ? 'Dashboard'
+          : (modLabels[c.moderator_id] ?? tags.get(c.moderator_id) ?? c.moderator_id),
+      reason: c.reason,
+      detail: c.detail,
+      ago: timeAgo(c.created_at),
     }));
 
     let bans = [];
@@ -473,9 +480,9 @@ router.get(
 
     res.render('guild', {
       ...baseContext(guild, 'moderation'),
-      warnings,
-      warningTotal,
-      warningShown: warnings.length,
+      cases,
+      caseTotal,
+      caseShown: cases.length,
       bans,
       bansTotal,
       bansShown: bans.length,
@@ -2461,36 +2468,61 @@ router.post(
   })
 );
 
-// Delete one warning by its id (dashboard equivalent of /warn remove).
+// Edit a case's reason (dashboard equivalent of /case reason).
 router.post(
-  '/:guildId/warnings/:id/delete',
+  '/:guildId/cases/reason',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const back = `/guilds/${guild.id}/moderation?tab=infr`;
-    const id = Number(req.params.id);
+    const n = Number(req.body.caseNumber);
+    const reason = String(req.body.reason ?? '')
+      .trim()
+      .slice(0, 1000);
+    if (!Number.isInteger(n) || n < 1 || reason === '' || !getCase(guild.id, n)) {
+      return res.redirect(`${back}&msg=warn-gone`);
+    }
+    editCaseReason(guild.id, n, reason);
+    recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'moderation:case-reason',
+      detail: `#${n}`,
+    });
+    res.redirect(`${back}&msg=warn-removed`);
+  })
+);
 
-    const existing = Number.isInteger(id) ? getWarning(guild.id, id) : null;
-    if (!existing || !removeWarning(guild.id, id)) return res.redirect(`${back}&msg=warn-gone`);
+// Soft-delete / restore one case (dashboard equivalent of /case delete).
+router.post(
+  '/:guildId/cases/:n/:op',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/moderation?tab=infr`;
+    if (req.params.op !== 'delete' && req.params.op !== 'restore') return res.redirect(back);
+    const n = Number(req.params.n);
+    const active = req.params.op === 'restore';
+
+    const existing = Number.isInteger(n) ? getCase(guild.id, n) : null;
+    if (!existing) return res.redirect(`${back}&msg=warn-gone`);
+    setCaseActive(guild.id, n, active);
 
     const target = await runtime.client.users.fetch(existing.user_id).catch(() => null);
     const embed = new EmbedBuilder()
       .setColor(MOD_COLOR)
-      .setTitle('Warning removed')
+      .setTitle(active ? `Case #${n} restored` : `Case #${n} deleted`)
       .addFields(
-        { name: 'Warning ID', value: `#${id}` },
         {
           name: 'User',
           value: target ? `${target.tag} (\`${existing.user_id}\`)` : `\`${existing.user_id}\``,
         },
-        { name: 'Original reason', value: existing.reason },
-        { name: 'Removed by', value: moderatorDisplayName(req) }
+        { name: 'Original reason', value: existing.reason || '—' },
+        { name: active ? 'Restored by' : 'Deleted by', value: moderatorDisplayName(req) }
       )
       .setTimestamp(Date.now());
     await postModLog(guild, embed);
     recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
-      action: 'moderation:warn-remove',
-      detail: `#${id}`,
+      action: `moderation:case-${req.params.op}`,
+      detail: `#${n}`,
     });
     res.redirect(`${back}&msg=warn-removed`);
   })

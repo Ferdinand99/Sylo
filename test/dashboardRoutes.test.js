@@ -65,22 +65,22 @@ const MEMBER = '900000000000009999';
 test('GET /member-data with a user id renders the lookup + data table', async () => {
   const { db } = await import('../src/db/index.js');
   db.prepare(
-    'INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at) VALUES (?,?,?,?,?)'
-  ).run(GID, MEMBER, 'mod', 'test', Date.now());
+    'INSERT INTO infractions (guild_id, case_number, user_id, moderator_id, action, reason, created_at) VALUES (?,?,?,?,?,?,?)'
+  ).run(GID, 1, MEMBER, 'mod', 'warn', 'test', Date.now());
 
   const res = await get(`/guilds/${GID}/member-data?user=${MEMBER}`);
   assert.equal(res.status, 200);
   const html = await res.text();
   assert.match(html, /Member data/);
   assert.match(html, new RegExp(MEMBER));
-  assert.match(html, /Warnings/);
+  assert.match(html, /Moderation cases/);
 });
 
 test('POST /member-data/forget deletes the data, DMs the member, and redirects', async () => {
   const { db } = await import('../src/db/index.js');
   assert.ok(
-    db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER).n >=
-      1
+    db.prepare('SELECT COUNT(*) AS n FROM infractions WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER)
+      .n >= 1
   );
   app.sink.dms.length = 0;
 
@@ -92,7 +92,7 @@ test('POST /member-data/forget deletes the data, DMs the member, and redirects',
   assert.equal(res.status, 302);
   assert.match(res.headers.get('location'), /msg=forgot/);
   assert.equal(
-    db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER).n,
+    db.prepare('SELECT COUNT(*) AS n FROM infractions WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER).n,
     0
   );
   assert.equal(app.sink.dms.length, 1);

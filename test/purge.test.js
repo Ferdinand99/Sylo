@@ -17,8 +17,8 @@ function seed(guildId, userId) {
     'INSERT OR REPLACE INTO guild_modules (guild_id, module_id, enabled, config, updated_at) VALUES (?,?,?,?,?)'
   ).run(guildId, 'leveling', 1, '{}', now);
   db.prepare(
-    'INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at) VALUES (?,?,?,?,?)'
-  ).run(guildId, userId, 'mod', 'x', now);
+    'INSERT INTO infractions (guild_id, case_number, user_id, moderator_id, action, reason, created_at) VALUES (?,?,?,?,?,?,?)'
+  ).run(guildId, 1, userId, 'mod', 'warn', 'x', now);
   db.prepare(
     'INSERT OR REPLACE INTO leveling (guild_id, user_id, xp, level, messages, last_msg_at) VALUES (?,?,?,?,?,?)'
   ).run(guildId, userId, 500, 3, 20, now);
@@ -74,7 +74,7 @@ test('purgeGuild removes every guild-scoped row and leaves other guilds alone', 
   for (const t of [
     'guild_settings',
     'guild_modules',
-    'warnings',
+    'infractions',
     'leveling',
     'counting',
     'tickets',
@@ -106,7 +106,7 @@ test('purgeGuild removes every guild-scoped row and leaves other guilds alone', 
 
 test('forgetUser deletes only that member’s data in that guild', () => {
   db.exec(
-    'DELETE FROM leveling; DELETE FROM warnings; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM birthdays; DELETE FROM giveaways; DELETE FROM giveaway_entries;'
+    'DELETE FROM leveling; DELETE FROM infractions; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM birthdays; DELETE FROM giveaways; DELETE FROM giveaway_entries;'
   );
   seed(G, U);
   const KEEP = '444444444444444444';
@@ -159,7 +159,7 @@ test('forgetUser deletes only that member’s data in that guild', () => {
 
 test('describeUserData counts what forgetUser would remove, then reads zero after', () => {
   db.exec(
-    'DELETE FROM leveling; DELETE FROM warnings; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM birthdays; DELETE FROM giveaways; DELETE FROM giveaway_entries;'
+    'DELETE FROM leveling; DELETE FROM infractions; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM birthdays; DELETE FROM giveaways; DELETE FROM giveaway_entries;'
   );
   seed(G, U);
 
