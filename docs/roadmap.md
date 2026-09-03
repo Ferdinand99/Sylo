@@ -344,3 +344,83 @@ One `feat` → **3.19.0**. Twitch / YouTube-live / Kick alerts now clean up the
   twitch / kick / youtube alert views + the matching `guilds.js` POST branches.
 - **Tests** — the `value` parse/round-trip, `normalise*` `onEnd` clamping, and a
   module-level offline-transition test using the fake client sink.
+
+---
+
+## Next — GDPR / data-rights line (planned)
+
+Three independent workstreams that tighten Sylo's data-protection posture. Same
+conventions as the lines above (branch per workstream → PR into `main`,
+`npm test` + `npm run lint` + compose build green, Conventional-Commit summary).
+Sylo already covers a lot here — a published privacy policy, `/forget` for
+per-user erasure, admin-assisted erasure with a DM receipt, and full guild-data
+purge on kick (guarded by `test/guildTables.test.js`). These close the remaining
+gaps: a stated legal basis + retention schedule, a data-access/portability path,
+and enforceable retention limits.
+
+### 1 — Legal basis + retention table in `privacy-policy.md` (`docs:` — no bump)
+
+Documentation only; no code.
+
+- Add a **legal basis** subsection to `docs/privacy-policy.md`: name the basis
+  per processing purpose (moderation records & audit log → legitimate interest;
+  leveling / birthdays / AFK / invite tracking → the member's use of the feature;
+  modmail transcripts → legitimate interest in handling the request). Note that
+  self-hosters must set their own (ties into §9).
+- Add a **retention schedule** table: for each data category (config, infractions,
+  leveling + periods, birthdays, AFK, invite graph, modmail transcripts, ban
+  appeals, insights aggregates, game-stat cache, logs) state the retention rule
+  and the deletion trigger (`/forget`, guild-leave purge, auto-prune once #3
+  lands, TTL, or "kept until changed").
+- Mention the **off-site backup** path (`BACKUP_WEBDAV_URL` / `BACKUP_WEBHOOK_URL`):
+  when enabled, the operator owns that destination as a processor, and snapshots
+  hold since-deleted rows until they rotate out (newest 7 kept).
+- Bump the "Last updated" date and add a line to §10.
+
+### 2 — `/mydata` self-service data export (`feat:` — minor)
+
+Covers GDPR Art. 15 (access) and Art. 20 (portability) in one command, and gives
+a member a way to see their data without going through an admin.
+
+- **`/mydata`** — ephemeral reply, DMs the caller a `sylo-<guildId>-<userId>.json`
+  attachment: every row Sylo keys to their Discord account **in that guild**,
+  grouped by source (infractions, leveling + period rows, birthdays, AFK, invite
+  counts + attribution, giveaway entries, modmail transcript text, ban appeals,
+  poll/temp-VC ownership). Same scope as `/forget`, read side.
+- **Reuse `purge.js`** — the per-user `userStmts` map already enumerates every
+  per-user table + column. Add a parallel `describeUserData(guildId, userId)` /
+  `exportUserData(...)` in the same file that `SELECT`s where those `DELETE`s
+  target, so the export and the erasure can never drift (a test asserts the two
+  key sets match, like `guildTables.test.js` does for `GUILD_TABLES`).
+- **Rate-limit** per user (cooldown in `posted_keys` or an in-memory map) — the
+  export is a DB read across ~12 tables plus a DM.
+- Fall back to an ephemeral message with the JSON in a code block if the DM is
+  closed (Discord attachment in an ephemeral interaction reply is fine up to
+  the size cap; chunk or refuse politely past it).
+- Docs: new `docs/` note + a line in the privacy policy §6 next to `/forget`.
+
+### 3 — Configurable auto-prune for transcripts + old infractions (`feat:` — minor)
+
+Turns "kept indefinitely" into a stated, enforced retention limit.
+
+- **Modmail transcripts** — a Tickets-module setting `transcriptRetentionDays`
+  (0 = keep forever, default 0 for back-compat; suggest 90). A daily sweep
+  deletes `ticket_messages` (and closed `tickets` rows) older than the cutoff.
+- **Infractions** — a moderation-module setting `infractionRetentionDays` for
+  **inactive** (soft-deleted / expired) cases only; active warns and the live
+  case history are never auto-pruned. 0 = keep forever.
+- One shared daily job (extend the insights prune interval pattern, or a small
+  `src/db/retention.js` invoked from the existing scheduler). Log a count per
+  sweep; never touch a guild with the setting at 0.
+- Surface both in the respective config views + `guilds.js` POST branches;
+  document in `docs/modules/tickets.md` and the moderation module doc.
+- Tests: sweep deletes only past-cutoff rows, respects 0, leaves active cases and
+  other guilds alone.
+
+### Suggested order
+
+1. **#1 legal basis + retention table** — docs-only, unblocks the wording #2/#3
+   reference, ships immediately.
+2. **#3 auto-prune** — makes the retention table's limits real.
+3. **#2 `/mydata` export** — largest surface; benefits from the `purge.js`
+   refactor being settled first.
