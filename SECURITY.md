@@ -4,10 +4,12 @@
 
 **Do not open a public issue for security problems.**
 
-Report privately through GitHub's
+Report it privately: go to the repository's
+**[Security tab](https://github.com/Ferdinand99/Sylo/security)** and click
+**"Report a vulnerability"** (this opens GitHub's
 [private vulnerability reporting](https://github.com/Ferdinand99/Sylo/security/advisories/new)
-on this repository. If you cannot use that, contact the maintainer through their
-[GitHub profile](https://github.com/Ferdinand99).
+form — only you and the maintainers can see it). If you can't use that, contact
+the maintainer through their [GitHub profile](https://github.com/Ferdinand99).
 
 Please include:
 
