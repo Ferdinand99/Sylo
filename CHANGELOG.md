@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.20.0](https://github.com/Ferdinand99/Sylo/compare/v3.19.3...v3.20.0) (2026-09-03)
+
+
+### Features
+
+* add /mydata self-service data export ([5f7ec3d](https://github.com/Ferdinand99/Sylo/commit/5f7ec3d322b46039f10358481d24fae082a8edd8))
+
 ## [3.19.3](https://github.com/Ferdinand99/Sylo/compare/v3.19.2...v3.19.3) (2026-09-03)
 
 
