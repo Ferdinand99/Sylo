@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.15.0](https://github.com/Ferdinand99/Sylo/compare/v3.14.0...v3.15.0) (2026-09-03)
+
+
+### Features
+
+* add a RuneScape (OSRS + RS3) stats adapter and flatten /stats ([#101](https://github.com/Ferdinand99/Sylo/issues/101)) ([ff72d39](https://github.com/Ferdinand99/Sylo/commit/ff72d39660621f9e6272babe7dea1ec4fa9a0a93))
+
+
+### Miscellaneous Chores
+
+* re-anchor release-please to 3.15.0 ([313b67a](https://github.com/Ferdinand99/Sylo/commit/313b67a88b1f952242c776f6958672365d4e1396))
+
 ## [3.14.0](https://github.com/Ferdinand99/Sylo/compare/v3.13.0...v3.14.0) (2026-09-03)
 
 
