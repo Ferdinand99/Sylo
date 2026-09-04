@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.22.2](https://github.com/Ferdinand99/Sylo/compare/v3.22.1...v3.22.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* refresh a stale guild-list session automatically ([8599034](https://github.com/Ferdinand99/Sylo/commit/859903463443e813a7a8517d4ebf772bf4390b6e))
+
 ## [3.22.1](https://github.com/Ferdinand99/Sylo/compare/v3.22.0...v3.22.1) (2026-09-04)
 
 
