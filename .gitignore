@@ -140,3 +140,4 @@ dist
 # SQLite database + WAL/SHM sidecar files (keep the data/ directory itself).
 /data/*
 !/data/.gitkeep
+/site/
