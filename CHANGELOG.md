@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.21.0](https://github.com/Ferdinand99/Sylo/compare/v3.20.0...v3.21.0) (2026-09-04)
+
+
+### Features
+
+* per-server auto-prune for old closed tickets and inactive cases ([951b952](https://github.com/Ferdinand99/Sylo/commit/951b952de9dff0e53f78b2acbb7ee3b053af231a))
+
 ## [3.20.0](https://github.com/Ferdinand99/Sylo/compare/v3.19.3...v3.20.0) (2026-09-03)
 
 
