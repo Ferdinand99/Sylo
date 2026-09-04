@@ -8,6 +8,7 @@ import { config } from '../config.js';
 import { setClient } from '../runtime.js';
 import { loadCommands } from './loadCommands.js';
 import { registerCommands } from './registerCommands.js';
+import { resolveShardOptions } from './lib/shards.js';
 import { log } from '../lib/log.js';
 
 /** Build the gateway intent list from config. */
@@ -58,6 +59,9 @@ async function loadEvents(client) {
 export async function startBot() {
   const client = new Client({
     intents: buildIntents(),
+    // Internal sharding — every shard runs in this process, sharing one cache
+    // and one DB connection. 'auto' stays at 1 shard until ~2,500+ guilds.
+    ...resolveShardOptions(config.discordShardCount),
     // Needed to receive reaction/message events for messages not in cache.
     partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.GuildMember, Partials.User],
   });
@@ -69,6 +73,7 @@ export async function startBot() {
   // Surface library-level errors on the dashboard instead of letting them bubble.
   client.on('error', (err) => log.error('bot', 'gateway client error', err));
   client.on('shardError', (err) => log.error('bot', 'shard error', err));
+  client.on('shardReady', (id) => log.info('bot', `shard ${id} connected`));
 
   try {
     await registerCommands(commands);

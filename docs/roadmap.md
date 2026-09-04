@@ -421,3 +421,31 @@ Turns "kept indefinitely" into a stated, enforced retention limit. As shipped:
 3. ~~**#3 auto-prune**~~ — done (branch `feat/retention-autoprune`).
 
 The GDPR / data-rights line is complete.
+
+---
+
+## Internal sharding → in progress (`feat:` — minor, branch `feat/internal-sharding`)
+
+Groundwork for the hosted instance growing past Discord's **2,500 guilds per
+gateway connection** limit, without disturbing anything about how Sylo runs
+today.
+
+- **Internal, not multi-process.** discord.js runs every shard inside the single
+  Sylo process — one `Client`, one shared guild cache, one better-sqlite3
+  connection. The dashboard (`runtime.client`, `req.guild`, channel/role
+  lookups), the module pollers and the DB-wide jobs (backup, retention, insights
+  flush, period prune) are all untouched, because there is still exactly one
+  process. Multi-process sharding (`ShardingManager` + a client/server DB) is a
+  separate, much larger project and stays out of scope.
+- **`DISCORD_SHARD_COUNT`** — `auto` (default) asks Discord for the recommended
+  count via `GET /gateway/bot`; it returns 1 below ~2,500 guilds, so this is a
+  no-op for self-hosters and can be left on. A positive integer pins the count.
+- `src/bot/lib/shards.js` `resolveShardOptions('auto' | n)` maps the config to
+  discord.js `Client` options (`{ shards: 'auto' }` or
+  `{ shardCount, shards: [0..n-1] }`); spread into `new Client(...)` in
+  `src/bot/index.js`. A `shardReady` listener logs each shard as it connects.
+- Docs: `.env.example`, the `docs/self-hosting.md` env table.
+- `test/shards.test.js` covers the mapping and rejects junk counts.
+
+When the hosted instance actually approaches the ceiling, the follow-up line is
+Postgres → dashboard/bot process split → `ShardingManager`, in that order.

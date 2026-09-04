@@ -21,7 +21,8 @@
 Thirty per-guild **modules**, Discord **OAuth2 login**, a public leveling
 **leaderboard**, and — via the optional Game stats module — **Battlefield-series**
 and **RuneScape** (OSRS / RS3) player lookups. Everything runs in **one Node
-process, one container, no build step**.
+process, one container, no build step** — and stays that way past Discord's
+2,500-guild gateway limit via in-process sharding.
 
 <details>
 <summary>The 30 modules</summary>

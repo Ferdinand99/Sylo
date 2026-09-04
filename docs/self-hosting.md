@@ -57,6 +57,7 @@ Only `DISCORD_TOKEN` and `DISCORD_CLIENT_ID` are required.
 | `DISCORD_TOKEN`           | —                               | Bot token (**required**) |
 | `DISCORD_CLIENT_ID`       | —                               | Application (client) id (**required**) |
 | `DISCORD_DEV_GUILD_IDS`   | —                               | Register commands instantly to one or more servers (comma/space-separated) instead of globally. Old name `DISCORD_GUILD_ID` still works (warns). |
+| `DISCORD_SHARD_COUNT`     | `auto`                          | Internal gateway shards for this one process. `auto` follows Discord's recommendation and stays at 1 below ~2,500 servers; pin an integer to override. Multi-process sharding is not supported. |
 | `WEB_PORT`                | `3000`                          | Dashboard HTTP port |
 | `DISCORD_CLIENT_SECRET`   | —                               | Set to require "Log in with Discord" on the dashboard |
 | `SESSION_SECRET`          | random                          | Signs the session cookie; pin it so logins survive restarts |
