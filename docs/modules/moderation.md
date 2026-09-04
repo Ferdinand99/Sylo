@@ -24,6 +24,10 @@ Admin, Infractions, Audit logging, Commands tabs).
   (shared with Auto-moderation, set on the Admin tab) are never auto-punished.
 - **Mod-log channel** — set under *General*; every moderation action posts an
   embed there.
+- **Delete inactive cases after** — days. A daily job removes cases that have
+  been deleted (`/case delete`) or resolved (an unban / untimeout) once they are
+  older than this. `0` (the default) keeps them forever; active warnings and the
+  visible history are never auto-removed.
 
 ## Case log
 

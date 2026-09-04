@@ -393,26 +393,31 @@ a member a way to see their data without going through an admin. As shipped:
   7 MiB guard. Listed under `/help` → Privacy.
 - Docs: privacy policy §4 + §7 + §11; README command list + feature line.
 
-### 3 — Configurable auto-prune for transcripts + old infractions (`feat:` — minor)
+### 3 — Configurable auto-prune for transcripts + old infractions → done (`feat:` — minor, branch `feat/retention-autoprune`)
 
-Turns "kept indefinitely" into a stated, enforced retention limit.
+Turns "kept indefinitely" into a stated, enforced retention limit. As shipped:
 
-- **Modmail transcripts** — a Tickets-module setting `transcriptRetentionDays`
-  (0 = keep forever, default 0 for back-compat; suggest 90). A daily sweep
-  deletes `ticket_messages` (and closed `tickets` rows) older than the cutoff.
-- **Infractions** — a moderation-module setting `infractionRetentionDays` for
-  **inactive** (soft-deleted / expired) cases only; active warns and the live
-  case history are never auto-pruned. 0 = keep forever.
-- One shared daily job (extend the insights prune interval pattern, or a small
-  `src/db/retention.js` invoked from the existing scheduler). Log a count per
-  sweep; never touch a guild with the setting at 0.
-- Surface both in the respective config views + `guilds.js` POST branches;
-  document in `docs/modules/tickets.md` and the moderation module doc.
-- Tests: sweep deletes only past-cutoff rows, respects 0, leaves active cases and
-  other guilds alone.
+- **`src/db/retention.js`** — `sweepRetention(now?)` reads every guild's
+  `tickets` / `moderation` config straight from `guild_modules`, deletes closed
+  tickets + their messages past `transcriptRetentionDays`, and inactive cases
+  (`active = 0`) past `infractionRetentionDays`. Whole sweep is one transaction;
+  logs a line only when it removed something. `startRetentionSchedule()` runs it
+  ~5 min after boot and every 24 h, wired into `src/index.js` next to
+  `startBackupSchedule()`.
+- Both settings default to **0 = keep forever** (back-compat), capped at 3650
+  days. Active warnings, the visible case history and open tickets are never
+  touched; a guild with the setting at 0 is skipped entirely.
+- Config UIs: a "Delete … after N days" number field on the Tickets and
+  Moderation module pages + `clampDays()` in the `guilds.js` POST branches.
+- Docs: `docs/modules/tickets.md`, `docs/modules/moderation.md`, and the
+  privacy-policy retention table + §11.
+- `test/retention.test.js` — past-cutoff rows go, recent / active / open rows
+  stay, `0` is a no-op, other guilds untouched.
 
 ### Suggested order
 
 1. ~~**#1 legal basis + retention table**~~ — done (commit `05d6697`).
 2. ~~**#2 `/mydata` export**~~ — done (commit `5f7ec3d`).
-3. **#3 auto-prune** — makes the retention table's limits real.
+3. ~~**#3 auto-prune**~~ — done (branch `feat/retention-autoprune`).
+
+The GDPR / data-rights line is complete.

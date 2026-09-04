@@ -18,6 +18,9 @@ from the dashboard — replies are delivered to the member as a DM from Sylo.
   addition to Manage Server / bot-master).
 - **Open / close messages** — the DM text sent when a ticket opens and closes.
 - **Log channel** — optional transcript summary when a ticket closes.
+- **Delete closed tickets after** — days. A daily job removes closed tickets and
+  every message in them once they are older than this. `0` (the default) keeps
+  them forever; open tickets are never affected.
 
 ## How it works
 

@@ -194,7 +194,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | Data | Retained for | Deleted when |
 | --- | --- | --- |
 | Server configuration & module settings | As long as the Bot is in the server | Bot removed from the server; or the setting is changed or cleared |
-| Infractions / moderation case log | Indefinitely, as a moderation record | `/forget`; admin-assisted erasure; Bot removed. Inactive cases (`/case delete`, expired temp-bans) are kept for audit until then |
+| Infractions / moderation case log | Indefinitely, as a moderation record | `/forget`; admin-assisted erasure; Bot removed. Inactive cases (`/case delete`, expired temp-bans) are kept for audit unless the server sets a "delete inactive cases after N days" limit |
 | Ban appeals | Indefinitely | `/forget`; admin-assisted erasure; Bot removed |
 | Config audit log | Indefinitely | Bot removed from the server (not covered by `/forget` — it records only a display name) |
 | Leveling XP, level, message/voice counters | Until erased | `/forget`; admin-assisted erasure; Bot removed; leaderboard reset by an admin |
@@ -205,7 +205,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | Giveaway entries | Until the giveaway ends, then until erased | `/forget` (entries only — a finished giveaway's winner list is kept); Bot removed |
 | Poll creator record | Until the poll ends | Poll ends (row deleted automatically) |
 | Temporary voice channel owner + ban list | Until the channel empties | Channel empties (row deleted automatically); Bot removed |
-| Modmail ticket transcripts | Indefinitely today; a per-server retention limit is planned | `/forget`; admin-assisted erasure; Bot removed |
+| Modmail ticket transcripts | Until erased, or the server's "delete closed tickets after N days" limit (off by default) | `/forget`; admin-assisted erasure; Bot removed; a closed ticket ageing past the server's limit |
 | Notifier bookkeeping *(no personal data)* | Rolling | Automatic pruning; Bot removed |
 | Game-stat cache | 5 minutes (configurable) | TTL expiry |
 | Dashboard session | 7 days | Logout or expiry (browser cookie only) |
@@ -251,6 +251,7 @@ version will be published at the same URL.
 - **4 September 2026** — added a legal-basis section (section 4) and a retention
   schedule (section 7); documented off-site backup retention; refreshed the data
   inventory (case log, voice XP, birthdays, RSS/social notifier markers); added
-  the `/mydata` self-service export (section 7).
+  the `/mydata` self-service export (section 7); noted the optional per-server
+  auto-deletion of old closed tickets and inactive cases.
 - **2 September 2026** — corrected the message-content section and expanded the
   data inventory to match the current feature set.
