@@ -122,6 +122,18 @@ if (shardCountRaw !== 'auto') {
 // "Log in with Discord" and gates actions to guild admins. When unset, the
 // dashboard runs in open mode (localhost / trusted LAN only).
 const discordClientSecret = optionalOrNull('DISCORD_CLIENT_SECRET');
+// Bot-wide operator ids (comma/space-separated Discord user ids). Gates /health
+// — status, error log and database backup/restore across every server — to just
+// these accounts, instead of any signed-in dashboard user.
+const ownerIds = (optionalOrNull('OWNER_IDS') ?? '')
+  .split(/[\s,]+/)
+  .map((s) => s.trim())
+  .filter(Boolean);
+const badOwnerIds = ownerIds.filter((id) => !/^\d{17,20}$/.test(id));
+if (badOwnerIds.length) {
+  console.error(`[config] OWNER_IDS has invalid id(s): ${badOwnerIds.join(', ')}`);
+  process.exit(1);
+}
 const turnstileSiteKey = optionalOrNull('TURNSTILE_SITE_KEY');
 const turnstileSecretKey = optionalOrNull('TURNSTILE_SECRET_KEY');
 const itadApiKey = optionalOrNull('ITAD_API_KEY');
@@ -166,6 +178,7 @@ export const config = Object.freeze({
   authEnabled: Boolean(discordClientSecret),
   discordClientSecret,
   sessionSecret,
+  ownerIds,
 
   // Cloudflare Turnstile — powers the Verification module's captcha mode. When
   // both are unset, captcha mode falls back to a plain button.

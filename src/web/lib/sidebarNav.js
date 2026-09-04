@@ -4,6 +4,7 @@
 // resolved in auth.js and passed in here. Every row uses an inline SVG icon
 // (the `#i-*` symbols in partials/header.ejs), never an emoji.
 import { runtime } from '../../runtime.js';
+import { config } from '../../config.js';
 import { getModule } from '../../modules/registry.js';
 import { getGuildModules } from '../../db/modules.js';
 import { MODULE_ICONS } from './moduleIcons.js';
@@ -101,8 +102,11 @@ const CATEGORIES = [
 export function buildSidebar(req, gid = null) {
   const path = req.path;
   const guild = gid ? runtime.client?.guilds.cache.get(gid) : null;
+  // Health exposes cross-server data and DB backup/restore — hide the link from
+  // anyone who isn't a bot operator rather than showing a link that 403s.
+  const isOwner = !config.authEnabled || config.ownerIds.includes(req.session?.user?.id);
 
-  const top = TOP.map((t) => {
+  const top = TOP.filter((t) => t.key !== 'health' || isOwner).map((t) => {
     const href = t.href ?? (guild ? t.guild(gid) : t.noGuild);
     let active;
     if (t.key === 'dashboard') active = path === '/' || (!!guild && path === `/guilds/${gid}/overview`);

@@ -7,6 +7,7 @@
 import { Router, raw } from 'express';
 import { createRequire } from 'node:module';
 import { config } from '../../config.js';
+import { requireOwner, isOwner, forbidOwner } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { runtime, uptimeSeconds, isDiscordReady, guildCount, errorScopeCounts } from '../../runtime.js';
 import { byMetric } from '../../lib/metrics.js';
@@ -41,16 +42,6 @@ const backupLimit = rateLimit({
   message: 'Too many backup operations — wait a minute.',
 });
 
-/** Require a signed-in user for the admin actions (pass-through in open mode). */
-function requireUser(req, res, next) {
-  if (!config.authEnabled || req.session?.user) return next();
-  if ((req.headers.accept || '').includes('text/html')) {
-    if (req.session) req.session.returnTo = '/health';
-    return res.redirect('/auth/discord/login');
-  }
-  return res.status(403).json({ error: 'authentication required' });
-}
-
 router.get('/', (req, res) => {
   const ready = isDiscordReady();
   // htmx (hx-boost) navigations fetch with `Accept: */*`, so fall back to the
@@ -81,6 +72,9 @@ router.get('/', (req, res) => {
   if (config.authEnabled && !req.session?.user) {
     if (req.session) req.session.returnTo = req.originalUrl;
     return res.redirect('/auth/discord/login');
+  }
+  if (config.authEnabled && !isOwner(req.session.user.id)) {
+    return forbidOwner(res);
   }
 
   const client = runtime.client;
@@ -135,7 +129,7 @@ router.get('/', (req, res) => {
 });
 
 // Create a snapshot now.
-router.post('/backups', requireUser, backupLimit, (req, res) => {
+router.post('/backups', requireOwner, backupLimit, (req, res) => {
   try {
     const { name } = runBackup('manual');
     res.redirect(`/health?backup=${encodeURIComponent(name)}`);
@@ -145,7 +139,7 @@ router.post('/backups', requireUser, backupLimit, (req, res) => {
 });
 
 // Download a snapshot.
-router.get('/backups/:name', requireUser, (req, res) => {
+router.get('/backups/:name', requireOwner, (req, res) => {
   const stream = openBackup(req.params.name);
   if (!stream) return res.status(404).json({ error: 'no such backup' });
   res.setHeader('Content-Disposition', `attachment; filename="${req.params.name}"`);
@@ -155,7 +149,7 @@ router.get('/backups/:name', requireUser, (req, res) => {
 });
 
 // Delete a snapshot.
-router.post('/backups/:name/delete', requireUser, backupLimit, (req, res) => {
+router.post('/backups/:name/delete', requireOwner, backupLimit, (req, res) => {
   deleteBackup(req.params.name);
   res.redirect('/health');
 });
@@ -164,7 +158,7 @@ router.post('/backups/:name/delete', requireUser, backupLimit, (req, res) => {
 // The browser posts the raw file as the request body (see the Health page script).
 router.post(
   '/backups/import',
-  requireUser,
+  requireOwner,
   backupLimit,
   raw({ type: () => true, limit: '128mb' }),
   (req, res) => {
@@ -176,7 +170,7 @@ router.post(
 
 // Restore the database from a snapshot, then exit so the process manager restarts
 // Sylo on the restored data. A "prerestore" snapshot is taken first.
-router.post('/backups/:name/restore', requireUser, backupLimit, (req, res) => {
+router.post('/backups/:name/restore', requireOwner, backupLimit, (req, res) => {
   const name = req.params.name;
   const full = resolveBackup(name);
   if (!full) return res.redirect('/health?restoreerr=no%20such%20backup');

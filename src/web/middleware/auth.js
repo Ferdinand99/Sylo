@@ -141,6 +141,38 @@ export function requireGuildAdmin(req, res, next) {
 /** Kept for backwards compatibility with earlier route code. */
 export const requireAdmin = requireAuth;
 
+/** Is this user id one of the bot's operators (`OWNER_IDS`)? Always true in open mode. */
+export function isOwner(userId) {
+  return !config.authEnabled || config.ownerIds.includes(userId);
+}
+
+/** Render the 403 for `requireOwner` — also used directly by /health's GET route. */
+export function forbidOwner(res) {
+  res.status(403).render('error', {
+    title: 'Forbidden',
+    heading: 'Not an operator',
+    message: config.ownerIds.length
+      ? "This page is restricted to Sylo's operators."
+      : 'OWNER_IDS is not set, so no account is authorized for this page. Set it to your Discord user id.',
+  });
+}
+
+/**
+ * Require the signed-in user to be one of the bot's operators (`OWNER_IDS`).
+ * Gates bot-wide pages — /health's status, error log and database
+ * backup/restore — that must not be reachable by an arbitrary guild admin,
+ * let alone any signed-in user.
+ */
+export function requireOwner(req, res, next) {
+  if (!config.authEnabled) return next();
+  if (!req.session?.user) {
+    req.session.returnTo = req.originalUrl;
+    return res.redirect('/auth/discord/login');
+  }
+  if (isOwner(req.session.user.id)) return next();
+  forbidOwner(res);
+}
+
 /**
  * Wire session handling, res.locals for templates, and the /auth/* routes.
  * @param {import('express').Express} app

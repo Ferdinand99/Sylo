@@ -61,6 +61,7 @@ Only `DISCORD_TOKEN` and `DISCORD_CLIENT_ID` are required.
 | `WEB_PORT`                | `3000`                          | Dashboard HTTP port |
 | `DISCORD_CLIENT_SECRET`   | —                               | Set to require "Log in with Discord" on the dashboard |
 | `SESSION_SECRET`          | random                          | Signs the session cookie; pin it so logins survive restarts |
+| `OWNER_IDS`               | —                               | Your Discord user id(s), comma/space-separated. Gates `/health` to just these accounts when `DISCORD_CLIENT_SECRET` is set — everyone else is blocked, not just non-admins |
 | `DASHBOARD_URL`           | derived                         | Public dashboard URL; needed behind a reverse proxy and for verification-captcha / ban-appeal links |
 | `TURNSTILE_SITE_KEY`      | —                               | Cloudflare Turnstile site key — enables the Verification captcha mode |
 | `TURNSTILE_SECRET_KEY`    | —                               | Cloudflare Turnstile secret key (pair with the site key) |
@@ -131,6 +132,8 @@ To require a login:
    (e.g. `http://192.168.1.10:3000/auth/discord/callback`, or the public HTTPS
    URL behind a proxy).
 3. Set a long random `SESSION_SECRET`.
+4. Set `OWNER_IDS` to your own Discord user id — without it, `/health` (status,
+   error log, database backup/restore) is reachable by no one, not even you.
 
 With `DISCORD_CLIENT_SECRET` set, every page except the `/health` JSON and the
 `/metrics` scrape endpoint requires "Log in with Discord". Per-server pages
