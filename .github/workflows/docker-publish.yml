@@ -7,6 +7,15 @@ name: Docker image (main)
 on:
   push:
     branches: [main]
+    # Docs / template / licence-only commits don't change the image — skip the
+    # multi-arch build+push of :main for them. (The pull_request trigger below
+    # keeps no filter so a required "validate" check never hangs on a docs PR.)
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'unraid/**'
+      - 'ca_profile.xml'
+      - 'LICENSE'
   pull_request:
     branches: [main]
   workflow_dispatch:
