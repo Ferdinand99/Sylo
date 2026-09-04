@@ -1,6 +1,6 @@
 {
   "name": "sylo",
-  "version": "3.22.0",
+  "version": "3.22.1",
   "description": "Multi-function Discord bot with a web dashboard and an extensible game-stats module (starting with the Battlefield series).",
   "type": "module",
   "main": "src/index.js",
