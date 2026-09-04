@@ -27,5 +27,12 @@
     <% }) %>
   </select>
 
+  <label>Delete closed tickets after <span class="muted small">— days; 0 = keep forever</span></label>
+  <input type="number" name="transcriptRetentionDays" min="0" max="3650" value="<%= Number(cfg.transcriptRetentionDays) || 0 %>" />
+  <p class="muted small">
+    A daily job removes closed tickets and every message in them once they are older than this. Open tickets are never
+    affected.
+  </p>
+
   <div><button type="submit">Save</button></div>
 </form>

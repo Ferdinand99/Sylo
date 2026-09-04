@@ -6,6 +6,7 @@ import { runtime } from './runtime.js';
 // Importing db/index.js opens the SQLite connection and runs migrations.
 import { closeDb } from './db/index.js';
 import { startBackupSchedule } from './db/backup.js';
+import { startRetentionSchedule } from './db/retention.js';
 import { startBot } from './bot/index.js';
 import { startWeb } from './web/server.js';
 
@@ -57,6 +58,7 @@ async function main() {
   await startBot();
   httpServer = await startWeb(config.webPort);
   startBackupSchedule();
+  startRetentionSchedule();
   log.info('sylo', 'Up and running');
 }
 

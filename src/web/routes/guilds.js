@@ -190,6 +190,11 @@ function parseUserId(raw) {
     .match(/^<@!?(\d{17,20})>$|^(\d{17,20})$/);
   return m ? m[1] || m[2] : null;
 }
+// A data-retention "delete after N days" field: 0 (or junk) means keep forever.
+function clampDays(raw) {
+  const n = Math.floor(Number(raw));
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 3650) : 0;
+}
 
 // Resolve the guild (404 if unknown) then require admin — for every /:guildId route.
 function loadGuild(req, res, next) {
@@ -939,6 +944,7 @@ router.post(
       config = {
         dmOnPunish: req.body.dmOnPunish === 'on',
         warnThresholds: normaliseThresholds(rows),
+        infractionRetentionDays: clampDays(req.body.infractionRetentionDays),
       };
     } else if (mod.id === 'logging') {
       config = {
@@ -996,6 +1002,7 @@ router.post(
         closeMessage: String(req.body.closeMessage ?? '').slice(0, 1500),
         notifyChannel: /^\d{17,20}$/.test(req.body.notifyChannel ?? '') ? req.body.notifyChannel : '',
         staffRoles: [].concat(req.body.staffRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)),
+        transcriptRetentionDays: clampDays(req.body.transcriptRetentionDays),
       };
     } else if (mod.id === 'automod') {
       const b = req.body;
