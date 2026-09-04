@@ -139,7 +139,7 @@ router.post('/backups', requireOwner, backupLimit, (req, res) => {
 });
 
 // Download a snapshot.
-router.get('/backups/:name', requireOwner, (req, res) => {
+router.get('/backups/:name', requireOwner, backupLimit, (req, res) => {
   const stream = openBackup(req.params.name);
   if (!stream) return res.status(404).json({ error: 'no such backup' });
   res.setHeader('Content-Disposition', `attachment; filename="${req.params.name}"`);
