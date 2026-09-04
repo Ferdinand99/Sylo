@@ -217,6 +217,10 @@ export function mountAuth(app) {
   // themselves. Scoped to the pages that actually read the guild list — not
   // every route, so a logged-in operator clicking a public link (leaderboard,
   // verify, appeal) never sees an unexpected redirect through discord.com.
+  // Rate-limited even though the redirect target (/auth/discord) already is —
+  // this runs ahead of every other limiter in the chain (before requireAuth's
+  // own 300/min, mounted later in server.js), so it shouldn't be bare.
+  app.use(rateLimit({ windowMs: 60_000, max: 120 }));
   app.use((req, res, next) => {
     if (
       config.authEnabled &&
