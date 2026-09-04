@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.22.0](https://github.com/Ferdinand99/Sylo/compare/v3.21.0...v3.22.0) (2026-09-04)
+
+
+### Features
+
+* internal gateway sharding via DISCORD_SHARD_COUNT ([#124](https://github.com/Ferdinand99/Sylo/issues/124)) ([d30e802](https://github.com/Ferdinand99/Sylo/commit/d30e802fe9df19f5ea74667eda88ac9f3ceec605))
+
 ## [3.21.0](https://github.com/Ferdinand99/Sylo/compare/v3.20.0...v3.21.0) (2026-09-04)
 
 
