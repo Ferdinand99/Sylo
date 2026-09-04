@@ -13,6 +13,7 @@
 [![GHCR](https://img.shields.io/badge/ghcr.io-Ferdinand99%2FSylo-2496ED?logo=github&logoColor=white)](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/github/license/Ferdinand99/Sylo)](LICENSE)
+[![Website](https://img.shields.io/badge/website-sylobot.com-7C6CFF)](https://sylobot.com)
 [![Roadmap](https://img.shields.io/badge/roadmap-sylobot.com-8B5CF6)](https://roadmap.sylobot.com/roadmap)
 
 </div>
@@ -35,6 +36,8 @@ giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS
 
 ## Documentation
 
+- **[sylobot.com](https://sylobot.com)** — the project site: what Sylo does at a
+  glance, and a self-host quick-start.
 - **[docs/modules/](docs/modules/README.md)** — a page per module: what it does,
   the permissions and intents it needs, its settings, and its commands.
 - **[docs/self-hosting.md](docs/self-hosting.md)** — install, environment
