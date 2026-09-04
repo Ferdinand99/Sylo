@@ -103,6 +103,21 @@ if (badGuildIds.length) {
   process.exit(1);
 }
 
+// Internal sharding: how many gateway shards this single process runs. 'auto'
+// (the default) asks Discord for the recommended count — it stays 1 until the
+// bot is in ~2,500+ servers, so it is a no-op for small instances. A positive
+// integer pins the count. This is always one process; multi-process sharding is
+// not supported.
+const shardCountRaw = optional('DISCORD_SHARD_COUNT', 'auto').toLowerCase();
+let discordShardCount = 'auto';
+if (shardCountRaw !== 'auto') {
+  discordShardCount = Number(shardCountRaw);
+  if (!Number.isInteger(discordShardCount) || discordShardCount < 1) {
+    console.error("[config] DISCORD_SHARD_COUNT must be 'auto' or a positive integer.");
+    process.exit(1);
+  }
+}
+
 // Dashboard auth. When DISCORD_CLIENT_SECRET is set, the dashboard requires
 // "Log in with Discord" and gates actions to guild admins. When unset, the
 // dashboard runs in open mode (localhost / trusted LAN only).
@@ -137,6 +152,8 @@ export const config = Object.freeze({
   // commands are registered globally (can take up to ~1 hour to propagate).
   discordGuildIds,
   discordGuildId: discordGuildIds[0] ?? null, // back-compat: first listed guild
+  // Internal gateway sharding for this one process. 'auto' | positive integer.
+  discordShardCount,
 
   // Web dashboard
   webPort,

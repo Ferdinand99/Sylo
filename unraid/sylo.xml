@@ -75,6 +75,15 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
     Required="false"
     Mask="false"/>
   <Config
+    Name="DISCORD_SHARD_COUNT"
+    Target="DISCORD_SHARD_COUNT"
+    Default=""
+    Description="Optional. Number of Discord gateway shards this one container runs. Leave blank (or 'auto') to follow Discord's recommendation - it stays at 1 until the bot is in ~2,500+ servers, so most instances never need this. Multi-process sharding is not supported."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+  <Config
     Name="DISCORD_CLIENT_SECRET"
     Target="DISCORD_CLIENT_SECRET"
     Default=""
