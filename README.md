@@ -13,7 +13,7 @@
 [![GHCR](https://img.shields.io/badge/ghcr.io-Ferdinand99%2FSylo-2496ED?logo=github&logoColor=white)](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/github/license/Ferdinand99/Sylo)](LICENSE)
-[![Roadmap](https://img.shields.io/badge/roadmap-opland.net-8B5CF6)](https://roadmap.opland.net/roadmap)
+[![Roadmap](https://img.shields.io/badge/roadmap-sylobot.com-8B5CF6)](https://roadmap.sylobot.com/roadmap)
 
 </div>
 
@@ -40,7 +40,7 @@ giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS
 - **[docs/self-hosting.md](docs/self-hosting.md)** — install, environment
   variables, reverse proxy, Docker, Unraid, backups, upgrades and rollback,
   troubleshooting.
-- **[Roadmap](https://roadmap.opland.net/roadmap)** — what's planned and what's
+- **[Roadmap](https://roadmap.sylobot.com/roadmap)** — what's planned and what's
   shipped; suggest features and vote.
 - [Privacy policy](docs/privacy-policy.md) · [Terms of service](docs/terms-of-service.md)
 
