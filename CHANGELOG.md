@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.22.3](https://github.com/Ferdinand99/Sylo/compare/v3.22.2...v3.22.3) (2026-09-04)
+
+
+### Bug Fixes
+
+* don't let htmx-boosted navigations hit Discord's OAuth redirect … ([88207a0](https://github.com/Ferdinand99/Sylo/commit/88207a0e90c48c7f02ed3dfb9a0241a749871fe8))
+* don't let htmx-boosted navigations hit Discord's OAuth redirect directly ([1131078](https://github.com/Ferdinand99/Sylo/commit/1131078576b4cfd25b0579aa5a0b1ed13953f5c3))
+* rate-limit the new session-refresh check + a missing backup-download limiter ([65b80e6](https://github.com/Ferdinand99/Sylo/commit/65b80e69780fc54681b185373d7d167a4bebcbbe))
+
 ## [3.22.2](https://github.com/Ferdinand99/Sylo/compare/v3.22.1...v3.22.2) (2026-09-04)
 
 
