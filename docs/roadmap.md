@@ -424,7 +424,7 @@ The GDPR / data-rights line is complete.
 
 ---
 
-## Internal sharding → in progress (`feat:` — minor, branch `feat/internal-sharding`)
+## Internal sharding → done (`feat:` — minor, branch `feat/internal-sharding`)
 
 Groundwork for the hosted instance growing past Discord's **2,500 guilds per
 gateway connection** limit, without disturbing anything about how Sylo runs
@@ -449,3 +449,38 @@ today.
 
 When the hosted instance actually approaches the ceiling, the follow-up line is
 Postgres → dashboard/bot process split → `ShardingManager`, in that order.
+
+---
+
+## Public hosted instance opened up → done (`fix/health-owner-only-access`, PR #126)
+
+Sylo's own Discord application is already a Discord-verified bot (approved for
+the Message Content privileged intent past the 100-guild threshold), and
+`sylobot.com` now points visitors at it directly instead of self-hosting only.
+
+- **"Add to Discord"** — a public install link
+  (`https://discord.com/oauth2/authorize?client_id=1374856793469227029`) is now
+  the primary CTA in the site nav and hero, replacing "Self-host it"; the
+  Guild Install scopes/permissions were set in the Discord Developer Portal's
+  **Installation** page (`bot` + `applications.commands`, the same permission
+  set `docs/self-hosting.md` lists for self-hosters).
+- **`/health` was reachable by anyone signed in, not just admins.** It uses its
+  own `requireUser` gate — checked only for *a* session, never for *whose* — so
+  any Discord account that completed the dashboard OAuth login could see
+  cross-server guild/member counts and module adoption, and could create,
+  download, restore or delete database backups. Harmless for a single
+  self-hosted server behind trusted admins; not safe once the same dashboard
+  serves many strangers' guilds.
+- **`OWNER_IDS`** (new env var, comma/space-separated Discord user ids) — gates
+  `/health`'s page and all four backup routes to just these accounts via a new
+  `requireOwner` / `isOwner` in `src/web/middleware/auth.js`; the sidebar hides
+  the Health link from everyone else instead of showing a link that 403s. The
+  machine-readable JSON branch (Docker healthcheck / uptime monitors) is
+  untouched — it was never gated. Documented in `.env.example` and
+  `docs/self-hosting.md`; self-hosters running with `DISCORD_CLIENT_SECRET` set
+  now need to set `OWNER_IDS` too, or `/health` is unreachable by anyone.
+- Deployed to `sylo-test` with `OWNER_IDS` set to the operator's id.
+
+Postgres (see above) stays out of scope for now — the roadmap's own sequencing
+already has it landing later, once guild count approaches the internal-sharding
+ceiling, not at hosted launch.
