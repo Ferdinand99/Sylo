@@ -16,6 +16,11 @@ import { rateLimit } from './rateLimit.js';
 const DISCORD_API = 'https://discord.com/api/v10';
 const OAUTH_SCOPES = 'identify guilds';
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+// req.session.guilds is a snapshot from login, not live — a server added or
+// left after that point won't show up until it's refreshed. Past this age, a
+// guild-list page transparently round-trips through Discord's OAuth again
+// instead of waiting for the user to notice and log out/in themselves.
+const GUILDS_TTL_MS = 10 * 60 * 1000;
 
 // "Add new server" bot-invite link. Scopes + a permission set that covers every
 // module: moderation (kick/ban/timeout), roles, channels & webhooks, reactions,
@@ -192,6 +197,25 @@ export function mountAuth(app) {
     );
   }
 
+  // A guild-list page with a stale snapshot silently round-trips through
+  // Discord's OAuth to refresh it, instead of making the user log out/in
+  // themselves. Scoped to the pages that actually read the guild list — not
+  // every route, so a logged-in operator clicking a public link (leaderboard,
+  // verify, appeal) never sees an unexpected redirect through discord.com.
+  app.use((req, res, next) => {
+    if (
+      config.authEnabled &&
+      req.method === 'GET' &&
+      req.session?.user &&
+      (req.path === '/' || req.path.startsWith('/guilds')) &&
+      (!req.session.guildsFetchedAt || Date.now() - req.session.guildsFetchedAt > GUILDS_TTL_MS)
+    ) {
+      req.session.returnTo = req.originalUrl;
+      return res.redirect('/auth/discord/login');
+    }
+    next();
+  });
+
   // Expose auth state to every view.
   app.use((req, res, next) => {
     res.locals.authEnabled = config.authEnabled;
@@ -276,6 +300,7 @@ export function mountAuth(app) {
       req.session.guilds = Array.isArray(guilds)
         ? guilds.map((g) => ({ id: g.id, owner: g.owner, permissions: g.permissions }))
         : [];
+      req.session.guildsFetchedAt = Date.now();
 
       const dest = req.session.returnTo || '/';
       req.session.returnTo = undefined;

@@ -141,3 +141,5 @@ dist
 /data/*
 !/data/.gitkeep
 /site/
+# Internal-only notes/plans that shouldn't be public (not project docs).
+/internal/
