@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.22.1](https://github.com/Ferdinand99/Sylo/compare/v3.22.0...v3.22.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* gate /health to OWNER_IDS instead of any signed-in user ([#126](https://github.com/Ferdinand99/Sylo/issues/126)) ([22ef2f8](https://github.com/Ferdinand99/Sylo/commit/22ef2f84255d080f3ed39fea0c7f60dafe7c625c))
+
 ## [3.22.0](https://github.com/Ferdinand99/Sylo/compare/v3.21.0...v3.22.0) (2026-09-04)
 
 
