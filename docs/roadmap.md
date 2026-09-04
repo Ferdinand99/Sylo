@@ -484,3 +484,112 @@ the Message Content privileged intent past the 100-guild threshold), and
 Postgres (see above) stays out of scope for now — the roadmap's own sequencing
 already has it landing later, once guild count approaches the internal-sharding
 ceiling, not at hosted launch.
+
+---
+
+## Next — Postgres migration line (planned, not queued)
+
+Written now so the shape of the work is scoped ahead of time — **not** a signal
+to start. Per the sequencing note above, this only becomes relevant once the
+hosted instance's guild count actually approaches the internal-sharding ceiling
+and a multi-process `ShardingManager` split is next. No branch should open here
+before that's actually in sight.
+
+Grounded in a codebase read-through: `src/db/` is a real seam — 31
+feature-specific wrapper files (`leveling.js`, `modCases.js`, `modules.js`, …,
+~3,800 lines total) sit around one connection module
+(`src/db/index.js`); the ~30 feature modules call **named functions**
+(`addCase()`, `setGuildModule()`, …), not raw SQL. Only one file outside
+`src/db` (`src/web/routes/metrics.js`) touches the raw `db` handle. That's why
+this is tractable at all — the SQL rewrite is confined to one directory, not
+smeared across every module.
+
+### 0 — Decision: self-hosting stays SQLite; Postgres is hosted-only, opt-in
+
+Not built — needs deciding before #1 starts, because it changes the shape of
+every piece below.
+
+Sylo's self-hosting pitch is "one container, one SQLite file you control, no
+external dependency" (the landing page, `docs/self-hosting.md`). Forcing every
+self-hoster onto a separate Postgres instance breaks that promise for the
+common case — one bot, one server — where a single SQLite connection is never
+going to be the bottleneck. Recommendation: self-hosting stays on
+better-sqlite3 **indefinitely**; the hosted instance gets Postgres as an
+opt-in, selected by a `DATABASE_URL` env var — unset (the default, and every
+self-hosted deployment) keeps today's SQLite path untouched; set (the hosted
+instance, once it needs it) switches the driver. This means a driver seam
+inside `src/db/`, not a hard cutover — more work than a straight swap, but it's
+what keeps the self-hosting story true.
+
+### 1 — Driver + async seam in `src/db/`
+
+The big, mechanical piece; blocks #2 and #3.
+
+- A thin driver abstraction behind each `src/db/*.js` file's existing exported
+  function names, so the same call (`addCase(...)`, `setGuildModule(...)`) runs
+  against either better-sqlite3 (sync) or a Postgres driver (async) depending on
+  `DATABASE_URL`.
+- better-sqlite3's API is synchronous end-to-end today — 231 `.prepare(`, 124
+  `.run(`, 322 `.get(`, 51 `.all(` calls across those 31 files — and the ~78
+  files outside `src/db` that import them (commands, dashboard routes) call
+  them with no `await`. Every one of those call sites needs `await` added once
+  the Postgres path exists, even though the SQLite path itself stays
+  synchronous. Mechanical, but wide — worth a scripted pass (grep + codemod)
+  rather than hand-editing 78 files.
+- Placeholder style differs: existing statements mix `?` positional and
+  `@namedParam` binding; Postgres wire protocol only understands `$1, $2, …`.
+  Picking a Postgres client that supports named parameters natively (e.g.
+  `postgres` (porsager) over bare `pg`) avoids hand-converting ~231 statements'
+  placeholders one at a time.
+- `db.transaction((...) => {...})` (better-sqlite3's synchronous wrapper) is
+  used in 5 files — `leveling.js`, `modCases.js`, `purge.js`, `retention.js`,
+  `index.js` — and callers use it inline for a return value (e.g. `addCase()`
+  returns the new case number synchronously). Its Postgres equivalent is async,
+  so those call sites need reshaping, not just an `await`.
+- No `json_extract`/`strftime` usage anywhere — JSON columns are plain `TEXT`
+  parsed in JS. That part is already Postgres-friendly and isn't part of this
+  work (could become native `jsonb` later, but doesn't block the migration).
+
+### 2 — Migration runner
+
+Small; can land alongside #1.
+
+- Today: a plain ordered JS array in `src/db/index.js` (36 entries so far),
+  each `` (database) => database.exec(`...`) ``, tracked via SQLite's `PRAGMA
+  user_version`. Postgres has no equivalent pragma.
+- Keep the same shape — it's simple and has worked fine for 36 migrations — but
+  track "applied migrations" in a real table (`schema_migrations(version int
+  primary key, applied_at)`) instead of a pragma. That works identically on
+  both drivers with one small per-driver read/write, instead of adopting a
+  migration framework (node-pg-migrate, Knex) that would only ever apply to the
+  Postgres half of a dual-driver setup.
+
+### 3 — Backup / restore redesign
+
+Depends on #1 (needs a working Postgres connection to dump from). This is a
+real redesign, not a driver swap.
+
+- Today's `/health` backup/restore (`src/db/backup.js`) is built entirely
+  around "it's one file": `VACUUM INTO` for compacted snapshots, WAL
+  checkpoint/truncate, a SQLite magic-header check on import, and a self-serve
+  **Restore** button that `copyFileSync`s a snapshot over the live database and
+  exits so the process manager restarts. None of it maps to Postgres.
+- Replace with `pg_dump` / `pg_restore` (needs the Postgres client tools
+  bundled into the Docker image). The "click Restore on the Health page" UX
+  needs rethinking too — a `pg_restore` isn't a fast file copy the way
+  `copyFileSync` was; it likely needs to run out-of-band with a progress/done
+  state instead of blocking a request.
+- The off-site backup path (`src/db/offsiteBackup.js` — gzip + ship to WebDAV
+  or a Discord webhook) stays conceptually the same; it just ships whatever
+  `runBackup()` produces, so once #3 produces a Postgres dump instead of a
+  `.db` file, this piece mostly carries over unchanged.
+
+### Suggested order
+
+1. **#0 decision** — confirm self-hosting stays SQLite-only; hosted becomes
+   opt-in via `DATABASE_URL`. Blocks everything else.
+2. **#1 driver + async seam** — the big one.
+3. **#2 migration runner** — small, land alongside #1.
+4. **#3 backup/restore redesign** — last, depends on #1.
+5. Ship behind `DATABASE_URL` unset by default, so every self-hosted
+   deployment sees no change at all.
