@@ -105,11 +105,26 @@ export function adminGuildIds(req) {
   );
 }
 
+/**
+ * Send the browser to /auth/discord/login. An hx-boost navigation fetches
+ * with `fetch()`, which silently fails on a cross-origin redirect (Discord's
+ * authorize page sends no CORS headers) — so a boosted request gets an
+ * `HX-Redirect` response instead, which htmx turns into a real top-level
+ * `window.location` navigation rather than an AJAX swap.
+ */
+function redirectToLogin(req, res) {
+  if (req.get('HX-Request')) {
+    res.set('HX-Redirect', '/auth/discord/login').status(204).end();
+  } else {
+    res.redirect('/auth/discord/login');
+  }
+}
+
 /** Require any signed-in user (pass-through in open mode). */
 export function requireAuth(req, res, next) {
   if (!config.authEnabled || req.session?.user) return next();
   req.session.returnTo = req.originalUrl;
-  res.redirect('/auth/discord/login');
+  redirectToLogin(req, res);
 }
 
 /** A "bot master" — holds one of the guild's designated dashboard-admin roles. */
@@ -135,7 +150,7 @@ export function requireGuildAdmin(req, res, next) {
   if (!config.authEnabled) return next();
   if (!req.session?.user) {
     req.session.returnTo = req.originalUrl;
-    return res.redirect('/auth/discord/login');
+    return redirectToLogin(req, res);
   }
   if (adminGuildIds(req).has(req.params.guildId)) return next();
   isBotMaster(req.params.guildId, req.session.user.id)
@@ -172,7 +187,7 @@ export function requireOwner(req, res, next) {
   if (!config.authEnabled) return next();
   if (!req.session?.user) {
     req.session.returnTo = req.originalUrl;
-    return res.redirect('/auth/discord/login');
+    return redirectToLogin(req, res);
   }
   if (isOwner(req.session.user.id)) return next();
   forbidOwner(res);
@@ -211,7 +226,7 @@ export function mountAuth(app) {
       (!req.session.guildsFetchedAt || Date.now() - req.session.guildsFetchedAt > GUILDS_TTL_MS)
     ) {
       req.session.returnTo = req.originalUrl;
-      return res.redirect('/auth/discord/login');
+      return redirectToLogin(req, res);
     }
     next();
   });
