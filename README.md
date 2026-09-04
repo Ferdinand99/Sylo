@@ -4,8 +4,9 @@
 
 # Sylo
 
-**Multi-function Discord bot with a MEE6-style web dashboard — self-hosted on Unraid via Docker.**
+**Multi-function Discord bot with a MEE6-style web dashboard — add the hosted instance, or self-host on Unraid via Docker.**
 
+[![Add to Discord](https://img.shields.io/badge/add%20to-Discord-5865F2?logo=discord&logoColor=white)](https://discord.com/oauth2/authorize?client_id=1374856793469227029)
 [![Test](https://github.com/Ferdinand99/Sylo/actions/workflows/test.yml/badge.svg)](https://github.com/Ferdinand99/Sylo/actions/workflows/test.yml)
 [![Release](https://img.shields.io/github/v/release/Ferdinand99/Sylo?sort=semver&label=release)](https://github.com/Ferdinand99/Sylo/releases)
 [![Docker Hub](https://img.shields.io/docker/v/iwgamin/sylo?sort=semver&logo=docker&logoColor=white&label=docker%20hub)](https://hub.docker.com/r/iwgamin/sylo)
@@ -24,6 +25,11 @@ and **RuneScape** (OSRS / RS3) player lookups. Everything runs in **one Node
 process, one container, no build step** — and stays that way past Discord's
 2,500-guild gateway limit via in-process sharding.
 
+Don't want to run your own instance? Sylo is a Discord-verified bot —
+[add it to your server](https://discord.com/oauth2/authorize?client_id=1374856793469227029)
+directly. The rest of this README, and [self-hosting](#self-hosting) below, is
+for running your own copy instead.
+
 <details>
 <summary>The 30 modules</summary>
 
@@ -38,7 +44,8 @@ giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS
 ## Documentation
 
 - **[sylobot.com](https://sylobot.com)** — the project site: what Sylo does at a
-  glance, and a self-host quick-start.
+  glance, the "Add to Discord" link for the hosted instance, and a self-host
+  quick-start.
 - **[docs/modules/](docs/modules/README.md)** — a page per module: what it does,
   the permissions and intents it needs, its settings, and its commands.
 - **[docs/self-hosting.md](docs/self-hosting.md)** — install, environment
@@ -418,6 +425,9 @@ several ids comma-separated (`DISCORD_DEV_GUILD_IDS=id1,id2`) to cover more than
 test server. `npm run register` re-syncs commands without a restart.
 
 ## Self-hosting
+
+Don't need your own instance? [Add the hosted bot](https://discord.com/oauth2/authorize?client_id=1374856793469227029)
+instead — this section is for running your own copy.
 
 The full guide — every environment variable, Discord application setup, running
 behind a reverse proxy, Docker, Unraid, backups, upgrades and rollback, and a
