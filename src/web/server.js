@@ -59,12 +59,15 @@ export function createApp() {
   app.use('/verify', rateLimit({ windowMs: 60_000, max: 20 }), verifyRouter);
   app.use('/appeal', rateLimit({ windowMs: 60_000, max: 15 }), appealRouter);
 
-  // Everything below requires a signed-in user when auth is enabled.
-  app.use(requireAuth);
   // Per-path ceiling on the authenticated dashboard — generous for normal
   // clicking, but stops a stuck script or a compromised session from hammering
-  // config saves, backups, or "send as bot".
+  // config saves, backups, or "send as bot". Ahead of requireAuth so
+  // unauthenticated traffic hitting these routes is capped too, not just
+  // signed-in sessions — requireAuth's own redirect is cheap, but it was the
+  // only thing standing between an arbitrary flood and the rest of the stack.
   app.use(rateLimit({ windowMs: 60_000, max: 300 }));
+  // Everything below requires a signed-in user when auth is enabled.
+  app.use(requireAuth);
   app.use('/', dashboardRouter);
   app.use('/stats', statsRouter);
   app.use('/commands', commandsRouter);

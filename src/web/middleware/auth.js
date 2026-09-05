@@ -16,6 +16,17 @@ import { rateLimit } from './rateLimit.js';
 const DISCORD_API = 'https://discord.com/api/v10';
 const OAUTH_SCOPES = 'identify guilds';
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * `returnTo` is always set from `req.originalUrl` — attacker-controlled in a
+ * crafted request (e.g. a path of `//evil.com/x`, which `res.redirect()`
+ * sends as-is and browsers resolve as protocol-relative to another host).
+ * Only redirect to a same-origin relative path: exactly one leading slash,
+ * never `//` or `/\` (both browser-recognized ways to smuggle a host in).
+ */
+function safeReturnTo(path) {
+  return typeof path === 'string' && /^\/(?!\/|\\)/.test(path) ? path : '/';
+}
 // req.session.guilds is a snapshot from login, not live — a server added or
 // left after that point won't show up until it's refreshed. Past this age, a
 // guild-list page transparently round-trips through Discord's OAuth again
@@ -321,7 +332,7 @@ export function mountAuth(app) {
         : [];
       req.session.guildsFetchedAt = Date.now();
 
-      const dest = req.session.returnTo || '/';
+      const dest = safeReturnTo(req.session.returnTo);
       req.session.returnTo = undefined;
       res.redirect(dest);
     } catch (err) {
