@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.22.4](https://github.com/Ferdinand99/Sylo/compare/v3.22.3...v3.22.4) (2026-09-05)
+
+
+### Bug Fixes
+
+* reject open-redirect returnTo paths and rate-limit requireAuth ([#136](https://github.com/Ferdinand99/Sylo/issues/136)) ([7ca6b3b](https://github.com/Ferdinand99/Sylo/commit/7ca6b3b97c7e18977451784805d95a26b3b3127f))
+
 ## [3.22.3](https://github.com/Ferdinand99/Sylo/compare/v3.22.2...v3.22.3) (2026-09-04)
 
 
