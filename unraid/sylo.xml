@@ -15,7 +15,9 @@ Setup: create a Discord application at https://discord.com/developers/applicatio
 
 Intents: the member/message-driven modules (logging, welcome, reaction roles, verification, leveling, server statistics, invite tracker, auto-moderation, counting, autoresponder, starboard) need the "Server Members" and/or "Message Content" intents enabled on the Developer Portal Bot page. Leave INTENT_GUILD_MEMBERS / INTENT_MESSAGE_CONTENT at their defaults, or set one to false to boot without that intent (its modules stay unavailable).
 
-Dashboard: runs open by default (use only on a trusted LAN). To require "Log in with Discord" for server admins, set DISCORD_CLIENT_SECRET and add http://[UNRAID-IP]:[HOST-PORT]/auth/discord/callback to the app's OAuth2 Redirects.</Overview>
+Dashboard: runs open by default (use only on a trusted LAN). To require "Log in with Discord" for server admins, set DISCORD_CLIENT_SECRET and add http://[UNRAID-IP]:[HOST-PORT]/auth/discord/callback to the app's OAuth2 Redirects.
+
+Community &amp; support: https://discord.gg/GAzR9k5hhS</Overview>
   <Category>Tools: Network:Messenger</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Ferdinand99/Sylo/main/unraid/sylo.xml</TemplateURL>

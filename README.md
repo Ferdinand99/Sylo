@@ -7,6 +7,7 @@
 **Multi-function Discord bot with a MEE6-style web dashboard — add the hosted instance, or self-host on Unraid via Docker.**
 
 [![Add to Discord](https://img.shields.io/badge/add%20to-Discord-5865F2?logo=discord&logoColor=white)](https://discord.com/oauth2/authorize?client_id=1374856793469227029)
+[![Discord](https://img.shields.io/discord/1545464180340039751?logo=discord&logoColor=white&label=community&color=5865F2)](https://discord.gg/GAzR9k5hhS)
 [![Test](https://github.com/Ferdinand99/Sylo/actions/workflows/test.yml/badge.svg)](https://github.com/Ferdinand99/Sylo/actions/workflows/test.yml)
 [![Release](https://img.shields.io/github/v/release/Ferdinand99/Sylo?sort=semver&label=release)](https://github.com/Ferdinand99/Sylo/releases)
 [![Docker Hub](https://img.shields.io/docker/v/iwgamin/sylo?sort=semver&logo=docker&logoColor=white&label=docker%20hub)](https://hub.docker.com/r/iwgamin/sylo)
@@ -53,6 +54,8 @@ giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS
   troubleshooting.
 - **[Roadmap](https://roadmap.sylobot.com/roadmap)** — what's planned and what's
   shipped; suggest features and vote.
+- **[Discord](https://discord.gg/GAzR9k5hhS)** — the community server: support,
+  announcements, and where development discussion happens.
 - [Privacy policy](docs/privacy-policy.md) · [Terms of service](docs/terms-of-service.md)
 
 ## Contents
