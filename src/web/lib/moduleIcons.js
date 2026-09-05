@@ -34,6 +34,7 @@ export const MODULE_ICONS = {
   'kick-alerts': 'kick',
   rss: 'rss',
   insights: 'trending-up',
+  'channel-cleanup': 'trash-2',
   // synthetic overview cards
   general: 'gear',
   commands: 'command',

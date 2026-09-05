@@ -62,6 +62,7 @@ const CATEGORIES = [
       { module: 'custom-commands' },
       { module: 'invite-tracker', label: 'Invite tracker' },
       { module: 'sticky' },
+      { module: 'channel-cleanup', label: 'Channel cleanup' },
       { page: 'insights', dotModule: 'insights', label: 'Insights' },
       { page: 'audit', label: 'Audit log' },
     ],

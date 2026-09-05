@@ -20,7 +20,7 @@
 
 </div>
 
-Thirty per-guild **modules**, Discord **OAuth2 login**, a public leveling
+Thirty-one per-guild **modules**, Discord **OAuth2 login**, a public leveling
 **leaderboard**, and — via the optional Game stats module — **Battlefield-series**
 and **RuneScape** (OSRS / RS3) player lookups. Everything runs in **one Node
 process, one container, no build step** — and stays that way past Discord's
@@ -32,13 +32,13 @@ directly. The rest of this README, and [self-hosting](#self-hosting) below, is
 for running your own copy instead.
 
 <details>
-<summary>The 30 modules</summary>
+<summary>The 31 modules</summary>
 
 moderation · logging · tickets · reaction roles · verification · welcome ·
 welcome channel · birthdays · sticky messages · auto-moderation · counting · custom commands ·
 autoresponder · reminders · leveling · AFK · server statistics · server insights · free games ·
 ban appeals · temporary voice channels · starboard · invite tracker · polls ·
-giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS alerts
+giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS alerts · channel cleanup
 
 </details>
 

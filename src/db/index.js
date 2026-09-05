@@ -653,6 +653,30 @@ export const MIGRATIONS = [
       DROP TABLE warnings;
     `);
   },
+
+  // Channel cleanup: per-channel weekly schedule that deletes messages older
+  // than a threshold. `days` is a comma-separated 0-6 list (Sun=0), same
+  // convention as scheduled_messages.days. `last_run_date` is a 'YYYY-MM-DD'
+  // string (server-local TZ) guarding against firing twice in one day.
+  (database) => {
+    database.exec(`
+      CREATE TABLE channel_cleanup_schedules (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id       TEXT NOT NULL,
+        channel_id     TEXT NOT NULL,
+        days           TEXT NOT NULL DEFAULT '0,1,2,3,4,5,6',
+        time_hhmm      TEXT NOT NULL,
+        max_age_hours  INTEGER NOT NULL,
+        skip_pinned    INTEGER NOT NULL DEFAULT 1,
+        enabled        INTEGER NOT NULL DEFAULT 1,
+        last_run_date  TEXT,
+        last_run_count INTEGER,
+        created_at     INTEGER NOT NULL
+      );
+      CREATE INDEX idx_cleanup_enabled ON channel_cleanup_schedules (enabled);
+      CREATE INDEX idx_cleanup_guild ON channel_cleanup_schedules (guild_id, created_at);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

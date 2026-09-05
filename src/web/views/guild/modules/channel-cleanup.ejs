@@ -1,0 +1,51 @@
+<% var list = typeof cleanupSchedules !== 'undefined' ? cleanupSchedules : []; %>
+<%
+  function dayLabel(dayList) {
+    if (dayList.length === 7) return 'every day';
+    var names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return dayList.slice().sort().map(function (n) { return names[n]; }).join('/');
+  }
+  function ageLabel(hours) {
+    if (hours % 24 === 0) return (hours / 24) + 'd';
+    return hours + 'h';
+  }
+%>
+
+<p class="muted small">
+  Auto-delete messages older than a threshold from a channel, on a weekly schedule you pick. Good for
+  high-noise channels (webhook feeds, status alerts) that would otherwise need manual cleanup forever.
+  Needs <strong>Manage Messages</strong> in the target channel.
+</p>
+
+<div class="rr-list-head">
+  <h3 class="u-m0">Your schedules <span class="muted small"><%= list.length %></span></h3>
+  <a class="btn btn-primary" href="/guilds/<%= guild.id %>/m/channel-cleanup/s/new">＋ New schedule</a>
+</div>
+
+<% if (list.length === 0) { %>
+  <p class="empty">None yet — create one to start cleaning up a channel.</p>
+<% } else { %>
+  <% list.forEach(function (s) { %>
+    <div class="cmd-override">
+      <div class="cmd-override-head">
+        <span>
+          <strong>#<%= s.channel %></strong>
+          <span class="muted small">
+            · <%= dayLabel(s.dayList) %> at <%= s.time %> · older than <%= ageLabel(s.maxAgeHours) %>
+            <% if (s.lastRunDate) { %> · last ran <%= s.lastRunDate %><% if (s.lastRunCount) { %> (<%= s.lastRunCount %> deleted)<% } %><% } %>
+          </span>
+        </span>
+        <span class="pill <%= s.enabled ? 'on' : 'off' %>"><%= s.enabled ? 'on' : 'off' %></span>
+      </div>
+      <div class="btn-row">
+        <a class="plugin-btn" href="/guilds/<%= guild.id %>/m/channel-cleanup/s/<%= s.id %>">Edit</a>
+        <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/m/channel-cleanup/s/<%= s.id %>/toggle">
+          <button type="submit"><%= s.enabled ? 'Pause' : 'Resume' %></button>
+        </form>
+        <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/m/channel-cleanup/s/<%= s.id %>/delete">
+          <button type="submit" class="danger" data-confirm="Delete this schedule?">Delete</button>
+        </form>
+      </div>
+    </div>
+  <% }) %>
+<% } %>

@@ -137,6 +137,14 @@ import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
+import {
+  listCleanupSchedules,
+  getCleanupSchedule,
+  createCleanupSchedule,
+  updateCleanupSchedule,
+  deleteCleanupSchedule,
+  setCleanupScheduleEnabled,
+} from '../../db/channelCleanup.js';
 
 const router = Router();
 
@@ -171,6 +179,7 @@ const CONFIG_VIEWS = new Set([
   'rss',
   'giveaways',
   'game-stats',
+  'channel-cleanup',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -801,6 +810,20 @@ function moduleViewLocals(mod, req, configOverride) {
             runAt: j.run_at,
             enabled: j.enabled === 1,
             lastRun: j.last_run_at ? timeAgo(j.last_run_at) : null,
+          }))
+        : [],
+    cleanupSchedules:
+      mod.id === 'channel-cleanup'
+        ? listCleanupSchedules(req.guild.id).map((s) => ({
+            id: s.id,
+            channel: guildTextChannels(req.guild).find((c) => c.id === s.channel_id)?.name ?? s.channel_id,
+            dayList: s.dayList,
+            time: s.time_hhmm,
+            maxAgeHours: s.max_age_hours,
+            skipPinned: s.skip_pinned === 1,
+            enabled: s.enabled === 1,
+            lastRunDate: s.last_run_date,
+            lastRunCount: s.last_run_count,
           }))
         : [],
     schedulePresets: SCHEDULE_PRESETS,
@@ -1555,6 +1578,93 @@ router.post('/:guildId/m/reminders/r/:id/toggle', (req, res) => {
   const rec = isRemId(req.params.id) ? getScheduled(req.guild.id, Number(req.params.id)) : null;
   if (rec) setScheduledEnabled(req.guild.id, rec.id, rec.enabled !== 1);
   res.redirect(`/guilds/${req.guild.id}/${REM_BASE}?msg=saved`);
+});
+
+// --- Channel cleanup builder -----------------------------------------
+
+const CLEAN_BASE = 'm/channel-cleanup';
+const isCleanId = (v) => /^\d+$/.test(v ?? '');
+const MAX_AGE_HOURS_CAP = 24 * 90; // 90 days
+
+function renderCleanupBuilder(req, res, rec) {
+  res.render('channel-cleanup-builder', {
+    ...baseContext(req.guild, CLEAN_BASE),
+    channels: guildTextChannels(req.guild),
+    guildId: req.guild.id,
+    weekdays: WEEKDAYS,
+    isNew: !rec,
+    rec: rec || {
+      id: '',
+      channel_id: '',
+      dayList: [0, 1, 2, 3, 4, 5, 6],
+      time_hhmm: '03:00',
+      max_age_hours: 24,
+      skip_pinned: 1,
+      enabled: 1,
+    },
+    msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+  });
+}
+
+router.get('/:guildId/m/channel-cleanup/s/new', (req, res) => renderCleanupBuilder(req, res, null));
+
+router.get('/:guildId/m/channel-cleanup/s/:id', (req, res) => {
+  if (!isCleanId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
+  const rec = getCleanupSchedule(req.guild.id, Number(req.params.id));
+  if (!rec) return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
+  renderCleanupBuilder(req, res, rec);
+});
+
+router.post('/:guildId/m/channel-cleanup/s/:id', (req, res) => {
+  const b = req.body;
+  if (req.params.id !== 'new' && !isCleanId(req.params.id)) {
+    return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
+  }
+  const existing = req.params.id === 'new' ? null : getCleanupSchedule(req.guild.id, Number(req.params.id));
+  if (req.params.id !== 'new' && !existing) return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
+  const back = `/guilds/${req.guild.id}/${CLEAN_BASE}/s/${existing ? existing.id : 'new'}`;
+
+  const channelId = /^\d{17,20}$/.test(b.channelId ?? '') ? b.channelId : '';
+  if (!channelId) return res.redirect(`${back}?msg=badchannel`);
+
+  const days = WEEKDAYS.map(([n]) => n).filter((n) => b[`day_${n}`] === 'on');
+  const maxAgeHours = Math.min(MAX_AGE_HOURS_CAP, Math.max(1, Math.floor(Number(b.maxAgeHours)) || 24));
+  if (!/^\d{2}:\d{2}$/.test(b.timeHhmm ?? '')) return res.redirect(`${back}?msg=cc-time`);
+
+  const data = {
+    channelId,
+    days: days.length ? days : [0, 1, 2, 3, 4, 5, 6],
+    timeHhmm: b.timeHhmm,
+    maxAgeHours,
+    skipPinned: b.skipPinned === 'on',
+  };
+
+  let id;
+  if (existing) {
+    updateCleanupSchedule(req.guild.id, existing.id, data);
+    id = existing.id;
+  } else {
+    id = createCleanupSchedule(req.guild.id, data);
+  }
+  recordAudit(req.guild.id, {
+    actor: moderatorDisplayName(req),
+    action: 'module:channel-cleanup',
+    detail: `${existing ? 'updated' : 'created'} schedule for #${
+      guildTextChannels(req.guild).find((c) => c.id === channelId)?.name ?? channelId
+    }`,
+  });
+  res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}/s/${id}?msg=saved`);
+});
+
+router.post('/:guildId/m/channel-cleanup/s/:id/delete', (req, res) => {
+  if (isCleanId(req.params.id)) deleteCleanupSchedule(req.guild.id, Number(req.params.id));
+  res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}?msg=saved`);
+});
+
+router.post('/:guildId/m/channel-cleanup/s/:id/toggle', (req, res) => {
+  const rec = isCleanId(req.params.id) ? getCleanupSchedule(req.guild.id, Number(req.params.id)) : null;
+  if (rec) setCleanupScheduleEnabled(req.guild.id, rec.id, rec.enabled !== 1);
+  res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}?msg=saved`);
 });
 
 // --- Temporary voice "hub" builder (MEE6-style) ---------------------

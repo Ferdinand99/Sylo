@@ -23,7 +23,7 @@ test('GET /overview renders the plugin grid shell', async () => {
   const html = await res.text();
   assert.match(html, /^<!doctype html>/i);
   assert.match(html, /class="plugin-grid"/);
-  assert.match(html, /of 30 plugins/); // overview health line
+  assert.match(html, /of 31 plugins/); // overview health line
   assert.match(html, /data-bulk-url=/); // 3.6 bulk-select wiring present
 });
 
