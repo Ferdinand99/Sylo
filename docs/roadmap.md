@@ -593,3 +593,89 @@ real redesign, not a driver swap.
 4. **#3 backup/restore redesign** — last, depends on #1.
 5. Ship behind `DATABASE_URL` unset by default, so every self-hosted
    deployment sees no change at all.
+
+---
+
+## Next — Scheduled Channel Cleanup module (planned, not started)
+
+31st module. Bulk-deletes old messages from specific channels on a per-channel
+weekly schedule — aimed at high-noise, low-value channels (webhook feeds,
+status/alert channels) that would otherwise need manual cleanup forever.
+Deliberately **not** named "auto-prune" — that name is already taken by the
+existing ticket/infraction retention sweep (`src/db/retention.js`), which is a
+different mechanism (age-based deletion of *closed* records) for a different
+purpose; reusing the name here would be confusing in the dashboard and docs.
+
+Two scope decisions already made (talked through with the operator):
+
+- **Deletes by age threshold, not "clear everything."** Each schedule entry
+  has a `maxAgeHours` — a run only deletes messages older than that, so
+  recent activity always survives to the next run. (The simpler
+  "wipe the whole channel every run" option was considered and declined —
+  more moving parts, but avoids ever nuking a message someone is mid-reading.)
+- **Full weekly schedule per entry, not just "every N hours."** Each entry
+  picks its own days-of-week + time-of-day to run, not a flat interval. More
+  UI/storage than a bare interval, but lets e.g. a low-traffic channel run
+  once a week at 3am instead of needlessly checking in every day.
+
+### Config shape
+
+Follows the existing pattern for multi-entry module config (temp-voice hubs,
+RSS feeds) — a list inside the module's own JSON blob in `guild_modules`, no
+new table needed:
+
+```js
+// guild_modules.config for module id 'channel-cleanup'
+{
+  schedules: [
+    {
+      id: 'sched_abc123',
+      channelId: '123456789012345678',
+      enabled: true,
+      days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], // subset ok
+      time: '03:00',            // HH:MM, evaluated in the server's TZ env var
+      maxAgeHours: 24,          // delete messages older than this
+      skipPinned: true,         // default on — never delete a pinned message
+    },
+  ],
+}
+```
+
+### Discord API constraint that shapes the delete logic
+
+`channel.bulkDelete()` only accepts messages **under 14 days old** — anything
+older must be deleted one at a time (`message.delete()`), which is far more
+rate-limited. For a channel actually being cleaned up regularly (like the
+24h/daily example that prompted this), everything is always well under 14
+days old and bulk delete alone is enough. But a schedule entry with a long
+`maxAgeHours` on a low-traffic channel could hit a backlog past 14 days on
+its first run — so the delete step needs to:
+
+1. Fetch + filter messages older than `maxAgeHours` (respecting `skipPinned`).
+2. Bulk-delete the ones under 14 days old in batches of 100.
+3. Individually delete anything older than 14 days, **capped** at some limit
+   per run (e.g. 50) so a large one-time backlog doesn't turn into a long
+   rate-limited loop blocking the scheduler — it just catches up over
+   several runs instead.
+
+### Scheduler
+
+A new `startChannelCleanupSchedule()` next to the existing
+`startBackupSchedule()` / `startRetentionSchedule()` in `src/index.js` —
+ticks every few minutes, and for every guild with the module enabled, checks
+each schedule entry against "is today's day-of-week + current time (± a
+small tolerance window) a match, and did this entry not already run today."
+
+### Permissions
+
+No new permission needed — `Manage Messages` is already in Sylo's guild-wide
+grant (`internal/discord-server-plan.md`'s guild-wide table), which is all
+`bulkDelete`/`message.delete()` require.
+
+### Not yet decided
+
+- Exact dashboard UI for picking days-of-week + time (a row-based builder
+  like the RSS-feed / reaction-roles list, presumably).
+- Whether to log what got deleted anywhere (a lightweight "cleaned N messages
+  from #channel" line to a log channel, similar to other modules' log-channel
+  settings) — leaning yes, so it's not a silent black box.
