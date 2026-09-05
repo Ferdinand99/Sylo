@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.23.0](https://github.com/Ferdinand99/Sylo/compare/v3.22.4...v3.23.0) (2026-09-05)
+
+
+### Features
+
+* add scheduled channel cleanup module ([#139](https://github.com/Ferdinand99/Sylo/issues/139)) ([34dc712](https://github.com/Ferdinand99/Sylo/commit/34dc71235ea0babe5e3c6414d7c7a91ed3484ca3))
+
 ## [3.22.4](https://github.com/Ferdinand99/Sylo/compare/v3.22.3...v3.22.4) (2026-09-05)
 
 
