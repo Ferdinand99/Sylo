@@ -291,6 +291,15 @@ export const MODULES = [
     defaultEnabled: false,
     configurable: true,
   },
+  {
+    id: 'channel-cleanup',
+    name: 'Channel cleanup',
+    description: 'Auto-delete old messages from a channel on a weekly schedule you pick.',
+    icon: '🧹',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
 ];
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));

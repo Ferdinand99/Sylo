@@ -39,6 +39,7 @@ intents it needs, its settings, and any slash commands.
 | [RSS alerts](rss.md) | Post new items from followed RSS / Atom feeds | off | — |
 | [Free games](free-games.md) | Announce games free to claim on the Epic Games Store | off | — |
 | [Game stats](game-stats.md) | Battlefield-series player lookups via `/stats` | off | — |
+| [Channel cleanup](channel-cleanup.md) | Auto-delete old messages from a channel on a weekly schedule | off | — |
 
 See also [self-hosting.md](../self-hosting.md) for the privileged-intent env
 vars and the bot's permission set.
