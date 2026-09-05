@@ -102,11 +102,13 @@ async function runSchedule(schedule, today) {
   }
   const me = guild.members.me;
   if (
-    !channel.permissionsFor(me)?.has([
-      PermissionFlagsBits.ViewChannel,
-      PermissionFlagsBits.ManageMessages,
-      PermissionFlagsBits.ReadMessageHistory,
-    ])
+    !channel
+      .permissionsFor(me)
+      ?.has([
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.ManageMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+      ])
   ) {
     log.error(
       'module:channel-cleanup',
@@ -123,7 +125,8 @@ async function runSchedule(schedule, today) {
     });
     const total = bulkDeleted + individualDeleted;
     markCleanupRan(schedule.id, today, total);
-    if (total) log.info('module:channel-cleanup', `cleaned ${total} message(s) from #${channel.name} (${guild.name})`);
+    if (total)
+      log.info('module:channel-cleanup', `cleaned ${total} message(s) from #${channel.name} (${guild.name})`);
   } catch (err) {
     log.error('module:channel-cleanup', `cleanup failed for #${channel.name} (${guild.name}):`, err.message);
     markCleanupRan(schedule.id, today, 0);

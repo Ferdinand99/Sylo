@@ -7,9 +7,7 @@ import { db } from './index.js';
 
 const ALL_DAYS = '0,1,2,3,4,5,6';
 
-const listStmt = db.prepare(
-  'SELECT * FROM channel_cleanup_schedules WHERE guild_id = ? ORDER BY created_at'
-);
+const listStmt = db.prepare('SELECT * FROM channel_cleanup_schedules WHERE guild_id = ? ORDER BY created_at');
 const getStmt = db.prepare('SELECT * FROM channel_cleanup_schedules WHERE id = ? AND guild_id = ?');
 // Enabled schedules not yet run today; the module code filters further by
 // day-of-week + time-of-day match, which SQLite can't express portably.
