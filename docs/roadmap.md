@@ -985,7 +985,37 @@ behavior first, confirmed the fix, per the "measure twice" habit from the
 
 19 of 32 files converted; same caveats as before still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (19 of 32 files)
+### Phase 17 shipped — `src/db/tickets.js`
+
+Two tables (`tickets`, `ticket_messages`); `tickets` carries the same
+partial-unique-index shape as `appeals.js` (one open ticket per guild+user)
+but — unlike `appeals.js` — `createTicket()` never catches a constraint
+violation itself; callers are expected to check `getOpenTicket()` first, so
+there was no SQLite-vs-Postgres error-message text to port this time.
+
+`openTicketCount()`/`unreadTicketCount()` feed `baseContext()` (already
+async since Phase 16) and `overviewSummary.js`'s `buildHealth()` (previously
+sync, one call site — made async the same way, unblocking it for any future
+file that needs it). Also caught a `.filter()` callback in
+`src/bot/events/dmTickets.js` calling the now-async `getOpenTicket()`
+synchronously per guild — restructured to `Promise.all(...map(...))` then
+`.filter()` on the resolved flags, the same pattern used for
+`overviewSummary.js`'s nested maps back in Phase 10.
+
+No pre-existing test file covered `src/db/tickets.js` directly (only
+indirect coverage via `purge.test.js`/`retention.test.js`, which write rows
+with raw SQL against the untouched SQLite table, and `routes.misc.test.js`'s
+HTTP-level dashboard checks) — added `test/tickets.test.js` and
+`test/tickets.postgres.test.js` from scratch. Found and fixed a bug in the
+Postgres test itself before it shipped: an early draft reused the same guild
+id across all three subtests, so `openTicketCount` picked up tickets created
+by an *earlier* subtest and asserted the wrong total — fixed by giving the
+count-assertions subtest its own guild id, same "each test brings its own
+guild id" discipline as every other phase.
+
+20 of 32 files converted; same caveats as before still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (20 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

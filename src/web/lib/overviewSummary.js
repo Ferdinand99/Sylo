@@ -83,7 +83,7 @@ export async function buildOverview(guild) {
   const state = new Map(getGuildModules(guild.id).map((m) => [m.id, m]));
 
   return {
-    health: buildHealth(guild, settings, state),
+    health: await buildHealth(guild, settings, state),
     groups: await Promise.all(
       LAYOUT.map(async (g) => ({
         title: g.title,
@@ -93,7 +93,7 @@ export async function buildOverview(guild) {
   };
 }
 
-function buildHealth(guild, settings, state) {
+async function buildHealth(guild, settings, state) {
   const me = guild.members.me;
   const missingPerms = me
     ? KEY_PERMS.filter(([bit]) => !me.permissions.has(PermissionFlagsBits[bit])).map(([, l]) => l)
@@ -122,7 +122,7 @@ function buildHealth(guild, settings, state) {
       set: Boolean(settings?.modlog_channel_id),
       name: channelName(guild, settings?.modlog_channel_id),
     },
-    tickets: { open: openTicketCount(guild.id), unread: unreadTicketCount(guild.id) },
+    tickets: { open: await openTicketCount(guild.id), unread: await unreadTicketCount(guild.id) },
     modules: { enabled: enabledCount, total: MODULES.length },
   };
 }
@@ -180,7 +180,7 @@ async function moduleLines(id, guild, cfg) {
     case 'tickets': {
       const staff = Array.isArray(cfg.staffRoles) ? cfg.staffRoles.length : 0;
       const notify = channelName(guild, cfg.notifyChannel);
-      const open = openTicketCount(guild.id);
+      const open = await openTicketCount(guild.id);
       return [
         staff ? on('Staff roles', String(staff)) : neutral('Staff roles', 'admins only'),
         notify ? on('Notify channel', `#${notify}`) : off('Notify channel', 'not set'),

@@ -48,7 +48,7 @@ export async function buildTextTranscript(ticket) {
   const guild = runtime.client?.guilds.cache.get(ticket.guild_id);
   const user = await runtime.client?.users.fetch(ticket.user_id).catch(() => null);
   const userLabel = user ? user.tag : ticket.user_id;
-  const rows = ticketMessages(ticket.id);
+  const rows = await ticketMessages(ticket.id);
 
   const header = [
     `Ticket #${ticket.id} — ${guild?.name ?? ticket.guild_id}`,
@@ -84,7 +84,7 @@ export async function buildTranscript(ticket) {
   const guild = runtime.client?.guilds.cache.get(ticket.guild_id);
   const user = await runtime.client?.users.fetch(ticket.user_id).catch(() => null);
   const userLabel = user ? user.tag : ticket.user_id;
-  const rows = ticketMessages(ticket.id);
+  const rows = await ticketMessages(ticket.id);
 
   const bubbles = rows
     .map((m) => {
@@ -153,11 +153,11 @@ async function notifyStaff(guild, text) {
  */
 export async function ingestUserDM(guild, user, payload) {
   const cfg = getGuildModule(guild.id, 'tickets').config;
-  let ticket = getOpenTicket(guild.id, user.id);
+  let ticket = await getOpenTicket(guild.id, user.id);
   const isNew = !ticket;
-  if (!ticket) ticket = createTicket(guild.id, user.id);
+  if (!ticket) ticket = await createTicket(guild.id, user.id);
 
-  addTicketMessage(ticket.id, {
+  await addTicketMessage(ticket.id, {
     authorId: user.id,
     authorKind: 'user',
     content: payload.content ?? '',
@@ -207,7 +207,7 @@ export async function relayStaffReply(ticket, staffUserId, content) {
       delivered = false;
     }
   }
-  addTicketMessage(ticket.id, { authorId: staffUserId, authorKind: 'staff', content, delivered });
+  await addTicketMessage(ticket.id, { authorId: staffUserId, authorKind: 'staff', content, delivered });
   return { delivered };
 }
 
@@ -227,15 +227,15 @@ export async function closeTicketWithNotice(ticket, staffUserId, closingMessage)
 
   // Record the closing message + close now, so the transcript includes them.
   if (text) {
-    addTicketMessage(ticket.id, {
+    await addTicketMessage(ticket.id, {
       authorId: staffUserId,
       authorKind: 'staff',
       content: text,
       delivered: true,
     });
   }
-  closeTicket(ticket.id, staffUserId);
-  addTicketMessage(ticket.id, {
+  await closeTicket(ticket.id, staffUserId);
+  await addTicketMessage(ticket.id, {
     authorId: staffUserId,
     authorKind: 'system',
     content: 'Ticket closed by staff.',
@@ -253,7 +253,7 @@ export async function closeTicketWithNotice(ticket, staffUserId, closingMessage)
         `${fill(cfg.closeMessage || DEFAULT_CLOSE, guild)}\n\nA transcript of this conversation is attached.`
       );
     }
-    const transcript = await buildTextTranscript(getTicket(ticket.id) ?? ticket);
+    const transcript = await buildTextTranscript((await getTicket(ticket.id)) ?? ticket);
     try {
       await user.send({
         embeds: [embed],
