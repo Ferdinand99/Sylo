@@ -53,7 +53,7 @@ async function resolve(req) {
   if (!guild) return { error: 'That server could not be found.' };
   const cfg = normaliseAppealsConfig(getGuildModule(guildId, 'appeals').config);
 
-  if (getOpenAppeal(guildId, parsed.userId)) {
+  if (await getOpenAppeal(guildId, parsed.userId)) {
     return {
       state: 'pending',
       message:
@@ -63,7 +63,7 @@ async function resolve(req) {
     };
   }
 
-  const latest = getLatestAppeal(guildId, parsed.userId);
+  const latest = await getLatestAppeal(guildId, parsed.userId);
   const banned = await guild.bans
     .fetch(parsed.userId)
     .then(() => true)
@@ -192,7 +192,7 @@ router.post('/:guildId', async (req, res, next) => {
       .then((u) => u.tag)
       .catch(() => '');
 
-    const appealId = createAppeal(guild.id, { userId: parsed.userId, userTag, banReason, answers });
+    const appealId = await createAppeal(guild.id, { userId: parsed.userId, userTag, banReason, answers });
     if (appealId == null) {
       return render(res, 'pending', {
         guildName: guild.name,
@@ -201,7 +201,7 @@ router.post('/:guildId', async (req, res, next) => {
       });
     }
 
-    const appeal = getAppeal(guild.id, appealId);
+    const appeal = await getAppeal(guild.id, appealId);
     announceNewAppeal(guild, appeal).catch((err) =>
       log.error('appeals', 'new-appeal notice failed:', err.message)
     );

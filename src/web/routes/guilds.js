@@ -237,7 +237,7 @@ router.get(
   '/:guildId/overview',
   asyncHandler(async (req, res) => {
     res.render('guild', {
-      ...baseContext(req.guild, 'overview'),
+      ...(await baseContext(req.guild, 'overview')),
       overview: await buildOverview(req.guild),
       msg: typeof req.query.msg === 'string' ? req.query.msg : null,
     });
@@ -264,7 +264,7 @@ router.get(
     const storedSet = new Set(stored);
 
     res.render('guild', {
-      ...baseContext(guild, 'settings'),
+      ...(await baseContext(guild, 'settings')),
       modlogChannelId: settings?.modlog_channel_id ?? '',
       embedColorHex: '#' + color.toString(16).padStart(6, '0'),
       adminRoles: adminRoles.map(roleView),
@@ -341,7 +341,7 @@ router.get(
       };
     }
     res.render('guild', {
-      ...baseContext(req.guild, 'member-data'),
+      ...(await baseContext(req.guild, 'member-data')),
       lookup,
       msg: typeof req.query.msg === 'string' ? req.query.msg : null,
     });
@@ -422,7 +422,7 @@ router.get(
       .sort((a, b) => a.name.localeCompare(b.name));
 
     res.render('guild', {
-      ...baseContext(req.guild, 'commands'),
+      ...(await baseContext(req.guild, 'commands')),
       commands,
       roles,
       msg: typeof req.query.msg === 'string' ? req.query.msg : null,
@@ -509,7 +509,7 @@ router.get(
     }));
 
     res.render('guild', {
-      ...baseContext(guild, 'moderation'),
+      ...(await baseContext(guild, 'moderation')),
       cases,
       caseTotal,
       caseShown: cases.length,
@@ -540,7 +540,7 @@ router.get(
   '/:guildId/appeals',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    const rows = listAppeals(guild.id, 100);
+    const rows = await listAppeals(guild.id, 100);
     const cfg = normaliseAppealsConfig(getGuildModule(guild.id, 'appeals').config);
     const appeals = rows.map((a) => ({
       id: a.id,
@@ -555,7 +555,7 @@ router.get(
       decidedAgo: a.decided_at ? timeAgo(a.decided_at) : null,
     }));
     res.render('guild', {
-      ...baseContext(guild, 'appeals'),
+      ...(await baseContext(guild, 'appeals')),
       appeals,
       appealsOpen: appeals.filter((a) => a.status === 'open').length,
       appealsModuleEnabled: getGuildModule(guild.id, 'appeals').enabled,
@@ -571,7 +571,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const back = `/guilds/${guild.id}/appeals`;
-    const appeal = getAppeal(guild.id, req.params.id);
+    const appeal = await getAppeal(guild.id, req.params.id);
     if (!appeal || appeal.status !== 'open') return res.redirect(`${back}?msg=appeal-gone`);
 
     const decision =
@@ -615,7 +615,7 @@ router.get(
       rows.map((r) => r.user_id)
     );
     res.render('guild', {
-      ...baseContext(guild, 'leaderboard'),
+      ...(await baseContext(guild, 'leaderboard')),
       levelingEnabled: enabled,
       publicLeaderboard: cfg.publicLeaderboard,
       leaderboardPeriod: period,
@@ -766,7 +766,7 @@ async function moduleViewLocals(mod, req, configOverride) {
   const cleanupRows = mod.id === 'channel-cleanup' ? await listCleanupSchedules(req.guild.id) : [];
   const levelingOverrides = mod.id === 'leveling' ? await getCommandOverrides(req.guild.id) : null;
   return {
-    ...baseContext(req.guild, `m/${mod.id}`),
+    ...(await baseContext(req.guild, `m/${mod.id}`)),
     activeModule: mod,
     moduleIconName: moduleIcon(mod.id),
     moduleEnabled: enabled,
@@ -1485,9 +1485,9 @@ function toMs(v) {
   return Number.isFinite(t) ? t : null;
 }
 
-function renderReminderBuilder(req, res, rec) {
+async function renderReminderBuilder(req, res, rec) {
   res.render('reminder-builder', {
-    ...baseContext(req.guild, REM_BASE),
+    ...(await baseContext(req.guild, REM_BASE)),
     channels: guildTextChannels(req.guild),
     roles: assignableRoles(req.guild),
     guildId: req.guild.id,
@@ -1511,7 +1511,10 @@ function renderReminderBuilder(req, res, rec) {
   });
 }
 
-router.get('/:guildId/m/reminders/r/new', (req, res) => renderReminderBuilder(req, res, null));
+router.get(
+  '/:guildId/m/reminders/r/new',
+  asyncHandler((req, res) => renderReminderBuilder(req, res, null))
+);
 
 // Express 5 dropped inline path regex — a numeric ("new" for the POST) id shape
 // is enforced in the handler instead.
@@ -1523,7 +1526,7 @@ router.get(
     if (!isRemId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
     const rec = await getScheduled(req.guild.id, Number(req.params.id));
     if (!rec) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
-    renderReminderBuilder(req, res, rec);
+    await renderReminderBuilder(req, res, rec);
   })
 );
 
@@ -1625,9 +1628,9 @@ const CLEAN_BASE = 'm/channel-cleanup';
 const isCleanId = (v) => /^\d+$/.test(v ?? '');
 const MAX_AGE_HOURS_CAP = 24 * 90; // 90 days
 
-function renderCleanupBuilder(req, res, rec) {
+async function renderCleanupBuilder(req, res, rec) {
   res.render('channel-cleanup-builder', {
-    ...baseContext(req.guild, CLEAN_BASE),
+    ...(await baseContext(req.guild, CLEAN_BASE)),
     channels: guildTextChannels(req.guild),
     guildId: req.guild.id,
     weekdays: WEEKDAYS,
@@ -1645,7 +1648,10 @@ function renderCleanupBuilder(req, res, rec) {
   });
 }
 
-router.get('/:guildId/m/channel-cleanup/s/new', (req, res) => renderCleanupBuilder(req, res, null));
+router.get(
+  '/:guildId/m/channel-cleanup/s/new',
+  asyncHandler((req, res) => renderCleanupBuilder(req, res, null))
+);
 
 router.get(
   '/:guildId/m/channel-cleanup/s/:id',
@@ -1653,7 +1659,7 @@ router.get(
     if (!isCleanId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
     const rec = await getCleanupSchedule(req.guild.id, Number(req.params.id));
     if (!rec) return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
-    renderCleanupBuilder(req, res, rec);
+    await renderCleanupBuilder(req, res, rec);
   })
 );
 
@@ -1727,9 +1733,9 @@ function tvHubs(guildId) {
   return normaliseTempVoiceConfig(getGuildModule(guildId, 'temp-voice').config).hubs;
 }
 
-function renderTvBuilder(req, res, hub) {
+async function renderTvBuilder(req, res, hub) {
   res.render('tv-builder', {
-    ...baseContext(req.guild, 'm/temp-voice'),
+    ...(await baseContext(req.guild, 'm/temp-voice')),
     guildId: req.guild.id,
     voiceChannels: guildVoiceChannels(req.guild),
     categories: guildCategories(req.guild),
@@ -1763,13 +1769,19 @@ function renderTvBuilder(req, res, hub) {
   });
 }
 
-router.get('/:guildId/m/temp-voice/hub/new', (req, res) => renderTvBuilder(req, res, null));
+router.get(
+  '/:guildId/m/temp-voice/hub/new',
+  asyncHandler((req, res) => renderTvBuilder(req, res, null))
+);
 
-router.get('/:guildId/m/temp-voice/hub/:id', (req, res) => {
-  const hub = tvHubs(req.guild.id).find((h) => h.id === req.params.id);
-  if (!hub) return res.redirect(`/guilds/${req.guild.id}/m/temp-voice`);
-  renderTvBuilder(req, res, hub);
-});
+router.get(
+  '/:guildId/m/temp-voice/hub/:id',
+  asyncHandler(async (req, res) => {
+    const hub = tvHubs(req.guild.id).find((h) => h.id === req.params.id);
+    if (!hub) return res.redirect(`/guilds/${req.guild.id}/m/temp-voice`);
+    await renderTvBuilder(req, res, hub);
+  })
+);
 
 router.post(
   '/:guildId/m/temp-voice/hub',
@@ -1842,9 +1854,9 @@ router.post(
 
 // --- Reaction-role builder (MEE6-style) ---------------------------------
 
-function renderRrBuilder(req, res, rm) {
+async function renderRrBuilder(req, res, rm) {
   res.render('rr-builder', {
-    ...baseContext(req.guild, 'm/roles'),
+    ...(await baseContext(req.guild, 'm/roles')),
     channels: guildTextChannels(req.guild),
     roles: assignableRoles(req.guild),
     guildId: req.guild.id,
@@ -1866,12 +1878,18 @@ function renderRrBuilder(req, res, rm) {
   });
 }
 
-router.get('/:guildId/m/roles/rr/new', (req, res) => renderRrBuilder(req, res, null));
+router.get(
+  '/:guildId/m/roles/rr/new',
+  asyncHandler((req, res) => renderRrBuilder(req, res, null))
+);
 
-router.get('/:guildId/m/roles/rr/:id', (req, res) => {
-  const list = getGuildModule(req.guild.id, 'roles').config.reactionMessages ?? [];
-  renderRrBuilder(req, res, list.find((x) => String(x.id) === req.params.id) || null);
-});
+router.get(
+  '/:guildId/m/roles/rr/:id',
+  asyncHandler(async (req, res) => {
+    const list = getGuildModule(req.guild.id, 'roles').config.reactionMessages ?? [];
+    await renderRrBuilder(req, res, list.find((x) => String(x.id) === req.params.id) || null);
+  })
+);
 
 router.post(
   '/:guildId/m/roles/rr',
@@ -1982,7 +2000,7 @@ function starboardBoards(guildId) {
   return normaliseStarboard(getGuildModule(guildId, 'starboard').config).boards;
 }
 
-function renderSbBuilder(req, res, board) {
+async function renderSbBuilder(req, res, board) {
   const emojiText = board
     ? board.emojis
         .map((e) => {
@@ -1993,7 +2011,7 @@ function renderSbBuilder(req, res, board) {
         .join(' ')
     : '⭐';
   res.render('sb-builder', {
-    ...baseContext(req.guild, 'm/starboard'),
+    ...(await baseContext(req.guild, 'm/starboard')),
     channels: guildTextChannels(req.guild),
     roles: assignableRoles(req.guild),
     guildId: req.guild.id,
@@ -2025,13 +2043,19 @@ function renderSbBuilder(req, res, board) {
   });
 }
 
-router.get('/:guildId/m/starboard/sb/new', (req, res) => renderSbBuilder(req, res, null));
+router.get(
+  '/:guildId/m/starboard/sb/new',
+  asyncHandler((req, res) => renderSbBuilder(req, res, null))
+);
 
-router.get('/:guildId/m/starboard/sb/:id', (req, res) => {
-  const board = starboardBoards(req.guild.id).find((b) => b.id === req.params.id);
-  if (!board) return res.redirect(`/guilds/${req.guild.id}/m/starboard`);
-  renderSbBuilder(req, res, board);
-});
+router.get(
+  '/:guildId/m/starboard/sb/:id',
+  asyncHandler(async (req, res) => {
+    const board = starboardBoards(req.guild.id).find((b) => b.id === req.params.id);
+    if (!board) return res.redirect(`/guilds/${req.guild.id}/m/starboard`);
+    await renderSbBuilder(req, res, board);
+  })
+);
 
 router.post(
   '/:guildId/m/starboard/sb',
@@ -2114,9 +2138,9 @@ function ccCommands(guildId) {
   return normaliseCustomCommands(getGuildModule(guildId, 'custom-commands').config).commands;
 }
 
-function renderCcBuilder(req, res, cmd) {
+async function renderCcBuilder(req, res, cmd) {
   res.render('cc-builder', {
-    ...baseContext(req.guild, 'm/custom-commands'),
+    ...(await baseContext(req.guild, 'm/custom-commands')),
     channels: guildTextChannels(req.guild),
     roles: assignableRoles(req.guild),
     guildId: req.guild.id,
@@ -2134,13 +2158,19 @@ function renderCcBuilder(req, res, cmd) {
   });
 }
 
-router.get('/:guildId/m/custom-commands/cmd/new', (req, res) => renderCcBuilder(req, res, null));
+router.get(
+  '/:guildId/m/custom-commands/cmd/new',
+  asyncHandler((req, res) => renderCcBuilder(req, res, null))
+);
 
-router.get('/:guildId/m/custom-commands/cmd/:id', (req, res) => {
-  const cmd = ccCommands(req.guild.id).find((c) => c.id === req.params.id);
-  if (!cmd) return res.redirect(`/guilds/${req.guild.id}/m/custom-commands`);
-  renderCcBuilder(req, res, cmd);
-});
+router.get(
+  '/:guildId/m/custom-commands/cmd/:id',
+  asyncHandler(async (req, res) => {
+    const cmd = ccCommands(req.guild.id).find((c) => c.id === req.params.id);
+    if (!cmd) return res.redirect(`/guilds/${req.guild.id}/m/custom-commands`);
+    await renderCcBuilder(req, res, cmd);
+  })
+);
 
 router.post(
   '/:guildId/m/custom-commands/cmd',
@@ -2487,7 +2517,7 @@ router.get(
   '/:guildId/audit',
   asyncHandler(async (req, res) => {
     res.render('guild', {
-      ...baseContext(req.guild, 'audit'),
+      ...(await baseContext(req.guild, 'audit')),
       audit: (await listAudit(req.guild.id, 150)).map((a) => ({
         actor: a.actor,
         action: a.action,
@@ -2499,49 +2529,52 @@ router.get(
 );
 
 // Server insights — activity charts from the guild_daily / guild_hourly rollups.
-router.get('/:guildId/insights', (req, res) => {
-  // range: 24 / 48 hours (hourly buckets), or 7 / 30 / 90 days.
-  const HOURLY = { 24: 24, 48: 48 };
-  const DAILY = { 7: 7, 30: 30, 90: 90 };
-  const raw = String(req.query.range ?? '30');
-  const hourly = raw in HOURLY;
-  const range = hourly ? HOURLY[raw] : (DAILY[raw] ?? 30);
-  const series = hourly ? hourlySeries(req.guild.id, range) : dailySeries(req.guild.id, range);
+router.get(
+  '/:guildId/insights',
+  asyncHandler(async (req, res) => {
+    // range: 24 / 48 hours (hourly buckets), or 7 / 30 / 90 days.
+    const HOURLY = { 24: 24, 48: 48 };
+    const DAILY = { 7: 7, 30: 30, 90: 90 };
+    const raw = String(req.query.range ?? '30');
+    const hourly = raw in HOURLY;
+    const range = hourly ? HOURLY[raw] : (DAILY[raw] ?? 30);
+    const series = hourly ? hourlySeries(req.guild.id, range) : dailySeries(req.guild.id, range);
 
-  // Per-channel totals ("top channels") are only kept daily; for an hourly
-  // window fall back to the last day.
-  const topDays = hourly ? 1 : range;
-  const chans = [...guildTextChannels(req.guild), ...guildVoiceChannels(req.guild)];
-  // A `name:` bucket already carries a captured channel name (temp voice, since
-  // deleted); a plain id resolves to the live channel, else it's since deleted.
-  const nameOf = (id) =>
-    id.startsWith('name:') ? id.slice(5) : (chans.find((c) => c.id === id)?.name ?? 'deleted channel');
+    // Per-channel totals ("top channels") are only kept daily; for an hourly
+    // window fall back to the last day.
+    const topDays = hourly ? 1 : range;
+    const chans = [...guildTextChannels(req.guild), ...guildVoiceChannels(req.guild)];
+    // A `name:` bucket already carries a captured channel name (temp voice, since
+    // deleted); a plain id resolves to the live channel, else it's since deleted.
+    const nameOf = (id) =>
+      id.startsWith('name:') ? id.slice(5) : (chans.find((c) => c.id === id)?.name ?? 'deleted channel');
 
-  res.render('guild', {
-    ...baseContext(req.guild, 'insights'),
-    insightsEnabled: getGuildModule(req.guild.id, 'insights').enabled,
-    insightsRange: range,
-    insightsGranularity: hourly ? 'hour' : 'day',
-    insightsSeries: series,
-    insightsTotals: {
-      messages: series.reduce((t, d) => t + d.messages, 0),
-      joins: series.reduce((t, d) => t + d.joins, 0),
-      leaves: series.reduce((t, d) => t + d.leaves, 0),
-      net: series.reduce((t, d) => t + d.joins - d.leaves, 0),
-      peakActive: series.reduce((m, d) => Math.max(m, d.activeMembers), 0),
-      voiceMinutes: series.reduce((t, d) => t + d.voiceMinutes, 0),
-      voicePeak: series.reduce((m, d) => Math.max(m, d.voicePeak), 0),
-    },
-    insightsTopChannels: topChannels(req.guild.id, topDays, 6).map((t) => ({
-      name: nameOf(t.channelId),
-      messages: t.messages,
-    })),
-    insightsTopVoice: topVoiceChannels(req.guild.id, topDays, 6).map((t) => ({
-      name: nameOf(t.channelId),
-      minutes: t.minutes,
-    })),
-  });
-});
+    res.render('guild', {
+      ...(await baseContext(req.guild, 'insights')),
+      insightsEnabled: getGuildModule(req.guild.id, 'insights').enabled,
+      insightsRange: range,
+      insightsGranularity: hourly ? 'hour' : 'day',
+      insightsSeries: series,
+      insightsTotals: {
+        messages: series.reduce((t, d) => t + d.messages, 0),
+        joins: series.reduce((t, d) => t + d.joins, 0),
+        leaves: series.reduce((t, d) => t + d.leaves, 0),
+        net: series.reduce((t, d) => t + d.joins - d.leaves, 0),
+        peakActive: series.reduce((m, d) => Math.max(m, d.activeMembers), 0),
+        voiceMinutes: series.reduce((t, d) => t + d.voiceMinutes, 0),
+        voicePeak: series.reduce((m, d) => Math.max(m, d.voicePeak), 0),
+      },
+      insightsTopChannels: topChannels(req.guild.id, topDays, 6).map((t) => ({
+        name: nameOf(t.channelId),
+        messages: t.messages,
+      })),
+      insightsTopVoice: topVoiceChannels(req.guild.id, topDays, 6).map((t) => ({
+        name: nameOf(t.channelId),
+        minutes: t.minutes,
+      })),
+    });
+  })
+);
 
 // "Refresh now" — flush the in-memory counters for this guild, then reload.
 router.post('/:guildId/insights/refresh', (req, res) => {

@@ -39,7 +39,7 @@ router.get(
       unread: t.status === 'open' && t.last_at > t.staff_seen_at,
     });
     res.render('guild-tickets', {
-      ...baseContext(req.guild, 'tickets'),
+      ...(await baseContext(req.guild, 'tickets')),
       open: open.map(shape),
       closed: closed.map(shape),
     });
@@ -58,7 +58,7 @@ router.get(
     const rows = ticketMessages(ticket.id);
     const tags = await resolveUserTags(runtime.client, [ticket.user_id, ...rows.map((r) => r.author_id)]);
     res.render('guild-ticket', {
-      ...baseContext(req.guild, 'tickets'),
+      ...(await baseContext(req.guild, 'tickets')),
       ticket: {
         id: ticket.id,
         status: ticket.status,

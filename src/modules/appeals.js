@@ -266,7 +266,7 @@ export async function createRejoinInvite(guild) {
  * @returns {Promise<{ recorded: boolean, unbanned: boolean, dmDelivered: boolean, inviteUrl: string | null }>}
  */
 export async function decideAndNotify(guild, appeal, { status, decidedBy, reason }) {
-  const recorded = decideAppeal(guild.id, appeal.id, { status, decidedBy, reason });
+  const recorded = await decideAppeal(guild.id, appeal.id, { status, decidedBy, reason });
   if (!recorded) return { recorded: false, unbanned: false, dmDelivered: false, inviteUrl: null };
 
   const cfg = normaliseAppealsConfig(getGuildModule(guild.id, 'appeals').config);
@@ -287,7 +287,7 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
   let inviteUrl = null;
   if (accepted) {
     inviteUrl = await createRejoinInvite(guild);
-    if (inviteUrl) setAppealInvite(guild.id, appeal.id, inviteUrl);
+    if (inviteUrl) await setAppealInvite(guild.id, appeal.id, inviteUrl);
   }
 
   const dm = new EmbedBuilder()

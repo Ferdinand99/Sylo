@@ -69,26 +69,26 @@ test('cooldownRemainingMs: only denied appeals within the window block', () => {
   assert.equal(cooldownRemainingMs({ status: 'denied', decided_at: old }, 7), 0);
 });
 
-test('db: one open appeal per user, decide closes it', () => {
+test('db: one open appeal per user, decide closes it', async () => {
   const answers = [{ q: 'Why?', a: 'Mistake' }];
-  const id = createAppeal(G, { userId: U, userTag: 'foo#0', banReason: 'spam', answers });
+  const id = await createAppeal(G, { userId: U, userTag: 'foo#0', banReason: 'spam', answers });
   assert.ok(id > 0);
 
   // Second insert while one is open is rejected.
-  assert.equal(createAppeal(G, { userId: U, answers }), null);
-  assert.equal(countOpenAppeals(G), 1);
-  assert.equal(getOpenAppeal(G, U).id, id);
+  assert.equal(await createAppeal(G, { userId: U, answers }), null);
+  assert.equal(await countOpenAppeals(G), 1);
+  assert.equal((await getOpenAppeal(G, U)).id, id);
 
-  assert.equal(decideAppeal(G, id, { status: 'denied', decidedBy: 'mod', reason: 'no' }), true);
-  assert.equal(countOpenAppeals(G), 0);
-  assert.equal(getOpenAppeal(G, U), undefined);
-  assert.equal(getLatestAppeal(G, U).status, 'denied');
+  assert.equal(await decideAppeal(G, id, { status: 'denied', decidedBy: 'mod', reason: 'no' }), true);
+  assert.equal(await countOpenAppeals(G), 0);
+  assert.equal(await getOpenAppeal(G, U), undefined);
+  assert.equal((await getLatestAppeal(G, U)).status, 'denied');
 
   // Deciding an already-closed appeal is a no-op.
-  assert.equal(decideAppeal(G, id, { status: 'accepted', decidedBy: 'mod', reason: 'x' }), false);
+  assert.equal(await decideAppeal(G, id, { status: 'accepted', decidedBy: 'mod', reason: 'x' }), false);
 
   // A fresh appeal can now be opened.
-  const id2 = createAppeal(G, { userId: U, answers });
+  const id2 = await createAppeal(G, { userId: U, answers });
   assert.ok(id2 > id);
-  assert.equal(listAppeals(G, 10).length, 2);
+  assert.equal((await listAppeals(G, 10)).length, 2);
 });

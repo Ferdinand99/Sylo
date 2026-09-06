@@ -206,7 +206,7 @@ async function moduleLines(id, guild, cfg) {
     }
     case 'appeals': {
       const q = Array.isArray(cfg.questions) ? cfg.questions.length : 3;
-      const open = countOpenAppeals(guild.id);
+      const open = await countOpenAppeals(guild.id);
       const review = channelName(guild, cfg.reviewChannelId);
       return [
         on('Form questions', String(q || 3)),
