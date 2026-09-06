@@ -77,7 +77,7 @@ export async function execute(interaction) {
         flags: MessageFlags.Ephemeral,
       });
     }
-    setBirthday({ guildId, userId: interaction.user.id, month, day, year: year ?? null });
+    await setBirthday({ guildId, userId: interaction.user.id, month, day, year: year ?? null });
     return interaction.reply({
       content: `🎂 Saved — **${MONTHS[month - 1]} ${day}**${year ? ` ${year}` : ''}. Use \`/birthday remove\` to delete it.`,
       flags: MessageFlags.Ephemeral,
@@ -85,7 +85,7 @@ export async function execute(interaction) {
   }
 
   if (sub === 'remove') {
-    const removed = removeBirthday(guildId, interaction.user.id);
+    const removed = await removeBirthday(guildId, interaction.user.id);
     return interaction.reply({
       content: removed ? 'Your birthday has been removed.' : "You don't have a birthday saved here.",
       flags: MessageFlags.Ephemeral,
@@ -93,7 +93,7 @@ export async function execute(interaction) {
   }
 
   // list
-  const rows = guildBirthdays(guildId)
+  const rows = (await guildBirthdays(guildId))
     .map((r) => ({ ...r, days: daysUntilBirthday(r.month, r.day) }))
     .sort((a, b) => a.days - b.days)
     .slice(0, 15);
@@ -112,7 +112,7 @@ export async function execute(interaction) {
         .join('\n')
     );
   }
-  const mine = getBirthday(guildId, interaction.user.id);
+  const mine = await getBirthday(guildId, interaction.user.id);
   if (mine) embed.setFooter({ text: `Yours: ${MONTHS[mine.month - 1]} ${mine.day}` });
   return interaction.reply({
     embeds: [embed],
