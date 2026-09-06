@@ -113,7 +113,7 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
 const TEMP_BAN_TICK_MS = 30_000;
 
 async function settleTempBan(row) {
-  clearTempBan(row.guild_id, row.user_id); // clear first so a throw can't loop
+  await clearTempBan(row.guild_id, row.user_id); // clear first so a throw can't loop
   const guild = runtime.client?.guilds.cache.get(row.guild_id);
   if (!guild?.members.me?.permissions.has('BanMembers')) return;
 
@@ -142,9 +142,9 @@ async function settleTempBan(row) {
   await postModLog(guild, embed);
 }
 
-const tempBanTimer = setInterval(() => {
+const tempBanTimer = setInterval(async () => {
   if (!runtime.client?.isReady()) return;
-  for (const row of dueTempBans(Date.now())) {
+  for (const row of await dueTempBans(Date.now())) {
     settleTempBan(row).catch((err) => log.error('module:moderation', 'temp-unban failed:', err.message));
   }
 }, TEMP_BAN_TICK_MS);

@@ -656,7 +656,24 @@ automatically enough when a table has a uniqueness constraint on a
 *different* column too. 5 of 32 files converted; same caveats as before
 still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (5 of 32 files)
+### Phase 7 shipped — sixth converted file (`src/db/tempBans.js`)
+
+Widest call-site fan-out yet — 4 files (`ban.js`, `unban.js`,
+`moderation.js`, `guilds.js`), 8 call sites — but every one was already
+inside an async function except `moderation.js`'s `setInterval(() => {...},
+30_000)` expiry-tick callback, which needed converting to
+`setInterval(async () => {...}, ...)` to `await dueTempBans(...)`. Applied
+the same lesson from Phase 6 proactively this time: the Postgres test uses
+per-run-unique guild ids, and — since `dueTempBans` scans across *all*
+guilds, not just one — asserts with `.some()`/`.every()` scoped to this
+run's own guild ids rather than exact array equality, so leftover rows from
+other runs against a persistent Postgres can't cause a false failure. Also
+caught (locally) a copy-paste gap in the Postgres test itself — a
+"guild B is untouched" assertion with no row ever inserted into guild B —
+same self-review habit that caught the slug bug last time. 6 of 32 files
+converted; same caveats as before still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (6 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 
