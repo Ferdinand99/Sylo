@@ -307,7 +307,7 @@ async function moduleLines(id, guild, cfg) {
       ];
     }
     case 'polls': {
-      const open = guildPollCount(guild.id);
+      const open = await guildPollCount(guild.id);
       const restricted = Array.isArray(cfg.voteRoles) && cfg.voteRoles.length;
       return [
         open ? on('Open polls', String(open)) : neutral('Open polls', '0'),
@@ -455,8 +455,8 @@ function commandsCard(guild) {
   };
 }
 
-function messagesCard(guild) {
-  const n = listComposed(guild.id, 200).length;
+async function messagesCard(guild) {
+  const n = (await listComposed(guild.id, 200)).length;
   return {
     kind: 'link',
     id: 'messages',

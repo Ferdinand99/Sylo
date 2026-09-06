@@ -204,7 +204,7 @@ async function applyRoleSelect(interaction, composedSpecForMessage) {
 registerComponent('messageCreator', 'msgrole:', (interaction) =>
   toggleRole(interaction, interaction.customId.slice('msgrole:'.length))
 );
-registerComponent('messageCreator', 'msgroles', (interaction) => {
-  const rec = getComposedByMessage(interaction.guildId, interaction.message.id);
+registerComponent('messageCreator', 'msgroles', async (interaction) => {
+  const rec = await getComposedByMessage(interaction.guildId, interaction.message.id);
   return applyRoleSelect(interaction, rec?.spec);
 });

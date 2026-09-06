@@ -9,6 +9,19 @@ import {
   buildPollPayload,
   buildResultsPayload,
 } from '../src/modules/polls.js';
+import {
+  createPoll,
+  getPoll,
+  pollsInChannel,
+  latestPollInChannel,
+  duePolls,
+  guildPollCount,
+  deletePoll,
+  clearGuildPolls,
+} from '../src/db/polls.js';
+
+const G = '900000000000000040';
+const CH = '700000000000000401';
 
 test('LETTERS: 20 distinct regional-indicator emoji', () => {
   assert.equal(LETTERS.length, 20);
@@ -106,4 +119,101 @@ test('buildResultsPayload: template placeholders', () => {
   });
   assert.equal(p.content, 'A wins with 5 votes');
   assert.equal(p.embeds[0].data.title, 'Done: Q');
+});
+
+test('polls table: create + get round-trips, hydrates options as an array', async () => {
+  await clearGuildPolls(G);
+  await createPoll({
+    messageId: 'm1',
+    guildId: G,
+    channelId: CH,
+    question: 'Best?',
+    options: ['A', 'B'],
+    multiple: false,
+    maxVotes: 0,
+    endsAt: null,
+    createdBy: 'u1',
+    createdAt: 1000,
+  });
+  const p = await getPoll('m1');
+  assert.equal(p.question, 'Best?');
+  assert.deepEqual(p.options, ['A', 'B']);
+  assert.equal(p.created_at, 1000);
+  assert.equal(p.ends_at, null);
+
+  assert.equal(await getPoll('nope'), null);
+});
+
+test('pollsInChannel/latestPollInChannel order by created_at desc; guildPollCount counts', async () => {
+  await clearGuildPolls(G);
+  await createPoll({
+    messageId: 'm1',
+    guildId: G,
+    channelId: CH,
+    question: 'Q1',
+    options: ['A'],
+    multiple: false,
+    maxVotes: 0,
+    createdBy: 'u1',
+    createdAt: 1000,
+  });
+  await createPoll({
+    messageId: 'm2',
+    guildId: G,
+    channelId: CH,
+    question: 'Q2',
+    options: ['A'],
+    multiple: false,
+    maxVotes: 0,
+    createdBy: 'u1',
+    createdAt: 2000,
+  });
+
+  const inCh = await pollsInChannel(G, CH);
+  assert.deepEqual(
+    inCh.map((p) => p.message_id),
+    ['m2', 'm1']
+  );
+  const latest = await latestPollInChannel(G, CH);
+  assert.equal(latest.message_id, 'm2');
+  assert.equal(await guildPollCount(G), 2);
+});
+
+test('duePolls returns only ended polls; deletePoll/clearGuildPolls remove rows', async () => {
+  await clearGuildPolls(G);
+  const now = Date.now();
+  await createPoll({
+    messageId: 'm1',
+    guildId: G,
+    channelId: CH,
+    question: 'Q',
+    options: ['A'],
+    multiple: false,
+    maxVotes: 0,
+    endsAt: now - 1000,
+    createdBy: 'u1',
+    createdAt: now,
+  });
+  await createPoll({
+    messageId: 'm2',
+    guildId: G,
+    channelId: CH,
+    question: 'Q',
+    options: ['A'],
+    multiple: false,
+    maxVotes: 0,
+    endsAt: null,
+    createdBy: 'u1',
+    createdAt: now,
+  });
+
+  const due = await duePolls(now);
+  assert.ok(due.some((p) => p.message_id === 'm1'));
+  assert.ok(!due.some((p) => p.message_id === 'm2'));
+
+  await deletePoll('m1');
+  assert.equal(await getPoll('m1'), null);
+
+  await clearGuildPolls(G);
+  assert.equal(await getPoll('m2'), null);
 });

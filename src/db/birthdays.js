@@ -47,4 +47,7 @@ export const removeBirthday = async (guildId, userId) => (await s.del.run(guildI
 export const guildBirthdays = async (guildId) => s.listGuild.all(guildId);
 export const birthdaysOnDay = async (guildId, month, day) => s.onDay.all(guildId, month, day);
 export const clearGuildBirthdays = async (guildId) => s.delGuild.run(guildId);
-export const birthdayCount = async (guildId, userId) => (await s.count.get(guildId, userId)).n;
+// COUNT(*) comes back as a JS number from better-sqlite3 but as a string
+// from postgres.js (bigint safety) — coerce so callers see the same type
+// regardless of driver.
+export const birthdayCount = async (guildId, userId) => Number((await s.count.get(guildId, userId)).n);

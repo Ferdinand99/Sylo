@@ -79,7 +79,7 @@ export async function execute(interaction) {
   await interaction.reply(buildPollPayload(poll, config));
   const message = await interaction.fetchReply();
 
-  createPoll({
+  await createPoll({
     messageId: message.id,
     guildId: poll.guild_id,
     channelId: poll.channel_id,

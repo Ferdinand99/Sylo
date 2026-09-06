@@ -45,20 +45,23 @@ function parseSpec(body) {
 
 // --- list ----------------------------------------------------------------
 
-router.get('/', (req, res) => {
-  const chName = (id) => guildTextChannels(req.guild).find((c) => c.id === id)?.name ?? id;
-  res.render('guild-messages', {
-    ...baseContext(req.guild, 'messages'),
-    items: listComposed(req.guild.id, 200).map((c) => ({
-      id: c.id,
-      name: c.name || specTitle(c.spec),
-      channel: chName(c.channel_id),
-      published: Boolean(c.message_id),
-      when: timeAgo(c.updated_at),
-    })),
-    msg: typeof req.query.msg === 'string' ? req.query.msg : null,
-  });
-});
+router.get(
+  '/',
+  asyncHandler(async (req, res) => {
+    const chName = (id) => guildTextChannels(req.guild).find((c) => c.id === id)?.name ?? id;
+    res.render('guild-messages', {
+      ...baseContext(req.guild, 'messages'),
+      items: (await listComposed(req.guild.id, 200)).map((c) => ({
+        id: c.id,
+        name: c.name || specTitle(c.spec),
+        channel: chName(c.channel_id),
+        published: Boolean(c.message_id),
+        when: timeAgo(c.updated_at),
+      })),
+      msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+    });
+  })
+);
 
 // --- builder -----------------------------------------------------------
 
@@ -85,12 +88,15 @@ const numericId = (v) => /^\d+$/.test(v ?? '');
 
 router.get('/new', (req, res) => renderBuilder(req, res, null));
 
-router.get('/:id', (req, res) => {
-  if (!numericId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/messages`);
-  const rec = getComposed(req.guild.id, Number(req.params.id));
-  if (!rec) return res.redirect(`/guilds/${req.guild.id}/messages`);
-  renderBuilder(req, res, rec);
-});
+router.get(
+  '/:id',
+  asyncHandler(async (req, res) => {
+    if (!numericId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/messages`);
+    const rec = await getComposed(req.guild.id, Number(req.params.id));
+    if (!rec) return res.redirect(`/guilds/${req.guild.id}/messages`);
+    renderBuilder(req, res, rec);
+  })
+);
 
 // --- save / publish --------------------------------------------------
 
@@ -99,7 +105,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const base = `/guilds/${req.guild.id}/messages`;
     if (req.params.id !== 'new' && !numericId(req.params.id)) return res.redirect(base);
-    const existing = req.params.id === 'new' ? null : getComposed(req.guild.id, Number(req.params.id));
+    const existing = req.params.id === 'new' ? null : await getComposed(req.guild.id, Number(req.params.id));
     if (req.params.id !== 'new' && !existing) return res.redirect(base);
 
     const spec = parseSpec(req.body);
@@ -113,9 +119,9 @@ router.post(
 
     let rec = existing;
     if (!rec) {
-      rec = createComposed(req.guild.id, { name, channelId, messageId: null, spec });
+      rec = await createComposed(req.guild.id, { name, channelId, messageId: null, spec });
     } else {
-      rec = updateComposed(req.guild.id, rec.id, {
+      rec = await updateComposed(req.guild.id, rec.id, {
         name,
         channelId: channelId || rec.channel_id,
         messageId: rec.message_id,
@@ -133,7 +139,7 @@ router.post(
         res.redirect(`${dest}?msg=updated`);
       } else {
         const message = await sendComposed(req.guild, rec.channel_id, spec);
-        updateComposed(req.guild.id, rec.id, {
+        await updateComposed(req.guild.id, rec.id, {
           name,
           channelId: rec.channel_id,
           messageId: message.id,
@@ -154,7 +160,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const base = `/guilds/${req.guild.id}/messages`;
     if (!numericId(req.params.id)) return res.redirect(base);
-    const rec = getComposed(req.guild.id, Number(req.params.id));
+    const rec = await getComposed(req.guild.id, Number(req.params.id));
     if (!rec) return res.redirect(base);
     if (rec.message_id) {
       try {
@@ -164,7 +170,7 @@ router.post(
       } catch {
         /* already gone */
       }
-      updateComposed(req.guild.id, rec.id, {
+      await updateComposed(req.guild.id, rec.id, {
         name: rec.name,
         channelId: rec.channel_id,
         messageId: null,
@@ -181,7 +187,7 @@ router.post(
   '/:id/delete',
   asyncHandler(async (req, res) => {
     if (!numericId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/messages`);
-    const rec = getComposed(req.guild.id, Number(req.params.id));
+    const rec = await getComposed(req.guild.id, Number(req.params.id));
     let msg = 'removed';
     if (rec) {
       if (rec.message_id) {
@@ -194,7 +200,7 @@ router.post(
           msg = 'removed';
         }
       }
-      deleteComposed(req.guild.id, rec.id);
+      await deleteComposed(req.guild.id, rec.id);
     }
     res.redirect(`/guilds/${req.guild.id}/messages?msg=${msg}`);
   })

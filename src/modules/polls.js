@@ -182,9 +182,9 @@ async function tally(message, poll, config) {
 
 /** Close a poll: tally, post results, tidy up. Safe to call more than once. */
 export async function endPoll(messageId) {
-  const poll = getPoll(messageId);
+  const poll = await getPoll(messageId);
   if (!poll) return;
-  deletePoll(messageId); // claim it first so the loop / a race can't double-post
+  await deletePoll(messageId); // claim it first so the loop / a race can't double-post
 
   const guild = runtime.client?.guilds.cache.get(poll.guild_id);
   const channel = guild?.channels.cache.get(poll.channel_id);
@@ -225,7 +225,7 @@ on('polls', 'reactionAdd', async ({ reaction, user }, rawConfig, _guildId) => {
     }
   }
 
-  const poll = getPoll(message.id);
+  const poll = await getPoll(message.id);
   if (!poll) return;
 
   const key = reaction.emoji.name;
@@ -268,13 +268,13 @@ on('polls', 'reactionAdd', async ({ reaction, user }, rawConfig, _guildId) => {
 // --- expiry loop -------------------------------------------------------
 
 const TICK_MS = 15_000;
-const timer = setInterval(() => {
+const timer = setInterval(async () => {
   if (!runtime.client?.isReady()) return;
-  for (const poll of duePolls(Date.now())) {
+  for (const poll of await duePolls(Date.now())) {
     if (isModuleEnabled(poll.guild_id, 'polls') && runtime.client.guilds.cache.has(poll.guild_id)) {
       endPoll(poll.message_id).catch((err) => log.error('module:polls', 'end failed:', err.message));
     } else {
-      deletePoll(poll.message_id); // module off or bot gone — just clear it
+      await deletePoll(poll.message_id); // module off or bot gone — just clear it
     }
   }
 }, TICK_MS);
