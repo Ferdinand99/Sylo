@@ -16,10 +16,10 @@ function stubGuild(id) {
   };
 }
 
-test('buildOverview returns health + grouped cards covering every module', () => {
+test('buildOverview returns health + grouped cards covering every module', async () => {
   setGuildModule(G, 'automod', { enabled: true, config: { rules: { invites: { enabled: true } } } });
 
-  const ov = buildOverview(stubGuild(G));
+  const ov = await buildOverview(stubGuild(G));
 
   assert.ok(ov.health.perms.missing.includes('Ban Members'), 'missing perms detected');
   assert.ok(ov.groups.length >= 4);

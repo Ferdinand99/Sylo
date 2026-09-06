@@ -743,7 +743,32 @@ placeholder-translation pattern):
 
 9 of 32 files converted; same caveats as before still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (9 of 32 files)
+### Phase 10 shipped — `src/db/counting.js`, and `overviewSummary.js` unblocked for good
+
+Went after the actual blocker from Phase 9 instead of routing around it
+again: `src/web/lib/overviewSummary.js`'s `buildOverview()` → `buildCard()`
+→ `moduleLines()` chain is now fully async, fixed **once**, in the same PR
+as the file whose conversion originally needed it (`counting.js`, single-
+column `TEXT` PK, same upsert shape as `appSettings`/`leaderboardVanity`).
+
+The fix: `buildCard`/`moduleLines` became `async`; `buildOverview`'s two
+nested `.map()`s (`LAYOUT.map` building groups, `g.ids.map` building each
+group's cards) became `Promise.all(...map(async ...))` pairs, since neither
+can `await` inline. Every *other* `moduleLines` switch case
+(`tickets`/`polls`/`giveaways`/`insights`/… — all still backed by
+unconverted db files) needed **no changes at all**: `await` on a
+non-promise value just resolves immediately, so a still-synchronous
+`openTicketCount()`-style call works fine inside the now-`async` function
+without itself being touched. This is the payoff — `polls.js`,
+`composedMessages.js`, `guildSettings.js`, and eventually `tickets.js`,
+`appeals.js`, `inviteTracker.js`, `cache.js`, `giveaways.js`,
+`scheduledMessages.js`, `leveling.js`, `insights.js` can each be converted
+later touching only their own one-line case in `moduleLines`, never
+`buildOverview`/`buildCard` again.
+
+10 of 32 files converted; same caveats as before still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (10 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

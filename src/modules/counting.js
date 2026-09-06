@@ -18,7 +18,7 @@ on('counting', 'messageCreate', async (message, config, guildId) => {
   if (!match) return; // not a counting attempt — leave chatter alone
 
   const value = Number(match[1]);
-  const state = getCounting(guildId);
+  const state = await getCounting(guildId);
   const expected = state.current + 1;
 
   const sameUser = !config.allowSameUser && state.last_user_id === message.author.id;
@@ -32,7 +32,7 @@ on('counting', 'messageCreate', async (message, config, guildId) => {
     });
   }
 
-  advanceCount(guildId, { current: value, userId: message.author.id, messageId: message.id });
+  await advanceCount(guildId, { current: value, userId: message.author.id, messageId: message.id });
 
   if (config.react !== false) {
     await message.react(value > state.record ? '🎉' : OK).catch(() => {});
@@ -51,7 +51,7 @@ async function fail(message, config, guildId, { brokeAt, record, reason }) {
     return;
   }
 
-  resetCount(guildId);
+  await resetCount(guildId);
   await message.react(BAD).catch(() => {});
   if (canManage) {
     await message.channel
