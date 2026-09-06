@@ -731,13 +731,14 @@ router.post(
 // Full render context for a module's settings panel. Shared by the GET page,
 // the htmx fragment render, and the config-POST re-render — so every module
 // partial can read what it needs straight from locals (no per-include passthrough).
-function moduleViewLocals(mod, req, configOverride) {
+async function moduleViewLocals(mod, req, configOverride) {
   const { enabled, config } = getGuildModule(req.guild.id, mod.id);
   const hasView = CONFIG_VIEWS.has(mod.id);
   // The temp-voice view renders each hub's id straight into an Edit/Delete URL;
   // a hub saved by an older build can lack `id`, producing an empty path
   // segment and a 404. Normalise on read so every hub has an id + defaults.
   const viewConfig = mod.id === 'temp-voice' ? normaliseTempVoiceConfig(config) : config;
+  const cleanupRows = mod.id === 'channel-cleanup' ? await listCleanupSchedules(req.guild.id) : [];
   return {
     ...baseContext(req.guild, `m/${mod.id}`),
     activeModule: mod,
@@ -812,20 +813,17 @@ function moduleViewLocals(mod, req, configOverride) {
             lastRun: j.last_run_at ? timeAgo(j.last_run_at) : null,
           }))
         : [],
-    cleanupSchedules:
-      mod.id === 'channel-cleanup'
-        ? listCleanupSchedules(req.guild.id).map((s) => ({
-            id: s.id,
-            channel: guildTextChannels(req.guild).find((c) => c.id === s.channel_id)?.name ?? s.channel_id,
-            dayList: s.dayList,
-            time: s.time_hhmm,
-            maxAgeHours: s.max_age_hours,
-            skipPinned: s.skip_pinned === 1,
-            enabled: s.enabled === 1,
-            lastRunDate: s.last_run_date,
-            lastRunCount: s.last_run_count,
-          }))
-        : [],
+    cleanupSchedules: cleanupRows.map((s) => ({
+      id: s.id,
+      channel: guildTextChannels(req.guild).find((c) => c.id === s.channel_id)?.name ?? s.channel_id,
+      dayList: s.dayList,
+      time: s.time_hhmm,
+      maxAgeHours: s.max_age_hours,
+      skipPinned: s.skip_pinned === 1,
+      enabled: s.enabled === 1,
+      lastRunDate: s.last_run_date,
+      lastRunCount: s.last_run_count,
+    })),
     schedulePresets: SCHEDULE_PRESETS,
     announceModes: ANNOUNCE_MODES,
     xpRates: XP_RATES,
@@ -907,18 +905,21 @@ function moduleViewLocals(mod, req, configOverride) {
   };
 }
 
-router.get('/:guildId/m/:moduleId', (req, res) => {
-  const mod = getModule(req.params.moduleId);
-  if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
-  const locals = moduleViewLocals(mod, req);
-  // A bare htmx GET (explicit hx-get to #module-config) wants just the panel;
-  // an hx-boost navigation (HX-Boosted) is a full-page swap and needs the whole
-  // document.
-  if (req.get('HX-Request') && !req.get('HX-Boosted')) {
-    return res.render('guild/_module-config', locals);
-  }
-  res.render('guild', locals);
-});
+router.get(
+  '/:guildId/m/:moduleId',
+  asyncHandler(async (req, res) => {
+    const mod = getModule(req.params.moduleId);
+    if (!mod) return res.redirect(`/guilds/${req.guild.id}/overview`);
+    const locals = await moduleViewLocals(mod, req);
+    // A bare htmx GET (explicit hx-get to #module-config) wants just the panel;
+    // an hx-boost navigation (HX-Boosted) is a full-page swap and needs the whole
+    // document.
+    if (req.get('HX-Request') && !req.get('HX-Boosted')) {
+      return res.render('guild/_module-config', locals);
+    }
+    res.render('guild', locals);
+  })
+);
 
 // Send a representative test message for a module to its configured channel.
 router.post(
@@ -1351,7 +1352,7 @@ router.post(
           'HX-Trigger',
           JSON.stringify({ toast: { msg: `Saved${nativeNote}`, kind: nativeWarned ? 'warn' : 'ok' } })
         )
-        .render('guild/_module-config', moduleViewLocals(mod, req, config));
+        .render('guild/_module-config', await moduleViewLocals(mod, req, config));
     }
     res.redirect(`${back}?msg=saved`);
   })
@@ -1608,64 +1609,79 @@ function renderCleanupBuilder(req, res, rec) {
 
 router.get('/:guildId/m/channel-cleanup/s/new', (req, res) => renderCleanupBuilder(req, res, null));
 
-router.get('/:guildId/m/channel-cleanup/s/:id', (req, res) => {
-  if (!isCleanId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
-  const rec = getCleanupSchedule(req.guild.id, Number(req.params.id));
-  if (!rec) return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
-  renderCleanupBuilder(req, res, rec);
-});
+router.get(
+  '/:guildId/m/channel-cleanup/s/:id',
+  asyncHandler(async (req, res) => {
+    if (!isCleanId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
+    const rec = await getCleanupSchedule(req.guild.id, Number(req.params.id));
+    if (!rec) return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
+    renderCleanupBuilder(req, res, rec);
+  })
+);
 
-router.post('/:guildId/m/channel-cleanup/s/:id', (req, res) => {
-  const b = req.body;
-  if (req.params.id !== 'new' && !isCleanId(req.params.id)) {
-    return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
-  }
-  const existing = req.params.id === 'new' ? null : getCleanupSchedule(req.guild.id, Number(req.params.id));
-  if (req.params.id !== 'new' && !existing) return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
-  const back = `/guilds/${req.guild.id}/${CLEAN_BASE}/s/${existing ? existing.id : 'new'}`;
+router.post(
+  '/:guildId/m/channel-cleanup/s/:id',
+  asyncHandler(async (req, res) => {
+    const b = req.body;
+    if (req.params.id !== 'new' && !isCleanId(req.params.id)) {
+      return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
+    }
+    const existing =
+      req.params.id === 'new' ? null : await getCleanupSchedule(req.guild.id, Number(req.params.id));
+    if (req.params.id !== 'new' && !existing) return res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}`);
+    const back = `/guilds/${req.guild.id}/${CLEAN_BASE}/s/${existing ? existing.id : 'new'}`;
 
-  const channelId = /^\d{17,20}$/.test(b.channelId ?? '') ? b.channelId : '';
-  if (!channelId) return res.redirect(`${back}?msg=badchannel`);
+    const channelId = /^\d{17,20}$/.test(b.channelId ?? '') ? b.channelId : '';
+    if (!channelId) return res.redirect(`${back}?msg=badchannel`);
 
-  const days = WEEKDAYS.map(([n]) => n).filter((n) => b[`day_${n}`] === 'on');
-  const maxAgeHours = Math.min(MAX_AGE_HOURS_CAP, Math.max(1, Math.floor(Number(b.maxAgeHours)) || 24));
-  if (!/^\d{2}:\d{2}$/.test(b.timeHhmm ?? '')) return res.redirect(`${back}?msg=cc-time`);
+    const days = WEEKDAYS.map(([n]) => n).filter((n) => b[`day_${n}`] === 'on');
+    const maxAgeHours = Math.min(MAX_AGE_HOURS_CAP, Math.max(1, Math.floor(Number(b.maxAgeHours)) || 24));
+    if (!/^\d{2}:\d{2}$/.test(b.timeHhmm ?? '')) return res.redirect(`${back}?msg=cc-time`);
 
-  const data = {
-    channelId,
-    days: days.length ? days : [0, 1, 2, 3, 4, 5, 6],
-    timeHhmm: b.timeHhmm,
-    maxAgeHours,
-    skipPinned: b.skipPinned === 'on',
-  };
+    const data = {
+      channelId,
+      days: days.length ? days : [0, 1, 2, 3, 4, 5, 6],
+      timeHhmm: b.timeHhmm,
+      maxAgeHours,
+      skipPinned: b.skipPinned === 'on',
+    };
 
-  let id;
-  if (existing) {
-    updateCleanupSchedule(req.guild.id, existing.id, data);
-    id = existing.id;
-  } else {
-    id = createCleanupSchedule(req.guild.id, data);
-  }
-  recordAudit(req.guild.id, {
-    actor: moderatorDisplayName(req),
-    action: 'module:channel-cleanup',
-    detail: `${existing ? 'updated' : 'created'} schedule for #${
-      guildTextChannels(req.guild).find((c) => c.id === channelId)?.name ?? channelId
-    }`,
-  });
-  res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}/s/${id}?msg=saved`);
-});
+    let id;
+    if (existing) {
+      await updateCleanupSchedule(req.guild.id, existing.id, data);
+      id = existing.id;
+    } else {
+      id = await createCleanupSchedule(req.guild.id, data);
+    }
+    recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:channel-cleanup',
+      detail: `${existing ? 'updated' : 'created'} schedule for #${
+        guildTextChannels(req.guild).find((c) => c.id === channelId)?.name ?? channelId
+      }`,
+    });
+    res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}/s/${id}?msg=saved`);
+  })
+);
 
-router.post('/:guildId/m/channel-cleanup/s/:id/delete', (req, res) => {
-  if (isCleanId(req.params.id)) deleteCleanupSchedule(req.guild.id, Number(req.params.id));
-  res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}?msg=saved`);
-});
+router.post(
+  '/:guildId/m/channel-cleanup/s/:id/delete',
+  asyncHandler(async (req, res) => {
+    if (isCleanId(req.params.id)) await deleteCleanupSchedule(req.guild.id, Number(req.params.id));
+    res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}?msg=saved`);
+  })
+);
 
-router.post('/:guildId/m/channel-cleanup/s/:id/toggle', (req, res) => {
-  const rec = isCleanId(req.params.id) ? getCleanupSchedule(req.guild.id, Number(req.params.id)) : null;
-  if (rec) setCleanupScheduleEnabled(req.guild.id, rec.id, rec.enabled !== 1);
-  res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}?msg=saved`);
-});
+router.post(
+  '/:guildId/m/channel-cleanup/s/:id/toggle',
+  asyncHandler(async (req, res) => {
+    const rec = isCleanId(req.params.id)
+      ? await getCleanupSchedule(req.guild.id, Number(req.params.id))
+      : null;
+    if (rec) await setCleanupScheduleEnabled(req.guild.id, rec.id, rec.enabled !== 1);
+    res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}?msg=saved`);
+  })
+);
 
 // --- Temporary voice "hub" builder (MEE6-style) ---------------------
 

@@ -533,7 +533,53 @@ today) is byte-identical to before this landed. Still ahead, unstarted:
 the driver shim and per-file conversion (#1), the migration-runner table
 swap (#2), and the backup/restore redesign (#3).
 
-### 1 — Driver + async seam in `src/db/`
+### Phase 2 shipped — driver shim + one converted file (`src/db/channelCleanup.js`)
+
+`src/db/driver.js` now exists: `prepare(sql)` returns `{ get, all, run }`,
+always `async` regardless of driver; the SQLite branch thin-wraps the
+existing `db.prepare()`, the Postgres branch translates `?`/`@name`
+placeholders to `$n`, auto-appends `RETURNING id` to bare INSERTs to recover
+`lastInsertRowid` (Postgres has no native equivalent), and uses `sql.unsafe()`
+for execution (still safely parameterized — confirmed via the porsager/postgres
+README, which also confirms it has **no native named-parameter support**, only
+positional `$n` and tagged templates). `registerPostgresBootstrap(ddl)` lets
+each converted file register its own `CREATE TABLE IF NOT EXISTS`, run once
+lazily on first real Postgres query.
+
+Exactly **one** file is converted end-to-end — `src/db/channelCleanup.js` —
+proven against a real Postgres connection by
+`test/channelCleanup.postgres.test.js`, plus every call site that touches it
+(`src/modules/channelCleanup.js`'s tick loop, and `src/web/routes/guilds.js`'s
+5 channel-cleanup routes + the **shared** `moduleViewLocals()` used by every
+module's config page — this one file's conversion had a wider blast radius
+than expected because of that shared helper; worth checking for that kind of
+thing before assuming a single-file conversion is contained). The other 31
+`src/db/*.js` files, and the ~77 remaining external call sites, are
+**untouched** — same "many small PRs" approach, not a single big-bang
+conversion.
+
+**Do not set `DATABASE_URL` on a real deployment yet.** `src/db/index.js`'s
+`db` export is still always SQLite, unconditionally, because the 31
+unconverted files still depend on it directly — turning the flag on before
+every file is converted would split a guild's data across both databases.
+This only becomes safe to flip on for real once the *last* file-conversion
+PR lands.
+
+Two things worth knowing before converting the next file:
+- SQLite's `INTEGER` is 64-bit; Postgres's plain `INTEGER` is only 32-bit.
+  Any column storing a `Date.now()` millisecond timestamp (already ~13
+  digits) needs `BIGINT` in its Postgres bootstrap DDL, not a blind type
+  copy — caught while writing `channel_cleanup_schedules`' bootstrap for its
+  `created_at` column.
+- `lastInsertRowid` → `RETURNING id` is safe to automate for any bare INSERT
+  whose table uses a surrogate `id INTEGER PRIMARY KEY AUTOINCREMENT` key —
+  confirmed by reading every `CREATE TABLE` in `MIGRATIONS`, exactly 8 tables
+  qualify (`tickets`, `ticket_messages`, `composed_messages`,
+  `scheduled_messages`, `config_audit`, `appeals`, `giveaways`,
+  `channel_cleanup_schedules`) — `driver.js`'s heuristic already covers this
+  generally, not just for the one file converted so far.
+
+### 1 — Driver + async seam in `src/db/` — in progress (1 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

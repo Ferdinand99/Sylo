@@ -3,34 +3,52 @@
 // dueSchedules() every few minutes; last_run_date (a 'YYYY-MM-DD' string, the
 // server's local calendar day) stops a schedule firing twice inside one day
 // without needing minute-precision timing.
-import { db } from './index.js';
+import { prepare, registerPostgresBootstrap } from './driver.js';
 
 const ALL_DAYS = '0,1,2,3,4,5,6';
 
-const listStmt = db.prepare('SELECT * FROM channel_cleanup_schedules WHERE guild_id = ? ORDER BY created_at');
-const getStmt = db.prepare('SELECT * FROM channel_cleanup_schedules WHERE id = ? AND guild_id = ?');
+registerPostgresBootstrap(`
+  CREATE TABLE IF NOT EXISTS channel_cleanup_schedules (
+    id             SERIAL PRIMARY KEY,
+    guild_id       TEXT NOT NULL,
+    channel_id     TEXT NOT NULL,
+    days           TEXT NOT NULL DEFAULT '0,1,2,3,4,5,6',
+    time_hhmm      TEXT NOT NULL,
+    max_age_hours  INTEGER NOT NULL,
+    skip_pinned    INTEGER NOT NULL DEFAULT 1,
+    enabled        INTEGER NOT NULL DEFAULT 1,
+    last_run_date  TEXT,
+    last_run_count INTEGER,
+    created_at     BIGINT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_cleanup_enabled ON channel_cleanup_schedules (enabled);
+  CREATE INDEX IF NOT EXISTS idx_cleanup_guild ON channel_cleanup_schedules (guild_id, created_at);
+`);
+
+const listStmt = prepare('SELECT * FROM channel_cleanup_schedules WHERE guild_id = ? ORDER BY created_at');
+const getStmt = prepare('SELECT * FROM channel_cleanup_schedules WHERE id = ? AND guild_id = ?');
 // Enabled schedules not yet run today; the module code filters further by
 // day-of-week + time-of-day match, which SQLite can't express portably.
-const dueCandidatesStmt = db.prepare(
+const dueCandidatesStmt = prepare(
   "SELECT * FROM channel_cleanup_schedules WHERE enabled = 1 AND COALESCE(last_run_date, '') != ?"
 );
-const insertStmt = db.prepare(`
+const insertStmt = prepare(`
   INSERT INTO channel_cleanup_schedules
     (guild_id, channel_id, days, time_hhmm, max_age_hours, skip_pinned, enabled, created_at)
   VALUES
     (@guildId, @channelId, @days, @timeHhmm, @maxAgeHours, @skipPinned, 1, @createdAt)
 `);
-const updateStmt = db.prepare(`
+const updateStmt = prepare(`
   UPDATE channel_cleanup_schedules SET
     channel_id = @channelId, days = @days, time_hhmm = @timeHhmm,
     max_age_hours = @maxAgeHours, skip_pinned = @skipPinned
   WHERE id = @id AND guild_id = @guildId
 `);
-const deleteStmt = db.prepare('DELETE FROM channel_cleanup_schedules WHERE id = ? AND guild_id = ?');
-const setEnabledStmt = db.prepare(
+const deleteStmt = prepare('DELETE FROM channel_cleanup_schedules WHERE id = ? AND guild_id = ?');
+const setEnabledStmt = prepare(
   'UPDATE channel_cleanup_schedules SET enabled = ? WHERE id = ? AND guild_id = ?'
 );
-const markRanStmt = db.prepare(
+const markRanStmt = prepare(
   'UPDATE channel_cleanup_schedules SET last_run_date = @date, last_run_count = @count WHERE id = @id'
 );
 
@@ -43,23 +61,23 @@ function hydrate(row) {
   return { ...row, dayList: days.length ? days : [0, 1, 2, 3, 4, 5, 6] };
 }
 
-export function listCleanupSchedules(guildId) {
-  return listStmt.all(guildId).map(hydrate);
+export async function listCleanupSchedules(guildId) {
+  return (await listStmt.all(guildId)).map(hydrate);
 }
-export function getCleanupSchedule(guildId, id) {
-  return hydrate(getStmt.get(id, guildId));
+export async function getCleanupSchedule(guildId, id) {
+  return hydrate(await getStmt.get(id, guildId));
 }
 /** Enabled schedules that haven't run on `today` (a 'YYYY-MM-DD' string) yet. */
-export function dueCandidates(today) {
-  return dueCandidatesStmt.all(today).map(hydrate);
+export async function dueCandidates(today) {
+  return (await dueCandidatesStmt.all(today)).map(hydrate);
 }
 
 /**
  * @param {string} guildId
  * @param {{ channelId: string, days: number[], timeHhmm: string, maxAgeHours: number, skipPinned: boolean }} s
  */
-export function createCleanupSchedule(guildId, s) {
-  return insertStmt.run({
+export async function createCleanupSchedule(guildId, s) {
+  const result = await insertStmt.run({
     guildId,
     channelId: s.channelId,
     days: (Array.isArray(s.days) && s.days.length ? s.days : [0, 1, 2, 3, 4, 5, 6]).join(','),
@@ -67,11 +85,12 @@ export function createCleanupSchedule(guildId, s) {
     maxAgeHours: s.maxAgeHours,
     skipPinned: s.skipPinned ? 1 : 0,
     createdAt: Date.now(),
-  }).lastInsertRowid;
+  });
+  return result.lastInsertRowid;
 }
 
-export function updateCleanupSchedule(guildId, id, s) {
-  updateStmt.run({
+export async function updateCleanupSchedule(guildId, id, s) {
+  await updateStmt.run({
     guildId,
     id,
     channelId: s.channelId,
@@ -82,13 +101,13 @@ export function updateCleanupSchedule(guildId, id, s) {
   });
 }
 
-export function deleteCleanupSchedule(guildId, id) {
-  deleteStmt.run(id, guildId);
+export async function deleteCleanupSchedule(guildId, id) {
+  await deleteStmt.run(id, guildId);
 }
-export function setCleanupScheduleEnabled(guildId, id, enabled) {
-  setEnabledStmt.run(enabled ? 1 : 0, id, guildId);
+export async function setCleanupScheduleEnabled(guildId, id, enabled) {
+  await setEnabledStmt.run(enabled ? 1 : 0, id, guildId);
 }
 /** A run just happened — record the calendar day so it doesn't fire again today. */
-export function markCleanupRan(id, today, count) {
-  markRanStmt.run({ id, date: today, count });
+export async function markCleanupRan(id, today, count) {
+  await markRanStmt.run({ id, date: today, count });
 }
