@@ -21,10 +21,10 @@ export function fillPresenceText(text, client) {
 }
 
 /** Read the stored presence config and push it to Discord. Never throws. */
-export function applyPresence(client) {
+export async function applyPresence(client) {
   if (!client?.user) return;
   try {
-    const cfg = getPresenceConfig();
+    const cfg = await getPresenceConfig();
     const type = TYPE_MAP[cfg.type] ?? ActivityType.Custom;
     const text = fillPresenceText(cfg.text, client).trim();
 

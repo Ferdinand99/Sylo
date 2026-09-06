@@ -19,25 +19,28 @@ function back(res, text, ok) {
   res.redirect(`/settings?m=${encodeURIComponent(text)}&ok=${ok ? 1 : 0}`);
 }
 
-router.get('/', (req, res) => {
-  const u = runtime.client?.user ?? null;
-  res.render('settings', {
-    bot: u
-      ? {
-          tag: u.tag,
-          username: u.username,
-          id: u.id,
-          avatar: u.displayAvatarURL({ size: 128 }),
-          banner: u.bannerURL ? u.bannerURL({ size: 512 }) : null,
-        }
-      : null,
-    presence: getPresenceConfig(),
-    presenceTypes: PRESENCE_TYPES,
-    presenceStatuses: PRESENCE_STATUSES,
-    m: typeof req.query.m === 'string' ? req.query.m : null,
-    ok: req.query.ok === '1',
-  });
-});
+router.get(
+  '/',
+  asyncHandler(async (req, res) => {
+    const u = runtime.client?.user ?? null;
+    res.render('settings', {
+      bot: u
+        ? {
+            tag: u.tag,
+            username: u.username,
+            id: u.id,
+            avatar: u.displayAvatarURL({ size: 128 }),
+            banner: u.bannerURL ? u.bannerURL({ size: 512 }) : null,
+          }
+        : null,
+      presence: await getPresenceConfig(),
+      presenceTypes: PRESENCE_TYPES,
+      presenceStatuses: PRESENCE_STATUSES,
+      m: typeof req.query.m === 'string' ? req.query.m : null,
+      ok: req.query.ok === '1',
+    });
+  })
+);
 
 router.post(
   '/identity',
@@ -104,10 +107,13 @@ router.post(
   })
 );
 
-router.post('/presence', (req, res) => {
-  setPresenceConfig({ status: req.body.status, type: req.body.type, text: req.body.text });
-  if (runtime.client) applyPresence(runtime.client);
-  back(res, 'Presence updated.', true);
-});
+router.post(
+  '/presence',
+  asyncHandler(async (req, res) => {
+    await setPresenceConfig({ status: req.body.status, type: req.body.type, text: req.body.text });
+    if (runtime.client) applyPresence(runtime.client);
+    back(res, 'Presence updated.', true);
+  })
+);
 
 export default router;
