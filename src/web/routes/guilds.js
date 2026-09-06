@@ -233,13 +233,16 @@ router.get('/:guildId/emojis', (req, res) => {
 
 // --- Panels ----------------------------------------------------------------
 
-router.get('/:guildId/overview', (req, res) => {
-  res.render('guild', {
-    ...baseContext(req.guild, 'overview'),
-    overview: buildOverview(req.guild),
-    msg: typeof req.query.msg === 'string' ? req.query.msg : null,
-  });
-});
+router.get(
+  '/:guildId/overview',
+  asyncHandler(async (req, res) => {
+    res.render('guild', {
+      ...baseContext(req.guild, 'overview'),
+      overview: await buildOverview(req.guild),
+      msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+    });
+  })
+);
 
 // Old bookmark → the renamed Settings panel.
 router.get('/:guildId/general', (req, res) => res.redirect(`/guilds/${req.guild.id}/settings`));
@@ -799,7 +802,7 @@ async function moduleViewLocals(mod, req, configOverride) {
     voiceChannels: ['server-stats', 'temp-voice'].includes(mod.id) ? guildVoiceChannels(req.guild) : [],
     categories: mod.id === 'temp-voice' ? guildCategories(req.guild) : [],
     statTypes: STAT_TYPES,
-    countingState: mod.id === 'counting' ? getCounting(req.guild.id) : null,
+    countingState: mod.id === 'counting' ? await getCounting(req.guild.id) : null,
     ccPlaceholders: CC_PLACEHOLDERS,
     arPlaceholders: AR_PLACEHOLDERS,
     arMatchModes: AR_MATCH_MODES,
@@ -1391,29 +1394,32 @@ router.post(
 );
 
 // Counting: correct the running number (or reset it) from the dashboard.
-router.post('/:guildId/m/counting/count', (req, res) => {
-  const back = `/guilds/${req.guild.id}/m/counting`;
-  if (req.body.reset === 'true') {
-    resetCount(req.guild.id);
+router.post(
+  '/:guildId/m/counting/count',
+  asyncHandler(async (req, res) => {
+    const back = `/guilds/${req.guild.id}/m/counting`;
+    if (req.body.reset === 'true') {
+      await resetCount(req.guild.id);
+      recordAudit(req.guild.id, {
+        actor: moderatorDisplayName(req),
+        action: 'counting:reset',
+        detail: 'count set to 0',
+      });
+      return res.redirect(`${back}?msg=count-reset`);
+    }
+    const n = Number(req.body.current);
+    if (!Number.isInteger(n) || n < 0 || n > 1e12) {
+      return res.redirect(`${back}?msg=count-bad`);
+    }
+    await setCount(req.guild.id, n);
     recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
-      action: 'counting:reset',
-      detail: 'count set to 0',
+      action: 'counting:set',
+      detail: `count = ${n}`,
     });
-    return res.redirect(`${back}?msg=count-reset`);
-  }
-  const n = Number(req.body.current);
-  if (!Number.isInteger(n) || n < 0 || n > 1e12) {
-    return res.redirect(`${back}?msg=count-bad`);
-  }
-  setCount(req.guild.id, n);
-  recordAudit(req.guild.id, {
-    actor: moderatorDisplayName(req),
-    action: 'counting:set',
-    detail: `count = ${n}`,
-  });
-  res.redirect(`${back}?msg=count-set`);
-});
+    res.redirect(`${back}?msg=count-set`);
+  })
+);
 
 // Leveling: set a member's XP, or wipe the whole guild leaderboard.
 router.post(

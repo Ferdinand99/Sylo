@@ -78,16 +78,18 @@ function channelName(guild, id) {
  * Build the whole overview view-model for a guild.
  * @param {import('discord.js').Guild} guild
  */
-export function buildOverview(guild) {
+export async function buildOverview(guild) {
   const settings = getGuildSettings(guild.id);
   const state = new Map(getGuildModules(guild.id).map((m) => [m.id, m]));
 
   return {
     health: buildHealth(guild, settings, state),
-    groups: LAYOUT.map((g) => ({
-      title: g.title,
-      cards: g.ids.map((id) => buildCard(id, guild, settings, state)).filter(Boolean),
-    })),
+    groups: await Promise.all(
+      LAYOUT.map(async (g) => ({
+        title: g.title,
+        cards: (await Promise.all(g.ids.map((id) => buildCard(id, guild, settings, state)))).filter(Boolean),
+      }))
+    ),
   };
 }
 
@@ -125,7 +127,7 @@ function buildHealth(guild, settings, state) {
   };
 }
 
-function buildCard(id, guild, settings, state) {
+async function buildCard(id, guild, settings, state) {
   if (id === 'general') return generalCard(guild, settings);
   if (id === 'commands') return commandsCard(guild);
   if (id === 'messages') return messagesCard(guild);
@@ -151,11 +153,11 @@ function buildCard(id, guild, settings, state) {
         : id === 'moderation'
           ? `/guilds/${guild.id}/m/moderation`
           : `/guilds/${guild.id}/m/${id}`,
-    lines: moduleLines(id, guild, row?.config ?? {}),
+    lines: await moduleLines(id, guild, row?.config ?? {}),
   };
 }
 
-function moduleLines(id, guild, cfg) {
+async function moduleLines(id, guild, cfg) {
   switch (id) {
     case 'moderation': {
       const rules = Array.isArray(cfg.warnThresholds) ? cfg.warnThresholds.length : 0;
@@ -237,7 +239,7 @@ function moduleLines(id, guild, cfg) {
     }
     case 'counting': {
       const ch = channelName(guild, cfg.channelId);
-      const st = getCounting(guild.id);
+      const st = await getCounting(guild.id);
       return [
         ch ? on('Channel', `#${ch}`) : off('Channel', 'not set'),
         neutral('Count', String(st.current)),
