@@ -30,6 +30,28 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # Runs the suite against both DB drivers: sqlite (today's default, always)
+    # and postgres (the opt-in path — see docs/roadmap.md, "Postgres migration
+    # line"). GitHub Actions starts the postgres service unconditionally for
+    # both matrix legs; it just sits idle on the sqlite leg.
+    strategy:
+      fail-fast: false
+      matrix:
+        driver: [sqlite, postgres]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: sylo
+          POSTGRES_PASSWORD: sylo
+          POSTGRES_DB: sylo_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     # src/config.js requires these and exits without them; the suite only needs
     # them to exist, never to be valid. DB tests redirect DATABASE_PATH to a
     # temp file themselves (see test/helpers/tmpDb.js).
@@ -48,6 +70,8 @@ jobs:
 
       - name: Unit tests
         run: npm test
+        env:
+          DATABASE_URL: ${{ matrix.driver == 'postgres' && 'postgres://sylo:sylo@localhost:5432/sylo_test' || '' }}
 
       - name: Syntax check every source file
         run: find src scripts test -name '*.js' -print0 | xargs -0 -n1 node --check

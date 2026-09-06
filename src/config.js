@@ -118,6 +118,16 @@ if (shardCountRaw !== 'auto') {
   }
 }
 
+// Hosted-only, opt-in Postgres driver (see docs/roadmap.md — "Postgres
+// migration line"). Unset (the default) — and every self-hosted deployment —
+// keeps today's SQLite path untouched. Currently READ-ONLY: nothing in
+// src/db/ consults it yet; that lands in a follow-up PR.
+const databaseUrl = optionalOrNull('DATABASE_URL');
+if (databaseUrl && !/^postgres(ql)?:\/\//i.test(databaseUrl)) {
+  console.error('[config] DATABASE_URL must start with postgres:// or postgresql://.');
+  process.exit(1);
+}
+
 // Dashboard auth. When DISCORD_CLIENT_SECRET is set, the dashboard requires
 // "Log in with Discord" and gates actions to guild admins. When unset, the
 // dashboard runs in open mode (localhost / trusted LAN only).
@@ -210,6 +220,7 @@ export const config = Object.freeze({
 
   // Persistence
   databasePath: optional('DATABASE_PATH', './data/sylo.db'),
+  databaseUrl,
   // Database backups. backupDir null => <db dir>/backups. intervalHours 0 =>
   // scheduled backup off. retention = how many snapshots to keep.
   backupDir: optionalOrNull('BACKUP_DIR'),
