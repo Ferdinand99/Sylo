@@ -181,9 +181,9 @@ async function tick() {
   for (const { guildId, alert } of jobs) {
     const channel = live.get(alert.slug);
     if (!channel) {
-      const row = seenRow(guildId, SCOPE, alert.slug);
+      const row = await seenRow(guildId, SCOPE, alert.slug);
       if (row) {
-        forget(guildId, SCOPE, alert.slug);
+        await forget(guildId, SCOPE, alert.slug);
         const { channelId, messageId } = decodeLiveValue(row.value);
         await settleEndedPost({
           guildId,
@@ -197,10 +197,10 @@ async function tick() {
       continue;
     }
     const key = streamKey(channel);
-    if (decodeLiveValue(seenValue(guildId, SCOPE, alert.slug)).ref === key) continue; // already announced
+    if (decodeLiveValue(await seenValue(guildId, SCOPE, alert.slug)).ref === key) continue; // already announced
 
     const posted = await postToChannel(guildId, alert.channelId, buildPayload(channel, alert));
-    markSeen(guildId, SCOPE, alert.slug, encodeLiveValue(key, posted?.channelId, posted?.messageId), {
+    await markSeen(guildId, SCOPE, alert.slug, encodeLiveValue(key, posted?.channelId, posted?.messageId), {
       upsert: true,
     });
   }

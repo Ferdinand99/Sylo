@@ -185,9 +185,9 @@ async function tick() {
   for (const { guildId, alert } of jobs) {
     const stream = streams.get(alert.login);
     if (!stream) {
-      const post = announcedPost(guildId, alert.login);
+      const post = await announcedPost(guildId, alert.login);
       if (post) {
-        markOffline(guildId, alert.login);
+        await markOffline(guildId, alert.login);
         await settleEndedPost({
           guildId,
           onEnd: alert.onEnd,
@@ -199,14 +199,14 @@ async function tick() {
       }
       continue;
     }
-    if (announcedStreamId(guildId, alert.login) === stream.id) continue; // already announced
+    if ((await announcedStreamId(guildId, alert.login)) === stream.id) continue; // already announced
 
     const posted = await postToChannel(
       guildId,
       alert.channelId,
       buildPayload(stream, users.get(alert.login), alert)
     );
-    markLive(guildId, alert.login, stream.id, posted);
+    await markLive(guildId, alert.login, stream.id, posted);
   }
 }
 

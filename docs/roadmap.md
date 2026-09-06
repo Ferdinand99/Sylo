@@ -707,7 +707,43 @@ exists at all), and confirmed `setStarboardCount`'s real "update in place"
 contract instead. 8 of 32 files converted; same caveats as before still
 apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (8 of 32 files)
+### Phase 9 shipped — `src/db/postedKeys.js` (solo, not paired — real dialect work)
+
+Four candidates considered for this round (`counting.js`, `polls.js`,
+`composedMessages.js`, `guildSettings.js`) were all rejected after
+inspection — every one of them feeds `src/web/lib/overviewSummary.js`'s
+`moduleLines()`/`buildCard()`, which are reached through a **double**
+`.map()` chain in `buildOverview()`. Converting any one of them forces that
+whole chain to become `Promise.all`-aware at once — real, contained work,
+but deserving its own dedicated PR rather than a repeat surprise across four
+separate ones. `guildSettings.js` additionally touches
+`src/web/middleware/auth.js` (the dashboard's auth check, run on every
+request) — outside scope for a casual pick regardless.
+
+`postedKeys.js` — the shared dedup store behind free-games, Twitch, YouTube,
+Kick, and RSS alerts — had no such entanglement, so it became this round's
+sole focus (not paired, given real work below beyond the usual
+placeholder-translation pattern):
+
+- `INSERT OR IGNORE` (SQLite-only) rewritten to `INSERT ... ON CONFLICT
+  (guild_id, scope, key) DO NOTHING` — SQLite has supported that standard
+  syntax since 3.24, so this is now the *same* statement on both drivers,
+  not a driver-specific branch.
+- `key GLOB ?` (SQLite-only pattern matching) rewritten to `key LIKE ?`; the
+  one real caller (`youtubeAlerts.js`'s `hasSeenAny`) always passes a
+  literal-prefix-plus-`*` pattern, so `anySeenMatching()` now converts the
+  `*` to `%` in JS before binding — the exported function's signature is
+  unchanged, only the SQL text and one internal translation line moved.
+- 24 call sites across `freeGames.js`, `twitchAlerts.js`, `youtubeAlerts.js`
+  (thin per-module wrappers around `postedKeys.js`), `kickAlerts.js`,
+  `rss.js`, and one site in `guilds.js` — every one already inside an async
+  function, so purely mechanical once the two dialect rewrites above were
+  settled. `rss.js`'s `entries.filter((e) => !seen(...))` needed converting
+  to an explicit loop, since a filter predicate can't `await`.
+
+9 of 32 files converted; same caveats as before still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (9 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

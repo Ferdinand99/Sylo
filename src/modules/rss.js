@@ -220,14 +220,17 @@ export async function runFeed(guildId, feed) {
   if (!entries.length) return;
 
   const scope = feedScope(feed.id);
-  if (!anySeen(guildId, scope)) {
+  if (!(await anySeen(guildId, scope))) {
     // First look at this feed — remember everything, announce nothing.
-    for (const e of entries) markSeen(guildId, scope, e.key);
+    for (const e of entries) await markSeen(guildId, scope, e.key);
     return;
   }
 
-  const unseen = entries.filter((e) => !seen(guildId, scope, e.key)); // newest-first
-  for (const e of unseen) markSeen(guildId, scope, e.key); // mark all, even past the post cap
+  const unseen = [];
+  for (const e of entries) {
+    if (!(await seen(guildId, scope, e.key))) unseen.push(e);
+  } // newest-first
+  for (const e of unseen) await markSeen(guildId, scope, e.key); // mark all, even past the post cap
   const toPost = unseen.slice(0, MAX_POSTS_PER_FEED_PER_TICK).reverse(); // oldest-first
   for (const e of toPost) {
     await sendToChannel(guildId, feed.channelId, buildPayload(feed, e));
@@ -251,7 +254,7 @@ async function tick() {
     }
   }
 
-  pruneScopePrefixOlderThan('rss:', KEEP_MS);
+  await pruneScopePrefixOlderThan('rss:', KEEP_MS);
 }
 
 const timer = setInterval(() => {
