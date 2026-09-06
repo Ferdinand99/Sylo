@@ -113,19 +113,19 @@ export function buildGiveawayPayload(g, { entryCount = 0 } = {}) {
  * @returns {Promise<{ ok: boolean, reason?: string, winners?: string[] }>}
  */
 export async function endGiveaway(id, opts = {}) {
-  const g = getGiveaway(id);
+  const g = await getGiveaway(id);
   if (!g) return { ok: false, reason: 'not-found' };
 
   const guild = runtime.client?.guilds.cache.get(g.guild_id);
   if (!guild) {
-    markGiveawayEnded(id, []);
+    await markGiveawayEnded(id, []);
     return { ok: false, reason: 'no-guild' };
   }
   const channel =
     guild.channels.cache.get(g.channel_id) ?? (await guild.channels.fetch(g.channel_id).catch(() => null));
 
   // Eligible = entrants still in the guild (and still holding the required role).
-  const entrants = giveawayEntrantIds(id);
+  const entrants = await giveawayEntrantIds(id);
   const exclude = new Set(opts.rerollCount ? g.wonIds : []);
   const eligible = [];
   for (const uid of entrants) {
@@ -139,11 +139,11 @@ export async function endGiveaway(id, opts = {}) {
   const count = opts.rerollCount ? Math.max(1, Math.min(opts.rerollCount, MAX_WINNERS)) : g.winners;
   const winners = pickWinners(eligible, count);
 
-  if (opts.rerollCount) setGiveawayWinners(id, winners);
-  else markGiveawayEnded(id, winners);
+  if (opts.rerollCount) await setGiveawayWinners(id, winners);
+  else await markGiveawayEnded(id, winners);
 
-  const fresh = getGiveaway(id);
-  const entryCount = giveawayEntryCount(id);
+  const fresh = await getGiveaway(id);
+  const entryCount = await giveawayEntryCount(id);
 
   const pending = pendingCountRefresh.get(id);
   if (pending) {
@@ -188,18 +188,18 @@ export async function endGiveaway(id, opts = {}) {
 /** Queue a trailing footer refresh; a burst of clicks yields one edit / 5s. */
 function scheduleCountRefresh(message, id) {
   if (pendingCountRefresh.has(id)) return;
-  const t = setTimeout(() => {
+  const t = setTimeout(async () => {
     pendingCountRefresh.delete(id);
-    const g = getGiveaway(id);
+    const g = await getGiveaway(id);
     if (!g || g.ended) return;
-    message.edit(buildGiveawayPayload(g, { entryCount: giveawayEntryCount(id) })).catch(() => {});
+    message.edit(buildGiveawayPayload(g, { entryCount: await giveawayEntryCount(id) })).catch(() => {});
   }, COUNT_REFRESH_MS);
   t.unref?.();
   pendingCountRefresh.set(id, t);
 }
 
 async function handleEnter(interaction, id) {
-  const g = getGiveaway(id);
+  const g = await getGiveaway(id);
   if (!g || g.ended) {
     return interaction.reply({ content: 'This giveaway has ended.', flags: MessageFlags.Ephemeral });
   }
@@ -218,11 +218,11 @@ async function handleEnter(interaction, id) {
   }
 
   let joined;
-  if (hasGiveawayEntry(id, interaction.user.id)) {
-    removeGiveawayEntry(id, interaction.user.id);
+  if (await hasGiveawayEntry(id, interaction.user.id)) {
+    await removeGiveawayEntry(id, interaction.user.id);
     joined = false;
   } else {
-    addGiveawayEntry(id, interaction.user.id);
+    await addGiveawayEntry(id, interaction.user.id);
     joined = true;
   }
 
@@ -242,14 +242,17 @@ registerComponent('giveaways', 'gaw:enter:', (interaction) =>
 // --- expiry loop ----------------------------------------------------
 
 const TICK_MS = 20_000;
-const timer = setInterval(() => {
+async function tick() {
   if (!runtime.client?.isReady()) return;
-  for (const g of dueGiveaways(Date.now())) {
+  for (const g of await dueGiveaways(Date.now())) {
     if (isModuleEnabled(g.guild_id, 'giveaways') && runtime.client.guilds.cache.has(g.guild_id)) {
       endGiveaway(g.id).catch((err) => log.error('giveaways', 'auto-end failed:', err.message));
     } else {
-      markGiveawayEnded(g.id, []); // module off / bot gone — just close it
+      await markGiveawayEnded(g.id, []); // module off / bot gone — just close it
     }
   }
+}
+const timer = setInterval(() => {
+  tick().catch((err) => log.error('giveaways', 'tick failed:', err.message));
 }, TICK_MS);
 timer.unref();

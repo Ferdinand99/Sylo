@@ -41,8 +41,8 @@ test('normaliseGiveawaysConfig: defaults and validation', () => {
   assert.equal(normaliseGiveawaysConfig({ ping: 'nonsense' }).ping, 'none');
 });
 
-test('giveaway lifecycle: create, enter, count, end', () => {
-  const { id } = createGiveaway({
+test('giveaway lifecycle: create, enter, count, end', async () => {
+  const { id } = await createGiveaway({
     guildId: G,
     channelId: '111',
     prize: 'Nitro',
@@ -51,31 +51,31 @@ test('giveaway lifecycle: create, enter, count, end', () => {
     endsAt: Date.now() + 60_000,
   });
   assert.ok(id > 0);
-  setGiveawayMessage(id, '333');
-  assert.equal(getGiveaway(id).message_id, '333');
-  assert.equal(getGiveaway(id).ended, false);
+  await setGiveawayMessage(id, '333');
+  assert.equal((await getGiveaway(id)).message_id, '333');
+  assert.equal((await getGiveaway(id)).ended, false);
 
-  addGiveawayEntry(id, 'u1');
-  addGiveawayEntry(id, 'u2');
-  addGiveawayEntry(id, 'u2'); // dupe — ignored
-  assert.equal(giveawayEntryCount(id), 2);
-  assert.ok(hasGiveawayEntry(id, 'u1'));
-  removeGiveawayEntry(id, 'u1');
-  assert.equal(hasGiveawayEntry(id, 'u1'), false);
-  assert.deepEqual(giveawayEntrantIds(id).sort(), ['u2']);
+  await addGiveawayEntry(id, 'u1');
+  await addGiveawayEntry(id, 'u2');
+  await addGiveawayEntry(id, 'u2'); // dupe — ignored
+  assert.equal(await giveawayEntryCount(id), 2);
+  assert.ok(await hasGiveawayEntry(id, 'u1'));
+  await removeGiveawayEntry(id, 'u1');
+  assert.equal(await hasGiveawayEntry(id, 'u1'), false);
+  assert.deepEqual((await giveawayEntrantIds(id)).sort(), ['u2']);
 
-  assert.equal(activeGiveaways(G).length, 1);
-  markGiveawayEnded(id, ['u2']);
-  const g = getGiveaway(id);
+  assert.equal((await activeGiveaways(G)).length, 1);
+  await markGiveawayEnded(id, ['u2']);
+  const g = await getGiveaway(id);
   assert.equal(g.ended, true);
   assert.deepEqual(g.wonIds, ['u2']);
-  assert.equal(activeGiveaways(G).length, 0);
-  assert.equal(endedGiveaways(G).length, 1);
+  assert.equal((await activeGiveaways(G)).length, 0);
+  assert.equal((await endedGiveaways(G)).length, 1);
 });
 
-test('dueGiveaways returns only past, un-ended rows; clearGuild wipes everything', () => {
-  clearGuildGiveaways(G);
-  const past = createGiveaway({
+test('dueGiveaways returns only past, un-ended rows; clearGuild wipes everything', async () => {
+  await clearGuildGiveaways(G);
+  const past = await createGiveaway({
     guildId: G,
     channelId: '1',
     prize: 'p',
@@ -83,7 +83,7 @@ test('dueGiveaways returns only past, un-ended rows; clearGuild wipes everything
     hostId: 'h',
     endsAt: Date.now() - 1000,
   });
-  const future = createGiveaway({
+  const future = await createGiveaway({
     guildId: G,
     channelId: '1',
     prize: 'f',
@@ -91,11 +91,11 @@ test('dueGiveaways returns only past, un-ended rows; clearGuild wipes everything
     hostId: 'h',
     endsAt: Date.now() + 60_000,
   });
-  const due = dueGiveaways(Date.now());
+  const due = await dueGiveaways(Date.now());
   assert.ok(due.some((g) => g.id === past.id));
   assert.ok(!due.some((g) => g.id === future.id));
 
-  clearGuildGiveaways(G);
-  assert.equal(activeGiveaways(G).length, 0);
-  assert.equal(getGiveaway(past.id), null);
+  await clearGuildGiveaways(G);
+  assert.equal((await activeGiveaways(G)).length, 0);
+  assert.equal(await getGiveaway(past.id), null);
 });

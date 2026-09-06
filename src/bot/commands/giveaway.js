@@ -88,7 +88,7 @@ export async function execute(interaction) {
     const role = interaction.options.getRole('required_role');
     const endsAt = Date.now() + ms;
 
-    const { id } = createGiveaway({
+    const { id } = await createGiveaway({
       guildId: interaction.guildId,
       channelId: interaction.channelId,
       prize,
@@ -111,7 +111,7 @@ export async function execute(interaction) {
     };
     await interaction.reply(buildGiveawayPayload(row, { entryCount: 0 }));
     const message = await interaction.fetchReply();
-    setGiveawayMessage(id, message.id);
+    await setGiveawayMessage(id, message.id);
     return interaction.followUp({
       content: `Giveaway **#${id}** started — ends in ${formatDuration(ms)}.`,
       flags: MessageFlags.Ephemeral,
@@ -120,7 +120,7 @@ export async function execute(interaction) {
 
   if (sub === 'end') {
     const id = interaction.options.getInteger('id', true);
-    const g = getGiveawayInGuild(id, interaction.guildId);
+    const g = await getGiveawayInGuild(id, interaction.guildId);
     if (!g) return eph(interaction, `No giveaway **#${id}** in this server.`);
     if (g.ended) return eph(interaction, `Giveaway **#${id}** has already ended — use \`/giveaway reroll\`.`);
     const r = await endGiveaway(id);
@@ -135,7 +135,7 @@ export async function execute(interaction) {
   if (sub === 'reroll') {
     const id = interaction.options.getInteger('id', true);
     const count = interaction.options.getInteger('count') ?? 1;
-    const g = getGiveawayInGuild(id, interaction.guildId);
+    const g = await getGiveawayInGuild(id, interaction.guildId);
     if (!g) return eph(interaction, `No giveaway **#${id}** in this server.`);
     if (!g.ended)
       return eph(interaction, `Giveaway **#${id}** is still running — use \`/giveaway end\` first.`);
@@ -149,19 +149,18 @@ export async function execute(interaction) {
   }
 
   // list
-  const active = activeGiveaways(interaction.guildId);
+  const active = await activeGiveaways(interaction.guildId);
   if (!active.length) return eph(interaction, 'No active giveaways. Start one with `/giveaway start`.');
+  const lines = await Promise.all(
+    active.map(
+      async (g) =>
+        `**#${g.id}** · ${g.prize} — ${g.winners} winner${g.winners === 1 ? '' : 's'} · ` +
+        `${await giveawayEntryCount(g.id)} entries · ends <t:${Math.floor(g.ends_at / 1000)}:R> · <#${g.channel_id}>`
+    )
+  );
   const embed = new EmbedBuilder()
     .setColor(0xf0b232)
     .setTitle('Active giveaways')
-    .setDescription(
-      active
-        .map(
-          (g) =>
-            `**#${g.id}** · ${g.prize} — ${g.winners} winner${g.winners === 1 ? '' : 's'} · ` +
-            `${giveawayEntryCount(g.id)} entries · ends <t:${Math.floor(g.ends_at / 1000)}:R> · <#${g.channel_id}>`
-        )
-        .join('\n')
-    );
+    .setDescription(lines.join('\n'));
   return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }

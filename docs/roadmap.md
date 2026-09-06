@@ -1015,7 +1015,54 @@ guild id" discipline as every other phase.
 
 20 of 32 files converted; same caveats as before still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (20 of 32 files)
+### Phase 18 shipped — `src/db/giveaways.js`
+
+Two tables (`giveaways`, `giveaway_entries`); `addGiveawayEntry`'s
+`INSERT OR IGNORE` rewritten to `ON CONFLICT (giveaway_id, user_id) DO
+NOTHING` — same portable pattern as `postedKeys.js`.
+
+Widest set of small restructures yet for one file: `giveawayEntryCount()`
+going async forced three separate `.map()` callbacks that read it into
+`Promise.all(...map(async ...))` pairs — `/giveaway list`'s embed lines,
+the dashboard's giveaway-history table in `guilds.js`, and
+`scheduleCountRefresh()`'s footer-edit timer in `modules/giveaways.js`
+(a `setTimeout` callback, made `async` directly — `setTimeout` doesn't care
+whether its callback returns a promise, matching the existing
+fire-and-forget `.catch(() => {})` style already used throughout this
+module). The expiry-sweep `setInterval` loop got the same
+`tick().catch(...)` wrapper used for every other polling loop in this
+migration (`scheduledMessages.js`, Phase 15).
+
+**Explicitly ruled three other files out of this batch, each for a
+different reason worth recording:**
+- `leveling.js` and `modCases.js` both wrap their writes in
+  `db.transaction(...)` — better-sqlite3's synchronous atomic-multi-statement
+  primitive. `driver.js` has no Postgres equivalent yet; building one
+  properly (safe under concurrent requests) needs `AsyncLocalStorage` to
+  thread the active transaction connection through already-`prepare()`d
+  statements, not just a module-level "current transaction" variable — that
+  would leak across concurrently in-flight guild operations. This is new
+  driver.js infrastructure, not an application of the existing pattern, so
+  it isn't being bolted on under time pressure. Both files stay on hold
+  until that primitive exists.
+- `purge.js` and `retention.js` also use `db.transaction(...)`, and
+  additionally sweep across nearly every table in the database — several
+  still unconverted (`guild_modules`, `infractions`) — so they're
+  doubly blocked: on the transaction primitive above, and on `modules.js`
+  and `modCases.js` landing first.
+- `backup.js` and `offsiteBackup.js` turned out not to belong in the
+  32-file count at all: they're SQLite-file-specific tooling (`VACUUM INTO`,
+  WAL checkpointing, replacing the live `.db` file, gzip-and-upload of that
+  file) with no per-guild data table to migrate. A hosted Postgres instance
+  will need its own backup strategy (`pg_dump` or similar) — a separate,
+  future piece of work, not a driver-shim conversion.
+
+21 of 30 files converted — the running total drops from 32 to 30 here:
+`backup.js`/`offsiteBackup.js` are removed from the count as out-of-scope
+infra (see above), not counted as remaining work. Same caveats as before
+still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (21 of 30 files)
 
 The big, mechanical piece; blocks #2 and #3.
 
