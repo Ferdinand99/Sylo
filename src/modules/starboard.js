@@ -221,7 +221,7 @@ export async function rescanBoard(guild, board) {
       if (board.minAgeMinutes && age < board.minAgeMinutes * 60_000) continue;
       if (board.maxAgeMinutes && age > board.maxAgeMinutes * 60_000) continue;
 
-      if (getStarboardEntry(guild.id, board.id, message.id)?.post_msg_id) continue;
+      if ((await getStarboardEntry(guild.id, board.id, message.id))?.post_msg_id) continue;
 
       const hasMatch = [...message.reactions.cache.values()].some(
         (rx) => !board.emojis.length || board.emojis.includes(rx.emoji.id || rx.emoji.name)
@@ -231,7 +231,7 @@ export async function rescanBoard(guild, board) {
       const count = await computeStars(message, board, guild);
       if (count < board.threshold) {
         if (count > 0) {
-          upsertStarboardEntry({
+          await upsertStarboardEntry({
             guildId: guild.id,
             boardId: board.id,
             sourceMsgId: message.id,
@@ -245,14 +245,14 @@ export async function rescanBoard(guild, board) {
       const sent = await dest.send(renderPost(message, board, count, guild)).catch(() => null);
       if (!sent) continue;
       posted += 1;
-      upsertStarboardEntry({
+      await upsertStarboardEntry({
         guildId: guild.id,
         boardId: board.id,
         sourceMsgId: message.id,
         sourceChanId: message.channelId,
         starCount: count,
       });
-      setStarboardPost(guild.id, board.id, message.id, sent.id, Date.now());
+      await setStarboardPost(guild.id, board.id, message.id, sent.id, Date.now());
 
       if (board.autoReact) {
         const src = board.emojis.length ? board.emojis : ['⭐'];
@@ -320,13 +320,13 @@ async function handleReaction({ reaction, user }, rawConfig, guildId, added) {
     if (board.maxAgeMinutes && age > board.maxAgeMinutes * 60_000) continue;
 
     const count = await computeStars(message, board, guild);
-    const entry = getStarboardEntry(guildId, board.id, message.id);
+    const entry = await getStarboardEntry(guildId, board.id, message.id);
     const boardKey = `${guildId}:${board.id}`;
     const cdKey = `${boardKey}:${message.id}`;
 
     if (count >= board.threshold) {
       if (entry?.post_msg_id) {
-        setStarboardCount(guildId, board.id, message.id, count);
+        await setStarboardCount(guildId, board.id, message.id, count);
         const post = await fetchPost(guild, board.channelId, entry.post_msg_id);
         if (post) post.edit({ content: renderPost(message, board, count, guild).content }).catch(() => {});
         continue;
@@ -334,7 +334,7 @@ async function handleReaction({ reaction, user }, rawConfig, guildId, added) {
       const cd = repostCd.get(cdKey);
       if (cd && cd.until > Date.now() && cd.byUser === user.id) continue;
 
-      upsertStarboardEntry({
+      await upsertStarboardEntry({
         guildId,
         boardId: board.id,
         sourceMsgId: message.id,
@@ -349,7 +349,7 @@ async function handleReaction({ reaction, user }, rawConfig, guildId, added) {
       const posted = await ch.send(renderPost(message, board, count, guild)).catch(() => null);
       if (!posted) continue;
       lastPostAt.set(boardKey, Date.now());
-      setStarboardPost(guildId, board.id, message.id, posted.id, Date.now());
+      await setStarboardPost(guildId, board.id, message.id, posted.id, Date.now());
 
       if (board.autoReact) {
         const src = board.emojis.length ? board.emojis : [reaction.emoji.id || reaction.emoji.name];
@@ -360,11 +360,11 @@ async function handleReaction({ reaction, user }, rawConfig, guildId, added) {
         }
       }
     } else if (entry?.post_msg_id) {
-      setStarboardCount(guildId, board.id, message.id, count);
+      await setStarboardCount(guildId, board.id, message.id, count);
       if (board.removeOnUnstar) {
         const post = await fetchPost(guild, board.channelId, entry.post_msg_id);
         if (post) await post.delete().catch(() => {});
-        setStarboardPost(guildId, board.id, message.id, null, null);
+        await setStarboardPost(guildId, board.id, message.id, null, null);
         if (!added && board.repostCooldown) {
           repostCd.set(cdKey, { until: Date.now() + POST_COOLDOWN_MS, byUser: user.id });
         }
@@ -373,7 +373,7 @@ async function handleReaction({ reaction, user }, rawConfig, guildId, added) {
         if (post) post.edit({ content: renderPost(message, board, count, guild).content }).catch(() => {});
       }
     } else {
-      upsertStarboardEntry({
+      await upsertStarboardEntry({
         guildId,
         boardId: board.id,
         sourceMsgId: message.id,
@@ -388,20 +388,20 @@ on('starboard', 'reactionAdd', (payload, cfg, guildId) => handleReaction(payload
 on('starboard', 'reactionRemove', (payload, cfg, guildId) => handleReaction(payload, cfg, guildId, false));
 
 on('starboard', 'messageDelete', async (message, rawConfig, guildId) => {
-  const byPost = getStarboardEntryByPost(message.id);
+  const byPost = await getStarboardEntryByPost(message.id);
   if (byPost) {
-    setStarboardPost(byPost.guild_id, byPost.board_id, byPost.source_msg_id, null, null);
+    await setStarboardPost(byPost.guild_id, byPost.board_id, byPost.source_msg_id, null, null);
     return;
   }
   const cfg = normaliseStarboard(rawConfig);
   const guild = runtime.client?.guilds.cache.get(guildId);
   for (const board of cfg.boards) {
-    const entry = getStarboardEntry(guildId, board.id, message.id);
+    const entry = await getStarboardEntry(guildId, board.id, message.id);
     if (!entry) continue;
     if (entry.post_msg_id && board.removeOnDelete && guild) {
       const post = await fetchPost(guild, board.channelId, entry.post_msg_id);
       if (post) await post.delete().catch(() => {});
     }
-    deleteStarboardEntry(guildId, board.id, message.id);
+    await deleteStarboardEntry(guildId, board.id, message.id);
   }
 });

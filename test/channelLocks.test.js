@@ -64,9 +64,9 @@ test('restoreLockPerms maps saved bitfields back to true / false / null', () => 
   assert.deepEqual(restoreLockPerms(String(allow), String(deny)), map);
 });
 
-test('channel_locks DB round-trips and scopes by guild', () => {
-  clearGuildChannelLocks(G);
-  recordChannelLock({
+test('channel_locks DB round-trips and scopes by guild', async () => {
+  await clearGuildChannelLocks(G);
+  await recordChannelLock({
     guildId: G,
     channelId: C1,
     prevAllow: PermissionFlagsBits.SendMessages,
@@ -76,35 +76,35 @@ test('channel_locks DB round-trips and scopes by guild', () => {
     lockdown: false,
   });
 
-  assert.equal(isChannelLocked(G, C1), true);
-  const row = getChannelLock(G, C1);
+  assert.equal(await isChannelLocked(G, C1), true);
+  const row = await getChannelLock(G, C1);
   assert.equal(row.prev_allow, String(PermissionFlagsBits.SendMessages));
   assert.equal(row.prev_deny, '0');
   assert.equal(row.had_overwrite, 1);
   assert.equal(row.lockdown, 0);
 
-  assert.equal(clearChannelLock(G, C1), 1);
-  assert.equal(isChannelLocked(G, C1), false);
+  assert.equal(await clearChannelLock(G, C1), 1);
+  assert.equal(await isChannelLocked(G, C1), false);
 });
 
-test('lockdownChannelLocks returns only rows flagged lockdown', () => {
-  clearGuildChannelLocks(G);
-  recordChannelLock({ guildId: G, channelId: C1, lockedBy: 'm', lockdown: true });
-  recordChannelLock({ guildId: G, channelId: C2, lockedBy: 'm', lockdown: false });
+test('lockdownChannelLocks returns only rows flagged lockdown', async () => {
+  await clearGuildChannelLocks(G);
+  await recordChannelLock({ guildId: G, channelId: C1, lockedBy: 'm', lockdown: true });
+  await recordChannelLock({ guildId: G, channelId: C2, lockedBy: 'm', lockdown: false });
 
   assert.deepEqual(
-    lockdownChannelLocks(G).map((r) => r.channel_id),
+    (await lockdownChannelLocks(G)).map((r) => r.channel_id),
     [C1]
   );
-  assert.equal(guildChannelLocks(G).length, 2);
+  assert.equal((await guildChannelLocks(G)).length, 2);
 });
 
 test('lockChannel records the prior overwrite once, then denies the lock perms', async () => {
-  clearGuildChannelLocks(G);
+  await clearGuildChannelLocks(G);
   const ch = fakeChannel(C1, overwrite(PermissionFlagsBits.SendMessages, PermissionFlagsBits.AddReactions));
 
   await lockChannel(ch, { moderatorTag: 'mod#1' });
-  const saved = getChannelLock(G, C1);
+  const saved = await getChannelLock(G, C1);
   assert.equal(saved.had_overwrite, 1);
   assert.equal(saved.prev_allow, String(PermissionFlagsBits.SendMessages));
   assert.equal(saved.prev_deny, String(PermissionFlagsBits.AddReactions));
@@ -112,27 +112,27 @@ test('lockChannel records the prior overwrite once, then denies the lock perms',
 
   // A second lock must not clobber the saved baseline with the locked values.
   await lockChannel(ch, { moderatorTag: 'mod#2' });
-  assert.deepEqual(getChannelLock(G, C1), saved);
+  assert.deepEqual(await getChannelLock(G, C1), saved);
 });
 
 test('unlockChannel restores the saved overwrite and clears the row', async () => {
-  clearGuildChannelLocks(G);
+  await clearGuildChannelLocks(G);
   const ch = fakeChannel(C1, overwrite(PermissionFlagsBits.SendMessages, 0n));
   await lockChannel(ch, { moderatorTag: 'mod#1' });
 
   await unlockChannel(ch, { moderatorTag: 'mod#1' });
-  assert.equal(getChannelLock(G, C1), null);
+  assert.equal(await getChannelLock(G, C1), null);
   assert.equal(ch._edits.at(-1).opts.SendMessages, true); // restored to allow
   assert.equal(ch._edits.at(-1).opts.CreatePublicThreads, null);
 });
 
 test('unlockChannel deletes the overwrite when there was none before the lock', async () => {
-  clearGuildChannelLocks(G);
+  await clearGuildChannelLocks(G);
   const ch = fakeChannel(C1, null); // no @everyone overwrite existed
   await lockChannel(ch, { moderatorTag: 'mod#1' });
-  assert.equal(getChannelLock(G, C1).had_overwrite, 0);
+  assert.equal((await getChannelLock(G, C1)).had_overwrite, 0);
 
   await unlockChannel(ch, { moderatorTag: 'mod#1' });
   assert.equal(ch._deletes.length, 1);
-  assert.equal(getChannelLock(G, C1), null);
+  assert.equal(await getChannelLock(G, C1), null);
 });

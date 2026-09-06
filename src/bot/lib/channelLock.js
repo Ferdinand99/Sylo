@@ -68,9 +68,9 @@ export function restoreLockPerms(prevAllow, prevDeny) {
  */
 export async function lockChannel(channel, { moderatorTag, lockdown = false }) {
   const everyone = channel.guild.roles.everyone;
-  if (!getChannelLock(channel.guild.id, channel.id)) {
+  if (!(await getChannelLock(channel.guild.id, channel.id))) {
     const existing = channel.permissionOverwrites.cache.get(everyone.id);
-    recordChannelLock({
+    await recordChannelLock({
       guildId: channel.guild.id,
       channelId: channel.id,
       prevAllow: existing?.allow.bitfield ?? 0n,
@@ -92,7 +92,7 @@ export async function lockChannel(channel, { moderatorTag, lockdown = false }) {
  */
 export async function unlockChannel(channel, { moderatorTag }) {
   const everyone = channel.guild.roles.everyone;
-  const saved = getChannelLock(channel.guild.id, channel.id);
+  const saved = await getChannelLock(channel.guild.id, channel.id);
   const reason = `Unlocked by ${moderatorTag}`;
 
   if (saved && !saved.had_overwrite) {
@@ -106,5 +106,5 @@ export async function unlockChannel(channel, { moderatorTag }) {
       reason,
     });
   }
-  clearChannelLock(channel.guild.id, channel.id);
+  await clearChannelLock(channel.guild.id, channel.id);
 }
