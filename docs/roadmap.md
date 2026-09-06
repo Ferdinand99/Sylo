@@ -504,10 +504,7 @@ feature-specific wrapper files (`leveling.js`, `modCases.js`, `modules.js`, …,
 this is tractable at all — the SQL rewrite is confined to one directory, not
 smeared across every module.
 
-### 0 — Decision: self-hosting stays SQLite; Postgres is hosted-only, opt-in
-
-Not built — needs deciding before #1 starts, because it changes the shape of
-every piece below.
+### 0 — Decision: self-hosting stays SQLite; Postgres is hosted-only, opt-in — done
 
 Sylo's self-hosting pitch is "one container, one SQLite file you control, no
 external dependency" (the landing page, `docs/self-hosting.md`). Forcing every
@@ -520,6 +517,21 @@ self-hosted deployment) keeps today's SQLite path untouched; set (the hosted
 instance, once it needs it) switches the driver. This means a driver seam
 inside `src/db/`, not a hard cutover — more work than a straight swap, but it's
 what keeps the self-hosting story true.
+
+### Phase 1 shipped — config + CI scaffolding
+
+`DATABASE_URL` now exists in `src/config.js` (validated as a `postgres://` /
+`postgresql://` URL when set) and CI now runs the full suite twice — once
+with no `DATABASE_URL` (`sqlite`), once against a real `postgres:16-alpine`
+service container (`postgres`), via a matrix in `.github/workflows/test.yml`
+plus `test/postgresSmoke.test.js`. The `postgres` (porsager) npm dependency
+is installed.
+
+**None of this makes Postgres actually work yet.** Nothing in `src/db/`
+reads `databaseUrl` — every self-hosted deployment (and the hosted instance,
+today) is byte-identical to before this landed. Still ahead, unstarted:
+the driver shim and per-file conversion (#1), the migration-runner table
+swap (#2), and the backup/restore redesign (#3).
 
 ### 1 — Driver + async seam in `src/db/`
 
@@ -549,6 +561,17 @@ The big, mechanical piece; blocks #2 and #3.
 - No `json_extract`/`strftime` usage anywhere — JSON columns are plain `TEXT`
   parsed in JS. That part is already Postgres-friendly and isn't part of this
   work (could become native `jsonb` later, but doesn't block the migration).
+- `lastInsertRowid` has no Postgres equivalent (`.run({...}).lastInsertRowid`
+  is how better-sqlite3 hands back a newly-created row's id). Verified against
+  every `CREATE TABLE` in `MIGRATIONS`: exactly 8 tables use a surrogate
+  `id INTEGER PRIMARY KEY AUTOINCREMENT` key (`tickets`, `ticket_messages`,
+  `composed_messages`, `scheduled_messages`, `config_audit`, `appeals`,
+  `giveaways`, `channel_cleanup_schedules`); every other table uses a
+  natural/composite key and never touches `.lastInsertRowid`. Usage is
+  confined to 6 files (`channelCleanup.js`, `scheduledMessages.js`,
+  `tickets.js`, `giveaways.js`, `appeals.js`, `composedMessages.js`). The shim
+  can scope a Postgres-only `RETURNING id` append to statements that actually
+  read `.lastInsertRowid`, not a blanket INSERT rewrite.
 
 ### 2 — Migration runner
 
@@ -563,6 +586,15 @@ Small; can land alongside #1.
   both drivers with one small per-driver read/write, instead of adopting a
   migration framework (node-pg-migrate, Knex) that would only ever apply to the
   Postgres half of a dual-driver setup.
+- Don't dialect-translate all 36 historical migrations (`AUTOINCREMENT` →
+  `SERIAL`/`IDENTITY`, SQLite type affinity, etc.) — a brand-new hosted
+  Postgres deployment has no legacy SQLite data to replay against, so there's
+  no correctness reason to port them one by one. Write a single "Postgres
+  bootstrap schema" reflecting the *current* cumulative shape, applied once
+  when `DATABASE_URL` is set and `schema_migrations` is empty. Accepted
+  ongoing tradeoff: migrations 38+ get written twice (SQLite `.exec()` DDL +
+  a Postgres-dialect equivalent) once this ships — a fine price for not
+  back-porting 36 historical ones.
 
 ### 3 — Backup / restore redesign
 
