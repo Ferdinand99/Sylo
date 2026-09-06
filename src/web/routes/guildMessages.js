@@ -50,7 +50,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const chName = (id) => guildTextChannels(req.guild).find((c) => c.id === id)?.name ?? id;
     res.render('guild-messages', {
-      ...baseContext(req.guild, 'messages'),
+      ...(await baseContext(req.guild, 'messages')),
       items: (await listComposed(req.guild.id, 200)).map((c) => ({
         id: c.id,
         name: c.name || specTitle(c.spec),
@@ -65,9 +65,9 @@ router.get(
 
 // --- builder -----------------------------------------------------------
 
-function renderBuilder(req, res, rec) {
+async function renderBuilder(req, res, rec) {
   res.render('msg-builder', {
-    ...baseContext(req.guild, 'messages'),
+    ...(await baseContext(req.guild, 'messages')),
     channels: guildTextChannels(req.guild),
     roles: assignableRoles(req.guild),
     guildId: req.guild.id,
@@ -86,7 +86,10 @@ function renderBuilder(req, res, rec) {
 // (and "new") id shape is checked in the handler instead.
 const numericId = (v) => /^\d+$/.test(v ?? '');
 
-router.get('/new', (req, res) => renderBuilder(req, res, null));
+router.get(
+  '/new',
+  asyncHandler((req, res) => renderBuilder(req, res, null))
+);
 
 router.get(
   '/:id',
@@ -94,7 +97,7 @@ router.get(
     if (!numericId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/messages`);
     const rec = await getComposed(req.guild.id, Number(req.params.id));
     if (!rec) return res.redirect(`/guilds/${req.guild.id}/messages`);
-    renderBuilder(req, res, rec);
+    await renderBuilder(req, res, rec);
   })
 );
 

@@ -948,7 +948,44 @@ shipping with a Postgres-path query against a table that doesn't exist yet.
 
 18 of 32 files converted; same caveats as before still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (18 of 32 files)
+### Phase 16 shipped — `src/db/appeals.js`
+
+The widest structural ripple since Phase 10's `overviewSummary.js` fix:
+`countOpenAppeals()` is read inside `baseContext()`
+(`src/web/lib/guildContext.js`), the shared sidebar/nav view-model built by
+**every** dashboard page — 20 call sites once `guildTickets.js` and
+`guildMessages.js` (missed on the first grep, since it only covered
+`guilds.js`) were counted too. Made `baseContext()` async (same
+"fix it once" approach as Phase 10) and `await`ed every call site; 6 of them
+were local `render*Builder` helpers (reminders, channel-cleanup, temp-voice,
+reaction-roles, starboard, custom-commands, plus messages' own builder) that
+were themselves plain sync functions spreading `...baseContext(...)` — each
+had to become `async` too, which then meant `await`ing *their* two call
+sites each (a one-liner "new" route and an "/:id" route, half already
+`asyncHandler`-wrapped from earlier phases, half not). `getGuildModules()`
+(modules.js) and `openTicketCount()` (tickets.js) stay sync-called inside
+the now-async `baseContext()` — unconverted-but-synchronous calls don't need
+an `await`, and this unblocks both of those files' own future conversions
+the same way Phase 10 unblocked several `src/db/*.js` files.
+
+**New cross-dialect gotcha**: `createAppeal()` relies on a partial unique
+index (`CREATE UNIQUE INDEX ... WHERE status = 'open'`, one open appeal per
+guild+user) and catches the constraint violation to return `null` instead of
+throwing. The old check was `err.message.includes('UNIQUE')` —
+SQLite-specific wording ("UNIQUE constraint failed: …"). Postgres reports
+the same violation as "duplicate key value violates unique constraint …"
+(error code `23505`), which doesn't contain the substring `UNIQUE`, so the
+old check would have silently stopped catching the case on Postgres and
+thrown instead of returning `null`. Fixed with a portable check: Postgres's
+error code OR a case-insensitive `unique` substring match, which covers both
+drivers' wording. Verified against a real Postgres connection (not just
+reasoned about) before considering this fixed — reproduced the wrong
+behavior first, confirmed the fix, per the "measure twice" habit from the
+`inviteTracker.js` incident in Phase 14.
+
+19 of 32 files converted; same caveats as before still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (19 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 
