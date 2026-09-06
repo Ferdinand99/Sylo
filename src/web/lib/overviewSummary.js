@@ -257,7 +257,7 @@ async function moduleLines(id, guild, cfg) {
     case 'invite-tracker': {
       const log = channelName(guild, cfg.joinLogChannelId);
       return [
-        neutral('Inviters ranked', String(inviterCount(guild.id))),
+        neutral('Inviters ranked', String(await inviterCount(guild.id))),
         log ? on('Join log', `#${log}`) : off('Join log', 'off'),
       ];
     }

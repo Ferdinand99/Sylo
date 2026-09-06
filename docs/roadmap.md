@@ -866,7 +866,50 @@ done, not just trusting the plan.
 
 15 of 32 files converted; same caveats as before still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (15 of 32 files)
+### Phase 14 shipped — `src/db/inviteTracker.js`
+
+Three tables in one file (`invite_counts`, `invite_joins`, `invite_personal`).
+Call sites: `src/bot/commands/inviter.js`, `invites-leaderboard.js`,
+`invites.js`, `src/modules/inviteTracker.js` (the `guildMemberAdd`/
+`guildMemberRemove` handlers were already `async`, no restructuring needed),
+plus the usual `overviewSummary.js`/`guilds.js` dashboard hooks.
+
+Deliberately did **not** take `tempVoice.js` alongside it even though it was
+next in line: `getTempChannel()` is called from `insights.js`'s
+`voiceBucket()` → `settleVoice()` → `flushSlot()` → `slot()` chain, itself
+invoked from currently-synchronous `messageCreate`/`guildMemberAdd`/
+`guildMemberRemove`/`voiceStateUpdate` handlers — a ripple on the same order
+as the Phase 10 `overviewSummary.js` fix. Left as its own dedicated phase
+rather than rushed alongside an unrelated file.
+
+**New cross-dialect gotcha, found by a failing Postgres test that an
+aliasing fix did *not* actually resolve (worth recording so the misdiagnosis
+isn't repeated)**: `bumpRegular`/`bumpLeaves` upsert with
+`ON CONFLICT (...) DO UPDATE SET regular = regular + @delta` — an
+**unqualified** self-reference on the right-hand side. SQLite accepts this
+without complaint, but Postgres raises `column reference "regular" is
+ambiguous` (42702), reproduced even on a bare two-column scratch table with
+no self-join anywhere in sight: `DO UPDATE SET`'s scope sees both the target
+table's current row and the proposed `excluded` row, both exposing a
+`regular` column, so the bare name is genuinely ambiguous per the SQL
+standard — Postgres just enforces it and SQLite doesn't. Fix is to qualify
+the target-table side with the real table name (no alias needed, since none
+is declared on the `INSERT`): `regular = invite_counts.regular + @delta`.
+Portable — SQLite accepts the qualified form too. (Every *other* already-converted
+file's `ON CONFLICT` clauses were re-grepped and confirmed clean — they all
+already use `excluded.col` exclusively, never a bare self-reference.)
+
+Separately (harmless, but worth keeping since it's correct standard SQL
+either way): `inviterRank()`'s correlated subquery re-references
+`invite_counts` in both the outer query and the inner subquery. Aliased both
+sides (`outer_ic`/`inner_ic`) for clarity — SQLite resolves the unaliased
+form's bare columns to the innermost scope without complaint, so this one
+was never actually the cause of the test failure above, just good hygiene
+once spotted.
+
+16 of 32 files converted; same caveats as before still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (16 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

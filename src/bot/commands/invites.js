@@ -36,7 +36,7 @@ async function personalLink(guild, userId) {
   } catch {
     return { error: 'I need the **Manage Server** permission to hand out invite links.' };
   }
-  const existing = getPersonalCode(guild.id, userId);
+  const existing = await getPersonalCode(guild.id, userId);
   if (existing && all.has(existing)) return { url: `https://discord.gg/${existing}` };
 
   const channel = pickInviteChannel(guild);
@@ -47,7 +47,7 @@ async function personalLink(guild, userId) {
       unique: true,
       reason: `Personal invite link via /invites for ${userId}`,
     });
-    setPersonalCode(guild.id, userId, invite.code);
+    await setPersonalCode(guild.id, userId, invite.code);
     await primeGuild(guild); // teach the cache about the new code
     return { url: invite.url };
   } catch {
@@ -69,7 +69,7 @@ export async function execute(interaction) {
 
   const target = interaction.options.getUser('user') ?? interaction.user;
   const isSelf = target.id === interaction.user.id;
-  const c = getInviteCount(interaction.guildId, target.id);
+  const c = await getInviteCount(interaction.guildId, target.id);
 
   const embed = new EmbedBuilder()
     .setColor(0x5b7cfa)
@@ -78,7 +78,7 @@ export async function execute(interaction) {
       { name: 'Invites', value: `**${c.net}**`, inline: true },
       {
         name: 'Rank',
-        value: `#${inviterRank(interaction.guildId, target.id)} of ${inviterCount(interaction.guildId)}`,
+        value: `#${await inviterRank(interaction.guildId, target.id)} of ${await inviterCount(interaction.guildId)}`,
         inline: true,
       },
       {

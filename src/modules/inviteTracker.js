@@ -85,7 +85,7 @@ on('invite-tracker', 'guildMemberAdd', async (member, rawConfig, guildId) => {
   const now = Date.now();
 
   if (member.user.bot) {
-    recordJoin(guildId, member.id, { source: 'bot', joinedAt: now, counted: 0 });
+    await recordJoin(guildId, member.id, { source: 'bot', joinedAt: now, counted: 0 });
     return;
   }
 
@@ -104,7 +104,7 @@ on('invite-tracker', 'guildMemberAdd', async (member, rawConfig, guildId) => {
       if (data.uses > (before.codes.get(c)?.uses ?? 0)) {
         // A link Sylo minted for a member via /invites credits that member,
         // not the bot that technically created it.
-        inviterId = personalCodeOwner(guildId, c) ?? data.inviterId;
+        inviterId = (await personalCodeOwner(guildId, c)) ?? data.inviterId;
         code = c;
         source = 'invite';
         break;
@@ -119,11 +119,11 @@ on('invite-tracker', 'guildMemberAdd', async (member, rawConfig, guildId) => {
     if (inviterMember?.user.bot) {
       source = 'unknown';
     } else {
-      bumpRegular(guildId, inviterId, 1);
+      await bumpRegular(guildId, inviterId, 1);
     }
   }
 
-  recordJoin(guildId, member.id, {
+  await recordJoin(guildId, member.id, {
     inviterId: creditable && source === 'invite' ? inviterId : null,
     code,
     source,
@@ -134,7 +134,7 @@ on('invite-tracker', 'guildMemberAdd', async (member, rawConfig, guildId) => {
   if (cfg.joinLogChannelId) {
     let tail;
     if (source === 'invite' && isId(inviterId)) {
-      const net = getInviteCount(guildId, inviterId).net;
+      const net = (await getInviteCount(guildId, inviterId)).net;
       tail = `invited by <@${inviterId}> — they now have **${net}** invite${net === 1 ? '' : 's'}`;
     } else if (source === 'vanity') {
       tail = 'joined through the server’s vanity URL';
@@ -151,15 +151,15 @@ on('invite-tracker', 'guildMemberAdd', async (member, rawConfig, guildId) => {
 
 on('invite-tracker', 'guildMemberRemove', async (member, rawConfig, guildId) => {
   const cfg = normaliseInviteTrackerConfig(rawConfig);
-  const join = getJoin(guildId, member.id);
-  deleteJoin(guildId, member.id);
+  const join = await getJoin(guildId, member.id);
+  await deleteJoin(guildId, member.id);
   if (!join) return;
 
   let note = '';
   if (join.counted && isId(join.inviter_id)) {
     const withinGrace = Date.now() - join.joined_at < cfg.graceHours * 3_600_000;
     if (withinGrace) {
-      bumpLeaves(guildId, join.inviter_id, 1);
+      await bumpLeaves(guildId, join.inviter_id, 1);
       note = ` — the invite by <@${join.inviter_id}> no longer counts (left within ${cfg.graceHours}h)`;
     } else {
       note = ` — was invited by <@${join.inviter_id}>`;
