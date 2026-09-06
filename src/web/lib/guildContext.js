@@ -46,7 +46,7 @@ export async function baseContext(guild, panel) {
     },
     channels: guildTextChannels(guild),
     modules,
-    openTickets: openTicketCount(guild.id),
+    openTickets: await openTicketCount(guild.id),
     openAppeals: await countOpenAppeals(guild.id),
     panel,
     msg: null,

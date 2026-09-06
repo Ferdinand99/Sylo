@@ -46,7 +46,8 @@ async function handleDM(message) {
   }
 
   // If there's exactly one open ticket already, keep the conversation there.
-  const openGuilds = guilds.filter((g) => getOpenTicket(g.id, message.author.id));
+  const openFlags = await Promise.all(guilds.map((g) => getOpenTicket(g.id, message.author.id)));
+  const openGuilds = guilds.filter((g, i) => openFlags[i]);
   if (openGuilds.length === 1) {
     await ingestUserDM(openGuilds[0], message.author, payload);
     await message.react('✅').catch(() => {});

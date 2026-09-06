@@ -23,8 +23,8 @@ router.use(requireTicketAccess);
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const open = listTickets(req.guild.id, 'open', 100);
-    const closed = listTickets(req.guild.id, 'closed', 25);
+    const open = await listTickets(req.guild.id, 'open', 100);
+    const closed = await listTickets(req.guild.id, 'closed', 25);
     const tags = await resolveUserTags(
       runtime.client,
       [...open, ...closed].map((t) => t.user_id)
@@ -50,12 +50,12 @@ router.get(
 router.get(
   '/:ticketId',
   asyncHandler(async (req, res) => {
-    const ticket = getTicket(Number(req.params.ticketId));
+    const ticket = await getTicket(Number(req.params.ticketId));
     if (!ticket || ticket.guild_id !== req.guild.id) {
       return res.status(404).render('guild-missing', { guildId: req.guild.id });
     }
-    markStaffSeen(ticket.id);
-    const rows = ticketMessages(ticket.id);
+    await markStaffSeen(ticket.id);
+    const rows = await ticketMessages(ticket.id);
     const tags = await resolveUserTags(runtime.client, [ticket.user_id, ...rows.map((r) => r.author_id)]);
     res.render('guild-ticket', {
       ...(await baseContext(req.guild, 'tickets')),
@@ -90,7 +90,7 @@ router.get(
 router.get(
   '/:ticketId/transcript',
   asyncHandler(async (req, res) => {
-    const ticket = getTicket(Number(req.params.ticketId));
+    const ticket = await getTicket(Number(req.params.ticketId));
     if (!ticket || ticket.guild_id !== req.guild.id) return res.status(404).send('Not found');
     const { filename, html } = await buildTranscript(ticket);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -99,29 +99,32 @@ router.get(
 );
 
 // Poll for new messages since `after`.
-router.get('/:ticketId/messages.json', (req, res) => {
-  const ticket = getTicket(Number(req.params.ticketId));
-  if (!ticket || ticket.guild_id !== req.guild.id) return res.status(404).json({ error: 'not found' });
-  const after = Number(req.query.after) || 0;
-  const rows = ticketMessages(ticket.id, after);
-  markStaffSeen(ticket.id);
-  res.json({
-    status: ticket.status,
-    messages: rows.map((m) => ({
-      id: m.id,
-      kind: m.author_kind,
-      who: m.author_kind === 'staff' ? 'Staff' : m.author_kind === 'system' ? 'System' : 'User',
-      content: m.content,
-      attachments: m.attachments,
-      delivered: m.delivered === 1,
-    })),
-  });
-});
+router.get(
+  '/:ticketId/messages.json',
+  asyncHandler(async (req, res) => {
+    const ticket = await getTicket(Number(req.params.ticketId));
+    if (!ticket || ticket.guild_id !== req.guild.id) return res.status(404).json({ error: 'not found' });
+    const after = Number(req.query.after) || 0;
+    const rows = await ticketMessages(ticket.id, after);
+    await markStaffSeen(ticket.id);
+    res.json({
+      status: ticket.status,
+      messages: rows.map((m) => ({
+        id: m.id,
+        kind: m.author_kind,
+        who: m.author_kind === 'staff' ? 'Staff' : m.author_kind === 'system' ? 'System' : 'User',
+        content: m.content,
+        attachments: m.attachments,
+        delivered: m.delivered === 1,
+      })),
+    });
+  })
+);
 
 router.post(
   '/:ticketId/reply',
   asyncHandler(async (req, res) => {
-    const ticket = getTicket(Number(req.params.ticketId));
+    const ticket = await getTicket(Number(req.params.ticketId));
     const back = `/guilds/${req.guild.id}/tickets/${req.params.ticketId}`;
     if (!ticket || ticket.guild_id !== req.guild.id) return res.redirect(`/guilds/${req.guild.id}/tickets`);
     if (ticket.status !== 'open') return res.redirect(`${back}?msg=closed`);
@@ -140,7 +143,7 @@ router.post(
 router.post(
   '/:ticketId/close',
   asyncHandler(async (req, res) => {
-    const ticket = getTicket(Number(req.params.ticketId));
+    const ticket = await getTicket(Number(req.params.ticketId));
     if (ticket && ticket.guild_id === req.guild.id && ticket.status === 'open') {
       const closingMessage = String(req.body.content ?? '')
         .trim()
