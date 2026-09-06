@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.24.0](https://github.com/Ferdinand99/Sylo/compare/v3.23.0...v3.24.0) (2026-09-06)
+
+
+### Features
+
+* add opt-in Postgres config + CI scaffolding ([bc0f34d](https://github.com/Ferdinand99/Sylo/commit/bc0f34d523f1b262272e2c01a1bf06fa8f85b90c))
+
 ## [3.23.0](https://github.com/Ferdinand99/Sylo/compare/v3.22.4...v3.23.0) (2026-09-05)
 
 
