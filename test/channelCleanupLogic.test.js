@@ -75,7 +75,11 @@ test('cleanupChannel: falls back to individual deletes for messages bulkDelete r
   old.delete = async () => {
     individuallyDeleted += 1;
   };
-  const messages = [old, fakeMessage('2', 1 * 3600_000)];
+  // Well under the 1h maxAgeHours cutoff (not exactly at it) — the cutoff is
+  // computed a few ms after this message's timestamp, so sitting exactly on
+  // the boundary makes the candidate check flip on millisecond timing (flaky
+  // under CI load); a real margin makes the result deterministic.
+  const messages = [old, fakeMessage('2', 10 * 60_000)];
   const channel = fakeChannel(messages, {
     bulkDeletable: (m) => Date.now() - m.createdTimestamp < 14 * 24 * 3600_000,
   });
