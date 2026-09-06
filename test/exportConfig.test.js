@@ -11,7 +11,7 @@ const G = '800000000000000001';
 test('exportGuildConfig captures settings, modules and scheduled messages, excludes member data', async () => {
   await setModlogChannel(G, '123456789012345678');
   setGuildModule(G, 'counting', { enabled: true, config: { channelId: '5', resetOnFail: true } });
-  createReminder(G, {
+  await createReminder(G, {
     name: 'daily',
     channelId: '999999999999999999',
     spec: { content: 'daily', embeds: [] },

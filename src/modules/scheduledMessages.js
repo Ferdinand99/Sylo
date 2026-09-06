@@ -58,12 +58,12 @@ async function tick() {
   if (!runtime.client?.isReady()) return;
   const now = Date.now();
 
-  for (const r of dueScheduled(now)) {
+  for (const r of await dueScheduled(now)) {
     const enabled = isModuleEnabled(r.guild_id, MODULE_ID);
     const inGuild = runtime.client.guilds.cache.has(r.guild_id);
 
     if (r.mode === 'single') {
-      markSingleFired(r.id, now); // claim it first so a crash can't double-fire
+      await markSingleFired(r.id, now); // claim it first so a crash can't double-fire
       if (enabled && inGuild) {
         const payload = payloadFor(r);
         if (payload) await sendToChannel(r.guild_id, r.channel_id, payload);
@@ -72,15 +72,15 @@ async function tick() {
     }
 
     // recurring
-    advanceReminder(r.id, r.interval_minutes, now); // claim + schedule next occurrence
+    await advanceReminder(r.id, r.interval_minutes, now); // claim + schedule next occurrence
 
     if (!inGuild) {
-      deleteScheduled(r.guild_id, r.id);
+      await deleteScheduled(r.guild_id, r.id);
       continue;
     }
     if (!enabled) continue;
     if (r.end_at && now > r.end_at) {
-      setScheduledEnabled(r.guild_id, r.id, false);
+      await setScheduledEnabled(r.guild_id, r.id, false);
       continue;
     }
     if (r.start_at && now < r.start_at) continue;
