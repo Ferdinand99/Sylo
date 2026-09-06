@@ -825,7 +825,48 @@ path too, not just Postgres, caught before it could flake in CI.
 
 13 of 32 files converted; same caveats as before still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (13 of 32 files)
+### Phase 13 shipped — two files (`src/db/commandOverrides.js`, `src/db/cache.js`)
+
+Went back for `commandOverrides.js`, rejected in Phase 9 over its
+`bot/events/interactionCreate.js` entanglement (runs on every slash-command
+interaction bot-wide) — same lesson as Phase 12's `auth.js`: the actual
+call site, `overrideBlockReason()`, was a plain function whose one caller
+was already `async` and already treated it as a synchronous return value
+sitting inside an already-`await`-ing flow, so making it `async` + adding
+one `await` at the call site was the entire fix. Paired with `cache.js`
+(game-stats lookups) — independent, no shared files with the other beyond
+`overviewSummary.js` (already async).
+
+One real restructure: `src/web/routes/guilds.js`'s `levelingCommands`
+block called `getCommandOverrides(req.guild.id)` **inside** a synchronous
+`.map()` callback, once per iteration — hoisted to a single `await`ed
+lookup before the map, same "precompute before the ternary" pattern used
+for `channel-cleanup`'s `cleanupSchedules` back in Phase 2.
+
+Also caught (locally): a test-only race in the new `cache.js` tests
+themselves — `stats_cache` has no guild scoping, so two tests in the same
+file both assuming their row would be "the most recent overall" collided
+when an unrelated upsert refreshed another row's `created_at` to nearly the
+same instant. Fixed by filtering results to each test's own keys rather
+than asserting on the raw top-N — a reusable pattern for any future test
+touching a non-guild-scoped shared table.
+
+**A real bug reached `sylo-test` this time, caught only by manually running
+`/stats`**: `src/bot/commands/stats.js`'s `runStatsLookup()` — identified
+during planning as "already async, easy" — never actually got its `await
+getCached(key)` edit applied. Since a pending Promise is always truthy,
+the cache-hit branch fired unconditionally and returned the Promise object
+itself as `stats`, crashing every `/stats` call downstream at `stats.kd`.
+The existing `cache.js` DB-layer tests didn't catch it because none of them
+exercised `runStatsLookup()`'s own logic, only the driver functions it
+calls — added `test/statsLookup.test.js` (exporting `runStatsLookup` for
+the purpose) as a regression guard, and re-ran a full grep of every call
+site named during planning against the actual diff before calling a phase
+done, not just trusting the plan.
+
+15 of 32 files converted; same caveats as before still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (15 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

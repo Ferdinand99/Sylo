@@ -292,7 +292,7 @@ async function moduleLines(id, guild, cfg) {
       ];
     }
     case 'game-stats': {
-      const cached = recentLookups(50).length;
+      const cached = (await recentLookups(50)).length;
       return [
         neutral('Command', '/stats battlefield'),
         cached ? on('Cached lookups', String(cached)) : neutral('Cached lookups', '0'),
@@ -429,8 +429,8 @@ function generalCard(guild, settings) {
   };
 }
 
-function commandsCard(guild) {
-  const overrides = [...getCommandOverrides(guild.id).values()];
+async function commandsCard(guild) {
+  const overrides = [...(await getCommandOverrides(guild.id)).values()];
   const total = runtime.client?.commands?.size ?? 0;
   const disabled = overrides.filter((o) => !o.enabled).length;
   const limited = overrides.filter(

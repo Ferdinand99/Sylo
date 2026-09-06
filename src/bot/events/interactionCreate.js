@@ -21,10 +21,10 @@ export const name = Events.InteractionCreate;
  * administrators.
  * @param {import('discord.js').ChatInputCommandInteraction} interaction
  */
-export function overrideBlockReason(interaction) {
+export async function overrideBlockReason(interaction) {
   if (!interaction.inGuild()) return null;
 
-  const ov = getCommandOverride(interaction.guildId, interaction.commandName);
+  const ov = await getCommandOverride(interaction.guildId, interaction.commandName);
   if (!ov) return null;
 
   if (!ov.enabled) return 'This command is disabled in this server.';
@@ -68,7 +68,7 @@ export async function execute(interaction) {
     return;
   }
 
-  const blocked = overrideBlockReason(interaction);
+  const blocked = await overrideBlockReason(interaction);
   if (blocked) {
     await interaction.reply({ content: `⚠️ ${blocked}`, flags: MessageFlags.Ephemeral }).catch(() => {});
     return;

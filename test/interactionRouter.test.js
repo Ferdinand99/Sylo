@@ -67,48 +67,56 @@ test('overrideBlockReason', async (t) => {
   const CH_NO = '700000000000000011';
   const ROLE = '700000000000000020';
 
-  await t.test('no override → allowed', () => {
+  await t.test('no override → allowed', async () => {
     assert.equal(
-      overrideBlockReason(fakeCommandInteraction({ guildId: G, commandName: 'ping', channelId: CH_OK })),
+      await overrideBlockReason(
+        fakeCommandInteraction({ guildId: G, commandName: 'ping', channelId: CH_OK })
+      ),
       null
     );
   });
 
-  await t.test('disabled → blocked for everyone, admins included', () => {
-    setCommandOverride(G, 'ping', { enabled: false });
-    const reason = overrideBlockReason(
+  await t.test('disabled → blocked for everyone, admins included', async () => {
+    await setCommandOverride(G, 'ping', { enabled: false });
+    const reason = await overrideBlockReason(
       fakeCommandInteraction({ guildId: G, commandName: 'ping', channelId: CH_OK, isAdmin: true })
     );
     assert.match(reason, /disabled/i);
   });
 
-  await t.test('channel restriction blocks a non-admin outside the allowed channel', () => {
-    setCommandOverride(G, 'rank', { enabled: true, allowedChannels: [CH_OK] });
+  await t.test('channel restriction blocks a non-admin outside the allowed channel', async () => {
+    await setCommandOverride(G, 'rank', { enabled: true, allowedChannels: [CH_OK] });
     assert.match(
-      overrideBlockReason(fakeCommandInteraction({ guildId: G, commandName: 'rank', channelId: CH_NO })),
+      await overrideBlockReason(
+        fakeCommandInteraction({ guildId: G, commandName: 'rank', channelId: CH_NO })
+      ),
       /can only be used in/i
     );
     assert.equal(
-      overrideBlockReason(fakeCommandInteraction({ guildId: G, commandName: 'rank', channelId: CH_OK })),
+      await overrideBlockReason(
+        fakeCommandInteraction({ guildId: G, commandName: 'rank', channelId: CH_OK })
+      ),
       null
     );
     // admins bypass channel/role limits
     assert.equal(
-      overrideBlockReason(
+      await overrideBlockReason(
         fakeCommandInteraction({ guildId: G, commandName: 'rank', channelId: CH_NO, isAdmin: true })
       ),
       null
     );
   });
 
-  await t.test('role restriction blocks a member without an allowed role', () => {
-    setCommandOverride(G, 'stats', { enabled: true, allowedRoles: [ROLE] });
+  await t.test('role restriction blocks a member without an allowed role', async () => {
+    await setCommandOverride(G, 'stats', { enabled: true, allowedRoles: [ROLE] });
     assert.match(
-      overrideBlockReason(fakeCommandInteraction({ guildId: G, commandName: 'stats', channelId: CH_OK })),
+      await overrideBlockReason(
+        fakeCommandInteraction({ guildId: G, commandName: 'stats', channelId: CH_OK })
+      ),
       /do not have a role/i
     );
     assert.equal(
-      overrideBlockReason(
+      await overrideBlockReason(
         fakeCommandInteraction({ guildId: G, commandName: 'stats', channelId: CH_OK, roleIds: [ROLE] })
       ),
       null

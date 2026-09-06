@@ -395,33 +395,36 @@ router.post(
   })
 );
 
-router.get('/:guildId/commands', (req, res) => {
-  const overrides = getCommandOverrides(req.guild.id);
-  const roles = [...req.guild.roles.cache.values()]
-    .filter((r) => r.id !== req.guild.id)
-    .sort((a, b) => b.position - a.position)
-    .map((r) => ({ id: r.id, name: r.name }));
+router.get(
+  '/:guildId/commands',
+  asyncHandler(async (req, res) => {
+    const overrides = await getCommandOverrides(req.guild.id);
+    const roles = [...req.guild.roles.cache.values()]
+      .filter((r) => r.id !== req.guild.id)
+      .sort((a, b) => b.position - a.position)
+      .map((r) => ({ id: r.id, name: r.name }));
 
-  const commands = [...(runtime.client?.commands?.values() ?? [])]
-    .map(({ data }) => {
-      const ov = overrides.get(data.name);
-      return {
-        name: data.name,
-        description: data.description,
-        enabled: ov ? ov.enabled : true,
-        allowedChannels: ov?.allowedChannels ?? [],
-        allowedRoles: ov?.allowedRoles ?? [],
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+    const commands = [...(runtime.client?.commands?.values() ?? [])]
+      .map(({ data }) => {
+        const ov = overrides.get(data.name);
+        return {
+          name: data.name,
+          description: data.description,
+          enabled: ov ? ov.enabled : true,
+          allowedChannels: ov?.allowedChannels ?? [],
+          allowedRoles: ov?.allowedRoles ?? [],
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
 
-  res.render('guild', {
-    ...baseContext(req.guild, 'commands'),
-    commands,
-    roles,
-    msg: typeof req.query.msg === 'string' ? req.query.msg : null,
-  });
-});
+    res.render('guild', {
+      ...baseContext(req.guild, 'commands'),
+      commands,
+      roles,
+      msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+    });
+  })
+);
 
 router.get(
   '/:guildId/moderation',
@@ -467,7 +470,7 @@ router.get(
       bansError = 'The bot is missing the "Ban Members" permission in this server.';
     }
 
-    const overrides = getCommandOverrides(guild.id);
+    const overrides = await getCommandOverrides(guild.id);
     const commands = [...(runtime.client?.commands?.values() ?? [])]
       .map(({ data }) => {
         const ov = overrides.get(data.name);
@@ -751,6 +754,7 @@ async function moduleViewLocals(mod, req, configOverride) {
   // segment and a 404. Normalise on read so every hub has an id + defaults.
   const viewConfig = mod.id === 'temp-voice' ? normaliseTempVoiceConfig(config) : config;
   const cleanupRows = mod.id === 'channel-cleanup' ? await listCleanupSchedules(req.guild.id) : [];
+  const levelingOverrides = mod.id === 'leveling' ? await getCommandOverrides(req.guild.id) : null;
   return {
     ...baseContext(req.guild, `m/${mod.id}`),
     activeModule: mod,
@@ -845,7 +849,7 @@ async function moduleViewLocals(mod, req, configOverride) {
             .map((name) => {
               const cmd = runtime.client?.commands?.get(name);
               if (!cmd) return null;
-              const ov = getCommandOverrides(req.guild.id).get(name);
+              const ov = levelingOverrides.get(name);
               return {
                 name,
                 description: cmd.data.description,
@@ -888,7 +892,7 @@ async function moduleViewLocals(mod, req, configOverride) {
         : null,
     gameStatsRecent:
       mod.id === 'game-stats'
-        ? recentLookups(15).map((r) => ({
+        ? (await recentLookups(15)).map((r) => ({
             game: r.game,
             title: r.title,
             username: r.username,
@@ -2544,44 +2548,47 @@ router.post(
   })
 );
 
-router.post('/:guildId/commands/:command', (req, res) => {
-  const guild = req.guild;
-  const command = req.params.command;
-  const hx = Boolean(req.get('HX-Request'));
-  if (!runtime.client?.commands?.has(command)) {
+router.post(
+  '/:guildId/commands/:command',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const command = req.params.command;
+    const hx = Boolean(req.get('HX-Request'));
+    if (!runtime.client?.commands?.has(command)) {
+      if (hx) {
+        return res
+          .status(404)
+          .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Unknown command', kind: 'bad' } }))
+          .end();
+      }
+      return res.redirect(`/guilds/${guild.id}/commands?msg=badcommand`);
+    }
+    // Accepts an array (multi-select) or a comma/space-separated string of ids.
+    const toIds = (v) =>
+      (Array.isArray(v) ? v : v == null ? [] : String(v).split(/[\s,]+/))
+        .map((s) => String(s).trim())
+        .filter((s) => /^\d{17,20}$/.test(s));
+
+    const on = req.body.enabled === 'on' || req.body.enabled === 'true';
+    await setCommandOverride(guild.id, command, {
+      enabled: on,
+      allowedChannels: toIds(req.body.channels),
+      allowedRoles: toIds(req.body.roles),
+    });
+    recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: `command:/${command}`,
+      detail: on ? 'updated limits' : 'disabled',
+    });
     if (hx) {
       return res
-        .status(404)
-        .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Unknown command', kind: 'bad' } }))
+        .status(204)
+        .set('HX-Trigger', JSON.stringify({ toast: { msg: `/${command} updated`, kind: 'ok' } }))
         .end();
     }
-    return res.redirect(`/guilds/${guild.id}/commands?msg=badcommand`);
-  }
-  // Accepts an array (multi-select) or a comma/space-separated string of ids.
-  const toIds = (v) =>
-    (Array.isArray(v) ? v : v == null ? [] : String(v).split(/[\s,]+/))
-      .map((s) => String(s).trim())
-      .filter((s) => /^\d{17,20}$/.test(s));
-
-  const on = req.body.enabled === 'on' || req.body.enabled === 'true';
-  setCommandOverride(guild.id, command, {
-    enabled: on,
-    allowedChannels: toIds(req.body.channels),
-    allowedRoles: toIds(req.body.roles),
-  });
-  recordAudit(guild.id, {
-    actor: moderatorDisplayName(req),
-    action: `command:/${command}`,
-    detail: on ? 'updated limits' : 'disabled',
-  });
-  if (hx) {
-    return res
-      .status(204)
-      .set('HX-Trigger', JSON.stringify({ toast: { msg: `/${command} updated`, kind: 'ok' } }))
-      .end();
-  }
-  res.redirect(`/guilds/${guild.id}/commands?msg=saved`);
-});
+    res.redirect(`/guilds/${guild.id}/commands?msg=saved`);
+  })
+);
 
 router.post(
   '/:guildId/warnings',

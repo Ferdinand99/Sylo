@@ -4,26 +4,30 @@ import { Router } from 'express';
 import { config } from '../../config.js';
 import { listCached } from '../../db/cache.js';
 import { timeAgo } from '../lib/format.js';
+import { asyncHandler } from '../lib/asyncHandler.js';
 
 const router = Router();
 
-router.get('/', (req, res) => {
-  const rows = listCached(50).map((row) => {
-    const ageMs = Date.now() - row.created_at;
-    return {
-      game: row.game,
-      title: row.title,
-      username: row.username,
-      platform: row.platform,
-      ago: timeAgo(row.created_at),
-      fresh: ageMs <= config.cacheTtlMs,
-      kd: row.payload?.kd ?? '—',
-      winRate: row.payload?.winRate ?? '—',
-      timePlayed: row.payload?.timePlayed ?? '—',
-    };
-  });
+router.get(
+  '/',
+  asyncHandler(async (req, res) => {
+    const rows = (await listCached(50)).map((row) => {
+      const ageMs = Date.now() - row.created_at;
+      return {
+        game: row.game,
+        title: row.title,
+        username: row.username,
+        platform: row.platform,
+        ago: timeAgo(row.created_at),
+        fresh: ageMs <= config.cacheTtlMs,
+        kd: row.payload?.kd ?? '—',
+        winRate: row.payload?.winRate ?? '—',
+        timePlayed: row.payload?.timePlayed ?? '—',
+      };
+    });
 
-  res.render('stats', { rows, ttlMinutes: config.cacheTtlMinutes });
-});
+    res.render('stats', { rows, ttlMinutes: config.cacheTtlMinutes });
+  })
+);
 
 export default router;
