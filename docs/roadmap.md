@@ -794,9 +794,38 @@ Two new, generalizable bugs found (both locally, before CI):
   writing any future bootstrap: grep `ALTER TABLE <table>` across the whole
   migrations file, not just its `CREATE TABLE`.
 
-11 of 32 files converted; same caveats as before still apply.
+12 of 32 files converted (correcting an off-by-one in this section — two
+files shipped in this phase, not one); same caveats as before still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (11 of 32 files)
+### Phase 12 shipped — `src/db/guildSettings.js` (solo — widest fan-out yet, 9 files)
+
+Both of the two entanglements flagged when this was rejected back in Phase 9
+turned out to be non-issues once actually inspected: `overviewSummary.js`
+was already fixed in Phase 10, and `web/middleware/auth.js`'s `isBotMaster()`
+— gating every admin-only dashboard request — was **already async**, with
+its only caller already treating it as a promise via `.then()/.catch()`
+(`requireGuildAdmin` never needed to change at all). The lesson from Phase 8
+generalizes: inspect the actual call site before rejecting a file as
+"too entangled" — sometimes the entanglement is already handled.
+
+Real find this time: `src/modules/welcome.js` had `guildEmbedColor(...)`
+called *inline inside an `EmbedBuilder` chain*
+(`.setColor(guildEmbedColor(...))`). `await` works fine as a plain argument
+expression even inside a chained call (`.setColor(await
+guildEmbedColor(...))`), so no extraction to a temporary variable was
+needed — but the containing `payloadFor()` helper and one of its two
+callers (`guildMemberRemove`, previously a bare non-async arrow returning a
+promise implicitly) both had to become `async` to allow that `await` at all.
+
+Also: while auditing every call site, `test/exportConfig.test.js` was
+calling `setModlogChannel(...)` with no `await` and immediately reading the
+result back via `exportGuildConfig()` (a raw-SQL function, untouched by this
+migration) — a genuine race the async conversion exposed on the **SQLite**
+path too, not just Postgres, caught before it could flake in CI.
+
+13 of 32 files converted; same caveats as before still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (13 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

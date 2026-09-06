@@ -247,59 +247,65 @@ router.get(
 // Old bookmark → the renamed Settings panel.
 router.get('/:guildId/general', (req, res) => res.redirect(`/guilds/${req.guild.id}/settings`));
 
-router.get('/:guildId/settings', (req, res) => {
-  const guild = req.guild;
-  const settings = getGuildSettings(guild.id);
-  const color = guildEmbedColor(guild.id);
+router.get(
+  '/:guildId/settings',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const settings = await getGuildSettings(guild.id);
+    const color = await guildEmbedColor(guild.id);
 
-  const roleView = (r) => ({ id: r.id, name: r.name, color: r.hexColor === '#000000' ? null : r.hexColor });
-  const usable = [...guild.roles.cache.values()]
-    .filter((r) => r.id !== guild.id && !r.managed)
-    .sort((a, b) => b.position - a.position);
-  const adminRoles = usable.filter((r) => r.permissions.has(PermissionFlagsBits.Administrator));
-  const adminIds = new Set(adminRoles.map((r) => r.id));
-  const stored = getBotMasterRoles(guild.id).filter((id) => !adminIds.has(id));
-  const storedSet = new Set(stored);
+    const roleView = (r) => ({ id: r.id, name: r.name, color: r.hexColor === '#000000' ? null : r.hexColor });
+    const usable = [...guild.roles.cache.values()]
+      .filter((r) => r.id !== guild.id && !r.managed)
+      .sort((a, b) => b.position - a.position);
+    const adminRoles = usable.filter((r) => r.permissions.has(PermissionFlagsBits.Administrator));
+    const adminIds = new Set(adminRoles.map((r) => r.id));
+    const stored = (await getBotMasterRoles(guild.id)).filter((id) => !adminIds.has(id));
+    const storedSet = new Set(stored);
 
-  res.render('guild', {
-    ...baseContext(guild, 'settings'),
-    modlogChannelId: settings?.modlog_channel_id ?? '',
-    embedColorHex: '#' + color.toString(16).padStart(6, '0'),
-    adminRoles: adminRoles.map(roleView),
-    botMasters: stored.map((id) => {
-      const r = guild.roles.cache.get(id);
-      return r ? roleView(r) : { id, name: id, color: null };
-    }),
-    rolePool: usable.filter((r) => !adminIds.has(r.id) && !storedSet.has(r.id)).map(roleView),
-    msg: typeof req.query.msg === 'string' ? req.query.msg : null,
-  });
-});
+    res.render('guild', {
+      ...baseContext(guild, 'settings'),
+      modlogChannelId: settings?.modlog_channel_id ?? '',
+      embedColorHex: '#' + color.toString(16).padStart(6, '0'),
+      adminRoles: adminRoles.map(roleView),
+      botMasters: stored.map((id) => {
+        const r = guild.roles.cache.get(id);
+        return r ? roleView(r) : { id, name: id, color: null };
+      }),
+      rolePool: usable.filter((r) => !adminIds.has(r.id) && !storedSet.has(r.id)).map(roleView),
+      msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+    });
+  })
+);
 
-router.post('/:guildId/settings', (req, res) => {
-  const guild = req.guild;
-  const back = `/guilds/${guild.id}/settings`;
+router.post(
+  '/:guildId/settings',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/settings`;
 
-  // Mod-log channel (empty = off).
-  const channelId = String(req.body.modlogChannelId ?? '').trim();
-  if (channelId === '') {
-    setModlogChannel(guild.id, null);
-  } else if (guildTextChannels(guild).some((c) => c.id === channelId)) {
-    setModlogChannel(guild.id, channelId);
-  } else {
-    return res.redirect(`${back}?msg=badchannel`);
-  }
+    // Mod-log channel (empty = off).
+    const channelId = String(req.body.modlogChannelId ?? '').trim();
+    if (channelId === '') {
+      await setModlogChannel(guild.id, null);
+    } else if (guildTextChannels(guild).some((c) => c.id === channelId)) {
+      await setModlogChannel(guild.id, channelId);
+    } else {
+      return res.redirect(`${back}?msg=badchannel`);
+    }
 
-  // Bot masters.
-  setBotMasterRoles(guild.id, [].concat(req.body.botMasterRoles ?? []));
+    // Bot masters.
+    await setBotMasterRoles(guild.id, [].concat(req.body.botMasterRoles ?? []));
 
-  // Default embed colour.
-  const hex = String(req.body.embedColor ?? '').replace('#', '');
-  if (req.body.embedColorReset === 'on' || hex === '') setEmbedColor(guild.id, null);
-  else if (/^[0-9a-fA-F]{6}$/.test(hex)) setEmbedColor(guild.id, parseInt(hex, 16));
+    // Default embed colour.
+    const hex = String(req.body.embedColor ?? '').replace('#', '');
+    if (req.body.embedColorReset === 'on' || hex === '') await setEmbedColor(guild.id, null);
+    else if (/^[0-9a-fA-F]{6}$/.test(hex)) await setEmbedColor(guild.id, parseInt(hex, 16));
 
-  recordAudit(guild.id, { actor: moderatorDisplayName(req), action: 'settings:server', detail: 'saved' });
-  res.redirect(`${back}?msg=saved`);
-});
+    recordAudit(guild.id, { actor: moderatorDisplayName(req), action: 'settings:server', detail: 'saved' });
+    res.redirect(`${back}?msg=saved`);
+  })
+);
 
 // --- Member data (data-subject requests) ---------------------------------
 
@@ -696,7 +702,7 @@ router.get(
       name: 'New Member',
       avatarUrl: runtime.client?.user?.displayAvatarURL({ extension: 'png', size: 256 }),
       memberCount: req.guild.memberCount || 0,
-      accent: guildEmbedColor(req.guild.id),
+      accent: await guildEmbedColor(req.guild.id),
       backgroundUrl: cfg.cardBackground || undefined,
     });
     if (!png) return res.status(204).end(); // canvas unavailable on this host
@@ -757,7 +763,7 @@ async function moduleViewLocals(mod, req, configOverride) {
     logEvents: LOG_EVENTS,
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
-    modlogChannelId: getGuildSettings(req.guild.id)?.modlog_channel_id ?? '',
+    modlogChannelId: (await getGuildSettings(req.guild.id))?.modlog_channel_id ?? '',
     roles: [
       'roles',
       'tickets',
@@ -2504,36 +2510,39 @@ router.post('/:guildId/insights/refresh', (req, res) => {
   res.redirect(back);
 });
 
-router.post('/:guildId/general', (req, res) => {
-  const guild = req.guild;
-  const back = `/guilds/${guild.id}/general`;
+router.post(
+  '/:guildId/general',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const back = `/guilds/${guild.id}/general`;
 
-  // Mod-log channel (empty = disabled).
-  const channelId = String(req.body.modlogChannelId ?? '').trim();
-  if (channelId === '') {
-    setModlogChannel(guild.id, null);
+    // Mod-log channel (empty = disabled).
+    const channelId = String(req.body.modlogChannelId ?? '').trim();
+    if (channelId === '') {
+      await setModlogChannel(guild.id, null);
+      recordAudit(guild.id, {
+        actor: moderatorDisplayName(req),
+        action: 'settings:modlog',
+        detail: 'disabled',
+      });
+      return res.redirect(`${back}?msg=saved`);
+    }
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel || !guildTextChannels(guild).some((c) => c.id === channelId)) {
+      return res.redirect(`${back}?msg=badchannel`);
+    }
+    if (!channel.permissionsFor(guild.members.me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) {
+      return res.redirect(`${back}?msg=perms`);
+    }
+    await setModlogChannel(guild.id, channelId);
     recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: 'settings:modlog',
-      detail: 'disabled',
+      detail: `#${channel.name}`,
     });
-    return res.redirect(`${back}?msg=saved`);
-  }
-  const channel = guild.channels.cache.get(channelId);
-  if (!channel || !guildTextChannels(guild).some((c) => c.id === channelId)) {
-    return res.redirect(`${back}?msg=badchannel`);
-  }
-  if (!channel.permissionsFor(guild.members.me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) {
-    return res.redirect(`${back}?msg=perms`);
-  }
-  setModlogChannel(guild.id, channelId);
-  recordAudit(guild.id, {
-    actor: moderatorDisplayName(req),
-    action: 'settings:modlog',
-    detail: `#${channel.name}`,
-  });
-  res.redirect(`${back}?msg=saved`);
-});
+    res.redirect(`${back}?msg=saved`);
+  })
+);
 
 router.post('/:guildId/commands/:command', (req, res) => {
   const guild = req.guild;

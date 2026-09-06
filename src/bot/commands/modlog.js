@@ -43,7 +43,7 @@ export async function execute(interaction) {
       });
       return;
     }
-    setModlogChannel(guildId, channel.id);
+    await setModlogChannel(guildId, channel.id);
     await interaction.reply({
       content: `✅ Moderation actions will be logged in ${channel}.`,
       flags: MessageFlags.Ephemeral,
@@ -52,13 +52,13 @@ export async function execute(interaction) {
   }
 
   if (sub === 'disable') {
-    setModlogChannel(guildId, null);
+    await setModlogChannel(guildId, null);
     await interaction.reply({ content: '✅ Moderation logging disabled.', flags: MessageFlags.Ephemeral });
     return;
   }
 
   // status
-  const current = getGuildSettings(guildId)?.modlog_channel_id;
+  const current = (await getGuildSettings(guildId))?.modlog_channel_id;
   await interaction.reply({
     content: current ? `Mod-log channel: <#${current}>` : 'Mod-log is not configured. Use `/modlog set`.',
     flags: MessageFlags.Ephemeral,

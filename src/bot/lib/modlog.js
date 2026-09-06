@@ -9,7 +9,7 @@ import { getGuildSettings } from '../../db/guildSettings.js';
  *   usable mod-log channel (unconfigured, missing, wrong type, or missing perms)
  */
 export async function postModLog(guild, embed) {
-  const channelId = getGuildSettings(guild.id)?.modlog_channel_id;
+  const channelId = (await getGuildSettings(guild.id))?.modlog_channel_id;
   if (!channelId) return false;
 
   try {

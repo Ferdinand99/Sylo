@@ -44,7 +44,7 @@ async function buildCard(member, config) {
       name: member.user.globalName || member.user.username,
       avatarUrl: member.user.displayAvatarURL({ extension: 'png', size: 256 }),
       memberCount: member.guild.memberCount,
-      accent: guildEmbedColor(member.guild.id),
+      accent: await guildEmbedColor(member.guild.id),
       backgroundUrl: config.cardBackground || undefined,
     });
     return png ? new AttachmentBuilder(png, { name: 'welcome.png' }) : null;
@@ -54,13 +54,13 @@ async function buildCard(member, config) {
   }
 }
 
-function payloadFor(text, member, useEmbed, card) {
+async function payloadFor(text, member, useEmbed, card) {
   const files = card ? [card] : [];
   if (!useEmbed) {
     return { content: text, files, allowedMentions: { users: [member.id] } };
   }
   const embed = new EmbedBuilder()
-    .setColor(guildEmbedColor(member.guild.id))
+    .setColor(await guildEmbedColor(member.guild.id))
     .setDescription(text)
     .setTimestamp(Date.now());
   // The card already shows the avatar — skip the thumbnail then.
@@ -75,7 +75,7 @@ on('welcome', 'guildMemberAdd', async (member, config, guildId) => {
     await sendToChannel(
       guildId,
       config.joinChannel,
-      payloadFor(fill(config.joinMessage, member), member, config.useEmbed, card)
+      await payloadFor(fill(config.joinMessage, member), member, config.useEmbed, card)
     );
   }
   if (config.dmMessage) {
@@ -83,11 +83,11 @@ on('welcome', 'guildMemberAdd', async (member, config, guildId) => {
   }
 });
 
-on('welcome', 'guildMemberRemove', (member, config, guildId) => {
+on('welcome', 'guildMemberRemove', async (member, config, guildId) => {
   if (!config.leaveChannel || !config.leaveMessage) return;
   return sendToChannel(
     guildId,
     config.leaveChannel,
-    payloadFor(fill(config.leaveMessage, member), member, config.useEmbed, null)
+    await payloadFor(fill(config.leaveMessage, member), member, config.useEmbed, null)
   );
 });

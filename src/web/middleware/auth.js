@@ -140,7 +140,7 @@ export function requireAuth(req, res, next) {
 
 /** A "bot master" — holds one of the guild's designated dashboard-admin roles. */
 async function isBotMaster(guildId, userId) {
-  const roles = getBotMasterRoles(guildId);
+  const roles = await getBotMasterRoles(guildId);
   if (!roles.length) return false;
   const guild = runtime.client?.guilds.cache.get(guildId);
   if (!guild) return false;

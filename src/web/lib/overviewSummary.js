@@ -79,7 +79,7 @@ function channelName(guild, id) {
  * @param {import('discord.js').Guild} guild
  */
 export async function buildOverview(guild) {
-  const settings = getGuildSettings(guild.id);
+  const settings = await getGuildSettings(guild.id);
   const state = new Map(getGuildModules(guild.id).map((m) => [m.id, m]));
 
   return {

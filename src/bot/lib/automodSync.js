@@ -244,7 +244,7 @@ export async function syncGuildAutomod(guild, cfg) {
     return { ...result, ok: false, skipped: 'missing-permission' };
   }
 
-  const alertChannelId = getGuildSettings(guild.id)?.modlog_channel_id || null;
+  const alertChannelId = (await getGuildSettings(guild.id))?.modlog_channel_id || null;
   const desired = desiredRules(cfg, { alertChannelId });
 
   let existing;
