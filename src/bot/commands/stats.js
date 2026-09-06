@@ -72,15 +72,15 @@ export const data = new SlashCommandBuilder()
  * @param {string} username
  * @param {string} platform
  */
-async function runStatsLookup(game, title, username, platform) {
+export async function runStatsLookup(game, title, username, platform) {
   const key = cacheKey(title, platform, username);
 
-  const hit = getCached(key);
+  const hit = await getCached(key);
   if (hit) return { stats: hit.payload, cached: true, cachedAt: hit.cachedAt };
 
   const adapter = getAdapter(game);
   const stats = await adapter.getPlayerStats(username, platform, { title });
-  setCached(key, { game, title, username: stats.username, platform }, stats);
+  await setCached(key, { game, title, username: stats.username, platform }, stats);
   return { stats, cached: false };
 }
 

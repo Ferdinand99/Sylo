@@ -1,10 +1,22 @@
 // Per-guild command overrides: disable a command, or restrict it to certain
 // channels / roles. Enforced in bot/events/interactionCreate.js.
-import { db } from './index.js';
+import { prepare, registerPostgresBootstrap } from './driver.js';
 
-const selectAllStmt = db.prepare('SELECT * FROM command_overrides WHERE guild_id = ?');
-const selectOneStmt = db.prepare('SELECT * FROM command_overrides WHERE guild_id = ? AND command_name = ?');
-const upsertStmt = db.prepare(`
+registerPostgresBootstrap(`
+  CREATE TABLE IF NOT EXISTS command_overrides (
+    guild_id         TEXT NOT NULL,
+    command_name     TEXT NOT NULL,
+    enabled          INTEGER NOT NULL DEFAULT 1,
+    allowed_channels TEXT NOT NULL DEFAULT '[]',
+    allowed_roles    TEXT NOT NULL DEFAULT '[]',
+    updated_at       BIGINT NOT NULL,
+    PRIMARY KEY (guild_id, command_name)
+  );
+`);
+
+const selectAllStmt = prepare('SELECT * FROM command_overrides WHERE guild_id = ?');
+const selectOneStmt = prepare('SELECT * FROM command_overrides WHERE guild_id = ? AND command_name = ?');
+const upsertStmt = prepare(`
   INSERT INTO command_overrides (guild_id, command_name, enabled, allowed_channels, allowed_roles, updated_at)
   VALUES (@guildId, @commandName, @enabled, @allowedChannels, @allowedRoles, @updatedAt)
   ON CONFLICT (guild_id, command_name) DO UPDATE SET
@@ -26,15 +38,15 @@ function normalise(row) {
 /**
  * All overrides for a guild, keyed by command name.
  * @param {string} guildId
- * @returns {Map<string, { command: string, enabled: boolean, allowedChannels: string[], allowedRoles: string[] }>}
+ * @returns {Promise<Map<string, { command: string, enabled: boolean, allowedChannels: string[], allowedRoles: string[] }>>}
  */
-export function getCommandOverrides(guildId) {
-  return new Map(selectAllStmt.all(guildId).map((r) => [r.command_name, normalise(r)]));
+export async function getCommandOverrides(guildId) {
+  return new Map((await selectAllStmt.all(guildId)).map((r) => [r.command_name, normalise(r)]));
 }
 
 /** One override, or null when the command has no override (i.e. default allow). */
-export function getCommandOverride(guildId, commandName) {
-  const row = selectOneStmt.get(guildId, commandName);
+export async function getCommandOverride(guildId, commandName) {
+  const row = await selectOneStmt.get(guildId, commandName);
   return row ? normalise(row) : null;
 }
 
@@ -43,13 +55,13 @@ export function getCommandOverride(guildId, commandName) {
  * @param {string} commandName
  * @param {{ enabled?: boolean, allowedChannels?: string[], allowedRoles?: string[] }} patch
  */
-export function setCommandOverride(guildId, commandName, patch) {
-  const current = getCommandOverride(guildId, commandName) ?? {
+export async function setCommandOverride(guildId, commandName, patch) {
+  const current = (await getCommandOverride(guildId, commandName)) ?? {
     enabled: true,
     allowedChannels: [],
     allowedRoles: [],
   };
-  upsertStmt.run({
+  await upsertStmt.run({
     guildId,
     commandName,
     enabled: (patch.enabled ?? current.enabled) ? 1 : 0,
