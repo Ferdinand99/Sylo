@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.25.0](https://github.com/Ferdinand99/Sylo/compare/v3.24.0...v3.25.0) (2026-09-06)
+
+
+### Features
+
+* build the Postgres driver shim, convert channel-cleanup ([#143](https://github.com/Ferdinand99/Sylo/issues/143)) ([7a4e4ea](https://github.com/Ferdinand99/Sylo/commit/7a4e4ea70666388cc68277e26f882326cf83f19e))
+
 ## [3.24.0](https://github.com/Ferdinand99/Sylo/compare/v3.23.0...v3.24.0) (2026-09-06)
 
 
