@@ -1,6 +1,7 @@
 // Proves the driver shim's Postgres branch for app_settings (single-column
 // TEXT primary key, no surrogate id) — same assertions as presence.test.js's
 // db-facing tests, real Postgres connection underneath.
+import './helpers/isolateSqlite.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { closePostgres } from '../src/db/driver.js';
