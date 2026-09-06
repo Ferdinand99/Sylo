@@ -22,7 +22,7 @@ export const TESTABLE = new Set([
  */
 export async function sendModuleTest(guild, moduleId) {
   const cfg = getGuildModule(guild.id, moduleId).config || {};
-  const color = guildEmbedColor(guild.id);
+  const color = await guildEmbedColor(guild.id);
   let channelId;
   let embed;
 
