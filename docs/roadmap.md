@@ -768,7 +768,35 @@ later touching only their own one-line case in `moduleLines`, never
 
 10 of 32 files converted; same caveats as before still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (10 of 32 files)
+### Phase 11 shipped — two files (`src/db/polls.js`, `src/db/composedMessages.js`), cashing in the Phase 10 fix
+
+First files converted since `overviewSummary.js` became fully async — and it
+paid off exactly as expected: both files' one-line `moduleLines`/`buildCard`
+cases (`polls`, `messages`) needed only a bare `await` added, no further
+propagation. `composedMessages.js` is one of the 8 `returningId: true`
+tables, first real exercise of that path since `channelCleanup.js`.
+
+Two new, generalizable bugs found (both locally, before CI):
+- **`COUNT(*)` comes back as a string from postgres.js**, not a number
+  (bigint safety), while better-sqlite3 returns a plain JS number.
+  `polls.js`'s `guildPollCount()` needed a `Number(...)` coercion — and the
+  same latent bug was found and fixed in the *already-shipped*
+  `birthdays.js`'s `birthdayCount()` (unused externally today, but wrong
+  regardless). Worth checking any future `COUNT(*) AS n` statement for this.
+- **A bootstrap DDL must account for every migration touching a table, not
+  just its original `CREATE TABLE`** — `composed_messages` gained a `name`
+  column via a *later* `ALTER TABLE` migration that the first draft of the
+  bootstrap DDL missed entirely, caught by a real Postgres insert error
+  ("column name does not exist") rather than by inspection. Audited every
+  `ALTER TABLE` in `MIGRATIONS` against the 10 files converted so far —
+  none of the other 9 tables have a matching `ALTER TABLE`, so this was an
+  isolated miss, not a systemic one — but it's now the standard step before
+  writing any future bootstrap: grep `ALTER TABLE <table>` across the whole
+  migrations file, not just its `CREATE TABLE`.
+
+11 of 32 files converted; same caveats as before still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (11 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

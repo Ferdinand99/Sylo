@@ -33,7 +33,7 @@ export async function execute(interaction) {
   let poll;
   if (raw) {
     const id = parseMessageId(raw);
-    poll = id ? getPoll(id) : null;
+    poll = id ? await getPoll(id) : null;
     if (!poll || poll.guild_id !== interaction.guildId) {
       return interaction.reply({
         content: 'No open poll found for that message.',
@@ -41,7 +41,7 @@ export async function execute(interaction) {
       });
     }
   } else {
-    poll = latestPollInChannel(interaction.guildId, interaction.channelId);
+    poll = await latestPollInChannel(interaction.guildId, interaction.channelId);
     if (!poll) {
       return interaction.reply({
         content: 'No open poll in this channel — pass a `message` id to target another one.',
