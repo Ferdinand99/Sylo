@@ -479,7 +479,7 @@ router.get(
       lockdown: r.lockdown === 1,
       ago: timeAgo(r.locked_at),
     }));
-    const tbRows = guildTempBans(guild.id);
+    const tbRows = await guildTempBans(guild.id);
     const tbTags = await resolveUserTags(
       runtime.client,
       tbRows.map((r) => r.user_id)
@@ -2189,12 +2189,12 @@ router.post(
     }
     const existing = await guild.bans.fetch(userId).catch(() => null);
     if (!existing) {
-      clearTempBan(guild.id, userId); // stale timer for an already-lifted ban
+      await clearTempBan(guild.id, userId); // stale timer for an already-lifted ban
       return res.redirect(`${back}?tab=infr&msg=notbanned`);
     }
 
     await guild.bans.remove(userId, `${moderatorDisplayName(req)}: unbanned via dashboard`);
-    clearTempBan(guild.id, userId); // in case this was a scheduled temporary ban
+    await clearTempBan(guild.id, userId); // in case this was a scheduled temporary ban
 
     const embed = new EmbedBuilder()
       .setColor(MOD_COLOR)

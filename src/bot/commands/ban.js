@@ -125,7 +125,7 @@ export async function execute(interaction) {
   let expiryField;
   if (tempMs != null) {
     const unbanAt = Date.now() + tempMs;
-    scheduleTempBan({
+    await scheduleTempBan({
       guildId: guild.id,
       userId: user.id,
       modId: interaction.user.id,
@@ -134,7 +134,7 @@ export async function execute(interaction) {
     });
     expiryField = `${formatDuration(tempMs)} · unbans <t:${Math.floor(unbanAt / 1000)}:R>`;
   } else {
-    clearTempBan(guild.id, user.id); // a plain ban overrides any earlier temp-ban
+    await clearTempBan(guild.id, user.id); // a plain ban overrides any earlier temp-ban
     expiryField = 'Permanent';
   }
 
