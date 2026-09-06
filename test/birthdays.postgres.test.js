@@ -1,5 +1,6 @@
 // Proves the driver shim's Postgres branch for the birthdays table — same
 // assertions as birthdays.test.js, real Postgres connection underneath.
+import './helpers/isolateSqlite.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { closePostgres } from '../src/db/driver.js';

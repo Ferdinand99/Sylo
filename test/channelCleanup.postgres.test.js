@@ -2,6 +2,7 @@
 // service container, or a local Postgres via DATABASE_URL) using the exact
 // same src/db/channelCleanup.js module as the SQLite-path test — same
 // assertions, same shapes, different driver underneath.
+import './helpers/isolateSqlite.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { closePostgres } from '../src/db/driver.js';

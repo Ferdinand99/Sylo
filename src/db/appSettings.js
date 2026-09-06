@@ -1,18 +1,26 @@
 // Bot-wide key/value settings (not per guild).
-import { db } from './index.js';
+import { prepare, registerPostgresBootstrap } from './driver.js';
 
-const getStmt = db.prepare('SELECT value FROM app_settings WHERE key = ?');
-const setStmt = db.prepare(`
+registerPostgresBootstrap(`
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at BIGINT NOT NULL
+  );
+`);
+
+const getStmt = prepare('SELECT value FROM app_settings WHERE key = ?');
+const setStmt = prepare(`
   INSERT INTO app_settings (key, value, updated_at) VALUES (@key, @value, @updatedAt)
   ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
 `);
 
-export function getAppSetting(key) {
-  return getStmt.get(key)?.value ?? null;
+export async function getAppSetting(key) {
+  return (await getStmt.get(key))?.value ?? null;
 }
 
-export function setAppSetting(key, value) {
-  setStmt.run({ key, value: String(value), updatedAt: Date.now() });
+export async function setAppSetting(key, value) {
+  await setStmt.run({ key, value: String(value), updatedAt: Date.now() });
 }
 
 // --- presence / activity --------------------------------------------------
@@ -22,10 +30,10 @@ export const PRESENCE_STATUSES = ['online', 'idle', 'dnd', 'invisible'];
 
 const DEFAULT_PRESENCE = { status: 'online', type: 'Listening', text: '/stats battlefield' };
 
-/** @returns {{ status: string, type: string, text: string }} */
-export function getPresenceConfig() {
+/** @returns {Promise<{ status: string, type: string, text: string }>} */
+export async function getPresenceConfig() {
   try {
-    const raw = getAppSetting('presence');
+    const raw = await getAppSetting('presence');
     if (!raw) return { ...DEFAULT_PRESENCE };
     const p = JSON.parse(raw);
     return {
@@ -38,12 +46,12 @@ export function getPresenceConfig() {
   }
 }
 
-export function setPresenceConfig({ status, type, text }) {
+export async function setPresenceConfig({ status, type, text }) {
   const value = {
     status: PRESENCE_STATUSES.includes(status) ? status : 'online',
     type: PRESENCE_TYPES.includes(type) ? type : 'Custom',
     text: String(text ?? '').slice(0, 128),
   };
-  setAppSetting('presence', JSON.stringify(value));
+  await setAppSetting('presence', JSON.stringify(value));
   return value;
 }

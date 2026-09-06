@@ -609,7 +609,35 @@ already stops, not just the file's single direct caller. 3 of 32 files
 converted; the untouched-29-files and "don't set `DATABASE_URL` on a real
 deployment yet" caveats still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (3 of 32 files)
+### Phase 5 shipped — fourth converted file (`src/db/appSettings.js`)
+
+Bot-wide (not per-guild) key/value store — single-column `TEXT` PRIMARY KEY,
+same `ON CONFLICT` upsert shape as the last two. New wrinkle:
+`src/bot/lib/presence.js`'s `applyPresence()` was already fire-and-forget
+(called with no `await`, its own internal `try/catch` swallows every
+failure) — converting its body to `async` needed **no change at either call
+site** (`ready.js`'s startup/interval calls, `settings.js`'s POST route),
+since a promise that always resolves (errors caught internally, never
+rethrown) is exactly as safe to leave un-awaited as the sync version was.
+Not every async conversion needs to ripple upward through its callers —
+worth checking whether the caller already treats the result as
+fire-and-forget before assuming propagation is required. 4 of 32 files
+converted; same caveats as before still apply.
+
+**Test-infra bug found + fixed here**: every `*.postgres.test.js` file
+imports `closePostgres` from `src/db/driver.js`, which transitively imports
+`src/db/index.js` — triggering its eager `migrate()` against the *default*
+`./data/sylo.db`, purely as an unavoidable side effect of the import graph,
+regardless of whether that file's test body ends up skipped. With 4 such
+files now, two of their subprocesses raced to migrate the same shared file
+concurrently (`SqliteError: table X already exists` in CI — low enough odds
+with 1–3 files to not manifest before this). Fixed with a new
+`test/helpers/isolateSqlite.js`, imported first in every `*.postgres.test.js`
+file: same `DATABASE_PATH`-to-temp-file trick as `tmpDb.js`, but — unlike
+`tmpDb.js` — it deliberately leaves `DATABASE_URL` untouched, since these
+files need the real ambient value to decide whether to run for real.
+
+### 1 — Driver + async seam in `src/db/` — in progress (4 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 
