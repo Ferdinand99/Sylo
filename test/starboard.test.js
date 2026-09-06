@@ -1,6 +1,23 @@
+import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normaliseStarboard } from '../src/modules/starboard.js';
+import {
+  getStarboardEntry,
+  getStarboardEntryByPost,
+  upsertStarboardEntry,
+  setStarboardPost,
+  setStarboardCount,
+  deleteStarboardEntry,
+  deleteBoardEntries,
+  clearGuildStarboard,
+} from '../src/db/starboard.js';
+
+const G = '900000000000000020';
+const B1 = 'b1';
+const B2 = 'b2';
+const M1 = '700000000000000101';
+const M2 = '700000000000000102';
 
 test('normaliseStarboard: defaults an empty config to no boards', () => {
   assert.deepEqual(normaliseStarboard(), { boards: [] });
@@ -76,4 +93,56 @@ test('normaliseStarboard: round-trips its own output', () => {
   });
   const twice = normaliseStarboard(once);
   assert.deepEqual(twice, once);
+});
+
+test('starboard_posts: upsert + get round-trips, scoped by (guild, board, source)', async () => {
+  await clearGuildStarboard(G);
+  assert.equal(await getStarboardEntry(G, B1, M1), null);
+
+  await upsertStarboardEntry({ guildId: G, boardId: B1, sourceMsgId: M1, sourceChanId: 'c1', starCount: 3 });
+  const row = await getStarboardEntry(G, B1, M1);
+  assert.equal(row.source_chan_id, 'c1');
+  assert.equal(row.star_count, 3);
+  assert.equal(row.post_msg_id, null);
+  assert.equal(row.posted_at, null);
+
+  assert.equal(await getStarboardEntry(G, B2, M1), null); // different board, no entry
+});
+
+test('setStarboardPost/setStarboardCount update fields in place without touching the rest', async () => {
+  await clearGuildStarboard(G);
+  await upsertStarboardEntry({ guildId: G, boardId: B1, sourceMsgId: M1, sourceChanId: 'c1', starCount: 1 });
+
+  await setStarboardPost(G, B1, M1, 'post-1', 12345);
+  let row = await getStarboardEntry(G, B1, M1);
+  assert.equal(row.post_msg_id, 'post-1');
+  assert.equal(Number(row.posted_at), 12345);
+
+  // setStarboardCount is what production code calls to bump the count on an
+  // already-posted entry — it must not touch post_msg_id/posted_at.
+  await setStarboardCount(G, B1, M1, 9);
+  row = await getStarboardEntry(G, B1, M1);
+  assert.equal(row.star_count, 9);
+  assert.equal(row.post_msg_id, 'post-1');
+  assert.equal(Number(row.posted_at), 12345);
+
+  assert.deepEqual(await getStarboardEntryByPost('post-1'), row);
+});
+
+test('deleteStarboardEntry, deleteBoardEntries, clearGuildStarboard scope correctly', async () => {
+  await clearGuildStarboard(G);
+  await upsertStarboardEntry({ guildId: G, boardId: B1, sourceMsgId: M1, sourceChanId: 'c1', starCount: 1 });
+  await upsertStarboardEntry({ guildId: G, boardId: B1, sourceMsgId: M2, sourceChanId: 'c1', starCount: 1 });
+  await upsertStarboardEntry({ guildId: G, boardId: B2, sourceMsgId: M1, sourceChanId: 'c1', starCount: 1 });
+
+  await deleteStarboardEntry(G, B1, M1);
+  assert.equal(await getStarboardEntry(G, B1, M1), null);
+  assert.ok(await getStarboardEntry(G, B1, M2));
+
+  await deleteBoardEntries(G, B1);
+  assert.equal(await getStarboardEntry(G, B1, M2), null);
+  assert.ok(await getStarboardEntry(G, B2, M1)); // other board untouched
+
+  await clearGuildStarboard(G);
+  assert.equal(await getStarboardEntry(G, B2, M1), null);
 });

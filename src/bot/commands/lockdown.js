@@ -54,7 +54,7 @@ export async function execute(interaction) {
     let locked = 0;
     let skipped = 0;
     for (const channel of targets) {
-      if (isChannelLocked(guild.id, channel.id) || lockPreflight(channel)) {
+      if ((await isChannelLocked(guild.id, channel.id)) || lockPreflight(channel)) {
         skipped += 1;
         continue;
       }
@@ -82,7 +82,7 @@ export async function execute(interaction) {
   }
 
   // end
-  const rows = lockdownChannelLocks(guild.id);
+  const rows = await lockdownChannelLocks(guild.id);
   if (rows.length === 0) {
     await interaction.editReply({ content: 'No lockdown is active.' });
     return;
@@ -95,7 +95,7 @@ export async function execute(interaction) {
       guild.channels.cache.get(row.channel_id) ??
       (await guild.channels.fetch(row.channel_id).catch(() => null));
     if (!channel) {
-      clearChannelLock(guild.id, row.channel_id); // channel gone — drop the stale row
+      await clearChannelLock(guild.id, row.channel_id); // channel gone — drop the stale row
       failed += 1;
       continue;
     }

@@ -673,7 +673,41 @@ caught (locally) a copy-paste gap in the Postgres test itself — a
 same self-review habit that caught the slug bug last time. 6 of 32 files
 converted; same caveats as before still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (6 of 32 files)
+### Phase 8 shipped — two files at once (`src/db/channelLocks.js`, `src/db/starboard.js`)
+
+First batch of **two independent files in one PR**, now that the shim has
+proven itself across 6 varied conversions — extra single-file caution had
+diminishing returns. Picked deliberately to avoid any shared blast radius:
+`channelLocks.js` (composite natural PK, 11 call sites across 4 files, all
+already inside async functions — purely mechanical) and `starboard.js`
+(composite natural PK, an `ON CONFLICT` upsert whose `UPDATE SET` includes a
+`COALESCE` to keep `posted_at` sticky, ~15 call sites concentrated in one
+module file). Neither touches a shared helper the other depends on.
+
+Two candidates were considered and explicitly **rejected** for this batch
+after inspection, both worth a dedicated future PR instead:
+- `commandOverrides.js` — enforced in `bot/events/interactionCreate.js`
+  (runs on every interaction bot-wide) *and* feeds the same shared
+  `overviewSummary.js` helper `counting.js` does (below) — too much blast
+  radius to pair casually.
+- `counting.js` — its dashboard-overview line lives inside
+  `overviewSummary.js`'s `moduleLines()`, itself called from a **double**
+  `.map()` chain in `buildOverview()`/`buildCard()` for *every* module's
+  summary card. Converting just the `counting` branch to async means
+  `moduleLines` → `buildCard` → the `LAYOUT.map()`/`g.ids.map()` chain all
+  need to become `Promise.all`-aware — a real, deep ripple discovered by
+  reading the call chain, not by trial and error. Deserves the same
+  dedicated attention channel-cleanup's `moduleViewLocals` ripple got.
+
+Also caught (locally) two of my own test-writing mistakes before they
+reached CI: an incorrect assumption that `upsertStarboardEntry` gets called
+again after a post is made (it doesn't — production code calls
+`setStarboardCount` instead, which is why `posted_at`'s `COALESCE` guard
+exists at all), and confirmed `setStarboardCount`'s real "update in place"
+contract instead. 8 of 32 files converted; same caveats as before still
+apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (8 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

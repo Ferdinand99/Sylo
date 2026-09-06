@@ -46,7 +46,7 @@ export async function execute(interaction) {
     await interaction.reply({ content: `⚠️ ${err}`, flags: MessageFlags.Ephemeral });
     return;
   }
-  if (!isChannelLocked(interaction.guildId, channel.id)) {
+  if (!(await isChannelLocked(interaction.guildId, channel.id))) {
     await interaction.reply({ content: `⚠️ ${channel} isn't locked.`, flags: MessageFlags.Ephemeral });
     return;
   }

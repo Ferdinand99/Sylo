@@ -472,7 +472,7 @@ router.get(
       })
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    const channelLocks = guildChannelLocks(guild.id).map((r) => ({
+    const channelLocks = (await guildChannelLocks(guild.id)).map((r) => ({
       channelId: r.channel_id,
       name: guild.channels.cache.get(r.channel_id)?.name ?? null,
       lockedBy: r.locked_by,
@@ -2048,18 +2048,21 @@ router.post('/:guildId/m/starboard/sb', (req, res) => {
   res.redirect(`${back}?msg=sb-saved`);
 });
 
-router.post('/:guildId/m/starboard/sb/:id/delete', (req, res) => {
-  const prev = normaliseStarboard(getGuildModule(req.guild.id, 'starboard').config);
-  const config = normaliseStarboard({ boards: prev.boards.filter((b) => b.id !== req.params.id) });
-  setGuildModule(req.guild.id, 'starboard', { config });
-  deleteBoardEntries(req.guild.id, req.params.id);
-  recordAudit(req.guild.id, {
-    actor: moderatorDisplayName(req),
-    action: 'module:starboard',
-    detail: 'deleted a board',
-  });
-  res.redirect(`/guilds/${req.guild.id}/m/starboard?msg=saved`);
-});
+router.post(
+  '/:guildId/m/starboard/sb/:id/delete',
+  asyncHandler(async (req, res) => {
+    const prev = normaliseStarboard(getGuildModule(req.guild.id, 'starboard').config);
+    const config = normaliseStarboard({ boards: prev.boards.filter((b) => b.id !== req.params.id) });
+    setGuildModule(req.guild.id, 'starboard', { config });
+    await deleteBoardEntries(req.guild.id, req.params.id);
+    recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:starboard',
+      detail: 'deleted a board',
+    });
+    res.redirect(`/guilds/${req.guild.id}/m/starboard?msg=saved`);
+  })
+);
 
 // --- Custom-command builder (MEE6-style actions) ----------------------
 
@@ -2221,7 +2224,7 @@ router.post(
     let locked = 0;
     for (const channel of guild.channels.cache.values()) {
       if (!LOCKDOWN_TYPES.includes(channel.type)) continue;
-      if (isChannelLocked(guild.id, channel.id) || lockPreflight(channel)) continue;
+      if ((await isChannelLocked(guild.id, channel.id)) || lockPreflight(channel)) continue;
       try {
         await lockChannel(channel, { moderatorTag, lockdown: true });
         locked += 1;
@@ -2257,10 +2260,10 @@ router.post(
     const moderatorTag = moderatorDisplayName(req);
 
     let unlocked = 0;
-    for (const row of lockdownChannelLocks(guild.id)) {
+    for (const row of await lockdownChannelLocks(guild.id)) {
       const channel = guild.channels.cache.get(row.channel_id);
       if (!channel) {
-        clearChannelLock(guild.id, row.channel_id);
+        await clearChannelLock(guild.id, row.channel_id);
         continue;
       }
       try {
@@ -2296,14 +2299,14 @@ router.post(
     const guild = req.guild;
     const back = `/guilds/${guild.id}/moderation`;
     const channelId = String(req.body.channelId ?? '');
-    if (!/^\d{17,20}$/.test(channelId) || !isChannelLocked(guild.id, channelId)) {
+    if (!/^\d{17,20}$/.test(channelId) || !(await isChannelLocked(guild.id, channelId))) {
       return res.redirect(`${back}?tab=infr&msg=lock-gone`);
     }
 
     const moderatorTag = moderatorDisplayName(req);
     const channel = guild.channels.cache.get(channelId);
     if (!channel) {
-      clearChannelLock(guild.id, channelId);
+      await clearChannelLock(guild.id, channelId);
       return res.redirect(`${back}?tab=infr&msg=unlocked-one`);
     }
     if (lockPreflight(channel)) return res.redirect(`${back}?tab=infr&msg=perms`);
