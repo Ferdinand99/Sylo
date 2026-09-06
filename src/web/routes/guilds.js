@@ -878,9 +878,9 @@ async function moduleViewLocals(mod, req, configOverride) {
     inviteBoard:
       mod.id === 'invite-tracker'
         ? {
-            total: inviterCount(req.guild.id),
+            total: await inviterCount(req.guild.id),
             canReadInvites: Boolean(req.guild.members.me?.permissions.has(PermissionFlagsBits.ManageGuild)),
-            rows: topInviters(req.guild.id, 15).map((r, i) => ({
+            rows: (await topInviters(req.guild.id, 15)).map((r, i) => ({
               rank: i + 1,
               userId: r.user_id,
               net: r.net,
@@ -2422,21 +2422,24 @@ router.post('/:guildId/modules/:moduleId', (req, res) => {
 });
 
 // Invite tracker: nudge a member's bonus invites from the dashboard.
-router.post('/:guildId/m/invite-tracker/bonus', (req, res) => {
-  const back = `/guilds/${req.guild.id}/m/invite-tracker`;
-  const userId = parseUserId(req.body.userId);
-  const bonus = Number(req.body.bonus);
-  if (!userId || !Number.isInteger(bonus) || bonus < -100000 || bonus > 100000) {
-    return res.redirect(`${back}?msg=inv-bad`);
-  }
-  setBonus(req.guild.id, userId, bonus);
-  recordAudit(req.guild.id, {
-    actor: moderatorDisplayName(req),
-    action: 'module:invite-tracker',
-    detail: `${userId} bonus → ${bonus}`,
-  });
-  res.redirect(`${back}?msg=saved`);
-});
+router.post(
+  '/:guildId/m/invite-tracker/bonus',
+  asyncHandler(async (req, res) => {
+    const back = `/guilds/${req.guild.id}/m/invite-tracker`;
+    const userId = parseUserId(req.body.userId);
+    const bonus = Number(req.body.bonus);
+    if (!userId || !Number.isInteger(bonus) || bonus < -100000 || bonus > 100000) {
+      return res.redirect(`${back}?msg=inv-bad`);
+    }
+    await setBonus(req.guild.id, userId, bonus);
+    recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:invite-tracker',
+      detail: `${userId} bonus → ${bonus}`,
+    });
+    res.redirect(`${back}?msg=saved`);
+  })
+);
 
 // Download the guild's configuration as JSON (backup / "export my setup").
 router.get('/:guildId/export', (req, res) => {

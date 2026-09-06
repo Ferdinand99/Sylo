@@ -21,7 +21,7 @@ export async function execute(interaction) {
     });
   }
 
-  const rows = topInviters(interaction.guildId, 15);
+  const rows = await topInviters(interaction.guildId, 15);
   if (!rows.length) {
     return interaction.reply({ content: 'No invites tracked yet.', flags: MessageFlags.Ephemeral });
   }

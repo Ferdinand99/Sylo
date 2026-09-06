@@ -21,7 +21,7 @@ export async function execute(interaction) {
   }
 
   const target = interaction.options.getUser('user') ?? interaction.user;
-  const join = getJoin(interaction.guildId, target.id);
+  const join = await getJoin(interaction.guildId, target.id);
 
   let msg;
   if (!join) {

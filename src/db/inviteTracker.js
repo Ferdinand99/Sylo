@@ -1,81 +1,122 @@
 // Invite tracker storage: per-member tallies (regular joins credited, leaves
 // within the grace window, and a manual bonus) plus a row per joiner recording
 // who invited them so a later leave can be attributed.
-import { db } from './index.js';
+import { prepare, registerPostgresBootstrap } from './driver.js';
 
 const NET = '(regular - leaves + bonus)';
 
+registerPostgresBootstrap(`
+  CREATE TABLE IF NOT EXISTS invite_counts (
+    guild_id  TEXT NOT NULL,
+    user_id   TEXT NOT NULL,
+    regular   INTEGER NOT NULL DEFAULT 0,
+    leaves    INTEGER NOT NULL DEFAULT 0,
+    bonus     INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, user_id)
+  );
+  CREATE TABLE IF NOT EXISTS invite_joins (
+    guild_id   TEXT NOT NULL,
+    user_id    TEXT NOT NULL,
+    inviter_id TEXT,
+    code       TEXT,
+    source     TEXT NOT NULL DEFAULT 'unknown',
+    joined_at  BIGINT NOT NULL,
+    counted    INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (guild_id, user_id)
+  );
+  CREATE TABLE IF NOT EXISTS invite_personal (
+    guild_id TEXT NOT NULL,
+    user_id  TEXT NOT NULL,
+    code     TEXT NOT NULL,
+    PRIMARY KEY (guild_id, user_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_invite_counts_guild ON invite_counts (guild_id);
+  CREATE INDEX IF NOT EXISTS idx_invite_personal_code ON invite_personal (guild_id, code);
+`);
+
 const stmts = {
-  getCount: db.prepare('SELECT * FROM invite_counts WHERE guild_id = ? AND user_id = ?'),
-  bumpRegular: db.prepare(`
+  getCount: prepare('SELECT * FROM invite_counts WHERE guild_id = ? AND user_id = ?'),
+  // The updated column is qualified with the table name — an unqualified
+  // `regular = regular + @delta` is AMBIGUOUS on Postgres (error 42702): the
+  // DO UPDATE SET scope sees both the target table's current row and the
+  // proposed `excluded` row, both with a `regular` column. SQLite never
+  // complains and just uses the current row, which is what we want, so
+  // qualifying with the real table name (not an alias — none is declared on
+  // the INSERT) is the portable fix for both drivers.
+  bumpRegular: prepare(`
     INSERT INTO invite_counts (guild_id, user_id, regular) VALUES (@guildId, @userId, @delta)
-    ON CONFLICT (guild_id, user_id) DO UPDATE SET regular = regular + @delta
+    ON CONFLICT (guild_id, user_id) DO UPDATE SET regular = invite_counts.regular + @delta
   `),
-  bumpLeaves: db.prepare(`
+  bumpLeaves: prepare(`
     INSERT INTO invite_counts (guild_id, user_id, leaves) VALUES (@guildId, @userId, @delta)
-    ON CONFLICT (guild_id, user_id) DO UPDATE SET leaves = leaves + @delta
+    ON CONFLICT (guild_id, user_id) DO UPDATE SET leaves = invite_counts.leaves + @delta
   `),
-  setBonus: db.prepare(`
+  setBonus: prepare(`
     INSERT INTO invite_counts (guild_id, user_id, bonus) VALUES (@guildId, @userId, @value)
     ON CONFLICT (guild_id, user_id) DO UPDATE SET bonus = @value
   `),
-  top: db.prepare(
+  top: prepare(
     `SELECT *, ${NET} AS net FROM invite_counts WHERE guild_id = ? AND ${NET} > 0 ORDER BY net DESC, regular DESC LIMIT ?`
   ),
-  rank: db.prepare(
-    `SELECT COUNT(*) AS n FROM invite_counts WHERE guild_id = ? AND ${NET} > (SELECT ${NET} FROM invite_counts WHERE guild_id = ? AND user_id = ?)`
+  // Aliased on both sides of the subquery — Postgres treats an unaliased
+  // self-referencing subquery's bare columns as ambiguous between the outer
+  // and inner scope (error 42702); SQLite silently resolves to the innermost
+  // scope and never complained. Aliasing is standard SQL and works
+  // identically on both drivers.
+  rank: prepare(
+    `SELECT COUNT(*) AS n FROM invite_counts outer_ic WHERE outer_ic.guild_id = ? AND (outer_ic.regular - outer_ic.leaves + outer_ic.bonus) > (SELECT (inner_ic.regular - inner_ic.leaves + inner_ic.bonus) FROM invite_counts inner_ic WHERE inner_ic.guild_id = ? AND inner_ic.user_id = ?)`
   ),
-  inviterCount: db.prepare(`SELECT COUNT(*) AS n FROM invite_counts WHERE guild_id = ? AND ${NET} > 0`),
-  recordJoin: db.prepare(`
+  inviterCount: prepare(`SELECT COUNT(*) AS n FROM invite_counts WHERE guild_id = ? AND ${NET} > 0`),
+  recordJoin: prepare(`
     INSERT INTO invite_joins (guild_id, user_id, inviter_id, code, source, joined_at, counted)
     VALUES (@guildId, @userId, @inviterId, @code, @source, @joinedAt, @counted)
     ON CONFLICT (guild_id, user_id) DO UPDATE SET
       inviter_id = excluded.inviter_id, code = excluded.code, source = excluded.source,
       joined_at = excluded.joined_at, counted = excluded.counted
   `),
-  getJoin: db.prepare('SELECT * FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
-  deleteJoin: db.prepare('DELETE FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
-  getPersonal: db.prepare('SELECT * FROM invite_personal WHERE guild_id = ? AND user_id = ?'),
-  ownerOfCode: db.prepare('SELECT user_id FROM invite_personal WHERE guild_id = ? AND code = ?'),
-  setPersonal: db.prepare(`
+  getJoin: prepare('SELECT * FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
+  deleteJoin: prepare('DELETE FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
+  getPersonal: prepare('SELECT * FROM invite_personal WHERE guild_id = ? AND user_id = ?'),
+  ownerOfCode: prepare('SELECT user_id FROM invite_personal WHERE guild_id = ? AND code = ?'),
+  setPersonal: prepare(`
     INSERT INTO invite_personal (guild_id, user_id, code) VALUES (@guildId, @userId, @code)
     ON CONFLICT (guild_id, user_id) DO UPDATE SET code = excluded.code
   `),
-  delCounts: db.prepare('DELETE FROM invite_counts WHERE guild_id = ?'),
-  delJoins: db.prepare('DELETE FROM invite_joins WHERE guild_id = ?'),
-  delPersonal: db.prepare('DELETE FROM invite_personal WHERE guild_id = ?'),
+  delCounts: prepare('DELETE FROM invite_counts WHERE guild_id = ?'),
+  delJoins: prepare('DELETE FROM invite_joins WHERE guild_id = ?'),
+  delPersonal: prepare('DELETE FROM invite_personal WHERE guild_id = ?'),
 };
 
 const ZERO = { regular: 0, leaves: 0, bonus: 0 };
 
-export function getInviteCount(guildId, userId) {
-  const row = stmts.getCount.get(guildId, userId) ?? { guild_id: guildId, user_id: userId, ...ZERO };
+export async function getInviteCount(guildId, userId) {
+  const row = (await stmts.getCount.get(guildId, userId)) ?? { guild_id: guildId, user_id: userId, ...ZERO };
   return { ...row, net: row.regular - row.leaves + row.bonus };
 }
-export function bumpRegular(guildId, userId, delta = 1) {
-  stmts.bumpRegular.run({ guildId, userId, delta });
+export async function bumpRegular(guildId, userId, delta = 1) {
+  await stmts.bumpRegular.run({ guildId, userId, delta });
 }
-export function bumpLeaves(guildId, userId, delta = 1) {
-  stmts.bumpLeaves.run({ guildId, userId, delta });
+export async function bumpLeaves(guildId, userId, delta = 1) {
+  await stmts.bumpLeaves.run({ guildId, userId, delta });
 }
-export function setBonus(guildId, userId, value) {
-  stmts.setBonus.run({ guildId, userId, value: Math.trunc(value) });
+export async function setBonus(guildId, userId, value) {
+  await stmts.setBonus.run({ guildId, userId, value: Math.trunc(value) });
 }
-export function topInviters(guildId, limit = 15) {
+export async function topInviters(guildId, limit = 15) {
   return stmts.top.all(guildId, limit);
 }
-export function inviterRank(guildId, userId) {
-  return (stmts.rank.get(guildId, guildId, userId)?.n ?? 0) + 1;
+export async function inviterRank(guildId, userId) {
+  return (Number((await stmts.rank.get(guildId, guildId, userId))?.n) || 0) + 1;
 }
-export function inviterCount(guildId) {
-  return stmts.inviterCount.get(guildId)?.n ?? 0;
+export async function inviterCount(guildId) {
+  return Number((await stmts.inviterCount.get(guildId))?.n) || 0;
 }
-export function recordJoin(
+export async function recordJoin(
   guildId,
   userId,
   { inviterId = null, code = null, source = 'unknown', joinedAt, counted = 1 }
 ) {
-  stmts.recordJoin.run({
+  await stmts.recordJoin.run({
     guildId,
     userId,
     inviterId,
@@ -85,23 +126,23 @@ export function recordJoin(
     counted,
   });
 }
-export function getJoin(guildId, userId) {
-  return stmts.getJoin.get(guildId, userId) ?? null;
+export async function getJoin(guildId, userId) {
+  return (await stmts.getJoin.get(guildId, userId)) ?? null;
 }
-export function deleteJoin(guildId, userId) {
-  stmts.deleteJoin.run(guildId, userId);
+export async function deleteJoin(guildId, userId) {
+  await stmts.deleteJoin.run(guildId, userId);
 }
-export function getPersonalCode(guildId, userId) {
-  return stmts.getPersonal.get(guildId, userId)?.code ?? null;
+export async function getPersonalCode(guildId, userId) {
+  return (await stmts.getPersonal.get(guildId, userId))?.code ?? null;
 }
-export function personalCodeOwner(guildId, code) {
-  return code ? (stmts.ownerOfCode.get(guildId, code)?.user_id ?? null) : null;
+export async function personalCodeOwner(guildId, code) {
+  return code ? ((await stmts.ownerOfCode.get(guildId, code))?.user_id ?? null) : null;
 }
-export function setPersonalCode(guildId, userId, code) {
-  stmts.setPersonal.run({ guildId, userId, code });
+export async function setPersonalCode(guildId, userId, code) {
+  await stmts.setPersonal.run({ guildId, userId, code });
 }
-export function clearGuildInvites(guildId) {
-  stmts.delCounts.run(guildId);
-  stmts.delJoins.run(guildId);
-  stmts.delPersonal.run(guildId);
+export async function clearGuildInvites(guildId) {
+  await stmts.delCounts.run(guildId);
+  await stmts.delJoins.run(guildId);
+  await stmts.delPersonal.run(guildId);
 }

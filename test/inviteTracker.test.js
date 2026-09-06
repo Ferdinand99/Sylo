@@ -32,84 +32,84 @@ test('normaliseInviteTrackerConfig: validates channel id, clamps grace hours', (
   assert.equal(normaliseInviteTrackerConfig({ graceHours: '48' }).graceHours, 48);
 });
 
-test('net invites = regular - leaves + bonus', () => {
-  clearGuildInvites(G);
+test('net invites = regular - leaves + bonus', async () => {
+  await clearGuildInvites(G);
   const u = '111111111111111111';
-  bumpRegular(G, u, 5);
-  bumpLeaves(G, u, 2);
-  setBonus(G, u, 3);
-  const c = getInviteCount(G, u);
+  await bumpRegular(G, u, 5);
+  await bumpLeaves(G, u, 2);
+  await setBonus(G, u, 3);
+  const c = await getInviteCount(G, u);
   assert.equal(c.regular, 5);
   assert.equal(c.leaves, 2);
   assert.equal(c.bonus, 3);
   assert.equal(c.net, 6);
 });
 
-test('setBonus overwrites (does not accumulate)', () => {
-  clearGuildInvites(G);
+test('setBonus overwrites (does not accumulate)', async () => {
+  await clearGuildInvites(G);
   const u = '222222222222222222';
-  setBonus(G, u, 10);
-  setBonus(G, u, 4);
-  assert.equal(getInviteCount(G, u).bonus, 4);
+  await setBonus(G, u, 10);
+  await setBonus(G, u, 4);
+  assert.equal((await getInviteCount(G, u)).bonus, 4);
 });
 
-test('topInviters: only positive net, ordered desc; rank + count', () => {
-  clearGuildInvites(G);
-  bumpRegular(G, 'aaaaaaaaaaaaaaaaaa'.replace(/a/g, '1'), 0); // no-op-ish
-  bumpRegular(G, '111111111111111111', 8);
-  bumpRegular(G, '222222222222222222', 3);
-  bumpRegular(G, '333333333333333333', 1);
-  bumpLeaves(G, '333333333333333333', 5); // net -4, excluded
+test('topInviters: only positive net, ordered desc; rank + count', async () => {
+  await clearGuildInvites(G);
+  await bumpRegular(G, 'aaaaaaaaaaaaaaaaaa'.replace(/a/g, '1'), 0); // no-op-ish
+  await bumpRegular(G, '111111111111111111', 8);
+  await bumpRegular(G, '222222222222222222', 3);
+  await bumpRegular(G, '333333333333333333', 1);
+  await bumpLeaves(G, '333333333333333333', 5); // net -4, excluded
 
-  const top = topInviters(G, 10);
+  const top = await topInviters(G, 10);
   assert.deepEqual(
     top.map((r) => r.user_id),
     ['111111111111111111', '222222222222222222']
   );
-  assert.equal(inviterCount(G), 2);
-  assert.equal(inviterRank(G, '222222222222222222'), 2);
-  assert.equal(inviterRank(G, '111111111111111111'), 1);
+  assert.equal(await inviterCount(G), 2);
+  assert.equal(await inviterRank(G, '222222222222222222'), 2);
+  assert.equal(await inviterRank(G, '111111111111111111'), 1);
 });
 
-test('join records: store, read, delete', () => {
-  clearGuildInvites(G);
+test('join records: store, read, delete', async () => {
+  await clearGuildInvites(G);
   const joiner = '444444444444444444';
-  recordJoin(G, joiner, {
+  await recordJoin(G, joiner, {
     inviterId: '111111111111111111',
     code: 'abcd',
     source: 'invite',
     joinedAt: 1000,
     counted: 1,
   });
-  let j = getJoin(G, joiner);
+  let j = await getJoin(G, joiner);
   assert.equal(j.inviter_id, '111111111111111111');
   assert.equal(j.source, 'invite');
   assert.equal(j.counted, 1);
 
   // re-join overwrites
-  recordJoin(G, joiner, { source: 'vanity', joinedAt: 2000, counted: 0 });
-  j = getJoin(G, joiner);
+  await recordJoin(G, joiner, { source: 'vanity', joinedAt: 2000, counted: 0 });
+  j = await getJoin(G, joiner);
   assert.equal(j.inviter_id, null);
   assert.equal(j.source, 'vanity');
 
-  deleteJoin(G, joiner);
-  assert.equal(getJoin(G, joiner), null);
+  await deleteJoin(G, joiner);
+  assert.equal(await getJoin(G, joiner), null);
 });
 
-test('personal invite code maps back to its owner', () => {
-  clearGuildInvites(G);
-  setPersonalCode(G, '111111111111111111', 'xYz123');
-  assert.equal(personalCodeOwner(G, 'xYz123'), '111111111111111111');
-  assert.equal(personalCodeOwner(G, 'unknown'), null);
-  assert.equal(personalCodeOwner(G, null), null);
+test('personal invite code maps back to its owner', async () => {
+  await clearGuildInvites(G);
+  await setPersonalCode(G, '111111111111111111', 'xYz123');
+  assert.equal(await personalCodeOwner(G, 'xYz123'), '111111111111111111');
+  assert.equal(await personalCodeOwner(G, 'unknown'), null);
+  assert.equal(await personalCodeOwner(G, null), null);
 });
 
-test('clearGuildInvites wipes everything for the guild', () => {
-  bumpRegular(G, '111111111111111111', 2);
-  recordJoin(G, '444444444444444444', { joinedAt: 1 });
-  setPersonalCode(G, '111111111111111111', 'code');
-  clearGuildInvites(G);
-  assert.equal(getInviteCount(G, '111111111111111111').net, 0);
-  assert.equal(getJoin(G, '444444444444444444'), null);
-  assert.equal(personalCodeOwner(G, 'code'), null);
+test('clearGuildInvites wipes everything for the guild', async () => {
+  await bumpRegular(G, '111111111111111111', 2);
+  await recordJoin(G, '444444444444444444', { joinedAt: 1 });
+  await setPersonalCode(G, '111111111111111111', 'code');
+  await clearGuildInvites(G);
+  assert.equal((await getInviteCount(G, '111111111111111111')).net, 0);
+  assert.equal(await getJoin(G, '444444444444444444'), null);
+  assert.equal(await personalCodeOwner(G, 'code'), null);
 });
