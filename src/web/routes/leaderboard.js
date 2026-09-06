@@ -119,10 +119,14 @@ router.get('/:guildId', (req, res, next) => {
 
 // /lb/<vanity-slug> — same page, served at the vanity URL.
 export const vanityRouter = Router();
-vanityRouter.get('/:slug', (req, res, next) => {
-  const guildId = guildForVanity(req.params.slug);
-  if (!guildId) return notFound(res, 'That leaderboard link is not in use.');
-  return renderLeaderboard(req, res, next, guildId, `/leaderboard/${guildId}`);
+vanityRouter.get('/:slug', async (req, res, next) => {
+  try {
+    const guildId = await guildForVanity(req.params.slug);
+    if (!guildId) return notFound(res, 'That leaderboard link is not in use.');
+    return renderLeaderboard(req, res, next, guildId, `/leaderboard/${guildId}`);
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;

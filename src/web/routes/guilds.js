@@ -603,7 +603,7 @@ router.get(
       levelingEnabled: enabled,
       publicLeaderboard: cfg.publicLeaderboard,
       leaderboardPeriod: period,
-      vanitySlug: getVanitySlug(guild.id),
+      vanitySlug: await getVanitySlug(guild.id),
       vanityBase: (appConfig.dashboardUrl ? appConfig.dashboardUrl.replace(/\/+$/, '') : '') + '/lb/',
       board: {
         total,
@@ -636,27 +636,30 @@ router.post('/:guildId/leaderboard/public', (req, res) => {
 });
 
 // Vanity URL for the public leaderboard (blank slug clears it).
-router.post('/:guildId/leaderboard/vanity', (req, res) => {
-  const back = `/guilds/${req.guild.id}/leaderboard`;
-  const raw = String(req.body.slug ?? '').trim();
-  if (raw === '') {
-    clearVanitySlug(req.guild.id);
+router.post(
+  '/:guildId/leaderboard/vanity',
+  asyncHandler(async (req, res) => {
+    const back = `/guilds/${req.guild.id}/leaderboard`;
+    const raw = String(req.body.slug ?? '').trim();
+    if (raw === '') {
+      await clearVanitySlug(req.guild.id);
+      recordAudit(req.guild.id, {
+        actor: moderatorDisplayName(req),
+        action: 'leveling:vanity',
+        detail: 'cleared',
+      });
+      return res.redirect(`${back}?msg=vanity-cleared`);
+    }
+    const r = await setVanitySlug(req.guild.id, raw);
+    if (!r.ok) return res.redirect(`${back}?msg=vanity-${r.error}`);
     recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'leveling:vanity',
-      detail: 'cleared',
+      detail: `/lb/${r.slug}`,
     });
-    return res.redirect(`${back}?msg=vanity-cleared`);
-  }
-  const r = setVanitySlug(req.guild.id, raw);
-  if (!r.ok) return res.redirect(`${back}?msg=vanity-${r.error}`);
-  recordAudit(req.guild.id, {
-    actor: moderatorDisplayName(req),
-    action: 'leveling:vanity',
-    detail: `/lb/${r.slug}`,
-  });
-  res.redirect(`${back}?msg=vanity-set`);
-});
+    res.redirect(`${back}?msg=vanity-set`);
+  })
+);
 
 // Moderator → Admin tab: immunity roles (patch just automod's exemptRoles).
 router.post('/:guildId/m/automod/immunity', (req, res) => {
