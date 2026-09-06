@@ -571,15 +571,32 @@ Two things worth knowing before converting the next file:
   digits) needs `BIGINT` in its Postgres bootstrap DDL, not a blind type
   copy — caught while writing `channel_cleanup_schedules`' bootstrap for its
   `created_at` column.
-- `lastInsertRowid` → `RETURNING id` is safe to automate for any bare INSERT
-  whose table uses a surrogate `id INTEGER PRIMARY KEY AUTOINCREMENT` key —
-  confirmed by reading every `CREATE TABLE` in `MIGRATIONS`, exactly 8 tables
-  qualify (`tickets`, `ticket_messages`, `composed_messages`,
+- `lastInsertRowid` → `RETURNING id` **must be opt-in per statement**
+  (`prepare(sql, { returningId: true })`), not inferred from "starts with
+  INSERT INTO" — most tables here use a natural/composite key with no `id`
+  column at all (confirmed the hard way converting `afk`, whose PK is
+  `(guild_id, user_id)`: a blind `RETURNING id` append errored with
+  `column "id" does not exist`). Only pass `returningId: true` for the 8
+  tables that actually have a surrogate `id INTEGER PRIMARY KEY AUTOINCREMENT`
+  key (`tickets`, `ticket_messages`, `composed_messages`,
   `scheduled_messages`, `config_audit`, `appeals`, `giveaways`,
-  `channel_cleanup_schedules`) — `driver.js`'s heuristic already covers this
-  generally, not just for the one file converted so far.
+  `channel_cleanup_schedules`) **and** whose `.run().lastInsertRowid` is
+  actually read.
 
-### 1 — Driver + async seam in `src/db/` — in progress (1 of 32 files)
+### Phase 3 shipped — second converted file (`src/db/afk.js`)
+
+Confirms the shim generalizes beyond channel-cleanup: `afk` has a natural
+composite PK (no surrogate `id`) and an `INSERT ... ON CONFLICT (...) DO
+UPDATE SET ...` upsert, which translates to Postgres with no SQL text changes
+beyond the usual `?`/`@name` → `$n` placeholder rewrite (Postgres originated
+this syntax; SQLite's is compatible). This is also where the `returningId`
+opt-in fix above was found and made — `src/db/driver.js`'s `prepare()` now
+takes a second `{ returningId }` argument instead of guessing from the SQL
+text; `channelCleanup.js`'s insert was updated to pass it explicitly.
+2 of 32 files converted; same untouched-31-files caveat as Phase 2 still
+applies.
+
+### 1 — Driver + async seam in `src/db/` — in progress (2 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

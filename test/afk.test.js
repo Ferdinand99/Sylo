@@ -7,22 +7,22 @@ import { normaliseServerStats } from '../src/modules/serverStats.js';
 const G = '111111111111111111';
 const U = '222222222222222222';
 
-test('afk: set / get / clear round-trip', () => {
-  assert.equal(getAfk(G, U), null);
-  setAfk(G, U, { reason: 'lunch', oldNick: 'Bob' });
-  const row = getAfk(G, U);
+test('afk: set / get / clear round-trip', async () => {
+  assert.equal(await getAfk(G, U), null);
+  await setAfk(G, U, { reason: 'lunch', oldNick: 'Bob' });
+  const row = await getAfk(G, U);
   assert.equal(row.reason, 'lunch');
   assert.equal(row.old_nick, 'Bob');
   assert.ok(row.since > 0);
-  clearAfk(G, U);
-  assert.equal(getAfk(G, U), null);
+  await clearAfk(G, U);
+  assert.equal(await getAfk(G, U), null);
 });
 
-test('afk: oldNick null is stored as null (nickname untouched)', () => {
-  setAfk(G, U, { reason: 'x', oldNick: null });
-  assert.equal(getAfk(G, U).old_nick, null);
-  clearGuildAfk(G);
-  assert.equal(getAfk(G, U), null);
+test('afk: oldNick null is stored as null (nickname untouched)', async () => {
+  await setAfk(G, U, { reason: 'x', oldNick: null });
+  assert.equal((await getAfk(G, U)).old_nick, null);
+  await clearGuildAfk(G);
+  assert.equal(await getAfk(G, U), null);
 });
 
 test('normaliseServerStats: drops rows without {count} or a channel, clamps to 10, defaults type', () => {

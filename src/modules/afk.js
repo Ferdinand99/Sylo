@@ -14,9 +14,9 @@ on('afk', 'messageCreate', async (message, config, guildId) => {
   if (Array.isArray(config.ignoreChannels) && config.ignoreChannels.includes(message.channelId)) return;
 
   // The author is coming back from AFK.
-  const own = getAfk(guildId, message.author.id);
+  const own = await getAfk(guildId, message.author.id);
   if (own) {
-    clearAfk(guildId, message.author.id);
+    await clearAfk(guildId, message.author.id);
     if (config.setNickname !== false && own.old_nick !== null && message.member.manageable) {
       message.member.setNickname(own.old_nick || null, 'Back from AFK').catch(() => {});
     }
@@ -35,7 +35,7 @@ on('afk', 'messageCreate', async (message, config, guildId) => {
   const targets = [...message.mentions.users.keys()].filter((uid) => uid !== message.author.id).slice(0, 4);
   const lines = [];
   for (const uid of targets) {
-    const afk = getAfk(guildId, uid);
+    const afk = await getAfk(guildId, uid);
     if (afk) lines.push(`<@${uid}> is AFK: ${afk.reason} · <t:${Math.floor(afk.since / 1000)}:R>`);
   }
   if (lines.length) {

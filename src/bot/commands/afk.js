@@ -39,6 +39,6 @@ export async function execute(interaction) {
     });
   }
 
-  setAfk(interaction.guildId, interaction.user.id, { reason, oldNick });
+  await setAfk(interaction.guildId, interaction.user.id, { reason, oldNick });
   return interaction.reply({ content: `You're now AFK: **${reason}**`, flags: MessageFlags.Ephemeral });
 }
