@@ -90,14 +90,14 @@ export async function cleanupChannel(channel, { maxAgeHours, skipPinned }) {
 async function runSchedule(schedule, today) {
   const guild = runtime.client.guilds.cache.get(schedule.guild_id);
   if (!guild) {
-    deleteCleanupSchedule(schedule.guild_id, schedule.id);
+    await deleteCleanupSchedule(schedule.guild_id, schedule.id);
     return;
   }
   if (!isModuleEnabled(schedule.guild_id, MODULE_ID)) return;
 
   const channel = guild.channels.cache.get(schedule.channel_id);
   if (!channel?.isTextBased()) {
-    markCleanupRan(schedule.id, today, 0);
+    await markCleanupRan(schedule.id, today, 0);
     return;
   }
   const me = guild.members.me;
@@ -114,7 +114,7 @@ async function runSchedule(schedule, today) {
       'module:channel-cleanup',
       `missing permissions in #${channel.name} (${guild.name}) — need View Channel, Manage Messages, Read Message History`
     );
-    markCleanupRan(schedule.id, today, 0);
+    await markCleanupRan(schedule.id, today, 0);
     return;
   }
 
@@ -124,12 +124,12 @@ async function runSchedule(schedule, today) {
       skipPinned: schedule.skip_pinned === 1,
     });
     const total = bulkDeleted + individualDeleted;
-    markCleanupRan(schedule.id, today, total);
+    await markCleanupRan(schedule.id, today, total);
     if (total)
       log.info('module:channel-cleanup', `cleaned ${total} message(s) from #${channel.name} (${guild.name})`);
   } catch (err) {
     log.error('module:channel-cleanup', `cleanup failed for #${channel.name} (${guild.name}):`, err.message);
-    markCleanupRan(schedule.id, today, 0);
+    await markCleanupRan(schedule.id, today, 0);
   }
 }
 
@@ -138,7 +138,7 @@ async function tick() {
   const now = new Date();
   const today = todayStr(now);
 
-  for (const schedule of dueCandidates(today)) {
+  for (const schedule of await dueCandidates(today)) {
     if (!isDue(schedule, now)) continue;
     await runSchedule(schedule, today);
   }
