@@ -3,54 +3,77 @@
 // (guild_id, scope, key); `value` optionally carries what was announced, e.g.
 // the Twitch stream id or YouTube live video id, so a *new* broadcast by the
 // same channel can be told apart from the one already announced.
-import { db } from './index.js';
+import { prepare, registerPostgresBootstrap } from './driver.js';
+
+registerPostgresBootstrap(`
+  CREATE TABLE IF NOT EXISTS posted_keys (
+    guild_id  TEXT NOT NULL,
+    scope     TEXT NOT NULL,
+    key       TEXT NOT NULL,
+    value     TEXT,
+    posted_at BIGINT NOT NULL,
+    PRIMARY KEY (guild_id, scope, key)
+  );
+  CREATE INDEX IF NOT EXISTS idx_posted_keys_prune ON posted_keys (scope, posted_at);
+`);
 
 const stmts = {
-  get: db.prepare('SELECT value, posted_at FROM posted_keys WHERE guild_id = ? AND scope = ? AND key = ?'),
-  anyInScope: db.prepare('SELECT 1 FROM posted_keys WHERE guild_id = ? AND scope = ? LIMIT 1'),
-  anyMatch: db.prepare('SELECT 1 FROM posted_keys WHERE guild_id = ? AND scope = ? AND key GLOB ? LIMIT 1'),
-  insert: db.prepare(`
-    INSERT OR IGNORE INTO posted_keys (guild_id, scope, key, value, posted_at)
+  get: prepare('SELECT value, posted_at FROM posted_keys WHERE guild_id = ? AND scope = ? AND key = ?'),
+  anyInScope: prepare('SELECT 1 FROM posted_keys WHERE guild_id = ? AND scope = ? LIMIT 1'),
+  // `key GLOB ?` (SQLite-only) rewritten to a plain `LIKE` — the only pattern
+  // this is ever called with is a literal prefix + wildcard (see
+  // anySeenMatching below, which converts the glob-style `*` to `%` before
+  // binding), so LIKE's semantics are equivalent here and this works
+  // identically on both drivers.
+  anyMatch: prepare('SELECT 1 FROM posted_keys WHERE guild_id = ? AND scope = ? AND key LIKE ? LIMIT 1'),
+  // `INSERT OR IGNORE` (SQLite-only) rewritten to the standard `ON CONFLICT
+  // DO NOTHING`, which SQLite has also supported since 3.24 — this is the
+  // same statement on both drivers, not a driver-specific branch.
+  insert: prepare(`
+    INSERT INTO posted_keys (guild_id, scope, key, value, posted_at)
     VALUES (@guildId, @scope, @key, @value, @now)
+    ON CONFLICT (guild_id, scope, key) DO NOTHING
   `),
-  upsert: db.prepare(`
+  upsert: prepare(`
     INSERT INTO posted_keys (guild_id, scope, key, value, posted_at)
     VALUES (@guildId, @scope, @key, @value, @now)
     ON CONFLICT (guild_id, scope, key) DO UPDATE SET value = excluded.value, posted_at = excluded.posted_at
   `),
-  del: db.prepare('DELETE FROM posted_keys WHERE guild_id = ? AND scope = ? AND key = ?'),
-  clearScope: db.prepare('DELETE FROM posted_keys WHERE guild_id = ? AND scope = ?'),
-  clearGuild: db.prepare('DELETE FROM posted_keys WHERE guild_id = ?'),
-  prune: db.prepare('DELETE FROM posted_keys WHERE scope = ? AND posted_at < ?'),
-  prunePrefix: db.prepare('DELETE FROM posted_keys WHERE scope LIKE ? AND posted_at < ?'),
+  del: prepare('DELETE FROM posted_keys WHERE guild_id = ? AND scope = ? AND key = ?'),
+  clearScope: prepare('DELETE FROM posted_keys WHERE guild_id = ? AND scope = ?'),
+  clearGuild: prepare('DELETE FROM posted_keys WHERE guild_id = ?'),
+  prune: prepare('DELETE FROM posted_keys WHERE scope = ? AND posted_at < ?'),
+  prunePrefix: prepare('DELETE FROM posted_keys WHERE scope LIKE ? AND posted_at < ?'),
 };
 
 /** Have we recorded this key? */
-export function seen(guildId, scope, key) {
-  return stmts.get.get(guildId, scope, key) != null;
+export async function seen(guildId, scope, key) {
+  return (await stmts.get.get(guildId, scope, key)) != null;
 }
 
 /** The stored value for this key, or null (also null when the key is absent). */
-export function seenValue(guildId, scope, key) {
-  return stmts.get.get(guildId, scope, key)?.value ?? null;
+export async function seenValue(guildId, scope, key) {
+  return (await stmts.get.get(guildId, scope, key))?.value ?? null;
 }
 
 /** The full row (`{ value, posted_at }`) for this key, or null. */
-export function seenRow(guildId, scope, key) {
-  return stmts.get.get(guildId, scope, key) ?? null;
+export async function seenRow(guildId, scope, key) {
+  return (await stmts.get.get(guildId, scope, key)) ?? null;
 }
 
 /** Has anything been recorded in this scope for this guild yet? */
-export function anySeen(guildId, scope) {
-  return stmts.anyInScope.get(guildId, scope) != null;
+export async function anySeen(guildId, scope) {
+  return (await stmts.anyInScope.get(guildId, scope)) != null;
 }
 
 /**
- * Is any key in this scope matching a GLOB pattern present? The pattern must be
- * a literal prefix followed by `*` so SQLite can use the primary-key index.
+ * Is any key in this scope matching a glob-style pattern present? The pattern
+ * must be a literal prefix followed by `*` (translated to `%` for the LIKE
+ * query the statement actually runs).
  */
-export function anySeenMatching(guildId, scope, keyGlob) {
-  return stmts.anyMatch.get(guildId, scope, keyGlob) != null;
+export async function anySeenMatching(guildId, scope, keyGlob) {
+  const likePattern = keyGlob.replace(/\*/g, '%');
+  return (await stmts.anyMatch.get(guildId, scope, likePattern)) != null;
 }
 
 /**
@@ -62,28 +85,28 @@ export function anySeenMatching(guildId, scope, keyGlob) {
  * @param {{ upsert?: boolean }} [opts]  upsert:true refreshes value + posted_at
  *   for an existing key; the default leaves an existing row untouched.
  */
-export function markSeen(guildId, scope, key, value = null, { upsert = false } = {}) {
-  (upsert ? stmts.upsert : stmts.insert).run({ guildId, scope, key, value, now: Date.now() });
+export async function markSeen(guildId, scope, key, value = null, { upsert = false } = {}) {
+  await (upsert ? stmts.upsert : stmts.insert).run({ guildId, scope, key, value, now: Date.now() });
 }
 
 /** Drop a single key (e.g. a stream went offline). */
-export function forget(guildId, scope, key) {
-  stmts.del.run(guildId, scope, key);
+export async function forget(guildId, scope, key) {
+  await stmts.del.run(guildId, scope, key);
 }
 
 /** Drop every key in one scope for one guild. */
-export function clearScope(guildId, scope) {
-  stmts.clearScope.run(guildId, scope);
+export async function clearScope(guildId, scope) {
+  await stmts.clearScope.run(guildId, scope);
 }
 
 /** Drop every posted key for a guild (guild-leave purge). */
-export function clearGuildPostedKeys(guildId) {
-  stmts.clearGuild.run(guildId);
+export async function clearGuildPostedKeys(guildId) {
+  await stmts.clearGuild.run(guildId);
 }
 
 /** Drop keys in a scope older than `ms` milliseconds. */
-export function pruneScopeOlderThan(scope, ms) {
-  stmts.prune.run(scope, Date.now() - ms);
+export async function pruneScopeOlderThan(scope, ms) {
+  await stmts.prune.run(scope, Date.now() - ms);
 }
 
 /**
@@ -91,6 +114,6 @@ export function pruneScopeOlderThan(scope, ms) {
  * prefix; `%` and `_` in it are treated literally enough for our scope names).
  * Used by RSS, whose scopes are `rss:<feedId>`.
  */
-export function pruneScopePrefixOlderThan(prefix, ms) {
-  stmts.prunePrefix.run(`${prefix}%`, Date.now() - ms);
+export async function pruneScopePrefixOlderThan(prefix, ms) {
+  await stmts.prunePrefix.run(`${prefix}%`, Date.now() - ms);
 }

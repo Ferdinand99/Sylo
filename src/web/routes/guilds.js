@@ -1262,7 +1262,7 @@ router.post(
       // URL later starts fresh rather than silently swallowing a backlog.
       const keptIds = new Set(config.feeds.map((f) => f.id));
       for (const id of prevIds) {
-        if (!keptIds.has(id)) clearScope(req.guild.id, `rss:${id}`);
+        if (!keptIds.has(id)) await clearScope(req.guild.id, `rss:${id}`);
       }
     } else if (mod.id === 'polls') {
       const msg = (raw) => {

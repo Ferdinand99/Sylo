@@ -208,7 +208,7 @@ async function tick() {
     return;
   }
   if (games.length === 0) return;
-  pruneFreeGames();
+  await pruneFreeGames();
 
   for (const guild of client.guilds.cache.values()) {
     const { enabled, config: cfg } = getGuildModule(guild.id, 'free-games');
@@ -217,7 +217,7 @@ async function tick() {
     let postedThisTick = 0;
     for (const game of games) {
       if (postedThisTick >= 10) break; // don't wall the channel during a big sale
-      if (wasPosted(guild.id, game.key)) continue;
+      if (await wasPosted(guild.id, game.key)) continue;
       const content = /^\d{17,20}$/.test(cfg.roleId ?? '') ? `<@&${cfg.roleId}>` : undefined;
       const sent = await sendToChannel(guild.id, cfg.channelId, {
         content,
@@ -225,7 +225,7 @@ async function tick() {
         allowedMentions: content ? { roles: [cfg.roleId] } : { parse: [] },
       });
       if (sent) {
-        markPosted(guild.id, game.key);
+        await markPosted(guild.id, game.key);
         postedThisTick += 1;
       }
     }

@@ -212,7 +212,7 @@ function payload(alert, { name, title, url, thumb }, kind) {
 
 async function tick() {
   if (!runtime.client?.isReady()) return;
-  pruneYoutube();
+  await pruneYoutube();
 
   for (const guild of runtime.client.guilds.cache.values()) {
     if (!isModuleEnabled(guild.id, 'youtube-alerts')) continue;
@@ -232,14 +232,14 @@ async function runAlert(guildId, alert) {
 
   if (alert.onVideo) {
     const entries = await fetchFeed(c);
-    if (!hasSeenAny(guildId, c)) {
+    if (!(await hasSeenAny(guildId, c))) {
       // First poll for this channel — seed everything without alerting.
-      for (const e of entries) markVideoSeen(guildId, c, e.videoId);
+      for (const e of entries) await markVideoSeen(guildId, c, e.videoId);
     } else {
       // Alert oldest-first for anything new.
       for (const e of [...entries].reverse()) {
-        if (isVideoSeen(guildId, c, e.videoId)) continue;
-        markVideoSeen(guildId, c, e.videoId);
+        if (await isVideoSeen(guildId, c, e.videoId)) continue;
+        await markVideoSeen(guildId, c, e.videoId);
         const name = alert.name || e.author || 'A channel';
         await sendToChannel(
           guildId,
@@ -252,9 +252,9 @@ async function runAlert(guildId, alert) {
 
   if (alert.onLive) {
     const state = await checkLive(c);
-    const known = liveVideoId(guildId, c);
+    const known = await liveVideoId(guildId, c);
     if (state.live && state.videoId !== known) {
-      markVideoSeen(guildId, c, state.videoId); // don't also fire a "new video" for the same stream
+      await markVideoSeen(guildId, c, state.videoId); // don't also fire a "new video" for the same stream
       const name = alert.name || 'A channel';
       const url = `https://www.youtube.com/watch?v=${state.videoId}`;
       const posted = await postToChannel(
@@ -271,10 +271,10 @@ async function runAlert(guildId, alert) {
           'live'
         )
       );
-      markLive(guildId, c, state.videoId, posted);
+      await markLive(guildId, c, state.videoId, posted);
     } else if (!state.live && known) {
-      const post = livePost(guildId, c);
-      markNotLive(guildId, c);
+      const post = await livePost(guildId, c);
+      await markNotLive(guildId, c);
       await settleEndedPost({
         guildId,
         onEnd: alert.onEnd,
