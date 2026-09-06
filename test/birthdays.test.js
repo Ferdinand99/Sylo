@@ -52,49 +52,44 @@ test('daysUntilBirthday: 0 today, 1 tomorrow, wraps the year', () => {
   assert.equal(daysUntilBirthday(6, 14, ref), 364); // already passed → next year
 });
 
-test('birthday storage: set, upsert, get, list order, remove', () => {
-  clearGuildBirthdays(G);
-  setBirthday({ guildId: G, userId: U1, month: 12, day: 25 });
-  setBirthday({ guildId: G, userId: U2, month: 3, day: 4, year: 2000 });
+test('birthday storage: set, upsert, get, list order, remove', async () => {
+  await clearGuildBirthdays(G);
+  await setBirthday({ guildId: G, userId: U1, month: 12, day: 25 });
+  await setBirthday({ guildId: G, userId: U2, month: 3, day: 4, year: 2000 });
 
-  assert.deepEqual(getBirthday(G, U1), {
+  assert.deepEqual(await getBirthday(G, U1), {
     guild_id: G,
     user_id: U1,
     month: 12,
     day: 25,
     year: null,
-    created_at: getBirthday(G, U1).created_at,
+    created_at: (await getBirthday(G, U1)).created_at,
   });
 
   // upsert — same user, new date, still one row
-  setBirthday({ guildId: G, userId: U1, month: 1, day: 2 });
-  const u1 = getBirthday(G, U1);
+  await setBirthday({ guildId: G, userId: U1, month: 1, day: 2 });
+  const u1 = await getBirthday(G, U1);
   assert.equal(u1.month, 1);
   assert.equal(u1.day, 2);
 
   // list is ordered by (month, day)
   assert.deepEqual(
-    guildBirthdays(G).map((r) => `${r.month}/${r.day}`),
+    (await guildBirthdays(G)).map((r) => `${r.month}/${r.day}`),
     ['1/2', '3/4']
   );
 
-  assert.equal(removeBirthday(G, U1), 1);
-  assert.equal(removeBirthday(G, U1), 0);
-  assert.equal(getBirthday(G, U1), null);
+  assert.equal(await removeBirthday(G, U1), 1);
+  assert.equal(await removeBirthday(G, U1), 0);
+  assert.equal(await getBirthday(G, U1), null);
 });
 
-test('birthdaysOnDay returns matches for that guild + date', () => {
-  clearGuildBirthdays(G);
-  setBirthday({ guildId: G, userId: U1, month: 7, day: 4 });
-  setBirthday({ guildId: G, userId: U2, month: 7, day: 4, year: 1999 });
-  setBirthday({ guildId: G, userId: '800000000000000203', month: 7, day: 5 });
+test('birthdaysOnDay returns matches for that guild + date', async () => {
+  await clearGuildBirthdays(G);
+  await setBirthday({ guildId: G, userId: U1, month: 7, day: 4 });
+  await setBirthday({ guildId: G, userId: U2, month: 7, day: 4, year: 1999 });
+  await setBirthday({ guildId: G, userId: '800000000000000203', month: 7, day: 5 });
 
-  assert.deepEqual(
-    birthdaysOnDay(G, 7, 4)
-      .map((r) => r.user_id)
-      .sort(),
-    [U1, U2].sort()
-  );
-  assert.equal(birthdaysOnDay(G, 7, 5).length, 1);
-  assert.equal(birthdaysOnDay('other-guild', 7, 4).length, 0);
+  assert.deepEqual((await birthdaysOnDay(G, 7, 4)).map((r) => r.user_id).sort(), [U1, U2].sort());
+  assert.equal((await birthdaysOnDay(G, 7, 5)).length, 1);
+  assert.equal((await birthdaysOnDay('other-guild', 7, 4)).length, 0);
 });

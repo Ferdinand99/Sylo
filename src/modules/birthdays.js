@@ -63,13 +63,13 @@ function fillMessage(template, mention, age) {
 }
 
 /** Rows to celebrate today for `guildId`, incl. the Feb-29 → Feb-28 fallback. */
-function celebrantsToday(guildId, now) {
+async function celebrantsToday(guildId, now) {
   const month = now.getMonth() + 1;
   const day = now.getDate();
-  const rows = birthdaysOnDay(guildId, month, day);
+  const rows = await birthdaysOnDay(guildId, month, day);
   const isLeap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
   if (month === 2 && day === 28 && !isLeap(now.getFullYear())) {
-    rows.push(...birthdaysOnDay(guildId, 2, 29));
+    rows.push(...(await birthdaysOnDay(guildId, 2, 29)));
   }
   return rows;
 }
@@ -78,7 +78,7 @@ async function celebrateGuild(guildId, now) {
   const guild = runtime.client?.guilds.cache.get(guildId);
   if (!guild) return;
   const cfg = normaliseBirthdaysConfig(getGuildModule(guildId, 'birthdays').config);
-  const rows = celebrantsToday(guildId, now);
+  const rows = await celebrantsToday(guildId, now);
   const celebrantIds = new Set(rows.map((r) => r.user_id));
 
   // Birthday role: strip it from yesterday's holders, grant it to today's.

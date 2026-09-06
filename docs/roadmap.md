@@ -596,7 +596,20 @@ text; `channelCleanup.js`'s insert was updated to pass it explicitly.
 2 of 32 files converted; same untouched-31-files caveat as Phase 2 still
 applies.
 
-### 1 — Driver + async seam in `src/db/` — in progress (2 of 32 files)
+### Phase 4 shipped — third converted file (`src/db/birthdays.js`)
+
+Same shape as `afk` (natural composite PK, `ON CONFLICT` upsert), no new
+shim changes needed this time — a good sign the `returningId` fix from
+Phase 3 is now solid. One extra wrinkle worth naming for future conversions:
+`src/modules/birthdays.js` had a plain **synchronous** helper
+(`celebrantsToday`) sitting between the already-async `celebrateGuild` and
+the newly-async `birthdaysOnDay` — converting a leaf db file can still
+require walking a short chain of callers upward to find where `async`
+already stops, not just the file's single direct caller. 3 of 32 files
+converted; the untouched-29-files and "don't set `DATABASE_URL` on a real
+deployment yet" caveats still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (3 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 
