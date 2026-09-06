@@ -912,20 +912,22 @@ async function moduleViewLocals(mod, req, configOverride) {
         : [],
     giveaways:
       mod.id === 'giveaways'
-        ? [
-            ...activeGiveaways(req.guild.id).map((g) => ({ ...g, state: 'active' })),
-            ...endedGiveaways(req.guild.id, 8).map((g) => ({ ...g, state: 'ended' })),
-          ].map((g) => ({
-            id: g.id,
-            prize: g.prize,
-            state: g.state,
-            winners: g.winners,
-            endsAt: g.ends_at,
-            entries: giveawayEntryCount(g.id),
-            wonIds: g.wonIds,
-            channel: guildTextChannels(req.guild).find((c) => c.id === g.channel_id)?.name ?? g.channel_id,
-            requiredRoleId: g.required_role_id,
-          }))
+        ? await Promise.all(
+            [
+              ...(await activeGiveaways(req.guild.id)).map((g) => ({ ...g, state: 'active' })),
+              ...(await endedGiveaways(req.guild.id, 8)).map((g) => ({ ...g, state: 'ended' })),
+            ].map(async (g) => ({
+              id: g.id,
+              prize: g.prize,
+              state: g.state,
+              winners: g.winners,
+              endsAt: g.ends_at,
+              entries: await giveawayEntryCount(g.id),
+              wonIds: g.wonIds,
+              channel: guildTextChannels(req.guild).find((c) => c.id === g.channel_id)?.name ?? g.channel_id,
+              requiredRoleId: g.required_role_id,
+            }))
+          )
         : [],
     msg: typeof req.query.msg === 'string' ? req.query.msg : null,
   };
@@ -1390,7 +1392,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const back = `/guilds/${req.guild.id}/m/giveaways`;
     const id = Number(req.params.id);
-    const g = getGiveawayInGuild(id, req.guild.id);
+    const g = await getGiveawayInGuild(id, req.guild.id);
     if (!g) return res.redirect(`${back}?msg=badcommand`);
 
     if (req.params.action === 'end' && !g.ended) {

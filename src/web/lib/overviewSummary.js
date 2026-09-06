@@ -299,7 +299,7 @@ async function moduleLines(id, guild, cfg) {
       ];
     }
     case 'giveaways': {
-      const active = activeGiveaways(guild.id);
+      const active = await activeGiveaways(guild.id);
       const ping = cfg.ping === 'everyone' ? '@everyone' : cfg.ping === 'here' ? '@here' : 'none';
       return [
         active.length ? on('Active giveaways', String(active.length)) : neutral('Active giveaways', '0'),
