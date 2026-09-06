@@ -302,7 +302,11 @@ router.post(
     if (req.body.embedColorReset === 'on' || hex === '') await setEmbedColor(guild.id, null);
     else if (/^[0-9a-fA-F]{6}$/.test(hex)) await setEmbedColor(guild.id, parseInt(hex, 16));
 
-    recordAudit(guild.id, { actor: moderatorDisplayName(req), action: 'settings:server', detail: 'saved' });
+    await recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'settings:server',
+      detail: 'saved',
+    });
     res.redirect(`${back}?msg=saved`);
   })
 );
@@ -385,7 +389,7 @@ router.post(
       .then(() => true)
       .catch(() => false);
 
-    recordAudit(guild.id, {
+    await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: 'privacy:member-data',
       detail: `deleted data for ${userId}${reason ? ` — ${reason}` : ''}${dmDelivered ? '' : ' (DM failed)'}`,
@@ -585,7 +589,7 @@ router.post(
     });
     if (!result.recorded) return res.redirect(`${back}?msg=appeal-gone`);
 
-    recordAudit(guild.id, {
+    await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: `appeal:${decision}`,
       detail: `#${appeal.id} ${appeal.user_tag || appeal.user_id}${decision === 'accepted' && !result.unbanned ? ' (unban manually)' : ''}`,
@@ -635,17 +639,20 @@ router.get(
 );
 
 // Flip only the public-leaderboard flag on the leveling module.
-router.post('/:guildId/leaderboard/public', (req, res) => {
-  const prev = getGuildModule(req.guild.id, 'leveling').config;
-  const publicLeaderboard = req.body.publicLeaderboard === 'on';
-  setGuildModule(req.guild.id, 'leveling', { config: { ...prev, publicLeaderboard } });
-  recordAudit(req.guild.id, {
-    actor: moderatorDisplayName(req),
-    action: 'leveling:leaderboard',
-    detail: publicLeaderboard ? 'made public' : 'made private',
-  });
-  res.redirect(`/guilds/${req.guild.id}/leaderboard?msg=saved`);
-});
+router.post(
+  '/:guildId/leaderboard/public',
+  asyncHandler(async (req, res) => {
+    const prev = getGuildModule(req.guild.id, 'leveling').config;
+    const publicLeaderboard = req.body.publicLeaderboard === 'on';
+    setGuildModule(req.guild.id, 'leveling', { config: { ...prev, publicLeaderboard } });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'leveling:leaderboard',
+      detail: publicLeaderboard ? 'made public' : 'made private',
+    });
+    res.redirect(`/guilds/${req.guild.id}/leaderboard?msg=saved`);
+  })
+);
 
 // Vanity URL for the public leaderboard (blank slug clears it).
 router.post(
@@ -655,7 +662,7 @@ router.post(
     const raw = String(req.body.slug ?? '').trim();
     if (raw === '') {
       await clearVanitySlug(req.guild.id);
-      recordAudit(req.guild.id, {
+      await recordAudit(req.guild.id, {
         actor: moderatorDisplayName(req),
         action: 'leveling:vanity',
         detail: 'cleared',
@@ -664,7 +671,7 @@ router.post(
     }
     const r = await setVanitySlug(req.guild.id, raw);
     if (!r.ok) return res.redirect(`${back}?msg=vanity-${r.error}`);
-    recordAudit(req.guild.id, {
+    await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'leveling:vanity',
       detail: `/lb/${r.slug}`,
@@ -674,25 +681,28 @@ router.post(
 );
 
 // Moderator → Admin tab: immunity roles (patch just automod's exemptRoles).
-router.post('/:guildId/m/automod/immunity', (req, res) => {
-  const prev = getGuildModule(req.guild.id, 'automod').config;
-  const roles = [].concat(req.body.immunityRoles ?? []).filter((r) => /^\d{17,20}$/.test(r));
-  setGuildModule(req.guild.id, 'automod', {
-    config: normaliseAutomodConfig({ ...prev, exemptRoles: roles }),
-  });
-  recordAudit(req.guild.id, {
-    actor: moderatorDisplayName(req),
-    action: 'module:automod',
-    detail: `immunity roles (${roles.length})`,
-  });
-  if (req.get('HX-Request')) {
-    return res
-      .status(204)
-      .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Immunity roles saved', kind: 'ok' } }))
-      .end();
-  }
-  res.redirect(`/guilds/${req.guild.id}/moderation?msg=saved`);
-});
+router.post(
+  '/:guildId/m/automod/immunity',
+  asyncHandler(async (req, res) => {
+    const prev = getGuildModule(req.guild.id, 'automod').config;
+    const roles = [].concat(req.body.immunityRoles ?? []).filter((r) => /^\d{17,20}$/.test(r));
+    setGuildModule(req.guild.id, 'automod', {
+      config: normaliseAutomodConfig({ ...prev, exemptRoles: roles }),
+    });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:automod',
+      detail: `immunity roles (${roles.length})`,
+    });
+    if (req.get('HX-Request')) {
+      return res
+        .status(204)
+        .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Immunity roles saved', kind: 'ok' } }))
+        .end();
+    }
+    res.redirect(`/guilds/${req.guild.id}/moderation?msg=saved`);
+  })
+);
 
 // Welcome: a PNG preview of the welcome image, using a sample member and the
 // saved background. Cheap enough to render on demand; browser-cached via the
@@ -722,7 +732,7 @@ router.post(
     if (!r.ok) return res.redirect(`${back}?msg=wc-fail`);
     const cfg = normaliseWelcomeChannelConfig(getGuildModule(req.guild.id, 'welcome-channel').config);
     setGuildModule(req.guild.id, 'welcome-channel', { config: { ...cfg, channelId: r.channelId } });
-    recordAudit(req.guild.id, {
+    await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:welcome-channel',
       detail: 'created #welcome',
@@ -818,7 +828,7 @@ async function moduleViewLocals(mod, req, configOverride) {
     arMatchModes: AR_MATCH_MODES,
     reminders:
       mod.id === 'reminders'
-        ? listScheduled(req.guild.id).map((j) => ({
+        ? (await listScheduled(req.guild.id)).map((j) => ({
             id: j.id,
             name: j.name || (j.spec?.embeds?.[0]?.title || j.content || 'Untitled reminder').slice(0, 60),
             channel: guildTextChannels(req.guild).find((c) => c.id === j.channel_id)?.name ?? j.channel_id,
@@ -1319,7 +1329,7 @@ router.post(
     }
 
     setGuildModule(req.guild.id, mod.id, { config });
-    recordAudit(req.guild.id, {
+    await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: `module:${mod.id}`,
       detail: 'settings saved',
@@ -1385,7 +1395,7 @@ router.post(
 
     if (req.params.action === 'end' && !g.ended) {
       await endGiveaway(id);
-      recordAudit(req.guild.id, {
+      await recordAudit(req.guild.id, {
         actor: moderatorDisplayName(req),
         action: 'module:giveaways',
         detail: `ended #${id}`,
@@ -1393,7 +1403,7 @@ router.post(
     } else if (req.params.action === 'reroll' && g.ended) {
       const count = Math.max(1, Math.min(Number(req.body.count) || 1, 20));
       await endGiveaway(id, { rerollCount: count });
-      recordAudit(req.guild.id, {
+      await recordAudit(req.guild.id, {
         actor: moderatorDisplayName(req),
         action: 'module:giveaways',
         detail: `rerolled #${id}`,
@@ -1410,7 +1420,7 @@ router.post(
     const back = `/guilds/${req.guild.id}/m/counting`;
     if (req.body.reset === 'true') {
       await resetCount(req.guild.id);
-      recordAudit(req.guild.id, {
+      await recordAudit(req.guild.id, {
         actor: moderatorDisplayName(req),
         action: 'counting:reset',
         detail: 'count set to 0',
@@ -1422,7 +1432,7 @@ router.post(
       return res.redirect(`${back}?msg=count-bad`);
     }
     await setCount(req.guild.id, n);
-    recordAudit(req.guild.id, {
+    await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'counting:set',
       detail: `count = ${n}`,
@@ -1438,7 +1448,7 @@ router.post(
     const back = `/guilds/${req.guild.id}/m/leveling`;
     if (req.body.reset === 'true') {
       resetGuildLeveling(req.guild.id);
-      recordAudit(req.guild.id, {
+      await recordAudit(req.guild.id, {
         actor: moderatorDisplayName(req),
         action: 'leveling:reset',
         detail: 'all XP wiped',
@@ -1451,7 +1461,7 @@ router.post(
       return res.redirect(`${back}?msg=lvl-bad`);
     }
     setXp(req.guild.id, userId, xp);
-    recordAudit(req.guild.id, {
+    await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'leveling:setxp',
       detail: `${userId} → ${xp} XP`,
@@ -1507,12 +1517,15 @@ router.get('/:guildId/m/reminders/r/new', (req, res) => renderReminderBuilder(re
 // is enforced in the handler instead.
 const isRemId = (v) => /^\d+$/.test(v ?? '');
 
-router.get('/:guildId/m/reminders/r/:id', (req, res) => {
-  if (!isRemId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
-  const rec = getScheduled(req.guild.id, Number(req.params.id));
-  if (!rec) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
-  renderReminderBuilder(req, res, rec);
-});
+router.get(
+  '/:guildId/m/reminders/r/:id',
+  asyncHandler(async (req, res) => {
+    if (!isRemId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
+    const rec = await getScheduled(req.guild.id, Number(req.params.id));
+    if (!rec) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
+    renderReminderBuilder(req, res, rec);
+  })
+);
 
 router.post(
   '/:guildId/m/reminders/r/:id',
@@ -1521,7 +1534,7 @@ router.post(
     if (req.params.id !== 'new' && !isRemId(req.params.id)) {
       return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
     }
-    const existing = req.params.id === 'new' ? null : getScheduled(req.guild.id, Number(req.params.id));
+    const existing = req.params.id === 'new' ? null : await getScheduled(req.guild.id, Number(req.params.id));
     if (req.params.id !== 'new' && !existing) return res.redirect(`/guilds/${req.guild.id}/${REM_BASE}`);
     const back = `/guilds/${req.guild.id}/${REM_BASE}/r/${existing ? existing.id : 'new'}`;
 
@@ -1575,12 +1588,12 @@ router.post(
 
     let id;
     if (existing) {
-      updateReminder(req.guild.id, existing.id, data);
+      await updateReminder(req.guild.id, existing.id, data);
       id = existing.id;
     } else {
-      id = createReminder(req.guild.id, data);
+      id = await createReminder(req.guild.id, data);
     }
-    recordAudit(req.guild.id, {
+    await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:reminders',
       detail: `${existing ? 'updated' : 'created'} "${data.name}"`,
@@ -1589,16 +1602,22 @@ router.post(
   })
 );
 
-router.post('/:guildId/m/reminders/r/:id/delete', (req, res) => {
-  if (isRemId(req.params.id)) deleteScheduled(req.guild.id, Number(req.params.id));
-  res.redirect(`/guilds/${req.guild.id}/${REM_BASE}?msg=saved`);
-});
+router.post(
+  '/:guildId/m/reminders/r/:id/delete',
+  asyncHandler(async (req, res) => {
+    if (isRemId(req.params.id)) await deleteScheduled(req.guild.id, Number(req.params.id));
+    res.redirect(`/guilds/${req.guild.id}/${REM_BASE}?msg=saved`);
+  })
+);
 
-router.post('/:guildId/m/reminders/r/:id/toggle', (req, res) => {
-  const rec = isRemId(req.params.id) ? getScheduled(req.guild.id, Number(req.params.id)) : null;
-  if (rec) setScheduledEnabled(req.guild.id, rec.id, rec.enabled !== 1);
-  res.redirect(`/guilds/${req.guild.id}/${REM_BASE}?msg=saved`);
-});
+router.post(
+  '/:guildId/m/reminders/r/:id/toggle',
+  asyncHandler(async (req, res) => {
+    const rec = isRemId(req.params.id) ? await getScheduled(req.guild.id, Number(req.params.id)) : null;
+    if (rec) await setScheduledEnabled(req.guild.id, rec.id, rec.enabled !== 1);
+    res.redirect(`/guilds/${req.guild.id}/${REM_BASE}?msg=saved`);
+  })
+);
 
 // --- Channel cleanup builder -----------------------------------------
 
@@ -1672,7 +1691,7 @@ router.post(
     } else {
       id = await createCleanupSchedule(req.guild.id, data);
     }
-    recordAudit(req.guild.id, {
+    await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:channel-cleanup',
       detail: `${existing ? 'updated' : 'created'} schedule for #${
@@ -1752,68 +1771,74 @@ router.get('/:guildId/m/temp-voice/hub/:id', (req, res) => {
   renderTvBuilder(req, res, hub);
 });
 
-router.post('/:guildId/m/temp-voice/hub', (req, res) => {
-  const back = `/guilds/${req.guild.id}/m/temp-voice`;
-  const b = req.body;
-  if (!/^\d{17,20}$/.test(b.hubChannelId ?? '')) return res.redirect(`${back}?msg=badchannel`);
+router.post(
+  '/:guildId/m/temp-voice/hub',
+  asyncHandler(async (req, res) => {
+    const back = `/guilds/${req.guild.id}/m/temp-voice`;
+    const b = req.body;
+    if (!/^\d{17,20}$/.test(b.hubChannelId ?? '')) return res.redirect(`${back}?msg=badchannel`);
 
-  const prev = tvHubs(req.guild.id);
-  const id = /^\d+$/.test(b.id ?? '') ? b.id : String(Date.now());
-  const existing = prev.find((h) => h.id === id);
-  const hub = {
-    id,
-    hubChannelId: b.hubChannelId,
-    categoryId: b.categoryId ?? '',
-    nameTemplate: b.nameTemplate ?? '',
-    userLimit: b.userLimit,
-    bitrate: b.bitrate,
-    keepAliveMinutes: b.keepAliveMinutes,
-    ownershipLock: b.ownershipLock === 'on',
-    syncCategory: b.syncCategory === 'on',
-    syncChannel: b.syncChannel === 'on',
-    roleMode: b.roleMode === 'deny' ? 'deny' : 'allow',
-    roleList: [].concat(b.roleList ?? []),
-    useRolesForAccess: b.useRolesForAccess === 'on',
-    ignoredRoles: [].concat(b.ignoredRoles ?? []),
-    moderatorRoles: [].concat(b.moderatorRoles ?? []),
-    ownerPerms: {
-      manageChannels: b.op_manageChannels === 'on',
-      managePermissions: b.op_managePermissions === 'on',
-      prioritySpeaker: b.op_prioritySpeaker === 'on',
-      moveMembers: b.op_moveMembers === 'on',
-    },
-    textChannel: {
-      enabled: b.tc_enabled === 'on',
-      restrictCommands: b.tc_restrictCommands === 'on',
-      pinUsages: b.tc_pinUsages === 'on',
-      restrict: b.tc_restrict === 'on',
-    },
-  };
-  const next = existing ? prev.map((h) => (h.id === id ? hub : h)) : [...prev, hub];
-  setGuildModule(req.guild.id, 'temp-voice', {
-    enabled: true,
-    config: normaliseTempVoiceConfig({ hubs: next }),
-  });
-  recordAudit(req.guild.id, {
-    actor: moderatorDisplayName(req),
-    action: 'module:temp-voice',
-    detail: `${existing ? 'updated' : 'created'} a hub`,
-  });
-  res.redirect(`${back}?msg=saved`);
-});
+    const prev = tvHubs(req.guild.id);
+    const id = /^\d+$/.test(b.id ?? '') ? b.id : String(Date.now());
+    const existing = prev.find((h) => h.id === id);
+    const hub = {
+      id,
+      hubChannelId: b.hubChannelId,
+      categoryId: b.categoryId ?? '',
+      nameTemplate: b.nameTemplate ?? '',
+      userLimit: b.userLimit,
+      bitrate: b.bitrate,
+      keepAliveMinutes: b.keepAliveMinutes,
+      ownershipLock: b.ownershipLock === 'on',
+      syncCategory: b.syncCategory === 'on',
+      syncChannel: b.syncChannel === 'on',
+      roleMode: b.roleMode === 'deny' ? 'deny' : 'allow',
+      roleList: [].concat(b.roleList ?? []),
+      useRolesForAccess: b.useRolesForAccess === 'on',
+      ignoredRoles: [].concat(b.ignoredRoles ?? []),
+      moderatorRoles: [].concat(b.moderatorRoles ?? []),
+      ownerPerms: {
+        manageChannels: b.op_manageChannels === 'on',
+        managePermissions: b.op_managePermissions === 'on',
+        prioritySpeaker: b.op_prioritySpeaker === 'on',
+        moveMembers: b.op_moveMembers === 'on',
+      },
+      textChannel: {
+        enabled: b.tc_enabled === 'on',
+        restrictCommands: b.tc_restrictCommands === 'on',
+        pinUsages: b.tc_pinUsages === 'on',
+        restrict: b.tc_restrict === 'on',
+      },
+    };
+    const next = existing ? prev.map((h) => (h.id === id ? hub : h)) : [...prev, hub];
+    setGuildModule(req.guild.id, 'temp-voice', {
+      enabled: true,
+      config: normaliseTempVoiceConfig({ hubs: next }),
+    });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:temp-voice',
+      detail: `${existing ? 'updated' : 'created'} a hub`,
+    });
+    res.redirect(`${back}?msg=saved`);
+  })
+);
 
-router.post('/:guildId/m/temp-voice/hub/:id/delete', (req, res) => {
-  const prev = tvHubs(req.guild.id);
-  setGuildModule(req.guild.id, 'temp-voice', {
-    config: normaliseTempVoiceConfig({ hubs: prev.filter((h) => h.id !== req.params.id) }),
-  });
-  recordAudit(req.guild.id, {
-    actor: moderatorDisplayName(req),
-    action: 'module:temp-voice',
-    detail: 'deleted a hub',
-  });
-  res.redirect(`/guilds/${req.guild.id}/m/temp-voice?msg=saved`);
-});
+router.post(
+  '/:guildId/m/temp-voice/hub/:id/delete',
+  asyncHandler(async (req, res) => {
+    const prev = tvHubs(req.guild.id);
+    setGuildModule(req.guild.id, 'temp-voice', {
+      config: normaliseTempVoiceConfig({ hubs: prev.filter((h) => h.id !== req.params.id) }),
+    });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:temp-voice',
+      detail: 'deleted a hub',
+    });
+    res.redirect(`/guilds/${req.guild.id}/m/temp-voice?msg=saved`);
+  })
+);
 
 // --- Reaction-role builder (MEE6-style) ---------------------------------
 
@@ -1923,7 +1948,7 @@ router.post(
 
     const next = existing ? list.map((x) => (String(x.id) === id ? rm : x)) : [...list, rm];
     setGuildModule(guild.id, 'roles', { enabled: true, config: { ...cfg, reactionMessages: next } });
-    recordAudit(guild.id, {
+    await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:roles',
       detail: `${existing ? 'updated' : 'created'} reaction-role set`,
@@ -2008,61 +2033,64 @@ router.get('/:guildId/m/starboard/sb/:id', (req, res) => {
   renderSbBuilder(req, res, board);
 });
 
-router.post('/:guildId/m/starboard/sb', (req, res) => {
-  const back = `/guilds/${req.guild.id}/m/starboard`;
-  const b = req.body;
-  const channelId = /^\d{17,20}$/.test(b.channelId ?? '') ? b.channelId : '';
-  if (!channelId) return res.redirect(`${back}?msg=badchannel`);
+router.post(
+  '/:guildId/m/starboard/sb',
+  asyncHandler(async (req, res) => {
+    const back = `/guilds/${req.guild.id}/m/starboard`;
+    const b = req.body;
+    const channelId = /^\d{17,20}$/.test(b.channelId ?? '') ? b.channelId : '';
+    if (!channelId) return res.redirect(`${back}?msg=badchannel`);
 
-  const prev = normaliseStarboard(getGuildModule(req.guild.id, 'starboard').config);
-  const list = prev.boards;
-  const id = /^\d+$/.test(b.id ?? '') ? b.id : String(Date.now());
-  const existing = list.find((x) => x.id === id);
+    const prev = normaliseStarboard(getGuildModule(req.guild.id, 'starboard').config);
+    const list = prev.boards;
+    const id = /^\d+$/.test(b.id ?? '') ? b.id : String(Date.now());
+    const existing = list.find((x) => x.id === id);
 
-  const board = {
-    id,
-    name: String(b.name ?? 'Starboard').slice(0, 60),
-    channelId,
-    emojis: String(b.emojis ?? '⭐'),
-    threshold: b.threshold,
-    multiPerUser: b.multiPerUser === 'on',
-    autoReact: b.autoReact === 'on',
-    autoReactFirstOnly: b.autoReactFirstOnly === 'on',
-    removeOnUnstar: b.removeOnUnstar === 'on',
-    repostCooldown: b.repostCooldown === 'on',
-    removeOnDelete: b.removeOnDelete === 'on',
-    ignoreSelfStars: b.ignoreSelfStars === 'on',
-    removeSelfStarReactions: b.removeSelfStarReactions === 'on',
-    ignoreBotMessages: b.ignoreBotMessages === 'on',
-    removeBotReactions: b.removeBotReactions === 'on',
-    minAgeMinutes: b.minAgeMinutes,
-    maxAgeMinutes: b.maxAgeMinutes,
-    roleMode: b.roleMode === 'deny' ? 'deny' : 'allow',
-    roleList: [].concat(b.roleList ?? []).filter((r) => /^\d{17,20}$/.test(r)),
-    channelMode: b.channelMode === 'deny' ? 'deny' : 'allow',
-    channelList: [].concat(b.channelList ?? []).filter((c) => /^\d{17,20}$/.test(c)),
-  };
+    const board = {
+      id,
+      name: String(b.name ?? 'Starboard').slice(0, 60),
+      channelId,
+      emojis: String(b.emojis ?? '⭐'),
+      threshold: b.threshold,
+      multiPerUser: b.multiPerUser === 'on',
+      autoReact: b.autoReact === 'on',
+      autoReactFirstOnly: b.autoReactFirstOnly === 'on',
+      removeOnUnstar: b.removeOnUnstar === 'on',
+      repostCooldown: b.repostCooldown === 'on',
+      removeOnDelete: b.removeOnDelete === 'on',
+      ignoreSelfStars: b.ignoreSelfStars === 'on',
+      removeSelfStarReactions: b.removeSelfStarReactions === 'on',
+      ignoreBotMessages: b.ignoreBotMessages === 'on',
+      removeBotReactions: b.removeBotReactions === 'on',
+      minAgeMinutes: b.minAgeMinutes,
+      maxAgeMinutes: b.maxAgeMinutes,
+      roleMode: b.roleMode === 'deny' ? 'deny' : 'allow',
+      roleList: [].concat(b.roleList ?? []).filter((r) => /^\d{17,20}$/.test(r)),
+      channelMode: b.channelMode === 'deny' ? 'deny' : 'allow',
+      channelList: [].concat(b.channelList ?? []).filter((c) => /^\d{17,20}$/.test(c)),
+    };
 
-  const nextBoards = existing ? list.map((x) => (x.id === id ? board : x)) : [...list, board];
-  const config = normaliseStarboard({ boards: nextBoards });
-  setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
-  recordAudit(req.guild.id, {
-    actor: moderatorDisplayName(req),
-    action: 'module:starboard',
-    detail: `${existing ? 'updated' : 'created'} board "${board.name}"`,
-  });
+    const nextBoards = existing ? list.map((x) => (x.id === id ? board : x)) : [...list, board];
+    const config = normaliseStarboard({ boards: nextBoards });
+    setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:starboard',
+      detail: `${existing ? 'updated' : 'created'} board "${board.name}"`,
+    });
 
-  // Catch up on messages that already clear the (possibly just-lowered) bar.
-  const saved = config.boards.find((x) => x.id === id);
-  if (saved) {
-    rescanBoard(req.guild, saved)
-      .then((r) =>
-        log.info('starboard', `rescan ${req.guild.id}/${id}: scanned ${r.scanned}, posted ${r.posted}`)
-      )
-      .catch((err) => log.error('starboard', 'rescan failed:', err.message));
-  }
-  res.redirect(`${back}?msg=sb-saved`);
-});
+    // Catch up on messages that already clear the (possibly just-lowered) bar.
+    const saved = config.boards.find((x) => x.id === id);
+    if (saved) {
+      rescanBoard(req.guild, saved)
+        .then((r) =>
+          log.info('starboard', `rescan ${req.guild.id}/${id}: scanned ${r.scanned}, posted ${r.posted}`)
+        )
+        .catch((err) => log.error('starboard', 'rescan failed:', err.message));
+    }
+    res.redirect(`${back}?msg=sb-saved`);
+  })
+);
 
 router.post(
   '/:guildId/m/starboard/sb/:id/delete',
@@ -2071,7 +2099,7 @@ router.post(
     const config = normaliseStarboard({ boards: prev.boards.filter((b) => b.id !== req.params.id) });
     setGuildModule(req.guild.id, 'starboard', { config });
     await deleteBoardEntries(req.guild.id, req.params.id);
-    recordAudit(req.guild.id, {
+    await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:starboard',
       detail: 'deleted a board',
@@ -2160,7 +2188,7 @@ router.post(
     }
 
     setGuildModule(req.guild.id, 'custom-commands', { enabled: true, config });
-    recordAudit(req.guild.id, {
+    await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:custom-commands',
       detail: `${existing ? 'updated' : 'created'} /${name}`,
@@ -2180,7 +2208,7 @@ router.post(
       commands: prev.commands.filter((c) => c.id !== req.params.id),
     });
     setGuildModule(req.guild.id, 'custom-commands', { config });
-    recordAudit(req.guild.id, {
+    await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:custom-commands',
       detail: 'deleted a command',
@@ -2249,7 +2277,7 @@ router.post(
       }
     }
 
-    recordAudit(guild.id, {
+    await recordAudit(guild.id, {
       actor: moderatorTag,
       action: 'moderation:lockdown',
       detail: `locked ${locked} channel(s)`,
@@ -2290,7 +2318,7 @@ router.post(
       }
     }
 
-    recordAudit(guild.id, {
+    await recordAudit(guild.id, {
       actor: moderatorTag,
       action: 'moderation:lockdown',
       detail: `unlocked ${unlocked} channel(s)`,
@@ -2328,7 +2356,7 @@ router.post(
     if (lockPreflight(channel)) return res.redirect(`${back}?tab=infr&msg=perms`);
 
     await unlockChannel(channel, { moderatorTag });
-    recordAudit(guild.id, {
+    await recordAudit(guild.id, {
       actor: moderatorTag,
       action: 'moderation:unlock',
       detail: `#${channel.name}`,
@@ -2345,81 +2373,87 @@ router.post(
 
 // Bulk enable/disable from the overview "select mode". Client reloads on 200.
 // Registered before the `:moduleId` route so "bulk" isn't read as a module id.
-router.post('/:guildId/modules/bulk', (req, res) => {
-  const ids = [...new Set([].concat(req.body.ids ?? []))].filter((id) => getModule(id));
-  const enabled = Boolean(req.body.enabled);
-  for (const id of ids) {
-    setGuildModule(req.guild.id, id, { enabled });
-    if (id === 'custom-commands') {
-      syncGuildCustomCommands(req.guild).catch((err) =>
-        log.error('custom-commands', 'sync after bulk toggle failed:', err.message)
-      );
+router.post(
+  '/:guildId/modules/bulk',
+  asyncHandler(async (req, res) => {
+    const ids = [...new Set([].concat(req.body.ids ?? []))].filter((id) => getModule(id));
+    const enabled = Boolean(req.body.enabled);
+    for (const id of ids) {
+      setGuildModule(req.guild.id, id, { enabled });
+      if (id === 'custom-commands') {
+        syncGuildCustomCommands(req.guild).catch((err) =>
+          log.error('custom-commands', 'sync after bulk toggle failed:', err.message)
+        );
+      }
+      if (id === 'invite-tracker' && enabled) {
+        primeInviteCache(req.guild).catch((err) =>
+          log.error('invite-tracker', 'cache prime after bulk enable failed:', err.message)
+        );
+      }
     }
-    if (id === 'invite-tracker' && enabled) {
-      primeInviteCache(req.guild).catch((err) =>
-        log.error('invite-tracker', 'cache prime after bulk enable failed:', err.message)
-      );
-    }
-  }
-  recordAudit(req.guild.id, {
-    actor: moderatorDisplayName(req),
-    action: 'module:bulk',
-    detail: `${enabled ? 'enabled' : 'disabled'} ${ids.length} module(s)`,
-  });
-  res.json({ ok: true, count: ids.length, enabled });
-});
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:bulk',
+      detail: `${enabled ? 'enabled' : 'disabled'} ${ids.length} module(s)`,
+    });
+    res.json({ ok: true, count: ids.length, enabled });
+  })
+);
 
 // Toggle a module on/off. Driven by htmx (see _module-toggle.ejs / _plugin-cta.ejs);
 // still answers plain JSON for the no-JS / programmatic path.
-router.post('/:guildId/modules/:moduleId', (req, res) => {
-  const mod = getModule(req.params.moduleId);
-  if (!mod) return res.status(404).json({ error: 'Unknown module' });
-  const enabled = Boolean(req.body?.enabled);
-  setGuildModule(req.guild.id, mod.id, { enabled });
-  recordAudit(req.guild.id, {
-    actor: moderatorDisplayName(req),
-    action: `module:${mod.id}`,
-    detail: enabled ? 'enabled' : 'disabled',
-  });
-  if (mod.id === 'custom-commands') {
-    syncGuildCustomCommands(req.guild).catch((err) =>
-      log.error('custom-commands', 'sync after toggle failed:', err.message)
-    );
-  }
-  if (mod.id === 'invite-tracker' && enabled) {
-    primeInviteCache(req.guild).catch((err) =>
-      log.error('invite-tracker', 'cache prime after enable failed:', err.message)
-    );
-  }
-  if (mod.id === 'automod') {
-    // Re-assert native rules when turned back on; tear them down when off.
-    const cfg = normaliseAutomodConfig(getGuildModule(req.guild.id, 'automod').config);
-    const target = enabled ? cfg : { ...cfg, native: { ...cfg.native, enabled: false } };
-    syncGuildAutomod(req.guild, target).catch((err) =>
-      log.error('automod', 'native sync after toggle failed:', err.message)
-    );
-  }
-  if (req.get('HX-Request')) {
-    res.set(
-      'HX-Trigger',
-      JSON.stringify({
-        moduleToggled: { id: mod.id, enabled },
-        toast: { msg: `${mod.name} ${enabled ? 'enabled' : 'disabled'}`, kind: 'ok' },
-      })
-    );
-    // Two callers: the plugin-grid "Enable" button and the settings-page switch.
-    if (req.body.view === 'grid') {
-      return res.render('guild/_plugin-cta', { href: `/guilds/${req.guild.id}/m/${mod.id}` });
-    }
-    return res.render('guild/_module-toggle', {
-      guild: req.guild,
-      activeModule: mod,
-      moduleEnabled: enabled,
-      toggleDisabled: missingIntents(mod).length > 0,
+router.post(
+  '/:guildId/modules/:moduleId',
+  asyncHandler(async (req, res) => {
+    const mod = getModule(req.params.moduleId);
+    if (!mod) return res.status(404).json({ error: 'Unknown module' });
+    const enabled = Boolean(req.body?.enabled);
+    setGuildModule(req.guild.id, mod.id, { enabled });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: `module:${mod.id}`,
+      detail: enabled ? 'enabled' : 'disabled',
     });
-  }
-  res.json({ enabled });
-});
+    if (mod.id === 'custom-commands') {
+      syncGuildCustomCommands(req.guild).catch((err) =>
+        log.error('custom-commands', 'sync after toggle failed:', err.message)
+      );
+    }
+    if (mod.id === 'invite-tracker' && enabled) {
+      primeInviteCache(req.guild).catch((err) =>
+        log.error('invite-tracker', 'cache prime after enable failed:', err.message)
+      );
+    }
+    if (mod.id === 'automod') {
+      // Re-assert native rules when turned back on; tear them down when off.
+      const cfg = normaliseAutomodConfig(getGuildModule(req.guild.id, 'automod').config);
+      const target = enabled ? cfg : { ...cfg, native: { ...cfg.native, enabled: false } };
+      syncGuildAutomod(req.guild, target).catch((err) =>
+        log.error('automod', 'native sync after toggle failed:', err.message)
+      );
+    }
+    if (req.get('HX-Request')) {
+      res.set(
+        'HX-Trigger',
+        JSON.stringify({
+          moduleToggled: { id: mod.id, enabled },
+          toast: { msg: `${mod.name} ${enabled ? 'enabled' : 'disabled'}`, kind: 'ok' },
+        })
+      );
+      // Two callers: the plugin-grid "Enable" button and the settings-page switch.
+      if (req.body.view === 'grid') {
+        return res.render('guild/_plugin-cta', { href: `/guilds/${req.guild.id}/m/${mod.id}` });
+      }
+      return res.render('guild/_module-toggle', {
+        guild: req.guild,
+        activeModule: mod,
+        moduleEnabled: enabled,
+        toggleDisabled: missingIntents(mod).length > 0,
+      });
+    }
+    res.json({ enabled });
+  })
+);
 
 // Invite tracker: nudge a member's bonus invites from the dashboard.
 router.post(
@@ -2432,7 +2466,7 @@ router.post(
       return res.redirect(`${back}?msg=inv-bad`);
     }
     await setBonus(req.guild.id, userId, bonus);
-    recordAudit(req.guild.id, {
+    await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:invite-tracker',
       detail: `${userId} bonus → ${bonus}`,
@@ -2449,17 +2483,20 @@ router.get('/:guildId/export', (req, res) => {
 });
 
 // Config change history.
-router.get('/:guildId/audit', (req, res) => {
-  res.render('guild', {
-    ...baseContext(req.guild, 'audit'),
-    audit: listAudit(req.guild.id, 150).map((a) => ({
-      actor: a.actor,
-      action: a.action,
-      detail: a.detail,
-      ago: timeAgo(a.created_at),
-    })),
-  });
-});
+router.get(
+  '/:guildId/audit',
+  asyncHandler(async (req, res) => {
+    res.render('guild', {
+      ...baseContext(req.guild, 'audit'),
+      audit: (await listAudit(req.guild.id, 150)).map((a) => ({
+        actor: a.actor,
+        action: a.action,
+        detail: a.detail,
+        ago: timeAgo(a.created_at),
+      })),
+    });
+  })
+);
 
 // Server insights — activity charts from the guild_daily / guild_hourly rollups.
 router.get('/:guildId/insights', (req, res) => {
@@ -2527,7 +2564,7 @@ router.post(
     const channelId = String(req.body.modlogChannelId ?? '').trim();
     if (channelId === '') {
       await setModlogChannel(guild.id, null);
-      recordAudit(guild.id, {
+      await recordAudit(guild.id, {
         actor: moderatorDisplayName(req),
         action: 'settings:modlog',
         detail: 'disabled',
@@ -2542,7 +2579,7 @@ router.post(
       return res.redirect(`${back}?msg=perms`);
     }
     await setModlogChannel(guild.id, channelId);
-    recordAudit(guild.id, {
+    await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: 'settings:modlog',
       detail: `#${channel.name}`,
@@ -2578,7 +2615,7 @@ router.post(
       allowedChannels: toIds(req.body.channels),
       allowedRoles: toIds(req.body.roles),
     });
-    recordAudit(guild.id, {
+    await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: `command:/${command}`,
       detail: on ? 'updated limits' : 'disabled',
@@ -2655,7 +2692,7 @@ router.post(
       return res.redirect(`${back}&msg=warn-gone`);
     }
     editCaseReason(guild.id, n, reason);
-    recordAudit(guild.id, {
+    await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: 'moderation:case-reason',
       detail: `#${n}`,
@@ -2692,7 +2729,7 @@ router.post(
       )
       .setTimestamp(Date.now());
     await postModLog(guild, embed);
-    recordAudit(guild.id, {
+    await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: `moderation:case-${req.params.op}`,
       detail: `#${n}`,
@@ -2724,7 +2761,7 @@ router.post(
       )
       .setTimestamp(Date.now());
     await postModLog(guild, embed);
-    recordAudit(guild.id, {
+    await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: 'moderation:warn-clear',
       detail: `${n} for ${userId}`,

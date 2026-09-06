@@ -381,7 +381,7 @@ async function moduleLines(id, guild, cfg) {
       ];
     }
     case 'reminders': {
-      const jobs = listScheduled(guild.id);
+      const jobs = await listScheduled(guild.id);
       const active = jobs.filter((j) => j.enabled === 1).length;
       return [
         jobs.length

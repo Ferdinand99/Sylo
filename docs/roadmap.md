@@ -909,7 +909,46 @@ once spotted.
 
 16 of 32 files converted; same caveats as before still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (16 of 32 files)
+### Phase 15 shipped — two files (`src/db/scheduledMessages.js`, `src/db/audit.js`)
+
+`scheduledMessages.js` (reminders — 3 timestamp-heavy columns beyond the
+usual: `start_at`/`end_at`/`run_at`, all `BIGINT`, plus the existing
+`next_run_at`/`last_run_at`/`created_at`) paired with `audit.js` (the
+dashboard's config-change log) — independent of each other, but `audit.js`
+turned into the widest single-PR ripple so far: `recordAudit()` is called
+from 36 places across `src/web/routes/guilds.js`, 7 of which were still
+plain synchronous route handlers (`leaderboard/public`,
+`m/automod/immunity`, both `m/temp-voice/hub*` routes, `m/starboard/sb`, and
+both `modules/bulk` / `modules/:moduleId` toggle routes) and needed the
+usual `asyncHandler` wrap; the other 29 were already inside `asyncHandler`d
+routes, so `await` was the whole fix there. Mechanical, but re-grepped every
+one of the 36 call sites against the actual diff before calling this done —
+the `stats.js` lesson from Phase 13.
+
+Went looking for more low-hanging files and found three that turned out to
+already be fully async-safe with **zero changes needed**: `freeGames.js`,
+`twitchAlerts.js`, `youtubeAlerts.js` — each is a thin wrapper over
+`postedKeys.js` (converted back in an earlier phase) with no SQL of its own,
+so their own `async` exports were already just forwarding an already-async
+call. Worth remembering for future phases: not every file in the "not yet
+converted" list actually needs work — check whether it owns any SQL before
+assuming it does.
+
+**Deliberately deferred `src/db/exportConfig.js`, `src/db/dashboardStats.js`,
+and `src/db/modules.js` together** — `exportConfig.js` reads
+`guild_modules` directly (among other already-converted tables), and
+`dashboardStats.js` reads `guild_modules`, `infractions`, and `tickets`, none
+of which are bootstrapped in Postgres yet since `modules.js` isn't converted.
+`modules.js`'s `getGuildModule()`/`isModuleEnabled()` are called synchronously
+from what looks like the widest blast radius of any remaining file — nearly
+every module's event handler checks it before doing anything — so it gets
+its own dedicated phase (like `tempVoice.js`/`insights.js`), and
+`exportConfig.js`/`dashboardStats.js` wait for that to land first rather than
+shipping with a Postgres-path query against a table that doesn't exist yet.
+
+18 of 32 files converted; same caveats as before still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (18 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

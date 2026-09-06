@@ -1,5 +1,15 @@
 // Serialise a guild's configuration for a backup / "download my setup" export.
 // Deliberately excludes member data (warnings, leveling, tickets).
+//
+// NOT converted to the driver.js shim yet — deliberately deferred. It reads
+// guild_modules directly, which is owned by modules.js; that file isn't
+// converted yet (getGuildModule/isModuleEnabled are called synchronously from
+// a very large number of hot-path event handlers across the codebase, likely
+// the widest blast radius of any remaining src/db file, so it gets its own
+// dedicated phase rather than being rushed here). Converting exportConfig.js
+// before that would either skip Postgres test coverage for this file or ship
+// a query against a table that doesn't exist yet on that driver — see
+// docs/roadmap.md.
 import { db } from './index.js';
 
 const q = {
