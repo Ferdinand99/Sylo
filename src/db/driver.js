@@ -71,15 +71,15 @@ function toParams(translated, args) {
   return args;
 }
 
-function preparePg(sqlText) {
+function preparePg(sqlText, { returningId } = {}) {
   const translated = translate(sqlText);
-  const isInsert = /^\s*insert\s+into/i.test(sqlText);
-  const hasReturning = /\breturning\b/i.test(sqlText);
-  // Postgres has no lastInsertRowid; every surrogate-key table here uses `id`
-  // as its sole PK column (verified against every CREATE TABLE in
-  // src/db/index.js's MIGRATIONS), so a bare INSERT can safely get RETURNING
-  // id appended to recover it.
-  const runText = isInsert && !hasReturning ? `${translated.text} RETURNING id` : translated.text;
+  // Postgres has no lastInsertRowid. Only append RETURNING id when the caller
+  // explicitly says this statement's table has a surrogate `id` PK and its
+  // result is actually used — NOT inferred from "starts with INSERT INTO",
+  // since most tables here use a natural/composite key with no `id` column at
+  // all (e.g. `afk`'s `(guild_id, user_id)`) and would error on a blind
+  // RETURNING id append.
+  const runText = returningId ? `${translated.text} RETURNING id` : translated.text;
 
   async function exec(text, args) {
     const sql = await getSql();
@@ -93,7 +93,7 @@ function preparePg(sqlText) {
       const rows = await exec(runText, args);
       return {
         changes: rows.count,
-        lastInsertRowid: isInsert ? rows[0]?.id : undefined,
+        lastInsertRowid: returningId ? rows[0]?.id : undefined,
       };
     },
   };
@@ -101,9 +101,13 @@ function preparePg(sqlText) {
 
 /**
  * @param {string} sqlText
+ * @param {{ returningId?: boolean }} [opts] - Set `returningId: true` for an
+ *   INSERT whose table has a surrogate `id` PK and whose `.run().lastInsertRowid`
+ *   is actually read (Postgres has no native equivalent, so this appends
+ *   `RETURNING id` only on that driver).
  * @returns {{ get: (...args: any[]) => Promise<any>, all: (...args: any[]) => Promise<any[]>, run: (...args: any[]) => Promise<{changes: number, lastInsertRowid: number | undefined}> }}
  */
-export function prepare(sqlText) {
+export function prepare(sqlText, opts) {
   if (!config.databaseUrl) {
     const stmt = db.prepare(sqlText);
     return {
@@ -112,5 +116,5 @@ export function prepare(sqlText) {
       run: async (...args) => stmt.run(...args),
     };
   }
-  return preparePg(sqlText);
+  return preparePg(sqlText, opts);
 }

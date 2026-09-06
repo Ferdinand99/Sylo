@@ -32,12 +32,15 @@ const getStmt = prepare('SELECT * FROM channel_cleanup_schedules WHERE id = ? AN
 const dueCandidatesStmt = prepare(
   "SELECT * FROM channel_cleanup_schedules WHERE enabled = 1 AND COALESCE(last_run_date, '') != ?"
 );
-const insertStmt = prepare(`
+const insertStmt = prepare(
+  `
   INSERT INTO channel_cleanup_schedules
     (guild_id, channel_id, days, time_hhmm, max_age_hours, skip_pinned, enabled, created_at)
   VALUES
     (@guildId, @channelId, @days, @timeHhmm, @maxAgeHours, @skipPinned, 1, @createdAt)
-`);
+`,
+  { returningId: true }
+);
 const updateStmt = prepare(`
   UPDATE channel_cleanup_schedules SET
     channel_id = @channelId, days = @days, time_hhmm = @timeHhmm,
