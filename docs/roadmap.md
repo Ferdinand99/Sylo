@@ -637,7 +637,26 @@ file: same `DATABASE_PATH`-to-temp-file trick as `tmpDb.js`, but — unlike
 `tmpDb.js` — it deliberately leaves `DATABASE_URL` untouched, since these
 files need the real ambient value to decide whether to run for real.
 
-### 1 — Driver + async seam in `src/db/` — in progress (4 of 32 files)
+### Phase 6 shipped — fifth converted file (`src/db/leaderboardVanity.js`)
+
+Single-column `TEXT` PRIMARY KEY again, same shape as `appSettings`. Two
+things worth naming: `src/web/routes/leaderboard.js` uses a manual
+`try/catch` + `next(err)` pattern instead of the `asyncHandler` helper used
+in `guilds.js` — converted its route to match that file's *own* existing
+idiom rather than importing `asyncHandler` in inconsistently. Also caught
+(locally, before it ever reached CI) a self-inflicted test bug: unlike every
+other converted table, `leaderboard_vanity.slug` is **UNIQUE across every
+guild**, not scoped — the first draft of `leaderboardVanity.postgres.test.js`
+hardcoded the literal slug text, which collided with a leftover row when run
+twice against the same *persistent* Postgres (fine against CI's per-run
+ephemeral container, but broke immediately under local iteration against a
+long-lived dev container). Fixed by making the slug text itself unique per
+run, not just the guild ids — a reminder that "give ids a per-run stamp" isn't
+automatically enough when a table has a uniqueness constraint on a
+*different* column too. 5 of 32 files converted; same caveats as before
+still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (5 of 32 files)
 
 The big, mechanical piece; blocks #2 and #3.
 
