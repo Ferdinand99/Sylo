@@ -27,6 +27,7 @@ import {
 import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
 import { MODULES } from '../../modules/registry.js';
 import { timeAgo, formatUptime, formatBytes } from '../lib/format.js';
+import { log } from '../../lib/log.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../../../package.json');
@@ -90,7 +91,7 @@ router.get(
       .filter((m) => m.guilds > 0)
       .sort((a, b) => b.guilds - a.guilds);
 
-    const dbInfo = dbFileInfo();
+    const dbInfo = await dbFileInfo();
 
     res.render('health', {
       ready,
@@ -111,7 +112,8 @@ router.get(
       })),
       db: {
         size: formatBytes(dbInfo.size),
-        wal: formatBytes(dbInfo.wal),
+        wal: dbInfo.wal === null ? null : formatBytes(dbInfo.wal),
+        postgres: Boolean(config.databaseUrl),
         intervalHours: config.backupIntervalHours,
         retention: config.backupRetention,
         offsite: offsiteBackupStatus(),
@@ -133,14 +135,19 @@ router.get(
 );
 
 // Create a snapshot now.
-router.post('/backups', requireOwner, backupLimit, (req, res) => {
-  try {
-    const { name } = runBackup('manual');
-    res.redirect(`/health?backup=${encodeURIComponent(name)}`);
-  } catch (err) {
-    res.redirect(`/health?backuperr=${encodeURIComponent(err.message || 'backup failed')}`);
-  }
-});
+router.post(
+  '/backups',
+  requireOwner,
+  backupLimit,
+  asyncHandler(async (req, res) => {
+    try {
+      const { name } = await runBackup('manual');
+      res.redirect(`/health?backup=${encodeURIComponent(name)}`);
+    } catch (err) {
+      res.redirect(`/health?backuperr=${encodeURIComponent(err.message || 'backup failed')}`);
+    }
+  })
+);
 
 // Download a snapshot.
 router.get('/backups/:name', requireOwner, backupLimit, (req, res) => {
@@ -158,32 +165,40 @@ router.post('/backups/:name/delete', requireOwner, backupLimit, (req, res) => {
   res.redirect('/health');
 });
 
-// Import (upload) a .db file — stored as a snapshot the operator can then restore.
-// The browser posts the raw file as the request body (see the Health page script).
+// Import (upload) a backup file — stored as a snapshot the operator can then
+// restore. The browser posts the raw file as the request body (see the
+// Health page script).
 router.post(
   '/backups/import',
   requireOwner,
   backupLimit,
   raw({ type: () => true, limit: '128mb' }),
-  (req, res) => {
-    const result = importBuffer(req.body);
+  asyncHandler(async (req, res) => {
+    const result = await importBuffer(req.body);
     if (!result.ok) return res.redirect(`/health?importerr=${encodeURIComponent(result.error)}`);
     res.redirect(`/health?imported=${encodeURIComponent(result.name)}`);
-  }
+  })
 );
 
 // Restore the database from a snapshot, then exit so the process manager restarts
 // Sylo on the restored data. A "prerestore" snapshot is taken first.
-router.post('/backups/:name/restore', requireOwner, backupLimit, (req, res) => {
-  const name = req.params.name;
-  const full = resolveBackup(name);
-  if (!full) return res.redirect('/health?restoreerr=no%20such%20backup');
-  const check = inspectDbFile(full);
-  if (!check.ok) return res.redirect(`/health?restoreerr=${encodeURIComponent(check.error)}`);
+router.post(
+  '/backups/:name/restore',
+  requireOwner,
+  backupLimit,
+  asyncHandler(async (req, res) => {
+    const name = req.params.name;
+    const full = resolveBackup(name);
+    if (!full) return res.redirect('/health?restoreerr=no%20such%20backup');
+    const check = await inspectDbFile(full);
+    if (!check.ok) return res.redirect(`/health?restoreerr=${encodeURIComponent(check.error)}`);
 
-  res.render('restoring', { title: 'Sylo — Restoring', name });
-  // Let the response flush before restoreFromBackup() closes the DB and exits.
-  setTimeout(() => restoreFromBackup(name), 750);
-});
+    res.render('restoring', { title: 'Sylo — Restoring', name });
+    // Let the response flush before restoreFromBackup() closes the DB and exits.
+    setTimeout(() => {
+      restoreFromBackup(name).catch((err) => log.error('db', 'Restore failed:', err.message));
+    }, 750);
+  })
+);
 
 export default router;

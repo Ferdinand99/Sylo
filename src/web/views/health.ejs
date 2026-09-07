@@ -108,9 +108,11 @@
   <% if (importErr) { %><div class="banner banner-flash bad">Import rejected: <%= importErr %></div><% } %>
   <% if (restoreErr) { %><div class="banner banner-flash bad">Restore rejected: <%= restoreErr %></div><% } %>
   <p class="muted">
-    Database <strong><%= db.size %></strong> (WAL <%= db.wal %>).
+    Database <strong><%= db.size %></strong><% if (db.wal !== null) { %> (WAL <%= db.wal %>)<% } %>.
     <% if (db.intervalHours > 0) { %>
       Automatic snapshot every <%= db.intervalHours %>h, keeping the newest <%= db.retention %>.
+    <% } else if (db.postgres) { %>
+      Scheduled backups are off.
     <% } else { %>
       Scheduled backups are off — a snapshot is still taken before every schema migration.
     <% } %>
@@ -124,8 +126,8 @@
       <button type="submit">Create backup now</button>
     </form>
     <span id="db-import">
-      <input type="file" id="db-import-file" accept=".db,.sqlite,.sqlite3,application/octet-stream" />
-      <button type="button" id="db-import-btn" class="secondary" disabled>Import .db file…</button>
+      <input type="file" id="db-import-file" accept=".db,.sqlite,.sqlite3,.dump,application/octet-stream" />
+      <button type="button" id="db-import-btn" class="secondary" disabled>Import backup file…</button>
     </span>
   </div>
   <p class="muted small">Importing stores the file as a snapshot; you then <strong>Restore</strong> it.

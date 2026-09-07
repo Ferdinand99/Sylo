@@ -22,6 +22,7 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const ping = runtime.client?.ws?.ping;
+    const dbBytes = (await dbFileInfo()).size;
     const blocks = [
       gauge('sylo_up', '1 when the Discord gateway is connected, else 0', isDiscordReady() ? 1 : 0),
       gauge('sylo_uptime_seconds', 'Seconds since the process started', uptimeSeconds()),
@@ -31,7 +32,7 @@ router.get(
         'Discord gateway heartbeat latency in ms (-1 when unknown)',
         typeof ping === 'number' && ping >= 0 ? Math.round(ping) : -1
       ),
-      gauge('sylo_db_bytes', 'Size of the SQLite database file in bytes', dbFileInfo().size),
+      gauge('sylo_db_bytes', 'Size of the database in bytes', dbBytes),
       gauge(
         'sylo_errors_recorded',
         'Errors currently held in the /health ring buffer',
