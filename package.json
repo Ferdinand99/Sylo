@@ -11,6 +11,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "register": "node scripts/register-commands.js",
+    "migrate-to-postgres": "node scripts/migrate-sqlite-to-postgres.js",
     "test": "node --test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
