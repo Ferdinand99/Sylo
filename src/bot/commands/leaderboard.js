@@ -33,7 +33,7 @@ export async function execute(interaction) {
     });
   }
 
-  const rows = topMembers(interaction.guildId, 10);
+  const rows = await topMembers(interaction.guildId, 10);
   if (rows.length === 0) {
     return interaction.reply({ content: 'No one has earned any XP yet.', flags: MessageFlags.Ephemeral });
   }
@@ -61,7 +61,7 @@ export async function execute(interaction) {
     };
   });
 
-  const yourRank = memberRank(interaction.guildId, interaction.user.id);
+  const yourRank = await memberRank(interaction.guildId, interaction.user.id);
   const cfg = getGuildModule(interaction.guildId, 'leveling').config;
   const components =
     config.dashboardUrl && cfg.publicLeaderboard !== false

@@ -319,7 +319,7 @@ async function act(message, member, rule, label, cfg) {
 
   try {
     if (rule.action === 'warn') {
-      const { caseNumber, warnCount } = addCase({
+      const { caseNumber, warnCount } = await addCase({
         guildId: guild.id,
         userId: member.id,
         moderatorId: 'automod',

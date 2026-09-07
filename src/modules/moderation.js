@@ -83,7 +83,7 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
   if (!done) return;
 
   const caseAction = done.startsWith('timed out') ? 'timeout' : rule.action;
-  const { caseNumber } = addCase({
+  const { caseNumber } = await addCase({
     guildId: guild.id,
     userId: targetUser.id,
     moderatorId: 'auto',
@@ -121,8 +121,8 @@ async function settleTempBan(row) {
   if (!existing) return; // already unbanned (manually or by Discord)
 
   await guild.bans.remove(row.user_id, 'Temporary ban expired');
-  const clearedCase = deactivateLatest(row.guild_id, row.user_id, 'ban');
-  const { caseNumber } = addCase({
+  const clearedCase = await deactivateLatest(row.guild_id, row.user_id, 'ban');
+  const { caseNumber } = await addCase({
     guildId: row.guild_id,
     userId: row.user_id,
     moderatorId: 'auto',

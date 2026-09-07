@@ -41,8 +41,8 @@ export async function execute(interaction) {
   await interaction.deferReply();
   await target.timeout(null, `${interaction.user.tag}: ${reason}`);
 
-  const clearedCase = deactivateLatest(interaction.guild.id, target.id, 'timeout');
-  const { caseNumber } = addCase({
+  const clearedCase = await deactivateLatest(interaction.guild.id, target.id, 'timeout');
+  const { caseNumber } = await addCase({
     guildId: interaction.guild.id,
     userId: target.id,
     moderatorId: interaction.user.id,

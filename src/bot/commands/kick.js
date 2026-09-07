@@ -45,7 +45,7 @@ export async function execute(interaction) {
   });
   await target.kick(`${interaction.user.tag}: ${reason}`);
 
-  const { caseNumber } = addCase({
+  const { caseNumber } = await addCase({
     guildId: interaction.guild.id,
     userId: target.id,
     moderatorId: interaction.user.id,

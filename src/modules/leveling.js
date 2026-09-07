@@ -145,7 +145,7 @@ on('leveling', 'messageCreate', async (message, rawConfig, guildId) => {
     channelId: message.channelId,
   });
   const gain = Math.max(1, Math.round(base * config.xpRate * mult));
-  const { level, leveledUp } = addXp(guildId, message.author.id, gain, now);
+  const { level, leveledUp } = await addXp(guildId, message.author.id, gain, now);
   if (!leveledUp) return;
 
   await announceLevelUp(config, message.member, level, { message, channel: message.channelId });
@@ -202,7 +202,7 @@ async function settleVoiceSession(guildId, member, session, now, rawConfig, { ke
     channelId: session.channelId,
   });
   const gain = Math.max(1, Math.round(minutes * config.voiceXpPerMin * config.xpRate * mult));
-  const { level, leveledUp } = addXp(guildId, member.id, gain, now, { voice: true, minutes });
+  const { level, leveledUp } = await addXp(guildId, member.id, gain, now, { voice: true, minutes });
   if (!leveledUp) return;
 
   await announceLevelUp(config, member, level, { channel: config.announceChannel || null });
@@ -264,7 +264,7 @@ async function settleAllVoice(now = Date.now()) {
       }
     }
   }
-  prunePeriods();
+  await prunePeriods();
 }
 
 const voiceTimer = setInterval(() => {

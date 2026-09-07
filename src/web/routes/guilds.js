@@ -434,7 +434,7 @@ router.get(
   '/:guildId/moderation',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    const { rows: caseRows, total: caseTotal } = listGuildCases(guild.id, 200);
+    const { rows: caseRows, total: caseTotal } = await listGuildCases(guild.id, 200);
     const tags = await resolveUserTags(
       runtime.client,
       caseRows.flatMap((c) => [c.user_id, c.moderator_id]).filter((id) => /^\d+$/.test(id))
@@ -608,8 +608,11 @@ router.get(
     const period = ['week', 'month'].includes(req.query.period) ? req.query.period : 'all';
     const keys = periodKeys();
     const rows =
-      period === 'all' ? topMembers(guild.id, 10) : topMembersForPeriod(guild.id, keys[period], 10);
-    const total = period === 'all' ? memberCount(guild.id) : memberCountForPeriod(guild.id, keys[period]);
+      period === 'all'
+        ? await topMembers(guild.id, 10)
+        : await topMembersForPeriod(guild.id, keys[period], 10);
+    const total =
+      period === 'all' ? await memberCount(guild.id) : await memberCountForPeriod(guild.id, keys[period]);
     const tags = await resolveUserTags(
       runtime.client,
       rows.map((r) => r.user_id)
@@ -873,8 +876,8 @@ async function moduleViewLocals(mod, req, configOverride) {
     levelingBoard:
       mod.id === 'leveling'
         ? {
-            total: memberCount(req.guild.id),
-            rows: topMembers(req.guild.id, 15).map((r, i) => ({
+            total: await memberCount(req.guild.id),
+            rows: (await topMembers(req.guild.id, 15)).map((r, i) => ({
               rank: i + 1,
               userId: r.user_id,
               level: r.level,
@@ -1449,7 +1452,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const back = `/guilds/${req.guild.id}/m/leveling`;
     if (req.body.reset === 'true') {
-      resetGuildLeveling(req.guild.id);
+      await resetGuildLeveling(req.guild.id);
       await recordAudit(req.guild.id, {
         actor: moderatorDisplayName(req),
         action: 'leveling:reset',
@@ -1462,7 +1465,7 @@ router.post(
     if (!userId || !Number.isInteger(xp) || xp < 0 || xp > 1e12) {
       return res.redirect(`${back}?msg=lvl-bad`);
     }
-    setXp(req.guild.id, userId, xp);
+    await setXp(req.guild.id, userId, xp);
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'leveling:setxp',
@@ -2681,7 +2684,7 @@ router.post(
     if (!user) return res.redirect(`${back}?tab=infr&msg=baduser`);
     if (user.bot) return res.redirect(`${back}?tab=infr&msg=botuser`);
 
-    const { id, count } = addWarning({
+    const { id, count } = await addWarning({
       guildId: guild.id,
       userId: user.id,
       moderatorId: webModeratorId(req),
@@ -2723,10 +2726,10 @@ router.post(
     const reason = String(req.body.reason ?? '')
       .trim()
       .slice(0, 1000);
-    if (!Number.isInteger(n) || n < 1 || reason === '' || !getCase(guild.id, n)) {
+    if (!Number.isInteger(n) || n < 1 || reason === '' || !(await getCase(guild.id, n))) {
       return res.redirect(`${back}&msg=warn-gone`);
     }
-    editCaseReason(guild.id, n, reason);
+    await editCaseReason(guild.id, n, reason);
     await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: 'moderation:case-reason',
@@ -2746,9 +2749,9 @@ router.post(
     const n = Number(req.params.n);
     const active = req.params.op === 'restore';
 
-    const existing = Number.isInteger(n) ? getCase(guild.id, n) : null;
+    const existing = Number.isInteger(n) ? await getCase(guild.id, n) : null;
     if (!existing) return res.redirect(`${back}&msg=warn-gone`);
-    setCaseActive(guild.id, n, active);
+    await setCaseActive(guild.id, n, active);
 
     const target = await runtime.client.users.fetch(existing.user_id).catch(() => null);
     const embed = new EmbedBuilder()
@@ -2782,7 +2785,7 @@ router.post(
     const userId = parseUserId(req.body.userId);
     if (!userId) return res.redirect(`${back}&msg=baduser`);
 
-    const n = clearWarnings(guild.id, userId);
+    const n = await clearWarnings(guild.id, userId);
     if (n === 0) return res.redirect(`${back}&msg=warn-none`);
 
     const target = await runtime.client.users.fetch(userId).catch(() => null);
