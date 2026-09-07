@@ -68,6 +68,14 @@ jobs:
 
       - run: npm ci
 
+      # pg_dump/pg_restore for db/backupPostgres.js's tests — ubuntu-latest
+      # runners usually already carry postgresql-client, but installed
+      # explicitly so this doesn't silently start skipping coverage if that
+      # ever stops being true.
+      - name: Install postgresql-client
+        if: matrix.driver == 'postgres'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
       - name: Unit tests
         run: npm test
         env:

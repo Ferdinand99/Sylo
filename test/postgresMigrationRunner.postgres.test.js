@@ -25,11 +25,26 @@ test(
     // registered migration's version in lockstep with SCHEMA_VERSION (see
     // registerPostgresMigration's own doc comment), so on a fresh database
     // it would normally be <= the just-stamped baseline and get skipped.
-    // Numbering it one higher is what makes this test exercise the
+    // Numbering it higher is what makes this test exercise the
     // "still-pending migration, apply it" branch against a fresh database
     // in one process, without needing a second real Postgres connection to
     // pre-seed an older baseline first.
-    const pendingVersion = SCHEMA_VERSION + 1;
+    //
+    // Using a real-time-derived version rather than a fixed SCHEMA_VERSION +
+    // 1: this file's process only evaluates registered migrations once, at
+    // the very first query, against whatever this same database's
+    // schema_migrations already holds — including from an *earlier* run of
+    // this same test against a database nobody wiped in between (CI always
+    // starts a fresh Postgres service container per run, so this never
+    // happens there, but it's a real gap for local iteration). A fixed
+    // version number would already be "covered" the second time and
+    // silently get skipped. Seconds-since-epoch is always greater than both
+    // SCHEMA_VERSION and whatever a previous run recorded, since real time
+    // only moves forward — milliseconds would too, but schema_migrations.
+    // version is a plain Postgres INTEGER (32-bit; a real migration's
+    // version number is always a small sequential int, so BIGINT isn't
+    // worth it there) and a millisecond timestamp overflows that.
+    const pendingVersion = Math.floor(Date.now() / 1000);
     const marker = `migration_marker_${Date.now()}`;
     registerPostgresMigration(pendingVersion, `CREATE TABLE ${marker} (hit INTEGER NOT NULL DEFAULT 1);`);
 

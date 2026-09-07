@@ -24,7 +24,16 @@ WORKDIR /app
 # su-exec: drop from root to the unprivileged user after fixing volume ownership.
 # tzdata: makes the TZ env var actually resolve for local-time formatting.
 # font-dejavu: text for the /rank image card (@napi-rs/canvas has no bundled font).
-RUN apk add --no-cache su-exec tzdata font-dejavu \
+# postgresql18-client: pg_dump/pg_restore for the Postgres backup/restore path
+# (src/db/backupPostgres.js) — only exercised when DATABASE_URL is set, i.e.
+# never on a self-hosted SQLite deployment, but bundled unconditionally since
+# it's the same one image either way. Pinned to the *newest* supported major
+# (18) rather than matching the postgres:16-alpine service used in CI/local
+# dev on purpose: pg_dump/pg_restore only officially support dumping from a
+# server version <= the client's own version, not the other way around — a
+# v18 client covers any Postgres 18 and older server (16 included, what CI
+# actually runs against); a v16 client would refuse a v18 server.
+RUN apk add --no-cache su-exec tzdata font-dejavu postgresql18-client \
   && addgroup -S sylo && adduser -S sylo -G sylo \
   && mkdir -p /app/data && chown -R sylo:sylo /app
 

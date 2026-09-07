@@ -18,8 +18,8 @@ import {
   importBuffer,
 } from '../src/db/backup.js';
 
-test('runBackup writes a valid SQLite snapshot that listBackups reports', () => {
-  const { name, size } = runBackup('manual');
+test('runBackup writes a valid SQLite snapshot that listBackups reports', async () => {
+  const { name, size } = await runBackup('manual');
   assert.match(name, /^sylo-manual-[\d-]+\.db$/);
   assert.ok(size > 0);
 
@@ -31,9 +31,9 @@ test('runBackup writes a valid SQLite snapshot that listBackups reports', () => 
   assert.ok(listBackups().some((b) => b.name === name));
 });
 
-test('back-to-back backups do not collide', () => {
-  const a = runBackup('manual');
-  const b = runBackup('manual');
+test('back-to-back backups do not collide', async () => {
+  const a = await runBackup('manual');
+  const b = await runBackup('manual');
   assert.notEqual(a.name, b.name);
   assert.ok(existsSync(resolveBackup(a.name)));
   assert.ok(existsSync(resolveBackup(b.name)));
@@ -62,53 +62,53 @@ test('pruneBackups keeps only the newest config.backupRetention', () => {
   assert.equal(listBackups().length, config.backupRetention);
 });
 
-test('deleteBackup removes a named snapshot; bad names are a no-op', () => {
-  const { name } = runBackup('manual');
+test('deleteBackup removes a named snapshot; bad names are a no-op', async () => {
+  const { name } = await runBackup('manual');
   assert.equal(deleteBackup('../whatever'), false);
   assert.equal(deleteBackup(name), true);
   assert.equal(resolveBackup(name), null);
 });
 
-test('dbFileInfo reports the live database path and size', () => {
-  const info = dbFileInfo();
+test('dbFileInfo reports the live database path and size', async () => {
+  const info = await dbFileInfo();
   assert.equal(typeof info.path, 'string');
   assert.ok(info.size > 0);
   assert.ok(info.path.endsWith('test.db'));
   assert.ok(backupDir().endsWith('backups'));
 });
 
-test('inspectDbFile accepts a real snapshot and rejects junk / newer schema', () => {
-  const { name } = runBackup('manual');
+test('inspectDbFile accepts a real snapshot and rejects junk / newer schema', async () => {
+  const { name } = await runBackup('manual');
   const full = resolveBackup(name);
 
-  const good = inspectDbFile(full);
+  const good = await inspectDbFile(full);
   assert.equal(good.ok, true);
   assert.equal(good.integrity, 'ok');
   assert.ok(good.userVersion <= SCHEMA_VERSION);
 
   const junk = join(backupDir(), 'sylo-junk-2026-01-01-00-00-00-000.db');
   writeFileSync(junk, 'definitely not a database');
-  assert.equal(inspectDbFile(junk).ok, false);
+  assert.equal((await inspectDbFile(junk)).ok, false);
 
   // A snapshot from a hypothetical future schema must be refused.
   const future = new Database(full);
   future.pragma(`user_version = ${SCHEMA_VERSION + 5}`);
   future.close();
-  const ahead = inspectDbFile(full);
+  const ahead = await inspectDbFile(full);
   assert.equal(ahead.ok, false);
   assert.match(ahead.error, /newer/i);
 });
 
-test('importBuffer stores a valid upload as a snapshot and rejects bad input', () => {
-  const { name } = runBackup('manual');
+test('importBuffer stores a valid upload as a snapshot and rejects bad input', async () => {
+  const { name } = await runBackup('manual');
   const bytes = readFileSync(resolveBackup(name));
 
-  const ok = importBuffer(bytes);
+  const ok = await importBuffer(bytes);
   assert.equal(ok.ok, true);
   assert.match(ok.name, /^sylo-imported-[\d-]+\.db$/);
   assert.ok(existsSync(resolveBackup(ok.name)));
 
-  assert.equal(importBuffer(Buffer.from('nope')).ok, false);
-  assert.equal(importBuffer(Buffer.alloc(2000)).ok, false); // right size, wrong magic
-  assert.equal(importBuffer('not a buffer').ok, false);
+  assert.equal((await importBuffer(Buffer.from('nope'))).ok, false);
+  assert.equal((await importBuffer(Buffer.alloc(2000))).ok, false); // right size, wrong magic
+  assert.equal((await importBuffer('not a buffer')).ok, false);
 });

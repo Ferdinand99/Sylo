@@ -1405,25 +1405,77 @@ with `SCHEMA_VERSION`, so testing "still pending" against a fresh database
 needs one numbered artificially higher) and confirms it runs and gets
 recorded, while one at-or-below the baseline is correctly left alone.
 
-### 3 — Backup / restore redesign
+### 3 — Backup / restore redesign — done
 
-Depends on #1 (needs a working Postgres connection to dump from). This is a
-real redesign, not a driver swap.
+Shipped: `src/db/backup.js` now dispatches per operation — creating a new
+backup uses the *live* driver (`config.databaseUrl`); validating/restoring an
+*existing* file uses that file's own magic bytes (`SQLite format 3\0` vs.
+pg_dump's `PGDMP`), not the live driver — a backups folder can hold snapshots
+from a driver this deployment isn't running anymore (right after switching
+one over, say), and restoring one of those now fails with a clear "this is a
+Postgres dump; the server is running in SQLite mode" instead of a cryptic
+one. All the actual `pg_dump`/`pg_restore` machinery lives in the new
+`src/db/backupPostgres.js`, kept separate from `backup.js` so the SQLite
+path's own functions stay textually unchanged.
 
-- Today's `/health` backup/restore (`src/db/backup.js`) is built entirely
-  around "it's one file": `VACUUM INTO` for compacted snapshots, WAL
-  checkpoint/truncate, a SQLite magic-header check on import, and a self-serve
-  **Restore** button that `copyFileSync`s a snapshot over the live database and
-  exits so the process manager restarts. None of it maps to Postgres.
-- Replace with `pg_dump` / `pg_restore` (needs the Postgres client tools
-  bundled into the Docker image). The "click Restore on the Health page" UX
-  needs rethinking too — a `pg_restore` isn't a fast file copy the way
-  `copyFileSync` was; it likely needs to run out-of-band with a progress/done
-  state instead of blocking a request.
+- `pg_dump -Fc` (custom format — compressed, and restorable straight at a
+  live database via `pg_restore -d`, unlike a plain-text dump) replaces
+  `VACUUM INTO`; files land in the same backups directory with a `.dump`
+  extension instead of `.db`. No WAL/checkpoint step needed — `pg_dump` reads
+  a consistent MVCC snapshot without blocking concurrent writers, an
+  operational advantage SQLite's approach didn't have.
+- `pg_restore --clean --if-exists -d <url>` replaces the plain file copy.
+  Kept the exact same UX shape as SQLite's restore (validate → prerestore
+  snapshot → swap → `process.exit(0)` so the process manager restarts) rather
+  than building the out-of-band progress UI this note originally floated —
+  the existing flow already sends the response and shows a "Restoring…" page
+  *before* doing the slow part, so a longer `pg_restore` is already tolerated
+  today; worth revisiting only if real restore times prove that wrong.
+- `inspectDbFile()` validates a Postgres dump via `pg_restore --list` (parses
+  the archive's table of contents without touching the live database) — but
+  unlike SQLite's check, it can't also compare the dump's schema version
+  against `SCHEMA_VERSION`; pg_dump's table of contents doesn't carry that,
+  and there's no cheap way to extract it without restoring the dump
+  somewhere first. Accepted gap: a version mismatch surfaces as a
+  `pg_restore` error against the live schema instead of being caught
+  upfront.
+- `dbFileInfo()` (`/health`'s size line, `sylo_db_bytes` on `/metrics`) is
+  `async` now on both drivers — SQLite still stats the local file + WAL
+  sidecar; Postgres runs a real `pg_database_size()` query, since there's no
+  local file to stat (`path`/`wal` come back `null`, and the Health page
+  hides the "(WAL …)" clause rather than showing a misleading 0 B).
+- `postgresql18-client` is now in the runtime Docker image unconditionally —
+  the same one image serves both drivers, and self-hosted SQLite deployments
+  never touch the added binaries. Pinned to 18 (the newest major) rather
+  than matching `postgres:16-alpine` (the version CI/local dev test
+  against): `pg_dump`/`pg_restore` only officially support a client version
+  >= the server's, never the other way around, so an 18 client covers any
+  16-or-newer hosted instance, while a 16 client would refuse an 18 server.
+  CI's `postgres` matrix leg installs `postgresql-client` too, so
+  `pg_dump`/`pg_restore` are exercised for real there, not just in the
+  Docker image build.
+- Picking 18 surfaced a real cross-version quirk, caught by actually dumping
+  a v16 database with the v18 client and restoring it back into a fresh v16
+  database (not something CI's matched-version service container exercises
+  on its own): `pg_restore` 17+ opens its session with `SET
+  transaction_timeout = 0;`, a parameter a pre-17 server doesn't recognize —
+  logged as a non-fatal "errors ignored on restore: 1" but still exits 1,
+  even though the rest of the restore completed correctly. `pgRestore()`
+  tolerates *only* that specific stderr pattern now; anything else still
+  fails loudly. Worth remembering for any future pg_restore/pg_dump version
+  bump: check stderr on a genuinely older target, don't just trust the exit
+  code.
 - The off-site backup path (`src/db/offsiteBackup.js` — gzip + ship to WebDAV
-  or a Discord webhook) stays conceptually the same; it just ships whatever
-  `runBackup()` produces, so once #3 produces a Postgres dump instead of a
-  `.db` file, this piece mostly carries over unchanged.
+  or a Discord webhook) needed no changes at all, exactly as predicted here —
+  it just gzips and ships whatever `runBackup()` produces, `.dump` or `.db`.
+- `test/backup.postgres.test.js` proves a real `pg_dump`/`pg_restore`
+  round-trip, including an *actual* destructive restore. That test runs
+  against its own dedicated database (`sylo_test_backup_restore`, created on
+  first use), not the shared `sylo_test` every other `*.postgres.test.js`
+  file uses — `pg_restore --clean` drops and recreates everything the dump
+  knows about, so running it against the shared database would clobber
+  whatever any other concurrently-running test file had written since the
+  snapshot, depending purely on process scheduling.
 
 ### 4 — One-time SQLite → Postgres data migration tool
 
@@ -1495,12 +1547,13 @@ code path, not automatic, and not a live/continuous sync):
    opt-in via `DATABASE_URL`. Blocks everything else. **Done.**
 2. **#1 driver + async seam** — the big one. **Done — 30 of 30 files.**
 3. **#2 migration runner** — small, land alongside #1. **Done.**
-4. **#3 backup/restore redesign** — depends on #1 (done).
+4. **#3 backup/restore redesign** — depends on #1 (done). **Done.**
 5. **#4 data migration tool** — depends on #1 (done) and #2 (done); needed
    before `DATABASE_URL` can be turned on for the *existing* hosted instance
-   without losing its current data. Independent of #3.
+   without losing its current data. The only piece left.
 6. Ship behind `DATABASE_URL` unset by default, so every self-hosted
-   deployment sees no change at all.
+   deployment sees no change at all. Already true — self-hosted deployments
+   have seen zero behavior change through all of #0-#3.
 
 ---
 
