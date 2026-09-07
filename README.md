@@ -52,6 +52,9 @@ giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS
 - **[docs/self-hosting.md](docs/self-hosting.md)** — install, environment
   variables, reverse proxy, Docker, Unraid, backups, upgrades and rollback,
   troubleshooting.
+- **[docs/postgres.md](docs/postgres.md)** — optional Postgres backend for
+  hosted-scale deployments, and how to move an existing SQLite install over
+  without losing data.
 - **[Roadmap](https://roadmap.sylobot.com/roadmap)** — what's planned and what's
   shipped; suggest features and vote.
 - **[Discord](https://discord.gg/GAzR9k5hhS)** — the community server: support,

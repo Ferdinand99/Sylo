@@ -5,7 +5,10 @@ proxy, upgrades and rollback, and a troubleshooting table. For what each feature
 does, see [`docs/modules/`](modules/README.md).
 
 Sylo is a single Node 22 process — the Discord bot and the web dashboard in one.
-No build step. All state is one SQLite file under a mounted data directory.
+No build step. All state is one SQLite file under a mounted data directory by
+default — that's the right choice for nearly everyone; see
+[docs/postgres.md](postgres.md) if you're running at hosted scale and want
+the optional Postgres backend instead.
 
 - [Quick start](#quick-start)
 - [Environment variables](#environment-variables)
@@ -71,6 +74,7 @@ Only `DISCORD_TOKEN` and `DISCORD_CLIENT_ID` are required.
 | `GAMETOOLS_API_BASE`      | `https://api.gametools.network` | Stats API base URL |
 | `STATS_CACHE_TTL_MINUTES` | `5`                             | How long stats lookups are cached |
 | `DATABASE_PATH`           | `./data/sylo.db`                | SQLite file path |
+| `DATABASE_URL`            | —                               | Optional: a `postgres://` URL to use Postgres instead of SQLite. Hosted-scale deployments only — see [docs/postgres.md](postgres.md). Unset (default) means nothing about the setup below changes. |
 | `BACKUP_INTERVAL_HOURS`   | `24`                            | Scheduled DB snapshot interval; `0` disables it (pre-migration + manual still run) |
 | `BACKUP_RETENTION`        | `14`                            | How many DB snapshots to keep in `<data>/backups` |
 | `BACKUP_DIR`              | `<db dir>/backups`              | Where DB snapshots are written |
@@ -265,7 +269,10 @@ silent corruption.
 
 ## Backups
 
-All state is one SQLite file (`data/sylo.db` + `-wal` / `-shm` sidecars).
+All state is one SQLite file (`data/sylo.db` + `-wal` / `-shm` sidecars) —
+this section assumes that default setup. Running with `DATABASE_URL` set
+instead? See [docs/postgres.md](postgres.md#backups-and-restore-on-postgres)
+— the same buttons and flow, `pg_dump`/`pg_restore` under the hood.
 
 **Automatic snapshots** are written to `data/backups/`: one before any schema
 migration, one shortly after start, and one every `BACKUP_INTERVAL_HOURS`
