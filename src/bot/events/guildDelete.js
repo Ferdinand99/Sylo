@@ -6,11 +6,11 @@ import { log } from '../../lib/log.js';
 export const name = Events.GuildDelete;
 
 /** @param {import('discord.js').Guild} guild */
-export function execute(guild) {
+export async function execute(guild) {
   // GuildDelete also fires during a Discord outage; don't wipe data then.
   if (guild.available === false) return;
   try {
-    purgeGuild(guild.id);
+    await purgeGuild(guild.id);
     log.info('bot', `Left guild ${guild.id} (${guild.name ?? 'unknown'}) — purged stored data`);
   } catch (err) {
     log.error('bot', `Failed to purge data for guild ${guild.id}:`, err.message);

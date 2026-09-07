@@ -35,7 +35,7 @@ export async function execute(interaction) {
     });
   }
 
-  const r = forgetUser(interaction.guildId, interaction.user.id);
+  const r = await forgetUser(interaction.guildId, interaction.user.id);
   const embed = new EmbedBuilder()
     .setColor(0x58d68d)
     .setTitle('Your data was deleted')

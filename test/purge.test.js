@@ -65,11 +65,11 @@ function seed(guildId, userId) {
 const countFor = (table, guildId) =>
   db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE guild_id = ?`).get(guildId).n;
 
-test('purgeGuild removes every guild-scoped row and leaves other guilds alone', () => {
+test('purgeGuild removes every guild-scoped row and leaves other guilds alone', async () => {
   seed(G, U);
   seed(OTHER, U);
 
-  purgeGuild(G);
+  await purgeGuild(G);
 
   for (const t of [
     'guild_settings',
@@ -104,7 +104,7 @@ test('purgeGuild removes every guild-scoped row and leaves other guilds alone', 
   assert.equal(countFor('afk', OTHER), 1, 'other guild afk untouched');
 });
 
-test('forgetUser deletes only that member’s data in that guild', () => {
+test('forgetUser deletes only that member’s data in that guild', async () => {
   db.exec(
     'DELETE FROM leveling; DELETE FROM infractions; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM birthdays; DELETE FROM giveaways; DELETE FROM giveaway_entries;'
   );
@@ -126,7 +126,7 @@ test('forgetUser deletes only that member’s data in that guild', () => {
     Date.now()
   );
 
-  const result = forgetUser(G, U);
+  const result = await forgetUser(G, U);
 
   assert.equal(result.warnings, 1);
   assert.equal(result.leveling, 1);
@@ -157,13 +157,13 @@ test('forgetUser deletes only that member’s data in that guild', () => {
   );
 });
 
-test('describeUserData counts what forgetUser would remove, then reads zero after', () => {
+test('describeUserData counts what forgetUser would remove, then reads zero after', async () => {
   db.exec(
     'DELETE FROM leveling; DELETE FROM infractions; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM birthdays; DELETE FROM giveaways; DELETE FROM giveaway_entries;'
   );
   seed(G, U);
 
-  const before = describeUserData(G, U);
+  const before = await describeUserData(G, U);
   const byKey = Object.fromEntries(before.items.map((i) => [i.key, i.count]));
   assert.equal(byKey.warnings, 1);
   assert.equal(byKey.leveling, 1);
@@ -175,20 +175,18 @@ test('describeUserData counts what forgetUser would remove, then reads zero afte
   assert.equal(byKey.countingLast, 1);
   assert.ok(before.total >= 8);
 
-  forgetUser(G, U);
+  await forgetUser(G, U);
 
-  assert.equal(describeUserData(G, U).total, 0, 'nothing left after forgetUser');
+  assert.equal((await describeUserData(G, U)).total, 0, 'nothing left after forgetUser');
 });
 
-test('exportUserData exposes exactly the sources describeUserData counts', () => {
-  const exportKeys = Object.keys(exportUserData(G, U).data).sort();
-  const describeKeys = describeUserData(G, U)
-    .items.map((i) => i.key)
-    .sort();
+test('exportUserData exposes exactly the sources describeUserData counts', async () => {
+  const exportKeys = Object.keys((await exportUserData(G, U)).data).sort();
+  const describeKeys = (await describeUserData(G, U)).items.map((i) => i.key).sort();
   assert.deepEqual(exportKeys, describeKeys);
 });
 
-test('exportUserData returns the rows, then reads empty after forgetUser', () => {
+test('exportUserData returns the rows, then reads empty after forgetUser', async () => {
   db.exec(
     'DELETE FROM leveling; DELETE FROM leveling_periods; DELETE FROM infractions; DELETE FROM tickets; DELETE FROM ticket_messages; DELETE FROM counting; DELETE FROM afk; DELETE FROM birthdays; DELETE FROM giveaways; DELETE FROM giveaway_entries; DELETE FROM appeals; DELETE FROM invite_counts;'
   );
@@ -207,7 +205,7 @@ test('exportUserData returns the rows, then reads empty after forgetUser', () =>
     0
   );
 
-  const dump = exportUserData(G, U);
+  const dump = await exportUserData(G, U);
   assert.equal(dump.guildId, G);
   assert.equal(dump.userId, U);
   assert.ok(dump.total >= 8, `expected several rows, got ${dump.total}`);
@@ -223,6 +221,6 @@ test('exportUserData returns the rows, then reads empty after forgetUser', () =>
     'summary pairs a label with each count'
   );
 
-  forgetUser(G, U);
-  assert.equal(exportUserData(G, U).total, 0, 'nothing left after forgetUser');
+  await forgetUser(G, U);
+  assert.equal((await exportUserData(G, U)).total, 0, 'nothing left after forgetUser');
 });
