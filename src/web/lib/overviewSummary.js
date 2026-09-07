@@ -337,7 +337,7 @@ async function moduleLines(id, guild, cfg) {
       ];
     }
     case 'insights': {
-      const week = dailySeries(guild.id, 7);
+      const week = await dailySeries(guild.id, 7);
       const msgs = week.reduce((t, d) => t + d.messages, 0);
       const net = week.reduce((t, d) => t + d.joins - d.leaves, 0);
       const voiceH = Math.round(week.reduce((t, d) => t + d.voiceMinutes, 0) / 60);

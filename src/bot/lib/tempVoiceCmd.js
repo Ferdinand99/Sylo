@@ -20,7 +20,7 @@ export async function resolveContext(interaction) {
   const vcId = member?.voice?.channelId;
   if (!vcId) return { error: 'Join your temporary voice channel first.' };
 
-  const row = getTempChannel(vcId);
+  const row = await getTempChannel(vcId);
   if (!row) return { error: 'This only works in a temporary voice channel.' };
 
   const channel = interaction.guild.channels.cache.get(vcId);

@@ -1265,7 +1265,65 @@ around locally in purge.js:**
 28 of 30 files converted; same caveats as before still apply. Remaining:
 `tempVoice.js` and `insights.js`.
 
-### 1 — Driver + async seam in `src/db/` — in progress (28 of 30 files)
+### Phase 23 shipped — `src/db/tempVoice.js` and `src/db/insights.js`
+
+The last two files — every `src/db/*.js` file now runs through the shared
+driver. Both bootstrap blocks that `purge.js` was temporarily carrying for
+these two tables (added in Phase 22, specifically flagged there as "drop once
+converted") moved back to their real owning files, and `purge.js`'s
+side-effect-import list picked up both files in their place — no functional
+change to `purge.js`, just where the DDL text lives.
+
+Neither file used `db.transaction()`, so no redesign needed there — but going
+async surfaced a real concurrency gap in `src/modules/insights.js` (not
+`src/db/insights.js` itself) worth detailing: `flushSlot()` reads a guild's
+buffered counters, awaits `accrueDaily`/`accrueHourly`, then resets them —
+and once that middle step is a real (if normally fast) network round trip
+instead of a synchronous write, two flushes for the *same* guild can now
+overlap in time. The periodic 10-minute `flushAll()` tick and a dashboard
+"Refresh now" click (`flushGuild`) racing for the same guild would previously
+have been impossible (JS never yielded between them), but now genuinely could
+send that guild's buffered counters to the DB twice. Fixed with a small
+per-guild in-flight `Set` — a second call for a guild already mid-flush is a
+no-op, not a double-send; nothing is lost, it's just picked up by the next
+flush. Also switched the post-flush reset from a hard `= 0` to subtracting
+the exact amount just flushed (matching the existing `voiceMinutes -=` carry
+pattern already in that function) so an event landing in the await window
+isn't wiped by the reset that follows — done for the scalar counters
+(messages/joins/leaves) where it's a one-line change; left as a hard clear
+for the Map/Set breakdowns (per-channel counts, active-member sets), which
+are cosmetic on an already-approximate rollup and self-correct next flush —
+not worth a general Map/Set diff for that narrow a window.
+
+**A genuinely new cross-dialect gotcha, not seen in 22 prior conversions**:
+`guild_daily`/`guild_hourly`'s upserts used SQLite's multi-argument scalar
+`MAX(a, b)` to track running peaks (`active_members`, `voice_peak`, …).
+Postgres's `MAX()` is aggregate-only — no two-argument scalar form exists —
+so this 42883'd immediately against real Postgres ("function max(integer,
+integer) does not exist"). `GREATEST(a, b)` is Postgres's equivalent, but
+isn't valid SQLite, and this codebase's driver shim translates placeholders
+only, not function names — so both dialects run the exact same SQL text.
+Fixed portably with `CASE WHEN a > b THEN a ELSE b END`, which both drivers
+understand identically. Worth adding to the running per-file gotcha
+checklist: **`MAX`/`MIN` with 2+ scalar arguments doesn't exist on Postgres —
+use a portable `CASE WHEN` instead of reaching for `GREATEST`/`LEAST`.**
+
+New `test/tempVoice.postgres.test.js` and `test/insights.postgres.test.js`
+caught both the `MAX()` gotcha and a test-authoring bug of the usual kind
+(a fixed, non-namespaced `HUB` id colliding with leftover rows across
+manual reruns against the same un-wiped local Postgres — fixed by
+namespacing it per test run, same lesson as Phase 19's leveling.js expected
+values). 5 fresh-schema-wipe reruns clean after both fixes.
+
+30 of 30 files converted — every `src/db/*.js` file now goes through
+`driver.js`. **#1 (driver + async seam) is done.** `DATABASE_URL` can be
+turned on for real hosted use as far as the file-conversion line is
+concerned — #2 (a real `schema_migrations`-tracked bootstrap, replacing the
+current "run every registered DDL block once, guarded by an advisory lock"
+approach) and #3 (Postgres-native backup/restore) are still ahead before that
+caveat from the top of this section can be dropped for good.
+
+### 1 — Driver + async seam in `src/db/` — done (30 of 30 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

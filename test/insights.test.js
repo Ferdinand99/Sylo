@@ -21,9 +21,9 @@ const G = '900000000000000001';
 
 // --- db layer ------------------------------------------------------------
 
-test('accrueDaily: adds counters, MAXes the *_members / peak, merges both maps', () => {
+test('accrueDaily: adds counters, MAXes the *_members / peak, merges both maps', async () => {
   const day = utcDay();
-  accrueDaily(G, day, {
+  await accrueDaily(G, day, {
     joins: 2,
     leaves: 1,
     messages: 10,
@@ -34,7 +34,7 @@ test('accrueDaily: adds counters, MAXes the *_members / peak, merges both maps',
     channels: { c1: 7, c2: 3 },
     voiceChannels: { v1: 20 },
   });
-  accrueDaily(G, day, {
+  await accrueDaily(G, day, {
     joins: 1,
     messages: 5,
     activeCount: 3,
@@ -56,8 +56,8 @@ test('accrueDaily: adds counters, MAXes the *_members / peak, merges both maps',
   assert.deepEqual(JSON.parse(row.voice_channels), { v1: 30, v2: 4 });
 });
 
-test('dailySeries: continuous oldest-first window, zero-filled, carries voice fields', () => {
-  const s = dailySeries(G, 7);
+test('dailySeries: continuous oldest-first window, zero-filled, carries voice fields', async () => {
+  const s = await dailySeries(G, 7);
   assert.equal(s.length, 7);
   assert.equal(s[6].label, utcDay());
   assert.ok(s[0].label < s[6].label);
@@ -67,11 +67,11 @@ test('dailySeries: continuous oldest-first window, zero-filled, carries voice fi
   assert.equal(s[6].voicePeak, 5);
 });
 
-test('accrueHourly + hourlySeries: per-hour buckets', () => {
+test('accrueHourly + hourlySeries: per-hour buckets', async () => {
   const h = utcHour();
-  accrueHourly(G, h, { messages: 8, voiceMinutes: 12, voiceActiveCount: 2 });
-  accrueHourly(G, h, { messages: 2 });
-  const s = hourlySeries(G, 24);
+  await accrueHourly(G, h, { messages: 8, voiceMinutes: 12, voiceActiveCount: 2 });
+  await accrueHourly(G, h, { messages: 2 });
+  const s = await hourlySeries(G, 24);
   assert.equal(s.length, 24);
   assert.equal(s[23].label, h);
   assert.equal(s[23].messages, 10);
@@ -79,14 +79,14 @@ test('accrueHourly + hourlySeries: per-hour buckets', () => {
   assert.equal(s[0].messages, 0);
 });
 
-test('topChannels / topVoiceChannels: merged, sorted desc, limited', () => {
+test('topChannels / topVoiceChannels: merged, sorted desc, limited', async () => {
   const earlier = utcDay(Date.now() - 2 * 86_400_000);
-  accrueDaily(G, earlier, { channels: { c2: 100 }, voiceChannels: { v2: 500 } });
+  await accrueDaily(G, earlier, { channels: { c2: 100 }, voiceChannels: { v2: 500 } });
   assert.deepEqual(
-    topChannels(G, 30, 2).map((t) => t.channelId),
+    (await topChannels(G, 30, 2)).map((t) => t.channelId),
     ['c2', 'c1'] // c2: 3+100, c1: 9
   );
-  const tv = topVoiceChannels(G, 30, 2);
+  const tv = await topVoiceChannels(G, 30, 2);
   assert.deepEqual(
     tv.map((t) => t.channelId),
     ['v2', 'v1'] // v2: 4+500, v1: 30
@@ -94,31 +94,31 @@ test('topChannels / topVoiceChannels: merged, sorted desc, limited', () => {
   assert.equal(tv[0].minutes, 504);
 });
 
-test('pruneInsights: drops old daily AND hourly rows', () => {
+test('pruneInsights: drops old daily AND hourly rows', async () => {
   db.prepare('INSERT INTO guild_daily (guild_id, day, messages) VALUES (?, ?, ?)').run(G, '2020-01-01', 9);
   db.prepare('INSERT INTO guild_hourly (guild_id, hour, messages) VALUES (?, ?, ?)').run(
     G,
     '2020-01-01T05',
     9
   );
-  pruneInsights(180, 72);
+  await pruneInsights(180, 72);
   assert.equal(db.prepare("SELECT 1 FROM guild_daily WHERE day = '2020-01-01'").get(), undefined);
   assert.equal(db.prepare("SELECT 1 FROM guild_hourly WHERE hour = '2020-01-01T05'").get(), undefined);
 });
 
 // --- module counter buffer --------------------------------------------------
 
-test('module: messageCreate accrues, flush persists to daily + hourly, resets deltas', () => {
+test('module: messageCreate accrues, flush persists to daily + hourly, resets deltas', async () => {
   _internals.buf.clear();
   const G2 = '900000000000000002';
-  const s = _internals.slot(G2);
+  const s = await _internals.slot(G2);
   s.messages = 4;
   s.joins = 1;
   s.channels.set('chanA', 4);
   s.dayActives.add('u1').add('u2');
   s.hourActives.add('u1');
 
-  _internals.flushSlot(G2, s);
+  await _internals.flushSlot(G2, s);
 
   const day = db.prepare('SELECT * FROM guild_daily WHERE guild_id = ? AND day = ?').get(G2, utcDay());
   assert.equal(day.messages, 4);
@@ -153,7 +153,7 @@ test('module: voiceStateUpdate tracks minutes, settled on flush and on leave', a
 
   // pretend 10 minutes passed, then flush
   s.voiceStart.get('v-user').at = now - 10 * 60_000;
-  _internals.flushSlot(GV, s);
+  await _internals.flushSlot(GV, s);
   assert.ok(voiceMinsOf() >= 9 && voiceMinsOf() <= 11, `after 10m: ${voiceMinsOf()}`);
   const row = db.prepare('SELECT * FROM guild_daily WHERE guild_id = ? AND day = ?').get(GV, utcDay());
   assert.equal(row.voice_active_members, 1);
@@ -163,7 +163,7 @@ test('module: voiceStateUpdate tracks minutes, settled on flush and on leave', a
   s.voiceStart.get('v-user').at = now - 5 * 60_000;
   await dispatch('voiceStateUpdate', GV, { old: vs('vc1'), new: vs(null) });
   assert.equal(s.voiceStart.has('v-user'), false);
-  _internals.flushSlot(GV, s);
+  await _internals.flushSlot(GV, s);
   assert.ok(voiceMinsOf() >= 14 && voiceMinsOf() <= 16, `after +5m leave: ${voiceMinsOf()}`);
 });
 
@@ -173,7 +173,7 @@ test('module: a temp voice channel is bucketed by its captured name, not its id'
   const GT = '900000000000000006';
   const SPAWN = '910000000000000002';
   await setGuildModule(GT, 'insights', { enabled: true });
-  addTempChannel({
+  await addTempChannel({
     channelId: SPAWN,
     guildId: GT,
     hubId: '910000000000000001',
@@ -195,30 +195,44 @@ test('module: a temp voice channel is bucketed by its captured name, not its id'
   assert.equal(s.voiceChannels.has(SPAWN), false);
 });
 
-test('flushGuild: writes one guild on demand, no-op for an unbuffered guild', () => {
+test('flushGuild: writes one guild on demand, no-op for an unbuffered guild', async () => {
   _internals.buf.clear();
   const GF = '900000000000000005';
-  const s = _internals.slot(GF);
+  const s = await _internals.slot(GF);
   s.messages = 9;
   s.dayActives.add('u1');
 
-  flushGuild(GF);
+  await flushGuild(GF);
   const row = db.prepare('SELECT messages FROM guild_daily WHERE guild_id = ? AND day = ?').get(GF, utcDay());
   assert.equal(row.messages, 9);
   assert.equal(s.messages, 0); // flushed
 
-  assert.doesNotThrow(() => flushGuild('900000000000000099')); // never buffered
+  await assert.doesNotReject(() => flushGuild('900000000000000099')); // never buffered
 });
 
-test('module: a day roll flushes the old slot and carries open voice sessions', () => {
+test('flushSlot: a second concurrent call for the same guild is a no-op, not a double-send', async () => {
+  _internals.buf.clear();
+  const GC = '900000000000000007';
+  const s = await _internals.slot(GC);
+  s.messages = 5;
+
+  const first = _internals.flushSlot(GC, s);
+  const second = _internals.flushSlot(GC, s); // starts while `first` is still in flight
+  await Promise.all([first, second]);
+
+  const row = db.prepare('SELECT messages FROM guild_daily WHERE guild_id = ? AND day = ?').get(GC, utcDay());
+  assert.equal(row.messages, 5, 'flushed once, not twice');
+});
+
+test('module: a day roll flushes the old slot and carries open voice sessions', async () => {
   _internals.buf.clear();
   const G3 = '900000000000000003';
-  const old = _internals.slot(G3);
+  const old = await _internals.slot(G3);
   old.day = '2000-01-01';
   old.messages = 3;
   old.voiceStart.set('caller', { at: Date.now() - 60_000, channelId: 'vc9' });
 
-  const s = _internals.slot(G3); // detects the day change
+  const s = await _internals.slot(G3); // detects the day change
   assert.equal(s.day, utcDay());
   assert.equal(s.messages, 0);
   assert.ok(s.voiceStart.has('caller'), 'ongoing call carried into the new day');

@@ -87,7 +87,7 @@ test('POST /insights/refresh flushes the buffer and redirects back', async () =>
   const { db } = await import('../src/db/index.js');
   const { utcDay } = await import('../src/db/insights.js');
   _internals.buf.clear();
-  const s = _internals.slot(GID);
+  const s = await _internals.slot(GID);
   s.messages = 11;
 
   const res = await post(app.base, `/guilds/${GID}/insights/refresh`, { range: '7' });

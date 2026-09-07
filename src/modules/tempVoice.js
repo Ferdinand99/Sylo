@@ -179,17 +179,20 @@ async function handleJoin(guild, member, hub) {
   const me = guild.members.me;
   if (!me?.permissions.has(P.ManageChannels) || !me.permissions.has(P.MoveMembers)) return;
 
-  const prior = findUserHubChannel(guild.id, hub.hubChannelId, member.id);
+  const prior = await findUserHubChannel(guild.id, hub.hubChannelId, member.id);
   if (prior) {
     const ch = guild.channels.cache.get(prior.channel_id);
     if (ch) return void member.voice.setChannel(ch).catch(() => {});
-    removeTempChannel(prior.channel_id);
+    await removeTempChannel(prior.channel_id);
   }
 
   const hubChannel = guild.channels.cache.get(hub.hubChannelId);
   const parent = hub.categoryId || hubChannel?.parentId || null;
   const parentCat = parent ? guild.channels.cache.get(parent) : null;
-  const name = renderName(hub.nameTemplate, { member, index: countHubChannels(hub.hubChannelId) + 1 });
+  const name = renderName(hub.nameTemplate, {
+    member,
+    index: (await countHubChannels(hub.hubChannelId)) + 1,
+  });
 
   let overwrites;
   if (hub.syncChannel && hubChannel?.permissionOverwrites) {
@@ -269,7 +272,7 @@ async function handleJoin(guild, member, hub) {
     if (textChannelId) await guild.channels.delete(textChannelId).catch(() => {});
     return;
   }
-  addTempChannel({
+  await addTempChannel({
     channelId: channel.id,
     guildId: guild.id,
     hubId: hub.hubChannelId,
@@ -282,19 +285,19 @@ async function handleJoin(guild, member, hub) {
 // --- cleanup + ownership transfer -----------------------------------
 
 async function onLeaveTemp(guild, channelId) {
-  const row = getTempChannel(channelId);
+  const row = await getTempChannel(channelId);
   if (!row) return;
   const channel = guild.channels.cache.get(channelId);
   if (!channel) return void destroy(guild, row);
 
   if (channel.members.size > 0) {
-    setTempEmptySince(channelId, null);
+    await setTempEmptySince(channelId, null);
     // Owner left but others remain → transfer unless the hub locks ownership.
     const hub = await hubForChannel(guild.id, row.hub_id);
     if (!channel.members.has(row.owner_id) && hub && !hub.ownershipLock) {
       const next = channel.members.first();
       if (next) {
-        setTempOwner(channelId, next.id);
+        await setTempOwner(channelId, next.id);
         await channel.permissionOverwrites
           .edit(next.id, Object.fromEntries(ownerAllowBits(hub).map((b) => [b, true])))
           .catch(() => {});
@@ -307,14 +310,14 @@ async function onLeaveTemp(guild, channelId) {
   const keep = hub?.keepAliveMinutes ?? 0;
   if (keep === 0) return void destroy(guild, row);
   if (keep < 0) return; // never auto-delete
-  setTempEmptySince(channelId, Date.now());
+  await setTempEmptySince(channelId, Date.now());
 }
 
 async function destroy(guild, row) {
   const ch = guild.channels.cache.get(row.channel_id);
   if (ch) await ch.delete('Temp voice: empty').catch(() => {});
   if (row.text_channel_id) await guild.channels.delete(row.text_channel_id).catch(() => {});
-  removeTempChannel(row.channel_id);
+  await removeTempChannel(row.channel_id);
 }
 
 // --- events ---------------------------------------------------------------
@@ -324,7 +327,11 @@ on('temp-voice', 'voiceStateUpdate', async ({ old: oldState, new: newState }, ra
   if (!guild) return;
   const cfg = normaliseTempVoiceConfig(rawConfig);
 
-  if (oldState.channelId && oldState.channelId !== newState.channelId && isTempChannel(oldState.channelId)) {
+  if (
+    oldState.channelId &&
+    oldState.channelId !== newState.channelId &&
+    (await isTempChannel(oldState.channelId))
+  ) {
     await onLeaveTemp(guild, oldState.channelId).catch((e) => log.error('temp-voice', 'leave:', e.message));
   }
   if (newState.channelId && newState.channelId !== oldState.channelId) {
@@ -341,7 +348,7 @@ async function sweep() {
   const client = runtime.client;
   if (!client?.isReady()) return;
   const now = Date.now();
-  for (const row of listAllTempChannels()) {
+  for (const row of await listAllTempChannels()) {
     const guild = client.guilds.cache.get(row.guild_id);
     if (!guild) continue;
     const channel =
@@ -349,11 +356,11 @@ async function sweep() {
       (await guild.channels.fetch(row.channel_id).catch(() => null));
     if (!channel) {
       if (row.text_channel_id) await guild.channels.delete(row.text_channel_id).catch(() => {});
-      removeTempChannel(row.channel_id);
+      await removeTempChannel(row.channel_id);
       continue;
     }
     if (channel.members.size > 0) {
-      if (row.empty_since) setTempEmptySince(row.channel_id, null);
+      if (row.empty_since) await setTempEmptySince(row.channel_id, null);
       continue;
     }
     const hub = await hubForChannel(guild.id, row.hub_id);
@@ -369,36 +376,36 @@ setTimeout(() => sweep().catch(() => {}), 30_000).unref();
 
 // --- command helpers (used by bot/commands/voice-*.js) ---------------
 
-export function setLock(channel, guild, locked) {
-  setTempLocked(channel.id, locked);
+export async function setLock(channel, guild, locked) {
+  await setTempLocked(channel.id, locked);
   return channel.permissionOverwrites.edit(guild.id, { Connect: locked ? false : null }).catch(() => {});
 }
-export function setHidden(channel, guild, hidden) {
-  setTempHidden(channel.id, hidden);
+export async function setHidden(channel, guild, hidden) {
+  await setTempHidden(channel.id, hidden);
   return channel.permissionOverwrites.edit(guild.id, { ViewChannel: hidden ? false : null }).catch(() => {});
 }
 export async function banFromChannel(channel, row, userId) {
   const bans = [...new Set([...row.banList, userId])];
-  setTempBans(channel.id, bans);
+  await setTempBans(channel.id, bans);
   await channel.permissionOverwrites.edit(userId, { Connect: false, ViewChannel: false }).catch(() => {});
   const m = channel.members.get(userId);
   if (m) await m.voice.disconnect('Voice-banned from temp channel').catch(() => {});
 }
 export async function unbanFromChannel(channel, row, userId) {
-  setTempBans(
+  await setTempBans(
     channel.id,
     row.banList.filter((b) => b !== userId)
   );
   await channel.permissionOverwrites.delete(userId).catch(() => {});
 }
-export function renameTemp(channel, name) {
-  setTempName(channel.id, name);
+export async function renameTemp(channel, name) {
+  await setTempName(channel.id, name);
   return channel.setName(name.slice(0, 100)).catch(() => {});
 }
 export async function transferTemp(channel, guild, row, newOwnerId) {
   const hub = await hubForChannel(guild.id, row.hub_id);
   if (row.owner_id) await channel.permissionOverwrites.delete(row.owner_id).catch(() => {});
-  setTempOwner(channel.id, newOwnerId);
+  await setTempOwner(channel.id, newOwnerId);
   if (hub) {
     await channel.permissionOverwrites
       .edit(newOwnerId, Object.fromEntries(ownerAllowBits(hub).map((b) => [b, true])))

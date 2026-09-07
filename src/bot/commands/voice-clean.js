@@ -15,7 +15,7 @@ export async function execute(interaction) {
   if (!(await isModuleEnabled(interaction.guildId, 'temp-voice'))) {
     return interaction.reply({ content: 'Temporary voice channels are not enabled here.', ...ephemeral });
   }
-  const rows = listGuildTempChannels(interaction.guildId);
+  const rows = await listGuildTempChannels(interaction.guildId);
   const roleIds = [...(interaction.member.roles?.cache?.keys() ?? [])];
   const hubs = await Promise.all(rows.map((r) => hubForChannel(interaction.guildId, r.hub_id)));
   const isMod =
@@ -33,13 +33,13 @@ export async function execute(interaction) {
     const ch = interaction.guild.channels.cache.get(r.channel_id);
     if (!ch) {
       if (r.text_channel_id) await interaction.guild.channels.delete(r.text_channel_id).catch(() => {});
-      removeTempChannel(r.channel_id);
+      await removeTempChannel(r.channel_id);
       continue;
     }
     if (ch.members.size === 0) {
       await ch.delete('voice-clean').catch(() => {});
       if (r.text_channel_id) await interaction.guild.channels.delete(r.text_channel_id).catch(() => {});
-      removeTempChannel(r.channel_id);
+      await removeTempChannel(r.channel_id);
       n += 1;
     }
   }
