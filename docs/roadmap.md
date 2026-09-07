@@ -1363,28 +1363,47 @@ The big, mechanical piece; blocks #2 and #3.
   can scope a Postgres-only `RETURNING id` append to statements that actually
   read `.lastInsertRowid`, not a blanket INSERT rewrite.
 
-### 2 — Migration runner
+### 2 — Migration runner — done
 
-Small; can land alongside #1.
+Shipped in `src/db/driver.js`: a `schema_migrations(version int primary key,
+applied_at)` table, **Postgres-only** — deliberately did not touch SQLite's
+own `PRAGMA user_version` runner in `src/db/index.js`, unlike what an earlier
+draft of this note implied ("instead of a pragma" read as replacing it).
+Doing that would mean changing how every self-hosted deployment's migration
+state is tracked for zero benefit to them — directly against #0's decision
+that self-hosting stays untouched by any of this. `migrate()` in `index.js`
+is unmodified; `SCHEMA_VERSION` (`MIGRATIONS.length`, already exported from
+there) is only *read*, once, to know where a brand-new Postgres database's
+baseline already stands.
 
-- Today: a plain ordered JS array in `src/db/index.js` (36 entries so far),
-  each `` (database) => database.exec(`...`) ``, tracked via SQLite's `PRAGMA
-  user_version`. Postgres has no equivalent pragma.
-- Keep the same shape — it's simple and has worked fine for 36 migrations — but
-  track "applied migrations" in a real table (`schema_migrations(version int
-  primary key, applied_at)`) instead of a pragma. That works identically on
-  both drivers with one small per-driver read/write, instead of adopting a
-  migration framework (node-pg-migrate, Knex) that would only ever apply to the
-  Postgres half of a dual-driver setup.
-- Don't dialect-translate all 36 historical migrations (`AUTOINCREMENT` →
-  `SERIAL`/`IDENTITY`, SQLite type affinity, etc.) — a brand-new hosted
-  Postgres deployment has no legacy SQLite data to replay against, so there's
-  no correctness reason to port them one by one. Write a single "Postgres
-  bootstrap schema" reflecting the *current* cumulative shape, applied once
-  when `DATABASE_URL` is set and `schema_migrations` is empty. Accepted
-  ongoing tradeoff: migrations 38+ get written twice (SQLite `.exec()` DDL +
-  a Postgres-dialect equivalent) once this ships — a fine price for not
-  back-porting 36 historical ones.
+How it works: `registerPostgresBootstrap()` (existing, unchanged) still
+always runs on every boot — every statement in it is `CREATE TABLE
+IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`, so replaying it is free. A new
+`registerPostgresMigration(version, ddlText)` registers something that
+*isn't* safely re-runnable that way (a rename, a backfill, a type change).
+On first connect, a brand-new database's `schema_migrations` table is empty;
+the bootstrap DDL just created its full current shape, so the baseline gets
+stamped at `SCHEMA_VERSION` directly rather than replaying every registered
+migration from scratch — the same "don't back-port history" tradeoff #2 was
+always going to make, just enforced by the runner now instead of being a
+one-time manual decision. An *existing* Postgres database (one that already
+ran an older baseline) picks up any registered migration numbered above its
+recorded max and applies it, in order, recording each as it goes. Runs
+inside the same advisory lock the bootstrap DDL already used (Phase 22), so
+this never races another process doing the same check.
+
+Convention going forward, mirroring what SQLite's 36 migrations already do
+implicitly: a schema change to an already-converted table needs **both** —
+update that file's `registerPostgresBootstrap()` DDL (so a brand-new install
+still gets it for free) **and** register the same change via
+`registerPostgresMigration(SCHEMA_VERSION_AT_THAT_POINT, ...)` (so an
+existing Postgres database catches up). Nothing has needed this yet — zero
+real entries exist today — so `test/postgresMigrationRunner.postgres.test.js`
+proves the machinery itself: registers a migration one version above the
+current `SCHEMA_VERSION` (real usage keeps a migration's version in lockstep
+with `SCHEMA_VERSION`, so testing "still pending" against a fresh database
+needs one numbered artificially higher) and confirms it runs and gets
+recorded, while one at-or-below the baseline is correctly left alone.
 
 ### 3 — Backup / restore redesign
 
@@ -1473,13 +1492,13 @@ code path, not automatic, and not a live/continuous sync):
 ### Suggested order
 
 1. **#0 decision** — confirm self-hosting stays SQLite-only; hosted becomes
-   opt-in via `DATABASE_URL`. Blocks everything else.
+   opt-in via `DATABASE_URL`. Blocks everything else. **Done.**
 2. **#1 driver + async seam** — the big one. **Done — 30 of 30 files.**
-3. **#2 migration runner** — small, land alongside #1.
-4. **#3 backup/restore redesign** — depends on #1.
-5. **#4 data migration tool** — depends on #1 (done) and #2; needed before
-   `DATABASE_URL` can be turned on for the *existing* hosted instance without
-   losing its current data. Independent of #3.
+3. **#2 migration runner** — small, land alongside #1. **Done.**
+4. **#3 backup/restore redesign** — depends on #1 (done).
+5. **#4 data migration tool** — depends on #1 (done) and #2 (done); needed
+   before `DATABASE_URL` can be turned on for the *existing* hosted instance
+   without losing its current data. Independent of #3.
 6. Ship behind `DATABASE_URL` unset by default, so every self-hosted
    deployment sees no change at all.
 
