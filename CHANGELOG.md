@@ -1,5 +1,32 @@
 # Changelog
 
+## [3.26.0](https://github.com/Ferdinand99/Sylo/compare/v3.25.0...v3.26.0) (2026-09-07)
+
+
+### Features
+
+* convert afk module to the Postgres driver shim ([#145](https://github.com/Ferdinand99/Sylo/issues/145)) ([6d427cf](https://github.com/Ferdinand99/Sylo/commit/6d427cfbd4d99bbec0f99a3db3525f48274d6536))
+* convert appSettings module to the Postgres driver shim ([#149](https://github.com/Ferdinand99/Sylo/issues/149)) ([83c7425](https://github.com/Ferdinand99/Sylo/commit/83c7425503d7e1ad8c81f46a0923127be9bc7a1e))
+* convert ban appeals to the Postgres-optional driver (#N) ([#160](https://github.com/Ferdinand99/Sylo/issues/160)) ([75fc6ec](https://github.com/Ferdinand99/Sylo/commit/75fc6ec3780097bbc9c9d05e9878cfd4f594c3b7))
+* convert birthdays module to the Postgres driver shim ([#148](https://github.com/Ferdinand99/Sylo/issues/148)) ([3966edb](https://github.com/Ferdinand99/Sylo/commit/3966edbb3b7038d1ff8671619c07ce1c766263a7))
+* convert channel-locks and starboard modules to the Postgres driver shim ([#152](https://github.com/Ferdinand99/Sylo/issues/152)) ([0dca125](https://github.com/Ferdinand99/Sylo/commit/0dca125162acac9dc17e4c896041ba240debf79a))
+* convert command-overrides and cache modules to the Postgres driver shim ([#157](https://github.com/Ferdinand99/Sylo/issues/157)) ([3ab9293](https://github.com/Ferdinand99/Sylo/commit/3ab92934d2d2646abb1002952fa8900f416ce081))
+* convert counting module to the Postgres driver shim ([#154](https://github.com/Ferdinand99/Sylo/issues/154)) ([1c3098b](https://github.com/Ferdinand99/Sylo/commit/1c3098bcb5f3b85f374c450acefbdd73303a6246))
+* convert guild-settings module to the Postgres driver shim ([#156](https://github.com/Ferdinand99/Sylo/issues/156)) ([a5c38ab](https://github.com/Ferdinand99/Sylo/commit/a5c38abe299380995745618cebe579c87fd4170c))
+* convert invite tracker to the Postgres-optional driver (#N) ([#158](https://github.com/Ferdinand99/Sylo/issues/158)) ([d4db9a2](https://github.com/Ferdinand99/Sylo/commit/d4db9a25e1fc030c30a7437e3ac5daed2d673fba))
+* convert leaderboard-vanity module to the Postgres driver shim ([#150](https://github.com/Ferdinand99/Sylo/issues/150)) ([67f8e04](https://github.com/Ferdinand99/Sylo/commit/67f8e047949a0e606f5fd7ad968baf045211e5ef))
+* convert polls and composed-messages modules to the Postgres driver shim ([#155](https://github.com/Ferdinand99/Sylo/issues/155)) ([41150fa](https://github.com/Ferdinand99/Sylo/commit/41150fa1cadc44e28e8d1c01d5d75e5456837cf9))
+* convert posted-keys module to the Postgres driver shim ([#153](https://github.com/Ferdinand99/Sylo/issues/153)) ([454f2d6](https://github.com/Ferdinand99/Sylo/commit/454f2d689ce20e86af9e5b594059ffc626e8150e))
+* convert reminders and audit log to the Postgres-optional driver (#N) ([#159](https://github.com/Ferdinand99/Sylo/issues/159)) ([5d52c0c](https://github.com/Ferdinand99/Sylo/commit/5d52c0cfc8c8899ae81e145a8a59804cf3babf48))
+* convert temp-bans module to the Postgres driver shim ([#151](https://github.com/Ferdinand99/Sylo/issues/151)) ([e34d018](https://github.com/Ferdinand99/Sylo/commit/e34d018bf35922798d1edd35ecb8687ac0e53509))
+* convert tickets module to the Postgres-optional driver (#N) ([#161](https://github.com/Ferdinand99/Sylo/issues/161)) ([261cdc9](https://github.com/Ferdinand99/Sylo/commit/261cdc94f1049ed9d11a51e8bfa435f24bff1213))
+
+
+### Bug Fixes
+
+* cap the OAuth session cookie to guild ids only, not the full guild list ([#164](https://github.com/Ferdinand99/Sylo/issues/164)) ([379dd35](https://github.com/Ferdinand99/Sylo/commit/379dd350718d956f561a61119de304edd7b67010))
+* remove timing race in channel-cleanup test ([#147](https://github.com/Ferdinand99/Sylo/issues/147)) ([8eddad3](https://github.com/Ferdinand99/Sylo/commit/8eddad336d08344d01ab48e287da968cd3226a58))
+
 ## [3.25.0](https://github.com/Ferdinand99/Sylo/compare/v3.24.0...v3.25.0) (2026-09-06)
 
 
