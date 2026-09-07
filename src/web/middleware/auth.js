@@ -12,6 +12,7 @@ import { BUILD } from '../../bot/lib/buildInfo.js';
 import { buildSidebar } from '../lib/sidebarNav.js';
 import { getBotMasterRoles } from '../../db/guildSettings.js';
 import { rateLimit } from './rateLimit.js';
+import { log } from '../../lib/log.js';
 
 const DISCORD_API = 'https://discord.com/api/v10';
 const OAUTH_SCOPES = 'identify guilds';
@@ -32,6 +33,22 @@ function safeReturnTo(path) {
 // guild-list page transparently round-trips through Discord's OAuth again
 // instead of waiting for the user to notice and log out/in themselves.
 const GUILDS_TTL_MS = 10 * 60 * 1000;
+
+// `cookie-session` stores the whole session (base64 + signed) inside the
+// cookie itself — nothing server-side. Browsers silently drop a `Set-Cookie`
+// header over ~4093 bytes, which loses `session.user` along with everything
+// else, sending the OAuth callback straight back to `redirectToLogin` — an
+// infinite authorize-loop for an account in enough guilds (issue #163: an
+// account in 50+ servers hit this at the old `{ id, owner, permissions }`
+// storage shape). Only the guild ids the user actually manages are ever read
+// (see adminGuildIds below), so those are the only ones stored — filtered
+// here, not at read time, as plain id strings — and capped as a last line of
+// defense for an account managing (not just belonging to) an implausibly
+// large number of servers. 100 ids plus a full user object measures out to
+// ~3.3 KB once base64'd and signed (~800 bytes of headroom under the 4093
+// limit for the cookie name/attributes) — see test/auth.test.js for the
+// actual byte-budget check.
+export const MAX_STORED_GUILDS = 100;
 
 // "Add new server" bot-invite link. Scopes + a permission set that covers every
 // module: moderation (kick/ban/timeout), roles, channels & webhooks, reactions,
@@ -62,6 +79,21 @@ function hasAdminPerms(permissionsString) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Reduce the OAuth "current user guilds" payload to the id list actually
+ * worth putting in the session cookie: only guilds the user owns or has
+ * admin/Manage-Server on — everything else gets filtered out on every read
+ * anyway (see adminGuildIds above), so there's no reason to store it.
+ * Uncapped; the caller applies {@link MAX_STORED_GUILDS}. Exported pure so
+ * the cookie-size fix can be unit tested without a real OAuth round-trip.
+ * @param {Array<{ id: string, owner?: boolean, permissions?: string }>} guilds
+ * @returns {string[]}
+ */
+export function adminGuildIdsFromOAuth(guilds) {
+  if (!Array.isArray(guilds)) return [];
+  return guilds.filter((g) => g.owner || hasAdminPerms(g.permissions)).map((g) => g.id);
 }
 
 /** Public base URL for building the OAuth redirect URI. */
@@ -104,16 +136,18 @@ export function manageableGuilds(req) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Guild ids (bot ∩ user-is-admin) for the signed-in user. */
+/**
+ * Guild ids (bot ∩ user-is-admin) for the signed-in user. `req.session.guilds`
+ * is already filtered to admin/owner guilds at login (see the callback route
+ * below) — only the bot-membership half of the intersection happens here.
+ */
 export function adminGuildIds(req) {
   if (!config.authEnabled) {
     return new Set(runtime.client?.guilds.cache.keys() ?? []);
   }
-  const guilds = req.session?.guilds ?? [];
+  const ids = req.session?.guilds ?? [];
   const botGuilds = new Set(runtime.client?.guilds.cache.keys() ?? []);
-  return new Set(
-    guilds.filter((g) => botGuilds.has(g.id) && (g.owner || hasAdminPerms(g.permissions))).map((g) => g.id)
-  );
+  return new Set(ids.filter((id) => botGuilds.has(id)));
 }
 
 /**
@@ -327,9 +361,14 @@ export function mountAuth(app) {
         global_name: user.global_name,
         avatar: user.avatar,
       };
-      req.session.guilds = Array.isArray(guilds)
-        ? guilds.map((g) => ({ id: g.id, owner: g.owner, permissions: g.permissions }))
-        : [];
+      const adminIds = adminGuildIdsFromOAuth(guilds);
+      if (adminIds.length > MAX_STORED_GUILDS) {
+        log.warn(
+          'auth',
+          `${user.id} manages ${adminIds.length} guilds — capping the stored session list at ${MAX_STORED_GUILDS} to stay under the cookie size limit`
+        );
+      }
+      req.session.guilds = adminIds.slice(0, MAX_STORED_GUILDS);
       req.session.guildsFetchedAt = Date.now();
 
       const dest = safeReturnTo(req.session.returnTo);
