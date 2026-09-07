@@ -1204,7 +1204,38 @@ DELETEs, not concurrency races — worth re-examining with the Phase 19 lens
 before assuming they need a transaction primitive), `tempVoice.js`, and
 `insights.js`.
 
-### 1 — Driver + async seam in `src/db/` — in progress (26 of 30 files)
+### Phase 22 shipped — `src/db/purge.js` and `src/db/retention.js`
+
+The two `db.transaction()` users flagged since Phase 19 as likely convertible
+without a transaction primitive — confirmed here. Neither `purgeGuild`/
+`forgetUser` (purge.js) nor `sweepRetention` (retention.js) needs atomicity:
+every statement is a DELETE (or an anonymising UPDATE) scoped to rows that are
+either already gone or already past their cutoff, so an interrupted run just
+leaves work for the next attempt — self-healing, not a race. Both now run as
+a plain sequence of awaited statements instead of a `db.transaction()`
+callback.
+
+**Real gap found while wiring this up, not a bug in the new code but a
+pre-existing one it exposed**: `GUILD_TABLES` (`purge.js`'s guild-scoped table
+list, checked against the schema by `test/guildTables.test.js`) includes
+`temp_voice_channels`, `guild_daily`, and `guild_hourly` — owned by
+`tempVoice.js` and `insights.js`, neither converted yet, so neither had ever
+registered Postgres bootstrap DDL for its table. `purgeGuild` used to run
+against the raw SQLite `db` unconditionally regardless of `DATABASE_URL`
+(same split-brain caveat as every unconverted file), so this never surfaced;
+switching it to the shared driver made every `DELETE FROM temp_voice_channels
+...` a real Postgres query for the first time, and it 42P01'd against a table
+that didn't exist. Fixed by having `purge.js` itself register bootstrap DDL
+for those three tables (schema copied verbatim from their SQLite migrations
+in `index.js`) — scoped deliberately to *just* creating the tables so
+`purgeGuild`'s DELETEs succeed, not to converting `tempVoice.js`/`insights.js`'s
+own read/write logic, which stays future work. Drop that bootstrap block once
+those two files are converted and register the same DDL there instead.
+
+28 of 30 files converted; same caveats as before still apply. Remaining:
+`tempVoice.js` and `insights.js`.
+
+### 1 — Driver + async seam in `src/db/` — in progress (28 of 30 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

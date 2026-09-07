@@ -337,7 +337,7 @@ router.get(
     } else if (userId) {
       lookup = {
         profile: await lookupProfile(userId),
-        data: describeUserData(req.guild.id, userId),
+        data: await describeUserData(req.guild.id, userId),
       };
     }
     res.render('guild', {
@@ -361,7 +361,7 @@ router.post(
     if (!userId) return res.redirect(`${back}?msg=md-baduser`);
     if (req.body.confirm !== 'on') return res.redirect(`${back}?user=${userId}&msg=noconfirm`);
 
-    const r = forgetUser(guild.id, userId);
+    const r = await forgetUser(guild.id, userId);
 
     const dm = new EmbedBuilder()
       .setColor(0x58d68d)

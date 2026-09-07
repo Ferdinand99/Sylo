@@ -82,7 +82,7 @@ export async function execute(interaction) {
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  const dump = exportUserData(interaction.guildId, interaction.user.id);
+  const dump = await exportUserData(interaction.guildId, interaction.user.id);
   const guildName = interaction.guild.name;
 
   if (dump.total === 0) {

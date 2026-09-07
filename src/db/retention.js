@@ -8,21 +8,31 @@
 //     touched.
 // A guild with the setting at 0 (the default) is left alone. The sweep runs
 // once a day, plus once shortly after boot.
-import { db } from './index.js';
+//
+// No registerPostgresBootstrap here — this file owns no table of its own, it
+// only reads/deletes from tables bootstrapped by their owning files.
+//
+// sweepRetention used to run inside a db.transaction() (better-sqlite3's
+// synchronous wrapper, incompatible with async — see the Phase 19 note in
+// docs/roadmap.md). It doesn't need atomicity: every statement is a DELETE
+// scoped to rows already past their guild's cutoff, so an interrupted sweep
+// just leaves some past-cutoff rows for tomorrow's sweep to catch — not a
+// correctness issue. So it runs as a plain sequence of awaited statements.
+import { prepare } from './driver.js';
 import { log } from '../lib/log.js';
 
 const DAY_MS = 86_400_000;
 const MAX_DAYS = 3650; // 10 years — matches the dashboard input cap
 
-const ticketCfgRows = db.prepare("SELECT guild_id, config FROM guild_modules WHERE module_id = 'tickets'");
-const modCfgRows = db.prepare("SELECT guild_id, config FROM guild_modules WHERE module_id = 'moderation'");
+const ticketCfgRows = prepare("SELECT guild_id, config FROM guild_modules WHERE module_id = 'tickets'");
+const modCfgRows = prepare("SELECT guild_id, config FROM guild_modules WHERE module_id = 'moderation'");
 
-const oldClosedTickets = db.prepare(
+const oldClosedTickets = prepare(
   "SELECT id FROM tickets WHERE guild_id = ? AND status = 'closed' AND COALESCE(closed_at, last_at) < ?"
 );
-const delTicketMsgs = db.prepare('DELETE FROM ticket_messages WHERE ticket_id = ?');
-const delTicket = db.prepare('DELETE FROM tickets WHERE id = ?');
-const delOldInactiveCases = db.prepare(
+const delTicketMsgs = prepare('DELETE FROM ticket_messages WHERE ticket_id = ?');
+const delTicket = prepare('DELETE FROM tickets WHERE id = ?');
+const delOldInactiveCases = prepare(
   'DELETE FROM infractions WHERE guild_id = ? AND active = 0 AND created_at < ?'
 );
 
@@ -37,37 +47,33 @@ function retentionDays(configJson, key) {
   return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_DAYS) : 0;
 }
 
-const sweep = db.transaction((now) => {
-  let closedTickets = 0;
-  let ticketMessages = 0;
-  let inactiveCases = 0;
-
-  for (const row of ticketCfgRows.all()) {
-    const days = retentionDays(row.config, 'transcriptRetentionDays');
-    if (!days) continue;
-    const cutoff = now - days * DAY_MS;
-    for (const { id } of oldClosedTickets.all(row.guild_id, cutoff)) {
-      ticketMessages += delTicketMsgs.run(id).changes;
-      closedTickets += delTicket.run(id).changes;
-    }
-  }
-
-  for (const row of modCfgRows.all()) {
-    const days = retentionDays(row.config, 'infractionRetentionDays');
-    if (!days) continue;
-    inactiveCases += delOldInactiveCases.run(row.guild_id, now - days * DAY_MS).changes;
-  }
-
-  return { closedTickets, ticketMessages, inactiveCases };
-});
-
 /**
  * Delete tickets / cases past their guild's configured retention window.
  * @param {number} [now] epoch ms, overridable for tests
  * @returns {{ closedTickets: number, ticketMessages: number, inactiveCases: number }}
  */
-export function sweepRetention(now = Date.now()) {
-  const result = sweep(now);
+export async function sweepRetention(now = Date.now()) {
+  let closedTickets = 0;
+  let ticketMessages = 0;
+  let inactiveCases = 0;
+
+  for (const row of await ticketCfgRows.all()) {
+    const days = retentionDays(row.config, 'transcriptRetentionDays');
+    if (!days) continue;
+    const cutoff = now - days * DAY_MS;
+    for (const { id } of await oldClosedTickets.all(row.guild_id, cutoff)) {
+      ticketMessages += (await delTicketMsgs.run(id)).changes;
+      closedTickets += (await delTicket.run(id)).changes;
+    }
+  }
+
+  for (const row of await modCfgRows.all()) {
+    const days = retentionDays(row.config, 'infractionRetentionDays');
+    if (!days) continue;
+    inactiveCases += (await delOldInactiveCases.run(row.guild_id, now - days * DAY_MS)).changes;
+  }
+
+  const result = { closedTickets, ticketMessages, inactiveCases };
   if (result.closedTickets || result.inactiveCases) {
     log.info(
       'retention',
@@ -85,9 +91,9 @@ export function startRetentionSchedule() {
   if (started) return;
   started = true;
 
-  const run = () => {
+  const run = async () => {
     try {
-      sweepRetention();
+      await sweepRetention();
     } catch (err) {
       log.error('retention', `sweep failed: ${err.message}`);
     }

@@ -53,7 +53,7 @@ test('sweepRetention prunes only past-cutoff closed tickets / inactive cases', a
   kase(G1, 3, { active: true, ageDays: 400 }); // old but active -> kept
   kase(G2, 1, { active: false, ageDays: 400 }); // other guild, no window -> kept
 
-  const r = sweepRetention(Date.now());
+  const r = await sweepRetention(Date.now());
   assert.deepEqual(r, { closedTickets: 1, ticketMessages: 3, inactiveCases: 1 });
 
   assert.equal(ticketExists(oldClosed), false);
@@ -68,8 +68,8 @@ test('sweepRetention prunes only past-cutoff closed tickets / inactive cases', a
   assert.equal(caseExists(G2, 1), true, 'guild with no window untouched');
 });
 
-test('sweepRetention is a no-op with nothing left to prune', () => {
-  assert.deepEqual(sweepRetention(Date.now()), {
+test('sweepRetention is a no-op with nothing left to prune', async () => {
+  assert.deepEqual(await sweepRetention(Date.now()), {
     closedTickets: 0,
     ticketMessages: 0,
     inactiveCases: 0,

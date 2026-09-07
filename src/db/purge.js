@@ -1,6 +1,72 @@
 // Delete every stored row for a guild. Used when Sylo is removed from a server
 // and by the /forget data-deletion command.
-import { db } from './index.js';
+//
+// purgeGuild/forgetUser used to run inside a db.transaction() (better-sqlite3's
+// synchronous wrapper, which can't take an async callback — see the Phase 19
+// note in docs/roadmap.md). Neither actually needs atomicity for correctness:
+// every statement here is a DELETE (or an anonymising UPDATE) scoped to one
+// guild_id / user_id pair, and deleting an already-deleted row is a no-op. If
+// a purge is interrupted partway through, the remaining rows are simply
+// deleted on the next attempt — self-healing, not a race. So both run as a
+// plain sequence of awaited statements instead of a transaction.
+import { prepare, registerPostgresBootstrap } from './driver.js';
+
+// This file owns no table of its own — every DELETE below targets a table
+// bootstrapped by its owning file, *except* the three below, which belong to
+// tempVoice.js and insights.js — neither converted yet, so neither has ever
+// registered Postgres DDL for them. purgeGuild deletes from every entry in
+// GUILD_TABLES though, so under DATABASE_URL those DELETEs would 42P01
+// against a table that was never created. Bootstrapping them here (schema
+// copied verbatim from their SQLite migrations in index.js) fixes that
+// without pulling either file's actual read/write logic into this phase.
+// Drop this block once tempVoice.js/insights.js are converted and register
+// the same DDL there instead.
+registerPostgresBootstrap(`
+  CREATE TABLE IF NOT EXISTS temp_voice_channels (
+    channel_id      TEXT PRIMARY KEY,
+    guild_id        TEXT NOT NULL,
+    hub_id          TEXT NOT NULL,
+    owner_id        TEXT NOT NULL,
+    created_at      BIGINT NOT NULL,
+    name            TEXT NOT NULL DEFAULT '',
+    locked          INTEGER NOT NULL DEFAULT 0,
+    hidden          INTEGER NOT NULL DEFAULT 0,
+    bans            TEXT NOT NULL DEFAULT '[]',
+    text_channel_id TEXT,
+    empty_since     BIGINT
+  );
+  CREATE INDEX IF NOT EXISTS idx_temp_voice_guild ON temp_voice_channels (guild_id);
+
+  CREATE TABLE IF NOT EXISTS guild_daily (
+    guild_id             TEXT NOT NULL,
+    day                  TEXT NOT NULL,
+    joins                INTEGER NOT NULL DEFAULT 0,
+    leaves               INTEGER NOT NULL DEFAULT 0,
+    messages             INTEGER NOT NULL DEFAULT 0,
+    active_members       INTEGER NOT NULL DEFAULT 0,
+    channels             TEXT NOT NULL DEFAULT '{}',
+    voice_minutes        INTEGER NOT NULL DEFAULT 0,
+    voice_active_members INTEGER NOT NULL DEFAULT 0,
+    voice_peak           INTEGER NOT NULL DEFAULT 0,
+    voice_channels       TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY (guild_id, day)
+  );
+  CREATE INDEX IF NOT EXISTS idx_guild_daily_day ON guild_daily (day);
+
+  CREATE TABLE IF NOT EXISTS guild_hourly (
+    guild_id             TEXT NOT NULL,
+    hour                 TEXT NOT NULL,
+    joins                INTEGER NOT NULL DEFAULT 0,
+    leaves               INTEGER NOT NULL DEFAULT 0,
+    messages             INTEGER NOT NULL DEFAULT 0,
+    active_members       INTEGER NOT NULL DEFAULT 0,
+    voice_minutes        INTEGER NOT NULL DEFAULT 0,
+    voice_active_members INTEGER NOT NULL DEFAULT 0,
+    voice_peak           INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, hour)
+  );
+  CREATE INDEX IF NOT EXISTS idx_guild_hourly_hour ON guild_hourly (hour);
+`);
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -37,70 +103,74 @@ export const GUILD_TABLES = [
   'channel_cleanup_schedules',
 ];
 
-const simpleStmts = GUILD_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
-const ticketMsgStmt = db.prepare(
+const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
+const ticketMsgStmt = prepare(
   'DELETE FROM ticket_messages WHERE ticket_id IN (SELECT id FROM tickets WHERE guild_id = ?)'
 );
-const giveawayEntryStmt = db.prepare(
+const giveawayEntryStmt = prepare(
   'DELETE FROM giveaway_entries WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)'
 );
 
-const purgeGuildTxn = db.transaction((guildId) => {
-  ticketMsgStmt.run(guildId); // before `tickets`, which the subquery reads
-  giveawayEntryStmt.run(guildId); // before `giveaways`, which the subquery reads
-  for (const stmt of simpleStmts) stmt.run(guildId);
-});
-
 /** Remove all of a guild's stored data. */
-export function purgeGuild(guildId) {
-  purgeGuildTxn(guildId);
+export async function purgeGuild(guildId) {
+  await ticketMsgStmt.run(guildId); // before `tickets`, which the subquery reads
+  await giveawayEntryStmt.run(guildId); // before `giveaways`, which the subquery reads
+  for (const stmt of simpleStmts) await stmt.run(guildId);
 }
 
 // --- per-user erasure (for /forget) -----------------------------------------
 
 const userStmts = {
-  warnings: db.prepare('DELETE FROM infractions WHERE guild_id = ? AND user_id = ?'),
-  leveling: db.prepare('DELETE FROM leveling WHERE guild_id = ? AND user_id = ?'),
-  levelingPeriods: db.prepare('DELETE FROM leveling_periods WHERE guild_id = ? AND user_id = ?'),
-  counting: db.prepare('UPDATE counting SET last_user_id = NULL WHERE guild_id = ? AND last_user_id = ?'),
-  ticketMsgs: db.prepare(`
+  warnings: prepare('DELETE FROM infractions WHERE guild_id = ? AND user_id = ?'),
+  leveling: prepare('DELETE FROM leveling WHERE guild_id = ? AND user_id = ?'),
+  levelingPeriods: prepare('DELETE FROM leveling_periods WHERE guild_id = ? AND user_id = ?'),
+  counting: prepare('UPDATE counting SET last_user_id = NULL WHERE guild_id = ? AND last_user_id = ?'),
+  ticketMsgs: prepare(`
     DELETE FROM ticket_messages
     WHERE author_kind = 'user'
       AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ? AND user_id = ?)
   `),
-  tickets: db.prepare('DELETE FROM tickets WHERE guild_id = ? AND user_id = ?'),
-  appeals: db.prepare('DELETE FROM appeals WHERE guild_id = ? AND user_id = ?'),
-  afk: db.prepare('DELETE FROM afk WHERE guild_id = ? AND user_id = ?'),
-  birthdays: db.prepare('DELETE FROM birthdays WHERE guild_id = ? AND user_id = ?'),
-  giveawayEntries: db.prepare(`
+  tickets: prepare('DELETE FROM tickets WHERE guild_id = ? AND user_id = ?'),
+  appeals: prepare('DELETE FROM appeals WHERE guild_id = ? AND user_id = ?'),
+  afk: prepare('DELETE FROM afk WHERE guild_id = ? AND user_id = ?'),
+  birthdays: prepare('DELETE FROM birthdays WHERE guild_id = ? AND user_id = ?'),
+  giveawayEntries: prepare(`
     DELETE FROM giveaway_entries
     WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)
       AND user_id = ?
   `),
-  inviteCounts: db.prepare('DELETE FROM invite_counts WHERE guild_id = ? AND user_id = ?'),
-  inviteJoins: db.prepare('DELETE FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
-  inviteJoinsAsInviter: db.prepare(
+  inviteCounts: prepare('DELETE FROM invite_counts WHERE guild_id = ? AND user_id = ?'),
+  inviteJoins: prepare('DELETE FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
+  inviteJoinsAsInviter: prepare(
     "UPDATE invite_joins SET inviter_id = NULL, source = 'unknown', counted = 0 WHERE guild_id = ? AND inviter_id = ?"
   ),
-  invitePersonal: db.prepare('DELETE FROM invite_personal WHERE guild_id = ? AND user_id = ?'),
+  invitePersonal: prepare('DELETE FROM invite_personal WHERE guild_id = ? AND user_id = ?'),
 };
 
-const forgetUserTxn = db.transaction((guildId, userId) => {
-  const warnings = userStmts.warnings.run(guildId, userId).changes;
+/**
+ * Erase a single member's data within one guild. Covers the tables that key on
+ * a Discord user id; a completed giveaway's host/winner list and the config
+ * audit log (which records a display name, not an id) are guild records and are
+ * only removed by {@link purgeGuild}.
+ * @returns {{ warnings: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, invites: number }}
+ */
+export async function forgetUser(guildId, userId) {
+  const warnings = (await userStmts.warnings.run(guildId, userId)).changes;
   const leveling =
-    userStmts.leveling.run(guildId, userId).changes + userStmts.levelingPeriods.run(guildId, userId).changes;
-  userStmts.counting.run(guildId, userId);
-  const ticketMsgs = userStmts.ticketMsgs.run(guildId, userId).changes;
-  const tickets = userStmts.tickets.run(guildId, userId).changes;
-  const appeals = userStmts.appeals.run(guildId, userId).changes;
-  const afk = userStmts.afk.run(guildId, userId).changes;
-  const birthdays = userStmts.birthdays.run(guildId, userId).changes;
-  const giveawayEntries = userStmts.giveawayEntries.run(guildId, userId).changes;
+    (await userStmts.leveling.run(guildId, userId)).changes +
+    (await userStmts.levelingPeriods.run(guildId, userId)).changes;
+  await userStmts.counting.run(guildId, userId);
+  const ticketMsgs = (await userStmts.ticketMsgs.run(guildId, userId)).changes;
+  const tickets = (await userStmts.tickets.run(guildId, userId)).changes;
+  const appeals = (await userStmts.appeals.run(guildId, userId)).changes;
+  const afk = (await userStmts.afk.run(guildId, userId)).changes;
+  const birthdays = (await userStmts.birthdays.run(guildId, userId)).changes;
+  const giveawayEntries = (await userStmts.giveawayEntries.run(guildId, userId)).changes;
   const invites =
-    userStmts.inviteCounts.run(guildId, userId).changes +
-    userStmts.inviteJoins.run(guildId, userId).changes +
-    userStmts.inviteJoinsAsInviter.run(guildId, userId).changes +
-    userStmts.invitePersonal.run(guildId, userId).changes;
+    (await userStmts.inviteCounts.run(guildId, userId)).changes +
+    (await userStmts.inviteJoins.run(guildId, userId)).changes +
+    (await userStmts.inviteJoinsAsInviter.run(guildId, userId)).changes +
+    (await userStmts.invitePersonal.run(guildId, userId)).changes;
   return {
     warnings,
     leveling,
@@ -112,17 +182,6 @@ const forgetUserTxn = db.transaction((guildId, userId) => {
     giveawayEntries,
     invites,
   };
-});
-
-/**
- * Erase a single member's data within one guild. Covers the tables that key on
- * a Discord user id; a completed giveaway's host/winner list and the config
- * audit log (which records a display name, not an id) are guild records and are
- * only removed by {@link purgeGuild}.
- * @returns {{ warnings: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, invites: number }}
- */
-export function forgetUser(guildId, userId) {
-  return forgetUserTxn(guildId, userId);
 }
 
 // --- read-only inventory ("Member data" dashboard page, /mydata export) ----
@@ -237,7 +296,7 @@ const USER_DATA_SOURCES = [
     countSql: 'SELECT COUNT(*) AS n FROM counting WHERE guild_id = ? AND last_user_id = ?',
     rowsSql: 'SELECT * FROM counting WHERE guild_id = ? AND last_user_id = ?',
   },
-].map((s) => ({ ...s, countStmt: db.prepare(s.countSql), rowsStmt: db.prepare(s.rowsSql) }));
+].map((s) => ({ ...s, countStmt: prepare(s.countSql), rowsStmt: prepare(s.rowsSql) }));
 
 const bindArgs = (order, guildId, userId) => (order === 'ug' ? [userId, guildId] : [guildId, userId]);
 
@@ -246,12 +305,12 @@ const bindArgs = (order, guildId, userId) => (order === 'ug' ? [userId, guildId]
  * anonymise for a member in a guild.
  * @returns {{ items: Array<{ key: string, label: string, count: number }>, total: number }}
  */
-export function describeUserData(guildId, userId) {
-  const items = USER_DATA_SOURCES.map(({ key, label, countStmt, order }) => ({
-    key,
-    label,
-    count: countStmt.get(...bindArgs(order, guildId, userId)).n,
-  }));
+export async function describeUserData(guildId, userId) {
+  const items = [];
+  for (const { key, label, countStmt, order } of USER_DATA_SOURCES) {
+    const row = await countStmt.get(...bindArgs(order, guildId, userId));
+    items.push({ key, label, count: Number(row.n) || 0 });
+  }
   return { items, total: items.reduce((sum, i) => sum + i.count, 0) };
 }
 
@@ -263,11 +322,11 @@ export function describeUserData(guildId, userId) {
  *   summary: Array<{ key: string, label: string, count: number }>,
  *   data: Record<string, object[]> }}
  */
-export function exportUserData(guildId, userId) {
+export async function exportUserData(guildId, userId) {
   const data = {};
   const summary = [];
   for (const { key, label, rowsStmt, order } of USER_DATA_SOURCES) {
-    const rows = rowsStmt.all(...bindArgs(order, guildId, userId));
+    const rows = await rowsStmt.all(...bindArgs(order, guildId, userId));
     data[key] = rows;
     summary.push({ key, label, count: rows.length });
   }
