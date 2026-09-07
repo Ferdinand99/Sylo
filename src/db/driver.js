@@ -5,11 +5,20 @@
 // path; every other `src/db/*.js` file still imports `db` from `./index.js`
 // directly and is completely unaffected by DATABASE_URL. `db`/`index.js`
 // itself is never modified by this file — the SQLite path stays exactly what
-// it was before this existed.
+// it was before this existed, including its own `PRAGMA user_version`-based
+// migration runner (`migrate()`), untouched by the `schema_migrations` table
+// below — that one tracks Postgres only, deliberately: unifying the two
+// would mean changing how every self-hosted SQLite deployment's migration
+// state is tracked for no benefit to them, which is the opposite of this
+// migration's guiding rule ("Sylo's self-hosting pitch is one container, one
+// SQLite file... that promise stays true," per the roadmap's own #0
+// decision) — see `registerPostgresMigration` below for the Postgres-only
+// incremental-migration mechanism this enables.
 import { config } from '../config.js';
-import { db } from './index.js';
+import { db, SCHEMA_VERSION } from './index.js';
 
 const bootstrapStatements = [];
+const postgresMigrations = [];
 let sqlClient = null;
 let readyPromise = null;
 
@@ -18,9 +27,42 @@ let readyPromise = null;
 // something else might pick by coincidence.
 const BOOTSTRAP_LOCK_KEY = 72739018;
 
-/** Each converted db file calls this once with its own Postgres-dialect DDL. */
+/**
+ * Each converted db file calls this once with its own Postgres-dialect DDL,
+ * reflecting that table's *current* cumulative shape — the same convention
+ * SQLite's `MIGRATIONS` array would produce if replayed from scratch, just
+ * collapsed into one block instead of kept as history (see docs/roadmap.md,
+ * "Postgres migration line" #2, for why: a brand-new Postgres database has no
+ * legacy data to replay 30-odd historical migrations against). This always
+ * runs, on every boot, for every driver — safe because every statement here
+ * is `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`.
+ *
+ * A schema change *after* this file's bootstrap DDL was last written needs
+ * both: update the DDL text here too (so a brand-new install still gets it
+ * for free) *and* register it via {@link registerPostgresMigration} (so an
+ * *existing* Postgres database — one that already ran an older version of
+ * this bootstrap — catches up). Exactly the "migrations 38+ get written
+ * twice" tradeoff the roadmap note describes.
+ */
 export function registerPostgresBootstrap(ddlText) {
   bootstrapStatements.push(ddlText);
+}
+
+/**
+ * Register a schema change that isn't safely re-runnable as an `IF NOT
+ * EXISTS` bootstrap statement — a column rename, a data backfill, a type
+ * change, anything `registerPostgresBootstrap` can't express idempotently.
+ * `version` should match the SQLite migration number this mirrors (i.e. the
+ * new `MIGRATIONS.length` after adding it) — purely for humans matching the
+ * two up when reading the code side by side; nothing here reads the SQLite
+ * migration array's *content*, only `SCHEMA_VERSION` (its length) once, to
+ * know where a brand-new database's baseline already stands. See `getSql()`
+ * for how a fresh vs. an existing Postgres database each decide what to run.
+ * @param {number} version
+ * @param {string} ddlText
+ */
+export function registerPostgresMigration(version, ddlText) {
+  postgresMigrations.push({ version, ddl: ddlText });
 }
 
 // Dynamic import so a pure-SQLite process (every self-hosted deployment,
@@ -59,6 +101,7 @@ async function getSql() {
         for (const ddl of bootstrapStatements) {
           await client.unsafe(ddl);
         }
+        await runPostgresMigrations(client);
       } finally {
         await client`SELECT pg_advisory_unlock(${BOOTSTRAP_LOCK_KEY})`;
       }
@@ -70,6 +113,39 @@ async function getSql() {
   }
   sqlClient = await readyPromise;
   return sqlClient;
+}
+
+// Runs after the `IF NOT EXISTS` bootstrap above, inside the same advisory
+// lock — so this never races another process's copy of the same check.
+async function runPostgresMigrations(client) {
+  await client.unsafe(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version    INTEGER PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  const [{ max }] = await client`SELECT COALESCE(MAX(version), 0) AS max FROM schema_migrations`;
+  let current = Number(max);
+
+  if (current === 0) {
+    // No baseline recorded — either a brand-new database (the bootstrap DDL
+    // above just created its full current shape, through SCHEMA_VERSION) or
+    // a database from before this migration runner existed (same thing in
+    // practice: every table already matches the current bootstrap DDL,
+    // since nothing calls DATABASE_URL "ready for real use" before this
+    // shipped — see the roadmap note). Either way, stamp SCHEMA_VERSION as
+    // already covered instead of replaying registered migrations that the
+    // bootstrap DDL was written to make unnecessary from scratch.
+    await client`INSERT INTO schema_migrations (version) VALUES (${SCHEMA_VERSION})`;
+    current = SCHEMA_VERSION;
+  }
+
+  for (const { version, ddl } of [...postgresMigrations].sort((a, b) => a.version - b.version)) {
+    if (version <= current) continue; // already covered by the baseline or an earlier boot
+    await client.unsafe(ddl);
+    await client`INSERT INTO schema_migrations (version) VALUES (${version})`;
+    current = version;
+  }
 }
 
 /** Closes the Postgres pool, if one was ever opened. For test teardown. */
