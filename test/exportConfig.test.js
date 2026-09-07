@@ -20,7 +20,7 @@ test('exportGuildConfig captures settings, modules and scheduled messages, exclu
     days: [0, 1, 2, 3, 4, 5, 6],
   });
 
-  const dump = exportGuildConfig(G);
+  const dump = await exportGuildConfig(G);
 
   assert.equal(dump.sylo, 'guild-config-export');
   assert.equal(dump.guildId, G);

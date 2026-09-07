@@ -2516,11 +2516,14 @@ router.post(
 );
 
 // Download the guild's configuration as JSON (backup / "export my setup").
-router.get('/:guildId/export', (req, res) => {
-  const data = exportGuildConfig(req.guild.id);
-  res.setHeader('Content-Disposition', `attachment; filename="sylo-${req.guild.id}-config.json"`);
-  res.type('application/json').send(JSON.stringify(data, null, 2));
-});
+router.get(
+  '/:guildId/export',
+  asyncHandler(async (req, res) => {
+    const data = await exportGuildConfig(req.guild.id);
+    res.setHeader('Content-Disposition', `attachment; filename="sylo-${req.guild.id}-config.json"`);
+    res.type('application/json').send(JSON.stringify(data, null, 2));
+  })
+);
 
 // Config change history.
 router.get(
