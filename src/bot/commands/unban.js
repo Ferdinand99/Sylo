@@ -39,8 +39,8 @@ export async function execute(interaction) {
   await guild.bans.remove(userId, `${interaction.user.tag}: ${reason}`);
   await clearTempBan(guild.id, userId); // in case this was a scheduled temporary ban
 
-  const clearedCase = deactivateLatest(guild.id, userId, 'ban');
-  const { caseNumber } = addCase({
+  const clearedCase = await deactivateLatest(guild.id, userId, 'ban');
+  const { caseNumber } = await addCase({
     guildId: guild.id,
     userId,
     moderatorId: interaction.user.id,

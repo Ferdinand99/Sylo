@@ -61,7 +61,7 @@ export async function execute(interaction) {
     }
 
     await interaction.deferReply();
-    const { id, count } = addWarning({
+    const { id, count } = await addWarning({
       guildId,
       userId: user.id,
       moderatorId: interaction.user.id,
@@ -93,7 +93,7 @@ export async function execute(interaction) {
 
   if (sub === 'list') {
     const user = interaction.options.getUser('user', true);
-    const rows = listWarnings(guildId, user.id);
+    const rows = await listWarnings(guildId, user.id);
 
     const embed = new EmbedBuilder()
       .setColor(INFO_COLOR)
@@ -118,8 +118,8 @@ export async function execute(interaction) {
 
   if (sub === 'remove') {
     const id = interaction.options.getInteger('id', true);
-    const existing = getWarning(guildId, id);
-    if (!existing || !removeWarning(guildId, id)) {
+    const existing = await getWarning(guildId, id);
+    if (!existing || !(await removeWarning(guildId, id))) {
       await interaction.reply({
         content: `⚠️ No warning #${id} in this server.`,
         flags: MessageFlags.Ephemeral,
@@ -149,7 +149,7 @@ export async function execute(interaction) {
 
   if (sub === 'clear') {
     const user = interaction.options.getUser('user', true);
-    const n = clearWarnings(guildId, user.id);
+    const n = await clearWarnings(guildId, user.id);
     const embed = new EmbedBuilder()
       .setColor(MOD_COLOR)
       .setTitle('Warnings cleared')

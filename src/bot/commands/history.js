@@ -39,7 +39,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const user = interaction.options.getUser('user', true);
   const asked = interaction.options.getInteger('page') ?? 1;
-  const { rows, total } = listUserCases(interaction.guild.id, user.id, {
+  const { rows, total } = await listUserCases(interaction.guild.id, user.id, {
     limit: PAGE,
     offset: (asked - 1) * PAGE,
   });

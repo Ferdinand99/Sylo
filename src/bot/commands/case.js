@@ -76,7 +76,7 @@ export async function execute(interaction) {
   if (sub === 'note') {
     const user = interaction.options.getUser('user', true);
     const text = interaction.options.getString('text', true);
-    const { caseNumber } = addCase({
+    const { caseNumber } = await addCase({
       guildId,
       userId: user.id,
       moderatorId: interaction.user.id,
@@ -98,7 +98,7 @@ export async function execute(interaction) {
   }
 
   const number = interaction.options.getInteger('number', true);
-  const existing = getCase(guildId, number);
+  const existing = await getCase(guildId, number);
   if (!existing) {
     await interaction.reply({
       content: `⚠️ No case #${number} in this server.`,
@@ -114,8 +114,8 @@ export async function execute(interaction) {
 
   if (sub === 'reason') {
     const text = interaction.options.getString('text', true);
-    editCaseReason(guildId, number, text);
-    const updated = getCase(guildId, number);
+    await editCaseReason(guildId, number, text);
+    const updated = await getCase(guildId, number);
     const embed = caseEmbed(updated, `Case #${number} reason updated`)
       .setColor(MOD_COLOR)
       .addFields({ name: 'Edited by', value: interaction.user.tag });
@@ -132,7 +132,7 @@ export async function execute(interaction) {
     });
     return;
   }
-  setCaseActive(guildId, number, false);
+  await setCaseActive(guildId, number, false);
   const embed = new EmbedBuilder()
     .setColor(MOD_COLOR)
     .setTitle(`Case #${number} deleted`)

@@ -10,6 +10,7 @@ export const GUILD_TABLES = [
   'guild_modules',
   'command_overrides',
   'infractions',
+  'case_counters',
   'tickets',
   'composed_messages',
   'counting',

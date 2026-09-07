@@ -44,13 +44,13 @@ async function renderLeaderboard(req, res, next, guildId, canonical) {
     const period = ['week', 'month'].includes(req.query.period) ? req.query.period : 'all';
     const periodKey = period === 'all' ? null : periodKeys()[period];
 
-    const total = periodKey ? memberCountForPeriod(guildId, periodKey) : memberCount(guildId);
+    const total = periodKey ? await memberCountForPeriod(guildId, periodKey) : await memberCount(guildId);
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
     const offset = (page - 1) * PAGE_SIZE;
     const rows = periodKey
-      ? topMembersForPeriod(guildId, periodKey, PAGE_SIZE, offset)
-      : topMembers(guildId, PAGE_SIZE, offset);
+      ? await topMembersForPeriod(guildId, periodKey, PAGE_SIZE, offset)
+      : await topMembers(guildId, PAGE_SIZE, offset);
 
     // One bulk gateway fetch for display names + avatars; fall back per-miss.
     let fetched = new Map();

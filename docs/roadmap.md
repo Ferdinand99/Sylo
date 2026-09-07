@@ -1062,7 +1062,58 @@ different reason worth recording:**
 infra (see above), not counted as remaining work. Same caveats as before
 still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (21 of 30 files)
+### Phase 19 shipped — `src/db/modCases.js` and `src/db/leveling.js`
+
+The two files deferred in Phase 18 over their `db.transaction()` usage —
+done without ever building a transaction primitive. Both turned out to be
+solvable by redesigning the write around a single atomic statement instead of
+a multi-statement app-level transaction:
+
+- **`modCases.js`**: the transaction only existed to make
+  `SELECT MAX(case_number)+1` race-free under concurrent writers. Replaced
+  with a new `case_counters` table and a single
+  `INSERT ... ON CONFLICT DO UPDATE SET next_number = next_number + 1
+  RETURNING next_number` claim — the same upsert-with-increment shape as
+  `inviteTracker.js`'s `bumpRegular` (Phase 14), just read back via
+  `RETURNING` instead of a blind write. A new migration (37) backfills
+  `case_counters` from `MAX(case_number)` per guild for existing
+  SQLite installs, so the counter picks up exactly where real history left
+  off instead of colliding with it. Verified with a dedicated stress test:
+  25 concurrent `addCase()` calls for the same guild against real Postgres,
+  asserting the claimed numbers are exactly `1..25` with zero duplicates or
+  gaps — passed first try.
+- **`leveling.js`**: `xp`/`messages`/`voice_xp`/`voice_minutes` are now a
+  single atomic increment-upsert (`RETURNING` the post-increment row);
+  `level` — a JS curve lookup (`levelFromXp`) with no practical single-SQL-
+  expression equivalent — is derived from that returned xp and written by a
+  second, self-guarding statement (`WHERE level < @level`, so an
+  out-of-order concurrent write can never regress it). `previousLevel` (for
+  the `leveledUp` check) is computed as `levelFromXp(newXp - add)` instead of
+  read before the write — mathematically exact for *this* call's own delta
+  regardless of what any concurrent caller does, so no pre-read is needed at
+  all. Also caught and fixed the exact Phase 14 bug in
+  `leveling_periods`'s *existing* upsert (`xp = xp + excluded.xp`, unqualified
+  — ambiguous on Postgres) while touching the file; qualified it to
+  `leveling_periods.xp + excluded.xp` like everything else. Verified with 50
+  concurrent `addXp()` calls for the same member against real Postgres,
+  asserting the final total is exactly 50×10 with nothing lost — passed
+  first try.
+
+Both fixes generalize the lesson from this pair: a `db.transaction()` in this
+codebase has, so far, always existed to guard exactly one thing (a
+read-compute-write or a claim-next-number race), and that thing has always
+turned out to be expressible as a single atomic SQL statement once you look
+for it — cheaper and safer than building a portable transaction primitive
+(which would have needed `AsyncLocalStorage` to thread a Postgres transaction
+connection through already-`prepare()`d statements, and still couldn't stop
+an unrelated statement from a different request interleaving on SQLite's
+single shared connection). `purge.js` and `retention.js` — the two remaining
+`db.transaction()` users — are worth re-examining with this same lens before
+assuming they need a transaction primitive either, when their turn comes.
+
+23 of 30 files converted; same caveats as before still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (23 of 30 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

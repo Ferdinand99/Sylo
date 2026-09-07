@@ -26,10 +26,10 @@ export async function execute(interaction) {
 
   const user = interaction.options.getUser('user') ?? interaction.user;
   const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-  const row = getMember(interaction.guildId, user.id);
+  const row = await getMember(interaction.guildId, user.id);
   const p = levelProgress(row.xp);
-  const rank = memberRank(interaction.guildId, user.id);
-  const total = memberCount(interaction.guildId);
+  const rank = await memberRank(interaction.guildId, user.id);
+  const total = await memberCount(interaction.guildId);
   const name = member?.displayName || user.username;
 
   try {

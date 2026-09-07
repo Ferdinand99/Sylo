@@ -249,6 +249,13 @@ test('GET /member-data lists a member’s stored data', async () => {
   db.prepare(
     'INSERT INTO infractions (guild_id, case_number, user_id, moderator_id, action, reason, created_at) VALUES (?,?,?,?,?,?,?)'
   ).run(GID, 1, MEMBER_ID, 'mod', 'warn', 'x', Date.now());
+  // Keep db/modCases.js's atomic case-number counter (case_counters) in sync
+  // with this raw seed, same as the migration 37 backfill does for real
+  // pre-existing data — otherwise the next addCase() call for GID (below)
+  // claims case_number 1 too and collides with this row's PRIMARY KEY.
+  db.prepare(
+    'INSERT INTO case_counters (guild_id, next_number) VALUES (?, 1) ON CONFLICT (guild_id) DO UPDATE SET next_number = MAX(next_number, excluded.next_number)'
+  ).run(GID);
 
   const res = await get(`/guilds/${GID}/member-data?user=${MEMBER_ID}`);
   assert.equal(res.status, 200);

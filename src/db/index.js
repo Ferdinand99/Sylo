@@ -677,6 +677,23 @@ export const MIGRATIONS = [
       CREATE INDEX idx_cleanup_guild ON channel_cleanup_schedules (guild_id, created_at);
     `);
   },
+
+  // Per-guild case-number counters, seeded from existing history. Lets
+  // db/modCases.js claim the next case number with a single atomic
+  // `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` upsert (portable to
+  // Postgres) instead of `SELECT MAX(case_number)+1` wrapped in a
+  // better-sqlite3 transaction (which has no safe equivalent once statements
+  // are async) — see docs/roadmap.md, Postgres migration line.
+  (database) => {
+    database.exec(`
+      CREATE TABLE case_counters (
+        guild_id    TEXT PRIMARY KEY,
+        next_number INTEGER NOT NULL DEFAULT 0
+      );
+      INSERT INTO case_counters (guild_id, next_number)
+      SELECT guild_id, MAX(case_number) FROM infractions GROUP BY guild_id;
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

@@ -138,7 +138,7 @@ export async function execute(interaction) {
     expiryField = 'Permanent';
   }
 
-  const { caseNumber } = addCase({
+  const { caseNumber } = await addCase({
     guildId: guild.id,
     userId: user.id,
     moderatorId: interaction.user.id,

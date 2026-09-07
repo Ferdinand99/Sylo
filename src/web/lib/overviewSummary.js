@@ -395,7 +395,7 @@ async function moduleLines(id, guild, cfg) {
       return [
         neutral('Announce', announce),
         rewards ? on('Reward roles', String(rewards)) : off('Reward roles', 'none'),
-        neutral('Ranked members', String(levelingMemberCount(guild.id))),
+        neutral('Ranked members', String(await levelingMemberCount(guild.id))),
       ];
     }
     case 'automod': {
