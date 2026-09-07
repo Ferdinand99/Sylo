@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.27.0](https://github.com/Ferdinand99/Sylo/compare/v3.26.0...v3.27.0) (2026-09-07)
+
+
+### Features
+
+* add a one-time SQLite to Postgres data migration tool ([#174](https://github.com/Ferdinand99/Sylo/issues/174)) ([c9c2391](https://github.com/Ferdinand99/Sylo/commit/c9c23910a842bd02188bcffe4d0722053cfb2ed7))
+* add a Postgres-only schema migration runner ([#172](https://github.com/Ferdinand99/Sylo/issues/172)) ([128ca46](https://github.com/Ferdinand99/Sylo/commit/128ca46b3e0c769ece8abcfbc5a93950705101a3))
+* convert config export and dashboard stats to the Postgres-optional driver ([#168](https://github.com/Ferdinand99/Sylo/issues/168)) ([adf4201](https://github.com/Ferdinand99/Sylo/commit/adf42013abcf8f0746264bb02f70472aa2f4dd31))
+* convert core modules table to the Postgres-optional driver (#N) ([#167](https://github.com/Ferdinand99/Sylo/issues/167)) ([517bb3c](https://github.com/Ferdinand99/Sylo/commit/517bb3c9cd6e483d154be741d8044ff48fd8381b))
+* convert guild purge and data retention to the Postgres-optional… ([#169](https://github.com/Ferdinand99/Sylo/issues/169)) ([89d27e7](https://github.com/Ferdinand99/Sylo/commit/89d27e7f0618969e222a9eecace9d74bfecc45eb))
+* convert modCases and leveling modules to the Postgres-optional driver (#N) ([#165](https://github.com/Ferdinand99/Sylo/issues/165)) ([685bb74](https://github.com/Ferdinand99/Sylo/commit/685bb74c807eaf9c8aee788b50030bac388649ed))
+* convert temp voice and server insights to the Postgres-optional driver ([#170](https://github.com/Ferdinand99/Sylo/issues/170)) ([84d9383](https://github.com/Ferdinand99/Sylo/commit/84d9383c73b86a2bf3dfa5744e2eab25b43ca312))
+* redesign backup/restore for Postgres via pg_dump/pg_restore ([#173](https://github.com/Ferdinand99/Sylo/issues/173)) ([5ee144b](https://github.com/Ferdinand99/Sylo/commit/5ee144b7d4f379c1496c4fbf43f1bf7854b3e282))
+
 ## [3.26.0](https://github.com/Ferdinand99/Sylo/compare/v3.25.0...v3.26.0) (2026-09-07)
 
 
