@@ -10,6 +10,7 @@ import { renderCounters } from '../../lib/metrics.js';
 import { moduleUsage } from '../../db/dashboardStats.js';
 import { dbFileInfo } from '../../db/backup.js';
 import { MODULES } from '../../modules/registry.js';
+import { asyncHandler } from '../lib/asyncHandler.js';
 
 const router = Router();
 
@@ -17,32 +18,39 @@ function gauge(name, help, value) {
   return `# HELP ${name} ${help}\n# TYPE ${name} gauge\n${name} ${value}`;
 }
 
-router.get('/', (req, res) => {
-  const ping = runtime.client?.ws?.ping;
-  const blocks = [
-    gauge('sylo_up', '1 when the Discord gateway is connected, else 0', isDiscordReady() ? 1 : 0),
-    gauge('sylo_uptime_seconds', 'Seconds since the process started', uptimeSeconds()),
-    gauge('sylo_guilds', 'Guilds the bot is currently in', guildCount()),
-    gauge(
-      'sylo_gateway_ping_ms',
-      'Discord gateway heartbeat latency in ms (-1 when unknown)',
-      typeof ping === 'number' && ping >= 0 ? Math.round(ping) : -1
-    ),
-    gauge('sylo_db_bytes', 'Size of the SQLite database file in bytes', dbFileInfo().size),
-    gauge('sylo_errors_recorded', 'Errors currently held in the /health ring buffer', runtime.errors.length),
-  ];
+router.get(
+  '/',
+  asyncHandler(async (req, res) => {
+    const ping = runtime.client?.ws?.ping;
+    const blocks = [
+      gauge('sylo_up', '1 when the Discord gateway is connected, else 0', isDiscordReady() ? 1 : 0),
+      gauge('sylo_uptime_seconds', 'Seconds since the process started', uptimeSeconds()),
+      gauge('sylo_guilds', 'Guilds the bot is currently in', guildCount()),
+      gauge(
+        'sylo_gateway_ping_ms',
+        'Discord gateway heartbeat latency in ms (-1 when unknown)',
+        typeof ping === 'number' && ping >= 0 ? Math.round(ping) : -1
+      ),
+      gauge('sylo_db_bytes', 'Size of the SQLite database file in bytes', dbFileInfo().size),
+      gauge(
+        'sylo_errors_recorded',
+        'Errors currently held in the /health ring buffer',
+        runtime.errors.length
+      ),
+    ];
 
-  const usage = moduleUsage();
-  const moduleLines = [
-    '# HELP sylo_module_enabled Number of guilds with a module enabled',
-    '# TYPE sylo_module_enabled gauge',
-    ...MODULES.map((m) => `sylo_module_enabled{module="${m.id}"} ${usage.get(m.id) ?? 0}`),
-  ];
+    const usage = await moduleUsage();
+    const moduleLines = [
+      '# HELP sylo_module_enabled Number of guilds with a module enabled',
+      '# TYPE sylo_module_enabled gauge',
+      ...MODULES.map((m) => `sylo_module_enabled{module="${m.id}"} ${usage.get(m.id) ?? 0}`),
+    ];
 
-  const counters = renderCounters();
-  const body = `${blocks.join('\n')}\n${moduleLines.join('\n')}\n` + (counters ? `\n${counters}` : '');
+    const counters = renderCounters();
+    const body = `${blocks.join('\n')}\n${moduleLines.join('\n')}\n` + (counters ? `\n${counters}` : '');
 
-  res.type('text/plain; version=0.0.4; charset=utf-8').send(body);
-});
+    res.type('text/plain; version=0.0.4; charset=utf-8').send(body);
+  })
+);
 
 export default router;

@@ -1170,7 +1170,41 @@ phase.
 
 24 of 30 files converted; same caveats as before still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (24 of 30 files)
+### Phase 21 shipped — `src/db/exportConfig.js` and `src/db/dashboardStats.js`
+
+The two files Phase 20's note flagged as unblocked-but-not-converted, plus
+`purge.js`/`retention.js` which are left for a later phase. Both files own no
+table of their own — they only `SELECT` from tables bootstrapped by their
+owning files (`guild_settings`, `guild_modules`, `command_overrides`,
+`scheduled_messages`, `counting` for `exportConfig.js`; `infractions`,
+`tickets`, `stats_cache`, `composed_messages`, `guild_modules` for
+`dashboardStats.js`) — so no `registerPostgresBootstrap()` call and no new
+migration were needed, just `prepare()` + `async`/`await` on every export.
+The only cross-dialect gotcha was the familiar one (checklist item 4):
+`dashboardStats()`'s six `COUNT(*)` queries each got wrapped in `Number(...)`
+since postgres.js returns bigint counts as strings.
+
+3 call sites outside `src/db` needed updating: `src/web/routes/guilds.js`'s
+`/:guildId/export` route (was plain sync, wrapped in `asyncHandler`) and two
+`moduleUsage()` reads in `src/web/routes/health.js` and
+`src/web/routes/metrics.js` (neither route was `asyncHandler`-wrapped before;
+both are now). `dashboardStats()`'s one call site (also in `health.js`) got
+the same treatment in the same pass.
+
+New `test/exportConfig.postgres.test.js` and `test/dashboardStats.postgres.test.js`
+verify both files end-to-end against a real Postgres connection, seeding
+through the already-converted owning modules (`modules.js`, `guildSettings.js`,
+`scheduledMessages.js`, `modCases.js`, `tickets.js`, `cache.js`,
+`composedMessages.js`) rather than raw SQL, so the tests exercise the same
+cross-file composition the app does in production.
+
+26 of 30 files converted; same caveats as before still apply. Remaining:
+`purge.js`, `retention.js` (both use `db.transaction()` for bulk/idempotent
+DELETEs, not concurrency races — worth re-examining with the Phase 19 lens
+before assuming they need a transaction primitive), `tempVoice.js`, and
+`insights.js`.
+
+### 1 — Driver + async seam in `src/db/` — in progress (26 of 30 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

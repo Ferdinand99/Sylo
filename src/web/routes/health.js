@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import { config } from '../../config.js';
 import { requireOwner, isOwner, forbidOwner } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
+import { asyncHandler } from '../lib/asyncHandler.js';
 import { runtime, uptimeSeconds, isDiscordReady, guildCount, errorScopeCounts } from '../../runtime.js';
 import { byMetric } from '../../lib/metrics.js';
 import { dashboardStats, moduleUsage } from '../../db/dashboardStats.js';
@@ -42,91 +43,94 @@ const backupLimit = rateLimit({
   message: 'Too many backup operations — wait a minute.',
 });
 
-router.get('/', (req, res) => {
-  const ready = isDiscordReady();
-  // htmx (hx-boost) navigations fetch with `Accept: */*`, so fall back to the
-  // HX-Request header — without this a boosted sidebar click renders the JSON.
-  const wantsHtml = (req.headers.accept || '').includes('text/html') || Boolean(req.get('HX-Request'));
+router.get(
+  '/',
+  asyncHandler(async (req, res) => {
+    const ready = isDiscordReady();
+    // htmx (hx-boost) navigations fetch with `Accept: */*`, so fall back to the
+    // HX-Request header — without this a boosted sidebar click renders the JSON.
+    const wantsHtml = (req.headers.accept || '').includes('text/html') || Boolean(req.get('HX-Request'));
 
-  if (!wantsHtml) {
-    const ping = runtime.client?.ws?.ping;
-    return res.status(ready ? 200 : 503).json({
-      status: ready ? 'ok' : 'degraded',
-      version,
-      uptimeSeconds: uptimeSeconds(),
-      discord: {
-        ready,
-        guilds: guildCount(),
-        gatewayPingMs: typeof ping === 'number' && ping >= 0 ? Math.round(ping) : null,
-        gatewayPingHistory: runtime.pingHistory.slice(),
-      },
+    if (!wantsHtml) {
+      const ping = runtime.client?.ws?.ping;
+      return res.status(ready ? 200 : 503).json({
+        status: ready ? 'ok' : 'degraded',
+        version,
+        uptimeSeconds: uptimeSeconds(),
+        discord: {
+          ready,
+          guilds: guildCount(),
+          gatewayPingMs: typeof ping === 'number' && ping >= 0 ? Math.round(ping) : null,
+          gatewayPingHistory: runtime.pingHistory.slice(),
+        },
+        lastError: runtime.lastError,
+        errorCount: runtime.errors.length,
+        errorsByScope: errorScopeCounts(),
+        commands: byMetric('sylo_commands_total')
+          .map((c) => ({ name: c.labels.command ?? 'unknown', count: c.value }))
+          .sort((a, b) => b.count - a.count),
+      });
+    }
+
+    if (config.authEnabled && !req.session?.user) {
+      if (req.session) req.session.returnTo = req.originalUrl;
+      return res.redirect('/auth/discord/login');
+    }
+    if (config.authEnabled && !isOwner(req.session.user.id)) {
+      return forbidOwner(res);
+    }
+
+    const client = runtime.client;
+    const guilds = client ? [...client.guilds.cache.values()] : [];
+    const memberReach = guilds.reduce((sum, g) => sum + (g.memberCount ?? 0), 0);
+    const gatewayPing = client?.ws?.ping;
+
+    const usage = await moduleUsage();
+    const modules = MODULES.map((m) => ({ name: m.name, icon: m.icon, guilds: usage.get(m.id) ?? 0 }))
+      .filter((m) => m.guilds > 0)
+      .sort((a, b) => b.guilds - a.guilds);
+
+    const dbInfo = dbFileInfo();
+
+    res.render('health', {
+      ready,
+      botTag: client?.user?.tag ?? null,
+      uptime: formatUptime(uptimeSeconds()),
+      guildCount: guildCount(),
+      memberReach,
+      gatewayPing: typeof gatewayPing === 'number' && gatewayPing >= 0 ? Math.round(gatewayPing) : null,
+      pingHistory: runtime.pingHistory.slice(),
+      stats: await dashboardStats(),
+      modules,
       lastError: runtime.lastError,
-      errorCount: runtime.errors.length,
-      errorsByScope: errorScopeCounts(),
-      commands: byMetric('sylo_commands_total')
-        .map((c) => ({ name: c.labels.command ?? 'unknown', count: c.value }))
-        .sort((a, b) => b.count - a.count),
-    });
-  }
-
-  if (config.authEnabled && !req.session?.user) {
-    if (req.session) req.session.returnTo = req.originalUrl;
-    return res.redirect('/auth/discord/login');
-  }
-  if (config.authEnabled && !isOwner(req.session.user.id)) {
-    return forbidOwner(res);
-  }
-
-  const client = runtime.client;
-  const guilds = client ? [...client.guilds.cache.values()] : [];
-  const memberReach = guilds.reduce((sum, g) => sum + (g.memberCount ?? 0), 0);
-  const gatewayPing = client?.ws?.ping;
-
-  const usage = moduleUsage();
-  const modules = MODULES.map((m) => ({ name: m.name, icon: m.icon, guilds: usage.get(m.id) ?? 0 }))
-    .filter((m) => m.guilds > 0)
-    .sort((a, b) => b.guilds - a.guilds);
-
-  const dbInfo = dbFileInfo();
-
-  res.render('health', {
-    ready,
-    botTag: client?.user?.tag ?? null,
-    uptime: formatUptime(uptimeSeconds()),
-    guildCount: guildCount(),
-    memberReach,
-    gatewayPing: typeof gatewayPing === 'number' && gatewayPing >= 0 ? Math.round(gatewayPing) : null,
-    pingHistory: runtime.pingHistory.slice(),
-    stats: dashboardStats(),
-    modules,
-    lastError: runtime.lastError,
-    lastErrorAgo: runtime.lastError ? timeAgo(runtime.lastError.at) : null,
-    errors: runtime.errors.slice(0, 25).map((e) => ({
-      message: e.message,
-      scope: e.scope,
-      ago: timeAgo(e.at),
-    })),
-    db: {
-      size: formatBytes(dbInfo.size),
-      wal: formatBytes(dbInfo.wal),
-      intervalHours: config.backupIntervalHours,
-      retention: config.backupRetention,
-      offsite: offsiteBackupStatus(),
-    },
-    backups: listBackups()
-      .slice(0, 25)
-      .map((b) => ({
-        name: b.name,
-        size: formatBytes(b.size),
-        ago: timeAgo(b.mtime),
+      lastErrorAgo: runtime.lastError ? timeAgo(runtime.lastError.at) : null,
+      errors: runtime.errors.slice(0, 25).map((e) => ({
+        message: e.message,
+        scope: e.scope,
+        ago: timeAgo(e.at),
       })),
-    backupMsg: typeof req.query.backup === 'string' ? req.query.backup : null,
-    backupErr: typeof req.query.backuperr === 'string' ? req.query.backuperr : null,
-    importMsg: typeof req.query.imported === 'string' ? req.query.imported : null,
-    importErr: typeof req.query.importerr === 'string' ? req.query.importerr : null,
-    restoreErr: typeof req.query.restoreerr === 'string' ? req.query.restoreerr : null,
-  });
-});
+      db: {
+        size: formatBytes(dbInfo.size),
+        wal: formatBytes(dbInfo.wal),
+        intervalHours: config.backupIntervalHours,
+        retention: config.backupRetention,
+        offsite: offsiteBackupStatus(),
+      },
+      backups: listBackups()
+        .slice(0, 25)
+        .map((b) => ({
+          name: b.name,
+          size: formatBytes(b.size),
+          ago: timeAgo(b.mtime),
+        })),
+      backupMsg: typeof req.query.backup === 'string' ? req.query.backup : null,
+      backupErr: typeof req.query.backuperr === 'string' ? req.query.backuperr : null,
+      importMsg: typeof req.query.imported === 'string' ? req.query.imported : null,
+      importErr: typeof req.query.importerr === 'string' ? req.query.importerr : null,
+      restoreErr: typeof req.query.restoreerr === 'string' ? req.query.restoreerr : null,
+    });
+  })
+);
 
 // Create a snapshot now.
 router.post('/backups', requireOwner, backupLimit, (req, res) => {
