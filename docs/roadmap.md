@@ -1113,7 +1113,64 @@ assuming they need a transaction primitive either, when their turn comes.
 
 23 of 30 files converted; same caveats as before still apply.
 
-### 1 — Driver + async seam in `src/db/` — in progress (23 of 30 files)
+### Phase 20 shipped — `src/db/modules.js`
+
+By far the widest single-PR change in this migration: 44 files, ~130+ call
+sites to `isModuleEnabled`/`getGuildModule`/`getGuildModules`/
+`setGuildModule` — dwarfing the previous record (Phase 16's `baseContext`,
+20 sites in 3 files). Had to land as one PR since every call site shares the
+same underlying functions; a partial conversion would have left the
+un-updated sites silently reading `.config`/`.enabled` off a pending Promise.
+
+The core risk was `dispatch.js` — the event fan-out every module's Discord.js
+handler routes through — but it turned out to already be `async` with an
+existing `await fn(...)` in its loop, so unblocking it took two words. That
+de-risked the rest: the ~40 remaining files were almost entirely mechanical
+`await` insertions inside already-async contexts (Discord command
+`execute()`, `on(...)` event handlers, `asyncHandler`-wrapped routes) — the
+same pattern proven repeatedly since Phase 14. A handful of local sync
+helpers had to become `async` and get their own call sites updated in turn:
+`resolveContext()` (shared by all 12 `/voice-*` commands),
+`tempVoiceConfig()`/`hubForChannel()`, `roleMessageById()`, `tvHubs()`,
+`starboardBoards()`, `ccCommands()`, and `buildSidebar()` (the whole
+dashboard's nav, wired through a new `async` auth middleware — safe on
+Express 5, which forwards a rejected promise from an async middleware to the
+error handler the same way it does for route handlers). Two `.some()`/`.find()`
+callbacks that called an now-async helper became `Promise.all(...)` +
+a plain synchronous check on the resolved results, same restructure as
+Phase 14/18's `Promise.all(...map(async ...))` pairs.
+
+**Two real, unrelated bugs found and fixed while re-auditing every call
+site (the `stats.js` lesson from Phase 13, still paying off):**
+- `birthdays.js`'s `runBirthdaySweep()` compared `getAppSetting(...)`
+  (converted to async in an earlier phase) directly against a date string
+  with no `await` — always false, silently defeating the "only run once
+  after midnight" guard and making the birthday sweep+announcement re-run
+  every hour, all day, since a much earlier phase. Fixed.
+- 4 more un-awaited `setGuildModule`/`getGuildModule` calls turned up in
+  test files during the full-suite run (`insights.test.js`,
+  `retention.test.js`, `routes.guilds.test.js`, `exportConfig.test.js`,
+  `overviewSummary.test.js`, `routes.misc.test.js`) — all fixed, and one
+  (`insights.test.js`) also needed `await` added on its own direct
+  `dispatch(...)` calls, since dispatch's internal work is now genuinely
+  asynchronous instead of resolving within the same tick.
+
+Also hardened `dispatch()` itself while in there: `isModuleEnabled()` was
+being called *outside* the per-handler `try/catch`, safe when it was a
+synchronous SQLite read that couldn't throw asynchronously, less so now that
+it's real (if normally fast) I/O — moved inside the same try/catch as the
+handler call, so a hiccup on one module's guard check can't abort the
+dispatch loop for every other module listening to that event.
+
+This unblocks `exportConfig.js`, `dashboardStats.js`, `purge.js`, and
+`retention.js` for a future phase — all previously deferred specifically
+because they read `guild_modules`, which had no Postgres bootstrap DDL until
+now. They're not converted themselves yet; only `modules.js` shipped in this
+phase.
+
+24 of 30 files converted; same caveats as before still apply.
+
+### 1 — Driver + async seam in `src/db/` — in progress (24 of 30 files)
 
 The big, mechanical piece; blocks #2 and #3.
 

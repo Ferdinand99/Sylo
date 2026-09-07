@@ -9,7 +9,7 @@ export const data = new SlashCommandBuilder()
   .setContexts(InteractionContextType.Guild);
 
 export async function execute(interaction) {
-  const ctx = resolveContext(interaction);
+  const ctx = await resolveContext(interaction);
   if (ctx.error) return interaction.reply({ content: ctx.error, ...ephemeral });
   if (!canControl(ctx))
     return interaction.reply({

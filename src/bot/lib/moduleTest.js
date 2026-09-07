@@ -21,7 +21,7 @@ export const TESTABLE = new Set([
  * @returns {Promise<{ ok: boolean, channelName?: string, reason?: 'no-channel'|'send-failed' }>}
  */
 export async function sendModuleTest(guild, moduleId) {
-  const cfg = getGuildModule(guild.id, moduleId).config || {};
+  const cfg = (await getGuildModule(guild.id, moduleId)).config || {};
   const color = await guildEmbedColor(guild.id);
   let channelId;
   let embed;

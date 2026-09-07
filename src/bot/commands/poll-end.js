@@ -22,7 +22,7 @@ const parseMessageId = (raw) => {
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
-  if (!isModuleEnabled(interaction.guildId, 'polls')) {
+  if (!(await isModuleEnabled(interaction.guildId, 'polls'))) {
     return interaction.reply({
       content: 'The Polls module is not enabled in this server.',
       flags: MessageFlags.Ephemeral,

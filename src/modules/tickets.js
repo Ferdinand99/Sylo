@@ -125,7 +125,7 @@ ${bubbles}
 export async function ticketGuildsForUser(user) {
   const out = [];
   for (const guild of runtime.client.guilds.cache.values()) {
-    if (!isModuleEnabled(guild.id, 'tickets')) continue;
+    if (!(await isModuleEnabled(guild.id, 'tickets'))) continue;
     const member = await guild.members.fetch(user.id).catch(() => null);
     if (member) out.push(guild);
   }
@@ -133,7 +133,7 @@ export async function ticketGuildsForUser(user) {
 }
 
 async function notifyStaff(guild, text) {
-  const cfg = getGuildModule(guild.id, 'tickets').config;
+  const cfg = (await getGuildModule(guild.id, 'tickets')).config;
   if (!cfg.notifyChannel) return;
   const ch =
     guild.channels.cache.get(cfg.notifyChannel) ??
@@ -152,7 +152,7 @@ async function notifyStaff(guild, text) {
  * @param {{ content: string, attachments: string[] }} payload
  */
 export async function ingestUserDM(guild, user, payload) {
-  const cfg = getGuildModule(guild.id, 'tickets').config;
+  const cfg = (await getGuildModule(guild.id, 'tickets')).config;
   let ticket = await getOpenTicket(guild.id, user.id);
   const isNew = !ticket;
   if (!ticket) ticket = await createTicket(guild.id, user.id);
@@ -220,7 +220,7 @@ export async function relayStaffReply(ticket, staffUserId, content) {
  */
 export async function closeTicketWithNotice(ticket, staffUserId, closingMessage) {
   const guild = runtime.client?.guilds.cache.get(ticket.guild_id);
-  const cfg = getGuildModule(ticket.guild_id, 'tickets').config;
+  const cfg = (await getGuildModule(ticket.guild_id, 'tickets')).config;
   const user = await runtime.client?.users.fetch(ticket.user_id).catch(() => null);
 
   const text = (closingMessage ?? '').trim();

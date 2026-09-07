@@ -35,7 +35,7 @@ async function renderLeaderboard(req, res, next, guildId, canonical) {
     const guild = runtime.client?.guilds.cache.get(guildId);
     if (!guild) return notFound(res, 'Sylo is not in that server.');
 
-    const { enabled, config } = getGuildModule(guildId, 'leveling');
+    const { enabled, config } = await getGuildModule(guildId, 'leveling');
     if (!enabled) return notFound(res, 'This server does not have leveling enabled.');
     if (config.publicLeaderboard === false) {
       return notFound(res, 'This server has turned its public leaderboard off.');

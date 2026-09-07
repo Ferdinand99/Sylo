@@ -165,8 +165,8 @@ async function tick() {
   // Gather every alert across enabled guilds.
   const jobs = [];
   for (const guild of runtime.client.guilds.cache.values()) {
-    if (!isModuleEnabled(guild.id, 'twitch-alerts')) continue;
-    const cfg = normaliseTwitchConfig(getGuildModule(guild.id, 'twitch-alerts').config);
+    if (!(await isModuleEnabled(guild.id, 'twitch-alerts'))) continue;
+    const cfg = normaliseTwitchConfig((await getGuildModule(guild.id, 'twitch-alerts')).config);
     for (const alert of cfg.alerts) jobs.push({ guildId: guild.id, alert });
   }
   if (!jobs.length) return;

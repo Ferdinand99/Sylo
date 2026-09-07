@@ -127,7 +127,7 @@ test('GET /stats renders the cache table', async () => {
 
 test('GET /leaderboard/:id renders when leveling is enabled', async () => {
   const { setGuildModule } = await import('../src/db/modules.js');
-  setGuildModule(GID, 'leveling', { enabled: true });
+  await setGuildModule(GID, 'leveling', { enabled: true });
   const res = await get(`/leaderboard/${GID}`);
   assert.equal(res.status, 200);
   assert.match(await res.text(), /<!doctype html>/i);
@@ -135,7 +135,7 @@ test('GET /leaderboard/:id renders when leveling is enabled', async () => {
 
 test('GET /leaderboard/:id 404s when leveling is off', async () => {
   const { setGuildModule } = await import('../src/db/modules.js');
-  setGuildModule(GID, 'leveling', { enabled: false });
+  await setGuildModule(GID, 'leveling', { enabled: false });
   const res = await get(`/leaderboard/${GID}`);
   assert.equal(res.status, 404);
 });

@@ -105,11 +105,13 @@ export function renderName(template, { member, index }) {
 
 // --- config lookup for the commands -----------------------------------
 
-export function tempVoiceConfig(guildId) {
-  return normaliseTempVoiceConfig(getGuildModule(guildId, 'temp-voice').config);
+export async function tempVoiceConfig(guildId) {
+  return normaliseTempVoiceConfig((await getGuildModule(guildId, 'temp-voice')).config);
 }
-export function hubForChannel(guildId, hubId) {
-  return tempVoiceConfig(guildId).hubs.find((h) => h.id === hubId || h.hubChannelId === hubId) ?? null;
+export async function hubForChannel(guildId, hubId) {
+  return (
+    (await tempVoiceConfig(guildId)).hubs.find((h) => h.id === hubId || h.hubChannelId === hubId) ?? null
+  );
 }
 
 // --- overwrites ------------------------------------------------------
@@ -288,7 +290,7 @@ async function onLeaveTemp(guild, channelId) {
   if (channel.members.size > 0) {
     setTempEmptySince(channelId, null);
     // Owner left but others remain → transfer unless the hub locks ownership.
-    const hub = hubForChannel(guild.id, row.hub_id);
+    const hub = await hubForChannel(guild.id, row.hub_id);
     if (!channel.members.has(row.owner_id) && hub && !hub.ownershipLock) {
       const next = channel.members.first();
       if (next) {
@@ -301,7 +303,7 @@ async function onLeaveTemp(guild, channelId) {
     return;
   }
 
-  const hub = hubForChannel(guild.id, row.hub_id);
+  const hub = await hubForChannel(guild.id, row.hub_id);
   const keep = hub?.keepAliveMinutes ?? 0;
   if (keep === 0) return void destroy(guild, row);
   if (keep < 0) return; // never auto-delete
@@ -354,7 +356,7 @@ async function sweep() {
       if (row.empty_since) setTempEmptySince(row.channel_id, null);
       continue;
     }
-    const hub = hubForChannel(guild.id, row.hub_id);
+    const hub = await hubForChannel(guild.id, row.hub_id);
     const keep = hub?.keepAliveMinutes ?? 0;
     if (keep < 0) continue;
     const since = row.empty_since ?? row.created_at;
@@ -394,7 +396,7 @@ export function renameTemp(channel, name) {
   return channel.setName(name.slice(0, 100)).catch(() => {});
 }
 export async function transferTemp(channel, guild, row, newOwnerId) {
-  const hub = hubForChannel(guild.id, row.hub_id);
+  const hub = await hubForChannel(guild.id, row.hub_id);
   if (row.owner_id) await channel.permissionOverwrites.delete(row.owner_id).catch(() => {});
   setTempOwner(channel.id, newOwnerId);
   if (hub) {

@@ -8,7 +8,7 @@ export const data = new SlashCommandBuilder()
   .setContexts(InteractionContextType.Guild);
 
 export async function execute(interaction) {
-  const ctx = resolveContext(interaction);
+  const ctx = await resolveContext(interaction);
   if (ctx.error) return interaction.reply({ content: ctx.error, ...ephemeral });
   const here = ctx.channel.members.has(ctx.row.owner_id);
   return interaction.reply({

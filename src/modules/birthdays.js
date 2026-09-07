@@ -77,7 +77,7 @@ async function celebrantsToday(guildId, now) {
 async function celebrateGuild(guildId, now) {
   const guild = runtime.client?.guilds.cache.get(guildId);
   if (!guild) return;
-  const cfg = normaliseBirthdaysConfig(getGuildModule(guildId, 'birthdays').config);
+  const cfg = normaliseBirthdaysConfig((await getGuildModule(guildId, 'birthdays')).config);
   const rows = await celebrantsToday(guildId, now);
   const celebrantIds = new Set(rows.map((r) => r.user_id));
 
@@ -121,11 +121,11 @@ async function celebrateGuild(guildId, now) {
 /** Run the daily sweep if the calendar day has rolled over since last time. */
 export async function runBirthdaySweep(now = new Date()) {
   const today = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
-  if (getAppSetting(LAST_RUN_KEY) === today) return;
-  setAppSetting(LAST_RUN_KEY, today);
+  if ((await getAppSetting(LAST_RUN_KEY)) === today) return;
+  await setAppSetting(LAST_RUN_KEY, today);
 
   for (const guild of runtime.client?.guilds.cache.values() ?? []) {
-    if (!isModuleEnabled(guild.id, 'birthdays')) continue;
+    if (!(await isModuleEnabled(guild.id, 'birthdays'))) continue;
     try {
       await celebrateGuild(guild.id, now);
     } catch (err) {

@@ -35,7 +35,7 @@ export const data = new SlashCommandBuilder()
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
-  if (!isModuleEnabled(interaction.guildId, 'polls')) {
+  if (!(await isModuleEnabled(interaction.guildId, 'polls'))) {
     return interaction.reply({
       content: 'The Polls module is not enabled in this server.',
       flags: MessageFlags.Ephemeral,
@@ -74,7 +74,7 @@ export async function execute(interaction) {
     ends_at: endsAt,
     created_at: Date.now(),
   };
-  const config = getGuildModule(interaction.guildId, 'polls').config;
+  const config = (await getGuildModule(interaction.guildId, 'polls')).config;
 
   await interaction.reply(buildPollPayload(poll, config));
   const message = await interaction.fetchReply();

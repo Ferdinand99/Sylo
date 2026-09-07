@@ -211,7 +211,7 @@ async function tick() {
   await pruneFreeGames();
 
   for (const guild of client.guilds.cache.values()) {
-    const { enabled, config: cfg } = getGuildModule(guild.id, 'free-games');
+    const { enabled, config: cfg } = await getGuildModule(guild.id, 'free-games');
     if (!enabled || !/^\d{17,20}$/.test(cfg.channelId ?? '')) continue;
 
     let postedThisTick = 0;

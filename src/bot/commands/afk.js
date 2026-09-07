@@ -15,7 +15,7 @@ export async function execute(interaction) {
   if (!interaction.inGuild()) {
     return interaction.reply({ content: 'Use this in a server.', flags: MessageFlags.Ephemeral });
   }
-  if (!isModuleEnabled(interaction.guildId, 'afk')) {
+  if (!(await isModuleEnabled(interaction.guildId, 'afk'))) {
     return interaction.reply({
       content: 'AFK is not enabled in this server.',
       flags: MessageFlags.Ephemeral,
@@ -23,7 +23,7 @@ export async function execute(interaction) {
   }
 
   const reason = interaction.options.getString('reason')?.trim() || 'AFK';
-  const cfg = getGuildModule(interaction.guildId, 'afk').config;
+  const cfg = (await getGuildModule(interaction.guildId, 'afk')).config;
   const member = interaction.member;
 
   let oldNick = null;

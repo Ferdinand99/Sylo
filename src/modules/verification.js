@@ -120,8 +120,8 @@ export async function ensureVerifyMessage(guild, cfg) {
     .send({ embeds: [verifyEmbed(cfg)], components: [verifyButtonRow()] })
     .catch(() => null);
   if (!posted) return;
-  const fresh = getGuildModule(guild.id, 'verification').config;
-  setGuildModule(guild.id, 'verification', { config: { ...fresh, messageId: posted.id } });
+  const fresh = (await getGuildModule(guild.id, 'verification')).config;
+  await setGuildModule(guild.id, 'verification', { config: { ...fresh, messageId: posted.id } });
 }
 
 function verifyEmbed(cfg) {
@@ -162,13 +162,13 @@ export async function grantVerified(guild, userId, cfg) {
 // --- interaction handler (Verify button) ---------------------------------
 
 async function handleVerifyButton(interaction) {
-  if (!interaction.inGuild() || !isModuleEnabled(interaction.guildId, 'verification')) {
+  if (!interaction.inGuild() || !(await isModuleEnabled(interaction.guildId, 'verification'))) {
     return interaction.reply({
       content: 'Verification is not active here.',
       flags: MessageFlags.Ephemeral,
     });
   }
-  const cfg = normaliseVerificationConfig(getGuildModule(interaction.guildId, 'verification').config);
+  const cfg = normaliseVerificationConfig((await getGuildModule(interaction.guildId, 'verification')).config);
   if (!cfg.verifiedRoleId) {
     return interaction.reply({
       content: 'Verification is misconfigured — no role is set.',
@@ -215,8 +215,10 @@ on('verification', 'guildMemberAdd', async (member, rawConfig) => {
   const graceMs = cfg.kickAfterMinutes * 60_000;
   setTimeout(async () => {
     try {
-      if (!isModuleEnabled(member.guild.id, 'verification')) return;
-      const fresh = normaliseVerificationConfig(getGuildModule(member.guild.id, 'verification').config);
+      if (!(await isModuleEnabled(member.guild.id, 'verification'))) return;
+      const fresh = normaliseVerificationConfig(
+        (await getGuildModule(member.guild.id, 'verification')).config
+      );
       const m = await member.guild.members.fetch(member.id).catch(() => null);
       if (!m || m.roles.cache.has(fresh.verifiedRoleId) || !m.kickable) return;
       await m.kick(`Did not verify within ${fresh.kickAfterMinutes} minutes`).catch(() => {});

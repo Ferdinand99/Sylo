@@ -100,7 +100,7 @@ const CATEGORIES = [
  * @param {import('express').Request} req
  * @param {string|null} gid  resolved active guild id
  */
-export function buildSidebar(req, gid = null) {
+export async function buildSidebar(req, gid = null) {
   const path = req.path;
   const guild = gid ? runtime.client?.guilds.cache.get(gid) : null;
   // Health exposes cross-server data and DB backup/restore — hide the link from
@@ -120,7 +120,7 @@ export function buildSidebar(req, gid = null) {
   if (!guild) return { top, guild: null, categories: [] };
 
   const base = `/guilds/${gid}`;
-  const enabled = new Map(getGuildModules(gid).map((m) => [m.id, m.enabled]));
+  const enabled = new Map((await getGuildModules(gid)).map((m) => [m.id, m.enabled]));
 
   const resolve = (it) => {
     if (it.module) {

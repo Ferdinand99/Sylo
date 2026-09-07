@@ -242,8 +242,8 @@ async function tick() {
   let budget = MAX_FETCHES_PER_TICK;
 
   for (const guild of runtime.client.guilds.cache.values()) {
-    if (!isModuleEnabled(guild.id, 'rss')) continue;
-    const cfg = normaliseRssConfig(getGuildModule(guild.id, 'rss').config);
+    if (!(await isModuleEnabled(guild.id, 'rss'))) continue;
+    const cfg = normaliseRssConfig((await getGuildModule(guild.id, 'rss')).config);
     for (const feed of cfg.feeds) {
       if (budget-- <= 0) return;
       try {

@@ -148,7 +148,7 @@ test('POST /m/sticky/config keeps the per-channel app + cooldown options', async
     s_cooldown: '90',
   });
   const { getGuildModule } = await import('../src/db/modules.js');
-  const [row] = getGuildModule(GID, 'sticky').config.stickies;
+  const [row] = (await getGuildModule(GID, 'sticky')).config.stickies;
   assert.equal(row.channelId, CH.general);
   assert.equal(row.repostOnBots, true);
   assert.equal(row.cooldownSeconds, 90);
@@ -163,7 +163,7 @@ test('POST /m/kick-alerts/config stores a cleaned alert list', async () => {
   );
   assert.equal(res.status, 200);
   const { getGuildModule } = await import('../src/db/modules.js');
-  const stored = getGuildModule(GID, 'kick-alerts').config;
+  const stored = (await getGuildModule(GID, 'kick-alerts')).config;
   assert.equal(stored.alerts.length, 1);
   assert.equal(stored.alerts[0].slug, 'xqc');
   assert.equal(stored.alerts[0].channelId, CH.general);
@@ -185,7 +185,7 @@ test('POST /m/rss/config resolves a friendly handle to a feed URL', async () => 
   );
   assert.equal(res.status, 200);
   const { getGuildModule } = await import('../src/db/modules.js');
-  const [feed] = getGuildModule(GID, 'rss').config.feeds;
+  const [feed] = (await getGuildModule(GID, 'rss')).config.feeds;
   assert.equal(feed.type, 'reddit');
   assert.equal(feed.ref, 'r/programming');
   assert.equal(feed.url, 'https://www.reddit.com/r/programming/new/.rss');

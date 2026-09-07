@@ -40,8 +40,8 @@ export function normaliseThresholds(list) {
  * @param {string} moderatorLabel  who issued the warning (for the mod-log)
  */
 export async function applyWarnThresholds(guild, targetUser, warnCount, moderatorLabel) {
-  if (!isModuleEnabled(guild.id, 'moderation')) return;
-  const config = getGuildModule(guild.id, 'moderation').config;
+  if (!(await isModuleEnabled(guild.id, 'moderation'))) return;
+  const config = (await getGuildModule(guild.id, 'moderation')).config;
   const rules = normaliseThresholds(config.warnThresholds);
 
   // Strictest rule whose count the user has reached (exact or exceeded).
@@ -50,7 +50,7 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
 
   const member = await guild.members.fetch(targetUser.id).catch(() => null);
   // Immunity roles (shared with Auto-moderation) are never auto-punished.
-  const immune = getGuildModule(guild.id, 'automod').config.exemptRoles;
+  const immune = (await getGuildModule(guild.id, 'automod')).config.exemptRoles;
   if (member && Array.isArray(immune) && immune.some((r) => member.roles.cache.has(r))) return;
   const reason = `Auto: reached ${warnCount} warning(s) (rule at ${rule.count})`;
   let done = null;

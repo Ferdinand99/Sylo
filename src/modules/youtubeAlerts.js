@@ -215,8 +215,8 @@ async function tick() {
   await pruneYoutube();
 
   for (const guild of runtime.client.guilds.cache.values()) {
-    if (!isModuleEnabled(guild.id, 'youtube-alerts')) continue;
-    const cfg = normaliseYoutubeConfig(getGuildModule(guild.id, 'youtube-alerts').config);
+    if (!(await isModuleEnabled(guild.id, 'youtube-alerts'))) continue;
+    const cfg = normaliseYoutubeConfig((await getGuildModule(guild.id, 'youtube-alerts')).config);
     for (const alert of cfg.alerts) {
       try {
         await runAlert(guild.id, alert);

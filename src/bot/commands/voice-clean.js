@@ -12,16 +12,15 @@ export const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels);
 
 export async function execute(interaction) {
-  if (!isModuleEnabled(interaction.guildId, 'temp-voice')) {
+  if (!(await isModuleEnabled(interaction.guildId, 'temp-voice'))) {
     return interaction.reply({ content: 'Temporary voice channels are not enabled here.', ...ephemeral });
   }
   const rows = listGuildTempChannels(interaction.guildId);
   const roleIds = [...(interaction.member.roles?.cache?.keys() ?? [])];
+  const hubs = await Promise.all(rows.map((r) => hubForChannel(interaction.guildId, r.hub_id)));
   const isMod =
     interaction.memberPermissions.has(PermissionFlagsBits.ManageChannels) ||
-    rows.some((r) =>
-      (hubForChannel(interaction.guildId, r.hub_id)?.moderatorRoles ?? []).some((x) => roleIds.includes(x))
-    );
+    hubs.some((hub) => (hub?.moderatorRoles ?? []).some((x) => roleIds.includes(x)));
   if (!isMod)
     return interaction.reply({
       content: 'You need Manage Channels or a voice-moderator role.',

@@ -58,7 +58,7 @@ export const data = new SlashCommandBuilder()
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
-  if (!isModuleEnabled(interaction.guildId, 'birthdays')) {
+  if (!(await isModuleEnabled(interaction.guildId, 'birthdays'))) {
     return interaction.reply({
       content: 'The Birthdays module is off in this server.',
       flags: MessageFlags.Ephemeral,

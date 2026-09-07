@@ -28,9 +28,14 @@ export async function dispatch(eventName, guildId, payload) {
   const list = handlers.get(eventName);
   if (!list) return;
   for (const { moduleId, fn } of list) {
-    if (!isModuleEnabled(guildId, moduleId)) continue;
+    // The whole per-handler body — including the two DB reads, not just fn()
+    // — is inside this try/catch: isModuleEnabled/getGuildModule are real
+    // (if normally fast) async I/O now, not the synchronous SQLite read they
+    // used to be, so a hiccup on either must not abort the loop for every
+    // other handler of this event.
     try {
-      await fn(payload, getGuildModule(guildId, moduleId).config, guildId);
+      if (!(await isModuleEnabled(guildId, moduleId))) continue;
+      await fn(payload, (await getGuildModule(guildId, moduleId)).config, guildId);
     } catch (err) {
       log.error(`module:${moduleId}`, `${eventName} handler failed:`, err);
     }

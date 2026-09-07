@@ -27,7 +27,7 @@ function toSlashJSON(cmd) {
 /** Push the desired application-command set for one guild. */
 export async function syncGuildCustomCommands(guild) {
   if (!guild) return;
-  const { enabled, config: cfg } = getGuildModule(guild.id, 'custom-commands');
+  const { enabled, config: cfg } = await getGuildModule(guild.id, 'custom-commands');
 
   const builtins = config.discordGuildIds.includes(guild.id)
     ? [...(guild.client.commands?.values() ?? [])].map((c) => c.data.toJSON())
@@ -48,7 +48,7 @@ export async function syncGuildCustomCommands(guild) {
 /** Startup: sync every guild that has the module enabled. */
 export async function syncAllGuildCustomCommands(client) {
   for (const guild of client.guilds.cache.values()) {
-    if (getGuildModule(guild.id, 'custom-commands').enabled) {
+    if ((await getGuildModule(guild.id, 'custom-commands')).enabled) {
       await syncGuildCustomCommands(guild);
     }
   }
@@ -87,7 +87,7 @@ function blockReason(cmd, interaction) {
  */
 export async function handleCustomSlash(interaction) {
   if (!interaction.inGuild()) return false;
-  const { enabled, config: cfg } = getGuildModule(interaction.guildId, 'custom-commands');
+  const { enabled, config: cfg } = await getGuildModule(interaction.guildId, 'custom-commands');
   if (!enabled) return false;
 
   const cmd = (cfg.commands ?? []).find((c) => c.name === interaction.commandName);

@@ -157,10 +157,10 @@ function takePreBanDm(guildId, userId) {
  *   caller should send its own ban DM instead.
  */
 export async function sendPreBanAppealDm(guild, user, reason) {
-  if (!isModuleEnabled(guild.id, 'appeals')) return null;
+  if (!(await isModuleEnabled(guild.id, 'appeals'))) return null;
   const link = appealLink(guild.id, user.id);
   if (!link) return null;
-  const cfg = normaliseAppealsConfig(getGuildModule(guild.id, 'appeals').config);
+  const cfg = normaliseAppealsConfig((await getGuildModule(guild.id, 'appeals')).config);
   const sent = await user
     .send({ embeds: [banAppealEmbed(guild.name, reason, link, cfg)] })
     .then(() => true)
@@ -269,7 +269,7 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
   const recorded = await decideAppeal(guild.id, appeal.id, { status, decidedBy, reason });
   if (!recorded) return { recorded: false, unbanned: false, dmDelivered: false, inviteUrl: null };
 
-  const cfg = normaliseAppealsConfig(getGuildModule(guild.id, 'appeals').config);
+  const cfg = normaliseAppealsConfig((await getGuildModule(guild.id, 'appeals')).config);
   const accepted = status === 'accepted';
 
   let unbanned = false;
@@ -356,7 +356,7 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
 
 /** Post a "new appeal submitted" notice to staff. Called from the web route. */
 export async function announceNewAppeal(guild, appeal) {
-  const cfg = normaliseAppealsConfig(getGuildModule(guild.id, 'appeals').config);
+  const cfg = normaliseAppealsConfig((await getGuildModule(guild.id, 'appeals')).config);
   const embed = new EmbedBuilder()
     .setColor(COLOR)
     .setTitle('⚖️ New ban appeal')

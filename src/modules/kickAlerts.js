@@ -163,8 +163,8 @@ async function tick() {
 
   const jobs = [];
   for (const guild of runtime.client.guilds.cache.values()) {
-    if (!isModuleEnabled(guild.id, 'kick-alerts')) continue;
-    const cfg = normaliseKickConfig(getGuildModule(guild.id, 'kick-alerts').config);
+    if (!(await isModuleEnabled(guild.id, 'kick-alerts'))) continue;
+    const cfg = normaliseKickConfig((await getGuildModule(guild.id, 'kick-alerts')).config);
     for (const alert of cfg.alerts) jobs.push({ guildId: guild.id, alert });
   }
   if (!jobs.length) return;
