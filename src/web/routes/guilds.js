@@ -2551,7 +2551,7 @@ router.get(
     const raw = String(req.query.range ?? '30');
     const hourly = raw in HOURLY;
     const range = hourly ? HOURLY[raw] : (DAILY[raw] ?? 30);
-    const series = hourly ? hourlySeries(req.guild.id, range) : dailySeries(req.guild.id, range);
+    const series = hourly ? await hourlySeries(req.guild.id, range) : await dailySeries(req.guild.id, range);
 
     // Per-channel totals ("top channels") are only kept daily; for an hourly
     // window fall back to the last day.
@@ -2577,11 +2577,11 @@ router.get(
         voiceMinutes: series.reduce((t, d) => t + d.voiceMinutes, 0),
         voicePeak: series.reduce((m, d) => Math.max(m, d.voicePeak), 0),
       },
-      insightsTopChannels: topChannels(req.guild.id, topDays, 6).map((t) => ({
+      insightsTopChannels: (await topChannels(req.guild.id, topDays, 6)).map((t) => ({
         name: nameOf(t.channelId),
         messages: t.messages,
       })),
-      insightsTopVoice: topVoiceChannels(req.guild.id, topDays, 6).map((t) => ({
+      insightsTopVoice: (await topVoiceChannels(req.guild.id, topDays, 6)).map((t) => ({
         name: nameOf(t.channelId),
         minutes: t.minutes,
       })),
@@ -2590,15 +2590,18 @@ router.get(
 );
 
 // "Refresh now" — flush the in-memory counters for this guild, then reload.
-router.post('/:guildId/insights/refresh', (req, res) => {
-  flushGuildInsights(req.guild.id);
-  const range = ['24', '48', '7', '30', '90'].includes(String(req.body.range))
-    ? String(req.body.range)
-    : '30';
-  const back = `/guilds/${req.guild.id}/insights?range=${range}`;
-  if (req.get('HX-Request')) return res.set('HX-Redirect', back).status(204).end();
-  res.redirect(back);
-});
+router.post(
+  '/:guildId/insights/refresh',
+  asyncHandler(async (req, res) => {
+    await flushGuildInsights(req.guild.id);
+    const range = ['24', '48', '7', '30', '90'].includes(String(req.body.range))
+      ? String(req.body.range)
+      : '30';
+    const back = `/guilds/${req.guild.id}/insights?range=${range}`;
+    if (req.get('HX-Request')) return res.set('HX-Redirect', back).status(204).end();
+    res.redirect(back);
+  })
+);
 
 router.post(
   '/:guildId/general',

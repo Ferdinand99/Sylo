@@ -54,25 +54,30 @@ test('renderName: substitutes {index}/{username} (and legacy {user}/{count}), tr
   assert.ok(renderName('x'.repeat(200), { member, index: 1 }).length === 100);
 });
 
-test('db: track a temp channel, find it by owner+hub, count, and remove', () => {
-  clearGuildTempVoice(G);
-  assert.equal(isTempChannel('900000000000000001'), false);
+test('db: track a temp channel, find it by owner+hub, count, and remove', async () => {
+  await clearGuildTempVoice(G);
+  assert.equal(await isTempChannel('900000000000000001'), false);
 
-  addTempChannel({ channelId: '900000000000000001', guildId: G, hubId: HUB, ownerId: U });
-  addTempChannel({ channelId: '900000000000000002', guildId: G, hubId: HUB, ownerId: '444444444444444444' });
+  await addTempChannel({ channelId: '900000000000000001', guildId: G, hubId: HUB, ownerId: U });
+  await addTempChannel({
+    channelId: '900000000000000002',
+    guildId: G,
+    hubId: HUB,
+    ownerId: '444444444444444444',
+  });
 
-  assert.equal(isTempChannel('900000000000000001'), true);
-  assert.equal(countHubChannels(HUB), 2);
-  assert.equal(findUserHubChannel(G, HUB, U).channel_id, '900000000000000001');
-  assert.equal(listAllTempChannels().filter((r) => r.guild_id === G).length, 2);
+  assert.equal(await isTempChannel('900000000000000001'), true);
+  assert.equal(await countHubChannels(HUB), 2);
+  assert.equal((await findUserHubChannel(G, HUB, U)).channel_id, '900000000000000001');
+  assert.equal((await listAllTempChannels()).filter((r) => r.guild_id === G).length, 2);
 
-  removeTempChannel('900000000000000001');
-  assert.equal(isTempChannel('900000000000000001'), false);
-  assert.equal(findUserHubChannel(G, HUB, U), null);
-  assert.equal(countHubChannels(HUB), 1);
+  await removeTempChannel('900000000000000001');
+  assert.equal(await isTempChannel('900000000000000001'), false);
+  assert.equal(await findUserHubChannel(G, HUB, U), null);
+  assert.equal(await countHubChannels(HUB), 1);
 
-  clearGuildTempVoice(G);
-  assert.equal(countHubChannels(HUB), 0);
+  await clearGuildTempVoice(G);
+  assert.equal(await countHubChannels(HUB), 0);
 });
 
 // --- overwrites: no "server muted" in your own temp channel -----------------

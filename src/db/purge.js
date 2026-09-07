@@ -9,7 +9,7 @@
 // a purge is interrupted partway through, the remaining rows are simply
 // deleted on the next attempt — self-healing, not a race. So both run as a
 // plain sequence of awaited statements instead of a transaction.
-import { prepare, registerPostgresBootstrap } from './driver.js';
+import { prepare } from './driver.js';
 
 // This file owns no table of its own — every DELETE below targets a table
 // bootstrapped by its owning file. But `registerPostgresBootstrap()` only
@@ -36,6 +36,7 @@ import './audit.js';
 import './afk.js';
 import './postedKeys.js';
 import './appeals.js';
+import './tempVoice.js';
 import './starboard.js';
 import './inviteTracker.js';
 import './polls.js';
@@ -44,64 +45,8 @@ import './leaderboardVanity.js';
 import './tempBans.js';
 import './channelLocks.js';
 import './birthdays.js';
+import './insights.js';
 import './channelCleanup.js';
-
-// `temp_voice_channels`, `guild_daily` and `guild_hourly` belong to
-// tempVoice.js and insights.js — neither converted yet, so neither has ever
-// registered Postgres DDL for them (no file to side-effect-import above).
-// purgeGuild deletes from every entry in GUILD_TABLES though, so under
-// DATABASE_URL those DELETEs would 42P01 against a table that was never
-// created. Bootstrapping them here (schema copied verbatim from their
-// SQLite migrations in index.js) fixes that without pulling either file's
-// actual read/write logic into this phase. Drop this block once
-// tempVoice.js/insights.js are converted and register the same DDL there
-// instead.
-registerPostgresBootstrap(`
-  CREATE TABLE IF NOT EXISTS temp_voice_channels (
-    channel_id      TEXT PRIMARY KEY,
-    guild_id        TEXT NOT NULL,
-    hub_id          TEXT NOT NULL,
-    owner_id        TEXT NOT NULL,
-    created_at      BIGINT NOT NULL,
-    name            TEXT NOT NULL DEFAULT '',
-    locked          INTEGER NOT NULL DEFAULT 0,
-    hidden          INTEGER NOT NULL DEFAULT 0,
-    bans            TEXT NOT NULL DEFAULT '[]',
-    text_channel_id TEXT,
-    empty_since     BIGINT
-  );
-  CREATE INDEX IF NOT EXISTS idx_temp_voice_guild ON temp_voice_channels (guild_id);
-
-  CREATE TABLE IF NOT EXISTS guild_daily (
-    guild_id             TEXT NOT NULL,
-    day                  TEXT NOT NULL,
-    joins                INTEGER NOT NULL DEFAULT 0,
-    leaves               INTEGER NOT NULL DEFAULT 0,
-    messages             INTEGER NOT NULL DEFAULT 0,
-    active_members       INTEGER NOT NULL DEFAULT 0,
-    channels             TEXT NOT NULL DEFAULT '{}',
-    voice_minutes        INTEGER NOT NULL DEFAULT 0,
-    voice_active_members INTEGER NOT NULL DEFAULT 0,
-    voice_peak           INTEGER NOT NULL DEFAULT 0,
-    voice_channels       TEXT NOT NULL DEFAULT '{}',
-    PRIMARY KEY (guild_id, day)
-  );
-  CREATE INDEX IF NOT EXISTS idx_guild_daily_day ON guild_daily (day);
-
-  CREATE TABLE IF NOT EXISTS guild_hourly (
-    guild_id             TEXT NOT NULL,
-    hour                 TEXT NOT NULL,
-    joins                INTEGER NOT NULL DEFAULT 0,
-    leaves               INTEGER NOT NULL DEFAULT 0,
-    messages             INTEGER NOT NULL DEFAULT 0,
-    active_members       INTEGER NOT NULL DEFAULT 0,
-    voice_minutes        INTEGER NOT NULL DEFAULT 0,
-    voice_active_members INTEGER NOT NULL DEFAULT 0,
-    voice_peak           INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (guild_id, hour)
-  );
-  CREATE INDEX IF NOT EXISTS idx_guild_hourly_hour ON guild_hourly (hour);
-`);
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
