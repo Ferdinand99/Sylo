@@ -12,15 +12,50 @@
 import { prepare, registerPostgresBootstrap } from './driver.js';
 
 // This file owns no table of its own — every DELETE below targets a table
-// bootstrapped by its owning file, *except* the three below, which belong to
+// bootstrapped by its owning file. But `registerPostgresBootstrap()` only
+// runs when that owning file is actually imported somewhere in *this*
+// process, and under `node --test` every test file is its own process — so a
+// process that imports purge.js without also (directly or transitively)
+// importing, say, starboard.js would 42P01 on `DELETE FROM starboard_posts`,
+// purely depending on which test files happened to run in which process.
+// Import every owning file below for its bootstrap side effect alone (all
+// their actual exports go unused here) so purgeGuild's full table list is
+// always backed by real DDL in whichever process loads purge.js, test or
+// production. Harmless and cheap — these are plain data modules with no
+// other side effects at import time.
+import './guildSettings.js';
+import './modules.js';
+import './commandOverrides.js';
+import './modCases.js';
+import './tickets.js';
+import './composedMessages.js';
+import './counting.js';
+import './scheduledMessages.js';
+import './leveling.js';
+import './audit.js';
+import './afk.js';
+import './postedKeys.js';
+import './appeals.js';
+import './starboard.js';
+import './inviteTracker.js';
+import './polls.js';
+import './giveaways.js';
+import './leaderboardVanity.js';
+import './tempBans.js';
+import './channelLocks.js';
+import './birthdays.js';
+import './channelCleanup.js';
+
+// `temp_voice_channels`, `guild_daily` and `guild_hourly` belong to
 // tempVoice.js and insights.js — neither converted yet, so neither has ever
-// registered Postgres DDL for them. purgeGuild deletes from every entry in
-// GUILD_TABLES though, so under DATABASE_URL those DELETEs would 42P01
-// against a table that was never created. Bootstrapping them here (schema
-// copied verbatim from their SQLite migrations in index.js) fixes that
-// without pulling either file's actual read/write logic into this phase.
-// Drop this block once tempVoice.js/insights.js are converted and register
-// the same DDL there instead.
+// registered Postgres DDL for them (no file to side-effect-import above).
+// purgeGuild deletes from every entry in GUILD_TABLES though, so under
+// DATABASE_URL those DELETEs would 42P01 against a table that was never
+// created. Bootstrapping them here (schema copied verbatim from their
+// SQLite migrations in index.js) fixes that without pulling either file's
+// actual read/write logic into this phase. Drop this block once
+// tempVoice.js/insights.js are converted and register the same DDL there
+// instead.
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS temp_voice_channels (
     channel_id      TEXT PRIMARY KEY,

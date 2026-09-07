@@ -1232,6 +1232,36 @@ in `index.js`) — scoped deliberately to *just* creating the tables so
 own read/write logic, which stays future work. Drop that bootstrap block once
 those two files are converted and register the same DDL there instead.
 
+**Two more gaps found by CI, both fixed at the driver level, not worked
+around locally in purge.js:**
+
+- `registerPostgresBootstrap()` only runs when the *calling file* is actually
+  imported in the current process, and `node --test` runs every test file as
+  its own process. `test/purge.postgres.test.js` imports `purge.js` but not
+  `starboard.js`, so its process's bootstrap list never included
+  `starboard_posts` — a 42P01 the CI run caught that a locally-run full suite
+  didn't (different import graph reaches `purge.js` first there). Fixed by
+  side-effect-importing every already-converted table-owning file into
+  `purge.js` (26 imports, none of their exports used) — since `purgeGuild`
+  genuinely touches all of them, this guarantees the full `GUILD_TABLES`
+  schema exists in whichever process loads `purge.js`, test or production,
+  regardless of what else that process happened to import first.
+- That fix's extra imports meant more processes racing to `CREATE TABLE IF
+  NOT EXISTS` the *same* brand-new table against a freshly wiped database at
+  once — reproduced locally (wipe the schema, rerun the suite) at roughly a
+  50% failure rate, always a `pg_type_typname_nsp_index` 23505: the
+  existence check and the creation aren't one atomic step, so two sessions
+  can both see "doesn't exist yet" and collide inserting into Postgres's
+  internal catalog. This was always possible, not something the extra
+  imports introduced — they just made it likely enough to actually hit. Fixed
+  in `driver.js`: the whole bootstrap loop now runs under a session-scoped
+  `pg_advisory_lock`, serializing it across every concurrent connection.
+  Also replaced the plain `bootstrapped` boolean with one shared promise every
+  caller awaits, closing a same-process version of the same race (a second
+  concurrent call could previously see the flag flip before the first call's
+  DDL had actually finished). 12 fresh-schema-wipe reruns clean afterward,
+  versus roughly 1-in-2 failing before.
+
 28 of 30 files converted; same caveats as before still apply. Remaining:
 `tempVoice.js` and `insights.js`.
 

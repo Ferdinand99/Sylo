@@ -11,7 +11,12 @@ import { db } from './index.js';
 
 const bootstrapStatements = [];
 let sqlClient = null;
-let bootstrapped = false;
+let readyPromise = null;
+
+// An arbitrary, otherwise-unused key for the advisory lock below — see its
+// comment. Any bigint works; this one just isn't 0 or a small round number
+// something else might pick by coincidence.
+const BOOTSTRAP_LOCK_KEY = 72739018;
 
 /** Each converted db file calls this once with its own Postgres-dialect DDL. */
 export function registerPostgresBootstrap(ddlText) {
@@ -22,17 +27,48 @@ export function registerPostgresBootstrap(ddlText) {
 // today) never loads the `postgres` package at all — matches the "zero
 // footprint when the flag is off" approach already used by
 // test/postgresSmoke.test.js.
+//
+// `node --test` runs every test file as its own process, and each process
+// only knows about the bootstrap DDL its own import graph registered — so
+// several processes can reach here at (roughly) the same real-world moment,
+// each running `CREATE TABLE IF NOT EXISTS` for tables the others are also
+// creating for the first time. That's not safe to leave unserialized: the
+// existence check and the creation aren't one atomic step, so two sessions
+// can both see "doesn't exist yet" and collide inserting the new type into
+// Postgres's internal catalog (a `pg_type_typname_nsp_index` 23505, not the
+// friendlier "already exists" you'd expect) — reproduced locally by wiping
+// the schema and re-running the suite against fresh Postgres a few times.
+// A session-scoped advisory lock around the whole bootstrap loop makes every
+// process's DDL run one at a time; whichever runs after the first just finds
+// every `IF NOT EXISTS` already satisfied and moves on.
+//
+// `readyPromise` also fixes a narrower same-process version of the same
+// bug: memoizing with a plain `if (!bootstrapped)` boolean lets a second
+// concurrent call (e.g. from a `Promise.all(...)` stress test) see
+// `bootstrapped = true` — set synchronously before the first `await` — and
+// return `sqlClient` before that first call's DDL has actually finished
+// running. Awaiting one shared promise makes every caller wait for the same
+// completed (or failed) initialization instead.
 async function getSql() {
-  if (!sqlClient) {
-    const postgres = (await import('postgres')).default;
-    sqlClient = postgres(config.databaseUrl);
+  if (!readyPromise) {
+    readyPromise = (async () => {
+      const postgres = (await import('postgres')).default;
+      const client = postgres(config.databaseUrl);
+      await client`SELECT pg_advisory_lock(${BOOTSTRAP_LOCK_KEY})`;
+      try {
+        for (const ddl of bootstrapStatements) {
+          await client.unsafe(ddl);
+        }
+      } finally {
+        await client`SELECT pg_advisory_unlock(${BOOTSTRAP_LOCK_KEY})`;
+      }
+      return client;
+    })().catch((err) => {
+      readyPromise = null; // let a later call retry instead of failing forever
+      throw err;
+    });
   }
-  if (!bootstrapped) {
-    bootstrapped = true;
-    for (const ddl of bootstrapStatements) {
-      await sqlClient.unsafe(ddl);
-    }
-  }
+  sqlClient = await readyPromise;
   return sqlClient;
 }
 
@@ -41,8 +77,8 @@ export async function closePostgres() {
   if (sqlClient) {
     await sqlClient.end({ timeout: 1 });
     sqlClient = null;
-    bootstrapped = false;
   }
+  readyPromise = null;
 }
 
 // `channelCleanup.js`'s statements are each consistently either all `?`
