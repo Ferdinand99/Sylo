@@ -6,6 +6,7 @@ import { config } from '../../config.js';
 import { runtime } from '../../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../../db/modules.js';
 import { log } from '../../lib/log.js';
+import { asyncHandler } from '../lib/asyncHandler.js';
 import { verifyVerifyToken, normaliseVerificationConfig, grantVerified } from '../../modules/verification.js';
 
 const router = Router();
@@ -17,26 +18,29 @@ function fail(res, message) {
     .render('verify', { state: 'error', message, siteKey: null, token: null, guildId: null });
 }
 
-router.get('/:guildId', (req, res) => {
-  const { guildId } = req.params;
-  const parsed = verifyVerifyToken(req.query.t);
-  if (!parsed || parsed.guildId !== guildId) {
-    return fail(res, 'This verification link is invalid or has expired. Click Verify again in Discord.');
-  }
-  if (!config.turnstileEnabled) {
-    return fail(res, 'The captcha is not configured on this server. Ask an admin.');
-  }
-  if (!isModuleEnabled(guildId, 'verification')) {
-    return fail(res, 'Verification is no longer active in that server.');
-  }
-  res.render('verify', {
-    state: 'challenge',
-    message: null,
-    siteKey: config.turnstileSiteKey,
-    token: req.query.t,
-    guildId,
-  });
-});
+router.get(
+  '/:guildId',
+  asyncHandler(async (req, res) => {
+    const { guildId } = req.params;
+    const parsed = verifyVerifyToken(req.query.t);
+    if (!parsed || parsed.guildId !== guildId) {
+      return fail(res, 'This verification link is invalid or has expired. Click Verify again in Discord.');
+    }
+    if (!config.turnstileEnabled) {
+      return fail(res, 'The captcha is not configured on this server. Ask an admin.');
+    }
+    if (!(await isModuleEnabled(guildId, 'verification'))) {
+      return fail(res, 'Verification is no longer active in that server.');
+    }
+    res.render('verify', {
+      state: 'challenge',
+      message: null,
+      siteKey: config.turnstileSiteKey,
+      token: req.query.t,
+      guildId,
+    });
+  })
+);
 
 router.post('/:guildId', async (req, res, next) => {
   try {
@@ -70,10 +74,10 @@ router.post('/:guildId', async (req, res, next) => {
     }
 
     const guild = runtime.client?.guilds.cache.get(guildId);
-    if (!guild || !isModuleEnabled(guildId, 'verification')) {
+    if (!guild || !(await isModuleEnabled(guildId, 'verification'))) {
       return fail(res, 'Verification is no longer active in that server.');
     }
-    const cfg = normaliseVerificationConfig(getGuildModule(guildId, 'verification').config);
+    const cfg = normaliseVerificationConfig((await getGuildModule(guildId, 'verification')).config);
     const result = await grantVerified(guild, parsed.userId, cfg);
     log.info('verification', `web verify ${parsed.userId} in ${guildId} -> ${result}`);
 

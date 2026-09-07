@@ -92,7 +92,7 @@ async function tick() {
   if (!client?.isReady()) return;
   const now = Date.now();
   for (const guild of client.guilds.cache.values()) {
-    const { enabled, config } = getGuildModule(guild.id, 'server-stats');
+    const { enabled, config } = await getGuildModule(guild.id, 'server-stats');
     if (!enabled) continue;
     const cfg = normaliseServerStats(config);
     if (cfg.channels.length === 0) continue;

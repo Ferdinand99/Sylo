@@ -190,7 +190,7 @@ export async function endPoll(messageId) {
   const channel = guild?.channels.cache.get(poll.channel_id);
   if (!channel?.isTextBased()) return;
 
-  const config = normalisePollsConfig(getGuildModule(poll.guild_id, 'polls').config);
+  const config = normalisePollsConfig((await getGuildModule(poll.guild_id, 'polls')).config);
 
   const message = await channel.messages.fetch(messageId).catch(() => null);
   const counts = message ? await tally(message, poll, config) : poll.options.map(() => ({ count: 0 }));
@@ -271,7 +271,7 @@ const TICK_MS = 15_000;
 const timer = setInterval(async () => {
   if (!runtime.client?.isReady()) return;
   for (const poll of await duePolls(Date.now())) {
-    if (isModuleEnabled(poll.guild_id, 'polls') && runtime.client.guilds.cache.has(poll.guild_id)) {
+    if ((await isModuleEnabled(poll.guild_id, 'polls')) && runtime.client.guilds.cache.has(poll.guild_id)) {
       endPoll(poll.message_id).catch((err) => log.error('module:polls', 'end failed:', err.message));
     } else {
       await deletePoll(poll.message_id); // module off or bot gone — just clear it

@@ -65,7 +65,7 @@ export async function primeGuild(guild) {
 /** Startup: prime every guild that has the module enabled. */
 export async function primeAllInviteCaches(client) {
   for (const guild of client.guilds.cache.values()) {
-    if (isModuleEnabled(guild.id, 'invite-tracker')) await primeGuild(guild);
+    if (await isModuleEnabled(guild.id, 'invite-tracker')) await primeGuild(guild);
   }
 }
 

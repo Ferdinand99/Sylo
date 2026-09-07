@@ -26,7 +26,7 @@ export async function execute(interaction) {
   if (!interaction.inGuild()) {
     return interaction.reply({ content: 'Use this in a server.', flags: MessageFlags.Ephemeral });
   }
-  if (!isModuleEnabled(interaction.guildId, 'leveling')) {
+  if (!(await isModuleEnabled(interaction.guildId, 'leveling'))) {
     return interaction.reply({
       content: 'Leveling is not enabled in this server.',
       flags: MessageFlags.Ephemeral,
@@ -62,7 +62,7 @@ export async function execute(interaction) {
   });
 
   const yourRank = await memberRank(interaction.guildId, interaction.user.id);
-  const cfg = getGuildModule(interaction.guildId, 'leveling').config;
+  const cfg = (await getGuildModule(interaction.guildId, 'leveling')).config;
   const components =
     config.dashboardUrl && cfg.publicLeaderboard !== false
       ? [

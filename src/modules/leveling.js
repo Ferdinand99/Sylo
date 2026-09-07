@@ -231,11 +231,12 @@ on('leveling', 'voiceStateUpdate', async ({ old: before, new: after }, rawConfig
  * `voiceStateUpdate` only fires on a change, so members who were connected when
  * the process (re)started would otherwise never accrue voice XP.
  */
-function discoverVoiceSessions(now) {
+async function discoverVoiceSessions(now) {
   if (!runtime.client?.isReady()) return;
   for (const guild of runtime.client.guilds.cache.values()) {
-    if (!isModuleEnabled(guild.id, 'leveling')) continue;
-    if (!normaliseLevelingConfig(getGuildModule(guild.id, 'leveling').config).voiceXpEnabled) continue;
+    if (!(await isModuleEnabled(guild.id, 'leveling'))) continue;
+    if (!normaliseLevelingConfig((await getGuildModule(guild.id, 'leveling')).config).voiceXpEnabled)
+      continue;
     const sessions = sessionsFor(guild.id);
     for (const vs of guild.voiceStates.cache.values()) {
       if (!vs.channelId || vs.member?.user?.bot) continue;
@@ -245,14 +246,14 @@ function discoverVoiceSessions(now) {
 }
 
 async function settleAllVoice(now = Date.now()) {
-  discoverVoiceSessions(now);
+  await discoverVoiceSessions(now);
   for (const [guildId, sessions] of voiceSessions) {
     if (!sessions.size) {
       voiceSessions.delete(guildId);
       continue;
     }
-    if (!isModuleEnabled(guildId, 'leveling')) continue;
-    const rawConfig = getGuildModule(guildId, 'leveling').config;
+    if (!(await isModuleEnabled(guildId, 'leveling'))) continue;
+    const rawConfig = (await getGuildModule(guildId, 'leveling')).config;
     const guild = runtime.client?.guilds.cache.get(guildId);
     for (const [userId, session] of sessions) {
       const member = guild?.members.cache.get(userId);
@@ -273,7 +274,11 @@ const voiceTimer = setInterval(() => {
 voiceTimer.unref();
 // Seed sessions for members already in voice shortly after boot, so a restart
 // doesn't cost everyone connected a full settle interval of accrual.
-setTimeout(() => discoverVoiceSessions(Date.now()), 25_000).unref();
+setTimeout(() => {
+  discoverVoiceSessions(Date.now()).catch((err) =>
+    log.error('module:leveling', 'initial voice session discovery failed:', err.message)
+  );
+}, 25_000).unref();
 
 export const _internals = { voiceSessions, settleAllVoice, settleVoiceSession, discoverVoiceSessions };
 

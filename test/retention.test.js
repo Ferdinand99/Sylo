@@ -37,11 +37,11 @@ const msgCount = (id) =>
 const caseExists = (g, n) =>
   !!db.prepare('SELECT 1 FROM infractions WHERE guild_id = ? AND case_number = ?').get(g, n);
 
-test('sweepRetention prunes only past-cutoff closed tickets / inactive cases', () => {
-  setGuildModule(G1, 'tickets', { enabled: true, config: { transcriptRetentionDays: 30 } });
-  setGuildModule(G1, 'moderation', { enabled: true, config: { infractionRetentionDays: 30 } });
-  setGuildModule(G2, 'tickets', { enabled: true, config: { transcriptRetentionDays: 0 } });
-  setGuildModule(G2, 'moderation', { enabled: true, config: {} });
+test('sweepRetention prunes only past-cutoff closed tickets / inactive cases', async () => {
+  await setGuildModule(G1, 'tickets', { enabled: true, config: { transcriptRetentionDays: 30 } });
+  await setGuildModule(G1, 'moderation', { enabled: true, config: { infractionRetentionDays: 30 } });
+  await setGuildModule(G2, 'tickets', { enabled: true, config: { transcriptRetentionDays: 0 } });
+  await setGuildModule(G2, 'moderation', { enabled: true, config: {} });
 
   const oldClosed = ticket(G1, { status: 'closed', ageDays: 60, msgs: 3 });
   const recentClosed = ticket(G1, { status: 'closed', ageDays: 5 });

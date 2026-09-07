@@ -59,7 +59,7 @@ async function tick() {
   const now = Date.now();
 
   for (const r of await dueScheduled(now)) {
-    const enabled = isModuleEnabled(r.guild_id, MODULE_ID);
+    const enabled = await isModuleEnabled(r.guild_id, MODULE_ID);
     const inGuild = runtime.client.guilds.cache.has(r.guild_id);
 
     if (r.mode === 'single') {

@@ -46,12 +46,12 @@ async function resolve(req) {
   if (!parsed || parsed.guildId !== guildId) {
     return { error: 'This appeal link is invalid or has expired. Contact the server staff for a new one.' };
   }
-  if (!isModuleEnabled(guildId, 'appeals')) {
+  if (!(await isModuleEnabled(guildId, 'appeals'))) {
     return { error: 'This server is not accepting ban appeals right now.' };
   }
   const guild = runtime.client?.guilds.cache.get(guildId);
   if (!guild) return { error: 'That server could not be found.' };
-  const cfg = normaliseAppealsConfig(getGuildModule(guildId, 'appeals').config);
+  const cfg = normaliseAppealsConfig((await getGuildModule(guildId, 'appeals')).config);
 
   if (await getOpenAppeal(guildId, parsed.userId)) {
     return {

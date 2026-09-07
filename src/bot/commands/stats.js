@@ -86,7 +86,7 @@ export async function runStatsLookup(game, title, username, platform) {
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
-  if (!isModuleEnabled(interaction.guildId, 'game-stats')) {
+  if (!(await isModuleEnabled(interaction.guildId, 'game-stats'))) {
     return interaction.reply({
       content: 'The **Game stats** module is not enabled in this server.',
       flags: MessageFlags.Ephemeral,

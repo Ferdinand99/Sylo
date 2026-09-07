@@ -11,9 +11,9 @@ export const ephemeral = { flags: MessageFlags.Ephemeral };
  * connected to). Returns { row, hub, channel, member, isOwner, isModerator,
  * isIgnored } or { error } for an early ephemeral reply.
  */
-export function resolveContext(interaction) {
+export async function resolveContext(interaction) {
   if (!interaction.inGuild()) return { error: 'Use this in a server.' };
-  if (!isModuleEnabled(interaction.guildId, 'temp-voice')) {
+  if (!(await isModuleEnabled(interaction.guildId, 'temp-voice'))) {
     return { error: 'Temporary voice channels are not enabled in this server.' };
   }
   const member = interaction.member;
@@ -26,7 +26,7 @@ export function resolveContext(interaction) {
   const channel = interaction.guild.channels.cache.get(vcId);
   if (!channel) return { error: 'That channel no longer exists.' };
 
-  const hub = hubForChannel(interaction.guildId, row.hub_id) || {
+  const hub = (await hubForChannel(interaction.guildId, row.hub_id)) || {
     moderatorRoles: [],
     ignoredRoles: [],
   };

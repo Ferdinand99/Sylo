@@ -60,7 +60,7 @@ export async function execute(interaction) {
   if (!interaction.inGuild()) {
     return interaction.reply({ content: 'Use this in a server.', flags: MessageFlags.Ephemeral });
   }
-  if (!isModuleEnabled(interaction.guildId, 'invite-tracker')) {
+  if (!(await isModuleEnabled(interaction.guildId, 'invite-tracker'))) {
     return interaction.reply({
       content: 'Invite tracking is not enabled in this server.',
       flags: MessageFlags.Ephemeral,

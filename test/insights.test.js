@@ -133,10 +133,10 @@ test('module: messageCreate accrues, flush persists to daily + hourly, resets de
   assert.equal(s.hourActives.size, 0); // hour set reset
 });
 
-test('module: voiceStateUpdate tracks minutes, settled on flush and on leave', () => {
+test('module: voiceStateUpdate tracks minutes, settled on flush and on leave', async () => {
   _internals.buf.clear();
   const GV = '900000000000000004';
-  setGuildModule(GV, 'insights', { enabled: true });
+  await setGuildModule(GV, 'insights', { enabled: true });
   const now = Date.now();
   const guild = { id: GV, voiceStates: { cache: new Map() } };
   const member = { id: 'v-user', user: { bot: false } };
@@ -146,7 +146,7 @@ test('module: voiceStateUpdate tracks minutes, settled on flush and on leave', (
       .voice_minutes;
 
   // join #vc
-  dispatch('voiceStateUpdate', GV, { old: vs(null), new: vs('vc1') });
+  await dispatch('voiceStateUpdate', GV, { old: vs(null), new: vs('vc1') });
   const s = _internals.buf.get(GV);
   assert.ok(s.voiceStart.has('v-user'));
   assert.ok(s.dayVoiceActives.has('v-user'));
@@ -161,7 +161,7 @@ test('module: voiceStateUpdate tracks minutes, settled on flush and on leave', (
 
   // 5 more minutes, then leave
   s.voiceStart.get('v-user').at = now - 5 * 60_000;
-  dispatch('voiceStateUpdate', GV, { old: vs('vc1'), new: vs(null) });
+  await dispatch('voiceStateUpdate', GV, { old: vs('vc1'), new: vs(null) });
   assert.equal(s.voiceStart.has('v-user'), false);
   _internals.flushSlot(GV, s);
   assert.ok(voiceMinsOf() >= 14 && voiceMinsOf() <= 16, `after +5m leave: ${voiceMinsOf()}`);
@@ -172,7 +172,7 @@ test('module: a temp voice channel is bucketed by its captured name, not its id'
   const { addTempChannel } = await import('../src/db/tempVoice.js');
   const GT = '900000000000000006';
   const SPAWN = '910000000000000002';
-  setGuildModule(GT, 'insights', { enabled: true });
+  await setGuildModule(GT, 'insights', { enabled: true });
   addTempChannel({
     channelId: SPAWN,
     guildId: GT,
@@ -186,10 +186,10 @@ test('module: a temp voice channel is bucketed by its captured name, not its id'
   const member = { id: 't-user', user: { bot: false } };
   const vs = (channelId) => ({ guild, member, channelId });
 
-  dispatch('voiceStateUpdate', GT, { old: vs(null), new: vs(SPAWN) });
+  await dispatch('voiceStateUpdate', GT, { old: vs(null), new: vs(SPAWN) });
   const s = _internals.buf.get(GT);
   s.voiceStart.get('t-user').at = now - 6 * 60_000;
-  dispatch('voiceStateUpdate', GT, { old: vs(SPAWN), new: vs(null) });
+  await dispatch('voiceStateUpdate', GT, { old: vs(SPAWN), new: vs(null) });
 
   assert.ok(s.voiceChannels.has("name:Ferd's room"), 'bucketed by name, not the spawn id');
   assert.equal(s.voiceChannels.has(SPAWN), false);

@@ -93,7 +93,7 @@ async function runSchedule(schedule, today) {
     await deleteCleanupSchedule(schedule.guild_id, schedule.id);
     return;
   }
-  if (!isModuleEnabled(schedule.guild_id, MODULE_ID)) return;
+  if (!(await isModuleEnabled(schedule.guild_id, MODULE_ID))) return;
 
   const channel = guild.channels.cache.get(schedule.channel_id);
   if (!channel?.isTextBased()) {

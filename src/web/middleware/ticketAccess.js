@@ -26,7 +26,7 @@ export async function requireTicketAccess(req, res, next) {
   const guildId = req.params.guildId;
   if (adminGuildIds(req).has(guildId)) return next();
 
-  const staffRoles = getGuildModule(guildId, 'tickets').config.staffRoles ?? [];
+  const staffRoles = (await getGuildModule(guildId, 'tickets')).config.staffRoles ?? [];
   if (staffRoles.length === 0) return deny(res);
 
   const guild = runtime.client?.guilds.cache.get(guildId);

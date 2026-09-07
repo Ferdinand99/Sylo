@@ -280,8 +280,10 @@ export function mountAuth(app) {
     next();
   });
 
-  // Expose auth state to every view.
-  app.use((req, res, next) => {
+  // Expose auth state to every view. Express 5 forwards a rejected promise
+  // from an async middleware to the error handler automatically, so this
+  // doesn't need an asyncHandler wrapper the way route handlers do.
+  app.use(async (req, res, next) => {
     res.locals.authEnabled = config.authEnabled;
     res.locals.syloVersion = BUILD.version;
     res.locals.botInviteUrl = botInviteUrl();
@@ -299,7 +301,7 @@ export function mountAuth(app) {
     const remembered = req.session?.lastGuild;
     res.locals.activeGuildId =
       urlGuildId || (mg.some((g) => g.id === remembered) ? remembered : null) || mg[0]?.id || null;
-    res.locals.sidebar = buildSidebar(req, res.locals.activeGuildId);
+    res.locals.sidebar = await buildSidebar(req, res.locals.activeGuildId);
     next();
   });
 

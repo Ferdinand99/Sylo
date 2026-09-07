@@ -73,7 +73,7 @@ const eph = (interaction, content) => interaction.reply({ content, flags: Messag
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
-  if (!isModuleEnabled(interaction.guildId, 'giveaways')) {
+  if (!(await isModuleEnabled(interaction.guildId, 'giveaways'))) {
     return eph(interaction, 'The Giveaways module is not enabled in this server.');
   }
   const sub = interaction.options.getSubcommand();

@@ -26,7 +26,7 @@ export function assignableRoles(guild) {
  * @param {string} panel  active panel id (for nav highlighting)
  */
 export async function baseContext(guild, panel) {
-  const enabledById = new Map(getGuildModules(guild.id).map((m) => [m.id, m.enabled]));
+  const enabledById = new Map((await getGuildModules(guild.id)).map((m) => [m.id, m.enabled]));
   const modules = MODULES.map((m) => ({
     id: m.id,
     name: m.name,

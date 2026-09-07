@@ -17,7 +17,7 @@ export async function execute(interaction) {
   if (!interaction.inGuild()) {
     return interaction.reply({ content: 'Use this in a server.', flags: MessageFlags.Ephemeral });
   }
-  if (!isModuleEnabled(interaction.guildId, 'leveling')) {
+  if (!(await isModuleEnabled(interaction.guildId, 'leveling'))) {
     return interaction.reply({
       content: 'Leveling is not enabled in this server.',
       flags: MessageFlags.Ephemeral,

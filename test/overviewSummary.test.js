@@ -17,7 +17,7 @@ function stubGuild(id) {
 }
 
 test('buildOverview returns health + grouped cards covering every module', async () => {
-  setGuildModule(G, 'automod', { enabled: true, config: { rules: { invites: { enabled: true } } } });
+  await setGuildModule(G, 'automod', { enabled: true, config: { rules: { invites: { enabled: true } } } });
 
   const ov = await buildOverview(stubGuild(G));
 

@@ -1,12 +1,23 @@
 // Per-guild module enable state and JSON config.
-import { db } from './index.js';
+import { prepare, registerPostgresBootstrap } from './driver.js';
 import { MODULES, getModule } from '../modules/registry.js';
 
-const selectAllStmt = db.prepare('SELECT module_id, enabled, config FROM guild_modules WHERE guild_id = ?');
-const selectOneStmt = db.prepare(
+registerPostgresBootstrap(`
+  CREATE TABLE IF NOT EXISTS guild_modules (
+    guild_id   TEXT NOT NULL,
+    module_id  TEXT NOT NULL,
+    enabled    INTEGER NOT NULL DEFAULT 0,
+    config     TEXT NOT NULL DEFAULT '{}',
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (guild_id, module_id)
+  );
+`);
+
+const selectAllStmt = prepare('SELECT module_id, enabled, config FROM guild_modules WHERE guild_id = ?');
+const selectOneStmt = prepare(
   'SELECT enabled, config FROM guild_modules WHERE guild_id = ? AND module_id = ?'
 );
-const upsertStmt = db.prepare(`
+const upsertStmt = prepare(`
   INSERT INTO guild_modules (guild_id, module_id, enabled, config, updated_at)
   VALUES (@guildId, @moduleId, @enabled, @config, @updatedAt)
   ON CONFLICT (guild_id, module_id) DO UPDATE SET
@@ -18,10 +29,10 @@ const upsertStmt = db.prepare(`
 /**
  * State for every module in a guild, merging stored rows with registry defaults.
  * @param {string} guildId
- * @returns {Array<{ id: string, enabled: boolean, config: object }>}
+ * @returns {Promise<Array<{ id: string, enabled: boolean, config: object }>>}
  */
-export function getGuildModules(guildId) {
-  const rows = new Map(selectAllStmt.all(guildId).map((r) => [r.module_id, r]));
+export async function getGuildModules(guildId) {
+  const rows = new Map((await selectAllStmt.all(guildId)).map((r) => [r.module_id, r]));
   return MODULES.map((mod) => {
     const row = rows.get(mod.id);
     return {
@@ -36,18 +47,18 @@ export function getGuildModules(guildId) {
  * Enabled state + config for one module (falls back to the registry default).
  * @param {string} guildId
  * @param {string} moduleId
- * @returns {{ enabled: boolean, config: object }}
+ * @returns {Promise<{ enabled: boolean, config: object }>}
  */
-export function getGuildModule(guildId, moduleId) {
-  const row = selectOneStmt.get(guildId, moduleId);
+export async function getGuildModule(guildId, moduleId) {
+  const row = await selectOneStmt.get(guildId, moduleId);
   if (row) return { enabled: row.enabled === 1, config: safeParse(row.config) };
   const mod = getModule(moduleId);
   return { enabled: mod ? mod.defaultEnabled : false, config: {} };
 }
 
 /** True if the module is on for the guild. */
-export function isModuleEnabled(guildId, moduleId) {
-  return getGuildModule(guildId, moduleId).enabled;
+export async function isModuleEnabled(guildId, moduleId) {
+  return (await getGuildModule(guildId, moduleId)).enabled;
 }
 
 /**
@@ -57,9 +68,9 @@ export function isModuleEnabled(guildId, moduleId) {
  * @param {string} moduleId
  * @param {{ enabled?: boolean, config?: object }} patch
  */
-export function setGuildModule(guildId, moduleId, patch) {
-  const current = getGuildModule(guildId, moduleId);
-  upsertStmt.run({
+export async function setGuildModule(guildId, moduleId, patch) {
+  const current = await getGuildModule(guildId, moduleId);
+  await upsertStmt.run({
     guildId,
     moduleId,
     enabled: (patch.enabled ?? current.enabled) ? 1 : 0,

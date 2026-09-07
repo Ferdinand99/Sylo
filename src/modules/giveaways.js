@@ -157,7 +157,7 @@ export async function endGiveaway(id, opts = {}) {
   }
 
   if (channel?.isTextBased?.()) {
-    const cfg = normaliseGiveawaysConfig(getGuildModule(g.guild_id, 'giveaways').config);
+    const cfg = normaliseGiveawaysConfig((await getGuildModule(g.guild_id, 'giveaways')).config);
     // A reroll never re-pings the whole channel — only the original draw does.
     const pinging = !opts.rerollCount && cfg.ping !== 'none';
     const lead = pinging ? (cfg.ping === 'everyone' ? '@everyone ' : '@here ') : '';
@@ -203,7 +203,7 @@ async function handleEnter(interaction, id) {
   if (!g || g.ended) {
     return interaction.reply({ content: 'This giveaway has ended.', flags: MessageFlags.Ephemeral });
   }
-  if (!isModuleEnabled(interaction.guildId, 'giveaways')) {
+  if (!(await isModuleEnabled(interaction.guildId, 'giveaways'))) {
     return interaction.reply({
       content: 'Giveaways are disabled in this server.',
       flags: MessageFlags.Ephemeral,
@@ -245,7 +245,7 @@ const TICK_MS = 20_000;
 async function tick() {
   if (!runtime.client?.isReady()) return;
   for (const g of await dueGiveaways(Date.now())) {
-    if (isModuleEnabled(g.guild_id, 'giveaways') && runtime.client.guilds.cache.has(g.guild_id)) {
+    if ((await isModuleEnabled(g.guild_id, 'giveaways')) && runtime.client.guilds.cache.has(g.guild_id)) {
       endGiveaway(g.id).catch((err) => log.error('giveaways', 'auto-end failed:', err.message));
     } else {
       await markGiveawayEnded(g.id, []); // module off / bot gone — just close it

@@ -200,8 +200,8 @@ export async function publishReactionMessage(guild, rm) {
 // --- component interaction handlers (button / select styles) -----------
 
 /** Look up a still-configured, still-enabled role message by id. */
-function roleMessageById(guildId, rmId) {
-  const mod = getGuildModule(guildId, 'roles');
+async function roleMessageById(guildId, rmId) {
+  const mod = await getGuildModule(guildId, 'roles');
   if (!mod.enabled) return null;
   return (mod.config.reactionMessages || []).find((x) => String(x.id) === String(rmId)) || null;
 }
@@ -209,7 +209,7 @@ function roleMessageById(guildId, rmId) {
 const ephemeral = (interaction, content) => interaction.reply({ content, flags: MessageFlags.Ephemeral });
 
 async function handleRoleButton(interaction, rmId, roleId) {
-  const rm = roleMessageById(interaction.guildId, rmId);
+  const rm = await roleMessageById(interaction.guildId, rmId);
   if (!rm || !(rm.pairs || []).some((p) => p.roleId === roleId)) {
     return ephemeral(interaction, 'This role menu is no longer configured.');
   }
@@ -239,7 +239,7 @@ async function handleRoleButton(interaction, rmId, roleId) {
 }
 
 async function handleRoleSelect(interaction, rmId) {
-  const rm = roleMessageById(interaction.guildId, rmId);
+  const rm = await roleMessageById(interaction.guildId, rmId);
   if (!rm) return ephemeral(interaction, 'This role menu is no longer configured.');
   const menuRoleIds = validPairs(rm).map((p) => p.roleId);
   const picked = new Set(interaction.values);

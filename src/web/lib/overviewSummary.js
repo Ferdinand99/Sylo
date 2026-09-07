@@ -80,7 +80,7 @@ function channelName(guild, id) {
  */
 export async function buildOverview(guild) {
   const settings = await getGuildSettings(guild.id);
-  const state = new Map(getGuildModules(guild.id).map((m) => [m.id, m]));
+  const state = new Map((await getGuildModules(guild.id)).map((m) => [m.id, m]));
 
   return {
     health: await buildHealth(guild, settings, state),

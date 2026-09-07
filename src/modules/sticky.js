@@ -71,11 +71,11 @@ on('sticky', 'messageCreateAny', async (message, config, guildId) => {
   if (!posted) return;
 
   // Persist the new message id (re-read config to avoid clobbering concurrent edits).
-  const fresh = getGuildModule(guildId, 'sticky').config;
+  const fresh = (await getGuildModule(guildId, 'sticky')).config;
   const list = Array.isArray(fresh.stickies) ? fresh.stickies : [];
   const row = list.find((s) => s.channelId === sticky.channelId);
   if (row) {
     row.lastMessageId = posted.id;
-    setGuildModule(guildId, 'sticky', { config: { ...fresh, stickies: list } });
+    await setGuildModule(guildId, 'sticky', { config: { ...fresh, stickies: list } });
   }
 });

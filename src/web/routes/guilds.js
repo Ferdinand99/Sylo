@@ -521,9 +521,9 @@ router.get(
       channelLocks,
       tempBans,
       lockdownActive: channelLocks.some((l) => l.lockdown),
-      automodConfig: getGuildModule(guild.id, 'automod').config,
-      moderationCfg: getGuildModule(guild.id, 'moderation').config,
-      loggingCfg: getGuildModule(guild.id, 'logging').config,
+      automodConfig: (await getGuildModule(guild.id, 'automod')).config,
+      moderationCfg: (await getGuildModule(guild.id, 'moderation')).config,
+      loggingCfg: (await getGuildModule(guild.id, 'logging')).config,
       commands,
       roles: assignableRoles(guild),
       automodRules: AUTOMOD_RULES,
@@ -541,7 +541,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const rows = await listAppeals(guild.id, 100);
-    const cfg = normaliseAppealsConfig(getGuildModule(guild.id, 'appeals').config);
+    const cfg = normaliseAppealsConfig((await getGuildModule(guild.id, 'appeals')).config);
     const appeals = rows.map((a) => ({
       id: a.id,
       user: a.user_tag || a.user_id,
@@ -558,7 +558,7 @@ router.get(
       ...(await baseContext(guild, 'appeals')),
       appeals,
       appealsOpen: appeals.filter((a) => a.status === 'open').length,
-      appealsModuleEnabled: getGuildModule(guild.id, 'appeals').enabled,
+      appealsModuleEnabled: (await getGuildModule(guild.id, 'appeals')).enabled,
       appealsConfigured: cfg.questions.length > 0,
       msg: typeof req.query.msg === 'string' ? req.query.msg : null,
     });
@@ -603,7 +603,7 @@ router.get(
   '/:guildId/leaderboard',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    const { enabled, config } = getGuildModule(guild.id, 'leveling');
+    const { enabled, config } = await getGuildModule(guild.id, 'leveling');
     const cfg = normaliseLevelingConfig(config);
     const period = ['week', 'month'].includes(req.query.period) ? req.query.period : 'all';
     const keys = periodKeys();
@@ -645,9 +645,9 @@ router.get(
 router.post(
   '/:guildId/leaderboard/public',
   asyncHandler(async (req, res) => {
-    const prev = getGuildModule(req.guild.id, 'leveling').config;
+    const prev = (await getGuildModule(req.guild.id, 'leveling')).config;
     const publicLeaderboard = req.body.publicLeaderboard === 'on';
-    setGuildModule(req.guild.id, 'leveling', { config: { ...prev, publicLeaderboard } });
+    await setGuildModule(req.guild.id, 'leveling', { config: { ...prev, publicLeaderboard } });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'leveling:leaderboard',
@@ -687,9 +687,9 @@ router.post(
 router.post(
   '/:guildId/m/automod/immunity',
   asyncHandler(async (req, res) => {
-    const prev = getGuildModule(req.guild.id, 'automod').config;
+    const prev = (await getGuildModule(req.guild.id, 'automod')).config;
     const roles = [].concat(req.body.immunityRoles ?? []).filter((r) => /^\d{17,20}$/.test(r));
-    setGuildModule(req.guild.id, 'automod', {
+    await setGuildModule(req.guild.id, 'automod', {
       config: normaliseAutomodConfig({ ...prev, exemptRoles: roles }),
     });
     await recordAudit(req.guild.id, {
@@ -713,7 +713,7 @@ router.post(
 router.get(
   '/:guildId/m/welcome/card-preview',
   asyncHandler(async (req, res) => {
-    const cfg = getGuildModule(req.guild.id, 'welcome').config || {};
+    const cfg = (await getGuildModule(req.guild.id, 'welcome')).config || {};
     const png = await renderWelcomeCard({
       name: 'New Member',
       avatarUrl: runtime.client?.user?.displayAvatarURL({ extension: 'png', size: 256 }),
@@ -733,8 +733,8 @@ router.post(
     const back = `/guilds/${req.guild.id}/m/welcome-channel`;
     const r = await createWelcomeChannel(req.guild);
     if (!r.ok) return res.redirect(`${back}?msg=wc-fail`);
-    const cfg = normaliseWelcomeChannelConfig(getGuildModule(req.guild.id, 'welcome-channel').config);
-    setGuildModule(req.guild.id, 'welcome-channel', { config: { ...cfg, channelId: r.channelId } });
+    const cfg = normaliseWelcomeChannelConfig((await getGuildModule(req.guild.id, 'welcome-channel')).config);
+    await setGuildModule(req.guild.id, 'welcome-channel', { config: { ...cfg, channelId: r.channelId } });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:welcome-channel',
@@ -749,9 +749,9 @@ router.post(
   '/:guildId/m/welcome-channel/unpublish',
   asyncHandler(async (req, res) => {
     const back = `/guilds/${req.guild.id}/m/welcome-channel`;
-    const cfg = normaliseWelcomeChannelConfig(getGuildModule(req.guild.id, 'welcome-channel').config);
+    const cfg = normaliseWelcomeChannelConfig((await getGuildModule(req.guild.id, 'welcome-channel')).config);
     await unpublishWelcome(req.guild, cfg);
-    setGuildModule(req.guild.id, 'welcome-channel', { config: { ...cfg, messageId: '' } });
+    await setGuildModule(req.guild.id, 'welcome-channel', { config: { ...cfg, messageId: '' } });
     res.redirect(`${back}?msg=wc-unpub`);
   })
 );
@@ -760,7 +760,7 @@ router.post(
 // the htmx fragment render, and the config-POST re-render — so every module
 // partial can read what it needs straight from locals (no per-include passthrough).
 async function moduleViewLocals(mod, req, configOverride) {
-  const { enabled, config } = getGuildModule(req.guild.id, mod.id);
+  const { enabled, config } = await getGuildModule(req.guild.id, mod.id);
   const hasView = CONFIG_VIEWS.has(mod.id);
   // The temp-voice view renders each hub's id straight into an Edit/Delete URL;
   // a hub saved by an older build can lack `id`, producing an empty path
@@ -802,8 +802,9 @@ async function moduleViewLocals(mod, req, configOverride) {
       ? assignableRoles(req.guild)
       : [],
     welcomeAutoroles:
-      mod.id === 'welcome' ? (getGuildModule(req.guild.id, 'roles').config.autoroles ?? []) : [],
-    verificationEnabled: mod.id === 'welcome' ? getGuildModule(req.guild.id, 'verification').enabled : false,
+      mod.id === 'welcome' ? ((await getGuildModule(req.guild.id, 'roles')).config.autoroles ?? []) : [],
+    verificationEnabled:
+      mod.id === 'welcome' ? (await getGuildModule(req.guild.id, 'verification')).enabled : false,
     wcPresets:
       mod.id === 'welcome-channel'
         ? WC_PRESETS.map((p) => ({ id: p.id, label: p.label, kind: p.kind, defaults: p.make() }))
@@ -1025,17 +1026,17 @@ router.post(
       // "Give roles to new members" here writes the Reaction roles & autoroles module.
       const autoOn = req.body.enable_autorole === 'on';
       const newRoles = autoOn ? [].concat(req.body.newRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)) : [];
-      const rolesMod = getGuildModule(req.guild.id, 'roles');
-      setGuildModule(req.guild.id, 'roles', {
+      const rolesMod = await getGuildModule(req.guild.id, 'roles');
+      await setGuildModule(req.guild.id, 'roles', {
         enabled: rolesMod.enabled || newRoles.length > 0,
         config: { ...rolesMod.config, autoroles: newRoles },
       });
     } else if (mod.id === 'roles') {
-      const existing = getGuildModule(req.guild.id, 'roles').config;
+      const existing = (await getGuildModule(req.guild.id, 'roles')).config;
       const autoroles = [].concat(req.body.autoroles ?? []).filter((r) => /^\d{17,20}$/.test(r));
       config = { autoroles, reactionMessages: existing.reactionMessages ?? [] };
     } else if (mod.id === 'sticky') {
-      const prev = getGuildModule(req.guild.id, 'sticky').config;
+      const prev = (await getGuildModule(req.guild.id, 'sticky')).config;
       const prevById = new Map((prev.stickies ?? []).map((s) => [s.channelId, s]));
       const chans = [].concat(req.body.s_channel ?? []);
       const contents = [].concat(req.body.s_content ?? []);
@@ -1061,7 +1062,7 @@ router.post(
       };
     } else if (mod.id === 'automod') {
       const b = req.body;
-      const prevAutomod = getGuildModule(req.guild.id, 'automod').config;
+      const prevAutomod = (await getGuildModule(req.guild.id, 'automod')).config;
       // MEE6-style: one dropdown per rule — off | delete | warn | timeout.
       const rule = (key) => {
         const m = b[`r_${key}_mode`];
@@ -1105,7 +1106,7 @@ router.post(
       const roleIds = [].concat(req.body.rw_role ?? []);
       const multTargets = [].concat(req.body.mult_target ?? []);
       const multFactors = [].concat(req.body.mult_factor ?? []);
-      const prevLvl = getGuildModule(req.guild.id, 'leveling').config;
+      const prevLvl = (await getGuildModule(req.guild.id, 'leveling')).config;
       config = normaliseLevelingConfig({
         cooldownSeconds: req.body.cooldownSeconds,
         xpRate: req.body.xpRate,
@@ -1180,7 +1181,7 @@ router.post(
         appealServerInvite: req.body.appealServerInvite,
       });
     } else if (mod.id === 'verification') {
-      const prev = getGuildModule(req.guild.id, 'verification').config;
+      const prev = (await getGuildModule(req.guild.id, 'verification')).config;
       config = normaliseVerificationConfig({
         mode: req.body.mode,
         verifiedRoleId: req.body.verifiedRoleId,
@@ -1275,7 +1276,9 @@ router.post(
       const chans = [].concat(req.body.rss_channel ?? []);
       const rolez = [].concat(req.body.rss_role ?? []);
       const tpls = [].concat(req.body.rss_template ?? []);
-      const prevIds = new Set((getGuildModule(req.guild.id, 'rss').config.feeds ?? []).map((f) => f.id));
+      const prevIds = new Set(
+        ((await getGuildModule(req.guild.id, 'rss')).config.feeds ?? []).map((f) => f.id)
+      );
       config = normaliseRssConfig({
         feeds: refs.map((ref, i) => ({
           id: ids[i] ?? '',
@@ -1308,7 +1311,7 @@ router.post(
         resultsMessage: msg(req.body.rm_json),
       });
     } else if (mod.id === 'welcome-channel') {
-      const prev = getGuildModule(req.guild.id, 'welcome-channel').config;
+      const prev = (await getGuildModule(req.guild.id, 'welcome-channel')).config;
       let spec;
       try {
         spec = JSON.parse(req.body.spec || '{}');
@@ -1333,7 +1336,7 @@ router.post(
       return res.redirect(back);
     }
 
-    setGuildModule(req.guild.id, mod.id, { config });
+    await setGuildModule(req.guild.id, mod.id, { config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: `module:${mod.id}`,
@@ -1364,10 +1367,12 @@ router.post(
       }
     }
     if (mod.id === 'welcome-channel' && req.body.action === 'publish') {
-      const cfg = normaliseWelcomeChannelConfig(getGuildModule(req.guild.id, 'welcome-channel').config);
+      const cfg = normaliseWelcomeChannelConfig(
+        (await getGuildModule(req.guild.id, 'welcome-channel')).config
+      );
       const r = await publishWelcome(req.guild, cfg);
       if (r.ok) {
-        setGuildModule(req.guild.id, 'welcome-channel', {
+        await setGuildModule(req.guild.id, 'welcome-channel', {
           enabled: true,
           config: { ...cfg, messageId: r.messageId },
         });
@@ -1473,7 +1478,7 @@ router.post(
     });
 
     // Reconcile reward roles for the new level (adds/strips per config).
-    const cfg = normaliseLevelingConfig(getGuildModule(req.guild.id, 'leveling').config);
+    const cfg = normaliseLevelingConfig((await getGuildModule(req.guild.id, 'leveling')).config);
     const member = await req.guild.members.fetch(userId).catch(() => null);
     if (member) await syncRewards(member, levelFromXp(xp), cfg).catch(() => {});
 
@@ -1734,8 +1739,8 @@ router.post(
 
 // --- Temporary voice "hub" builder (MEE6-style) ---------------------
 
-function tvHubs(guildId) {
-  return normaliseTempVoiceConfig(getGuildModule(guildId, 'temp-voice').config).hubs;
+async function tvHubs(guildId) {
+  return normaliseTempVoiceConfig((await getGuildModule(guildId, 'temp-voice')).config).hubs;
 }
 
 async function renderTvBuilder(req, res, hub) {
@@ -1782,7 +1787,7 @@ router.get(
 router.get(
   '/:guildId/m/temp-voice/hub/:id',
   asyncHandler(async (req, res) => {
-    const hub = tvHubs(req.guild.id).find((h) => h.id === req.params.id);
+    const hub = (await tvHubs(req.guild.id)).find((h) => h.id === req.params.id);
     if (!hub) return res.redirect(`/guilds/${req.guild.id}/m/temp-voice`);
     await renderTvBuilder(req, res, hub);
   })
@@ -1795,7 +1800,7 @@ router.post(
     const b = req.body;
     if (!/^\d{17,20}$/.test(b.hubChannelId ?? '')) return res.redirect(`${back}?msg=badchannel`);
 
-    const prev = tvHubs(req.guild.id);
+    const prev = await tvHubs(req.guild.id);
     const id = /^\d+$/.test(b.id ?? '') ? b.id : String(Date.now());
     const existing = prev.find((h) => h.id === id);
     const hub = {
@@ -1828,7 +1833,7 @@ router.post(
       },
     };
     const next = existing ? prev.map((h) => (h.id === id ? hub : h)) : [...prev, hub];
-    setGuildModule(req.guild.id, 'temp-voice', {
+    await setGuildModule(req.guild.id, 'temp-voice', {
       enabled: true,
       config: normaliseTempVoiceConfig({ hubs: next }),
     });
@@ -1844,8 +1849,8 @@ router.post(
 router.post(
   '/:guildId/m/temp-voice/hub/:id/delete',
   asyncHandler(async (req, res) => {
-    const prev = tvHubs(req.guild.id);
-    setGuildModule(req.guild.id, 'temp-voice', {
+    const prev = await tvHubs(req.guild.id);
+    await setGuildModule(req.guild.id, 'temp-voice', {
       config: normaliseTempVoiceConfig({ hubs: prev.filter((h) => h.id !== req.params.id) }),
     });
     await recordAudit(req.guild.id, {
@@ -1891,7 +1896,7 @@ router.get(
 router.get(
   '/:guildId/m/roles/rr/:id',
   asyncHandler(async (req, res) => {
-    const list = getGuildModule(req.guild.id, 'roles').config.reactionMessages ?? [];
+    const list = (await getGuildModule(req.guild.id, 'roles')).config.reactionMessages ?? [];
     await renderRrBuilder(req, res, list.find((x) => String(x.id) === req.params.id) || null);
   })
 );
@@ -1901,7 +1906,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const back = `/guilds/${guild.id}/m/roles`;
-    const cfg = getGuildModule(guild.id, 'roles').config;
+    const cfg = (await getGuildModule(guild.id, 'roles')).config;
     const list = Array.isArray(cfg.reactionMessages) ? cfg.reactionMessages : [];
 
     const channelId = /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '';
@@ -1970,7 +1975,7 @@ router.post(
     }
 
     const next = existing ? list.map((x) => (String(x.id) === id ? rm : x)) : [...list, rm];
-    setGuildModule(guild.id, 'roles', { enabled: true, config: { ...cfg, reactionMessages: next } });
+    await setGuildModule(guild.id, 'roles', { enabled: true, config: { ...cfg, reactionMessages: next } });
     await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:roles',
@@ -1984,7 +1989,7 @@ router.post(
   '/:guildId/m/roles/rr/:id/delete',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    const cfg = getGuildModule(guild.id, 'roles').config;
+    const cfg = (await getGuildModule(guild.id, 'roles')).config;
     const list = Array.isArray(cfg.reactionMessages) ? cfg.reactionMessages : [];
     const rm = list.find((x) => String(x.id) === req.params.id);
     if (rm?.messageId && rm.channelId) {
@@ -1992,7 +1997,7 @@ router.post(
       const m = ch && (await ch.messages.fetch(rm.messageId).catch(() => null));
       if (m) await m.delete().catch(() => {});
     }
-    setGuildModule(guild.id, 'roles', {
+    await setGuildModule(guild.id, 'roles', {
       config: { ...cfg, reactionMessages: list.filter((x) => String(x.id) !== req.params.id) },
     });
     res.redirect(`/guilds/${guild.id}/m/roles?msg=saved`);
@@ -2001,8 +2006,8 @@ router.post(
 
 // --- Starboard builder (MEE6-style) -----------------------------------
 
-function starboardBoards(guildId) {
-  return normaliseStarboard(getGuildModule(guildId, 'starboard').config).boards;
+async function starboardBoards(guildId) {
+  return normaliseStarboard((await getGuildModule(guildId, 'starboard')).config).boards;
 }
 
 async function renderSbBuilder(req, res, board) {
@@ -2056,7 +2061,7 @@ router.get(
 router.get(
   '/:guildId/m/starboard/sb/:id',
   asyncHandler(async (req, res) => {
-    const board = starboardBoards(req.guild.id).find((b) => b.id === req.params.id);
+    const board = (await starboardBoards(req.guild.id)).find((b) => b.id === req.params.id);
     if (!board) return res.redirect(`/guilds/${req.guild.id}/m/starboard`);
     await renderSbBuilder(req, res, board);
   })
@@ -2070,7 +2075,7 @@ router.post(
     const channelId = /^\d{17,20}$/.test(b.channelId ?? '') ? b.channelId : '';
     if (!channelId) return res.redirect(`${back}?msg=badchannel`);
 
-    const prev = normaliseStarboard(getGuildModule(req.guild.id, 'starboard').config);
+    const prev = normaliseStarboard((await getGuildModule(req.guild.id, 'starboard')).config);
     const list = prev.boards;
     const id = /^\d+$/.test(b.id ?? '') ? b.id : String(Date.now());
     const existing = list.find((x) => x.id === id);
@@ -2101,7 +2106,7 @@ router.post(
 
     const nextBoards = existing ? list.map((x) => (x.id === id ? board : x)) : [...list, board];
     const config = normaliseStarboard({ boards: nextBoards });
-    setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
+    await setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:starboard',
@@ -2124,9 +2129,9 @@ router.post(
 router.post(
   '/:guildId/m/starboard/sb/:id/delete',
   asyncHandler(async (req, res) => {
-    const prev = normaliseStarboard(getGuildModule(req.guild.id, 'starboard').config);
+    const prev = normaliseStarboard((await getGuildModule(req.guild.id, 'starboard')).config);
     const config = normaliseStarboard({ boards: prev.boards.filter((b) => b.id !== req.params.id) });
-    setGuildModule(req.guild.id, 'starboard', { config });
+    await setGuildModule(req.guild.id, 'starboard', { config });
     await deleteBoardEntries(req.guild.id, req.params.id);
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -2139,8 +2144,8 @@ router.post(
 
 // --- Custom-command builder (MEE6-style actions) ----------------------
 
-function ccCommands(guildId) {
-  return normaliseCustomCommands(getGuildModule(guildId, 'custom-commands').config).commands;
+async function ccCommands(guildId) {
+  return normaliseCustomCommands((await getGuildModule(guildId, 'custom-commands')).config).commands;
 }
 
 async function renderCcBuilder(req, res, cmd) {
@@ -2171,7 +2176,7 @@ router.get(
 router.get(
   '/:guildId/m/custom-commands/cmd/:id',
   asyncHandler(async (req, res) => {
-    const cmd = ccCommands(req.guild.id).find((c) => c.id === req.params.id);
+    const cmd = (await ccCommands(req.guild.id)).find((c) => c.id === req.params.id);
     if (!cmd) return res.redirect(`/guilds/${req.guild.id}/m/custom-commands`);
     await renderCcBuilder(req, res, cmd);
   })
@@ -2196,7 +2201,7 @@ router.post(
     if (!/^[a-z0-9_-]{1,32}$/.test(name)) return res.redirect(`${back}?msg=cc-name`);
     if (runtime.client?.commands?.has(name)) return res.redirect(`${back}?msg=cc-reserved`);
 
-    const prev = normaliseCustomCommands(getGuildModule(req.guild.id, 'custom-commands').config);
+    const prev = normaliseCustomCommands((await getGuildModule(req.guild.id, 'custom-commands')).config);
     const id = /^\d+$/.test(req.body.id ?? '') ? String(req.body.id) : String(Date.now());
     const existing = prev.commands.find((c) => c.id === id);
     if (prev.commands.some((c) => c.name === name && c.id !== id)) {
@@ -2222,7 +2227,7 @@ router.post(
       return res.redirect(`${back}?msg=cc-empty`);
     }
 
-    setGuildModule(req.guild.id, 'custom-commands', { enabled: true, config });
+    await setGuildModule(req.guild.id, 'custom-commands', { enabled: true, config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:custom-commands',
@@ -2238,11 +2243,11 @@ router.post(
 router.post(
   '/:guildId/m/custom-commands/cmd/:id/delete',
   asyncHandler(async (req, res) => {
-    const prev = normaliseCustomCommands(getGuildModule(req.guild.id, 'custom-commands').config);
+    const prev = normaliseCustomCommands((await getGuildModule(req.guild.id, 'custom-commands')).config);
     const config = normaliseCustomCommands({
       commands: prev.commands.filter((c) => c.id !== req.params.id),
     });
-    setGuildModule(req.guild.id, 'custom-commands', { config });
+    await setGuildModule(req.guild.id, 'custom-commands', { config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:custom-commands',
@@ -2414,7 +2419,7 @@ router.post(
     const ids = [...new Set([].concat(req.body.ids ?? []))].filter((id) => getModule(id));
     const enabled = Boolean(req.body.enabled);
     for (const id of ids) {
-      setGuildModule(req.guild.id, id, { enabled });
+      await setGuildModule(req.guild.id, id, { enabled });
       if (id === 'custom-commands') {
         syncGuildCustomCommands(req.guild).catch((err) =>
           log.error('custom-commands', 'sync after bulk toggle failed:', err.message)
@@ -2443,7 +2448,7 @@ router.post(
     const mod = getModule(req.params.moduleId);
     if (!mod) return res.status(404).json({ error: 'Unknown module' });
     const enabled = Boolean(req.body?.enabled);
-    setGuildModule(req.guild.id, mod.id, { enabled });
+    await setGuildModule(req.guild.id, mod.id, { enabled });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: `module:${mod.id}`,
@@ -2461,7 +2466,7 @@ router.post(
     }
     if (mod.id === 'automod') {
       // Re-assert native rules when turned back on; tear them down when off.
-      const cfg = normaliseAutomodConfig(getGuildModule(req.guild.id, 'automod').config);
+      const cfg = normaliseAutomodConfig((await getGuildModule(req.guild.id, 'automod')).config);
       const target = enabled ? cfg : { ...cfg, native: { ...cfg.native, enabled: false } };
       syncGuildAutomod(req.guild, target).catch((err) =>
         log.error('automod', 'native sync after toggle failed:', err.message)
@@ -2556,7 +2561,7 @@ router.get(
 
     res.render('guild', {
       ...(await baseContext(req.guild, 'insights')),
-      insightsEnabled: getGuildModule(req.guild.id, 'insights').enabled,
+      insightsEnabled: (await getGuildModule(req.guild.id, 'insights')).enabled,
       insightsRange: range,
       insightsGranularity: hourly ? 'hour' : 'day',
       insightsSeries: series,
