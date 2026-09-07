@@ -1406,14 +1406,81 @@ real redesign, not a driver swap.
   `runBackup()` produces, so once #3 produces a Postgres dump instead of a
   `.db` file, this piece mostly carries over unchanged.
 
+### 4 — One-time SQLite → Postgres data migration tool
+
+Depends on #1 (needs every table's Postgres bootstrap DDL to exist — done)
+and #2 (a `schema_migrations` table to stamp as "fully migrated" once this
+runs, so the app doesn't try to re-run historical DDL against an already-
+populated database). Motivation: the *hosted* instance (sylobot.com) is a
+real, publicly-used deployment already running on SQLite with real guild
+data — #0's "hosted gets `DATABASE_URL`" decision only actually ships without
+data loss once there's a way to carry that data over. Everything in #1-#3 so
+far assumed a *fresh* Postgres database with no SQLite history to preserve;
+this is the piece that makes flipping `DATABASE_URL` on for the *existing*
+hosted instance safe.
+
+Shape of the tool (a one-off script, e.g. `scripts/migrate-sqlite-to-postgres.js`,
+run manually by the operator during a maintenance window — not a runtime
+code path, not automatic, and not a live/continuous sync):
+
+- **Schema-driven, not a hand-maintained table list.** Enumerate every table
+  via SQLite's `sqlite_master` (same technique `test/guildTables.test.js`
+  already uses to catch drift) rather than hardcoding a copy of
+  `GUILD_TABLES` — that list is guild-scoped tables only anyway; this needs
+  *every* table, guild-scoped or not (e.g. `stats_cache`).
+- **Bootstrap the target first.** Import the app's command/module registry
+  (the same thing `src/index.js` does at boot) so every `src/db/*.js` file's
+  `registerPostgresBootstrap()` call fires before any copying starts —
+  reuses the exact DDL already proven against real Postgres by 30 files'
+  worth of `.postgres.test.js` coverage, instead of a second copy of the
+  schema.
+- **Preserve surrogate ids, not just column values.** The 8 tables with a
+  SQLite `id INTEGER PRIMARY KEY AUTOINCREMENT` (`tickets`, `ticket_messages`,
+  `composed_messages`, `scheduled_messages`, `config_audit`, `appeals`,
+  `giveaways`, `channel_cleanup_schedules` — the same list from #1's
+  `lastInsertRowid` note) have other rows referencing that id in plain
+  application logic, not an enforced `FOREIGN KEY` (e.g.
+  `ticket_messages.ticket_id`, `giveaway_entries.giveaway_id`). A copy that
+  lets Postgres's `SERIAL` assign fresh ids would silently break every one of
+  those references. The migration must `INSERT` the `id` column explicitly,
+  then `SELECT setval(pg_get_serial_sequence(...), MAX(id))` per table
+  afterward so the sequence doesn't collide with the copied rows on the next
+  real insert.
+- **Chunked, not one giant read.** Page each table (e.g. 1,000 rows at a
+  time via `LIMIT`/`OFFSET` on `rowid`) rather than loading a potentially
+  large table fully into memory — the hosted instance's `infractions` /
+  `leveling_periods` / `ticket_messages` tables are the ones most likely to
+  be large after a long-running deployment.
+- **Refuse to run onto a non-empty target**, unless an explicit `--force` is
+  passed — this is a one-shot operation onto what should be a fresh
+  database; silently appending onto (or worse, partially overwriting) an
+  already-populated Postgres instance is the wrong default.
+- **Verify, don't just trust.** After copying, compare a `COUNT(*)` per table
+  between SQLite and Postgres and fail loudly on any mismatch, before the
+  operator is told it's safe to flip `DATABASE_URL` on for real.
+- **Needs a quiet database.** SQLite has one writer; for the exported
+  snapshot to be consistent, the bot/dashboard should be stopped (or at
+  least not writing) for the duration — worth a `docs/self-hosting.md`
+  callout ("stop Sylo, run the migration, set `DATABASE_URL`, start Sylo")
+  rather than trying to build a zero-downtime path for what's meant to be a
+  single, deliberate cutover.
+- Every value-level conversion this needs (millisecond timestamps as
+  `BIGINT`, booleans as 0/1 `INTEGER`, JSON blobs as `TEXT`) is already
+  exactly what the bootstrap DDL declares — no separate type-mapping table,
+  just insert the SQLite row's values as-is into the already-correct
+  Postgres columns.
+
 ### Suggested order
 
 1. **#0 decision** — confirm self-hosting stays SQLite-only; hosted becomes
    opt-in via `DATABASE_URL`. Blocks everything else.
-2. **#1 driver + async seam** — the big one.
+2. **#1 driver + async seam** — the big one. **Done — 30 of 30 files.**
 3. **#2 migration runner** — small, land alongside #1.
-4. **#3 backup/restore redesign** — last, depends on #1.
-5. Ship behind `DATABASE_URL` unset by default, so every self-hosted
+4. **#3 backup/restore redesign** — depends on #1.
+5. **#4 data migration tool** — depends on #1 (done) and #2; needed before
+   `DATABASE_URL` can be turned on for the *existing* hosted instance without
+   losing its current data. Independent of #3.
+6. Ship behind `DATABASE_URL` unset by default, so every self-hosted
    deployment sees no change at all.
 
 ---
