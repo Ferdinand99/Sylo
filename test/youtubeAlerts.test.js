@@ -6,7 +6,9 @@ import {
   parseFeed,
   fillMessage,
   resolveYtChannel,
+  checkLive,
 } from '../src/modules/youtubeAlerts.js';
+import { log } from '../src/lib/log.js';
 
 const UC = 'UC' + 'x'.repeat(22);
 const CH = '123456789012345678';
@@ -50,6 +52,79 @@ test('resolveYtChannel: a non-youtube URL is rejected (SSRF guard), never fetche
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+// issue #178: "stopped working, nothing in the logs" — resolveYtChannel and
+// checkLive used to swallow every fetch failure completely silently. These
+// prove each failure mode now logs something useful, without changing the
+// return value callers already depend on.
+function withMockedFetch(response, fn) {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => response;
+  const realWarn = log.warn;
+  const warnings = [];
+  log.warn = (...args) => warnings.push(args);
+  return fn(warnings).finally(() => {
+    globalThis.fetch = realFetch;
+    log.warn = realWarn;
+  });
+}
+
+test('resolveYtChannel: an HTTP error logs a warning with the status', async () => {
+  await withMockedFetch({ ok: false, status: 429 }, async (warnings) => {
+    assert.equal(await resolveYtChannel('@somechannel'), null);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0].join(' '), /HTTP 429/);
+  });
+});
+
+test('resolveYtChannel: a 200 with no recognisable channel id logs a warning', async () => {
+  await withMockedFetch(
+    { ok: true, text: async () => '<html>no channel id here</html>' },
+    async (warnings) => {
+      assert.equal(await resolveYtChannel('@somechannel'), null);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0].join(' '), /no channel id found/);
+    }
+  );
+});
+
+test('checkLive: an HTTP error logs a warning and reports not live', async () => {
+  await withMockedFetch({ ok: false, status: 503 }, async (warnings) => {
+    assert.deepEqual(await checkLive(UC), { live: false });
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0].join(' '), /HTTP 503/);
+  });
+});
+
+test('checkLive: legitimately not live is silent (no warning) — the common case', async () => {
+  await withMockedFetch({ ok: true, text: async () => '<html>not live</html>' }, async (warnings) => {
+    assert.deepEqual(await checkLive(UC), { live: false });
+    assert.equal(warnings.length, 0);
+  });
+});
+
+// issue #178's actual root cause: YouTube's channel/live pages now run ~2 MB,
+// but grab() (shared with the RSS/Atom feed parser) defaulted to a 300 KB scan
+// cap sized for feed bodies — so a channelId/videoId sitting past 300 KB was
+// silently never found, on an otherwise perfectly healthy 200 response. These
+// pad the needle past the old cap and confirm the new one still reaches it.
+const PAST_OLD_CAP = 'x'.repeat(350_000); // > the old 300 KB grab() default
+
+test('resolveYtChannel: a channel id past the old 300 KB scan cap is still found', async () => {
+  const html = `<html>${PAST_OLD_CAP}<script>"channelId":"${UC}"</script></html>`;
+  await withMockedFetch({ ok: true, text: async () => html }, async (warnings) => {
+    assert.deepEqual(await resolveYtChannel('@somechannel'), { channelId: UC, name: '' });
+    assert.equal(warnings.length, 0);
+  });
+});
+
+test('checkLive: a videoId past the old 300 KB scan cap is still found', async () => {
+  const html = `<html>"isLive":true${PAST_OLD_CAP}<script>"videoId":"abcdefghijk"</script></html>`;
+  await withMockedFetch({ ok: true, text: async () => html }, async (warnings) => {
+    assert.deepEqual(await checkLive(UC), { live: true, videoId: 'abcdefghijk', title: 'Live now' });
+    assert.equal(warnings.length, 0);
+  });
 });
 
 test('normaliseYoutubeConfig: caps at 50', () => {

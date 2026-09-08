@@ -12,8 +12,12 @@ const MAX_DOC = 4_000_000; // ~4 MB — far above any real feed
 const MAX_SCAN = 300_000; // per grab() call
 const MAX_FIELD = 200_000; // per CDATA / tag-text capture
 
-/** First capture group of `re` in `s` (scanning at most MAX_SCAN chars), or null. */
-export const grab = (re, s) => (String(s).slice(0, MAX_SCAN).match(re) || [])[1] || null;
+/**
+ * First capture group of `re` in `s` (scanning at most `maxScan` chars, default
+ * MAX_SCAN), or null. Callers scraping something bigger than a feed body (e.g.
+ * a full HTML page) can pass a larger `maxScan` explicitly — see youtubeAlerts.js.
+ */
+export const grab = (re, s, maxScan = MAX_SCAN) => (String(s).slice(0, maxScan).match(re) || [])[1] || null;
 
 /** Unwrap a single wrapping CDATA section, if present. */
 function stripCdata(s) {
