@@ -47,6 +47,17 @@ If you already have a running instance with real data, don't just set
 database. Use `scripts/migrate-sqlite-to-postgres.js` to copy everything
 over first.
 
+> **The order matters — get this wrong and Sylo starts up on an empty
+> database.** `DATABASE_URL` being set is the *only* thing that decides
+> which database Sylo talks to; it doesn't know or care whether that
+> database actually has your data in it yet. Do the copy **first**, with
+> Sylo stopped and `DATABASE_URL` still unset for it, and only add
+> `DATABASE_URL` to Sylo's own config **after** the migration reports every
+> table matched. Adding the env var and restarting before that — even
+> planning to "migrate right after" — means real requests hit empty tables
+> in the gap. See the [troubleshooting entry](#troubleshooting) below for
+> exactly what that looks like and how to recover if it happens anyway.
+
 **1. Try it safely against a copy first.** Take a backup from the Health page
 (or `docker cp <container>:/app/data/backups/<name>.db ./`), then dry-run the
 migration against it — this touches nothing live:
@@ -61,21 +72,46 @@ sure about (a schema mismatch, an already-populated target) without writing
 a single row.
 
 **2. Run it for real** against the copy (drop `--dry-run`), and check the
-per-table row-count report at the end — every line should show a ✔.
+per-table row-count report at the end — every line should show a ✔. This
+proves the whole path works before it's anywhere near the live database.
 
-**3. Cut the live instance over.** Stop Sylo so nothing is still writing to
-the SQLite file (a live write mid-copy would make the snapshot inconsistent),
-then run the same command against the *live* `DATABASE_PATH`
-(`./data/sylo.db` by default) and your real `DATABASE_URL`. In Docker:
+**3. Stop Sylo.** Nothing should be writing to the SQLite file during the
+real copy — a write mid-copy makes the snapshot inconsistent. `DATABASE_URL`
+is **not** set anywhere yet at this point, on the stopped instance or in the
+migration command below.
 
 ```bash
-docker compose stop sylo
-docker compose run --rm -e DATABASE_URL=postgres://user:pass@host/db \
-  sylo node scripts/migrate-sqlite-to-postgres.js
+docker compose stop sylo          # docker-compose deployments
+# or, for a container started directly (e.g. an Unraid template, no
+# docker-compose.yml): docker stop sylo
 ```
 
-**4. Add `DATABASE_URL` to your `.env`** and start Sylo again. It's now
-running on Postgres with all of its previous data.
+**4. Get a snapshot of the now-quiet database and migrate it.** With Sylo
+stopped, either take one last backup via `docker cp` (the file doesn't
+change once the container isn't running) or point `DATABASE_PATH` straight
+at the mounted volume's file, then run the real migration against your real
+`DATABASE_URL`:
+
+```bash
+# docker-compose deployments — runs in a throwaway container sharing the
+# same volume as the stopped service:
+docker compose run --rm -e DATABASE_URL=postgres://user:pass@host/db \
+  sylo node scripts/migrate-sqlite-to-postgres.js
+
+# a container started directly (no compose file) — copy the file out first:
+docker cp sylo:/app/data/sylo.db ./sylo-final.db
+DATABASE_PATH=./sylo-final.db DATABASE_URL=postgres://user:pass@host/db \
+  npm run migrate-to-postgres
+```
+
+Check the row-count report at the end — every line ✔ — **before** moving on.
+
+**5. Only now add `DATABASE_URL`** to Sylo's own config — `.env` for
+docker-compose, or as a Variable on the container's template if it was
+started directly (e.g. Unraid: Docker tab → the container → **Edit** → add
+a **Variable**, `DATABASE_URL` → **Apply**, which recreates and starts it
+for you) — **then start Sylo**. It connects to a database that already has
+every row it had before.
 
 The script refuses to run onto a Postgres database that already has rows in
 it (pass `--force` to override — see its own header comment for exactly what
@@ -125,3 +161,4 @@ sync — the migration is a one-time copy, not a live replication).
 | Migration fails with "Postgres is missing column(s)" | The Postgres schema is out of date relative to this build — start Sylo once against `DATABASE_URL` first (it bootstraps the schema on connect), then re-run the migration. |
 | Restore rejects a snapshot with "server is running in \[SQLite/Postgres\] mode" | The snapshot is from the other driver. Restore it only on a deployment running that same driver. |
 | `pg_dump`/`pg_restore: command not found` | You're running Sylo from source outside the Docker image without the Postgres client tools installed locally. Install `postgresql-client` (matching or newer than your server's major version) or use the Docker image, which bundles it. |
+| Sylo is already running against `DATABASE_URL`, but the database is empty (dashboard shows no servers, no settings) | `DATABASE_URL` got added and Sylo restarted *before* the migration ran — see the order in [step 3-5](#moving-an-existing-sqlite-install-over) above. To recover: **1)** stop Sylo again so nothing else gets written; **2)** check what, if anything, wrote to the empty database in the meantime (`SELECT * FROM app_settings;` is usually the only thing — background timers like the birthday sweep touch it even with zero real activity) and delete those few rows — they're not real data, and left in place they'll collide with the same rows in your SQLite backup; **3)** run the migration for real, now that the target is genuinely empty; **4)** start Sylo. Nothing about this touches or risks the original SQLite file — it was only ever read. |
