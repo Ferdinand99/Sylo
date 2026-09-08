@@ -169,7 +169,7 @@ migration when it ships.
 
 ---
 
-## Next — the 3.14 line
+## The 3.14 line → done
 
 Complete. Themes 1–4 shipped across **3.14.0 → 3.17.0**. Same conventions as
 above (branch per workstream, `npm test` + `npm run lint` + compose build green,
@@ -347,9 +347,9 @@ One `feat` → **3.19.0**. Twitch / YouTube-live / Kick alerts now clean up the
 
 ---
 
-## Next — GDPR / data-rights line (planned)
+## GDPR / data-rights line → done
 
-Three independent workstreams that tighten Sylo's data-protection posture. Same
+All three workstreams shipped (see below). Same
 conventions as the lines above (branch per workstream → PR into `main`,
 `npm test` + `npm run lint` + compose build green, Conventional-Commit summary).
 Sylo already covers a lot here — a published privacy policy, `/forget` for
@@ -487,13 +487,14 @@ ceiling, not at hosted launch.
 
 ---
 
-## Next — Postgres migration line (planned, not queued)
+## Postgres migration line → done
 
-Written now so the shape of the work is scoped ahead of time — **not** a signal
-to start. Per the sequencing note above, this only becomes relevant once the
-hosted instance's guild count actually approaches the internal-sharding ceiling
-and a multi-process `ShardingManager` split is next. No branch should open here
-before that's actually in sight.
+Originally written up as a scoped-ahead-of-time plan, gated on the hosted
+instance's guild count approaching the internal-sharding ceiling — that gate
+turned out not to matter in practice; the line shipped in full anyway (#0-#4
+below), and the hosted instance (sylobot.com's main bot) has been cut over
+to Postgres for real, with its existing data migrated over, not just a
+theoretical fresh-install capability.
 
 Grounded in a codebase read-through: `src/db/` is a real seam — 31
 feature-specific wrapper files (`leveling.js`, `modCases.js`, `modules.js`, …,
@@ -1557,9 +1558,12 @@ either way.
 
 ---
 
-## Next — Scheduled Channel Cleanup module (planned, not started)
+## Scheduled Channel Cleanup module → done
 
-31st module. Bulk-deletes old messages from specific channels on a per-channel
+31st module, shipped as planned below (`src/modules/channelCleanup.js`,
+`src/db/channelCleanup.js`, dashboard views `channel-cleanup.ejs` +
+`channel-cleanup-builder.ejs`). Bulk-deletes old messages from specific
+channels on a per-channel
 weekly schedule — aimed at high-noise, low-value channels (webhook feeds,
 status/alert channels) that would otherwise need manual cleanup forever.
 Deliberately **not** named "auto-prune" — that name is already taken by the
@@ -1621,11 +1625,14 @@ its first run — so the delete step needs to:
 
 ### Scheduler
 
-A new `startChannelCleanupSchedule()` next to the existing
-`startBackupSchedule()` / `startRetentionSchedule()` in `src/index.js` —
-ticks every few minutes, and for every guild with the module enabled, checks
-each schedule entry against "is today's day-of-week + current time (± a
-small tolerance window) a match, and did this entry not already run today."
+As shipped: a self-contained `setInterval` tick inside
+`src/modules/channelCleanup.js` itself (the established per-module pattern —
+e.g. `tempVoice.js`'s sweep — rather than a `src/index.js`-level
+`startXSchedule()` alongside `startBackupSchedule()`/`startRetentionSchedule()`,
+which is reserved for core DB-level concerns). For every guild with the
+module enabled, checks each schedule entry against "is today's day-of-week +
+current time (± a small tolerance window) a match, and did this entry not
+already run today."
 
 ### Permissions
 
@@ -1633,10 +1640,18 @@ No new permission needed — `Manage Messages` is already in Sylo's guild-wide
 grant (`internal/discord-server-plan.md`'s guild-wide table), which is all
 `bulkDelete`/`message.delete()` require.
 
-### Not yet decided
+### How the open questions above were resolved
 
-- Exact dashboard UI for picking days-of-week + time (a row-based builder
-  like the RSS-feed / reaction-roles list, presumably).
-- Whether to log what got deleted anywhere (a lightweight "cleaned N messages
-  from #channel" line to a log channel, similar to other modules' log-channel
-  settings) — leaning yes, so it's not a silent black box.
+- Dashboard UI: a row-based builder, as guessed — `channel-cleanup-builder.ejs`,
+  matching the RSS-feed / reaction-roles list pattern.
+- Deletion logging: landed on internal app logs only (`log.info`/`log.error`
+  in `src/modules/channelCleanup.js`, e.g. "cleaned N message(s) from
+  #channel"), not a posted Discord log-channel message — no `logChannelId`
+  concept exists in this module's config.
+
+---
+
+## Next
+
+Every workstream recorded above is done. Nothing is currently planned —
+sketch the next candidate line here when there is one.
