@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.27.1](https://github.com/Ferdinand99/Sylo/compare/v3.27.0...v3.27.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* **youtube-alerts:** raise the HTML scan cap truncating channel/live scrapes ([#179](https://github.com/Ferdinand99/Sylo/issues/179)) ([cc96850](https://github.com/Ferdinand99/Sylo/commit/cc968506c0a6187b8d42a7547cca61bdb18e8196))
+
 ## [3.27.0](https://github.com/Ferdinand99/Sylo/compare/v3.26.0...v3.27.0) (2026-09-07)
 
 
