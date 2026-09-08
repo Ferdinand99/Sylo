@@ -31,6 +31,18 @@ const COLOR = 0xff0000;
 const POLL_MS = 3 * 60_000;
 const UA = 'Mozilla/5.0 (compatible; Sylo-Discord-Bot/1.0; +https://github.com/Ferdinand99/Sylo)';
 
+// feed.js's grab() defaults to a 300 KB scan cap, sized for RSS/Atom feed
+// bodies. resolveYtChannel/checkLive scrape full YouTube HTML pages instead —
+// now routinely ~2 MB — and the channelId/videoId/title JSON blobs they need
+// sit well past 300 KB, so every grab() below silently came back empty no
+// matter how healthy the fetch was (issue #178: "stopped working, nothing in
+// the logs" — the fetch succeeded and there genuinely was nothing logged,
+// because grab() never got far enough into the page to fail loudly). 3 MB
+// covers today's page size with real headroom; still bounded so a change in
+// how YouTube serves these pages can't turn a scan into unbounded work.
+const PAGE_MAX_SCAN = 3_000_000;
+const grabPage = (re, html) => grab(re, html, PAGE_MAX_SCAN);
+
 export const DEFAULT_VIDEO_MESSAGE = '📺 **{name}** posted a new video: **{title}**\n{url}';
 export const DEFAULT_LIVE_MESSAGE = '🔴 **{name}** is live on YouTube: **{title}**\n{url}';
 const UC_RE = /^UC[\w-]{20,}$/;
@@ -94,24 +106,41 @@ export async function resolveYtChannel(input) {
   // Only a plain channel path — no protocol-relative "//host", no control chars.
   if (!/^\/[A-Za-z0-9@%._~/?=&+-]{1,200}$/.test(path) || path.startsWith('//')) return null;
 
+  // resolveYtChannel/checkLive are the only two scraping-based (not
+  // official-API) pieces in this codebase's alert modules — the fragile
+  // part, since a YouTube-side page change or IP-based rate limit/challenge
+  // breaks them with no client-visible error at all, just "nothing happens".
+  // Every return-null path below logs *why*, distinctly, so a report like
+  // "it stopped working, nothing in the logs" (issue #178) is diagnosable
+  // instead of a dead end — previously all three were silent.
   try {
     const res = await fetch(`https://www.youtube.com${path}`, {
       headers: { 'User-Agent': UA },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      log.warn('youtube-alerts', `resolve ${path}: HTTP ${res.status}`);
+      return null;
+    }
     const html = await res.text();
     const channelId =
-      grab(/"channelId":"(UC[\w-]{20,})"/, html) ||
-      grab(/<meta itemprop="(?:identifier|channelId)" content="(UC[\w-]{20,})">/, html) ||
-      grab(/channel\/(UC[\w-]{20,})/, html);
-    if (!channelId) return null;
+      grabPage(/"channelId":"(UC[\w-]{20,})"/, html) ||
+      grabPage(/<meta itemprop="(?:identifier|channelId)" content="(UC[\w-]{20,})">/, html) ||
+      grabPage(/channel\/(UC[\w-]{20,})/, html);
+    if (!channelId) {
+      log.warn(
+        'youtube-alerts',
+        `resolve ${path}: no channel id found in the response (${html.length} bytes) — YouTube may have changed its page format, or served a consent/challenge page`
+      );
+      return null;
+    }
     const name =
-      grab(/"channelMetadataRenderer":\{"title":"([^"]+)"/, html) ||
-      grab(/<meta property="og:title" content="([^"]+)">/, html) ||
+      grabPage(/"channelMetadataRenderer":\{"title":"([^"]+)"/, html) ||
+      grabPage(/<meta property="og:title" content="([^"]+)">/, html) ||
       '';
     return { channelId, name: decodeEntities(name).slice(0, 100) };
-  } catch {
+  } catch (err) {
+    log.warn('youtube-alerts', `resolve ${path}: ${err.message}`);
     return null;
   }
 }
@@ -159,20 +188,27 @@ export async function checkLive(ytChannelId) {
       signal: AbortSignal.timeout(10_000),
       redirect: 'follow',
     });
-    if (!res.ok) return { live: false };
+    // Not-ok is a real fetch problem (blocked/rate-limited/etc.) — worth a
+    // log, unlike "not currently live", which is the normal, frequent
+    // outcome of this poll and would just be noise.
+    if (!res.ok) {
+      log.warn('youtube-alerts', `live check ${ytChannelId}: HTTP ${res.status}`);
+      return { live: false };
+    }
     const html = await res.text();
     const isLive = /"isLive":true/.test(html) || /"isLiveNow":true/.test(html);
     if (!isLive) return { live: false };
     const videoId =
-      grab(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})">/, html) ||
-      grab(/"videoId":"([\w-]{11})"/, html);
+      grabPage(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})">/, html) ||
+      grabPage(/"videoId":"([\w-]{11})"/, html);
     const title = decodeEntities(
-      grab(/"title":\s*{\s*"runs":\s*\[\s*{\s*"text":\s*"([^"]+)"/, html) ||
-        grab(/<meta name="title" content="([^"]+)">/, html) ||
+      grabPage(/"title":\s*{\s*"runs":\s*\[\s*{\s*"text":\s*"([^"]+)"/, html) ||
+        grabPage(/<meta name="title" content="([^"]+)">/, html) ||
         'Live now'
     );
     return videoId ? { live: true, videoId, title } : { live: false };
-  } catch {
+  } catch (err) {
+    log.warn('youtube-alerts', `live check ${ytChannelId}: ${err.message}`);
     return { live: false };
   }
 }
