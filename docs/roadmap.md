@@ -1651,7 +1651,53 @@ grant (`internal/discord-server-plan.md`'s guild-wide table), which is all
 
 ---
 
-## Next
+## Next — YouTube alerts: WebSub push instead of polling (planned, not started)
 
-Every workstream recorded above is done. Nothing is currently planned —
-sketch the next candidate line here when there is one.
+**Origin:** issue #178 ("YouTube alerts stopped working"). The actual bug
+turned out to be unrelated to polling — a scraping helper (`grab()`, shared
+with the RSS/Atom feed parser) was truncating its scan at 300 KB, sized for
+feed bodies, while YouTube's channel/live pages had grown to ~2 MB; the
+channelId/videoId/title being searched for routinely sat past that cutoff.
+Fixed by raising the scan cap for page-scrapes specifically. But fixing that
+surfaced a real follow-up want: the reporter asked for faster live-alert
+latency (seconds, not "however long until the next poll"), and
+`src/modules/youtubeAlerts.js` currently polls every guild × channel pair on
+a single shared 3-minute timer (`POLL_MS`), sequentially, from one bot
+process/IP. We deliberately declined to just lower `POLL_MS` — YouTube alerts
+are the only scraping-based (non-official-API) alert integration Sylo has,
+so polling harder raises outbound request volume bot-wide and, with it, the
+risk of exactly the kind of breakage #178 first looked like (rate-limiting/
+blocking), for every guild using the module, not just one.
+
+**The idea:** YouTube's official WebSub (PubSubHubbub) push mechanism —
+free, quota-free, no API key. Subscribe once per tracked channel
+(`https://pubsubhubbub.appspot.com/subscribe` against
+`https://www.youtube.com/xml/feeds/videos.xml?channel_id=…`) and YouTube's
+hub POSTs to a callback URL within seconds of a new video being published or
+an existing entry updated — this reportedly includes a stream going live,
+though community reports say that transition is less reliably documented
+than plain uploads. This flips the model from "ask repeatedly" to "get told,"
+which is the actual fix for both the latency want and the request-volume
+concern — a channel that never changes costs nothing, instead of one poll
+every 3 minutes forever.
+
+**What it would take (sketch, not designed yet):**
+- A public callback endpoint — Sylo already runs an Express server for the
+  dashboard, so this reuses that rather than standing up something new.
+- Subscription lifecycle: WebSub leases expire (Google's hub grants ~5-day
+  leases) and must be renewed per channel before they lapse.
+- The hub's verification handshake (a GET challenge on subscribe/unsubscribe
+  that must be echoed back correctly).
+- The push payload is a compact Atom entry, not full state — still need one
+  follow-up check (reusing `checkLive()`) against just the channel that was
+  pinged, to tell "went live" apart from "video metadata edited."
+- A fallback story: WebSub delivery isn't guaranteed, so the existing
+  polling loop should likely keep running as a safety net (maybe at a
+  longer interval) rather than being fully replaced.
+
+**Not yet decided:** whether the operational complexity (public callback +
+per-channel subscription renewal + hub verification) is worth it for one
+hosted bot's YouTube module, versus keeping polling and accepting today's
+latency ceiling. This is a sketch, not a committed plan — no branch, no
+design doc yet.
+b
