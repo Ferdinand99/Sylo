@@ -144,6 +144,15 @@ if (badOwnerIds.length) {
   console.error(`[config] OWNER_IDS has invalid id(s): ${badOwnerIds.join(', ')}`);
   process.exit(1);
 }
+// Channel Sylo posts its own operational errors to (a "dev-log", distinct from
+// any per-guild logging/modlog channel a server admin configures — this is
+// Sylo's own health signal, not moderation activity). Optional; unset means
+// no proactive notification, matching every other opt-in integration here.
+const devLogChannelId = optionalOrNull('DEV_LOG_CHANNEL_ID');
+if (devLogChannelId && !/^\d{17,20}$/.test(devLogChannelId)) {
+  console.error('[config] DEV_LOG_CHANNEL_ID must be a Discord channel id.');
+  process.exit(1);
+}
 const turnstileSiteKey = optionalOrNull('TURNSTILE_SITE_KEY');
 const turnstileSecretKey = optionalOrNull('TURNSTILE_SECRET_KEY');
 const itadApiKey = optionalOrNull('ITAD_API_KEY');
@@ -189,6 +198,7 @@ export const config = Object.freeze({
   discordClientSecret,
   sessionSecret,
   ownerIds,
+  devLogChannelId,
 
   // Cloudflare Turnstile — powers the Verification module's captcha mode. When
   // both are unset, captcha mode falls back to a plain button.

@@ -28,6 +28,7 @@ import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
 import { MODULES } from '../../modules/registry.js';
 import { timeAgo, formatUptime, formatBytes } from '../lib/format.js';
 import { log } from '../../lib/log.js';
+import { sendDevLogTest } from '../../lib/devLog.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../../../package.json');
@@ -130,9 +131,42 @@ router.get(
       importMsg: typeof req.query.imported === 'string' ? req.query.imported : null,
       importErr: typeof req.query.importerr === 'string' ? req.query.importerr : null,
       restoreErr: typeof req.query.restoreerr === 'string' ? req.query.restoreerr : null,
+      devLogConfigured: Boolean(config.devLogChannelId),
+      devLogTestOk: req.query.devlogtest === 'ok',
+      devLogTestErr: typeof req.query.devlogtesterr === 'string' ? req.query.devlogtesterr : null,
+      devLogErrorTestSent: req.query.devlogerrortest === '1',
     });
   })
 );
+
+// Send a one-off test message to the configured dev-log channel, so an
+// operator can verify DEV_LOG_CHANNEL_ID without waiting for a real error.
+// This calls sendDevLogTest() directly — it bypasses log.error() entirely,
+// so it reports success/failure synchronously but doesn't exercise the real
+// notification path. Use /dev-log-error-test below for that.
+router.post(
+  '/dev-log-test',
+  requireOwner,
+  backupLimit,
+  asyncHandler(async (req, res) => {
+    const result = await sendDevLogTest();
+    res.redirect(
+      result.ok ? '/health?devlogtest=ok' : `/health?devlogtesterr=${encodeURIComponent(result.error)}`
+    );
+  })
+);
+
+// Trigger a genuine log.error() call, so an operator can verify the real,
+// fire-and-forget notifyDevLog() path end to end (throttling included) —
+// not just the direct-send path above. No synchronous result to report:
+// that's the whole point of this being the real, less-controlled path.
+router.post('/dev-log-error-test', requireOwner, backupLimit, (req, res) => {
+  log.error(
+    'dev-log-test',
+    'Manually triggered from /health — if you see this in the dev-log channel, the real error pipeline works end to end.'
+  );
+  res.redirect('/health?devlogerrortest=1');
+});
 
 // Create a snapshot now.
 router.post(
