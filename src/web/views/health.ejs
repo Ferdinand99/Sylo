@@ -40,6 +40,27 @@
   </div>
 </section>
 
+<section class="card">
+  <h2>Dev-log channel</h2>
+  <% if (devLogTestOk) { %><div class="banner banner-flash ok">Test message sent — check the channel.</div><% } %>
+  <% if (devLogTestErr) { %><div class="banner banner-flash bad">Test failed: <%= devLogTestErr %></div><% } %>
+  <% if (devLogErrorTestSent) { %><div class="banner banner-flash ok">Test log.error() triggered — check the channel in a moment. (Won't repost if an identical test posted in the last 5 minutes — that's the throttle working.)</div><% } %>
+  <% if (devLogConfigured) { %>
+    <p class="muted">Sylo posts its own errors here — separate from any per-guild logging/modlog channel.</p>
+    <div class="btn-row u-m0 u-mt-3">
+      <form method="POST" action="/health/dev-log-test" hx-boost="false">
+        <button type="submit" class="secondary">Send test message</button>
+      </form>
+      <form method="POST" action="/health/dev-log-error-test" hx-boost="false">
+        <button type="submit" class="secondary">Trigger a real log.error()</button>
+      </form>
+    </div>
+  <% } else { %>
+    <p class="muted">Not set up — set <code>DEV_LOG_CHANNEL_ID</code> to a channel id to get a proactive
+      Discord message whenever Sylo logs an error, instead of only finding out via a bug report.</p>
+  <% } %>
+</section>
+
 <% if (errors && errors.length) { %>
   <section class="card warn">
     <h2>Recent errors <span class="muted">(<%= errors.length %> shown, newest first)</span></h2>

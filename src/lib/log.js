@@ -14,6 +14,7 @@
 // records the event in the /health error history via runtime.recordError.
 import { recordError } from '../runtime.js';
 import { inc } from './metrics.js';
+import { notifyDevLog } from './devLog.js';
 
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
 
@@ -39,6 +40,7 @@ function emit(level, scope, msg, args) {
   if (LEVELS[level] < threshold) return;
   const { tail, err, meta } = splitArgs(args);
   const message = [msg, tail].filter(Boolean).join(' ');
+  const fullMessage = err?.message ? `${message} ${err.message}`.trim() : message;
   const ts = new Date().toISOString();
 
   if (asJson) {
@@ -48,8 +50,7 @@ function emit(level, scope, msg, args) {
       `${JSON.stringify(rec)}\n`
     );
   } else {
-    const withErr = err?.message ? `${message} ${err.message}`.trim() : message;
-    const line = `${ts}  ${level.toUpperCase().padEnd(5)} ${scope}  ${withErr}`;
+    const line = `${ts}  ${level.toUpperCase().padEnd(5)} ${scope}  ${fullMessage}`;
     (level === 'error' || level === 'warn' ? console.error : console.log)(line);
     if (err?.stack && threshold <= LEVELS.debug) console.error(err.stack);
   }
@@ -61,6 +62,9 @@ function emit(level, scope, msg, args) {
     } catch {
       // runtime module not ready / unavailable — never let logging throw.
     }
+    // Proactive notification to the operator's dev-log channel, if configured
+    // (see src/lib/devLog.js) — fully guarded there, never throws.
+    notifyDevLog('error', scope, fullMessage);
   }
 }
 
