@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.28.0](https://github.com/Ferdinand99/Sylo/compare/v3.27.1...v3.28.0) (2026-09-09)
+
+
+### Features
+
+* **observability:** add a dedicated dev-log channel for proactive error alerts ([#182](https://github.com/Ferdinand99/Sylo/issues/182)) ([316a097](https://github.com/Ferdinand99/Sylo/commit/316a0972f31af896b093090668247633ef368c56))
+
 ## [3.27.1](https://github.com/Ferdinand99/Sylo/compare/v3.27.0...v3.27.1) (2026-09-08)
 
 
