@@ -22,15 +22,58 @@
   </label>
   <label class="check">
     <input type="checkbox" name="allowSameUser" <%= cfg.allowSameUser ? 'checked' : '' %> />
-    Allow the same person to count twice in a row
+    Allow the same person to count multiple times in a row (off = counters must alternate)
   </label>
   <label class="check">
     <input type="checkbox" name="resetOnFail" <%= cfg.resetOnFail !== false ? 'checked' : '' %> />
     Reset to 0 when someone posts the wrong number
   </label>
 
+  <hr class="sep" />
+
+  <label>Penalty role <span class="muted small">(optional)</span></label>
+  <select name="penaltyRoleId">
+    <option value="">— none (no penalty) —</option>
+    <% roles.forEach(function (r) { %>
+      <option value="<%= r.id %>" <%= r.id === (cfg.penaltyRoleId || '') ? 'selected' : '' %>><%= r.name %></option>
+    <% }) %>
+  </select>
+  <p class="muted small">
+    When someone breaks the streak, Sylo removes this role from them and gives it back later.
+    Point it at whatever role lets people type in the counting channel. Sylo's own top role must
+    sit above it. This is not a ban or a timeout — only this one role is touched.
+  </p>
+  <label class="u-mt-2">Bench for (minutes)</label>
+  <input class="u-w-field-sm" type="number" name="penaltyMinutes" min="1" max="10080"
+         value="<%= cfg.penaltyMinutes || 15 %>" />
+
   <div class="u-mt-3"><button type="submit">Save</button></div>
 </form>
+
+<% if (countingPenalties && countingPenalties.length) { %>
+  <hr class="sep" />
+  <h3 class="u-mb-1">Currently benched</h3>
+  <table>
+    <thead><tr><th>Member</th><th>Role</th><th>Back at</th><th></th></tr></thead>
+    <tbody>
+      <% countingPenalties.forEach(function (p) { %>
+        <tr>
+          <td class="mono"><%= p.label %></td>
+          <td><%= p.roleName %></td>
+          <td class="muted small"><%
+            var t = Number(p.restoreAt);
+            %><%= Number.isFinite(t) ? new Date(t).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '—' %></td>
+          <td class="num">
+            <form method="POST" action="/guilds/<%= guild.id %>/m/counting/penalty/release" style="margin:0">
+              <input type="hidden" name="userId" value="<%= p.userId %>" />
+              <button type="submit" class="secondary">Release now</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
 
 <hr class="sep" />
 
