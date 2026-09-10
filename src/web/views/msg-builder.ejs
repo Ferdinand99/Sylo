@@ -35,9 +35,12 @@
     <% if (rec.message_id) { %><p class="muted small">Published — “Update published” edits the posted message; changing the channel posts a fresh one.</p><% } %>
   </section>
 
-  <section class="card">
+    <section class="card">
     <h2 class="u-m0 u-mb-2">Message</h2>
     <label class="small">Text above the embeds <span class="muted">— optional</span></label>
+    <p class="muted small">
+      To ping a role, paste it here as <code>&lt;@&amp;ROLE_ID&gt;</code> — mentions placed inside an embed don't notify anyone.
+    </p>
     <textarea x-model="content" rows="2" placeholder="Write your message here…"></textarea>
     <div class="wc-stage u-mt-3">
       <template x-if="!items.length">
