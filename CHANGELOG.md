@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.29.1](https://github.com/Ferdinand99/Sylo/compare/v3.29.0...v3.29.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* note role-ping format in the embed builder ([#188](https://github.com/Ferdinand99/Sylo/issues/188)) ([f64f1dd](https://github.com/Ferdinand99/Sylo/commit/f64f1dd1d5e1b8e712bff53cf88690b96a96f01d))
+
 ## [3.29.0](https://github.com/Ferdinand99/Sylo/compare/v3.28.0...v3.29.0) (2026-09-10)
 
 
