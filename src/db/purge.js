@@ -30,6 +30,7 @@ import './modCases.js';
 import './tickets.js';
 import './composedMessages.js';
 import './counting.js';
+import './countingPenalties.js';
 import './scheduledMessages.js';
 import './leveling.js';
 import './audit.js';
@@ -60,6 +61,7 @@ export const GUILD_TABLES = [
   'tickets',
   'composed_messages',
   'counting',
+  'counting_penalties',
   'scheduled_messages',
   'leveling',
   'leveling_periods',

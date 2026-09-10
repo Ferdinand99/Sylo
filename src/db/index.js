@@ -694,6 +694,25 @@ export const MIGRATIONS = [
       SELECT guild_id, MAX(case_number) FROM infractions GROUP BY guild_id;
     `);
   },
+
+  // Counting "bench": when a member breaks the streak, the Counting module can
+  // pull a configured access role off them and put it back after a fixed delay
+  // (src/modules/counting.js sweeps `restore_at`). One row per (guild, user);
+  // a re-offence just pushes `restore_at` further out. Not a moderation action
+  // — it only ever touches the one role named in the module config.
+  (database) => {
+    database.exec(`
+      CREATE TABLE counting_penalties (
+        guild_id   TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        role_id    TEXT NOT NULL,
+        restore_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE INDEX idx_counting_penalties_due ON counting_penalties (restore_at);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

@@ -54,6 +54,7 @@ import '../src/db/modCases.js';
 import '../src/db/tickets.js';
 import '../src/db/composedMessages.js';
 import '../src/db/counting.js';
+import '../src/db/countingPenalties.js';
 import '../src/db/scheduledMessages.js';
 import '../src/db/leveling.js';
 import '../src/db/audit.js';

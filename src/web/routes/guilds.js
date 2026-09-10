@@ -54,6 +54,7 @@ import { recentLookups } from '../../db/cache.js';
 import { getVanitySlug, setVanitySlug, clearVanitySlug } from '../../db/leaderboardVanity.js';
 import { normaliseEmbedSpec } from '../../modules/welcomeChannel.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
+import { listCountingPenalties, clearCountingPenalty } from '../../db/countingPenalties.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
 import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
 import {
@@ -798,6 +799,7 @@ async function moduleViewLocals(mod, req, configOverride) {
       'kick-alerts',
       'rss',
       'giveaways',
+      'counting',
     ].includes(mod.id)
       ? assignableRoles(req.guild)
       : [],
@@ -827,6 +829,15 @@ async function moduleViewLocals(mod, req, configOverride) {
     categories: mod.id === 'temp-voice' ? guildCategories(req.guild) : [],
     statTypes: STAT_TYPES,
     countingState: mod.id === 'counting' ? await getCounting(req.guild.id) : null,
+    countingPenalties:
+      mod.id === 'counting'
+        ? (await listCountingPenalties(req.guild.id)).map((p) => ({
+            userId: p.user_id,
+            label: req.guild.members.cache.get(p.user_id)?.user.tag ?? p.user_id,
+            roleName: req.guild.roles.cache.get(p.role_id)?.name ?? p.role_id,
+            restoreAt: Number(p.restore_at),
+          }))
+        : [],
     ccPlaceholders: CC_PLACEHOLDERS,
     arPlaceholders: AR_PLACEHOLDERS,
     arMatchModes: AR_MATCH_MODES,
@@ -1095,11 +1106,17 @@ router.post(
         },
       });
     } else if (mod.id === 'counting') {
+      const penaltyMinutes = Math.round(Number(req.body.penaltyMinutes));
       config = {
         channelId: /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '',
         allowSameUser: req.body.allowSameUser === 'on',
         resetOnFail: req.body.resetOnFail === 'on',
         react: req.body.react === 'on',
+        penaltyRoleId: /^\d{17,20}$/.test(req.body.penaltyRoleId ?? '') ? req.body.penaltyRoleId : '',
+        penaltyMinutes:
+          Number.isFinite(penaltyMinutes) && penaltyMinutes > 0
+            ? Math.min(penaltyMinutes, 10080) // cap at one week
+            : 15,
       };
     } else if (mod.id === 'leveling') {
       const levels = [].concat(req.body.rw_level ?? []);
@@ -1448,6 +1465,30 @@ router.post(
       detail: `count = ${n}`,
     });
     res.redirect(`${back}?msg=count-set`);
+  })
+);
+
+// Counting: end a member's bench early — hand the penalty role straight back.
+router.post(
+  '/:guildId/m/counting/penalty/release',
+  asyncHandler(async (req, res) => {
+    const back = `/guilds/${req.guild.id}/m/counting`;
+    const userId = String(req.body.userId ?? '');
+    if (!/^\d{17,20}$/.test(userId)) return res.redirect(`${back}?msg=count-bad`);
+
+    const cfg = (await getGuildModule(req.guild.id, 'counting')).config;
+    const role = cfg.penaltyRoleId ? req.guild.roles.cache.get(cfg.penaltyRoleId) : null;
+    const member = await req.guild.members.fetch(userId).catch(() => null);
+    if (role && member && !member.roles.cache.has(role.id) && role.editable) {
+      await member.roles.add(role, 'Counting: bench ended early from the dashboard').catch(() => {});
+    }
+    await clearCountingPenalty(req.guild.id, userId);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'counting:unbench',
+      detail: `released ${userId}`,
+    });
+    res.redirect(`${back}?msg=count-unbenched`);
   })
 );
 
