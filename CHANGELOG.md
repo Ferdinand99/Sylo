@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.29.0](https://github.com/Ferdinand99/Sylo/compare/v3.28.0...v3.29.0) (2026-09-10)
+
+
+### Features
+
+* **counting:** temporarily remove a role when someone breaks the streak ([#185](https://github.com/Ferdinand99/Sylo/issues/185)) ([020f8b1](https://github.com/Ferdinand99/Sylo/commit/020f8b16cd2ffc76ceb37a498d0be1d90396aa9b))
+
 ## [3.28.0](https://github.com/Ferdinand99/Sylo/compare/v3.27.1...v3.28.0) (2026-09-09)
 
 
