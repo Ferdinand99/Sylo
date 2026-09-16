@@ -178,9 +178,14 @@ test('github webhook: a push touching the changelog path posts only its latest e
           event: 'push',
           secret,
           body: {
+            ref: 'refs/heads/main',
             after: 'deadbeef',
             compare: 'https://github.com/x/compare',
-            repository: { full_name: 'Ferdinand99/home-assistant-newt-addon', private: false },
+            repository: {
+              full_name: 'Ferdinand99/home-assistant-newt-addon',
+              default_branch: 'main',
+              private: false,
+            },
             commits: [{ added: [], modified: ['newt-beta/CHANGELOG.md'], removed: [] }],
           },
         });
@@ -192,6 +197,88 @@ test('github webhook: a push touching the changelog path posts only its latest e
         assert.doesNotMatch(embed.description, /old entry/);
       }
     );
+  } finally {
+    app.close();
+  }
+});
+
+test("github webhook: a push to a non-default branch (e.g. release-please's own release branch) doesn't post a changelog entry", async () => {
+  const app = await startWebApp();
+  try {
+    let fetched = false;
+    await withMockedChangelogFetch(
+      {
+        ok: true,
+        text: async () => {
+          fetched = true;
+          return '## v1\nhi';
+        },
+      },
+      async () => {
+        await setGuildModule(GID, 'github', { enabled: true, config: {} });
+        const id = await createGithubWatch(GID, {
+          repo: 'o/r',
+          channelId: CH.general,
+          changelogPath: 'CHANGELOG.md',
+          events: [],
+        });
+        const { token, secret } = await getGithubWatch(GID, id);
+
+        await postWebhook(app.base, token, {
+          event: 'push',
+          secret,
+          body: {
+            ref: 'refs/heads/release-please--branches--main--components--sylo',
+            after: 'deadbeef',
+            repository: { full_name: 'o/r', default_branch: 'main', private: false },
+            commits: [{ added: [], modified: ['CHANGELOG.md'], removed: [] }],
+          },
+        });
+
+        assert.equal(fetched, false);
+        assert.equal(app.sink.messages.length, 0);
+      }
+    );
+  } finally {
+    app.close();
+  }
+});
+
+test("github webhook: release-please's draft push (own branch) then the merge push (main) posts exactly once, not twice", async () => {
+  const app = await startWebApp();
+  try {
+    await withMockedChangelogFetch({ ok: true, text: async () => '## v3.30.1\nBug Fixes' }, async () => {
+      await setGuildModule(GID, 'github', { enabled: true, config: {} });
+      const id = await createGithubWatch(GID, {
+        repo: 'o/r',
+        channelId: CH.general,
+        changelogPath: 'CHANGELOG.md',
+        events: [],
+      });
+      const { token, secret } = await getGithubWatch(GID, id);
+      const repository = { full_name: 'o/r', default_branch: 'main', private: false };
+      const commits = [{ added: [], modified: ['CHANGELOG.md'], removed: [] }];
+
+      // 1) release-please updates its own long-lived release PR branch.
+      await postWebhook(app.base, token, {
+        event: 'push',
+        secret,
+        body: {
+          ref: 'refs/heads/release-please--branches--main--components--sylo',
+          after: 'draft-sha',
+          repository,
+          commits,
+        },
+      });
+      // 2) that PR gets merged into main.
+      await postWebhook(app.base, token, {
+        event: 'push',
+        secret,
+        body: { ref: 'refs/heads/main', after: 'merge-sha', repository, commits },
+      });
+
+      assert.equal(app.sink.messages.length, 1); // not 2
+    });
   } finally {
     app.close();
   }

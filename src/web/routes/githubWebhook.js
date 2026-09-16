@@ -14,6 +14,7 @@ import {
   formatGithubEvent,
   applyRolePing,
   pushTouchedPath,
+  isDefaultBranchPush,
   fetchChangelogBlock,
   formatChangelogPost,
 } from '../../modules/githubAlerts.js';
@@ -68,7 +69,15 @@ router.post(
     // it fires purely off `changelog_path` being set, whether or not 'push'
     // itself is also checked (they're not mutually exclusive: a watch can
     // post both the generic commit list and the extracted changelog entry).
-    if (eventName === 'push' && watch.changelog_path && pushTouchedPath(payload, watch.changelog_path)) {
+    // Restricted to the default branch so a release-please-style draft push
+    // to its own release branch doesn't post the same entry a second time
+    // when that PR is later merged.
+    if (
+      eventName === 'push' &&
+      watch.changelog_path &&
+      isDefaultBranchPush(payload) &&
+      pushTouchedPath(payload, watch.changelog_path)
+    ) {
       if (payload?.repository?.private) {
         log.warn('module:github', `changelog watch on ${watch.repo}: private repos aren't supported yet`);
       } else {
