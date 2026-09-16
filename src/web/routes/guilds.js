@@ -1893,7 +1893,9 @@ router.post(
     const changelog = parseChangelogPath(b.changelogPath);
     if (!changelog.ok) return res.redirect(`${back}?msg=gh-changelog`);
     const events = sanitiseGithubEvents([].concat(b.events ?? []));
-    if (!events.length) return res.redirect(`${back}?msg=gh-events`);
+    // Changelog watching is independent of the checkboxes — a watch with just
+    // a changelog path and nothing checked is valid and does something.
+    if (!events.length && !changelog.value) return res.redirect(`${back}?msg=gh-events`);
 
     const data = { repo, channelId, roleId, changelogPath: changelog.value, events };
     let id;
