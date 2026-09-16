@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.30.2](https://github.com/Ferdinand99/Sylo/compare/v3.30.1...v3.30.2) (2026-09-16)
+
+
+### Bug Fixes
+
+* **github:** only post changelog entries from the repo's default branch ([fb83da7](https://github.com/Ferdinand99/Sylo/commit/fb83da7ee6a5222ff1abcf191f83f61fd35d540b))
+
 ## [3.30.1](https://github.com/Ferdinand99/Sylo/compare/v3.30.0...v3.30.1) (2026-09-16)
 
 
