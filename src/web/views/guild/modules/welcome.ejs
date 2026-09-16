@@ -14,7 +14,13 @@
     : !!(cfg.leaveChannel && String(cfg.leaveMessage || '').trim());
 %>
 <% var picked = Array.isArray(welcomeAutoroles) ? welcomeAutoroles : []; %>
-<% var autoOn = picked.length > 0; %>
+<%
+  // Same trap as the toggles above: this one controls the *separate* Roles
+  // module's autoroles list, so "on" used to be inferred from that list being
+  // non-empty. Turn it on, save before picking a role, and it flipped back
+  // off next render even though you'd just checked it.
+  var autoOn = cfg.autoroleEnabled !== undefined ? !!cfg.autoroleEnabled : picked.length > 0;
+%>
 <% var pool = roles.filter(function (r) { return !picked.includes(r.id); }); %>
 
 <form method="POST" action="/guilds/<%= guild.id %>/m/welcome/config" hx-post="/guilds/<%= guild.id %>/m/welcome/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-xl">
