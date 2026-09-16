@@ -1,0 +1,46 @@
+<% var list = typeof githubWatches !== 'undefined' ? githubWatches : []; %>
+
+<p class="muted small">
+  Post GitHub activity from a repo straight to a channel — pushes, releases, issues, pull requests.
+  GitHub pushes each event to Sylo the moment it happens (no polling delay). Each repo gets its own
+  webhook URL and secret to paste into that repo's <strong>Settings → Webhooks</strong> page.
+</p>
+
+<% if (typeof githubDashboardUrlSet !== 'undefined' && !githubDashboardUrlSet) { %>
+  <div class="banner banner-flash bad">
+    <code>DASHBOARD_URL</code> isn't set, so GitHub has no reachable address to send events to. Set it
+    (a public HTTPS URL) before adding a repo here.
+  </div>
+<% } %>
+
+<div class="rr-list-head">
+  <h3 class="u-m0">Watched repos <span class="muted small"><%= list.length %></span></h3>
+  <a class="btn btn-primary" href="/guilds/<%= guild.id %>/m/github/w/new">＋ Add repository</a>
+</div>
+
+<% if (list.length === 0) { %>
+  <p class="empty">None yet — add a repo to start posting its activity here.</p>
+<% } else { %>
+  <% list.forEach(function (w) { %>
+    <div class="cmd-override">
+      <div class="cmd-override-head">
+        <span>
+          <strong><%= w.repo %></strong>
+          <span class="muted small">
+            · #<%= w.channel %> · <%= w.events.length %> event type<%= w.events.length === 1 ? '' : 's' %><% if (w.role) { %> · pings @<%= w.role %><% } %><% if (w.changelogPath) { %> · watching <%= w.changelogPath %><% } %>
+          </span>
+        </span>
+        <span class="pill <%= w.enabled ? 'on' : 'off' %>"><%= w.enabled ? 'on' : 'off' %></span>
+      </div>
+      <div class="btn-row">
+        <a class="plugin-btn" href="/guilds/<%= guild.id %>/m/github/w/<%= w.id %>">Edit</a>
+        <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/m/github/w/<%= w.id %>/toggle">
+          <button type="submit"><%= w.enabled ? 'Pause' : 'Resume' %></button>
+        </form>
+        <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/m/github/w/<%= w.id %>/delete">
+          <button type="submit" class="danger" data-confirm="Remove this repo watch? Its webhook URL will stop working.">Remove</button>
+        </form>
+      </div>
+    </div>
+  <% }) %>
+<% } %>

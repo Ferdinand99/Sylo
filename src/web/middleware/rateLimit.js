@@ -9,11 +9,21 @@ setInterval(() => {
 }, 60_000).unref();
 
 /**
- * @param {{ windowMs?: number, max?: number, message?: string }} [opts]
+ * @param {{ windowMs?: number, max?: number, message?: string, keyFn?: (req: import('express').Request) => string }} [opts]
  */
-export function rateLimit({ windowMs = 60_000, max = 60, message = 'Too many requests — slow down.' } = {}) {
+export function rateLimit({
+  windowMs = 60_000,
+  max = 60,
+  message = 'Too many requests — slow down.',
+  keyFn,
+} = {}) {
   return function rateLimitMiddleware(req, res, next) {
-    const key = `${req.baseUrl || req.path}|${req.ip}`;
+    // Default: one bucket per mount path per client IP. `keyFn` overrides this —
+    // e.g. the GitHub webhook route keys by URL token instead, since every
+    // repo's deliveries share GitHub's own small set of egress IPs and an
+    // IP-keyed bucket there would let one busy repo rate-limit every other
+    // guild's webhook on the same hosted instance.
+    const key = keyFn ? keyFn(req) : `${req.baseUrl || req.path}|${req.ip}`;
     const now = Date.now();
 
     let bucket = buckets.get(key);

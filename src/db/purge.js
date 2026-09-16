@@ -31,6 +31,7 @@ import './tickets.js';
 import './composedMessages.js';
 import './counting.js';
 import './countingPenalties.js';
+import './githubWatches.js';
 import './scheduledMessages.js';
 import './leveling.js';
 import './audit.js';
@@ -83,6 +84,7 @@ export const GUILD_TABLES = [
   'guild_daily',
   'guild_hourly',
   'channel_cleanup_schedules',
+  'github_watches',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));

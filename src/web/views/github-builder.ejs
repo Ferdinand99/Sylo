@@ -1,0 +1,110 @@
+<%- include('partials/header', { title: `Sylo — ${isNew ? 'New' : 'Edit'} GitHub watch` }) %>
+
+<p class="muted"><a href="/guilds/<%= guildId %>/m/github">&larr; GitHub alerts</a></p>
+
+<div class="rr-builder-head">
+  <h2 class="u-m0"><%= isNew ? 'Add' : 'Edit' %> repository</h2>
+  <div class="rr-actions">
+    <a class="btn" href="/guilds/<%= guildId %>/m/github">Discard</a>
+    <button type="submit" form="gh-form" class="btn btn-primary">Save &amp; close</button>
+  </div>
+</div>
+
+<% if (typeof msg !== 'undefined' && msg) { %>
+  <div class="banner banner-flash <%= (['saved', 'gh-resecret'].indexOf(msg) >= 0) ? 'ok' : 'bad' %>">
+    <%= ({
+      saved: 'Saved.',
+      badchannel: 'Pick a channel.',
+      'gh-repo': 'Enter a repo as owner/repo (or paste its github.com URL).',
+      'gh-events': 'Pick at least one event to announce.',
+      'gh-changelog': 'That changelog path looks invalid — a plain relative file path, e.g. CHANGELOG.md.',
+      'gh-resecret': 'New secret generated — update it in the repo\'s GitHub webhook settings too.',
+    })[msg] || (function(){ try { return decodeURIComponent(msg); } catch(e){ return msg; } })() %>
+  </div>
+<% } %>
+
+<% if (!dashboardUrlSet) { %>
+  <div class="banner banner-flash bad">
+    <code>DASHBOARD_URL</code> isn't set — GitHub has no reachable address to send events to yet. You can
+    still save this, but the webhook URL below won't work until it's set.
+  </div>
+<% } %>
+
+<form method="POST" action="/guilds/<%= guildId %>/m/github/w/<%= isNew ? 'new' : rec.id %>" id="gh-form" hx-boost="false" class="stack u-mw-xl">
+  <section class="card stack">
+    <h2 class="u-m0">Repository</h2>
+    <label class="small">Repo</label>
+    <input class="u-mw-md" type="text" name="repo" placeholder="owner/repo" value="<%= rec.repo %>" required />
+    <p class="muted small">Either <code>owner/repo</code> or the full <code>github.com/owner/repo</code> URL.</p>
+
+    <label class="small u-mt-2">Post in</label>
+    <select class="u-mw-md" name="channelId" required>
+      <option value="">— select a channel —</option>
+      <% channels.forEach(function (c) { %>
+        <option value="<%= c.id %>" <%= c.id === rec.channel_id ? 'selected' : '' %>>#<%= c.name %></option>
+      <% }) %>
+    </select>
+
+    <label class="small u-mt-2">Ping role <span class="muted">— optional</span></label>
+    <select class="u-mw-md" name="roleId">
+      <option value="">— none —</option>
+      <% roles.forEach(function (r) { %>
+        <option value="<%= r.id %>" <%= r.id === rec.role_id ? 'selected' : '' %>><%= r.name %></option>
+      <% }) %>
+    </select>
+  </section>
+
+  <section class="card stack">
+    <h2 class="u-m0">What to post</h2>
+    <% eventTypes.forEach(function (e) { var on = (rec.events || []).indexOf(e.key) !== -1; %>
+      <label class="check">
+        <input type="checkbox" name="events" value="<%= e.key %>" <%= on ? 'checked' : '' %> />
+        <%= e.label %>
+      </label>
+    <% }) %>
+  </section>
+
+  <section class="card stack">
+    <h2 class="u-m0">Changelog watching <span class="muted small">— optional</span></h2>
+    <label class="small">Changelog file path</label>
+    <input class="u-mw-md mono" type="text" name="changelogPath" placeholder="CHANGELOG.md" value="<%= rec.changelog_path %>" />
+    <p class="muted small">
+      When a push changes this exact file, Sylo fetches it and posts only the newest entry — the first
+      <code>## </code> heading block, same idea as checking out the file and grabbing the top section.
+      Independent of the checkboxes above: works whether or not "Commits pushed" is also on.
+      <strong>Public repos only</strong> — Sylo fetches the raw file with no GitHub token.
+    </p>
+  </section>
+</form>
+
+<% if (!isNew) { %>
+  <section class="card stack u-mw-xl">
+    <h2 class="u-m0">GitHub webhook setup</h2>
+    <p class="muted small">
+      In this repo on GitHub: <strong>Settings → Webhooks → Add webhook</strong>. Paste these in, set
+      <strong>Content type</strong> to <code>application/json</code>, and for
+      <strong>Which events would you like to trigger this webhook?</strong> pick <strong>Send me
+      everything</strong> — Sylo only posts the event types checked above regardless of what GitHub sends.
+    </p>
+
+    <label class="small">Payload URL</label>
+    <input class="u-mw-xl mono" type="text" readonly onclick="this.select()" value="<%= rec.webhookUrl || '— DASHBOARD_URL not set —' %>" />
+
+    <label class="small u-mt-2">Secret</label>
+    <input class="u-mw-xl mono" type="text" readonly onclick="this.select()" value="<%= rec.secret %>" />
+
+    <form method="POST" action="/guilds/<%= guildId %>/m/github/w/<%= rec.id %>/regen-secret" class="u-mt-2" hx-boost="false">
+      <button type="submit" class="secondary" data-confirm="Generate a new secret? The old one (and the old value in GitHub's webhook settings) stops working immediately.">Regenerate secret</button>
+    </form>
+
+    <p class="muted small u-mt-2">
+      GitHub sends a <strong>ping</strong> event the moment you save the webhook — Sylo posts a short
+      "connected" confirmation in the channel above so you know it's wired up correctly, no separate test
+      button needed.
+    </p>
+  </section>
+<% } else { %>
+  <p class="muted small u-mw-xl">Save this first — the webhook URL and secret are generated once it exists.</p>
+<% } %>
+
+<%- include('partials/footer') %>

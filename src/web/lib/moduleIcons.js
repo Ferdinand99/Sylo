@@ -35,6 +35,7 @@ export const MODULE_ICONS = {
   rss: 'rss',
   insights: 'trending-up',
   'channel-cleanup': 'trash-2',
+  github: 'github',
   // synthetic overview cards
   general: 'gear',
   commands: 'command',

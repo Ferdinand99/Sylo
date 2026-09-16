@@ -92,6 +92,7 @@ const CATEGORIES = [
       { module: 'youtube-alerts', label: 'YouTube alerts' },
       { module: 'kick-alerts', label: 'Kick alerts' },
       { module: 'rss', label: 'RSS alerts' },
+      { module: 'github', label: 'GitHub alerts' },
     ],
   },
 ];
