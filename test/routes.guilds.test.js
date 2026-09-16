@@ -251,6 +251,19 @@ test('POST /m/welcome/config — a toggle stays checked after saving with a chan
   assert.match(frag, /id="w-leave"[^>]*checked/);
 });
 
+test('POST /m/welcome/config — "Give roles to new members" stays checked after saving with no role picked yet', async () => {
+  // Same class of bug as above, for the autorole toggle: it wrote to the
+  // separate Roles module and inferred "on" from that role list being
+  // non-empty, so enabling it and saving before picking a role reverted it.
+  await post(app.base, `/guilds/${GID}/m/welcome/config`, {
+    enable_autorole: 'on',
+    // newRoles deliberately omitted — nothing picked in the chip-picker yet.
+  });
+
+  const frag = await (await get(`/guilds/${GID}/m/welcome`, { 'HX-Request': 'true' })).text();
+  assert.match(frag, /id="w-auto"[^>]*checked/);
+});
+
 test('POST /m/:id/test — "set a channel first" when unconfigured', async () => {
   await post(app.base, `/guilds/${GID}/m/free-games/config`, {}); // clears channel
   const res = await post(app.base, `/guilds/${GID}/m/free-games/test`, {}, { 'HX-Request': 'true' });

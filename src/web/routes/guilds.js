@@ -1064,8 +1064,13 @@ router.post(
         card: req.body.enable_card === 'on',
         cardBackground: /^https:\/\/\S+$/i.test(cardBg) ? cardBg.slice(0, 500) : '',
       };
-      // "Give roles to new members" here writes the Reaction roles & autoroles module.
+      // "Give roles to new members" here writes the Reaction roles & autoroles
+      // module — its enabled-ness still gets stored on *this* module's config
+      // (autoroleEnabled) since that's what welcome.ejs's toggle reads, the
+      // same fix as the four toggles above: on but no role picked yet must
+      // not read back as off.
       const autoOn = req.body.enable_autorole === 'on';
+      config.autoroleEnabled = autoOn;
       const newRoles = autoOn ? [].concat(req.body.newRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)) : [];
       const rolesMod = await getGuildModule(req.guild.id, 'roles');
       await setGuildModule(req.guild.id, 'roles', {
