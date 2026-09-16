@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.30.3](https://github.com/Ferdinand99/Sylo/compare/v3.30.2...v3.30.3) (2026-09-16)
+
+
+### Bug Fixes
+
+* **welcome:** stop the autorole toggle from reverting after save ([#199](https://github.com/Ferdinand99/Sylo/issues/199)) ([38fa4f9](https://github.com/Ferdinand99/Sylo/commit/38fa4f99c5d58b20518dc6f178e88ff1a6750522))
+
 ## [3.30.2](https://github.com/Ferdinand99/Sylo/compare/v3.30.1...v3.30.2) (2026-09-16)
 
 
