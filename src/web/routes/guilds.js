@@ -146,6 +146,16 @@ import {
   deleteCleanupSchedule,
   setCleanupScheduleEnabled,
 } from '../../db/channelCleanup.js';
+import {
+  listGithubWatches,
+  getGithubWatch,
+  createGithubWatch,
+  updateGithubWatch,
+  deleteGithubWatch,
+  setGithubWatchEnabled,
+  regenerateGithubWatchSecret,
+} from '../../db/githubWatches.js';
+import { GITHUB_EVENT_TYPES, sanitiseGithubEvents } from '../../modules/githubAlerts.js';
 
 const router = Router();
 
@@ -181,6 +191,7 @@ const CONFIG_VIEWS = new Set([
   'giveaways',
   'game-stats',
   'channel-cleanup',
+  'github',
 ]);
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
@@ -768,6 +779,7 @@ async function moduleViewLocals(mod, req, configOverride) {
   // segment and a 404. Normalise on read so every hub has an id + defaults.
   const viewConfig = mod.id === 'temp-voice' ? normaliseTempVoiceConfig(config) : config;
   const cleanupRows = mod.id === 'channel-cleanup' ? await listCleanupSchedules(req.guild.id) : [];
+  const githubRows = mod.id === 'github' ? await listGithubWatches(req.guild.id) : [];
   const levelingOverrides = mod.id === 'leveling' ? await getCommandOverrides(req.guild.id) : null;
   return {
     ...(await baseContext(req.guild, `m/${mod.id}`)),
@@ -865,6 +877,16 @@ async function moduleViewLocals(mod, req, configOverride) {
       lastRunDate: s.last_run_date,
       lastRunCount: s.last_run_count,
     })),
+    githubWatches: githubRows.map((w) => ({
+      id: w.id,
+      repo: w.repo,
+      channel: guildTextChannels(req.guild).find((c) => c.id === w.channel_id)?.name ?? w.channel_id,
+      role: w.role_id ? (req.guild.roles.cache.get(w.role_id)?.name ?? null) : null,
+      changelogPath: w.changelog_path || null,
+      events: w.events,
+      enabled: w.enabled === 1,
+    })),
+    githubDashboardUrlSet: Boolean(appConfig.dashboardUrl),
     schedulePresets: SCHEDULE_PRESETS,
     announceModes: ANNOUNCE_MODES,
     xpRates: XP_RATES,
@@ -1775,6 +1797,153 @@ router.post(
       : null;
     if (rec) await setCleanupScheduleEnabled(req.guild.id, rec.id, rec.enabled !== 1);
     res.redirect(`/guilds/${req.guild.id}/${CLEAN_BASE}?msg=saved`);
+  })
+);
+
+// --- GitHub watch builder --------------------------------------------
+
+const GH_BASE = 'm/github';
+const isGhId = (v) => /^\d+$/.test(v ?? '');
+const REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
+
+/** Accepts "owner/repo" or a pasted github.com URL; returns the normalised "owner/repo" or null. */
+function parseRepoInput(raw) {
+  const v = String(raw ?? '')
+    .trim()
+    .replace(/^https?:\/\/(www\.)?github\.com\//i, '')
+    .replace(/\.git$/i, '')
+    .replace(/\/+$/, '');
+  return REPO_RE.test(v) ? v : null;
+}
+
+/** A relative repo file path for the changelog watcher — blank is valid (off). */
+function parseChangelogPath(raw) {
+  const v = String(raw ?? '')
+    .trim()
+    .replace(/^\/+/, '');
+  if (!v) return { ok: true, value: '' };
+  if (v.length > 300 || v.includes('..') || /[\0\r\n]/.test(v)) return { ok: false, value: '' };
+  return { ok: true, value: v };
+}
+
+function webhookUrl(token) {
+  return appConfig.dashboardUrl
+    ? `${appConfig.dashboardUrl.replace(/\/+$/, '')}/webhooks/github/${token}`
+    : null;
+}
+
+async function renderGithubBuilder(req, res, rec, msg) {
+  res.render('github-builder', {
+    ...(await baseContext(req.guild, GH_BASE)),
+    channels: guildTextChannels(req.guild),
+    roles: assignableRoles(req.guild),
+    guildId: req.guild.id,
+    eventTypes: GITHUB_EVENT_TYPES,
+    dashboardUrlSet: Boolean(appConfig.dashboardUrl),
+    isNew: !rec,
+    rec: rec
+      ? { ...rec, webhookUrl: webhookUrl(rec.token) }
+      : {
+          id: '',
+          repo: '',
+          channel_id: '',
+          role_id: '',
+          changelog_path: '',
+          events: ['push', 'release'],
+          token: '',
+          secret: '',
+          webhookUrl: null,
+        },
+    msg: msg ?? (typeof req.query.msg === 'string' ? req.query.msg : null),
+  });
+}
+
+router.get(
+  '/:guildId/m/github/w/new',
+  asyncHandler((req, res) => renderGithubBuilder(req, res, null))
+);
+
+router.get(
+  '/:guildId/m/github/w/:id',
+  asyncHandler(async (req, res) => {
+    if (!isGhId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/${GH_BASE}`);
+    const rec = await getGithubWatch(req.guild.id, Number(req.params.id));
+    if (!rec) return res.redirect(`/guilds/${req.guild.id}/${GH_BASE}`);
+    await renderGithubBuilder(req, res, rec);
+  })
+);
+
+router.post(
+  '/:guildId/m/github/w/:id',
+  asyncHandler(async (req, res) => {
+    const b = req.body;
+    if (req.params.id !== 'new' && !isGhId(req.params.id)) {
+      return res.redirect(`/guilds/${req.guild.id}/${GH_BASE}`);
+    }
+    const existing =
+      req.params.id === 'new' ? null : await getGithubWatch(req.guild.id, Number(req.params.id));
+    if (req.params.id !== 'new' && !existing) return res.redirect(`/guilds/${req.guild.id}/${GH_BASE}`);
+    const back = `/guilds/${req.guild.id}/${GH_BASE}/w/${existing ? existing.id : 'new'}`;
+
+    const repo = parseRepoInput(b.repo);
+    if (!repo) return res.redirect(`${back}?msg=gh-repo`);
+    const channelId = /^\d{17,20}$/.test(b.channelId ?? '') ? b.channelId : '';
+    if (!channelId) return res.redirect(`${back}?msg=badchannel`);
+    const roleId = /^\d{17,20}$/.test(b.roleId ?? '') ? b.roleId : '';
+    const changelog = parseChangelogPath(b.changelogPath);
+    if (!changelog.ok) return res.redirect(`${back}?msg=gh-changelog`);
+    const events = sanitiseGithubEvents([].concat(b.events ?? []));
+    if (!events.length) return res.redirect(`${back}?msg=gh-events`);
+
+    const data = { repo, channelId, roleId, changelogPath: changelog.value, events };
+    let id;
+    if (existing) {
+      await updateGithubWatch(req.guild.id, existing.id, data);
+      id = existing.id;
+    } else {
+      id = await createGithubWatch(req.guild.id, data);
+    }
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:github',
+      detail: `${existing ? 'updated' : 'added'} watch for ${repo}`,
+    });
+    res.redirect(`/guilds/${req.guild.id}/${GH_BASE}/w/${id}?msg=saved`);
+  })
+);
+
+router.post(
+  '/:guildId/m/github/w/:id/delete',
+  asyncHandler(async (req, res) => {
+    if (isGhId(req.params.id)) await deleteGithubWatch(req.guild.id, Number(req.params.id));
+    res.redirect(`/guilds/${req.guild.id}/${GH_BASE}?msg=saved`);
+  })
+);
+
+router.post(
+  '/:guildId/m/github/w/:id/toggle',
+  asyncHandler(async (req, res) => {
+    const rec = isGhId(req.params.id) ? await getGithubWatch(req.guild.id, Number(req.params.id)) : null;
+    if (rec) await setGithubWatchEnabled(req.guild.id, rec.id, rec.enabled !== 1);
+    res.redirect(`/guilds/${req.guild.id}/${GH_BASE}?msg=saved`);
+  })
+);
+
+// Issue a fresh HMAC secret — the old one (and the old value pasted into
+// GitHub's webhook settings) stops verifying immediately.
+router.post(
+  '/:guildId/m/github/w/:id/regen-secret',
+  asyncHandler(async (req, res) => {
+    if (!isGhId(req.params.id)) return res.redirect(`/guilds/${req.guild.id}/${GH_BASE}`);
+    const rec = await getGithubWatch(req.guild.id, Number(req.params.id));
+    if (!rec) return res.redirect(`/guilds/${req.guild.id}/${GH_BASE}`);
+    await regenerateGithubWatchSecret(req.guild.id, rec.id);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:github',
+      detail: `regenerated secret for ${rec.repo}`,
+    });
+    res.redirect(`/guilds/${req.guild.id}/${GH_BASE}/w/${rec.id}?msg=gh-resecret`);
   })
 );
 

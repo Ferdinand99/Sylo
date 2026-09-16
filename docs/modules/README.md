@@ -40,6 +40,7 @@ intents it needs, its settings, and any slash commands.
 | [Free games](free-games.md) | Announce games free to claim on the Epic Games Store | off | — |
 | [Game stats](game-stats.md) | Battlefield-series player lookups via `/stats` | off | — |
 | [Channel cleanup](channel-cleanup.md) | Auto-delete old messages from a channel on a weekly schedule | off | — |
+| [GitHub alerts](github.md) | Post a repo's pushes, releases, issues and pull requests to a channel | off | — |
 
 See also [self-hosting.md](../self-hosting.md) for the privileged-intent env
 vars and the bot's permission set.

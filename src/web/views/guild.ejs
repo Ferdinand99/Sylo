@@ -36,6 +36,9 @@
        'test-fail': 'Send failed — check the bot has access to that channel.',
        needpair: 'Add at least one emoji → role pair.',
        rrfail: 'Could not post the reaction-role message (check the bot\'s permissions in that channel).',
+       'gh-repo': 'Enter a repo as owner/repo (or paste its github.com URL).',
+       'gh-events': 'Pick at least one event to announce.',
+       'gh-resecret': 'New secret generated — update it in the repo\'s GitHub webhook settings too.',
        'count-set': 'Counting number updated.',
        'count-reset': 'Counting reset to 0.',
        'count-bad': 'Enter a whole number of 0 or more.',
@@ -70,7 +73,7 @@
        noconfirm: 'Tick the confirmation box to delete the member\'s data.',
        'md-baduser': 'Enter a valid Discord user ID or @mention.',
      };
-     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'locked-all', 'unlocked-all', 'unlocked-one', 'warn-removed', 'warn-cleared', 'bulk-on', 'bulk-off', 'test-sent', 'count-set', 'count-reset', 'count-unbenched', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
+     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'locked-all', 'unlocked-all', 'unlocked-one', 'warn-removed', 'warn-cleared', 'bulk-on', 'bulk-off', 'test-sent', 'count-set', 'count-reset', 'count-unbenched', 'gh-resecret', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' || msg === 'forgot-nodm' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');
 %>
   <div class="banner banner-flash <%= cls %>"><%= messages[msg] || 'Done.' %></div>

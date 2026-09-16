@@ -21,6 +21,7 @@ import settingsRouter from './routes/settings.js';
 import guildsRouter from './routes/guilds.js';
 import guildTicketsRouter from './routes/guildTickets.js';
 import guildMessagesRouter from './routes/guildMessages.js';
+import githubWebhookRouter from './routes/githubWebhook.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -38,6 +39,13 @@ export function createApp() {
 
   // First in the chain: per-request debug log + the HTTP request counter.
   app.use(requestLog);
+
+  // Ahead of the global body parsers below: this route needs the exact raw
+  // request bytes to verify GitHub's HMAC signature, and a body parser can
+  // only consume the request stream once. It's also unauthenticated by
+  // design (GitHub can't carry a dashboard session) — signature verification
+  // inside the route is what stands in for auth here.
+  app.use('/webhooks/github', githubWebhookRouter);
 
   app.use(express.static(join(here, 'public')));
   app.use(express.urlencoded({ extended: false, limit: '256kb' }));

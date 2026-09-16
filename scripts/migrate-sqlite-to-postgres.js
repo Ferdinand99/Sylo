@@ -72,6 +72,7 @@ import '../src/db/channelLocks.js';
 import '../src/db/birthdays.js';
 import '../src/db/insights.js';
 import '../src/db/channelCleanup.js';
+import '../src/db/githubWatches.js';
 import '../src/db/cache.js';
 import '../src/db/appSettings.js';
 

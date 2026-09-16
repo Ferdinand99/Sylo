@@ -300,6 +300,15 @@ export const MODULES = [
     defaultEnabled: false,
     configurable: true,
   },
+  {
+    id: 'github',
+    name: 'GitHub alerts',
+    description: 'Post GitHub activity — pushes, releases, issues, pull requests — from a repo to a channel.',
+    icon: '🐙',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
 ];
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));
