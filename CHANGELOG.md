@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.30.1](https://github.com/Ferdinand99/Sylo/compare/v3.30.0...v3.30.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **github:** allow saving a watch with only a changelog path, no events checked ([#193](https://github.com/Ferdinand99/Sylo/issues/193)) ([f0c56f1](https://github.com/Ferdinand99/Sylo/commit/f0c56f16e5aed47fe236bc4c7e0e0ee9b1cf1315))
+
 ## [3.30.0](https://github.com/Ferdinand99/Sylo/compare/v3.29.1...v3.30.0) (2026-09-16)
 
 
