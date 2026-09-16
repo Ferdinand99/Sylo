@@ -1,8 +1,18 @@
 <% var cfg = moduleConfig || {}; %>
 <% var cardOn = !!cfg.card; %>
-<% var joinOn = !!(cfg.joinChannel && String(cfg.joinMessage || '').trim()); %>
-<% var dmOn = !!String(cfg.dmMessage || '').trim(); %>
-<% var leaveOn = !!(cfg.leaveChannel && String(cfg.leaveMessage || '').trim()); %>
+<%
+  // Prefer the explicitly-saved *Enabled flag; a config saved before that flag
+  // existed has no such key, so fall back to the old "does it have real
+  // content" guess just for those — never for a config that has since been
+  // saved again, where the flag reflects the checkbox honestly either way.
+  var joinOn = cfg.joinEnabled !== undefined
+    ? !!cfg.joinEnabled
+    : !!(cfg.joinChannel && String(cfg.joinMessage || '').trim());
+  var dmOn = cfg.dmEnabled !== undefined ? !!cfg.dmEnabled : !!String(cfg.dmMessage || '').trim();
+  var leaveOn = cfg.leaveEnabled !== undefined
+    ? !!cfg.leaveEnabled
+    : !!(cfg.leaveChannel && String(cfg.leaveMessage || '').trim());
+%>
 <% var picked = Array.isArray(welcomeAutoroles) ? welcomeAutoroles : []; %>
 <% var autoOn = picked.length > 0; %>
 <% var pool = roles.filter(function (r) { return !picked.includes(r.id); }); %>

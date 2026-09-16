@@ -237,6 +237,20 @@ test('POST /m/:id/test — sends for a configured testable module', async () => 
   assert.equal(app.sink.messages.length, 1);
 });
 
+test('POST /m/welcome/config — a toggle stays checked after saving with a channel but no message yet', async () => {
+  // Regression for #197: "enabled" used to be inferred from channel+message
+  // both being non-empty, so picking a channel and saving before typing a
+  // message made the toggle silently flip back to unchecked.
+  await post(app.base, `/guilds/${GID}/m/welcome/config`, {
+    enable_leave: 'on',
+    leaveChannel: CH.general,
+    // leaveMessage deliberately omitted — nothing typed yet.
+  });
+
+  const frag = await (await get(`/guilds/${GID}/m/welcome`, { 'HX-Request': 'true' })).text();
+  assert.match(frag, /id="w-leave"[^>]*checked/);
+});
+
 test('POST /m/:id/test — "set a channel first" when unconfigured', async () => {
   await post(app.base, `/guilds/${GID}/m/free-games/config`, {}); // clears channel
   const res = await post(app.base, `/guilds/${GID}/m/free-games/test`, {}, { 'HX-Request': 'true' });
