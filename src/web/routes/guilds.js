@@ -1047,10 +1047,18 @@ router.post(
       const leaveOn = req.body.enable_leave === 'on';
       const cardBg = String(req.body.cardBackground ?? '').trim();
       config = {
+        // Stored explicitly rather than inferred from channel+message being
+        // non-empty — a toggle turned on with a channel picked but no message
+        // typed yet (easy to do: the textarea's placeholder text looks like
+        // real content) must not silently flip back to "off" on the next
+        // render just because the message field happens to be blank.
+        joinEnabled: joinOn,
         joinChannel: joinOn ? chan(req.body.joinChannel) : '',
         joinMessage: joinOn ? String(req.body.joinMessage ?? '').slice(0, 1500) : '',
+        leaveEnabled: leaveOn,
         leaveChannel: leaveOn ? chan(req.body.leaveChannel) : '',
         leaveMessage: leaveOn ? String(req.body.leaveMessage ?? '').slice(0, 1500) : '',
+        dmEnabled: dmOn,
         dmMessage: dmOn ? String(req.body.dmMessage ?? '').slice(0, 1500) : '',
         useEmbed: req.body.useEmbed === 'on',
         card: req.body.enable_card === 'on',
