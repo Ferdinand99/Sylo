@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.30.0](https://github.com/Ferdinand99/Sylo/compare/v3.29.1...v3.30.0) (2026-09-16)
+
+
+### Features
+
+* **github:** add GitHub alerts — post repo activity, ping roles, extract changelog entries ([#191](https://github.com/Ferdinand99/Sylo/issues/191)) ([466ba0f](https://github.com/Ferdinand99/Sylo/commit/466ba0fc56418a7bd1bea7e65072f2cb5a4e46e9))
+
 ## [3.29.1](https://github.com/Ferdinand99/Sylo/compare/v3.29.0...v3.29.1) (2026-09-10)
 
 
