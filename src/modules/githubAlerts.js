@@ -196,6 +196,18 @@ export function pushTouchedPath(payload, path) {
 }
 
 /**
+ * Was this push to the repo's default branch? Release tooling (e.g.
+ * release-please) commonly pushes the same changelog update to its own
+ * long-lived release branch first, then again when a human merges that PR
+ * into the default branch — without this check, both pushes touch the
+ * changelog file and it gets posted twice for the same entry.
+ */
+export function isDefaultBranchPush(payload) {
+  const branch = payload?.repository?.default_branch || 'main';
+  return payload?.ref === `refs/heads/${branch}`;
+}
+
+/**
  * The first `## heading` block in `text` (its heading line through the line
  * before the next `## heading`, or end of file) — e.g. the newest entry in a
  * "Keep a Changelog"-style file, regardless of what's after `## ` on that

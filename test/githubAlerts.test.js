@@ -9,6 +9,7 @@ import {
   formatGithubEvent,
   applyRolePing,
   pushTouchedPath,
+  isDefaultBranchPush,
   extractLatestChangelogBlock,
   fetchChangelogBlock,
   formatChangelogPost,
@@ -166,6 +167,25 @@ test('pushTouchedPath: true only when a commit added/modified/removed the exact 
   assert.equal(pushTouchedPath({ commits: [] }, 'CHANGELOG.md'), false);
   assert.equal(pushTouchedPath(payload, ''), false);
   assert.equal(pushTouchedPath({}, 'CHANGELOG.md'), false); // no commits array at all
+});
+
+test("isDefaultBranchPush: true only for a push to the repo's own default branch", () => {
+  const repo = { default_branch: 'main' };
+  assert.equal(isDefaultBranchPush({ ref: 'refs/heads/main', repository: repo }), true);
+  assert.equal(
+    isDefaultBranchPush({ ref: 'refs/heads/release-please--branches--main', repository: repo }),
+    false
+  );
+  assert.equal(isDefaultBranchPush({ ref: 'refs/tags/v1.0.0', repository: repo }), false);
+
+  // A repo whose default branch isn't "main" (e.g. "master", or a custom name).
+  const masterRepo = { default_branch: 'master' };
+  assert.equal(isDefaultBranchPush({ ref: 'refs/heads/master', repository: masterRepo }), true);
+  assert.equal(isDefaultBranchPush({ ref: 'refs/heads/main', repository: masterRepo }), false);
+
+  // Missing repository info falls back to assuming "main" rather than matching nothing.
+  assert.equal(isDefaultBranchPush({ ref: 'refs/heads/main' }), true);
+  assert.equal(isDefaultBranchPush({}), false);
 });
 
 test('extractLatestChangelogBlock: the real newt changelog format — only the newest heading block', () => {
