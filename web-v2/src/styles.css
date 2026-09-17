@@ -50,6 +50,27 @@ a:hover {
   border-bottom: 1px solid var(--border-subtle);
 }
 
+/* Hamburger — hidden on desktop, shown by the media query below. */
+.v2-nav-toggle {
+  display: none;
+  flex: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+.v2-nav-toggle span {
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text);
+}
+
 .v2-brand {
   display: flex;
   align-items: center;
@@ -233,9 +254,44 @@ a:hover {
   width: 100%;
 }
 
+/* Scrim behind the off-canvas sidebar on mobile — only rendered while open. */
+.v2-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  border: 0;
+  padding: 0;
+  z-index: 40;
+  cursor: default;
+}
+
 @media (max-width: 860px) {
+  .v2-topbar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .v2-nav-toggle {
+    display: flex;
+  }
+  .v2-scrim {
+    display: block;
+  }
   .v2-sidebar {
-    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 240px;
+    background: var(--bg-main);
+    border-right: 1px solid var(--border-subtle);
+    padding: 72px 12px 24px;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    z-index: 50;
+  }
+  .v2-sidebar.is-open {
+    transform: translateX(0);
   }
 }
 
@@ -408,6 +464,13 @@ a:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.v2-row-main p.v2-row-warn {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  color: #f0b132;
+  margin-top: 6px;
 }
 .v2-row-arrow {
   color: var(--text-muted);

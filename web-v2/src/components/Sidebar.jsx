@@ -50,7 +50,11 @@ function Icon({ name }) {
   );
 }
 
-export default function Sidebar({ activeGuildId }) {
+// `open`/`onClose` only matter below the 860px breakpoint, where the
+// sidebar becomes an off-canvas drawer (see Shell.jsx, which owns the open
+// state and renders the hamburger button + scrim) — above it the sidebar is
+// always visible and these are unused.
+export default function Sidebar({ activeGuildId, open, onClose }) {
   const { pathname } = useLocation();
 
   const items = [
@@ -77,17 +81,21 @@ export default function Sidebar({ activeGuildId }) {
   ];
 
   return (
-    <nav className="v2-sidebar" aria-label="Dashboard">
-      {items.map((it) => (
-        <Link
-          key={it.key}
-          to={it.href}
-          className={`v2-sidebar-link${pathname === it.href ? ' is-active' : ''}`}
-        >
-          <Icon name={it.icon} />
-          <span>{it.label}</span>
-        </Link>
-      ))}
-    </nav>
+    <>
+      {open ? <button type="button" className="v2-scrim" aria-label="Close menu" onClick={onClose} /> : null}
+      <nav className={`v2-sidebar${open ? ' is-open' : ''}`} aria-label="Dashboard">
+        {items.map((it) => (
+          <Link
+            key={it.key}
+            to={it.href}
+            className={`v2-sidebar-link${pathname === it.href ? ' is-active' : ''}`}
+            onClick={onClose}
+          >
+            <Icon name={it.icon} />
+            <span>{it.label}</span>
+          </Link>
+        ))}
+      </nav>
+    </>
   );
 }

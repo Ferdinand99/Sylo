@@ -14,6 +14,10 @@ import { buildOverview } from '../lib/overviewSummary.js';
 import { getDashboardVersion, setDashboardVersion, DASHBOARD_VERSIONS } from '../../db/userPrefs.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { normaliseLevelingConfig } from '../../modules/leveling.js';
+import { normaliseAutomodConfig } from '../../modules/automod.js';
+import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
+import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
+import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import {
   topMembers,
   topMembersForPeriod,
@@ -52,7 +56,7 @@ import {
   inspectDbFile,
 } from '../../db/backup.js';
 import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
-import { MODULES } from '../../modules/registry.js';
+import { MODULES, getModule } from '../../modules/registry.js';
 import { timeAgo, formatUptime, formatBytes } from '../lib/format.js';
 import { log } from '../../lib/log.js';
 import { sendDevLogTest } from '../../lib/devLog.js';
@@ -139,6 +143,43 @@ router.get(
       buildOverview(req.guild),
     ]);
     res.json({ guild, openTickets, openAppeals, groups });
+  })
+);
+
+// Toggle a module on/off — mirrors guilds.js:2671-2721 (minus the htmx
+// branch, this is a plain JSON API). Same per-module side effects on
+// enable/disable as V1: re-sync custom commands, prime the invite-tracker
+// cache, push/tear down automod's native Discord AutoMod rules.
+router.post(
+  '/guilds/:guildId/modules/:moduleId',
+  asyncHandler(async (req, res) => {
+    const mod = getModule(req.params.moduleId);
+    if (!mod) return res.status(404).json({ error: 'Unknown module' });
+    const enabled = Boolean(req.body?.enabled);
+    await setGuildModule(req.guild.id, mod.id, { enabled });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: `module:${mod.id}`,
+      detail: enabled ? 'enabled' : 'disabled',
+    });
+    if (mod.id === 'custom-commands') {
+      syncGuildCustomCommands(req.guild).catch((err) =>
+        log.error('custom-commands', 'sync after toggle failed:', err.message)
+      );
+    }
+    if (mod.id === 'invite-tracker' && enabled) {
+      primeInviteCache(req.guild).catch((err) =>
+        log.error('invite-tracker', 'cache prime after enable failed:', err.message)
+      );
+    }
+    if (mod.id === 'automod') {
+      const cfg = normaliseAutomodConfig((await getGuildModule(req.guild.id, 'automod')).config);
+      const target = enabled ? cfg : { ...cfg, native: { ...cfg.native, enabled: false } };
+      syncGuildAutomod(req.guild, target).catch((err) =>
+        log.error('automod', 'native sync after toggle failed:', err.message)
+      );
+    }
+    res.json({ enabled });
   })
 );
 

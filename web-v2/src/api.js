@@ -55,6 +55,8 @@ const postJson = (path, body) =>
 
 export const getGuilds = () => apiFetch('/api/v2/guilds').then((d) => d.guilds);
 export const getOverview = (guildId) => apiFetch(`/api/v2/guilds/${guildId}/overview`);
+export const setModuleEnabled = (guildId, moduleId, enabled) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/${moduleId}`, { enabled });
 export const getPrefs = () => apiFetch('/api/v2/prefs');
 export const setDashboardVersion = (dashboardVersion) => postJson('/api/v2/prefs', { dashboardVersion });
 

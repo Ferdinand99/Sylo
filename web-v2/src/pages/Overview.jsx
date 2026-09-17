@@ -1,25 +1,43 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getOverview, ApiError } from '../api.js';
+import { getOverview, setModuleEnabled, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
 
-function ModuleRow({ card }) {
+function ModuleRow({ card, busy, onToggle }) {
+  if (!card.hasToggle) {
+    return (
+      <div className="v2-row">
+        <div className="v2-row-main">
+          <h3>{card.name}</h3>
+          <p>{card.description}</p>
+        </div>
+        <span className="v2-row-arrow" aria-hidden="true">
+          →
+        </span>
+      </div>
+    );
+  }
+
+  const blocked = card.missingIntents.length > 0;
+
   return (
     <div className="v2-row">
       <div className="v2-row-main">
         <h3>{card.name}</h3>
         <p>{card.description}</p>
+        {blocked ? (
+          <p className="v2-row-warn">
+            Needs the {card.missingIntents.join(', ')} intent — see docs/self-hosting.md.
+          </p>
+        ) : null}
       </div>
-      {card.hasToggle ? (
-        <span
-          className={`v2-toggle${card.enabled ? ' is-on' : ''}`}
-          aria-label={card.enabled ? 'Enabled' : 'Disabled'}
-        />
-      ) : (
-        <span className="v2-row-arrow" aria-hidden="true">
-          →
-        </span>
-      )}
+      <button
+        type="button"
+        className={`v2-toggle${card.enabled ? ' is-on' : ''}`}
+        aria-label={card.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}
+        disabled={busy || blocked}
+        onClick={() => onToggle(card.id, !card.enabled)}
+      />
     </div>
   );
 }
@@ -27,7 +45,8 @@ function ModuleRow({ card }) {
 export default function Overview() {
   const { guildId } = useParams();
   const [query, setQuery] = useState('');
-  const { data, loading, error } = useApiData(() => getOverview(guildId), [guildId]);
+  const [togglingId, setTogglingId] = useState(null);
+  const { data, loading, error, setData } = useApiData(() => getOverview(guildId), [guildId]);
 
   const filteredGroups = useMemo(() => {
     if (!data) return [];
@@ -58,6 +77,24 @@ export default function Overview() {
         )}
       </p>
     );
+  }
+
+  async function onToggle(moduleId, enabled) {
+    setTogglingId(moduleId);
+    try {
+      await setModuleEnabled(guildId, moduleId, enabled);
+      setData((d) => ({
+        ...d,
+        groups: d.groups.map((g) => ({
+          ...g,
+          cards: g.cards.map((c) => (c.id === moduleId ? { ...c, enabled } : c)),
+        })),
+      }));
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setTogglingId(null);
+    }
   }
 
   const { guild, groups, openTickets, openAppeals } = data;
@@ -109,7 +146,7 @@ export default function Overview() {
           <h2 className="v2-group-title">{g.title}</h2>
           <div className="v2-list">
             {g.cards.map((card) => (
-              <ModuleRow key={card.id} card={card} />
+              <ModuleRow key={card.id} card={card} busy={togglingId === card.id} onToggle={onToggle} />
             ))}
           </div>
         </section>
