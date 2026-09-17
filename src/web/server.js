@@ -22,6 +22,8 @@ import guildsRouter from './routes/guilds.js';
 import guildTicketsRouter from './routes/guildTickets.js';
 import guildMessagesRouter from './routes/guildMessages.js';
 import githubWebhookRouter from './routes/githubWebhook.js';
+import v2ApiRouter from './routes/v2Api.js';
+import v2ClientRouter from './routes/v2Client.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -85,6 +87,11 @@ export function createApp() {
   app.use('/guilds/:guildId/tickets', guildTicketsRouter);
   app.use('/guilds/:guildId/messages', guildMessagesRouter);
   app.use('/guilds', guildsRouter);
+  // V2 dashboard (opt-in, side-by-side with the routes above — see
+  // internal/dashboard-v2-plan.md). Purely additive: neither router touches
+  // or reorders anything mounted before it.
+  app.use('/api/v2', v2ApiRouter);
+  app.use('/v2', v2ClientRouter);
 
   // Central error handler — keep the server up, record the error for the dashboard.
   // Express recognises an error handler by its 4-arg signature, so `_next` must

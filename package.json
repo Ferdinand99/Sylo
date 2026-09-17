@@ -13,6 +13,8 @@
     "register": "node scripts/register-commands.js",
     "migrate-to-postgres": "node scripts/migrate-sqlite-to-postgres.js",
     "test": "node --test",
+    "build:v2": "vite build --config web-v2/vite.config.js",
+    "dev:v2": "vite --config web-v2/vite.config.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -35,15 +37,20 @@
     "dotenv": "^17.4.2",
     "ejs": "^6.0.1",
     "express": "^5.1.0",
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@vitejs/plugin-react": "^6.1.1",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-n": "^18.3.0",
     "globals": "^17.12.0",
     "prettier": "^3.9.6",
-    "undici": "^8.10.2"
+    "undici": "^8.10.2",
+    "vite": "^8.3.0"
   }
 }
