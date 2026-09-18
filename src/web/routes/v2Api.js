@@ -19,6 +19,7 @@ import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
+import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import {
   topMembers,
   topMembersForPeriod,
@@ -312,6 +313,32 @@ router.post(
       detail: 'settings saved',
     });
     res.json({ config: { ...config, autoroles: newRoles } });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/birthdays/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'birthdays');
+    res.json({
+      config: normaliseBirthdaysConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/birthdays/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseBirthdaysConfig(req.body);
+    await setGuildModule(req.guild.id, 'birthdays', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:birthdays',
+      detail: 'settings saved',
+    });
+    res.json({ config });
   })
 );
 

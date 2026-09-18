@@ -6,8 +6,10 @@
 // a new module gets built out.
 import Afk from './Afk.jsx';
 import Welcome from './Welcome.jsx';
+import Birthdays from './Birthdays.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
   welcome: Welcome,
+  birthdays: Birthdays,
 };
