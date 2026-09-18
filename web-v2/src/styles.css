@@ -653,6 +653,7 @@ button.v2-toggle:disabled {
 }
 .v2-field input[type='text'],
 .v2-field input[type='url'],
+.v2-field input[type='number'],
 .v2-field select,
 .v2-field textarea {
   width: 100%;

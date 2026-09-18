@@ -9,6 +9,7 @@ import Welcome from './Welcome.jsx';
 import Birthdays from './Birthdays.jsx';
 import Verification from './Verification.jsx';
 import FreeGames from './FreeGames.jsx';
+import Counting from './Counting.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -16,4 +17,5 @@ export const MODULE_FORMS = {
   birthdays: Birthdays,
   verification: Verification,
   'free-games': FreeGames,
+  counting: Counting,
 };

@@ -20,6 +20,8 @@ import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
+import { getCounting, setCount, resetCount } from '../../db/counting.js';
+import { listCountingPenalties, clearCountingPenalty } from '../../db/countingPenalties.js';
 import {
   normaliseVerificationConfig,
   VERIFY_MODES,
@@ -419,6 +421,111 @@ router.post(
       detail: 'settings saved',
     });
     res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/counting/config',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const { config: cfg } = await getGuildModule(guild.id, 'counting');
+    const state = await getCounting(guild.id);
+    const penalties = await listCountingPenalties(guild.id);
+    res.json({
+      config: {
+        channelId: cfg.channelId || '',
+        react: cfg.react !== false,
+        allowSameUser: Boolean(cfg.allowSameUser),
+        resetOnFail: cfg.resetOnFail !== false,
+        penaltyRoleId: cfg.penaltyRoleId || '',
+        penaltyMinutes: cfg.penaltyMinutes || 15,
+      },
+      channels: guildTextChannels(guild),
+      roles: assignableRoles(guild),
+      state: {
+        current: state.current,
+        record: state.record,
+        lastUserId: state.last_user_id,
+      },
+      penalties: penalties.map((p) => ({
+        userId: p.user_id,
+        label: guild.members.cache.get(p.user_id)?.user.tag ?? p.user_id,
+        roleName: guild.roles.cache.get(p.role_id)?.name ?? p.role_id,
+        restoreAt: Number(p.restore_at),
+      })),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/counting/config',
+  asyncHandler(async (req, res) => {
+    const penaltyMinutes = Math.round(Number(req.body.penaltyMinutes));
+    const config = {
+      channelId: /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '',
+      allowSameUser: Boolean(req.body.allowSameUser),
+      resetOnFail: Boolean(req.body.resetOnFail),
+      react: Boolean(req.body.react),
+      penaltyRoleId: /^\d{17,20}$/.test(req.body.penaltyRoleId ?? '') ? req.body.penaltyRoleId : '',
+      penaltyMinutes:
+        Number.isFinite(penaltyMinutes) && penaltyMinutes > 0 ? Math.min(penaltyMinutes, 10080) : 15,
+    };
+    await setGuildModule(req.guild.id, 'counting', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:counting',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/counting/count',
+  asyncHandler(async (req, res) => {
+    if (req.body.reset === true) {
+      await resetCount(req.guild.id);
+      await recordAudit(req.guild.id, {
+        actor: moderatorDisplayName(req),
+        action: 'counting:reset',
+        detail: 'count set to 0',
+      });
+      return res.json({ state: await getCounting(req.guild.id) });
+    }
+    const n = Number(req.body.current);
+    if (!Number.isInteger(n) || n < 0 || n > 1e12) {
+      return res.status(400).json({ error: 'Invalid count' });
+    }
+    await setCount(req.guild.id, n);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'counting:set',
+      detail: `count = ${n}`,
+    });
+    res.json({ state: await getCounting(req.guild.id) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/counting/penalty/release',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const userId = String(req.body.userId ?? '');
+    if (!/^\d{17,20}$/.test(userId)) return res.status(400).json({ error: 'Invalid user' });
+
+    const cfg = (await getGuildModule(guild.id, 'counting')).config;
+    const role = cfg.penaltyRoleId ? guild.roles.cache.get(cfg.penaltyRoleId) : null;
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (role && member && !member.roles.cache.has(role.id) && role.editable) {
+      await member.roles.add(role, 'Counting: bench ended early from the dashboard').catch(() => {});
+    }
+    await clearCountingPenalty(guild.id, userId);
+    await recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'counting:unbench',
+      detail: `released ${userId}`,
+    });
+    res.json({ ok: true });
   })
 );
 

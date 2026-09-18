@@ -64,6 +64,13 @@ export const getModuleConfig = (guildId, moduleId) =>
   apiFetch(`/api/v2/guilds/${guildId}/modules/${moduleId}/config`);
 export const saveModuleConfig = (guildId, moduleId, body) =>
   postJson(`/api/v2/guilds/${guildId}/modules/${moduleId}/config`, body);
+export const setCountingCount = (guildId, current) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/counting/count`, { current });
+export const resetCountingCount = (guildId) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/counting/count`, { reset: true });
+export const releaseCountingPenalty = (guildId, userId) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/counting/penalty/release`, { userId });
+
 export const getPrefs = () => apiFetch('/api/v2/prefs');
 export const setDashboardVersion = (dashboardVersion) => postJson('/api/v2/prefs', { dashboardVersion });
 
