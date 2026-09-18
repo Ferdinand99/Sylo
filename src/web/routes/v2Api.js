@@ -21,6 +21,11 @@ import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import {
+  normaliseVerificationConfig,
+  VERIFY_MODES,
+  ensureVerifyMessage,
+} from '../../modules/verification.js';
+import {
   topMembers,
   topMembersForPeriod,
   memberCount,
@@ -339,6 +344,49 @@ router.post(
       detail: 'settings saved',
     });
     res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/verification/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'verification');
+    res.json({
+      config: normaliseVerificationConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      modes: VERIFY_MODES,
+      turnstileEnabled: config.turnstileEnabled,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/verification/config',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const prev = (await getGuildModule(guild.id, 'verification')).config;
+    const cfg = normaliseVerificationConfig({
+      mode: req.body.mode,
+      verifiedRoleId: req.body.verifiedRoleId,
+      channelId: req.body.channelId,
+      messageId: prev.messageId, // bot-managed, not form-editable
+      title: req.body.title,
+      message: req.body.message,
+      successMessage: req.body.successMessage,
+      logChannelId: req.body.logChannelId,
+      kickAfterMinutes: req.body.kickAfterMinutes,
+    });
+    await setGuildModule(guild.id, 'verification', { config: cfg });
+    await recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:verification',
+      detail: 'settings saved',
+    });
+    ensureVerifyMessage(guild, cfg).catch((err) =>
+      log.error('verification', 'ensure message after save failed:', err.message)
+    );
+    res.json({ config: cfg });
   })
 );
 

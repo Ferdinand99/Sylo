@@ -476,11 +476,13 @@ a:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.v2-row-warn {
+  color: #f0b132;
+}
 .v2-row-main p.v2-row-warn {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
-  color: #f0b132;
   margin-top: 6px;
 }
 .v2-row-arrow {
