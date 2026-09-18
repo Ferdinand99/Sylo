@@ -8,10 +8,12 @@ import Afk from './Afk.jsx';
 import Welcome from './Welcome.jsx';
 import Birthdays from './Birthdays.jsx';
 import Verification from './Verification.jsx';
+import FreeGames from './FreeGames.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
   welcome: Welcome,
   birthdays: Birthdays,
   verification: Verification,
+  'free-games': FreeGames,
 };

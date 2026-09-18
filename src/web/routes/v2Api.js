@@ -390,6 +390,38 @@ router.post(
   })
 );
 
+router.get(
+  '/guilds/:guildId/modules/free-games/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'free-games');
+    res.json({
+      config: {
+        channelId: cfg.channelId || '',
+        roleId: cfg.roleId || '',
+      },
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/free-games/config',
+  asyncHandler(async (req, res) => {
+    const config = {
+      channelId: /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '',
+      roleId: /^\d{17,20}$/.test(req.body.roleId ?? '') ? req.body.roleId : '',
+    };
+    await setGuildModule(req.guild.id, 'free-games', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:free-games',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
 // --- Leaderboard (mirrors guilds.js:614-696) --------------------------------
 
 router.get(
