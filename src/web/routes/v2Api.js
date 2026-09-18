@@ -18,6 +18,7 @@ import { normaliseAutomodConfig } from '../../modules/automod.js';
 import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
+import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import {
   topMembers,
   topMembersForPeriod,
@@ -222,6 +223,95 @@ router.post(
       detail: 'settings saved',
     });
     res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/welcome/config',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const { config: cfg } = await getGuildModule(guild.id, 'welcome');
+    const rolesModule = await getGuildModule(guild.id, 'roles');
+    const picked = Array.isArray(rolesModule.config.autoroles) ? rolesModule.config.autoroles : [];
+    const verification = await getGuildModule(guild.id, 'verification');
+
+    // Same explicit-flag-with-old-config-fallback as welcome.ejs (the toggle-
+    // reverts-on-save bug fixed for issue #197) — never infer "on" from
+    // content for a config that has an explicit flag already.
+    const joinEnabled =
+      cfg.joinEnabled !== undefined
+        ? Boolean(cfg.joinEnabled)
+        : Boolean(cfg.joinChannel && String(cfg.joinMessage || '').trim());
+    const dmEnabled =
+      cfg.dmEnabled !== undefined ? Boolean(cfg.dmEnabled) : Boolean(String(cfg.dmMessage || '').trim());
+    const leaveEnabled =
+      cfg.leaveEnabled !== undefined
+        ? Boolean(cfg.leaveEnabled)
+        : Boolean(cfg.leaveChannel && String(cfg.leaveMessage || '').trim());
+    const autoroleEnabled =
+      cfg.autoroleEnabled !== undefined ? Boolean(cfg.autoroleEnabled) : picked.length > 0;
+
+    res.json({
+      config: {
+        joinEnabled,
+        joinChannel: cfg.joinChannel || '',
+        joinMessage: cfg.joinMessage || '',
+        useEmbed: Boolean(cfg.useEmbed),
+        card: Boolean(cfg.card),
+        cardBackground: cfg.cardBackground || '',
+        dmEnabled,
+        dmMessage: cfg.dmMessage || '',
+        leaveEnabled,
+        leaveChannel: cfg.leaveChannel || '',
+        leaveMessage: cfg.leaveMessage || '',
+        autoroleEnabled,
+        autoroles: picked,
+      },
+      channels: guildTextChannels(guild),
+      roles: assignableRoles(guild),
+      verificationEnabled: verification.enabled,
+      placeholders: WELCOME_PLACEHOLDERS,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/welcome/config',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const chan = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
+    const joinOn = Boolean(req.body.joinEnabled);
+    const dmOn = Boolean(req.body.dmEnabled);
+    const leaveOn = Boolean(req.body.leaveEnabled);
+    const cardBg = String(req.body.cardBackground ?? '').trim();
+    const config = {
+      joinEnabled: joinOn,
+      joinChannel: joinOn ? chan(req.body.joinChannel) : '',
+      joinMessage: joinOn ? String(req.body.joinMessage ?? '').slice(0, 1500) : '',
+      leaveEnabled: leaveOn,
+      leaveChannel: leaveOn ? chan(req.body.leaveChannel) : '',
+      leaveMessage: leaveOn ? String(req.body.leaveMessage ?? '').slice(0, 1500) : '',
+      dmEnabled: dmOn,
+      dmMessage: dmOn ? String(req.body.dmMessage ?? '').slice(0, 1500) : '',
+      useEmbed: Boolean(req.body.useEmbed),
+      card: Boolean(req.body.card),
+      cardBackground: /^https:\/\/\S+$/i.test(cardBg) ? cardBg.slice(0, 500) : '',
+    };
+    const autoOn = Boolean(req.body.autoroleEnabled);
+    config.autoroleEnabled = autoOn;
+    const newRoles = autoOn ? [].concat(req.body.autoroles ?? []).filter((r) => /^\d{17,20}$/.test(r)) : [];
+    const rolesMod = await getGuildModule(guild.id, 'roles');
+    await setGuildModule(guild.id, 'roles', {
+      enabled: rolesMod.enabled || newRoles.length > 0,
+      config: { ...rolesMod.config, autoroles: newRoles },
+    });
+    await setGuildModule(guild.id, 'welcome', { config });
+    await recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:welcome',
+      detail: 'settings saved',
+    });
+    res.json({ config: { ...config, autoroles: newRoles } });
   })
 );
 

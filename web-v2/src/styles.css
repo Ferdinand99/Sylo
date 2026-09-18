@@ -651,7 +651,8 @@ button.v2-toggle:disabled {
 }
 .v2-field input[type='text'],
 .v2-field input[type='url'],
-.v2-field select {
+.v2-field select,
+.v2-field textarea {
   width: 100%;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -660,9 +661,11 @@ button.v2-toggle:disabled {
   padding: 9px 12px;
   font: inherit;
   font-size: 0.9rem;
+  resize: vertical;
 }
 .v2-field input:focus,
-.v2-field select:focus {
+.v2-field select:focus,
+.v2-field textarea:focus {
   outline: none;
   border-color: var(--accent);
 }
@@ -687,4 +690,39 @@ button.v2-toggle:disabled {
   border-radius: 8px;
   background: var(--bg-surface);
   flex: none;
+}
+
+/* Feature toggle whose settings expand below it once on — ToggleSection.jsx. */
+.v2-toggle-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.v2-toggle-section-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.v2-toggle-section-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.v2-toggle-section-body {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.v2-placeholders code {
+  margin-right: 6px;
+}
+
+.v2-card-preview {
+  max-width: 480px;
+  width: 100%;
+  border-radius: 12px;
+  margin-top: 8px;
+  display: block;
 }

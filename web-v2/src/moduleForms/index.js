@@ -5,7 +5,9 @@
 // yet. Add an entry here (and its two backend routes in v2Api.js) whenever
 // a new module gets built out.
 import Afk from './Afk.jsx';
+import Welcome from './Welcome.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
+  welcome: Welcome,
 };
