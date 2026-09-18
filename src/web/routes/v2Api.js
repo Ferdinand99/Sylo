@@ -183,6 +183,48 @@ router.post(
   })
 );
 
+// --- Per-module config ------------------------------------------------------
+// One GET+POST pair per module, added as each gets a real V2 form (see
+// web-v2/src/moduleForms/) — mirrors guilds.js's shared `/m/:moduleId/config`
+// route (guilds.js:1014 on), which handles all 32 modules in one big
+// if/else keyed on form-encoded field names. There's no way to generalise
+// that across modules (every module's config shape and field names are
+// different), so each gets its own small pair here instead, same as
+// Leaderboard/Settings/Personalizer/Health already do.
+
+router.get(
+  '/guilds/:guildId/modules/afk/config',
+  asyncHandler(async (req, res) => {
+    const { config } = await getGuildModule(req.guild.id, 'afk');
+    res.json({
+      config: {
+        setNickname: config.setNickname !== false,
+        mentionReply: config.mentionReply !== false,
+        ignoreChannels: Array.isArray(config.ignoreChannels) ? config.ignoreChannels : [],
+      },
+      channels: guildTextChannels(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/afk/config',
+  asyncHandler(async (req, res) => {
+    const config = {
+      setNickname: Boolean(req.body.setNickname),
+      mentionReply: Boolean(req.body.mentionReply),
+      ignoreChannels: [].concat(req.body.ignoreChannels ?? []).filter((id) => /^\d{17,20}$/.test(id)),
+    };
+    await setGuildModule(req.guild.id, 'afk', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:afk',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
 // --- Leaderboard (mirrors guilds.js:614-696) --------------------------------
 
 router.get(

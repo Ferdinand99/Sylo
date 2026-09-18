@@ -1,12 +1,33 @@
 import { useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { getOverview, setModuleEnabled, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { MODULE_FORMS } from '../moduleForms/index.js';
 
-function ModuleRow({ card, busy, onToggle }) {
-  if (!card.hasToggle) {
+// The module's name links to its V2 settings page if one's been built
+// (MODULE_FORMS), otherwise to V1's own config page for it — `card.href`,
+// which the overview API already provides (src/web/lib/overviewSummary.js).
+// Every module is configurable today either way; not every one has a V2
+// page yet.
+function ModuleTitle({ card, guildId }) {
+  if (MODULE_FORMS[card.id]) {
     return (
-      <div className="v2-row">
+      <Link className="v2-row-title-link" to={`/guilds/${guildId}/m/${card.id}`}>
+        <h3>{card.name}</h3>
+      </Link>
+    );
+  }
+  return (
+    <a className="v2-row-title-link" href={card.href}>
+      <h3>{card.name}</h3>
+    </a>
+  );
+}
+
+function ModuleRow({ card, guildId, busy, onToggle }) {
+  if (!card.hasToggle) {
+    const rowContent = (
+      <>
         <div className="v2-row-main">
           <h3>{card.name}</h3>
           <p>{card.description}</p>
@@ -14,7 +35,16 @@ function ModuleRow({ card, busy, onToggle }) {
         <span className="v2-row-arrow" aria-hidden="true">
           →
         </span>
-      </div>
+      </>
+    );
+    return MODULE_FORMS[card.id] ? (
+      <Link className="v2-row" to={`/guilds/${guildId}/m/${card.id}`}>
+        {rowContent}
+      </Link>
+    ) : (
+      <a className="v2-row" href={card.href}>
+        {rowContent}
+      </a>
     );
   }
 
@@ -23,7 +53,7 @@ function ModuleRow({ card, busy, onToggle }) {
   return (
     <div className="v2-row">
       <div className="v2-row-main">
-        <h3>{card.name}</h3>
+        <ModuleTitle card={card} guildId={guildId} />
         <p>{card.description}</p>
         {blocked ? (
           <p className="v2-row-warn">
@@ -146,7 +176,13 @@ export default function Overview() {
           <h2 className="v2-group-title">{g.title}</h2>
           <div className="v2-list">
             {g.cards.map((card) => (
-              <ModuleRow key={card.id} card={card} busy={togglingId === card.id} onToggle={onToggle} />
+              <ModuleRow
+                key={card.id}
+                card={card}
+                guildId={guildId}
+                busy={togglingId === card.id}
+                onToggle={onToggle}
+              />
             ))}
           </div>
         </section>

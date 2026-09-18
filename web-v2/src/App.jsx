@@ -6,6 +6,7 @@ import Leaderboard from './pages/Leaderboard.jsx';
 import Settings from './pages/Settings.jsx';
 import Personalizer from './pages/Personalizer.jsx';
 import Health from './pages/Health.jsx';
+import ModulePage from './pages/ModulePage.jsx';
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="guilds/:guildId" element={<Overview />} />
           <Route path="guilds/:guildId/leaderboard" element={<Leaderboard />} />
           <Route path="guilds/:guildId/settings" element={<Settings />} />
+          <Route path="guilds/:guildId/m/:moduleId" element={<ModulePage />} />
           <Route path="settings" element={<Personalizer />} />
           <Route path="health" element={<Health />} />
         </Route>
