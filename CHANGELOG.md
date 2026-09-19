@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.32.0](https://github.com/Ferdinand99/Sylo/compare/v3.31.0...v3.32.0) (2026-09-19)
+
+
+### Features
+
+* **dashboard:** add opt-in V2 dashboard foundation (React + Vite) ([#201](https://github.com/Ferdinand99/Sylo/issues/201)) ([a5057ab](https://github.com/Ferdinand99/Sylo/commit/a5057ab74e80495cc65db4d5ea1fd57a84b1b5cf))
+
 ## [3.31.0](https://github.com/Ferdinand99/Sylo/compare/v3.30.3...v3.31.0) (2026-09-19)
 
 
