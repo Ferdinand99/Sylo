@@ -60,6 +60,17 @@ test('normaliseAutoReact: caps rules at 25 and emoji per rule at 10', () => {
   assert.equal(many.rules[0].emojis.length, 10);
 });
 
+test('normaliseAutoReact: validates a rule channelId as a snowflake', () => {
+  const c = normaliseAutoReact({
+    rules: [
+      { targetUsers: ['111111111111111111'], emojis: ['🧟'], channelId: '555555555555555555' },
+      { targetUsers: ['111111111111111111'], emojis: ['🧟'], channelId: 'not-an-id' },
+    ],
+  });
+  assert.equal(c.rules[0].channelId, '555555555555555555');
+  assert.equal(c.rules[1].channelId, '');
+});
+
 test('ruleMatches: matches by target user id', () => {
   const rule = { targetUsers: ['111111111111111111'], targetRoles: [] };
   const message = { author: { id: '111111111111111111' }, member: { roles: { cache: new Map() } } };
@@ -82,4 +93,26 @@ test('ruleMatches: no match when neither user nor role is targeted', () => {
     member: { roles: { cache: new Map() } },
   };
   assert.ok(!ruleMatches(rule, message));
+});
+
+test('ruleMatches: a channel-locked rule only matches in that channel', () => {
+  const rule = { targetUsers: ['111111111111111111'], targetRoles: [], channelId: '555555555555555555' };
+  const inChannel = {
+    author: { id: '111111111111111111' },
+    member: { roles: { cache: new Map() } },
+    channelId: '555555555555555555',
+  };
+  const otherChannel = { ...inChannel, channelId: '666666666666666666' };
+  assert.ok(ruleMatches(rule, inChannel));
+  assert.ok(!ruleMatches(rule, otherChannel));
+});
+
+test('ruleMatches: an unset channelId matches in any channel', () => {
+  const rule = { targetUsers: ['111111111111111111'], targetRoles: [], channelId: '' };
+  const message = {
+    author: { id: '111111111111111111' },
+    member: { roles: { cache: new Map() } },
+    channelId: '777777777777777777',
+  };
+  assert.ok(ruleMatches(rule, message));
 });

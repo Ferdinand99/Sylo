@@ -8,6 +8,7 @@
 //     emojis: string[],              // custom-emoji id or unicode character, starboard-style
 //     mode: 'always'|'random', chance: number (1-100, only used in 'random'),
 //     roleId: string, roleAction: 'add'|'remove',
+//     channelId: string,             // '' = every channel, otherwise locked to just this one
 //   } ] }
 // First matching rule wins, same as autoresponder's responders.
 import { EmbedBuilder } from 'discord.js';
@@ -59,12 +60,14 @@ export function normaliseAutoReact(raw = {}) {
         chance: clampInt(r.chance, 1, 100, 50),
         roleId: id(r.roleId),
         roleAction: AUTO_REACT_ROLE_ACTIONS.includes(r.roleAction) ? r.roleAction : 'add',
+        channelId: id(r.channelId),
       }))
       .filter((r) => (r.targetUsers.length > 0 || r.targetRoles.length > 0) && r.emojis.length > 0),
   };
 }
 
 export function ruleMatches(rule, message) {
+  if (rule.channelId && rule.channelId !== message.channelId) return false;
   if (rule.targetUsers.includes(message.author.id)) return true;
   return rule.targetRoles.some((roleId) => message.member.roles.cache.has(roleId));
 }

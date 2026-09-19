@@ -1,21 +1,23 @@
 <% var cfg = moduleConfig || {}; var list = Array.isArray(cfg.rules) ? cfg.rules : []; %>
 <%
-  var modeLabels = { always: 'every message', random: 'a random chance' };
-  var roleActionLabels = { add: 'give them the role', remove: 'take the role away' };
-  var emptyRow = { targetUsers: [], targetRoles: [], emojis: [], mode: 'always', chance: 50, roleId: '', roleAction: 'add' };
+  var modeLabels = { always: 'React to every message', random: 'React at a random chance' };
+  var roleActionLabels = { add: 'Give them the role', remove: 'Take the role away' };
+  var emptyRow = { targetUsers: [], targetRoles: [], emojis: [], mode: 'always', chance: 50, roleId: '', roleAction: 'add', channelId: '' };
 %>
 
 <p class="muted small">
-  Reacts automatically to messages from chosen users or roles — every message, or at a random chance.
-  Can also give (or take away) a role on the same trigger, e.g. to track a status like "infected".
-  First matching rule wins. Emoji can be pasted directly (unicode or a server custom emoji).
+  Reacts automatically to messages from chosen users or roles. Each rule below is independent — the
+  <strong>first</strong> rule that matches a message wins. Example: react with 🧟 to anyone with the
+  "Infected" role, and also give the "Infected" role to a few specific people below to kick off the game.
 </p>
 
 <form method="POST" action="/guilds/<%= guild.id %>/m/auto-react/config" hx-post="/guilds/<%= guild.id %>/m/auto-react/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-2xl">
   <label>Per-user cooldown (seconds)</label>
+  <p class="muted small u-m0">How long to wait before reacting to the <em>same person</em> again, so one active chatter doesn't get reacted to on every single message.</p>
   <input class="u-w-field-sm" type="number" name="cooldownSeconds" min="0" max="300" value="<%= cfg.cooldownSeconds != null ? cfg.cooldownSeconds : 5 %>" />
 
-  <label class="u-mt-2">Log channel <span class="muted small">— optional, posts a line for every trigger</span></label>
+  <label class="u-mt-3">Log channel <span class="muted small">— optional</span></label>
+  <p class="muted small u-m0">Posts one line here every time a rule triggers — who it reacted to and what changed. Leave as "none" if you don't want a log.</p>
   <select name="logChannelId">
     <option value="">— none —</option>
     <% channels.forEach(function (c) { %>
@@ -23,31 +25,54 @@
     <% }) %>
   </select>
 
-  <label class="u-mt-2">Rules</label>
+  <label class="u-mt-3">Rules</label>
   <div id="rx-rows">
     <% (list.length ? list : [emptyRow]).forEach(function (r) { %>
       <div class="sticky-row">
-        <div class="row-form">
-          <input class="u-w-field" type="text" name="rx_users" placeholder="user IDs or @mentions" value="<%= (r.targetUsers || []).join(' ') %>" />
-          <select class="u-w-field-sm" name="rx_target_role">
-            <option value="">— no role —</option>
-            <% roles.forEach(function (rl) { %>
-              <option value="<%= rl.id %>" <%= (r.targetRoles || [])[0] === rl.id ? 'selected' : '' %>><%= rl.name %></option>
-            <% }) %>
-          </select>
-          <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove</button>
+        <div class="rr-list-head">
+          <span class="muted small">Rule — matches if <strong>either</strong> the users or the role below match</span>
+          <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove rule</button>
         </div>
+
+        <label class="small">Target users <span class="muted small">— optional</span></label>
+        <input class="u-w-field" type="text" name="rx_users" placeholder="e.g. 123456789012345678 @SomeUser" value="<%= (r.targetUsers || []).join(' ') %>" />
+        <p class="muted small u-m0">Paste one or more Discord user IDs or @mentions, separated by spaces or commas.</p>
+
+        <label class="small u-mt-2">Target role <span class="muted small">— optional</span></label>
+        <select class="u-w-field-sm" name="rx_target_role">
+          <option value="">— no role —</option>
+          <% roles.forEach(function (rl) { %>
+            <option value="<%= rl.id %>" <%= (r.targetRoles || [])[0] === rl.id ? 'selected' : '' %>><%= rl.name %></option>
+          <% }) %>
+        </select>
+        <p class="muted small u-m0">Anyone with this role matches too, on top of the specific users above.</p>
+
+        <label class="small u-mt-2">Channel <span class="muted small">— optional</span></label>
+        <select class="u-w-field-sm" name="rx_channel_id">
+          <option value="">— all channels —</option>
+          <% channels.forEach(function (c) { %>
+            <option value="<%= c.id %>" <%= r.channelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+          <% }) %>
+        </select>
+        <p class="muted small u-m0">Leave as "all channels" for this rule to trigger anywhere. Pick one to lock the "game" to a single channel.</p>
+
+        <label class="small u-mt-2">Emoji to react with</label>
+        <input class="u-w-field" type="text" name="rx_emojis" placeholder="🧟 🔥" value="<%= (r.emojis || []).join(' ') %>" />
+        <p class="muted small u-m0">Paste one or more emoji, separated by spaces or commas — unicode (🧟) or a server custom emoji.</p>
+
+        <label class="small u-mt-2">When to react</label>
         <div class="row-form">
-          <input class="u-w-field" type="text" name="rx_emojis" placeholder="🧟 emoji, space/comma separated" value="<%= (r.emojis || []).join(' ') %>" />
           <select class="u-w-field-sm" name="rx_mode">
             <% autoReactModes.forEach(function (m) { %>
-              <option value="<%= m %>" <%= m === (r.mode || 'always') ? 'selected' : '' %>>react to <%= modeLabels[m] || m %></option>
+              <option value="<%= m %>" <%= m === (r.mode || 'always') ? 'selected' : '' %>><%= modeLabels[m] || m %></option>
             <% }) %>
           </select>
-          <input class="u-w-field-sm" type="number" name="rx_chance" min="1" max="100" value="<%= r.chance || 50 %>" title="Chance % — only used when mode is 'a random chance'" />
+          <input class="u-w-field-sm" type="number" name="rx_chance" min="1" max="100" value="<%= r.chance || 50 %>" />
+          <span class="muted small">% chance — only used when mode is "random chance"</span>
         </div>
+
+        <label class="small u-mt-2">Also change a role <span class="muted small">— optional</span></label>
         <div class="row-form">
-          <span class="muted small">Also:</span>
           <select class="u-w-field-sm" name="rx_role_action">
             <% autoReactRoleActions.forEach(function (a) { %>
               <option value="<%= a %>" <%= a === (r.roleAction || 'add') ? 'selected' : '' %>><%= roleActionLabels[a] || a %></option>
@@ -60,6 +85,7 @@
             <% }) %>
           </select>
         </div>
+        <p class="muted small u-m0">Leave as "no role change" to just react without touching roles. Set a role here to also give (or take away) it from the message author — e.g. to mark them "Infected".</p>
       </div>
     <% }) %>
   </div>
@@ -70,23 +96,44 @@
 
 <template id="rx-template">
   <div class="sticky-row">
-    <div class="row-form">
-      <input class="u-w-field" type="text" name="rx_users" placeholder="user IDs or @mentions" />
-      <select class="u-w-field-sm" name="rx_target_role">
-        <option value="" selected>— no role —</option>
-        <% roles.forEach(function (rl) { %><option value="<%= rl.id %>"><%= rl.name %></option><% }) %>
-      </select>
-      <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove</button>
+    <div class="rr-list-head">
+      <span class="muted small">Rule — matches if <strong>either</strong> the users or the role below match</span>
+      <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove rule</button>
     </div>
+
+    <label class="small">Target users <span class="muted small">— optional</span></label>
+    <input class="u-w-field" type="text" name="rx_users" placeholder="e.g. 123456789012345678 @SomeUser" />
+    <p class="muted small u-m0">Paste one or more Discord user IDs or @mentions, separated by spaces or commas.</p>
+
+    <label class="small u-mt-2">Target role <span class="muted small">— optional</span></label>
+    <select class="u-w-field-sm" name="rx_target_role">
+      <option value="" selected>— no role —</option>
+      <% roles.forEach(function (rl) { %><option value="<%= rl.id %>"><%= rl.name %></option><% }) %>
+    </select>
+    <p class="muted small u-m0">Anyone with this role matches too, on top of the specific users above.</p>
+
+    <label class="small u-mt-2">Channel <span class="muted small">— optional</span></label>
+    <select class="u-w-field-sm" name="rx_channel_id">
+      <option value="" selected>— all channels —</option>
+      <% channels.forEach(function (c) { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %>
+    </select>
+    <p class="muted small u-m0">Leave as "all channels" for this rule to trigger anywhere. Pick one to lock the "game" to a single channel.</p>
+
+    <label class="small u-mt-2">Emoji to react with</label>
+    <input class="u-w-field" type="text" name="rx_emojis" placeholder="🧟 🔥" />
+    <p class="muted small u-m0">Paste one or more emoji, separated by spaces or commas — unicode (🧟) or a server custom emoji.</p>
+
+    <label class="small u-mt-2">When to react</label>
     <div class="row-form">
-      <input class="u-w-field" type="text" name="rx_emojis" placeholder="🧟 emoji, space/comma separated" />
       <select class="u-w-field-sm" name="rx_mode">
-        <% autoReactModes.forEach(function (m) { %><option value="<%= m %>"<%= m === 'always' ? ' selected' : '' %>>react to <%= modeLabels[m] || m %></option><% }) %>
+        <% autoReactModes.forEach(function (m) { %><option value="<%= m %>"<%= m === 'always' ? ' selected' : '' %>><%= modeLabels[m] || m %></option><% }) %>
       </select>
-      <input class="u-w-field-sm" type="number" name="rx_chance" min="1" max="100" value="50" title="Chance % — only used when mode is 'a random chance'" />
+      <input class="u-w-field-sm" type="number" name="rx_chance" min="1" max="100" value="50" />
+      <span class="muted small">% chance — only used when mode is "random chance"</span>
     </div>
+
+    <label class="small u-mt-2">Also change a role <span class="muted small">— optional</span></label>
     <div class="row-form">
-      <span class="muted small">Also:</span>
       <select class="u-w-field-sm" name="rx_role_action">
         <% autoReactRoleActions.forEach(function (a) { %><option value="<%= a %>"<%= a === 'add' ? ' selected' : '' %>><%= roleActionLabels[a] || a %></option><% }) %>
       </select>
@@ -95,6 +142,7 @@
         <% roles.forEach(function (rl) { %><option value="<%= rl.id %>"><%= rl.name %></option><% }) %>
       </select>
     </div>
+    <p class="muted small u-m0">Leave as "no role change" to just react without touching roles. Set a role here to also give (or take away) it from the message author — e.g. to mark them "Infected".</p>
   </div>
 </template>
 <script>

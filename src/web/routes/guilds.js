@@ -1217,6 +1217,7 @@ router.post(
       const chances = [].concat(req.body.rx_chance ?? []);
       const roleIds = [].concat(req.body.rx_role_id ?? []);
       const roleActions = [].concat(req.body.rx_role_action ?? []);
+      const channelIds = [].concat(req.body.rx_channel_id ?? []);
       config = normaliseAutoReact({
         cooldownSeconds: req.body.cooldownSeconds,
         logChannelId: req.body.logChannelId,
@@ -1231,6 +1232,7 @@ router.post(
           chance: chances[i],
           roleId: roleIds[i],
           roleAction: roleActions[i],
+          channelId: channelIds[i],
         })),
       });
     } else if (mod.id === 'afk') {
