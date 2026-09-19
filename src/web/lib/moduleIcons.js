@@ -22,6 +22,7 @@ export const MODULE_ICONS = {
   'invite-tracker': 'user-plus',
   polls: 'bar-chart',
   autoresponder: 'message-circle',
+  'auto-react': 'zap',
   afk: 'moon',
   'server-stats': 'activity',
   'temp-voice': 'mic',

@@ -110,6 +110,15 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'auto-react',
+    name: 'Auto-react',
+    description: 'Automatically react — and optionally add or remove a role — for chosen users or roles.',
+    icon: '🎯',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+  },
+  {
     id: 'reminders',
     name: 'Reminders',
     description: 'Post a text or embed message to a channel — once, or on a repeating schedule.',

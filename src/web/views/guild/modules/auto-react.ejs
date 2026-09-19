@@ -1,0 +1,104 @@
+<% var cfg = moduleConfig || {}; var list = Array.isArray(cfg.rules) ? cfg.rules : []; %>
+<%
+  var modeLabels = { always: 'every message', random: 'a random chance' };
+  var roleActionLabels = { add: 'give them the role', remove: 'take the role away' };
+  var emptyRow = { targetUsers: [], targetRoles: [], emojis: [], mode: 'always', chance: 50, roleId: '', roleAction: 'add' };
+%>
+
+<p class="muted small">
+  Reacts automatically to messages from chosen users or roles — every message, or at a random chance.
+  Can also give (or take away) a role on the same trigger, e.g. to track a status like "infected".
+  First matching rule wins. Emoji can be pasted directly (unicode or a server custom emoji).
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/auto-react/config" hx-post="/guilds/<%= guild.id %>/m/auto-react/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-2xl">
+  <label>Per-user cooldown (seconds)</label>
+  <input class="u-w-field-sm" type="number" name="cooldownSeconds" min="0" max="300" value="<%= cfg.cooldownSeconds != null ? cfg.cooldownSeconds : 5 %>" />
+
+  <label class="u-mt-2">Log channel <span class="muted small">— optional, posts a line for every trigger</span></label>
+  <select name="logChannelId">
+    <option value="">— none —</option>
+    <% channels.forEach(function (c) { %>
+      <option value="<%= c.id %>" <%= c.id === (cfg.logChannelId || '') ? 'selected' : '' %>>#<%= c.name %></option>
+    <% }) %>
+  </select>
+
+  <label class="u-mt-2">Rules</label>
+  <div id="rx-rows">
+    <% (list.length ? list : [emptyRow]).forEach(function (r) { %>
+      <div class="sticky-row">
+        <div class="row-form">
+          <input class="u-w-field" type="text" name="rx_users" placeholder="user IDs or @mentions" value="<%= (r.targetUsers || []).join(' ') %>" />
+          <select class="u-w-field-sm" name="rx_target_role">
+            <option value="">— no role —</option>
+            <% roles.forEach(function (rl) { %>
+              <option value="<%= rl.id %>" <%= (r.targetRoles || [])[0] === rl.id ? 'selected' : '' %>><%= rl.name %></option>
+            <% }) %>
+          </select>
+          <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove</button>
+        </div>
+        <div class="row-form">
+          <input class="u-w-field" type="text" name="rx_emojis" placeholder="🧟 emoji, space/comma separated" value="<%= (r.emojis || []).join(' ') %>" />
+          <select class="u-w-field-sm" name="rx_mode">
+            <% autoReactModes.forEach(function (m) { %>
+              <option value="<%= m %>" <%= m === (r.mode || 'always') ? 'selected' : '' %>>react to <%= modeLabels[m] || m %></option>
+            <% }) %>
+          </select>
+          <input class="u-w-field-sm" type="number" name="rx_chance" min="1" max="100" value="<%= r.chance || 50 %>" title="Chance % — only used when mode is 'a random chance'" />
+        </div>
+        <div class="row-form">
+          <span class="muted small">Also:</span>
+          <select class="u-w-field-sm" name="rx_role_action">
+            <% autoReactRoleActions.forEach(function (a) { %>
+              <option value="<%= a %>" <%= a === (r.roleAction || 'add') ? 'selected' : '' %>><%= roleActionLabels[a] || a %></option>
+            <% }) %>
+          </select>
+          <select class="u-w-field-sm" name="rx_role_id">
+            <option value="">— no role change —</option>
+            <% roles.forEach(function (rl) { %>
+              <option value="<%= rl.id %>" <%= r.roleId === rl.id ? 'selected' : '' %>><%= rl.name %></option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+  <div><button type="button" class="secondary" id="rx-add">+ Add rule</button></div>
+
+  <div class="u-mt-3"><button type="submit">Save</button></div>
+</form>
+
+<template id="rx-template">
+  <div class="sticky-row">
+    <div class="row-form">
+      <input class="u-w-field" type="text" name="rx_users" placeholder="user IDs or @mentions" />
+      <select class="u-w-field-sm" name="rx_target_role">
+        <option value="" selected>— no role —</option>
+        <% roles.forEach(function (rl) { %><option value="<%= rl.id %>"><%= rl.name %></option><% }) %>
+      </select>
+      <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">remove</button>
+    </div>
+    <div class="row-form">
+      <input class="u-w-field" type="text" name="rx_emojis" placeholder="🧟 emoji, space/comma separated" />
+      <select class="u-w-field-sm" name="rx_mode">
+        <% autoReactModes.forEach(function (m) { %><option value="<%= m %>"<%= m === 'always' ? ' selected' : '' %>>react to <%= modeLabels[m] || m %></option><% }) %>
+      </select>
+      <input class="u-w-field-sm" type="number" name="rx_chance" min="1" max="100" value="50" title="Chance % — only used when mode is 'a random chance'" />
+    </div>
+    <div class="row-form">
+      <span class="muted small">Also:</span>
+      <select class="u-w-field-sm" name="rx_role_action">
+        <% autoReactRoleActions.forEach(function (a) { %><option value="<%= a %>"<%= a === 'add' ? ' selected' : '' %>><%= roleActionLabels[a] || a %></option><% }) %>
+      </select>
+      <select class="u-w-field-sm" name="rx_role_id">
+        <option value="" selected>— no role change —</option>
+        <% roles.forEach(function (rl) { %><option value="<%= rl.id %>"><%= rl.name %></option><% }) %>
+      </select>
+    </div>
+  </div>
+</template>
+<script>
+  document.getElementById('rx-add')?.addEventListener('click', () => {
+    document.getElementById('rx-rows').appendChild(document.getElementById('rx-template').content.cloneNode(true));
+  });
+</script>

@@ -53,6 +53,7 @@ const LAYOUT = [
       'polls',
       'giveaways',
       'autoresponder',
+      'auto-react',
       'afk',
       'server-stats',
       'insights',
