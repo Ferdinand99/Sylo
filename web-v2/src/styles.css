@@ -490,6 +490,24 @@ a:hover {
   flex: none;
 }
 
+/* A repeatable, editable card — one per rule (currently Auto-react only).
+   Unlike .v2-row (read-only list items), this holds a small multi-field
+   form, so it gets its own padded/bordered box rather than reusing .v2-row. */
+.v2-rule-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.v2-rule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
 /* Animated toggle switch, accent color when on — replaces V1's pill button.
    Used both as a read-only <span> (Overview's module rows) and a real
    <button> (Leaderboard's public switch), hence the padding/font reset. */

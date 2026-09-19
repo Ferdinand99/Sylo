@@ -22,6 +22,7 @@ import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { listCountingPenalties, clearCountingPenalty } from '../../db/countingPenalties.js';
+import { normaliseAutoReact, AUTO_REACT_MODES, AUTO_REACT_ROLE_ACTIONS } from '../../modules/autoReact.js';
 import {
   normaliseVerificationConfig,
   VERIFY_MODES,
@@ -88,6 +89,15 @@ const router = Router();
 // "actor" strings, same convention V1 uses.
 function moderatorDisplayName(req) {
   return currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`;
+}
+
+// Mirrors guilds.js's private parseUserId() — a raw snowflake or an
+// `<@id>`/`<@!id>` mention, as pasted straight out of Discord.
+function parseUserId(raw) {
+  const m = String(raw ?? '')
+    .trim()
+    .match(/^<@!?(\d{17,20})>$|^(\d{17,20})$/);
+  return m ? m[1] || m[2] : null;
 }
 
 // Same list V1's server switcher and "Choose a server" picker use
@@ -526,6 +536,54 @@ router.post(
       detail: `released ${userId}`,
     });
     res.json({ ok: true });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/auto-react/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'auto-react');
+    res.json({
+      config: normaliseAutoReact(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      modes: AUTO_REACT_MODES,
+      roleActions: AUTO_REACT_ROLE_ACTIONS,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/auto-react/config',
+  asyncHandler(async (req, res) => {
+    // The form sends a raw "target users" string per rule (IDs/@mentions,
+    // space/comma separated), same as V1's rx_users field — split it into
+    // ids here rather than pushing that parsing into the React form.
+    const rules = Array.isArray(req.body.rules) ? req.body.rules : [];
+    const config = normaliseAutoReact({
+      cooldownSeconds: req.body.cooldownSeconds,
+      logChannelId: req.body.logChannelId,
+      rules: rules.map((r) => ({
+        targetUsers: String(r.targetUsersText ?? '')
+          .split(/[\s,]+/)
+          .map((s) => parseUserId(s))
+          .filter(Boolean),
+        targetRoles: r.targetRoleId ? [r.targetRoleId] : [],
+        emojis: r.emojis,
+        mode: r.mode,
+        chance: r.chance,
+        roleId: r.roleId,
+        roleAction: r.roleAction,
+        channelId: r.channelId,
+      })),
+    });
+    await setGuildModule(req.guild.id, 'auto-react', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:auto-react',
+      detail: 'settings saved',
+    });
+    res.json({ config });
   })
 );
 

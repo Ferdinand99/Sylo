@@ -10,6 +10,7 @@ import Birthdays from './Birthdays.jsx';
 import Verification from './Verification.jsx';
 import FreeGames from './FreeGames.jsx';
 import Counting from './Counting.jsx';
+import AutoReact from './AutoReact.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -18,4 +19,5 @@ export const MODULE_FORMS = {
   verification: Verification,
   'free-games': FreeGames,
   counting: Counting,
+  'auto-react': AutoReact,
 };
