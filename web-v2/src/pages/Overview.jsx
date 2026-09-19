@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { getOverview, setModuleEnabled, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
+import { setModuleEnabled, ApiError } from '../api.js';
+import { useOverview } from '../OverviewContext.jsx';
 import { MODULE_FORMS } from '../moduleForms/index.js';
 
 // The module's name links to its V2 settings page if one's been built
@@ -76,7 +76,7 @@ export default function Overview() {
   const { guildId } = useParams();
   const [query, setQuery] = useState('');
   const [togglingId, setTogglingId] = useState(null);
-  const { data, loading, error, setData } = useApiData(() => getOverview(guildId), [guildId]);
+  const { data, loading, error, setData } = useOverview();
 
   const filteredGroups = useMemo(() => {
     if (!data) return [];

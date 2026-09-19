@@ -3,6 +3,11 @@
 // (modules) or a spacer (plain pages). A server is always in view — the id is
 // resolved in auth.js and passed in here. Every row uses an inline SVG icon
 // (the `#i-*` symbols in partials/header.ejs), never an emoji.
+//
+// Rows tied to a disabled module are left out entirely (not just dimmed) —
+// turn the module on from the Dashboard overview grid first and its sidebar
+// row appears. A category with nothing left in it (every module in it is
+// off) is dropped too, rather than showing an empty header.
 import { runtime } from '../../runtime.js';
 import { config } from '../../config.js';
 import { getModule } from '../../modules/registry.js';
@@ -58,7 +63,7 @@ const CATEGORIES = [
     title: 'Server management',
     items: [
       { page: 'appeals', dotModule: 'appeals', label: 'Ban appeals' },
-      { page: 'tickets', label: 'Tickets' },
+      { page: 'tickets', dotModule: 'tickets', label: 'Tickets' },
       { module: 'custom-commands' },
       { module: 'invite-tracker', label: 'Invite tracker' },
       { module: 'sticky' },
@@ -152,8 +157,10 @@ export async function buildSidebar(req, gid = null) {
   const categories = CATEGORIES.map((c) => ({
     key: c.key,
     title: c.title,
-    items: c.items.map(resolve).filter(Boolean),
-  }));
+    // Drop rows for a disabled module entirely (dot === 'off') — a
+    // 'spacer' row (no module tied to it, e.g. Audit log) always stays.
+    items: c.items.map(resolve).filter((r) => r && r.dot !== 'off'),
+  })).filter((c) => c.items.length > 0);
 
   return { top, guild: { id: gid, name: guild.name, icon: guild.iconURL({ size: 64 }) }, categories };
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom';
 import { getGuilds } from '../api.js';
 import { readLastGuildId, writeLastGuildId } from '../util.js';
+import { OverviewProvider } from '../OverviewContext.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
 
@@ -75,12 +76,14 @@ export default function Shell() {
           Back to classic dashboard
         </a>
       </header>
-      <div className="v2-body">
-        <Sidebar activeGuildId={lastGuildId} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
-        <main className="v2-page">
-          <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
-        </main>
-      </div>
+      <OverviewProvider guildId={lastGuildId}>
+        <div className="v2-body">
+          <Sidebar activeGuildId={lastGuildId} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+          <main className="v2-page">
+            <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
+          </main>
+        </div>
+      </OverviewProvider>
     </div>
   );
 }

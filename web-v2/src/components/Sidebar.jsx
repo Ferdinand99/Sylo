@@ -1,4 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useOverview } from '../OverviewContext.jsx';
+import { MODULE_FORMS } from '../moduleForms/index.js';
 
 // Small inline icon set — kept self-contained rather than porting V1's full
 // sprite (src/web/views/partials/header.ejs) just for these five.
@@ -56,6 +58,10 @@ function Icon({ name }) {
 // always visible and these are unused.
 export default function Sidebar({ activeGuildId, open, onClose }) {
   const { pathname } = useLocation();
+  // Same overview data the Dashboard page reads (OverviewContext, provided
+  // in Shell.jsx) — not a separate fetch, so toggling a module there is
+  // reflected here immediately, no refresh needed.
+  const { data } = useOverview();
 
   const items = [
     {
@@ -80,6 +86,13 @@ export default function Sidebar({ activeGuildId, open, onClose }) {
     { key: 'health', label: 'Health', icon: 'pulse', href: '/health' },
   ];
 
+  // Only modules actually turned on for this server, grouped the same way
+  // the Dashboard page groups them. A module gets enabled from there, not
+  // from here — this list just reflects that state, it never toggles it.
+  const moduleGroups = (data?.groups ?? [])
+    .map((g) => ({ title: g.title, cards: g.cards.filter((c) => !c.hasToggle || c.enabled) }))
+    .filter((g) => g.cards.length > 0);
+
   return (
     <>
       {open ? <button type="button" className="v2-scrim" aria-label="Close menu" onClick={onClose} /> : null}
@@ -95,6 +108,34 @@ export default function Sidebar({ activeGuildId, open, onClose }) {
             <span>{it.label}</span>
           </Link>
         ))}
+
+        {activeGuildId && moduleGroups.length ? (
+          <div className="v2-sidebar-modules">
+            {moduleGroups.map((g) => (
+              <div className="v2-sidebar-group" key={g.title}>
+                <div className="v2-sidebar-group-title">{g.title}</div>
+                {g.cards.map((card) => {
+                  const isV2 = Boolean(MODULE_FORMS[card.id]);
+                  const href = isV2 ? `/guilds/${activeGuildId}/m/${card.id}` : card.href;
+                  return isV2 ? (
+                    <Link
+                      key={card.id}
+                      to={href}
+                      className={`v2-sidebar-sublink${pathname === href ? ' is-active' : ''}`}
+                      onClick={onClose}
+                    >
+                      {card.name}
+                    </Link>
+                  ) : (
+                    <a key={card.id} href={href} className="v2-sidebar-sublink" onClick={onClose}>
+                      {card.name}
+                    </a>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ) : null}
       </nav>
     </>
   );

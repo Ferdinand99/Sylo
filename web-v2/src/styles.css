@@ -217,9 +217,44 @@ a:hover {
   padding: 24px 12px;
   position: sticky;
   top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+.v2-sidebar-modules {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.v2-sidebar-group {
+  margin-bottom: 10px;
+}
+.v2-sidebar-group-title {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  opacity: 0.7;
+  padding: 4px 12px;
+}
+.v2-sidebar-sublink {
+  display: block;
+  padding: 6px 12px 6px 20px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+.v2-sidebar-sublink:hover {
+  color: var(--text);
+  background: var(--bg-surface);
+  text-decoration: none;
+}
+.v2-sidebar-sublink.is-active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 .v2-sidebar-link {
   display: flex;
