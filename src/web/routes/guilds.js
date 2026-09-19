@@ -57,6 +57,7 @@ import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { listCountingPenalties, clearCountingPenalty } from '../../db/countingPenalties.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
 import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
+import { normaliseAutoReact, AUTO_REACT_MODES, AUTO_REACT_ROLE_ACTIONS } from '../../modules/autoReact.js';
 import {
   normaliseVerificationConfig,
   VERIFY_MODES,
@@ -174,6 +175,7 @@ const CONFIG_VIEWS = new Set([
   'reminders',
   'leveling',
   'autoresponder',
+  'auto-react',
   'verification',
   'afk',
   'server-stats',
@@ -800,6 +802,7 @@ async function moduleViewLocals(mod, req, configOverride) {
       'automod',
       'leveling',
       'autoresponder',
+      'auto-react',
       'verification',
       'free-games',
       'welcome',
@@ -853,6 +856,8 @@ async function moduleViewLocals(mod, req, configOverride) {
     ccPlaceholders: CC_PLACEHOLDERS,
     arPlaceholders: AR_PLACEHOLDERS,
     arMatchModes: AR_MATCH_MODES,
+    autoReactModes: AUTO_REACT_MODES,
+    autoReactRoleActions: AUTO_REACT_ROLE_ACTIONS,
     reminders:
       mod.id === 'reminders'
         ? (await listScheduled(req.guild.id)).map((j) => ({
@@ -1198,6 +1203,36 @@ router.post(
           response: responses[i] ?? '',
           embed: asEmbed[i] === 'embed',
           deleteTrigger: del[i] === 'delete',
+        })),
+      });
+    } else if (mod.id === 'auto-react') {
+      // Rows come as parallel arrays, same shape as autoresponder's ar_* fields.
+      // Each row has at most one target role (a single <select>, not a
+      // multi-select — a per-row multi-select would flatten every row's
+      // picks into one array and lose row alignment).
+      const targetUsers = [].concat(req.body.rx_users ?? []);
+      const targetRole = [].concat(req.body.rx_target_role ?? []);
+      const emojis = [].concat(req.body.rx_emojis ?? []);
+      const modes = [].concat(req.body.rx_mode ?? []);
+      const chances = [].concat(req.body.rx_chance ?? []);
+      const roleIds = [].concat(req.body.rx_role_id ?? []);
+      const roleActions = [].concat(req.body.rx_role_action ?? []);
+      const channelIds = [].concat(req.body.rx_channel_id ?? []);
+      config = normaliseAutoReact({
+        cooldownSeconds: req.body.cooldownSeconds,
+        logChannelId: req.body.logChannelId,
+        rules: targetUsers.map((_, i) => ({
+          targetUsers: (targetUsers[i] ?? '')
+            .split(/[\s,]+/)
+            .map((s) => parseUserId(s))
+            .filter(Boolean),
+          targetRoles: targetRole[i] ? [targetRole[i]] : [],
+          emojis: emojis[i],
+          mode: modes[i],
+          chance: chances[i],
+          roleId: roleIds[i],
+          roleAction: roleActions[i],
+          channelId: channelIds[i],
         })),
       });
     } else if (mod.id === 'afk') {
