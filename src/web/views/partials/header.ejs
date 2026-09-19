@@ -124,6 +124,14 @@
       </details>
     <% } %>
 
+    <% if (typeof user !== 'undefined' && user && !user.open) { %>
+      <a class="sb-tryv2-top" href="/v2" hx-boost="false">
+        <svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sparkle"/></svg>
+        <span>Try the new dashboard</span>
+        <span class="sb-tryv2-beta">Beta</span>
+      </a>
+    <% } %>
+
     <nav class="sb-nav" x-data="moduleFilter">
       <% if (sb.categories.length) { %>
         <div class="sb-filter">
@@ -142,12 +150,6 @@
     </nav>
 
     <div class="sb-foot">
-      <% if (typeof user !== 'undefined' && user && !user.open) { %>
-        <a class="sb-tryv2" href="/v2" hx-boost="false">
-          <svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sparkle"/></svg>
-          <span>Try the new dashboard</span>
-        </a>
-      <% } %>
       <button type="button" class="sb-theme" aria-label="Toggle light and dark theme" title="Toggle theme">
         <svg class="sb-ico sb-theme-dark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sun"/></svg>
         <svg class="sb-ico sb-theme-light" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moon"/></svg>

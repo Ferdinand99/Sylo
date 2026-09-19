@@ -70,6 +70,12 @@ export default function Shell() {
         <Link className="v2-brand" to="/">
           <span className="v2-brand-mark">S</span>
           <span>Sylo</span>
+          <span
+            className="v2-beta-badge"
+            title="Not every module has a V2 page yet — some still open the classic dashboard"
+          >
+            Beta
+          </span>
         </Link>
         <ServerSwitcher guilds={guilds} activeGuildId={lastGuildId} onSelectGuild={selectGuild} />
         <a className="v2-classic-link" href="/">

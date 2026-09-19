@@ -4,6 +4,17 @@ import { setModuleEnabled, ApiError } from '../api.js';
 import { useOverview } from '../OverviewContext.jsx';
 import { MODULE_FORMS } from '../moduleForms/index.js';
 
+// A module without a V2 page yet gets this tag next to its name, wherever
+// its title is shown — the click still works (falls back to `card.href`,
+// V1's own config page for it), just not as a V2-native page yet.
+function ClassicTag() {
+  return (
+    <span className="v2-classic-tag" title="Opens the classic V1 dashboard — no V2 page yet">
+      Classic
+    </span>
+  );
+}
+
 // The module's name links to its V2 settings page if one's been built
 // (MODULE_FORMS), otherwise to V1's own config page for it — `card.href`,
 // which the overview API already provides (src/web/lib/overviewSummary.js).
@@ -19,7 +30,9 @@ function ModuleTitle({ card, guildId }) {
   }
   return (
     <a className="v2-row-title-link" href={card.href}>
-      <h3>{card.name}</h3>
+      <h3>
+        {card.name} <ClassicTag />
+      </h3>
     </a>
   );
 }
@@ -29,7 +42,9 @@ function ModuleRow({ card, guildId, busy, onToggle }) {
     const rowContent = (
       <>
         <div className="v2-row-main">
-          <h3>{card.name}</h3>
+          <h3>
+            {card.name} {MODULE_FORMS[card.id] ? null : <ClassicTag />}
+          </h3>
           <p>{card.description}</p>
         </div>
         <span className="v2-row-arrow" aria-hidden="true">
@@ -144,6 +159,12 @@ export default function Overview() {
           <p>{guild.memberCount.toLocaleString()} members</p>
         </div>
       </div>
+
+      <p className="v2-note">
+        <strong>V2 is in beta.</strong> Not every module has its own V2 page yet — those marked{' '}
+        <span className="v2-classic-tag">Classic</span> still open the classic dashboard when clicked.
+        Everything is fully configurable either way.
+      </p>
 
       <div className="v2-stat-strip">
         <div className="v2-stat">

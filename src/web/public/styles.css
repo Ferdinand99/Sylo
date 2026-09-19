@@ -224,16 +224,39 @@ body {
 .sb-chev { font-size: 9px; color: var(--muted); transition: transform .15s; }
 .sb-modgroup[open] > summary .sb-chev { transform: rotate(180deg); }
 
+/* Prominent entry point to V2, near the top of the sidebar (below the server
+   switcher) rather than buried in the footer — accent-tinted so it stands
+   out from the plain nav rows below it, with a small "Beta" tag since not
+   every module has a V2 page yet (those fall back to this classic view). */
+.sb-tryv2-top {
+  display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 14px;
+  padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: var(--r-sm); background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+  color: var(--text); font: inherit; font-size: 12.5px; font-weight: 700;
+  cursor: pointer; transition: border-color var(--dur-1), background var(--dur-1);
+  text-decoration: none;
+}
+.sb-tryv2-top:hover {
+  border-color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, var(--surface-2));
+  text-decoration: none;
+}
+.sb-tryv2-top .sb-ico { width: 16px; height: 16px; flex: none; color: var(--accent); }
+.sb-tryv2-beta {
+  margin-left: auto; font-size: 9.5px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 999px; padding: 2px 7px; flex: none;
+}
+
 .sb-foot { border-top: 1px solid var(--border); margin-top: 6px; padding: 10px 6px 2px; }
-.sb-theme, .sb-tryv2 {
+.sb-theme {
   display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 6px;
   padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--r-sm);
   background: var(--surface-2); color: var(--muted); font: inherit; font-size: 12.5px;
   font-weight: 600; cursor: pointer; transition: color var(--dur-1), border-color var(--dur-1);
   text-decoration: none;
 }
-.sb-theme:hover, .sb-tryv2:hover { color: var(--text); border-color: var(--border-strong); text-decoration: none; }
-.sb-theme .sb-ico, .sb-tryv2 .sb-ico { width: 16px; height: 16px; flex: none; }
+.sb-theme:hover { color: var(--text); border-color: var(--border-strong); text-decoration: none; }
+.sb-theme .sb-ico { width: 16px; height: 16px; flex: none; }
 .sb-theme .sb-theme-light { display: none; }
 :root[data-theme="light"] .sb-theme .sb-theme-dark { display: none; }
 :root[data-theme="light"] .sb-theme .sb-theme-light { display: inline; }

@@ -88,6 +88,16 @@ a:hover {
   font-size: 14px;
   color: #fff;
 }
+.v2-beta-badge {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
 
 .v2-classic-link {
   font-size: 0.88rem;
@@ -519,6 +529,21 @@ a:hover {
   overflow: visible;
   text-overflow: clip;
   margin-top: 6px;
+}
+.v2-classic-tag {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 1px 7px;
+  vertical-align: middle;
+}
+.v2-sidebar-classic-mark {
+  opacity: 0.55;
 }
 .v2-row-arrow {
   color: var(--text-muted);

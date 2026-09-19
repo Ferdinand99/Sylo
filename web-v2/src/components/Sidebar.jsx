@@ -127,8 +127,14 @@ export default function Sidebar({ activeGuildId, open, onClose }) {
                       {card.name}
                     </Link>
                   ) : (
-                    <a key={card.id} href={href} className="v2-sidebar-sublink" onClick={onClose}>
-                      {card.name}
+                    <a
+                      key={card.id}
+                      href={href}
+                      className="v2-sidebar-sublink"
+                      onClick={onClose}
+                      title="Opens the classic V1 dashboard — no V2 page yet"
+                    >
+                      {card.name} <span className="v2-sidebar-classic-mark">↗</span>
                     </a>
                   );
                 })}
