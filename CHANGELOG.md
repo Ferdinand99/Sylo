@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.32.1](https://github.com/Ferdinand99/Sylo/compare/v3.32.0...v3.32.1) (2026-09-19)
+
+
+### Bug Fixes
+
+* **bot:** paginate /help by category to stay under Discord's field limit ([2c28de3](https://github.com/Ferdinand99/Sylo/commit/2c28de32f320cc424aa6b410c2298ac0d91cd815))
+
 ## [3.32.0](https://github.com/Ferdinand99/Sylo/compare/v3.31.0...v3.32.0) (2026-09-19)
 
 
