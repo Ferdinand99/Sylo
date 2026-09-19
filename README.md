@@ -20,7 +20,7 @@
 
 </div>
 
-Thirty-one per-guild **modules**, Discord **OAuth2 login**, a public leveling
+Thirty-three per-guild **modules**, Discord **OAuth2 login**, a public leveling
 **leaderboard**, and — via the optional Game stats module — **Battlefield-series**
 and **RuneScape** (OSRS / RS3) player lookups. Everything runs in **one Node
 process, one container, no build step** — and stays that way past Discord's
@@ -32,11 +32,11 @@ directly. The rest of this README, and [self-hosting](#self-hosting) below, is
 for running your own copy instead.
 
 <details>
-<summary>The 32 modules</summary>
+<summary>The 33 modules</summary>
 
 moderation · logging · tickets · reaction roles · verification · welcome ·
 welcome channel · birthdays · sticky messages · auto-moderation · counting · custom commands ·
-autoresponder · reminders · leveling · AFK · server statistics · server insights · free games ·
+autoresponder · auto-react · reminders · leveling · AFK · server statistics · server insights · free games ·
 ban appeals · temporary voice channels · starboard · invite tracker · polls ·
 giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS alerts · channel cleanup ·
 GitHub alerts
@@ -50,6 +50,8 @@ GitHub alerts
   quick-start.
 - **[docs/modules/](docs/modules/README.md)** — a page per module: what it does,
   the permissions and intents it needs, its settings, and its commands.
+- **[docs/dashboard-v2.md](docs/dashboard-v2.md)** — the new React dashboard
+  (Beta, opt-in): what's different, module coverage, and how to try it.
 - **[docs/self-hosting.md](docs/self-hosting.md)** — install, environment
   variables, reverse proxy, Docker, Unraid, backups, upgrades and rollback,
   troubleshooting.
@@ -228,7 +230,7 @@ settings panel per module — saves swap in place with a toast.
   non-moderators.
 - **Extensible game adapters** — one file per game, registered in a central
   registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 30 feature groups, each toggled and configured from the
+- **Per-guild modules** — 33 feature groups, each toggled and configured from the
   dashboard:
   - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
   - **Server logging** — member / message / role / channel events to a log channel
@@ -293,6 +295,10 @@ settings panel per module — saves swap in place with a toast.
     on the shared `posted_keys` table (scope `rss:<feedId>`)
   - **Autoresponder** — auto-reply when a message matches a trigger (contains /
     exact / starts-with / whole-word), optionally deleting the trigger
+  - **Auto-react** — automatically react to messages from chosen users or roles,
+    every message or at a random chance, with an optional role add/remove on the
+    same trigger (e.g. tracking a status like "infected"); per-rule channel lock
+    and an optional log channel
   - **Scheduled messages** — recurring posts to a channel, every minute to every
     4 weeks, with pause/resume
   - **Leveling** — 15–25 XP per message on a MEE6-style curve, optional **voice

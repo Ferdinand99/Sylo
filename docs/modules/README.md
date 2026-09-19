@@ -24,6 +24,7 @@ intents it needs, its settings, and any slash commands.
 | [Counting](counting.md) | Members count upward one number at a time | off | Message Content |
 | [Starboard](starboard.md) | Re-post well-reacted messages into a highlights channel | off | Message Content |
 | [Autoresponder](autoresponder.md) | Auto-reply when a message matches a trigger | off | Message Content |
+| [Auto-react](auto-react.md) | Auto-react to messages from chosen users/roles, optionally change a role too | off | — |
 | [Custom commands](custom-commands.md) | Build `/slash` commands from an action list | off | — |
 | [Reminders](reminders.md) | Post a message to a channel once or on a schedule | off | — |
 | [Sticky messages](sticky.md) | Keep a message pinned to the bottom of a channel | off | — |
