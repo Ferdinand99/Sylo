@@ -77,6 +77,7 @@ const CATEGORIES = [
       { module: 'giveaways' },
       { module: 'reminders' },
       { module: 'autoresponder' },
+      { module: 'auto-react', label: 'Auto-react' },
       { module: 'afk' },
       { module: 'server-stats' },
       { module: 'temp-voice' },
