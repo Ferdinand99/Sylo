@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.31.0](https://github.com/Ferdinand99/Sylo/compare/v3.30.3...v3.31.0) (2026-09-19)
+
+
+### Features
+
+* **modules:** add Auto-react module ([#203](https://github.com/Ferdinand99/Sylo/issues/203)) ([7f73f89](https://github.com/Ferdinand99/Sylo/commit/7f73f89e71b05535a53c92b39f331feac67a97f2))
+
 ## [3.30.3](https://github.com/Ferdinand99/Sylo/compare/v3.30.2...v3.30.3) (2026-09-16)
 
 
