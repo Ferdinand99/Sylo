@@ -7,7 +7,18 @@ import prettier from 'eslint-config-prettier';
 
 export default [
   {
-    ignores: ['node_modules/**', 'data/**', 'coverage/**', 'src/web/public/vendor/**'],
+    ignores: [
+      'node_modules/**',
+      'data/**',
+      'coverage/**',
+      'src/web/public/vendor/**',
+      'web-v2/dist/**',
+      // Gitignored, not part of the project proper (see .gitignore) — the
+      // marketing site (its own no-dependency static project) and personal
+      // scratch scripts.
+      'site/**',
+      'internal/**',
+    ],
   },
 
   js.configs.recommended,
@@ -42,6 +53,20 @@ export default [
     },
     rules: {
       'n/no-unsupported-features/node-builtins': 'off',
+    },
+  },
+
+  // V2 dashboard SPA (React + Vite, its own build — see web-v2/README.md).
+  {
+    files: ['web-v2/**/*.{js,jsx}'],
+    languageOptions: {
+      sourceType: 'module',
+      parserOptions: { ecmaFeatures: { jsx: true } },
+      globals: { ...globals.browser },
+    },
+    rules: {
+      'n/no-unsupported-features/node-builtins': 'off',
+      'n/no-missing-import': 'off',
     },
   },
 

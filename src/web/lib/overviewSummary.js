@@ -40,7 +40,7 @@ const LAYOUT = [
   { title: 'Moderation & filtering', ids: ['automod', 'verification', 'appeals', 'logging'] },
   {
     title: 'Engagement',
-    ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'starboard', 'sticky'],
+    ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'starboard', 'sticky', 'birthdays'],
   },
   {
     title: 'Utilities',
@@ -60,9 +60,10 @@ const LAYOUT = [
       'temp-voice',
       'free-games',
       'game-stats',
+      'channel-cleanup',
     ],
   },
-  { title: 'Social alerts', ids: ['twitch-alerts', 'youtube-alerts', 'kick-alerts', 'rss'] },
+  { title: 'Social alerts', ids: ['twitch-alerts', 'youtube-alerts', 'kick-alerts', 'rss', 'github'] },
 ];
 
 const line = (label, value, state) => ({ label, value, state });

@@ -13,6 +13,13 @@ RUN npm ci --omit=dev
 
 COPY . .
 
+# Build the V2 dashboard SPA (web-v2/ — see internal/dashboard-v2-plan.md).
+# Needs vite + the React plugin, which --omit=dev above skipped, so install
+# the full dependency set just for this, then prune straight back down to
+# production-only — the node_modules copied into the runtime stage below
+# must never carry vite/react's dev-only weight.
+RUN npm ci && npm run build:v2 && npm prune --omit=dev
+
 # ---- runtime: minimal image ----
 FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
@@ -38,6 +45,7 @@ RUN apk add --no-cache su-exec tzdata font-dejavu postgresql18-client \
   && mkdir -p /app/data && chown -R sylo:sylo /app
 
 COPY --from=builder --chown=sylo:sylo /app/node_modules ./node_modules
+COPY --from=builder --chown=sylo:sylo /app/web-v2/dist ./web-v2/dist
 COPY --chown=sylo:sylo . .
 RUN chmod +x /app/docker-entrypoint.sh
 

@@ -751,6 +751,20 @@ export const MIGRATIONS = [
   (database) => {
     database.exec('ALTER TABLE github_watches ADD COLUMN changelog_path TEXT;');
   },
+
+  // Per-account dashboard-version preference (V1 vs the new V2 SPA) — see
+  // src/db/userPrefs.js. Keyed on the Discord user id, not per guild: the
+  // choice follows the account everywhere, same as it would on any other
+  // per-user setting.
+  (database) => {
+    database.exec(`
+      CREATE TABLE user_prefs (
+        user_id          TEXT PRIMARY KEY,
+        dashboard_version TEXT NOT NULL DEFAULT 'v1',
+        updated_at        INTEGER NOT NULL
+      );
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

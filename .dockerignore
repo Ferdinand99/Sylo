@@ -1,4 +1,5 @@
 node_modules
+web-v2/dist
 npm-debug.log*
 data
 *.log

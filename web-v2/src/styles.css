@@ -1,0 +1,809 @@
+/* V2 dashboard — design tokens lifted from sylobot.com (site/styles.css),
+   not from V1's src/web/public/styles.css (which is blue/green, not this
+   palette). Byte-matched to the real marketing-site values, not approximated. */
+:root {
+  color-scheme: dark;
+  --bg-main: #0b0d17;
+  --bg-surface: #171b33;
+  --bg-surface-2: #111427;
+  --border-subtle: #262c4a;
+  --accent: #7c6cff;
+  --accent-2: #38bdf8;
+  --text: #e7e9f5;
+  --text-muted: #a6accd;
+  --radius: 12px;
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-main);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent-2);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+.v2-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.v2-topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Hamburger — hidden on desktop, shown by the media query below. */
+.v2-nav-toggle {
+  display: none;
+  flex: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+.v2-nav-toggle span {
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text);
+}
+
+.v2-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  color: var(--text);
+}
+.v2-brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: #fff;
+}
+.v2-beta-badge {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+.v2-classic-link {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 6px 14px;
+  margin-left: auto;
+  flex: none;
+}
+.v2-classic-link:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  text-decoration: none;
+}
+
+/* Server switcher, in the topbar (not the sidebar) — native <details>, no JS. */
+.v2-switch {
+  position: relative;
+}
+.v2-switch summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 0.88rem;
+  max-width: 220px;
+}
+.v2-switch summary::-webkit-details-marker {
+  display: none;
+}
+.v2-switch[open] summary,
+.v2-switch summary:hover {
+  border-color: var(--accent);
+}
+.v2-switch summary img,
+.v2-switch-ph,
+.v2-switch-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex: none;
+}
+.v2-switch-ph,
+.v2-switch-dot {
+  background: var(--bg-surface-2);
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.v2-switch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.v2-switch-caret {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  flex: none;
+}
+.v2-switch-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 6px;
+  z-index: 20;
+}
+.v2-switch-menu a,
+.v2-switch-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  text-align: left;
+  cursor: pointer;
+}
+.v2-switch-menu a:hover,
+.v2-switch-menu a.active,
+.v2-switch-menu button:hover,
+.v2-switch-menu button.active {
+  background: var(--bg-surface-2);
+  text-decoration: none;
+}
+.v2-switch-menu img {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex: none;
+}
+.v2-switch-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 8px;
+  margin: 0;
+}
+
+/* Body layout: persistent sidebar (every page, not just guild ones — matches
+   V1 always showing its top nav regardless of whether a server is picked)
+   plus the content column. */
+.v2-body {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+}
+
+.v2-sidebar {
+  width: 190px;
+  flex: none;
+  padding: 24px 12px;
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.v2-sidebar-modules {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.v2-sidebar-group {
+  margin-bottom: 10px;
+}
+.v2-sidebar-group-title {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  opacity: 0.7;
+  padding: 4px 12px;
+}
+.v2-sidebar-sublink {
+  display: block;
+  padding: 6px 12px 6px 20px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+.v2-sidebar-sublink:hover {
+  color: var(--text);
+  background: var(--bg-surface);
+  text-decoration: none;
+}
+.v2-sidebar-sublink.is-active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.v2-sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.v2-sidebar-link:hover {
+  color: var(--text);
+  background: var(--bg-surface);
+  text-decoration: none;
+}
+.v2-sidebar-link.is-active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.v2-sidebar-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.v2-page {
+  flex: 1;
+  min-width: 0;
+  padding: 32px 24px 60px;
+  max-width: 900px;
+  width: 100%;
+}
+
+/* Scrim behind the off-canvas sidebar on mobile — only rendered while open. */
+.v2-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  border: 0;
+  padding: 0;
+  z-index: 40;
+  cursor: default;
+}
+
+@media (max-width: 860px) {
+  .v2-topbar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .v2-nav-toggle {
+    display: flex;
+  }
+  .v2-scrim {
+    display: block;
+  }
+  .v2-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 240px;
+    background: var(--bg-main);
+    border-right: 1px solid var(--border-subtle);
+    padding: 72px 12px 24px;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    z-index: 50;
+  }
+  .v2-sidebar.is-open {
+    transform: translateX(0);
+  }
+}
+
+.v2-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.v2-hero img {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+}
+.v2-hero-ph {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  display: grid;
+  place-items: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.v2-hero h1,
+.v2-hero h2 {
+  margin: 0 0 4px;
+  font-size: 1.5rem;
+}
+
+.v2-section-gap {
+  margin-top: 32px;
+}
+.v2-hero p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.v2-stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+  margin-bottom: 32px;
+}
+.v2-stat {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.v2-stat strong {
+  display: block;
+  font-size: 1.5rem;
+}
+.v2-stat span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.v2-sparkline {
+  display: block;
+  color: var(--accent-2);
+  margin-top: 8px;
+}
+
+.v2-section-title {
+  font-size: 1.05rem;
+  margin: 0 0 14px;
+  color: var(--text);
+}
+
+/* Server picker — a handful of items, a card grid reads fine here. */
+.v2-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.v2-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+.v2-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.v2-card h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* Module list — one bordered surface per group, thin dividers between rows
+   instead of a border around every single module. Dense on purpose: this
+   replaces an earlier big-card-per-module grid that felt cluttered. */
+.v2-search {
+  display: block;
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 10px 14px;
+  font-size: 0.92rem;
+  margin-bottom: 28px;
+}
+.v2-search::placeholder {
+  color: var(--text-muted);
+}
+.v2-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.v2-group {
+  margin-bottom: 22px;
+}
+.v2-group-title {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+  padding: 0 4px;
+}
+
+.v2-list {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.v2-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.12s ease;
+  color: inherit;
+  text-decoration: none;
+}
+.v2-row:last-child {
+  border-bottom: 0;
+}
+.v2-row:hover {
+  background: var(--bg-surface-2);
+  text-decoration: none;
+}
+.v2-row-main {
+  min-width: 0;
+}
+.v2-row-main h3 {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.v2-row-title-link {
+  color: inherit;
+  text-decoration: none;
+}
+.v2-row-title-link:hover h3 {
+  color: var(--accent-2);
+  text-decoration: underline;
+}
+.v2-row-main p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.v2-row-warn {
+  color: #f0b132;
+}
+.v2-row-main p.v2-row-warn {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  margin-top: 6px;
+}
+.v2-classic-tag {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 1px 7px;
+  vertical-align: middle;
+}
+.v2-sidebar-classic-mark {
+  opacity: 0.55;
+}
+.v2-row-arrow {
+  color: var(--text-muted);
+  flex: none;
+}
+
+/* A repeatable, editable card — one per rule (currently Auto-react only).
+   Unlike .v2-row (read-only list items), this holds a small multi-field
+   form, so it gets its own padded/bordered box rather than reusing .v2-row. */
+.v2-rule-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.v2-rule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* Animated toggle switch, accent color when on — replaces V1's pill button.
+   Used both as a read-only <span> (Overview's module rows) and a real
+   <button> (Leaderboard's public switch), hence the padding/font reset. */
+.v2-toggle {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  flex: none;
+  cursor: default;
+  padding: 0;
+  font: inherit;
+  appearance: none;
+}
+button.v2-toggle {
+  cursor: pointer;
+}
+button.v2-toggle:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.v2-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease;
+}
+.v2-toggle.is-on {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  border-color: var(--accent);
+}
+.v2-toggle.is-on::after {
+  transform: translateX(16px);
+  background: var(--accent);
+}
+
+.v2-state {
+  color: var(--text-muted);
+  padding: 40px 0;
+  text-align: center;
+}
+.v2-state a {
+  color: var(--accent-2);
+}
+
+.v2-note {
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  margin: 0 0 16px;
+}
+
+.v2-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.v2-tab {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.v2-tab:hover {
+  color: var(--text);
+}
+.v2-tab.is-active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--accent);
+}
+
+.v2-inline-input {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  width: 160px;
+  flex: none;
+}
+.v2-inline-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.v2-btn-ghost {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 7px 14px;
+  cursor: pointer;
+  flex: none;
+}
+.v2-btn-ghost:hover {
+  border-color: var(--accent);
+}
+.v2-btn-ghost:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.v2-btn-primary {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: #fff;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 9px 18px;
+  cursor: pointer;
+}
+.v2-btn-primary:hover {
+  filter: brightness(1.08);
+}
+.v2-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.v2-field {
+  margin-bottom: 16px;
+}
+.v2-field label {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.v2-field label.v2-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 0.88rem;
+  margin-bottom: 10px;
+}
+.v2-check input {
+  flex: none;
+}
+.v2-field input[type='text'],
+.v2-field input[type='url'],
+.v2-field input[type='number'],
+.v2-field select,
+.v2-field textarea {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+.v2-field input:focus,
+.v2-field select:focus,
+.v2-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.v2-field select[multiple] {
+  min-height: 140px;
+}
+.v2-field-hint {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  margin: 4px 0 0;
+}
+.v2-field-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.v2-color-input {
+  width: 40px;
+  height: 34px;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  flex: none;
+}
+
+/* Feature toggle whose settings expand below it once on — ToggleSection.jsx. */
+.v2-toggle-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.v2-toggle-section-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.v2-toggle-section-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.v2-toggle-section-body {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.v2-placeholders code {
+  margin-right: 6px;
+}
+
+.v2-card-preview {
+  max-width: 480px;
+  width: 100%;
+  border-radius: 12px;
+  margin-top: 8px;
+  display: block;
+}

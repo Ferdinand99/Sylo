@@ -74,6 +74,7 @@
   <g id="i-gift" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/></g>
   <g id="i-cake" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21h16"/><path d="M4 21v-8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8"/><path d="M4 15c1.5 0 1.5 1.5 3 1.5S8.5 15 10 15s1.5 1.5 3 1.5 1.5-1.5 3-1.5 1.5 1.5 3 1.5"/><path d="M8 8v-.5a1.5 1.5 0 1 0-3 0V8"/><path d="M12 8v-1a1.5 1.5 0 1 0-3 0"/><path d="M12 3v2"/></g>
   <g id="i-target" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></g>
+  <g id="i-sparkle" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></g>
 </defs></svg>
 
 <% var sb = typeof sidebar !== 'undefined' ? sidebar : { top: [], guild: null, categories: [] }; %>
@@ -121,6 +122,14 @@
           <% } %>
         </div>
       </details>
+    <% } %>
+
+    <% if (typeof user !== 'undefined' && user && !user.open) { %>
+      <a class="sb-tryv2-top" href="/v2" hx-boost="false">
+        <svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sparkle"/></svg>
+        <span>Try the new dashboard</span>
+        <span class="sb-tryv2-beta">Beta</span>
+      </a>
     <% } %>
 
     <nav class="sb-nav" x-data="moduleFilter">
