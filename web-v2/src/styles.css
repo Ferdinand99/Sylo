@@ -712,6 +712,11 @@ button.v2-toggle:disabled {
 .v2-field {
   margin-bottom: 16px;
 }
+/* Several plain inputs stacked in one .v2-field (e.g. a fixed list of text
+   rows) — .v2-field itself has no automatic gap between siblings. */
+.v2-field input:not(:first-of-type) {
+  margin-top: 6px;
+}
 .v2-field label {
   display: block;
   font-size: 0.82rem;

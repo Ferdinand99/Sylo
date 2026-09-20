@@ -13,6 +13,7 @@ import Counting from './Counting.jsx';
 import AutoReact from './AutoReact.jsx';
 import Logging from './Logging.jsx';
 import Tickets from './Tickets.jsx';
+import Appeals from './Appeals.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -24,4 +25,5 @@ export const MODULE_FORMS = {
   'auto-react': AutoReact,
   logging: Logging,
   tickets: Tickets,
+  appeals: Appeals,
 };

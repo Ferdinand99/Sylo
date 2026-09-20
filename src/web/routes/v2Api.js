@@ -20,6 +20,7 @@ import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
+import { normaliseAppealsConfig } from '../../modules/appeals.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { listCountingPenalties, clearCountingPenalty } from '../../db/countingPenalties.js';
 import { normaliseAutoReact, AUTO_REACT_MODES, AUTO_REACT_ROLE_ACTIONS } from '../../modules/autoReact.js';
@@ -662,6 +663,39 @@ router.post(
       detail: 'settings saved',
     });
     res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/appeals/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'appeals');
+    res.json({
+      config: normaliseAppealsConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      dashboardUrlSet: Boolean(config.dashboardUrl),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/appeals/config',
+  asyncHandler(async (req, res) => {
+    const cfg = normaliseAppealsConfig({
+      questions: req.body.questions,
+      autoUnbanOnAccept: req.body.autoUnbanOnAccept,
+      reviewChannelId: req.body.reviewChannelId,
+      cooldownDays: req.body.cooldownDays,
+      appealMessage: req.body.appealMessage,
+      appealServerInvite: req.body.appealServerInvite,
+    });
+    await setGuildModule(req.guild.id, 'appeals', { config: cfg });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:appeals',
+      detail: 'settings saved',
+    });
+    res.json({ config: cfg });
   })
 );
 
