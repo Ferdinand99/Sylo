@@ -101,6 +101,13 @@ function parseUserId(raw) {
   return m ? m[1] || m[2] : null;
 }
 
+// Mirrors guilds.js's private clampDays() — a "delete after N days" field
+// where 0 (or junk) means keep forever.
+function clampDays(raw) {
+  const n = Math.floor(Number(raw));
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 3650) : 0;
+}
+
 // Same list V1's server switcher and "Choose a server" picker use
 // (src/web/middleware/auth.js:129) — the SPA's own guild picker.
 router.get('/guilds', (req, res) => {
@@ -614,6 +621,44 @@ router.post(
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:logging',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/tickets/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'tickets');
+    res.json({
+      config: {
+        greeting: cfg.greeting || '',
+        closeMessage: cfg.closeMessage || '',
+        notifyChannel: cfg.notifyChannel || '',
+        staffRoles: Array.isArray(cfg.staffRoles) ? cfg.staffRoles : [],
+        transcriptRetentionDays: Number(cfg.transcriptRetentionDays) || 0,
+      },
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/tickets/config',
+  asyncHandler(async (req, res) => {
+    const config = {
+      greeting: String(req.body.greeting ?? '').slice(0, 1500),
+      closeMessage: String(req.body.closeMessage ?? '').slice(0, 1500),
+      notifyChannel: /^\d{17,20}$/.test(req.body.notifyChannel ?? '') ? req.body.notifyChannel : '',
+      staffRoles: [].concat(req.body.staffRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)),
+      transcriptRetentionDays: clampDays(req.body.transcriptRetentionDays),
+    };
+    await setGuildModule(req.guild.id, 'tickets', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:tickets',
       detail: 'settings saved',
     });
     res.json({ config });
