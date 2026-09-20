@@ -729,6 +729,14 @@ button.v2-toggle:disabled {
 .v2-check input {
   flex: none;
 }
+.v2-check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 16px;
+}
+.v2-check-grid .v2-check {
+  margin-bottom: 0;
+}
 .v2-field input[type='text'],
 .v2-field input[type='url'],
 .v2-field input[type='number'],

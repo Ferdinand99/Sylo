@@ -23,6 +23,7 @@ import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { listCountingPenalties, clearCountingPenalty } from '../../db/countingPenalties.js';
 import { normaliseAutoReact, AUTO_REACT_MODES, AUTO_REACT_ROLE_ACTIONS } from '../../modules/autoReact.js';
+import { LOG_EVENTS } from '../../modules/logging.js';
 import {
   normaliseVerificationConfig,
   VERIFY_MODES,
@@ -581,6 +582,38 @@ router.post(
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:auto-react',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/logging/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'logging');
+    res.json({
+      config: {
+        channel: cfg.channel || '',
+        events: Object.fromEntries(LOG_EVENTS.map(([key]) => [key, Boolean(cfg.events?.[key])])),
+      },
+      channels: guildTextChannels(req.guild),
+      logEvents: LOG_EVENTS,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/logging/config',
+  asyncHandler(async (req, res) => {
+    const config = {
+      channel: /^\d{17,20}$/.test(req.body.channel ?? '') ? req.body.channel : '',
+      events: Object.fromEntries(LOG_EVENTS.map(([key]) => [key, Boolean(req.body.events?.[key])])),
+    };
+    await setGuildModule(req.guild.id, 'logging', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:logging',
       detail: 'settings saved',
     });
     res.json({ config });
