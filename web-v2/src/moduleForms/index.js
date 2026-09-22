@@ -22,6 +22,8 @@ import ServerStats from './ServerStats.jsx';
 import Autoresponder from './Autoresponder.jsx';
 import InviteTracker from './InviteTracker.jsx';
 import TwitchAlerts from './TwitchAlerts.jsx';
+import KickAlerts from './KickAlerts.jsx';
+import RssAlerts from './RssAlerts.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -32,6 +34,8 @@ export const MODULE_FORMS = {
   autoresponder: Autoresponder,
   'invite-tracker': InviteTracker,
   'twitch-alerts': TwitchAlerts,
+  'kick-alerts': KickAlerts,
+  rss: RssAlerts,
   welcome: Welcome,
   birthdays: Birthdays,
   verification: Verification,

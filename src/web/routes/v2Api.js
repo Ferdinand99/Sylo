@@ -34,6 +34,9 @@ import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../m
 import { normaliseInviteTrackerConfig } from '../../modules/inviteTracker.js';
 import { topInviters, inviterCount, setBonus } from '../../db/inviteTracker.js';
 import { normaliseTwitchConfig, DEFAULT_MESSAGE as TWITCH_DEFAULT_MSG } from '../../modules/twitchAlerts.js';
+import { normaliseKickConfig, DEFAULT_MESSAGE as KICK_DEFAULT_MSG } from '../../modules/kickAlerts.js';
+import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TPL, FEED_TYPES } from '../../modules/rss.js';
+import { clearScope } from '../../db/postedKeys.js';
 import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
 import {
   listComposed,
@@ -909,6 +912,72 @@ router.post(
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:twitch-alerts',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/kick-alerts/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'kick-alerts');
+    res.json({
+      config: normaliseKickConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      kickEnabled: config.kickEnabled,
+      defaultMessage: KICK_DEFAULT_MSG,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/kick-alerts/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseKickConfig({ alerts: req.body.alerts });
+    await setGuildModule(req.guild.id, 'kick-alerts', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:kick-alerts',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/rss/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'rss');
+    res.json({
+      config: normaliseRssConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      feedTypes: FEED_TYPES,
+      defaultTemplate: RSS_DEFAULT_TPL,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/rss/config',
+  asyncHandler(async (req, res) => {
+    const prevIds = new Set(
+      ((await getGuildModule(req.guild.id, 'rss')).config.feeds ?? []).map((f) => f.id)
+    );
+    const config = normaliseRssConfig({ feeds: req.body.feeds });
+    // Drop dedup state for feeds that were removed, so re-adding the same
+    // URL later starts fresh rather than silently swallowing a backlog —
+    // same cleanup guilds.js's POST handler does.
+    const keptIds = new Set(config.feeds.map((f) => f.id));
+    for (const id of prevIds) {
+      if (!keptIds.has(id)) await clearScope(req.guild.id, `rss:${id}`);
+    }
+    await setGuildModule(req.guild.id, 'rss', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:rss',
       detail: 'settings saved',
     });
     res.json({ config });
