@@ -20,6 +20,8 @@ import Automod from './Automod.jsx';
 import Sticky from './Sticky.jsx';
 import ServerStats from './ServerStats.jsx';
 import Autoresponder from './Autoresponder.jsx';
+import InviteTracker from './InviteTracker.jsx';
+import TwitchAlerts from './TwitchAlerts.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -28,6 +30,8 @@ export const MODULE_FORMS = {
   sticky: Sticky,
   'server-stats': ServerStats,
   autoresponder: Autoresponder,
+  'invite-tracker': InviteTracker,
+  'twitch-alerts': TwitchAlerts,
   welcome: Welcome,
   birthdays: Birthdays,
   verification: Verification,

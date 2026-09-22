@@ -5,6 +5,7 @@
 // getGuild, requireGuildAdmin) — none of them are modified by this file.
 import { createRequire } from 'node:module';
 import { Router, raw } from 'express';
+import { PermissionFlagsBits } from 'discord.js';
 import { requireGuildAdmin, requireOwner, manageableGuilds, currentUser } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -30,6 +31,9 @@ import { normaliseAppealsConfig } from '../../modules/appeals.js';
 import { normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
 import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
 import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
+import { normaliseInviteTrackerConfig } from '../../modules/inviteTracker.js';
+import { topInviters, inviterCount, setBonus } from '../../db/inviteTracker.js';
+import { normaliseTwitchConfig, DEFAULT_MESSAGE as TWITCH_DEFAULT_MSG } from '../../modules/twitchAlerts.js';
 import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
 import {
   listComposed,
@@ -806,6 +810,105 @@ router.post(
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:autoresponder',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+async function inviteBoard(guild) {
+  const rows = await topInviters(guild.id, 15);
+  const tags = await resolveUserTags(
+    runtime.client,
+    rows.map((r) => r.user_id)
+  );
+  return {
+    total: await inviterCount(guild.id),
+    canReadInvites: Boolean(guild.members.me?.permissions.has(PermissionFlagsBits.ManageGuild)),
+    rows: rows.map((r, i) => ({
+      rank: i + 1,
+      userId: r.user_id,
+      name: tags.get(r.user_id) ?? r.user_id,
+      net: r.net,
+      regular: r.regular,
+      leaves: r.leaves,
+      bonus: r.bonus,
+    })),
+  };
+}
+
+router.get(
+  '/guilds/:guildId/modules/invite-tracker/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'invite-tracker');
+    res.json({
+      config: normaliseInviteTrackerConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      board: await inviteBoard(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/invite-tracker/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseInviteTrackerConfig({
+      joinLogChannelId: req.body.joinLogChannelId,
+      graceHours: req.body.graceHours,
+    });
+    await setGuildModule(req.guild.id, 'invite-tracker', { config });
+    primeInviteCache(req.guild).catch((err) =>
+      log.error('invite-tracker', 'cache prime after save failed:', err.message)
+    );
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:invite-tracker',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/invite-tracker/bonus',
+  asyncHandler(async (req, res) => {
+    const userId = parseUserId(req.body.userId);
+    const bonus = Number(req.body.bonus);
+    if (!userId || !Number.isInteger(bonus) || bonus < -100000 || bonus > 100000) {
+      return res.status(400).json({ error: 'Invalid member id or bonus value.' });
+    }
+    await setBonus(req.guild.id, userId, bonus);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:invite-tracker',
+      detail: `${userId} bonus → ${bonus}`,
+    });
+    res.json({ board: await inviteBoard(req.guild) });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/twitch-alerts/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'twitch-alerts');
+    res.json({
+      config: normaliseTwitchConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      twitchEnabled: config.twitchEnabled,
+      defaultMessage: TWITCH_DEFAULT_MSG,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/twitch-alerts/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseTwitchConfig({ alerts: req.body.alerts });
+    await setGuildModule(req.guild.id, 'twitch-alerts', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:twitch-alerts',
       detail: 'settings saved',
     });
     res.json({ config });
