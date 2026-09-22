@@ -18,12 +18,14 @@ import Giveaways from './Giveaways.jsx';
 import Moderation from './Moderation.jsx';
 import Automod from './Automod.jsx';
 import Sticky from './Sticky.jsx';
+import ServerStats from './ServerStats.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
   moderation: Moderation,
   automod: Automod,
   sticky: Sticky,
+  'server-stats': ServerStats,
   welcome: Welcome,
   birthdays: Birthdays,
   verification: Verification,

@@ -9,7 +9,7 @@ import { requireGuildAdmin, requireOwner, manageableGuilds, currentUser } from '
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
-import { guildTextChannels, resolveUserTags } from '../lib/discord.js';
+import { guildTextChannels, guildVoiceChannels, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { getDashboardVersion, setDashboardVersion, DASHBOARD_VERSIONS } from '../../db/userPrefs.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
@@ -28,6 +28,7 @@ import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
 import { normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
+import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
 import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
 import {
   listComposed,
@@ -740,6 +741,35 @@ router.post(
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:sticky',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/server-stats/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'server-stats');
+    res.json({
+      config: normaliseServerStats(cfg),
+      voiceChannels: guildVoiceChannels(req.guild),
+      statTypes: STAT_TYPES,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/server-stats/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseServerStats({
+      refreshMinutes: req.body.refreshMinutes,
+      channels: req.body.channels,
+    });
+    await setGuildModule(req.guild.id, 'server-stats', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:server-stats',
       detail: 'settings saved',
     });
     res.json({ config });
