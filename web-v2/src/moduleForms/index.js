@@ -17,11 +17,13 @@ import Appeals from './Appeals.jsx';
 import Giveaways from './Giveaways.jsx';
 import Moderation from './Moderation.jsx';
 import Automod from './Automod.jsx';
+import Sticky from './Sticky.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
   moderation: Moderation,
   automod: Automod,
+  sticky: Sticky,
   welcome: Welcome,
   birthdays: Birthdays,
   verification: Verification,

@@ -707,6 +707,46 @@ router.post(
 );
 
 router.get(
+  '/guilds/:guildId/modules/sticky/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'sticky');
+    res.json({
+      config: { stickies: Array.isArray(cfg.stickies) ? cfg.stickies : [] },
+      channels: guildTextChannels(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/sticky/config',
+  asyncHandler(async (req, res) => {
+    // lastMessageId is bot-managed (the currently-posted sticky message per
+    // channel) — carried over from the previous config by channelId, same
+    // as V1's guilds.js, rather than letting the form touch it.
+    const prev = (await getGuildModule(req.guild.id, 'sticky')).config;
+    const prevById = new Map((prev.stickies ?? []).map((s) => [s.channelId, s]));
+    const rows = Array.isArray(req.body.stickies) ? req.body.stickies : [];
+    const stickies = rows
+      .map((s) => ({
+        channelId: s.channelId,
+        content: String(s.content ?? '').slice(0, 2000),
+        lastMessageId: prevById.get(s.channelId)?.lastMessageId ?? null,
+        repostOnBots: Boolean(s.repostOnBots),
+        cooldownSeconds: Math.max(0, Math.min(3600, Math.floor(Number(s.cooldownSeconds)) || 0)),
+      }))
+      .filter((s) => /^\d{17,20}$/.test(s.channelId) && s.content.trim() !== '');
+    const config = { stickies };
+    await setGuildModule(req.guild.id, 'sticky', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:sticky',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
   '/guilds/:guildId/modules/logging/config',
   asyncHandler(async (req, res) => {
     const { config: cfg } = await getGuildModule(req.guild.id, 'logging');
