@@ -14,6 +14,7 @@ import AutoReact from './AutoReact.jsx';
 import Logging from './Logging.jsx';
 import Tickets from './Tickets.jsx';
 import Appeals from './Appeals.jsx';
+import Giveaways from './Giveaways.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -26,4 +27,5 @@ export const MODULE_FORMS = {
   logging: Logging,
   tickets: Tickets,
   appeals: Appeals,
+  giveaways: Giveaways,
 };

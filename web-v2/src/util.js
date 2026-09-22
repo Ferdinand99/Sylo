@@ -23,3 +23,25 @@ export function writeLastGuildId(guildId) {
     // ignore — nothing to fall back to, this is just a convenience
   }
 }
+
+const RECENT_COLORS_KEY = 'sylo:v2:recentEmbedColors';
+const MAX_RECENT_COLORS = 8;
+
+/** Most-recently-used embed colours first, for the "History" row in ColorPicker. */
+export function readRecentColors() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(RECENT_COLORS_KEY) ?? '[]');
+    return Array.isArray(raw) ? raw.filter((c) => typeof c === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addRecentColor(color) {
+  try {
+    const next = [color, ...readRecentColors().filter((c) => c !== color)].slice(0, MAX_RECENT_COLORS);
+    localStorage.setItem(RECENT_COLORS_KEY, JSON.stringify(next));
+  } catch {
+    // ignore — nothing to fall back to, this is just a convenience
+  }
+}

@@ -115,8 +115,15 @@ export default function Sidebar({ activeGuildId, open, onClose }) {
               <div className="v2-sidebar-group" key={g.title}>
                 <div className="v2-sidebar-group-title">{g.title}</div>
                 {g.cards.map((card) => {
-                  const isV2 = Boolean(MODULE_FORMS[card.id]);
-                  const href = isV2 ? `/guilds/${activeGuildId}/m/${card.id}` : card.href;
+                  // 'messages' (Embed messages) has its own top-level V2
+                  // route, not the standard /m/:id module-page path — same
+                  // exception Overview.jsx makes.
+                  const isV2 = Boolean(MODULE_FORMS[card.id]) || card.id === 'messages';
+                  const href = isV2
+                    ? card.id === 'messages'
+                      ? `/guilds/${activeGuildId}/messages`
+                      : `/guilds/${activeGuildId}/m/${card.id}`
+                    : card.href;
                   return isV2 ? (
                     <Link
                       key={card.id}

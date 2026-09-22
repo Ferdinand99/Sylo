@@ -15,15 +15,26 @@ function ClassicTag() {
   );
 }
 
-// The module's name links to its V2 settings page if one's been built
-// (MODULE_FORMS), otherwise to V1's own config page for it — `card.href`,
-// which the overview API already provides (src/web/lib/overviewSummary.js).
-// Every module is configurable today either way; not every one has a V2
-// page yet.
+// 'messages' (Embed messages) isn't a toggleable module config under
+// /m/:id like every other card — it's its own top-level guild feature
+// (Messages.jsx/MessageBuilder.jsx), same shape as Leaderboard/Settings.
+// Special-cased here rather than building a general id->path map for what
+// is, so far, exactly one exception.
+function hasV2Page(card) {
+  return Boolean(MODULE_FORMS[card.id]) || card.id === 'messages';
+}
+function v2Href(card, guildId) {
+  return card.id === 'messages' ? `/guilds/${guildId}/messages` : `/guilds/${guildId}/m/${card.id}`;
+}
+
+// The module's name links to its V2 settings page if one's been built,
+// otherwise to V1's own config page for it — `card.href`, which the
+// overview API already provides (src/web/lib/overviewSummary.js). Every
+// module is configurable today either way; not every one has a V2 page yet.
 function ModuleTitle({ card, guildId }) {
-  if (MODULE_FORMS[card.id]) {
+  if (hasV2Page(card)) {
     return (
-      <Link className="v2-row-title-link" to={`/guilds/${guildId}/m/${card.id}`}>
+      <Link className="v2-row-title-link" to={v2Href(card, guildId)}>
         <h3>{card.name}</h3>
       </Link>
     );
@@ -43,7 +54,7 @@ function ModuleRow({ card, guildId, busy, onToggle }) {
       <>
         <div className="v2-row-main">
           <h3>
-            {card.name} {MODULE_FORMS[card.id] ? null : <ClassicTag />}
+            {card.name} {hasV2Page(card) ? null : <ClassicTag />}
           </h3>
           <p>{card.description}</p>
         </div>
@@ -52,8 +63,8 @@ function ModuleRow({ card, guildId, busy, onToggle }) {
         </span>
       </>
     );
-    return MODULE_FORMS[card.id] ? (
-      <Link className="v2-row" to={`/guilds/${guildId}/m/${card.id}`}>
+    return hasV2Page(card) ? (
+      <Link className="v2-row" to={v2Href(card, guildId)}>
         {rowContent}
       </Link>
     ) : (

@@ -21,6 +21,21 @@ import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
+import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
+import {
+  listComposed,
+  getComposed,
+  createComposed,
+  updateComposed,
+  deleteComposed,
+} from '../../db/composedMessages.js';
+import { sendComposed, editComposed } from '../../modules/messageCreator.js';
+import {
+  activeGiveaways,
+  endedGiveaways,
+  giveawayEntryCount,
+  getGiveawayInGuild,
+} from '../../db/giveaways.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { listCountingPenalties, clearCountingPenalty } from '../../db/countingPenalties.js';
 import { normaliseAutoReact, AUTO_REACT_MODES, AUTO_REACT_ROLE_ACTIONS } from '../../modules/autoReact.js';
@@ -696,6 +711,242 @@ router.post(
       detail: 'settings saved',
     });
     res.json({ config: cfg });
+  })
+);
+
+async function giveawaysList(guild) {
+  const channels = guildTextChannels(guild);
+  const raw = [
+    ...(await activeGiveaways(guild.id)).map((g) => ({ ...g, state: 'active' })),
+    ...(await endedGiveaways(guild.id, 8)).map((g) => ({ ...g, state: 'ended' })),
+  ];
+  return Promise.all(
+    raw.map(async (g) => ({
+      id: g.id,
+      prize: g.prize,
+      state: g.state,
+      winners: g.winners,
+      endsAt: g.ends_at,
+      entries: await giveawayEntryCount(g.id),
+      wonIds: g.wonIds,
+      channel: channels.find((c) => c.id === g.channel_id)?.name ?? g.channel_id,
+      requiredRoleId: g.required_role_id,
+    }))
+  );
+}
+
+router.get(
+  '/guilds/:guildId/modules/giveaways/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'giveaways');
+    res.json({
+      config: normaliseGiveawaysConfig(cfg),
+      giveaways: await giveawaysList(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/giveaways/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseGiveawaysConfig({ ping: req.body.ping, dmWinners: req.body.dmWinners });
+    await setGuildModule(req.guild.id, 'giveaways', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:giveaways',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/giveaways/:id/end',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const g = await getGiveawayInGuild(id, req.guild.id);
+    if (!g || g.ended) return res.status(400).json({ error: 'Not an active giveaway' });
+    await endGiveaway(id);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:giveaways',
+      detail: `ended #${id}`,
+    });
+    res.json({ giveaways: await giveawaysList(req.guild) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/giveaways/:id/reroll',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const g = await getGiveawayInGuild(id, req.guild.id);
+    if (!g || !g.ended) return res.status(400).json({ error: 'Not an ended giveaway' });
+    const count = Math.max(1, Math.min(Number(req.body.count) || 1, 20));
+    await endGiveaway(id, { rerollCount: count });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:giveaways',
+      detail: `rerolled #${id}`,
+    });
+    res.json({ giveaways: await giveawaysList(req.guild) });
+  })
+);
+
+// --- Embed messages (mirrors src/web/routes/guildMessages.js) --------------
+// Not a toggleable module (no /modules/:id route, no enable/disable) — its
+// own top-level guild-scoped feature, same as Leaderboard/Settings. Overview
+// and the sidebar special-case its href instead of assuming the standard
+// `/m/:id` module-page path.
+
+const numericId = (v) => /^\d+$/.test(v ?? '');
+const specTitle = (spec) => spec?.embeds?.[0]?.title || spec?.content?.slice(0, 60) || '(no text)';
+
+function composedListItem(guild, c) {
+  return {
+    id: c.id,
+    name: c.name || specTitle(c.spec),
+    channel: guildTextChannels(guild).find((ch) => ch.id === c.channel_id)?.name ?? c.channel_id,
+    published: Boolean(c.message_id),
+    when: timeAgo(c.updated_at),
+  };
+}
+
+function composedRecJson(rec) {
+  return { id: rec.id, name: rec.name, channelId: rec.channel_id, messageId: rec.message_id, spec: rec.spec };
+}
+
+router.get(
+  '/guilds/:guildId/messages',
+  asyncHandler(async (req, res) => {
+    const items = (await listComposed(req.guild.id, 200)).map((c) => composedListItem(req.guild, c));
+    res.json({ items });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/messages/:id',
+  asyncHandler(async (req, res) => {
+    const isNew = req.params.id === 'new';
+    let rec = null;
+    if (!isNew) {
+      if (!numericId(req.params.id)) return res.status(404).json({ error: 'Not found' });
+      rec = await getComposed(req.guild.id, Number(req.params.id));
+      if (!rec) return res.status(404).json({ error: 'Not found' });
+    }
+    res.json({
+      isNew,
+      rec: rec
+        ? composedRecJson(rec)
+        : { id: '', name: '', channelId: '', messageId: null, spec: { content: '', embeds: [], rows: [] } },
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/messages/:id',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const isNew = req.params.id === 'new';
+    if (!isNew && !numericId(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
+    const existing = isNew ? null : await getComposed(guild.id, Number(req.params.id));
+    if (!isNew && !existing) return res.status(404).json({ error: 'Not found' });
+
+    const spec = req.body.spec;
+    if (!spec || typeof spec !== 'object') return res.status(400).json({ error: "Missing 'spec'" });
+    const normalisedSpec = {
+      content: String(spec.content ?? ''),
+      embeds: Array.isArray(spec.embeds) ? spec.embeds : [],
+      rows: Array.isArray(spec.rows) ? spec.rows : [],
+    };
+    const name =
+      String(req.body.name ?? '')
+        .trim()
+        .slice(0, 100) || 'Untitled embed';
+    const channelId = /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '';
+    const publish = req.body.action === 'publish';
+
+    let rec = existing;
+    if (!rec) {
+      rec = await createComposed(guild.id, { name, channelId, messageId: null, spec: normalisedSpec });
+    } else {
+      rec = await updateComposed(guild.id, rec.id, {
+        name,
+        channelId: channelId || rec.channel_id,
+        messageId: rec.message_id,
+        spec: normalisedSpec,
+      });
+    }
+
+    if (!publish) return res.json({ rec: composedRecJson(rec), status: 'saved' });
+
+    if (!/^\d{17,20}$/.test(rec.channel_id)) {
+      return res.status(400).json({ error: 'Pick a channel before publishing.', rec: composedRecJson(rec) });
+    }
+    try {
+      if (rec.message_id) {
+        await editComposed(guild, rec.channel_id, rec.message_id, normalisedSpec);
+        return res.json({ rec: composedRecJson(rec), status: 'updated' });
+      }
+      const message = await sendComposed(guild, rec.channel_id, normalisedSpec);
+      rec = await updateComposed(guild.id, rec.id, {
+        name,
+        channelId: rec.channel_id,
+        messageId: message.id,
+        spec: normalisedSpec,
+      });
+      return res.json({ rec: composedRecJson(rec), status: 'sent' });
+    } catch (err) {
+      return res.status(400).json({ error: err.message, rec: composedRecJson(rec) });
+    }
+  })
+);
+
+router.post(
+  '/guilds/:guildId/messages/:id/unpublish',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    if (!numericId(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
+    const rec = await getComposed(guild.id, Number(req.params.id));
+    if (!rec) return res.status(404).json({ error: 'Not found' });
+    if (rec.message_id) {
+      try {
+        const ch = guild.channels.cache.get(rec.channel_id) ?? (await guild.channels.fetch(rec.channel_id));
+        await ch.messages.delete(rec.message_id);
+      } catch {
+        /* already gone */
+      }
+      await updateComposed(guild.id, rec.id, {
+        name: rec.name,
+        channelId: rec.channel_id,
+        messageId: null,
+        spec: rec.spec,
+      });
+    }
+    res.json({ rec: composedRecJson(await getComposed(guild.id, rec.id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/messages/:id/delete',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    if (!numericId(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
+    const rec = await getComposed(guild.id, Number(req.params.id));
+    if (rec) {
+      if (rec.message_id) {
+        try {
+          const ch = guild.channels.cache.get(rec.channel_id) ?? (await guild.channels.fetch(rec.channel_id));
+          await ch.messages.delete(rec.message_id);
+        } catch {
+          /* already gone */
+        }
+      }
+      await deleteComposed(guild.id, rec.id);
+    }
+    res.json({ ok: true });
   })
 );
 
