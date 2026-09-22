@@ -24,6 +24,7 @@ import InviteTracker from './InviteTracker.jsx';
 import TwitchAlerts from './TwitchAlerts.jsx';
 import KickAlerts from './KickAlerts.jsx';
 import RssAlerts from './RssAlerts.jsx';
+import GameStats from './GameStats.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -36,6 +37,7 @@ export const MODULE_FORMS = {
   'twitch-alerts': TwitchAlerts,
   'kick-alerts': KickAlerts,
   rss: RssAlerts,
+  'game-stats': GameStats,
   welcome: Welcome,
   birthdays: Birthdays,
   verification: Verification,
@@ -58,6 +60,7 @@ export const MODULE_FORMS = {
 export const SPECIAL_V2_PATHS = {
   messages: (guildId) => `/guilds/${guildId}/messages`,
   general: (guildId) => `/guilds/${guildId}/settings`,
+  insights: (guildId) => `/guilds/${guildId}/insights`,
 };
 
 export function hasV2Page(card) {

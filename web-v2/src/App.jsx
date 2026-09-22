@@ -9,6 +9,7 @@ import Health from './pages/Health.jsx';
 import ModulePage from './pages/ModulePage.jsx';
 import Messages from './pages/Messages.jsx';
 import MessageBuilder from './pages/MessageBuilder.jsx';
+import Insights from './pages/Insights.jsx';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="guilds/:guildId/m/:moduleId" element={<ModulePage />} />
           <Route path="guilds/:guildId/messages" element={<Messages />} />
           <Route path="guilds/:guildId/messages/:id" element={<MessageBuilder />} />
+          <Route path="guilds/:guildId/insights" element={<Insights />} />
           <Route path="settings" element={<Personalizer />} />
           <Route path="health" element={<Health />} />
         </Route>

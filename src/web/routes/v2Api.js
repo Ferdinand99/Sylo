@@ -37,6 +37,9 @@ import { normaliseTwitchConfig, DEFAULT_MESSAGE as TWITCH_DEFAULT_MSG } from '..
 import { normaliseKickConfig, DEFAULT_MESSAGE as KICK_DEFAULT_MSG } from '../../modules/kickAlerts.js';
 import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TPL, FEED_TYPES } from '../../modules/rss.js';
 import { clearScope } from '../../db/postedKeys.js';
+import { dailySeries, hourlySeries, topChannels, topVoiceChannels } from '../../db/insights.js';
+import { flushGuild as flushGuildInsights } from '../../modules/insights.js';
+import { recentLookups } from '../../db/cache.js';
 import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
 import {
   listComposed,
@@ -984,6 +987,24 @@ router.post(
   })
 );
 
+// No POST route — this module has nothing to configure beyond the
+// enable/disable toggle every module already gets. Read-only, matching
+// V1's game-stats.ejs (command docs + the shared lookup cache).
+router.get(
+  '/guilds/:guildId/modules/game-stats/config',
+  asyncHandler(async (req, res) => {
+    res.json({
+      recent: (await recentLookups(15)).map((r) => ({
+        game: r.game,
+        title: r.title,
+        username: r.username,
+        platform: r.platform,
+        ago: timeAgo(r.created_at),
+      })),
+    });
+  })
+);
+
 router.get(
   '/guilds/:guildId/modules/logging/config',
   asyncHandler(async (req, res) => {
@@ -1448,6 +1469,59 @@ router.post(
       action: 'settings:server',
       detail: 'saved',
     });
+    res.json({ ok: true });
+  })
+);
+
+// --- Server insights (mirrors guilds.js:2804-2864) -------------------------
+
+const INSIGHTS_HOURLY = { 24: 24, 48: 48 };
+const INSIGHTS_DAILY = { 7: 7, 30: 30, 90: 90 };
+
+router.get(
+  '/guilds/:guildId/insights',
+  asyncHandler(async (req, res) => {
+    const raw = String(req.query.range ?? '30');
+    const hourly = raw in INSIGHTS_HOURLY;
+    const range = hourly ? INSIGHTS_HOURLY[raw] : (INSIGHTS_DAILY[raw] ?? 30);
+    const series = hourly ? await hourlySeries(req.guild.id, range) : await dailySeries(req.guild.id, range);
+
+    // Per-channel totals ("top channels") are only kept daily; for an
+    // hourly window fall back to the last day.
+    const topDays = hourly ? 1 : range;
+    const chans = [...guildTextChannels(req.guild), ...guildVoiceChannels(req.guild)];
+    const nameOf = (id) =>
+      id.startsWith('name:') ? id.slice(5) : (chans.find((c) => c.id === id)?.name ?? 'deleted channel');
+
+    res.json({
+      range,
+      granularity: hourly ? 'hour' : 'day',
+      series,
+      totals: {
+        messages: series.reduce((t, d) => t + d.messages, 0),
+        joins: series.reduce((t, d) => t + d.joins, 0),
+        leaves: series.reduce((t, d) => t + d.leaves, 0),
+        net: series.reduce((t, d) => t + d.joins - d.leaves, 0),
+        peakActive: series.reduce((m, d) => Math.max(m, d.activeMembers), 0),
+        voiceMinutes: series.reduce((t, d) => t + d.voiceMinutes, 0),
+        voicePeak: series.reduce((m, d) => Math.max(m, d.voicePeak), 0),
+      },
+      topChannels: (await topChannels(req.guild.id, topDays, 6)).map((t) => ({
+        name: nameOf(t.channelId),
+        messages: t.messages,
+      })),
+      topVoice: (await topVoiceChannels(req.guild.id, topDays, 6)).map((t) => ({
+        name: nameOf(t.channelId),
+        minutes: t.minutes,
+      })),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/insights/refresh',
+  asyncHandler(async (req, res) => {
+    await flushGuildInsights(req.guild.id);
     res.json({ ok: true });
   })
 );
