@@ -70,6 +70,19 @@ export const resetCountingCount = (guildId) =>
   postJson(`/api/v2/guilds/${guildId}/modules/counting/count`, { reset: true });
 export const releaseCountingPenalty = (guildId, userId) =>
   postJson(`/api/v2/guilds/${guildId}/modules/counting/penalty/release`, { userId });
+export const endGiveaway = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/giveaways/${id}/end`, {});
+export const rerollGiveaway = (guildId, id, count) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/giveaways/${id}/reroll`, { count });
+
+export const getComposedMessages = (guildId) => apiFetch(`/api/v2/guilds/${guildId}/messages`);
+export const getComposedMessage = (guildId, id) => apiFetch(`/api/v2/guilds/${guildId}/messages/${id}`);
+export const saveComposedMessage = (guildId, id, body) =>
+  postJson(`/api/v2/guilds/${guildId}/messages/${id}`, body);
+export const unpublishComposedMessage = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/messages/${id}/unpublish`, {});
+export const deleteComposedMessage = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/messages/${id}/delete`, {});
 
 export const getPrefs = () => apiFetch('/api/v2/prefs');
 export const setDashboardVersion = (dashboardVersion) => postJson('/api/v2/prefs', { dashboardVersion });

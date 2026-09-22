@@ -371,6 +371,9 @@ a:hover {
 .v2-section-gap {
   margin-top: 32px;
 }
+.v2-section-gap-sm {
+  margin-top: 10px;
+}
 .v2-hero p {
   margin: 0;
   color: var(--text-muted);
@@ -568,6 +571,484 @@ a:hover {
   margin-bottom: 12px;
 }
 
+/* Embed message builder (MessageBuilder.jsx) — a compact image-picker button
+   (a prompt() for the URL, same as V1's, rather than a full upload UI) and a
+   name field styled to read as a page title, not a form field. */
+.v2-mb-name {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--text);
+  font-size: 1.3rem;
+  font-weight: 700;
+  padding: 4px 0;
+  width: 100%;
+  max-width: 420px;
+}
+.v2-mb-name:hover,
+.v2-mb-name:focus {
+  border-bottom-color: var(--border-subtle);
+  outline: none;
+}
+/* Embed builder, MEE6-style: a live "fake Discord message" you edit
+   straight inside rather than a labeled form. The trick is styling real
+   <input>/<textarea> elements to look like plain text (no border, no
+   background) until hovered/focused, so the "form" and the "preview" are
+   the same element instead of two synced representations. */
+.v2-msg-preview {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.v2-msg-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+.v2-msg-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex: none;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+.v2-msg-head-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.v2-msg-botname {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+.v2-msg-botbadge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.v2-msg-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.v2-msg-preview .v2-msg-content {
+  display: block;
+  width: calc(100% - 48px);
+  margin: 2px 0 4px 48px;
+  background: none;
+  border: 0;
+  resize: none;
+  overflow: hidden;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.v2-msg-preview .v2-msg-content:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.v2-msg-preview .v2-msg-content:focus {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  outline: none;
+}
+.v2-msg-preview .v2-msg-content::placeholder {
+  color: var(--text-muted);
+}
+
+.v2-embed-preview {
+  position: relative;
+  display: flex;
+  margin: 8px 0 8px 48px;
+  max-width: 520px;
+}
+/* Purely a visual indicator now — ColorPicker.jsx (a dedicated round swatch
+   button, positioned over this corner) is the actual control. It used to
+   *be* the control (a bare <input type="color">), which is fine on its own
+   but doesn't give room for presets/history the way a real popover does. */
+.v2-embed-bar {
+  width: 4px;
+  flex: none;
+  border-radius: 4px 0 0 4px;
+}
+.v2-embed-body {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-surface-2);
+  border-radius: 0 8px 8px 0;
+  padding: 12px 14px;
+}
+
+/* Colour picker — a round swatch button (ColorPicker.jsx) at the embed's
+   top-left corner opening a popover: presets, recently-used (localStorage),
+   a hex field, and a hidden native <input type="color"> for the full
+   gradient/hue picker a browser already provides, rather than hand-rolling
+   one. */
+.v2-colorpicker {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  z-index: 5;
+}
+.v2-colorpicker-swatch {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-main);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  list-style: none;
+}
+.v2-colorpicker-swatch::-webkit-details-marker {
+  display: none;
+}
+.v2-colorpicker-swatch svg {
+  width: 13px;
+  height: 13px;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6));
+}
+.v2-colorpicker-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 220px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.v2-colorpicker-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 8px 0 6px;
+}
+.v2-colorpicker-label:first-child {
+  margin-top: 0;
+}
+.v2-colorpicker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.v2-colorpicker-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 0;
+  cursor: pointer;
+}
+.v2-colorpicker-dot:hover {
+  transform: scale(1.12);
+}
+.v2-colorpicker-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.v2-colorpicker-more {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 0;
+  cursor: pointer;
+}
+.v2-colorpicker-panel .v2-colorpicker-hex {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 5px 8px;
+}
+.v2-colorpicker-panel .v2-colorpicker-hex:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.v2-colorpicker-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.v2-embed-toolbar {
+  position: absolute;
+  top: -14px;
+  right: 0;
+  display: flex;
+  gap: 2px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.v2-embed-preview:hover .v2-embed-toolbar,
+.v2-embed-preview:focus-within .v2-embed-toolbar {
+  opacity: 1;
+}
+.v2-embed-toolbar button {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.v2-embed-toolbar button:hover {
+  background: var(--bg-surface);
+  color: var(--text);
+}
+.v2-embed-toolbar button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.v2-embed-toolbar svg {
+  width: 15px;
+  height: 15px;
+}
+
+.v2-embed-top {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.v2-embed-main {
+  flex: 1;
+  min-width: 0;
+}
+.v2-embed-author-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.v2-embed-avatar-pick {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-subtle);
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+.v2-embed-avatar-pick:hover {
+  border-color: var(--accent);
+}
+.v2-embed-avatar-pick img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.v2-msg-preview .v2-embed-input {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  padding: 2px 4px;
+  margin: 0 0 0 -4px;
+  border-radius: 4px;
+  resize: none;
+}
+.v2-msg-preview .v2-embed-input:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.v2-msg-preview .v2-embed-input:focus {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  outline: none;
+}
+.v2-msg-preview .v2-embed-input::placeholder {
+  color: var(--text-muted);
+}
+.v2-embed-title {
+  font-weight: 700;
+  font-size: 1rem;
+}
+.v2-embed-desc {
+  font-size: 0.88rem;
+  line-height: 1.4;
+  overflow: hidden;
+}
+.v2-embed-author {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.v2-embed-footer {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.v2-embed-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px 16px;
+  margin-top: 6px;
+}
+.v2-embed-field-block {
+  position: relative;
+}
+.v2-embed-field-name {
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+.v2-embed-field-value {
+  font-size: 0.82rem;
+}
+.v2-embed-field-remove {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+}
+.v2-embed-field-block:hover .v2-embed-field-remove {
+  display: flex;
+}
+
+.v2-embed-addfield {
+  display: block;
+  margin-top: 6px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent-2);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.v2-embed-addfield:hover {
+  text-decoration: underline;
+}
+
+.v2-embed-thumb-pick {
+  width: 68px;
+  height: 68px;
+  flex: none;
+  border-radius: 6px;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  text-align: center;
+  overflow: hidden;
+  padding: 4px;
+  cursor: pointer;
+}
+.v2-embed-thumb-pick.has {
+  border-style: solid;
+  padding: 0;
+}
+.v2-embed-thumb-pick img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.v2-embed-thumb-pick:hover {
+  border-color: var(--accent);
+}
+
+.v2-embed-image-pick {
+  display: block;
+  width: 100%;
+  min-height: 60px;
+  margin-top: 10px;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+}
+.v2-embed-image-pick.has {
+  border-style: solid;
+}
+.v2-embed-image-pick img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+}
+.v2-embed-image-pick:hover {
+  border-color: var(--accent);
+}
+
+.v2-embed-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.v2-embed-add {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  background: none;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-muted);
+  padding: 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.v2-embed-add:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.v2-embed-add:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Animated toggle switch, accent color when on — replaces V1's pill button.
    Used both as a read-only <span> (Overview's module rows) and a real
    <button> (Leaderboard's public switch), hence the padding/font reset. */
@@ -700,9 +1181,21 @@ button.v2-toggle:disabled {
   font-weight: 600;
   padding: 9px 18px;
   cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+/* A page title with an action button on the same line (e.g. "+ New…") —
+   used where a page needs one, most don't. */
+.v2-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 .v2-btn-primary:hover {
   filter: brightness(1.08);
+  text-decoration: none;
 }
 .v2-btn-primary:disabled {
   opacity: 0.6;
@@ -711,6 +1204,11 @@ button.v2-toggle:disabled {
 
 .v2-field {
   margin-bottom: 16px;
+}
+/* Several plain inputs stacked in one .v2-field (e.g. a fixed list of text
+   rows) — .v2-field itself has no automatic gap between siblings. */
+.v2-field input:not(:first-of-type) {
+  margin-top: 6px;
 }
 .v2-field label {
   display: block;
@@ -729,11 +1227,76 @@ button.v2-toggle:disabled {
 .v2-check input {
   flex: none;
 }
-.v2-field input[type='text'],
-.v2-field input[type='url'],
-.v2-field input[type='number'],
-.v2-field select,
-.v2-field textarea {
+.v2-check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 16px;
+}
+.v2-check-grid .v2-check {
+  margin-bottom: 0;
+}
+/* A compact number/text input outside .v2-field — e.g. a per-row count next
+   to an action button, where a full field (with its label margin) doesn't
+   fit the layout. */
+.v2-input-sm {
+  width: 64px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 7px 8px;
+  font: inherit;
+  font-size: 0.85rem;
+}
+.v2-input-sm:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+/* Auto-moderation (Automod.jsx) — one row per check (mode select + an
+   optional collapsible params panel), lighter than .v2-rule-card since
+   most rows have no extra fields at all. */
+.v2-am-rules {
+  margin-bottom: 20px;
+}
+.v2-am-rule {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.v2-am-rule:last-child {
+  border-bottom: none;
+}
+.v2-am-rule-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.v2-am-params {
+  margin-top: 10px;
+}
+.v2-am-params summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.v2-am-params .v2-field,
+.v2-am-params .v2-field-row {
+  margin-top: 8px;
+}
+.v2-warn-text {
+  color: #f5a524;
+  font-size: 0.82rem;
+  margin: 6px 0 0;
+}
+/* Scoped to any form, not just .v2-field, so a card of raw inputs (e.g.
+   .v2-rule-card's embed fields) gets the same look without every single
+   input needing its own .v2-field wrapper (and that wrapper's label-sized
+   margin, which doesn't fit a dense card layout). */
+form input[type='text'],
+form input[type='url'],
+form input[type='number'],
+form select,
+form textarea {
   width: 100%;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);

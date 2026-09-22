@@ -17,8 +17,15 @@ export default function Shell() {
   // The server switcher and sidebar links need a guild to point at even on
   // pages that aren't guild-scoped (Bot Personalizer, Health) — otherwise
   // navigating there loses the selection instead of just "not needing" it.
-  // Seeded from localStorage so a reload/new tab remembers it too.
-  const [lastGuildId, setLastGuildId] = useState(readLastGuildId);
+  // Seeded from the URL itself when the very first page loaded is already
+  // guild-scoped (a bookmark, a shared link, a fresh browser with no
+  // localStorage yet) — falling back to localStorage otherwise. Without the
+  // guildId fallback, a direct hard-navigation to /v2/guilds/:id in a fresh
+  // browser started this at null, which fed OverviewProvider a null guildId
+  // and crashed the page (useApiData resolves to `data: null` with no error
+  // for a null guildId, and Overview.jsx has nothing else guarding against
+  // that combination).
+  const [lastGuildId, setLastGuildId] = useState(() => guildId || readLastGuildId());
   // Off-canvas sidebar below the 860px breakpoint (see .v2-sidebar in
   // styles.css) — above it this is unused, the sidebar is always visible.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
