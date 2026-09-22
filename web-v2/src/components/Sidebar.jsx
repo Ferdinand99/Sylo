@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useOverview } from '../OverviewContext.jsx';
-import { MODULE_FORMS } from '../moduleForms/index.js';
+import { hasV2Page, v2Href } from '../moduleForms/index.js';
 
 // Small inline icon set — kept self-contained rather than porting V1's full
 // sprite (src/web/views/partials/header.ejs) just for these five.
@@ -115,15 +115,8 @@ export default function Sidebar({ activeGuildId, open, onClose }) {
               <div className="v2-sidebar-group" key={g.title}>
                 <div className="v2-sidebar-group-title">{g.title}</div>
                 {g.cards.map((card) => {
-                  // 'messages' (Embed messages) has its own top-level V2
-                  // route, not the standard /m/:id module-page path — same
-                  // exception Overview.jsx makes.
-                  const isV2 = Boolean(MODULE_FORMS[card.id]) || card.id === 'messages';
-                  const href = isV2
-                    ? card.id === 'messages'
-                      ? `/guilds/${activeGuildId}/messages`
-                      : `/guilds/${activeGuildId}/m/${card.id}`
-                    : card.href;
+                  const isV2 = hasV2Page(card);
+                  const href = isV2 ? v2Href(card, activeGuildId) : card.href;
                   return isV2 ? (
                     <Link
                       key={card.id}

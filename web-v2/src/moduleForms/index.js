@@ -33,3 +33,23 @@ export const MODULE_FORMS = {
   appeals: Appeals,
   giveaways: Giveaways,
 };
+
+// Overview/Sidebar cards with a real V2 page that isn't the standard
+// /m/:id module-config route: Embed messages is its own top-level feature,
+// and "Settings" (card.id 'general', the Core group's link card) is the
+// same /guilds/:id/settings route Sidebar's own fixed nav item already
+// points to. Centralized here (not duplicated per-component) so Overview.jsx
+// and Sidebar.jsx can't drift out of sync on which cards have a V2 page —
+// happened once already when 'general' was missed from both.
+export const SPECIAL_V2_PATHS = {
+  messages: (guildId) => `/guilds/${guildId}/messages`,
+  general: (guildId) => `/guilds/${guildId}/settings`,
+};
+
+export function hasV2Page(card) {
+  return Boolean(MODULE_FORMS[card.id]) || Boolean(SPECIAL_V2_PATHS[card.id]);
+}
+
+export function v2Href(card, guildId) {
+  return SPECIAL_V2_PATHS[card.id] ? SPECIAL_V2_PATHS[card.id](guildId) : `/guilds/${guildId}/m/${card.id}`;
+}

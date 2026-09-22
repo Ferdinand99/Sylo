@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { setModuleEnabled, ApiError } from '../api.js';
 import { useOverview } from '../OverviewContext.jsx';
-import { MODULE_FORMS } from '../moduleForms/index.js';
+import { hasV2Page, v2Href } from '../moduleForms/index.js';
 
 // A module without a V2 page yet gets this tag next to its name, wherever
 // its title is shown — the click still works (falls back to `card.href`,
@@ -13,18 +13,6 @@ function ClassicTag() {
       Classic
     </span>
   );
-}
-
-// 'messages' (Embed messages) isn't a toggleable module config under
-// /m/:id like every other card — it's its own top-level guild feature
-// (Messages.jsx/MessageBuilder.jsx), same shape as Leaderboard/Settings.
-// Special-cased here rather than building a general id->path map for what
-// is, so far, exactly one exception.
-function hasV2Page(card) {
-  return Boolean(MODULE_FORMS[card.id]) || card.id === 'messages';
-}
-function v2Href(card, guildId) {
-  return card.id === 'messages' ? `/guilds/${guildId}/messages` : `/guilds/${guildId}/m/${card.id}`;
 }
 
 // The module's name links to its V2 settings page if one's been built,
