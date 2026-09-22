@@ -15,9 +15,13 @@ import Logging from './Logging.jsx';
 import Tickets from './Tickets.jsx';
 import Appeals from './Appeals.jsx';
 import Giveaways from './Giveaways.jsx';
+import Moderation from './Moderation.jsx';
+import Automod from './Automod.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
+  moderation: Moderation,
+  automod: Automod,
   welcome: Welcome,
   birthdays: Birthdays,
   verification: Verification,

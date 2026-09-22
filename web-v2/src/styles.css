@@ -1252,6 +1252,42 @@ button.v2-toggle:disabled {
   outline: none;
   border-color: var(--accent);
 }
+/* Auto-moderation (Automod.jsx) — one row per check (mode select + an
+   optional collapsible params panel), lighter than .v2-rule-card since
+   most rows have no extra fields at all. */
+.v2-am-rules {
+  margin-bottom: 20px;
+}
+.v2-am-rule {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.v2-am-rule:last-child {
+  border-bottom: none;
+}
+.v2-am-rule-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.v2-am-params {
+  margin-top: 10px;
+}
+.v2-am-params summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.v2-am-params .v2-field,
+.v2-am-params .v2-field-row {
+  margin-top: 8px;
+}
+.v2-warn-text {
+  color: #f5a524;
+  font-size: 0.82rem;
+  margin: 6px 0 0;
+}
 /* Scoped to any form, not just .v2-field, so a card of raw inputs (e.g.
    .v2-rule-card's embed fields) gets the same look without every single
    input needing its own .v2-field wrapper (and that wrapper's label-sized

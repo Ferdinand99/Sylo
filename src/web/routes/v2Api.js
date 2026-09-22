@@ -14,13 +14,20 @@ import { buildOverview } from '../lib/overviewSummary.js';
 import { getDashboardVersion, setDashboardVersion, DASHBOARD_VERSIONS } from '../../db/userPrefs.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { normaliseLevelingConfig } from '../../modules/leveling.js';
-import { normaliseAutomodConfig } from '../../modules/automod.js';
+import {
+  normaliseAutomodConfig,
+  AUTOMOD_RULES,
+  AUTOMOD_ACTIONS,
+  NATIVE_MAPPABLE,
+  PRESET_KEYS,
+} from '../../modules/automod.js';
 import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
+import { normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
 import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
 import {
   listComposed,
@@ -608,6 +615,94 @@ router.post(
       detail: 'settings saved',
     });
     res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/moderation/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'moderation');
+    res.json({
+      config: {
+        dmOnPunish: cfg.dmOnPunish !== false,
+        warnThresholds: normaliseThresholds(cfg.warnThresholds),
+        infractionRetentionDays: Number(cfg.infractionRetentionDays) || 0,
+      },
+      thresholdActions: THRESHOLD_ACTIONS,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/moderation/config',
+  asyncHandler(async (req, res) => {
+    const config = {
+      dmOnPunish: req.body.dmOnPunish !== false,
+      warnThresholds: normaliseThresholds(req.body.warnThresholds),
+      infractionRetentionDays: clampDays(req.body.infractionRetentionDays),
+    };
+    await setGuildModule(req.guild.id, 'moderation', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:moderation',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/automod/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'automod');
+    const settings = await getGuildSettings(req.guild.id);
+    res.json({
+      config: normaliseAutomodConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      automodRules: AUTOMOD_RULES,
+      automodActions: AUTOMOD_ACTIONS,
+      nativeMappable: NATIVE_MAPPABLE,
+      presetKeys: PRESET_KEYS,
+      modlogChannelId: settings?.modlog_channel_id || '',
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/automod/config',
+  asyncHandler(async (req, res) => {
+    // Immunity (exempt) roles are managed on the Admin tab, not this form —
+    // keep whatever is already stored, same as V1's guilds.js.
+    const prev = (await getGuildModule(req.guild.id, 'automod')).config;
+    const config = normaliseAutomodConfig({
+      deleteMessage: true,
+      timeoutMinutes: req.body.timeoutMinutes,
+      exemptChannels: req.body.exemptChannels,
+      exemptRoles: prev.exemptRoles ?? [],
+      native: req.body.native,
+      rules: req.body.rules,
+    });
+    await setGuildModule(req.guild.id, 'automod', { config });
+
+    let nativeNote = '';
+    let nativeWarned = false;
+    const r = await syncGuildAutomod(req.guild, config);
+    if (r.skipped === 'missing-permission') {
+      nativeNote = 'native rules skipped: Sylo needs the Manage Server permission';
+      nativeWarned = true;
+    } else if (r.skipped === 'fetch-failed' || r.errors.length) {
+      nativeNote = 'some native rules could not be updated';
+      nativeWarned = true;
+    } else if (r.created || r.edited || r.removed) {
+      nativeNote = `native rules +${r.created} ~${r.edited} -${r.removed}`;
+    }
+
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:automod',
+      detail: 'settings saved',
+    });
+    res.json({ config, nativeNote, nativeWarned });
   })
 );
 
