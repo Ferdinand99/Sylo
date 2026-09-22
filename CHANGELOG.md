@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.33.0](https://github.com/Ferdinand99/Sylo/compare/v3.32.1...v3.33.0) (2026-09-22)
+
+
+### Features
+
+* **dashboard:** add Sticky messages V2 config page ([#209](https://github.com/Ferdinand99/Sylo/issues/209)) ([f1d9702](https://github.com/Ferdinand99/Sylo/commit/f1d970201ef0f89ff8c085df67d070c962e7dffd))
+
 ## [3.32.1](https://github.com/Ferdinand99/Sylo/compare/v3.32.0...v3.32.1) (2026-09-19)
 
 
