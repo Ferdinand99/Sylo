@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import ChipPicker from '../components/ChipPicker.jsx';
 
 export default function Tickets() {
   const { guildId } = useParams();
@@ -105,22 +106,16 @@ export default function Tickets() {
         </div>
 
         <div className="v2-field">
-          <label htmlFor="staffRoles">
+          <label>
             Staff roles{' '}
             <span className="v2-field-hint">— may read/reply to tickets even without Manage Server</span>
           </label>
-          <select
-            id="staffRoles"
-            multiple
+          <ChipPicker
+            kind="role"
+            items={data.roles}
             value={form.staffRoles}
-            onChange={(e) => set({ staffRoles: [...e.target.selectedOptions].map((o) => o.value) })}
-          >
-            {data.roles.map((r) => (
-              <option key={r.id} value={r.id}>
-                @{r.name}
-              </option>
-            ))}
-          </select>
+            onChange={(staffRoles) => set({ staffRoles })}
+          />
         </div>
 
         <div className="v2-field">

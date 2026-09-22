@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import ChipPicker from '../components/ChipPicker.jsx';
 
 export default function Afk() {
   const { guildId } = useParams();
@@ -75,23 +76,15 @@ export default function Afk() {
         </div>
 
         <div className="v2-field">
-          <label htmlFor="ignoreChannels">
+          <label>
             Ignore channels <span className="v2-field-hint">— AFK isn't cleared or announced here</span>
           </label>
-          <select
-            id="ignoreChannels"
-            multiple
+          <ChipPicker
+            kind="channel"
+            items={data.channels}
             value={form.ignoreChannels}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, ignoreChannels: [...e.target.selectedOptions].map((o) => o.value) }))
-            }
-          >
-            {data.channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                #{c.name}
-              </option>
-            ))}
-          </select>
+            onChange={(ignoreChannels) => setForm((f) => ({ ...f, ignoreChannels }))}
+          />
         </div>
 
         <button type="submit" className="v2-btn-primary" disabled={saving}>

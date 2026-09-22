@@ -5,11 +5,12 @@
 // getGuild, requireGuildAdmin) — none of them are modified by this file.
 import { createRequire } from 'node:module';
 import { Router, raw } from 'express';
+import { PermissionFlagsBits } from 'discord.js';
 import { requireGuildAdmin, requireOwner, manageableGuilds, currentUser } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
-import { guildTextChannels, resolveUserTags } from '../lib/discord.js';
+import { guildTextChannels, guildVoiceChannels, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { getDashboardVersion, setDashboardVersion, DASHBOARD_VERSIONS } from '../../db/userPrefs.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
@@ -28,6 +29,17 @@ import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
 import { normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
+import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
+import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
+import { normaliseInviteTrackerConfig } from '../../modules/inviteTracker.js';
+import { topInviters, inviterCount, setBonus } from '../../db/inviteTracker.js';
+import { normaliseTwitchConfig, DEFAULT_MESSAGE as TWITCH_DEFAULT_MSG } from '../../modules/twitchAlerts.js';
+import { normaliseKickConfig, DEFAULT_MESSAGE as KICK_DEFAULT_MSG } from '../../modules/kickAlerts.js';
+import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TPL, FEED_TYPES } from '../../modules/rss.js';
+import { clearScope } from '../../db/postedKeys.js';
+import { dailySeries, hourlySeries, topChannels, topVoiceChannels } from '../../db/insights.js';
+import { flushGuild as flushGuildInsights } from '../../modules/insights.js';
+import { recentLookups } from '../../db/cache.js';
 import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
 import {
   listComposed,
@@ -707,6 +719,293 @@ router.post(
 );
 
 router.get(
+  '/guilds/:guildId/modules/sticky/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'sticky');
+    res.json({
+      config: { stickies: Array.isArray(cfg.stickies) ? cfg.stickies : [] },
+      channels: guildTextChannels(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/sticky/config',
+  asyncHandler(async (req, res) => {
+    // lastMessageId is bot-managed (the currently-posted sticky message per
+    // channel) — carried over from the previous config by channelId, same
+    // as V1's guilds.js, rather than letting the form touch it.
+    const prev = (await getGuildModule(req.guild.id, 'sticky')).config;
+    const prevById = new Map((prev.stickies ?? []).map((s) => [s.channelId, s]));
+    const rows = Array.isArray(req.body.stickies) ? req.body.stickies : [];
+    const stickies = rows
+      .map((s) => ({
+        channelId: s.channelId,
+        content: String(s.content ?? '').slice(0, 2000),
+        lastMessageId: prevById.get(s.channelId)?.lastMessageId ?? null,
+        repostOnBots: Boolean(s.repostOnBots),
+        cooldownSeconds: Math.max(0, Math.min(3600, Math.floor(Number(s.cooldownSeconds)) || 0)),
+      }))
+      .filter((s) => /^\d{17,20}$/.test(s.channelId) && s.content.trim() !== '');
+    const config = { stickies };
+    await setGuildModule(req.guild.id, 'sticky', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:sticky',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/server-stats/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'server-stats');
+    res.json({
+      config: normaliseServerStats(cfg),
+      voiceChannels: guildVoiceChannels(req.guild),
+      statTypes: STAT_TYPES,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/server-stats/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseServerStats({
+      refreshMinutes: req.body.refreshMinutes,
+      channels: req.body.channels,
+    });
+    await setGuildModule(req.guild.id, 'server-stats', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:server-stats',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/autoresponder/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'autoresponder');
+    res.json({
+      config: normaliseAutoresponder(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      matchModes: AR_MATCH_MODES,
+      placeholders: AR_PLACEHOLDERS,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/autoresponder/config',
+  asyncHandler(async (req, res) => {
+    // embedColor isn't exposed on this form — same as V1, which never sends
+    // it either, so normaliseAutoresponder's default applies on every save.
+    const config = normaliseAutoresponder({
+      cooldownSeconds: req.body.cooldownSeconds,
+      ignoreChannels: req.body.ignoreChannels,
+      ignoreRoles: req.body.ignoreRoles,
+      responders: req.body.responders,
+    });
+    await setGuildModule(req.guild.id, 'autoresponder', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:autoresponder',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+async function inviteBoard(guild) {
+  const rows = await topInviters(guild.id, 15);
+  const tags = await resolveUserTags(
+    runtime.client,
+    rows.map((r) => r.user_id)
+  );
+  return {
+    total: await inviterCount(guild.id),
+    canReadInvites: Boolean(guild.members.me?.permissions.has(PermissionFlagsBits.ManageGuild)),
+    rows: rows.map((r, i) => ({
+      rank: i + 1,
+      userId: r.user_id,
+      name: tags.get(r.user_id) ?? r.user_id,
+      net: r.net,
+      regular: r.regular,
+      leaves: r.leaves,
+      bonus: r.bonus,
+    })),
+  };
+}
+
+router.get(
+  '/guilds/:guildId/modules/invite-tracker/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'invite-tracker');
+    res.json({
+      config: normaliseInviteTrackerConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      board: await inviteBoard(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/invite-tracker/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseInviteTrackerConfig({
+      joinLogChannelId: req.body.joinLogChannelId,
+      graceHours: req.body.graceHours,
+    });
+    await setGuildModule(req.guild.id, 'invite-tracker', { config });
+    primeInviteCache(req.guild).catch((err) =>
+      log.error('invite-tracker', 'cache prime after save failed:', err.message)
+    );
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:invite-tracker',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/invite-tracker/bonus',
+  asyncHandler(async (req, res) => {
+    const userId = parseUserId(req.body.userId);
+    const bonus = Number(req.body.bonus);
+    if (!userId || !Number.isInteger(bonus) || bonus < -100000 || bonus > 100000) {
+      return res.status(400).json({ error: 'Invalid member id or bonus value.' });
+    }
+    await setBonus(req.guild.id, userId, bonus);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:invite-tracker',
+      detail: `${userId} bonus → ${bonus}`,
+    });
+    res.json({ board: await inviteBoard(req.guild) });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/twitch-alerts/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'twitch-alerts');
+    res.json({
+      config: normaliseTwitchConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      twitchEnabled: config.twitchEnabled,
+      defaultMessage: TWITCH_DEFAULT_MSG,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/twitch-alerts/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseTwitchConfig({ alerts: req.body.alerts });
+    await setGuildModule(req.guild.id, 'twitch-alerts', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:twitch-alerts',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/kick-alerts/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'kick-alerts');
+    res.json({
+      config: normaliseKickConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      kickEnabled: config.kickEnabled,
+      defaultMessage: KICK_DEFAULT_MSG,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/kick-alerts/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseKickConfig({ alerts: req.body.alerts });
+    await setGuildModule(req.guild.id, 'kick-alerts', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:kick-alerts',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/rss/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'rss');
+    res.json({
+      config: normaliseRssConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      feedTypes: FEED_TYPES,
+      defaultTemplate: RSS_DEFAULT_TPL,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/rss/config',
+  asyncHandler(async (req, res) => {
+    const prevIds = new Set(
+      ((await getGuildModule(req.guild.id, 'rss')).config.feeds ?? []).map((f) => f.id)
+    );
+    const config = normaliseRssConfig({ feeds: req.body.feeds });
+    // Drop dedup state for feeds that were removed, so re-adding the same
+    // URL later starts fresh rather than silently swallowing a backlog —
+    // same cleanup guilds.js's POST handler does.
+    const keptIds = new Set(config.feeds.map((f) => f.id));
+    for (const id of prevIds) {
+      if (!keptIds.has(id)) await clearScope(req.guild.id, `rss:${id}`);
+    }
+    await setGuildModule(req.guild.id, 'rss', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:rss',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+// No POST route — this module has nothing to configure beyond the
+// enable/disable toggle every module already gets. Read-only, matching
+// V1's game-stats.ejs (command docs + the shared lookup cache).
+router.get(
+  '/guilds/:guildId/modules/game-stats/config',
+  asyncHandler(async (req, res) => {
+    res.json({
+      recent: (await recentLookups(15)).map((r) => ({
+        game: r.game,
+        title: r.title,
+        username: r.username,
+        platform: r.platform,
+        ago: timeAgo(r.created_at),
+      })),
+    });
+  })
+);
+
+router.get(
   '/guilds/:guildId/modules/logging/config',
   asyncHandler(async (req, res) => {
     const { config: cfg } = await getGuildModule(req.guild.id, 'logging');
@@ -1170,6 +1469,59 @@ router.post(
       action: 'settings:server',
       detail: 'saved',
     });
+    res.json({ ok: true });
+  })
+);
+
+// --- Server insights (mirrors guilds.js:2804-2864) -------------------------
+
+const INSIGHTS_HOURLY = { 24: 24, 48: 48 };
+const INSIGHTS_DAILY = { 7: 7, 30: 30, 90: 90 };
+
+router.get(
+  '/guilds/:guildId/insights',
+  asyncHandler(async (req, res) => {
+    const raw = String(req.query.range ?? '30');
+    const hourly = raw in INSIGHTS_HOURLY;
+    const range = hourly ? INSIGHTS_HOURLY[raw] : (INSIGHTS_DAILY[raw] ?? 30);
+    const series = hourly ? await hourlySeries(req.guild.id, range) : await dailySeries(req.guild.id, range);
+
+    // Per-channel totals ("top channels") are only kept daily; for an
+    // hourly window fall back to the last day.
+    const topDays = hourly ? 1 : range;
+    const chans = [...guildTextChannels(req.guild), ...guildVoiceChannels(req.guild)];
+    const nameOf = (id) =>
+      id.startsWith('name:') ? id.slice(5) : (chans.find((c) => c.id === id)?.name ?? 'deleted channel');
+
+    res.json({
+      range,
+      granularity: hourly ? 'hour' : 'day',
+      series,
+      totals: {
+        messages: series.reduce((t, d) => t + d.messages, 0),
+        joins: series.reduce((t, d) => t + d.joins, 0),
+        leaves: series.reduce((t, d) => t + d.leaves, 0),
+        net: series.reduce((t, d) => t + d.joins - d.leaves, 0),
+        peakActive: series.reduce((m, d) => Math.max(m, d.activeMembers), 0),
+        voiceMinutes: series.reduce((t, d) => t + d.voiceMinutes, 0),
+        voicePeak: series.reduce((m, d) => Math.max(m, d.voicePeak), 0),
+      },
+      topChannels: (await topChannels(req.guild.id, topDays, 6)).map((t) => ({
+        name: nameOf(t.channelId),
+        messages: t.messages,
+      })),
+      topVoice: (await topVoiceChannels(req.guild.id, topDays, 6)).map((t) => ({
+        name: nameOf(t.channelId),
+        minutes: t.minutes,
+      })),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/insights/refresh',
+  asyncHandler(async (req, res) => {
+    await flushGuildInsights(req.guild.id);
     res.json({ ok: true });
   })
 );

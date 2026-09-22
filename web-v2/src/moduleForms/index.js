@@ -17,11 +17,27 @@ import Appeals from './Appeals.jsx';
 import Giveaways from './Giveaways.jsx';
 import Moderation from './Moderation.jsx';
 import Automod from './Automod.jsx';
+import Sticky from './Sticky.jsx';
+import ServerStats from './ServerStats.jsx';
+import Autoresponder from './Autoresponder.jsx';
+import InviteTracker from './InviteTracker.jsx';
+import TwitchAlerts from './TwitchAlerts.jsx';
+import KickAlerts from './KickAlerts.jsx';
+import RssAlerts from './RssAlerts.jsx';
+import GameStats from './GameStats.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
   moderation: Moderation,
   automod: Automod,
+  sticky: Sticky,
+  'server-stats': ServerStats,
+  autoresponder: Autoresponder,
+  'invite-tracker': InviteTracker,
+  'twitch-alerts': TwitchAlerts,
+  'kick-alerts': KickAlerts,
+  rss: RssAlerts,
+  'game-stats': GameStats,
   welcome: Welcome,
   birthdays: Birthdays,
   verification: Verification,
@@ -44,6 +60,7 @@ export const MODULE_FORMS = {
 export const SPECIAL_V2_PATHS = {
   messages: (guildId) => `/guilds/${guildId}/messages`,
   general: (guildId) => `/guilds/${guildId}/settings`,
+  insights: (guildId) => `/guilds/${guildId}/insights`,
 };
 
 export function hasV2Page(card) {

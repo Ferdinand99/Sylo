@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import ToggleSection from '../components/ToggleSection.jsx';
+import ChipPicker from '../components/ChipPicker.jsx';
 
 export default function Welcome() {
   const { guildId } = useParams();
@@ -183,19 +184,13 @@ export default function Welcome() {
           onToggle={() => set({ autoroleEnabled: !form.autoroleEnabled })}
         >
           <div className="v2-field">
-            <label htmlFor="autoroles">Roles</label>
-            <select
-              id="autoroles"
-              multiple
+            <label>Roles</label>
+            <ChipPicker
+              kind="role"
+              items={data.roles}
               value={form.autoroles}
-              onChange={(e) => set({ autoroles: [...e.target.selectedOptions].map((o) => o.value) })}
-            >
-              {data.roles.map((r) => (
-                <option key={r.id} value={r.id}>
-                  @{r.name}
-                </option>
-              ))}
-            </select>
+              onChange={(autoroles) => set({ autoroles })}
+            />
           </div>
         </ToggleSection>
 

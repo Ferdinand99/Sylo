@@ -1313,13 +1313,69 @@ form textarea {
   outline: none;
   border-color: var(--accent);
 }
-.v2-field select[multiple] {
-  min-height: 140px;
-}
 .v2-field-hint {
   color: var(--text-muted);
   font-size: 0.78rem;
   margin: 4px 0 0;
+}
+/* ChipPicker.jsx — replaces a native <select multiple> (needs ctrl/cmd-
+   click to pick more than one, not discoverable) with removable chips
+   plus a single-select "add" dropdown. Ports V1's .role-picker/.role-chip
+   (styles.css) to V2's tokens. */
+.v2-chip-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.v2-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.v2-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 7px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.v2-chip-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+.v2-chip-hash {
+  color: var(--text-muted);
+  font-weight: 700;
+  flex: none;
+  font-size: 0.8rem;
+}
+.v2-chip-x {
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 0 0 2px;
+  cursor: pointer;
+}
+.v2-chip-x:hover {
+  color: #f87171;
+}
+.v2-chip-add {
+  max-width: 320px;
 }
 .v2-field-row {
   display: flex;
@@ -1369,4 +1425,140 @@ form textarea {
   border-radius: 12px;
   margin-top: 8px;
   display: block;
+}
+
+/* Insights.jsx — ports V1's hand-rolled SVG bar/line charts (ins-* in
+   V1's styles.css) onto V2's tokens rather than pulling in a charting
+   library for six small sparkline-style charts. */
+.v2-ins-range {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.v2-pill {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-muted);
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.v2-pill.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.v2-ins-refresh {
+  margin-left: auto;
+}
+.v2-ins-tiles {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.v2-ins-tile {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 110px;
+}
+.v2-ins-n {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.v2-ins-ok {
+  color: #4ade80;
+}
+.v2-ins-bad {
+  color: #f87171;
+}
+.v2-ins-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+.v2-ins-chart {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.v2-ins-chart h3 {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+}
+.v2-ins-chart svg {
+  display: block;
+  width: 100%;
+  height: 120px;
+}
+.v2-ins-bar-msg {
+  fill: var(--accent);
+}
+.v2-ins-bar-voice {
+  fill: #4ade80;
+}
+.v2-ins-line-grow {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.v2-ins-line-join {
+  stroke: #4ade80;
+  stroke-width: 2;
+}
+.v2-ins-line-leave {
+  stroke: #f87171;
+  stroke-width: 2;
+}
+.v2-ins-key {
+  font-size: 0.7rem;
+}
+.v2-ins-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.v2-ins-bars li {
+  display: grid;
+  grid-template-columns: minmax(80px, 30%) 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+.v2-ins-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+.v2-ins-bar-track {
+  background: var(--bg-surface-2);
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+}
+.v2-ins-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+.v2-ins-bar-fill-voice {
+  background: #4ade80;
+}
+.v2-ins-bar-val {
+  font-size: 0.78rem;
+  color: var(--text-muted);
 }

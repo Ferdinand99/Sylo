@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import ChipPicker from '../components/ChipPicker.jsx';
 
 const MODE_LABELS = {
   off: 'Disabled',
@@ -288,23 +289,15 @@ export default function Automod() {
         </div>
 
         <div className="v2-field">
-          <label htmlFor="exemptChannels">
+          <label>
             Exempt channels <span className="v2-field-hint">— automod never acts here</span>
           </label>
-          <select
-            id="exemptChannels"
-            multiple
+          <ChipPicker
+            kind="channel"
+            items={data.channels}
             value={form.exemptChannels}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, exemptChannels: [...e.target.selectedOptions].map((o) => o.value) }))
-            }
-          >
-            {data.channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                #{c.name}
-              </option>
-            ))}
-          </select>
+            onChange={(exemptChannels) => setForm((f) => ({ ...f, exemptChannels }))}
+          />
         </div>
 
         <div className="v2-section-gap">

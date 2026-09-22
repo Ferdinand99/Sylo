@@ -74,6 +74,8 @@ export const endGiveaway = (guildId, id) =>
   postJson(`/api/v2/guilds/${guildId}/modules/giveaways/${id}/end`, {});
 export const rerollGiveaway = (guildId, id, count) =>
   postJson(`/api/v2/guilds/${guildId}/modules/giveaways/${id}/reroll`, { count });
+export const setInviteBonus = (guildId, userId, bonus) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/invite-tracker/bonus`, { userId, bonus });
 
 export const getComposedMessages = (guildId) => apiFetch(`/api/v2/guilds/${guildId}/messages`);
 export const getComposedMessage = (guildId, id) => apiFetch(`/api/v2/guilds/${guildId}/messages/${id}`);
@@ -83,6 +85,9 @@ export const unpublishComposedMessage = (guildId, id) =>
   postJson(`/api/v2/guilds/${guildId}/messages/${id}/unpublish`, {});
 export const deleteComposedMessage = (guildId, id) =>
   postJson(`/api/v2/guilds/${guildId}/messages/${id}/delete`, {});
+
+export const getInsights = (guildId, range) => apiFetch(`/api/v2/guilds/${guildId}/insights?range=${range}`);
+export const refreshInsights = (guildId) => postJson(`/api/v2/guilds/${guildId}/insights/refresh`, {});
 
 export const getPrefs = () => apiFetch('/api/v2/prefs');
 export const setDashboardVersion = (dashboardVersion) => postJson('/api/v2/prefs', { dashboardVersion });
