@@ -29,6 +29,7 @@ import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
 import { normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
 import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
+import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
 import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
 import {
   listComposed,
@@ -770,6 +771,41 @@ router.post(
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:server-stats',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/autoresponder/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'autoresponder');
+    res.json({
+      config: normaliseAutoresponder(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      matchModes: AR_MATCH_MODES,
+      placeholders: AR_PLACEHOLDERS,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/autoresponder/config',
+  asyncHandler(async (req, res) => {
+    // embedColor isn't exposed on this form — same as V1, which never sends
+    // it either, so normaliseAutoresponder's default applies on every save.
+    const config = normaliseAutoresponder({
+      cooldownSeconds: req.body.cooldownSeconds,
+      ignoreChannels: req.body.ignoreChannels,
+      ignoreRoles: req.body.ignoreRoles,
+      responders: req.body.responders,
+    });
+    await setGuildModule(req.guild.id, 'autoresponder', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:autoresponder',
       detail: 'settings saved',
     });
     res.json({ config });

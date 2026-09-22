@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getGuildSettings, saveGuildSettings, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import ChipPicker from '../components/ChipPicker.jsx';
 
 export default function Settings() {
   const { guildId } = useParams();
@@ -91,27 +92,15 @@ export default function Settings() {
         </div>
 
         <div className="v2-field">
-          <label htmlFor="masters">Bot master roles</label>
-          <select
-            id="masters"
-            multiple
+          <label>Bot master roles</label>
+          <ChipPicker
+            kind="role"
+            items={data.roles}
             value={form.botMasterRoleIds}
-            onChange={(e) =>
-              setForm((f) => ({
-                ...f,
-                botMasterRoleIds: [...e.target.selectedOptions].map((o) => o.value),
-              }))
-            }
-          >
-            {data.roles.map((r) => (
-              <option key={r.id} value={r.id}>
-                @{r.name}
-              </option>
-            ))}
-          </select>
+            onChange={(botMasterRoleIds) => setForm((f) => ({ ...f, botMasterRoleIds }))}
+          />
           <p className="v2-field-hint">
-            Ctrl/Cmd-click to select several. Roles with Administrator already have dashboard access and don't
-            need to be added here.
+            Roles with Administrator already have dashboard access and don't need to be added here.
           </p>
         </div>
 

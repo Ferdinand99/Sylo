@@ -1313,13 +1313,69 @@ form textarea {
   outline: none;
   border-color: var(--accent);
 }
-.v2-field select[multiple] {
-  min-height: 140px;
-}
 .v2-field-hint {
   color: var(--text-muted);
   font-size: 0.78rem;
   margin: 4px 0 0;
+}
+/* ChipPicker.jsx — replaces a native <select multiple> (needs ctrl/cmd-
+   click to pick more than one, not discoverable) with removable chips
+   plus a single-select "add" dropdown. Ports V1's .role-picker/.role-chip
+   (styles.css) to V2's tokens. */
+.v2-chip-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.v2-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.v2-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 7px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.v2-chip-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+.v2-chip-hash {
+  color: var(--text-muted);
+  font-weight: 700;
+  flex: none;
+  font-size: 0.8rem;
+}
+.v2-chip-x {
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 0 0 2px;
+  cursor: pointer;
+}
+.v2-chip-x:hover {
+  color: #f87171;
+}
+.v2-chip-add {
+  max-width: 320px;
 }
 .v2-field-row {
   display: flex;

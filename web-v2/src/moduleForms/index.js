@@ -19,6 +19,7 @@ import Moderation from './Moderation.jsx';
 import Automod from './Automod.jsx';
 import Sticky from './Sticky.jsx';
 import ServerStats from './ServerStats.jsx';
+import Autoresponder from './Autoresponder.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -26,6 +27,7 @@ export const MODULE_FORMS = {
   automod: Automod,
   sticky: Sticky,
   'server-stats': ServerStats,
+  autoresponder: Autoresponder,
   welcome: Welcome,
   birthdays: Birthdays,
   verification: Verification,
