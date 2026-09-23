@@ -53,6 +53,7 @@ const CATEGORIES = [
       { module: 'birthdays' },
       { module: 'roles', label: 'Reaction roles' },
       { module: 'verification' },
+      { module: 'honeypot', label: 'Honeypot' },
       { page: 'moderation', dotModule: 'moderation', label: 'Moderator' },
       { module: 'leveling', label: 'Levels' },
       { module: 'starboard', label: 'Starboard' },

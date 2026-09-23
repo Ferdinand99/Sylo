@@ -545,8 +545,27 @@ a:hover {
   padding: 1px 7px;
   vertical-align: middle;
 }
+/* Newly-added modules — registry.js's `beta` flag — get this wherever
+   they're listed, same shape as .v2-classic-tag but amber-tinted so the
+   two read as distinct signals at a glance. */
+.v2-beta-tag {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #f0b132;
+  border: 1px solid rgba(240, 177, 50, 0.35);
+  border-radius: 999px;
+  padding: 1px 7px;
+  vertical-align: middle;
+}
 .v2-sidebar-classic-mark {
   opacity: 0.55;
+}
+.v2-sidebar-beta-mark {
+  color: #f0b132;
+  opacity: 0.85;
 }
 .v2-row-arrow {
   color: var(--text-muted);

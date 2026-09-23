@@ -765,6 +765,25 @@ export const MIGRATIONS = [
       );
     `);
   },
+
+  // Honeypot catch log — see src/db/honeypotCatches.js. Stores the member's
+  // tag at catch time so the dashboard shows a real name even once the
+  // account is no longer resolvable as a guild member.
+  (database) => {
+    database.exec(`
+      CREATE TABLE honeypot_catches (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id   TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        user_tag   TEXT NOT NULL,
+        kind       TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        action     TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_honeypot_catches_guild ON honeypot_catches (guild_id, created_at DESC);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

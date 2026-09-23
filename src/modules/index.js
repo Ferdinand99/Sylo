@@ -6,6 +6,7 @@ import './roles.js';
 import './sticky.js';
 import './counting.js';
 import './automod.js';
+import './honeypot.js';
 import './customCommands.js';
 import './scheduledMessages.js';
 import './leveling.js';

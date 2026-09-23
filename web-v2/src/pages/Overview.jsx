@@ -15,6 +15,16 @@ function ClassicTag() {
   );
 }
 
+// A newly-added module gets this next to its name until it's had enough
+// real-world use to drop registry.js's `beta` flag.
+function BetaTag() {
+  return (
+    <span className="v2-beta-tag" title="New module — behavior may still change">
+      Beta
+    </span>
+  );
+}
+
 // The module's name links to its V2 settings page if one's been built,
 // otherwise to V1's own config page for it — `card.href`, which the
 // overview API already provides (src/web/lib/overviewSummary.js). Every
@@ -23,14 +33,16 @@ function ModuleTitle({ card, guildId }) {
   if (hasV2Page(card)) {
     return (
       <Link className="v2-row-title-link" to={v2Href(card, guildId)}>
-        <h3>{card.name}</h3>
+        <h3>
+          {card.name} {card.beta ? <BetaTag /> : null}
+        </h3>
       </Link>
     );
   }
   return (
     <a className="v2-row-title-link" href={card.href}>
       <h3>
-        {card.name} <ClassicTag />
+        {card.name} <ClassicTag /> {card.beta ? <BetaTag /> : null}
       </h3>
     </a>
   );
@@ -42,7 +54,7 @@ function ModuleRow({ card, guildId, busy, onToggle }) {
       <>
         <div className="v2-row-main">
           <h3>
-            {card.name} {hasV2Page(card) ? null : <ClassicTag />}
+            {card.name} {hasV2Page(card) ? null : <ClassicTag />} {card.beta ? <BetaTag /> : null}
           </h3>
           <p>{card.description}</p>
         </div>

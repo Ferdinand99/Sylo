@@ -22,6 +22,8 @@ import {
   NATIVE_MAPPABLE,
   PRESET_KEYS,
 } from '../../modules/automod.js';
+import { normaliseHoneypotConfig, HONEYPOT_ACTIONS, ensureHoneypotMessages } from '../../modules/honeypot.js';
+import { recentHoneypotCatches } from '../../db/honeypotCatches.js';
 import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
@@ -442,6 +444,63 @@ router.post(
       log.error('verification', 'ensure message after save failed:', err.message)
     );
     res.json({ config: cfg });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/honeypot/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'honeypot');
+    res.json({
+      config: normaliseHoneypotConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      actions: HONEYPOT_ACTIONS,
+      catches: (await recentHoneypotCatches(req.guild.id, 25)).map((c) => ({
+        userTag: c.user_tag,
+        kind: c.kind,
+        channelName: req.guild.channels.cache.get(c.channel_id)?.name ?? 'deleted channel',
+        action: c.action,
+        ago: timeAgo(c.created_at),
+      })),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/honeypot/config',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    // messageId and triggerCount are bot-managed — never trust whatever the
+    // client echoes back, re-derive both server-side by channelId, same as
+    // the V1 form branch.
+    const prev = (await getGuildModule(guild.id, 'honeypot')).config;
+    const prevMsgByChannel = new Map((prev.messages ?? []).map((m) => [m.channelId, m]));
+    const prevChanByChannel = new Map((prev.channels ?? []).map((c) => [c.channelId, c]));
+    const rawChannels = Array.isArray(req.body.channels) ? req.body.channels : [];
+    const rawMessages = Array.isArray(req.body.messages) ? req.body.messages : [];
+    const config = normaliseHoneypotConfig({
+      exemptRoles: req.body.exemptRoles,
+      channels: rawChannels.map((c) => ({
+        ...c,
+        triggerCount: prevChanByChannel.get(c.channelId)?.triggerCount ?? 0,
+      })),
+      messages: rawMessages.map((m) => ({
+        ...m,
+        messageId: prevMsgByChannel.get(m.channelId)?.messageId ?? '',
+        triggerCount: prevMsgByChannel.get(m.channelId)?.triggerCount ?? 0,
+      })),
+    });
+    await setGuildModule(guild.id, 'honeypot', { config });
+    await recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:honeypot',
+      detail: 'settings saved',
+    });
+    ensureHoneypotMessages(guild, config).catch((err) =>
+      log.error('honeypot', 'ensure message after save failed:', err.message)
+    );
+    res.json({ config });
   })
 );
 

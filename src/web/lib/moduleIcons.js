@@ -7,6 +7,7 @@ export const MODULE_ICONS = {
   moderation: 'shield',
   logging: 'file-text',
   automod: 'filter',
+  honeypot: 'target',
   verification: 'shield-check',
   appeals: 'gavel',
   tickets: 'ticket',
