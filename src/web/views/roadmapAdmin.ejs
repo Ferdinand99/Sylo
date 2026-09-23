@@ -1,0 +1,93 @@
+<%- include('partials/header', { title: 'Sylo — Roadmap admin' }) %>
+
+<h1 class="page-title">Roadmap admin</h1>
+<p class="muted">Review suggestions, manage status, or post something yourself.
+  <a href="/roadmap">View the public board</a>.</p>
+
+<% if (createErr) { %><div class="banner banner-flash bad"><%= createErr %></div><% } %>
+
+<section class="card">
+  <h2>Pending suggestions <span class="muted">(<%= pending.length %>)</span></h2>
+  <% if (pending.length === 0) { %>
+    <p class="muted">Nothing waiting on review.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>Title</th><th>Description</th><th>Submitted</th><th></th></tr></thead>
+      <tbody>
+        <% pending.forEach(function (p) { %>
+          <tr>
+            <td><%= p.title %></td>
+            <td class="muted"><%= p.description %></td>
+            <td class="muted u-nowrap"><%= p.ago %></td>
+            <td class="num">
+              <div class="btn-row" style="justify-content:flex-end;margin:0">
+                <form method="POST" action="/roadmap/admin/<%= p.id %>/approve" hx-boost="false">
+                  <button type="submit">Approve</button>
+                </form>
+                <form method="POST" action="/roadmap/admin/<%= p.id %>/reject" hx-boost="false" data-confirm="Reject and delete this suggestion?">
+                  <button type="submit" class="danger">Reject</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<section class="card">
+  <h2>Post something new</h2>
+  <form method="POST" action="/roadmap/admin" hx-boost="false">
+    <label class="small">Title</label>
+    <input name="title" type="text" maxlength="100" required />
+    <label class="small u-mt-2">Description</label>
+    <textarea name="description" maxlength="1000" rows="3" required></textarea>
+    <div class="btn-row u-mt-3">
+      <button type="submit">Post as planned</button>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Public posts <span class="muted">(<%= posts.length %>)</span></h2>
+  <% if (posts.length === 0) { %>
+    <p class="muted">Nothing posted yet.</p>
+  <% } else { %>
+    <% posts.forEach(function (p) { %>
+      <div class="roadmap-post">
+        <div style="flex:1">
+          <h3><span class="pill <%= p.status %>"><%= p.status %></span> <%= p.title %></h3>
+          <p><%= p.description %></p>
+          <p class="muted small"><%= p.votes %> vote<%= p.votes === 1 ? '' : 's' %> &middot; posted <%= p.ago %></p>
+
+          <details class="u-mt-2">
+            <summary class="muted small">Edit</summary>
+            <form method="POST" action="/roadmap/admin/<%= p.id %>/edit" hx-boost="false" class="u-mt-2">
+              <input name="title" type="text" maxlength="100" value="<%= p.title %>" required />
+              <textarea name="description" maxlength="1000" rows="3" required class="u-mt-2"><%= p.description %></textarea>
+              <div class="btn-row u-mt-2">
+                <button type="submit" class="secondary">Save</button>
+              </div>
+            </form>
+          </details>
+        </div>
+
+        <div class="btn-row" style="flex-direction:column;align-items:stretch">
+          <form method="POST" action="/roadmap/admin/<%= p.id %>/status" hx-boost="false">
+            <select name="status" onchange="this.form.requestSubmit()">
+              <% statuses.forEach(function (s) { %>
+                <option value="<%= s %>" <%= s === p.status ? 'selected' : '' %>><%= s %></option>
+              <% }) %>
+            </select>
+          </form>
+          <form method="POST" action="/roadmap/admin/<%= p.id %>/delete" hx-boost="false" data-confirm="Delete this post permanently?">
+            <button type="submit" class="danger">Delete</button>
+          </form>
+        </div>
+      </div>
+    <% }) %>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

@@ -24,6 +24,7 @@ import guildMessagesRouter from './routes/guildMessages.js';
 import githubWebhookRouter from './routes/githubWebhook.js';
 import v2ApiRouter from './routes/v2Api.js';
 import v2ClientRouter from './routes/v2Client.js';
+import roadmapRouter from './routes/roadmap.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -68,6 +69,7 @@ export function createApp() {
   app.use('/lb', rateLimit({ windowMs: 60_000, max: 40 }), vanityRouter);
   app.use('/verify', rateLimit({ windowMs: 60_000, max: 20 }), verifyRouter);
   app.use('/appeal', rateLimit({ windowMs: 60_000, max: 15 }), appealRouter);
+  app.use('/roadmap', rateLimit({ windowMs: 60_000, max: 60 }), roadmapRouter);
 
   // Per-path ceiling on the authenticated dashboard — generous for normal
   // clicking, but stops a stuck script or a compromised session from hammering

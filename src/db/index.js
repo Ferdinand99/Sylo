@@ -784,6 +784,31 @@ export const MIGRATIONS = [
       CREATE INDEX idx_honeypot_catches_guild ON honeypot_catches (guild_id, created_at DESC);
     `);
   },
+
+  // Self-hosted roadmap + voting (replaces the Fider embed) — see
+  // src/db/roadmap.js. Not guild-scoped: one shared board for the whole
+  // hosted instance, keyed on the Discord user id who suggested/voted.
+  (database) => {
+    database.exec(`
+      CREATE TABLE roadmap_posts (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        title       TEXT NOT NULL,
+        description TEXT NOT NULL,
+        status      TEXT NOT NULL DEFAULT 'pending',
+        created_by  TEXT NOT NULL,
+        created_at  INTEGER NOT NULL,
+        updated_at  INTEGER NOT NULL
+      );
+      CREATE INDEX idx_roadmap_posts_status ON roadmap_posts (status, created_at);
+
+      CREATE TABLE roadmap_votes (
+        post_id    INTEGER NOT NULL,
+        user_id    TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (post_id, user_id)
+      );
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

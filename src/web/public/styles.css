@@ -694,6 +694,20 @@ td.num, th.num { text-align: right; }
 .pill.on { background: rgba(88, 214, 141, 0.14); border-color: rgba(88, 214, 141, 0.3); color: var(--ok); }
 .pill.off { background: rgba(242, 85, 90, 0.14); border-color: rgba(242, 85, 90, 0.3); color: var(--bad); }
 .pill.beta { background: rgba(229, 181, 103, 0.14); border-color: rgba(229, 181, 103, 0.3); color: var(--warn); font-size: 10px; vertical-align: middle; }
+
+/* Roadmap board */
+.pill.planned { background: rgba(122, 162, 247, 0.14); border-color: rgba(122, 162, 247, 0.3); color: var(--accent); }
+.pill.started { background: rgba(229, 181, 103, 0.14); border-color: rgba(229, 181, 103, 0.3); color: var(--warn); }
+.pill.completed { background: rgba(88, 214, 141, 0.14); border-color: rgba(88, 214, 141, 0.3); color: var(--ok); }
+.pill.pending { background: rgba(138, 148, 166, 0.14); border-color: rgba(138, 148, 166, 0.3); color: var(--muted); }
+.roadmap-post { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.roadmap-post:last-child { border-bottom: none; }
+.roadmap-post h3 { margin: 0 0 4px; font-size: 0.98rem; }
+.roadmap-post p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.roadmap-vote { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 52px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); cursor: pointer; font: inherit; color: var(--text); }
+.roadmap-vote.voted { border-color: var(--accent); color: var(--accent); }
+.roadmap-vote:disabled { cursor: not-allowed; opacity: 0.6; }
+.roadmap-vote .n { font-weight: 700; font-size: 1.05rem; }
 .appeal-answers { margin: 4px 0 8px; }
 .appeal-answers dt { color: var(--muted); font-weight: 600; margin-top: 6px; }
 .appeal-answers dd { margin: 2px 0 0; white-space: pre-wrap; }
