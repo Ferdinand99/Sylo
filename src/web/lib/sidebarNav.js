@@ -36,6 +36,7 @@ const TOP = [
   },
   { key: 'personalizer', label: 'Bot Personalizer', icon: ICONS.personalizer, href: '/settings' },
   { key: 'settings', label: 'Settings', icon: 'gear', guild: (g) => `/guilds/${g}/settings`, noGuild: '/' },
+  { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', href: '/roadmap' },
   { key: 'health', label: 'Health', icon: 'pulse', href: '/health' },
 ];
 

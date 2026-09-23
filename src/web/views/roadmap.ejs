@@ -1,0 +1,94 @@
+<%- include('partials/header', { title: 'Sylo — Roadmap' }) %>
+
+<h1 class="page-title">Roadmap</h1>
+<p class="muted">What's planned, in progress, and shipped. Vote on what matters to you, or suggest something new.
+  <% if (isOwner) { %><a href="/roadmap/admin">Manage board →</a><% } %>
+</p>
+
+<% if (suggestOk) { %><div class="banner banner-flash ok">Thanks — your suggestion is awaiting review.</div><% } %>
+<% if (suggestErr) { %><div class="banner banner-flash bad"><%= suggestErr %></div><% } %>
+
+<% if (!loggedIn) { %>
+  <div class="banner info">
+    <a href="/auth/discord/login">Log in with Discord</a> to vote or suggest a feature.
+  </div>
+<% } %>
+
+<% ['planned', 'started', 'completed'].forEach(function (status) { %>
+  <section class="card">
+    <h2><span class="pill <%= status %>"><%= status %></span></h2>
+    <% if (groups[status].length === 0) { %>
+      <p class="muted">Nothing here yet.</p>
+    <% } else { %>
+      <% groups[status].forEach(function (p) { %>
+        <div class="roadmap-post" id="post-<%= p.id %>">
+          <div>
+            <h3><%= p.title %></h3>
+            <p><%= p.description %></p>
+          </div>
+          <button
+            type="button"
+            class="roadmap-vote<%= p.voted ? ' voted' : '' %>"
+            data-post-id="<%= p.id %>"
+            <%= loggedIn ? '' : 'disabled title="Log in with Discord to vote"' %>
+          >
+            <span class="n"><%= p.votes %></span>
+            <span>vote<%= p.votes === 1 ? '' : 's' %></span>
+          </button>
+        </div>
+      <% }) %>
+    <% } %>
+  </section>
+<% }) %>
+
+<% if (loggedIn) { %>
+  <section class="card">
+    <h2>Suggest a feature</h2>
+    <form method="POST" action="/roadmap/suggest" hx-boost="false">
+      <label class="small">Title</label>
+      <input name="title" type="text" maxlength="100" required />
+      <label class="small u-mt-2">Description</label>
+      <textarea name="description" maxlength="1000" rows="3" required></textarea>
+      <div class="btn-row u-mt-3">
+        <button type="submit">Submit for review</button>
+      </div>
+    </form>
+
+    <% if (mine.length) { %>
+      <h3 class="u-mt-3">Your suggestions awaiting review</h3>
+      <table>
+        <thead><tr><th>Title</th><th>Submitted</th></tr></thead>
+        <tbody>
+          <% mine.forEach(function (p) { %>
+            <tr><td><%= p.title %></td><td class="muted"><%= p.ago %></td></tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </section>
+<% } %>
+
+<script>
+  (function () {
+    var token = document.querySelector('meta[name="csrf-token"]');
+    token = token ? token.content : null;
+    document.querySelectorAll('.roadmap-vote').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        var headers = { 'Content-Type': 'application/json' };
+        if (token) headers['x-csrf-token'] = token;
+        fetch('/roadmap/' + btn.dataset.postId + '/vote', { method: 'POST', headers: headers })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+          .then(function (data) {
+            btn.querySelector('.n').textContent = data.votes;
+            btn.classList.toggle('voted', data.voted);
+          })
+          .catch(function () {})
+          .finally(function () { btn.disabled = false; });
+      });
+    });
+  })();
+</script>
+
+<%- include('partials/footer') %>
