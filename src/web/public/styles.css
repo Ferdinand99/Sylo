@@ -693,6 +693,7 @@ td.num, th.num { text-align: right; }
 .pill.open { background: rgba(122, 162, 247, 0.14); border-color: rgba(122, 162, 247, 0.3); color: var(--accent); }
 .pill.on { background: rgba(88, 214, 141, 0.14); border-color: rgba(88, 214, 141, 0.3); color: var(--ok); }
 .pill.off { background: rgba(242, 85, 90, 0.14); border-color: rgba(242, 85, 90, 0.3); color: var(--bad); }
+.pill.beta { background: rgba(229, 181, 103, 0.14); border-color: rgba(229, 181, 103, 0.3); color: var(--warn); font-size: 10px; vertical-align: middle; }
 .appeal-answers { margin: 4px 0 8px; }
 .appeal-answers dt { color: var(--muted); font-weight: 600; margin-top: 6px; }
 .appeal-answers dd { margin: 2px 0 0; white-space: pre-wrap; }

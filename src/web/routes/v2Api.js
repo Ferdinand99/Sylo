@@ -22,6 +22,7 @@ import {
   NATIVE_MAPPABLE,
   PRESET_KEYS,
 } from '../../modules/automod.js';
+import { normaliseHoneypotConfig, HONEYPOT_ACTIONS, ensureHoneypotMessages } from '../../modules/honeypot.js';
 import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
@@ -442,6 +443,49 @@ router.post(
       log.error('verification', 'ensure message after save failed:', err.message)
     );
     res.json({ config: cfg });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/honeypot/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'honeypot');
+    res.json({
+      config: normaliseHoneypotConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      actions: HONEYPOT_ACTIONS,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/honeypot/config',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    // messageId is bot-managed — never trust whatever the client echoes back,
+    // re-derive it server-side by channelId, same as the V1 form branch.
+    const prev = (await getGuildModule(guild.id, 'honeypot')).config;
+    const prevMsgByChannel = new Map((prev.messages ?? []).map((m) => [m.channelId, m]));
+    const rawMessages = Array.isArray(req.body.messages) ? req.body.messages : [];
+    const config = normaliseHoneypotConfig({
+      exemptRoles: req.body.exemptRoles,
+      channels: req.body.channels,
+      messages: rawMessages.map((m) => ({
+        ...m,
+        messageId: prevMsgByChannel.get(m.channelId)?.messageId ?? '',
+      })),
+    });
+    await setGuildModule(guild.id, 'honeypot', { config });
+    await recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:honeypot',
+      detail: 'settings saved',
+    });
+    ensureHoneypotMessages(guild, config).catch((err) =>
+      log.error('honeypot', 'ensure message after save failed:', err.message)
+    );
+    res.json({ config });
   })
 );
 

@@ -128,7 +128,7 @@
             <% } %>
             <a class="plugin-hit" href="<%= c.href %>" aria-label="<%= c.name %>"></a>
             <span class="plugin-ico"><svg class="plugin-ico-svg" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-<%= c.icon %>"/></svg></span>
-            <span class="plugin-name"><%= c.name %></span>
+            <span class="plugin-name"><%= c.name %><% if (c.beta) { %> <span class="pill beta" title="New module — behavior may still change">Beta</span><% } %></span>
             <span class="plugin-desc"><%= c.description %></span>
             <span class="plugin-cta" data-guild="<%= guild.id %>" data-module="<%= c.id %>">
               <% if (c.status === 'blocked') { %>
@@ -465,6 +465,9 @@
         <%- include('guild/_module-toggle', { guild: guild, activeModule: activeModule, moduleEnabled: mrow.enabled, toggleDisabled: mrow.missingIntents.length > 0 }) %>
       </div>
       <p class="muted"><%= activeModule.description %></p>
+      <% if (activeModule.beta) { %>
+        <p class="muted small"><strong>Beta</strong> — this module is new; behavior may still change based on feedback.</p>
+      <% } %>
       <% if (mrow.missingIntents.length) { %>
         <p class="warn-text small">Needs intent: <%= mrow.missingIntents.join(', ') %> — enable it in the Discord Developer Portal.</p>
       <% } %>

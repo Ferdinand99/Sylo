@@ -25,11 +25,13 @@ import TwitchAlerts from './TwitchAlerts.jsx';
 import KickAlerts from './KickAlerts.jsx';
 import RssAlerts from './RssAlerts.jsx';
 import GameStats from './GameStats.jsx';
+import Honeypot from './Honeypot.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
   moderation: Moderation,
   automod: Automod,
+  honeypot: Honeypot,
   sticky: Sticky,
   'server-stats': ServerStats,
   autoresponder: Autoresponder,

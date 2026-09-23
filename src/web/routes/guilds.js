@@ -41,6 +41,7 @@ import {
   PRESET_KEYS,
 } from '../../modules/automod.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
+import { normaliseHoneypotConfig, HONEYPOT_ACTIONS, ensureHoneypotMessages } from '../../modules/honeypot.js';
 import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
 import {
   activeGiveaways,
@@ -170,6 +171,7 @@ const CONFIG_VIEWS = new Set([
   'sticky',
   'tickets',
   'automod',
+  'honeypot',
   'counting',
   'custom-commands',
   'reminders',
@@ -793,6 +795,7 @@ async function moduleViewLocals(mod, req, configOverride) {
     configView: hasView ? `guild/modules/${mod.id}` : 'guild/modules/stub',
     configPartialRel: hasView ? `modules/${mod.id}` : 'modules/stub',
     logEvents: LOG_EVENTS,
+    honeypotActions: HONEYPOT_ACTIONS,
     welcomePlaceholders: WELCOME_PLACEHOLDERS,
     thresholdActions: THRESHOLD_ACTIONS,
     modlogChannelId: (await getGuildSettings(req.guild.id))?.modlog_channel_id ?? '',
@@ -800,6 +803,7 @@ async function moduleViewLocals(mod, req, configOverride) {
       'roles',
       'tickets',
       'automod',
+      'honeypot',
       'leveling',
       'autoresponder',
       'auto-react',
@@ -1145,6 +1149,34 @@ router.post(
           repeat: rule('repeat'),
         },
       });
+    } else if (mod.id === 'honeypot') {
+      const b = req.body;
+      const prevHoneypot = (await getGuildModule(req.guild.id, 'honeypot')).config;
+      const prevMsgByChannel = new Map((prevHoneypot.messages ?? []).map((m) => [m.channelId, m]));
+      const hpChannels = [].concat(b.hp_channel ?? []);
+      const hpChannelActions = [].concat(b.hp_channel_action ?? []);
+      const hpChannelTimeouts = [].concat(b.hp_channel_timeout ?? []);
+      const hpChannelDeletes = [].concat(b.hp_channel_delete ?? []);
+      const hpMsgChannels = [].concat(b.hp_msg_channel ?? []);
+      const hpMsgBaits = [].concat(b.hp_msg_bait ?? []);
+      const hpMsgActions = [].concat(b.hp_msg_action ?? []);
+      const hpMsgTimeouts = [].concat(b.hp_msg_timeout ?? []);
+      config = normaliseHoneypotConfig({
+        exemptRoles: [].concat(b.exemptRoles ?? []),
+        channels: hpChannels.map((channelId, i) => ({
+          channelId,
+          action: hpChannelActions[i],
+          timeoutMinutes: hpChannelTimeouts[i],
+          deleteMessage: hpChannelDeletes[i] === 'on',
+        })),
+        messages: hpMsgChannels.map((channelId, i) => ({
+          channelId,
+          messageId: prevMsgByChannel.get(channelId)?.messageId ?? '',
+          bait: hpMsgBaits[i],
+          action: hpMsgActions[i],
+          timeoutMinutes: hpMsgTimeouts[i],
+        })),
+      });
     } else if (mod.id === 'counting') {
       const penaltyMinutes = Math.round(Number(req.body.penaltyMinutes));
       config = {
@@ -1437,6 +1469,11 @@ router.post(
     if (mod.id === 'verification') {
       ensureVerifyMessage(req.guild, config).catch((err) =>
         log.error('verification', 'ensure message after save failed:', err.message)
+      );
+    }
+    if (mod.id === 'honeypot') {
+      ensureHoneypotMessages(req.guild, config).catch((err) =>
+        log.error('honeypot', 'ensure message after save failed:', err.message)
       );
     }
     let nativeNote = '';

@@ -1,0 +1,131 @@
+<% var cfg = moduleConfig || {}; %>
+<% var channels_ = Array.isArray(cfg.channels) ? cfg.channels : []; %>
+<% var messages_ = Array.isArray(cfg.messages) ? cfg.messages : []; %>
+<% var exemptRoles = Array.isArray(cfg.exemptRoles) ? cfg.exemptRoles : []; %>
+<% var ACTION_LABELS = { kick: 'Kick', timeout: 'Timeout', ban: 'Ban' }; %>
+
+<p class="muted small">
+  Any real member who posts in a trap channel, or reacts to a trap message, is punished immediately —
+  there is no warning or grace period. Administrators and members with an exempt role below are never
+  acted on. Every trigger is logged to the mod-log channel (set under
+  <a href="/guilds/<%= guild.id %>/settings">Settings</a>).
+</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/honeypot/config"
+      hx-post="/guilds/<%= guild.id %>/m/honeypot/config" hx-target="#module-config" hx-swap="outerHTML"
+      class="stack u-mw-xl">
+
+  <h3 class="u-m0">Channel honeypots</h3>
+  <p class="muted small">Any message posted in one of these channels triggers the punishment.</p>
+  <div id="hp-channel-rows">
+    <% channels_.forEach(function (c) { %>
+      <div class="row-form">
+        <select name="hp_channel" style="min-width:180px">
+          <option value="">— channel —</option>
+          <% channels.forEach(function (ch) { %>
+            <option value="<%= ch.id %>" <%= ch.id === c.channelId ? 'selected' : '' %>>#<%= ch.name %></option>
+          <% }) %>
+        </select>
+        <select class="u-w-field" name="hp_channel_action">
+          <% honeypotActions.forEach(function (a) { %>
+            <option value="<%= a %>" <%= a === c.action ? 'selected' : '' %>><%= ACTION_LABELS[a] || a %></option>
+          <% }) %>
+        </select>
+        <label class="small">Timeout (min)
+          <input class="u-w-num" type="number" name="hp_channel_timeout" min="1" max="40320" value="<%= c.timeoutMinutes || 10 %>" />
+        </label>
+        <label class="small"><input type="checkbox" name="hp_channel_delete" <%= c.deleteMessage !== false ? 'checked' : '' %> /> delete message</label>
+        <button type="button" class="link-btn" onclick="this.closest('.row-form').remove()">remove</button>
+      </div>
+    <% }) %>
+  </div>
+  <div><button type="button" class="secondary" id="hp-channel-add">+ Add channel honeypot</button></div>
+
+  <h3 class="u-mt-4">Message honeypots</h3>
+  <p class="muted small">Sylo posts a trap message in the chosen channel; any reaction to it triggers the punishment.</p>
+  <div id="hp-msg-rows">
+    <% messages_.forEach(function (m) { %>
+      <div class="row-form-stack card stack">
+        <div class="star-age">
+          <div class="stack u-grow">
+            <label class="small">Channel</label>
+            <select name="hp_msg_channel">
+              <option value="">— channel —</option>
+              <% channels.forEach(function (ch) { %>
+                <option value="<%= ch.id %>" <%= ch.id === m.channelId ? 'selected' : '' %>>#<%= ch.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="stack u-grow">
+            <label class="small">Action</label>
+            <select name="hp_msg_action">
+              <% honeypotActions.forEach(function (a) { %>
+                <option value="<%= a %>" <%= a === m.action ? 'selected' : '' %>><%= ACTION_LABELS[a] || a %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="stack">
+            <label class="small">Timeout (min)</label>
+            <input class="u-w-num" type="number" name="hp_msg_timeout" min="1" max="40320" value="<%= m.timeoutMinutes || 10 %>" />
+          </div>
+        </div>
+        <label class="small">Bait text <span class="muted">— shown in the trap message</span></label>
+        <textarea name="hp_msg_bait" rows="2" maxlength="500" placeholder="Click here to verify your account."><%= m.bait || '' %></textarea>
+        <% if (m.messageId) { %>
+          <p class="muted small u-m0">Live: <a href="https://discord.com/channels/<%= guild.id %>/<%= m.channelId %>/<%= m.messageId %>" target="_blank" rel="noopener">jump to message</a></p>
+        <% } %>
+        <div><button type="button" class="link-btn" onclick="this.closest('.row-form-stack').remove()">remove</button></div>
+      </div>
+    <% }) %>
+  </div>
+  <div><button type="button" class="secondary" id="hp-msg-add">+ Add message honeypot</button></div>
+
+  <h3 class="u-mt-4">Exempt roles</h3>
+  <p class="muted small">Members with any of these roles are never punished by the honeypot (Administrators are always exempt).</p>
+  <%- include('../../partials/chip-picker', { field: 'exemptRoles', kind: 'role', items: roles, selected: exemptRoles }) %>
+
+  <div class="u-mt-4"><button type="submit">Save</button></div>
+</form>
+
+<template id="hp-channel-template">
+  <div class="row-form">
+    <select name="hp_channel" style="min-width:180px">
+      <option value="">— channel —</option>
+      <% channels.forEach(function (ch) { %><option value="<%= ch.id %>">#<%= ch.name %></option><% }) %>
+    </select>
+    <select class="u-w-field" name="hp_channel_action">
+      <% honeypotActions.forEach(function (a) { %><option value="<%= a %>"><%= ACTION_LABELS[a] || a %></option><% }) %>
+    </select>
+    <label class="small">Timeout (min)
+      <input class="u-w-num" type="number" name="hp_channel_timeout" min="1" max="40320" value="10" />
+    </label>
+    <label class="small"><input type="checkbox" name="hp_channel_delete" checked /> delete message</label>
+    <button type="button" class="link-btn" onclick="this.closest('.row-form').remove()">remove</button>
+  </div>
+</template>
+<template id="hp-msg-template">
+  <div class="row-form-stack card stack">
+    <div class="star-age">
+      <div class="stack u-grow"><label class="small">Channel</label>
+        <select name="hp_msg_channel"><option value="">— channel —</option>
+          <% channels.forEach(function (ch) { %><option value="<%= ch.id %>">#<%= ch.name %></option><% }) %></select></div>
+      <div class="stack u-grow"><label class="small">Action</label>
+        <select name="hp_msg_action">
+          <% honeypotActions.forEach(function (a) { %><option value="<%= a %>"><%= ACTION_LABELS[a] || a %></option><% }) %>
+        </select></div>
+      <div class="stack"><label class="small">Timeout (min)</label>
+        <input class="u-w-num" type="number" name="hp_msg_timeout" min="1" max="40320" value="10" /></div>
+    </div>
+    <label class="small">Bait text</label>
+    <textarea name="hp_msg_bait" rows="2" maxlength="500" placeholder="Click here to verify your account."></textarea>
+    <div><button type="button" class="link-btn" onclick="this.closest('.row-form-stack').remove()">remove</button></div>
+  </div>
+</template>
+<script>
+  document.getElementById('hp-channel-add')?.addEventListener('click', function () {
+    document.getElementById('hp-channel-rows').appendChild(document.getElementById('hp-channel-template').content.cloneNode(true));
+  });
+  document.getElementById('hp-msg-add')?.addEventListener('click', function () {
+    document.getElementById('hp-msg-rows').appendChild(document.getElementById('hp-msg-template').content.cloneNode(true));
+  });
+</script>

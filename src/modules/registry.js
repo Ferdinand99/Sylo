@@ -14,6 +14,8 @@ import { config } from '../config.js';
  *   ("GuildMembers", "MessageContent"). Empty = works with the base intents.
  * @property {boolean} defaultEnabled   Whether it is on by default in a new guild.
  * @property {boolean} configurable     Whether it has a settings panel yet.
+ * @property {boolean} [beta]           Shows a "Beta" tag wherever the module is listed.
+ *   Set on a newly-added module and removed once it's proven stable in practice.
  */
 
 /** @type {ModuleDef[]} */
@@ -162,6 +164,16 @@ export const MODULES = [
     requiredIntents: ['MessageContent'],
     defaultEnabled: false,
     configurable: true,
+  },
+  {
+    id: 'honeypot',
+    name: 'Honeypot',
+    description: 'Trap channels and messages that instantly punish scrapers and raid bots.',
+    icon: '🍯',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
   },
   {
     id: 'afk',

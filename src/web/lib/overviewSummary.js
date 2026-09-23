@@ -37,7 +37,7 @@ const KEY_PERMS = [
 // of the synthetic cards built below ('general', 'commands', 'messages').
 const LAYOUT = [
   { title: 'Core', ids: ['general', 'commands', 'moderation'] },
-  { title: 'Moderation & filtering', ids: ['automod', 'verification', 'appeals', 'logging'] },
+  { title: 'Moderation & filtering', ids: ['automod', 'honeypot', 'verification', 'appeals', 'logging'] },
   {
     title: 'Engagement',
     ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'starboard', 'sticky', 'birthdays'],
@@ -147,6 +147,7 @@ async function buildCard(id, guild, settings, state) {
     description: def.description,
     hasToggle: true,
     enabled,
+    beta: Boolean(def.beta),
     missingIntents: missing,
     status: missing.length ? 'blocked' : enabled ? 'on' : 'off',
     href:
@@ -407,6 +408,15 @@ async function moduleLines(id, guild, cfg) {
       return [
         active ? on('Active filters', `${active} of ${AUTOMOD_RULES.length}`) : off('Active filters', 'none'),
         exempt ? on('Exemptions', String(exempt)) : neutral('Exemptions', '0'),
+      ];
+    }
+    case 'honeypot': {
+      const channels = Array.isArray(cfg.channels) ? cfg.channels.length : 0;
+      const messages = Array.isArray(cfg.messages) ? cfg.messages.length : 0;
+      const traps = channels + messages;
+      return [
+        traps ? on('Traps set', String(traps)) : off('Traps set', 'none'),
+        neutral('Exempt roles', String(cfg.exemptRoles?.length ?? 0)),
       ];
     }
     default:

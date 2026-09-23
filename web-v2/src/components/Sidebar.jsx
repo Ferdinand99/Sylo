@@ -124,7 +124,12 @@ export default function Sidebar({ activeGuildId, open, onClose }) {
                       className={`v2-sidebar-sublink${pathname === href ? ' is-active' : ''}`}
                       onClick={onClose}
                     >
-                      {card.name}
+                      {card.name}{' '}
+                      {card.beta ? (
+                        <span className="v2-sidebar-beta-mark" title="New module — behavior may still change">
+                          ●
+                        </span>
+                      ) : null}
                     </Link>
                   ) : (
                     <a
@@ -135,6 +140,12 @@ export default function Sidebar({ activeGuildId, open, onClose }) {
                       title="Opens the classic V1 dashboard — no V2 page yet"
                     >
                       {card.name} <span className="v2-sidebar-classic-mark">↗</span>
+                      {card.beta ? (
+                        <span className="v2-sidebar-beta-mark" title="New module — behavior may still change">
+                          {' '}
+                          ●
+                        </span>
+                      ) : null}
                     </a>
                   );
                 })}
