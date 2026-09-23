@@ -22,9 +22,9 @@
     <% } else { %>
       <% groups[status].forEach(function (p) { %>
         <div class="roadmap-post" id="post-<%= p.id %>">
-          <div>
+          <div class="roadmap-post-body">
             <h3><%= p.title %></h3>
-            <p><%= p.description %></p>
+            <div class="roadmap-desc"><%- p.descriptionHtml %></div>
           </div>
           <button
             type="button"
@@ -44,12 +44,13 @@
 <% if (loggedIn) { %>
   <section class="card">
     <h2>Suggest a feature</h2>
-    <form method="POST" action="/roadmap/suggest" hx-boost="false">
+    <form method="POST" action="/roadmap/suggest" hx-boost="false" class="stack">
       <label class="small">Title</label>
       <input name="title" type="text" maxlength="100" required />
-      <label class="small u-mt-2">Description</label>
-      <textarea name="description" maxlength="1000" rows="3" required></textarea>
-      <div class="btn-row u-mt-3">
+      <label class="small">Description</label>
+      <textarea name="description" maxlength="2000" rows="5" required></textarea>
+      <p class="muted small u-m0">Markdown: **bold**, _italic_, `code`, [links](url), and - bullet lists.</p>
+      <div class="btn-row u-mt-2">
         <button type="submit">Submit for review</button>
       </div>
     </form>

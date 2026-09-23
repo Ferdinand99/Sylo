@@ -7,6 +7,7 @@ import { requireAuth, requireOwner, isOwner } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { timeAgo } from '../lib/format.js';
+import { mdToHtml } from '../lib/markdown.js';
 import {
   ROADMAP_STATUSES,
   listPublicPosts,
@@ -24,7 +25,7 @@ const router = Router();
 
 const COMPLETED_CAP = 6;
 const TITLE_MAX = 100;
-const DESC_MAX = 1000;
+const DESC_MAX = 2000;
 
 // One vote toggle per user is cheap and legitimate to click a lot; this only
 // stops a stuck script. Suggestions are capped hard — a public submission
@@ -49,8 +50,15 @@ function groupPublicPosts(posts) {
   byStatus.completed = byStatus.completed.slice(0, COMPLETED_CAP);
   byStatus.planned.sort((a, b) => a.createdAt - b.createdAt);
   byStatus.started.sort((a, b) => a.createdAt - b.createdAt);
+  for (const list of Object.values(byStatus)) {
+    for (const p of list) p.descriptionHtml = mdToHtml(p.description);
+  }
   return byStatus;
 }
+
+// description stays the raw markdown source (e.g. for the admin edit form's
+// textarea) — descriptionHtml is the rendered, safe-to-inject-unescaped copy.
+const withHtml = (p) => ({ ...p, descriptionHtml: mdToHtml(p.description) });
 
 function cleanTitle(raw) {
   const s = String(raw ?? '').trim();
@@ -101,7 +109,7 @@ router.get(
     const mine = userId ? await listUserPending(userId) : [];
     res.render('roadmap', {
       groups: groupPublicPosts(posts),
-      mine: mine.map((p) => ({ ...p, ago: timeAgo(p.createdAt) })),
+      mine: mine.map((p) => ({ ...withHtml(p), ago: timeAgo(p.createdAt) })),
       loggedIn: Boolean(userId),
       isOwner: userId ? isOwner(userId) : false,
       suggestErr: typeof req.query.suggesterr === 'string' ? req.query.suggesterr : null,
@@ -156,11 +164,11 @@ admin.get(
     const [pending, publicPosts] = await Promise.all([listPendingPosts(), listPublicPosts()]);
     res.render('roadmapAdmin', {
       statuses: ROADMAP_STATUSES.filter((s) => s !== 'pending'),
-      pending: pending.map((p) => ({ ...p, ago: timeAgo(p.createdAt) })),
+      pending: pending.map((p) => ({ ...withHtml(p), ago: timeAgo(p.createdAt) })),
       posts: publicPosts
         .slice()
         .sort((a, b) => b.createdAt - a.createdAt)
-        .map((p) => ({ ...p, ago: timeAgo(p.createdAt) })),
+        .map((p) => ({ ...withHtml(p), ago: timeAgo(p.createdAt) })),
       createErr: typeof req.query.createerr === 'string' ? req.query.createerr : null,
     });
   })

@@ -703,7 +703,13 @@ td.num, th.num { text-align: right; }
 .roadmap-post { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
 .roadmap-post:last-child { border-bottom: none; }
 .roadmap-post h3 { margin: 0 0 4px; font-size: 0.98rem; }
-.roadmap-post p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.roadmap-post-body { flex: 1; min-width: 0; }
+/* Rendered markdown (src/web/lib/markdown.js) inside a suggestion/post description. */
+.roadmap-desc { color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+.roadmap-desc p { margin: 0 0 6px; }
+.roadmap-desc p:last-child { margin-bottom: 0; }
+.roadmap-desc ul { margin: 0 0 6px; padding-left: 20px; }
+.roadmap-desc code { background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 0.85em; }
 .roadmap-vote { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 52px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); cursor: pointer; font: inherit; color: var(--text); }
 .roadmap-vote.voted { border-color: var(--accent); color: var(--accent); }
 .roadmap-vote:disabled { cursor: not-allowed; opacity: 0.6; }

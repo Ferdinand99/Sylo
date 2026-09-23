@@ -17,7 +17,7 @@
         <% pending.forEach(function (p) { %>
           <tr>
             <td><%= p.title %></td>
-            <td class="muted"><%= p.description %></td>
+            <td class="muted roadmap-desc"><%- p.descriptionHtml %></td>
             <td class="muted u-nowrap"><%= p.ago %></td>
             <td class="num">
               <div class="btn-row" style="justify-content:flex-end;margin:0">
@@ -38,12 +38,13 @@
 
 <section class="card">
   <h2>Post something new</h2>
-  <form method="POST" action="/roadmap/admin" hx-boost="false">
+  <form method="POST" action="/roadmap/admin" hx-boost="false" class="stack">
     <label class="small">Title</label>
     <input name="title" type="text" maxlength="100" required />
-    <label class="small u-mt-2">Description</label>
-    <textarea name="description" maxlength="1000" rows="3" required></textarea>
-    <div class="btn-row u-mt-3">
+    <label class="small">Description</label>
+    <textarea name="description" maxlength="2000" rows="5" required></textarea>
+    <p class="muted small u-m0">Markdown: **bold**, _italic_, `code`, [links](url), and - bullet lists.</p>
+    <div class="btn-row u-mt-2">
       <button type="submit">Post as planned</button>
     </div>
   </form>
@@ -56,16 +57,16 @@
   <% } else { %>
     <% posts.forEach(function (p) { %>
       <div class="roadmap-post">
-        <div style="flex:1">
+        <div class="roadmap-post-body">
           <h3><span class="pill <%= p.status %>"><%= p.status %></span> <%= p.title %></h3>
-          <p><%= p.description %></p>
+          <div class="roadmap-desc"><%- p.descriptionHtml %></div>
           <p class="muted small"><%= p.votes %> vote<%= p.votes === 1 ? '' : 's' %> &middot; posted <%= p.ago %></p>
 
           <details class="u-mt-2">
             <summary class="muted small">Edit</summary>
-            <form method="POST" action="/roadmap/admin/<%= p.id %>/edit" hx-boost="false" class="u-mt-2">
+            <form method="POST" action="/roadmap/admin/<%= p.id %>/edit" hx-boost="false" class="stack u-mt-2">
               <input name="title" type="text" maxlength="100" value="<%= p.title %>" required />
-              <textarea name="description" maxlength="1000" rows="3" required class="u-mt-2"><%= p.description %></textarea>
+              <textarea name="description" maxlength="2000" rows="5" required><%= p.description %></textarea>
               <div class="btn-row u-mt-2">
                 <button type="submit" class="secondary">Save</button>
               </div>
