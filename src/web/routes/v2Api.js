@@ -23,6 +23,7 @@ import {
   PRESET_KEYS,
 } from '../../modules/automod.js';
 import { normaliseHoneypotConfig, HONEYPOT_ACTIONS, ensureHoneypotMessages } from '../../modules/honeypot.js';
+import { recentHoneypotCatches } from '../../db/honeypotCatches.js';
 import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
@@ -455,6 +456,13 @@ router.get(
       channels: guildTextChannels(req.guild),
       roles: assignableRoles(req.guild),
       actions: HONEYPOT_ACTIONS,
+      catches: (await recentHoneypotCatches(req.guild.id, 25)).map((c) => ({
+        userTag: c.user_tag,
+        kind: c.kind,
+        channelName: req.guild.channels.cache.get(c.channel_id)?.name ?? 'deleted channel',
+        action: c.action,
+        ago: timeAgo(c.created_at),
+      })),
     });
   })
 );

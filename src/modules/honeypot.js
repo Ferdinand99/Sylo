@@ -19,6 +19,7 @@ import { getGuildModule, setGuildModule } from '../db/modules.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget, MOD_COLOR } from '../bot/lib/moderation.js';
 import { addCase } from '../db/modCases.js';
+import { recordHoneypotCatch } from '../db/honeypotCatches.js';
 import { log } from '../lib/log.js';
 
 export const HONEYPOT_ACTIONS = ['kick', 'timeout', 'ban'];
@@ -207,7 +208,16 @@ on('honeypot', 'messageCreate', async (message, config) => {
 
   const done = await punish(message.guild, member, entry, 'Honeypot: message posted in trap channel');
   if (entry.deleteMessage && message.deletable) await message.delete().catch(() => {});
-  if (done) await bumpHoneypotStat(message.guild, 'channels', message.channelId);
+  if (done) {
+    await bumpHoneypotStat(message.guild, 'channels', message.channelId);
+    await recordHoneypotCatch(message.guild.id, {
+      userId: member.id,
+      userTag: member.user.tag,
+      kind: 'channel',
+      channelId: message.channelId,
+      action: entry.action,
+    }).catch((err) => log.error('module:honeypot', 'catch log failed:', err.message));
+  }
 });
 
 on('honeypot', 'reactionAdd', async ({ reaction, user }, config) => {
@@ -223,5 +233,14 @@ on('honeypot', 'reactionAdd', async ({ reaction, user }, config) => {
   if (!member || isExempt(member, cfg)) return;
 
   const done = await punish(guild, member, entry, 'Honeypot: reacted to trap message');
-  if (done) await bumpHoneypotStat(guild, 'messages', entry.channelId);
+  if (done) {
+    await bumpHoneypotStat(guild, 'messages', entry.channelId);
+    await recordHoneypotCatch(guild.id, {
+      userId: member.id,
+      userTag: member.user.tag,
+      kind: 'message',
+      channelId: entry.channelId,
+      action: entry.action,
+    }).catch((err) => log.error('module:honeypot', 'catch log failed:', err.message));
+  }
 });

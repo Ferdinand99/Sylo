@@ -89,6 +89,25 @@
   <div class="u-mt-4"><button type="submit">Save</button></div>
 </form>
 
+<h3 class="u-mt-4">Recent catches</h3>
+<% if (!honeypotCatches || honeypotCatches.length === 0) { %>
+  <p class="muted small">No one has triggered a honeypot yet.</p>
+<% } else { %>
+  <table>
+    <thead><tr><th>Member</th><th>Trigger</th><th>Action</th><th>When</th></tr></thead>
+    <tbody>
+      <% honeypotCatches.forEach(function (c) { %>
+        <tr>
+          <td><%= c.userTag %></td>
+          <td>#<%= c.channelName %> <span class="muted small">(<%= c.kind === 'message' ? 'message' : 'channel' %>)</span></td>
+          <td><%= ACTION_LABELS[c.action] || c.action %></td>
+          <td class="muted"><%= c.ago %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
 <template id="hp-channel-template">
   <div class="row-form">
     <select name="hp_channel" style="min-width:180px">

@@ -296,6 +296,24 @@ export default function Honeypot() {
           {saved ? <span className="v2-field-hint"> Saved.</span> : null}
         </div>
       </form>
+
+      <h2 className="v2-group-title v2-section-gap">Recent catches</h2>
+      {data.catches.length === 0 ? (
+        <p className="v2-field-hint">No one has triggered a honeypot yet.</p>
+      ) : (
+        <div className="v2-list">
+          {data.catches.map((c, i) => (
+            <div className="v2-row" key={i}>
+              <div className="v2-row-main">
+                <h3>{c.userTag}</h3>
+                <p>
+                  #{c.channelName} ({c.kind}) · {ACTION_LABELS[c.action] || c.action} · {c.ago}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
