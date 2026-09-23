@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.34.0](https://github.com/Ferdinand99/Sylo/compare/v3.33.0...v3.34.0) (2026-09-23)
+
+
+### Features
+
+* **moderation:** add Honeypot trap channels/messages ([#211](https://github.com/Ferdinand99/Sylo/issues/211)) ([8530f35](https://github.com/Ferdinand99/Sylo/commit/8530f3510b462e7e0f0cfe77abb1d414342e9d1c))
+* **moderation:** add Honeypot trap channels/messages ([#211](https://github.com/Ferdinand99/Sylo/issues/211)) ([#214](https://github.com/Ferdinand99/Sylo/issues/214)) ([8530f35](https://github.com/Ferdinand99/Sylo/commit/8530f3510b462e7e0f0cfe77abb1d414342e9d1c))
+
 ## [3.33.0](https://github.com/Ferdinand99/Sylo/compare/v3.32.1...v3.33.0) (2026-09-22)
 
 
