@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.35.0](https://github.com/Ferdinand99/Sylo/compare/v3.34.0...v3.35.0) (2026-09-23)
+
+
+### Features
+
+* **web:** add a self-hosted roadmap + voting board, replacing Fider ([#216](https://github.com/Ferdinand99/Sylo/issues/216)) ([cdee5c3](https://github.com/Ferdinand99/Sylo/commit/cdee5c3d6130ac7aac4d3b0a21bc556529ffcc24))
+* **web:** render roadmap descriptions as markdown, fix suggest-form layout ([347345d](https://github.com/Ferdinand99/Sylo/commit/347345de6292ae5d0e9308d7385c3ae136fd4b41))
+
 ## [3.34.0](https://github.com/Ferdinand99/Sylo/compare/v3.33.0...v3.34.0) (2026-09-23)
 
 
