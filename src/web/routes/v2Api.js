@@ -463,17 +463,24 @@ router.post(
   '/guilds/:guildId/modules/honeypot/config',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    // messageId is bot-managed — never trust whatever the client echoes back,
-    // re-derive it server-side by channelId, same as the V1 form branch.
+    // messageId and triggerCount are bot-managed — never trust whatever the
+    // client echoes back, re-derive both server-side by channelId, same as
+    // the V1 form branch.
     const prev = (await getGuildModule(guild.id, 'honeypot')).config;
     const prevMsgByChannel = new Map((prev.messages ?? []).map((m) => [m.channelId, m]));
+    const prevChanByChannel = new Map((prev.channels ?? []).map((c) => [c.channelId, c]));
+    const rawChannels = Array.isArray(req.body.channels) ? req.body.channels : [];
     const rawMessages = Array.isArray(req.body.messages) ? req.body.messages : [];
     const config = normaliseHoneypotConfig({
       exemptRoles: req.body.exemptRoles,
-      channels: req.body.channels,
+      channels: rawChannels.map((c) => ({
+        ...c,
+        triggerCount: prevChanByChannel.get(c.channelId)?.triggerCount ?? 0,
+      })),
       messages: rawMessages.map((m) => ({
         ...m,
         messageId: prevMsgByChannel.get(m.channelId)?.messageId ?? '',
+        triggerCount: prevMsgByChannel.get(m.channelId)?.triggerCount ?? 0,
       })),
     });
     await setGuildModule(guild.id, 'honeypot', { config });

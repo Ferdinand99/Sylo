@@ -1153,6 +1153,7 @@ router.post(
       const b = req.body;
       const prevHoneypot = (await getGuildModule(req.guild.id, 'honeypot')).config;
       const prevMsgByChannel = new Map((prevHoneypot.messages ?? []).map((m) => [m.channelId, m]));
+      const prevChanByChannel = new Map((prevHoneypot.channels ?? []).map((c) => [c.channelId, c]));
       const hpChannels = [].concat(b.hp_channel ?? []);
       const hpChannelActions = [].concat(b.hp_channel_action ?? []);
       const hpChannelTimeouts = [].concat(b.hp_channel_timeout ?? []);
@@ -1168,6 +1169,7 @@ router.post(
           action: hpChannelActions[i],
           timeoutMinutes: hpChannelTimeouts[i],
           deleteMessage: hpChannelDeletes[i] === 'on',
+          triggerCount: prevChanByChannel.get(channelId)?.triggerCount ?? 0,
         })),
         messages: hpMsgChannels.map((channelId, i) => ({
           channelId,
@@ -1175,6 +1177,7 @@ router.post(
           bait: hpMsgBaits[i],
           action: hpMsgActions[i],
           timeoutMinutes: hpMsgTimeouts[i],
+          triggerCount: prevMsgByChannel.get(channelId)?.triggerCount ?? 0,
         })),
       });
     } else if (mod.id === 'counting') {

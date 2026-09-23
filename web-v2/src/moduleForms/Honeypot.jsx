@@ -17,6 +17,7 @@ function toChannelRow(c = {}) {
     action: c.action || 'kick',
     timeoutMinutes: c.timeoutMinutes || 10,
     deleteMessage: c.deleteMessage !== false,
+    triggerCount: c.triggerCount || 0,
   };
 }
 
@@ -28,6 +29,7 @@ function toMessageRow(m = {}) {
     bait: m.bait || '',
     action: m.action || 'kick',
     timeoutMinutes: m.timeoutMinutes || 10,
+    triggerCount: m.triggerCount || 0,
   };
 }
 
@@ -128,7 +130,9 @@ export default function Honeypot() {
         {form.channels.map((c) => (
           <div className="v2-rule-card" key={c.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Channel honeypot</span>
+              <span className="v2-field-hint">
+                Channel honeypot{c.triggerCount ? ` · triggered ${c.triggerCount}×` : ''}
+              </span>
               <button type="button" className="v2-btn-ghost" onClick={() => removeChannelRow(c.key)}>
                 remove
               </button>
@@ -193,7 +197,12 @@ export default function Honeypot() {
         {form.messages.map((m) => (
           <div className="v2-rule-card" key={m.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Message honeypot</span>
+              <span className="v2-field-hint">
+                Message honeypot
+                {m.triggerCount
+                  ? ` · ${ACTION_LABELS[m.action].toLowerCase()}s so far: ${m.triggerCount}`
+                  : ''}
+              </span>
               <button type="button" className="v2-btn-ghost" onClick={() => removeMessageRow(m.key)}>
                 remove
               </button>
