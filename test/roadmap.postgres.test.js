@@ -29,8 +29,14 @@ test(
     await t.test('createPost defaults to pending, hidden from the public list', async () => {
       const post = await createPost({ title: `PG dark mode ${stamp}`, description: 'desc', userId: USER_A });
       assert.equal(post.status, 'pending');
-      assert.equal((await listPublicPosts()).some((p) => p.id === post.id), false);
-      assert.equal((await listPendingPosts()).some((p) => p.id === post.id), true);
+      assert.equal(
+        (await listPublicPosts()).some((p) => p.id === post.id),
+        false
+      );
+      assert.equal(
+        (await listPendingPosts()).some((p) => p.id === post.id),
+        true
+      );
     });
 
     await t.test('setPostStatus approves into the public list; toggleVote adds/removes', async () => {

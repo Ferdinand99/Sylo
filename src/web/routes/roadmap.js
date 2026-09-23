@@ -68,7 +68,10 @@ function cleanDescription(raw) {
 // also reads req.session.user.id.
 function requireRealUser(req, res, next) {
   if (req.session?.user?.id) return next();
-  res.status(400).type('text/plain').send('Voting and suggestions need a real Discord login — not available in open/self-hosted mode.');
+  res
+    .status(400)
+    .type('text/plain')
+    .send('Voting and suggestions need a real Discord login — not available in open/self-hosted mode.');
 }
 
 // Public, unauthenticated — this is what the marketing site's nginx proxy
@@ -77,7 +80,16 @@ router.get(
   '/posts.json',
   asyncHandler(async (req, res) => {
     const posts = await listPublicPosts();
-    res.json(posts.map((p) => ({ id: p.id, title: p.title, description: p.description, status: p.status, votes: p.votes, createdAt: p.createdAt })));
+    res.json(
+      posts.map((p) => ({
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        status: p.status,
+        votes: p.votes,
+        createdAt: p.createdAt,
+      }))
+    );
   })
 );
 
@@ -121,7 +133,9 @@ router.post(
     const title = cleanTitle(req.body.title);
     const description = cleanDescription(req.body.description);
     if (!title || !description) {
-      return res.redirect(`/roadmap?suggesterr=${encodeURIComponent('Title (3-100 chars) and description are required.')}`);
+      return res.redirect(
+        `/roadmap?suggesterr=${encodeURIComponent('Title (3-100 chars) and description are required.')}`
+      );
     }
     await createPost({ title, description, userId: req.session.user.id, status: 'pending' });
     res.redirect('/roadmap?suggested=1');
@@ -158,7 +172,9 @@ admin.post(
     const title = cleanTitle(req.body.title);
     const description = cleanDescription(req.body.description);
     if (!title || !description) {
-      return res.redirect(`/roadmap/admin?createerr=${encodeURIComponent('Title (3-100 chars) and description are required.')}`);
+      return res.redirect(
+        `/roadmap/admin?createerr=${encodeURIComponent('Title (3-100 chars) and description are required.')}`
+      );
     }
     await createPost({ title, description, userId: req.session.user.id, status: 'planned' });
     res.redirect('/roadmap/admin');
