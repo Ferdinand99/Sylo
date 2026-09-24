@@ -6,7 +6,7 @@
 import { createRequire } from 'node:module';
 import { Router, raw } from 'express';
 import { PermissionFlagsBits } from 'discord.js';
-import { requireGuildAdmin, requireOwner, manageableGuilds, currentUser } from '../middleware/auth.js';
+import { requireGuildAdmin, requireOwner, requireRealUser, isOwner, manageableGuilds, currentUser } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';

@@ -3,7 +3,7 @@
 // browse); voting and suggesting need any signed-in Discord account;
 // /roadmap/admin/* is restricted to OWNER_IDS, same as /health.
 import { Router } from 'express';
-import { requireAuth, requireOwner, isOwner } from '../middleware/auth.js';
+import { requireAuth, requireOwner, requireRealUser, isOwner } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { timeAgo } from '../lib/format.js';
@@ -19,37 +19,31 @@ import {
   deletePost,
   toggleVote,
   getPost,
+  groupPublicPosts,
+  cleanTitle,
+  cleanDescription,
 } from '../../db/roadmap.js';
 
 const router = Router();
 
-const COMPLETED_CAP = 6;
-const TITLE_MAX = 100;
-const DESC_MAX = 2000;
-
 // One vote toggle per user is cheap and legitimate to click a lot; this only
 // stops a stuck script. Suggestions are capped hard — a public submission
-// form is the one part of this feature open to abuse.
-const voteLimit = rateLimit({
+// form is the one part of this feature open to abuse. Shared (same buckets)
+// with the V2 API's equivalent routes — see v2Api.js's "Roadmap" section.
+export const voteLimit = rateLimit({
   windowMs: 60_000,
   max: 30,
   keyFn: (req) => `rmvote:${req.session.user.id}`,
   message: 'Too many votes — slow down.',
 });
-const suggestLimit = rateLimit({
+export const suggestLimit = rateLimit({
   windowMs: 86_400_000,
   max: 5,
   keyFn: (req) => `rmsuggest:${req.session.user.id}`,
   message: "You've hit today's suggestion limit — try again tomorrow.",
 });
 
-function groupPublicPosts(posts) {
-  const byStatus = { planned: [], started: [], completed: [] };
-  for (const p of posts) byStatus[p.status]?.push(p);
-  byStatus.completed.sort((a, b) => b.createdAt - a.createdAt);
-  byStatus.completed = byStatus.completed.slice(0, COMPLETED_CAP);
-  byStatus.planned.sort((a, b) => a.createdAt - b.createdAt);
-  byStatus.started.sort((a, b) => a.createdAt - b.createdAt);
+function withGroupHtml(byStatus) {
   for (const list of Object.values(byStatus)) {
     for (const p of list) p.descriptionHtml = mdToHtml(p.description);
   }
@@ -59,28 +53,6 @@ function groupPublicPosts(posts) {
 // description stays the raw markdown source (e.g. for the admin edit form's
 // textarea) — descriptionHtml is the rendered, safe-to-inject-unescaped copy.
 const withHtml = (p) => ({ ...p, descriptionHtml: mdToHtml(p.description) });
-
-function cleanTitle(raw) {
-  const s = String(raw ?? '').trim();
-  return s.length >= 3 && s.length <= TITLE_MAX ? s : null;
-}
-function cleanDescription(raw) {
-  const s = String(raw ?? '').trim();
-  return s.length >= 1 && s.length <= DESC_MAX ? s : null;
-}
-
-// requireAuth/requireOwner are no-ops in open mode (no DISCORD_CLIENT_SECRET,
-// self-hosted default) — there's no real per-user Discord id to attribute a
-// vote or suggestion to there, unlike every other guarded action in this
-// router. Checked ahead of the rate limiters below too, since their keyFn
-// also reads req.session.user.id.
-function requireRealUser(req, res, next) {
-  if (req.session?.user?.id) return next();
-  res
-    .status(400)
-    .type('text/plain')
-    .send('Voting and suggestions need a real Discord login — not available in open/self-hosted mode.');
-}
 
 // Public, unauthenticated — this is what the marketing site's nginx proxy
 // forwards to for the sylobot.com roadmap embed.
@@ -108,7 +80,7 @@ router.get(
     const posts = await listPublicPosts(userId);
     const mine = userId ? await listUserPending(userId) : [];
     res.render('roadmap', {
-      groups: groupPublicPosts(posts),
+      groups: withGroupHtml(groupPublicPosts(posts)),
       mine: mine.map((p) => ({ ...withHtml(p), ago: timeAgo(p.createdAt) })),
       loggedIn: Boolean(userId),
       isOwner: userId ? isOwner(userId) : false,

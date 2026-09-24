@@ -239,6 +239,21 @@ export function requireOwner(req, res, next) {
 }
 
 /**
+ * Require a real, non-synthetic signed-in Discord user id — stricter than
+ * requireAuth, which passes through unconditionally in open mode (no
+ * DISCORD_CLIENT_SECRET, self-hosted default). For actions that attribute
+ * authorship to a specific account (e.g. a roadmap vote or suggestion) where
+ * there's no real per-user identity to attach in open mode.
+ */
+export function requireRealUser(req, res, next) {
+  if (req.session?.user?.id) return next();
+  res
+    .status(400)
+    .type('text/plain')
+    .send('This action needs a real Discord login — not available in open/self-hosted mode.');
+}
+
+/**
  * Wire session handling, res.locals for templates, and the /auth/* routes.
  * @param {import('express').Express} app
  */

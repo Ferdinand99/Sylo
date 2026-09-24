@@ -26,6 +26,36 @@ registerPostgresBootstrap(`
 
 export const ROADMAP_STATUSES = ['pending', 'planned', 'started', 'completed'];
 export const PUBLIC_STATUSES = ['planned', 'started', 'completed'];
+export const TITLE_MAX = 100;
+export const DESC_MAX = 2000;
+const COMPLETED_CAP = 6;
+
+/** Trim + length-validate a submitted title; null when it doesn't fit. */
+export function cleanTitle(raw) {
+  const s = String(raw ?? '').trim();
+  return s.length >= 3 && s.length <= TITLE_MAX ? s : null;
+}
+
+/** Trim + length-validate a submitted description; null when it doesn't fit. */
+export function cleanDescription(raw) {
+  const s = String(raw ?? '').trim();
+  return s.length >= 1 && s.length <= DESC_MAX ? s : null;
+}
+
+/**
+ * Group a flat `listPublicPosts()` result by status the way every roadmap
+ * view (V1 EJS, V2 React, the marketing site's public JSON consumer) wants
+ * it: completed newest-first and capped, planned/started oldest-first.
+ */
+export function groupPublicPosts(posts) {
+  const byStatus = { planned: [], started: [], completed: [] };
+  for (const p of posts) byStatus[p.status]?.push(p);
+  byStatus.completed.sort((a, b) => b.createdAt - a.createdAt);
+  byStatus.completed = byStatus.completed.slice(0, COMPLETED_CAP);
+  byStatus.planned.sort((a, b) => a.createdAt - b.createdAt);
+  byStatus.started.sort((a, b) => a.createdAt - b.createdAt);
+  return byStatus;
+}
 
 const stmts = {
   insertPost: prepare(
