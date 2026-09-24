@@ -28,6 +28,7 @@ import GameStats from './GameStats.jsx';
 import Honeypot from './Honeypot.jsx';
 import YoutubeAlerts from './YoutubeAlerts.jsx';
 import Leveling from './Leveling.jsx';
+import ChannelCleanup from './ChannelCleanup.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -42,6 +43,7 @@ export const MODULE_FORMS = {
   'kick-alerts': KickAlerts,
   'youtube-alerts': YoutubeAlerts,
   leveling: Leveling,
+  'channel-cleanup': ChannelCleanup,
   rss: RssAlerts,
   'game-stats': GameStats,
   welcome: Welcome,

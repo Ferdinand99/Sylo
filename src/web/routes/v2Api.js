@@ -40,6 +40,15 @@ import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } fr
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '../../modules/leveling.js';
 import { levelFromXp } from '../../modules/lib/levels.js';
+import { WEEKDAYS } from '../../modules/scheduledMessages.js';
+import {
+  listCleanupSchedules,
+  getCleanupSchedule,
+  createCleanupSchedule,
+  updateCleanupSchedule,
+  deleteCleanupSchedule,
+  setCleanupScheduleEnabled,
+} from '../../db/channelCleanup.js';
 import {
   normaliseAutomodConfig,
   AUTOMOD_RULES,
@@ -2137,6 +2146,111 @@ router.post(
   asyncHandler(async (req, res) => {
     await deleteRoadmapPost(Number(req.params.id));
     res.json({ ok: true });
+  })
+);
+
+// --- Channel cleanup (mirrors guilds.js's "Channel cleanup builder" section
+// — schedules live in their own table, not guild_modules.config, so this
+// isn't the usual getModuleConfig/saveModuleConfig shape.) -----------------
+
+const CLEANUP_MAX_AGE_HOURS = 24 * 90; // 90 days
+
+function shapeCleanupSchedule(rec) {
+  return {
+    id: rec.id,
+    channelId: rec.channel_id,
+    days: rec.dayList,
+    timeHhmm: rec.time_hhmm,
+    maxAgeHours: rec.max_age_hours,
+    skipPinned: Boolean(rec.skip_pinned),
+    enabled: Boolean(rec.enabled),
+    lastRunDate: rec.last_run_date || null,
+    lastRunCount: rec.last_run_count ?? null,
+  };
+}
+
+router.get(
+  '/guilds/:guildId/modules/channel-cleanup/schedules',
+  asyncHandler(async (req, res) => {
+    const rows = await listCleanupSchedules(req.guild.id);
+    res.json({
+      schedules: rows.map(shapeCleanupSchedule),
+      channels: guildTextChannels(req.guild),
+      weekdays: WEEKDAYS,
+      maxAgeHoursCap: CLEANUP_MAX_AGE_HOURS,
+    });
+  })
+);
+
+function parseCleanupBody(body) {
+  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
+  const days = (Array.isArray(body.days) ? body.days : []).map(Number).filter((n) => n >= 0 && n <= 6);
+  const maxAgeHours = Math.min(
+    CLEANUP_MAX_AGE_HOURS,
+    Math.max(1, Math.floor(Number(body.maxAgeHours)) || 24)
+  );
+  const timeOk = /^\d{2}:\d{2}$/.test(body.timeHhmm ?? '');
+  return {
+    channelId,
+    days,
+    maxAgeHours,
+    timeHhmm: body.timeHhmm,
+    skipPinned: Boolean(body.skipPinned),
+    timeOk,
+  };
+}
+
+router.post(
+  '/guilds/:guildId/modules/channel-cleanup/schedules',
+  asyncHandler(async (req, res) => {
+    const s = parseCleanupBody(req.body);
+    if (!s.channelId) return res.status(400).json({ error: 'Pick a channel.' });
+    if (!s.timeOk) return res.status(400).json({ error: 'Pick a valid time.' });
+    const id = await createCleanupSchedule(req.guild.id, s);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:channel-cleanup',
+      detail: `created schedule for #${guildTextChannels(req.guild).find((c) => c.id === s.channelId)?.name ?? s.channelId}`,
+    });
+    res.json({ schedule: shapeCleanupSchedule(await getCleanupSchedule(req.guild.id, id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/channel-cleanup/schedules/:id',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = Number.isInteger(id) ? await getCleanupSchedule(req.guild.id, id) : null;
+    if (!existing) return res.status(404).json({ error: 'No such schedule' });
+    const s = parseCleanupBody(req.body);
+    if (!s.channelId) return res.status(400).json({ error: 'Pick a channel.' });
+    if (!s.timeOk) return res.status(400).json({ error: 'Pick a valid time.' });
+    await updateCleanupSchedule(req.guild.id, id, s);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:channel-cleanup',
+      detail: `updated schedule for #${guildTextChannels(req.guild).find((c) => c.id === s.channelId)?.name ?? s.channelId}`,
+    });
+    res.json({ schedule: shapeCleanupSchedule(await getCleanupSchedule(req.guild.id, id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/channel-cleanup/schedules/:id/delete',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (Number.isInteger(id)) await deleteCleanupSchedule(req.guild.id, id);
+    res.json({ ok: true });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/channel-cleanup/schedules/:id/toggle',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const rec = Number.isInteger(id) ? await getCleanupSchedule(req.guild.id, id) : null;
+    if (rec) await setCleanupScheduleEnabled(req.guild.id, id, !rec.enabled);
+    res.json({ schedule: rec ? shapeCleanupSchedule(await getCleanupSchedule(req.guild.id, id)) : null });
   })
 );
 

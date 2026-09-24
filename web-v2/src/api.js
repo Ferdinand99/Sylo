@@ -136,3 +136,14 @@ export const setRoadmapPostStatus = (id, status) =>
 export const editRoadmapPost = (id, title, description) =>
   postJson(`/api/v2/roadmap/admin/${id}/edit`, { title, description });
 export const deleteRoadmapPost = (id) => postJson(`/api/v2/roadmap/admin/${id}/delete`, {});
+
+export const getCleanupSchedules = (guildId) =>
+  apiFetch(`/api/v2/guilds/${guildId}/modules/channel-cleanup/schedules`);
+export const createCleanupSchedule = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/channel-cleanup/schedules`, body);
+export const updateCleanupSchedule = (guildId, id, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/channel-cleanup/schedules/${id}`, body);
+export const deleteCleanupSchedule = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/channel-cleanup/schedules/${id}/delete`, {});
+export const toggleCleanupSchedule = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/channel-cleanup/schedules/${id}/toggle`, {});
