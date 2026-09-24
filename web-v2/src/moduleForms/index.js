@@ -27,6 +27,7 @@ import RssAlerts from './RssAlerts.jsx';
 import GameStats from './GameStats.jsx';
 import Honeypot from './Honeypot.jsx';
 import YoutubeAlerts from './YoutubeAlerts.jsx';
+import Leveling from './Leveling.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -40,6 +41,7 @@ export const MODULE_FORMS = {
   'twitch-alerts': TwitchAlerts,
   'kick-alerts': KickAlerts,
   'youtube-alerts': YoutubeAlerts,
+  leveling: Leveling,
   rss: RssAlerts,
   'game-stats': GameStats,
   welcome: Welcome,

@@ -38,7 +38,8 @@ import {
 import { mdToHtml } from '../lib/markdown.js';
 import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } from './roadmap.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
-import { normaliseLevelingConfig } from '../../modules/leveling.js';
+import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '../../modules/leveling.js';
+import { levelFromXp } from '../../modules/lib/levels.js';
 import {
   normaliseAutomodConfig,
   AUTOMOD_RULES,
@@ -102,6 +103,8 @@ import {
   memberCount,
   memberCountForPeriod,
   periodKeys,
+  setXp,
+  resetGuildLeveling,
 } from '../../db/leveling.js';
 import { getVanitySlug, setVanitySlug, clearVanitySlug } from '../../db/leaderboardVanity.js';
 import {
@@ -1490,6 +1493,93 @@ router.post(
       }
       await deleteComposed(guild.id, rec.id);
     }
+    res.json({ ok: true });
+  })
+);
+
+// --- Leveling (mirrors guilds.js's mod.id === 'leveling' config branch +
+// the /m/leveling/xp set/reset route) ---------------------------------------
+
+router.get(
+  '/guilds/:guildId/modules/leveling/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'leveling');
+    const rows = await topMembers(req.guild.id, 15);
+    const tags = await resolveUserTags(
+      runtime.client,
+      rows.map((r) => r.user_id)
+    );
+    res.json({
+      config: normaliseLevelingConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      announceModes: ANNOUNCE_MODES,
+      xpRates: XP_RATES,
+      board: {
+        total: await memberCount(req.guild.id),
+        rows: rows.map((r, i) => ({
+          rank: i + 1,
+          name: tags.get(r.user_id) ?? r.user_id,
+          level: r.level,
+          xp: r.xp,
+          voiceXp: r.voice_xp ?? 0,
+          voiceMinutes: r.voice_minutes ?? 0,
+          messages: r.messages,
+        })),
+      },
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/leveling/config',
+  asyncHandler(async (req, res) => {
+    const prev = (await getGuildModule(req.guild.id, 'leveling')).config;
+    const config = normaliseLevelingConfig({
+      ...req.body,
+      // The public-leaderboard toggle lives on the Leaderboard V2 page — keep it.
+      publicLeaderboard: prev.publicLeaderboard !== false,
+    });
+    await setGuildModule(req.guild.id, 'leveling', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:leveling',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/leveling/xp',
+  asyncHandler(async (req, res) => {
+    if (req.body.reset === true) {
+      await resetGuildLeveling(req.guild.id);
+      await recordAudit(req.guild.id, {
+        actor: moderatorDisplayName(req),
+        action: 'leveling:reset',
+        detail: 'all XP wiped',
+      });
+      return res.json({ ok: true });
+    }
+    const userId = parseUserId(req.body.userId);
+    const xp = Number(req.body.xp);
+    if (!userId || !Number.isInteger(xp) || xp < 0 || xp > 1e12) {
+      return res
+        .status(400)
+        .json({ error: 'Enter a valid user id/mention and a non-negative whole XP value.' });
+    }
+    await setXp(req.guild.id, userId, xp);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'leveling:setxp',
+      detail: `${userId} → ${xp} XP`,
+    });
+
+    const cfg = normaliseLevelingConfig((await getGuildModule(req.guild.id, 'leveling')).config);
+    const member = await req.guild.members.fetch(userId).catch(() => null);
+    if (member) await syncRewards(member, levelFromXp(xp), cfg).catch(() => {});
+
     res.json({ ok: true });
   })
 );
