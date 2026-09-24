@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.36.0](https://github.com/Ferdinand99/Sylo/compare/v3.35.0...v3.36.0) (2026-09-24)
+
+
+### Features
+
+* **tickets:** option to include the opening message in the staff alert; fix a Postgres timestamp crash on close ([066051a](https://github.com/Ferdinand99/Sylo/commit/066051aa8c36293f4148e462515d0b1ddefd9533))
+
+
+### Bug Fixes
+
+* **honeypot:** permission gap silently broke the live catch counter; feat(web-v2): add Roadmap to the V2 dashboard ([#220](https://github.com/Ferdinand99/Sylo/issues/220)) ([804215e](https://github.com/Ferdinand99/Sylo/commit/804215eb759f7139df3aeb75361388a909164f5f))
+* **honeypot:** permission gap silently broke the live catch counter; feat(web-v2): add Roadmap to the V2 dashboard ([#221](https://github.com/Ferdinand99/Sylo/issues/221)) ([824fe1d](https://github.com/Ferdinand99/Sylo/commit/824fe1d620d433b5d7ea51a7e4537fd21fb6886e))
+* Roadmap routing fixed ([952b7d4](https://github.com/Ferdinand99/Sylo/commit/952b7d46804133d51f6b87203a11ec3a466af216))
+
 ## [3.35.0](https://github.com/Ferdinand99/Sylo/compare/v3.34.0...v3.35.0) (2026-09-23)
 
 
