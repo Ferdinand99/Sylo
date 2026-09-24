@@ -6,13 +6,37 @@
 import { createRequire } from 'node:module';
 import { Router, raw } from 'express';
 import { PermissionFlagsBits } from 'discord.js';
-import { requireGuildAdmin, requireOwner, requireRealUser, isOwner, manageableGuilds, currentUser } from '../middleware/auth.js';
+import {
+  requireGuildAdmin,
+  requireOwner,
+  requireRealUser,
+  isOwner,
+  manageableGuilds,
+  currentUser,
+} from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { guildTextChannels, guildVoiceChannels, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { getDashboardVersion, setDashboardVersion, DASHBOARD_VERSIONS } from '../../db/userPrefs.js';
+import {
+  ROADMAP_STATUSES,
+  listPublicPosts,
+  listPendingPosts,
+  listUserPending,
+  createPost as createRoadmapPost,
+  setPostStatus as setRoadmapPostStatus,
+  updatePost as updateRoadmapPost,
+  deletePost as deleteRoadmapPost,
+  toggleVote as toggleRoadmapVote,
+  getPost as getRoadmapPost,
+  groupPublicPosts,
+  cleanTitle as cleanRoadmapTitle,
+  cleanDescription as cleanRoadmapDescription,
+} from '../../db/roadmap.js';
+import { mdToHtml } from '../lib/markdown.js';
+import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } from './roadmap.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { normaliseLevelingConfig } from '../../modules/leveling.js';
 import {
@@ -1810,6 +1834,152 @@ router.post(
     setTimeout(() => {
       restoreFromBackup(name).catch((err) => log.error('db', 'Restore failed:', err.message));
     }, 750);
+  })
+);
+
+// --- Roadmap (mirrors src/web/routes/roadmap.js's V1 pages in full — bot-
+// wide, not per-guild, same as Health/Personalizer above. The vote/suggest
+// rate limiters are the *same* instances V1 uses (imported from roadmap.js,
+// not re-created here) so a user can't double their effective limit by
+// switching between the V1 and V2 UI.)
+
+function withRoadmapHtml(p) {
+  return { ...p, descriptionHtml: mdToHtml(p.description) };
+}
+function roadmapGroupsWithHtml(posts) {
+  const groups = groupPublicPosts(posts);
+  for (const list of Object.values(groups)) {
+    for (const p of list) p.descriptionHtml = mdToHtml(p.description);
+  }
+  return groups;
+}
+
+router.get(
+  '/roadmap',
+  asyncHandler(async (req, res) => {
+    const userId = req.session?.user?.id ?? null;
+    const posts = await listPublicPosts(userId);
+    const mine = userId ? await listUserPending(userId) : [];
+    res.json({
+      groups: roadmapGroupsWithHtml(posts),
+      mine: mine.map((p) => ({ ...withRoadmapHtml(p), ago: timeAgo(p.createdAt) })),
+      isOwner: userId ? isOwner(userId) : false,
+    });
+  })
+);
+
+router.post(
+  '/roadmap/:id/vote',
+  requireRealUser,
+  roadmapVoteLimit,
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const post = Number.isInteger(id) ? await getRoadmapPost(id) : null;
+    if (!post || post.status === 'pending') return res.status(404).json({ error: 'No such post' });
+    res.json(await toggleRoadmapVote(id, req.session.user.id));
+  })
+);
+
+router.post(
+  '/roadmap/suggest',
+  requireRealUser,
+  roadmapSuggestLimit,
+  asyncHandler(async (req, res) => {
+    const title = cleanRoadmapTitle(req.body.title);
+    const description = cleanRoadmapDescription(req.body.description);
+    if (!title || !description) {
+      return res.status(400).json({ error: 'Title (3-100 chars) and description are required.' });
+    }
+    await createRoadmapPost({ title, description, userId: req.session.user.id, status: 'pending' });
+    res.json({ ok: true });
+  })
+);
+
+router.get(
+  '/roadmap/admin',
+  requireOwner,
+  asyncHandler(async (req, res) => {
+    const [pending, publicPosts] = await Promise.all([listPendingPosts(), listPublicPosts()]);
+    res.json({
+      statuses: ROADMAP_STATUSES.filter((s) => s !== 'pending'),
+      pending: pending.map((p) => ({ ...withRoadmapHtml(p), ago: timeAgo(p.createdAt) })),
+      posts: publicPosts
+        .slice()
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map((p) => ({ ...withRoadmapHtml(p), ago: timeAgo(p.createdAt) })),
+    });
+  })
+);
+
+router.post(
+  '/roadmap/admin',
+  requireOwner,
+  requireRealUser,
+  asyncHandler(async (req, res) => {
+    const title = cleanRoadmapTitle(req.body.title);
+    const description = cleanRoadmapDescription(req.body.description);
+    if (!title || !description) {
+      return res.status(400).json({ error: 'Title (3-100 chars) and description are required.' });
+    }
+    const post = await createRoadmapPost({
+      title,
+      description,
+      userId: req.session.user.id,
+      status: 'planned',
+    });
+    res.json({ post: withRoadmapHtml(post) });
+  })
+);
+
+router.post(
+  '/roadmap/admin/:id/approve',
+  requireOwner,
+  asyncHandler(async (req, res) => {
+    res.json({ post: await setRoadmapPostStatus(Number(req.params.id), 'planned') });
+  })
+);
+
+router.post(
+  '/roadmap/admin/:id/reject',
+  requireOwner,
+  asyncHandler(async (req, res) => {
+    await deleteRoadmapPost(Number(req.params.id));
+    res.json({ ok: true });
+  })
+);
+
+router.post(
+  '/roadmap/admin/:id/status',
+  requireOwner,
+  asyncHandler(async (req, res) => {
+    const status = String(req.body.status ?? '');
+    if (!ROADMAP_STATUSES.includes(status) || status === 'pending') {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    res.json({ post: await setRoadmapPostStatus(Number(req.params.id), status) });
+  })
+);
+
+router.post(
+  '/roadmap/admin/:id/edit',
+  requireOwner,
+  asyncHandler(async (req, res) => {
+    const title = cleanRoadmapTitle(req.body.title);
+    const description = cleanRoadmapDescription(req.body.description);
+    if (!title || !description) {
+      return res.status(400).json({ error: 'Title (3-100 chars) and description are required.' });
+    }
+    const post = await updateRoadmapPost(Number(req.params.id), { title, description });
+    res.json({ post: withRoadmapHtml(post) });
+  })
+);
+
+router.post(
+  '/roadmap/admin/:id/delete',
+  requireOwner,
+  asyncHandler(async (req, res) => {
+    await deleteRoadmapPost(Number(req.params.id));
+    res.json({ ok: true });
   })
 );
 
