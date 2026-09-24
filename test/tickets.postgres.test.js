@@ -41,6 +41,12 @@ test(
       assert.ok(Number.isInteger(ticket.id) && ticket.id > 0);
       assert.equal((await getOpenTicket(G, 'u1')).id, ticket.id);
       assert.equal((await getTicket(ticket.id)).id, ticket.id);
+      // BIGINT columns come back as strings from postgres.js unless coerced —
+      // new Date() on the raw string throws "Invalid time value" wherever a
+      // timestamp is later formatted (modules/tickets.js's fmtTs).
+      assert.equal(typeof ticket.created_at, 'number');
+      assert.equal(typeof ticket.last_at, 'number');
+      assert.equal(ticket.closed_at, null);
     });
 
     await t.test('addTicketMessage stores + orders messages; ticketMessages(after) filters', async () => {
@@ -55,6 +61,7 @@ test(
       const rows = await ticketMessages(ticket.id);
       assert.equal(rows.length, 2);
       assert.deepEqual(rows[1].attachments, ['http://x/y.png']);
+      assert.equal(typeof rows[0].created_at, 'number');
       const after = await ticketMessages(ticket.id, rows[0].id);
       assert.equal(after.length, 1);
     });
@@ -76,6 +83,7 @@ test(
       const closed = await getTicket(t2.id);
       assert.equal(closed.status, 'closed');
       assert.equal(closed.closed_by, 'mod1');
+      assert.equal(typeof closed.closed_at, 'number');
       assert.equal(await openTicketCount(guild), 1);
 
       const openList = await listTickets(guild, 'open', 10);

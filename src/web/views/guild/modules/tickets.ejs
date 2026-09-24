@@ -27,6 +27,12 @@
     <% }) %>
   </select>
 
+  <label class="check">
+    <input type="checkbox" name="showMessageInAlert" <%= cfg.showMessageInAlert ? 'checked' : '' %> />
+    Include the ticket's opening message in the staff notification
+  </label>
+  <p class="muted small">Lets staff see what a ticket is about before opening it — off by default since the message may be sensitive.</p>
+
   <label>Delete closed tickets after <span class="muted small">— days; 0 = keep forever</span></label>
   <input type="number" name="transcriptRetentionDays" min="0" max="3650" value="<%= Number(cfg.transcriptRetentionDays) || 0 %>" />
   <p class="muted small">

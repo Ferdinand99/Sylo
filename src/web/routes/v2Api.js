@@ -6,7 +6,7 @@
 import { createRequire } from 'node:module';
 import { Router, raw } from 'express';
 import { PermissionFlagsBits } from 'discord.js';
-import { requireGuildAdmin, requireOwner, requireRealUser, isOwner, manageableGuilds, currentUser } from '../middleware/auth.js';
+import { requireGuildAdmin, requireOwner, manageableGuilds, currentUser } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
@@ -1107,6 +1107,7 @@ router.get(
         notifyChannel: cfg.notifyChannel || '',
         staffRoles: Array.isArray(cfg.staffRoles) ? cfg.staffRoles : [],
         transcriptRetentionDays: Number(cfg.transcriptRetentionDays) || 0,
+        showMessageInAlert: Boolean(cfg.showMessageInAlert),
       },
       channels: guildTextChannels(req.guild),
       roles: assignableRoles(req.guild),
@@ -1123,6 +1124,7 @@ router.post(
       notifyChannel: /^\d{17,20}$/.test(req.body.notifyChannel ?? '') ? req.body.notifyChannel : '',
       staffRoles: [].concat(req.body.staffRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)),
       transcriptRetentionDays: clampDays(req.body.transcriptRetentionDays),
+      showMessageInAlert: Boolean(req.body.showMessageInAlert),
     };
     await setGuildModule(req.guild.id, 'tickets', { config });
     await recordAudit(req.guild.id, {

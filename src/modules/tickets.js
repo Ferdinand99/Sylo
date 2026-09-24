@@ -132,7 +132,9 @@ export async function ticketGuildsForUser(user) {
   return out;
 }
 
-async function notifyStaff(guild, text) {
+const ALERT_MESSAGE_MAX = 1000;
+
+async function notifyStaff(guild, text, embed) {
   const cfg = (await getGuildModule(guild.id, 'tickets')).config;
   if (!cfg.notifyChannel) return;
   const ch =
@@ -141,7 +143,9 @@ async function notifyStaff(guild, text) {
   if (!ch?.isTextBased()) return;
   const me = guild.members.me;
   if (me && !ch.permissionsFor(me)?.has(['ViewChannel', 'SendMessages'])) return;
-  await ch.send({ content: text, allowedMentions: { parse: [] } }).catch(() => {});
+  const payload = { content: text, allowedMentions: { parse: [] } };
+  if (embed) payload.embeds = [embed];
+  await ch.send(payload).catch(() => {});
 }
 
 /**
@@ -178,7 +182,23 @@ export async function ingestUserDM(guild, user, payload) {
         ],
       })
       .catch(() => {});
-    await notifyStaff(guild, `🎫 New ticket #${ticket.id} from **${user.tag}** (\`${user.id}\`)${link}`);
+    // Opt-in (issue #218) — staff otherwise only learn a ticket exists, not
+    // what it's about, until someone opens the dashboard.
+    const alertEmbed =
+      cfg.showMessageInAlert && payload.content
+        ? new EmbedBuilder()
+            .setColor(TICKET_COLOR)
+            .setDescription(
+              payload.content.length > ALERT_MESSAGE_MAX
+                ? `${payload.content.slice(0, ALERT_MESSAGE_MAX)}…`
+                : payload.content
+            )
+        : null;
+    await notifyStaff(
+      guild,
+      `🎫 New ticket #${ticket.id} from **${user.tag}** (\`${user.id}\`)${link}`,
+      alertEmbed
+    );
   } else {
     await notifyStaff(guild, `💬 New reply on ticket #${ticket.id} from **${user.tag}**${link}`);
   }

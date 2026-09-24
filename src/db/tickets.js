@@ -63,20 +63,40 @@ const lastPreviewStmt = prepare(
   'SELECT content, author_kind FROM ticket_messages WHERE ticket_id = ? ORDER BY created_at DESC, id DESC LIMIT 1'
 );
 
+// postgres.js returns BIGINT columns as strings, not numbers (better-sqlite3
+// returns them as numbers already) — new Date("1758...") fails to parse as a
+// date string (it's not ISO-8601) and throws "Invalid time value" wherever a
+// timestamp is later formatted (fmtTs in modules/tickets.js). Coerce every
+// BIGINT column back to a number right where rows leave this file, the same
+// pattern src/db/roadmap.js uses for its own timestamp/count columns.
+function toTicket(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    created_at: Number(row.created_at),
+    last_at: Number(row.last_at),
+    closed_at: row.closed_at == null ? null : Number(row.closed_at),
+    staff_seen_at: Number(row.staff_seen_at),
+  };
+}
+function toMsg(row) {
+  return { ...row, created_at: Number(row.created_at) };
+}
+
 /** The user's open ticket in a guild, or undefined. */
 export async function getOpenTicket(guildId, userId) {
-  return openByUserStmt.get(guildId, userId);
+  return toTicket(await openByUserStmt.get(guildId, userId));
 }
 
 export async function getTicket(id) {
-  return getStmt.get(id);
+  return toTicket(await getStmt.get(id));
 }
 
 /** Create an open ticket (caller must ensure there isn't one already). */
 export async function createTicket(guildId, userId) {
   const now = Date.now();
   const info = await createStmt.run({ guildId, userId, now });
-  return getStmt.get(Number(info.lastInsertRowid));
+  return toTicket(await getStmt.get(Number(info.lastInsertRowid)));
 }
 
 /**
@@ -110,14 +130,18 @@ export async function listTickets(guildId, status = 'open', limit = 100) {
   const out = [];
   for (const t of rows) {
     const p = await lastPreviewStmt.get(t.id);
-    out.push({ ...t, preview: p ? p.content.slice(0, 120) : '', previewKind: p?.author_kind ?? null });
+    out.push({
+      ...toTicket(t),
+      preview: p ? p.content.slice(0, 120) : '',
+      previewKind: p?.author_kind ?? null,
+    });
   }
   return out;
 }
 
 export async function ticketMessages(ticketId, afterId = 0) {
   const rows = afterId ? await msgsAfterStmt.all(ticketId, afterId) : await msgsStmt.all(ticketId);
-  return rows.map((r) => ({ ...r, attachments: safeArr(r.attachments) }));
+  return rows.map((r) => ({ ...toMsg(r), attachments: safeArr(r.attachments) }));
 }
 
 export async function openTicketCount(guildId) {

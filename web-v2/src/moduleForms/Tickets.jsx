@@ -119,6 +119,21 @@ export default function Tickets() {
         </div>
 
         <div className="v2-field">
+          <label className="v2-check">
+            <input
+              type="checkbox"
+              checked={form.showMessageInAlert}
+              onChange={(e) => set({ showMessageInAlert: e.target.checked })}
+            />
+            Include the ticket's opening message in the staff notification
+          </label>
+          <p className="v2-field-hint">
+            Lets staff see what a ticket is about before opening it — off by default since the message may be
+            sensitive.
+          </p>
+        </div>
+
+        <div className="v2-field">
           <label htmlFor="transcriptRetentionDays">
             Delete closed tickets after <span className="v2-field-hint">— days; 0 = keep forever</span>
           </label>

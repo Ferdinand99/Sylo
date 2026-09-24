@@ -1125,6 +1125,7 @@ router.post(
         notifyChannel: /^\d{17,20}$/.test(req.body.notifyChannel ?? '') ? req.body.notifyChannel : '',
         staffRoles: [].concat(req.body.staffRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)),
         transcriptRetentionDays: clampDays(req.body.transcriptRetentionDays),
+        showMessageInAlert: req.body.showMessageInAlert === 'on',
       };
     } else if (mod.id === 'automod') {
       const b = req.body;
