@@ -6,6 +6,8 @@ import Leaderboard from './pages/Leaderboard.jsx';
 import Settings from './pages/Settings.jsx';
 import Personalizer from './pages/Personalizer.jsx';
 import Health from './pages/Health.jsx';
+import Roadmap from './pages/Roadmap.jsx';
+import RoadmapAdmin from './pages/RoadmapAdmin.jsx';
 import ModulePage from './pages/ModulePage.jsx';
 import Messages from './pages/Messages.jsx';
 import MessageBuilder from './pages/MessageBuilder.jsx';
@@ -25,6 +27,8 @@ export default function App() {
           <Route path="guilds/:guildId/messages/:id" element={<MessageBuilder />} />
           <Route path="guilds/:guildId/insights" element={<Insights />} />
           <Route path="settings" element={<Personalizer />} />
+          <Route path="roadmap" element={<Roadmap />} />
+          <Route path="roadmap/admin" element={<RoadmapAdmin />} />
           <Route path="health" element={<Health />} />
         </Route>
       </Routes>

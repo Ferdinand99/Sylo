@@ -121,3 +121,18 @@ export const importBackup = (file) =>
     headers: { 'Content-Type': 'application/octet-stream' },
     body: file,
   });
+
+export const getRoadmap = () => apiFetch('/api/v2/roadmap');
+export const voteRoadmapPost = (id) => postJson(`/api/v2/roadmap/${id}/vote`, {});
+export const suggestRoadmapPost = (title, description) =>
+  postJson('/api/v2/roadmap/suggest', { title, description });
+export const getRoadmapAdmin = () => apiFetch('/api/v2/roadmap/admin');
+export const createRoadmapPost = (title, description) =>
+  postJson('/api/v2/roadmap/admin', { title, description });
+export const approveRoadmapPost = (id) => postJson(`/api/v2/roadmap/admin/${id}/approve`, {});
+export const rejectRoadmapPost = (id) => postJson(`/api/v2/roadmap/admin/${id}/reject`, {});
+export const setRoadmapPostStatus = (id, status) =>
+  postJson(`/api/v2/roadmap/admin/${id}/status`, { status });
+export const editRoadmapPost = (id, title, description) =>
+  postJson(`/api/v2/roadmap/admin/${id}/edit`, { title, description });
+export const deleteRoadmapPost = (id) => postJson(`/api/v2/roadmap/admin/${id}/delete`, {});

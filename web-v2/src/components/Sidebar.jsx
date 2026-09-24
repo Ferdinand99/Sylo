@@ -33,6 +33,12 @@ const ICONS = {
     </>
   ),
   pulse: <path d="M3 12h4l3 8 4-16 3 8h4" />,
+  megaphone: (
+    <>
+      <path d="m3 11 18-5v12L3 14v-3z" />
+      <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+    </>
+  ),
 };
 
 function Icon({ name }) {
@@ -83,6 +89,7 @@ export default function Sidebar({ activeGuildId, open, onClose }) {
       icon: 'gear',
       href: activeGuildId ? `/guilds/${activeGuildId}/settings` : '/',
     },
+    { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', href: '/roadmap' },
     { key: 'health', label: 'Health', icon: 'pulse', href: '/health' },
   ];
 

@@ -66,6 +66,18 @@ function isExempt(member, cfg) {
   return cfg.exemptRoles.some((r) => member.roles.cache.has(r));
 }
 
+// Fetching a message by id (needed to edit the live "Catches" count, and to
+// tell "still there" from "deleted, re-post it" apart) needs Read Message
+// History on top of the View/Send/Embed set ensureHoneypotMessages already
+// checked for — a permission gap here used to be silently swallowed by the
+// fetch's .catch(() => null), which then read as "the message was deleted"
+// and posted a fresh duplicate on every config save, on top of the visible
+// "Catches" count never updating (the exact symptom reported against #211).
+const BAIT_PERMS = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'ReadMessageHistory'];
+function canManageBait(channel, me) {
+  return Boolean(channel.permissionsFor(me)?.has(BAIT_PERMS));
+}
+
 /** The trap message's embed — a "Catches" field labeled by the row's own
  * punishment action (e.g. "Bans: 14") so it reflects what actually happens
  * here, not a generic counter. */
@@ -147,8 +159,21 @@ async function bumpHoneypotStat(guild, kind, channelId) {
   const channel =
     guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId).catch(() => null));
   if (!channel?.isTextBased()) return;
-  const existing = await channel.messages.fetch(row.messageId).catch(() => null);
-  if (existing) await existing.edit({ embeds: [baitEmbed(row)] }).catch(() => {});
+  if (!canManageBait(channel, guild.members.me)) {
+    log.warn(
+      'module:honeypot',
+      `missing permissions (need ${BAIT_PERMS.join(', ')}) to update the live catch count in #${channel.name ?? channelId}`
+    );
+    return;
+  }
+  const existing = await channel.messages.fetch(row.messageId).catch((err) => {
+    log.error('module:honeypot', 'fetching the bait message failed:', err.message);
+    return null;
+  });
+  if (!existing) return;
+  await existing
+    .edit({ embeds: [baitEmbed(row)] })
+    .catch((err) => log.error('module:honeypot', 'updating the live catch count failed:', err.message));
 }
 
 /**
@@ -169,16 +194,30 @@ export async function ensureHoneypotMessages(guild, config) {
       guild.channels.cache.get(row.channelId) ??
       (await guild.channels.fetch(row.channelId).catch(() => null));
     if (!channel?.isTextBased()) continue;
-    if (!channel.permissionsFor(me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) continue;
+    if (!canManageBait(channel, me)) {
+      log.warn(
+        'module:honeypot',
+        `missing permissions (need ${BAIT_PERMS.join(', ')}) to manage the bait message in #${channel.name ?? row.channelId}`
+      );
+      continue;
+    }
 
     if (row.messageId) {
-      const existing = await channel.messages.fetch(row.messageId).catch(() => null);
+      const existing = await channel.messages.fetch(row.messageId).catch((err) => {
+        log.error('module:honeypot', 'fetching the bait message failed:', err.message);
+        return null;
+      });
       if (existing) {
-        await existing.edit({ embeds: [baitEmbed(row)] }).catch(() => {});
+        await existing
+          .edit({ embeds: [baitEmbed(row)] })
+          .catch((err) => log.error('module:honeypot', 'updating the bait message failed:', err.message));
         continue;
       }
     }
-    const posted = await channel.send({ embeds: [baitEmbed(row)] }).catch(() => null);
+    const posted = await channel.send({ embeds: [baitEmbed(row)] }).catch((err) => {
+      log.error('module:honeypot', 'posting the bait message failed:', err.message);
+      return null;
+    });
     if (posted) {
       row.messageId = posted.id;
       changed = true;
