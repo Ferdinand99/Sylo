@@ -1471,6 +1471,74 @@ form textarea {
   border-color: var(--accent);
   color: #fff;
 }
+/* Roadmap board status badges — static, not clickable filter chips. */
+.v2-status-pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.v2-status-pill.planned {
+  background: rgba(56, 189, 248, 0.16);
+  color: var(--accent-2);
+}
+.v2-status-pill.started {
+  background: rgba(251, 191, 36, 0.16);
+  color: #fbbf24;
+}
+.v2-status-pill.completed {
+  background: rgba(74, 222, 128, 0.16);
+  color: #4ade80;
+}
+.v2-status-pill.pending {
+  background: rgba(166, 172, 205, 0.16);
+  color: var(--text-muted);
+}
+.v2-roadmap-vote {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 52px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+}
+.v2-roadmap-vote.is-voted {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.v2-roadmap-vote:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.v2-roadmap-vote strong {
+  font-size: 1.05rem;
+}
+.v2-roadmap-desc :first-child {
+  margin-top: 0;
+}
+.v2-roadmap-desc :last-child {
+  margin-bottom: 0;
+}
+.v2-roadmap-desc ul {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.v2-roadmap-desc code {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.85em;
+}
 .v2-ins-refresh {
   margin-left: auto;
 }
