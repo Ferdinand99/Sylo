@@ -61,6 +61,12 @@ import { normaliseInviteTrackerConfig } from '../../modules/inviteTracker.js';
 import { topInviters, inviterCount, setBonus } from '../../db/inviteTracker.js';
 import { normaliseTwitchConfig, DEFAULT_MESSAGE as TWITCH_DEFAULT_MSG } from '../../modules/twitchAlerts.js';
 import { normaliseKickConfig, DEFAULT_MESSAGE as KICK_DEFAULT_MSG } from '../../modules/kickAlerts.js';
+import {
+  normaliseYoutubeConfig,
+  resolveYtChannel,
+  DEFAULT_VIDEO_MESSAGE as YT_DEFAULT_VIDEO_MSG,
+  DEFAULT_LIVE_MESSAGE as YT_DEFAULT_LIVE_MSG,
+} from '../../modules/youtubeAlerts.js';
 import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TPL, FEED_TYPES } from '../../modules/rss.js';
 import { clearScope } from '../../db/postedKeys.js';
 import { dailySeries, hourlySeries, topChannels, topVoiceChannels } from '../../db/insights.js';
@@ -1026,6 +1032,65 @@ router.post(
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:kick-alerts',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/youtube-alerts/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'youtube-alerts');
+    res.json({
+      config: normaliseYoutubeConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      defaultVideoMessage: YT_DEFAULT_VIDEO_MSG,
+      defaultLiveMessage: YT_DEFAULT_LIVE_MSG,
+    });
+  })
+);
+
+// A channel is given as a raw @handle/URL the client never resolves itself
+// (mirrors guilds.js's V1 branch) — resolveYtChannel does a live network
+// fetch, so this route can be slow; the previously-resolved ytChannelId/name
+// are carried forward (same UC_RE re-check V1 does) when the input field is
+// left blank on an already-resolved row, so re-saving other rows doesn't
+// force a re-resolve of ones that didn't change.
+router.post(
+  '/guilds/:guildId/modules/youtube-alerts/config',
+  asyncHandler(async (req, res) => {
+    const rows = Array.isArray(req.body.alerts) ? req.body.alerts : [];
+    const UC_RE = /^UC[\w-]{20,}$/;
+    const alerts = [];
+    for (const a of rows) {
+      const input = String(a.input ?? '').trim();
+      const prevId = a.ytChannelId ?? '';
+      const prevName = a.name ?? '';
+      if (!input && !prevId) continue;
+      let resolved = UC_RE.test(prevId) && !input ? { channelId: prevId, name: prevName } : null;
+      if (!resolved) resolved = (await resolveYtChannel(input || prevId)) || null;
+      if (!resolved && UC_RE.test(prevId)) resolved = { channelId: prevId, name: prevName };
+      if (!resolved) continue;
+      const notify = a.notify || 'both';
+      alerts.push({
+        ytChannelId: resolved.channelId,
+        name: resolved.name || prevName || '',
+        discordChannelId: a.discordChannelId ?? '',
+        roleId: a.roleId ?? '',
+        onVideo: notify === 'both' || notify === 'video',
+        onLive: notify === 'both' || notify === 'live',
+        onEnd: a.onEnd ?? 'delete',
+        videoMessage: a.videoMessage ?? '',
+        liveMessage: a.liveMessage ?? '',
+      });
+    }
+    const config = normaliseYoutubeConfig({ alerts });
+    await setGuildModule(req.guild.id, 'youtube-alerts', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:youtube-alerts',
       detail: 'settings saved',
     });
     res.json({ config });

@@ -26,6 +26,7 @@ import KickAlerts from './KickAlerts.jsx';
 import RssAlerts from './RssAlerts.jsx';
 import GameStats from './GameStats.jsx';
 import Honeypot from './Honeypot.jsx';
+import YoutubeAlerts from './YoutubeAlerts.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -38,6 +39,7 @@ export const MODULE_FORMS = {
   'invite-tracker': InviteTracker,
   'twitch-alerts': TwitchAlerts,
   'kick-alerts': KickAlerts,
+  'youtube-alerts': YoutubeAlerts,
   rss: RssAlerts,
   'game-stats': GameStats,
   welcome: Welcome,
