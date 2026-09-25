@@ -136,3 +136,64 @@ export const setRoadmapPostStatus = (id, status) =>
 export const editRoadmapPost = (id, title, description) =>
   postJson(`/api/v2/roadmap/admin/${id}/edit`, { title, description });
 export const deleteRoadmapPost = (id) => postJson(`/api/v2/roadmap/admin/${id}/delete`, {});
+
+export const getCleanupSchedules = (guildId) =>
+  apiFetch(`/api/v2/guilds/${guildId}/modules/channel-cleanup/schedules`);
+export const createCleanupSchedule = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/channel-cleanup/schedules`, body);
+export const updateCleanupSchedule = (guildId, id, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/channel-cleanup/schedules/${id}`, body);
+export const deleteCleanupSchedule = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/channel-cleanup/schedules/${id}/delete`, {});
+export const toggleCleanupSchedule = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/channel-cleanup/schedules/${id}/toggle`, {});
+
+export const getGithubWatches = (guildId) => apiFetch(`/api/v2/guilds/${guildId}/modules/github/watches`);
+export const createGithubWatch = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/github/watches`, body);
+export const updateGithubWatch = (guildId, id, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/github/watches/${id}`, body);
+export const deleteGithubWatch = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/github/watches/${id}/delete`, {});
+export const toggleGithubWatch = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/github/watches/${id}/toggle`, {});
+export const regenGithubSecret = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/github/watches/${id}/regen-secret`, {});
+
+export const getReminders = (guildId) => apiFetch(`/api/v2/guilds/${guildId}/modules/reminders/list`);
+export const createReminder = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/reminders`, body);
+export const updateReminder = (guildId, id, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/reminders/${id}`, body);
+export const deleteReminder = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/reminders/${id}/delete`, {});
+export const toggleReminder = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/reminders/${id}/toggle`, {});
+export const testReminder = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/reminders/test`, body);
+
+export const getWelcomeChannel = (guildId) =>
+  apiFetch(`/api/v2/guilds/${guildId}/modules/welcome-channel/config`);
+export const saveWelcomeChannel = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/welcome-channel/config`, body);
+export const publishWelcomeChannel = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/welcome-channel/publish`, body);
+export const unpublishWelcomeChannel = (guildId) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/welcome-channel/unpublish`, {});
+export const createWelcomeReadOnlyChannel = (guildId) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/welcome-channel/create-channel`, {});
+
+export const getRoles = (guildId) => apiFetch(`/api/v2/guilds/${guildId}/modules/roles/list`);
+export const saveAutoroles = (guildId, autoroles) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/roles/autoroles`, { autoroles });
+export const saveReactionRole = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/roles/rr`, body);
+export const deleteReactionRole = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/roles/rr/${id}/delete`, {});
+
+export const getCustomCommands = (guildId) =>
+  apiFetch(`/api/v2/guilds/${guildId}/modules/custom-commands/list`);
+export const saveCustomCommand = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/custom-commands/cmd`, body);
+export const deleteCustomCommand = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/custom-commands/cmd/${id}/delete`, {});

@@ -17,7 +17,7 @@ import {
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
-import { guildTextChannels, guildVoiceChannels, resolveUserTags } from '../lib/discord.js';
+import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { getDashboardVersion, setDashboardVersion, DASHBOARD_VERSIONS } from '../../db/userPrefs.js';
 import {
@@ -38,7 +38,53 @@ import {
 import { mdToHtml } from '../lib/markdown.js';
 import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } from './roadmap.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
-import { normaliseLevelingConfig } from '../../modules/leveling.js';
+import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '../../modules/leveling.js';
+import { levelFromXp } from '../../modules/lib/levels.js';
+import {
+  SCHEDULE_PRESETS,
+  WEEKDAYS,
+  MIN_INTERVAL_MINUTES,
+  MAX_INTERVAL_MINUTES,
+} from '../../modules/scheduledMessages.js';
+import {
+  listScheduled,
+  getScheduled,
+  createReminder,
+  updateReminder,
+  deleteScheduled,
+  setScheduledEnabled,
+} from '../../db/scheduledMessages.js';
+import {
+  normaliseEmbedSpec,
+  normaliseWelcomeChannelConfig,
+  WC_PRESETS,
+  publishWelcome,
+  unpublishWelcome,
+  createWelcomeChannel,
+} from '../../modules/welcomeChannel.js';
+import { normalisePollsConfig, POLL_PLACEHOLDERS, RESULTS_PLACEHOLDERS } from '../../modules/polls.js';
+import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
+import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
+import {
+  listCleanupSchedules,
+  getCleanupSchedule,
+  createCleanupSchedule,
+  updateCleanupSchedule,
+  deleteCleanupSchedule,
+  setCleanupScheduleEnabled,
+} from '../../db/channelCleanup.js';
+import {
+  listGithubWatches,
+  getGithubWatch,
+  createGithubWatch,
+  updateGithubWatch,
+  deleteGithubWatch,
+  setGithubWatchEnabled,
+  regenerateGithubWatchSecret,
+} from '../../db/githubWatches.js';
+import { GITHUB_EVENT_TYPES, sanitiseGithubEvents } from '../../modules/githubAlerts.js';
+import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
+import { normaliseStarboard, rescanBoard } from '../../modules/starboard.js';
 import {
   normaliseAutomodConfig,
   AUTOMOD_RULES,
@@ -61,6 +107,12 @@ import { normaliseInviteTrackerConfig } from '../../modules/inviteTracker.js';
 import { topInviters, inviterCount, setBonus } from '../../db/inviteTracker.js';
 import { normaliseTwitchConfig, DEFAULT_MESSAGE as TWITCH_DEFAULT_MSG } from '../../modules/twitchAlerts.js';
 import { normaliseKickConfig, DEFAULT_MESSAGE as KICK_DEFAULT_MSG } from '../../modules/kickAlerts.js';
+import {
+  normaliseYoutubeConfig,
+  resolveYtChannel,
+  DEFAULT_VIDEO_MESSAGE as YT_DEFAULT_VIDEO_MSG,
+  DEFAULT_LIVE_MESSAGE as YT_DEFAULT_LIVE_MSG,
+} from '../../modules/youtubeAlerts.js';
 import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TPL, FEED_TYPES } from '../../modules/rss.js';
 import { clearScope } from '../../db/postedKeys.js';
 import { dailySeries, hourlySeries, topChannels, topVoiceChannels } from '../../db/insights.js';
@@ -96,6 +148,8 @@ import {
   memberCount,
   memberCountForPeriod,
   periodKeys,
+  setXp,
+  resetGuildLeveling,
 } from '../../db/leveling.js';
 import { getVanitySlug, setVanitySlug, clearVanitySlug } from '../../db/leaderboardVanity.js';
 import {
@@ -1004,6 +1058,97 @@ router.post(
   })
 );
 
+// --- Temporary voice (mirrors guilds.js's "Temporary voice hub builder"
+// section — hubs live in guild_modules.config as { hubs: [...] }, same
+// generic getModuleConfig/saveModuleConfig shape every other array-of-rows
+// module here already uses, unlike channel-cleanup/github's own tables.)
+
+router.get(
+  '/guilds/:guildId/modules/temp-voice/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'temp-voice');
+    res.json({
+      config: normaliseTempVoiceConfig(cfg),
+      voiceChannels: guildVoiceChannels(req.guild),
+      categories: guildCategories(req.guild),
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/temp-voice/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseTempVoiceConfig({ hubs: req.body.hubs });
+    await setGuildModule(req.guild.id, 'temp-voice', { enabled: true, config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:temp-voice',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+// --- Starboard (mirrors guilds.js's "Starboard board builder" section —
+// boards live in guild_modules.config as { boards: [...] }, same generic
+// shape as temp-voice.) ------------------------------------------------
+
+/** Custom emoji ids round-trip through the text field as <:emoji:id> so
+ * they're editable/copyable — mirrors guilds.js's renderSbBuilder exactly. */
+function boardEmojiText(board, guild) {
+  return board.emojis
+    .map((e) => {
+      if (!/^\d+$/.test(e)) return e;
+      const ge = guild.emojis.cache.get(e);
+      return ge ? ge.toString() : `<:emoji:${e}>`;
+    })
+    .join(' ');
+}
+
+router.get(
+  '/guilds/:guildId/modules/starboard/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'starboard');
+    const config = normaliseStarboard(cfg);
+    res.json({
+      config: {
+        boards: config.boards.map((b) => ({ ...b, emojiText: boardEmojiText(b, req.guild) })),
+      },
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/starboard/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseStarboard({ boards: req.body.boards });
+    await setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:starboard',
+      detail: 'settings saved',
+    });
+    // Catch up on messages that already clear a possibly-just-lowered bar —
+    // fire-and-forget, same as V1's save route.
+    for (const board of config.boards) {
+      rescanBoard(req.guild, board)
+        .then((r) =>
+          log.info(
+            'starboard',
+            `rescan ${req.guild.id}/${board.id}: scanned ${r.scanned}, posted ${r.posted}`
+          )
+        )
+        .catch((err) => log.error('starboard', 'rescan failed:', err.message));
+    }
+    res.json({
+      config: { boards: config.boards.map((b) => ({ ...b, emojiText: boardEmojiText(b, req.guild) })) },
+    });
+  })
+);
+
 router.get(
   '/guilds/:guildId/modules/kick-alerts/config',
   asyncHandler(async (req, res) => {
@@ -1026,6 +1171,65 @@ router.post(
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:kick-alerts',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/youtube-alerts/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'youtube-alerts');
+    res.json({
+      config: normaliseYoutubeConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      defaultVideoMessage: YT_DEFAULT_VIDEO_MSG,
+      defaultLiveMessage: YT_DEFAULT_LIVE_MSG,
+    });
+  })
+);
+
+// A channel is given as a raw @handle/URL the client never resolves itself
+// (mirrors guilds.js's V1 branch) — resolveYtChannel does a live network
+// fetch, so this route can be slow; the previously-resolved ytChannelId/name
+// are carried forward (same UC_RE re-check V1 does) when the input field is
+// left blank on an already-resolved row, so re-saving other rows doesn't
+// force a re-resolve of ones that didn't change.
+router.post(
+  '/guilds/:guildId/modules/youtube-alerts/config',
+  asyncHandler(async (req, res) => {
+    const rows = Array.isArray(req.body.alerts) ? req.body.alerts : [];
+    const UC_RE = /^UC[\w-]{20,}$/;
+    const alerts = [];
+    for (const a of rows) {
+      const input = String(a.input ?? '').trim();
+      const prevId = a.ytChannelId ?? '';
+      const prevName = a.name ?? '';
+      if (!input && !prevId) continue;
+      let resolved = UC_RE.test(prevId) && !input ? { channelId: prevId, name: prevName } : null;
+      if (!resolved) resolved = (await resolveYtChannel(input || prevId)) || null;
+      if (!resolved && UC_RE.test(prevId)) resolved = { channelId: prevId, name: prevName };
+      if (!resolved) continue;
+      const notify = a.notify || 'both';
+      alerts.push({
+        ytChannelId: resolved.channelId,
+        name: resolved.name || prevName || '',
+        discordChannelId: a.discordChannelId ?? '',
+        roleId: a.roleId ?? '',
+        onVideo: notify === 'both' || notify === 'video',
+        onLive: notify === 'both' || notify === 'live',
+        onEnd: a.onEnd ?? 'delete',
+        videoMessage: a.videoMessage ?? '',
+        liveMessage: a.liveMessage ?? '',
+      });
+    }
+    const config = normaliseYoutubeConfig({ alerts });
+    await setGuildModule(req.guild.id, 'youtube-alerts', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:youtube-alerts',
       detail: 'settings saved',
     });
     res.json({ config });
@@ -1425,6 +1629,93 @@ router.post(
       }
       await deleteComposed(guild.id, rec.id);
     }
+    res.json({ ok: true });
+  })
+);
+
+// --- Leveling (mirrors guilds.js's mod.id === 'leveling' config branch +
+// the /m/leveling/xp set/reset route) ---------------------------------------
+
+router.get(
+  '/guilds/:guildId/modules/leveling/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'leveling');
+    const rows = await topMembers(req.guild.id, 15);
+    const tags = await resolveUserTags(
+      runtime.client,
+      rows.map((r) => r.user_id)
+    );
+    res.json({
+      config: normaliseLevelingConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      announceModes: ANNOUNCE_MODES,
+      xpRates: XP_RATES,
+      board: {
+        total: await memberCount(req.guild.id),
+        rows: rows.map((r, i) => ({
+          rank: i + 1,
+          name: tags.get(r.user_id) ?? r.user_id,
+          level: r.level,
+          xp: r.xp,
+          voiceXp: r.voice_xp ?? 0,
+          voiceMinutes: r.voice_minutes ?? 0,
+          messages: r.messages,
+        })),
+      },
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/leveling/config',
+  asyncHandler(async (req, res) => {
+    const prev = (await getGuildModule(req.guild.id, 'leveling')).config;
+    const config = normaliseLevelingConfig({
+      ...req.body,
+      // The public-leaderboard toggle lives on the Leaderboard V2 page — keep it.
+      publicLeaderboard: prev.publicLeaderboard !== false,
+    });
+    await setGuildModule(req.guild.id, 'leveling', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:leveling',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/leveling/xp',
+  asyncHandler(async (req, res) => {
+    if (req.body.reset === true) {
+      await resetGuildLeveling(req.guild.id);
+      await recordAudit(req.guild.id, {
+        actor: moderatorDisplayName(req),
+        action: 'leveling:reset',
+        detail: 'all XP wiped',
+      });
+      return res.json({ ok: true });
+    }
+    const userId = parseUserId(req.body.userId);
+    const xp = Number(req.body.xp);
+    if (!userId || !Number.isInteger(xp) || xp < 0 || xp > 1e12) {
+      return res
+        .status(400)
+        .json({ error: 'Enter a valid user id/mention and a non-negative whole XP value.' });
+    }
+    await setXp(req.guild.id, userId, xp);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'leveling:setxp',
+      detail: `${userId} → ${xp} XP`,
+    });
+
+    const cfg = normaliseLevelingConfig((await getGuildModule(req.guild.id, 'leveling')).config);
+    const member = await req.guild.members.fetch(userId).catch(() => null);
+    if (member) await syncRewards(member, levelFromXp(xp), cfg).catch(() => {});
+
     res.json({ ok: true });
   })
 );
@@ -1981,6 +2272,760 @@ router.post(
   requireOwner,
   asyncHandler(async (req, res) => {
     await deleteRoadmapPost(Number(req.params.id));
+    res.json({ ok: true });
+  })
+);
+
+// --- Channel cleanup (mirrors guilds.js's "Channel cleanup builder" section
+// — schedules live in their own table, not guild_modules.config, so this
+// isn't the usual getModuleConfig/saveModuleConfig shape.) -----------------
+
+const CLEANUP_MAX_AGE_HOURS = 24 * 90; // 90 days
+
+function shapeCleanupSchedule(rec) {
+  return {
+    id: rec.id,
+    channelId: rec.channel_id,
+    days: rec.dayList,
+    timeHhmm: rec.time_hhmm,
+    maxAgeHours: rec.max_age_hours,
+    skipPinned: Boolean(rec.skip_pinned),
+    enabled: Boolean(rec.enabled),
+    lastRunDate: rec.last_run_date || null,
+    lastRunCount: rec.last_run_count ?? null,
+  };
+}
+
+router.get(
+  '/guilds/:guildId/modules/channel-cleanup/schedules',
+  asyncHandler(async (req, res) => {
+    const rows = await listCleanupSchedules(req.guild.id);
+    res.json({
+      schedules: rows.map(shapeCleanupSchedule),
+      channels: guildTextChannels(req.guild),
+      weekdays: WEEKDAYS,
+      maxAgeHoursCap: CLEANUP_MAX_AGE_HOURS,
+    });
+  })
+);
+
+function parseCleanupBody(body) {
+  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
+  const days = (Array.isArray(body.days) ? body.days : []).map(Number).filter((n) => n >= 0 && n <= 6);
+  const maxAgeHours = Math.min(
+    CLEANUP_MAX_AGE_HOURS,
+    Math.max(1, Math.floor(Number(body.maxAgeHours)) || 24)
+  );
+  const timeOk = /^\d{2}:\d{2}$/.test(body.timeHhmm ?? '');
+  return {
+    channelId,
+    days,
+    maxAgeHours,
+    timeHhmm: body.timeHhmm,
+    skipPinned: Boolean(body.skipPinned),
+    timeOk,
+  };
+}
+
+router.post(
+  '/guilds/:guildId/modules/channel-cleanup/schedules',
+  asyncHandler(async (req, res) => {
+    const s = parseCleanupBody(req.body);
+    if (!s.channelId) return res.status(400).json({ error: 'Pick a channel.' });
+    if (!s.timeOk) return res.status(400).json({ error: 'Pick a valid time.' });
+    const id = await createCleanupSchedule(req.guild.id, s);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:channel-cleanup',
+      detail: `created schedule for #${guildTextChannels(req.guild).find((c) => c.id === s.channelId)?.name ?? s.channelId}`,
+    });
+    res.json({ schedule: shapeCleanupSchedule(await getCleanupSchedule(req.guild.id, id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/channel-cleanup/schedules/:id',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = Number.isInteger(id) ? await getCleanupSchedule(req.guild.id, id) : null;
+    if (!existing) return res.status(404).json({ error: 'No such schedule' });
+    const s = parseCleanupBody(req.body);
+    if (!s.channelId) return res.status(400).json({ error: 'Pick a channel.' });
+    if (!s.timeOk) return res.status(400).json({ error: 'Pick a valid time.' });
+    await updateCleanupSchedule(req.guild.id, id, s);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:channel-cleanup',
+      detail: `updated schedule for #${guildTextChannels(req.guild).find((c) => c.id === s.channelId)?.name ?? s.channelId}`,
+    });
+    res.json({ schedule: shapeCleanupSchedule(await getCleanupSchedule(req.guild.id, id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/channel-cleanup/schedules/:id/delete',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (Number.isInteger(id)) await deleteCleanupSchedule(req.guild.id, id);
+    res.json({ ok: true });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/channel-cleanup/schedules/:id/toggle',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const rec = Number.isInteger(id) ? await getCleanupSchedule(req.guild.id, id) : null;
+    if (rec) await setCleanupScheduleEnabled(req.guild.id, id, !rec.enabled);
+    res.json({ schedule: rec ? shapeCleanupSchedule(await getCleanupSchedule(req.guild.id, id)) : null });
+  })
+);
+
+// --- GitHub alerts (mirrors guilds.js's "GitHub repo watch builder" section
+// — same repo/changelog-path/webhook-token shape, own table.) --------------
+
+const REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
+
+/** Accepts "owner/repo" or a pasted github.com URL; returns the normalised "owner/repo" or null. */
+function parseRepoInput(raw) {
+  const v = String(raw ?? '')
+    .trim()
+    .replace(/^https?:\/\/(www\.)?github\.com\//i, '')
+    .replace(/\.git$/i, '')
+    .replace(/\/+$/, '');
+  return REPO_RE.test(v) ? v : null;
+}
+
+/** A relative repo file path for the changelog watcher — blank is valid (off). */
+function parseChangelogPath(raw) {
+  const v = String(raw ?? '')
+    .trim()
+    .replace(/^\/+/, '');
+  if (!v) return { ok: true, value: '' };
+  if (v.length > 300 || v.includes('..') || /[\0\r\n]/.test(v)) return { ok: false, value: '' };
+  return { ok: true, value: v };
+}
+
+function githubWebhookUrl(token) {
+  return config.dashboardUrl ? `${config.dashboardUrl.replace(/\/+$/, '')}/webhooks/github/${token}` : null;
+}
+
+function shapeGithubWatch(rec) {
+  return {
+    id: rec.id,
+    repo: rec.repo,
+    channelId: rec.channel_id,
+    roleId: rec.role_id || '',
+    changelogPath: rec.changelog_path || '',
+    events: rec.events,
+    enabled: Boolean(rec.enabled),
+    secret: rec.secret,
+    webhookUrl: githubWebhookUrl(rec.token),
+  };
+}
+
+router.get(
+  '/guilds/:guildId/modules/github/watches',
+  asyncHandler(async (req, res) => {
+    const rows = await listGithubWatches(req.guild.id);
+    res.json({
+      watches: rows.map(shapeGithubWatch),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      eventTypes: GITHUB_EVENT_TYPES,
+      dashboardUrlSet: Boolean(config.dashboardUrl),
+    });
+  })
+);
+
+function parseGithubBody(body) {
+  const repo = parseRepoInput(body.repo);
+  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
+  const roleId = /^\d{17,20}$/.test(body.roleId ?? '') ? body.roleId : '';
+  const changelog = parseChangelogPath(body.changelogPath);
+  const events = sanitiseGithubEvents(body.events);
+  return { repo, channelId, roleId, changelogPath: changelog.value, changelogOk: changelog.ok, events };
+}
+
+function githubBodyError(s) {
+  if (!s.repo) return 'Enter a repo as owner/repo (or paste its github.com URL).';
+  if (!s.channelId) return 'Pick a channel.';
+  if (!s.changelogOk)
+    return 'That changelog path looks invalid — a plain relative file path, e.g. CHANGELOG.md.';
+  if (!s.events.length && !s.changelogPath)
+    return 'Pick at least one event to announce, or set a changelog file path.';
+  return null;
+}
+
+router.post(
+  '/guilds/:guildId/modules/github/watches',
+  asyncHandler(async (req, res) => {
+    const s = parseGithubBody(req.body);
+    const err = githubBodyError(s);
+    if (err) return res.status(400).json({ error: err });
+    const id = await createGithubWatch(req.guild.id, s);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:github',
+      detail: `added watch for ${s.repo}`,
+    });
+    res.json({ watch: shapeGithubWatch(await getGithubWatch(req.guild.id, id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/github/watches/:id',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = Number.isInteger(id) ? await getGithubWatch(req.guild.id, id) : null;
+    if (!existing) return res.status(404).json({ error: 'No such watch' });
+    const s = parseGithubBody(req.body);
+    const err = githubBodyError(s);
+    if (err) return res.status(400).json({ error: err });
+    await updateGithubWatch(req.guild.id, id, s);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:github',
+      detail: `updated watch for ${s.repo}`,
+    });
+    res.json({ watch: shapeGithubWatch(await getGithubWatch(req.guild.id, id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/github/watches/:id/delete',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (Number.isInteger(id)) await deleteGithubWatch(req.guild.id, id);
+    res.json({ ok: true });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/github/watches/:id/toggle',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const rec = Number.isInteger(id) ? await getGithubWatch(req.guild.id, id) : null;
+    if (rec) await setGithubWatchEnabled(req.guild.id, id, !rec.enabled);
+    res.json({ watch: rec ? shapeGithubWatch(await getGithubWatch(req.guild.id, id)) : null });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/github/watches/:id/regen-secret',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const rec = Number.isInteger(id) ? await getGithubWatch(req.guild.id, id) : null;
+    if (!rec) return res.status(404).json({ error: 'No such watch' });
+    await regenerateGithubWatchSecret(req.guild.id, id);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:github',
+      detail: `regenerated secret for ${rec.repo}`,
+    });
+    res.json({ watch: shapeGithubWatch(await getGithubWatch(req.guild.id, id)) });
+  })
+);
+
+// --- Reminders (mirrors guilds.js's "Reminders builder (MEE6-style)" section
+// — schedules live in their own table, not guild_modules.config.) ----------
+
+function num(v) {
+  return v === null || v === undefined ? null : Number(v);
+}
+
+function shapeReminder(rec) {
+  return {
+    id: rec.id,
+    name: rec.name,
+    channelId: rec.channel_id,
+    spec: rec.spec,
+    mode: rec.mode,
+    intervalMinutes: rec.interval_minutes,
+    days: rec.dayList,
+    startAt: num(rec.start_at),
+    endAt: num(rec.end_at),
+    runAt: num(rec.run_at),
+    enabled: rec.enabled === 1,
+    lastRunAt: num(rec.last_run_at),
+  };
+}
+
+function toMs(v) {
+  const t = new Date(String(v ?? '')).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+function parseReminderBody(body) {
+  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
+  let embed = null;
+  let content = body.content;
+  // Embed mode's "text above the embed" lives on the EmbedEditor's own spec
+  // (content:true), not the plain-text textarea used in text mode.
+  if (body.msgType === 'embed' && body.embedSpec && typeof body.embedSpec === 'object') {
+    embed = normaliseEmbedSpec(body.embedSpec);
+    content = body.embedSpec.content;
+  }
+  const spec = { content: String(content ?? '').slice(0, 2000), embeds: embed ? [embed] : [] };
+  const mode = body.mode === 'single' ? 'single' : 'multiple';
+  const intervalMinutes = Math.min(
+    MAX_INTERVAL_MINUTES,
+    Math.max(MIN_INTERVAL_MINUTES, Math.floor(Number(body.intervalMinutes)) || 60)
+  );
+  const days = (Array.isArray(body.days) ? body.days : []).map(Number).filter((n) => n >= 0 && n <= 6);
+  return {
+    name:
+      String(body.name ?? '')
+        .trim()
+        .slice(0, 100) || 'Untitled reminder',
+    channelId,
+    spec,
+    mode,
+    intervalMinutes,
+    days: days.length ? days : [0, 1, 2, 3, 4, 5, 6],
+    startAt: body.enableStart ? toMs(body.startAt) : null,
+    endAt: body.enableEnd ? toMs(body.endAt) : null,
+    runAt: mode === 'single' ? toMs(body.runAt) : null,
+  };
+}
+
+router.get(
+  '/guilds/:guildId/modules/reminders/list',
+  asyncHandler(async (req, res) => {
+    const rows = await listScheduled(req.guild.id);
+    res.json({
+      reminders: rows.map(shapeReminder),
+      channels: guildTextChannels(req.guild),
+      schedulePresets: SCHEDULE_PRESETS,
+      weekdays: WEEKDAYS,
+      minIntervalMinutes: MIN_INTERVAL_MINUTES,
+      maxIntervalMinutes: MAX_INTERVAL_MINUTES,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/reminders',
+  asyncHandler(async (req, res) => {
+    const r = parseReminderBody(req.body);
+    if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
+    if (!r.spec.content.trim() && !r.spec.embeds.length) {
+      return res.status(400).json({ error: 'Add a message or an embed.' });
+    }
+    if (r.mode === 'single' && !r.runAt)
+      return res.status(400).json({ error: 'Pick a date and time to send at.' });
+    const id = await createReminder(req.guild.id, r);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:reminders',
+      detail: `created "${r.name}"`,
+    });
+    res.json({ reminder: shapeReminder(await getScheduled(req.guild.id, id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/reminders/:id',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = Number.isInteger(id) ? await getScheduled(req.guild.id, id) : null;
+    if (!existing) return res.status(404).json({ error: 'No such reminder' });
+    const r = parseReminderBody(req.body);
+    if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
+    if (!r.spec.content.trim() && !r.spec.embeds.length) {
+      return res.status(400).json({ error: 'Add a message or an embed.' });
+    }
+    if (r.mode === 'single' && !r.runAt)
+      return res.status(400).json({ error: 'Pick a date and time to send at.' });
+    await updateReminder(req.guild.id, id, r);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:reminders',
+      detail: `updated "${r.name}"`,
+    });
+    res.json({ reminder: shapeReminder(await getScheduled(req.guild.id, id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/reminders/:id/delete',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (Number.isInteger(id)) await deleteScheduled(req.guild.id, id);
+    res.json({ ok: true });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/reminders/:id/toggle',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const rec = Number.isInteger(id) ? await getScheduled(req.guild.id, id) : null;
+    if (rec) await setScheduledEnabled(req.guild.id, id, rec.enabled !== 1);
+    res.json({ reminder: rec ? shapeReminder(await getScheduled(req.guild.id, id)) : null });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/reminders/test',
+  asyncHandler(async (req, res) => {
+    const r = parseReminderBody(req.body);
+    if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
+    if (!r.spec.content.trim() && !r.spec.embeds.length) {
+      return res.status(400).json({ error: 'Add a message or an embed.' });
+    }
+    try {
+      await sendComposed(req.guild, r.channelId, r.spec);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  })
+);
+
+// --- Polls (mirrors guilds.js's "polls" config branch — generic
+// getGuildModule/setGuildModule config, same as most other modules.) -------
+
+router.get(
+  '/guilds/:guildId/modules/polls/config',
+  asyncHandler(async (req, res) => {
+    const { config } = await getGuildModule(req.guild.id, 'polls');
+    res.json({
+      config: normalisePollsConfig(config),
+      roles: assignableRoles(req.guild),
+      pollPlaceholders: POLL_PLACEHOLDERS,
+      resultsPlaceholders: RESULTS_PLACEHOLDERS,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/polls/config',
+  asyncHandler(async (req, res) => {
+    const config = normalisePollsConfig({
+      voteRoleMode: req.body.voteRoleMode,
+      voteRoles: Array.isArray(req.body.voteRoles) ? req.body.voteRoles : [],
+      pollMessage: req.body.pollMessage,
+      resultsMessage: req.body.resultsMessage,
+    });
+    await setGuildModule(req.guild.id, 'polls', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:polls',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+// --- Welcome Channel (mirrors guilds.js's "welcome-channel" branch + its
+// create-channel/unpublish routes — generic config, plus three actions that
+// touch the live channel.) ---------------------------------------------
+
+router.get(
+  '/guilds/:guildId/modules/welcome-channel/config',
+  asyncHandler(async (req, res) => {
+    const { config } = await getGuildModule(req.guild.id, 'welcome-channel');
+    res.json({
+      config: normaliseWelcomeChannelConfig(config),
+      channels: guildTextChannels(req.guild),
+      presets: WC_PRESETS.map((p) => ({ id: p.id, label: p.label, kind: p.kind, defaults: p.make() })),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/welcome-channel/config',
+  asyncHandler(async (req, res) => {
+    const prev = (await getGuildModule(req.guild.id, 'welcome-channel')).config;
+    const config = normaliseWelcomeChannelConfig({
+      channelId: req.body.channelId,
+      messageId: prev.messageId,
+      spec: req.body.spec,
+    });
+    await setGuildModule(req.guild.id, 'welcome-channel', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:welcome-channel',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/welcome-channel/publish',
+  asyncHandler(async (req, res) => {
+    const prev = (await getGuildModule(req.guild.id, 'welcome-channel')).config;
+    const config = normaliseWelcomeChannelConfig({
+      channelId: req.body.channelId,
+      messageId: prev.messageId,
+      spec: req.body.spec,
+    });
+    await setGuildModule(req.guild.id, 'welcome-channel', { config });
+    const r = await publishWelcome(req.guild, config);
+    if (!r.ok) return res.status(400).json({ error: r.error });
+    const published = { ...config, messageId: r.messageId };
+    await setGuildModule(req.guild.id, 'welcome-channel', { enabled: true, config: published });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:welcome-channel',
+      detail: 'published to channel',
+    });
+    res.json({ config: published });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/welcome-channel/unpublish',
+  asyncHandler(async (req, res) => {
+    const config = normaliseWelcomeChannelConfig(
+      (await getGuildModule(req.guild.id, 'welcome-channel')).config
+    );
+    await unpublishWelcome(req.guild, config);
+    const next = { ...config, messageId: '' };
+    await setGuildModule(req.guild.id, 'welcome-channel', { config: next });
+    res.json({ config: next });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/welcome-channel/create-channel',
+  asyncHandler(async (req, res) => {
+    const r = await createWelcomeChannel(req.guild);
+    if (!r.ok) return res.status(400).json({ error: r.error });
+    const cfg = normaliseWelcomeChannelConfig((await getGuildModule(req.guild.id, 'welcome-channel')).config);
+    const next = { ...cfg, channelId: r.channelId };
+    await setGuildModule(req.guild.id, 'welcome-channel', { config: next });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:welcome-channel',
+      detail: 'created #welcome',
+    });
+    res.json({ config: next, channels: guildTextChannels(req.guild) });
+  })
+);
+
+// --- Reaction roles & autoroles (mirrors guilds.js's "Reaction-role builder"
+// section — reactionMessages/autoroles live in the generic module config,
+// but a save always (re-)publishes the live message, unlike a plain draft.) -
+
+router.get(
+  '/guilds/:guildId/modules/roles/list',
+  asyncHandler(async (req, res) => {
+    const { config } = await getGuildModule(req.guild.id, 'roles');
+    res.json({
+      reactionMessages: Array.isArray(config.reactionMessages) ? config.reactionMessages : [],
+      autoroles: Array.isArray(config.autoroles) ? config.autoroles : [],
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/roles/autoroles',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'roles');
+    const autoroles = (Array.isArray(req.body.autoroles) ? req.body.autoroles : []).filter((id) =>
+      /^\d{17,20}$/.test(id)
+    );
+    await setGuildModule(req.guild.id, 'roles', { config: { ...cfg, autoroles } });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:roles',
+      detail: 'autoroles saved',
+    });
+    res.json({ autoroles });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/roles/rr',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const cfg = (await getGuildModule(guild.id, 'roles')).config;
+    const list = Array.isArray(cfg.reactionMessages) ? cfg.reactionMessages : [];
+
+    const channelId = /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '';
+    if (!channelId) return res.status(400).json({ error: 'Pick a channel.' });
+
+    const style = ['buttons', 'select'].includes(req.body.style) ? req.body.style : 'reaction';
+    const rawPairs = Array.isArray(req.body.pairs) ? req.body.pairs : [];
+    const pairs = [];
+    for (const row of rawPairs) {
+      const rid = row?.roleId;
+      if (!/^\d{17,20}$/.test(rid ?? '')) continue;
+      const parsed = parseEmoji(row?.emoji ?? '', guild);
+      // The reaction style needs a usable emoji; button / select styles don't.
+      if (style === 'reaction' && !parsed) continue;
+      pairs.push({
+        ...(parsed || { key: '', display: '', react: '' }),
+        roleId: rid,
+        label: String(row?.label ?? '').slice(0, 80),
+        btnStyle: ['primary', 'secondary', 'success', 'danger'].includes(row?.btnStyle)
+          ? row.btnStyle
+          : 'secondary',
+      });
+    }
+    if (pairs.length === 0)
+      return res.status(400).json({ error: 'Add at least one role with a usable emoji.' });
+
+    const id = /^\d+$/.test(req.body.id ?? '') ? req.body.id : String(Date.now());
+    const existing = list.find((x) => String(x.id) === id);
+    const rm = {
+      id,
+      channelId,
+      messageId: existing?.messageId || '',
+      style,
+      message: String(req.body.message ?? '').slice(0, 2000),
+      embed: normaliseEmbedSpec(req.body.embed || {}),
+      exclusive: Boolean(req.body.exclusive),
+      mode: req.body.mode === 'reverse' ? 'reverse' : 'default',
+      placeholder: String(req.body.placeholder ?? '').slice(0, 150),
+      selMin: Number.parseInt(req.body.selMin, 10) || 0,
+      selMax: Number.parseInt(req.body.selMax, 10) || 0,
+      pairs,
+    };
+    // Re-publishing after a style change: drop the old message so the new one is
+    // posted cleanly (components vs reactions differ enough that editing is messy).
+    if (existing && existing.style && existing.style !== style && existing.messageId) {
+      const oldCh = guild.channels.cache.get(existing.channelId);
+      const oldMsg = oldCh && (await oldCh.messages.fetch(existing.messageId).catch(() => null));
+      if (oldMsg) await oldMsg.delete().catch(() => {});
+      rm.messageId = '';
+    }
+
+    let publishError = null;
+    try {
+      rm.messageId = await publishReactionMessage(guild, rm);
+    } catch (err) {
+      publishError = err.message;
+      log.error('roles', 'publish reaction message failed:', err.message);
+    }
+
+    const next = existing ? list.map((x) => (String(x.id) === id ? rm : x)) : [...list, rm];
+    await setGuildModule(guild.id, 'roles', { enabled: true, config: { ...cfg, reactionMessages: next } });
+    await recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:roles',
+      detail: `${existing ? 'updated' : 'created'} reaction-role set`,
+    });
+    // The set is saved either way — a publish failure is surfaced as a
+    // notice, not an error response, so the caller doesn't lose the edit.
+    res.json({ reactionMessage: rm, error: publishError });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/roles/rr/:id/delete',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const cfg = (await getGuildModule(guild.id, 'roles')).config;
+    const list = Array.isArray(cfg.reactionMessages) ? cfg.reactionMessages : [];
+    const rm = list.find((x) => String(x.id) === req.params.id);
+    if (rm?.messageId && rm.channelId) {
+      const ch = guild.channels.cache.get(rm.channelId);
+      const m = ch && (await ch.messages.fetch(rm.messageId).catch(() => null));
+      if (m) await m.delete().catch(() => {});
+    }
+    await setGuildModule(guild.id, 'roles', {
+      config: { ...cfg, reactionMessages: list.filter((x) => String(x.id) !== req.params.id) },
+    });
+    await recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:roles',
+      detail: 'deleted reaction-role set',
+    });
+    res.json({ ok: true });
+  })
+);
+
+// --- Custom commands (mirrors guilds.js's "Custom-command builder" section
+// — commands live in the generic module config; actions arrive as real JSON
+// here instead of a hidden-input string, since this is the JSON API.) ------
+
+router.get(
+  '/guilds/:guildId/modules/custom-commands/list',
+  asyncHandler(async (req, res) => {
+    const { config } = await getGuildModule(req.guild.id, 'custom-commands');
+    const { commands } = normaliseCustomCommands(config);
+    res.json({
+      commands,
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      placeholders: CC_PLACEHOLDERS,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/custom-commands/cmd',
+  asyncHandler(async (req, res) => {
+    const name = String(req.body.name ?? '')
+      .trim()
+      .toLowerCase();
+    if (!/^[a-z0-9_-]{1,32}$/.test(name)) {
+      return res.status(400).json({ error: 'Invalid name — lowercase letters, numbers, - and _ only.' });
+    }
+    if (runtime.client?.commands?.has(name)) {
+      return res.status(400).json({ error: `/${name} is reserved by a built-in command.` });
+    }
+
+    const prev = normaliseCustomCommands((await getGuildModule(req.guild.id, 'custom-commands')).config);
+    const id = /^\d+$/.test(req.body.id ?? '') ? String(req.body.id) : String(Date.now());
+    const existing = prev.commands.find((c) => c.id === id);
+    if (prev.commands.some((c) => c.name === name && c.id !== id)) {
+      return res.status(400).json({ error: `/${name} already exists.` });
+    }
+
+    const merged = {
+      id,
+      name,
+      description: req.body.description ?? '',
+      actions: Array.isArray(req.body.actions) ? req.body.actions : [],
+      allowedRoles: Array.isArray(req.body.allowedRoles) ? req.body.allowedRoles : [],
+      allowedChannels: Array.isArray(req.body.allowedChannels) ? req.body.allowedChannels : [],
+      cooldownSeconds: req.body.cooldownSeconds ?? 0,
+    };
+    const nextList = existing
+      ? prev.commands.map((c) => (c.id === id ? merged : c))
+      : [...prev.commands, merged];
+    const config = normaliseCustomCommands({ commands: nextList });
+
+    if (!config.commands.some((c) => c.id === id)) {
+      return res.status(400).json({ error: 'Every action was empty — add at least one message, role, etc.' });
+    }
+
+    await setGuildModule(req.guild.id, 'custom-commands', { enabled: true, config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:custom-commands',
+      detail: `${existing ? 'updated' : 'created'} /${name}`,
+    });
+    await syncGuildCustomCommands(req.guild).catch((err) =>
+      log.error('custom-commands', 'sync after save failed:', err.message)
+    );
+    res.json({ command: config.commands.find((c) => c.id === id) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/custom-commands/cmd/:id/delete',
+  asyncHandler(async (req, res) => {
+    const prev = normaliseCustomCommands((await getGuildModule(req.guild.id, 'custom-commands')).config);
+    const config = normaliseCustomCommands({
+      commands: prev.commands.filter((c) => c.id !== req.params.id),
+    });
+    await setGuildModule(req.guild.id, 'custom-commands', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:custom-commands',
+      detail: 'deleted a command',
+    });
+    await syncGuildCustomCommands(req.guild).catch((err) =>
+      log.error('custom-commands', 'sync after delete failed:', err.message)
+    );
     res.json({ ok: true });
   })
 );

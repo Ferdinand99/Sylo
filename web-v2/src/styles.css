@@ -688,8 +688,23 @@ a:hover {
 .v2-embed-preview {
   position: relative;
   display: flex;
-  margin: 8px 0 8px 48px;
+  /* Uneven top/bottom margin — the toolbar below pops up 14px above the
+     card on hover, and adjacent siblings' margins collapse to whichever is
+     larger, so the top side needs enough clearance on its own or a stack of
+     cards clips/hides each other's toolbar behind the card above it. */
+  margin: 22px 0 6px 48px;
   max-width: 520px;
+}
+.v2-embed-preview:hover,
+.v2-embed-preview:focus-within {
+  z-index: 1;
+}
+/* welcome-channel's element list (moduleForms/WelcomeChannel.jsx) has no
+   avatar/username header to align the 48px indent under, so it isn't a
+   .v2-msg-preview — reset the indent and let cards use the full width. */
+.v2-wc-stage .v2-embed-preview {
+  margin-left: 0;
+  max-width: 640px;
 }
 /* Purely a visual indicator now — ColorPicker.jsx (a dedicated round swatch
    button, positioned over this corner) is the actual control. It used to
@@ -820,6 +835,10 @@ a:hover {
   position: absolute;
   top: -14px;
   right: 0;
+  /* .v2-embed-body is also `position: relative` and comes later in the DOM,
+     so without this it paints over the toolbar's lower half (both are
+     positioned with z-index:auto, so plain DOM order decides the winner). */
+  z-index: 2;
   display: flex;
   gap: 2px;
   background: var(--bg-surface);
@@ -892,7 +911,11 @@ a:hover {
   object-fit: cover;
 }
 
-.v2-msg-preview .v2-embed-input {
+/* Scoped to .v2-embed-preview (EmbedCard's own root), not .v2-msg-preview —
+   EmbedCard also renders standalone (welcome-channel's element list has no
+   Discord-message header wrapper around it), so the blend-into-the-preview
+   input look can't depend on that outer wrapper being present. */
+.v2-embed-preview .v2-embed-input {
   display: block;
   width: 100%;
   background: none;
@@ -904,14 +927,14 @@ a:hover {
   border-radius: 4px;
   resize: none;
 }
-.v2-msg-preview .v2-embed-input:hover {
+.v2-embed-preview .v2-embed-input:hover {
   background: color-mix(in srgb, var(--text) 5%, transparent);
 }
-.v2-msg-preview .v2-embed-input:focus {
+.v2-embed-preview .v2-embed-input:focus {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   outline: none;
 }
-.v2-msg-preview .v2-embed-input::placeholder {
+.v2-embed-preview .v2-embed-input::placeholder {
   color: var(--text-muted);
 }
 .v2-embed-title {
@@ -1314,6 +1337,8 @@ button.v2-toggle:disabled {
 form input[type='text'],
 form input[type='url'],
 form input[type='number'],
+form input[type='time'],
+form input[type='datetime-local'],
 form select,
 form textarea {
   width: 100%;
@@ -1648,4 +1673,41 @@ form textarea {
 .v2-ins-bar-val {
   font-size: 0.78rem;
   color: var(--text-muted);
+}
+
+/* ---------- Embed editor (components/EmbedEditor.jsx) ----------
+   Single-embed module forms (reminders, polls, …) reuse the exact same
+   Discord-message-preview look as the Embed messages builder — the
+   v2-msg and v2-embed classes below, shared via components/EmbedCard.jsx.
+   Only the token-insert row here is new. */
+.v2-embed-fixed-body {
+  border-left: 2px solid var(--border-subtle);
+  padding: 6px 0 6px 10px;
+  margin: 4px 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+  user-select: none;
+}
+.v2-embed-fixed-q {
+  font-weight: 700;
+  color: var(--text);
+}
+.v2-embed-vars {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.v2-embed-vars button {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.76rem;
+  padding: 2px 9px;
+  margin: 0 3px;
+  cursor: pointer;
 }

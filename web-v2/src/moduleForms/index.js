@@ -26,6 +26,17 @@ import KickAlerts from './KickAlerts.jsx';
 import RssAlerts from './RssAlerts.jsx';
 import GameStats from './GameStats.jsx';
 import Honeypot from './Honeypot.jsx';
+import YoutubeAlerts from './YoutubeAlerts.jsx';
+import Leveling from './Leveling.jsx';
+import ChannelCleanup from './ChannelCleanup.jsx';
+import GithubAlerts from './GithubAlerts.jsx';
+import TempVoice from './TempVoice.jsx';
+import Starboard from './Starboard.jsx';
+import Reminders from './Reminders.jsx';
+import Polls from './Polls.jsx';
+import WelcomeChannel from './WelcomeChannel.jsx';
+import Roles from './Roles.jsx';
+import CustomCommands from './CustomCommands.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -38,6 +49,17 @@ export const MODULE_FORMS = {
   'invite-tracker': InviteTracker,
   'twitch-alerts': TwitchAlerts,
   'kick-alerts': KickAlerts,
+  'youtube-alerts': YoutubeAlerts,
+  leveling: Leveling,
+  'channel-cleanup': ChannelCleanup,
+  github: GithubAlerts,
+  'temp-voice': TempVoice,
+  starboard: Starboard,
+  reminders: Reminders,
+  polls: Polls,
+  'welcome-channel': WelcomeChannel,
+  roles: Roles,
+  'custom-commands': CustomCommands,
   rss: RssAlerts,
   'game-stats': GameStats,
   welcome: Welcome,

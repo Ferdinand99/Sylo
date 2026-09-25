@@ -1,15 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getComposedMessage, saveComposedMessage, ApiError } from '../api.js';
-import ColorPicker from '../components/ColorPicker.jsx';
+import EmbedCard, { autoGrow, newKey } from '../components/EmbedCard.jsx';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
-const URL_RE = /^https?:\/\/\S+$/i;
 const MAX_EMBEDS = 10;
 const MAX_LINKS = 5;
-
-let uid = 0;
-const newKey = (prefix) => `${prefix}${uid++}`;
 
 function normEmbed(e = {}) {
   return {
@@ -78,203 +74,6 @@ function formToSpec(form) {
     .filter((b) => b.url && (b.label || b.emoji));
   const rows = buttons.length ? [...form.keepRows, { type: 'buttons', buttons }] : form.keepRows;
   return { content: form.content, embeds, rows };
-}
-
-function pickImage(current) {
-  const u = window.prompt('Image URL (https://…). Leave blank to remove.', current || '');
-  if (u === null) return current;
-  const trimmed = String(u).trim();
-  return URL_RE.test(trimmed) ? trimmed : '';
-}
-
-// Small icon-only toolbar buttons (reorder / duplicate / delete) — MEE6's
-// builder uses these instead of labeled buttons; self-contained SVGs rather
-// than pulling in V1's sprite, same call Sidebar.jsx already made.
-function ToolIcon({ name }) {
-  const paths = {
-    up: <polyline points="18 15 12 9 6 15" />,
-    down: <polyline points="6 9 12 15 18 9" />,
-    copy: (
-      <>
-        <rect x="9" y="9" width="12" height="12" rx="2" />
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-      </>
-    ),
-    trash: (
-      <>
-        <path d="M3 6h18" />
-        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-      </>
-    ),
-  };
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {paths[name]}
-    </svg>
-  );
-}
-
-function AvatarPick({ value, onChange, title }) {
-  return (
-    <button
-      type="button"
-      className="v2-embed-avatar-pick"
-      title={title}
-      onClick={() => onChange(pickImage(value))}
-    >
-      {value ? <img src={value} alt="" /> : null}
-    </button>
-  );
-}
-
-// Auto-growing so a long title/description doesn't scroll inside its own
-// tiny box — it should just make the "message" taller, like Discord itself.
-function autoGrow(e) {
-  e.target.style.height = 'auto';
-  e.target.style.height = `${e.target.scrollHeight}px`;
-}
-
-function EmbedCard({ embed, index, count, onChange, onMove, onDuplicate, onRemove }) {
-  const set = (patch) => onChange({ ...embed, ...patch });
-  const setField = (key, patch) =>
-    onChange({ ...embed, fields: embed.fields.map((f) => (f.key === key ? { ...f, ...patch } : f)) });
-  const addField = () =>
-    onChange({
-      ...embed,
-      fields: [...embed.fields, { key: newKey('f'), name: '', value: '', inline: false }],
-    });
-  const removeField = (key) => onChange({ ...embed, fields: embed.fields.filter((f) => f.key !== key) });
-
-  return (
-    <div className="v2-embed-preview">
-      <div className="v2-embed-toolbar">
-        <button type="button" title="Move up" disabled={index === 0} onClick={() => onMove(-1)}>
-          <ToolIcon name="up" />
-        </button>
-        <button type="button" title="Move down" disabled={index === count - 1} onClick={() => onMove(1)}>
-          <ToolIcon name="down" />
-        </button>
-        <button type="button" title="Duplicate" onClick={onDuplicate}>
-          <ToolIcon name="copy" />
-        </button>
-        <button type="button" title="Delete" onClick={onRemove}>
-          <ToolIcon name="trash" />
-        </button>
-      </div>
-
-      <div className="v2-embed-bar" style={{ background: embed.color }} />
-
-      <div className="v2-embed-body">
-        <ColorPicker value={embed.color} onChange={(color) => set({ color })} />
-        <div className="v2-embed-top">
-          <div className="v2-embed-main">
-            <div className="v2-embed-author-row">
-              <AvatarPick
-                value={embed.authorIcon}
-                onChange={(v) => set({ authorIcon: v })}
-                title="Author icon"
-              />
-              <input
-                className="v2-embed-input v2-embed-author"
-                placeholder="Author name"
-                maxLength={256}
-                value={embed.authorName}
-                onChange={(e) => set({ authorName: e.target.value })}
-              />
-            </div>
-
-            <input
-              className="v2-embed-input v2-embed-title"
-              placeholder="Title"
-              maxLength={256}
-              value={embed.title}
-              onChange={(e) => set({ title: e.target.value })}
-            />
-            <textarea
-              className="v2-embed-input v2-embed-desc"
-              placeholder="Write your message here!"
-              rows={1}
-              maxLength={4096}
-              value={embed.description}
-              onChange={(e) => {
-                autoGrow(e);
-                set({ description: e.target.value });
-              }}
-              onFocus={autoGrow}
-            />
-
-            {embed.fields.length > 0 ? (
-              <div className="v2-embed-fields-grid">
-                {embed.fields.map((f) => (
-                  <div className="v2-embed-field-block" key={f.key}>
-                    <button
-                      type="button"
-                      className="v2-embed-field-remove"
-                      onClick={() => removeField(f.key)}
-                    >
-                      ✕
-                    </button>
-                    <input
-                      className="v2-embed-input v2-embed-field-name"
-                      placeholder="Field name"
-                      maxLength={256}
-                      value={f.name}
-                      onChange={(e) => setField(f.key, { name: e.target.value })}
-                    />
-                    <input
-                      className="v2-embed-input v2-embed-field-value"
-                      placeholder="Field value"
-                      maxLength={1024}
-                      value={f.value}
-                      onChange={(e) => setField(f.key, { value: e.target.value })}
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            <button type="button" className="v2-embed-addfield" onClick={addField}>
-              + Add field
-            </button>
-          </div>
-
-          <button
-            type="button"
-            className={`v2-embed-thumb-pick${embed.thumbnail ? ' has' : ''}`}
-            onClick={() => set({ thumbnail: pickImage(embed.thumbnail) })}
-          >
-            {embed.thumbnail ? <img src={embed.thumbnail} alt="" /> : <span>+ thumbnail</span>}
-          </button>
-        </div>
-
-        <button
-          type="button"
-          className={`v2-embed-image-pick${embed.image ? ' has' : ''}`}
-          onClick={() => set({ image: pickImage(embed.image) })}
-        >
-          {embed.image ? <img src={embed.image} alt="" /> : <span>+ Add an image</span>}
-        </button>
-
-        <div className="v2-embed-footer-row">
-          <AvatarPick value={embed.footerIcon} onChange={(v) => set({ footerIcon: v })} title="Footer icon" />
-          <input
-            className="v2-embed-input v2-embed-footer"
-            placeholder="Footer text"
-            maxLength={2048}
-            value={embed.footerText}
-            onChange={(e) => set({ footerText: e.target.value })}
-          />
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export default function MessageBuilder() {
@@ -466,12 +265,14 @@ export default function MessageBuilder() {
           <EmbedCard
             key={embed.key}
             embed={embed}
-            index={i}
-            count={form.embeds.length}
             onChange={(next) => updateEmbed(i, next)}
-            onMove={(d) => moveEmbed(i, d)}
-            onDuplicate={() => duplicateEmbed(i)}
-            onRemove={() => removeEmbed(i)}
+            toolbar={{
+              index: i,
+              count: form.embeds.length,
+              onMove: (d) => moveEmbed(i, d),
+              onDuplicate: () => duplicateEmbed(i),
+              onRemove: () => removeEmbed(i),
+            }}
           />
         ))}
 
