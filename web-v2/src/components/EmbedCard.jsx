@@ -70,6 +70,34 @@ function ToolIcon({ name }) {
   );
 }
 
+// Move up/down/duplicate/delete row shown on hover — shared by EmbedCard and
+// welcome-channel's banner blocks (moduleForms/WelcomeChannel.jsx), since
+// both are items in a reorderable list.
+export function EmbedToolbar({ toolbar }) {
+  if (!toolbar) return null;
+  return (
+    <div className="v2-embed-toolbar">
+      <button type="button" title="Move up" disabled={toolbar.index === 0} onClick={() => toolbar.onMove(-1)}>
+        <ToolIcon name="up" />
+      </button>
+      <button
+        type="button"
+        title="Move down"
+        disabled={toolbar.index === toolbar.count - 1}
+        onClick={() => toolbar.onMove(1)}
+      >
+        <ToolIcon name="down" />
+      </button>
+      <button type="button" title="Duplicate" onClick={toolbar.onDuplicate}>
+        <ToolIcon name="copy" />
+      </button>
+      <button type="button" title="Delete" onClick={toolbar.onRemove}>
+        <ToolIcon name="trash" />
+      </button>
+    </div>
+  );
+}
+
 export default function EmbedCard({
   embed,
   onChange,
@@ -98,32 +126,7 @@ export default function EmbedCard({
 
   return (
     <div className="v2-embed-preview">
-      {toolbar ? (
-        <div className="v2-embed-toolbar">
-          <button
-            type="button"
-            title="Move up"
-            disabled={toolbar.index === 0}
-            onClick={() => toolbar.onMove(-1)}
-          >
-            <ToolIcon name="up" />
-          </button>
-          <button
-            type="button"
-            title="Move down"
-            disabled={toolbar.index === toolbar.count - 1}
-            onClick={() => toolbar.onMove(1)}
-          >
-            <ToolIcon name="down" />
-          </button>
-          <button type="button" title="Duplicate" onClick={toolbar.onDuplicate}>
-            <ToolIcon name="copy" />
-          </button>
-          <button type="button" title="Delete" onClick={toolbar.onRemove}>
-            <ToolIcon name="trash" />
-          </button>
-        </div>
-      ) : null}
+      <EmbedToolbar toolbar={toolbar} />
 
       <div className="v2-embed-bar" style={{ background: embed.color }} />
 

@@ -34,6 +34,7 @@ import TempVoice from './TempVoice.jsx';
 import Starboard from './Starboard.jsx';
 import Reminders from './Reminders.jsx';
 import Polls from './Polls.jsx';
+import WelcomeChannel from './WelcomeChannel.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -54,6 +55,7 @@ export const MODULE_FORMS = {
   starboard: Starboard,
   reminders: Reminders,
   polls: Polls,
+  'welcome-channel': WelcomeChannel,
   rss: RssAlerts,
   'game-stats': GameStats,
   welcome: Welcome,

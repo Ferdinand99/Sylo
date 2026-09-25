@@ -691,6 +691,13 @@ a:hover {
   margin: 8px 0 8px 48px;
   max-width: 520px;
 }
+/* welcome-channel's element list (moduleForms/WelcomeChannel.jsx) has no
+   avatar/username header to align the 48px indent under, so it isn't a
+   .v2-msg-preview — reset the indent and let cards use the full width. */
+.v2-wc-stage .v2-embed-preview {
+  margin-left: 0;
+  max-width: 640px;
+}
 /* Purely a visual indicator now — ColorPicker.jsx (a dedicated round swatch
    button, positioned over this corner) is the actual control. It used to
    *be* the control (a bare <input type="color">), which is fine on its own
@@ -892,7 +899,11 @@ a:hover {
   object-fit: cover;
 }
 
-.v2-msg-preview .v2-embed-input {
+/* Scoped to .v2-embed-preview (EmbedCard's own root), not .v2-msg-preview —
+   EmbedCard also renders standalone (welcome-channel's element list has no
+   Discord-message header wrapper around it), so the blend-into-the-preview
+   input look can't depend on that outer wrapper being present. */
+.v2-embed-preview .v2-embed-input {
   display: block;
   width: 100%;
   background: none;
@@ -904,14 +915,14 @@ a:hover {
   border-radius: 4px;
   resize: none;
 }
-.v2-msg-preview .v2-embed-input:hover {
+.v2-embed-preview .v2-embed-input:hover {
   background: color-mix(in srgb, var(--text) 5%, transparent);
 }
-.v2-msg-preview .v2-embed-input:focus {
+.v2-embed-preview .v2-embed-input:focus {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   outline: none;
 }
-.v2-msg-preview .v2-embed-input::placeholder {
+.v2-embed-preview .v2-embed-input::placeholder {
   color: var(--text-muted);
 }
 .v2-embed-title {

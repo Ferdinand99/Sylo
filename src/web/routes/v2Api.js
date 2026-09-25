@@ -54,7 +54,14 @@ import {
   deleteScheduled,
   setScheduledEnabled,
 } from '../../db/scheduledMessages.js';
-import { normaliseEmbedSpec } from '../../modules/welcomeChannel.js';
+import {
+  normaliseEmbedSpec,
+  normaliseWelcomeChannelConfig,
+  WC_PRESETS,
+  publishWelcome,
+  unpublishWelcome,
+  createWelcomeChannel,
+} from '../../modules/welcomeChannel.js';
 import { normalisePollsConfig, POLL_PLACEHOLDERS, RESULTS_PLACEHOLDERS } from '../../modules/polls.js';
 import {
   listCleanupSchedules,
@@ -2706,6 +2713,94 @@ router.post(
       detail: 'settings saved',
     });
     res.json({ config });
+  })
+);
+
+// --- Welcome Channel (mirrors guilds.js's "welcome-channel" branch + its
+// create-channel/unpublish routes — generic config, plus three actions that
+// touch the live channel.) ---------------------------------------------
+
+router.get(
+  '/guilds/:guildId/modules/welcome-channel/config',
+  asyncHandler(async (req, res) => {
+    const { config } = await getGuildModule(req.guild.id, 'welcome-channel');
+    res.json({
+      config: normaliseWelcomeChannelConfig(config),
+      channels: guildTextChannels(req.guild),
+      presets: WC_PRESETS.map((p) => ({ id: p.id, label: p.label, kind: p.kind, defaults: p.make() })),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/welcome-channel/config',
+  asyncHandler(async (req, res) => {
+    const prev = (await getGuildModule(req.guild.id, 'welcome-channel')).config;
+    const config = normaliseWelcomeChannelConfig({
+      channelId: req.body.channelId,
+      messageId: prev.messageId,
+      spec: req.body.spec,
+    });
+    await setGuildModule(req.guild.id, 'welcome-channel', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:welcome-channel',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/welcome-channel/publish',
+  asyncHandler(async (req, res) => {
+    const prev = (await getGuildModule(req.guild.id, 'welcome-channel')).config;
+    const config = normaliseWelcomeChannelConfig({
+      channelId: req.body.channelId,
+      messageId: prev.messageId,
+      spec: req.body.spec,
+    });
+    await setGuildModule(req.guild.id, 'welcome-channel', { config });
+    const r = await publishWelcome(req.guild, config);
+    if (!r.ok) return res.status(400).json({ error: r.error });
+    const published = { ...config, messageId: r.messageId };
+    await setGuildModule(req.guild.id, 'welcome-channel', { enabled: true, config: published });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:welcome-channel',
+      detail: 'published to channel',
+    });
+    res.json({ config: published });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/welcome-channel/unpublish',
+  asyncHandler(async (req, res) => {
+    const config = normaliseWelcomeChannelConfig(
+      (await getGuildModule(req.guild.id, 'welcome-channel')).config
+    );
+    await unpublishWelcome(req.guild, config);
+    const next = { ...config, messageId: '' };
+    await setGuildModule(req.guild.id, 'welcome-channel', { config: next });
+    res.json({ config: next });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/welcome-channel/create-channel',
+  asyncHandler(async (req, res) => {
+    const r = await createWelcomeChannel(req.guild);
+    if (!r.ok) return res.status(400).json({ error: r.error });
+    const cfg = normaliseWelcomeChannelConfig((await getGuildModule(req.guild.id, 'welcome-channel')).config);
+    const next = { ...cfg, channelId: r.channelId };
+    await setGuildModule(req.guild.id, 'welcome-channel', { config: next });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:welcome-channel',
+      detail: 'created #welcome',
+    });
+    res.json({ config: next, channels: guildTextChannels(req.guild) });
   })
 );
 

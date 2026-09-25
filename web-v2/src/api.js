@@ -171,3 +171,14 @@ export const toggleReminder = (guildId, id) =>
   postJson(`/api/v2/guilds/${guildId}/modules/reminders/${id}/toggle`, {});
 export const testReminder = (guildId, body) =>
   postJson(`/api/v2/guilds/${guildId}/modules/reminders/test`, body);
+
+export const getWelcomeChannel = (guildId) =>
+  apiFetch(`/api/v2/guilds/${guildId}/modules/welcome-channel/config`);
+export const saveWelcomeChannel = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/welcome-channel/config`, body);
+export const publishWelcomeChannel = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/welcome-channel/publish`, body);
+export const unpublishWelcomeChannel = (guildId) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/welcome-channel/unpublish`, {});
+export const createWelcomeReadOnlyChannel = (guildId) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/welcome-channel/create-channel`, {});
