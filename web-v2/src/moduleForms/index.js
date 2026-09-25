@@ -33,6 +33,7 @@ import GithubAlerts from './GithubAlerts.jsx';
 import TempVoice from './TempVoice.jsx';
 import Starboard from './Starboard.jsx';
 import Reminders from './Reminders.jsx';
+import Polls from './Polls.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -52,6 +53,7 @@ export const MODULE_FORMS = {
   'temp-voice': TempVoice,
   starboard: Starboard,
   reminders: Reminders,
+  polls: Polls,
   rss: RssAlerts,
   'game-stats': GameStats,
   welcome: Welcome,

@@ -1657,6 +1657,22 @@ form textarea {
    Discord-message-preview look as the Embed messages builder — the
    v2-msg and v2-embed classes below, shared via components/EmbedCard.jsx.
    Only the token-insert row here is new. */
+.v2-embed-fixed-body {
+  border-left: 2px solid var(--border-subtle);
+  padding: 6px 0 6px 10px;
+  margin: 4px 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+  user-select: none;
+}
+.v2-embed-fixed-q {
+  font-weight: 700;
+  color: var(--text);
+}
 .v2-embed-vars {
   margin-top: 8px;
   font-size: 0.8rem;

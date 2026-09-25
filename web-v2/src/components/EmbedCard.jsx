@@ -82,6 +82,7 @@ export default function EmbedCard({
   fixedBody = null,
   placeholders = {},
   toolbar = null,
+  onFieldFocus = null,
 }) {
   const set = (patch) => onChange({ ...embed, ...patch });
   const setField = (key, patch) =>
@@ -143,6 +144,7 @@ export default function EmbedCard({
                   maxLength={256}
                   value={embed.authorName}
                   onChange={(e) => set({ authorName: e.target.value })}
+                  onFocus={() => onFieldFocus?.('authorName')}
                 />
               </div>
             ) : null}
@@ -153,6 +155,7 @@ export default function EmbedCard({
               maxLength={256}
               value={embed.title}
               onChange={(e) => set({ title: e.target.value })}
+              onFocus={() => onFieldFocus?.('title')}
             />
             {description ? (
               <textarea
@@ -165,7 +168,10 @@ export default function EmbedCard({
                   autoGrow(e);
                   set({ description: e.target.value });
                 }}
-                onFocus={autoGrow}
+                onFocus={(e) => {
+                  autoGrow(e);
+                  onFieldFocus?.('description');
+                }}
               />
             ) : null}
 
@@ -242,6 +248,7 @@ export default function EmbedCard({
             maxLength={2048}
             value={footer}
             onChange={(e) => setFooter(e.target.value)}
+            onFocus={() => onFieldFocus?.(footerKey)}
           />
         </div>
       </div>

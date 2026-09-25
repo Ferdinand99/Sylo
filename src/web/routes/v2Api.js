@@ -55,6 +55,7 @@ import {
   setScheduledEnabled,
 } from '../../db/scheduledMessages.js';
 import { normaliseEmbedSpec } from '../../modules/welcomeChannel.js';
+import { normalisePollsConfig, POLL_PLACEHOLDERS, RESULTS_PLACEHOLDERS } from '../../modules/polls.js';
 import {
   listCleanupSchedules,
   getCleanupSchedule,
@@ -2670,6 +2671,41 @@ router.post(
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
+  })
+);
+
+// --- Polls (mirrors guilds.js's "polls" config branch — generic
+// getGuildModule/setGuildModule config, same as most other modules.) -------
+
+router.get(
+  '/guilds/:guildId/modules/polls/config',
+  asyncHandler(async (req, res) => {
+    const { config } = await getGuildModule(req.guild.id, 'polls');
+    res.json({
+      config: normalisePollsConfig(config),
+      roles: assignableRoles(req.guild),
+      pollPlaceholders: POLL_PLACEHOLDERS,
+      resultsPlaceholders: RESULTS_PLACEHOLDERS,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/polls/config',
+  asyncHandler(async (req, res) => {
+    const config = normalisePollsConfig({
+      voteRoleMode: req.body.voteRoleMode,
+      voteRoles: Array.isArray(req.body.voteRoles) ? req.body.voteRoles : [],
+      pollMessage: req.body.pollMessage,
+      resultsMessage: req.body.resultsMessage,
+    });
+    await setGuildModule(req.guild.id, 'polls', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:polls',
+      detail: 'settings saved',
+    });
+    res.json({ config });
   })
 );
 

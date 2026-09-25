@@ -75,6 +75,11 @@ export default function EmbedEditor({
 }) {
   const opts = { content, author, description, fields, thumb, footerIcon, footerKey };
   const [e, setE] = useState(() => initialState(spec, { footerKey, defaultColor }));
+  // Mirrors V1's Alpine `_last` — inserted tokens go into whichever field the
+  // user last focused (title/author/description/footer/content), not a
+  // fixed spot, since every consumer (polls, welcome-channel, …) customises
+  // a different mix of those fields.
+  const [lastFocused, setLastFocused] = useState(content ? 'content' : 'title');
 
   function set(patch) {
     setE((prev) => {
@@ -85,9 +90,8 @@ export default function EmbedEditor({
   }
 
   function insertVar(token) {
-    const key = content ? 'content' : 'description';
-    const current = String(e[key] ?? '');
-    set({ [key]: (current + (current ? ' ' : '') + token).trim() });
+    const current = String(e[lastFocused] ?? '');
+    set({ [lastFocused]: (current + (current ? ' ' : '') + token).trim() });
   }
 
   return (
@@ -112,7 +116,10 @@ export default function EmbedEditor({
             autoGrow(ev);
             set({ content: ev.target.value });
           }}
-          onFocus={autoGrow}
+          onFocus={(ev) => {
+            autoGrow(ev);
+            setLastFocused('content');
+          }}
         />
       ) : null}
 
@@ -127,6 +134,7 @@ export default function EmbedEditor({
         footerKey={footerKey}
         fixedBody={fixedBody}
         placeholders={placeholders}
+        onFieldFocus={setLastFocused}
       />
 
       {vars.length ? (
