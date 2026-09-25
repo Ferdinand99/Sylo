@@ -688,8 +688,16 @@ a:hover {
 .v2-embed-preview {
   position: relative;
   display: flex;
-  margin: 8px 0 8px 48px;
+  /* Uneven top/bottom margin — the toolbar below pops up 14px above the
+     card on hover, and adjacent siblings' margins collapse to whichever is
+     larger, so the top side needs enough clearance on its own or a stack of
+     cards clips/hides each other's toolbar behind the card above it. */
+  margin: 22px 0 6px 48px;
   max-width: 520px;
+}
+.v2-embed-preview:hover,
+.v2-embed-preview:focus-within {
+  z-index: 1;
 }
 /* welcome-channel's element list (moduleForms/WelcomeChannel.jsx) has no
    avatar/username header to align the 48px indent under, so it isn't a
@@ -827,6 +835,10 @@ a:hover {
   position: absolute;
   top: -14px;
   right: 0;
+  /* .v2-embed-body is also `position: relative` and comes later in the DOM,
+     so without this it paints over the toolbar's lower half (both are
+     positioned with z-index:auto, so plain DOM order decides the winner). */
+  z-index: 2;
   display: flex;
   gap: 2px;
   background: var(--bg-surface);
