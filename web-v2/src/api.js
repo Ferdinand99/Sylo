@@ -159,3 +159,15 @@ export const toggleGithubWatch = (guildId, id) =>
   postJson(`/api/v2/guilds/${guildId}/modules/github/watches/${id}/toggle`, {});
 export const regenGithubSecret = (guildId, id) =>
   postJson(`/api/v2/guilds/${guildId}/modules/github/watches/${id}/regen-secret`, {});
+
+export const getReminders = (guildId) => apiFetch(`/api/v2/guilds/${guildId}/modules/reminders/list`);
+export const createReminder = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/reminders`, body);
+export const updateReminder = (guildId, id, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/reminders/${id}`, body);
+export const deleteReminder = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/reminders/${id}/delete`, {});
+export const toggleReminder = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/reminders/${id}/toggle`, {});
+export const testReminder = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/reminders/test`, body);

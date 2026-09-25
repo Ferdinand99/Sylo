@@ -40,7 +40,21 @@ import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } fr
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '../../modules/leveling.js';
 import { levelFromXp } from '../../modules/lib/levels.js';
-import { WEEKDAYS } from '../../modules/scheduledMessages.js';
+import {
+  SCHEDULE_PRESETS,
+  WEEKDAYS,
+  MIN_INTERVAL_MINUTES,
+  MAX_INTERVAL_MINUTES,
+} from '../../modules/scheduledMessages.js';
+import {
+  listScheduled,
+  getScheduled,
+  createReminder,
+  updateReminder,
+  deleteScheduled,
+  setScheduledEnabled,
+} from '../../db/scheduledMessages.js';
+import { normaliseEmbedSpec } from '../../modules/welcomeChannel.js';
 import {
   listCleanupSchedules,
   getCleanupSchedule,
@@ -2500,6 +2514,162 @@ router.post(
       detail: `regenerated secret for ${rec.repo}`,
     });
     res.json({ watch: shapeGithubWatch(await getGithubWatch(req.guild.id, id)) });
+  })
+);
+
+// --- Reminders (mirrors guilds.js's "Reminders builder (MEE6-style)" section
+// — schedules live in their own table, not guild_modules.config.) ----------
+
+function num(v) {
+  return v === null || v === undefined ? null : Number(v);
+}
+
+function shapeReminder(rec) {
+  return {
+    id: rec.id,
+    name: rec.name,
+    channelId: rec.channel_id,
+    spec: rec.spec,
+    mode: rec.mode,
+    intervalMinutes: rec.interval_minutes,
+    days: rec.dayList,
+    startAt: num(rec.start_at),
+    endAt: num(rec.end_at),
+    runAt: num(rec.run_at),
+    enabled: rec.enabled === 1,
+    lastRunAt: num(rec.last_run_at),
+  };
+}
+
+function toMs(v) {
+  const t = new Date(String(v ?? '')).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+function parseReminderBody(body) {
+  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
+  let embed = null;
+  let content = body.content;
+  // Embed mode's "text above the embed" lives on the EmbedEditor's own spec
+  // (content:true), not the plain-text textarea used in text mode.
+  if (body.msgType === 'embed' && body.embedSpec && typeof body.embedSpec === 'object') {
+    embed = normaliseEmbedSpec(body.embedSpec);
+    content = body.embedSpec.content;
+  }
+  const spec = { content: String(content ?? '').slice(0, 2000), embeds: embed ? [embed] : [] };
+  const mode = body.mode === 'single' ? 'single' : 'multiple';
+  const intervalMinutes = Math.min(
+    MAX_INTERVAL_MINUTES,
+    Math.max(MIN_INTERVAL_MINUTES, Math.floor(Number(body.intervalMinutes)) || 60)
+  );
+  const days = (Array.isArray(body.days) ? body.days : []).map(Number).filter((n) => n >= 0 && n <= 6);
+  return {
+    name:
+      String(body.name ?? '')
+        .trim()
+        .slice(0, 100) || 'Untitled reminder',
+    channelId,
+    spec,
+    mode,
+    intervalMinutes,
+    days: days.length ? days : [0, 1, 2, 3, 4, 5, 6],
+    startAt: body.enableStart ? toMs(body.startAt) : null,
+    endAt: body.enableEnd ? toMs(body.endAt) : null,
+    runAt: mode === 'single' ? toMs(body.runAt) : null,
+  };
+}
+
+router.get(
+  '/guilds/:guildId/modules/reminders/list',
+  asyncHandler(async (req, res) => {
+    const rows = await listScheduled(req.guild.id);
+    res.json({
+      reminders: rows.map(shapeReminder),
+      channels: guildTextChannels(req.guild),
+      schedulePresets: SCHEDULE_PRESETS,
+      weekdays: WEEKDAYS,
+      minIntervalMinutes: MIN_INTERVAL_MINUTES,
+      maxIntervalMinutes: MAX_INTERVAL_MINUTES,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/reminders',
+  asyncHandler(async (req, res) => {
+    const r = parseReminderBody(req.body);
+    if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
+    if (!r.spec.content.trim() && !r.spec.embeds.length) {
+      return res.status(400).json({ error: 'Add a message or an embed.' });
+    }
+    if (r.mode === 'single' && !r.runAt)
+      return res.status(400).json({ error: 'Pick a date and time to send at.' });
+    const id = await createReminder(req.guild.id, r);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:reminders',
+      detail: `created "${r.name}"`,
+    });
+    res.json({ reminder: shapeReminder(await getScheduled(req.guild.id, id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/reminders/:id',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = Number.isInteger(id) ? await getScheduled(req.guild.id, id) : null;
+    if (!existing) return res.status(404).json({ error: 'No such reminder' });
+    const r = parseReminderBody(req.body);
+    if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
+    if (!r.spec.content.trim() && !r.spec.embeds.length) {
+      return res.status(400).json({ error: 'Add a message or an embed.' });
+    }
+    if (r.mode === 'single' && !r.runAt)
+      return res.status(400).json({ error: 'Pick a date and time to send at.' });
+    await updateReminder(req.guild.id, id, r);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:reminders',
+      detail: `updated "${r.name}"`,
+    });
+    res.json({ reminder: shapeReminder(await getScheduled(req.guild.id, id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/reminders/:id/delete',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (Number.isInteger(id)) await deleteScheduled(req.guild.id, id);
+    res.json({ ok: true });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/reminders/:id/toggle',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const rec = Number.isInteger(id) ? await getScheduled(req.guild.id, id) : null;
+    if (rec) await setScheduledEnabled(req.guild.id, id, rec.enabled !== 1);
+    res.json({ reminder: rec ? shapeReminder(await getScheduled(req.guild.id, id)) : null });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/reminders/test',
+  asyncHandler(async (req, res) => {
+    const r = parseReminderBody(req.body);
+    if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
+    if (!r.spec.content.trim() && !r.spec.embeds.length) {
+      return res.status(400).json({ error: 'Add a message or an embed.' });
+    }
+    try {
+      await sendComposed(req.guild, r.channelId, r.spec);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
   })
 );
 

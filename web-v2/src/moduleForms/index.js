@@ -32,6 +32,7 @@ import ChannelCleanup from './ChannelCleanup.jsx';
 import GithubAlerts from './GithubAlerts.jsx';
 import TempVoice from './TempVoice.jsx';
 import Starboard from './Starboard.jsx';
+import Reminders from './Reminders.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -50,6 +51,7 @@ export const MODULE_FORMS = {
   github: GithubAlerts,
   'temp-voice': TempVoice,
   starboard: Starboard,
+  reminders: Reminders,
   rss: RssAlerts,
   'game-stats': GameStats,
   welcome: Welcome,
