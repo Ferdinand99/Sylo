@@ -147,3 +147,15 @@ export const deleteCleanupSchedule = (guildId, id) =>
   postJson(`/api/v2/guilds/${guildId}/modules/channel-cleanup/schedules/${id}/delete`, {});
 export const toggleCleanupSchedule = (guildId, id) =>
   postJson(`/api/v2/guilds/${guildId}/modules/channel-cleanup/schedules/${id}/toggle`, {});
+
+export const getGithubWatches = (guildId) => apiFetch(`/api/v2/guilds/${guildId}/modules/github/watches`);
+export const createGithubWatch = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/github/watches`, body);
+export const updateGithubWatch = (guildId, id, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/github/watches/${id}`, body);
+export const deleteGithubWatch = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/github/watches/${id}/delete`, {});
+export const toggleGithubWatch = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/github/watches/${id}/toggle`, {});
+export const regenGithubSecret = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/github/watches/${id}/regen-secret`, {});

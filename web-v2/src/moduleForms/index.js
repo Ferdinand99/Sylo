@@ -29,6 +29,7 @@ import Honeypot from './Honeypot.jsx';
 import YoutubeAlerts from './YoutubeAlerts.jsx';
 import Leveling from './Leveling.jsx';
 import ChannelCleanup from './ChannelCleanup.jsx';
+import GithubAlerts from './GithubAlerts.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -44,6 +45,7 @@ export const MODULE_FORMS = {
   'youtube-alerts': YoutubeAlerts,
   leveling: Leveling,
   'channel-cleanup': ChannelCleanup,
+  github: GithubAlerts,
   rss: RssAlerts,
   'game-stats': GameStats,
   welcome: Welcome,

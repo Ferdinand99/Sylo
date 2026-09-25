@@ -50,6 +50,16 @@ import {
   setCleanupScheduleEnabled,
 } from '../../db/channelCleanup.js';
 import {
+  listGithubWatches,
+  getGithubWatch,
+  createGithubWatch,
+  updateGithubWatch,
+  deleteGithubWatch,
+  setGithubWatchEnabled,
+  regenerateGithubWatchSecret,
+} from '../../db/githubWatches.js';
+import { GITHUB_EVENT_TYPES, sanitiseGithubEvents } from '../../modules/githubAlerts.js';
+import {
   normaliseAutomodConfig,
   AUTOMOD_RULES,
   AUTOMOD_ACTIONS,
@@ -2251,6 +2261,152 @@ router.post(
     const rec = Number.isInteger(id) ? await getCleanupSchedule(req.guild.id, id) : null;
     if (rec) await setCleanupScheduleEnabled(req.guild.id, id, !rec.enabled);
     res.json({ schedule: rec ? shapeCleanupSchedule(await getCleanupSchedule(req.guild.id, id)) : null });
+  })
+);
+
+// --- GitHub alerts (mirrors guilds.js's "GitHub repo watch builder" section
+// — same repo/changelog-path/webhook-token shape, own table.) --------------
+
+const REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
+
+/** Accepts "owner/repo" or a pasted github.com URL; returns the normalised "owner/repo" or null. */
+function parseRepoInput(raw) {
+  const v = String(raw ?? '')
+    .trim()
+    .replace(/^https?:\/\/(www\.)?github\.com\//i, '')
+    .replace(/\.git$/i, '')
+    .replace(/\/+$/, '');
+  return REPO_RE.test(v) ? v : null;
+}
+
+/** A relative repo file path for the changelog watcher — blank is valid (off). */
+function parseChangelogPath(raw) {
+  const v = String(raw ?? '')
+    .trim()
+    .replace(/^\/+/, '');
+  if (!v) return { ok: true, value: '' };
+  if (v.length > 300 || v.includes('..') || /[\0\r\n]/.test(v)) return { ok: false, value: '' };
+  return { ok: true, value: v };
+}
+
+function githubWebhookUrl(token) {
+  return config.dashboardUrl ? `${config.dashboardUrl.replace(/\/+$/, '')}/webhooks/github/${token}` : null;
+}
+
+function shapeGithubWatch(rec) {
+  return {
+    id: rec.id,
+    repo: rec.repo,
+    channelId: rec.channel_id,
+    roleId: rec.role_id || '',
+    changelogPath: rec.changelog_path || '',
+    events: rec.events,
+    enabled: Boolean(rec.enabled),
+    secret: rec.secret,
+    webhookUrl: githubWebhookUrl(rec.token),
+  };
+}
+
+router.get(
+  '/guilds/:guildId/modules/github/watches',
+  asyncHandler(async (req, res) => {
+    const rows = await listGithubWatches(req.guild.id);
+    res.json({
+      watches: rows.map(shapeGithubWatch),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      eventTypes: GITHUB_EVENT_TYPES,
+      dashboardUrlSet: Boolean(config.dashboardUrl),
+    });
+  })
+);
+
+function parseGithubBody(body) {
+  const repo = parseRepoInput(body.repo);
+  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
+  const roleId = /^\d{17,20}$/.test(body.roleId ?? '') ? body.roleId : '';
+  const changelog = parseChangelogPath(body.changelogPath);
+  const events = sanitiseGithubEvents(body.events);
+  return { repo, channelId, roleId, changelogPath: changelog.value, changelogOk: changelog.ok, events };
+}
+
+function githubBodyError(s) {
+  if (!s.repo) return 'Enter a repo as owner/repo (or paste its github.com URL).';
+  if (!s.channelId) return 'Pick a channel.';
+  if (!s.changelogOk)
+    return 'That changelog path looks invalid — a plain relative file path, e.g. CHANGELOG.md.';
+  if (!s.events.length && !s.changelogPath)
+    return 'Pick at least one event to announce, or set a changelog file path.';
+  return null;
+}
+
+router.post(
+  '/guilds/:guildId/modules/github/watches',
+  asyncHandler(async (req, res) => {
+    const s = parseGithubBody(req.body);
+    const err = githubBodyError(s);
+    if (err) return res.status(400).json({ error: err });
+    const id = await createGithubWatch(req.guild.id, s);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:github',
+      detail: `added watch for ${s.repo}`,
+    });
+    res.json({ watch: shapeGithubWatch(await getGithubWatch(req.guild.id, id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/github/watches/:id',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = Number.isInteger(id) ? await getGithubWatch(req.guild.id, id) : null;
+    if (!existing) return res.status(404).json({ error: 'No such watch' });
+    const s = parseGithubBody(req.body);
+    const err = githubBodyError(s);
+    if (err) return res.status(400).json({ error: err });
+    await updateGithubWatch(req.guild.id, id, s);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:github',
+      detail: `updated watch for ${s.repo}`,
+    });
+    res.json({ watch: shapeGithubWatch(await getGithubWatch(req.guild.id, id)) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/github/watches/:id/delete',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (Number.isInteger(id)) await deleteGithubWatch(req.guild.id, id);
+    res.json({ ok: true });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/github/watches/:id/toggle',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const rec = Number.isInteger(id) ? await getGithubWatch(req.guild.id, id) : null;
+    if (rec) await setGithubWatchEnabled(req.guild.id, id, !rec.enabled);
+    res.json({ watch: rec ? shapeGithubWatch(await getGithubWatch(req.guild.id, id)) : null });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/github/watches/:id/regen-secret',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const rec = Number.isInteger(id) ? await getGithubWatch(req.guild.id, id) : null;
+    if (!rec) return res.status(404).json({ error: 'No such watch' });
+    await regenerateGithubWatchSecret(req.guild.id, id);
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:github',
+      detail: `regenerated secret for ${rec.repo}`,
+    });
+    res.json({ watch: shapeGithubWatch(await getGithubWatch(req.guild.id, id)) });
   })
 );
 
