@@ -63,6 +63,7 @@ import {
   createWelcomeChannel,
 } from '../../modules/welcomeChannel.js';
 import { normalisePollsConfig, POLL_PLACEHOLDERS, RESULTS_PLACEHOLDERS } from '../../modules/polls.js';
+import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
 import {
   listCleanupSchedules,
   getCleanupSchedule,
@@ -2801,6 +2802,141 @@ router.post(
       detail: 'created #welcome',
     });
     res.json({ config: next, channels: guildTextChannels(req.guild) });
+  })
+);
+
+// --- Reaction roles & autoroles (mirrors guilds.js's "Reaction-role builder"
+// section — reactionMessages/autoroles live in the generic module config,
+// but a save always (re-)publishes the live message, unlike a plain draft.) -
+
+router.get(
+  '/guilds/:guildId/modules/roles/list',
+  asyncHandler(async (req, res) => {
+    const { config } = await getGuildModule(req.guild.id, 'roles');
+    res.json({
+      reactionMessages: Array.isArray(config.reactionMessages) ? config.reactionMessages : [],
+      autoroles: Array.isArray(config.autoroles) ? config.autoroles : [],
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/roles/autoroles',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'roles');
+    const autoroles = (Array.isArray(req.body.autoroles) ? req.body.autoroles : []).filter((id) =>
+      /^\d{17,20}$/.test(id)
+    );
+    await setGuildModule(req.guild.id, 'roles', { config: { ...cfg, autoroles } });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:roles',
+      detail: 'autoroles saved',
+    });
+    res.json({ autoroles });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/roles/rr',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const cfg = (await getGuildModule(guild.id, 'roles')).config;
+    const list = Array.isArray(cfg.reactionMessages) ? cfg.reactionMessages : [];
+
+    const channelId = /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '';
+    if (!channelId) return res.status(400).json({ error: 'Pick a channel.' });
+
+    const style = ['buttons', 'select'].includes(req.body.style) ? req.body.style : 'reaction';
+    const rawPairs = Array.isArray(req.body.pairs) ? req.body.pairs : [];
+    const pairs = [];
+    for (const row of rawPairs) {
+      const rid = row?.roleId;
+      if (!/^\d{17,20}$/.test(rid ?? '')) continue;
+      const parsed = parseEmoji(row?.emoji ?? '', guild);
+      // The reaction style needs a usable emoji; button / select styles don't.
+      if (style === 'reaction' && !parsed) continue;
+      pairs.push({
+        ...(parsed || { key: '', display: '', react: '' }),
+        roleId: rid,
+        label: String(row?.label ?? '').slice(0, 80),
+        btnStyle: ['primary', 'secondary', 'success', 'danger'].includes(row?.btnStyle)
+          ? row.btnStyle
+          : 'secondary',
+      });
+    }
+    if (pairs.length === 0)
+      return res.status(400).json({ error: 'Add at least one role with a usable emoji.' });
+
+    const id = /^\d+$/.test(req.body.id ?? '') ? req.body.id : String(Date.now());
+    const existing = list.find((x) => String(x.id) === id);
+    const rm = {
+      id,
+      channelId,
+      messageId: existing?.messageId || '',
+      style,
+      message: String(req.body.message ?? '').slice(0, 2000),
+      embed: normaliseEmbedSpec(req.body.embed || {}),
+      exclusive: Boolean(req.body.exclusive),
+      mode: req.body.mode === 'reverse' ? 'reverse' : 'default',
+      placeholder: String(req.body.placeholder ?? '').slice(0, 150),
+      selMin: Number.parseInt(req.body.selMin, 10) || 0,
+      selMax: Number.parseInt(req.body.selMax, 10) || 0,
+      pairs,
+    };
+    // Re-publishing after a style change: drop the old message so the new one is
+    // posted cleanly (components vs reactions differ enough that editing is messy).
+    if (existing && existing.style && existing.style !== style && existing.messageId) {
+      const oldCh = guild.channels.cache.get(existing.channelId);
+      const oldMsg = oldCh && (await oldCh.messages.fetch(existing.messageId).catch(() => null));
+      if (oldMsg) await oldMsg.delete().catch(() => {});
+      rm.messageId = '';
+    }
+
+    let publishError = null;
+    try {
+      rm.messageId = await publishReactionMessage(guild, rm);
+    } catch (err) {
+      publishError = err.message;
+      log.error('roles', 'publish reaction message failed:', err.message);
+    }
+
+    const next = existing ? list.map((x) => (String(x.id) === id ? rm : x)) : [...list, rm];
+    await setGuildModule(guild.id, 'roles', { enabled: true, config: { ...cfg, reactionMessages: next } });
+    await recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:roles',
+      detail: `${existing ? 'updated' : 'created'} reaction-role set`,
+    });
+    // The set is saved either way — a publish failure is surfaced as a
+    // notice, not an error response, so the caller doesn't lose the edit.
+    res.json({ reactionMessage: rm, error: publishError });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/roles/rr/:id/delete',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const cfg = (await getGuildModule(guild.id, 'roles')).config;
+    const list = Array.isArray(cfg.reactionMessages) ? cfg.reactionMessages : [];
+    const rm = list.find((x) => String(x.id) === req.params.id);
+    if (rm?.messageId && rm.channelId) {
+      const ch = guild.channels.cache.get(rm.channelId);
+      const m = ch && (await ch.messages.fetch(rm.messageId).catch(() => null));
+      if (m) await m.delete().catch(() => {});
+    }
+    await setGuildModule(guild.id, 'roles', {
+      config: { ...cfg, reactionMessages: list.filter((x) => String(x.id) !== req.params.id) },
+    });
+    await recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:roles',
+      detail: 'deleted reaction-role set',
+    });
+    res.json({ ok: true });
   })
 );
 

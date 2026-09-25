@@ -182,3 +182,11 @@ export const unpublishWelcomeChannel = (guildId) =>
   postJson(`/api/v2/guilds/${guildId}/modules/welcome-channel/unpublish`, {});
 export const createWelcomeReadOnlyChannel = (guildId) =>
   postJson(`/api/v2/guilds/${guildId}/modules/welcome-channel/create-channel`, {});
+
+export const getRoles = (guildId) => apiFetch(`/api/v2/guilds/${guildId}/modules/roles/list`);
+export const saveAutoroles = (guildId, autoroles) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/roles/autoroles`, { autoroles });
+export const saveReactionRole = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/roles/rr`, body);
+export const deleteReactionRole = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/roles/rr/${id}/delete`, {});
