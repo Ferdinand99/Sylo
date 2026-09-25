@@ -36,6 +36,7 @@ import Reminders from './Reminders.jsx';
 import Polls from './Polls.jsx';
 import WelcomeChannel from './WelcomeChannel.jsx';
 import Roles from './Roles.jsx';
+import CustomCommands from './CustomCommands.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -58,6 +59,7 @@ export const MODULE_FORMS = {
   polls: Polls,
   'welcome-channel': WelcomeChannel,
   roles: Roles,
+  'custom-commands': CustomCommands,
   rss: RssAlerts,
   'game-stats': GameStats,
   welcome: Welcome,

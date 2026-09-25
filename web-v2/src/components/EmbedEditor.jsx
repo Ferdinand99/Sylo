@@ -29,6 +29,7 @@ function initialState(spec, { footerKey, defaultColor }) {
     thumbnail: String(s.thumbnail || ''),
     [footerKey]: String(s[footerKey] || s.footer || s.footerText || ''),
     footerIcon: String(s.footerIcon || ''),
+    timestamp: Boolean(s.timestamp),
     fields: (Array.isArray(s.fields) ? s.fields : []).map((f) => ({
       key: newKey('f'),
       name: String(f.name || ''),
@@ -49,6 +50,7 @@ function serialize(e, opts) {
   if (opts.thumb) out.thumbnail = e.thumbnail;
   out[opts.footerKey] = e[opts.footerKey] ?? '';
   if (opts.footerIcon) out.footerIcon = e.footerIcon;
+  if (opts.timestamp) out.timestamp = e.timestamp;
   if (opts.fields) {
     out.fields = e.fields
       .map((f) => ({ name: f.name, value: f.value, inline: f.inline }))
@@ -67,13 +69,14 @@ export default function EmbedEditor({
   thumb = true,
   footerIcon = true,
   footerKey = 'footerText',
+  timestamp = false,
   defaultColor = '#5865f2',
   fixedBody = null,
   vars = [],
   placeholders = {},
   botName = 'Sylo',
 }) {
-  const opts = { content, author, description, fields, thumb, footerIcon, footerKey };
+  const opts = { content, author, description, fields, thumb, footerIcon, footerKey, timestamp };
   const [e, setE] = useState(() => initialState(spec, { footerKey, defaultColor }));
   // Mirrors V1's Alpine `_last` — inserted tokens go into whichever field the
   // user last focused (title/author/description/footer/content), not a
@@ -132,6 +135,7 @@ export default function EmbedEditor({
         thumb={thumb}
         footerIcon={footerIcon}
         footerKey={footerKey}
+        timestamp={timestamp}
         fixedBody={fixedBody}
         placeholders={placeholders}
         onFieldFocus={setLastFocused}

@@ -64,6 +64,7 @@ import {
 } from '../../modules/welcomeChannel.js';
 import { normalisePollsConfig, POLL_PLACEHOLDERS, RESULTS_PLACEHOLDERS } from '../../modules/polls.js';
 import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
+import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
 import {
   listCleanupSchedules,
   getCleanupSchedule,
@@ -2936,6 +2937,95 @@ router.post(
       action: 'module:roles',
       detail: 'deleted reaction-role set',
     });
+    res.json({ ok: true });
+  })
+);
+
+// --- Custom commands (mirrors guilds.js's "Custom-command builder" section
+// — commands live in the generic module config; actions arrive as real JSON
+// here instead of a hidden-input string, since this is the JSON API.) ------
+
+router.get(
+  '/guilds/:guildId/modules/custom-commands/list',
+  asyncHandler(async (req, res) => {
+    const { config } = await getGuildModule(req.guild.id, 'custom-commands');
+    const { commands } = normaliseCustomCommands(config);
+    res.json({
+      commands,
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      placeholders: CC_PLACEHOLDERS,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/custom-commands/cmd',
+  asyncHandler(async (req, res) => {
+    const name = String(req.body.name ?? '')
+      .trim()
+      .toLowerCase();
+    if (!/^[a-z0-9_-]{1,32}$/.test(name)) {
+      return res.status(400).json({ error: 'Invalid name — lowercase letters, numbers, - and _ only.' });
+    }
+    if (runtime.client?.commands?.has(name)) {
+      return res.status(400).json({ error: `/${name} is reserved by a built-in command.` });
+    }
+
+    const prev = normaliseCustomCommands((await getGuildModule(req.guild.id, 'custom-commands')).config);
+    const id = /^\d+$/.test(req.body.id ?? '') ? String(req.body.id) : String(Date.now());
+    const existing = prev.commands.find((c) => c.id === id);
+    if (prev.commands.some((c) => c.name === name && c.id !== id)) {
+      return res.status(400).json({ error: `/${name} already exists.` });
+    }
+
+    const merged = {
+      id,
+      name,
+      description: req.body.description ?? '',
+      actions: Array.isArray(req.body.actions) ? req.body.actions : [],
+      allowedRoles: Array.isArray(req.body.allowedRoles) ? req.body.allowedRoles : [],
+      allowedChannels: Array.isArray(req.body.allowedChannels) ? req.body.allowedChannels : [],
+      cooldownSeconds: req.body.cooldownSeconds ?? 0,
+    };
+    const nextList = existing
+      ? prev.commands.map((c) => (c.id === id ? merged : c))
+      : [...prev.commands, merged];
+    const config = normaliseCustomCommands({ commands: nextList });
+
+    if (!config.commands.some((c) => c.id === id)) {
+      return res.status(400).json({ error: 'Every action was empty — add at least one message, role, etc.' });
+    }
+
+    await setGuildModule(req.guild.id, 'custom-commands', { enabled: true, config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:custom-commands',
+      detail: `${existing ? 'updated' : 'created'} /${name}`,
+    });
+    await syncGuildCustomCommands(req.guild).catch((err) =>
+      log.error('custom-commands', 'sync after save failed:', err.message)
+    );
+    res.json({ command: config.commands.find((c) => c.id === id) });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/custom-commands/cmd/:id/delete',
+  asyncHandler(async (req, res) => {
+    const prev = normaliseCustomCommands((await getGuildModule(req.guild.id, 'custom-commands')).config);
+    const config = normaliseCustomCommands({
+      commands: prev.commands.filter((c) => c.id !== req.params.id),
+    });
+    await setGuildModule(req.guild.id, 'custom-commands', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:custom-commands',
+      detail: 'deleted a command',
+    });
+    await syncGuildCustomCommands(req.guild).catch((err) =>
+      log.error('custom-commands', 'sync after delete failed:', err.message)
+    );
     res.json({ ok: true });
   })
 );

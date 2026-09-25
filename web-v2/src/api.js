@@ -190,3 +190,10 @@ export const saveReactionRole = (guildId, body) =>
   postJson(`/api/v2/guilds/${guildId}/modules/roles/rr`, body);
 export const deleteReactionRole = (guildId, id) =>
   postJson(`/api/v2/guilds/${guildId}/modules/roles/rr/${id}/delete`, {});
+
+export const getCustomCommands = (guildId) =>
+  apiFetch(`/api/v2/guilds/${guildId}/modules/custom-commands/list`);
+export const saveCustomCommand = (guildId, body) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/custom-commands/cmd`, body);
+export const deleteCustomCommand = (guildId, id) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/custom-commands/cmd/${id}/delete`, {});

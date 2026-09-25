@@ -107,6 +107,7 @@ export default function EmbedCard({
   thumb = true,
   footerIcon = true,
   footerKey = 'footerText',
+  timestamp = false,
   fixedBody = null,
   placeholders = {},
   toolbar = null,
@@ -254,6 +255,17 @@ export default function EmbedCard({
             onFocus={() => onFieldFocus?.(footerKey)}
           />
         </div>
+
+        {timestamp ? (
+          <label className="v2-check u-mt-2">
+            <input
+              type="checkbox"
+              checked={Boolean(embed.timestamp)}
+              onChange={(e) => set({ timestamp: e.target.checked })}
+            />
+            Show the current time in the footer
+          </label>
+        ) : null}
       </div>
     </div>
   );
