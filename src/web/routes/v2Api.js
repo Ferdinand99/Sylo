@@ -17,7 +17,7 @@ import {
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
-import { guildTextChannels, guildVoiceChannels, resolveUserTags } from '../lib/discord.js';
+import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { getDashboardVersion, setDashboardVersion, DASHBOARD_VERSIONS } from '../../db/userPrefs.js';
 import {
@@ -59,6 +59,7 @@ import {
   regenerateGithubWatchSecret,
 } from '../../db/githubWatches.js';
 import { GITHUB_EVENT_TYPES, sanitiseGithubEvents } from '../../modules/githubAlerts.js';
+import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
 import {
   normaliseAutomodConfig,
   AUTOMOD_RULES,
@@ -1026,6 +1027,38 @@ router.post(
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:twitch-alerts',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+// --- Temporary voice (mirrors guilds.js's "Temporary voice hub builder"
+// section — hubs live in guild_modules.config as { hubs: [...] }, same
+// generic getModuleConfig/saveModuleConfig shape every other array-of-rows
+// module here already uses, unlike channel-cleanup/github's own tables.)
+
+router.get(
+  '/guilds/:guildId/modules/temp-voice/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'temp-voice');
+    res.json({
+      config: normaliseTempVoiceConfig(cfg),
+      voiceChannels: guildVoiceChannels(req.guild),
+      categories: guildCategories(req.guild),
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/temp-voice/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseTempVoiceConfig({ hubs: req.body.hubs });
+    await setGuildModule(req.guild.id, 'temp-voice', { enabled: true, config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:temp-voice',
       detail: 'settings saved',
     });
     res.json({ config });

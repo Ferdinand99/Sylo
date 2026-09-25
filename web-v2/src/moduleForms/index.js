@@ -30,6 +30,7 @@ import YoutubeAlerts from './YoutubeAlerts.jsx';
 import Leveling from './Leveling.jsx';
 import ChannelCleanup from './ChannelCleanup.jsx';
 import GithubAlerts from './GithubAlerts.jsx';
+import TempVoice from './TempVoice.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -46,6 +47,7 @@ export const MODULE_FORMS = {
   leveling: Leveling,
   'channel-cleanup': ChannelCleanup,
   github: GithubAlerts,
+  'temp-voice': TempVoice,
   rss: RssAlerts,
   'game-stats': GameStats,
   welcome: Welcome,
