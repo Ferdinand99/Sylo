@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.37.0](https://github.com/Ferdinand99/Sylo/compare/v3.36.0...v3.37.0) (2026-09-25)
+
+
+### Features
+
+* **dashboard:** add YouTube alerts V2 config page ([#222](https://github.com/Ferdinand99/Sylo/issues/222)) ([d860a2e](https://github.com/Ferdinand99/Sylo/commit/d860a2ee5adf1acc0d36270534de9121bc094426))
+
 ## [3.36.0](https://github.com/Ferdinand99/Sylo/compare/v3.35.0...v3.36.0) (2026-09-24)
 
 
