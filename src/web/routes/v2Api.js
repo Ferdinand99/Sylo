@@ -60,6 +60,7 @@ import {
 } from '../../db/githubWatches.js';
 import { GITHUB_EVENT_TYPES, sanitiseGithubEvents } from '../../modules/githubAlerts.js';
 import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
+import { normaliseStarboard, rescanBoard } from '../../modules/starboard.js';
 import {
   normaliseAutomodConfig,
   AUTOMOD_RULES,
@@ -1062,6 +1063,65 @@ router.post(
       detail: 'settings saved',
     });
     res.json({ config });
+  })
+);
+
+// --- Starboard (mirrors guilds.js's "Starboard board builder" section —
+// boards live in guild_modules.config as { boards: [...] }, same generic
+// shape as temp-voice.) ------------------------------------------------
+
+/** Custom emoji ids round-trip through the text field as <:emoji:id> so
+ * they're editable/copyable — mirrors guilds.js's renderSbBuilder exactly. */
+function boardEmojiText(board, guild) {
+  return board.emojis
+    .map((e) => {
+      if (!/^\d+$/.test(e)) return e;
+      const ge = guild.emojis.cache.get(e);
+      return ge ? ge.toString() : `<:emoji:${e}>`;
+    })
+    .join(' ');
+}
+
+router.get(
+  '/guilds/:guildId/modules/starboard/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'starboard');
+    const config = normaliseStarboard(cfg);
+    res.json({
+      config: {
+        boards: config.boards.map((b) => ({ ...b, emojiText: boardEmojiText(b, req.guild) })),
+      },
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/starboard/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseStarboard({ boards: req.body.boards });
+    await setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:starboard',
+      detail: 'settings saved',
+    });
+    // Catch up on messages that already clear a possibly-just-lowered bar —
+    // fire-and-forget, same as V1's save route.
+    for (const board of config.boards) {
+      rescanBoard(req.guild, board)
+        .then((r) =>
+          log.info(
+            'starboard',
+            `rescan ${req.guild.id}/${board.id}: scanned ${r.scanned}, posted ${r.posted}`
+          )
+        )
+        .catch((err) => log.error('starboard', 'rescan failed:', err.message));
+    }
+    res.json({
+      config: { boards: config.boards.map((b) => ({ ...b, emojiText: boardEmojiText(b, req.guild) })) },
+    });
   })
 );
 
