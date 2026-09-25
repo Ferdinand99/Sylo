@@ -145,14 +145,14 @@ function ReminderForm({
         <div className="v2-tabs">
           <button
             type="button"
-            className={msgType === 'text' ? 'active' : ''}
+            className={`v2-tab${msgType === 'text' ? ' is-active' : ''}`}
             onClick={() => setMsgType('text')}
           >
             Text message
           </button>
           <button
             type="button"
-            className={msgType === 'embed' ? 'active' : ''}
+            className={`v2-tab${msgType === 'embed' ? ' is-active' : ''}`}
             onClick={() => setMsgType('embed')}
           >
             Embed message
@@ -189,14 +189,14 @@ function ReminderForm({
         <div className="v2-tabs">
           <button
             type="button"
-            className={mode === 'single' ? 'active' : ''}
+            className={`v2-tab${mode === 'single' ? ' is-active' : ''}`}
             onClick={() => setMode('single')}
           >
             Single
           </button>
           <button
             type="button"
-            className={mode === 'multiple' ? 'active' : ''}
+            className={`v2-tab${mode === 'multiple' ? ' is-active' : ''}`}
             onClick={() => setMode('multiple')}
           >
             Multiple

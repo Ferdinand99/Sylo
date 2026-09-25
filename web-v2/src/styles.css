@@ -1314,6 +1314,8 @@ button.v2-toggle:disabled {
 form input[type='text'],
 form input[type='url'],
 form input[type='number'],
+form input[type='time'],
+form input[type='datetime-local'],
 form select,
 form textarea {
   width: 100%;
@@ -1651,182 +1653,10 @@ form textarea {
 }
 
 /* ---------- Embed editor (components/EmbedEditor.jsx) ----------
-   A live Discord-embed-styled preview you type directly into — plain
-   controlled inputs/textareas styled borderless so they blend into the
-   preview, rather than V1's contenteditable-div approach. */
-.v2-embed-content {
-  width: 100%;
-  margin-bottom: 10px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
-  color: var(--text);
-  font: inherit;
-  padding: 10px 12px;
-  resize: vertical;
-}
-.v2-embed {
-  position: relative;
-  display: flex;
-  gap: 12px;
-  background: var(--bg-surface);
-  border-left: 4px solid var(--v2-embed-color, #5865f2);
-  border-radius: 6px;
-  padding: 12px 14px;
-}
-.v2-embed-colorwrap {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  cursor: pointer;
-}
-.v2-embed-colorwrap input[type='color'] {
-  width: 28px;
-  height: 28px;
-  margin: -4px;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  background: none;
-}
-.v2-embed-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.v2-embed-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.v2-embed-footrow {
-  margin-top: 4px;
-}
-.v2-embed-field {
-  width: 100%;
-  background: transparent;
-  border: 1px dashed transparent;
-  border-radius: 4px;
-  color: var(--text);
-  font: inherit;
-  padding: 4px 6px;
-  resize: vertical;
-}
-.v2-embed-field:hover,
-.v2-embed-field:focus {
-  border-color: var(--border-subtle);
-  outline: none;
-}
-.v2-embed-title {
-  font-weight: 700;
-}
-.v2-embed-author {
-  font-weight: 600;
-  font-size: 0.85rem;
-}
-.v2-embed-desc {
-  font-size: 0.88rem;
-  color: var(--text-muted);
-}
-.v2-embed-thumb {
-  flex: none;
-}
-.v2-embed-imgslot-sq,
-.v2-embed-imgslot-sq img {
-  width: 56px;
-  height: 56px;
-}
-.v2-embed-imgslot-sq {
-  border-radius: 6px;
-  overflow: hidden;
-  position: relative;
-  background: var(--bg-surface-2);
-  border: 1px dashed var(--border-subtle);
-}
-.v2-embed-imgslot-sq img {
-  object-fit: cover;
-  display: block;
-}
-.v2-embed-imgslot:not(.v2-embed-imgslot-sq) {
-  margin-top: 4px;
-}
-.v2-embed-imgslot:not(.v2-embed-imgslot-sq) img {
-  max-width: 100%;
-  max-height: 160px;
-  border-radius: 6px;
-  display: block;
-}
-.v2-embed-imgedit {
-  position: absolute;
-  bottom: 2px;
-  right: 2px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  border: 0;
-  border-radius: 4px;
-  font-size: 0.7rem;
-  padding: 1px 4px;
-  cursor: pointer;
-}
-.v2-embed-imgbtn {
-  align-self: flex-start;
-  background: var(--bg-surface-2);
-  border: 1px dashed var(--border-subtle);
-  border-radius: 6px;
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  padding: 6px 10px;
-  cursor: pointer;
-}
-.v2-embed-imginput {
-  width: 100%;
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  color: var(--text);
-  font: inherit;
-  font-size: 0.78rem;
-  padding: 3px 6px;
-}
-.v2-embed-fields {
-  display: grid;
-  gap: 6px;
-  margin-top: 4px;
-}
-.v2-embed-field-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 6px;
-  align-items: center;
-}
-.v2-embed-field-row input {
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  color: var(--text);
-  font: inherit;
-  font-size: 0.82rem;
-  padding: 4px 7px;
-}
-.v2-embed-x {
-  background: none;
-  border: 0;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-  padding: 4px;
-}
-.v2-embed-x:hover {
-  color: #f87171;
-}
+   Single-embed module forms (reminders, polls, …) reuse the exact same
+   Discord-message-preview look as the Embed messages builder — the
+   v2-msg and v2-embed classes below, shared via components/EmbedCard.jsx.
+   Only the token-insert row here is new. */
 .v2-embed-vars {
   margin-top: 8px;
   font-size: 0.8rem;
