@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.38.0](https://github.com/Ferdinand99/Sylo/compare/v3.37.0...v3.38.0) (2026-09-26)
+
+
+### Features
+
+* **sticky:** support embeds, not just plain text ([e027ed6](https://github.com/Ferdinand99/Sylo/commit/e027ed64f43264b2fa9b9a76e275596d397facbb))
+
 ## [3.37.0](https://github.com/Ferdinand99/Sylo/compare/v3.36.0...v3.37.0) (2026-09-25)
 
 
