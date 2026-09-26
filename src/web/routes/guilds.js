@@ -55,6 +55,7 @@ import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { recentLookups } from '../../db/cache.js';
 import { getVanitySlug, setVanitySlug, clearVanitySlug } from '../../db/leaderboardVanity.js';
 import { normaliseEmbedSpec } from '../../modules/welcomeChannel.js';
+import { normaliseStickyConfig } from '../../modules/sticky.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { listCountingPenalties, clearCountingPenalty } from '../../db/countingPenalties.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
@@ -1102,22 +1103,27 @@ router.post(
       const autoroles = [].concat(req.body.autoroles ?? []).filter((r) => /^\d{17,20}$/.test(r));
       config = { autoroles, reactionMessages: existing.reactionMessages ?? [] };
     } else if (mod.id === 'sticky') {
+      // No embed editing UI here yet (only V2's dashboard has one) — carry
+      // each row's existing embed over by channelId so a save from this
+      // page can't silently wipe one set on V2.
       const prev = (await getGuildModule(req.guild.id, 'sticky')).config;
       const prevById = new Map((prev.stickies ?? []).map((s) => [s.channelId, s]));
       const chans = [].concat(req.body.s_channel ?? []);
       const contents = [].concat(req.body.s_content ?? []);
       const bots = [].concat(req.body.s_bots ?? []);
       const cooldowns = [].concat(req.body.s_cooldown ?? []);
-      const stickies = chans
-        .map((channelId, i) => ({
-          channelId,
-          content: String(contents[i] ?? '').slice(0, 2000),
-          lastMessageId: prevById.get(channelId)?.lastMessageId ?? null,
-          repostOnBots: bots[i] === 'on',
-          cooldownSeconds: Math.max(0, Math.min(3600, Math.floor(Number(cooldowns[i])) || 0)),
-        }))
-        .filter((s) => /^\d{17,20}$/.test(s.channelId) && s.content.trim() !== '');
-      config = { stickies };
+      config = normaliseStickyConfig(
+        {
+          stickies: chans.map((channelId, i) => ({
+            channelId,
+            content: contents[i] ?? '',
+            embed: prevById.get(channelId)?.embed ?? null,
+            repostOnBots: bots[i] === 'on',
+            cooldownSeconds: cooldowns[i],
+          })),
+        },
+        prev
+      );
     } else if (mod.id === 'tickets') {
       config = {
         greeting: String(req.body.greeting ?? '').slice(0, 1500),

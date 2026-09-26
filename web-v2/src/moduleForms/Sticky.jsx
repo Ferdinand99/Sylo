@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import EmbedEditor from '../components/EmbedEditor.jsx';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -12,6 +13,7 @@ function toFormRow(s = {}) {
     key: newKey(),
     channelId: s.channelId || '',
     content: s.content || '',
+    embed: s.embed || null,
     repostOnBots: Boolean(s.repostOnBots),
     cooldownSeconds: s.cooldownSeconds || 0,
   };
@@ -59,6 +61,7 @@ export default function Sticky() {
         stickies: form.stickies.map((s) => ({
           channelId: s.channelId,
           content: s.content,
+          embed: s.embed,
           repostOnBots: s.repostOnBots,
           cooldownSeconds: s.cooldownSeconds,
         })),
@@ -77,8 +80,8 @@ export default function Sticky() {
     <>
       <h1 className="v2-section-title">Sticky messages</h1>
       <p className="v2-field-hint">
-        Each channel can have one sticky message. It is re-posted at the bottom whenever someone else writes
-        in that channel.
+        Each channel can have one sticky message — text, an embed, or both. It is re-posted at the bottom
+        whenever someone else writes in that channel.
       </p>
 
       <form onSubmit={onSave}>
@@ -111,10 +114,36 @@ export default function Sticky() {
               <textarea
                 rows={3}
                 maxLength={2000}
-                placeholder="Message to keep at the bottom…"
+                placeholder="Message to keep at the bottom… (optional if using an embed)"
                 value={s.content}
                 onChange={(e) => updateRow(s.key, { content: e.target.value })}
               />
+            </div>
+
+            <div className="v2-field">
+              {s.embed ? (
+                <>
+                  <div className="v2-field-row" style={{ marginBottom: 0 }}>
+                    <label style={{ marginBottom: 0 }}>Embed</label>
+                    <button
+                      type="button"
+                      className="v2-btn-ghost"
+                      onClick={() => updateRow(s.key, { embed: null })}
+                    >
+                      Remove embed
+                    </button>
+                  </div>
+                  <EmbedEditor spec={s.embed} onChange={(embed) => updateRow(s.key, { embed })} />
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="v2-btn-ghost"
+                  onClick={() => updateRow(s.key, { embed: {} })}
+                >
+                  + Add embed
+                </button>
+              )}
             </div>
 
             <div className="v2-field-row">

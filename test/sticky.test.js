@@ -1,7 +1,7 @@
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { shouldRepost, cooldownMs } from '../src/modules/sticky.js';
+import { shouldRepost, cooldownMs, normaliseStickyConfig } from '../src/modules/sticky.js';
 
 const human = { isOwnSticky: false, isApp: false };
 const app = { isOwnSticky: false, isApp: true };
@@ -40,4 +40,46 @@ test('shouldRepost: within the cooldown window it holds off', () => {
 
 test('shouldRepost: an empty sticky never reposts', () => {
   assert.equal(shouldRepost({ content: '' }, human, 0, 10_000), false);
+});
+
+test('shouldRepost: an embed-only sticky (no content) still reposts', () => {
+  assert.equal(shouldRepost({ content: '', embed: { title: 'hi' } }, human, 0, 10_000), true);
+});
+
+test('normaliseStickyConfig: drops a row with neither content nor a usable embed', () => {
+  const out = normaliseStickyConfig({
+    stickies: [
+      { channelId: '111111111111111111', content: '', embed: null },
+      { channelId: '222222222222222222', content: '', embed: {} }, // empty embed spec
+    ],
+  });
+  assert.deepEqual(out.stickies, []);
+});
+
+test('normaliseStickyConfig: keeps an embed-only row and sanitises the embed', () => {
+  const out = normaliseStickyConfig({
+    stickies: [
+      {
+        channelId: '111111111111111111',
+        content: '',
+        embed: { title: 'Rules', color: '5865f2', junk: 'nope' },
+      },
+    ],
+  });
+  assert.equal(out.stickies.length, 1);
+  assert.equal(out.stickies[0].content, '');
+  assert.equal(out.stickies[0].embed.title, 'Rules');
+  assert.equal(out.stickies[0].embed.color, '#5865f2');
+  assert.equal(out.stickies[0].embed.junk, undefined);
+});
+
+test('normaliseStickyConfig: carries the previous lastMessageId over by channelId', () => {
+  const prev = {
+    stickies: [{ channelId: '111111111111111111', content: 'old', lastMessageId: '999' }],
+  };
+  const out = normaliseStickyConfig(
+    { stickies: [{ channelId: '111111111111111111', content: 'new' }] },
+    prev
+  );
+  assert.equal(out.stickies[0].lastMessageId, '999');
 });

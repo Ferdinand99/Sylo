@@ -65,6 +65,7 @@ import {
 import { normalisePollsConfig, POLL_PLACEHOLDERS, RESULTS_PLACEHOLDERS } from '../../modules/polls.js';
 import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
+import { normaliseStickyConfig } from '../../modules/sticky.js';
 import {
   listCleanupSchedules,
   getCleanupSchedule,
@@ -873,18 +874,7 @@ router.post(
     // channel) — carried over from the previous config by channelId, same
     // as V1's guilds.js, rather than letting the form touch it.
     const prev = (await getGuildModule(req.guild.id, 'sticky')).config;
-    const prevById = new Map((prev.stickies ?? []).map((s) => [s.channelId, s]));
-    const rows = Array.isArray(req.body.stickies) ? req.body.stickies : [];
-    const stickies = rows
-      .map((s) => ({
-        channelId: s.channelId,
-        content: String(s.content ?? '').slice(0, 2000),
-        lastMessageId: prevById.get(s.channelId)?.lastMessageId ?? null,
-        repostOnBots: Boolean(s.repostOnBots),
-        cooldownSeconds: Math.max(0, Math.min(3600, Math.floor(Number(s.cooldownSeconds)) || 0)),
-      }))
-      .filter((s) => /^\d{17,20}$/.test(s.channelId) && s.content.trim() !== '');
-    const config = { stickies };
+    const config = normaliseStickyConfig({ stickies: req.body.stickies }, prev);
     await setGuildModule(req.guild.id, 'sticky', { config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
