@@ -232,9 +232,14 @@ two `FROM node:22-alpine` lines in the `Dockerfile` to `node:22-slim`.
 
 ## Unraid
 
-Sylo is in the Unraid **Community Applications** store — search "Sylo". Template
-edits on `main` propagate automatically (via `<TemplateURL>` in
-`unraid/sylo.xml`), so no re-submission is needed for config changes.
+Sylo is in the Unraid **Community Applications** store — search "Sylo". The
+template's source of truth is
+[Ferdinand99/unraid-templates](https://github.com/Ferdinand99/unraid-templates)
+(`templates/sylo.xml`) — edits there propagate to existing installs
+automatically via `<TemplateURL>`, so no re-submission is needed for config
+changes. If Community Applications hasn't picked up that repository yet, add
+`https://github.com/Ferdinand99/unraid-templates` under Docker → Template
+repositories to install the current template directly.
 
 Manual container setup (Docker tab → Add Container):
 

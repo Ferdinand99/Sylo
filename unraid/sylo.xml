@@ -1,4 +1,11 @@
 <?xml version="1.0"?>
+<!--
+  Transitional copy. The source of truth for this template is now
+  https://github.com/Ferdinand99/unraid-templates (templates/sylo.xml).
+  Make template changes there, not here. This file stays in place only until
+  Community Applications' "Ferdinand99's Repository" registration is moved
+  from this repo to the new one.
+-->
 <Container version="2">
   <Name>Sylo</Name>
   <Repository>docker.io/iwgamin/sylo:latest</Repository>
@@ -20,7 +27,7 @@ Dashboard: runs open by default (use only on a trusted LAN). To require "Log in 
 Community &amp; support: https://discord.gg/GAzR9k5hhS</Overview>
   <Category>Tools: Network:Messenger</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
-  <TemplateURL>https://raw.githubusercontent.com/Ferdinand99/Sylo/main/unraid/sylo.xml</TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/Ferdinand99/unraid-templates/main/templates/sylo.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/Ferdinand99/Sylo/main/unraid/sylo-icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>

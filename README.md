@@ -474,7 +474,11 @@ Or a prebuilt multi-arch image (`linux/amd64` + `linux/arm64`):
 
 ### Unraid
 
-Sylo is in **Community Applications** — search "Sylo". Put the data directory on
+Sylo is in **Community Applications** — search "Sylo". The template's source of
+truth is [Ferdinand99/unraid-templates](https://github.com/Ferdinand99/unraid-templates);
+if CA hasn't picked that repo up yet, add
+`https://github.com/Ferdinand99/unraid-templates` under Docker → Template
+repositories to get the current template directly. Put the data directory on
 a real local disk (e.g. `/mnt/cache/appdata/sylo`), **not** `/mnt/user` — SQLite
 in WAL mode needs working file locks. See
 [docs/self-hosting.md](docs/self-hosting.md#unraid) for the container fields and
