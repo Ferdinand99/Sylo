@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
+import { notify } from '../notify.js';
 
 // Poll/results messages only expose content, title, colour, footer and image
 // (src/modules/polls.js's normMsg) — the description is always Sylo's own
@@ -109,7 +110,7 @@ export default function Polls() {
       });
       setSaved(true);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { notify } from '../notify.js';
 
 const QUESTION_SLOTS = 5;
 
@@ -52,7 +53,7 @@ export default function Appeals() {
       setForm({ ...config, questions: padQuestions(config.questions) });
       setSaved(true);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }

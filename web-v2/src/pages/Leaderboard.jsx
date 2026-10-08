@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getLeaderboard, setLeaderboardPublic, setLeaderboardVanity, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { notify } from '../notify.js';
 
 const PERIODS = [
   { key: 'all', label: 'All time' },
@@ -61,7 +62,7 @@ export default function Leaderboard() {
       const { vanitySlug } = await setLeaderboardVanity(guildId, slugInput);
       setData((d) => ({ ...d, vanitySlug }));
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }

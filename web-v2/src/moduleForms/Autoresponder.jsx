@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import ChipPicker from '../components/ChipPicker.jsx';
+import { notify } from '../notify.js';
 
 const MATCH_LABELS = {
   contains: 'contains',
@@ -94,7 +95,7 @@ export default function Autoresponder() {
       });
       setSaved(true);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }

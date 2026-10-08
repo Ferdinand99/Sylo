@@ -14,28 +14,40 @@ function deny(res) {
   });
 }
 
-/** @type {import('express').RequestHandler} */
-export async function requireTicketAccess(req, res, next) {
-  if (!config.authEnabled) return next();
+/**
+ * Whether the request may use the tickets pages: 'ok', 'login' (not signed in),
+ * or 'denied'. Shared by the HTML guard below and the V2 JSON API (v2Staff.js).
+ * @returns {Promise<'ok' | 'login' | 'denied'>}
+ */
+export async function ticketAccessState(req) {
+  if (!config.authEnabled) return 'ok';
 
   const userId = req.session?.user?.id;
-  if (!userId) {
-    req.session.returnTo = req.originalUrl;
-    return res.redirect('/auth/discord/login');
-  }
+  if (!userId) return 'login';
   const guildId = req.params.guildId;
-  if (adminGuildIds(req).has(guildId)) return next();
+  if (adminGuildIds(req).has(guildId)) return 'ok';
 
   const staffRoles = (await getGuildModule(guildId, 'tickets')).config.staffRoles ?? [];
-  if (staffRoles.length === 0) return deny(res);
+  if (staffRoles.length === 0) return 'denied';
 
   const guild = runtime.client?.guilds.cache.get(guildId);
-  if (!guild) return deny(res);
+  if (!guild) return 'denied';
   try {
     const member = await guild.members.fetch(userId);
-    if (member.roles.cache.some((r) => staffRoles.includes(r.id))) return next();
+    if (member.roles.cache.some((r) => staffRoles.includes(r.id))) return 'ok';
   } catch {
     /* fall through */
+  }
+  return 'denied';
+}
+
+/** @type {import('express').RequestHandler} */
+export async function requireTicketAccess(req, res, next) {
+  const state = await ticketAccessState(req);
+  if (state === 'ok') return next();
+  if (state === 'login') {
+    req.session.returnTo = req.originalUrl;
+    return res.redirect('/auth/discord/login');
   }
   deny(res);
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { notify } from '../notify.js';
 
 const ACTION_LABELS = { timeout: 'Timeout', kick: 'Kick', ban: 'Ban' };
 
@@ -80,7 +81,7 @@ export default function Moderation() {
       });
       setSaved(true);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }

@@ -19,7 +19,9 @@
   --text: #e7e9f5;
   --text-muted: #a6accd;
   --radius: 12px;
-  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font:
+    'Schibsted Grotesk Variable', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
   /* Rim around a colour-preset dot (ColorPicker.jsx) — needs to read against
      arbitrary swatch fills, not page background, so it's its own token
      rather than --border-subtle: a light rim on dark, a dark rim on light. */
@@ -55,6 +57,22 @@ a {
 }
 a:hover {
   text-decoration: underline;
+}
+
+/* Visible keyboard focus everywhere; mouse clicks do not show it. */
+:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .v2-shell {
@@ -1405,7 +1423,14 @@ form input[type='number'],
 form input[type='time'],
 form input[type='datetime-local'],
 form select,
-form textarea {
+form textarea,
+.v2-field input[type='text'],
+.v2-field input[type='url'],
+.v2-field input[type='number'],
+.v2-field input[type='time'],
+.v2-field input[type='datetime-local'],
+.v2-field select,
+.v2-field textarea {
   width: 100%;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -1775,4 +1800,187 @@ form textarea {
   padding: 2px 9px;
   margin: 0 3px;
   cursor: pointer;
+}
+
+/* Toasts (components/Toasts.jsx) — messages that replace window.alert(). */
+.v2-toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(380px, calc(100vw - 32px));
+}
+.v2-toast {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent-2);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.v2-toast.is-error {
+  border-left-color: #f87171;
+}
+.v2-toast button {
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.v2-toast button:hover {
+  color: var(--text);
+}
+
+/* components/Meta.jsx: facts side by side with space between, no separator character. */
+.v2-meta-item + .v2-meta-item {
+  margin-left: 0.9em;
+}
+/* Small muted number in front of a title ("#12 Prize"). */
+.v2-id {
+  margin-right: 0.5em;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The intro line under a page title needs air before the first form field. */
+.v2-section-title + p.v2-field-hint {
+  margin-bottom: 20px;
+}
+
+/* Staff pages: commands, appeals, tickets, moderation. */
+.v2-cmd-list {
+  align-items: start;
+}
+.v2-cmd-row {
+  align-items: flex-start;
+}
+.v2-cmd-row .v2-row-main {
+  flex: 1;
+}
+.v2-cmd-limits {
+  margin-top: 12px;
+}
+.v2-cmd-open {
+  margin-top: 8px;
+}
+.v2-appeal-user {
+  margin: 0 0 2px;
+  font-size: 1rem;
+}
+.v2-appeal-answers {
+  margin: 12px 0;
+}
+.v2-appeal-answers dt {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-top: 8px;
+}
+.v2-appeal-answers dd {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+}
+.v2-unread-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: var(--accent-2);
+}
+.v2-ticket-row.is-unread h3 {
+  color: var(--text);
+}
+.v2-ticket-user {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.7em;
+}
+.v2-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding: 14px;
+  margin-bottom: 18px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+.v2-bubble {
+  max-width: 78%;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  align-self: flex-start;
+}
+.v2-bubble.is-staff {
+  align-self: flex-end;
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface));
+}
+.v2-bubble.is-system {
+  align-self: center;
+  max-width: 90%;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.v2-bubble-meta {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+.v2-bubble-body {
+  margin-top: 2px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.v2-bubble-att {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.85rem;
+}
+.v2-case-row.is-deleted {
+  opacity: 0.55;
+}
+.v2-case-action {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.v2-case-reason {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* Pages shown inside another page (the Moderation tabs): their own title is the tab. */
+.v2-embedded > .v2-section-title {
+  display: none;
+}
+.v2-hub-tabs {
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.v2-tab-off {
+  color: var(--text-muted);
+  font-weight: 400;
 }

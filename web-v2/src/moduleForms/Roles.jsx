@@ -4,6 +4,7 @@ import { getRoles, saveAutoroles, saveReactionRole, deleteReactionRole, ApiError
 import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
+import { notify } from '../notify.js';
 
 const BTN_STYLES = ['secondary', 'primary', 'success', 'danger'];
 const STYLES = [
@@ -294,7 +295,7 @@ export default function Roles() {
       await saveAutoroles(guildId, autoroles);
       setAutorolesSaved(true);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSavingAutoroles(false);
     }

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { getGuildSettings, saveGuildSettings, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import ChipPicker from '../components/ChipPicker.jsx';
+import { notify } from '../notify.js';
 
 export default function Settings() {
   const { guildId } = useParams();
@@ -48,7 +49,7 @@ export default function Settings() {
       await saveGuildSettings(guildId, form);
       setSaved(true);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
@@ -63,7 +64,7 @@ export default function Settings() {
       setForm((f) => ({ ...f, embedColor: fresh.embedColorHex }));
       setSaved(true);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }

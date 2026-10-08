@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, setInviteBonus, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { notify } from '../notify.js';
 
 export default function InviteTracker() {
   const { guildId } = useParams();
@@ -48,7 +49,7 @@ export default function InviteTracker() {
       setForm(config);
       setSaved(true);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
@@ -63,7 +64,7 @@ export default function InviteTracker() {
       setBonusUser('');
       setBonusValue(0);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setBonusBusy(false);
     }

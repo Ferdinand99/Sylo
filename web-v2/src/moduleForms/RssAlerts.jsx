@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { notify } from '../notify.js';
 
 // Per-type ref field label/placeholder — mirrors V1's client-side HINTS map
 // (rss.ejs's inline script) exactly, same wording.
@@ -84,7 +85,7 @@ export default function RssAlerts() {
       setForm({ feeds: config.feeds.length ? config.feeds.map(toFormRow) : [toFormRow()] });
       setSaved(true);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
