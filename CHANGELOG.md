@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.39.0](https://github.com/Ferdinand99/Sylo/compare/v3.38.0...v3.39.0) (2026-10-08)
+
+
+### Features
+
+* **dashboard:** add bulk enable/disable to the V2 overview page ([#233](https://github.com/Ferdinand99/Sylo/issues/233)) ([5532a3b](https://github.com/Ferdinand99/Sylo/commit/5532a3be36e7e7f7b461366af3cf8330a3a4044d))
+
 ## [3.38.0](https://github.com/Ferdinand99/Sylo/compare/v3.37.0...v3.38.0) (2026-09-26)
 
 
