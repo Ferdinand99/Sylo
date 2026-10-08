@@ -24,6 +24,26 @@ export function writeLastGuildId(guildId) {
   }
 }
 
+const THEME_KEY = 'sylo:v2:theme';
+
+/** 'light' or 'dark' — null means "no explicit choice yet", so the default applies. */
+export function readTheme() {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    return v === 'light' || v === 'dark' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeTheme(theme) {
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    // ignore — nothing to fall back to, this is just a convenience
+  }
+}
+
 const RECENT_COLORS_KEY = 'sylo:v2:recentEmbedColors';
 const MAX_RECENT_COLORS = 8;
 
