@@ -1,6 +1,13 @@
 /* V2 dashboard — design tokens lifted from sylobot.com (site/styles.css),
    not from V1's src/web/public/styles.css (which is blue/green, not this
-   palette). Byte-matched to the real marketing-site values, not approximated. */
+   palette). Byte-matched to the real marketing-site values, not approximated.
+   Dark is the default (matches sylobot.com and docs.sylobot.com, both
+   dark-only) — light is an explicit opt-in via the topbar toggle
+   (components/Shell.jsx), not a prefers-color-scheme auto-switch, so the
+   dashboard doesn't change look out from under someone who didn't ask.
+   --accent/--accent-2 are identical in both themes: neither is ever used as
+   plain text-on-background color (only as a button/border/accent-color
+   tint), so there's no contrast reason to adjust them for light. */
 :root {
   color-scheme: dark;
   --bg-main: #0b0d17;
@@ -13,6 +20,20 @@
   --text-muted: #a6accd;
   --radius: 12px;
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Rim around a colour-preset dot (ColorPicker.jsx) — needs to read against
+     arbitrary swatch fills, not page background, so it's its own token
+     rather than --border-subtle: a light rim on dark, a dark rim on light. */
+  --swatch-border: rgba(255, 255, 255, 0.15);
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-main: #f5f6fb;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #eef0f8;
+  --border-subtle: #dde1f0;
+  --swatch-border: rgba(0, 0, 0, 0.15);
+  --text: #171a2b;
+  --text-muted: #5b6080;
 }
 
 * {
@@ -112,6 +133,27 @@ a:hover {
   color: var(--text);
   border-color: var(--accent);
   text-decoration: none;
+}
+
+.v2-theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.v2-theme-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.v2-theme-toggle svg {
+  width: 17px;
+  height: 17px;
 }
 
 /* Server switcher, in the topbar (not the sidebar) — native <details>, no JS. */
@@ -462,6 +504,29 @@ a:hover {
   outline: none;
   border-color: var(--accent);
 }
+/* The Overview page's search bar gains a "Select" button alongside it for
+   bulk enable/disable — the input gives up its own bottom margin to the
+   row wrapper so the button stays vertically centered with it. */
+.v2-search-row {
+  margin-bottom: 16px;
+}
+.v2-search-row .v2-search {
+  flex: 1;
+  margin-bottom: 0;
+}
+.v2-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.v2-row-pick {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 
 .v2-group {
   margin-bottom: 22px;
@@ -785,7 +850,7 @@ a:hover {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--swatch-border);
   padding: 0;
   cursor: pointer;
 }
@@ -805,7 +870,7 @@ a:hover {
   height: 24px;
   flex: none;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--swatch-border);
   padding: 0;
   cursor: pointer;
 }

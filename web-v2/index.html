@@ -8,6 +8,16 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%237c6cff'/%3E%3Ctext x='16' y='23' font-size='21' font-family='system-ui,sans-serif' font-weight='700' text-anchor='middle' fill='white'%3ES%3C/text%3E%3C/svg%3E"
     />
+    <script>
+      // Set data-theme before the stylesheet/React load, so a saved "light"
+      // choice doesn't flash dark-then-light on every page load. Mirrors
+      // util.js's readTheme() — duplicated here (not imported) because this
+      // has to run before any module script.
+      try {
+        var t = localStorage.getItem('sylo:v2:theme');
+        if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

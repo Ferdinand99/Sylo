@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom';
 import { getGuilds } from '../api.js';
-import { readLastGuildId, writeLastGuildId } from '../util.js';
+import { readLastGuildId, writeLastGuildId, readTheme, writeTheme } from '../util.js';
 import { OverviewProvider } from '../OverviewContext.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
+import ThemeToggle from './ThemeToggle.jsx';
 
 // Top-level layout for every V2 page: topbar (brand, server switcher — kept
 // out of the sidebar per request, it's app-wide not tied to one guild page —
@@ -29,7 +30,24 @@ export default function Shell() {
   // Off-canvas sidebar below the 860px breakpoint (see .v2-sidebar in
   // styles.css) — above it this is unused, the sidebar is always visible.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [theme, setTheme] = useState(() => readTheme() ?? 'dark');
   const { pathname } = useLocation();
+
+  // index.html's inline script already set data-theme before first paint for
+  // a saved "light" choice (avoids a flash of dark-then-light) — this just
+  // keeps it in sync as the user toggles, and handles switching back to dark.
+  useEffect(() => {
+    if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((t) => {
+      const next = t === 'light' ? 'dark' : 'light';
+      writeTheme(next);
+      return next;
+    });
+  }
 
   useEffect(() => {
     getGuilds()
@@ -88,6 +106,7 @@ export default function Shell() {
         <a className="v2-classic-link" href="/">
           Back to classic dashboard
         </a>
+        <ThemeToggle theme={theme} onToggle={toggleTheme} />
       </header>
       <OverviewProvider guildId={lastGuildId}>
         <div className="v2-body">
