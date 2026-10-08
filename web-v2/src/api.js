@@ -57,6 +57,8 @@ export const getGuilds = () => apiFetch('/api/v2/guilds').then((d) => d.guilds);
 export const getOverview = (guildId) => apiFetch(`/api/v2/guilds/${guildId}/overview`);
 export const setModuleEnabled = (guildId, moduleId, enabled) =>
   postJson(`/api/v2/guilds/${guildId}/modules/${moduleId}`, { enabled });
+export const setModulesEnabledBulk = (guildId, ids, enabled) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/bulk`, { ids, enabled });
 // Generic per-module config load/save — every module's V2 form (web-v2/src/
 // moduleForms/) uses these same two calls, one dedicated backend route per
 // module (see v2Api.js's "Per-module config" section) behind them.

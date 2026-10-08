@@ -462,6 +462,29 @@ a:hover {
   outline: none;
   border-color: var(--accent);
 }
+/* The Overview page's search bar gains a "Select" button alongside it for
+   bulk enable/disable — the input gives up its own bottom margin to the
+   row wrapper so the button stays vertically centered with it. */
+.v2-search-row {
+  margin-bottom: 16px;
+}
+.v2-search-row .v2-search {
+  flex: 1;
+  margin-bottom: 0;
+}
+.v2-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.v2-row-pick {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 
 .v2-group {
   margin-bottom: 22px;

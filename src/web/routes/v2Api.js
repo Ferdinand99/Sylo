@@ -289,6 +289,44 @@ router.get(
   })
 );
 
+// Bulk enable/disable from the overview page's "select mode" — mirrors
+// guilds.js's own /modules/bulk route (same per-module side effects as a
+// single toggle, just looped). Registered before the `:moduleId` route
+// below so "bulk" isn't read as a module id.
+router.post(
+  '/guilds/:guildId/modules/bulk',
+  asyncHandler(async (req, res) => {
+    const ids = [...new Set((Array.isArray(req.body.ids) ? req.body.ids : []).filter((id) => getModule(id)))];
+    const enabled = Boolean(req.body.enabled);
+    for (const id of ids) {
+      await setGuildModule(req.guild.id, id, { enabled });
+      if (id === 'custom-commands') {
+        syncGuildCustomCommands(req.guild).catch((err) =>
+          log.error('custom-commands', 'sync after bulk toggle failed:', err.message)
+        );
+      }
+      if (id === 'invite-tracker' && enabled) {
+        primeInviteCache(req.guild).catch((err) =>
+          log.error('invite-tracker', 'cache prime after bulk enable failed:', err.message)
+        );
+      }
+      if (id === 'automod') {
+        const cfg = normaliseAutomodConfig((await getGuildModule(req.guild.id, 'automod')).config);
+        const target = enabled ? cfg : { ...cfg, native: { ...cfg.native, enabled: false } };
+        syncGuildAutomod(req.guild, target).catch((err) =>
+          log.error('automod', 'native sync after bulk toggle failed:', err.message)
+        );
+      }
+    }
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:bulk',
+      detail: `${enabled ? 'enabled' : 'disabled'} ${ids.length} module(s)`,
+    });
+    res.json({ ok: true, count: ids.length, enabled });
+  })
+);
+
 // Toggle a module on/off — mirrors guilds.js:2671-2721 (minus the htmx
 // branch, this is a plain JSON API). Same per-module side effects on
 // enable/disable as V1: re-sync custom commands, prime the invite-tracker

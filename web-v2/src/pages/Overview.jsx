@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { setModuleEnabled, ApiError } from '../api.js';
+import { setModuleEnabled, setModulesEnabledBulk, ApiError } from '../api.js';
 import { useOverview } from '../OverviewContext.jsx';
 import { hasV2Page, v2Href } from '../moduleForms/index.js';
 
@@ -48,7 +48,7 @@ function ModuleTitle({ card, guildId }) {
   );
 }
 
-function ModuleRow({ card, guildId, busy, onToggle }) {
+function ModuleRow({ card, guildId, busy, onToggle, selecting, picked, onPick }) {
   if (!card.hasToggle) {
     const rowContent = (
       <>
@@ -87,13 +87,23 @@ function ModuleRow({ card, guildId, busy, onToggle }) {
           </p>
         ) : null}
       </div>
-      <button
-        type="button"
-        className={`v2-toggle${card.enabled ? ' is-on' : ''}`}
-        aria-label={card.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}
-        disabled={busy || blocked}
-        onClick={() => onToggle(card.id, !card.enabled)}
-      />
+      {selecting ? (
+        <input
+          type="checkbox"
+          className="v2-row-pick"
+          aria-label={`Select ${card.name}`}
+          checked={picked}
+          onChange={(e) => onPick(card.id, e.target.checked)}
+        />
+      ) : (
+        <button
+          type="button"
+          className={`v2-toggle${card.enabled ? ' is-on' : ''}`}
+          aria-label={card.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}
+          disabled={busy || blocked}
+          onClick={() => onToggle(card.id, !card.enabled)}
+        />
+      )}
     </div>
   );
 }
@@ -102,6 +112,9 @@ export default function Overview() {
   const { guildId } = useParams();
   const [query, setQuery] = useState('');
   const [togglingId, setTogglingId] = useState(null);
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   const { data, loading, error, setData } = useOverview();
 
   const filteredGroups = useMemo(() => {
@@ -153,6 +166,40 @@ export default function Overview() {
     }
   }
 
+  function toggleSelecting() {
+    setSelecting((s) => !s);
+    setPicked(new Set());
+  }
+  function onPick(moduleId, on) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(moduleId);
+      else next.delete(moduleId);
+      return next;
+    });
+  }
+  async function applyBulk(enabled) {
+    if (!picked.size || bulkBusy) return;
+    setBulkBusy(true);
+    try {
+      const ids = [...picked];
+      await setModulesEnabledBulk(guildId, ids, enabled);
+      setData((d) => ({
+        ...d,
+        groups: d.groups.map((g) => ({
+          ...g,
+          cards: g.cards.map((c) => (ids.includes(c.id) ? { ...c, enabled } : c)),
+        })),
+      }));
+      setSelecting(false);
+      setPicked(new Set());
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   const { guild, groups, openTickets, openAppeals } = data;
   const toggleCards = groups.flatMap((g) => g.cards).filter((c) => c.hasToggle);
   const enabledCount = toggleCards.filter((c) => c.enabled).length;
@@ -194,14 +241,41 @@ export default function Overview() {
         </div>
       </div>
 
-      <input
-        className="v2-search"
-        type="search"
-        placeholder="Search modules…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        aria-label="Search modules"
-      />
+      <div className="v2-field-row v2-search-row">
+        <input
+          className="v2-search"
+          type="search"
+          placeholder="Search modules…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search modules"
+        />
+        <button type="button" className="v2-btn-ghost" onClick={toggleSelecting}>
+          {selecting ? 'Cancel' : 'Select'}
+        </button>
+      </div>
+
+      {selecting ? (
+        <div className="v2-bulk-bar">
+          <span className="v2-field-hint">{picked.size} selected</span>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            disabled={!picked.size || bulkBusy}
+            onClick={() => applyBulk(true)}
+          >
+            {bulkBusy ? 'Working…' : 'Enable'}
+          </button>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            disabled={!picked.size || bulkBusy}
+            onClick={() => applyBulk(false)}
+          >
+            {bulkBusy ? 'Working…' : 'Disable'}
+          </button>
+        </div>
+      ) : null}
 
       {filteredGroups.map((g) => (
         <section key={g.title} className="v2-group">
@@ -214,6 +288,9 @@ export default function Overview() {
                 guildId={guildId}
                 busy={togglingId === card.id}
                 onToggle={onToggle}
+                selecting={selecting}
+                picked={picked.has(card.id)}
+                onPick={onPick}
               />
             ))}
           </div>
