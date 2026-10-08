@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { setModuleEnabled, setModulesEnabledBulk, ApiError } from '../api.js';
 import { useOverview } from '../OverviewContext.jsx';
 import { hasV2Page, v2Href } from '../moduleForms/index.js';
+import { notify } from '../notify.js';
 
 // A module without a V2 page yet gets this tag next to its name, wherever
 // its title is shown — the click still works (falls back to `card.href`,
@@ -160,7 +161,7 @@ export default function Overview() {
         })),
       }));
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setTogglingId(null);
     }
@@ -194,7 +195,7 @@ export default function Overview() {
       setSelecting(false);
       setPicked(new Set());
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setBulkBusy(false);
     }

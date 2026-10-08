@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getInsights, refreshInsights, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { notify } from '../notify.js';
 
 // Same hand-rolled SVG bar/line chart math as V1's insights.ejs, ported
 // 1:1 rather than pulling in a charting library for six small sparkline-
@@ -104,7 +105,7 @@ export default function Insights() {
       const fresh = await getInsights(guildId, range);
       setData(fresh);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setRefreshing(false);
     }

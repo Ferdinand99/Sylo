@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
+import { getModuleConfig, saveModuleConfig, saveAutomodImmunity, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import ChipPicker from '../components/ChipPicker.jsx';
+import { notify } from '../notify.js';
 
 const MODE_LABELS = {
   off: 'Disabled',
@@ -41,9 +42,14 @@ export default function Automod() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [nativeNote, setNativeNote] = useState(null);
+  const [immune, setImmune] = useState([]);
+  const [savingImmune, setSavingImmune] = useState(false);
 
   useEffect(() => {
-    if (data) setForm(toFormConfig(data.config));
+    if (data) {
+      setForm(toFormConfig(data.config));
+      setImmune(data.config.exemptRoles ?? []);
+    }
   }, [data]);
 
   if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
@@ -83,9 +89,22 @@ export default function Automod() {
       setSaved(true);
       if (result.nativeNote) setNativeNote({ text: result.nativeNote, warned: result.nativeWarned });
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onSaveImmunity() {
+    setSavingImmune(true);
+    try {
+      const r = await saveAutomodImmunity(guildId, immune);
+      setImmune(r.exemptRoles);
+      notify('Immunity roles saved.', 'info');
+    } catch (err) {
+      notify(err.message);
+    } finally {
+      setSavingImmune(false);
     }
   }
 
@@ -310,6 +329,18 @@ export default function Automod() {
           ) : null}
         </div>
       </form>
+
+      <h2 className="v2-group-title v2-section-gap">Immunity roles</h2>
+      <p className="v2-field-hint">
+        Members with one of these roles are never touched by auto-moderation or the warning auto-actions.
+        Administrators, the server owner and bot-master roles are always immune.
+      </p>
+      <div className="v2-field">
+        <ChipPicker kind="role" items={data.roles} value={immune} onChange={setImmune} />
+      </div>
+      <button type="button" className="v2-btn-primary" disabled={savingImmune} onClick={onSaveImmunity}>
+        {savingImmune ? 'Saving…' : 'Save immunity roles'}
+      </button>
     </>
   );
 }

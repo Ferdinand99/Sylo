@@ -6,6 +6,8 @@ import { OverviewProvider } from '../OverviewContext.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import Toasts from './Toasts.jsx';
+import useLabelLinks from './useLabelLinks.js';
 
 // Top-level layout for every V2 page: topbar (brand, server switcher — kept
 // out of the sidebar per request, it's app-wide not tied to one guild page —
@@ -13,6 +15,7 @@ import ThemeToggle from './ThemeToggle.jsx';
 // Fetches the guild list once and hands it down via Outlet context so
 // GuildPicker doesn't need its own separate fetch of the same list.
 export default function Shell() {
+  useLabelLinks();
   const [state, setState] = useState({ loading: true, guilds: [], error: null });
   const { guildId } = useParams();
   // The server switcher and sidebar links need a guild to point at even on
@@ -116,6 +119,7 @@ export default function Shell() {
           </main>
         </div>
       </OverviewProvider>
+      <Toasts />
     </div>
   );
 }

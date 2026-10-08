@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, endGiveaway, rerollGiveaway, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { notify } from '../notify.js';
 
 function rel(ms) {
   const s = Math.round((ms - Date.now()) / 1000);
@@ -59,7 +60,7 @@ export default function Giveaways() {
       setForm(config);
       setSaved(true);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
@@ -72,7 +73,7 @@ export default function Giveaways() {
       const { giveaways } = await endGiveaway(guildId, id);
       setData((d) => ({ ...d, giveaways }));
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setBusyId(null);
     }
@@ -85,7 +86,7 @@ export default function Giveaways() {
       const { giveaways } = await rerollGiveaway(guildId, id, rerollCounts[id] || 1);
       setData((d) => ({ ...d, giveaways }));
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setBusyId(null);
     }

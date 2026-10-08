@@ -199,3 +199,39 @@ export const saveCustomCommand = (guildId, body) =>
   postJson(`/api/v2/guilds/${guildId}/modules/custom-commands/cmd`, body);
 export const deleteCustomCommand = (guildId, id) =>
   postJson(`/api/v2/guilds/${guildId}/modules/custom-commands/cmd/${id}/delete`, {});
+
+// Staff pages that used to exist only in V1 (see src/web/routes/v2Staff.js).
+const g = (guildId) => `/api/v2/guilds/${guildId}`;
+export const getTickets = (guildId) => apiFetch(`${g(guildId)}/tickets`);
+export const getTicket = (guildId, id) => apiFetch(`${g(guildId)}/tickets/${id}`);
+export const pollTicket = (guildId, id, after) =>
+  apiFetch(`${g(guildId)}/tickets/${id}/messages?after=${after}`);
+export const replyToTicket = (guildId, id, content) =>
+  postJson(`${g(guildId)}/tickets/${id}/reply`, { content });
+export const closeTicket = (guildId, id, content) =>
+  postJson(`${g(guildId)}/tickets/${id}/close`, { content });
+export const ticketTranscriptUrl = (guildId, id) => `${g(guildId)}/tickets/${id}/transcript`;
+
+export const getAppealsReview = (guildId) => apiFetch(`${g(guildId)}/appeals`);
+export const decideAppeal = (guildId, id, decision, reason) =>
+  postJson(`${g(guildId)}/appeals/${id}/decide`, { decision, reason });
+
+export const getCommands = (guildId) => apiFetch(`${g(guildId)}/commands`);
+export const saveCommand = (guildId, name, body) => postJson(`${g(guildId)}/commands/${name}`, body);
+
+export const getModeration = (guildId) => apiFetch(`${g(guildId)}/moderation`);
+export const unbanMember = (guildId, userId) => postJson(`${g(guildId)}/moderation/unban`, { userId });
+export const lockAllChannels = (guildId) => postJson(`${g(guildId)}/moderation/lock-all`, {});
+export const unlockAllChannels = (guildId) => postJson(`${g(guildId)}/moderation/unlock-all`, {});
+export const unlockChannel = (guildId, channelId) =>
+  postJson(`${g(guildId)}/moderation/unlock-channel`, { channelId });
+export const warnMember = (guildId, userId, reason) =>
+  postJson(`${g(guildId)}/moderation/warn`, { userId, reason });
+export const clearMemberWarnings = (guildId, userId) =>
+  postJson(`${g(guildId)}/moderation/warnings/clear`, { userId });
+export const editCaseReason = (guildId, n, reason) =>
+  postJson(`${g(guildId)}/moderation/cases/${n}/reason`, { reason });
+export const setCaseDeleted = (guildId, n, deleted) =>
+  postJson(`${g(guildId)}/moderation/cases/${n}/${deleted ? 'delete' : 'restore'}`, {});
+export const saveAutomodImmunity = (guildId, exemptRoles) =>
+  postJson(`/api/v2/guilds/${guildId}/modules/automod/immunity`, { exemptRoles });

@@ -9,6 +9,7 @@ import {
   ApiError,
 } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { notify } from '../notify.js';
 
 export default function Counting() {
   const { guildId } = useParams();
@@ -55,7 +56,7 @@ export default function Counting() {
       setForm(config);
       setSaved(true);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
@@ -63,13 +64,13 @@ export default function Counting() {
 
   async function onSetCount() {
     const n = Number(countInput);
-    if (!Number.isInteger(n) || n < 0) return alert('Enter a whole number, 0 or higher.');
+    if (!Number.isInteger(n) || n < 0) return notify('Enter a whole number, 0 or higher.');
     setCountBusy(true);
     try {
       const { state } = await setCountingCount(guildId, n);
       setData((d) => ({ ...d, state }));
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setCountBusy(false);
     }
@@ -83,7 +84,7 @@ export default function Counting() {
       setData((d) => ({ ...d, state }));
       setCountInput('0');
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setCountBusy(false);
     }
@@ -95,7 +96,7 @@ export default function Counting() {
       await releaseCountingPenalty(guildId, userId);
       setData((d) => ({ ...d, penalties: d.penalties.filter((p) => p.userId !== userId) }));
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     } finally {
       setReleasing(null);
     }
