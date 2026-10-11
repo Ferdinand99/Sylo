@@ -112,11 +112,13 @@ const CATEGORIES = [
 export async function buildSidebar(req, gid = null) {
   const path = req.path;
   const guild = gid ? runtime.client?.guilds.cache.get(gid) : null;
-  // Health exposes cross-server data and DB backup/restore — hide the link from
-  // anyone who isn't a bot operator rather than showing a link that 403s.
+  // Health exposes cross-server data and DB backup/restore, and Personalizer
+  // changes the bot's identity everywhere it's installed — hide both links
+  // from anyone who isn't a bot operator rather than showing a link that 403s.
   const isOwner = !config.authEnabled || config.ownerIds.includes(req.session?.user?.id);
+  const ownerOnly = new Set(['health', 'personalizer']);
 
-  const top = TOP.filter((t) => t.key !== 'health' || isOwner).map((t) => {
+  const top = TOP.filter((t) => !ownerOnly.has(t.key) || isOwner).map((t) => {
     const href = t.href ?? (guild ? t.guild(gid) : t.noGuild);
     let active;
     if (t.key === 'dashboard') active = path === '/' || (!!guild && path === `/guilds/${gid}/overview`);

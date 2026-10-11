@@ -1959,11 +1959,10 @@ router.post(
 );
 
 // --- Bot Personalizer (mirrors settings.js) — bot-wide, not per-guild ------
-// Gated by the app-wide requireAuth only, same as V1's /settings route: no
-// requireGuildAdmin/requireOwner here, matching V1's existing access level
-// exactly rather than tightening or loosening it.
+// Owner only: this changes the bot's identity everywhere it's installed, not
+// just in the admin's own guild, so requireGuildAdmin isn't strict enough.
 
-router.get('/personalizer', (req, res) => {
+router.get('/personalizer', requireOwner, (req, res) => {
   const u = runtime.client?.user ?? null;
   res.json({
     bot: u
@@ -1980,6 +1979,7 @@ router.get('/personalizer', (req, res) => {
 
 router.get(
   '/personalizer/presence',
+  requireOwner,
   asyncHandler(async (req, res) => {
     res.json({ presence: await getPresenceConfig(), types: PRESENCE_TYPES, statuses: PRESENCE_STATUSES });
   })
@@ -1987,6 +1987,7 @@ router.get(
 
 router.post(
   '/personalizer/identity',
+  requireOwner,
   asyncHandler(async (req, res) => {
     const u = runtime.client?.user;
     if (!u) return res.status(503).json({ error: 'The bot is not connected yet — try again in a moment.' });
@@ -2049,6 +2050,7 @@ router.post(
 
 router.post(
   '/personalizer/presence',
+  requireOwner,
   asyncHandler(async (req, res) => {
     const presence = await setPresenceConfig({
       status: req.body.status,
