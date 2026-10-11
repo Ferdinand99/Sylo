@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { ChannelType } from 'discord.js';
 import { AudioPlayerStatus, VoiceConnectionStatus, StreamType } from '@discordjs/voice';
 import { config } from '../src/config.js';
-import { playSound, stopSound, soundboardStatus } from '../src/modules/soundboard.js';
+import { playSound, stopSound, soundboardStatus, joinSoundboard } from '../src/modules/soundboard.js';
 const clipId = '11111111-1111-4111-8111-111111111111';
 let count = 940000000000000001n;
 async function environment(mode) {
@@ -65,6 +65,7 @@ async function environment(mode) {
     },
   };
   return {
+    connection,
     guild,
     channelId,
     voice,
@@ -103,6 +104,68 @@ test('join and player errors both destroy the voice connection', async () => {
     assert.equal(env.destroyed, 1);
     assert.deepEqual(soundboardStatus(env.guild.id), { playing: false });
   }
+});
+test('manual join stays idle and repeated clips reuse the connection without listener leaks', async (t) => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const env = await environment('idle');
+  let joins = 0;
+  const original = env.voice.joinVoiceChannel;
+  env.voice.joinVoiceChannel = (options) => {
+    joins++;
+    return original(options);
+  };
+  await joinSoundboard(env.guild, env.channelId, env.voice);
+  assert.equal(soundboardStatus(env.guild.id).connected, true);
+  assert.equal(soundboardStatus(env.guild.id).playing, false);
+  for (let i = 0; i < 12; i++) {
+    now += 3000;
+    await playSound(env.guild, clipId, env.channelId, env.voice);
+  }
+  assert.equal(joins, 1);
+  assert.equal(env.destroyed, 0);
+  assert.equal(env.connection.listenerCount(VoiceConnectionStatus.Disconnected), 1);
+  assert.equal(env.connection.listenerCount(VoiceConnectionStatus.Destroyed), 1);
+  assert.equal(env.connection.listenerCount('error'), 1);
+  stopSound(env.guild.id);
+  assert.equal(env.destroyed, 1);
+  assert.deepEqual(soundboardStatus(env.guild.id), { playing: false });
+});
+test('stay-after-play mode retains the connection until explicitly disconnected', async () => {
+  const env = await environment('idle');
+  await playSound(env.guild, clipId, env.channelId, env.voice, true);
+  assert.equal(env.destroyed, 0);
+  assert.equal(soundboardStatus(env.guild.id).connected, true);
+  await assert.rejects(joinSoundboard(env.guild, '940000000000000099', env.voice), /innym kanale/);
+  env.connection.emit(VoiceConnectionStatus.Disconnected);
+  assert.equal(env.destroyed, 1);
+  assert.deepEqual(soundboardStatus(env.guild.id), { playing: false });
+});
+test('disconnect while joining cancels the held connection without leaving an orphan', async () => {
+  const env = await environment('idle');
+  let complete, entered;
+  const started = new Promise((resolve) => {
+    entered = resolve;
+  });
+  env.voice.entersState = () => {
+    entered();
+    return new Promise((resolve) => {
+      complete = resolve;
+    });
+  };
+  const job = joinSoundboard(env.guild, env.channelId, env.voice);
+  await started;
+  stopSound(env.guild.id);
+  complete();
+  await assert.rejects(job, /anulowane/);
+  assert.equal(env.destroyed, 1);
+  assert.deepEqual(soundboardStatus(env.guild.id), { playing: false });
+});
+test('failed playback removes a retained connection', async () => {
+  const env = await environment('error');
+  await assert.rejects(playSound(env.guild, clipId, env.channelId, env.voice, true), /Nie udało/);
+  assert.equal(env.destroyed, 1);
+  assert.deepEqual(soundboardStatus(env.guild.id), { playing: false });
 });
 test.after(async () => {
   await rm(join(dirname(config.databasePath), 'soundboard'), { recursive: true, force: true });

@@ -24,6 +24,7 @@ export const MAX_SECONDS = 30;
 const PCM_RATE = 48000 * 2 * 2;
 const locks = new Map();
 const sessions = new Map();
+const heldConnections = new Map();
 const lastPlay = new Map();
 let converting = false;
 
@@ -227,10 +228,33 @@ export async function deleteSound(guildId, id) {
 }
 export function soundboardStatus(guildId) {
   const active = sessions.get(guildId);
-  return active ? { playing: true, name: active.name, channelId: active.channelId } : { playing: false };
+  const held = heldConnections.get(guildId);
+  if (active)
+    return {
+      playing: true,
+      name: active.name,
+      channelId: active.channelId,
+      connected: active.connection?.state.status === VoiceConnectionStatus.Ready,
+    };
+  if (held)
+    return {
+      playing: false,
+      connected: held.connection?.state.status === VoiceConnectionStatus.Ready,
+      joining: !held.connection,
+      channelId: held.channelId,
+    };
+  return { playing: false };
+}
+function releaseHeld(guildId) {
+  const held = heldConnections.get(guildId);
+  if (!held) return;
+  held.cancelled = true;
+  heldConnections.delete(guildId);
+  if (held.connection?.state.status !== VoiceConnectionStatus.Destroyed) held.connection?.destroy();
 }
 export function stopSound(guildId) {
   sessions.get(guildId)?.stop();
+  releaseHeld(guildId);
 }
 
 const voiceApi = {
@@ -240,19 +264,83 @@ const voiceApi = {
   entersState,
   getVoiceConnection,
 };
-export async function playSound(guild, id, channelId, voice = voiceApi) {
+function atConnectionLimit(guildId) {
+  const guilds = new Set([...sessions.keys(), ...heldConnections.keys()]);
+  return !guilds.has(guildId) && guilds.size >= 3;
+}
+async function checkVoiceChannel(guild, channelId) {
+  const channel = await guild.channels.fetch(channelId).catch(() => null);
+  const me = guild.members.me ?? (await guild.members.fetchMe());
+  if (
+    channel?.type !== ChannelType.GuildVoice ||
+    !channel
+      .permissionsFor(me)
+      ?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak])
+  )
+    throw new SoundboardError('Wybierz kanał głosowy, na którym bot może się połączyć i mówić.');
+  if (!channel.joinable && guild.members.me?.voice?.channelId !== channelId)
+    throw new SoundboardError('Kanał jest pełny lub niedostępny dla bota.');
+}
+async function connectHeld(guild, channelId, voice) {
+  const existing = heldConnections.get(guild.id);
+  if (existing) {
+    if (existing.channelId !== channelId)
+      throw new SoundboardError('Bot pozostaje na innym kanale. Najpierw kliknij „Rozłącz”.', 409);
+    if (!existing.connection || existing.connection.state.status !== VoiceConnectionStatus.Ready)
+      throw new SoundboardError('Bot jeszcze się łączy. Spróbuj za chwilę.', 409);
+    return existing.connection;
+  }
+  if (voice.getVoiceConnection(guild.id))
+    throw new SoundboardError('Bot ma już inne połączenie głosowe.', 409);
+  if (atConnectionLimit(guild.id))
+    throw new SoundboardError('Bot jest już połączony na trzech serwerach.', 409);
+  const held = { channelId, cancelled: false };
+  heldConnections.set(guild.id, held);
+  try {
+    await checkVoiceChannel(guild, channelId);
+    if (held.cancelled) throw new SoundboardError('Dołączanie zostało anulowane.');
+    held.connection = voice.joinVoiceChannel({
+      channelId,
+      guildId: guild.id,
+      adapterCreator: guild.voiceAdapterCreator,
+      selfDeaf: true,
+      selfMute: false,
+    });
+    const drop = () => {
+      if (heldConnections.get(guild.id) === held) releaseHeld(guild.id);
+    };
+    held.connection.on('error', drop);
+    held.connection.on(VoiceConnectionStatus.Disconnected, drop);
+    held.connection.on(VoiceConnectionStatus.Destroyed, () => {
+      if (heldConnections.get(guild.id) === held) heldConnections.delete(guild.id);
+    });
+    await voice.entersState(held.connection, VoiceConnectionStatus.Ready, 15000);
+    if (held.cancelled) throw new SoundboardError('Dołączanie zostało anulowane.');
+    return held.connection;
+  } catch (error) {
+    if (heldConnections.get(guild.id) === held) releaseHeld(guild.id);
+    if (error instanceof SoundboardError) throw error;
+    throw new SoundboardError('Nie udało się dołączyć do kanału głosowego.', 503);
+  }
+}
+export async function joinSoundboard(guild, channelId, voice = voiceApi) {
+  if (sessions.has(guild.id)) throw new SoundboardError('Najpierw zatrzymaj odtwarzanie klipu.', 409);
+  await connectHeld(guild, channelId, voice);
+}
+export async function playSound(guild, id, channelId, voice = voiceApi, keepConnected = false) {
   if (sessions.has(guild.id)) throw new SoundboardError('Bot już odtwarza klip na tym serwerze.', 409);
-  if (sessions.size >= 3)
+  if (atConnectionLimit(guild.id))
     throw new SoundboardError('Bot odtwarza już na trzech serwerach. Spróbuj za chwilę.', 409);
   if (Date.now() - (lastPlay.get(guild.id) ?? 0) < 2000)
     throw new SoundboardError('Odczekaj 2 sekundy między klipami.', 429);
-  if (voice.getVoiceConnection(guild.id))
+  if (voice.getVoiceConnection(guild.id) && !heldConnections.has(guild.id))
     throw new SoundboardError('Bot ma już inne połączenie głosowe.', 409);
   const session = {
     clipId: id,
     channelId,
     name: '',
     stopped: false,
+    failed: false,
     stop: () => {
       session.stopped = true;
       session.player?.stop(true);
@@ -265,26 +353,27 @@ export async function playSound(guild, id, channelId, voice = voiceApi) {
     const clip = (await listSounds(guild.id)).find((item) => item.id === id);
     if (!clip) throw new SoundboardError('Nie znaleziono klipu.', 404);
     session.name = clip.name;
-    const channel = await guild.channels.fetch(channelId).catch(() => null);
-    const me = guild.members.me ?? (await guild.members.fetchMe());
-    if (
-      channel?.type !== ChannelType.GuildVoice ||
-      !channel
-        .permissionsFor(me)
-        ?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak])
-    )
-      throw new SoundboardError('Wybierz kanał głosowy, na którym bot może się połączyć i mówić.');
-    if (!channel.joinable) throw new SoundboardError('Kanał jest pełny lub niedostępny dla bota.');
+    await checkVoiceChannel(guild, channelId);
     if (session.stopped) return;
-    const connection = voice.joinVoiceChannel({
-      channelId,
-      guildId: guild.id,
-      adapterCreator: guild.voiceAdapterCreator,
-      selfDeaf: true,
-      selfMute: false,
-    });
+    const held = heldConnections.get(guild.id);
+    if (held && held.channelId !== channelId)
+      throw new SoundboardError('Bot pozostaje na innym kanale. Najpierw kliknij „Rozłącz”.', 409);
+    const connection =
+      held || keepConnected
+        ? await connectHeld(guild, channelId, voice)
+        : voice.joinVoiceChannel({
+            channelId,
+            guildId: guild.id,
+            adapterCreator: guild.voiceAdapterCreator,
+            selfDeaf: true,
+            selfMute: false,
+          });
     session.connection = connection;
-    connection.on('error', () => session.player?.stop(true));
+    const onConnectionError = () => {
+      session.failed = true;
+    };
+    session.onConnectionError = onConnectionError;
+    connection.on('error', onConnectionError);
     await voice.entersState(connection, VoiceConnectionStatus.Ready, 15000);
     if (session.stopped) return;
     const player = voice.createAudioPlayer();
@@ -292,20 +381,36 @@ export async function playSound(guild, id, channelId, voice = voiceApi) {
     connection.subscribe(player);
     const resource = voice.createAudioResource(clipFile(guild.id, id), { inputType: StreamType.OggOpus });
     await new Promise((done, reject) => {
-      const timer = setTimeout(() => reject(new SoundboardError('Przekroczono czas odtwarzania.')), 35000);
+      let settled = false;
+      const onIdle = () => finish();
+      const onDisconnected = () => finish(new SoundboardError('Połączenie głosowe zostało przerwane.'));
+      const onDestroyed = () => finish(new SoundboardError('Bot został rozłączony.'));
       const finish = (error) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
+        player.off('error', finish);
+        player.off(AudioPlayerStatus.Idle, onIdle);
+        connection.off('error', finish);
+        connection.off(VoiceConnectionStatus.Disconnected, onDisconnected);
+        connection.off(VoiceConnectionStatus.Destroyed, onDestroyed);
         if (error) reject(error);
         else done();
       };
+      const timer = setTimeout(() => finish(new SoundboardError('Przekroczono czas odtwarzania.')), 35000);
       player.once('error', finish);
-      player.once(AudioPlayerStatus.Idle, () => finish());
-      connection.once(VoiceConnectionStatus.Disconnected, () =>
-        finish(new SoundboardError('Połączenie głosowe zostało przerwane.'))
-      );
-      player.play(resource);
+      player.once(AudioPlayerStatus.Idle, onIdle);
+      connection.once('error', finish);
+      connection.once(VoiceConnectionStatus.Disconnected, onDisconnected);
+      connection.once(VoiceConnectionStatus.Destroyed, onDestroyed);
+      try {
+        player.play(resource);
+      } catch (error) {
+        finish(error);
+      }
     });
   } catch (error) {
+    session.failed = true;
     if (!session.stopped) {
       if (error instanceof SoundboardError) throw error;
       throw new SoundboardError(
@@ -315,7 +420,13 @@ export async function playSound(guild, id, channelId, voice = voiceApi) {
     }
   } finally {
     session.player?.stop(true);
-    if (session.connection?.state.status !== VoiceConnectionStatus.Destroyed) session.connection?.destroy();
+    if (session.onConnectionError) session.connection?.off('error', session.onConnectionError);
+    if (session.stopped || session.failed) releaseHeld(guild.id);
+    if (
+      !heldConnections.has(guild.id) &&
+      session.connection?.state.status !== VoiceConnectionStatus.Destroyed
+    )
+      session.connection?.destroy();
     sessions.delete(guild.id);
   }
 }

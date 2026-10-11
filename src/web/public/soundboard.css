@@ -54,3 +54,4 @@
 .sb-clip:hover {
   border-color: var(--border-strong);
 }
+.sb-stay { display: block; margin: 16px 0; }

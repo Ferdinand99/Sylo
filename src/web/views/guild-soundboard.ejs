@@ -1,15 +1,17 @@
 <%- include('partials/header', { title: `Sylo — Dźwięki — ${guild.name}` }) %>
 <section id="soundboard" data-base="/guilds/<%= guild.id %>/soundboard" hx-boost="false">
   <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'mic', title: 'Dźwięki na kanale głosowym', lg: true }) %></div>
-  <p class="muted">Wybierz kanał i kliknij klip. Bot dołączy, odtworzy dźwięk i wyjdzie. Bez nagrywania rozmów.</p>
+  <p class="muted">Wybierz kanał i kliknij klip. Możesz też zostawić bota na VC między dźwiękami, np. do familiady. Bez nagrywania rozmów.</p>
   <div class="panel sb-controls">
     <label>Kanał głosowy
       <select id="sb-channel"><option value="">Wybierz kanał…</option>
       <% voiceChannels.forEach(function(channel) { %><option value="<%= channel.id %>"><%= channel.name %></option><% }) %>
       </select>
     </label>
+    <button type="button" class="btn" id="sb-join">Dołącz i zostań</button>
     <button type="button" class="btn danger" id="sb-stop">Zatrzymaj i rozłącz</button>
   </div>
+  <label class="sb-stay"><input type="checkbox" id="sb-stay"> Pozostań na VC po odtworzeniu klipu</label>
   <p id="sb-status" role="status" aria-live="polite"></p>
   <div class="sb-grid">
     <% clips.forEach(function(clip) { %>

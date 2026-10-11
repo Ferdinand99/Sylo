@@ -5,9 +5,11 @@
   const base = root.dataset.base;
   const channel = root.querySelector('#sb-channel');
   const status = root.querySelector('#sb-status');
+  const stay = root.querySelector('#sb-stay');
   const key = `sylo:soundboard:${base}:channel`;
   try {
     channel.value = localStorage.getItem(key) || '';
+    stay.checked = localStorage.getItem(key + ':stay') === 'true';
   } catch {
     /* Storage may be disabled by the browser. */
   }
@@ -18,10 +20,31 @@
       /* Storage may be disabled by the browser. */
     }
   });
+  stay.addEventListener('change', () => {
+    try {
+      localStorage.setItem(key + ':stay', String(stay.checked));
+    } catch {
+      /* Storage may be disabled. */
+    }
+  });
   const notice = (text, error = false) => {
     status.textContent = text;
     status.dataset.error = String(error);
   };
+  fetch(base + '/status')
+    .then((response) => (response.ok ? response.json() : null))
+    .then((state) => {
+      if (!state?.connected || status.textContent) return;
+      channel.value = state.channelId;
+      notice(
+        state.playing
+          ? 'Bot odtwarza klip na VC.'
+          : 'Bot pozostaje na VC. Kliknij klip lub „Zatrzymaj i rozłącz”.'
+      );
+    })
+    .catch(() => {
+      /* Controls remain usable if the initial status check fails. */
+    });
   async function request(path, body, raw = false) {
     const response = await fetch(base + path, {
       method: 'POST',
@@ -44,8 +67,15 @@
       notice('Bot dołącza i odtwarza klip…');
       button.disabled = true;
       try {
-        await request(`/${button.closest('[data-id]').dataset.id}/play`, { channelId: channel.value });
-        notice('Zakończono odtwarzanie. Bot się rozłączył.');
+        const result = await request(`/${button.closest('[data-id]').dataset.id}/play`, {
+          channelId: channel.value,
+          keepConnected: stay.checked,
+        });
+        notice(
+          result.connected
+            ? 'Zakończono odtwarzanie. Bot pozostaje na VC.'
+            : 'Zakończono odtwarzanie. Bot się rozłączył.'
+        );
       } catch (error) {
         notice(error.message, true);
       } finally {
@@ -53,6 +83,22 @@
       }
     })
   );
+  root.querySelector('#sb-join').addEventListener('click', async (event) => {
+    if (!channel.value) return notice('Najpierw wybierz kanał głosowy.', true);
+    event.currentTarget.disabled = true;
+    const button = event.currentTarget;
+    notice('Bot dołącza do kanału…');
+    try {
+      await request('/join', { channelId: channel.value });
+      stay.checked = true;
+      stay.dispatchEvent(new Event('change'));
+      notice('Bot pozostaje na VC. Możesz puszczać kolejne klipy lub kliknąć „Zatrzymaj i rozłącz”.');
+    } catch (error) {
+      notice(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
   root.querySelector('#sb-stop').addEventListener('click', async () => {
     try {
       await request('/stop');

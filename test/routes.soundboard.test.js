@@ -20,6 +20,8 @@ test('soundboard is linked in V1 and offers voice channels only', async () => {
   assert.match(html, /Dźwięki na VC/);
   assert.match(html, /Test VC/);
   assert.match(html, /id="sb-upload"/);
+  assert.match(html, /Dołącz i zostań/);
+  assert.match(html, /id="sb-stay"/);
 });
 test('cross-origin uploads are blocked before decoding and bad audio is rejected', async () => {
   const url = `${app.base}/guilds/${app.guild.id}/soundboard/upload?name=Test&filename=test.mp3`;
@@ -46,4 +48,6 @@ test('unknown guilds and missing channel selections cannot start playback', asyn
   });
   assert.equal(res.status, 400);
   assert.deepEqual(await res.json(), { error: 'Wybierz kanał głosowy.' });
+  const join = await fetch(`${app.base}/guilds/${app.guild.id}/soundboard/join`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  assert.equal(join.status, 400);
 });

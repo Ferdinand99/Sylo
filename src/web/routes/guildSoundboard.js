@@ -11,6 +11,7 @@ import {
   uploadSound,
   deleteSound,
   playSound,
+  joinSoundboard,
   stopSound,
   soundboardStatus,
   SoundboardError,
@@ -79,7 +80,15 @@ router.post(
   '/:id/play',
   asyncHandler(async (req, res) => {
     if (!/^\d{17,20}$/.test(req.body.channelId || '')) throw new SoundboardError('Wybierz kanał głosowy.');
-    await playSound(req.guild, req.params.id, req.body.channelId);
+    await playSound(req.guild, req.params.id, req.body.channelId, undefined, req.body.keepConnected === true);
+    res.json({ ok: true, connected: soundboardStatus(req.guild.id).connected === true });
+  })
+);
+router.post(
+  '/join',
+  asyncHandler(async (req, res) => {
+    if (!/^\d{17,20}$/.test(req.body.channelId || '')) throw new SoundboardError('Wybierz kanał głosowy.');
+    await joinSoundboard(req.guild, req.body.channelId);
     res.json({ ok: true });
   })
 );

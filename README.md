@@ -49,7 +49,8 @@ This fork extends the upstream bot with features configured from the dashboard:
   messages and conversation content are preserved.
 - **Dashboard soundboard**: upload short audio clips, choose a voice channel and
   click to join, play and disconnect. Per-server libraries, remembered channel,
-  stop/delete controls and upload/playback limits. [Setup](docs/soundboard.md).
+  stop/delete controls, an optional stay-on-VC mode for game shows, and
+  upload/playback limits. [Setup](docs/soundboard.md).
 - **Separate log destinations** for individual events, including sent messages
   with attachment links/image previews and voice joins, leaves and moves.
   Message logging is opt-in and needs Message Content Intent. No voice audio

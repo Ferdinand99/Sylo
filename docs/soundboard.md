@@ -6,6 +6,14 @@ Upload an audio file, give it a name, select a normal voice channel and click
 stops an active clip. The selected channel is remembered per server in the browser.
 Stage channels are not supported.
 
+For game shows or repeated sound effects, click **Dołącz i zostań** to keep the
+bot connected without playing anything. **Pozostań na VC po odtworzeniu klipu**
+also keeps the connection after a sound. Later clips reuse that connection;
+**Zatrzymaj i rozłącz** leaves the channel, including during playback or joining.
+To switch channels, disconnect first. This mode lasts until explicitly
+disconnected, the connection fails, or the bot restarts. It does not reconnect
+automatically after a restart and never records or processes microphone audio.
+
 ## Requirements
 
 - Node.js 22.12 or newer (the Pelican Node 22 image is suitable).
@@ -38,7 +46,8 @@ step. Audio is converted to 48 kHz stereo Opus once at upload and streamed witho
 live transcoding. Playback is limited to one clip per guild, three concurrent
 guilds per process and a two-second gap between starts. Voice readiness has a
 15-second deadline and playback a 35-second deadline; errors clean up the
-connection. Existing voice connections are not replaced by the soundboard.
+connection. Up to three guilds may have a connection, including idle retained
+connections. Existing voice connections are not replaced by the soundboard.
 
 The dashboard checks current Manage Server / Administrator or configured
 bot-master roles on every request when OAuth is enabled. Upload/play/delete
