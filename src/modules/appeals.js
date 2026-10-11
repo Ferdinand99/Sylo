@@ -25,6 +25,7 @@ import { ChannelType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
 import { config } from '../config.js';
 import { signToken, verifyToken } from '../lib/signedToken.js';
+import { isPlatformGuildId } from '../lib/platformId.js';
 import { getGuildModule, isModuleEnabled } from '../db/modules.js';
 import { decideAppeal, setAppealInvite } from '../db/appeals.js';
 import { sendToChannel } from './lib/send.js';
@@ -82,7 +83,7 @@ export function verifyAppealToken(token) {
   const parts = verifyToken(token, 2);
   if (!parts) return null;
   const [guildId, userId] = parts;
-  if (!/^\d{17,20}$/.test(guildId) || !/^\d{17,20}$/.test(userId)) return null;
+  if (!isPlatformGuildId(guildId) || !/^\d{17,20}$/.test(userId)) return null;
   return { guildId, userId };
 }
 

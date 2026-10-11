@@ -1,10 +1,13 @@
-// Composite guild-id convention: every guild id in application code is
-// "<platform>:<raw id>" (e.g. "discord:123456789012345678"), not a bare
-// snowflake — so a single opaque guildId string can be routed to the right
-// platform's client (src/runtime.js) without any DB schema change. See the
-// architecture plan (docs/superpowers/plans — Fluxer dual-platform support)
-// for the full rationale.
+// Guild-id convention for running on more than one chat platform.
+//
+// A Discord guild id stays a bare snowflake ("123456789012345678") — exactly
+// what it has always been, so every existing DB row, URL, signed token and
+// guilds.cache lookup keeps working untouched. Any other platform's id carries
+// a "<platform>:" prefix ("fluxer:987654321098765432"). Bare therefore always
+// means Discord, and ids from different platforms can never collide.
 export const PLATFORMS = ['discord', 'fluxer'];
+
+const SNOWFLAKE = /^\d{17,20}$/;
 
 /**
  * @param {'discord'|'fluxer'} platform
@@ -13,7 +16,7 @@ export const PLATFORMS = ['discord', 'fluxer'];
  */
 export function makePlatformGuildId(platform, rawId) {
   if (!PLATFORMS.includes(platform)) throw new Error(`Unknown platform: ${platform}`);
-  return `${platform}:${rawId}`;
+  return platform === 'discord' ? rawId : `${platform}:${rawId}`;
 }
 
 /**
@@ -23,10 +26,11 @@ export function makePlatformGuildId(platform, rawId) {
 export function splitPlatformGuildId(value) {
   if (typeof value !== 'string') return null;
   const i = value.indexOf(':');
-  if (i === -1) return null;
+  if (i === -1) return SNOWFLAKE.test(value) ? { platform: 'discord', rawId: value } : null;
   const platform = value.slice(0, i);
   const rawId = value.slice(i + 1);
-  if (!PLATFORMS.includes(platform) || !rawId) return null;
+  // Discord ids are never prefixed, so "discord:<id>" is not a valid form.
+  if (platform === 'discord' || !PLATFORMS.includes(platform) || !SNOWFLAKE.test(rawId)) return null;
   return { platform, rawId };
 }
 

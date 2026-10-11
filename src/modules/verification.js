@@ -19,6 +19,7 @@ import { on } from './dispatch.js';
 import { registerComponent } from '../bot/lib/components.js';
 import { config } from '../config.js';
 import { getGuildModule, setGuildModule, isModuleEnabled } from '../db/modules.js';
+import { isPlatformGuildId } from '../lib/platformId.js';
 import { sendToChannel } from './lib/send.js';
 
 export const VERIFY_MODES = ['button', 'captcha'];
@@ -84,7 +85,7 @@ export function verifyVerifyToken(token) {
     const got = Buffer.from(sigB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
     if (got.length !== expected.length || !timingSafeEqual(got, expected)) return null;
     const [guildId, userId, exp] = body.split('.');
-    if (!/^\d{17,20}$/.test(guildId) || !/^\d{17,20}$/.test(userId)) return null;
+    if (!isPlatformGuildId(guildId) || !/^\d{17,20}$/.test(userId)) return null;
     if (Date.now() > Number(exp)) return null;
     return { guildId, userId };
   } catch {

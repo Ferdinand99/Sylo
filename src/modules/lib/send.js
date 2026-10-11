@@ -1,10 +1,16 @@
 // Helper for modules that post to a configured channel.
-import { runtime } from '../../runtime.js';
+import { clientFor } from '../../runtime.js';
+import { splitPlatformGuildId } from '../../lib/platformId.js';
 
-/** Resolve a text-based channel the bot can post in, or null. Never throws. */
+/**
+ * Resolve a text-based channel the bot can post in, or null. Never throws.
+ * `guildId` is a bare Discord id or a "fluxer:<id>" one (src/lib/platformId.js).
+ */
 async function usableChannel(guildId, channelId) {
   if (!channelId) return null;
-  const guild = runtime.client?.guilds.cache.get(guildId);
+  const parsed = splitPlatformGuildId(guildId);
+  if (!parsed) return null;
+  const guild = clientFor(parsed.platform)?.guilds.cache.get(parsed.rawId);
   if (!guild) return null;
   try {
     const channel = guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId));

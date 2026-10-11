@@ -60,6 +60,15 @@ test('appeal token: round-trips guild + user, rejects tampering', () => {
   assert.equal(verifyAppealToken(''), null);
 });
 
+test('appeal token: also carries a "fluxer:" guild id, and still rejects malformed ones', () => {
+  const fluxerGuild = 'fluxer:987654321098765432';
+  assert.deepEqual(verifyAppealToken(signAppealToken(fluxerGuild, U)), { guildId: fluxerGuild, userId: U });
+  // A correctly-signed token with a guild id in no valid form is still refused.
+  assert.equal(verifyAppealToken(signAppealToken('telegram:987654321098765432', U)), null);
+  assert.equal(verifyAppealToken(signAppealToken(`discord:${G}`, U)), null);
+  assert.equal(verifyAppealToken(signAppealToken('fluxer:', U)), null);
+});
+
 test('cooldownRemainingMs: only denied appeals within the window block', () => {
   assert.equal(cooldownRemainingMs(null, 7), 0);
   assert.equal(cooldownRemainingMs({ status: 'accepted', decided_at: Date.now() }, 7), 0);
