@@ -1,8 +1,8 @@
 // DM → ticket bridge. A DM to the bot opens (or appends to) a ticket. When the
-// user shares several ticket-enabled servers and has no open ticket, the bot
+// bot serves several ticket-enabled servers and the destination is ambiguous, it
 // asks which server with a select menu.
 import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
-import { ticketGuildsForUser, ingestUserDM } from '../../modules/tickets.js';
+import { ticketGuildsForDM, ingestUserDM } from '../../modules/tickets.js';
 import { handleDMTicketStaffMessage } from '../../modules/dmTicketChannels.js';
 import { getOpenTicket } from '../../db/tickets.js';
 import { registerComponent } from '../lib/components.js';
@@ -38,11 +38,9 @@ async function handleDM(message) {
   };
   if (!payload.content && payload.attachments.length === 0) return;
 
-  const guilds = await ticketGuildsForUser(message.author);
+  const guilds = await ticketGuildsForDM();
   if (guilds.length === 0) {
-    await message
-      .reply('Nie obsługuję obecnie zgłoszeń na żadnym serwerze, do którego należysz.')
-      .catch(() => {});
+    await message.reply('Nie obsługuję obecnie zgłoszeń DM na żadnym serwerze.').catch(() => {});
     return;
   }
 
@@ -88,9 +86,9 @@ async function handleSelect(interaction) {
     return;
   }
   await interaction.deferUpdate();
-  if (!(await ticketGuildsForUser(interaction.user)).some((candidate) => candidate.id === guild.id)) {
+  if (!(await ticketGuildsForDM()).some((candidate) => candidate.id === guild.id)) {
     await interaction.editReply({
-      content: 'Nie masz już dostępu do zgłoszeń na tym serwerze.',
+      content: 'Zgłoszenia DM na tym serwerze zostały wyłączone.',
       components: [],
     });
     return;

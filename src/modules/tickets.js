@@ -150,13 +150,12 @@ ${bubbles}
   return { filename: `ticket-${ticket.id}-transcript.html`, html };
 }
 
-/** Guilds where the tickets module is enabled and the user is a member. */
-export async function ticketGuildsForUser(user) {
+/** Public DM support destinations, including for former or banned members. */
+export async function ticketGuildsForDM() {
   const out = [];
   for (const guild of runtime.client.guilds.cache.values()) {
     if (!(await isModuleEnabled(guild.id, 'tickets'))) continue;
-    const member = await guild.members.fetch(user.id).catch(() => null);
-    if (member) out.push(guild);
+    out.push(guild);
   }
   return out;
 }

@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 10442)
+Total output lines: 697
+
 <div align="center">
 
 # Sylo-kripbot
@@ -40,6 +43,8 @@ This fork extends the upstream bot with features configured from the dashboard:
   the ticket channel; failed exports retain the channel for retry.
   [Ticket setup](docs/modules/tickets.md).
 - **Polish DM tickets (modmail)**: opening and closing notices, server selection,
+  including support for users who have left, been kicked or been banned. The
+  destination list includes this bot's servers with the tickets module enabled.
   staff reply headers, notifications and transcript labels. DMs create private
   Discord workspaces where staff reply and close tickets; closure exports the
   conversation to the ticket log channel before deleting the workspace. Previously saved
@@ -325,30 +330,7 @@ settings panel per module — saves swap in place with a toast.
     dashboard (replies arrive as an anonymous "Staff" DM)
   - **Moderator** — a tabbed page consolidating **Auto-moderation** (bad words,
     repeated text, invites, links, caps, emojis, spoilers, mentions, zalgo,
-    anti-spam — each Disabled / Delete / Delete + Warn / Delete + Timeout), with
-    an optional **push to Discord's native AutoMod** for the mappable checks
-    (bad words, mentions, anti-spam) plus Discord's profanity / sexual-content /
-    slurs preset lists — reconciled as `Sylo:`-named rules, needs Manage Server,
-    **auto-actions** (warning-count thresholds → timeout/kick/ban), **infractions**
-    (warnings + ban manager), **immunity roles** (skip automod + auto-actions),
-    **audit logging** (server events → a channel), and per-command permissions
-  - **Counting** — members count upward one number per message in a chosen channel;
-    correct or reset the running number from the dashboard
-  - **Custom commands** — MEE6-style `/slash` commands built from an ordered list
-    of actions: reply in the channel (text and/or embed, optionally private, or a
-    random pick from several messages), post a message to another channel, or add
-    / remove a role. Per-command role/channel restrictions and cooldown; synced
-    to Discord on save
-  - **Invite tracker** — attributes each new member to the invite link they used
-    and ranks inviters. `/invites` gives a member a personal invite link plus
-    their count, `/inviter` looks up who invited someone, `/invites-leaderboard`
-    ranks the server. Optional join/leave log channel and a fake-invite grace
-    window (a join that leaves inside it doesn't count). Needs Manage Server
-  - **Polls** — `/poll question:… choices:A | B | C` with optional `duration`,
-    `multiple` and `max_votes`; members vote by reacting with the option letter.
-    Auto-closes on the timer or vote cap and posts a bar-chart results embed;
-    `/poll-end` closes one early. Optional allow/deny role list for voters
-  - **Twitch alerts** — post a "go live" notification to a channel when a Twitch
+    anti-spam — each Disabled / Delete / Delete + Warn / Delete …442 tokens truncated…ation to a channel when a Twitch
     streamer starts streaming. Per-streamer channel, optional ping role and a
     custom message (`{name}` `{title}` `{game}` `{url}` `{viewers}`). Polls the
     Twitch Helix API ~once a minute; needs `TWITCH_CLIENT_ID` /
