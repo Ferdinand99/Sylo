@@ -34,7 +34,7 @@ MP3, WAV, OGG, Opus, M4A, AAC, FLAC and WebM uploads are accepted, up to 8 MiB a
 30 seconds. Files must decode as actual audio. Playlists and remote protocols
 are rejected. Metadata and the original upload are discarded after conversion.
 
-There are at most 50 clips per server. Files and their index are stored in
+There are at most 200 clips per server. Files and their index are stored in
 `soundboard/<guildId>/` beside `DATABASE_PATH`, normally `data/soundboard/`.
 They survive bot restarts and use the same encrypted filesystem when the data
 folder is mounted on encrypted storage. Configuration export/import does not

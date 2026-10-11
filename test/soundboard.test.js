@@ -61,9 +61,9 @@ test('quota is enforced and malformed clip ids cannot access files', async () =>
   await mkdir(path, { recursive: true });
   await writeFile(
     join(path, 'index.json'),
-    JSON.stringify(Array.from({ length: 50 }, (_, i) => ({ id: String(i) })))
+    JSON.stringify(Array.from({ length: 200 }, (_, i) => ({ id: String(i) })))
   );
-  await assert.rejects(uploadSound(otherId, 'extra', 'extra.wav', audio(0.1)), /50 klipów/);
+  await assert.rejects(uploadSound(otherId, 'extra', 'extra.wav', audio(0.1)), /200 klipów/);
   await assert.rejects(deleteSound(guildId, '../index.json'), /znaleziono/);
 });
 test('failed playback releases its reservation and cross-guild deletion is rejected', async () => {

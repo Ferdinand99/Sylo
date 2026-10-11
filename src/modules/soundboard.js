@@ -19,7 +19,7 @@ import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { config } from '../config.js';
 
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
-export const MAX_CLIPS = 50;
+export const MAX_CLIPS = 200;
 export const MAX_SECONDS = 30;
 const PCM_RATE = 48000 * 2 * 2;
 const locks = new Map();
@@ -125,7 +125,7 @@ export async function uploadSound(guildId, name, originalName, bytes) {
     return await serial(guildId, async () => {
       const clips = await listSounds(guildId);
       if (clips.length >= MAX_CLIPS)
-        throw new SoundboardError('Limit 50 klipów na serwer został osiągnięty.');
+        throw new SoundboardError(`Limit ${MAX_CLIPS} klipów na serwer został osiągnięty.`);
       const dir = directory(guildId);
       await mkdir(dir, { recursive: true, mode: 0o700 });
       const id = randomUUID(),

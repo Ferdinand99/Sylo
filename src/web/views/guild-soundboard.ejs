@@ -24,7 +24,7 @@
   </div>
   <% if (!clips.length) { %><p class="muted">Nie masz jeszcze klipów. Wgraj pierwszy poniżej.</p><% } %>
   <form id="sb-upload" class="panel sb-upload">
-    <h3>Dodaj dźwięk <span class="muted small"><%= clips.length %> / 50</span></h3>
+    <h3>Dodaj dźwięk <span class="muted small"><%= clips.length %> / <%= maxClips %></span></h3>
     <label>Nazwa klipu<input name="name" type="text" required maxlength="80" placeholder="Np. Toż to kpina"></label>
     <label>Plik dźwiękowy<input name="audio" type="file" required accept=".mp3,.wav,.ogg,.opus,.m4a,.aac,.flac,.webm"></label>
     <p class="muted small">MP3, WAV, OGG, Opus, M4A, AAC, FLAC lub WebM. Maksymalnie 8 MB i 30 sekund. Jedna konwersja naraz.</p>

@@ -16,6 +16,7 @@ import {
   soundboardStatus,
   SoundboardError,
   MAX_UPLOAD_BYTES,
+  MAX_CLIPS,
 } from '../../modules/soundboard.js';
 
 const router = Router({ mergeParams: true });
@@ -51,6 +52,7 @@ router.get(
         .sort((a, b) => a.rawPosition - b.rawPosition)
         .map((channel) => ({ id: channel.id, name: channel.name })),
       clips: await listSounds(req.guild.id),
+      maxClips: MAX_CLIPS,
     });
   })
 );
