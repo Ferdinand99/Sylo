@@ -22,6 +22,7 @@ const ICONS = {
   leaderboard: 'trophy',
   personalizer: 'id',
   audit: 'list',
+  soundboard: 'mic',
 };
 
 // Top group — special pages, no dot.
@@ -81,6 +82,7 @@ const CATEGORIES = [
     items: [
       { page: 'messages', label: 'Embed messages' },
       { page: 'messages/send', label: 'Wyślij wiadomość' },
+      { page: 'soundboard', label: 'Dźwięki na VC' },
       { module: 'counting' },
       { module: 'polls' },
       { module: 'giveaways' },

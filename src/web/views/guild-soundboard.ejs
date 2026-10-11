@@ -1,0 +1,34 @@
+<%- include('partials/header', { title: `Sylo — Dźwięki — ${guild.name}` }) %>
+<section id="soundboard" data-base="/guilds/<%= guild.id %>/soundboard" hx-boost="false">
+  <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'mic', title: 'Dźwięki na kanale głosowym', lg: true }) %></div>
+  <p class="muted">Wybierz kanał i kliknij klip. Bot dołączy, odtworzy dźwięk i wyjdzie. Bez nagrywania rozmów.</p>
+  <div class="panel sb-controls">
+    <label>Kanał głosowy
+      <select id="sb-channel"><option value="">Wybierz kanał…</option>
+      <% voiceChannels.forEach(function(channel) { %><option value="<%= channel.id %>"><%= channel.name %></option><% }) %>
+      </select>
+    </label>
+    <button type="button" class="btn danger" id="sb-stop">Zatrzymaj i rozłącz</button>
+  </div>
+  <p id="sb-status" role="status" aria-live="polite"></p>
+  <div class="sb-grid">
+    <% clips.forEach(function(clip) { %>
+    <article class="panel sb-clip" data-id="<%= clip.id %>">
+      <h3><%= clip.name %></h3><p class="muted small"><%= clip.seconds %> s</p>
+      <button type="button" class="btn btn-primary" data-play>▶ Odtwórz</button>
+      <button type="button" class="btn danger" data-delete>Usuń</button>
+    </article>
+    <% }) %>
+  </div>
+  <% if (!clips.length) { %><p class="muted">Nie masz jeszcze klipów. Wgraj pierwszy poniżej.</p><% } %>
+  <form id="sb-upload" class="panel sb-upload">
+    <h3>Dodaj dźwięk <span class="muted small"><%= clips.length %> / 50</span></h3>
+    <label>Nazwa klipu<input name="name" type="text" required maxlength="80" placeholder="Np. Toż to kpina"></label>
+    <label>Plik dźwiękowy<input name="audio" type="file" required accept=".mp3,.wav,.ogg,.opus,.m4a,.aac,.flac,.webm"></label>
+    <p class="muted small">MP3, WAV, OGG, Opus, M4A, AAC, FLAC lub WebM. Maksymalnie 8 MB i 30 sekund. Jedna konwersja naraz.</p>
+    <button type="submit" class="btn btn-primary">Wgraj klip</button>
+  </form>
+</section>
+<link rel="stylesheet" href="/soundboard.css">
+<script src="/soundboard.js"></script>
+<%- include('partials/footer') %>

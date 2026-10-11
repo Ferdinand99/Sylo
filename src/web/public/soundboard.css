@@ -1,0 +1,56 @@
+.sb-controls {
+  display: flex;
+  gap: 16px;
+  align-items: end;
+  flex-wrap: wrap;
+  padding: 20px;
+}
+.sb-controls label {
+  flex: 1;
+  min-width: 220px;
+}
+.sb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.sb-clip {
+  padding: 20px;
+}
+.sb-clip h3 {
+  overflow-wrap: anywhere;
+}
+.sb-clip button {
+  margin: 4px 4px 4px 0;
+}
+.sb-upload {
+  padding: 20px;
+  max-width: 640px;
+}
+.sb-upload label {
+  display: block;
+  margin: 16px 0;
+}
+.sb-upload input,
+.sb-controls select {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
+#sb-status {
+  min-height: 24px;
+}
+#sb-status[data-error='true'] {
+  color: #ef9494;
+}
+.sb-controls,
+.sb-clip,
+.sb-upload {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+.sb-clip:hover {
+  border-color: var(--border-strong);
+}
