@@ -19,6 +19,14 @@ nie zawierają automatycznie zmian z tego repozytorium.
 
 This fork extends the upstream bot with features configured from the dashboard:
 
+- **Configuration export/import** in V1 server Settings: download a JSON setup
+  and restore it to the same Discord server. Includes module configuration,
+  command access, dashboard staff roles, embed colors, saved embed messages and
+  reminder schedules. Restore validates the file and applies database changes
+  atomically; repeated imports do not duplicate templates/reminders. Version 1
+  exports remain supported. Files do not include member data, global bot settings
+  or `.env`; use Health database backups for a full data restore. Restart the bot
+  after importing to refresh commands and integrations.
 - **One-off message sender** in dashboard V1: choose a Discord text channel,
   write plain text or add embeds/link buttons, and send without saving a draft
   or template. The form clears after success and retains unsent content on

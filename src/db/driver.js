@@ -230,3 +230,19 @@ export function prepare(sqlText, opts) {
   }
   return preparePg(sqlText, opts);
 }
+
+/** Execute parameterized writes atomically on either database backend. */
+export async function runAtomicWrites(operations) {
+  if (!config.databaseUrl) {
+    return db.transaction(() => {
+      for (const operation of operations) db.prepare(operation.sql).run(...operation.args);
+    })();
+  }
+  const sql = await getSql();
+  await sql.begin(async (transaction) => {
+    for (const operation of operations) {
+      const translated = translate(operation.sql);
+      await transaction.unsafe(translated.text, toParams(translated, operation.args));
+    }
+  });
+}

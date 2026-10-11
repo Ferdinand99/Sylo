@@ -195,9 +195,16 @@
       </form>
 
       <hr class="sep" />
-      <h3 class="u-mb-1">Backup</h3>
-      <p class="muted small">Download this server's module configuration as JSON. Member data (warnings, XP, tickets) is not included.</p>
-      <p><a href="/guilds/<%= guild.id %>/export">Export configuration &rarr;</a></p>
+      <h3 class="u-mb-1">Eksport i import konfiguracji</h3>
+      <p class="muted small">Plik obejmuje moduły, role dostępu do komend i panelu, logi, zapisane osadzone wiadomości oraz przypomnienia. Import przywraca ustawienia tego samego serwera, zastępuje listy komend, embedów i przypomnień z pliku. Nie obejmuje warnów, XP, ticketów, ustawień globalnych bota ani pliku .env. Pełna kopia bazy jest dostępna na stronie Stan bota.</p>
+      <p><a class="btn btn-primary" href="/guilds/<%= guild.id %>/export">Eksportuj konfigurację (.json)</a></p>
+      <form action="/guilds/<%= guild.id %>/import" method="POST" data-config-import hx-boost="false" class="stack u-mw-lg">
+        <label for="config-backup">Przywróć konfigurację z pliku</label>
+        <input id="config-backup" type="file" accept=".json,application/json" required />
+        <button type="submit">Importuj konfigurację</button>
+        <p class="muted small" role="status" data-import-status></p>
+      </form>
+      <script src="/config-import.js" defer></script>
 
       <hr class="sep" />
       <h3 class="u-mb-1">Member data</h3>

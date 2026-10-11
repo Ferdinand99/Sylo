@@ -53,6 +53,8 @@ export function createApp() {
   app.use('/webhooks/github', githubWebhookRouter);
 
   app.use(express.static(join(here, 'public')));
+  // Configuration files can include many embed templates; auth and CSRF still apply below.
+  app.use('/guilds/:guildId/import', express.json({ limit: '4mb' }));
   app.use(express.urlencoded({ extended: false, limit: '256kb' }));
   app.use(express.json({ limit: '256kb' }));
 

@@ -149,7 +149,7 @@ import { lockChannel, unlockChannel, lockPreflight } from '../../bot/lib/channel
 import { formatDuration } from '../../bot/lib/duration.js';
 import { renderWelcomeCard } from '../../bot/lib/welcomeCard.js';
 import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
-import { exportGuildConfig } from '../../db/exportConfig.js';
+import { exportGuildConfig, importGuildConfig } from '../../db/exportConfig.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
 import {
@@ -1161,14 +1161,12 @@ router.post(
         ...normaliseChannelTickets(
           {
             ...req.body,
-            formFields: []
-              .concat(req.body.formFieldLabel ?? [])
-              .map((label, index) => ({
-                label,
-                placeholder: [].concat(req.body.formFieldPlaceholder ?? [])[index],
-                style: [].concat(req.body.formFieldStyle ?? [])[index],
-                required: [].concat(req.body.formFieldRequired ?? [])[index] !== 'no',
-              })),
+            formFields: [].concat(req.body.formFieldLabel ?? []).map((label, index) => ({
+              label,
+              placeholder: [].concat(req.body.formFieldPlaceholder ?? [])[index],
+              style: [].concat(req.body.formFieldStyle ?? [])[index],
+              required: [].concat(req.body.formFieldRequired ?? [])[index] !== 'no',
+            })),
             ticketTypes: labels.map((label, index) => ({
               id: ids[index],
               label,
@@ -2959,6 +2957,26 @@ router.get(
     const data = await exportGuildConfig(req.guild.id);
     res.setHeader('Content-Disposition', `attachment; filename="sylo-${req.guild.id}-config.json"`);
     res.type('application/json').send(JSON.stringify(data, null, 2));
+  })
+);
+
+// Restore configuration only; member records are never part of this import.
+router.post(
+  '/:guildId/import',
+  asyncHandler(async (req, res) => {
+    try {
+      await importGuildConfig(req.guild.id, req.body.backup);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'config:import',
+      detail: 'Restored guild configuration from JSON',
+    });
+    return res.json({
+      message: 'Przywrócono konfigurację. Zrestartuj bota, aby odświeżyć komendy i integracje.',
+    });
   })
 );
 
