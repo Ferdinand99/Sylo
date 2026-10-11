@@ -15,24 +15,46 @@ Ten fork dodaje własne funkcje i poprawki dla samodzielnie hostowanego bota.
 Oryginalny bot, jego publiczna instancja i obrazy Docker są osobnymi wydaniami;
 nie zawierają automatycznie zmian z tego repozytorium.
 
-## Co zmienia ten fork?
+## Fork features and recent updates
 
-- **Automatyczne wątki** — publiczny wątek pod nową wiadomością na wybranych
-  kanałach tekstowych lub kanałach ogłoszeń. Wybór wielu kanałów, nazwa z
-  `{author}` / `{message}` i archiwizacja po 1 godzinie, 1, 3 lub 7 dniach.
-- **Konfiguracja w V1 i V2** — moduł dostępny w ustawieniach obu paneli;
-  w V1 także na liście kafelków i w bocznym menu.
-- **Diagnostyka weryfikacji** — błędy publikowania lub edycji wiadomości
-  weryfikacyjnej są zgłaszane w konsoli.
+This fork extends the upstream bot with features configured from the dashboard:
 
-Wątki pomijają boty, webhooki, wiadomości systemowe i wiadomości wewnątrz
-wątków. Nie przetwarzają starszych wiadomości.
-[Instrukcja i uprawnienia modułu](docs/modules/auto-threads.md).
+- **Automatic threads** on selected text and announcement channels, with custom
+  names and archive durations. [Setup](docs/modules/auto-threads.md).
+- **Discord channel tickets** with an Open ticket button, a private topic
+  dropdown, destination categories, configurable forms with 1–5 fields, staff
+  roles and predefined role pings. A call-staff button has a five-minute cooldown.
+  Closing exports the conversation to the ticket log channel before deleting
+  the ticket channel; failed exports retain the channel for retry.
+  [Ticket setup](docs/modules/tickets.md).
+- **Polish DM tickets (modmail)**: opening and closing notices, server selection,
+  staff reply headers, notifications and transcript labels. Previously saved
+  English built-in defaults are translated when sent; administrator-written
+  messages and conversation content are preserved.
+- **Separate log destinations** for individual events, including sent messages
+  with attachment links/image previews and voice joins, leaves and moves.
+  Message logging is opt-in and needs Message Content Intent. No voice audio
+  is recorded. [Logging](docs/modules/logging.md).
+- **Moderation command role access**, configurable warning thresholds and private
+  punishment history with pagination. [Moderation](docs/modules/moderation.md).
+- **Keyless YouTube alerts** with multiple Discord destinations per YouTube
+  channel, independent delivery tracking and retries after failed sends.
+  [YouTube alerts](docs/modules/youtube-alerts.md).
+- **Text and random media replies**, including image pools and MP4/WebM links.
+  [Autoresponder](docs/modules/autoresponder.md).
+- **Rotating presence text** with a shuffled pool: every text appears before
+  any repeats, with a configurable interval starting at 10 seconds.
+- **Free-game announcements for Epic and Steam** without API keys. Steam offers
+  use GamerPower and cover permanent claims, excluding free weekends and demos;
+  this does not scrape SteamDB. [Free games](docs/modules/free-games.md).
+- **Polish/English dashboard switching** and searchable channel/role selectors
+  in updated configuration forms. V1 runs without a frontend build; optional
+  V2 requires `npm run build:v2`.
 
-Pozostałe funkcje pochodzą z Sylo: moderacja, logi, weryfikacja, role,
-tymczasowe kanały głosowe, modmail, leveling, automatyczne odpowiedzi i inne.
-Panel **V1 działa bez budowania frontendu**. Opcjonalny panel V2 wymaga
-`npm run build:v2`.
+Automatic threads skip bots, webhooks, system messages and messages inside
+threads; older messages are not processed. The bot also retains upstream
+features such as verification, self-assign roles, temporary voice channels,
+leveling, polls, giveaways and custom commands.
 
 ## Pelican — szybki start (V1)
 
@@ -185,7 +207,7 @@ settings panel per module — saves swap in place with a toast.
 - **YouTube alerts** — announce a channel's new uploads and when it goes live.
   Add channels by URL or `@handle` (resolved on save); new videos come from
   YouTube's public feed and live status from a light page check — no API key
-  needed. Per-channel Discord channel, ping role and custom messages.
+  needed. Multiple Discord destinations per YouTube channel, ping role and custom messages.
 - **Twitch alerts** — announce in a channel when a streamer goes live. Add
   streamers on the dashboard (channel + optional ping role + custom message with
   `{name}`/`{title}`/`{game}`/`{url}` placeholders); Sylo polls the Twitch API
@@ -608,16 +630,52 @@ Upload and live announcement history is independent for each Discord destination
 
 For delivery, grant the bot **View Channel**, **Send Messages**, and **Embed Links** in the destination. Updating/deleting announcements requires access to the original destination as well. Existing custom message templates are preserved; placeholders are `{name}`, `{title}`, and `{url}`.
 
-### Progi warnów
+### Warning thresholds
 
-Domyślnie `/warn add` i warny z panelu stosują zasadę: **3 warny = ban na 30 dni**, **5 warnów = ban permanentny**. Moduł moderacji musi być włączony. Własne zapisane progi pozostają konfigurowalne w panelu; czas bana podaje się w minutach (43200 = 30 dni, 0 = permanentny). Warny nie znikają po odbanowaniu. Czwarty warn podczas trwającego bana nie przedłuża terminu. Piąty warn anuluje automatyczne odbanowanie. Terminy są zapisane w bazie i sprawdzane co 30 sekund; po restarcie bot obsłuży zaległe odbanowania, a błędy Discorda ponowi. Bot potrzebuje uprawnienia Ban Members i odpowiedniej pozycji roli.
+By default, `/warn add` and dashboard warnings apply **3 warnings = a 30-day
+ban** and **5 warnings = a permanent ban**. Enable the moderation module first.
+Saved custom thresholds remain configurable; ban duration is in minutes
+(`43200` = 30 days, `0` = permanent). Warnings remain after an unban. A fourth
+warning during the ban does not extend it; a fifth cancels the scheduled unban.
+Unban deadlines persist in the database, are checked every 30 seconds and are
+processed after a restart. The bot needs Ban Members and sufficient role
+hierarchy. See [moderation](docs/modules/moderation.md).
 
-### Automatyczne odpowiedzi: tekst i losowe obrazki
+Use `/history user:@member [page]` for a private, paginated punishment history
+with reasons, moderators and dates, including archived cases still stored in
+the database. Access follows the command's permissions and configured role
+access; manually performed Discord actions are not imported retroactively.
 
-Włącz moduł **Autoresponder** i dodaj regułę bez prefiksu. Przykład: słowo `cp`, dopasowanie „dokładnie ta wiadomość”, rodzaj „Stały tekst”, treść `serowa pizza`. Dla `f` wybierz „Losowy obrazek” i wklej trzy bezpośrednie linki do obrazków, każdy w osobnym wierszu. Przy każdej odpowiedzi bot losuje jeden obrazek z listy (maksymalnie 25); tekst może być opcjonalnym podpisem. Reguły działają bez rozróżniania wielkości liter, zachowują ignorowane role/kanały i przerwę między odpowiedziami. Bot potrzebuje Message Content Intent oraz uprawnień View Channel, Send Messages i Embed Links dla obrazków.
+### Automatic replies: text, images and videos
 
-### Losowe teksty statusu bota
+Enable **Autoresponder** and add a rule without a command prefix. For example,
+match the exact message `cp` and reply with fixed text `serowa pizza`. For `f`,
+choose the random image/video response and enter direct media URLs, one per line
+(up to 25). Each reply picks one item; text can be an optional caption. Rules
+are case-insensitive and respect configured ignored roles/channels and cooldowns.
+Message Content Intent, View Channel and Send Messages are required; image
+embeds also need Embed Links.
 
-W ustawieniach bota `/settings` wybierz rodzaj aktywności **Custom**, wpisz własne teksty (każdy w osobnym wierszu) i ustaw odstęp 10–3600 sekund. Bot losuje tekst bez natychmiastowych powtórek. Lista jest zapisana w bazie i działa po restarcie; jest wspólna dla wszystkich serwerów. Pusta lista przywraca pole stałego tekstu. Obsługiwane są zmienne `{servers}` i `{members}`.
+MP4/WebM detection uses the URL pathname, so query parameters on signed links
+are supported. Videos from Reddit and Discord media CDNs can be uploaded as
+attachments up to 8 MiB with Attach Files permission. Failed or oversized
+uploads and other hosts fall back to the original link. Signed media links can
+expire; separate Reddit audio/video tracks are not merged.
+See [video replies](docs/modules/autoresponder.md#video-replies).
 
-Możliwe przyszłe rozszerzenia `/stats` wymagają osobnych adapterów i kluczy: [CS2/FACEIT](https://docs.faceit.com/docs/data-api/data/), [PUBG](https://documentation.pubg.com/en/getting-started.html), [Minecraft/Hypixel](https://api.hypixel.net/) oraz [League of Legends/TFT](https://developer.riotgames.com/docs/portal). FACEIT zwraca dane FACEIT; nie należy przedstawiać ich jako statystyk Valve Premier. Dla publicznego bota na dużym serwerze Riot wymaga klucza produkcyjnego; Valorant dodatkowo wymaga zgody użytkownika na dostęp do jego danych. Te integracje nie zostały dodane w zmianie statusów.
+### Rotating bot presence
+
+In the bot settings page (`/settings`), select **Custom** activity and enter one
+text per line. Choose an interval of **10–3600 seconds**. Texts are shuffled into
+a pool and each appears once before the next cycle; adjacent cycle boundaries
+also avoid repeating the same text when there is more than one distinct entry.
+The configured list persists in the database and is shared across servers;
+the current pool restarts after the bot restarts. An empty list uses the fixed
+text field. `{servers}` and `{members}` placeholders are supported.
+
+### Game statistics
+
+Changing presence texts does not add games to `/stats`. The command supports
+the adapters listed in [Game stats](docs/modules/game-stats.md). CS2/FACEIT,
+PUBG, Hypixel and Riot integrations are not included in this fork; additional
+games require their own adapter and a suitable data source.
