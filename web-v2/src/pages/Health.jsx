@@ -238,6 +238,28 @@ export default function Health() {
         </div>
       ) : null}
 
+      {d.botAudit && d.botAudit.length ? (
+        <div className="v2-group">
+          <h2 className="v2-group-title">Bot-wide audit log ({d.botAudit.length} shown, newest first)</h2>
+          <p className="v2-field-hint">
+            Changes to bot-wide (not per-server) settings: identity, presence, announcement.
+          </p>
+          <div className="v2-list">
+            {d.botAudit.map((a, i) => (
+              <div className="v2-row" key={i}>
+                <div className="v2-row-main">
+                  <h3>{a.action}</h3>
+                  <p>
+                    {a.actor} — {a.detail}
+                  </p>
+                </div>
+                <span className="v2-field-hint">{a.ago}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="v2-stat-strip v2-section-gap">
         <div className="v2-stat">
           <strong>{d.stats.openTickets}</strong>

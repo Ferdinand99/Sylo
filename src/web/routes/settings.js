@@ -4,6 +4,7 @@
 import { Router } from 'express';
 import { runtime } from '../../runtime.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { currentUser } from '../middleware/auth.js';
 import {
   getPresenceConfig,
   setPresenceConfig,
@@ -15,9 +16,13 @@ import {
   ANNOUNCEMENT_SEVERITIES,
 } from '../../db/appSettings.js';
 import { applyPresence } from '../../bot/lib/presence.js';
+import { recordBotAudit } from '../../db/botAudit.js';
 
 const router = Router();
 const isHttps = (u) => /^https:\/\/\S+$/i.test(u);
+// Mirrors v2Api.js's private moderatorDisplayName() — used for bot-wide
+// audit-log "actor" strings, same convention guild audit logs use.
+const actorFor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`);
 
 function back(res, text, ok) {
   res.redirect(`/settings?m=${encodeURIComponent(text)}&ok=${ok ? 1 : 0}`);
@@ -106,6 +111,13 @@ router.post(
     }
 
     if (!done.length && !failed.length) return back(res, 'Nothing to change.', true);
+    if (done.length) {
+      await recordBotAudit({
+        actor: actorFor(req),
+        action: 'personalizer:identity',
+        detail: done.join(', '),
+      });
+    }
     const parts = [];
     if (done.length) parts.push(`Updated ${done.join(', ')}.`);
     if (failed.length) parts.push(`Failed: ${failed.join('; ')}.`);
@@ -116,8 +128,17 @@ router.post(
 router.post(
   '/presence',
   asyncHandler(async (req, res) => {
-    await setPresenceConfig({ status: req.body.status, type: req.body.type, text: req.body.text });
+    const presence = await setPresenceConfig({
+      status: req.body.status,
+      type: req.body.type,
+      text: req.body.text,
+    });
     if (runtime.client) applyPresence(runtime.client);
+    await recordBotAudit({
+      actor: actorFor(req),
+      action: 'personalizer:presence',
+      detail: `${presence.status} / ${presence.type} / ${presence.text}`,
+    });
     back(res, 'Presence updated.', true);
   })
 );
@@ -130,6 +151,11 @@ router.post(
       body: req.body.body,
       severity: req.body.severity,
     });
+    await recordBotAudit({
+      actor: actorFor(req),
+      action: 'personalizer:announcement',
+      detail: saved ? `published (${saved.severity}): ${saved.title}` : 'cleared (blank title)',
+    });
     back(res, saved ? 'Announcement published.' : 'Announcement cleared (title was blank).', true);
   })
 );
@@ -138,6 +164,7 @@ router.post(
   '/announcement/clear',
   asyncHandler(async (req, res) => {
     await clearAnnouncement();
+    await recordBotAudit({ actor: actorFor(req), action: 'personalizer:announcement', detail: 'cleared' });
     back(res, 'Announcement cleared.', true);
   })
 );

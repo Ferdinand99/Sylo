@@ -163,6 +163,7 @@ import {
   guildEmbedColor,
 } from '../../db/guildSettings.js';
 import { recordAudit } from '../../db/audit.js';
+import { recordBotAudit, listBotAudit } from '../../db/botAudit.js';
 import { runtime, uptimeSeconds, isDiscordReady, guildCount } from '../../runtime.js';
 import {
   getPresenceConfig,
@@ -2053,6 +2054,13 @@ router.post(
       }
     }
 
+    if (done.length) {
+      await recordBotAudit({
+        actor: moderatorDisplayName(req),
+        action: 'personalizer:identity',
+        detail: done.join(', '),
+      });
+    }
     res.json({ done, failed });
   })
 );
@@ -2067,6 +2075,11 @@ router.post(
       text: req.body.text,
     });
     if (runtime.client) applyPresence(runtime.client);
+    await recordBotAudit({
+      actor: moderatorDisplayName(req),
+      action: 'personalizer:presence',
+      detail: `${presence.status} / ${presence.type} / ${presence.text}`,
+    });
     res.json({ presence });
   })
 );
@@ -2089,6 +2102,13 @@ router.post(
       body: req.body.body,
       severity: req.body.severity,
     });
+    await recordBotAudit({
+      actor: moderatorDisplayName(req),
+      action: 'personalizer:announcement',
+      detail: announcement
+        ? `published (${announcement.severity}): ${announcement.title}`
+        : 'cleared (blank title)',
+    });
     res.json({ announcement });
   })
 );
@@ -2098,6 +2118,11 @@ router.post(
   requireOwner,
   asyncHandler(async (req, res) => {
     await clearAnnouncement();
+    await recordBotAudit({
+      actor: moderatorDisplayName(req),
+      action: 'personalizer:announcement',
+      detail: 'cleared',
+    });
     res.json({ announcement: null });
   })
 );
@@ -2142,6 +2167,12 @@ router.get(
       errors: runtime.errors
         .slice(0, 25)
         .map((e) => ({ message: e.message, scope: e.scope, ago: timeAgo(e.at) })),
+      botAudit: (await listBotAudit(50)).map((a) => ({
+        actor: a.actor,
+        action: a.action,
+        detail: a.detail,
+        ago: timeAgo(a.created_at),
+      })),
       db: {
         size: formatBytes(dbInfo.size),
         wal: dbInfo.wal === null ? null : formatBytes(dbInfo.wal),

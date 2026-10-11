@@ -79,6 +79,26 @@
   </section>
 <% } %>
 
+<% if (botAudit && botAudit.length) { %>
+  <section class="card">
+    <h2>Bot-wide audit log <span class="muted">(<%= botAudit.length %> shown, newest first)</span></h2>
+    <p class="muted">Changes to bot-wide (not per-server) settings: identity, presence, announcement.</p>
+    <table>
+      <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr></thead>
+      <tbody>
+        <% botAudit.forEach(function (a) { %>
+          <tr>
+            <td class="muted u-nowrap"><%= a.ago %></td>
+            <td><%= a.actor %></td>
+            <td class="mono"><%= a.action %></td>
+            <td class="muted"><%= a.detail %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </section>
+<% } %>
+
 <section class="grid">
   <div class="card">
     <h2>Open tickets</h2>
