@@ -263,7 +263,7 @@ async function tick() {
   }
 }
 
-async function runAlert(guildId, alert) {
+export async function runAlert(guildId, alert) {
   const c = alert.ytChannelId;
 
   if (alert.onVideo) {
@@ -272,16 +272,19 @@ async function runAlert(guildId, alert) {
       // First poll for this channel — seed everything without alerting.
       for (const e of entries) await markVideoSeen(guildId, c, e.videoId);
     } else {
-      // Alert oldest-first for anything new.
+      // Alert oldest-first for anything new. Only marked seen once the send
+      // actually succeeds, so a failed delivery (missing permissions, a
+      // deleted channel, a transient API error, …) retries on the next poll
+      // instead of being silently and permanently dropped.
       for (const e of [...entries].reverse()) {
         if (await isVideoSeen(guildId, c, e.videoId)) continue;
-        await markVideoSeen(guildId, c, e.videoId);
         const name = alert.name || e.author || 'A channel';
-        await sendToChannel(
+        const sent = await sendToChannel(
           guildId,
           alert.discordChannelId,
           payload(alert, { name, title: e.title, url: e.url, thumb: e.thumb }, 'video')
         );
+        if (sent) await markVideoSeen(guildId, c, e.videoId);
       }
     }
   }
@@ -290,7 +293,6 @@ async function runAlert(guildId, alert) {
     const state = await checkLive(c);
     const known = await liveVideoId(guildId, c);
     if (state.live && state.videoId !== known) {
-      await markVideoSeen(guildId, c, state.videoId); // don't also fire a "new video" for the same stream
       const name = alert.name || 'A channel';
       const url = `https://www.youtube.com/watch?v=${state.videoId}`;
       const posted = await postToChannel(
@@ -307,7 +309,12 @@ async function runAlert(guildId, alert) {
           'live'
         )
       );
-      await markLive(guildId, c, state.videoId, posted);
+      // Only recorded on a successful post — otherwise `known` stays stale and
+      // the next tick retries instead of treating a failed send as handled.
+      if (posted) {
+        await markVideoSeen(guildId, c, state.videoId); // don't also fire a "new video" for the same stream
+        await markLive(guildId, c, state.videoId, posted);
+      }
     } else if (!state.live && known) {
       const post = await livePost(guildId, c);
       await markNotLive(guildId, c);

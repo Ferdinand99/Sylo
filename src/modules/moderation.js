@@ -6,7 +6,7 @@
 //     dmOnPunish: boolean,
 //     warnThresholds: [ { count, action: 'timeout'|'kick'|'ban', durationMinutes? } ]
 //   }
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, RESTJSONErrorCodes } from 'discord.js';
 import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { dueTempBans, clearTempBan } from '../db/tempBans.js';
@@ -112,15 +112,32 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
 
 const TEMP_BAN_TICK_MS = 30_000;
 
-async function settleTempBan(row) {
-  await clearTempBan(row.guild_id, row.user_id); // clear first so a throw can't loop
+// A row is only cleared once the unban is confirmed (or already moot), not
+// before — a transient guild.bans.remove() failure (rate limit, momentary API
+// error) then just leaves it due for the next tick, instead of forgetting the
+// user was ever supposed to be unbanned. A slow settle can still overlap with
+// the row being due again on the next tick, hence the in-flight guard below.
+const settlingTempBans = new Set();
+
+export async function settleTempBan(row) {
   const guild = runtime.client?.guilds.cache.get(row.guild_id);
-  if (!guild?.members.me?.permissions.has('BanMembers')) return;
+  if (!guild?.members.me?.permissions.has('BanMembers')) return; // retry next tick
 
   const existing = await guild.bans.fetch(row.user_id).catch(() => null);
-  if (!existing) return; // already unbanned (manually or by Discord)
+  if (!existing) {
+    await clearTempBan(row.guild_id, row.user_id); // already unbanned — nothing left to do
+    return;
+  }
 
-  await guild.bans.remove(row.user_id, 'Temporary ban expired');
+  try {
+    await guild.bans.remove(row.user_id, 'Temporary ban expired');
+  } catch (err) {
+    // Already gone (race with a manual unban) counts as done; anything else
+    // is a real failure, so leave the row in place for the next tick.
+    if (err.code !== RESTJSONErrorCodes.UnknownBan) throw err;
+  }
+
+  await clearTempBan(row.guild_id, row.user_id);
   const clearedCase = await deactivateLatest(row.guild_id, row.user_id, 'ban');
   const { caseNumber } = await addCase({
     guildId: row.guild_id,
@@ -145,7 +162,12 @@ async function settleTempBan(row) {
 const tempBanTimer = setInterval(async () => {
   if (!runtime.client?.isReady()) return;
   for (const row of await dueTempBans(Date.now())) {
-    settleTempBan(row).catch((err) => log.error('module:moderation', 'temp-unban failed:', err.message));
+    const key = `${row.guild_id}:${row.user_id}`;
+    if (settlingTempBans.has(key)) continue;
+    settlingTempBans.add(key);
+    settleTempBan(row)
+      .catch((err) => log.error('module:moderation', 'temp-unban failed:', err.message))
+      .finally(() => settlingTempBans.delete(key));
   }
 }, TEMP_BAN_TICK_MS);
 tempBanTimer.unref();

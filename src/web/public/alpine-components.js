@@ -158,12 +158,23 @@ document.addEventListener('alpine:init', function () {
   // Reaction-role builder: the style toggle + the emoji/label/role rows.
   // (The in-place embed editor on the same page is the shared `embedEditor`.)
   window.Alpine.data('rrRows', function (cfg) {
+    // Each row gets a stable synthetic key, separate from its position in the
+    // array — using the array index as the x-for :key instead (as this used
+    // to) makes Alpine reuse DOM nodes by position when a row in the middle
+    // is removed, which can carry one row's emoji-picker/input state onto a
+    // different row's data after the shift.
+    var nextKey = 0;
+    function freshKey() {
+      nextKey += 1;
+      return 'rr-' + nextKey;
+    }
     return {
       style: cfg.style === 'buttons' || cfg.style === 'select' ? cfg.style : 'reaction',
       roles: Array.isArray(cfg.roles) ? cfg.roles : [],
       btnStyles: ['secondary', 'primary', 'success', 'danger'],
       rows: (Array.isArray(cfg.pairs) && cfg.pairs.length ? cfg.pairs : [{}]).map(function (p) {
         return {
+          _key: freshKey(),
           emoji: p.display || '',
           label: p.label || '',
           roleId: p.roleId ? String(p.roleId) : '',
@@ -189,7 +200,7 @@ document.addEventListener('alpine:init', function () {
       },
       addRow() {
         if (this.rows.length < this.max)
-          this.rows.push({ emoji: '', label: '', roleId: '', btnStyle: 'secondary' });
+          this.rows.push({ _key: freshKey(), emoji: '', label: '', roleId: '', btnStyle: 'secondary' });
       },
       removeRow(i) {
         this.rows.splice(i, 1);

@@ -140,6 +140,27 @@ async function punish(guild, member, entry, reason) {
   return done;
 }
 
+// bumpHoneypotStat does a read-modify-write (fetch config, bump the count,
+// save it back) — two triggers landing close enough together could both read
+// before either writes and lose an increment. Chaining each call onto the
+// previous one for the same row, instead of letting them run concurrently,
+// closes that without needing a real lock.
+const honeypotBumpQueue = new Map();
+
+export async function bumpHoneypotStat(guild, kind, channelId) {
+  const key = `${guild.id}:${kind}:${channelId}`;
+  const run = (honeypotBumpQueue.get(key) ?? Promise.resolve()).then(() =>
+    bumpHoneypotStatOnce(guild, kind, channelId)
+  );
+  // Swallow here so one failed bump doesn't jam the queue for the next
+  // caller on the same row — this call's own `await` still sees the rejection.
+  honeypotBumpQueue.set(
+    key,
+    run.catch(() => {})
+  );
+  return run;
+}
+
 /**
  * Bumps a row's triggerCount and persists it — re-reads the config fresh
  * (not the stale copy the dispatch handler was called with) so a rapid
@@ -147,7 +168,7 @@ async function punish(guild, member, entry, reason) {
  * For a message row, also re-renders the live trap message so the visible
  * "Bans: N" (or Kicks/Timeouts) count is never stale.
  */
-async function bumpHoneypotStat(guild, kind, channelId) {
+async function bumpHoneypotStatOnce(guild, kind, channelId) {
   const fresh = (await getGuildModule(guild.id, 'honeypot')).config;
   const list = Array.isArray(fresh[kind]) ? fresh[kind] : [];
   const row = list.find((r) => r.channelId === channelId);
