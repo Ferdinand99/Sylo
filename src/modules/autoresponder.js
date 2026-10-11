@@ -9,13 +9,23 @@
 //     ignoreRoles: string[],
 //     responders: [ {
 //       trigger, match: 'contains'|'exact'|'startswith'|'wholeword',
-//       response, responseType: 'text'|'random-image', imageUrls: string[],
+//       response, responseType: 'text'|'random-image'|'random-media', imageUrls: string[],
 //       embed: bool, embedColor, deleteTrigger: bool
 //     } ]
 //   }
 import { EmbedBuilder } from 'discord.js';
 import { on } from './dispatch.js';
 import { buildCustomReply } from './customCommands.js';
+import { downloadAutoresponderVideo, videoExtension } from './lib/autoresponderVideo.js';
+
+const VIDEO_URL = Symbol('autoresponderVideo');
+const videoLinkContent = (caption, url) => {
+  const text = String(caption || '')
+    .trim()
+    .slice(0, Math.max(0, 1999 - url.length));
+  return text ? `${text}\n${url}` : url;
+};
+const isMediaRule = (rule) => ['random-image', 'random-media'].includes(rule.responseType);
 
 export const AR_MATCH_MODES = ['contains', 'exact', 'startswith', 'wholeword'];
 export const AR_PLACEHOLDERS = ['{user}', '{username}', '{server}', '{channel}'];
@@ -32,7 +42,7 @@ const imageLines = (value) =>
     .map((url) => String(url).trim())
     .filter(Boolean);
 const validImageUrl = (value) => {
-  if (value.length > 2048) return false;
+  if (value.length > 2048 || (videoExtension(value) && value.length > 2000)) return false;
   try {
     const url = new URL(value);
     return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
@@ -52,12 +62,13 @@ export function autoresponderValidationError(responders) {
     const response = String(rule.response ?? '').trim();
     if (!trigger && !response && !urls.length) continue;
     if (!trigger) return `Odpowiedź ${i + 1}: wpisz słowo wyzwalające.`;
-    if (rule.responseType !== 'random-image') {
-      if (!response) return `Odpowiedź ${i + 1}: wpisz treść odpowiedzi lub wybierz rodzaj „Losowy obrazek”.`;
+    if (!isMediaRule(rule)) {
+      if (!response)
+        return `Odpowiedź ${i + 1}: wpisz treść odpowiedzi lub wybierz rodzaj „Losowy obrazek lub film”.`;
       continue;
     }
-    if (!urls.length) return `Odpowiedź ${i + 1}: dodaj co najmniej jeden link do obrazka.`;
-    if (urls.length > 25) return `Odpowiedź ${i + 1}: możesz dodać maksymalnie 25 obrazków.`;
+    if (!urls.length) return `Odpowiedź ${i + 1}: dodaj co najmniej jeden link do obrazka lub filmu.`;
+    if (urls.length > 25) return `Odpowiedź ${i + 1}: możesz dodać maksymalnie 25 obrazków lub filmów.`;
     if (urls.some((url) => !validImageUrl(url)))
       return `Odpowiedź ${i + 1}: wpisz poprawne linki HTTP lub HTTPS, każdy w osobnym wierszu.`;
   }
@@ -77,17 +88,13 @@ export function normaliseAutoresponder(raw = {}) {
           .slice(0, 200),
         match: AR_MATCH_MODES.includes(r.match) ? r.match : 'contains',
         response: String(r.response ?? '').slice(0, 2000),
-        responseType: r.responseType === 'random-image' ? 'random-image' : 'text',
+        responseType: isMediaRule(r) ? r.responseType : 'text',
         imageUrls: [...new Set(imageLines(r.imageUrls).filter(validImageUrl))].slice(0, 25),
         embed: Boolean(r.embed),
         embedColor: /^#?[0-9a-fA-F]{6}$/.test(r.embedColor ?? '') ? r.embedColor.replace('#', '') : '5b7cfa',
         deleteTrigger: Boolean(r.deleteTrigger),
       }))
-      .filter(
-        (r) =>
-          r.trigger !== '' &&
-          (r.responseType === 'random-image' ? r.imageUrls.length > 0 : r.response.trim() !== '')
-      )
+      .filter((r) => r.trigger !== '' && (isMediaRule(r) ? r.imageUrls.length > 0 : r.response.trim() !== ''))
       .slice(0, 100),
   };
 }
@@ -110,20 +117,48 @@ export function matchesTrigger(content, trigger, mode) {
   }
 }
 
-/** Build one reply; image mode randomly chooses a single configured image. */
+/** Randomly choose an image or video. Video links can be prepared as attachments. */
 export function buildAutoresponderReply(rule, context, random = Math.random) {
   const payload = buildCustomReply(
     { response: rule.response, embed: rule.embed, embedTitle: '', embedColor: rule.embedColor },
     context
   );
-  if (rule.responseType === 'random-image' && rule.imageUrls.length) {
+  if (isMediaRule(rule) && rule.imageUrls.length) {
     const url = rule.imageUrls[Math.floor(random() * rule.imageUrls.length)];
+    if (videoExtension(url)) {
+      payload[VIDEO_URL] = url;
+      payload.content = videoLinkContent(rule.embed || !rule.response.trim() ? '' : payload.content, url);
+      if (!rule.response.trim()) delete payload.embeds;
+      return payload;
+    }
     const image =
       payload.embeds?.[0] || new EmbedBuilder().setColor(parseInt(rule.embedColor || '5b7cfa', 16));
     image.setImage(url);
     payload.embeds = [image];
     if (!rule.response.trim()) delete payload.content;
   }
+  return payload;
+}
+
+/** Upload supported CDN videos; fall back to the original link on failure. */
+export async function prepareAutoresponderReply(
+  rule,
+  context,
+  { random = Math.random, download = downloadAutoresponderVideo, attachVideos = true } = {}
+) {
+  const payload = buildAutoresponderReply(rule, context, random);
+  const url = payload[VIDEO_URL];
+  if (!url || !attachVideos) return payload;
+  const buffer = await download(url).catch(() => null);
+  if (!buffer) return payload;
+  payload.files = [{ attachment: buffer, name: `odpowiedz.${videoExtension(url)}` }];
+  // Rebuild only the caption so the fallback URL is not shown alongside a file.
+  const caption = buildCustomReply(
+    { response: rule.response, embed: rule.embed, embedTitle: '', embedColor: rule.embedColor },
+    context
+  );
+  if (rule.response.trim() && !rule.embed) payload.content = caption.content;
+  else delete payload.content;
   return payload;
 }
 
@@ -147,7 +182,7 @@ on('autoresponder', 'messageCreate', async (message, rawConfig, guildId) => {
 
   const me = message.guild.members.me;
   const required = ['SendMessages', 'ViewChannel'];
-  if (hit.embed || hit.responseType === 'random-image') required.push('EmbedLinks');
+  if (hit.embed || isMediaRule(hit)) required.push('EmbedLinks');
   if (!message.channel.permissionsFor(me)?.has(required)) return;
   lastFire.set(key, now);
 
@@ -155,12 +190,22 @@ on('autoresponder', 'messageCreate', async (message, rawConfig, guildId) => {
     await message.delete().catch(() => {});
   }
 
-  const payload = buildAutoresponderReply(hit, {
-    userId: message.author.id,
-    username: message.author.username,
-    guildName: message.guild.name,
-    channelId: message.channelId,
-    args: '',
+  const payload = await prepareAutoresponderReply(
+    hit,
+    {
+      userId: message.author.id,
+      username: message.author.username,
+      guildName: message.guild.name,
+      channelId: message.channelId,
+      args: '',
+    },
+    { attachVideos: message.channel.permissionsFor(me)?.has('AttachFiles') }
+  );
+  await message.channel.send(payload).catch(async () => {
+    if (payload.files?.length && payload[VIDEO_URL]) {
+      await message.channel
+        .send({ ...payload, files: [], content: videoLinkContent(payload.content, payload[VIDEO_URL]) })
+        .catch(() => {});
+    }
   });
-  await message.channel.send(payload).catch(() => {});
 });

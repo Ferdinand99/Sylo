@@ -21,7 +21,7 @@ function toFormRow(r = {}) {
     trigger: r.trigger || '',
     match: r.match || 'exact',
     response: r.response || '',
-    responseType: r.responseType || 'text',
+    responseType: ['random-image', 'random-media'].includes(r.responseType) ? 'random-media' : 'text',
     imageUrls: (r.imageUrls || []).join('\n'),
     embed: Boolean(r.embed),
     deleteTrigger: Boolean(r.deleteTrigger),
@@ -168,23 +168,31 @@ export default function Autoresponder() {
                 onChange={(e) => updateRow(r.key, { responseType: e.target.value })}
               >
                 <option value="text">Stały tekst</option>
-                <option value="random-image">Losowy obrazek</option>
+                <option value="random-media">Losowy obrazek lub film</option>
               </select>
             </div>
-            {r.responseType === 'random-image' && (
+            {r.responseType === 'random-media' && (
               <div className="v2-field">
-                <label>Linki do obrazków — każdy w osobnym wierszu (maks. 25)</label>
+                <label>Linki do obrazków lub filmów — każdy w osobnym wierszu (maks. 25)</label>
                 <textarea
                   rows={3}
                   value={r.imageUrls}
                   onChange={(e) => updateRow(r.key, { imageUrls: e.target.value })}
                   placeholder="https://example.com/obrazek.png"
                 />
-                <p className="v2-field-hint">Bot losuje jeden obrazek. Podaj bezpośrednie linki do plików.</p>
+                <p className="v2-field-hint">
+                  Filmy z Reddita i Discorda do 8 MiB bot wysyła jako załączniki; wymagają uprawnienia
+                  „Załączanie plików”. Większe pliki i inne hostingi są wysyłane jako linki. Podpisane linki
+                  mogą wygasać.
+                </p>
+                <p className="v2-field-hint">
+                  Bot losuje jeden obrazek lub film. Podaj bezpośrednie linki do plików PNG/JPG/GIF lub
+                  MP4/WebM.
+                </p>
               </div>
             )}
             <div className="v2-field">
-              <label>Treść odpowiedzi (przy obrazkach: opcjonalny podpis)</label>
+              <label>Treść odpowiedzi (przy mediach: opcjonalny podpis)</label>
               <textarea
                 rows={2}
                 maxLength={2000}

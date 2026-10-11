@@ -8,8 +8,9 @@
 <p class="muted small">
   Bot odpowiada na wybrane słowo bez komendy. Działa pierwsza pasująca reguła.
   Zmienne: <%- arPlaceholders.map(function (p) { return '<code>' + p + '</code>'; }).join(' ') %>.
-  Obrazki wymagają uprawnienia <strong>Osadzanie linków</strong>, a usuwanie wiadomości — <strong>Zarządzanie wiadomościami</strong>.
+  Obrazki i linki do filmów wymagają uprawnienia <strong>Osadzanie linków</strong>, a usuwanie wiadomości — <strong>Zarządzanie wiadomościami</strong>.
 </p>
+<p class="muted small">Filmy z Reddita i Discorda do 8 MiB bot wysyła jako załączniki; wymagają uprawnienia „Załączanie plików”. Większe pliki i inne hostingi są wysyłane jako linki. Podpisane linki mogą wygasać.</p>
 <p class="muted small">Przykłady: <code>cp</code> → tekst <code>serowa pizza</code>; <code>f</code> → losowy obrazek z trzech podanych linków. Wybierz „dokładnie ta wiadomość”, aby bot nie reagował na litery wewnątrz innych słów.</p>
 
 <form method="POST" action="/guilds/<%= guild.id %>/m/autoresponder/config" hx-post="/guilds/<%= guild.id %>/m/autoresponder/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-2xl">
@@ -39,14 +40,14 @@
         </div>
         <label class="small">Rodzaj odpowiedzi</label>
         <select name="ar_response_type">
-          <option value="text" <%= r.responseType === 'random-image' ? '' : 'selected' %>>Stały tekst</option>
-          <option value="random-image" <%= r.responseType === 'random-image' ? 'selected' : '' %>>Losowy obrazek</option>
+          <option value="text" <%= ['random-image', 'random-media'].includes(r.responseType) ? '' : 'selected' %>>Stały tekst</option>
+          <option value="random-media" <%= ['random-image', 'random-media'].includes(r.responseType) ? 'selected' : '' %>>Losowy obrazek lub film</option>
         </select>
-        <label class="small">Treść odpowiedzi (przy obrazkach: opcjonalny podpis)</label>
+        <label class="small">Treść odpowiedzi (przy mediach: opcjonalny podpis)</label>
         <textarea name="ar_response" rows="2" placeholder="Np. serowa pizza"><%= r.response || '' %></textarea>
-        <label class="small">Linki do obrazków — każdy w osobnym wierszu (maks. 25)</label>
+        <label class="small">Linki do obrazków lub filmów — każdy w osobnym wierszu (maks. 25)</label>
         <textarea name="ar_images" rows="3" placeholder="https://example.com/obrazek1.png&#10;https://example.com/obrazek2.png&#10;https://example.com/obrazek3.png"><%= Array.isArray(r.imageUrls) ? r.imageUrls.join('\n') : '' %></textarea>
-        <p class="muted small">W trybie „Losowy obrazek” bot wysyła jeden wylosowany obrazek. Podaj bezpośrednie linki do plików, a nie strony z obrazkami.</p>
+        <p class="muted small">W trybie „Losowy obrazek lub film” bot wysyła jeden wylosowany obrazek lub film. Podaj bezpośrednie linki do plików PNG/JPG/GIF lub MP4/WebM, a nie strony z mediami.</p>
       </div>
     <% }) %>
   </div>
@@ -71,12 +72,12 @@
       <button type="button" class="link-btn" onclick="this.closest('.sticky-row').remove()">Usuń</button>
     </div>
     <label class="small">Rodzaj odpowiedzi</label>
-    <select name="ar_response_type"><option value="text">Stały tekst</option><option value="random-image">Losowy obrazek</option></select>
-    <label class="small">Treść odpowiedzi (przy obrazkach: opcjonalny podpis)</label>
+    <select name="ar_response_type"><option value="text">Stały tekst</option><option value="random-media">Losowy obrazek lub film</option></select>
+    <label class="small">Treść odpowiedzi (przy mediach: opcjonalny podpis)</label>
     <textarea name="ar_response" rows="2" placeholder="Np. serowa pizza"></textarea>
-    <label class="small">Linki do obrazków — każdy w osobnym wierszu (maks. 25)</label>
+    <label class="small">Linki do obrazków lub filmów — każdy w osobnym wierszu (maks. 25)</label>
     <textarea name="ar_images" rows="3" placeholder="https://example.com/obrazek1.png&#10;https://example.com/obrazek2.png&#10;https://example.com/obrazek3.png"></textarea>
-    <p class="muted small">W trybie „Losowy obrazek” bot wysyła jeden wylosowany obrazek. Podaj bezpośrednie linki do plików.</p>
+    <p class="muted small">W trybie „Losowy obrazek lub film” bot wysyła jeden wylosowany obrazek lub film. Podaj bezpośrednie linki do plików.</p>
   </div>
 </template>
 </form>
