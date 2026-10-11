@@ -1843,27 +1843,36 @@ form textarea,
   color: var(--text);
 }
 
-/* components/Announcement.jsx: bot-wide notice from Bot Personalizer. */
+/* components/Announcement.jsx: bot-wide notice from Bot Personalizer. Full
+   tinted background per severity, same convention V1 uses (.banner.ok/.bad) —
+   not just a border accent, so the severity reads at a glance. */
 .v2-announcement {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 11px 15px;
   margin-bottom: 16px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-left: 3px solid var(--accent-2);
+  border: 1px solid transparent;
   border-radius: 10px;
   font-size: 0.9rem;
 }
 .v2-announcement span {
-  color: var(--text-muted);
+  opacity: 0.85;
+}
+.v2-ann-info {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.28);
+  color: var(--accent-2);
 }
 .v2-ann-warning {
-  border-left-color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.28);
+  color: #fbbf24;
 }
 .v2-ann-critical {
-  border-left-color: #f87171;
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.32);
+  color: #f87171;
 }
 .v2-ann-dismiss {
   margin-left: auto;
