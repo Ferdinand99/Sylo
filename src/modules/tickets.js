@@ -1,5 +1,5 @@
 // Ticket / modmail helpers. Users DM the bot; staff reply from the dashboard.
-// The bot relays messages both ways. Staff replies are anonymous ("Staff").
+// The bot relays messages both ways. Staff replies are anonymous ("Administracja").
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { runtime } from '../runtime.js';
@@ -15,10 +15,25 @@ import {
 
 const TICKET_COLOR = 0x4aa3df;
 export const DEFAULT_GREETING =
-  'Thanks for contacting the staff of {server}. Your message has been received — a moderator will reply here shortly.';
-export const DEFAULT_CLOSE = 'This ticket has been closed. Send another message any time to open a new one.';
+  'Dziękujemy za kontakt z administracją serwera {server}. Twoja wiadomość dotarła — moderator wkrótce odpowie w tym czacie.';
+export const DEFAULT_CLOSE = 'Zgłoszenie zostało zamknięte. Aby otworzyć nowe, wyślij kolejną wiadomość.';
 
-const fill = (t, guild) => String(t || '').replaceAll('{server}', guild?.name ?? 'the server');
+// Translate previously saved built-in defaults, leaving administrator-written
+// greetings, closing messages and conversation content untouched.
+const LEGACY_GREETING =
+  'Thanks for contacting the staff of {server}. Your message has been received — a moderator will reply here shortly.';
+const LEGACY_CLOSE = 'This ticket has been closed. Send another message any time to open a new one.';
+const ticketNotice = (value, fallback) => {
+  const text = String(value || '').trim();
+  const legacy = fallback === DEFAULT_GREETING ? LEGACY_GREETING : LEGACY_CLOSE;
+  if (!text || text === legacy) return fallback;
+  return value;
+};
+const fill = (t, guild) => String(t || '').replaceAll('{server}', guild?.name ?? 'serwer');
+const transcriptContent = (message) =>
+  message.author_kind === 'system' && message.content === 'Ticket closed by staff.'
+    ? 'Zgłoszenie zamknięte przez administrację.'
+    : message.content;
 
 const escHtml = (s) =>
   String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -51,20 +66,25 @@ export async function buildTextTranscript(ticket) {
   const rows = await ticketMessages(ticket.id);
 
   const header = [
-    `Ticket #${ticket.id} — ${guild?.name ?? ticket.guild_id}`,
-    `Member:  ${userLabel} (${ticket.user_id})`,
-    `Opened:  ${fmtTs(ticket.created_at)}`,
-    ticket.closed_at ? `Closed:  ${fmtTs(ticket.closed_at)}` : null,
-    `Messages: ${rows.length}`,
+    `Zgłoszenie #${ticket.id} — ${guild?.name ?? ticket.guild_id}`,
+    `Użytkownik: ${userLabel} (${ticket.user_id})`,
+    `Otwarto: ${fmtTs(ticket.created_at)}`,
+    ticket.closed_at ? `Zamknięto: ${fmtTs(ticket.closed_at)}` : null,
+    `Wiadomości: ${rows.length}`,
     '─'.repeat(48),
     '',
   ].filter((l) => l != null);
 
   const body = rows.map((m) => {
-    const who = m.author_kind === 'user' ? userLabel : m.author_kind === 'staff' ? 'Staff' : 'System';
+    const who = m.author_kind === 'user' ? userLabel : m.author_kind === 'staff' ? 'Administracja' : 'System';
     const lines = [`[${fmtTs(m.created_at)}] ${who}:`];
-    if (m.content) lines.push(...m.content.split('\n').map((l) => `    ${l}`));
-    for (const a of m.attachments) lines.push(`    [attachment] ${a}`);
+    if (m.content)
+      lines.push(
+        ...transcriptContent(m)
+          .split('\n')
+          .map((l) => `    ${l}`)
+      );
+    for (const a of m.attachments) lines.push(`    [załącznik] ${a}`);
     return lines.join('\n');
   });
 
@@ -76,7 +96,7 @@ export async function buildTextTranscript(ticket) {
 
 /**
  * Render a self-contained HTML transcript of a ticket. Staff messages are shown
- * as "Staff" (matching what the member saw).
+ * as "Administracja" (matching what the member saw).
  * @param {object} ticket
  * @returns {Promise<{ filename: string, html: string }>}
  */
@@ -89,17 +109,21 @@ export async function buildTranscript(ticket) {
   const bubbles = rows
     .map((m) => {
       const who =
-        m.author_kind === 'user' ? escHtml(userLabel) : m.author_kind === 'staff' ? 'Staff' : 'System';
+        m.author_kind === 'user'
+          ? escHtml(userLabel)
+          : m.author_kind === 'staff'
+            ? 'Administracja'
+            : 'System';
       const atts = m.attachments.length
         ? `<div class="atts">${m.attachments.map((a) => `<a href="${escHtml(a)}">${escHtml(a)}</a>`).join('<br>')}</div>`
         : '';
-      const content = escHtml(m.content).replace(/\n/g, '<br>');
+      const content = escHtml(transcriptContent(m)).replace(/\n/g, '<br>');
       return `<div class="msg ${m.author_kind}"><div class="meta">${who} · ${fmtTs(m.created_at)}</div><div class="content">${content}${atts}</div></div>`;
     })
     .join('\n');
 
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<title>Ticket #${ticket.id} — ${escHtml(guild?.name ?? '')}</title>
+  const html = `<!doctype html><html lang="pl"><head><meta charset="utf-8">
+<title>Zgłoszenie #${ticket.id} — ${escHtml(guild?.name ?? '')}</title>
 <style>
  body{font:14px/1.55 system-ui,-apple-system,Segoe UI,sans-serif;background:#0f1216;color:#e6e9ed;max-width:820px;margin:24px auto;padding:0 16px}
  h1{font-size:18px;margin:0 0 4px}
@@ -110,11 +134,11 @@ export async function buildTranscript(ticket) {
  .msg.system{text-align:center;color:#8b95a1;font-size:12px}.msg.system .content{background:none;border:0;padding:2px}
  .atts{margin-top:6px;font-size:12px}a{color:#4aa3df}
 </style></head><body>
-<h1>Ticket #${ticket.id}</h1>
-<div class="hdr">Server: ${escHtml(guild?.name ?? ticket.guild_id)}<br>
-Member: ${escHtml(userLabel)} (${ticket.user_id})<br>
-Opened: ${fmtTs(ticket.created_at)}${ticket.closed_at ? `<br>Closed: ${fmtTs(ticket.closed_at)}` : ''}<br>
-Messages: ${rows.length}</div>
+<h1>Zgłoszenie #${ticket.id}</h1>
+<div class="hdr">Serwer: ${escHtml(guild?.name ?? ticket.guild_id)}<br>
+Użytkownik: ${escHtml(userLabel)} (${ticket.user_id})<br>
+Otwarto: ${fmtTs(ticket.created_at)}${ticket.closed_at ? `<br>Zamknięto: ${fmtTs(ticket.closed_at)}` : ''}<br>
+Wiadomości: ${rows.length}</div>
 ${bubbles}
 </body></html>`;
 
@@ -177,8 +201,8 @@ export async function ingestUserDM(guild, user, payload) {
         embeds: [
           new EmbedBuilder()
             .setColor(TICKET_COLOR)
-            .setTitle(`Ticket #${ticket.id} — ${guild.name}`)
-            .setDescription(fill(cfg.greeting || DEFAULT_GREETING, guild)),
+            .setTitle(`Zgłoszenie #${ticket.id} — ${guild.name}`)
+            .setDescription(fill(ticketNotice(cfg.greeting, DEFAULT_GREETING), guild)),
         ],
       })
       .catch(() => {});
@@ -196,11 +220,11 @@ export async function ingestUserDM(guild, user, payload) {
         : null;
     await notifyStaff(
       guild,
-      `🎫 New ticket #${ticket.id} from **${user.tag}** (\`${user.id}\`)${link}`,
+      `🎫 Nowe zgłoszenie #${ticket.id} od **${user.tag}** (\`${user.id}\`)${link}`,
       alertEmbed
     );
   } else {
-    await notifyStaff(guild, `💬 New reply on ticket #${ticket.id} from **${user.tag}**${link}`);
+    await notifyStaff(guild, `💬 Nowa wiadomość w zgłoszeniu #${ticket.id} od **${user.tag}**${link}`);
   }
   return ticket;
 }
@@ -219,7 +243,7 @@ export async function relayStaffReply(ticket, staffUserId, content) {
         embeds: [
           new EmbedBuilder()
             .setColor(TICKET_COLOR)
-            .setAuthor({ name: `Staff reply · ${guild?.name ?? 'server'}` })
+            .setAuthor({ name: `Odpowiedź administracji · ${guild?.name ?? 'serwer'}` })
             .setDescription(content),
         ],
       });
@@ -258,19 +282,19 @@ export async function closeTicketWithNotice(ticket, staffUserId, closingMessage)
   await addTicketMessage(ticket.id, {
     authorId: staffUserId,
     authorKind: 'system',
-    content: 'Ticket closed by staff.',
+    content: 'Zgłoszenie zamknięte przez administrację.',
   });
 
   if (user) {
     const embed = new EmbedBuilder().setColor(0x8b95a1);
     if (text) {
-      embed.setAuthor({ name: `Staff reply · ${guild?.name ?? 'server'}` }).setDescription(text);
+      embed.setAuthor({ name: `Odpowiedź administracji · ${guild?.name ?? 'serwer'}` }).setDescription(text);
       embed.setFooter({
-        text: 'This ticket is now closed. Message again to open a new one. A transcript is attached.',
+        text: 'Zgłoszenie zostało zamknięte. Aby otworzyć nowe, wyślij kolejną wiadomość. Dołączono zapis rozmowy.',
       });
     } else {
       embed.setDescription(
-        `${fill(cfg.closeMessage || DEFAULT_CLOSE, guild)}\n\nA transcript of this conversation is attached.`
+        `${fill(ticketNotice(cfg.closeMessage, DEFAULT_CLOSE), guild)}\n\nDołączono zapis tej rozmowy.`
       );
     }
     const transcript = await buildTextTranscript((await getTicket(ticket.id)) ?? ticket);

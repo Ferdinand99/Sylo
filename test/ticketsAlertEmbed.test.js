@@ -44,7 +44,7 @@ test('a new ticket alert has no embed when showMessageInAlert is off (default)',
   await ingestUserDM(guild, user, { content: 'my subscription is broken', attachments: [] });
 
   assert.equal(sent.length, 1);
-  assert.match(sent[0].content, /New ticket/);
+  assert.match(sent[0].content, /Nowe zgłoszenie/);
   assert.equal(sent[0].embeds, undefined);
 });
 
@@ -88,6 +88,6 @@ test('a reply on an already-open ticket never gets an embed, regardless of the s
   await ingestUserDM(guild, user, { content: 'a follow-up reply', attachments: [] });
 
   assert.equal(sent.length, 2);
-  assert.match(sent[1].content, /New reply/);
+  assert.match(sent[1].content, /Nowa wiadomość/);
   assert.equal(sent[1].embeds, undefined);
 });

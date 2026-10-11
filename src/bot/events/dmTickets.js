@@ -40,7 +40,7 @@ async function handleDM(message) {
   const guilds = await ticketGuildsForUser(message.author);
   if (guilds.length === 0) {
     await message
-      .reply("I'm not set up to take messages for any server you're in right now.")
+      .reply('Nie obsługuję obecnie zgłoszeń na żadnym serwerze, do którego należysz.')
       .catch(() => {});
     return;
   }
@@ -71,7 +71,7 @@ async function handleDM(message) {
     );
   await message
     .reply({
-      content: 'You can reach staff in more than one server. Pick one:',
+      content: 'Możesz skontaktować się z administracją kilku serwerów. Wybierz jeden:',
       components: [new ActionRowBuilder().addComponents(menu)],
     })
     .catch(() => {});
@@ -82,14 +82,14 @@ async function handleSelect(interaction) {
   const payload = takeStash(interaction.user.id);
   if (!guild || !payload) {
     await interaction
-      .update({ content: 'That request expired — send your message again.', components: [] })
+      .update({ content: 'Ten wybór wygasł — wyślij swoją wiadomość ponownie.', components: [] })
       .catch(() => {});
     return;
   }
   const ticket = await ingestUserDM(guild, interaction.user, payload);
   await interaction
     .update({
-      content: `Opened ticket #${ticket.id} for **${guild.name}**. Just keep replying here.`,
+      content: `Otwarto zgłoszenie #${ticket.id} dla serwera **${guild.name}**. Kolejne wiadomości wysyłaj tutaj.`,
       components: [],
     })
     .catch(() => {});
