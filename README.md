@@ -354,8 +354,8 @@ settings panel per module — saves swap in place with a toast.
     never message content or per-user rows — with ~180-day (hourly: ~3-day)
     retention
   - **Free games** — announces games that become free to claim (hourly poll):
-    the Epic Games Store, plus Steam / GOG / Fanatical / Humble and more with an
-    `ITAD_API_KEY`. Optional ping role; `/freegames [dlc]` on demand
+    Epic Games Store and Steam (via [GamerPower](https://www.gamerpower.com/))
+    without API keys; GOG / Fanatical / Humble and more with an `ITAD_API_KEY`. Optional ping role; `/freegames [dlc]` on demand
   - **Ban appeals** — banned members are DM'd a signed link to an appeal form
     (sent *before* the ban lands, since a bot can't DM a user it no longer shares
     a server with). Staff accept (auto-unban + single-use rejoin invite) or deny

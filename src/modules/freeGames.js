@@ -1,5 +1,5 @@
 // Free games notifier — announces titles that become free to claim.
-// Source: the Epic Games Store promotion feed (always) plus, when an
+// Sources: Epic Games Store and Steam giveaways via GamerPower (no key), plus, when an
 // ITAD_API_KEY is set, IsThereAnyDeal's cross-store deals list.
 //
 // config shape: { channelId, roleId }
@@ -14,6 +14,7 @@ import { log } from '../lib/log.js';
 const EPIC_URL =
   'https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions?locale=en-US&country=US&allowCountries=US';
 const ITAD_URL = 'https://api.isthereanydeal.com/deals/v2';
+const STEAM_URL = 'https://www.gamerpower.com/api/giveaways?platform=steam&type=game';
 const COLOR = 0x2f2d2e;
 const POLL_MS = 60 * 60 * 1000;
 
@@ -114,7 +115,8 @@ export function parseItadPayload(json, kind = 'game') {
 
     const a = entry.assets || {};
     out.push({
-      key: gameKey(entry.title),
+      key:
+        deal.shop?.name?.toLowerCase() === 'steam' ? `steam:${gameKey(entry.title)}` : gameKey(entry.title),
       title: entry.title,
       kind: isDlc ? 'dlc' : 'game',
       description: '',
@@ -139,11 +141,85 @@ async function fetchItad(kind = 'game') {
   return parseItadPayload(await res.json(), kind);
 }
 
+// --- Steam (GamerPower's public, attributed API) -------------------------------
+
+const gamerPowerUrl = (value) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' &&
+      url.hostname === 'www.gamerpower.com' &&
+      !url.username &&
+      !url.password
+      ? url.href
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Permanent Steam giveaways only, not third-party key tasks or free weekends. */
+export function parseSteamPayload(json, now = Date.now()) {
+  if (!Array.isArray(json)) return [];
+  const out = [];
+  for (const entry of json) {
+    if (!entry || entry.type !== 'Game' || entry.status !== 'Active') continue;
+    if (
+      !String(entry.platforms || '')
+        .split(',')
+        .some((p) => p.trim() === 'Steam')
+    )
+      continue;
+    const title = String(entry.title || '').trim();
+    const details = `${title} ${entry.description || ''} ${entry.instructions || ''}`;
+    if (!title || /\b(?:demo|beta|playtest|free[- ]weekend|free[- ]to[- ]play|trial)\b/i.test(details))
+      continue;
+    if (/\b(?:keys?|ARP)\b|activate a product|alienware/i.test(details)) continue;
+    // Fail closed: require evidence that the giveaway is redeemed on Steam itself.
+    if (!/(?:directly (?:via|on|from) Steam|free on Steam|free (?:on|via) Steam|Steam store)/i.test(details))
+      continue;
+    const url = gamerPowerUrl(entry.open_giveaway_url || entry.open_giveaway);
+    const sourceUrl = gamerPowerUrl(entry.gamerpower_url);
+    if (!url || !sourceUrl) continue;
+    const cleanTitle = title.replace(/\s*\(Steam\)\s*Giveaway\s*$/i, '').trim();
+    if (!cleanTitle) continue;
+    // GamerPower's dates have no documented timezone. Show the calendar date
+    // rather than inventing an exact deadline or interpreting the host's timezone.
+    const endsOn = String(entry.end_date || '').match(/^(\d{4}-\d{2}-\d{2}) [\d:]+$/)?.[1] || null;
+    if (endsOn && endsOn < new Date(now).toISOString().slice(0, 10)) continue;
+    out.push({
+      key: `steam:${gameKey(cleanTitle)}`,
+      title: cleanTitle,
+      kind: 'game',
+      description: 'Odbierz grę na Steam i zachowaj ją na stałe.',
+      image: gamerPowerUrl(entry.image) || gamerPowerUrl(entry.thumbnail),
+      url,
+      sourceUrl,
+      store: 'Steam',
+      priceText: /^\$\d+(?:\.\d{2})?$/.test(entry.worth || '') ? entry.worth : null,
+      endsAt: NaN,
+      endsOn,
+    });
+  }
+  return out;
+}
+
+async function fetchSteam() {
+  const res = await fetch(STEAM_URL, {
+    headers: { 'User-Agent': 'Sylo-Discord-Bot' },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (res.status === 201) return [];
+  if (!res.ok) throw new Error(`GamerPower API ${res.status}`);
+  const json = await res.json();
+  if (!Array.isArray(json)) throw new Error('Unexpected GamerPower response');
+  return parseSteamPayload(json);
+}
+
 // --- combined ------------------------------------------------------------------
 
 /**
- * Current free games (Epic first for the nicer embed, then ITAD's extras),
- * de-duplicated by normalised title.
+ * Current free games from Epic, Steam, then ITAD's extras.
+ * Steam has a separate dedup key so an Epic claim does not hide a Steam offer.
  * @param {{ kind?: 'game'|'dlc' }} [opts]
  */
 export async function getFreeGames({ kind = 'game' } = {}) {
@@ -152,6 +228,12 @@ export async function getFreeGames({ kind = 'game' } = {}) {
     results.push(
       await fetchEpic().catch((err) => {
         log.error('free-games', 'Epic fetch failed:', err.message);
+        return [];
+      })
+    );
+    results.push(
+      await fetchSteam().catch((err) => {
+        log.error('free-games', 'Steam fetch failed:', err.message);
         return [];
       })
     );
@@ -186,13 +268,15 @@ export function gameEmbed(game) {
     .setTitle(`${game.kind === 'dlc' ? '[DLC] ' : ''}${game.title}`)
     .setURL(game.url)
     .setDescription(game.description || null)
-    .addFields({ name: 'Store', value: game.store, inline: true });
-  if (game.priceText) embed.addFields({ name: 'Was', value: game.priceText, inline: true });
+    .addFields({ name: 'Sklep', value: game.store, inline: true });
+  if (game.priceText) embed.addFields({ name: 'Poprzednia cena', value: game.priceText, inline: true });
   if (Number.isFinite(game.endsAt)) {
-    embed.addFields({ name: 'Free until', value: `<t:${Math.floor(game.endsAt / 1000)}:D>`, inline: true });
+    embed.addFields({ name: 'Darmowa do', value: `<t:${Math.floor(game.endsAt / 1000)}:D>`, inline: true });
   }
+  if (game.endsOn) embed.addFields({ name: 'Termin według źródła', value: game.endsOn, inline: true });
+  if (game.sourceUrl) embed.addFields({ name: 'Źródło', value: `[GamerPower](${game.sourceUrl})` });
   if (game.image) embed.setImage(game.image);
-  embed.setFooter({ text: 'Free to claim' }).setTimestamp(Date.now());
+  embed.setFooter({ text: 'Do odebrania za darmo' }).setTimestamp(Date.now());
   return embed;
 }
 

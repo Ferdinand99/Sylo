@@ -215,7 +215,7 @@ export const MODULES = [
   {
     id: 'free-games',
     name: 'Free games',
-    description: 'Announce games that become free to claim on the Epic Games Store.',
+    description: 'Announce games that become free to claim on Epic Games Store and Steam.',
     icon: '🎮',
     requiredIntents: [],
     defaultEnabled: false,
