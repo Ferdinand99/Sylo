@@ -10,6 +10,12 @@
   </div>
 </div>
 
+<% if (typeof errors !== 'undefined' && errors.length) { %>
+  <div class="banner bad">
+    <% errors.forEach(function (e) { %><div><%= e %></div><% }) %>
+  </div>
+<% } %>
+
 <%
   var _rr = {
     style: rm.style || 'reaction',
@@ -77,7 +83,7 @@
     </div>
 
     <div class="rr-rows">
-      <template x-for="(row, i) in rows" :key="i">
+      <template x-for="(row, i) in rows" :key="row._key">
         <div class="rr-row">
           <span class="emoji-cellwrap" x-data="emojiPicker('<%= guildId %>')" @emoji-pick="row.emoji = $event.detail">
             <input type="text" name="rr_emoji" class="rr-emoji" x-model="row.emoji"

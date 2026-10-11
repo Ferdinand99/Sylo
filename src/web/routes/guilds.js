@@ -142,6 +142,7 @@ import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
+import { headerJson } from '../lib/httpJson.js';
 import {
   listCleanupSchedules,
   getCleanupSchedule,
@@ -718,7 +719,7 @@ router.post(
     if (req.get('HX-Request')) {
       return res
         .status(204)
-        .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Immunity roles saved', kind: 'ok' } }))
+        .set('HX-Trigger', headerJson({ toast: { msg: 'Immunity roles saved', kind: 'ok' } }))
         .end();
     }
     res.redirect(`/guilds/${req.guild.id}/moderation?msg=saved`);
@@ -1025,7 +1026,7 @@ router.post(
           kind: 'bad',
         };
     if (req.get('HX-Request')) {
-      return res.status(204).set('HX-Trigger', JSON.stringify({ toast })).end();
+      return res.status(204).set('HX-Trigger', headerJson({ toast })).end();
     }
     const msg = r.ok ? 'test-sent' : r.reason === 'no-channel' ? 'test-nochan' : 'test-fail';
     res.redirect(`${back}?msg=${msg}`);
@@ -1531,7 +1532,7 @@ router.post(
       return res
         .set(
           'HX-Trigger',
-          JSON.stringify({ toast: { msg: `Saved${nativeNote}`, kind: nativeWarned ? 'warn' : 'ok' } })
+          headerJson({ toast: { msg: `Saved${nativeNote}`, kind: nativeWarned ? 'warn' : 'ok' } })
         )
         .render('guild/_module-config', await moduleViewLocals(mod, req, config));
     }
@@ -2182,13 +2183,14 @@ router.post(
 
 // --- Reaction-role builder (MEE6-style) ---------------------------------
 
-async function renderRrBuilder(req, res, rm) {
+async function renderRrBuilder(req, res, rm, opts = {}) {
   res.render('rr-builder', {
     ...(await baseContext(req.guild, 'm/roles')),
     channels: guildTextChannels(req.guild),
     roles: assignableRoles(req.guild),
     guildId: req.guild.id,
-    isNew: !rm,
+    isNew: opts.isNew ?? !rm,
+    errors: opts.errors || [],
     rm: rm || {
       id: '',
       channelId: '',
@@ -2227,8 +2229,8 @@ router.post(
     const cfg = (await getGuildModule(guild.id, 'roles')).config;
     const list = Array.isArray(cfg.reactionMessages) ? cfg.reactionMessages : [];
 
-    const channelId = /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '';
-    if (!channelId) return res.redirect(`${back}?msg=badchannel`);
+    const id = /^\d+$/.test(req.body.id ?? '') ? req.body.id : String(Date.now());
+    const existing = list.find((x) => String(x.id) === id);
 
     let embed;
     try {
@@ -2242,12 +2244,29 @@ router.post(
     const roleIds = [].concat(req.body.rr_role ?? []);
     const labels = [].concat(req.body.rr_label ?? []);
     const btnStyles = [].concat(req.body.rr_btnstyle ?? []);
+
+    const errors = [];
+    const channelId = /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '';
+    if (!channelId) errors.push('Select a channel.');
+
     const pairs = [];
+    let hadRowError = false;
     roleIds.forEach((rid, i) => {
-      if (!/^\d{17,20}$/.test(rid ?? '')) return;
+      // A fully blank trailing row (the default empty one, or one added and
+      // never filled in) is ignored, not an error.
+      if (!rid && !emojis[i] && !labels[i]) return;
+      if (!/^\d{17,20}$/.test(rid ?? '')) {
+        errors.push(`Row ${i + 1}: select a role.`);
+        hadRowError = true;
+        return;
+      }
       const parsed = parseEmoji(emojis[i] ?? '', guild);
       // The reaction style needs a usable emoji; button / select styles don't.
-      if (style === 'reaction' && !parsed) return;
+      if (style === 'reaction' && !parsed) {
+        errors.push(`Row ${i + 1}: enter a valid emoji (required for the Reactions style).`);
+        hadRowError = true;
+        return;
+      }
       pairs.push({
         ...(parsed || { key: '', display: '', react: '' }),
         roleId: rid,
@@ -2257,10 +2276,38 @@ router.post(
           : 'secondary',
       });
     });
-    if (pairs.length === 0) return res.redirect(`${back}?msg=needpair`);
+    if (pairs.length === 0 && !hadRowError) errors.push('Add at least one role.');
 
-    const id = /^\d+$/.test(req.body.id ?? '') ? req.body.id : String(Date.now());
-    const existing = list.find((x) => String(x.id) === id);
+    if (errors.length) {
+      // Re-render with exactly what was submitted (not the saved config) and
+      // the specific problems, instead of discarding every typed row behind a
+      // generic redirect message.
+      return renderRrBuilder(
+        req,
+        res,
+        {
+          id,
+          channelId: req.body.channelId || '',
+          messageId: existing?.messageId || '',
+          style,
+          message: String(req.body.message ?? '').slice(0, 2000),
+          embed: normaliseEmbedSpec(embed),
+          exclusive: req.body.exclusive === 'on',
+          mode: req.body.mode === 'reverse' ? 'reverse' : 'default',
+          placeholder: String(req.body.rr_placeholder ?? '').slice(0, 150),
+          selMin: Number.parseInt(req.body.rr_selmin, 10) || 0,
+          selMax: Number.parseInt(req.body.rr_selmax, 10) || 0,
+          pairs: roleIds.map((rid, i) => ({
+            display: emojis[i] || '',
+            label: labels[i] || '',
+            roleId: rid || '',
+            btnStyle: btnStyles[i] || 'secondary',
+          })),
+        },
+        { isNew: !existing, errors }
+      );
+    }
+
     const rm = {
       id,
       channelId,
@@ -2793,7 +2840,7 @@ router.post(
     if (req.get('HX-Request')) {
       res.set(
         'HX-Trigger',
-        JSON.stringify({
+        headerJson({
           moduleToggled: { id: mod.id, enabled },
           toast: { msg: `${mod.name} ${enabled ? 'enabled' : 'disabled'}`, kind: 'ok' },
         })
@@ -2965,7 +3012,7 @@ router.post(
       if (hx) {
         return res
           .status(404)
-          .set('HX-Trigger', JSON.stringify({ toast: { msg: 'Unknown command', kind: 'bad' } }))
+          .set('HX-Trigger', headerJson({ toast: { msg: 'Unknown command', kind: 'bad' } }))
           .end();
       }
       return res.redirect(`/guilds/${guild.id}/commands?msg=badcommand`);
@@ -2990,7 +3037,7 @@ router.post(
     if (hx) {
       return res
         .status(204)
-        .set('HX-Trigger', JSON.stringify({ toast: { msg: `/${command} updated`, kind: 'ok' } }))
+        .set('HX-Trigger', headerJson({ toast: { msg: `/${command} updated`, kind: 'ok' } }))
         .end();
     }
     res.redirect(`/guilds/${guild.id}/commands?msg=saved`);
