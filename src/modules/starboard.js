@@ -7,9 +7,9 @@
 //   removeBotReactions, minAgeMinutes, maxAgeMinutes, roleMode: 'allow'|'deny',
 //   roleList: [], channelMode, channelList: [] } ] }
 // `key` for an emoji is its custom id, or the unicode character. [] = any emoji.
+import { guildByKey, guildKey } from '../platform/platformOf.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionsBitField } from 'discord.js';
 import { on } from './dispatch.js';
-import { runtime } from '../runtime.js';
 import {
   getStarboardEntry,
   getStarboardEntryByPost,
@@ -221,7 +221,7 @@ export async function rescanBoard(guild, board) {
       if (board.minAgeMinutes && age < board.minAgeMinutes * 60_000) continue;
       if (board.maxAgeMinutes && age > board.maxAgeMinutes * 60_000) continue;
 
-      if ((await getStarboardEntry(guild.id, board.id, message.id))?.post_msg_id) continue;
+      if ((await getStarboardEntry(guildKey(guild), board.id, message.id))?.post_msg_id) continue;
 
       const hasMatch = [...message.reactions.cache.values()].some(
         (rx) => !board.emojis.length || board.emojis.includes(rx.emoji.id || rx.emoji.name)
@@ -232,7 +232,7 @@ export async function rescanBoard(guild, board) {
       if (count < board.threshold) {
         if (count > 0) {
           await upsertStarboardEntry({
-            guildId: guild.id,
+            guildId: guildKey(guild),
             boardId: board.id,
             sourceMsgId: message.id,
             sourceChanId: message.channelId,
@@ -246,13 +246,13 @@ export async function rescanBoard(guild, board) {
       if (!sent) continue;
       posted += 1;
       await upsertStarboardEntry({
-        guildId: guild.id,
+        guildId: guildKey(guild),
         boardId: board.id,
         sourceMsgId: message.id,
         sourceChanId: message.channelId,
         starCount: count,
       });
-      await setStarboardPost(guild.id, board.id, message.id, sent.id, Date.now());
+      await setStarboardPost(guildKey(guild), board.id, message.id, sent.id, Date.now());
 
       if (board.autoReact) {
         const src = board.emojis.length ? board.emojis : ['⭐'];
@@ -394,7 +394,7 @@ on('starboard', 'messageDelete', async (message, rawConfig, guildId) => {
     return;
   }
   const cfg = normaliseStarboard(rawConfig);
-  const guild = runtime.client?.guilds.cache.get(guildId);
+  const guild = guildByKey(guildId);
   for (const board of cfg.boards) {
     const entry = await getStarboardEntry(guildId, board.id, message.id);
     if (!entry) continue;

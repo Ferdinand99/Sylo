@@ -1,6 +1,7 @@
 // DM → ticket bridge. A DM to the bot opens (or appends to) a ticket. When the
 // user shares several ticket-enabled servers and has no open ticket, the bot
 // asks which server with a select menu.
+import { guildKey, guildByKey } from '../../platform/platformOf.js';
 import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
 import { ticketGuildsForUser, ingestUserDM } from '../../modules/tickets.js';
 import { getOpenTicket } from '../../db/tickets.js';
@@ -46,7 +47,7 @@ async function handleDM(message) {
   }
 
   // If there's exactly one open ticket already, keep the conversation there.
-  const openFlags = await Promise.all(guilds.map((g) => getOpenTicket(g.id, message.author.id)));
+  const openFlags = await Promise.all(guilds.map((g) => getOpenTicket(guildKey(g), message.author.id)));
   const openGuilds = guilds.filter((g, i) => openFlags[i]);
   if (openGuilds.length === 1) {
     await ingestUserDM(openGuilds[0], message.author, payload);
@@ -67,7 +68,7 @@ async function handleDM(message) {
     .addOptions(
       (openGuilds.length ? openGuilds : guilds)
         .slice(0, 25)
-        .map((g) => ({ label: g.name.slice(0, 100), value: g.id }))
+        .map((g) => ({ label: g.name.slice(0, 100), value: guildKey(g) }))
     );
   await message
     .reply({
@@ -78,7 +79,7 @@ async function handleDM(message) {
 }
 
 async function handleSelect(interaction) {
-  const guild = interaction.client.guilds.cache.get(interaction.values[0]);
+  const guild = guildByKey(interaction.values[0]);
   const payload = takeStash(interaction.user.id);
   if (!guild || !payload) {
     await interaction

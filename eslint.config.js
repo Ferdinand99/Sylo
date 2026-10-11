@@ -44,6 +44,32 @@ export default [
     },
   },
 
+  // A guild's `.id` is the platform's raw id. Everything Sylo keys on — DB rows,
+  // timers, caches, dashboard URLs — uses the guild *key* instead (a Fluxer guild's
+  // is "fluxer:<id>"), so a raw id must never reach one. Use guildKey(guild) from
+  // src/platform/platformOf.js; keep `.id` only where the platform itself wants it
+  // (the @everyone role id, REST calls) and say why in an eslint-disable comment.
+  // `interaction.guild.id` is exempt: an interaction's guild already reports its key.
+  {
+    files: [
+      'src/modules/**/*.js',
+      'src/bot/commands/**/*.js',
+      'src/bot/events/**/*.js',
+      'src/bot/lib/**/*.js',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "MemberExpression[property.name='id'][object.name='guild'], MemberExpression[property.name='id'][object.type='MemberExpression'][object.property.name='guild']:not([object.object.name='interaction'])",
+          message:
+            'Use guildKey(guild) (src/platform/platformOf.js) — `guild.id` is the raw platform id, not the key.',
+        },
+      ],
+    },
+  },
+
   // Browser-side progressive-enhancement scripts.
   {
     files: ['src/web/public/**/*.js'],

@@ -1,5 +1,6 @@
 // Ticket / modmail helpers. Users DM the bot; staff reply from the dashboard.
 // The bot relays messages both ways. Staff replies are anonymous ("Staff").
+import { allGuilds, guildByKey, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { runtime } from '../runtime.js';
@@ -45,7 +46,7 @@ const fmtTs = (ts) => tsFmt.format(new Date(ts));
  * @returns {Promise<{ filename: string, text: string }>}
  */
 export async function buildTextTranscript(ticket) {
-  const guild = runtime.client?.guilds.cache.get(ticket.guild_id);
+  const guild = guildByKey(ticket.guild_id);
   const user = await runtime.client?.users.fetch(ticket.user_id).catch(() => null);
   const userLabel = user ? user.tag : ticket.user_id;
   const rows = await ticketMessages(ticket.id);
@@ -81,7 +82,7 @@ export async function buildTextTranscript(ticket) {
  * @returns {Promise<{ filename: string, html: string }>}
  */
 export async function buildTranscript(ticket) {
-  const guild = runtime.client?.guilds.cache.get(ticket.guild_id);
+  const guild = guildByKey(ticket.guild_id);
   const user = await runtime.client?.users.fetch(ticket.user_id).catch(() => null);
   const userLabel = user ? user.tag : ticket.user_id;
   const rows = await ticketMessages(ticket.id);
@@ -124,8 +125,8 @@ ${bubbles}
 /** Guilds where the tickets module is enabled and the user is a member. */
 export async function ticketGuildsForUser(user) {
   const out = [];
-  for (const guild of runtime.client.guilds.cache.values()) {
-    if (!(await isModuleEnabled(guild.id, 'tickets'))) continue;
+  for (const guild of allGuilds()) {
+    if (!(await isModuleEnabled(guildKey(guild), 'tickets'))) continue;
     const member = await guild.members.fetch(user.id).catch(() => null);
     if (member) out.push(guild);
   }
@@ -135,7 +136,7 @@ export async function ticketGuildsForUser(user) {
 const ALERT_MESSAGE_MAX = 1000;
 
 async function notifyStaff(guild, text, embed) {
-  const cfg = (await getGuildModule(guild.id, 'tickets')).config;
+  const cfg = (await getGuildModule(guildKey(guild), 'tickets')).config;
   if (!cfg.notifyChannel) return;
   const ch =
     guild.channels.cache.get(cfg.notifyChannel) ??
@@ -156,10 +157,10 @@ async function notifyStaff(guild, text, embed) {
  * @param {{ content: string, attachments: string[] }} payload
  */
 export async function ingestUserDM(guild, user, payload) {
-  const cfg = (await getGuildModule(guild.id, 'tickets')).config;
-  let ticket = await getOpenTicket(guild.id, user.id);
+  const cfg = (await getGuildModule(guildKey(guild), 'tickets')).config;
+  let ticket = await getOpenTicket(guildKey(guild), user.id);
   const isNew = !ticket;
-  if (!ticket) ticket = await createTicket(guild.id, user.id);
+  if (!ticket) ticket = await createTicket(guildKey(guild), user.id);
 
   await addTicketMessage(ticket.id, {
     authorId: user.id,
@@ -169,7 +170,7 @@ export async function ingestUserDM(guild, user, payload) {
   });
 
   const link = config.dashboardUrl
-    ? `\n<${config.dashboardUrl}/guilds/${guild.id}/tickets/${ticket.id}>`
+    ? `\n<${config.dashboardUrl}/guilds/${guildKey(guild)}/tickets/${ticket.id}>`
     : '';
   if (isNew) {
     await user
@@ -210,7 +211,7 @@ export async function ingestUserDM(guild, user, payload) {
  * @returns {Promise<{ delivered: boolean }>}
  */
 export async function relayStaffReply(ticket, staffUserId, content) {
-  const guild = runtime.client.guilds.cache.get(ticket.guild_id);
+  const guild = guildByKey(ticket.guild_id);
   const user = await runtime.client.users.fetch(ticket.user_id).catch(() => null);
   let delivered = Boolean(user);
   if (user) {
@@ -239,7 +240,7 @@ export async function relayStaffReply(ticket, staffUserId, content) {
  * @param {string} [closingMessage]
  */
 export async function closeTicketWithNotice(ticket, staffUserId, closingMessage) {
-  const guild = runtime.client?.guilds.cache.get(ticket.guild_id);
+  const guild = guildByKey(ticket.guild_id);
   const cfg = (await getGuildModule(ticket.guild_id, 'tickets')).config;
   const user = await runtime.client?.users.fetch(ticket.user_id).catch(() => null);
 

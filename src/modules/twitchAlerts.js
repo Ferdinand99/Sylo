@@ -7,9 +7,9 @@
 // message placeholders: {name} {title} {game} {url} {viewers}
 // plainText: send a plain message with no embed (for channels bridged elsewhere,
 // e.g. a RuneLite Discord->game-chat plugin that ignores embeds).
+import { allGuilds, anyClientReady, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
-import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { announcedStreamId, announcedPost, markLive, markOffline } from '../db/twitchAlerts.js';
 import { postToChannel } from './lib/send.js';
@@ -160,14 +160,14 @@ export function buildPayload(stream, user, alert) {
 // --- poll loop -------------------------------------------------------
 
 async function tick() {
-  if (!runtime.client?.isReady() || !config.twitchEnabled) return;
+  if (!anyClientReady() || !config.twitchEnabled) return;
 
   // Gather every alert across enabled guilds.
   const jobs = [];
-  for (const guild of runtime.client.guilds.cache.values()) {
-    if (!(await isModuleEnabled(guild.id, 'twitch-alerts'))) continue;
-    const cfg = normaliseTwitchConfig((await getGuildModule(guild.id, 'twitch-alerts')).config);
-    for (const alert of cfg.alerts) jobs.push({ guildId: guild.id, alert });
+  for (const guild of allGuilds()) {
+    if (!(await isModuleEnabled(guildKey(guild), 'twitch-alerts'))) continue;
+    const cfg = normaliseTwitchConfig((await getGuildModule(guildKey(guild), 'twitch-alerts')).config);
+    for (const alert of cfg.alerts) jobs.push({ guildId: guildKey(guild), alert });
   }
   if (!jobs.length) return;
 

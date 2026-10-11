@@ -1,6 +1,7 @@
 // "Send test" from the dashboard: post one representative message for a module
 // to its configured channel, so an admin can confirm the channel + permissions
 // without waiting for a real trigger.
+import { guildKey } from '../../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { getGuildModule } from '../../db/modules.js';
 import { guildEmbedColor } from '../../db/guildSettings.js';
@@ -21,8 +22,8 @@ export const TESTABLE = new Set([
  * @returns {Promise<{ ok: boolean, channelName?: string, reason?: 'no-channel'|'send-failed' }>}
  */
 export async function sendModuleTest(guild, moduleId) {
-  const cfg = (await getGuildModule(guild.id, moduleId)).config || {};
-  const color = await guildEmbedColor(guild.id);
+  const cfg = (await getGuildModule(guildKey(guild), moduleId)).config || {};
+  const color = await guildEmbedColor(guildKey(guild));
   let channelId;
   let embed;
 
@@ -81,7 +82,7 @@ export async function sendModuleTest(guild, moduleId) {
   }
 
   if (!channelId) return { ok: false, reason: 'no-channel' };
-  const sent = await sendToChannel(guild.id, channelId, {
+  const sent = await sendToChannel(guildKey(guild), channelId, {
     embeds: [embed],
     allowedMentions: { parse: [] },
   });

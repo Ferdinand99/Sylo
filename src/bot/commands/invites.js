@@ -1,4 +1,5 @@
 // /invites [user] — a member's invite tally, plus a personal invite link.
+import { guildKey } from '../../platform/platformOf.js';
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { isModuleEnabled } from '../../db/modules.js';
 import {
@@ -36,7 +37,7 @@ async function personalLink(guild, userId) {
   } catch {
     return { error: 'I need the **Manage Server** permission to hand out invite links.' };
   }
-  const existing = await getPersonalCode(guild.id, userId);
+  const existing = await getPersonalCode(guildKey(guild), userId);
   if (existing && all.has(existing)) return { url: `https://discord.gg/${existing}` };
 
   const channel = pickInviteChannel(guild);
@@ -47,7 +48,7 @@ async function personalLink(guild, userId) {
       unique: true,
       reason: `Personal invite link via /invites for ${userId}`,
     });
-    await setPersonalCode(guild.id, userId, invite.code);
+    await setPersonalCode(guildKey(guild), userId, invite.code);
     await primeGuild(guild); // teach the cache about the new code
     return { url: invite.url };
   } catch {

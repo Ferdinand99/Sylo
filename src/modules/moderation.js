@@ -6,8 +6,8 @@
 //     dmOnPunish: boolean,
 //     warnThresholds: [ { count, action: 'timeout'|'kick'|'ban', durationMinutes? } ]
 //   }
+import { anyClientReady, guildByKey, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder, RESTJSONErrorCodes } from 'discord.js';
-import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { dueTempBans, clearTempBan } from '../db/tempBans.js';
 import { addCase, deactivateLatest } from '../db/modCases.js';
@@ -40,8 +40,8 @@ export function normaliseThresholds(list) {
  * @param {string} moderatorLabel  who issued the warning (for the mod-log)
  */
 export async function applyWarnThresholds(guild, targetUser, warnCount, moderatorLabel) {
-  if (!(await isModuleEnabled(guild.id, 'moderation'))) return;
-  const config = (await getGuildModule(guild.id, 'moderation')).config;
+  if (!(await isModuleEnabled(guildKey(guild), 'moderation'))) return;
+  const config = (await getGuildModule(guildKey(guild), 'moderation')).config;
   const rules = normaliseThresholds(config.warnThresholds);
 
   // Strictest rule whose count the user has reached (exact or exceeded).
@@ -50,7 +50,7 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
 
   const member = await guild.members.fetch(targetUser.id).catch(() => null);
   // Immunity roles (shared with Auto-moderation) are never auto-punished.
-  const immune = (await getGuildModule(guild.id, 'automod')).config.exemptRoles;
+  const immune = (await getGuildModule(guildKey(guild), 'automod')).config.exemptRoles;
   if (member && Array.isArray(immune) && immune.some((r) => member.roles.cache.has(r))) return;
   const reason = `Auto: reached ${warnCount} warning(s) (rule at ${rule.count})`;
   let done = null;
@@ -84,7 +84,7 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
 
   const caseAction = done.startsWith('timed out') ? 'timeout' : rule.action;
   const { caseNumber } = await addCase({
-    guildId: guild.id,
+    guildId: guildKey(guild),
     userId: targetUser.id,
     moderatorId: 'auto',
     action: caseAction,
@@ -120,7 +120,7 @@ const TEMP_BAN_TICK_MS = 30_000;
 const settlingTempBans = new Set();
 
 export async function settleTempBan(row) {
-  const guild = runtime.client?.guilds.cache.get(row.guild_id);
+  const guild = guildByKey(row.guild_id);
   if (!guild?.members.me?.permissions.has('BanMembers')) return; // retry next tick
 
   const existing = await guild.bans.fetch(row.user_id).catch(() => null);
@@ -160,7 +160,7 @@ export async function settleTempBan(row) {
 }
 
 const tempBanTimer = setInterval(async () => {
-  if (!runtime.client?.isReady()) return;
+  if (!anyClientReady()) return;
   for (const row of await dueTempBans(Date.now())) {
     const key = `${row.guild_id}:${row.user_id}`;
     if (settlingTempBans.has(key)) continue;

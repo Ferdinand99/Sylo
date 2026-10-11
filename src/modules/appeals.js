@@ -21,6 +21,7 @@
 //
 // The decision is always shown on the appeal page itself when the user reopens
 // their link, so notification never depends on the DM succeeding.
+import { guildKey } from '../platform/platformOf.js';
 import { ChannelType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
 import { config } from '../config.js';
@@ -158,15 +159,15 @@ function takePreBanDm(guildId, userId) {
  *   caller should send its own ban DM instead.
  */
 export async function sendPreBanAppealDm(guild, user, reason) {
-  if (!(await isModuleEnabled(guild.id, 'appeals'))) return null;
-  const link = appealLink(guild.id, user.id);
+  if (!(await isModuleEnabled(guildKey(guild), 'appeals'))) return null;
+  const link = appealLink(guildKey(guild), user.id);
   if (!link) return null;
-  const cfg = normaliseAppealsConfig((await getGuildModule(guild.id, 'appeals')).config);
+  const cfg = normaliseAppealsConfig((await getGuildModule(guildKey(guild), 'appeals')).config);
   const sent = await user
     .send({ embeds: [banAppealEmbed(guild.name, reason, link, cfg)] })
     .then(() => true)
     .catch(() => false);
-  rememberPreBanDm(guild.id, user.id, sent);
+  rememberPreBanDm(guildKey(guild), user.id, sent);
   return sent;
 }
 
@@ -175,7 +176,7 @@ on('appeals', 'guildBanAdd', async (ban, rawConfig) => {
   if (!user || user.bot) return;
   const cfg = normaliseAppealsConfig(rawConfig);
 
-  const link = appealLink(ban.guild.id, user.id);
+  const link = appealLink(guildKey(ban.guild), user.id);
   if (!link) {
     log.warn('appeals', 'DASHBOARD_URL is not set — cannot build an appeal link.');
     return;
@@ -192,7 +193,7 @@ on('appeals', 'guildBanAdd', async (ban, rawConfig) => {
   reason = reason || 'No reason recorded';
 
   // Did Sylo's own ban flow already DM the link (before the ban)?
-  const pre = takePreBanDm(ban.guild.id, user.id);
+  const pre = takePreBanDm(guildKey(ban.guild), user.id);
   const delivered = pre
     ? pre.sent
     : await user
@@ -201,7 +202,7 @@ on('appeals', 'guildBanAdd', async (ban, rawConfig) => {
         .catch(() => false);
 
   if (cfg.reviewChannelId) {
-    await sendToChannel(ban.guild.id, cfg.reviewChannelId, {
+    await sendToChannel(guildKey(ban.guild), cfg.reviewChannelId, {
       embeds: [
         new EmbedBuilder()
           .setColor(COLOR)
@@ -267,10 +268,10 @@ export async function createRejoinInvite(guild) {
  * @returns {Promise<{ recorded: boolean, unbanned: boolean, dmDelivered: boolean, inviteUrl: string | null }>}
  */
 export async function decideAndNotify(guild, appeal, { status, decidedBy, reason }) {
-  const recorded = await decideAppeal(guild.id, appeal.id, { status, decidedBy, reason });
+  const recorded = await decideAppeal(guildKey(guild), appeal.id, { status, decidedBy, reason });
   if (!recorded) return { recorded: false, unbanned: false, dmDelivered: false, inviteUrl: null };
 
-  const cfg = normaliseAppealsConfig((await getGuildModule(guild.id, 'appeals')).config);
+  const cfg = normaliseAppealsConfig((await getGuildModule(guildKey(guild), 'appeals')).config);
   const accepted = status === 'accepted';
 
   let unbanned = false;
@@ -288,7 +289,7 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
   let inviteUrl = null;
   if (accepted) {
     inviteUrl = await createRejoinInvite(guild);
-    if (inviteUrl) await setAppealInvite(guild.id, appeal.id, inviteUrl);
+    if (inviteUrl) await setAppealInvite(guildKey(guild), appeal.id, inviteUrl);
   }
 
   const dm = new EmbedBuilder()
@@ -346,7 +347,7 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
   }
   await postModLog(guild, logEmbed);
   if (cfg.reviewChannelId) {
-    await sendToChannel(guild.id, cfg.reviewChannelId, {
+    await sendToChannel(guildKey(guild), cfg.reviewChannelId, {
       embeds: [logEmbed],
       allowedMentions: { parse: [] },
     });
@@ -357,7 +358,7 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
 
 /** Post a "new appeal submitted" notice to staff. Called from the web route. */
 export async function announceNewAppeal(guild, appeal) {
-  const cfg = normaliseAppealsConfig((await getGuildModule(guild.id, 'appeals')).config);
+  const cfg = normaliseAppealsConfig((await getGuildModule(guildKey(guild), 'appeals')).config);
   const embed = new EmbedBuilder()
     .setColor(COLOR)
     .setTitle('⚖️ New ban appeal')
@@ -369,12 +370,15 @@ export async function announceNewAppeal(guild, appeal) {
       })),
       {
         name: 'Review',
-        value: `${config.dashboardUrl ? config.dashboardUrl.replace(/\/$/, '') : ''}/guilds/${guild.id}/appeals`,
+        value: `${config.dashboardUrl ? config.dashboardUrl.replace(/\/$/, '') : ''}/guilds/${guildKey(guild)}/appeals`,
       }
     )
     .setTimestamp(Date.now());
   await postModLog(guild, embed);
   if (cfg.reviewChannelId) {
-    await sendToChannel(guild.id, cfg.reviewChannelId, { embeds: [embed], allowedMentions: { parse: [] } });
+    await sendToChannel(guildKey(guild), cfg.reviewChannelId, {
+      embeds: [embed],
+      allowedMentions: { parse: [] },
+    });
   }
 }

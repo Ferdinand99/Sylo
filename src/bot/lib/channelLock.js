@@ -2,6 +2,7 @@
 // having first saved whatever @everyone overwrite was there before. Unlocking
 // restores that saved state exactly (or removes the overwrite if there wasn't
 // one). Shared by /lock, /unlock and /lockdown.
+import { guildKey } from '../../platform/platformOf.js';
 import { PermissionFlagsBits } from 'discord.js';
 import { platformOfGuild } from '../../platform/platformOf.js';
 import { supports } from '../../platform/capabilities.js';
@@ -77,10 +78,10 @@ export function restoreLockPerms(prevAllow, prevDeny, platform = 'discord') {
  */
 export async function lockChannel(channel, { moderatorTag, lockdown = false }) {
   const everyone = channel.guild.roles.everyone;
-  if (!(await getChannelLock(channel.guild.id, channel.id))) {
+  if (!(await getChannelLock(guildKey(channel.guild), channel.id))) {
     const existing = channel.permissionOverwrites.cache.get(everyone.id);
     await recordChannelLock({
-      guildId: channel.guild.id,
+      guildId: guildKey(channel.guild),
       channelId: channel.id,
       prevAllow: existing?.allow.bitfield ?? 0n,
       prevDeny: existing?.deny.bitfield ?? 0n,
@@ -104,7 +105,7 @@ export async function lockChannel(channel, { moderatorTag, lockdown = false }) {
 export async function unlockChannel(channel, { moderatorTag }) {
   const everyone = channel.guild.roles.everyone;
   const platform = platformOfGuild(channel.guild);
-  const saved = await getChannelLock(channel.guild.id, channel.id);
+  const saved = await getChannelLock(guildKey(channel.guild), channel.id);
   const reason = `Unlocked by ${moderatorTag}`;
 
   if (saved && !saved.had_overwrite) {
@@ -126,5 +127,5 @@ export async function unlockChannel(channel, { moderatorTag }) {
       }
     );
   }
-  await clearChannelLock(channel.guild.id, channel.id);
+  await clearChannelLock(guildKey(channel.guild), channel.id);
 }

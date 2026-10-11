@@ -1,8 +1,8 @@
 // Channel cleanup: per-channel weekly schedule that deletes messages older
 // than a configured age. Not event-driven — a polling loop (started on
 // import) checks which schedules are due.
+import { anyClientReady, guildByKey } from '../platform/platformOf.js';
 import { PermissionFlagsBits } from 'discord.js';
-import { runtime } from '../runtime.js';
 import { isModuleEnabled } from '../db/modules.js';
 import { dueCandidates, markCleanupRan, deleteCleanupSchedule } from '../db/channelCleanup.js';
 import { log } from '../lib/log.js';
@@ -88,7 +88,7 @@ export async function cleanupChannel(channel, { maxAgeHours, skipPinned }) {
 }
 
 async function runSchedule(schedule, today) {
-  const guild = runtime.client.guilds.cache.get(schedule.guild_id);
+  const guild = guildByKey(schedule.guild_id);
   if (!guild) {
     await deleteCleanupSchedule(schedule.guild_id, schedule.id);
     return;
@@ -134,7 +134,7 @@ async function runSchedule(schedule, today) {
 }
 
 async function tick() {
-  if (!runtime.client?.isReady()) return;
+  if (!anyClientReady()) return;
   const now = new Date();
   const today = todayStr(now);
 

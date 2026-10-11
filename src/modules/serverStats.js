@@ -1,7 +1,7 @@
 // Server statistics: keeps chosen voice channels named with a live count
 // (e.g. "Members: 1,234"). Not event-driven — a slow refresh loop, because
 // Discord rate-limits channel renames hard (~2 per 10 minutes per channel).
-import { runtime } from '../runtime.js';
+import { allGuilds, anyClientReady, guildKey } from '../platform/platformOf.js';
 import { getGuildModule } from '../db/modules.js';
 import { log } from '../lib/log.js';
 
@@ -88,21 +88,20 @@ async function refreshGuild(guild, cfg) {
 const lastRefresh = new Map(); // guildId -> timestamp of the last rename pass
 
 async function tick() {
-  const client = runtime.client;
-  if (!client?.isReady()) return;
+  if (!anyClientReady()) return;
   const now = Date.now();
-  for (const guild of client.guilds.cache.values()) {
-    const { enabled, config } = await getGuildModule(guild.id, 'server-stats');
+  for (const guild of allGuilds()) {
+    const { enabled, config } = await getGuildModule(guildKey(guild), 'server-stats');
     if (!enabled) continue;
     const cfg = normaliseServerStats(config);
     if (cfg.channels.length === 0) continue;
 
     // Respect this guild's chosen interval.
-    if (now - (lastRefresh.get(guild.id) ?? 0) < cfg.refreshMinutes * 60_000) continue;
-    lastRefresh.set(guild.id, now);
+    if (now - (lastRefresh.get(guildKey(guild)) ?? 0) < cfg.refreshMinutes * 60_000) continue;
+    lastRefresh.set(guildKey(guild), now);
 
     await refreshGuild(guild, cfg).catch((err) =>
-      log.error('server-stats', `refresh failed for ${guild.id}:`, err.message)
+      log.error('server-stats', `refresh failed for ${guildKey(guild)}:`, err.message)
     );
   }
 }

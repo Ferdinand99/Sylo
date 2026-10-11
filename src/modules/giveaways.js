@@ -3,6 +3,7 @@
 // plus the dashboard, call endGiveaway() directly.
 //
 // config shape: { ping: 'none' | 'here' | 'everyone', dmWinners: boolean }
+import { anyClientReady, guildByKey } from '../platform/platformOf.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { runtime } from '../runtime.js';
 import { registerComponent } from '../bot/lib/components.js';
@@ -116,7 +117,7 @@ export async function endGiveaway(id, opts = {}) {
   const g = await getGiveaway(id);
   if (!g) return { ok: false, reason: 'not-found' };
 
-  const guild = runtime.client?.guilds.cache.get(g.guild_id);
+  const guild = guildByKey(g.guild_id);
   if (!guild) {
     await markGiveawayEnded(id, []);
     return { ok: false, reason: 'no-guild' };
@@ -243,9 +244,9 @@ registerComponent('giveaways', 'gaw:enter:', (interaction) =>
 
 const TICK_MS = 20_000;
 async function tick() {
-  if (!runtime.client?.isReady()) return;
+  if (!anyClientReady()) return;
   for (const g of await dueGiveaways(Date.now())) {
-    if ((await isModuleEnabled(g.guild_id, 'giveaways')) && runtime.client.guilds.cache.has(g.guild_id)) {
+    if ((await isModuleEnabled(g.guild_id, 'giveaways')) && Boolean(guildByKey(g.guild_id))) {
       endGiveaway(g.id).catch((err) => log.error('giveaways', 'auto-end failed:', err.message));
     } else {
       await markGiveawayEnded(g.id, []); // module off / bot gone — just close it

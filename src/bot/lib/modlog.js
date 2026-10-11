@@ -1,4 +1,5 @@
 // Posts moderation actions to a guild's configured mod-log channel, if any.
+import { guildKey } from '../../platform/platformOf.js';
 import { getGuildSettings } from '../../db/guildSettings.js';
 
 /**
@@ -9,7 +10,7 @@ import { getGuildSettings } from '../../db/guildSettings.js';
  *   usable mod-log channel (unconfigured, missing, wrong type, or missing perms)
  */
 export async function postModLog(guild, embed) {
-  const channelId = (await getGuildSettings(guild.id))?.modlog_channel_id;
+  const channelId = (await getGuildSettings(guildKey(guild)))?.modlog_channel_id;
   if (!channelId) return false;
 
   try {

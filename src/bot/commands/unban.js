@@ -1,4 +1,5 @@
 // /unban <user_id> [reason] — lift a ban.
+import { guildKey } from '../../platform/platformOf.js';
 import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags } from 'discord.js';
 import { resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
@@ -37,11 +38,11 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
   await guild.bans.remove(userId, `${interaction.user.tag}: ${reason}`);
-  await clearTempBan(guild.id, userId); // in case this was a scheduled temporary ban
+  await clearTempBan(guildKey(guild), userId); // in case this was a scheduled temporary ban
 
-  const clearedCase = await deactivateLatest(guild.id, userId, 'ban');
+  const clearedCase = await deactivateLatest(guildKey(guild), userId, 'ban');
   const { caseNumber } = await addCase({
-    guildId: guild.id,
+    guildId: guildKey(guild),
     userId,
     moderatorId: interaction.user.id,
     action: 'unban',

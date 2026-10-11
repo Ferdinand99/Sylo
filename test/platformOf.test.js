@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runtime } from '../src/runtime.js';
-import { platformOfClient, platformOfGuild, guildSupports } from '../src/platform/platformOf.js';
+import {
+  platformOfClient,
+  platformOfGuild,
+  guildSupports,
+  guildKey,
+  guildKeyOf,
+  allGuilds,
+  guildByKey,
+  anyClientReady,
+} from '../src/platform/platformOf.js';
 import { supports } from '../src/platform/capabilities.js';
 
 const discord = { name: 'discord-client' };
@@ -45,4 +54,72 @@ test('the capability table: Discord has everything, Fluxer lacks what it has no 
     assert.equal(supports('discord', f), true, f);
   for (const f of ['components', 'nativeAutomod', 'threads', 'moveMembers'])
     assert.equal(supports('fluxer', f), false, f);
+});
+
+// --- guild keys: the id every DB row, timer and dashboard URL uses ------------
+
+const RAW = '900000000000000123';
+
+test('guildKey: a Discord guild keeps its bare id, a Fluxer guild gets the fluxer: prefix', () => {
+  assert.equal(guildKey({ id: RAW, client: discord }), RAW);
+  assert.equal(guildKey({ id: RAW, client: fluxer }), `fluxer:${RAW}`);
+  assert.equal(guildKey({ id: RAW }), RAW); // no client: Discord, as every existing test fake assumes
+  assert.equal(guildKey({ id: 'g1', client: discord }), 'g1'); // test-style ids pass through on Discord
+});
+
+test('guildKey never prefixes twice (an interaction guild already carries the key)', () => {
+  assert.equal(guildKey({ id: `fluxer:${RAW}`, client: fluxer }), `fluxer:${RAW}`);
+});
+
+test('guildKeyOf: reads the guild from a message, member, channel or ban', () => {
+  const guild = { id: RAW, client: fluxer };
+  assert.equal(guildKeyOf({ guild }), `fluxer:${RAW}`);
+  assert.equal(guildKeyOf({ guildId: RAW, client: fluxer }), `fluxer:${RAW}`);
+  assert.equal(guildKeyOf({ guildId: RAW, client: discord }), RAW);
+  assert.equal(guildKeyOf({}), null);
+  assert.equal(guildKeyOf(null), null);
+});
+
+test('allGuilds: every guild of every connected client; a missing platform contributes nothing', () => {
+  const d1 = { id: 'd1' };
+  const f1 = { id: 'f1' };
+  runtime.clients.discord = { guilds: { cache: new Map([['d1', d1]]) } };
+  runtime.clients.fluxer = { guilds: { cache: new Map([['f1', f1]]) } };
+  assert.deepEqual(allGuilds(), [d1, f1]);
+  runtime.clients.fluxer = null;
+  assert.deepEqual(allGuilds(), [d1]);
+  runtime.clients.discord = null;
+  assert.deepEqual(allGuilds(), []);
+});
+
+test('guildByKey: finds the guild a stored key refers to, on the right platform', () => {
+  const d = { id: RAW };
+  const f = { id: RAW };
+  runtime.clients.discord = { guilds: { cache: new Map([[RAW, d]]) } };
+  runtime.clients.fluxer = { guilds: { cache: new Map([[RAW, f]]) } };
+  assert.equal(guildByKey(RAW), d);
+  assert.equal(guildByKey(`fluxer:${RAW}`), f);
+  assert.equal(guildByKey('nope'), undefined);
+  assert.equal(guildByKey(null), undefined);
+  runtime.clients.fluxer = null;
+  assert.equal(guildByKey(`fluxer:${RAW}`), undefined); // platform not connected
+});
+
+test('guildByKey falls back to Discord for non-snowflake ids (legacy test fixtures)', () => {
+  const g = { id: 'g1' };
+  runtime.clients.discord = { guilds: { cache: new Map([['g1', g]]) } };
+  assert.equal(guildByKey('g1'), g);
+});
+
+test('anyClientReady: true when at least one connected client is ready', () => {
+  runtime.clients.discord = { isReady: () => false };
+  runtime.clients.fluxer = null;
+  assert.equal(anyClientReady(), false);
+  runtime.clients.fluxer = { isReady: () => true };
+  assert.equal(anyClientReady(), true); // a Fluxer-only deployment still runs its sweeps
+  runtime.clients.fluxer = null;
+  runtime.clients.discord = { isReady: () => true };
+  assert.equal(anyClientReady(), true);
+  runtime.clients.discord = null;
+  assert.equal(anyClientReady(), false);
 });

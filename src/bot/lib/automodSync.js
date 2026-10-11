@@ -14,6 +14,7 @@
 // those to match the config and never touches a rule it did not create. A hand
 // edit to a `Sylo:`-named rule is overwritten on the next dashboard save — edit
 // those from the dashboard, not in Discord.
+import { guildKey } from '../../platform/platformOf.js';
 import {
   AutoModerationRuleEventType,
   AutoModerationRuleTriggerType,
@@ -248,7 +249,7 @@ export async function syncGuildAutomod(guild, cfg) {
     return { ...result, ok: false, skipped: 'missing-permission' };
   }
 
-  const alertChannelId = (await getGuildSettings(guild.id))?.modlog_channel_id || null;
+  const alertChannelId = (await getGuildSettings(guildKey(guild)))?.modlog_channel_id || null;
   const desired = desiredRules(cfg, { alertChannelId });
 
   let existing;

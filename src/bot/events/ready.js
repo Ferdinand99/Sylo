@@ -30,7 +30,7 @@ export function execute(client) {
 
   // Cache each guild's current invite uses so the first join after a restart is
   // still attributable.
-  primeAllInviteCaches(client).catch((err) =>
+  primeAllInviteCaches().catch((err) =>
     log.error('invite-tracker', 'startup invite cache prime failed:', err.message)
   );
 }

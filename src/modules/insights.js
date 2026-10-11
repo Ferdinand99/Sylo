@@ -8,6 +8,7 @@
 // few minutes, on the UTC day roll, and on demand (the "Refresh now" button).
 // A crash loses at most the last few minutes; a voice session in progress loses
 // only its unflushed tail.
+import { guildKey, guildKeyOf } from '../platform/platformOf.js';
 import { on } from './dispatch.js';
 import { accrueDaily, accrueHourly, pruneInsights, utcDay, utcHour } from '../db/insights.js';
 import { getTempChannel } from '../db/tempVoice.js';
@@ -188,8 +189,8 @@ async function flushAll() {
 }
 
 on('insights', 'messageCreate', async (message) => {
-  if (!message.guildId || message.author?.bot) return;
-  const s = await slot(message.guildId);
+  if (!guildKeyOf(message) || message.author?.bot) return;
+  const s = await slot(guildKeyOf(message));
   s.messages += 1;
   if (message.author?.id) {
     s.dayActives.add(message.author.id);
@@ -202,12 +203,12 @@ on('insights', 'messageCreate', async (message) => {
 
 on('insights', 'guildMemberAdd', async (member) => {
   if (member.user?.bot) return;
-  (await slot(member.guild.id)).joins += 1;
+  (await slot(guildKey(member.guild))).joins += 1;
 });
 
 on('insights', 'guildMemberRemove', async (member) => {
   if (member.user?.bot) return;
-  (await slot(member.guild.id)).leaves += 1;
+  (await slot(guildKey(member.guild))).leaves += 1;
 });
 
 on('insights', 'voiceStateUpdate', async ({ old: before, new: after }) => {
@@ -215,7 +216,7 @@ on('insights', 'voiceStateUpdate', async ({ old: before, new: after }) => {
   const member = after.member ?? before.member;
   if (!guild || !member || member.user?.bot) return;
 
-  const s = await slot(guild.id);
+  const s = await slot(guildKey(guild));
   const now = Date.now();
   const from = before.channelId;
   const to = after.channelId;

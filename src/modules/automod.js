@@ -21,6 +21,7 @@
 //       presets: string[],             // subset of PRESET_KEYS
 //     }
 //   }
+import { guildKey, guildKeyOf } from '../platform/platformOf.js';
 import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { PRESET_KEYS } from '../bot/lib/automodSync.js';
 import { on } from './dispatch.js';
@@ -302,7 +303,7 @@ async function scan(message, config, opts) {
     if (hit) return act(message, member, rules.words, `banned word "${hit}"`, cfg);
   }
   if (opts.flood && rules.spam.enabled) {
-    const key = `${message.guildId}:${message.author.id}`;
+    const key = `${guildKeyOf(message)}:${message.author.id}`;
     const n = bumpFlood(key, Date.now(), rules.spam.seconds * 1000);
     if (n > rules.spam.max) return act(message, member, rules.spam, 'message flood', cfg);
   }
@@ -320,7 +321,7 @@ async function act(message, member, rule, label, cfg) {
   try {
     if (rule.action === 'warn') {
       const { caseNumber, warnCount } = await addCase({
-        guildId: guild.id,
+        guildId: guildKey(guild),
         userId: member.id,
         moderatorId: 'automod',
         action: 'warn',
