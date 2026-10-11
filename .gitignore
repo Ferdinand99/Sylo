@@ -143,3 +143,4 @@ dist
 /site/
 # Internal-only notes/plans that shouldn't be public (not project docs).
 /internal/
+.env.fluxer-test

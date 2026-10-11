@@ -153,3 +153,20 @@ test('a platform with native components keeps them and bridges nothing', async (
     CAPABILITIES.fluxer.components = false;
   }
 });
+
+test("an edit clears reactions through message.removeAllReactions() on Fluxer's SDK", async () => {
+  const { message } = fakeSent('m-j');
+  delete message.reactions;
+  let cleared = 0;
+  message.removeAllReactions = async () => {
+    cleared += 1;
+  };
+  await attachActions(message, prepareOutgoing({ components: [] }), { guildId: '', edit: true });
+  assert.equal(cleared, 1);
+});
+
+test('preparing an already-prepared edit payload does not lose the cleared legend', () => {
+  const first = prepareOutgoing({ components: [] }, { edit: true });
+  assert.equal(first.payload.content, '');
+  assert.equal(prepareOutgoing(first.payload, { edit: true }).payload.content, '');
+});

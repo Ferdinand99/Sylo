@@ -20,7 +20,7 @@ import { supports } from './capabilities.js';
  * @param {{ edit?: boolean, platform?: 'discord'|'fluxer' }} [opts]
  */
 export function prepareOutgoing(input, { edit = false, platform = 'fluxer' } = {}) {
-  const base = toFluxerPayload(input);
+  const base = toFluxerPayload(input, { edit });
   const components = typeof input === 'object' ? input.components : undefined;
   if (supports(platform, 'components')) {
     // Native components: send them as built, nothing to bridge.
@@ -87,6 +87,16 @@ export async function dispatchToCollectors(messageId, interaction) {
 
 // --- reactions ---------------------------------------------------------------
 
+/** Remove every reaction: Fluxer's SDK has message.removeAllReactions(), discord.js message.reactions.removeAll(). */
+async function clearReactions(message) {
+  try {
+    if (typeof message.removeAllReactions === 'function') await message.removeAllReactions();
+    else await message.reactions?.removeAll?.();
+  } catch (err) {
+    log.warn('components', 'could not clear reactions:', err.message);
+  }
+}
+
 /**
  * React to a sent (or edited) message and store what the reactions do.
  * @param {any} message  the message returned by the send/edit
@@ -102,9 +112,7 @@ export async function attachActions(message, out, { guildId, ttlMs = null, edit 
 
   const { saveComponentActions, deleteComponentActions } = await import('../db/componentReactions.js');
   if (edit) {
-    await message.reactions
-      ?.removeAll?.()
-      .catch((err) => log.warn('components', 'could not clear reactions:', err.message));
+    await clearReactions(message);
     await deleteComponentActions(message.id);
   }
   if (!out.actions.length) return;

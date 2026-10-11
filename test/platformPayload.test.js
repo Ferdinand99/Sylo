@@ -83,3 +83,8 @@ test('the input object is not mutated', () => {
   toFluxerPayload(input);
   assert.deepEqual(input, { content: 'x', ephemeral: true, components: [{}] });
 });
+
+test('an edit keeps an empty content string so it can clear old text', () => {
+  assert.equal(toFluxerPayload({ content: '' }, { edit: true }).payload.content, '');
+  assert.equal('content' in toFluxerPayload({ content: '' }).payload, false);
+});

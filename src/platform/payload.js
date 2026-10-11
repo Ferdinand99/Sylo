@@ -21,15 +21,16 @@ function toFile(file) {
 
 /**
  * @param {string | object} input
+ * @param {{ edit?: boolean }} [opts]
  * @returns {{ payload: object, ephemeral: boolean, wantsResponse: boolean }}
  */
-export function toFluxerPayload(input) {
+export function toFluxerPayload(input, { edit = false } = {}) {
   const payload = typeof input === 'string' ? { content: input } : { ...input };
   const flags = typeof payload.flags === 'number' ? payload.flags : 0;
   const ephemeral = Boolean(payload.ephemeral) || (flags & MessageFlags.Ephemeral) === MessageFlags.Ephemeral;
   const wantsResponse = Boolean(payload.withResponse);
   for (const key of DISCORD_ONLY_KEYS) delete payload[key];
-  if (payload.content === '') delete payload.content;
+  if (payload.content === '' && !edit) delete payload.content; // an edit may use '' to clear the text
   if (payload.embeds)
     payload.embeds = payload.embeds.map((e) => (typeof e?.toJSON === 'function' ? e.toJSON() : e));
   if (payload.files) payload.files = payload.files.map(toFile);
