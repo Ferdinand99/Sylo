@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.40.0](https://github.com/Ferdinand99/Sylo/compare/v3.39.0...v3.40.0) (2026-10-11)
+
+
+### Features
+
+* **dashboard:** add an owner-only announcement banner ([c37ee33](https://github.com/Ferdinand99/Sylo/commit/c37ee334829dbff4699f0502ef42db6695d28721))
+
+
+### Bug Fixes
+
+* **web:** restrict Bot Personalizer to the bot owner ([#237](https://github.com/Ferdinand99/Sylo/issues/237)) ([d5129ba](https://github.com/Ferdinand99/Sylo/commit/d5129ba9ebda51df07139ff9f9d15f410f449df3))
+
 ## [3.39.0](https://github.com/Ferdinand99/Sylo/compare/v3.38.0...v3.39.0) (2026-10-08)
 
 
