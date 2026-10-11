@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.41.1](https://github.com/Ferdinand99/Sylo/compare/v3.41.0...v3.41.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* retry-safety for temp-ban/YouTube alerts, reaction-role data los… ([#241](https://github.com/Ferdinand99/Sylo/issues/241)) ([0de95e0](https://github.com/Ferdinand99/Sylo/commit/0de95e06fd0cd5bfe27b0f36716492f33aaa17e9))
+
 ## [3.41.0](https://github.com/Ferdinand99/Sylo/compare/v3.40.0...v3.41.0) (2026-10-11)
 
 
