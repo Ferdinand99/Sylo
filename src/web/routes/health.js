@@ -25,6 +25,7 @@ import {
   inspectDbFile,
 } from '../../db/backup.js';
 import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
+import { listBotAudit } from '../../db/botAudit.js';
 import { MODULES } from '../../modules/registry.js';
 import { timeAgo, formatUptime, formatBytes } from '../lib/format.js';
 import { log } from '../../lib/log.js';
@@ -126,6 +127,12 @@ router.get(
           size: formatBytes(b.size),
           ago: timeAgo(b.mtime),
         })),
+      botAudit: (await listBotAudit(50)).map((a) => ({
+        actor: a.actor,
+        action: a.action,
+        detail: a.detail,
+        ago: timeAgo(a.created_at),
+      })),
       backupMsg: typeof req.query.backup === 'string' ? req.query.backup : null,
       backupErr: typeof req.query.backuperr === 'string' ? req.query.backuperr : null,
       importMsg: typeof req.query.imported === 'string' ? req.query.imported : null,

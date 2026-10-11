@@ -809,6 +809,21 @@ export const MIGRATIONS = [
       );
     `);
   },
+
+  // Bot-wide audit log: who changed bot-level (not per-guild) settings from
+  // the dashboard — identity/presence/announcement. See src/db/botAudit.js.
+  (database) => {
+    database.exec(`
+      CREATE TABLE bot_audit (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        actor      TEXT NOT NULL,
+        action     TEXT NOT NULL,
+        detail     TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_bot_audit_created ON bot_audit (created_at DESC);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */
