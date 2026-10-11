@@ -16,7 +16,9 @@
  * @property {number} startedAt          Epoch ms when the process booted.
  * @property {{ message: string, at: number } | null} lastError  Most recent unexpected error.
  * @property {ErrorEntry[]} errors       Recent errors, most-recent-first, capped.
- * @property {import('discord.js').Client | null} client  The logged-in Discord client, once ready.
+ * @property {{ discord: import('discord.js').Client | null, fluxer: object | null }} clients
+ *   One logged-in client per platform, keyed by platform name. Either side is
+ *   null until that platform is configured and connected.
  */
 
 const MAX_ERRORS = 40;
@@ -31,7 +33,17 @@ export const runtime = {
   errors: [],
   /** @type {number[]} Gateway ping in ms, oldest first, capped. */
   pingHistory: [],
-  client: null,
+  clients: { discord: null, fluxer: null },
+  // Back-compat alias for the (still overwhelmingly common) Discord-only call
+  // sites, and for the test suite's existing `runtime.client = fake` direct
+  // assignments — both reads and writes transparently go through to
+  // `clients.discord` instead of a second, separate source of truth.
+  get client() {
+    return this.clients.discord;
+  },
+  set client(value) {
+    this.clients.discord = value;
+  },
 };
 
 /**
@@ -80,11 +92,28 @@ export function recordGatewayPing(ms) {
 }
 
 /**
- * Attach the Discord client once it has logged in.
+ * Attach a logged-in client for a platform.
+ * @param {'discord'|'fluxer'} platform
+ * @param {unknown} client
+ */
+export function setClientFor(platform, client) {
+  runtime.clients[platform] = client;
+}
+
+/**
+ * @param {'discord'|'fluxer'} platform
+ * @returns {unknown}
+ */
+export function clientFor(platform) {
+  return runtime.clients[platform] ?? null;
+}
+
+/**
+ * Back-compat alias — attaches the Discord client specifically.
  * @param {import('discord.js').Client} client
  */
 export function setClient(client) {
-  runtime.client = client;
+  setClientFor('discord', client);
 }
 
 /** Uptime in whole seconds since process start. */
