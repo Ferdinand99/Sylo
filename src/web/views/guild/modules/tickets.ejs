@@ -1,9 +1,6 @@
 <% var cfg = moduleConfig || {}; var staff = Array.isArray(cfg.staffRoles) ? cfg.staffRoles : []; %>
 
-<p class="muted small">
-  Members open a ticket by sending the bot a direct message. Staff read and reply here — replies reach the member as an
-  anonymous “Staff” DM. Manage the queue under <a href="/guilds/<%= guild.id %>/tickets">Tickets</a>.
-</p>
+<p class="muted small">Zgłoszenia wysłane na DM trafiają do prywatnych kanałów na Discordzie. Administracja odpowiada w kanale, a bot przekazuje odpowiedzi na DM użytkownika. Panel zachowuje historię rozmów.</p>
 
 <form method="POST" action="/guilds/<%= guild.id %>/m/tickets/config" hx-post="/guilds/<%= guild.id %>/m/tickets/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-lg">
   <h3>Discord ticket panel</h3>
@@ -77,6 +74,12 @@
   <label>Message sent when a ticket is closed</label>
   <textarea name="closeMessage" rows="2" placeholder="This ticket has been closed…"><%= cfg.closeMessage || '' %></textarea>
 
+  <h3>Tickety z DM na Discordzie</h3>
+  <label>Kategoria zgłoszeń z DM</label>
+  <select name="dmCategory"><option value="">— kategoria kanału panelu / pierwszego tematu —</option>
+  <% categories.forEach(function(c) { %><option value="<%= c.id %>" <%= c.id === cfg.dmCategory ? 'selected' : '' %>><%= c.name %></option><% }) %>
+  </select>
+  <p class="muted small">Każdy użytkownik dostaje osobny prywatny kanał dm-ticket. Dostęp mają wybrane role administracji i administratorzy. Odpowiedzi i załączniki są przekazywane na DM. Zamknięcie zapisuje rozmowę w kanale logów ticketów, a następnie usuwa kanał. Wymagane: Zarządzanie kanałami, Zarządzanie rolami, Message Content Intent i kanał logów ticketów.</p>
   <label>Staff notification channel <span class="muted small">— optional, pinged on new tickets/replies</span></label>
   <select name="notifyChannel">
     <option value="">— none —</option>

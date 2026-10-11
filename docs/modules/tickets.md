@@ -22,19 +22,33 @@ Members may have one open channel ticket per server. Duplicate clicks are guarde
 
 # DM tickets (modmail)
 
-Members open a ticket by **DMing the bot**. Staff read the conversation and reply
-from the dashboard — replies are delivered to the member as a DM from Sylo.
+Members open a ticket by **DMing the bot**. The bot creates a private
+`dm-ticket-<id>` text channel for staff; members continue the conversation in DMs.
+Staff messages and attachment URLs from that channel are relayed anonymously
+as **Odpowiedź administracji**. The dashboard retains conversation history.
 
 **Dashboard:** `/guilds/<id>/tickets` (list) and `/guilds/<id>/tickets/<n>`
 (conversation).
 
 ## Needs
 
-- No extra Discord permissions and no privileged intents — just leave the bot
-  able to receive DMs (Discord *Settings → Privacy* on the shared server).
+- **Manage Channels**, **Manage Roles**, View Channel, Send Messages, Embed Links and Read Message
+  History for the Discord workspace, plus **Message Content Intent** to read
+  staff replies and attachments. The bot must be able to apply the private role
+  overwrites. Attach Files is needed in the ticket log channel.
+- Members must allow DMs from the shared server.
 
 ## Settings
 
+- **DM ticket category** — where private DM workspaces are created. If empty,
+  uses the public ticket panel channel's category (or notification channel's
+  category when no panel channel is set), then the first configured ticket topic
+  category. A destination is required; delivery errors are reported instead of
+  silently routing new messages only to the web dashboard.
+- **Ticket log channel** — required for closing a Discord DM workspace. The bot
+  exports the stored conversation before deleting the workspace. Failed exports
+  leave the ticket open for retry. Discord transcripts have their own retention;
+  the modmail retention setting does not delete them.
 - **Enabled** — the module toggle is the on/off switch.
 - **Staff roles** — who may view and reply to tickets on the dashboard (in
   addition to Manage Server / bot-master).
@@ -50,10 +64,19 @@ from the dashboard — replies are delivered to the member as a DM from Sylo.
 
 ## How it works
 
-A member's DM to the bot opens (or appends to) their one open ticket for that
-server. Staff reply as **Staff** from the ticket page; the member sees Sylo's DM.
-**Close ticket** sends a final reply (or the default closing notice if the box is
-empty) and closes it. The member can open a new one by DMing again.
+A member's DM opens or appends to their one open ticket for that server. Staff
+roles and configured ping roles can see the workspace; the member is not granted
+channel access. Administrators can also access it. Only authorized staff replies
+are relayed; bot and webhook messages are ignored. A check reaction confirms
+successful delivery, and failed DMs are reported in the workspace.
+
+The **Zamknij zgłoszenie** button archives the conversation, sends the member a
+Polish closing notice and transcript, and deletes the workspace. Channel routing
+is stored in the database and survives restarts. Existing open modmail tickets
+get a workspace with stored history when the member next sends a DM. Deleting a
+workspace manually recreates it on the next DM. The member can open a new ticket
+by DMing after closure. Dashboard replies/closure remain compatible, but the
+primary staff workflow is Discord. Role changes apply to newly created workspaces.
 
 `/forget` removes the member's ticket history and the messages they sent; staff
 replies already delivered are not clawed back.

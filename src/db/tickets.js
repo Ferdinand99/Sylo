@@ -29,6 +29,35 @@ registerPostgresBootstrap(`
   CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket ON ticket_messages (ticket_id, created_at);
 `);
 
+registerPostgresBootstrap(`
+  CREATE TABLE IF NOT EXISTS ticket_channels (
+    ticket_id INTEGER PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL UNIQUE,
+    last_message_id INTEGER NOT NULL DEFAULT 0
+  );
+`);
+const channelByTicket = prepare('SELECT * FROM ticket_channels WHERE ticket_id = ?');
+const ticketByChannel = prepare(
+  'SELECT ticket_id FROM ticket_channels WHERE channel_id = ? AND guild_id = ?'
+);
+const saveChannel = prepare(`INSERT INTO ticket_channels (ticket_id, guild_id, channel_id, last_message_id)
+  VALUES (?, ?, ?, 0) ON CONFLICT (ticket_id) DO UPDATE SET channel_id = excluded.channel_id, last_message_id = 0`);
+const channelCursor = prepare('UPDATE ticket_channels SET last_message_id = ? WHERE ticket_id = ?');
+export async function getTicketChannel(ticketId) {
+  return channelByTicket.get(ticketId);
+}
+export async function getChannelTicket(channelId, guildId) {
+  const row = await ticketByChannel.get(channelId, guildId);
+  return row ? getTicket(row.ticket_id) : undefined;
+}
+export async function setTicketChannel(ticket, channelId) {
+  await saveChannel.run(ticket.id, ticket.guild_id, channelId);
+}
+export async function setTicketChannelCursor(ticketId, messageId) {
+  await channelCursor.run(messageId, ticketId);
+}
+
 const openByUserStmt = prepare(
   "SELECT * FROM tickets WHERE guild_id = ? AND user_id = ? AND status = 'open'"
 );

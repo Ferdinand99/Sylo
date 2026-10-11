@@ -30,15 +30,22 @@ function fakeEnv() {
   const guild = {
     id: G,
     name: 'Test Guild',
-    channels: { cache: new Map([[CHANNEL_ID, channel]]), fetch: async () => null },
-    members: { me: { permissions: { has: () => true } } },
+    channels: {
+      cache: new Map([[CHANNEL_ID, channel]]),
+      fetch: async (id) => (id === '100000000000000777' ? { type: 4 } : id === CHANNEL_ID ? channel : null),
+      create: async () => ({ id: `channel-${userId}`, send: async () => {} }),
+    },
+    members: { me: { id: '100000000000000888', permissions: { has: () => true } } },
   };
   const user = { id: userId, tag: 'member#0001', send: async () => {} };
   return { guild, user, sent };
 }
 
 test('a new ticket alert has no embed when showMessageInAlert is off (default)', async () => {
-  await setGuildModule(G, 'tickets', { enabled: true, config: { notifyChannel: CHANNEL_ID } });
+  await setGuildModule(G, 'tickets', {
+    enabled: true,
+    config: { dmCategory: '100000000000000777', notifyChannel: CHANNEL_ID },
+  });
   const { guild, user, sent } = fakeEnv();
 
   await ingestUserDM(guild, user, { content: 'my subscription is broken', attachments: [] });
@@ -51,7 +58,7 @@ test('a new ticket alert has no embed when showMessageInAlert is off (default)',
 test('a new ticket alert embeds the opening message when showMessageInAlert is on', async () => {
   await setGuildModule(G, 'tickets', {
     enabled: true,
-    config: { notifyChannel: CHANNEL_ID, showMessageInAlert: true },
+    config: { dmCategory: '100000000000000777', notifyChannel: CHANNEL_ID, showMessageInAlert: true },
   });
   const { guild, user, sent } = fakeEnv();
 
@@ -65,7 +72,7 @@ test('a new ticket alert embeds the opening message when showMessageInAlert is o
 test('a long opening message is truncated in the alert embed', async () => {
   await setGuildModule(G, 'tickets', {
     enabled: true,
-    config: { notifyChannel: CHANNEL_ID, showMessageInAlert: true },
+    config: { dmCategory: '100000000000000777', notifyChannel: CHANNEL_ID, showMessageInAlert: true },
   });
   const { guild, user, sent } = fakeEnv();
   const long = 'x'.repeat(1200);
@@ -80,7 +87,7 @@ test('a long opening message is truncated in the alert embed', async () => {
 test('a reply on an already-open ticket never gets an embed, regardless of the setting', async () => {
   await setGuildModule(G, 'tickets', {
     enabled: true,
-    config: { notifyChannel: CHANNEL_ID, showMessageInAlert: true },
+    config: { dmCategory: '100000000000000777', notifyChannel: CHANNEL_ID, showMessageInAlert: true },
   });
   const { guild, user, sent } = fakeEnv();
 

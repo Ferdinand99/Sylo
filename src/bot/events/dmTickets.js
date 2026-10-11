@@ -3,6 +3,7 @@
 // asks which server with a select menu.
 import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
 import { ticketGuildsForUser, ingestUserDM } from '../../modules/tickets.js';
+import { handleDMTicketStaffMessage } from '../../modules/dmTicketChannels.js';
 import { getOpenTicket } from '../../db/tickets.js';
 import { registerComponent } from '../lib/components.js';
 import { log } from '../../lib/log.js';
@@ -86,9 +87,17 @@ async function handleSelect(interaction) {
       .catch(() => {});
     return;
   }
+  await interaction.deferUpdate();
+  if (!(await ticketGuildsForUser(interaction.user)).some((candidate) => candidate.id === guild.id)) {
+    await interaction.editReply({
+      content: 'Nie masz już dostępu do zgłoszeń na tym serwerze.',
+      components: [],
+    });
+    return;
+  }
   const ticket = await ingestUserDM(guild, interaction.user, payload);
   await interaction
-    .update({
+    .editReply({
       content: `Otwarto zgłoszenie #${ticket.id} dla serwera **${guild.name}**. Kolejne wiadomości wysyłaj tutaj.`,
       components: [],
     })
@@ -100,6 +109,17 @@ registerComponent('tickets', SELECT_ID, handleSelect);
 /** @param {import('discord.js').Client} client */
 export function register(client) {
   client.on(Events.MessageCreate, (message) => {
-    handleDM(message).catch((err) => log.error('tickets', 'DM handler failed:', err));
+    const job = message.guild ? handleDMTicketStaffMessage(message) : handleDM(message);
+    job.catch(async (err) => {
+      log.error('tickets', 'Ticket message handler failed:', err);
+      if (!message.author.bot)
+        await message
+          .reply({
+            content:
+              'Nie udało się przekazać wiadomości. Administracja musi sprawdzić konfigurację i uprawnienia ticketów.',
+            allowedMentions: { parse: [] },
+          })
+          .catch(() => {});
+    });
   });
 }

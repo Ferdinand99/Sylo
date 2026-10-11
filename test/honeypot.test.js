@@ -91,8 +91,8 @@ test('reactionAdd on a message honeypot bumps triggerCount AND re-renders the li
   // ...and the live message must have been re-edited to show it.
   assert.equal(editCalls.length, 1, 'the bait message should have been re-edited exactly once');
   const embed = editCalls[0].embeds[0];
-  const catchesField = embed.data.fields.find((f) => f.name === 'Catches');
-  assert.equal(catchesField.value, 'Kicks: 1');
+  const catchesField = embed.data.fields.find((f) => f.name === 'Wykryte przypadki');
+  assert.equal(catchesField.value, 'Wyrzucenia: 1');
   void guild;
 });
 
@@ -122,7 +122,7 @@ test('reactionAdd: a second trigger reads the fresh count, not the stale dispatc
   const saved = (await getGuildModule(G, 'honeypot')).config;
   assert.equal(saved.messages[0].triggerCount, 2);
   assert.equal(editCalls.length, 2);
-  assert.equal(editCalls[1].embeds[0].data.fields[0].value, 'Kicks: 2');
+  assert.equal(editCalls[1].embeds[0].data.fields[0].value, 'Wyrzucenia: 2');
 });
 
 test('reactionAdd: a bot reacting is ignored entirely (no punish, no bump)', async () => {

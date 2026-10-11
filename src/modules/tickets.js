@@ -1,7 +1,12 @@
-// Ticket / modmail helpers. Users DM the bot; staff reply from the dashboard.
+// Ticket / modmail helpers. Users DM the bot; staff reply in Discord or the dashboard.
 // The bot relays messages both ways. Staff replies are anonymous ("Administracja").
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
-import { config } from '../config.js';
+import {
+  withDMTicketLock,
+  syncDMTicketChannel,
+  archiveDMTicketChannel,
+  deleteDMTicketChannel,
+} from './dmTicketChannels.js';
 import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import {
@@ -180,6 +185,9 @@ async function notifyStaff(guild, text, embed) {
  * @param {{ content: string, attachments: string[] }} payload
  */
 export async function ingestUserDM(guild, user, payload) {
+  return withDMTicketLock(guild.id, user.id, () => ingestUserDMUnlocked(guild, user, payload));
+}
+async function ingestUserDMUnlocked(guild, user, payload) {
   const cfg = (await getGuildModule(guild.id, 'tickets')).config;
   let ticket = await getOpenTicket(guild.id, user.id);
   const isNew = !ticket;
@@ -192,9 +200,8 @@ export async function ingestUserDM(guild, user, payload) {
     attachments: payload.attachments ?? [],
   });
 
-  const link = config.dashboardUrl
-    ? `\n<${config.dashboardUrl}/guilds/${guild.id}/tickets/${ticket.id}>`
-    : '';
+  const workspace = await syncDMTicketChannel(guild, ticket, user);
+  const link = `\n<#${workspace.id}>`;
   if (isNew) {
     await user
       .send({
@@ -233,25 +240,35 @@ export async function ingestUserDM(guild, user, payload) {
  * DM an anonymous staff reply to the ticket user and record it.
  * @returns {Promise<{ delivered: boolean }>}
  */
-export async function relayStaffReply(ticket, staffUserId, content) {
+export async function relayStaffReply(ticket, staffUserId, content, attachments = []) {
   const guild = runtime.client.guilds.cache.get(ticket.guild_id);
   const user = await runtime.client.users.fetch(ticket.user_id).catch(() => null);
   let delivered = Boolean(user);
   if (user) {
     try {
-      await user.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(TICKET_COLOR)
-            .setAuthor({ name: `Odpowiedź administracji · ${guild?.name ?? 'serwer'}` })
-            .setDescription(content),
-        ],
-      });
+      const text = [content, ...attachments].filter(Boolean).join('\n');
+      for (let i = 0; i < text.length; i += 4000) {
+        await user.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(TICKET_COLOR)
+              .setAuthor({ name: `Odpowiedź administracji · ${guild?.name ?? 'serwer'}` })
+              .setDescription(text.slice(i, i + 4000)),
+          ],
+          allowedMentions: { parse: [] },
+        });
+      }
     } catch {
       delivered = false;
     }
   }
-  await addTicketMessage(ticket.id, { authorId: staffUserId, authorKind: 'staff', content, delivered });
+  await addTicketMessage(ticket.id, {
+    authorId: staffUserId,
+    authorKind: 'staff',
+    content,
+    attachments,
+    delivered,
+  });
   return { delivered };
 }
 
@@ -263,6 +280,17 @@ export async function relayStaffReply(ticket, staffUserId, content) {
  * @param {string} [closingMessage]
  */
 export async function closeTicketWithNotice(ticket, staffUserId, closingMessage) {
+  return withDMTicketLock(ticket.guild_id, ticket.user_id, async () => {
+    const current = await getTicket(ticket.id);
+    if (!current) throw new Error('Zgłoszenie już nie istnieje.');
+    if (current.status === 'closed') {
+      await deleteDMTicketChannel(current);
+      return;
+    }
+    await closeTicketUnlocked(current, staffUserId, closingMessage);
+  });
+}
+async function closeTicketUnlocked(ticket, staffUserId, closingMessage) {
   const guild = runtime.client?.guilds.cache.get(ticket.guild_id);
   const cfg = (await getGuildModule(ticket.guild_id, 'tickets')).config;
   const user = await runtime.client?.users.fetch(ticket.user_id).catch(() => null);
@@ -278,6 +306,7 @@ export async function closeTicketWithNotice(ticket, staffUserId, closingMessage)
       delivered: true,
     });
   }
+  await archiveDMTicketChannel(ticket, staffUserId);
   await closeTicket(ticket.id, staffUserId);
   await addTicketMessage(ticket.id, {
     authorId: staffUserId,
@@ -307,4 +336,5 @@ export async function closeTicketWithNotice(ticket, staffUserId, closingMessage)
       await user.send({ embeds: [embed] }).catch(() => {}); // retry without the file
     }
   }
+  await deleteDMTicketChannel(ticket);
 }

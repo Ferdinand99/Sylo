@@ -8,6 +8,7 @@ test('V1 ticket topics save, render and publish a dropdown panel', async () => {
   const app = await startWebApp();
   try {
     const body = {
+      dmCategory: CH.category,
       panelChannel: CH.general,
       ticketLogChannel: CH.bots,
       ticketLabel: 'Technical support',
@@ -22,6 +23,7 @@ test('V1 ticket topics save, render and publish a dropdown panel', async () => {
     assert.equal(config.ticketTypes[0].categoryId, CH.category);
     assert.ok(config.panelMessageId);
     assert.equal(config.ticketLogChannel, CH.bots);
+    assert.equal(config.dmCategory, CH.category);
     const page = await fetch(`${app.base}/guilds/${GID}/m/tickets?lang=en`);
     assert.equal(page.status, 200);
     const html = await page.text();
@@ -40,6 +42,7 @@ test('V2 ticket configuration preserves dropdown topics and category choices', a
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
+        dmCategory: CH.category,
         panelChannel: CH.general,
         ticketLogChannel: CH.bots,
         ticketTypes: [{ id: 'appeal', label: 'Appeal', categoryId: CH.category }],

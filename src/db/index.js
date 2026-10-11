@@ -809,6 +809,17 @@ export const MIGRATIONS = [
       );
     `);
   },
+  // Persist Discord destinations for DM modmail across restarts.
+  (database) => {
+    database.exec(`
+      CREATE TABLE ticket_channels (
+        ticket_id INTEGER PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL UNIQUE,
+        last_message_id INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

@@ -58,11 +58,17 @@ export function checkActable({ interaction, target, action }) {
  * @returns {Promise<boolean>} whether the DM was delivered
  */
 export async function notifyTarget(user, { guildName, action, reason, extra }) {
+  const titles = {
+    kicked: `Wyrzucono Cię z serwera ${guildName}`,
+    banned: `Zbanowano Cię na serwerze ${guildName}`,
+    warned: `Otrzymujesz ostrzeżenie na serwerze ${guildName}`,
+    'timed out': `Wyciszono Cię na serwerze ${guildName}`,
+  };
   const embed = new EmbedBuilder()
     .setColor(MOD_COLOR)
-    .setTitle(`You were ${action} in ${guildName}`)
-    .addFields({ name: 'Reason', value: reason });
-  if (extra) embed.addFields({ name: 'Details', value: extra });
+    .setTitle(titles[action] || `Nałożono karę na serwerze ${guildName}`)
+    .addFields({ name: 'Powód', value: reason === NO_REASON ? 'Nie podano powodu' : reason });
+  if (extra) embed.addFields({ name: 'Szczegóły', value: extra });
   embed.setTimestamp(Date.now());
 
   try {

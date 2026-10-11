@@ -28,7 +28,9 @@ This fork extends the upstream bot with features configured from the dashboard:
   the ticket channel; failed exports retain the channel for retry.
   [Ticket setup](docs/modules/tickets.md).
 - **Polish DM tickets (modmail)**: opening and closing notices, server selection,
-  staff reply headers, notifications and transcript labels. Previously saved
+  staff reply headers, notifications and transcript labels. DMs create private
+  Discord workspaces where staff reply and close tickets; closure exports the
+  conversation to the ticket log channel before deleting the workspace. Previously saved
   English built-in defaults are translated when sent; administrator-written
   messages and conversation content are preserved.
 - **Separate log destinations** for individual events, including sent messages

@@ -66,6 +66,7 @@ export function normaliseChannelTickets(input = {}, previous = {}) {
   const panelChannel = id(input.panelChannel);
   return {
     panelChannel,
+    dmCategory: id(input.dmCategory ?? previous.dmCategory),
     panelMessageId: panelChannel === previous.panelChannel ? previous.panelMessageId || '' : '',
     panelTitle: String(input.panelTitle || 'Tickety pomocy').slice(0, 256),
     panelText: String(

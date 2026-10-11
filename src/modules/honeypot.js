@@ -23,7 +23,7 @@ import { recordHoneypotCatch } from '../db/honeypotCatches.js';
 import { log } from '../lib/log.js';
 
 export const HONEYPOT_ACTIONS = ['kick', 'timeout', 'ban'];
-const ACTION_LABELS = { kick: 'Kicks', timeout: 'Timeouts', ban: 'Bans' };
+const ACTION_LABELS = { kick: 'Wyrzucenia', timeout: 'Wyciszenia', ban: 'Bany' };
 const MAX_TIMEOUT_MS = 28 * 86_400_000; // Discord's own cap
 
 const clampInt = (v, min, max, dflt) => {
@@ -84,9 +84,12 @@ function canManageBait(channel, me) {
 function baitEmbed(row) {
   return new EmbedBuilder()
     .setColor(0xed4245)
-    .setTitle('🍯 Do not send messages / react here')
+    .setTitle('🍯 Nie pisz ani nie reaguj tutaj')
     .setDescription(row.bait || '​')
-    .addFields({ name: 'Catches', value: `${ACTION_LABELS[row.action]}: ${row.triggerCount ?? 0}` });
+    .addFields({
+      name: 'Wykryte przypadki',
+      value: `${ACTION_LABELS[row.action]}: ${row.triggerCount ?? 0}`,
+    });
 }
 
 /** Apply the configured punishment, log a case, and post to the mod-log.
@@ -99,16 +102,16 @@ async function punish(guild, member, entry, reason) {
   try {
     if (entry.action === 'timeout' && member.moderatable) {
       await member.timeout(Math.min(entry.timeoutMinutes * 60_000, MAX_TIMEOUT_MS), reason);
-      done = `timed out for ${entry.timeoutMinutes}m`;
+      done = `Wyciszenie na ${entry.timeoutMinutes} min`;
       await notifyTarget(member.user, { guildName: guild.name, action: 'timed out', reason });
     } else if (entry.action === 'kick' && member.kickable) {
       await notifyTarget(member.user, { guildName: guild.name, action: 'kicked', reason });
       await member.kick(reason);
-      done = 'kicked';
+      done = 'Wyrzucenie';
     } else if (entry.action === 'ban' && guild.members.me?.permissions.has('BanMembers')) {
       await notifyTarget(member.user, { guildName: guild.name, action: 'banned', reason });
       await guild.bans.create(member.id, { reason });
-      done = 'banned';
+      done = 'Ban';
     }
   } catch (err) {
     log.error('module:honeypot', 'punish failed:', err.message);
@@ -127,13 +130,13 @@ async function punish(guild, member, entry, reason) {
 
   const embed = new EmbedBuilder()
     .setColor(MOD_COLOR)
-    .setTitle('Honeypot triggered')
+    .setTitle('Uruchomiono pułapkę')
     .setThumbnail(member.user.displayAvatarURL())
     .addFields(
-      { name: 'Case', value: `#${caseNumber}` },
-      { name: 'User', value: `${member.user.tag} (\`${member.id}\`)` },
-      { name: 'Action', value: done },
-      { name: 'Trigger', value: reason }
+      { name: 'Sprawa', value: `#${caseNumber}` },
+      { name: 'Użytkownik', value: `${member.user.tag} (\`${member.id}\`)` },
+      { name: 'Kara', value: done },
+      { name: 'Powód', value: reason }
     )
     .setTimestamp(Date.now());
   await postModLog(guild, embed);
@@ -245,7 +248,7 @@ on('honeypot', 'messageCreate', async (message, config) => {
   const member = message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
   if (!member || isExempt(member, cfg)) return;
 
-  const done = await punish(message.guild, member, entry, 'Honeypot: message posted in trap channel');
+  const done = await punish(message.guild, member, entry, 'Pułapka: wysłanie wiadomości na kanale pułapce');
   if (entry.deleteMessage && message.deletable) await message.delete().catch(() => {});
   if (done) {
     await bumpHoneypotStat(message.guild, 'channels', message.channelId);
@@ -271,7 +274,7 @@ on('honeypot', 'reactionAdd', async ({ reaction, user }, config) => {
   const member = await guild.members.fetch(user.id).catch(() => null);
   if (!member || isExempt(member, cfg)) return;
 
-  const done = await punish(guild, member, entry, 'Honeypot: reacted to trap message');
+  const done = await punish(guild, member, entry, 'Pułapka: dodanie reakcji do wiadomości pułapki');
   if (done) {
     await bumpHoneypotStat(guild, 'messages', entry.channelId);
     await recordHoneypotCatch(guild.id, {

@@ -56,9 +56,8 @@ export default function Tickets() {
     <>
       <h1 className="v2-section-title">Tickets</h1>
       <p className="v2-field-hint">
-        Members open a ticket by sending the bot a direct message. Staff read and reply from the{' '}
-        <a href={`/guilds/${guildId}/tickets`}>Tickets</a> page — replies reach the member as an anonymous
-        "Staff" DM.
+        Zgłoszenia wysłane na DM trafiają do prywatnych kanałów na Discordzie. Administracja odpowiada w
+        kanale, a bot przekazuje odpowiedzi użytkownikowi na DM. Panel zachowuje historię rozmów.
       </p>
 
       <form onSubmit={onSave}>
@@ -190,6 +189,26 @@ export default function Tickets() {
             value={form.closeMessage}
             onChange={(e) => set({ closeMessage: e.target.value })}
           />
+        </div>
+
+        <div className="v2-field">
+          <label htmlFor="dmCategory">Kategoria zgłoszeń z DM</label>
+          <select
+            id="dmCategory"
+            value={form.dmCategory || ''}
+            onChange={(e) => set({ dmCategory: e.target.value })}
+          >
+            <option value="">— kategoria kanału panelu / pierwszego tematu —</option>
+            {data.categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <p className="v2-field-hint">
+            Odpowiadaj w prywatnym kanale zgłoszenia. Bot przekazuje wiadomości na DM. Zamknięcie zapisuje
+            rozmowę w kanale logów ticketów i usuwa kanał.
+          </p>
         </div>
 
         <div className="v2-field">
