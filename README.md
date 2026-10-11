@@ -258,7 +258,8 @@ settings panel per module — saves swap in place with a toast.
   - `/stats game:<Battlefield … | Old School RuneScape | RuneScape 3> username:…
     [platform:…]` — player stats as an embed (Battlefield: K/D, win rate, best
     class, …; RuneScape: combat / total level, top skills, boss KCs)
-  - `/history @user` · `/case view|reason|delete|note` — the moderation case log
+  - `/history @user` · `/case view|reason|delete|note` — private moderation history
+    with page buttons, archived cases, reasons, dates and moderators
   - Friendly, non-crashing error handling (unknown player, API down, rate-limited)
 - **Moderation** — `/kick`, `/ban`, `/unban`, `/timeout`, `/untimeout`, `/purge`,
   `/slowmode`, `/warn`, `/modlog`, plus a numbered **case log**: every action is a

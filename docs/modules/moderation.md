@@ -26,8 +26,8 @@ Admin, Infractions, Audit logging, Commands tabs).
   embed there.
 - **Delete inactive cases after** — days. A daily job removes cases that have
   been deleted (`/case delete`) or resolved (an unban / untimeout) once they are
-  older than this. `0` (the default) keeps them forever; active warnings and the
-  visible history are never auto-removed.
+  older than this. `0` (the default) keeps them forever. Active cases are never
+  auto-removed; archived history can be removed by this setting.
 
 ## Case log
 
@@ -35,7 +35,8 @@ Every action — `warn`, `note`, `timeout`, `untimeout`, `kick`, `ban`, `unban` 
 is recorded as an `infractions` row with a **per-server sequential case number**.
 `/unban` and `/untimeout` also mark the matching ban/timeout case inactive.
 `/case delete` is a **soft** delete: the row stays for audit but drops out of
-`/history` and the warning count. (Migration 35 folded the old flat `warnings`
+the warning count, while staying visible as archived in `/history`.
+(Migration 35 folded the old flat `warnings`
 table in as `warn` cases.)
 
 ## Commands
@@ -56,3 +57,20 @@ table in as `warn` cases.)
 
 The **Infractions** tab lists every case with edit-reason and soft-delete/restore
 controls, alongside active bans, channel locks and pending temporary bans.
+
+## Private punishment history
+
+Use `/history user:@member` to view warnings, bans, kicks, timeouts, their
+reversals and moderator notes recorded by this bot in the current server.
+The reply is ephemeral, with five entries per page, newest first. Previous/next
+buttons work for two minutes and recheck command access on every click.
+`page` can jump straight to a page; out-of-range pages resolve to the last page.
+
+Each entry shows its case number, type, available duration/detail, moderator,
+date and reason. Archived/inactive cases remain visible. This status does not
+prove that a punishment is currently in effect. Hard-deleted warnings and
+records already removed by configured retention cannot be reconstructed.
+Actions taken outside the bot are not imported retroactively.
+
+Access requires Moderate Members, Administrator, or a role granted access to
+`/history` in the dashboard's command settings. Replies do not ping anyone.

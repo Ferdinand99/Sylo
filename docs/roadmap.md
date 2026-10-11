@@ -292,8 +292,8 @@ commands and an editable dashboard view. Built exactly to the plan below.
 - **`/history <user> [page]`** — paginated ephemeral embed, one line per case
   (`#N · action · date · by @mod — reason`).
 - **`/case` group** — `view <n>`, `reason <n> <text>` (edit reason),
-  `delete <n>` (**soft** — `active=0`, drops out of `/history` and the warn
-  count, stays in the DB), `note <user> <text>` (a case with no enforcement / no
+  `delete <n>` (**soft** — `active=0`, excluded from the warn count,
+  shown as archived in `/history`, stays in the DB), `note <user> <text>` (a case with no enforcement / no
   DM).
 - **Wire the existing actions**: `ban` / `kick` / `timeout` / `untimeout` /
   `unban` / `warn`, the auto-threshold punishments, and the temp-ban expiry loop

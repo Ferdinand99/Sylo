@@ -38,7 +38,7 @@ export const data = new SlashCommandBuilder()
   .addSubcommand((s) =>
     s
       .setName('delete')
-      .setDescription('Soft-delete a case (kept for audit, hidden from /history and the warn count).')
+      .setDescription('Deactivate a case (kept in history for audit, excluded from the warning count).')
       .addIntegerOption((o) =>
         o.setName('number').setDescription('Case number').setRequired(true).setMinValue(1)
       )

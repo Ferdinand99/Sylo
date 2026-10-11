@@ -4,7 +4,7 @@
 // warn action, the temp-ban expiry loop, and the moderation dashboard.
 //
 // `active` is 1 for a case still "in effect"; /case delete soft-deletes it to 0
-// (kept for audit, dropped from /history and the warn count), and /unban /
+// (kept in history for audit, dropped from the warn count), and /unban /
 // /untimeout flip the matching ban/timeout case to 0.
 import { prepare, registerPostgresBootstrap } from './driver.js';
 

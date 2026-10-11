@@ -2034,5 +2034,6 @@
   "🔴 **{name}** is live on YouTube: **{title}** {url}": "🔴 **{name}** prowadzi transmisję na YouTube: **{title}**\n{url}",
   "🟢 **{name}** is live on Kick!": "🟢 **{name}** prowadzi transmisję na Kicku!",
   "Epic Games Store and Steam giveaways (via GamerPower) are checked hourly without API keys. Steam announcements include permanent claims; free weekends, demos and third-party key tasks are skipped. Other stores require an": "Epic Games Store oraz promocje Steam (przez GamerPower) są sprawdzane co godzinę, bez kluczy API. Ogłoszenia Steam obejmują gry do zachowania na stałe; pomijamy darmowe weekendy, dema i rozdawanie kluczy z dodatkowymi zadaniami. Inne sklepy wymagają",
-  "Announce games that become free to claim on Epic Games Store and Steam.": "Ogłaszaj gry dostępne bezpłatnie do odebrania w Epic Games Store i na Steam."
+  "Announce games that become free to claim on Epic Games Store and Steam.": "Ogłaszaj gry dostępne bezpłatnie do odebrania w Epic Games Store i na Steam.",
+  "Deactivate a case (kept in history for audit, excluded from the warning count).": "Dezaktywuj wpis: pozostanie w historii, ale nie będzie liczony jako ostrzeżenie."
 }
