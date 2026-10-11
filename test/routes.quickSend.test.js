@@ -32,7 +32,7 @@ test('text and embeds send to the chosen channel without saving a composition', 
       }),
     });
     assert.equal(response.status, 303);
-    assert.equal(response.headers.get('location'), `${path}?sent=1`);
+    assert.equal(response.headers.get('location'), `${path}?sent=1&channelId=${CH.general}`);
     assert.equal(app.sink.messages.length, 1);
     assert.equal(app.sink.messages[0].channel, CH.general);
     assert.equal(app.sink.messages[0].payload.content, 'wiadomość jednorazowa');
@@ -40,6 +40,7 @@ test('text and embeds send to the chosen channel without saving a composition', 
     assert.deepEqual(await listComposed(GID), before);
     const fresh = await (await fetch(app.base + response.headers.get('location'))).text();
     assert.match(fresh, /Wiadomość wysłana/);
+    assert.match(fresh, new RegExp(`value="${CH.general}" selected`));
     assert.doesNotMatch(fresh, /wiadomość jednorazowa/);
   } finally {
     app.close();

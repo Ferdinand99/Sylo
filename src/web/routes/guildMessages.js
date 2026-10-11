@@ -97,7 +97,20 @@ async function renderSend(req, res, rec, msg = null, status = 200) {
 }
 router.get(
   '/send',
-  asyncHandler((req, res) => renderSend(req, res, null, req.query.sent === '1' ? 'Wiadomość wysłana.' : null))
+  asyncHandler((req, res) => {
+    const channelId = guildTextChannels(req.guild).some((channel) => channel.id === req.query.channelId)
+      ? req.query.channelId
+      : '';
+    return renderSend(
+      req,
+      res,
+      {
+        channel_id: channelId,
+        spec: { content: '', embeds: [], rows: [] },
+      },
+      req.query.sent === '1' ? 'Wiadomość wysłana.' : null
+    );
+  })
 );
 router.post(
   '/send',
@@ -118,7 +131,7 @@ router.post(
           : 'Nie udało się wysłać wiadomości. Sprawdź kanał i uprawnienia bota.';
       return renderSend(req, res, rec, message, 400);
     }
-    return res.redirect(303, `/guilds/${req.guild.id}/messages/send?sent=1`);
+    return res.redirect(303, `/guilds/${req.guild.id}/messages/send?sent=1&channelId=${channelId}`);
   })
 );
 
