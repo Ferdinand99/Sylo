@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.41.0](https://github.com/Ferdinand99/Sylo/compare/v3.40.0...v3.41.0) (2026-10-11)
+
+
+### Features
+
+* **dashboard:** add a bot-wide audit log for owner-only settings ([#239](https://github.com/Ferdinand99/Sylo/issues/239)) ([9075445](https://github.com/Ferdinand99/Sylo/commit/90754455d9aef9827b307864743c84feccf585ac))
+
 ## [3.40.0](https://github.com/Ferdinand99/Sylo/compare/v3.39.0...v3.40.0) (2026-10-11)
 
 
