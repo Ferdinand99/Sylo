@@ -30,10 +30,18 @@ export async function applyPresence(client, { force = true, now = Date.now(), ra
     const signature = JSON.stringify(cfg);
     const previous = rotations.get(client);
     if (!force && previous?.signature === signature && now < previous.nextAt) return;
-    // Avoid showing the same line twice in a row when multiple texts exist.
     const choices = cfg.texts.length ? cfg.texts : [cfg.text];
-    const candidates = choices.length > 1 ? choices.filter((text) => text !== previous?.text) : choices;
+    const poolSignature = JSON.stringify(choices);
+    // Drawing without replacement is a shuffled cycle. Keep the remaining
+    // pool across status/interval changes, resetting only when texts change.
+    const remaining =
+      previous?.poolSignature === poolSignature && previous.remaining.length
+        ? [...previous.remaining]
+        : [...choices];
+    // At the boundary between cycles, do not repeat the last displayed line.
+    const candidates = remaining.length > 1 ? remaining.filter((text) => text !== previous?.text) : remaining;
     const chosen = candidates[Math.floor(random() * candidates.length)];
+    remaining.splice(remaining.indexOf(chosen), 1);
     const type = TYPE_MAP[cfg.type] ?? ActivityType.Custom;
     const text = fillPresenceText(chosen, client).trim().slice(0, 128);
 
@@ -42,7 +50,13 @@ export async function applyPresence(client, { force = true, now = Date.now(), ra
       : [];
 
     client.user.setPresence({ status: cfg.status, activities });
-    rotations.set(client, { signature, text: chosen, nextAt: now + cfg.rotationSeconds * 1000 });
+    rotations.set(client, {
+      signature,
+      poolSignature,
+      remaining,
+      text: chosen,
+      nextAt: now + cfg.rotationSeconds * 1000,
+    });
   } catch (err) {
     log.error('bot', 'Failed to apply presence:', err.message);
   }

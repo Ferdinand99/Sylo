@@ -99,3 +99,73 @@ test('ten-second rotation is saved and updates at ten seconds, not earlier', asy
   assert.equal(updates.length, 2);
   assert.equal(updates[1].activities[0].state, 'b');
 });
+
+test('presence pool exhausts every line before repeating, including cycle boundaries', async () => {
+  const { applyPresence } = await import('../src/bot/lib/presence.js');
+  const updates = [];
+  const client = {
+    guilds: { cache: new Map() },
+    user: { setPresence: (v) => updates.push(v.activities[0].state) },
+  };
+  const texts = ['a', 'b', 'c', 'd'];
+  await setPresenceConfig({ type: 'Custom', texts, rotationSeconds: 10 });
+  for (let i = 0; i < 24; i++) {
+    await applyPresence(client, { force: false, now: i * 10000, random: () => (Math.floor(i / texts.length) % 2 ? 0.999 : 0) });
+  }
+  for (let i = 0; i < updates.length; i += texts.length) {
+    assert.deepEqual([...updates.slice(i, i + texts.length)].sort(), texts);
+  }
+  for (let i = 1; i < updates.length; i++) assert.notEqual(updates[i], updates[i - 1]);
+});
+
+test('presence pool survives timing/status edits, restarts on list edits and is per-client', async () => {
+  const { applyPresence } = await import('../src/bot/lib/presence.js');
+  const updates = [];
+  const client = {
+    guilds: { cache: new Map() },
+    user: { setPresence: (v) => updates.push(v.activities[0].state) },
+  };
+  await setPresenceConfig({ type: 'Custom', texts: ['a', 'b', 'c'], rotationSeconds: 10 });
+  await applyPresence(client, { now: 0, random: () => 0 });
+  await setPresenceConfig({ status: 'dnd', type: 'Custom', texts: ['a', 'b', 'c'], rotationSeconds: 20 });
+  await applyPresence(client, { now: 1, random: () => 0 });
+  await applyPresence(client, { now: 2, random: () => 0 });
+  assert.deepEqual(updates, ['a', 'b', 'c']);
+  const other = {
+    guilds: { cache: new Map() },
+    user: { setPresence: (v) => updates.push(v.activities[0].state) },
+  };
+  await applyPresence(other, { now: 3, random: () => 0 });
+  assert.equal(updates.at(-1), 'a');
+  await setPresenceConfig({ type: 'Custom', texts: ['x', 'y'], rotationSeconds: 10 });
+  await applyPresence(client, { now: 4, random: () => 0 });
+  await applyPresence(client, { now: 5, random: () => 0 });
+  assert.deepEqual(updates.slice(-2), ['x', 'y']);
+});
+
+test('presence pool handles a single line and does not consume failed updates', async () => {
+  const { applyPresence } = await import('../src/bot/lib/presence.js');
+  const updates = [];
+  let fail = false;
+  const client = {
+    guilds: { cache: new Map() },
+    user: {
+      setPresence: (v) => {
+        if (fail) throw new Error('test failure');
+        updates.push(v.activities[0].state);
+      },
+    },
+  };
+  await setPresenceConfig({ type: 'Custom', texts: ['only'], rotationSeconds: 10 });
+  await applyPresence(client, { now: 0 });
+  await applyPresence(client, { now: 10000 });
+  assert.deepEqual(updates, ['only', 'only']);
+  await setPresenceConfig({ type: 'Custom', texts: ['a', 'b', 'c'], rotationSeconds: 10 });
+  await applyPresence(client, { now: 20000, random: () => 0 });
+  fail = true;
+  await applyPresence(client, { now: 30000, random: () => 0 });
+  fail = false;
+  await applyPresence(client, { now: 30001, random: () => 0 });
+  await applyPresence(client, { now: 40001, random: () => 0 });
+  assert.deepEqual(updates.slice(-3), ['a', 'b', 'c']);
+});
