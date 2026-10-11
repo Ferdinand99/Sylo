@@ -19,6 +19,10 @@ nie zawierają automatycznie zmian z tego repozytorium.
 
 This fork extends the upstream bot with features configured from the dashboard:
 
+- **One-off message sender** in dashboard V1: choose a Discord text channel,
+  write plain text or add embeds/link buttons, and send without saving a draft
+  or template. The form clears after success and retains unsent content on
+  failure. Available under Utilities → Send message.
 - **Automatic threads** on selected text and announcement channels, with custom
   names and archive durations. [Setup](docs/modules/auto-threads.md).
 - **Discord channel tickets** with an Open ticket button, a private topic

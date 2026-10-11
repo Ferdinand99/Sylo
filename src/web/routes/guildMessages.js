@@ -82,6 +82,46 @@ async function renderBuilder(req, res, rec) {
   });
 }
 
+// One-off sending shares the editor but never creates a composed-message record.
+async function renderSend(req, res, rec, msg = null, status = 200) {
+  return res.status(status).render('msg-builder', {
+    ...(await baseContext(req.guild, 'messages/send')),
+    channels: guildTextChannels(req.guild),
+    roles: assignableRoles(req.guild),
+    guildId: req.guild.id,
+    isNew: true,
+    quickSend: true,
+    msg,
+    rec: rec || { id: '', channel_id: '', message_id: null, spec: { content: '', embeds: [], rows: [] } },
+  });
+}
+router.get(
+  '/send',
+  asyncHandler((req, res) => renderSend(req, res, null, req.query.sent === '1' ? 'Wiadomość wysłana.' : null))
+);
+router.post(
+  '/send',
+  asyncHandler(async (req, res) => {
+    const spec = parseSpec(req.body);
+    const channelId = isId(req.body.channelId) ? req.body.channelId : '';
+    const rec = { channel_id: channelId, spec: spec || { content: '', embeds: [], rows: [] } };
+    if (!spec) return renderSend(req, res, rec, 'Nie można odczytać wiadomości.', 400);
+    if (!guildTextChannels(req.guild).some((channel) => channel.id === channelId))
+      return renderSend(req, res, rec, 'Wybierz kanał tekstowy tego serwera.', 400);
+    try {
+      await sendComposed(req.guild, channelId, spec);
+    } catch (error) {
+      const message = error.message.includes('Nothing to send')
+        ? 'Wpisz treść lub dodaj osadzoną wiadomość.'
+        : error.message.includes('lacks')
+          ? 'Bot nie ma uprawnień do wysłania wiadomości na tym kanale.'
+          : 'Nie udało się wysłać wiadomości. Sprawdź kanał i uprawnienia bota.';
+      return renderSend(req, res, rec, message, 400);
+    }
+    return res.redirect(303, `/guilds/${req.guild.id}/messages/send?sent=1`);
+  })
+);
+
 // Express 5 / path-to-regexp v8 has no inline regex in the path — the numeric
 // (and "new") id shape is checked in the handler instead.
 const numericId = (v) => /^\d+$/.test(v ?? '');

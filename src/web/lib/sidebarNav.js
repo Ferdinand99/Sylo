@@ -80,6 +80,7 @@ const CATEGORIES = [
     title: 'Utilities',
     items: [
       { page: 'messages', label: 'Embed messages' },
+      { page: 'messages/send', label: 'Wyślij wiadomość' },
       { module: 'counting' },
       { module: 'polls' },
       { module: 'giveaways' },

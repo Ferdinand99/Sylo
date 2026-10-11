@@ -1,26 +1,31 @@
-<%- include('partials/header', { title: `Sylo — ${isNew ? 'New' : 'Edit'} embed message` }) %>
+<% var oneOff = typeof quickSend !== 'undefined' && quickSend; %>
+<%- include('partials/header', { title: oneOff ? 'Sylo — Wyślij wiadomość' : `Sylo — ${isNew ? 'New' : 'Edit'} embed message` }) %>
 
 <p class="muted"><a href="/guilds/<%= guildId %>/messages">&larr; Embed messages</a></p>
 
+<% if (oneOff) { %>
+<h1>Wyślij wiadomość</h1>
+<p class="muted small">Wybierz kanał, wpisz treść i wyślij wiadomość botem. Możesz też dodać osadzone wiadomości i przyciski z linkami.</p>
+<% } %>
 <div class="rr-builder-head">
-  <input type="text" form="mb-form" name="name" class="mb-name" maxlength="100"
-         value="<%= rec.name || '' %>" placeholder="Untitled embed" />
+  <% if (!oneOff) { %><input type="text" form="mb-form" name="name" class="mb-name" maxlength="100"
+         value="<%= rec.name || '' %>" placeholder="Untitled embed" /><% } %>
   <div class="rr-actions">
     <a class="btn" href="/guilds/<%= guildId %>/messages">Discard</a>
-    <button type="submit" form="mb-form" name="action" value="save" class="btn">Save draft</button>
+    <% if (!oneOff) { %><button type="submit" form="mb-form" name="action" value="save" class="btn">Save draft</button><% } %>
     <button type="submit" form="mb-form" name="action" value="publish" class="btn btn-primary">
-      <%= rec.message_id ? 'Update published' : 'Publish' %>
+      <%= oneOff ? 'Wyślij wiadomość' : rec.message_id ? 'Update published' : 'Publish' %>
     </button>
   </div>
 </div>
 
 <% if (typeof msg !== 'undefined' && msg) { %>
-  <div class="banner banner-flash <%= (['saved','sent','updated'].indexOf(msg) >= 0) ? 'ok' : (msg === 'unpublished' ? 'info' : 'bad') %>">
+  <div class="banner banner-flash <%= (['saved','sent','updated','Wiadomość wysłana.'].indexOf(msg) >= 0) ? 'ok' : (msg === 'unpublished' ? 'info' : 'bad') %>">
     <%= ({ saved:'Draft saved.', sent:'Published to the channel.', updated:'Published message updated.', unpublished:'Unpublished — draft kept.', bad:'Could not read the editor.', nochannel:'Pick a channel before publishing.' })[msg] || (function(){ try { return decodeURIComponent(msg); } catch(e){ return msg; } })() %>
   </div>
 <% } %>
 
-<form method="POST" action="/guilds/<%= guildId %>/messages/<%= isNew ? 'new' : rec.id %>" id="mb-form" hx-boost="false" class="stack u-mw-xl"
+<form method="POST" action="/guilds/<%= guildId %>/messages/<%= oneOff ? 'send' : isNew ? 'new' : rec.id %>" id="mb-form" hx-boost="false" class="stack u-mw-xl"
       x-data="embedList(<%= JSON.stringify({ max: 10, links: true, spec: (rec.spec || { content: '', embeds: [], rows: [] }) }) %>)">
   <input type="hidden" name="spec" id="mb-spec" />
 

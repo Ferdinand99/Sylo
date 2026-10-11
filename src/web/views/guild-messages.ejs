@@ -4,6 +4,7 @@
 
 <div class="rr-builder-head">
   <div class="mod-hero"><%- include('guild/_hero-inner', { icon: 'message-square', title: 'Embed messages', lg: true }) %></div>
+  <a class="btn" href="/guilds/<%= guild.id %>/messages/send">Wyślij wiadomość</a>
   <a class="btn btn-primary" href="/guilds/<%= guild.id %>/messages/new">＋ New embed message</a>
 </div>
 <p class="muted small">Build rich embed messages with a live editor, then publish them to a channel as Sylo — and re-publish to edit the posted message in place.</p>
