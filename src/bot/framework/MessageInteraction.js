@@ -8,25 +8,19 @@
 //   - There are no ephemeral replies in a channel. An "ephemeral" reply is sent
 //     normally, then deleted — along with the invoking message — after a short
 //     delay, so a private result does not linger.
-//   - Buttons and menus do not exist here; `components` is dropped.
+//   - Buttons and menus do not exist here; `components` become reactions
+//     (platform/outgoing.js) and a reaction runs the same handler.
 //   - `guildId` and `guild.id` are in platform form ("fluxer:<id>"), because
 //     that is the id every DB lookup keys on; every other property of `guild`
 //     (and every method, bound to the real guild) is the SDK's own.
-import { MessageFlags } from 'discord.js';
 import { makePlatformGuildId } from '../../lib/platformId.js';
+import { prepareOutgoing, attachActions } from '../../platform/outgoing.js';
 
 /** How long an "ephemeral" reply stays in the channel. */
 export const PRIVATE_TTL_MS = 15_000;
 
-function normalise(input) {
-  const p = typeof input === 'string' ? { content: input } : { ...input };
-  const flags = typeof p.flags === 'number' ? p.flags : 0;
-  const ephemeral = Boolean(p.ephemeral) || (flags & MessageFlags.Ephemeral) === MessageFlags.Ephemeral;
-  const wantsResponse = Boolean(p.withResponse);
-  for (const key of ['ephemeral', 'flags', 'withResponse', 'fetchReply', 'components']) delete p[key];
-  if (p.content === '') delete p.content;
-  return { payload: p, ephemeral, wantsResponse };
-}
+/** How long the reactions of a command reply's buttons/menus stay live (a Discord interaction token lives 15 min). */
+export const COMPONENT_TTL_MS = 15 * 60_000;
 
 function withPlatformId(guild, platform) {
   if (!guild) return null;
@@ -141,6 +135,8 @@ export class MessageInteraction {
     return true;
   }
 
+  // Subclasses may use a second `ephemeral` argument; a reply to the invoking
+  // message needs no mention to reach its author.
   async _send(payload) {
     try {
       return await this.message.reply(payload);
@@ -158,37 +154,50 @@ export class MessageInteraction {
     timer.unref?.();
   }
 
+  /** Put the reactions for a reply's buttons/menus on the sent message. */
+  _attach(sent, out, edit = false) {
+    return attachActions(sent, out, { guildId: this.guildId ?? '', ttlMs: COMPONENT_TTL_MS, edit });
+  }
+
   async deferReply(opts = {}) {
-    this.ephemeral = normalise(opts).ephemeral;
+    this.ephemeral = prepareOutgoing(opts).ephemeral;
     this.deferred = true;
     this.channel?.sendTyping?.().catch(() => {});
   }
 
   async reply(input) {
-    const { payload, ephemeral, wantsResponse } = normalise(input);
-    this.ephemeral = ephemeral;
-    const sent = await this._send(payload);
+    const out = prepareOutgoing(input);
+    this.ephemeral = out.ephemeral;
+    const sent = await this._send(out.payload, out.ephemeral);
     this._sent = sent;
     this.replied = true;
-    if (ephemeral) this._scheduleCleanup(sent);
-    return wantsResponse ? { resource: { message: sent } } : sent;
+    await this._attach(sent, out);
+    if (out.ephemeral) this._scheduleCleanup(sent);
+    return out.wantsResponse ? { resource: { message: sent } } : sent;
   }
 
   async editReply(input) {
-    const { payload } = normalise(input);
-    if (this._sent) return this._sent.edit(payload);
-    const sent = await this._send(payload);
+    if (this._sent) {
+      const out = prepareOutgoing(input, { edit: true });
+      const edited = await this._sent.edit(out.payload);
+      await this._attach(this._sent, out, true);
+      return edited;
+    }
+    const out = prepareOutgoing(input);
+    const sent = await this._send(out.payload, this.ephemeral);
     this._sent = sent;
     this.replied = true;
+    await this._attach(sent, out);
     if (this.ephemeral) this._scheduleCleanup(sent);
     return sent;
   }
 
   async followUp(input) {
-    const { payload, ephemeral } = normalise(input);
-    const sent = await this._send(payload);
+    const out = prepareOutgoing(input);
+    const sent = await this._send(out.payload, out.ephemeral);
     this.replied = true;
-    if (ephemeral) this._scheduleCleanup(sent);
+    await this._attach(sent, out);
+    if (out.ephemeral) this._scheduleCleanup(sent);
     return sent;
   }
 

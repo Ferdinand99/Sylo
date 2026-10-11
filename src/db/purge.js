@@ -50,6 +50,7 @@ import './birthdays.js';
 import './insights.js';
 import './channelCleanup.js';
 import './honeypotCatches.js';
+import './componentReactions.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -87,6 +88,7 @@ export const GUILD_TABLES = [
   'channel_cleanup_schedules',
   'github_watches',
   'honeypot_catches',
+  'component_reactions',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));

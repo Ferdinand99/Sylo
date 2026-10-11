@@ -824,6 +824,25 @@ export const MIGRATIONS = [
       CREATE INDEX idx_bot_audit_created ON bot_audit (created_at DESC);
     `);
   },
+
+  // Reaction-rendered buttons/select menus for platforms without native
+  // components — see src/db/componentReactions.js.
+  (database) => {
+    database.exec(`
+      CREATE TABLE component_reactions (
+        guild_id   TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        message_id TEXT NOT NULL,
+        emoji      TEXT NOT NULL,
+        kind       TEXT NOT NULL,
+        custom_id  TEXT NOT NULL,
+        value      TEXT,
+        expires_at INTEGER,
+        PRIMARY KEY (message_id, emoji)
+      );
+      CREATE INDEX idx_component_reactions_expiry ON component_reactions (expires_at);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */
