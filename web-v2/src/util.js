@@ -44,6 +44,26 @@ export function writeTheme(theme) {
   }
 }
 
+// Same key V1's header partial uses — dismissing an announcement in one
+// dashboard dismisses it in the other too, since it's the same browser.
+const DISMISSED_ANNOUNCEMENT_KEY = 'sylo:dismissedAnnouncement';
+
+export function readDismissedAnnouncement() {
+  try {
+    return localStorage.getItem(DISMISSED_ANNOUNCEMENT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeDismissedAnnouncement(createdAt) {
+  try {
+    localStorage.setItem(DISMISSED_ANNOUNCEMENT_KEY, String(createdAt));
+  } catch {
+    // ignore — nothing to fall back to, this is just a convenience
+  }
+}
+
 const RECENT_COLORS_KEY = 'sylo:v2:recentEmbedColors';
 const MAX_RECENT_COLORS = 8;
 

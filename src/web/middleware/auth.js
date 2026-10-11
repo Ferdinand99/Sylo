@@ -11,6 +11,7 @@ import { runtime } from '../../runtime.js';
 import { BUILD } from '../../bot/lib/buildInfo.js';
 import { buildSidebar } from '../lib/sidebarNav.js';
 import { getBotMasterRoles } from '../../db/guildSettings.js';
+import { getAnnouncement } from '../../db/appSettings.js';
 import { rateLimit } from './rateLimit.js';
 import { log } from '../../lib/log.js';
 
@@ -317,6 +318,7 @@ export function mountAuth(app) {
     res.locals.activeGuildId =
       urlGuildId || (mg.some((g) => g.id === remembered) ? remembered : null) || mg[0]?.id || null;
     res.locals.sidebar = await buildSidebar(req, res.locals.activeGuildId);
+    res.locals.announcement = res.locals.user ? await getAnnouncement() : null;
     next();
   });
 

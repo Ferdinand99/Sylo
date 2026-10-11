@@ -109,6 +109,11 @@ export const getPersonalizerPresence = () => apiFetch('/api/v2/personalizer/pres
 export const savePersonalizerIdentity = (body) => postJson('/api/v2/personalizer/identity', body);
 export const savePersonalizerPresence = (body) => postJson('/api/v2/personalizer/presence', body);
 
+// Readable by anyone signed in; saving/clearing is owner-only (enforced server-side).
+export const getAnnouncement = () => apiFetch('/api/v2/announcement');
+export const savePersonalizerAnnouncement = (body) => postJson('/api/v2/personalizer/announcement', body);
+export const clearPersonalizerAnnouncement = () => postJson('/api/v2/personalizer/announcement/clear', {});
+
 export const getHealth = () => apiFetch('/api/v2/health');
 export const sendDevLogTest = () => postJson('/api/v2/health/dev-log-test', {});
 export const sendDevLogErrorTest = () => postJson('/api/v2/health/dev-log-error-test', {});

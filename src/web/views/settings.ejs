@@ -72,4 +72,42 @@
   </form>
 </section>
 
+<section class="card">
+  <h2>Announcement</h2>
+  <p class="muted small">
+    Shown to everyone signed in to the dashboard, on every page — e.g. to explain an incident or
+    outage. <strong>Critical</strong> announcements have no dismiss button and stay until you clear them.
+  </p>
+
+  <% if (announcement) { %>
+    <div class="banner banner-flash ok u-mb-2">
+      Currently live: <strong><%= announcement.title %></strong> (<%= announcement.severity %>)
+    </div>
+  <% } %>
+
+  <form method="POST" action="/settings/announcement" class="stack u-mw-lg">
+    <label>Title</label>
+    <input type="text" name="title" maxlength="200" value="<%= announcement ? announcement.title : '' %>" placeholder="e.g. Scheduled maintenance tonight" />
+
+    <label>Message</label>
+    <textarea name="body" rows="3" maxlength="2000" placeholder="Optional details"><%= announcement ? announcement.body : '' %></textarea>
+
+    <label>Severity</label>
+    <select name="severity">
+      <% announcementSeverities.forEach(function (s) { %>
+        <option value="<%= s %>" <%= announcement && s === announcement.severity ? 'selected' : '' %>>
+          <%= s.charAt(0).toUpperCase() + s.slice(1) %>
+        </option>
+      <% }) %>
+    </select>
+
+    <div class="btn-row u-mt-3">
+      <button type="submit">Publish announcement</button>
+      <% if (announcement) { %>
+        <button type="submit" formaction="/settings/announcement/clear" class="btn-secondary">Clear</button>
+      <% } %>
+    </div>
+  </form>
+</section>
+
 <%- include('partials/footer') %>

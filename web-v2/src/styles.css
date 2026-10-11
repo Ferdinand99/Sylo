@@ -1843,6 +1843,43 @@ form textarea,
   color: var(--text);
 }
 
+/* components/Announcement.jsx: bot-wide notice from Bot Personalizer. */
+.v2-announcement {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 15px;
+  margin-bottom: 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent-2);
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+.v2-announcement span {
+  color: var(--text-muted);
+}
+.v2-ann-warning {
+  border-left-color: #fbbf24;
+}
+.v2-ann-critical {
+  border-left-color: #f87171;
+}
+.v2-ann-dismiss {
+  margin-left: auto;
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.v2-ann-dismiss:hover {
+  color: var(--text);
+}
+
 /* components/Meta.jsx: facts side by side with space between, no separator character. */
 .v2-meta-item + .v2-meta-item {
   margin-left: 0.9em;

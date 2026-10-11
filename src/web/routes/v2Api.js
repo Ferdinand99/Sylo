@@ -169,6 +169,10 @@ import {
   setPresenceConfig,
   PRESENCE_TYPES,
   PRESENCE_STATUSES,
+  getAnnouncement,
+  setAnnouncement,
+  clearAnnouncement,
+  ANNOUNCEMENT_SEVERITIES,
 } from '../../db/appSettings.js';
 import { applyPresence } from '../../bot/lib/presence.js';
 import { config } from '../../config.js';
@@ -1981,7 +1985,12 @@ router.get(
   '/personalizer/presence',
   requireOwner,
   asyncHandler(async (req, res) => {
-    res.json({ presence: await getPresenceConfig(), types: PRESENCE_TYPES, statuses: PRESENCE_STATUSES });
+    res.json({
+      presence: await getPresenceConfig(),
+      types: PRESENCE_TYPES,
+      statuses: PRESENCE_STATUSES,
+      announcementSeverities: ANNOUNCEMENT_SEVERITIES,
+    });
   })
 );
 
@@ -2059,6 +2068,37 @@ router.post(
     });
     if (runtime.client) applyPresence(runtime.client);
     res.json({ presence });
+  })
+);
+
+// Deliberately NOT requireOwner: every signed-in dashboard user needs to see
+// a live announcement (e.g. an incident notice), not just the operator.
+router.get(
+  '/announcement',
+  asyncHandler(async (req, res) => {
+    res.json({ announcement: await getAnnouncement() });
+  })
+);
+
+router.post(
+  '/personalizer/announcement',
+  requireOwner,
+  asyncHandler(async (req, res) => {
+    const announcement = await setAnnouncement({
+      title: req.body.title,
+      body: req.body.body,
+      severity: req.body.severity,
+    });
+    res.json({ announcement });
+  })
+);
+
+router.post(
+  '/personalizer/announcement/clear',
+  requireOwner,
+  asyncHandler(async (req, res) => {
+    await clearAnnouncement();
+    res.json({ announcement: null });
   })
 );
 

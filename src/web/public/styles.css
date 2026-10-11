@@ -328,6 +328,15 @@ a:hover { color: var(--accent-strong); text-decoration: underline; text-underlin
 .banner.ok { background: rgba(88, 214, 141, 0.12); border-color: rgba(88, 214, 141, 0.25); color: var(--ok); }
 .banner.bad { background: rgba(242, 85, 90, 0.12); border-color: rgba(242, 85, 90, 0.28); color: var(--bad); }
 .banner.info { background: rgba(229, 181, 103, 0.12); border-color: rgba(229, 181, 103, 0.28); color: var(--warn); }
+
+.sa-announcement { display: flex; align-items: center; gap: 10px; }
+.sa-announcement strong { flex-shrink: 0; }
+.sa-announcement span { opacity: 0.85; }
+.sa-announcement.sa-info { background: rgba(122, 162, 247, 0.12); border-color: rgba(122, 162, 247, 0.28); color: var(--accent); }
+.sa-announcement.sa-warning { background: rgba(229, 181, 103, 0.12); border-color: rgba(229, 181, 103, 0.28); color: var(--warn); }
+.sa-announcement.sa-critical { background: rgba(242, 85, 90, 0.14); border-color: rgba(242, 85, 90, 0.32); color: var(--bad); }
+.sa-dismiss { margin-left: auto; background: none; border: none; color: inherit; font-size: 18px; line-height: 1; cursor: pointer; opacity: 0.7; padding: 0 2px; }
+.sa-dismiss:hover { opacity: 1; }
 .warn-text { color: var(--warn); }
 
 /* form controls */

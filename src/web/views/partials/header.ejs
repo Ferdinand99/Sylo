@@ -177,3 +177,37 @@
       <span class="brand">Sylo</span>
     </header>
     <main>
+      <% var ann = typeof announcement !== 'undefined' ? announcement : null; %>
+      <% if (ann) { %>
+        <div
+          class="banner sa-announcement sa-<%= ann.severity %>"
+          data-sa-announcement="<%= ann.createdAt %>"
+          <% if (ann.severity !== 'critical') { %>style="display:none"<% } %>
+        >
+          <strong><%= ann.title %></strong>
+          <% if (ann.body) { %><span><%= ann.body %></span><% } %>
+          <% if (ann.severity !== 'critical') { %>
+            <button type="button" class="sa-dismiss" aria-label="Dismiss">&times;</button>
+          <% } %>
+        </div>
+        <% if (ann.severity !== 'critical') { %>
+          <script>
+            (function () {
+              var el = document.currentScript.previousElementSibling;
+              var key = 'sylo:dismissedAnnouncement';
+              try {
+                if (localStorage.getItem(key) !== el.dataset.saAnnouncement) el.style.display = '';
+              } catch (e) {
+                el.style.display = '';
+              }
+              var btn = el.querySelector('.sa-dismiss');
+              btn.addEventListener('click', function () {
+                try {
+                  localStorage.setItem(key, el.dataset.saAnnouncement);
+                } catch (e) {}
+                el.style.display = 'none';
+              });
+            })();
+          </script>
+        <% } %>
+      <% } %>

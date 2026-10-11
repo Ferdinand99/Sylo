@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useParams } from 'react-router-dom';
 import { getGuilds } from '../api.js';
 import { readLastGuildId, writeLastGuildId, readTheme, writeTheme } from '../util.js';
 import { OverviewProvider } from '../OverviewContext.jsx';
+import Announcement from './Announcement.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
@@ -115,6 +116,7 @@ export default function Shell() {
         <div className="v2-body">
           <Sidebar activeGuildId={lastGuildId} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
           <main className="v2-page">
+            <Announcement />
             <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
           </main>
         </div>

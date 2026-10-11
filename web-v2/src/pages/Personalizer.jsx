@@ -4,6 +4,9 @@ import {
   getPersonalizerPresence,
   savePersonalizerIdentity,
   savePersonalizerPresence,
+  getAnnouncement,
+  savePersonalizerAnnouncement,
+  clearPersonalizerAnnouncement,
   ApiError,
 } from '../api.js';
 
@@ -14,6 +17,8 @@ export default function Personalizer() {
     presence: null,
     types: [],
     statuses: [],
+    announcementSeverities: [],
+    announcement: null,
     error: null,
   });
   const [identity, setIdentity] = useState({
@@ -23,17 +28,19 @@ export default function Personalizer() {
     resetAvatar: false,
   });
   const [presence, setPresence] = useState({ status: 'online', type: 'Listening', text: '' });
+  const [announcement, setAnnouncement] = useState({ title: '', body: '', severity: 'info' });
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getPersonalizer(), getPersonalizerPresence()])
-      .then(([p, pr]) => {
+    Promise.all([getPersonalizer(), getPersonalizerPresence(), getAnnouncement()])
+      .then(([p, pr, a]) => {
         if (cancelled) return;
-        setState({ loading: false, ...p, ...pr, error: null });
+        setState({ loading: false, ...p, ...pr, announcement: a.announcement, error: null });
         setIdentity({ username: p.bot?.username ?? '', avatarUrl: '', bannerUrl: '', resetAvatar: false });
         setPresence(pr.presence);
+        if (a.announcement) setAnnouncement(a.announcement);
       })
       .catch((error) => {
         if (!cancelled) setState((s) => ({ ...s, loading: false, error }));
@@ -89,6 +96,36 @@ export default function Personalizer() {
       const { presence: saved } = await savePersonalizerPresence(presence);
       setPresence(saved);
       setNotice('Presence updated.');
+    } catch (err) {
+      setNotice(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onSaveAnnouncement(e) {
+    e.preventDefault();
+    setSaving(true);
+    setNotice(null);
+    try {
+      const { announcement: saved } = await savePersonalizerAnnouncement(announcement);
+      setState((s) => ({ ...s, announcement: saved }));
+      setNotice(saved ? 'Announcement published.' : 'Announcement cleared (title was blank).');
+    } catch (err) {
+      setNotice(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onClearAnnouncement() {
+    setSaving(true);
+    setNotice(null);
+    try {
+      await clearPersonalizerAnnouncement();
+      setState((s) => ({ ...s, announcement: null }));
+      setAnnouncement({ title: '', body: '', severity: 'info' });
+      setNotice('Announcement cleared.');
     } catch (err) {
       setNotice(err.message);
     } finally {
@@ -201,6 +238,63 @@ export default function Personalizer() {
         <button type="submit" className="v2-btn-primary" disabled={saving}>
           {saving ? 'Saving…' : 'Save presence'}
         </button>
+      </form>
+
+      <h2 className="v2-group-title v2-section-gap">Announcement</h2>
+      <p className="v2-field-hint">
+        Shown to everyone signed in to the dashboard, on every page — e.g. to explain an incident or outage.{' '}
+        <strong>Critical</strong> announcements have no dismiss button and stay until you clear them.
+      </p>
+      {state.announcement ? (
+        <p className="v2-note">
+          Currently live: <strong>{state.announcement.title}</strong> ({state.announcement.severity})
+        </p>
+      ) : null}
+      <form onSubmit={onSaveAnnouncement}>
+        <div className="v2-field">
+          <label htmlFor="annTitle">Title</label>
+          <input
+            id="annTitle"
+            type="text"
+            maxLength={200}
+            placeholder="e.g. Scheduled maintenance tonight"
+            value={announcement.title}
+            onChange={(e) => setAnnouncement((a) => ({ ...a, title: e.target.value }))}
+          />
+        </div>
+        <div className="v2-field">
+          <label htmlFor="annBody">Message</label>
+          <textarea
+            id="annBody"
+            rows={3}
+            maxLength={2000}
+            placeholder="Optional details"
+            value={announcement.body}
+            onChange={(e) => setAnnouncement((a) => ({ ...a, body: e.target.value }))}
+          />
+        </div>
+        <div className="v2-field">
+          <label htmlFor="annSeverity">Severity</label>
+          <select
+            id="annSeverity"
+            value={announcement.severity}
+            onChange={(e) => setAnnouncement((a) => ({ ...a, severity: e.target.value }))}
+          >
+            {state.announcementSeverities.map((s) => (
+              <option key={s} value={s}>
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button type="submit" className="v2-btn-primary" disabled={saving}>
+          {saving ? 'Saving…' : 'Publish announcement'}
+        </button>{' '}
+        {state.announcement ? (
+          <button type="button" className="v2-btn-ghost" disabled={saving} onClick={onClearAnnouncement}>
+            Clear
+          </button>
+        ) : null}
       </form>
     </>
   );

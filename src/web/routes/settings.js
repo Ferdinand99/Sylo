@@ -9,6 +9,10 @@ import {
   setPresenceConfig,
   PRESENCE_TYPES,
   PRESENCE_STATUSES,
+  getAnnouncement,
+  setAnnouncement,
+  clearAnnouncement,
+  ANNOUNCEMENT_SEVERITIES,
 } from '../../db/appSettings.js';
 import { applyPresence } from '../../bot/lib/presence.js';
 
@@ -36,6 +40,8 @@ router.get(
       presence: await getPresenceConfig(),
       presenceTypes: PRESENCE_TYPES,
       presenceStatuses: PRESENCE_STATUSES,
+      announcement: await getAnnouncement(),
+      announcementSeverities: ANNOUNCEMENT_SEVERITIES,
       m: typeof req.query.m === 'string' ? req.query.m : null,
       ok: req.query.ok === '1',
     });
@@ -113,6 +119,26 @@ router.post(
     await setPresenceConfig({ status: req.body.status, type: req.body.type, text: req.body.text });
     if (runtime.client) applyPresence(runtime.client);
     back(res, 'Presence updated.', true);
+  })
+);
+
+router.post(
+  '/announcement',
+  asyncHandler(async (req, res) => {
+    const saved = await setAnnouncement({
+      title: req.body.title,
+      body: req.body.body,
+      severity: req.body.severity,
+    });
+    back(res, saved ? 'Announcement published.' : 'Announcement cleared (title was blank).', true);
+  })
+);
+
+router.post(
+  '/announcement/clear',
+  asyncHandler(async (req, res) => {
+    await clearAnnouncement();
+    back(res, 'Announcement cleared.', true);
   })
 );
 
