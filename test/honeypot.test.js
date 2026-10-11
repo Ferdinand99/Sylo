@@ -183,3 +183,45 @@ test('reactionAdd: missing Read Message History still bumps the count but skips 
   );
   assert.equal(editCalls.length, 0, 'no edit attempted without Read Message History');
 });
+
+test('message and reaction kicks share the live count without losing concurrent increments', async () => {
+  await setGuildModule(G, 'honeypot', {
+    enabled: true,
+    config: {
+      exemptRoles: [],
+      channels: [{ channelId: CHANNEL_ID, action: 'kick', triggerCount: 4 }],
+      messages: [{ channelId: CHANNEL_ID, messageId: MESSAGE_ID, action: 'kick', triggerCount: 2 }],
+    },
+  });
+  const { guild, message, editCalls } = fakeEnv();
+  const posted = {
+    guild,
+    channelId: CHANNEL_ID,
+    author: { id: RAIDER_ID, bot: false },
+    deletable: true,
+    delete: async () => {},
+  };
+  await Promise.all([
+    dispatch('messageCreate', G, posted),
+    dispatch('reactionAdd', G, { reaction: { message }, user: { id: RAIDER_ID, bot: false } }),
+  ]);
+  const saved = (await getGuildModule(G, 'honeypot')).config;
+  assert.equal(saved.channels[0].triggerCount, 5);
+  assert.equal(saved.messages[0].triggerCount, 3);
+  assert.equal(editCalls.length, 2);
+  assert.equal(editCalls.at(-1).embeds[0].data.fields[0].value, 'Wyrzucenia: 8');
+});
+
+test('publishing aggregates saved counts but does not include a different punishment', async () => {
+  const { ensureHoneypotMessages } = await import('../src/modules/honeypot.js');
+  const { guild, editCalls } = fakeEnv();
+  const config = {
+    channels: [{ channelId: CHANNEL_ID, action: 'kick', triggerCount: 5 }],
+    messages: [{ channelId: CHANNEL_ID, messageId: MESSAGE_ID, action: 'kick', triggerCount: 3 }],
+  };
+  await ensureHoneypotMessages(guild, config);
+  assert.equal(editCalls.at(-1).embeds[0].data.fields[0].value, 'Wyrzucenia: 8');
+  config.channels[0].action = 'ban';
+  await ensureHoneypotMessages(guild, config);
+  assert.equal(editCalls.at(-1).embeds[0].data.fields[0].value, 'Wyrzucenia: 3');
+});

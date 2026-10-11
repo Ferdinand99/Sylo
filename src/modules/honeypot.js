@@ -81,14 +81,20 @@ function canManageBait(channel, me) {
 /** The trap message's embed — a "Catches" field labeled by the row's own
  * punishment action (e.g. "Bans: 14") so it reflects what actually happens
  * here, not a generic counter. */
-function baitEmbed(row) {
+function baitEmbed(row, cfg = {}) {
+  // Each row keeps its own counter; the Discord display combines matching
+  // punishments from messages and reactions in the same channel.
+  const channelCount = (cfg.channels || [])
+    .filter((entry) => entry.channelId === row.channelId && entry.action === row.action)
+    .reduce((sum, entry) => sum + (Number(entry.triggerCount) || 0), 0);
+  const total = (Number(row.triggerCount) || 0) + channelCount;
   return new EmbedBuilder()
     .setColor(0xed4245)
     .setTitle('🍯 Nie pisz ani nie reaguj tutaj')
     .setDescription(row.bait || '​')
     .addFields({
       name: 'Wykryte przypadki',
-      value: `${ACTION_LABELS[row.action]}: ${row.triggerCount ?? 0}`,
+      value: `${ACTION_LABELS[row.action]}: ${total}`,
     });
 }
 
@@ -147,10 +153,21 @@ async function punish(guild, member, entry, reason) {
  * Bumps a row's triggerCount and persists it — re-reads the config fresh
  * (not the stale copy the dispatch handler was called with) so a rapid
  * back-to-back trigger on the same row doesn't clobber the other's count.
- * For a message row, also re-renders the live trap message so the visible
+ * Both trigger types re-render the live trap message so the visible
  * "Bans: N" (or Kicks/Timeouts) count is never stale.
  */
+const statUpdates = new Map();
 async function bumpHoneypotStat(guild, kind, channelId) {
+  const previous = statUpdates.get(guild.id) || Promise.resolve();
+  const job = previous.catch(() => {}).then(() => bumpHoneypotStatUnlocked(guild, kind, channelId));
+  statUpdates.set(guild.id, job);
+  try {
+    await job;
+  } finally {
+    if (statUpdates.get(guild.id) === job) statUpdates.delete(guild.id);
+  }
+}
+async function bumpHoneypotStatUnlocked(guild, kind, channelId) {
   const fresh = (await getGuildModule(guild.id, 'honeypot')).config;
   const list = Array.isArray(fresh[kind]) ? fresh[kind] : [];
   const row = list.find((r) => r.channelId === channelId);
@@ -158,7 +175,8 @@ async function bumpHoneypotStat(guild, kind, channelId) {
   row.triggerCount = (row.triggerCount || 0) + 1;
   await setGuildModule(guild.id, 'honeypot', { config: { ...fresh, [kind]: list } });
 
-  if (kind !== 'messages' || !row.messageId) return;
+  const displayRow = (fresh.messages || []).find((entry) => entry.channelId === channelId);
+  if (!displayRow?.messageId) return;
   const channel =
     guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId).catch(() => null));
   if (!channel?.isTextBased()) return;
@@ -169,13 +187,13 @@ async function bumpHoneypotStat(guild, kind, channelId) {
     );
     return;
   }
-  const existing = await channel.messages.fetch(row.messageId).catch((err) => {
+  const existing = await channel.messages.fetch(displayRow.messageId).catch((err) => {
     log.error('module:honeypot', 'fetching the bait message failed:', err.message);
     return null;
   });
   if (!existing) return;
   await existing
-    .edit({ embeds: [baitEmbed(row)] })
+    .edit({ embeds: [baitEmbed(displayRow, fresh)] })
     .catch((err) => log.error('module:honeypot', 'updating the live catch count failed:', err.message));
 }
 
@@ -212,12 +230,12 @@ export async function ensureHoneypotMessages(guild, config) {
       });
       if (existing) {
         await existing
-          .edit({ embeds: [baitEmbed(row)] })
+          .edit({ embeds: [baitEmbed(row, config)] })
           .catch((err) => log.error('module:honeypot', 'updating the bait message failed:', err.message));
         continue;
       }
     }
-    const posted = await channel.send({ embeds: [baitEmbed(row)] }).catch((err) => {
+    const posted = await channel.send({ embeds: [baitEmbed(row, config)] }).catch((err) => {
       log.error('module:honeypot', 'posting the bait message failed:', err.message);
       return null;
     });
