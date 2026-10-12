@@ -99,3 +99,25 @@ test('dueGiveaways returns only past, un-ended rows; clearGuild wipes everything
   assert.equal((await activeGiveaways(G)).length, 0);
   assert.equal(await getGiveaway(past.id), null);
 });
+
+test('buildGiveawayPayload copes with timestamps that arrive as strings (Postgres returns BIGINT as text)', async () => {
+  const { buildGiveawayPayload } = await import('../src/modules/giveaways.js');
+  const row = {
+    id: 5,
+    prize: 'Test',
+    winners: 1,
+    host_id: '111111111111111111',
+    required_role_id: null,
+    ends_at: String(Date.now() + 60_000),
+    created_at: String(Date.now()),
+    ended: false,
+    wonIds: [],
+  };
+  const open = buildGiveawayPayload(row, { entryCount: 1 });
+  assert.equal(open.embeds[0].toJSON().title, '🎉 Test');
+  const ended = buildGiveawayPayload(
+    { ...row, ended: true, wonIds: ['222222222222222222'] },
+    { entryCount: 1 }
+  );
+  assert.match(ended.embeds[0].toJSON().description, /Winner: <@222222222222222222>/);
+});

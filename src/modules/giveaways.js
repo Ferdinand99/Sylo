@@ -3,9 +3,8 @@
 // plus the dashboard, call endGiveaway() directly.
 //
 // config shape: { ping: 'none' | 'here' | 'everyone', dmWinners: boolean }
-import { anyClientReady, guildByKey } from '../platform/platformOf.js';
+import { anyClientReady, clientOfGuild, guildByKey } from '../platform/platformOf.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
-import { runtime } from '../runtime.js';
 import { registerComponent } from '../bot/lib/components.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import {
@@ -60,7 +59,8 @@ export function buildGiveawayPayload(g, { entryCount = 0 } = {}) {
   const embed = new EmbedBuilder()
     .setColor(ACCENT)
     .setTitle(`🎉 ${g.prize}`)
-    .setTimestamp(g.created_at || Date.now());
+    // Postgres hands BIGINT back as text, and the embed builder rejects a string timestamp.
+    .setTimestamp(Number(g.created_at) || Date.now());
 
   if (!g.ended) {
     embed.setDescription(
@@ -175,7 +175,9 @@ export async function endGiveaway(id, opts = {}) {
 
     if (cfg.dmWinners && winners.length) {
       for (const w of winners) {
-        const user = await runtime.client.users.fetch(w).catch(() => null);
+        const user = await clientOfGuild(guild)
+          .users.fetch(w)
+          .catch(() => null);
         await user?.send(`You won **${g.prize}** in ${guild.name}! 🎉`).catch(() => {});
       }
     }
