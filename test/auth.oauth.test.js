@@ -153,3 +153,10 @@ test('an expired or garbage session cookie is treated as signed out', async () =
   assert.equal(res.status, 302);
   assert.equal(res.headers.get('location'), '/auth/login');
 });
+
+test('the OAuth endpoints are rate limited per platform', async () => {
+  const b = browser();
+  let limited = false;
+  for (let i = 0; i < 30 && !limited; i += 1) limited = (await b.get('/auth/discord/login')).status === 429;
+  assert.equal(limited, true);
+});

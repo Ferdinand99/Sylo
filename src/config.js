@@ -238,7 +238,8 @@ export const config = Object.freeze({
   // "Log in with …" is offered for a platform only when it is configured to run and has an OAuth secret.
   discordAuthEnabled: Boolean(discordClientSecret && discordClientId),
   fluxerAuthEnabled: Boolean(fluxerClientSecret && fluxerClientId),
-  authEnabled: Boolean(discordClientSecret && discordClientId) || Boolean(fluxerClientSecret && fluxerClientId),
+  authEnabled:
+    Boolean(discordClientSecret && discordClientId) || Boolean(fluxerClientSecret && fluxerClientId),
   discordClientSecret,
   fluxerClientSecret,
   sessionSecret,

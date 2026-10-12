@@ -61,7 +61,9 @@ const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
  * never `//` or `/\` (both browser-recognized ways to smuggle a host in).
  */
 function safeReturnTo(path) {
-  return typeof path === 'string' && /^\/(?!\/|\\)/.test(path) ? path : '/';
+  if (typeof path !== 'string') return '/';
+  if (!path.startsWith('/') || path.startsWith('//') || path.startsWith('/\\')) return '/';
+  return path;
 }
 
 // An identity's guild list is a snapshot from login, not live — a server added or left
@@ -391,11 +393,18 @@ export function mountAuth(app) {
 
   const router = Router();
 
-  // Throttle the OAuth endpoints (state-token guessing / callback hammering).
-  router.use(['/discord', '/fluxer'], rateLimit({ windowMs: 60_000, max: 20 }));
+  // Throttle the OAuth endpoints (state-token guessing / callback hammering). Passed to
+  // each route rather than mounted on a path so every handler visibly carries its limit.
+  // One bucket per platform (login, callback and connect share it), as before.
+  const oauthLimit = rateLimit({
+    windowMs: 60_000,
+    max: 20,
+    keyFn: (req) => `oauth:${req.params.platform ?? req.path.split('/')[1]}|${req.ip}`,
+  });
+  const pageLimit = rateLimit({ windowMs: 60_000, max: 60 });
 
   // The chooser, shown when more than one login is offered.
-  router.get('/login', (req, res) => {
+  router.get('/login', pageLimit, (req, res) => {
     if (!config.authEnabled || req.account) return res.redirect('/');
     const offered = enabledProviders();
     if (offered.length === 1) return res.redirect(`/auth/${offered[0].platform}/login`);
@@ -410,12 +419,12 @@ export function mountAuth(app) {
   });
 
   for (const provider of Object.values(providers)) {
-    router.get(`/${provider.platform}/login`, (req, res) => {
+    router.get(`/${provider.platform}/login`, oauthLimit, (req, res) => {
       if (!config.authEnabled) return res.redirect('/');
       beginOAuth(req, res, provider, { connect: false });
     });
 
-    router.get(`/${provider.platform}/callback`, async (req, res, next) => {
+    router.get(`/${provider.platform}/callback`, oauthLimit, async (req, res, next) => {
       if (!config.authEnabled || !provider.enabled()) return res.redirect('/');
       try {
         const { code, state, error } = req.query;
@@ -453,7 +462,7 @@ export function mountAuth(app) {
   }
 
   // "Connect Fluxer / Discord" while signed in: links a second identity to this account.
-  router.get('/connect/:platform', (req, res) => {
+  router.get('/connect/:platform', oauthLimit, (req, res) => {
     const provider = providers[req.params.platform];
     if (!config.authEnabled || !req.account || !provider) return res.redirect('/');
     beginOAuth(req, res, provider, { connect: true });
@@ -464,9 +473,9 @@ export function mountAuth(app) {
     req.session = null;
     res.redirect('/');
   };
-  router.post('/logout', logout);
+  router.post('/logout', pageLimit, logout);
   // Allow GET for a plain link too.
-  router.get('/logout', logout);
+  router.get('/logout', pageLimit, logout);
 
   app.use('/auth', router);
 }
