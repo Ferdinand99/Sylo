@@ -73,8 +73,11 @@ export function registerFluxerModuleEvents(
     // `messageCreateAny` also carries bot / app / webhook messages — only the
     // sticky module opts into those. `messageCreate` stays human-only.
     await send('messageCreateAny', message.guildId, message);
-    // A command is not chat: AFK, leveling and auto-moderation never see one.
-    if (!message.author?.bot && !isCommand(message)) await send('messageCreate', message.guildId, message);
+    // A command is not chat: AFK, leveling and counting never see one. It is still a
+    // message a member posted, so the moderation modules (automod, honeypot) get it as
+    // `commandMessageCreate`; otherwise `!afk <invite> @everyone` would walk past them.
+    if (message.author?.bot) return;
+    await send(isCommand(message) ? 'commandMessageCreate' : 'messageCreate', message.guildId, message);
   });
 
   on('guildRoleCreate', (role) => send('roleCreate', role.guildId, role));

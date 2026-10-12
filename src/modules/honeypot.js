@@ -257,7 +257,7 @@ export async function ensureHoneypotMessages(guild, config) {
   }
 }
 
-on('honeypot', 'messageCreate', async (message, config) => {
+async function onTrapMessage(message, config) {
   if (message.partial || !message.guild) return;
   const cfg = normaliseHoneypotConfig(config);
   if (!cfg.channels.length) return;
@@ -279,7 +279,11 @@ on('honeypot', 'messageCreate', async (message, config) => {
       action: entry.action,
     }).catch((err) => log.error('module:honeypot', 'catch log failed:', err.message));
   }
-});
+}
+
+on('honeypot', 'messageCreate', onTrapMessage);
+// A command posted in a trap channel is just as much a trap hit.
+on('honeypot', 'commandMessageCreate', onTrapMessage);
 
 on('honeypot', 'reactionAdd', async ({ reaction, user }, config) => {
   if (user.bot) return;

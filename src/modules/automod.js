@@ -376,4 +376,7 @@ async function act(message, member, rule, label, cfg) {
 }
 
 on('automod', 'messageCreate', (message, config) => scan(message, config, { flood: true }));
+// A chat command can carry an invite, a link or a mass mention too. Flood counting skips it:
+// running several commands in a row is not spam.
+on('automod', 'commandMessageCreate', (message, config) => scan(message, config, { flood: false }));
 on('automod', 'messageUpdate', (payload, config) => scan(payload.new, config, { flood: false }));

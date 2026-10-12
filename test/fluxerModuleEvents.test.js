@@ -190,7 +190,7 @@ test('removing Sylo from a guild purges that guild by its key, unless the guild 
   assert.deepEqual(purged, [KEY]);
 });
 
-test('a message that is a command reaches messageCreateAny but not the human messageCreate modules', async () => {
+test('a command message reaches messageCreateAny and the moderation-only commandMessageCreate, not the chat modules', async () => {
   const calls = [];
   const client = new EventEmitter();
   client.user = { id: BOT };
@@ -203,10 +203,12 @@ test('a message that is a command reaches messageCreateAny but not the human mes
   client.emit('messageCreate', { guildId: RAW, content: '!afk lunsj', author: { id: 'u1', bot: false } });
   client.emit('messageCreate', { guildId: RAW, content: 'hello', author: { id: 'u1', bot: false } });
   await new Promise((r) => setImmediate(r));
-  assert.deepEqual(calls, [
-    ['messageCreateAny', KEY],
-    ['messageCreateAny', KEY],
-    ['messageCreate', KEY],
+  // The two messages are handled concurrently, so only the set of events is fixed.
+  assert.deepEqual(calls.map((c) => c[0]).sort(), [
+    'commandMessageCreate',
+    'messageCreate',
+    'messageCreateAny',
+    'messageCreateAny',
   ]);
 });
 
