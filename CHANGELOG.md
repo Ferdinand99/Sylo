@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.0.0](https://github.com/Ferdinand99/Sylo/compare/v3.41.1...v4.0.0) (2026-10-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* run Sylo on Fluxer as well as Discord, with linked dashboard accounts ([#243](https://github.com/Ferdinand99/Sylo/issues/243))
+
+### Features
+
+* run Sylo on Fluxer as well as Discord, with linked dashboard accounts ([#243](https://github.com/Ferdinand99/Sylo/issues/243)) ([548fe38](https://github.com/Ferdinand99/Sylo/commit/548fe38653e0356bc2f287ffa2d7033bd24d637b))
+
 ## [3.41.1](https://github.com/Ferdinand99/Sylo/compare/v3.41.0...v3.41.1) (2026-10-11)
 
 
