@@ -136,7 +136,12 @@ test('a collector ends by itself after its time', async () => {
   await attachActions(message, prepareOutgoing({ components: [row()] }), { guildId: '' });
   const collector = message.createMessageComponentCollector({ time: 10 });
   const ended = new Promise((resolve) => collector.on('end', resolve));
+  // The collector's own timer is unref'd (it must not keep the process alive), so
+  // hold the event loop open while waiting for it — a bare await would let Node
+  // cancel the test when nothing else is pending.
+  const keepAlive = setTimeout(() => {}, 5000);
   await ended;
+  clearTimeout(keepAlive);
   assert.equal(await dispatchToCollectors('m-i', { user: { id: 'u1' } }), false);
 });
 
