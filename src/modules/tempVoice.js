@@ -11,7 +11,15 @@
 //     ignoredRoles: [], moderatorRoles: [],
 //     ownerPerms: { manageChannels, managePermissions, prioritySpeaker, moveMembers },
 //     textChannel: { enabled, restrictCommands, pinUsages, restrict } }
-import { anyClientReady, guildByKey, guildKey } from '../platform/platformOf.js';
+import {
+  anyClientReady,
+  guildByKey,
+  guildKey,
+  guildSupports,
+  platformOfGuild,
+} from '../platform/platformOf.js';
+import { createGuildChannel, deleteGuildChannel } from '../platform/channels.js';
+import { config } from '../config.js';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
 import { getGuildModule } from '../db/modules.js';
@@ -35,6 +43,7 @@ import {
 const DEFAULT_NAME = "#{index} - {username}'s Channel";
 const SWEEP_MS = 60 * 1000;
 const CREATE_DEBOUNCE_MS = 3000;
+const JOIN_GRACE_MS = 2 * 60 * 1000;
 const P = PermissionFlagsBits;
 
 const clampInt = (v, min, max, dflt) => {
@@ -179,12 +188,16 @@ async function handleJoin(guild, member, hub) {
   lastCreate.set(key, Date.now());
 
   const me = guild.members.me;
-  if (!me?.permissions.has(P.ManageChannels) || !me.permissions.has(P.MoveMembers)) return;
+  // Moving the member needs Move Members; on a platform where a bot cannot move
+  // anyone (Fluxer) the member is sent a link instead, so only Manage Channels is needed.
+  const canMove = guildSupports(guild, 'moveMembers');
+  if (!me?.permissions.has(P.ManageChannels) || (canMove && !me.permissions.has(P.MoveMembers))) return;
 
   const prior = await findUserHubChannel(guildKey(guild), hub.hubChannelId, member.id);
   if (prior) {
     const ch = guild.channels.cache.get(prior.channel_id);
-    if (ch) return void member.voice.setChannel(ch).catch(() => {});
+    if (ch)
+      return void (canMove ? member.voice.setChannel(ch).catch(() => {}) : sendJoinLink(guild, member, ch));
     await removeTempChannel(prior.channel_id);
   }
 
@@ -213,7 +226,7 @@ async function handleJoin(guild, member, hub) {
 
   let channel;
   try {
-    channel = await guild.channels.create({
+    channel = await createGuildChannel(guild, {
       name,
       type: ChannelType.GuildVoice,
       parent: parent ?? undefined,
@@ -227,10 +240,12 @@ async function handleJoin(guild, member, hub) {
     return;
   }
 
+  // Commands are slash commands on Discord and prefix commands elsewhere.
+  const prefix = platformOfGuild(guild) === 'discord' ? '/' : config.commandPrefix;
   let textChannelId = null;
   if (hub.textChannel.enabled) {
     try {
-      const t = await guild.channels.create({
+      const t = await createGuildChannel(guild, {
         name,
         type: ChannelType.GuildText,
         parent: parent ?? undefined,
@@ -250,10 +265,13 @@ async function handleJoin(guild, member, hub) {
             embeds: [
               {
                 title: `Controls for ${name}`,
-                description:
-                  '`/voice-lock` `/voice-unlock` · `/voice-hide` `/voice-reveal`\n' +
-                  '`/voice-limit` `/voice-rename` · `/voice-kick` `/voice-ban` `/voice-unban`\n' +
-                  '`/voice-claim` `/voice-transfer` `/voice-owner`',
+                description: [
+                  ['lock', 'unlock', 'hide', 'reveal'],
+                  ['limit', 'rename', 'kick', 'ban', 'unban'],
+                  ['claim', 'transfer', 'owner'],
+                ]
+                  .map((row) => row.map((c) => '`' + prefix + 'voice-' + c + '`').join(' '))
+                  .join('\n'),
                 color: 0x5b7cfa,
               },
             ],
@@ -266,14 +284,17 @@ async function handleJoin(guild, member, hub) {
     }
   }
 
-  const moved = await member.voice
-    .setChannel(channel)
-    .then(() => true)
-    .catch(() => false);
-  if (!moved) {
-    await channel.delete('Temp voice: member never joined').catch(() => {});
-    if (textChannelId) await guild.channels.delete(textChannelId).catch(() => {});
-    return;
+  if (canMove) {
+    const moved = await member.voice
+      .setChannel(channel)
+      .then(() => true)
+      .catch(() => false);
+    if (!moved) {
+      await channel.delete('Temp voice: member never joined').catch(() => {});
+      if (textChannelId)
+        await deleteGuildChannel(guild, textChannelId, 'Temp voice: member never joined').catch(() => {});
+      return;
+    }
   }
   await addTempChannel({
     channelId: channel.id,
@@ -283,6 +304,15 @@ async function handleJoin(guild, member, hub) {
     name,
     textChannelId,
   });
+  // The member joins on their own; if they never do, the sweep removes the channel after JOIN_GRACE_MS.
+  if (!canMove) await sendJoinLink(guild, member, channel);
+}
+
+/** Tell a member where their temp channel is (a bot cannot move them into it on Fluxer). */
+async function sendJoinLink(guild, member, channel) {
+  await member.user
+    .send(`Your temporary voice channel in **${guild.name}** is ready — join it here: <#${channel.id}>`)
+    .catch(() => {});
 }
 
 // --- cleanup + ownership transfer -----------------------------------
@@ -319,7 +349,8 @@ async function onLeaveTemp(guild, channelId) {
 async function destroy(guild, row) {
   const ch = guild.channels.cache.get(row.channel_id);
   if (ch) await ch.delete('Temp voice: empty').catch(() => {});
-  if (row.text_channel_id) await guild.channels.delete(row.text_channel_id).catch(() => {});
+  if (row.text_channel_id)
+    await deleteGuildChannel(guild, row.text_channel_id, 'Temp voice: empty').catch(() => {});
   await removeTempChannel(row.channel_id);
 }
 
@@ -347,7 +378,7 @@ on('temp-voice', 'voiceStateUpdate', async ({ old: oldState, new: newState }, ra
 
 // --- keep-alive sweep --------------------------------------------------
 
-async function sweep() {
+export async function sweepTempChannels() {
   if (!anyClientReady()) return;
   const now = Date.now();
   for (const row of await listAllTempChannels()) {
@@ -357,7 +388,8 @@ async function sweep() {
       guild.channels.cache.get(row.channel_id) ??
       (await guild.channels.fetch(row.channel_id).catch(() => null));
     if (!channel) {
-      if (row.text_channel_id) await guild.channels.delete(row.text_channel_id).catch(() => {});
+      if (row.text_channel_id)
+        await deleteGuildChannel(guild, row.text_channel_id, 'Temp voice: gone').catch(() => {});
       await removeTempChannel(row.channel_id);
       continue;
     }
@@ -369,12 +401,17 @@ async function sweep() {
     const keep = hub?.keepAliveMinutes ?? 0;
     if (keep < 0) continue;
     const since = row.empty_since ?? row.created_at;
-    if (now - since >= keep * 60_000) await destroy(guild, row);
+    // A channel nobody has been in yet gets a grace period: its owner may still be joining it.
+    const wait = Math.max(keep * 60_000, row.empty_since ? 0 : JOIN_GRACE_MS);
+    if (now - since >= wait) await destroy(guild, row);
   }
 }
 
-setInterval(() => sweep().catch((e) => log.error('temp-voice', 'sweep:', e.message)), SWEEP_MS).unref();
-setTimeout(() => sweep().catch(() => {}), 30_000).unref();
+setInterval(
+  () => sweepTempChannels().catch((e) => log.error('temp-voice', 'sweep:', e.message)),
+  SWEEP_MS
+).unref();
+setTimeout(() => sweepTempChannels().catch(() => {}), 30_000).unref();
 
 // --- command helpers (used by bot/commands/voice-*.js) ---------------
 

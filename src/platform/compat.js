@@ -91,9 +91,10 @@ export function withGuildId(client, value) {
 
 /**
  * @param {Record<string, any>} sdk  the @fluxerjs/core module
- * @param {{ Collection?: new (entries?: Iterable<[string, any]>) => Map<string, any> }} [deps]
+ * @param {{ Collection?: new (entries?: Iterable<[string, any]>) => Map<string, any>, voice?: ReturnType<typeof import('./voiceStates.js').createVoiceTracker> }} [deps]
+ *   `voice` is the process's voice-state tracker; without it member.voice, guild.voiceStates and channel.members are not installed.
  */
-export function installFluxerCompat(sdk, { Collection } = {}) {
+export function installFluxerCompat(sdk, { Collection, voice } = {}) {
   const {
     Channel,
     ChannelManager,
@@ -112,6 +113,7 @@ export function installFluxerCompat(sdk, { Collection } = {}) {
     MessageReactionManager,
     OverwriteType,
     PartialMessage,
+    PermissionsBitField,
     PermissionOverwriteManager,
     Role,
     User,
@@ -668,4 +670,90 @@ export function installFluxerCompat(sdk, { Collection } = {}) {
       };
     })
   );
+
+  // Guild.channels is a plain Collection on Fluxer, which has no fetch(); resolve from the cache.
+  if (Collection) {
+    define(
+      Collection.prototype,
+      'fetch',
+      method(async function (id) {
+        return this.get(id) ?? null;
+      })
+    );
+  }
+
+  // Fluxer has no boost tiers; this is the platform's bitrate ceiling.
+  define(
+    Guild.prototype,
+    'maximumBitrate',
+    getter(() => 384_000)
+  );
+
+  // channel.create() from discord.js-style options (parent, permissionOverwrites with
+  // permission names or bits) onto Fluxer's createChannel().
+  define(
+    Guild.prototype,
+    'createChannelCompat',
+    method(function (opts) {
+      const toOverwrite = (o) => ({
+        id: o.id,
+        type:
+          o.type ?? (o.id === this.id || this.roles.get(o.id) ? OverwriteType.Role : OverwriteType.Member),
+        allow: new PermissionsBitField(o.allow ?? 0n).bitfield,
+        deny: new PermissionsBitField(o.deny ?? 0n).bitfield,
+      });
+      const { name, type, topic, userLimit, bitrate, rateLimitPerUser, nsfw, reason } = opts;
+      return this.createChannel({
+        name,
+        type,
+        parentId: idOf(opts.parent) ?? opts.parentId ?? null,
+        topic,
+        userLimit,
+        bitrate,
+        rateLimitPerUser,
+        nsfw,
+        ...(reason !== undefined && { reason }),
+        permissionOverwrites: (opts.permissionOverwrites ?? []).map(toOverwrite),
+      });
+    })
+  );
+
+  // Voice: Fluxer members carry no voice state, so these read the tracker.
+  if (voice) {
+    define(
+      GuildMember.prototype,
+      'voice',
+      getter(function () {
+        const member = this;
+        const state = voice.statesFor(member.guild.id).get(member.id) ?? null;
+        return {
+          channelId: state?.channelId ?? null,
+          get channel() {
+            return state?.channel ?? null;
+          },
+          selfDeaf: state?.selfDeaf ?? false,
+          selfMute: state?.selfMute ?? false,
+          deaf: state?.deaf ?? false,
+          mute: state?.mute ?? false,
+          // Fluxer supports several connections per user: move the one being tracked.
+          setChannel: (channel) => member.move(idOf(channel), state?.connectionId ?? undefined),
+          disconnect: () => member.move(null, state?.connectionId ?? undefined),
+        };
+      })
+    );
+    define(
+      Guild.prototype,
+      'voiceStates',
+      getter(function () {
+        return { cache: voice.statesFor(this.id) };
+      })
+    );
+    define(
+      GuildChannel.prototype,
+      'members',
+      getter(function () {
+        return voice.membersIn(this.guildId, this.id);
+      })
+    );
+  }
 }

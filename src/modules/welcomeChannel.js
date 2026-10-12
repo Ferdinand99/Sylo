@@ -1,6 +1,7 @@
 // Welcome Channel — build one rich, pinned message for a dedicated read-only
 // channel (welcome / rules / links). A thin, welcome-flavoured front-end over
 // the Message Creator's embed payload builder.
+import { createGuildChannel } from '../platform/channels.js';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { sendComposed, editComposed } from './messageCreator.js';
 
@@ -194,7 +195,7 @@ export async function createWelcomeChannel(guild) {
     return { ok: false, error: 'The bot needs Manage Channels.' };
   }
   try {
-    const ch = await guild.channels.create({
+    const ch = await createGuildChannel(guild, {
       name: 'welcome',
       type: ChannelType.GuildText,
       reason: 'Welcome Channel module',

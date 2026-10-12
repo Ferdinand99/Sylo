@@ -2,8 +2,7 @@
 // of events/moduleEvents.js for the Discord client. The event names match
 // discord.js's, but several payloads do not (reactions arrive as one object, a
 // role delete may carry no role, bulk deletes list ids), and every guild is
-// keyed "fluxer:<id>". Voice states are not forwarded yet — Fluxer members
-// carry none, so they need their own tracking.
+// keyed "fluxer:<id>". Voice states come from the tracker in platform/voiceStates.js.
 import { dispatch as realDispatch } from '../modules/dispatch.js';
 import { purgeGuild } from '../db/purge.js';
 import { makePlatformGuildId } from '../lib/platformId.js';
@@ -14,11 +13,11 @@ const keyOf = (rawGuildId) => (rawGuildId ? makePlatformGuildId('fluxer', rawGui
 
 /**
  * @param {import('node:events').EventEmitter & { user?: any, channels?: any, users?: any }} client
- * @param {{ dispatch?: typeof realDispatch, purge?: typeof purgeGuild, isCommand?: (message: any) => boolean }} [opts]
+ * @param {{ dispatch?: typeof realDispatch, purge?: typeof purgeGuild, isCommand?: (message: any) => boolean, voice?: { track: Function } }} [opts]
  */
 export function registerFluxerModuleEvents(
   client,
-  { dispatch = realDispatch, purge = purgeGuild, isCommand = () => false } = {}
+  { dispatch = realDispatch, purge = purgeGuild, isCommand = () => false, voice } = {}
 ) {
   // Run a handler without letting a throw or rejection escape into the gateway.
   const on = (event, handler) =>
@@ -54,6 +53,11 @@ export function registerFluxerModuleEvents(
 
   on('guildBanAdd', (ban) => send('guildBanAdd', ban.guildId, ban));
   on('guildBanRemove', (ban) => send('guildBanRemove', ban.guildId, ban));
+
+  // Voice states are tracked by us (members carry none); each change is a module event.
+  voice?.track(client, (oldState, newState) =>
+    send('voiceStateUpdate', newState.guildId, { old: oldState, new: newState })
+  );
 
   on('messageDelete', (message) => send('messageDelete', message.guildId, message));
   on('messageDeleteBulk', ({ ids, channelId, guildId }) => {

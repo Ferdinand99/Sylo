@@ -14,6 +14,7 @@ import { installFluxerCompat } from '../platform/compat.js';
 import { installSendBridge } from '../platform/fluxerSendBridge.js';
 import { registerFluxerModuleEvents } from './fluxerModuleEvents.js';
 import { fluxerReactionAdd } from '../platform/fluxerEvents.js';
+import { createVoiceTracker } from '../platform/voiceStates.js';
 import { handleReactionAdd } from '../platform/reactionBridge.js';
 
 /**
@@ -71,7 +72,8 @@ export async function startFluxerBot(opts = {}) {
       : await resolveInstance({ webUrl: config.fluxerWebUrl, apiUrl: config.fluxerApiUrl });
 
   const { Collection } = opts.collection ?? (await import('@fluxerjs/collection'));
-  (opts.installCompat ?? installFluxerCompat)(sdk, { Collection });
+  const voice = createVoiceTracker({ Collection });
+  (opts.installCompat ?? installFluxerCompat)(sdk, { Collection, voice });
   // Before any message is sent: components become reactions, discord.js files are converted.
   installSendBridge({ channelClasses: [sdk.TextChannel, sdk.DMChannel], Message: sdk.Message });
 
@@ -86,6 +88,7 @@ export async function startFluxerBot(opts = {}) {
 
   client.on('error', (err) => log.error('fluxer', 'gateway client error', err));
   registerFluxerModuleEvents(client, {
+    voice,
     isCommand: (message) => isCommandMessage(message, { commands, prefix }),
   });
   attachPrefixCommands(client, { commands, prefix });

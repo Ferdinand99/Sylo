@@ -188,8 +188,8 @@ test('the discord.js compat aliases are installed on the SDK before login', asyn
     prefix: '!',
     loadModules: async () => {},
     installCompat: (s, deps) => {
-      installedOn = [s, typeof deps.Collection];
+      installedOn = [s, typeof deps.Collection, typeof deps.voice?.track];
     },
   });
-  assert.deepEqual(installedOn, [sdk, 'function']);
+  assert.deepEqual(installedOn, [sdk, 'function', 'function']);
 });

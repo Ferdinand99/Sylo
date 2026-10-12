@@ -209,3 +209,28 @@ test('a message that is a command reaches messageCreateAny but not the human mes
     ['messageCreate', KEY],
   ]);
 });
+
+test('voice state changes from the tracker reach the modules keyed by the fluxer guild', async () => {
+  const calls = [];
+  const client = new EventEmitter();
+  client.user = { id: BOT };
+  client.channels = new Map();
+  client.users = { fetch: async () => null };
+  let listener;
+  const voice = {
+    track: (_client, cb) => {
+      listener = cb;
+    },
+  };
+  registerFluxerModuleEvents(client, {
+    dispatch: async (event, key, payload) => calls.push({ event, key, payload }),
+    voice,
+  });
+  const oldState = { guildId: RAW, channelId: null };
+  const newState = { guildId: RAW, channelId: 'vc1' };
+  listener(oldState, newState);
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(calls, [
+    { event: 'voiceStateUpdate', key: KEY, payload: { old: oldState, new: newState } },
+  ]);
+});
