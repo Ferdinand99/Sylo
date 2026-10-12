@@ -150,6 +150,7 @@ import {
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { listCountingPenalties, clearCountingPenalty } from '../../db/countingPenalties.js';
 import { normaliseAutoThreads } from '../../modules/autoThreads.js';
+import { normaliseMusic, stationsToText } from '../../modules/music.js';
 import { normaliseAutoReact, AUTO_REACT_MODES, AUTO_REACT_ROLE_ACTIONS } from '../../modules/autoReact.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import {
@@ -752,6 +753,31 @@ router.post(
       detail: 'settings saved',
     });
     res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/music/config',
+  asyncHandler(async (req, res) => {
+    const { config } = await getGuildModule(req.guild.id, 'music');
+    const cfg = normaliseMusic(config);
+    res.json({
+      config: { ...cfg, stations: stationsToText(cfg.stations) },
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+router.post(
+  '/guilds/:guildId/modules/music/config',
+  asyncHandler(async (req, res) => {
+    const config = normaliseMusic({ ...req.body, allowUrls: Boolean(req.body.allowUrls) });
+    await setGuildModule(req.guild.id, 'music', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:music',
+      detail: 'settings saved',
+    });
+    res.json({ config: { ...config, stations: stationsToText(config.stations) } });
   })
 );
 

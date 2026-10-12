@@ -39,6 +39,16 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'music',
+    name: 'Music',
+    description: 'Play audio links and radio stations in a voice channel with /music.',
+    icon: '🎵',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
     id: 'moderation',
     name: 'Moderation',
     description: 'Mod-log channel, warning thresholds, mute role, ban manager.',

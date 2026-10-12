@@ -69,6 +69,7 @@ import {
   AR_PLACEHOLDERS,
 } from '../../modules/autoresponder.js';
 import { normaliseAutoThreads } from '../../modules/autoThreads.js';
+import { normaliseMusic } from '../../modules/music.js';
 import { normaliseAutoReact, AUTO_REACT_MODES, AUTO_REACT_ROLE_ACTIONS } from '../../modules/autoReact.js';
 import {
   normaliseVerificationConfig,
@@ -177,6 +178,7 @@ const router = Router();
 const CONFIG_VIEWS = new Set([
   'feedback',
   'auto-threads',
+  'music',
   'moderation',
   'logging',
   'welcome',
@@ -828,6 +830,7 @@ async function moduleViewLocals(mod, req, configOverride) {
       'leveling',
       'autoresponder',
       'auto-react',
+      'music',
       'verification',
       'free-games',
       'welcome',
@@ -1321,6 +1324,8 @@ router.post(
       });
     } else if (mod.id === 'auto-threads') {
       config = normaliseAutoThreads(req.body);
+    } else if (mod.id === 'music') {
+      config = normaliseMusic({ ...req.body, allowUrls: req.body.allowUrls === 'on' });
     } else if (mod.id === 'auto-react') {
       // Rows come as parallel arrays, same shape as autoresponder's ar_* fields.
       // Each row has at most one target role (a single <select>, not a

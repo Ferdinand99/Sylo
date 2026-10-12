@@ -90,6 +90,7 @@ const CATEGORIES = [
       { module: 'autoresponder' },
       { module: 'auto-react', label: 'Auto-react' },
       { module: 'auto-threads' },
+      { module: 'music' },
       { module: 'afk' },
       { module: 'server-stats' },
       { module: 'temp-voice' },

@@ -1,0 +1,38 @@
+<% var cfg = moduleConfig || {}; var stations = Array.isArray(cfg.stations) ? cfg.stations.map(function (s) { return s.name + ' | ' + s.url; }).join('\n') : (cfg.stations || ''); %>
+
+<p class="muted small">Members in a voice channel use /music play with a direct audio link, or /music radio with a saved station.</p>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/music/config"
+      hx-post="/guilds/<%= guild.id %>/m/music/config" hx-target="#module-config" hx-swap="outerHTML"
+      class="stack u-mw-lg">
+  <label>DJ role (optional)</label>
+  <select name="djRoleId">
+    <option value="">— none —</option>
+    <% roles.forEach(function (r) { %>
+      <option value="<%= r.id %>" <%= r.id === (cfg.djRoleId || '') ? 'selected' : '' %>><%= r.name %></option>
+    <% }) %>
+  </select>
+  <p class="muted small">With a DJ role set, only members with it (or Manage Server) can play and control music.</p>
+
+  <label class="check u-mt-2">
+    <input type="checkbox" name="allowUrls" <%= cfg.allowUrls !== false ? 'checked' : '' %> />
+    Allow playing any audio link
+  </label>
+
+  <label class="u-mt-2">Maximum queue length</label>
+  <input type="number" name="maxQueue" min="1" max="200" value="<%= cfg.maxQueue || 50 %>" />
+
+  <label class="u-mt-2">Maximum track length (minutes)</label>
+  <input type="number" name="maxTrackMinutes" min="1" max="720" value="<%= cfg.maxTrackMinutes || 180 %>" />
+
+  <label class="u-mt-2">Leave after being idle (minutes)</label>
+  <input type="number" name="idleLeaveMinutes" min="1" max="60" value="<%= cfg.idleLeaveMinutes || 5 %>" />
+
+  <label class="u-mt-2">Radio stations</label>
+  <textarea name="stations" rows="6" placeholder="Name | https://stream.example.com/radio.mp3"><%= stations %></textarea>
+  <p class="muted small">One station per line in the format Name | direct stream link. Playlists (.m3u, .pls) are not supported.</p>
+
+  <div class="u-mt-3"><button type="submit">Save</button></div>
+</form>
+
+<p class="muted small u-mt-3">The bot needs View Channel, Connect and Speak in the voice channel. YouTube and Spotify links are not supported.</p>

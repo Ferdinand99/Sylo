@@ -33,6 +33,8 @@ This fork extends the upstream bot with features configured from the dashboard:
   failure. Available under Utilities → Send message.
 - **Automatic threads** on selected text and announcement channels, with custom
   names and archive durations. [Setup](docs/modules/auto-threads.md).
+- **Music** from direct audio links and radio stations, with a queue, DJ role and
+  per-server station list (no YouTube/Spotify). [Setup](docs/modules/music.md).
 - **Discord channel tickets** with an Open ticket button, a private topic
   dropdown, destination categories, configurable forms with 1–5 fields, staff
   roles and predefined role pings. A call-staff button has a five-minute cooldown.

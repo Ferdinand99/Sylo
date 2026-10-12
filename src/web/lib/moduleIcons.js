@@ -26,6 +26,7 @@ export const MODULE_ICONS = {
   autoresponder: 'message-circle',
   'auto-react': 'zap',
   'auto-threads': 'message-square',
+  music: 'music',
   afk: 'moon',
   'server-stats': 'activity',
   'temp-voice': 'mic',

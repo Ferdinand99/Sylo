@@ -58,6 +58,7 @@ const LAYOUT = [
       'autoresponder',
       'auto-react',
       'auto-threads',
+      'music',
       'afk',
       'server-stats',
       'insights',
@@ -329,6 +330,13 @@ async function moduleLines(id, guild, cfg) {
     case 'autoresponder': {
       const n = Array.isArray(cfg.responders) ? cfg.responders.length : 0;
       return [n ? on('Responders', String(n)) : off('Responders', 'none')];
+    }
+    case 'music': {
+      const stations = Array.isArray(cfg.stations) ? cfg.stations.length : 0;
+      return [
+        stations ? on('Radio stations', String(stations)) : neutral('Radio stations', 'none'),
+        cfg.djRoleId ? on('DJ role', 'required') : neutral('DJ role', 'not required'),
+      ];
     }
     case 'afk': {
       return [
