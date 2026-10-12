@@ -192,7 +192,12 @@ router.post('/:guildId', async (req, res, next) => {
       .then((u) => u.tag)
       .catch(() => '');
 
-    const appealId = await createAppeal(guild.id, { userId: parsed.userId, userTag, banReason, answers });
+    const appealId = await createAppeal(req.params.guildId, {
+      userId: parsed.userId,
+      userTag,
+      banReason,
+      answers,
+    });
     if (appealId == null) {
       return render(res, 'pending', {
         guildName: guild.name,
@@ -201,11 +206,11 @@ router.post('/:guildId', async (req, res, next) => {
       });
     }
 
-    const appeal = await getAppeal(guild.id, appealId);
+    const appeal = await getAppeal(req.params.guildId, appealId);
     announceNewAppeal(guild, appeal).catch((err) =>
       log.error('appeals', 'new-appeal notice failed:', err.message)
     );
-    log.info('appeals', `${parsed.userId} submitted appeal #${appealId} in ${guild.id}`);
+    log.info('appeals', `${parsed.userId} submitted appeal #${appealId} in ${req.params.guildId}`);
 
     render(res, 'submitted', {
       guildName: guild.name,
