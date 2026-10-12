@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useMessageLink } from '../platformContext.jsx';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import ChipPicker from '../components/ChipPicker.jsx';
@@ -36,6 +37,7 @@ function toMessageRow(m = {}) {
 
 export default function Honeypot() {
   const { guildId } = useParams();
+  const messageLink = useMessageLink();
   const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'honeypot'), [guildId]);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -263,7 +265,7 @@ export default function Honeypot() {
               <p className="v2-field-hint">
                 Live:{' '}
                 <a
-                  href={`https://discord.com/channels/${guildId}/${m.channelId}/${m.messageId}`}
+                  href={messageLink(guildId, m.channelId, m.messageId)}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

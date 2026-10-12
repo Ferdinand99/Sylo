@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useCmd } from '../platformContext.jsx';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
@@ -55,6 +56,7 @@ function ResultsBodyPreview() {
 
 export default function Polls() {
   const { guildId } = useParams();
+  const cmd = useCmd();
   const [state, setState] = useState({ loading: true, data: null, error: null });
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -120,8 +122,9 @@ export default function Polls() {
     <>
       <h1 className="v2-section-title">Polls</h1>
       <p className="v2-field-hint">
-        Members create polls with <code>/poll</code> and vote by reacting with the letter of their choice. A
-        poll closes on its timer, when it hits its vote cap, or when someone runs <code>/poll-end</code>.
+        Members create polls with <code>{cmd('/poll')}</code> and vote by reacting with the letter of their
+        choice. A poll closes on its timer, when it hits its vote cap, or when someone runs{' '}
+        <code>{cmd('/poll-end')}</code>.
       </p>
 
       <form onSubmit={onSave}>

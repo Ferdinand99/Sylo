@@ -28,7 +28,7 @@ export function assignableRoles(guild) {
  */
 export async function baseContext(guild, panel) {
   const enabledById = new Map((await getGuildModules(guild.id)).map((m) => [m.id, m.enabled]));
-  const { platform, capabilities } = platformInfo(guild);
+  const { platform, capabilities, webAppUrl, commandPrefix } = platformInfo(guild);
   const modules = MODULES.map((m) => ({
     id: m.id,
     name: m.name,
@@ -54,6 +54,8 @@ export async function baseContext(guild, panel) {
     panel,
     platform,
     platformCaps: capabilities,
+    platformWebUrl: webAppUrl,
+    commandPrefix,
     msg: null,
   };
 }

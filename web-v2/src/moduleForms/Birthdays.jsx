@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useCmd } from '../platformContext.jsx';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 
 export default function Birthdays() {
   const { guildId } = useParams();
+  const cmd = useCmd();
   const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'birthdays'), [guildId]);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -53,8 +55,8 @@ export default function Birthdays() {
     <>
       <h1 className="v2-section-title">Birthdays</h1>
       <p className="v2-field-hint">
-        Members save their own date with <code>/birthday set</code>. Sylo checks once a day and posts here.
-        Placeholders: <code>{'{user}'}</code> <code>{'{age}'}</code> (blank unless a year was given).
+        Members save their own date with <code>{cmd('/birthday set')}</code>. Sylo checks once a day and posts
+        here. Placeholders: <code>{'{user}'}</code> <code>{'{age}'}</code> (blank unless a year was given).
       </p>
 
       <form onSubmit={onSave}>

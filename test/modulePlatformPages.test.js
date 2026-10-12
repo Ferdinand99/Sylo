@@ -14,7 +14,10 @@ test('module pages: Fluxer servers get a platform note and no native AutoMod, Di
     isReady: () => true,
     ws: { ping: 5 },
     user: { id: '555555555555555555', displayAvatarURL: () => null },
-    commands: new Map(),
+    commands: new Map([
+      ['giveaway', {}],
+      ['afk', {}],
+    ]),
     guilds: { cache: new Map() },
   };
   fluxerClient.guilds.cache.set(RAW, {
@@ -55,6 +58,44 @@ test('module pages: Fluxer servers get a platform note and no native AutoMod, Di
     assert.equal(d.platform, 'discord');
     assert.equal(d.capabilities.nativeAutomod, true);
     assert.deepEqual(d.notes, {});
+
+    // Commands read as chat commands on Fluxer, and a URL that merely starts like one is left alone.
+    const fGiveaways = await page(KEY, 'giveaways');
+    assert.match(fGiveaways, /<code>!giveaway start/);
+    assert.doesNotMatch(fGiveaways, /<code>\/giveaway start/);
+    const dGiveaways = await page(app.guild.id, 'giveaways');
+    assert.match(dGiveaways, /<code>\/giveaway start/);
+
+    // The custom command builder talks about chat commands, not Discord's slash command list.
+    const fBuilder = await page(KEY, 'custom-commands/cmd/new');
+    assert.match(fBuilder, /<span class="cc-slash">!<\/span>/);
+    assert.doesNotMatch(fBuilder, /Discord(?:'|&#39;)s command list/);
+    assert.match(fBuilder, /Members run it as/);
+    const dBuilder = await page(app.guild.id, 'custom-commands/cmd/new');
+    assert.match(dBuilder, /<span class="cc-slash">\/<\/span>/);
+    assert.match(dBuilder, /Discord(?:'|&#39;)s command list/);
+    const fCc = await page(KEY, 'custom-commands');
+    assert.doesNotMatch(fCc, /sync to\s+Discord/);
+
+    // A message link points at the platform's own web app, not at discord.com.
+    const { setGuildModule } = await import('../src/db/modules.js');
+    const trap = {
+      channelId: '222222222222222222',
+      messageId: '333333333333333333',
+      bait: 'x',
+      action: 'kick',
+    };
+    await setGuildModule(KEY, 'honeypot', { enabled: true, config: { messages: [trap] } });
+    const fHoney = await page(KEY, 'honeypot');
+    assert.match(
+      fHoney,
+      new RegExp(`href="https://web.fluxer.app/channels/${RAW}/222222222222222222/333333333333333333"`)
+    );
+    assert.doesNotMatch(fHoney, /discord\.com\/channels/);
+
+    // The V2 API carries the prefix and the web app address for links.
+    assert.equal(f.commandPrefix, '!');
+    assert.equal(d.commandPrefix, '/');
 
     const dAutomod = await page(app.guild.id, 'automod');
     assert.doesNotMatch(dAutomod, /Fluxer has no native AutoMod/);

@@ -8,6 +8,7 @@ import { log } from '../lib/log.js';
 import { mountAuth, requireAuth, requireOwner } from './middleware/auth.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { csrf } from './middleware/csrf.js';
+import { platformCommands } from './middleware/platformCommands.js';
 import { requestLog } from './middleware/requestLog.js';
 import healthRouter from './routes/health.js';
 import metricsRouter from './routes/metrics.js';
@@ -90,6 +91,7 @@ export function createApp() {
   app.use('/settings', requireOwner, settingsRouter);
   // Tickets are mounted first: they have their own (staff-role aware) access
   // check, so they must not fall through to the admin-only /guilds router.
+  app.use('/guilds/:guildId', platformCommands);
   app.use('/guilds/:guildId/tickets', guildTicketsRouter);
   app.use('/guilds/:guildId/messages', guildMessagesRouter);
   app.use('/guilds', guildsRouter);

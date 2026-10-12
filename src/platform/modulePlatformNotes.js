@@ -5,6 +5,7 @@
 import { config } from '../config.js';
 import { CAPABILITIES } from './capabilities.js';
 import { platformOfGuild } from './platformOf.js';
+import { fluxerEndpoints } from './instance.js';
 
 /** @type {Record<string, (ctx: { prefix: string }) => string>} */
 const FLUXER_NOTES = {
@@ -37,7 +38,7 @@ export function modulePlatformNote(platform, moduleId) {
 /**
  * What the dashboard needs to know about a guild's platform.
  * @param {any} guild
- * @returns {{ platform: 'discord' | 'fluxer', capabilities: Record<string, boolean>, notes: Record<string, string> }}
+ * @returns {{ platform: 'discord' | 'fluxer', capabilities: Record<string, boolean>, notes: Record<string, string>, commandPrefix: string, webAppUrl: string }}
  */
 export function platformInfo(guild) {
   const platform = platformOfGuild(guild);
@@ -46,5 +47,12 @@ export function platformInfo(guild) {
     const note = modulePlatformNote(platform, id);
     if (note) notes[id] = note;
   }
-  return { platform, capabilities: { ...CAPABILITIES[platform] }, notes };
+  return {
+    platform,
+    capabilities: { ...CAPABILITIES[platform] },
+    notes,
+    // How a command is written in help text, and where a message link points.
+    commandPrefix: platform === 'fluxer' ? config.commandPrefix : '/',
+    webAppUrl: platform === 'fluxer' ? fluxerEndpoints().webapp : 'https://discord.com',
+  };
 }

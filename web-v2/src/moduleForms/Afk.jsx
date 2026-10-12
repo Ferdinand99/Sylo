@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useCmd } from '../platformContext.jsx';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import ChipPicker from '../components/ChipPicker.jsx';
@@ -7,6 +8,7 @@ import { notify } from '../notify.js';
 
 export default function Afk() {
   const { guildId } = useParams();
+  const cmd = useCmd();
   const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'afk'), [guildId]);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -52,8 +54,8 @@ export default function Afk() {
     <>
       <h1 className="v2-section-title">AFK</h1>
       <p className="v2-note">
-        Members run <code>/afk [reason]</code>. Sylo replies to anyone who mentions them, and clears the
-        status automatically when they next send a message.
+        Members run <code>{cmd('/afk [reason]')}</code>. Sylo replies to anyone who mentions them, and clears
+        the status automatically when they next send a message.
       </p>
 
       <form onSubmit={onSave}>

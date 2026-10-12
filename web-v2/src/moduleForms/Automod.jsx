@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, saveAutomodImmunity, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
-import { usePlatformInfo } from '../usePlatformInfo.js';
+import { PlatformContext } from '../platformContext.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
 
@@ -42,7 +42,7 @@ export default function Automod() {
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const { capabilities } = usePlatformInfo(guildId);
+  const { capabilities } = useContext(PlatformContext);
   const [nativeNote, setNativeNote] = useState(null);
   const [immune, setImmune] = useState([]);
   const [savingImmune, setSavingImmune] = useState(false);

@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { MODULE_FORMS } from '../moduleForms/index.js';
 import { usePlatformInfo } from '../usePlatformInfo.js';
+import { PlatformContext } from '../platformContext.jsx';
 
 // Generic shell for /guilds/:guildId/m/:moduleId — just looks up the
 // module's form component. Reachable directly only if someone bookmarks/
@@ -8,20 +9,21 @@ import { usePlatformInfo } from '../usePlatformInfo.js';
 // here for modules that do (see MODULE_FORMS).
 export default function ModulePage() {
   const { guildId, moduleId } = useParams();
-  const { platform, notes } = usePlatformInfo(guildId);
+  const info = usePlatformInfo(guildId);
+  const { platform, notes } = info;
   const Form = MODULE_FORMS[moduleId];
   if (!Form) {
     return <p className="v2-state">This module doesn't have a V2 settings page yet.</p>;
   }
   const note = notes[moduleId];
   return (
-    <>
+    <PlatformContext.Provider value={info}>
       {note ? (
         <p className="v2-note v2-platform-note">
           <span className="v2-platform-note-tag">{platform === 'fluxer' ? 'Fluxer' : 'Discord'}</span> {note}
         </p>
       ) : null}
       <Form />
-    </>
+    </PlatformContext.Provider>
   );
 }

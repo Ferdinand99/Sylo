@@ -11,10 +11,11 @@
 %>
 
 <p class="muted small">
-  Each command is a <code>/slash</code> command that runs an ordered list of actions —
-  reply in the channel, post to another channel, or add / remove a role. Commands sync to
-  Discord on save. Placeholders: <% ccPlaceholders.forEach(function (p) { %><code><%= p %></code> <% }) %>
-  (<code>{args}</code> becomes a <code>text:</code> option).
+  <% if (platform === 'fluxer') { %>Each command runs from chat (<code><%= commandPrefix %>name</code>) <% } else { %>Each command is a <code>/slash</code> command <% } %>that runs an ordered list of actions —
+  reply in the channel, post to another channel, or add / remove a role.
+  <% if (platform !== 'fluxer') { %>Commands sync to
+  Discord on save. <% } %>Placeholders: <% ccPlaceholders.forEach(function (p) { %><code><%= p %></code> <% }) %>
+  <% if (platform === 'fluxer') { %>(<code>{args}</code> becomes the text after the command)<% } else { %>(<code>{args}</code> becomes a <code>text:</code> option)<% } %>.
 </p>
 
 <div class="rr-list-head">
@@ -41,7 +42,7 @@
       <div class="btn-row">
         <a class="plugin-btn" href="/guilds/<%= guild.id %>/m/custom-commands/cmd/<%= c.id %>">Edit</a>
         <form class="u-inline" method="POST" action="/guilds/<%= guild.id %>/m/custom-commands/cmd/<%= c.id %>/delete">
-          <button type="submit" class="danger" data-confirm="Delete /<%= c.name %>? It is removed from Discord too.">Delete</button>
+          <button type="submit" class="danger" data-confirm="Delete <%= commandPrefix %><%= c.name %>?<%= platform === 'fluxer' ? '' : ' It is removed from Discord too.' %>">Delete</button>
         </form>
       </div>
     </div>
