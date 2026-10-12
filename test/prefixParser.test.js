@@ -154,3 +154,22 @@ test('only the LAST string option takes the rest of the line, earlier ones take 
   assert.equal(noReason.values.duration.value, '90m');
   assert.equal(noReason.values.reason, undefined);
 });
+
+test('an option given by name later in the line does not stop the reason taking the rest', () => {
+  // /ban <user> [reason] [duration]: "reason words duration:1m" is the documented way to add
+  // a duration after a free-text reason.
+  const tempBan = new SlashCommandBuilder()
+    .setName('ban')
+    .setDescription('b')
+    .addUserOption((o) => o.setName('user').setDescription('u').setRequired(true))
+    .addStringOption((o) => o.setName('reason').setDescription('r'))
+    .addStringOption((o) => o.setName('duration').setDescription('d'))
+    .toJSON();
+  const after = parseArgs(tempBan, `${USER} Test temp ban duration:1m`);
+  assert.equal(after.values.reason.value, 'Test temp ban');
+  assert.equal(after.values.duration.value, '1m');
+
+  const before = parseArgs(tempBan, `${USER} duration:1m Test temp ban`);
+  assert.equal(before.values.reason.value, 'Test temp ban');
+  assert.equal(before.values.duration.value, '1m');
+});

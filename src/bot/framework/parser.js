@@ -165,7 +165,9 @@ export function parseArgs(schema, text) {
 
     // Free text goes to the last string option only; an earlier string (a
     // duration, a name) takes one word so the options after it stay reachable.
-    const later = scope.slice(cursor).filter((o) => !(o.name in values));
+    // An option given by name further along the line is spoken for too.
+    const named = new Set(tokens.filter((x) => x.name).map((x) => x.name));
+    const later = scope.slice(cursor).filter((o) => !(o.name in values) && !named.has(o.name));
     const takesRest =
       opt.type === T.String && later.every((o) => !o.required) && !later.some((o) => o.type === T.String);
     if (!takesRest) {
