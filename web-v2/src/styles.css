@@ -2079,3 +2079,16 @@ form textarea,
 .v2-account-card p {
   margin: 0;
 }
+
+.v2-platform-note-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-2);
+  color: var(--bg-surface);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}

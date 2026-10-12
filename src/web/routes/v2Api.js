@@ -169,6 +169,7 @@ import {
 } from '../../db/guildSettings.js';
 import { recordAudit } from '../../db/audit.js';
 import { recordBotAudit, listBotAudit } from '../../db/botAudit.js';
+import { platformInfo } from '../../platform/modulePlatformNotes.js';
 import { runtime, uptimeSeconds, isAnyClientReady, totalGuildCount } from '../../runtime.js';
 import {
   getPresenceConfig,
@@ -313,6 +314,10 @@ router.use('/guilds/:guildId/tickets', ticketsRouter);
 router.use('/guilds/:guildId', loadGuildJson, requireGuildAdmin);
 // Appeals review, command limits and the moderation hub (v2Staff.js).
 router.use('/guilds/:guildId', staffRouter);
+
+// What the new dashboard needs to know about a server's platform: its capabilities (to hide
+// what the platform cannot do) and the per-module notes (what behaves differently there).
+router.get('/guilds/:guildId/platform', (req, res) => res.json(platformInfo(req.guild)));
 
 router.get(
   '/guilds/:guildId/overview',

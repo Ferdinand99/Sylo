@@ -1,7 +1,8 @@
 // Per-guild control panel: module toggles, general settings, command
 // management, and the moderation panel (warnings + bans). Every route requires
 // the signed-in user to be an admin of that guild (pass-through in open mode).
-import { clientOfGuild, primaryClient, rawGuildId } from '../../platform/platformOf.js';
+import { clientOfGuild, primaryClient, rawGuildId, platformOfGuild } from '../../platform/platformOf.js';
+import { modulePlatformNote } from '../../platform/modulePlatformNotes.js';
 import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
 import { requireGuildAdmin, currentUser, actingUserId } from '../middleware/auth.js';
@@ -792,6 +793,7 @@ async function moduleViewLocals(mod, req, configOverride) {
     ...(await baseContext(req.guild, `m/${mod.id}`)),
     activeModule: mod,
     moduleIconName: moduleIcon(mod.id),
+    platformNote: modulePlatformNote(platformOfGuild(req.guild), mod.id),
     moduleEnabled: enabled,
     moduleTestable: enabled && TESTABLE.has(mod.id),
     moduleConfig: configOverride ?? viewConfig,

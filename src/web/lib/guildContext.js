@@ -1,5 +1,6 @@
 // Shared view-model for the per-guild control panel.
 import { guildByKey, keyedGuild, rawGuildId } from '../../platform/platformOf.js';
+import { platformInfo } from '../../platform/modulePlatformNotes.js';
 import { MODULES, missingIntents } from '../../modules/registry.js';
 import { getGuildModules } from '../../db/modules.js';
 import { openTicketCount } from '../../db/tickets.js';
@@ -27,6 +28,7 @@ export function assignableRoles(guild) {
  */
 export async function baseContext(guild, panel) {
   const enabledById = new Map((await getGuildModules(guild.id)).map((m) => [m.id, m.enabled]));
+  const { platform, capabilities } = platformInfo(guild);
   const modules = MODULES.map((m) => ({
     id: m.id,
     name: m.name,
@@ -34,7 +36,8 @@ export async function baseContext(guild, panel) {
     icon: m.icon,
     configurable: m.configurable,
     enabled: enabledById.get(m.id) ?? false,
-    missingIntents: missingIntents(m),
+    // Privileged intents are a Discord concept; Fluxer has none to switch on.
+    missingIntents: platform === 'discord' ? missingIntents(m) : [],
   }));
 
   return {
@@ -49,6 +52,8 @@ export async function baseContext(guild, panel) {
     openTickets: await openTicketCount(guild.id),
     openAppeals: await countOpenAppeals(guild.id),
     panel,
+    platform,
+    platformCaps: capabilities,
     msg: null,
   };
 }
