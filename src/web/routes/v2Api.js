@@ -245,10 +245,13 @@ router.get('/csrf', (req, res) => {
   res.json({ token: req.session?.csrf ?? null });
 });
 
+// Open mode has no signed-in user, so the dashboard-version preference is one shared record.
+const prefsUserId = (req) => req.session?.user?.id ?? 'local-admin';
+
 router.get(
   '/prefs',
   asyncHandler(async (req, res) => {
-    res.json({ dashboardVersion: await getDashboardVersion(req.session.user.id) });
+    res.json({ dashboardVersion: await getDashboardVersion(prefsUserId(req)) });
   })
 );
 
@@ -261,7 +264,7 @@ router.post(
         .status(400)
         .json({ error: `dashboardVersion must be one of ${DASHBOARD_VERSIONS.join(', ')}` });
     }
-    const dashboardVersion = await setDashboardVersion(req.session.user.id, requested);
+    const dashboardVersion = await setDashboardVersion(prefsUserId(req), requested);
     res.json({ dashboardVersion });
   })
 );

@@ -193,3 +193,30 @@ test('the discord.js compat aliases are installed on the SDK before login', asyn
   });
   assert.deepEqual(installedOn, [sdk, 'function', 'function']);
 });
+
+test('the Fluxer client logs when it is ready, so a run can be told from a silent failure', async () => {
+  const { log } = await import('../src/lib/log.js');
+  const sdk = fakeSdk();
+  const client = await startFluxerBot({
+    sdk,
+    token: 't',
+    commands: new Map(),
+    prefix: '!',
+    loadModules: async () => {},
+    installCompat: () => {},
+  });
+  const lines = [];
+  const original = log.info;
+  log.info = (scope, ...rest) => lines.push([scope, ...rest].join(' '));
+  try {
+    client.user = { id: '555', username: 'Sylo_Test' };
+    client.guilds = { cache: { size: 3 } };
+    await client.emit('ready');
+  } finally {
+    log.info = original;
+  }
+  assert.ok(
+    lines.some((l) => /fluxer.*Sylo_Test.*3 guild/.test(l)),
+    lines.join(' | ')
+  );
+});

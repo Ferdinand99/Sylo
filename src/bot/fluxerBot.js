@@ -87,6 +87,9 @@ export async function startFluxerBot(opts = {}) {
   client.commands = commands;
 
   client.on('error', (err) => log.error('fluxer', 'gateway client error', err));
+  client.once('ready', () =>
+    log.info('fluxer', `Logged in as ${client.user?.username} - serving ${client.guilds.cache.size} guild(s)`)
+  );
   registerFluxerModuleEvents(client, {
     voice,
     isCommand: (message) => isCommandMessage(message, { commands, prefix }),
