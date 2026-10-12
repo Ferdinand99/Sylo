@@ -27,6 +27,8 @@ import { ChannelType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
 import { config } from '../config.js';
 import { signToken, verifyToken } from '../lib/signedToken.js';
+import { addCase, deactivateLatest } from '../db/modCases.js';
+import { clearTempBan } from '../db/tempBans.js';
 import { isPlatformGuildId } from '../lib/platformId.js';
 import { getGuildModule, isModuleEnabled } from '../db/modules.js';
 import { decideAppeal, setAppealInvite } from '../db/appeals.js';
@@ -283,6 +285,18 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
         .then(() => true)
         .catch(() => false);
     }
+  }
+  // Lifting the ban is a moderation action like /unban: keep the case log honest.
+  if (unbanned) {
+    await clearTempBan(guildKey(guild), appeal.user_id); // a scheduled temp-ban release is moot now
+    await deactivateLatest(guildKey(guild), appeal.user_id, 'ban');
+    await addCase({
+      guildId: guildKey(guild),
+      userId: appeal.user_id,
+      moderatorId: 'web',
+      action: 'unban',
+      reason: `Ban appeal #${appeal.id} accepted by ${decidedBy}`,
+    });
   }
 
   // On accept, mint a single-use rejoin invite and store it on the appeal so the

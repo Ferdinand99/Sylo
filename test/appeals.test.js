@@ -142,3 +142,47 @@ test('createRejoinInvite: a single-use link built from the channel, in the guild
     runtime.clients.fluxer = null;
   }
 });
+
+test('decideAndNotify: accepting an appeal that lifts the ban is recorded as an unban case', async () => {
+  const { decideAndNotify } = await import('../src/modules/appeals.js');
+  const { addCase, listUserCases } = await import('../src/db/modCases.js');
+  const { scheduleTempBan, getTempBan } = await import('../src/db/tempBans.js');
+  const gid = '555555555555555555';
+  const uid = '666666666666666666';
+  await addCase({ guildId: gid, userId: uid, moderatorId: 'm', action: 'ban', reason: 'spam' });
+  await scheduleTempBan({
+    guildId: gid,
+    userId: uid,
+    modId: 'm',
+    reason: 'spam',
+    unbanAt: Date.now() + 60_000,
+  });
+  const appealId = await createAppeal(gid, { userId: uid, userTag: 't', banReason: '', answers: [] });
+  const removed = [];
+  const guild = {
+    id: gid,
+    name: 'G',
+    client: { users: { fetch: async () => null } },
+    members: { me: { permissions: { has: () => true } } },
+    bans: { remove: async (id) => removed.push(id) },
+    channels: { cache: new Map() },
+  };
+
+  const res = await decideAndNotify(
+    guild,
+    { id: appealId, user_id: uid, user_tag: 't' },
+    {
+      status: 'accepted',
+      decidedBy: 'Staff',
+      reason: 'ok',
+    }
+  );
+  assert.equal(res.unbanned, true);
+  assert.deepEqual(removed, [uid]);
+
+  const { rows } = await listUserCases(gid, uid, { includeInactive: true });
+  const byAction = Object.fromEntries(rows.map((r) => [r.action, r]));
+  assert.equal(byAction.unban?.reason.includes(`appeal #${appealId}`), true, 'an unban case is recorded');
+  assert.equal(byAction.ban.active, 0, 'the ban case is closed');
+  assert.equal(await getTempBan(gid, uid), null, 'a scheduled temp-ban release is cancelled');
+});
