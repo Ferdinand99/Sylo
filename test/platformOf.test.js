@@ -52,9 +52,9 @@ test('guildSupports asks the capability table for the guild platform', () => {
 });
 
 test('the capability table: Discord has everything, Fluxer lacks what it has no API for', () => {
-  for (const f of ['components', 'nativeAutomod', 'threads', 'moveMembers'])
+  for (const f of ['components', 'nativeAutomod', 'threads', 'moveMembers', 'slashCommands'])
     assert.equal(supports('discord', f), true, f);
-  for (const f of ['components', 'nativeAutomod', 'threads', 'moveMembers'])
+  for (const f of ['components', 'nativeAutomod', 'threads', 'moveMembers', 'slashCommands'])
     assert.equal(supports('fluxer', f), false, f);
 });
 

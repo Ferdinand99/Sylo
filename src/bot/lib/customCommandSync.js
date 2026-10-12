@@ -2,7 +2,7 @@
 // them. guild.commands.set() REPLACES the guild's whole application-command
 // list, so when Sylo's built-in commands are guild-scoped for this guild (dev
 // mode, DISCORD_GUILD_ID) they must be included in the payload too.
-import { guildKey } from '../../platform/platformOf.js';
+import { guildKey, guildSupports } from '../../platform/platformOf.js';
 import { MessageFlags } from 'discord.js';
 import { config } from '../../config.js';
 import { getGuildModule } from '../../db/modules.js';
@@ -27,7 +27,7 @@ function toSlashJSON(cmd) {
 
 /** Push the desired application-command set for one guild. */
 export async function syncGuildCustomCommands(guild) {
-  if (!guild) return;
+  if (!guild || !guildSupports(guild, 'slashCommands')) return;
   const { enabled, config: cfg } = await getGuildModule(guildKey(guild), 'custom-commands');
 
   const builtins = config.discordGuildIds.includes(guildKey(guild))

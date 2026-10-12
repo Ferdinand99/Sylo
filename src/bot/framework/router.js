@@ -10,6 +10,7 @@ import { MessageInteraction } from './MessageInteraction.js';
 import { parseArgs, ParseError } from './parser.js';
 import { resolveOptions } from './resolve.js';
 import { usageLines } from './usage.js';
+import { handleCustomSlash } from '../lib/customCommandSync.js';
 import { log } from '../../lib/log.js';
 import { inc } from '../../lib/metrics.js';
 
@@ -37,6 +38,24 @@ export function splitCommand(content, prefix, botId) {
 }
 
 /**
+ * A guild's custom commands have no slash form on a platform without slash commands, so
+ * `!name some text` runs them: the text becomes the `text` option, as it does on Discord.
+ */
+async function runCustomCommand(message, split) {
+  if (!message.guild) return;
+  const parsed = {
+    subcommand: null,
+    values: split.rest.trim() ? { text: { type: 3, value: split.rest.trim() } } : {},
+  };
+  const interaction = new MessageInteraction({ message, commandName: split.name, parsed, resolved: {} });
+  try {
+    if (await handleCustomSlash(interaction)) inc('sylo_commands_total', { command: split.name });
+  } catch (err) {
+    log.error('bot', `Custom command "${split.name}" failed:`, err);
+  }
+}
+
+/**
  * Is this message a command Sylo will run? Modules that react to ordinary chat
  * (AFK, leveling, auto-moderation) must not treat it as chat, just as they never
  * see a slash command.
@@ -58,7 +77,7 @@ export async function handleMessage(message, { commands, prefix, botId = message
   const split = splitCommand(message.content, prefix, botId);
   if (!split) return;
   const command = commands.get(split.name);
-  if (!command) return;
+  if (!command) return runCustomCommand(message, split);
 
   const schema = command.data.toJSON();
   const init = { message, commandName: split.name };
