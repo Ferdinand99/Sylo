@@ -9,8 +9,9 @@
 //     order — the way to skip an optional option or to give one after a long
 //     free-text reason.
 //   - Anything else fills the remaining options positionally, in declared order.
-//   - A string option followed only by optional options takes the rest of the
-//     line (up to the next `name:value`), so a multi-word reason needs no quotes.
+//   - The last string option, when only optional options follow it, takes the rest
+//     of the line (up to the next `name:value`), so a multi-word reason needs no
+//     quotes. An earlier string option takes a single word.
 //
 // Users, channels and roles are returned as the raw reference text; resolving
 // them against a guild is resolve.js's job.
@@ -162,7 +163,11 @@ export function parseArgs(schema, text) {
     if (!opt) throw new ParseError('Too many arguments.');
     cursor += 1;
 
-    const takesRest = opt.type === T.String && scope.slice(cursor).every((o) => !o.required);
+    // Free text goes to the last string option only; an earlier string (a
+    // duration, a name) takes one word so the options after it stay reachable.
+    const later = scope.slice(cursor).filter((o) => !(o.name in values));
+    const takesRest =
+      opt.type === T.String && later.every((o) => !o.required) && !later.some((o) => o.type === T.String);
     if (!takesRest) {
       set(opt, tok.value);
       continue;

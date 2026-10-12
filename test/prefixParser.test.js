@@ -136,3 +136,21 @@ test('a required attachment option cannot be satisfied over a prefix command', (
     .toJSON();
   err(() => parseArgs(up, ''), /attachment/i);
 });
+
+test('only the LAST string option takes the rest of the line, earlier ones take one word', () => {
+  // /timeout <user> <duration> [reason]: "1m" is the duration, the rest is the reason.
+  const timeout = new SlashCommandBuilder()
+    .setName('timeout')
+    .setDescription('t')
+    .addUserOption((o) => o.setName('user').setDescription('u').setRequired(true))
+    .addStringOption((o) => o.setName('duration').setDescription('d').setRequired(true))
+    .addStringOption((o) => o.setName('reason').setDescription('r'))
+    .toJSON();
+  const r = parseArgs(timeout, `${USER} 1m being rude to everyone`);
+  assert.equal(r.values.duration.value, '1m');
+  assert.equal(r.values.reason.value, 'being rude to everyone');
+
+  const noReason = parseArgs(timeout, `${USER} 90m`);
+  assert.equal(noReason.values.duration.value, '90m');
+  assert.equal(noReason.values.reason, undefined);
+});
