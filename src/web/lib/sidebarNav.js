@@ -121,7 +121,7 @@ export async function buildSidebar(req, gid = null) {
   // anyone who isn't a bot operator rather than showing a link that 403s.
   const isOwner = !config.authEnabled || config.ownerIds.includes(req.session?.user?.id);
 
-  const top = TOP.filter((t) => t.key !== 'health' || isOwner).map((t) => {
+  const top = TOP.filter((t) => !['health', 'personalizer'].includes(t.key) || isOwner).map((t) => {
     const href = t.href ?? (guild ? t.guild(gid) : t.noGuild);
     let active;
     if (t.key === 'dashboard') active = path === '/' || (!!guild && path === `/guilds/${gid}/overview`);

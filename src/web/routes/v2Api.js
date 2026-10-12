@@ -1,4 +1,9 @@
 import { normaliseFeedbackConfig, publishFeedbackPanel } from '../../modules/feedback.js';
+import {
+  beginPersonalizerAudit,
+  finishPersonalizerAudit,
+  personalizerHistory,
+} from '../lib/personalizerAudit.js';
 import { normaliseChannelTickets, publishTicketPanel } from '../../modules/channelTickets.js';
 // JSON API for the V2 dashboard SPA (web-v2/). Mounted at /api/v2, entirely
 // after the app-wide requireAuth (src/web/server.js), so every route here
@@ -1971,9 +1976,12 @@ router.post(
 );
 
 // --- Bot Personalizer (mirrors settings.js) — bot-wide, not per-guild ------
-// Gated by the app-wide requireAuth only, same as V1's /settings route: no
-// requireGuildAdmin/requireOwner here, matching V1's existing access level
-// exactly rather than tightening or loosening it.
+// Bot-wide identity and presence are restricted to configured bot operators.
+router.use('/personalizer', requireOwner);
+router.get(
+  '/personalizer/history',
+  asyncHandler(async (req, res) => res.json({ history: await personalizerHistory() }))
+);
 
 router.get('/personalizer', (req, res) => {
   const u = runtime.client?.user ?? null;
@@ -2002,6 +2010,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const u = runtime.client?.user;
     if (!u) return res.status(503).json({ error: 'The bot is not connected yet — try again in a moment.' });
+    const audit = await beginPersonalizerAudit(req, 'identity', u);
 
     const isHttps = (s) => /^https:\/\/\S+$/i.test(s);
     const done = [];
@@ -2055,6 +2064,7 @@ router.post(
       }
     }
 
+    await finishPersonalizerAudit(audit, done, failed, u);
     res.json({ done, failed });
   })
 );
@@ -2062,6 +2072,7 @@ router.post(
 router.post(
   '/personalizer/presence',
   asyncHandler(async (req, res) => {
+    const audit = await beginPersonalizerAudit(req, 'presence');
     const presence = await setPresenceConfig({
       status: req.body.status,
       type: req.body.type,
@@ -2069,6 +2080,7 @@ router.post(
       texts: req.body.texts,
       rotationSeconds: req.body.rotationSeconds,
     });
+    await finishPersonalizerAudit(audit, ['presence'], [], runtime.client?.user);
     if (runtime.client) await applyPresence(runtime.client);
     res.json({ presence });
   })

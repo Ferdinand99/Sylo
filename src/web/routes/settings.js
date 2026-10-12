@@ -11,8 +11,15 @@ import {
   PRESENCE_STATUSES,
 } from '../../db/appSettings.js';
 import { applyPresence } from '../../bot/lib/presence.js';
+import { requireOwner } from '../middleware/auth.js';
+import {
+  beginPersonalizerAudit,
+  finishPersonalizerAudit,
+  personalizerHistory,
+} from '../lib/personalizerAudit.js';
 
 const router = Router();
+router.use(requireOwner);
 const isHttps = (u) => /^https:\/\/\S+$/i.test(u);
 
 function back(res, text, ok) {
@@ -38,6 +45,7 @@ router.get(
       presenceStatuses: PRESENCE_STATUSES,
       m: typeof req.query.m === 'string' ? req.query.m : null,
       ok: req.query.ok === '1',
+      history: await personalizerHistory(),
     });
   })
 );
@@ -47,6 +55,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const u = runtime.client?.user;
     if (!u) return back(res, 'The bot is not connected yet — try again in a moment.', false);
+    const audit = await beginPersonalizerAudit(req, 'identity', u);
 
     const done = [];
     const failed = [];
@@ -99,6 +108,7 @@ router.post(
       }
     }
 
+    await finishPersonalizerAudit(audit, done, failed, u);
     if (!done.length && !failed.length) return back(res, 'Nothing to change.', true);
     const parts = [];
     if (done.length) parts.push(`Updated ${done.join(', ')}.`);
@@ -110,6 +120,7 @@ router.post(
 router.post(
   '/presence',
   asyncHandler(async (req, res) => {
+    const audit = await beginPersonalizerAudit(req, 'presence');
     await setPresenceConfig({
       status: req.body.status,
       type: req.body.type,
@@ -117,6 +128,7 @@ router.post(
       texts: req.body.texts,
       rotationSeconds: req.body.rotationSeconds,
     });
+    await finishPersonalizerAudit(audit, ['presence'], [], runtime.client?.user);
     if (runtime.client) await applyPresence(runtime.client);
     back(res, 'Presence updated.', true);
   })

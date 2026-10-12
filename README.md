@@ -51,6 +51,10 @@ This fork extends the upstream bot with features configured from the dashboard:
   click to join, play and disconnect. Per-server libraries, remembered channel,
   stop/delete controls, an optional stay-on-VC mode for game shows, and
   upload/playback limits. [Setup](docs/soundboard.md).
+- **Operator-only bot personalizer**: bot-wide identity and presence changes in
+  dashboard V1 and V2 require `OWNER_IDS` when Discord login is enabled. The
+  personalizer records the actor's Discord ID, timestamp, affected fields and
+  outcome in a bot-wide history, separate from guild configuration logs.
 - **Separate log destinations** for individual events, including sent messages
   with attachment links/image previews and voice joins, leaves and moves.
   Message logging is opt-in and needs Message Content Intent. No voice audio

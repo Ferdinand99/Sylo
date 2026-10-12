@@ -76,4 +76,18 @@
   </form>
 </section>
 
+<section class="card">
+  <h2>Historia personalizacji bota</h2>
+  <p class="muted small">Zmiany wykonane przez panel od włączenia historii. ID wskazuje zalogowanego użytkownika Discorda. „local-admin” oznacza panel bez logowania. Starsze zmiany nie są dostępne.</p>
+  <% if (!history.length) { %><p class="muted">Brak zapisanych zmian.</p><% } else { %>
+  <div style="overflow-x:auto"><table>
+    <thead><tr><th>Czas</th><th>ID użytkownika</th><th>Operacja</th><th>Szczegóły</th></tr></thead>
+    <tbody><% history.forEach(function(entry) { %><tr>
+      <td><%= new Date(Number(entry.created_at)).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) %></td>
+      <td><code><%= entry.actor %></code></td><td><%= entry.label %></td><td><%= entry.detail %></td>
+    </tr><% }) %></tbody>
+  </table></div>
+  <% } %>
+</section>
+
 <%- include('partials/footer') %>
