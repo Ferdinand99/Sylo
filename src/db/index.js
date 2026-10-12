@@ -843,6 +843,36 @@ export const MIGRATIONS = [
       CREATE INDEX idx_component_reactions_expiry ON component_reactions (expires_at);
     `);
   },
+
+  // Dashboard accounts that can hold a Discord and a Fluxer identity, plus
+  // server-side sessions — see src/db/accounts.js.
+  (database) => {
+    database.exec(`
+      CREATE TABLE accounts (
+        id         TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE account_identities (
+        platform          TEXT NOT NULL,
+        platform_user_id  TEXT NOT NULL,
+        account_id        TEXT NOT NULL,
+        username          TEXT NOT NULL DEFAULT '',
+        avatar            TEXT,
+        guild_ids         TEXT NOT NULL DEFAULT '[]',
+        guilds_fetched_at INTEGER NOT NULL DEFAULT 0,
+        linked_at         INTEGER NOT NULL,
+        PRIMARY KEY (platform, platform_user_id)
+      );
+      CREATE INDEX idx_account_identities_account ON account_identities (account_id);
+      CREATE TABLE sessions (
+        id         TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_sessions_expires ON sessions (expires_at);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */
