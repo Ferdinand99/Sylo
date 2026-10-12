@@ -101,3 +101,44 @@ test('db: one open appeal per user, decide closes it', async () => {
   assert.ok(id2 > id);
   assert.equal((await listAppeals(G, 10)).length, 2);
 });
+
+// --- the rejoin link minted when an appeal is accepted -----------------------------
+
+const guildFor = (client) => {
+  const created = [];
+  const channel = {
+    id: 'c1',
+    type: 0,
+    rawPosition: 0,
+    permissionsFor: () => ({ has: () => true }),
+    createInvite: async (opts) => {
+      created.push(opts);
+      return { code: 'abc123' };
+    },
+  };
+  const guild = {
+    id: 'g1',
+    client,
+    members: { me: { permissions: { has: () => true } } },
+    channels: { cache: new Map([['c1', channel]]) },
+    rulesChannel: null,
+    systemChannel: null,
+  };
+  return { guild, created };
+};
+
+test('createRejoinInvite: a single-use link built from the channel, in the guild platform’s format', async () => {
+  const { runtime } = await import('../src/runtime.js');
+  const { createRejoinInvite } = await import('../src/modules/appeals.js');
+  const fluxerClient = {};
+  runtime.clients.fluxer = fluxerClient;
+  try {
+    const f = guildFor(fluxerClient);
+    assert.equal(await createRejoinInvite(f.guild), 'https://fluxer.gg/abc123');
+    assert.equal(f.created[0].maxUses, 1);
+    const d = guildFor({});
+    assert.equal(await createRejoinInvite(d.guild), 'https://discord.gg/abc123');
+  } finally {
+    runtime.clients.fluxer = null;
+  }
+});

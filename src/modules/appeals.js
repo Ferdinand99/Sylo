@@ -22,6 +22,7 @@
 // The decision is always shown on the appeal page itself when the user reopens
 // their link, so notification never depends on the DM succeeding.
 import { guildKey } from '../platform/platformOf.js';
+import { inviteUrl as publicInviteUrl } from '../platform/instance.js';
 import { ChannelType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
 import { config } from '../config.js';
@@ -248,13 +249,13 @@ export async function createRejoinInvite(guild) {
   if (!target) return null;
 
   try {
-    const invite = await guild.invites.create(target.id, {
+    const invite = await target.createInvite({
       maxAge: 7 * 86_400, // 7 days
       maxUses: 1,
       unique: true,
       reason: 'Ban appeal accepted — single-use rejoin link',
     });
-    return invite.url;
+    return publicInviteUrl(guild, invite.code);
   } catch {
     return null;
   }

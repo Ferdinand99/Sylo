@@ -42,7 +42,7 @@ function render(res, state, extra = {}) {
  */
 async function resolve(req) {
   const { guildId } = req.params;
-  const parsed = verifyAppealToken(req.query.t ?? req.body.t);
+  const parsed = verifyAppealToken(req.query.t ?? req.body?.t);
   if (!parsed || parsed.guildId !== guildId) {
     return { error: 'This appeal link is invalid or has expired. Contact the server staff for a new one.' };
   }
