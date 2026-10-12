@@ -174,10 +174,40 @@ if (!sessionSecret) {
   }
 }
 
+// Platforms. Each one is optional, but at least one must be configured: a
+// Discord-only install sets DISCORD_TOKEN, a Fluxer-only one FLUXER_TOKEN, and
+// setting both runs Sylo on both from this one process.
+const fluxerToken = optionalOrNull('FLUXER_TOKEN');
+const discordToken = optionalOrNull('DISCORD_TOKEN') ?? (fluxerToken ? null : required('DISCORD_TOKEN'));
+const discordClientId = discordToken ? required('DISCORD_CLIENT_ID') : null;
+const fluxerClientId = fluxerToken ? required('FLUXER_CLIENT_ID') : null;
+
+// Which Fluxer instance to talk to. Unset = hosted Fluxer (fluxer.app). For a
+// self-hosted instance set FLUXER_WEB_URL (its web app origin, e.g.
+// https://chat.example.com); the API, gateway and CDN hosts are read from its
+// /.well-known/fluxer. FLUXER_API_URL overrides the API origin only.
+const fluxerWebUrl = optionalOrNull('FLUXER_WEB_URL')?.replace(/\/+$/, '') ?? null;
+const fluxerApiUrl = optionalOrNull('FLUXER_API_URL')?.replace(/\/+$/, '') ?? null;
+
+// Fluxer has no slash commands yet, so commands run from chat as <prefix>name.
+const commandPrefix = optional('COMMAND_PREFIX', '!');
+if (/\s/.test(commandPrefix) || commandPrefix.length > 5) {
+  console.error('[config] COMMAND_PREFIX must be 1-5 characters with no spaces.');
+  process.exit(1);
+}
+
 export const config = Object.freeze({
-  // Discord
-  discordToken: required('DISCORD_TOKEN'),
-  discordClientId: required('DISCORD_CLIENT_ID'),
+  // Discord (null when this install does not run on Discord)
+  discordToken,
+  discordClientId,
+  discordEnabled: Boolean(discordToken),
+  // Fluxer (null when this install does not run on Fluxer)
+  fluxerToken,
+  fluxerClientId,
+  fluxerEnabled: Boolean(fluxerToken),
+  fluxerWebUrl,
+  fluxerApiUrl,
+  commandPrefix,
   // Optional: register slash commands to these guild(s) for instant availability
   // during development (one id, or a comma/space-separated list). When empty,
   // commands are registered globally (can take up to ~1 hour to propagate).

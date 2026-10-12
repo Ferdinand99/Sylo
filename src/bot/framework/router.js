@@ -37,6 +37,19 @@ export function splitCommand(content, prefix, botId) {
 }
 
 /**
+ * Is this message a command Sylo will run? Modules that react to ordinary chat
+ * (AFK, leveling, auto-moderation) must not treat it as chat, just as they never
+ * see a slash command.
+ * @param {any} message
+ * @param {{ commands: Map<string, unknown>, prefix: string, botId?: string }} opts
+ */
+export function isCommandMessage(message, { commands, prefix, botId = message.client?.user?.id }) {
+  if (message.author?.bot || typeof message.content !== 'string') return false;
+  const split = splitCommand(message.content, prefix, botId);
+  return Boolean(split && commands.has(split.name));
+}
+
+/**
  * @param {any} message  the incoming message
  * @param {{ commands: Map<string, { data: any, execute: Function }>, prefix: string, botId?: string }} opts
  */

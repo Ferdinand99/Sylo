@@ -21,6 +21,7 @@
 //       presets: string[],             // subset of PRESET_KEYS
 //     }
 //   }
+import { mentionedUserIds, mentionedRoleIds, mentionsEveryone } from '../platform/mentions.js';
 import { guildKey, guildKeyOf } from '../platform/platformOf.js';
 import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { PRESET_KEYS } from '../bot/lib/automodSync.js';
@@ -276,7 +277,9 @@ async function scan(message, config, opts) {
   }
   if (rules.mentions.enabled) {
     const count =
-      message.mentions.users.size + message.mentions.roles.size + (message.mentions.everyone ? 1 : 0);
+      mentionedUserIds(message).length +
+      mentionedRoleIds(message).length +
+      (mentionsEveryone(message) ? 1 : 0);
     if (count > rules.mentions.max) {
       return act(message, member, rules.mentions, `${count} mentions`, cfg);
     }

@@ -2,6 +2,7 @@
 // the status when they next speak.
 //
 // config shape: { setNickname: bool, mentionReply: bool, ignoreChannels: [] }
+import { mentionedUserIds } from '../platform/mentions.js';
 import { on } from './dispatch.js';
 import { getAfk, setAfk, clearAfk } from '../db/afk.js';
 
@@ -32,7 +33,9 @@ on('afk', 'messageCreate', async (message, config, guildId) => {
 
   // Someone mentioned people who are AFK.
   if (config.mentionReply === false) return;
-  const targets = [...message.mentions.users.keys()].filter((uid) => uid !== message.author.id).slice(0, 4);
+  const targets = mentionedUserIds(message)
+    .filter((uid) => uid !== message.author.id)
+    .slice(0, 4);
   const lines = [];
   for (const uid of targets) {
     const afk = await getAfk(guildId, uid);

@@ -166,3 +166,14 @@ test('a command that throws is reported to the user and does not escape', async 
   await assert.doesNotReject(run(message, commands));
   assert.match(replies[0].content, /went wrong/i);
 });
+
+test('isCommandMessage: true only for a known command from a human', async () => {
+  const { isCommandMessage } = await import('../src/bot/framework/router.js');
+  const { commands } = setup();
+  const opts = { commands, prefix: '!', botId: BOT_ID };
+  assert.equal(isCommandMessage(fakeMessage({ content: '!ping' }).message, opts), true);
+  assert.equal(isCommandMessage(fakeMessage({ content: `<@${BOT_ID}> ping` }).message, opts), true);
+  assert.equal(isCommandMessage(fakeMessage({ content: '!nope' }).message, opts), false);
+  assert.equal(isCommandMessage(fakeMessage({ content: 'ping' }).message, opts), false);
+  assert.equal(isCommandMessage(fakeMessage({ content: '!ping', bot: true }).message, opts), false);
+});

@@ -1,5 +1,5 @@
-// Sylo entrypoint — boots the database, the Discord bot, and the web dashboard
-// in a single process.
+// Sylo entrypoint — boots the database, the chat bot(s) (Discord and/or Fluxer),
+// and the web dashboard in a single process.
 import { config } from './config.js';
 import { log } from './lib/log.js';
 import { runtime } from './runtime.js';
@@ -8,6 +8,7 @@ import { closeDb } from './db/index.js';
 import { startBackupSchedule } from './db/backup.js';
 import { startRetentionSchedule } from './db/retention.js';
 import { startBot } from './bot/index.js';
+import { startFluxerBot } from './bot/fluxerBot.js';
 import { startWeb } from './web/server.js';
 
 /** Set once the HTTP server is listening; used by the shutdown path. */
@@ -39,7 +40,7 @@ async function shutdown(signal) {
 
   const drained = Promise.allSettled([
     httpServer ? new Promise((resolve) => httpServer.close(resolve)) : Promise.resolve(),
-    runtime.client?.destroy?.() ?? Promise.resolve(),
+    ...Object.values(runtime.clients).map((client) => client?.destroy?.() ?? Promise.resolve()),
   ]);
   await Promise.race([drained, new Promise((resolve) => setTimeout(resolve, 3000).unref())]);
 
@@ -55,7 +56,8 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 
 async function main() {
   log.info('sylo', `Starting in ${config.nodeEnv} mode`);
-  await startBot();
+  // Every configured platform starts in parallel; one that is not configured is never loaded.
+  await Promise.all([config.discordEnabled && startBot(), config.fluxerEnabled && startFluxerBot()]);
   httpServer = await startWeb(config.webPort);
   startBackupSchedule();
   startRetentionSchedule();

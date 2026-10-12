@@ -47,10 +47,14 @@ export async function fluxerReactionAdd(client, payload) {
 
   withGuild(client, message, guildId);
   const emoji = payload.emoji ?? payload.reaction?.emoji;
-  const reaction = {
-    emoji,
-    message,
-    users: { remove: (userId) => message.removeReaction(emojiId(emoji), userId) },
-  };
+  // Keep the SDK's own reaction (count, partial, …) and override what differs.
+  const reaction = Object.create(payload.reaction ?? {}, {
+    emoji: { value: emoji, enumerable: true },
+    message: { value: message, enumerable: true },
+    users: {
+      value: { remove: (userId) => message.removeReaction(emojiId(emoji), userId) },
+      enumerable: true,
+    },
+  });
   return { reaction, user };
 }
