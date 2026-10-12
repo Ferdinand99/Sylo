@@ -7,6 +7,7 @@ import { dispatch as realDispatch } from '../modules/dispatch.js';
 import { purgeGuild } from '../db/purge.js';
 import { makePlatformGuildId } from '../lib/platformId.js';
 import { fluxerReactionAdd } from '../platform/fluxerEvents.js';
+import { beginModeration } from '../modules/lib/messageModeration.js';
 import { log } from '../lib/log.js';
 
 const keyOf = (rawGuildId) => (rawGuildId ? makePlatformGuildId('fluxer', rawGuildId) : null);
@@ -72,12 +73,18 @@ export function registerFluxerModuleEvents(
     if (!message.guildId) return;
     // `messageCreateAny` also carries bot / app / webhook messages — only the
     // sticky module opts into those. `messageCreate` stays human-only.
-    await send('messageCreateAny', message.guildId, message);
     // A command is not chat: AFK, leveling and counting never see one. It is still a
     // message a member posted, so the moderation modules (automod, honeypot) get it as
     // `commandMessageCreate`; otherwise `!afk <invite> @everyone` would walk past them.
-    if (message.author?.bot) return;
-    await send(isCommand(message) ? 'commandMessageCreate' : 'messageCreate', message.guildId, message);
+    const human = !message.author?.bot;
+    const work = (async () => {
+      await send('messageCreateAny', message.guildId, message);
+      if (human)
+        await send(isCommand(message) ? 'commandMessageCreate' : 'messageCreate', message.guildId, message);
+    })();
+    // The command router waits for this before running a command (see messageModeration.js).
+    if (human) beginModeration(message, work);
+    await work;
   });
 
   on('guildRoleCreate', (role) => send('roleCreate', role.guildId, role));

@@ -26,6 +26,7 @@ import { guildKey, guildKeyOf } from '../platform/platformOf.js';
 import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { PRESET_KEYS } from '../bot/lib/automodSync.js';
 import { on } from './dispatch.js';
+import { markModerated } from './lib/messageModeration.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget } from '../bot/lib/moderation.js';
 import { addCase } from '../db/modCases.js';
@@ -315,6 +316,7 @@ async function scan(message, config, opts) {
 }
 
 async function act(message, member, rule, label, cfg) {
+  markModerated(message); // a command behind this message must not run
   const guild = message.guild;
   const removed = cfg.deleteMessage && message.deletable;
   if (removed) await message.delete().catch(() => {});
@@ -378,5 +380,18 @@ async function act(message, member, rule, label, cfg) {
 on('automod', 'messageCreate', (message, config) => scan(message, config, { flood: true }));
 // A chat command can carry an invite, a link or a mass mention too. Flood counting skips it:
 // running several commands in a row is not spam.
-on('automod', 'commandMessageCreate', (message, config) => scan(message, config, { flood: false }));
+// Staff are not scanned for the commands they run: `!ban @a @b @c ... see https://evidence`
+// carries mentions and links by design. Typing the same text as chat is still filtered.
+const STAFF_PERMS = [
+  PermissionFlagsBits.ManageMessages,
+  PermissionFlagsBits.ModerateMembers,
+  PermissionFlagsBits.KickMembers,
+  PermissionFlagsBits.BanMembers,
+  PermissionFlagsBits.ManageGuild,
+];
+on('automod', 'commandMessageCreate', (message, config) => {
+  const perms = message.member?.permissions;
+  if (perms && STAFF_PERMS.some((p) => perms.has(p))) return;
+  return scan(message, config, { flood: false });
+});
 on('automod', 'messageUpdate', (payload, config) => scan(payload.new, config, { flood: false }));

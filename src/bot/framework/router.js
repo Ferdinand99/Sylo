@@ -11,6 +11,7 @@ import { parseArgs, ParseError } from './parser.js';
 import { resolveOptions } from './resolve.js';
 import { usageLines } from './usage.js';
 import { handleCustomSlash } from '../lib/customCommandSync.js';
+import { moderationOutcome } from '../../modules/lib/messageModeration.js';
 import { log } from '../../lib/log.js';
 import { inc } from '../../lib/metrics.js';
 
@@ -57,8 +58,8 @@ async function runCustomCommand(message, split) {
 
 /**
  * Is this message a command Sylo will run? Modules that react to ordinary chat
- * (AFK, leveling, auto-moderation) must not treat it as chat, just as they never
- * see a slash command.
+ * (AFK, leveling, counting) must not treat it as chat, just as they never see a slash
+ * command. Moderation (automod, honeypot) still scans it: see `commandMessageCreate`.
  * @param {any} message
  * @param {{ commands: Map<string, unknown>, prefix: string, botId?: string }} opts
  */
@@ -76,6 +77,8 @@ export async function handleMessage(message, { commands, prefix, botId = message
   if (message.author?.bot || typeof message.content !== 'string') return;
   const split = splitCommand(message.content, prefix, botId);
   if (!split) return;
+  // Moderation gets the message first: one automod deleted or the honeypot punished does not run.
+  if (await moderationOutcome(message)) return;
   const command = commands.get(split.name);
   if (!command) return runCustomCommand(message, split);
 

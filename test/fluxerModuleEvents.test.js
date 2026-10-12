@@ -197,18 +197,18 @@ test('a command message reaches messageCreateAny and the moderation-only command
   client.channels = new Map();
   client.users = { fetch: async () => null };
   registerFluxerModuleEvents(client, {
-    dispatch: async (event, key) => calls.push([event, key]),
+    dispatch: async (event, key, message) => calls.push([event, key, message.content]),
     isCommand: (m) => m.content.startsWith('!'),
   });
   client.emit('messageCreate', { guildId: RAW, content: '!afk lunsj', author: { id: 'u1', bot: false } });
   client.emit('messageCreate', { guildId: RAW, content: 'hello', author: { id: 'u1', bot: false } });
   await new Promise((r) => setImmediate(r));
-  // The two messages are handled concurrently, so only the set of events is fixed.
-  assert.deepEqual(calls.map((c) => c[0]).sort(), [
-    'commandMessageCreate',
-    'messageCreate',
-    'messageCreateAny',
-    'messageCreateAny',
+  // The two messages are handled concurrently, so compare as sets of (event, text).
+  assert.deepEqual(calls.map((c) => `${c[0]}:${c[2]}`).sort(), [
+    'commandMessageCreate:!afk lunsj',
+    'messageCreate:hello',
+    'messageCreateAny:!afk lunsj',
+    'messageCreateAny:hello',
   ]);
 });
 

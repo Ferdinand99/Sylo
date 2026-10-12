@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { SlashCommandBuilder, InteractionContextType, PermissionFlagsBits } from 'discord.js';
 import { handleMessage, splitCommand } from '../src/bot/framework/router.js';
 import { setCommandOverride } from '../src/db/commandOverrides.js';
+import { beginModeration, markModerated } from '../src/modules/lib/messageModeration.js';
 
 const RAW_GUILD = '900000000000000080';
 const UID = '111111111111111111';
@@ -176,4 +177,23 @@ test('isCommandMessage: true only for a known command from a human', async () =>
   assert.equal(isCommandMessage(fakeMessage({ content: '!nope' }).message, opts), false);
   assert.equal(isCommandMessage(fakeMessage({ content: 'ping' }).message, opts), false);
   assert.equal(isCommandMessage(fakeMessage({ content: '!ping', bot: true }).message, opts), false);
+});
+
+test('a command whose message moderation already acted on is not run', async () => {
+  let ran = 0;
+  const cmds = new Map([['ping', { data: ping, execute: async () => ran++ }]]);
+  const acted = fakeMessage({ content: '!ping' });
+  beginModeration(
+    acted.message,
+    (async () => {
+      markModerated(acted.message);
+    })()
+  );
+  await handleMessage(acted.message, { commands: cmds, prefix: '!' });
+  assert.equal(ran, 0);
+
+  const fine = fakeMessage({ content: '!ping' });
+  beginModeration(fine.message, Promise.resolve());
+  await handleMessage(fine.message, { commands: cmds, prefix: '!' });
+  assert.equal(ran, 1);
 });

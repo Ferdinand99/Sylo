@@ -16,6 +16,7 @@
 import { guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
+import { markModerated } from './lib/messageModeration.js';
 import { getGuildModule, setGuildModule } from '../db/modules.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget, MOD_COLOR } from '../bot/lib/moderation.js';
@@ -267,6 +268,7 @@ async function onTrapMessage(message, config) {
   const member = message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
   if (!member || isExempt(member, cfg)) return;
 
+  markModerated(message); // a command posted in a trap channel must not run
   const done = await punish(message.guild, member, entry, 'Honeypot: message posted in trap channel');
   if (entry.deleteMessage && message.deletable) await message.delete().catch(() => {});
   if (done) {
