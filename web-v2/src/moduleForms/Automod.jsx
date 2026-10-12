@@ -60,7 +60,7 @@ export default function Automod() {
       <p className="v2-state">
         {notAuthed ? (
           <>
-            Your session expired — <a href="/auth/discord/login">log in again</a>.
+            Your session expired — <a href="/auth/login">log in again</a>.
           </>
         ) : (
           `Couldn't load Auto-moderation settings (${error.message}).`

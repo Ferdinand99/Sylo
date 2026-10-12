@@ -8,6 +8,7 @@
 // turn the module on from the Dashboard overview grid first and its sidebar
 // row appears. A category with nothing left in it (every module in it is
 // off) is dropped too, rather than showing an empty header.
+import { isOperator } from '../lib/accountAuth.js';
 import { guildByKey } from '../../platform/platformOf.js';
 import { config } from '../../config.js';
 import { getModule } from '../../modules/registry.js';
@@ -115,7 +116,7 @@ export async function buildSidebar(req, gid = null) {
   // Health exposes cross-server data and DB backup/restore, and Personalizer
   // changes the bot's identity everywhere it's installed — hide both links
   // from anyone who isn't a bot operator rather than showing a link that 403s.
-  const isOwner = !config.authEnabled || config.ownerIds.includes(req.session?.user?.id);
+  const isOwner = !config.authEnabled || isOperator(req.account);
   const ownerOnly = new Set(['health', 'personalizer']);
 
   const top = TOP.filter((t) => !ownerOnly.has(t.key) || isOwner).map((t) => {

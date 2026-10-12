@@ -30,7 +30,7 @@ export async function apiFetch(path, options = {}) {
   }
   const res = await fetch(path, { ...options, headers, credentials: 'same-origin' });
 
-  if (res.redirected && res.url.includes('/auth/discord/login')) {
+  if (res.redirected && /\/auth\/(login|discord\/login|fluxer\/login)/.test(res.url)) {
     throw new ApiError('Not signed in', { status: 401, notAuthenticated: true });
   }
 

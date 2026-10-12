@@ -85,7 +85,7 @@ export default function Polls() {
       <p className="v2-state">
         {notAuthed ? (
           <>
-            Your session expired — <a href="/auth/discord/login">log in again</a>.
+            Your session expired — <a href="/auth/login">log in again</a>.
           </>
         ) : (
           `Couldn't load Polls settings (${state.error.message}).`

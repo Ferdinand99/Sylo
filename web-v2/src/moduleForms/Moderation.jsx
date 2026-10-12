@@ -44,7 +44,7 @@ export default function Moderation() {
       <p className="v2-state">
         {notAuthed ? (
           <>
-            Your session expired — <a href="/auth/discord/login">log in again</a>.
+            Your session expired — <a href="/auth/login">log in again</a>.
           </>
         ) : (
           `Couldn't load Moderation settings (${error.message}).`

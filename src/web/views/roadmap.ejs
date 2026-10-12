@@ -10,7 +10,7 @@
 
 <% if (!loggedIn) { %>
   <div class="banner info">
-    <a href="/auth/discord/login">Log in with Discord</a> to vote or suggest a feature.
+    <a href="/auth/login">Log in</a> to vote or suggest a feature.
   </div>
 <% } %>
 
@@ -30,7 +30,7 @@
             type="button"
             class="roadmap-vote<%= p.voted ? ' voted' : '' %>"
             data-post-id="<%= p.id %>"
-            <%= loggedIn ? '' : 'disabled title="Log in with Discord to vote"' %>
+            <%= loggedIn ? '' : 'disabled title="Log in to vote"' %>
           >
             <span class="n"><%= p.votes %></span>
             <span>vote<%= p.votes === 1 ? '' : 's' %></span>

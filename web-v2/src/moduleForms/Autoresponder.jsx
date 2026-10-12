@@ -53,7 +53,7 @@ export default function Autoresponder() {
       <p className="v2-state">
         {notAuthed ? (
           <>
-            Your session expired — <a href="/auth/discord/login">log in again</a>.
+            Your session expired — <a href="/auth/login">log in again</a>.
           </>
         ) : (
           `Couldn't load Autoresponder settings (${error.message}).`

@@ -14,6 +14,7 @@ import {
   isOwner,
   manageableGuilds,
   currentUser,
+  sessionUserId,
 } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -246,7 +247,7 @@ router.get('/csrf', (req, res) => {
 });
 
 // Open mode has no signed-in user, so the dashboard-version preference is one shared record.
-const prefsUserId = (req) => req.session?.user?.id ?? 'local-admin';
+const prefsUserId = (req) => sessionUserId(req) ?? 'local-admin';
 
 router.get(
   '/prefs',
@@ -2283,13 +2284,13 @@ function roadmapGroupsWithHtml(posts) {
 router.get(
   '/roadmap',
   asyncHandler(async (req, res) => {
-    const userId = req.session?.user?.id ?? null;
+    const userId = sessionUserId(req);
     const posts = await listPublicPosts(userId);
     const mine = userId ? await listUserPending(userId) : [];
     res.json({
       groups: roadmapGroupsWithHtml(posts),
       mine: mine.map((p) => ({ ...withRoadmapHtml(p), ago: timeAgo(p.createdAt) })),
-      isOwner: userId ? isOwner(userId) : false,
+      isOwner: userId ? isOwner(req) : false,
     });
   })
 );
@@ -2302,7 +2303,7 @@ router.post(
     const id = Number(req.params.id);
     const post = Number.isInteger(id) ? await getRoadmapPost(id) : null;
     if (!post || post.status === 'pending') return res.status(404).json({ error: 'No such post' });
-    res.json(await toggleRoadmapVote(id, req.session.user.id));
+    res.json(await toggleRoadmapVote(id, sessionUserId(req)));
   })
 );
 
@@ -2316,7 +2317,7 @@ router.post(
     if (!title || !description) {
       return res.status(400).json({ error: 'Title (3-100 chars) and description are required.' });
     }
-    await createRoadmapPost({ title, description, userId: req.session.user.id, status: 'pending' });
+    await createRoadmapPost({ title, description, userId: sessionUserId(req), status: 'pending' });
     res.json({ ok: true });
   })
 );
@@ -2350,7 +2351,7 @@ router.post(
     const post = await createRoadmapPost({
       title,
       description,
-      userId: req.session.user.id,
+      userId: sessionUserId(req),
       status: 'planned',
     });
     res.json({ post: withRoadmapHtml(post) });

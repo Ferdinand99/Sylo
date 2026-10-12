@@ -1,28 +1,13 @@
-// Regression coverage for the cookie-session size bug (issue #163): an
-// account managing enough Discord guilds pushed the signed, base64 session
-// cookie past the ~4093-byte limit browsers accept, silently dropping
-// `session.user` on every subsequent request and looping the OAuth login
-// forever. The fix stores only the ids of guilds the user actually manages
-// (filtered at login, not read time), as plain strings instead of
-// `{ id, owner, permissions }` objects, capped as a last resort.
+// Unit coverage for the guild-admin rules. Login, accounts and sessions are covered end to
+// end in auth.oauth.test.js. (The cookie no longer holds a guild list — see src/db/accounts.js —
+// so the cookie-size bug from issue #163 cannot recur in this design.)
 process.env.DISCORD_CLIENT_SECRET = 'test-secret';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
 
-const { adminGuildIds, adminGuildIdsFromOAuth, MAX_STORED_GUILDS } =
-  await import('../src/web/middleware/auth.js');
+const { adminGuildIds, adminGuildIdsFromOAuth } = await import('../src/web/middleware/auth.js');
 const { runtime } = await import('../src/runtime.js');
-
-// Mirrors keygrip's default signing (sha1, used by `cookies`/`cookie-session`
-// under the hood) closely enough to get a realistic cookie-value byte count
-// for a session object, without pulling in the real middleware/HTTP stack.
-function cookieValueBytes(sessionObj, key = 'x') {
-  const b64 = Buffer.from(JSON.stringify(sessionObj)).toString('base64');
-  const sig = createHmac('sha1', key).update(b64).digest('base64');
-  return Buffer.byteLength(`${b64}.${sig}`, 'utf8');
-}
 
 const ADMINISTRATOR = (1n << 3n).toString();
 const MANAGE_GUILD = (1n << 5n).toString();
@@ -56,31 +41,7 @@ test('adminGuildIdsFromOAuth: stores plain ids, not { id, owner, permissions } o
   assert.ok(ids.every((id) => typeof id === 'string'));
 });
 
-test('MAX_STORED_GUILDS worth of ids + a full session fits well under the 4093-byte cookie limit — issue #163', () => {
-  // The actual bug: an account in 50+ guilds pushed the old
-  // `{ id, owner, permissions }`-per-guild session past the browser's
-  // ~4093-byte Set-Cookie ceiling, which silently dropped `session.user` on
-  // every request after login and looped the OAuth flow forever. This
-  // reconstructs cookie-session's real encoding (base64 JSON + HMAC-SHA1
-  // signature) for a worst-case-realistic full session at the cap, to prove
-  // the fix actually fits rather than just asserting the cap constant exists.
-  const ids = Array.from({ length: MAX_STORED_GUILDS }, (_, i) => String(100000000000000000n + BigInt(i)));
-  const session = {
-    guilds: ids,
-    user: {
-      id: '111111111111111111',
-      username: 'a'.repeat(32), // Discord's max username length
-      global_name: 'a'.repeat(32),
-      avatar: 'a'.repeat(32), // avatar hash
-    },
-    guildsFetchedAt: Date.now(),
-    lastGuild: '111111111111111111',
-  };
-  const bytes = cookieValueBytes(session);
-  assert.ok(bytes < 4093, `expected the full session at the cap to fit under 4093 bytes, got ${bytes}`);
-});
-
-test("adminGuildIds(req): intersects the stored (already-filtered) ids with the bot's current guilds", (t) => {
+test("adminGuildIds(req): the identities' guilds, limited to the bot's current guilds", (t) => {
   const savedClient = runtime.client;
   runtime.client = {
     guilds: {
@@ -94,11 +55,16 @@ test("adminGuildIds(req): intersects the stored (already-filtered) ids with the 
     runtime.client = savedClient;
   });
 
-  const req = { session: { guilds: ['bot-guild-1', 'guild-bot-left', 'bot-guild-2'] } };
+  const req = {
+    account: {
+      id: 'acc',
+      identities: [{ platform: 'discord', guildIds: ['bot-guild-1', 'guild-bot-left', 'bot-guild-2'] }],
+    },
+  };
   assert.deepEqual([...adminGuildIds(req)].sort(), ['bot-guild-1', 'bot-guild-2']);
 });
 
-test('adminGuildIds(req): no session / no guilds → empty set, never throws', (t) => {
+test('adminGuildIds(req): no account / no guilds → empty set, never throws', (t) => {
   const savedClient = runtime.client;
   runtime.client = { guilds: { cache: new Map() } };
   t.after(() => {
@@ -106,6 +72,6 @@ test('adminGuildIds(req): no session / no guilds → empty set, never throws', (
   });
 
   assert.deepEqual([...adminGuildIds({})], []);
-  assert.deepEqual([...adminGuildIds({ session: {} })], []);
-  assert.deepEqual([...adminGuildIds({ session: { guilds: [] } })], []);
+  assert.deepEqual([...adminGuildIds({ account: null })], []);
+  assert.deepEqual([...adminGuildIds({ account: { id: 'a', identities: [] } })], []);
 });

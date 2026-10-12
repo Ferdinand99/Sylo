@@ -76,11 +76,11 @@ router.get(
       });
     }
 
-    if (config.authEnabled && !req.session?.user) {
+    if (config.authEnabled && !req.account) {
       if (req.session) req.session.returnTo = req.originalUrl;
-      return res.redirect('/auth/discord/login');
+      return res.redirect('/auth/login');
     }
-    if (config.authEnabled && !isOwner(req.session.user.id)) {
+    if (config.authEnabled && !isOwner(req)) {
       return forbidOwner(res);
     }
 

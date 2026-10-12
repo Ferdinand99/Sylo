@@ -3,7 +3,7 @@
 // open mode.
 import { guildByKey } from '../../platform/platformOf.js';
 import { config } from '../../config.js';
-import { adminGuildIds } from './auth.js';
+import { adminGuildIds, userIdForGuild } from './auth.js';
 import { getGuildModule } from '../../db/modules.js';
 
 function deny(res) {
@@ -22,9 +22,9 @@ function deny(res) {
 export async function ticketAccessState(req) {
   if (!config.authEnabled) return 'ok';
 
-  const userId = req.session?.user?.id;
-  if (!userId) return 'login';
+  if (!req.account) return 'login';
   const guildId = req.params.guildId;
+  const userId = userIdForGuild(req, guildId);
   if (adminGuildIds(req).has(guildId)) return 'ok';
 
   const staffRoles = (await getGuildModule(guildId, 'tickets')).config.staffRoles ?? [];
@@ -47,7 +47,7 @@ export async function requireTicketAccess(req, res, next) {
   if (state === 'ok') return next();
   if (state === 'login') {
     req.session.returnTo = req.originalUrl;
-    return res.redirect('/auth/discord/login');
+    return res.redirect('/auth/login');
   }
   deny(res);
 }
