@@ -193,7 +193,10 @@ function instanceInviteRe() {
   const key = prefixes.join('|');
   if (key !== instanceRe.key) {
     const escaped = prefixes.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('/', '\\/'));
-    instanceRe = { key, re: escaped.length ? new RegExp(`(?:${escaped.join('|')})\\/[\\w-]+`, 'i') : null };
+    instanceRe = {
+      key,
+      re: escaped.length ? new RegExp(`(?<![\\w.-])(?:${escaped.join('|')})\\/[\\w-]+`, 'i') : null,
+    };
   }
   return instanceRe.re;
 }

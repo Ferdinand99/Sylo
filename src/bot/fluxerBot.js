@@ -94,11 +94,9 @@ export async function startFluxerBot(opts = {}) {
   client.once('ready', () =>
     log.info('fluxer', `Logged in as ${client.user?.username} - serving ${client.guilds.cache.size} guild(s)`)
   );
-  registerFluxerModuleEvents(client, {
-    voice,
-    isCommand: (message) => isCommandMessage(message, { commands, prefix }),
-  });
-  registerDmTickets(client, { isCommand: (message) => isCommandMessage(message, { commands, prefix }) }); // a DM to the bot opens a ticket, as on Discord
+  const isCommand = (message) => isCommandMessage(message, { commands, prefix });
+  registerFluxerModuleEvents(client, { voice, isCommand });
+  registerDmTickets(client, { isCommand }); // a DM to the bot opens a ticket, as on Discord
   attachPrefixCommands(client, { commands, prefix });
   client.on('messageReactionAdd', async (payload) => {
     try {

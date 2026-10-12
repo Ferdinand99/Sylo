@@ -18,8 +18,20 @@ export function markModerated(message) {
   moderated.add(message);
 }
 
-/** Wait for the message's moderation to finish; true when something acted on it. */
-export async function moderationOutcome(message) {
-  await pending.get(message)?.catch(() => {});
+/**
+ * Wait for the message's moderation to finish; true when something acted on it. The wait is
+ * bounded: the work covers every message handler, and one stuck module must not hold every
+ * command back, so after `timeoutMs` the command is judged on what has been marked so far.
+ */
+export async function moderationOutcome(message, { timeoutMs = 3000 } = {}) {
+  const work = pending.get(message);
+  if (work) {
+    let timer;
+    const limit = new Promise((resolve) => {
+      timer = setTimeout(resolve, timeoutMs);
+    });
+    await Promise.race([work.catch(() => {}), limit]);
+    clearTimeout(timer);
+  }
   return moderated.has(message);
 }

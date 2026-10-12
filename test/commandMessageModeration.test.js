@@ -96,3 +96,12 @@ test('a staff member running a command is not scanned as if it were chat', async
   await dispatch('messageCreate', GUILD, chat.message);
   assert.equal(chat.log.deleted, true);
 });
+
+test('moderationOutcome gives up waiting on a stuck module instead of holding every command back', async () => {
+  const { beginModeration, moderationOutcome } = await import('../src/modules/lib/messageModeration.js');
+  const message = {};
+  beginModeration(message, new Promise(() => {})); // never settles
+  const started = Date.now();
+  assert.equal(await moderationOutcome(message, { timeoutMs: 30 }), false);
+  assert.ok(Date.now() - started < 1000);
+});

@@ -9,12 +9,14 @@ import { PlatformContext } from '../platformContext.jsx';
 // here for modules that do (see MODULE_FORMS).
 export default function ModulePage() {
   const { guildId, moduleId } = useParams();
-  const info = usePlatformInfo(guildId);
+  const { info, loading } = usePlatformInfo(guildId);
   const { platform, notes } = info;
   const Form = MODULE_FORMS[moduleId];
   if (!Form) {
     return <p className="v2-state">This module doesn't have a V2 settings page yet.</p>;
   }
+  // Wait for the platform so a Fluxer server never flashes Discord wording or settings.
+  if (loading) return <p className="v2-state">Loading…</p>;
   const note = notes[moduleId];
   return (
     <PlatformContext.Provider value={info}>

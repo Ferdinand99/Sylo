@@ -69,6 +69,10 @@ test('containsInvite: a self-hosted Fluxer instance’s own invite links count t
     assert.ok(containsInvite('join https://fluxer.opland.net/invite/AbC123'));
     assert.ok(containsInvite('FLUXER.OPLAND.NET/invite/xyz'));
     assert.ok(!containsInvite('see https://fluxer.opland.net/channels/1/2'), 'only invite paths');
+    assert.ok(
+      !containsInvite('see https://notfluxer.opland.net/invite/AbC'),
+      'a different domain that merely ends the same'
+    );
     assert.ok(containsInvite('discord.gg/abc'), 'the built-in forms still match');
     // An instance that publishes a bare invite host (like hosted fluxer.gg).
     setFluxerInstance({
