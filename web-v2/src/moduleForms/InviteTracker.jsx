@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useCmd } from '../platformContext.jsx';
 import { getModuleConfig, saveModuleConfig, setInviteBonus, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 
 export default function InviteTracker() {
   const { guildId } = useParams();
+  const cmd = useCmd();
   const { data, loading, error, setData } = useApiData(
     () => getModuleConfig(guildId, 'invite-tracker'),
     [guildId]
@@ -29,7 +31,7 @@ export default function InviteTracker() {
       <p className="v2-state">
         {notAuthed ? (
           <>
-            Your session expired — <a href="/auth/discord/login">log in again</a>.
+            Your session expired — <a href="/auth/login">log in again</a>.
           </>
         ) : (
           `Couldn't load Invite tracker settings (${error.message}).`
@@ -76,9 +78,9 @@ export default function InviteTracker() {
     <>
       <h1 className="v2-section-title">Invite tracker</h1>
       <p className="v2-field-hint">
-        Members get a personal invite link with <code>/invites</code>. When someone joins through it, that
-        member's invite count goes up. <code>/inviter</code> and <code>/invites-leaderboard</code> read this
-        same data.
+        Members get a personal invite link with <code>{cmd('/invites')}</code>. When someone joins through it,
+        that member's invite count goes up. <code>{cmd('/inviter')}</code> and{' '}
+        <code>{cmd('/invites-leaderboard')}</code> read this same data.
       </p>
 
       {!board.canReadInvites ? (

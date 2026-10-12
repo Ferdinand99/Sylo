@@ -97,13 +97,17 @@
 
     <% var curG = sb.guild || (mg.length ? mg.find(function (g) { return g.id === (typeof activeGuildId !== 'undefined' ? activeGuildId : null); }) : null); %>
     <% var loggedIn = typeof user !== 'undefined' && user && !user.open; %>
-    <% var inviteUrl = typeof botInviteUrl !== 'undefined' ? botInviteUrl : ''; %>
+    <% var invites = typeof botInvites !== 'undefined' ? botInvites : []; %>
+    <%# Once the account spans both platforms, say which platform each server is on. %>
+    <% var multiPlatform = new Set(mg.map(function (g) { return g.platform; })).size > 1; %>
+    <% function platBadge(g) { return multiPlatform && g ? '<span class="srv-badge srv-badge-' + g.platform + '">' + (g.platform === 'fluxer' ? 'Fluxer' : 'Discord') + '</span>' : ''; } %>
     <% if (mg.length || loggedIn) { %>
       <details class="srv-switch" x-data @click.outside="$el.open = false" @keydown.escape.window="$el.open = false">
         <summary>
           <span class="srv-switch-face">
             <% if (curG && curG.icon) { %><img class="srv-switch-icon" src="<%= curG.icon %>" alt="" /><% } else { %><span class="srv-switch-ph"><%= curG ? curG.name.charAt(0) : '+' %></span><% } %>
             <span class="srv-switch-name"><%= curG ? curG.name : 'Select a server' %></span>
+            <%- platBadge(mg.find(function (g) { return curG && g.id === curG.id; })) %>
           </span>
           <span class="srv-switch-caret" aria-hidden="true">▾</span>
         </summary>
@@ -112,14 +116,15 @@
             <a href="/guilds/<%= g.id %>/overview" class="<%= curG && g.id === curG.id ? 'active' : '' %>">
               <% if (g.icon) { %><img src="<%= g.icon %>" alt="" /><% } else { %><span class="srv-switch-dot"><%= g.name.charAt(0) %></span><% } %>
               <span><%= g.name %></span>
+              <%- platBadge(g) %>
             </a>
           <% }) %>
-          <% if (inviteUrl) { %>
-            <a class="srv-switch-add" href="<%= inviteUrl %>" target="_blank" rel="noopener">
+          <% invites.forEach(function (inv) { %>
+            <a class="srv-switch-add" href="<%= inv.url %>" target="_blank" rel="noopener">
               <span class="srv-switch-dot" aria-hidden="true">＋</span>
-              <span>Add new server</span>
+              <span><%= invites.length > 1 ? 'Add a server on ' + inv.label : 'Add new server' %></span>
             </a>
-          <% } %>
+          <% }) %>
         </div>
       </details>
     <% } %>
@@ -158,11 +163,11 @@
       <% if (typeof user !== 'undefined' && user && !user.open) { %>
         <div class="sb-user">
           <% if (user.avatar) { %><img class="avatar" src="<%= user.avatar %>" alt="" /><% } %>
-          <span class="sb-user-name"><%= user.name %></span>
+          <a class="sb-user-name" href="/account" title="Your account"><%= user.name %></a>
           <a href="/auth/logout" title="Log out" hx-boost="false">Log out</a>
         </div>
       <% } else if (typeof authEnabled !== 'undefined' && authEnabled) { %>
-        <a class="sb-login" href="/auth/discord/login" hx-boost="false">Log in with Discord</a>
+        <a class="sb-login" href="/auth/login" hx-boost="false">Log in</a>
       <% } else { %>
         <span class="tag-open">open mode — no auth</span>
       <% } %>

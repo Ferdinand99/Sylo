@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getCustomCommands, saveCustomCommand, deleteCustomCommand, ApiError } from '../api.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
+import { PlatformContext } from '../platformContext.jsx';
 
 const ACTION_TYPES = [
   ['reply', 'Bot responds with a message in the current channel'],
@@ -155,6 +156,7 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
 }
 
 function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel, saving }) {
+  const { platform, commandPrefix } = useContext(PlatformContext);
   const [name, setName] = useState(initial.name || '');
   const [description, setDescription] = useState(initial.description || '');
   const [actions, setActions] = useState(() => {
@@ -230,7 +232,7 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
       <div className="v2-field">
         <label>Name</label>
         <div className="v2-field-row" style={{ alignItems: 'center', marginBottom: 0 }}>
-          <span className="v2-field-hint">/</span>
+          <span className="v2-field-hint">{commandPrefix}</span>
           <input
             type="text"
             maxLength={32}
@@ -241,12 +243,22 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
             required
           />
         </div>
-        <p className="v2-field-hint">Lowercase letters, numbers, - and _. This is the slash command.</p>
+        <p className="v2-field-hint">
+          Lowercase letters, numbers, - and _.{' '}
+          {platform === 'fluxer'
+            ? `Members run it as ${commandPrefix}name in chat.`
+            : 'This is the slash command.'}
+        </p>
       </div>
 
       <div className="v2-field">
         <label>
-          Description <span className="v2-field-hint">— shown in Discord's command list</span>
+          Description{' '}
+          <span className="v2-field-hint">
+            {platform === 'fluxer'
+              ? '— a note for you; Fluxer has no command list to show it in'
+              : "— shown in Discord's command list"}
+          </span>
         </label>
         <input
           type="text"
@@ -344,6 +356,7 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
 }
 
 export default function CustomCommands() {
+  const { platform } = useContext(PlatformContext);
   const { guildId } = useParams();
   const [state, setState] = useState({ loading: true, data: null, error: null });
   const [editingId, setEditingId] = useState(null);
@@ -368,7 +381,7 @@ export default function CustomCommands() {
       <p className="v2-state">
         {notAuthed ? (
           <>
-            Your session expired — <a href="/auth/discord/login">log in again</a>.
+            Your session expired — <a href="/auth/login">log in again</a>.
           </>
         ) : (
           `Couldn't load Custom commands (${state.error.message}).`
@@ -408,7 +421,8 @@ export default function CustomCommands() {
     <>
       <h1 className="v2-section-title">Custom commands</h1>
       <p className="v2-field-hint">
-        Build /slash commands from an ordered list of actions: reply, post to a channel, add or remove a role.
+        Build {platform === 'fluxer' ? 'chat commands' : '/slash commands'} from an ordered list of actions:
+        reply, post to a channel, add or remove a role.
       </p>
 
       {notice ? <p className="v2-row-warn">{notice}</p> : null}

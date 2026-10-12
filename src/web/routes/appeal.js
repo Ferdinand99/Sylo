@@ -2,8 +2,8 @@
 // their DM, answers the guild's questions, and the appeal lands in the
 // dashboard's Appeals tab for staff to accept or deny. Reopening the same link
 // later shows the decision — notification never depends on a DM getting through.
+import { guildByKey } from '../../platform/platformOf.js';
 import { Router } from 'express';
-import { runtime } from '../../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../../db/modules.js';
 import { log } from '../../lib/log.js';
 import {
@@ -42,14 +42,14 @@ function render(res, state, extra = {}) {
  */
 async function resolve(req) {
   const { guildId } = req.params;
-  const parsed = verifyAppealToken(req.query.t ?? req.body.t);
+  const parsed = verifyAppealToken(req.query.t ?? req.body?.t);
   if (!parsed || parsed.guildId !== guildId) {
     return { error: 'This appeal link is invalid or has expired. Contact the server staff for a new one.' };
   }
   if (!(await isModuleEnabled(guildId, 'appeals'))) {
     return { error: 'This server is not accepting ban appeals right now.' };
   }
-  const guild = runtime.client?.guilds.cache.get(guildId);
+  const guild = guildByKey(guildId);
   if (!guild) return { error: 'That server could not be found.' };
   const cfg = normaliseAppealsConfig((await getGuildModule(guildId, 'appeals')).config);
 
@@ -192,7 +192,12 @@ router.post('/:guildId', async (req, res, next) => {
       .then((u) => u.tag)
       .catch(() => '');
 
-    const appealId = await createAppeal(guild.id, { userId: parsed.userId, userTag, banReason, answers });
+    const appealId = await createAppeal(req.params.guildId, {
+      userId: parsed.userId,
+      userTag,
+      banReason,
+      answers,
+    });
     if (appealId == null) {
       return render(res, 'pending', {
         guildName: guild.name,
@@ -201,11 +206,11 @@ router.post('/:guildId', async (req, res, next) => {
       });
     }
 
-    const appeal = await getAppeal(guild.id, appealId);
+    const appeal = await getAppeal(req.params.guildId, appealId);
     announceNewAppeal(guild, appeal).catch((err) =>
       log.error('appeals', 'new-appeal notice failed:', err.message)
     );
-    log.info('appeals', `${parsed.userId} submitted appeal #${appealId} in ${guild.id}`);
+    log.info('appeals', `${parsed.userId} submitted appeal #${appealId} in ${req.params.guildId}`);
 
     render(res, 'submitted', {
       guildName: guild.name,

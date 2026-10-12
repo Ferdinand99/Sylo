@@ -2,6 +2,7 @@
 //   { joinChannel, joinMessage, leaveChannel, leaveMessage, dmMessage, useEmbed,
 //     card, cardBackground }
 // Placeholders: {user} {user.tag} {user.name} {user.id} {server} {memberCount}
+import { guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { on } from './dispatch.js';
 import { sendToChannel } from './lib/send.js';
@@ -44,7 +45,7 @@ async function buildCard(member, config) {
       name: member.user.globalName || member.user.username,
       avatarUrl: member.user.displayAvatarURL({ extension: 'png', size: 256 }),
       memberCount: member.guild.memberCount,
-      accent: await guildEmbedColor(member.guild.id),
+      accent: await guildEmbedColor(guildKey(member.guild)),
       backgroundUrl: config.cardBackground || undefined,
     });
     return png ? new AttachmentBuilder(png, { name: 'welcome.png' }) : null;
@@ -60,7 +61,7 @@ async function payloadFor(text, member, useEmbed, card) {
     return { content: text, files, allowedMentions: { users: [member.id] } };
   }
   const embed = new EmbedBuilder()
-    .setColor(await guildEmbedColor(member.guild.id))
+    .setColor(await guildEmbedColor(guildKey(member.guild)))
     .setDescription(text)
     .setTimestamp(Date.now());
   // The card already shows the avatar — skip the thumbnail then.

@@ -11,9 +11,17 @@
 //     ignoredRoles: [], moderatorRoles: [],
 //     ownerPerms: { manageChannels, managePermissions, prioritySpeaker, moveMembers },
 //     textChannel: { enabled, restrictCommands, pinUsages, restrict } }
+import {
+  allClientsReady,
+  guildByKey,
+  guildKey,
+  guildSupports,
+  platformOfGuild,
+} from '../platform/platformOf.js';
+import { createGuildChannel, deleteGuildChannel } from '../platform/channels.js';
+import { config } from '../config.js';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
-import { runtime } from '../runtime.js';
 import { getGuildModule } from '../db/modules.js';
 import { log } from '../lib/log.js';
 import {
@@ -35,6 +43,7 @@ import {
 const DEFAULT_NAME = "#{index} - {username}'s Channel";
 const SWEEP_MS = 60 * 1000;
 const CREATE_DEBOUNCE_MS = 3000;
+const JOIN_GRACE_MS = 2 * 60 * 1000;
 const P = PermissionFlagsBits;
 
 const clampInt = (v, min, max, dflt) => {
@@ -130,6 +139,7 @@ function ownerAllowBits(hub) {
 // often denies @everyone Speak, and copying that onto the spawned channel shows
 // its own owner as server-muted.
 export function syncedOverwrites(source, guild) {
+  // eslint-disable-next-line no-restricted-syntax -- the @everyone role id is the platform guild id
   return [...source].filter((ow) => ow.id !== guild.id);
 }
 
@@ -144,6 +154,7 @@ export function buildOverwrites(guild, hub, ownerId, { forText = false } = {}) {
   const everyoneDeny = [];
   if (hub.roleList.length && hub.roleMode === 'deny') everyoneDeny.push(view);
   if (everyoneAllow.length || everyoneDeny.length) {
+    // eslint-disable-next-line no-restricted-syntax -- the @everyone role id is the platform guild id
     overwrites.push({ id: guild.id, allow: everyoneAllow, deny: everyoneDeny });
   }
 
@@ -172,17 +183,21 @@ export function buildOverwrites(guild, hub, ownerId, { forText = false } = {}) {
 const lastCreate = new Map();
 
 async function handleJoin(guild, member, hub) {
-  const key = `${guild.id}:${member.id}`;
+  const key = `${guildKey(guild)}:${member.id}`;
   if (Date.now() - (lastCreate.get(key) ?? 0) < CREATE_DEBOUNCE_MS) return;
   lastCreate.set(key, Date.now());
 
   const me = guild.members.me;
-  if (!me?.permissions.has(P.ManageChannels) || !me.permissions.has(P.MoveMembers)) return;
+  // Moving the member needs Move Members; on a platform where a bot cannot move
+  // anyone (Fluxer) the member is sent a link instead, so only Manage Channels is needed.
+  const canMove = guildSupports(guild, 'moveMembers');
+  if (!me?.permissions.has(P.ManageChannels) || (canMove && !me.permissions.has(P.MoveMembers))) return;
 
-  const prior = await findUserHubChannel(guild.id, hub.hubChannelId, member.id);
+  const prior = await findUserHubChannel(guildKey(guild), hub.hubChannelId, member.id);
   if (prior) {
     const ch = guild.channels.cache.get(prior.channel_id);
-    if (ch) return void member.voice.setChannel(ch).catch(() => {});
+    if (ch)
+      return void (canMove ? member.voice.setChannel(ch).catch(() => {}) : sendJoinLink(guild, member, ch));
     await removeTempChannel(prior.channel_id);
   }
 
@@ -211,7 +226,7 @@ async function handleJoin(guild, member, hub) {
 
   let channel;
   try {
-    channel = await guild.channels.create({
+    channel = await createGuildChannel(guild, {
       name,
       type: ChannelType.GuildVoice,
       parent: parent ?? undefined,
@@ -225,16 +240,19 @@ async function handleJoin(guild, member, hub) {
     return;
   }
 
+  // Commands are slash commands on Discord and prefix commands elsewhere.
+  const prefix = platformOfGuild(guild) === 'discord' ? '/' : config.commandPrefix;
   let textChannelId = null;
   if (hub.textChannel.enabled) {
     try {
-      const t = await guild.channels.create({
+      const t = await createGuildChannel(guild, {
         name,
         type: ChannelType.GuildText,
         parent: parent ?? undefined,
         reason: `Temp voice text for ${member.user.tag}`,
         permissionOverwrites: hub.textChannel.restrict
           ? [
+              // eslint-disable-next-line no-restricted-syntax -- the @everyone role id is the platform guild id
               { id: guild.id, deny: [P.ViewChannel] },
               ...buildOverwrites(guild, hub, member.id, { forText: true }),
             ]
@@ -247,10 +265,13 @@ async function handleJoin(guild, member, hub) {
             embeds: [
               {
                 title: `Controls for ${name}`,
-                description:
-                  '`/voice-lock` `/voice-unlock` · `/voice-hide` `/voice-reveal`\n' +
-                  '`/voice-limit` `/voice-rename` · `/voice-kick` `/voice-ban` `/voice-unban`\n' +
-                  '`/voice-claim` `/voice-transfer` `/voice-owner`',
+                description: [
+                  ['lock', 'unlock', 'hide', 'reveal'],
+                  ['limit', 'rename', 'kick', 'ban', 'unban'],
+                  ['claim', 'transfer', 'owner'],
+                ]
+                  .map((row) => row.map((c) => '`' + prefix + 'voice-' + c + '`').join(' '))
+                  .join('\n'),
                 color: 0x5b7cfa,
               },
             ],
@@ -263,23 +284,35 @@ async function handleJoin(guild, member, hub) {
     }
   }
 
-  const moved = await member.voice
-    .setChannel(channel)
-    .then(() => true)
-    .catch(() => false);
-  if (!moved) {
-    await channel.delete('Temp voice: member never joined').catch(() => {});
-    if (textChannelId) await guild.channels.delete(textChannelId).catch(() => {});
-    return;
+  if (canMove) {
+    const moved = await member.voice
+      .setChannel(channel)
+      .then(() => true)
+      .catch(() => false);
+    if (!moved) {
+      await channel.delete('Temp voice: member never joined').catch(() => {});
+      if (textChannelId)
+        await deleteGuildChannel(guild, textChannelId, 'Temp voice: member never joined').catch(() => {});
+      return;
+    }
   }
   await addTempChannel({
     channelId: channel.id,
-    guildId: guild.id,
+    guildId: guildKey(guild),
     hubId: hub.hubChannelId,
     ownerId: member.id,
     name,
     textChannelId,
   });
+  // The member joins on their own; if they never do, the sweep removes the channel after JOIN_GRACE_MS.
+  if (!canMove) await sendJoinLink(guild, member, channel);
+}
+
+/** Tell a member where their temp channel is (a bot cannot move them into it on Fluxer). */
+async function sendJoinLink(guild, member, channel) {
+  await member.user
+    .send(`Your temporary voice channel in **${guild.name}** is ready — join it here: <#${channel.id}>`)
+    .catch(() => {});
 }
 
 // --- cleanup + ownership transfer -----------------------------------
@@ -293,7 +326,7 @@ async function onLeaveTemp(guild, channelId) {
   if (channel.members.size > 0) {
     await setTempEmptySince(channelId, null);
     // Owner left but others remain → transfer unless the hub locks ownership.
-    const hub = await hubForChannel(guild.id, row.hub_id);
+    const hub = await hubForChannel(guildKey(guild), row.hub_id);
     if (!channel.members.has(row.owner_id) && hub && !hub.ownershipLock) {
       const next = channel.members.first();
       if (next) {
@@ -306,7 +339,7 @@ async function onLeaveTemp(guild, channelId) {
     return;
   }
 
-  const hub = await hubForChannel(guild.id, row.hub_id);
+  const hub = await hubForChannel(guildKey(guild), row.hub_id);
   const keep = hub?.keepAliveMinutes ?? 0;
   if (keep === 0) return void destroy(guild, row);
   if (keep < 0) return; // never auto-delete
@@ -316,7 +349,8 @@ async function onLeaveTemp(guild, channelId) {
 async function destroy(guild, row) {
   const ch = guild.channels.cache.get(row.channel_id);
   if (ch) await ch.delete('Temp voice: empty').catch(() => {});
-  if (row.text_channel_id) await guild.channels.delete(row.text_channel_id).catch(() => {});
+  if (row.text_channel_id)
+    await deleteGuildChannel(guild, row.text_channel_id, 'Temp voice: empty').catch(() => {});
   await removeTempChannel(row.channel_id);
 }
 
@@ -344,18 +378,18 @@ on('temp-voice', 'voiceStateUpdate', async ({ old: oldState, new: newState }, ra
 
 // --- keep-alive sweep --------------------------------------------------
 
-async function sweep() {
-  const client = runtime.client;
-  if (!client?.isReady()) return;
+export async function sweepTempChannels() {
+  if (!allClientsReady()) return;
   const now = Date.now();
   for (const row of await listAllTempChannels()) {
-    const guild = client.guilds.cache.get(row.guild_id);
+    const guild = guildByKey(row.guild_id);
     if (!guild) continue;
     const channel =
       guild.channels.cache.get(row.channel_id) ??
       (await guild.channels.fetch(row.channel_id).catch(() => null));
     if (!channel) {
-      if (row.text_channel_id) await guild.channels.delete(row.text_channel_id).catch(() => {});
+      if (row.text_channel_id)
+        await deleteGuildChannel(guild, row.text_channel_id, 'Temp voice: gone').catch(() => {});
       await removeTempChannel(row.channel_id);
       continue;
     }
@@ -363,25 +397,32 @@ async function sweep() {
       if (row.empty_since) await setTempEmptySince(row.channel_id, null);
       continue;
     }
-    const hub = await hubForChannel(guild.id, row.hub_id);
+    const hub = await hubForChannel(guildKey(guild), row.hub_id);
     const keep = hub?.keepAliveMinutes ?? 0;
     if (keep < 0) continue;
     const since = row.empty_since ?? row.created_at;
-    if (now - since >= keep * 60_000) await destroy(guild, row);
+    // A channel nobody has been in yet gets a grace period: its owner may still be joining it.
+    const wait = Math.max(keep * 60_000, row.empty_since ? 0 : JOIN_GRACE_MS);
+    if (now - since >= wait) await destroy(guild, row);
   }
 }
 
-setInterval(() => sweep().catch((e) => log.error('temp-voice', 'sweep:', e.message)), SWEEP_MS).unref();
-setTimeout(() => sweep().catch(() => {}), 30_000).unref();
+setInterval(
+  () => sweepTempChannels().catch((e) => log.error('temp-voice', 'sweep:', e.message)),
+  SWEEP_MS
+).unref();
+setTimeout(() => sweepTempChannels().catch(() => {}), 30_000).unref();
 
 // --- command helpers (used by bot/commands/voice-*.js) ---------------
 
 export async function setLock(channel, guild, locked) {
   await setTempLocked(channel.id, locked);
+  // eslint-disable-next-line no-restricted-syntax -- the @everyone role id is the platform guild id
   return channel.permissionOverwrites.edit(guild.id, { Connect: locked ? false : null }).catch(() => {});
 }
 export async function setHidden(channel, guild, hidden) {
   await setTempHidden(channel.id, hidden);
+  // eslint-disable-next-line no-restricted-syntax -- the @everyone role id is the platform guild id
   return channel.permissionOverwrites.edit(guild.id, { ViewChannel: hidden ? false : null }).catch(() => {});
 }
 export async function banFromChannel(channel, row, userId) {
@@ -403,7 +444,7 @@ export async function renameTemp(channel, name) {
   return channel.setName(name.slice(0, 100)).catch(() => {});
 }
 export async function transferTemp(channel, guild, row, newOwnerId) {
-  const hub = await hubForChannel(guild.id, row.hub_id);
+  const hub = await hubForChannel(guildKey(guild), row.hub_id);
   if (row.owner_id) await channel.permissionOverwrites.delete(row.owner_id).catch(() => {});
   await setTempOwner(channel.id, newOwnerId);
   if (hub) {

@@ -2,7 +2,7 @@
 // time, or on a repeating interval with an optional start/end window and a
 // weekday filter. Not event-driven: a polling loop (started on import) checks
 // for due reminders.
-import { runtime } from '../runtime.js';
+import { allClientsReady, guildByKey } from '../platform/platformOf.js';
 import { isModuleEnabled } from '../db/modules.js';
 import {
   dueScheduled,
@@ -55,12 +55,12 @@ function payloadFor(reminder) {
 }
 
 async function tick() {
-  if (!runtime.client?.isReady()) return;
+  if (!allClientsReady()) return;
   const now = Date.now();
 
   for (const r of await dueScheduled(now)) {
     const enabled = await isModuleEnabled(r.guild_id, MODULE_ID);
-    const inGuild = runtime.client.guilds.cache.has(r.guild_id);
+    const inGuild = Boolean(guildByKey(r.guild_id));
 
     if (r.mode === 'single') {
       await markSingleFired(r.id, now); // claim it first so a crash can't double-fire

@@ -136,3 +136,25 @@ test('unlockChannel deletes the overwrite when there was none before the lock', 
   assert.equal(ch._deletes.length, 1);
   assert.equal(await getChannelLock(G, C1), null);
 });
+
+test('on a platform without threads, the lock leaves the thread permissions out', async () => {
+  const { runtime } = await import('../src/runtime.js');
+  const { lockPermsFor } = await import('../src/bot/lib/channelLock.js');
+  assert.deepEqual(lockPermsFor('fluxer'), ['SendMessages', 'AddReactions']);
+  assert.deepEqual(lockPermsFor('discord'), LOCK_PERMS);
+  assert.deepEqual(Object.keys(denyLockPerms('fluxer')), ['SendMessages', 'AddReactions']);
+  assert.deepEqual(Object.keys(restoreLockPerms(0n, 0n, 'fluxer')), ['SendMessages', 'AddReactions']);
+
+  await clearGuildChannelLocks(G);
+  const fluxer = {};
+  runtime.clients.fluxer = fluxer;
+  try {
+    const ch = fakeChannel(C2, undefined);
+    ch.guild.client = fluxer;
+    await lockChannel(ch, { moderatorTag: 'mod#1' });
+    assert.deepEqual(Object.keys(ch._edits.at(-1).opts), ['SendMessages', 'AddReactions']);
+    await unlockChannel(ch, { moderatorTag: 'mod#1' });
+  } finally {
+    runtime.clients.fluxer = null;
+  }
+});

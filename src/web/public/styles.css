@@ -1158,3 +1158,32 @@ label.checkline input { width: auto; }
 .u-mw-xl { max-width: var(--mw-xl); }
 .u-mw-2xl { max-width: var(--mw-2xl); }
 .u-list { margin: 0; padding-left: 18px; line-height: 1.7; }
+
+/* Which platform a server is on, shown once an account spans more than one. */
+.srv-badge { flex: none; margin-left: auto; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; border: 1px solid var(--border); color: var(--muted); }
+.srv-badge-fluxer { color: #3fb7a8; border-color: rgba(63, 183, 168, 0.4); }
+.srv-badge-discord { color: #8b9bff; border-color: rgba(139, 155, 255, 0.4); }
+
+/* A note on a module page about what differs on the server's platform (Fluxer). */
+.platform-note {
+  margin: 0 0 var(--sp-3);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.platform-note-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}

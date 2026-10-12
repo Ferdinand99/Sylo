@@ -13,8 +13,10 @@
 // triggerCount is bot-managed — bumped each time that row actually punishes
 // someone, and (for message rows) shown live in the trap message itself,
 // e.g. "Bans: 14" — never form-editable.
+import { guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
+import { markModerated } from './lib/messageModeration.js';
 import { getGuildModule, setGuildModule } from '../db/modules.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget, MOD_COLOR } from '../bot/lib/moderation.js';
@@ -117,7 +119,7 @@ async function punish(guild, member, entry, reason) {
   if (!done) return null;
 
   const { caseNumber } = await addCase({
-    guildId: guild.id,
+    guildId: guildKey(guild),
     userId: member.id,
     moderatorId: 'honeypot',
     action: entry.action,
@@ -148,7 +150,7 @@ async function punish(guild, member, entry, reason) {
 const honeypotBumpQueue = new Map();
 
 export async function bumpHoneypotStat(guild, kind, channelId) {
-  const key = `${guild.id}:${kind}:${channelId}`;
+  const key = `${guildKey(guild)}:${kind}:${channelId}`;
   const run = (honeypotBumpQueue.get(key) ?? Promise.resolve()).then(() =>
     bumpHoneypotStatOnce(guild, kind, channelId)
   );
@@ -169,12 +171,12 @@ export async function bumpHoneypotStat(guild, kind, channelId) {
  * "Bans: N" (or Kicks/Timeouts) count is never stale.
  */
 async function bumpHoneypotStatOnce(guild, kind, channelId) {
-  const fresh = (await getGuildModule(guild.id, 'honeypot')).config;
+  const fresh = (await getGuildModule(guildKey(guild), 'honeypot')).config;
   const list = Array.isArray(fresh[kind]) ? fresh[kind] : [];
   const row = list.find((r) => r.channelId === channelId);
   if (!row) return;
   row.triggerCount = (row.triggerCount || 0) + 1;
-  await setGuildModule(guild.id, 'honeypot', { config: { ...fresh, [kind]: list } });
+  await setGuildModule(guildKey(guild), 'honeypot', { config: { ...fresh, [kind]: list } });
 
   if (kind !== 'messages' || !row.messageId) return;
   const channel =
@@ -246,17 +248,17 @@ export async function ensureHoneypotMessages(guild, config) {
   }
 
   if (changed) {
-    const fresh = (await getGuildModule(guild.id, 'honeypot')).config;
+    const fresh = (await getGuildModule(guildKey(guild), 'honeypot')).config;
     const byChannel = new Map(rows.map((r) => [r.channelId, r]));
     const merged = {
       ...fresh,
       messages: (fresh.messages ?? []).map((m) => byChannel.get(m.channelId) ?? m),
     };
-    await setGuildModule(guild.id, 'honeypot', { config: merged });
+    await setGuildModule(guildKey(guild), 'honeypot', { config: merged });
   }
 }
 
-on('honeypot', 'messageCreate', async (message, config) => {
+async function onTrapMessage(message, config) {
   if (message.partial || !message.guild) return;
   const cfg = normaliseHoneypotConfig(config);
   if (!cfg.channels.length) return;
@@ -266,11 +268,12 @@ on('honeypot', 'messageCreate', async (message, config) => {
   const member = message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
   if (!member || isExempt(member, cfg)) return;
 
+  markModerated(message); // a command posted in a trap channel must not run
   const done = await punish(message.guild, member, entry, 'Honeypot: message posted in trap channel');
   if (entry.deleteMessage && message.deletable) await message.delete().catch(() => {});
   if (done) {
     await bumpHoneypotStat(message.guild, 'channels', message.channelId);
-    await recordHoneypotCatch(message.guild.id, {
+    await recordHoneypotCatch(guildKey(message.guild), {
       userId: member.id,
       userTag: member.user.tag,
       kind: 'channel',
@@ -278,7 +281,11 @@ on('honeypot', 'messageCreate', async (message, config) => {
       action: entry.action,
     }).catch((err) => log.error('module:honeypot', 'catch log failed:', err.message));
   }
-});
+}
+
+on('honeypot', 'messageCreate', onTrapMessage);
+// A command posted in a trap channel is just as much a trap hit.
+on('honeypot', 'commandMessageCreate', onTrapMessage);
 
 on('honeypot', 'reactionAdd', async ({ reaction, user }, config) => {
   if (user.bot) return;
@@ -295,7 +302,7 @@ on('honeypot', 'reactionAdd', async ({ reaction, user }, config) => {
   const done = await punish(guild, member, entry, 'Honeypot: reacted to trap message');
   if (done) {
     await bumpHoneypotStat(guild, 'messages', entry.channelId);
-    await recordHoneypotCatch(guild.id, {
+    await recordHoneypotCatch(guildKey(guild), {
       userId: member.id,
       userTag: member.user.tag,
       kind: 'message',

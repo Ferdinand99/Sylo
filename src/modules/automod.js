@@ -21,9 +21,13 @@
 //       presets: string[],             // subset of PRESET_KEYS
 //     }
 //   }
+import { mentionedUserIds, mentionedRoleIds, mentionsEveryone } from '../platform/mentions.js';
+import { guildKey, guildKeyOf } from '../platform/platformOf.js';
 import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { PRESET_KEYS } from '../bot/lib/automodSync.js';
 import { on } from './dispatch.js';
+import { markModerated } from './lib/messageModeration.js';
+import { instanceInvitePrefixes } from '../platform/instance.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget } from '../bot/lib/moderation.js';
 import { addCase } from '../db/modCases.js';
@@ -49,7 +53,9 @@ export const AUTOMOD_RULES = [
 const RULE_KEYS = AUTOMOD_RULES.map(([k]) => k);
 const AUTOMOD_COLOR = 0xe5b567;
 
-const INVITE_RE = /(?:discord\.(?:gg|io|me|li)|discord(?:app)?\.com\/invite)\/[\w-]+/i;
+// Discord invites, plus Fluxer's (fluxer.gg/<code>, and <web app>/invite/<code>).
+const INVITE_RE =
+  /(?:discord\.(?:gg|io|me|li)|discord(?:app)?\.com\/invite|fluxer\.gg|(?:web\.)?fluxer\.app\/invite)\/[\w-]+/i;
 const URL_RE = /\bhttps?:\/\/[^\s/$.?#][^\s]*/gi;
 
 // --- config normalisation ------------------------------------------------
@@ -179,8 +185,24 @@ function isExempt(member, channelId, cfg) {
   return cfg.exemptRoles.some((r) => member.roles.cache.has(r));
 }
 
+// The connected Fluxer instance's own invite links (a self-hosted instance is not
+// fluxer.gg), compiled once per distinct set of prefixes.
+let instanceRe = { key: '', re: null };
+function instanceInviteRe() {
+  const prefixes = instanceInvitePrefixes();
+  const key = prefixes.join('|');
+  if (key !== instanceRe.key) {
+    const escaped = prefixes.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('/', '\\/'));
+    instanceRe = {
+      key,
+      re: escaped.length ? new RegExp(`(?<![\\w.-])(?:${escaped.join('|')})\\/[\\w-]+`, 'i') : null,
+    };
+  }
+  return instanceRe.re;
+}
+
 export function containsInvite(content) {
-  return INVITE_RE.test(content);
+  return INVITE_RE.test(content) || Boolean(instanceInviteRe()?.test(content));
 }
 
 export function disallowedLink(content, allowed = []) {
@@ -266,7 +288,7 @@ async function scan(message, config, opts) {
   const { rules } = cfg;
   const content = message.content;
 
-  if (rules.invites.enabled && INVITE_RE.test(content)) {
+  if (rules.invites.enabled && containsInvite(content)) {
     return act(message, member, rules.invites, 'Discord invite', cfg);
   }
   if (rules.links.enabled) {
@@ -275,7 +297,9 @@ async function scan(message, config, opts) {
   }
   if (rules.mentions.enabled) {
     const count =
-      message.mentions.users.size + message.mentions.roles.size + (message.mentions.everyone ? 1 : 0);
+      mentionedUserIds(message).length +
+      mentionedRoleIds(message).length +
+      (mentionsEveryone(message) ? 1 : 0);
     if (count > rules.mentions.max) {
       return act(message, member, rules.mentions, `${count} mentions`, cfg);
     }
@@ -302,13 +326,14 @@ async function scan(message, config, opts) {
     if (hit) return act(message, member, rules.words, `banned word "${hit}"`, cfg);
   }
   if (opts.flood && rules.spam.enabled) {
-    const key = `${message.guildId}:${message.author.id}`;
+    const key = `${guildKeyOf(message)}:${message.author.id}`;
     const n = bumpFlood(key, Date.now(), rules.spam.seconds * 1000);
     if (n > rules.spam.max) return act(message, member, rules.spam, 'message flood', cfg);
   }
 }
 
 async function act(message, member, rule, label, cfg) {
+  markModerated(message); // a command behind this message must not run
   const guild = message.guild;
   const removed = cfg.deleteMessage && message.deletable;
   if (removed) await message.delete().catch(() => {});
@@ -320,7 +345,7 @@ async function act(message, member, rule, label, cfg) {
   try {
     if (rule.action === 'warn') {
       const { caseNumber, warnCount } = await addCase({
-        guildId: guild.id,
+        guildId: guildKey(guild),
         userId: member.id,
         moderatorId: 'automod',
         action: 'warn',
@@ -370,4 +395,20 @@ async function act(message, member, rule, label, cfg) {
 }
 
 on('automod', 'messageCreate', (message, config) => scan(message, config, { flood: true }));
+// A chat command can carry an invite, a link or a mass mention too. Flood counting skips it:
+// running several commands in a row is not spam.
+// Staff are not scanned for the commands they run: `!ban @a @b @c ... see https://evidence`
+// carries mentions and links by design. Typing the same text as chat is still filtered.
+const STAFF_PERMS = [
+  PermissionFlagsBits.ManageMessages,
+  PermissionFlagsBits.ModerateMembers,
+  PermissionFlagsBits.KickMembers,
+  PermissionFlagsBits.BanMembers,
+  PermissionFlagsBits.ManageGuild,
+];
+on('automod', 'commandMessageCreate', (message, config) => {
+  const perms = message.member?.permissions;
+  if (perms && STAFF_PERMS.some((p) => perms.has(p))) return;
+  return scan(message, config, { flood: false });
+});
 on('automod', 'messageUpdate', (payload, config) => scan(payload.new, config, { flood: false }));

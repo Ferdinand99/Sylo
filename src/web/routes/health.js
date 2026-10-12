@@ -4,13 +4,21 @@
 //    connected, 503 otherwise.
 //  - browser request (a normal navigation *or* an hx-boost click from the
 //    dashboard sidebar) -> the human status page. Gated by auth when enabled.
+import { allGuilds, primaryClient } from '../../platform/platformOf.js';
 import { Router, raw } from 'express';
 import { createRequire } from 'node:module';
 import { config } from '../../config.js';
 import { requireOwner, isOwner, forbidOwner } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { runtime, uptimeSeconds, isDiscordReady, guildCount, errorScopeCounts } from '../../runtime.js';
+import {
+  runtime,
+  uptimeSeconds,
+  isAnyClientReady,
+  totalGuildCount,
+  platformStatus,
+  errorScopeCounts,
+} from '../../runtime.js';
 import { byMetric } from '../../lib/metrics.js';
 import { dashboardStats, moduleUsage } from '../../db/dashboardStats.js';
 import {
@@ -49,20 +57,21 @@ const backupLimit = rateLimit({
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const ready = isDiscordReady();
+    const ready = isAnyClientReady();
     // htmx (hx-boost) navigations fetch with `Accept: */*`, so fall back to the
     // HX-Request header — without this a boosted sidebar click renders the JSON.
     const wantsHtml = (req.headers.accept || '').includes('text/html') || Boolean(req.get('HX-Request'));
 
     if (!wantsHtml) {
-      const ping = runtime.client?.ws?.ping;
+      const ping = primaryClient()?.ws?.ping;
       return res.status(ready ? 200 : 503).json({
         status: ready ? 'ok' : 'degraded',
         version,
         uptimeSeconds: uptimeSeconds(),
+        platforms: platformStatus(),
         discord: {
           ready,
-          guilds: guildCount(),
+          guilds: totalGuildCount(),
           gatewayPingMs: typeof ping === 'number' && ping >= 0 ? Math.round(ping) : null,
           gatewayPingHistory: runtime.pingHistory.slice(),
         },
@@ -75,16 +84,16 @@ router.get(
       });
     }
 
-    if (config.authEnabled && !req.session?.user) {
+    if (config.authEnabled && !req.account) {
       if (req.session) req.session.returnTo = req.originalUrl;
-      return res.redirect('/auth/discord/login');
+      return res.redirect('/auth/login');
     }
-    if (config.authEnabled && !isOwner(req.session.user.id)) {
+    if (config.authEnabled && !isOwner(req)) {
       return forbidOwner(res);
     }
 
-    const client = runtime.client;
-    const guilds = client ? [...client.guilds.cache.values()] : [];
+    const client = primaryClient();
+    const guilds = allGuilds();
     const memberReach = guilds.reduce((sum, g) => sum + (g.memberCount ?? 0), 0);
     const gatewayPing = client?.ws?.ping;
 
@@ -97,9 +106,14 @@ router.get(
 
     res.render('health', {
       ready,
-      botTag: client?.user?.tag ?? null,
+      botTag:
+        platformStatus()
+          .map((p) => p.tag)
+          .filter(Boolean)
+          .join(' · ') || null,
+      platforms: platformStatus(),
       uptime: formatUptime(uptimeSeconds()),
-      guildCount: guildCount(),
+      guildCount: totalGuildCount(),
       memberReach,
       gatewayPing: typeof gatewayPing === 'number' && gatewayPing >= 0 ? Math.round(gatewayPing) : null,
       pingHistory: runtime.pingHistory.slice(),

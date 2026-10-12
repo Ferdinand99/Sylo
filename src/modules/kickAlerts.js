@@ -7,9 +7,9 @@
 // message placeholders: {name} {title} {game} {url} {viewers}
 // plainText: send a plain message with no embed (for channels bridged elsewhere,
 // e.g. a RuneLite Discord->game-chat plugin that ignores embeds).
+import { allGuilds, allClientsReady, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
-import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { seenValue, seenRow, markSeen, forget } from '../db/postedKeys.js';
 import { postToChannel } from './lib/send.js';
@@ -159,13 +159,13 @@ export function buildPayload(channel, alert) {
 // --- poll loop -------------------------------------------------------
 
 async function tick() {
-  if (!runtime.client?.isReady() || !config.kickEnabled) return;
+  if (!allClientsReady() || !config.kickEnabled) return;
 
   const jobs = [];
-  for (const guild of runtime.client.guilds.cache.values()) {
-    if (!(await isModuleEnabled(guild.id, 'kick-alerts'))) continue;
-    const cfg = normaliseKickConfig((await getGuildModule(guild.id, 'kick-alerts')).config);
-    for (const alert of cfg.alerts) jobs.push({ guildId: guild.id, alert });
+  for (const guild of allGuilds()) {
+    if (!(await isModuleEnabled(guildKey(guild), 'kick-alerts'))) continue;
+    const cfg = normaliseKickConfig((await getGuildModule(guildKey(guild), 'kick-alerts')).config);
+    for (const alert of cfg.alerts) jobs.push({ guildId: guildKey(guild), alert });
   }
   if (!jobs.length) return;
 

@@ -60,6 +60,15 @@ test('appeal token: round-trips guild + user, rejects tampering', () => {
   assert.equal(verifyAppealToken(''), null);
 });
 
+test('appeal token: also carries a "fluxer:" guild id, and still rejects malformed ones', () => {
+  const fluxerGuild = 'fluxer:987654321098765432';
+  assert.deepEqual(verifyAppealToken(signAppealToken(fluxerGuild, U)), { guildId: fluxerGuild, userId: U });
+  // A correctly-signed token with a guild id in no valid form is still refused.
+  assert.equal(verifyAppealToken(signAppealToken('telegram:987654321098765432', U)), null);
+  assert.equal(verifyAppealToken(signAppealToken(`discord:${G}`, U)), null);
+  assert.equal(verifyAppealToken(signAppealToken('fluxer:', U)), null);
+});
+
 test('cooldownRemainingMs: only denied appeals within the window block', () => {
   assert.equal(cooldownRemainingMs(null, 7), 0);
   assert.equal(cooldownRemainingMs({ status: 'accepted', decided_at: Date.now() }, 7), 0);
@@ -91,4 +100,89 @@ test('db: one open appeal per user, decide closes it', async () => {
   const id2 = await createAppeal(G, { userId: U, answers });
   assert.ok(id2 > id);
   assert.equal((await listAppeals(G, 10)).length, 2);
+});
+
+// --- the rejoin link minted when an appeal is accepted -----------------------------
+
+const guildFor = (client) => {
+  const created = [];
+  const channel = {
+    id: 'c1',
+    type: 0,
+    rawPosition: 0,
+    permissionsFor: () => ({ has: () => true }),
+    createInvite: async (opts) => {
+      created.push(opts);
+      return { code: 'abc123' };
+    },
+  };
+  const guild = {
+    id: 'g1',
+    client,
+    members: { me: { permissions: { has: () => true } } },
+    channels: { cache: new Map([['c1', channel]]) },
+    rulesChannel: null,
+    systemChannel: null,
+  };
+  return { guild, created };
+};
+
+test('createRejoinInvite: a single-use link built from the channel, in the guild platform’s format', async () => {
+  const { runtime } = await import('../src/runtime.js');
+  const { createRejoinInvite } = await import('../src/modules/appeals.js');
+  const fluxerClient = {};
+  runtime.clients.fluxer = fluxerClient;
+  try {
+    const f = guildFor(fluxerClient);
+    assert.equal(await createRejoinInvite(f.guild), 'https://fluxer.gg/abc123');
+    assert.equal(f.created[0].maxUses, 1);
+    const d = guildFor({});
+    assert.equal(await createRejoinInvite(d.guild), 'https://discord.gg/abc123');
+  } finally {
+    runtime.clients.fluxer = null;
+  }
+});
+
+test('decideAndNotify: accepting an appeal that lifts the ban is recorded as an unban case', async () => {
+  const { decideAndNotify } = await import('../src/modules/appeals.js');
+  const { addCase, listUserCases } = await import('../src/db/modCases.js');
+  const { scheduleTempBan, getTempBan } = await import('../src/db/tempBans.js');
+  const gid = '555555555555555555';
+  const uid = '666666666666666666';
+  await addCase({ guildId: gid, userId: uid, moderatorId: 'm', action: 'ban', reason: 'spam' });
+  await scheduleTempBan({
+    guildId: gid,
+    userId: uid,
+    modId: 'm',
+    reason: 'spam',
+    unbanAt: Date.now() + 60_000,
+  });
+  const appealId = await createAppeal(gid, { userId: uid, userTag: 't', banReason: '', answers: [] });
+  const removed = [];
+  const guild = {
+    id: gid,
+    name: 'G',
+    client: { users: { fetch: async () => null } },
+    members: { me: { permissions: { has: () => true } } },
+    bans: { remove: async (id) => removed.push(id) },
+    channels: { cache: new Map() },
+  };
+
+  const res = await decideAndNotify(
+    guild,
+    { id: appealId, user_id: uid, user_tag: 't' },
+    {
+      status: 'accepted',
+      decidedBy: 'Staff',
+      reason: 'ok',
+    }
+  );
+  assert.equal(res.unbanned, true);
+  assert.deepEqual(removed, [uid]);
+
+  const { rows } = await listUserCases(gid, uid, { includeInactive: true });
+  const byAction = Object.fromEntries(rows.map((r) => [r.action, r]));
+  assert.equal(byAction.unban?.reason.includes(`appeal #${appealId}`), true, 'an unban case is recorded');
+  assert.equal(byAction.ban.active, 0, 'the ban case is closed');
+  assert.equal(await getTempBan(gid, uid), null, 'a scheduled temp-ban release is cancelled');
 });

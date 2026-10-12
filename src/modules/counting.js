@@ -6,8 +6,8 @@
 //                 penaltyRoleId, penaltyMinutes }
 // Running state (current/record/last counter) lives in the `counting` table;
 // active "benches" live in `counting_penalties`.
+import { allClientsReady, guildByKey } from '../platform/platformOf.js';
 import { on } from './dispatch.js';
-import { runtime } from '../runtime.js';
 import { log } from '../lib/log.js';
 import { getCounting, advanceCount, resetCount } from '../db/counting.js';
 import { addCountingPenalty, clearCountingPenalty, dueCountingPenalties } from '../db/countingPenalties.js';
@@ -123,7 +123,7 @@ const PENALTY_TICK_MS = 30_000;
 
 async function restoreBench(row) {
   await clearCountingPenalty(row.guild_id, row.user_id); // clear first so a throw can't loop
-  const guild = runtime.client?.guilds.cache.get(row.guild_id);
+  const guild = guildByKey(row.guild_id);
   if (!guild) return;
 
   const role = guild.roles.cache.get(row.role_id);
@@ -138,7 +138,7 @@ async function restoreBench(row) {
 }
 
 const penaltyTimer = setInterval(async () => {
-  if (!runtime.client?.isReady()) return;
+  if (!allClientsReady()) return;
   for (const row of await dueCountingPenalties(Date.now())) {
     restoreBench(row).catch((err) => log.error('module:counting', 'bench restore failed:', err.message));
   }

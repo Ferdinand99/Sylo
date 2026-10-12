@@ -71,7 +71,14 @@ const hydrate = (row) => {
   } catch {
     won = [];
   }
-  return { ...row, ended: row.ended === 1, wonIds: Array.isArray(won) ? won : [] };
+  // Postgres returns BIGINT columns as text; everything downstream treats them as numbers.
+  return {
+    ...row,
+    ends_at: Number(row.ends_at),
+    created_at: Number(row.created_at),
+    ended: row.ended === 1,
+    wonIds: Array.isArray(won) ? won : [],
+  };
 };
 
 /** @returns {Promise<{ id: number }>} */

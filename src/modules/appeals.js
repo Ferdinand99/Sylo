@@ -21,10 +21,15 @@
 //
 // The decision is always shown on the appeal page itself when the user reopens
 // their link, so notification never depends on the DM succeeding.
+import { guildKey } from '../platform/platformOf.js';
+import { inviteUrl as publicInviteUrl } from '../platform/instance.js';
 import { ChannelType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
 import { config } from '../config.js';
 import { signToken, verifyToken } from '../lib/signedToken.js';
+import { addCase, deactivateLatest } from '../db/modCases.js';
+import { clearTempBan } from '../db/tempBans.js';
+import { isPlatformGuildId } from '../lib/platformId.js';
 import { getGuildModule, isModuleEnabled } from '../db/modules.js';
 import { decideAppeal, setAppealInvite } from '../db/appeals.js';
 import { sendToChannel } from './lib/send.js';
@@ -82,7 +87,7 @@ export function verifyAppealToken(token) {
   const parts = verifyToken(token, 2);
   if (!parts) return null;
   const [guildId, userId] = parts;
-  if (!/^\d{17,20}$/.test(guildId) || !/^\d{17,20}$/.test(userId)) return null;
+  if (!isPlatformGuildId(guildId) || !/^\d{17,20}$/.test(userId)) return null;
   return { guildId, userId };
 }
 
@@ -157,15 +162,15 @@ function takePreBanDm(guildId, userId) {
  *   caller should send its own ban DM instead.
  */
 export async function sendPreBanAppealDm(guild, user, reason) {
-  if (!(await isModuleEnabled(guild.id, 'appeals'))) return null;
-  const link = appealLink(guild.id, user.id);
+  if (!(await isModuleEnabled(guildKey(guild), 'appeals'))) return null;
+  const link = appealLink(guildKey(guild), user.id);
   if (!link) return null;
-  const cfg = normaliseAppealsConfig((await getGuildModule(guild.id, 'appeals')).config);
+  const cfg = normaliseAppealsConfig((await getGuildModule(guildKey(guild), 'appeals')).config);
   const sent = await user
     .send({ embeds: [banAppealEmbed(guild.name, reason, link, cfg)] })
     .then(() => true)
     .catch(() => false);
-  rememberPreBanDm(guild.id, user.id, sent);
+  rememberPreBanDm(guildKey(guild), user.id, sent);
   return sent;
 }
 
@@ -174,7 +179,7 @@ on('appeals', 'guildBanAdd', async (ban, rawConfig) => {
   if (!user || user.bot) return;
   const cfg = normaliseAppealsConfig(rawConfig);
 
-  const link = appealLink(ban.guild.id, user.id);
+  const link = appealLink(guildKey(ban.guild), user.id);
   if (!link) {
     log.warn('appeals', 'DASHBOARD_URL is not set — cannot build an appeal link.');
     return;
@@ -191,7 +196,7 @@ on('appeals', 'guildBanAdd', async (ban, rawConfig) => {
   reason = reason || 'No reason recorded';
 
   // Did Sylo's own ban flow already DM the link (before the ban)?
-  const pre = takePreBanDm(ban.guild.id, user.id);
+  const pre = takePreBanDm(guildKey(ban.guild), user.id);
   const delivered = pre
     ? pre.sent
     : await user
@@ -200,7 +205,7 @@ on('appeals', 'guildBanAdd', async (ban, rawConfig) => {
         .catch(() => false);
 
   if (cfg.reviewChannelId) {
-    await sendToChannel(ban.guild.id, cfg.reviewChannelId, {
+    await sendToChannel(guildKey(ban.guild), cfg.reviewChannelId, {
       embeds: [
         new EmbedBuilder()
           .setColor(COLOR)
@@ -246,13 +251,13 @@ export async function createRejoinInvite(guild) {
   if (!target) return null;
 
   try {
-    const invite = await guild.invites.create(target.id, {
+    const invite = await target.createInvite({
       maxAge: 7 * 86_400, // 7 days
       maxUses: 1,
       unique: true,
       reason: 'Ban appeal accepted — single-use rejoin link',
     });
-    return invite.url;
+    return publicInviteUrl(guild, invite.code);
   } catch {
     return null;
   }
@@ -266,10 +271,10 @@ export async function createRejoinInvite(guild) {
  * @returns {Promise<{ recorded: boolean, unbanned: boolean, dmDelivered: boolean, inviteUrl: string | null }>}
  */
 export async function decideAndNotify(guild, appeal, { status, decidedBy, reason }) {
-  const recorded = await decideAppeal(guild.id, appeal.id, { status, decidedBy, reason });
+  const recorded = await decideAppeal(guildKey(guild), appeal.id, { status, decidedBy, reason });
   if (!recorded) return { recorded: false, unbanned: false, dmDelivered: false, inviteUrl: null };
 
-  const cfg = normaliseAppealsConfig((await getGuildModule(guild.id, 'appeals')).config);
+  const cfg = normaliseAppealsConfig((await getGuildModule(guildKey(guild), 'appeals')).config);
   const accepted = status === 'accepted';
 
   let unbanned = false;
@@ -281,13 +286,25 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
         .catch(() => false);
     }
   }
+  // Lifting the ban is a moderation action like /unban: keep the case log honest.
+  if (unbanned) {
+    await clearTempBan(guildKey(guild), appeal.user_id); // a scheduled temp-ban release is moot now
+    await deactivateLatest(guildKey(guild), appeal.user_id, 'ban');
+    await addCase({
+      guildId: guildKey(guild),
+      userId: appeal.user_id,
+      moderatorId: 'web',
+      action: 'unban',
+      reason: `Ban appeal #${appeal.id} accepted by ${decidedBy}`,
+    });
+  }
 
   // On accept, mint a single-use rejoin invite and store it on the appeal so the
   // appeal page can show it when the user reopens their link.
   let inviteUrl = null;
   if (accepted) {
     inviteUrl = await createRejoinInvite(guild);
-    if (inviteUrl) await setAppealInvite(guild.id, appeal.id, inviteUrl);
+    if (inviteUrl) await setAppealInvite(guildKey(guild), appeal.id, inviteUrl);
   }
 
   const dm = new EmbedBuilder()
@@ -345,7 +362,7 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
   }
   await postModLog(guild, logEmbed);
   if (cfg.reviewChannelId) {
-    await sendToChannel(guild.id, cfg.reviewChannelId, {
+    await sendToChannel(guildKey(guild), cfg.reviewChannelId, {
       embeds: [logEmbed],
       allowedMentions: { parse: [] },
     });
@@ -356,7 +373,7 @@ export async function decideAndNotify(guild, appeal, { status, decidedBy, reason
 
 /** Post a "new appeal submitted" notice to staff. Called from the web route. */
 export async function announceNewAppeal(guild, appeal) {
-  const cfg = normaliseAppealsConfig((await getGuildModule(guild.id, 'appeals')).config);
+  const cfg = normaliseAppealsConfig((await getGuildModule(guildKey(guild), 'appeals')).config);
   const embed = new EmbedBuilder()
     .setColor(COLOR)
     .setTitle('⚖️ New ban appeal')
@@ -368,12 +385,15 @@ export async function announceNewAppeal(guild, appeal) {
       })),
       {
         name: 'Review',
-        value: `${config.dashboardUrl ? config.dashboardUrl.replace(/\/$/, '') : ''}/guilds/${guild.id}/appeals`,
+        value: `${config.dashboardUrl ? config.dashboardUrl.replace(/\/$/, '') : ''}/guilds/${guildKey(guild)}/appeals`,
       }
     )
     .setTimestamp(Date.now());
   await postModLog(guild, embed);
   if (cfg.reviewChannelId) {
-    await sendToChannel(guild.id, cfg.reviewChannelId, { embeds: [embed], allowedMentions: { parse: [] } });
+    await sendToChannel(guildKey(guild), cfg.reviewChannelId, {
+      embeds: [embed],
+      allowedMentions: { parse: [] },
+    });
   }
 }

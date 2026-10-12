@@ -82,9 +82,14 @@ export async function startBot() {
     log.error('bot', 'Slash command registration failed:', err.message);
   }
 
+  // Registered before login, like the Fluxer client: while Discord is still connecting,
+  // "every connected platform is ready" must already count it as not ready, or a sweep reads
+  // its guilds as gone (see allClientsReady).
+  setClient(client);
   try {
     await client.login(config.discordToken);
   } catch (err) {
+    setClient(null); // a client that never connected must not hold sweeps back
     if (err?.code === 'DisallowedIntents' || /disallowed intents/i.test(err?.message ?? '')) {
       log.error(
         'bot',
@@ -96,6 +101,5 @@ export async function startBot() {
     }
     throw err;
   }
-  setClient(client);
   return client;
 }

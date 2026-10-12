@@ -8,6 +8,9 @@ import { log } from '../lib/log.js';
 /** @type {Map<string, Array<{ moduleId: string, fn: Function }>>} */
 const handlers = new Map();
 
+// Event names worth knowing: `messageCreate` is human chat; `commandMessageCreate` is a
+// chat command (Fluxer), seen only by modules that must moderate it too (automod, honeypot);
+// a module that moderates message content has to register for both.
 /**
  * @param {string} moduleId
  * @param {string} eventName

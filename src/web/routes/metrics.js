@@ -4,8 +4,9 @@
 //
 // Gauges are computed here from live runtime state on every scrape. Counters come
 // from the in-process registry in ../../lib/metrics.js.
+import { primaryClient } from '../../platform/platformOf.js';
 import { Router } from 'express';
-import { runtime, uptimeSeconds, isDiscordReady, guildCount } from '../../runtime.js';
+import { runtime, uptimeSeconds, isAnyClientReady, totalGuildCount } from '../../runtime.js';
 import { renderCounters } from '../../lib/metrics.js';
 import { moduleUsage } from '../../db/dashboardStats.js';
 import { dbFileInfo } from '../../db/backup.js';
@@ -21,12 +22,16 @@ function gauge(name, help, value) {
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const ping = runtime.client?.ws?.ping;
+    const ping = primaryClient()?.ws?.ping;
     const dbBytes = (await dbFileInfo()).size;
     const blocks = [
-      gauge('sylo_up', '1 when the Discord gateway is connected, else 0', isDiscordReady() ? 1 : 0),
+      gauge(
+        'sylo_up',
+        '1 when at least one platform gateway is connected, else 0',
+        isAnyClientReady() ? 1 : 0
+      ),
       gauge('sylo_uptime_seconds', 'Seconds since the process started', uptimeSeconds()),
-      gauge('sylo_guilds', 'Guilds the bot is currently in', guildCount()),
+      gauge('sylo_guilds', 'Guilds the bot is currently in', totalGuildCount()),
       gauge(
         'sylo_gateway_ping_ms',
         'Discord gateway heartbeat latency in ms (-1 when unknown)',

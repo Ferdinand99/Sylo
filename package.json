@@ -30,6 +30,8 @@
   "author": "Ferdinand99",
   "license": "MIT",
   "dependencies": {
+    "@fluxerjs/collection": "3.0.0",
+    "@fluxerjs/core": "3.2.0",
     "@napi-rs/canvas": "^1.0.10",
     "better-sqlite3": "^13.0.3",
     "cookie-session": "^2.1.1",

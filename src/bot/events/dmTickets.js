@@ -1,6 +1,7 @@
 // DM → ticket bridge. A DM to the bot opens (or appends to) a ticket. When the
 // user shares several ticket-enabled servers and has no open ticket, the bot
 // asks which server with a select menu.
+import { guildKey, guildByKey } from '../../platform/platformOf.js';
 import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
 import { ticketGuildsForUser, ingestUserDM } from '../../modules/tickets.js';
 import { getOpenTicket } from '../../db/tickets.js';
@@ -37,7 +38,8 @@ async function handleDM(message) {
   };
   if (!payload.content && payload.attachments.length === 0) return;
 
-  const guilds = await ticketGuildsForUser(message.author);
+  // Only the servers on the platform this DM arrived on: a user id means nothing on the other one.
+  const guilds = await ticketGuildsForUser(message.author, message.client);
   if (guilds.length === 0) {
     await message
       .reply("I'm not set up to take messages for any server you're in right now.")
@@ -46,7 +48,7 @@ async function handleDM(message) {
   }
 
   // If there's exactly one open ticket already, keep the conversation there.
-  const openFlags = await Promise.all(guilds.map((g) => getOpenTicket(g.id, message.author.id)));
+  const openFlags = await Promise.all(guilds.map((g) => getOpenTicket(guildKey(g), message.author.id)));
   const openGuilds = guilds.filter((g, i) => openFlags[i]);
   if (openGuilds.length === 1) {
     await ingestUserDM(openGuilds[0], message.author, payload);
@@ -67,7 +69,7 @@ async function handleDM(message) {
     .addOptions(
       (openGuilds.length ? openGuilds : guilds)
         .slice(0, 25)
-        .map((g) => ({ label: g.name.slice(0, 100), value: g.id }))
+        .map((g) => ({ label: g.name.slice(0, 100), value: guildKey(g) }))
     );
   await message
     .reply({
@@ -78,7 +80,7 @@ async function handleDM(message) {
 }
 
 async function handleSelect(interaction) {
-  const guild = interaction.client.guilds.cache.get(interaction.values[0]);
+  const guild = guildByKey(interaction.values[0]);
   const payload = takeStash(interaction.user.id);
   if (!guild || !payload) {
     await interaction
@@ -98,8 +100,10 @@ async function handleSelect(interaction) {
 registerComponent('tickets', SELECT_ID, handleSelect);
 
 /** @param {import('discord.js').Client} client */
-export function register(client) {
+export function register(client, { isCommand = () => false } = {}) {
   client.on(Events.MessageCreate, (message) => {
+    // `!help` in a DM is a command for the router (Fluxer), not a ticket message.
+    if (isCommand(message)) return;
     handleDM(message).catch((err) => log.error('tickets', 'DM handler failed:', err));
   });
 }

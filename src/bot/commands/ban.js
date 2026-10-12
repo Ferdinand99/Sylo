@@ -1,4 +1,5 @@
 // /ban <user> [reason] [delete_messages] — ban a member, or pre-ban a user by ID.
+import { guildKey } from '../../platform/platformOf.js';
 import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags } from 'discord.js';
 import { checkActable, notifyTarget, resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
@@ -126,7 +127,7 @@ export async function execute(interaction) {
   if (tempMs != null) {
     const unbanAt = Date.now() + tempMs;
     await scheduleTempBan({
-      guildId: guild.id,
+      guildId: guildKey(guild),
       userId: user.id,
       modId: interaction.user.id,
       reason,
@@ -134,12 +135,12 @@ export async function execute(interaction) {
     });
     expiryField = `${formatDuration(tempMs)} · unbans <t:${Math.floor(unbanAt / 1000)}:R>`;
   } else {
-    await clearTempBan(guild.id, user.id); // a plain ban overrides any earlier temp-ban
+    await clearTempBan(guildKey(guild), user.id); // a plain ban overrides any earlier temp-ban
     expiryField = 'Permanent';
   }
 
   const { caseNumber } = await addCase({
-    guildId: guild.id,
+    guildId: guildKey(guild),
     userId: user.id,
     moderatorId: interaction.user.id,
     action: 'ban',

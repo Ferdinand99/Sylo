@@ -1,5 +1,6 @@
 import { Link, useOutletContext } from 'react-router-dom';
 import { ApiError } from '../api.js';
+import PlatformBadge from '../components/PlatformBadge.jsx';
 
 export default function GuildPicker() {
   const { guilds, guildsLoading, guildsError } = useOutletContext();
@@ -12,7 +13,7 @@ export default function GuildPicker() {
       <p className="v2-state">
         {notAuthed ? (
           <>
-            Your session expired — <a href="/auth/discord/login">log in again</a>.
+            Your session expired — <a href="/auth/login">log in again</a>.
           </>
         ) : (
           `Couldn't load your servers (${guildsError.message}).`
@@ -20,6 +21,8 @@ export default function GuildPicker() {
       </p>
     );
   }
+
+  const multiPlatform = new Set(guilds.map((g) => g.platform)).size > 1;
 
   if (!guilds.length) {
     return (
@@ -35,7 +38,10 @@ export default function GuildPicker() {
       <div className="v2-card-grid">
         {guilds.map((g) => (
           <Link key={g.id} to={`/guilds/${g.id}`} className="v2-card">
-            <h3>{g.name}</h3>
+            <h3>
+              {g.name}
+              {multiPlatform ? <PlatformBadge platform={g.platform} /> : null}
+            </h3>
             {g.icon ? <img src={g.icon} alt="" width={32} height={32} style={{ borderRadius: 8 }} /> : null}
           </Link>
         ))}

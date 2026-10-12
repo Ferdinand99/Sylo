@@ -38,6 +38,14 @@ test('verify token: round-trips and binds guild + user', () => {
   assert.deepEqual(parsed, { guildId: G, userId: U });
 });
 
+test('verify token: also carries a "fluxer:" guild id, and still rejects malformed ones', () => {
+  const fluxerGuild = 'fluxer:987654321098765432';
+  assert.deepEqual(verifyVerifyToken(signVerifyToken(fluxerGuild, U)), { guildId: fluxerGuild, userId: U });
+  assert.equal(verifyVerifyToken(signVerifyToken('telegram:987654321098765432', U)), null);
+  assert.equal(verifyVerifyToken(signVerifyToken(`discord:${G}`, U)), null);
+  assert.equal(verifyVerifyToken(signVerifyToken('fluxer:', U)), null);
+});
+
 test('verify token: rejects tampering and garbage', () => {
   const token = signVerifyToken(G, U);
   assert.equal(verifyVerifyToken(token.slice(0, -3) + 'aaa'), null);

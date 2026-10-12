@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import PlatformBadge from './PlatformBadge.jsx';
+import { getInvites } from '../api.js';
+import { useApiData } from '../useApiData.js';
 
 // Matches /guilds/:id or /guilds/:id/<subpath> — captures the subpath (or ''
 // for the guild root) so switching servers on e.g. Leaderboard lands back on
@@ -12,6 +15,9 @@ const GUILD_PAGE = /^\/guilds\/[^/]+(\/.*)?$/;
 // not necessarily the URL's own :guildId.
 export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild }) {
   const current = guilds.find((g) => g.id === activeGuildId) ?? null;
+  const multiPlatform = new Set(guilds.map((g) => g.platform)).size > 1;
+  const { data: invites } = useApiData(() => getInvites(), []);
+  const addLinks = invites ?? [];
   const detailsRef = useRef(null);
   const { pathname } = useLocation();
   const guildPageMatch = pathname.match(GUILD_PAGE);
@@ -64,6 +70,7 @@ export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild })
                 <span className="v2-switch-dot">{g.name.charAt(0)}</span>
               )}
               <span>{g.name}</span>
+              {multiPlatform ? <PlatformBadge platform={g.platform} /> : null}
             </>
           );
           const className = g.id === activeGuildId ? 'active' : '';
@@ -90,6 +97,20 @@ export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild })
           );
         })}
         {!guilds.length ? <p className="v2-switch-empty">No servers found</p> : null}
+        {addLinks.map((inv) => (
+          <a
+            key={inv.platform}
+            className="v2-switch-add"
+            href={inv.url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span className="v2-switch-dot" aria-hidden="true">
+              ＋
+            </span>
+            <span>{addLinks.length > 1 ? `Add a server on ${inv.label}` : 'Add new server'}</span>
+          </a>
+        ))}
       </div>
     </details>
   );

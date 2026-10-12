@@ -3,6 +3,9 @@
 // already has a signed-in req.session.user — same cookie-session V1 uses,
 // nothing new. Read-only reuse of V1's data-layer functions (baseContext,
 // getGuild, requireGuildAdmin) — none of them are modified by this file.
+import { accountPlatforms } from '../lib/accountView.js';
+import { unlinkIdentity } from '../../db/accounts.js';
+import { allGuilds, clientOfGuild, primaryClient } from '../../platform/platformOf.js';
 import { createRequire } from 'node:module';
 import { Router, raw } from 'express';
 import { PermissionFlagsBits } from 'discord.js';
@@ -13,6 +16,8 @@ import {
   isOwner,
   manageableGuilds,
   currentUser,
+  sessionUserId,
+  botInviteUrls,
 } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -164,7 +169,8 @@ import {
 } from '../../db/guildSettings.js';
 import { recordAudit } from '../../db/audit.js';
 import { recordBotAudit, listBotAudit } from '../../db/botAudit.js';
-import { runtime, uptimeSeconds, isDiscordReady, guildCount } from '../../runtime.js';
+import { platformInfo } from '../../platform/modulePlatformNotes.js';
+import { runtime, uptimeSeconds, isAnyClientReady, totalGuildCount } from '../../runtime.js';
 import {
   getPresenceConfig,
   setPresenceConfig,
@@ -236,6 +242,27 @@ router.get('/guilds', (req, res) => {
   res.json({ guilds: manageableGuilds(req) });
 });
 
+// The signed-in person's connected platforms (the account page), and disconnecting one.
+router.get('/account', (req, res) => {
+  if (!req.account) return res.json({ open: true, platforms: [] });
+  res.json({ open: false, platforms: accountPlatforms(req.account) });
+});
+
+router.post(
+  '/account/disconnect/:platform',
+  asyncHandler(async (req, res) => {
+    if (!req.account) return res.status(400).json({ error: 'Not signed in.' });
+    const ok = await unlinkIdentity(req.account.id, req.params.platform);
+    if (!ok) return res.status(409).json({ error: "You can't disconnect your only sign-in." });
+    res.json({ ok: true });
+  })
+);
+
+// The "add a server" links, one per platform Sylo runs on.
+router.get('/invites', (req, res) => {
+  res.json({ invites: botInviteUrls() });
+});
+
 // The SPA is served as static files (no EJS), so it has no <meta
 // name="csrf-token"> to read the way V1's pages do — this hands it the same
 // per-session token the shared `csrf` middleware already put on
@@ -244,10 +271,13 @@ router.get('/csrf', (req, res) => {
   res.json({ token: req.session?.csrf ?? null });
 });
 
+// Open mode has no signed-in user, so the dashboard-version preference is one shared record.
+const prefsUserId = (req) => sessionUserId(req) ?? 'local-admin';
+
 router.get(
   '/prefs',
   asyncHandler(async (req, res) => {
-    res.json({ dashboardVersion: await getDashboardVersion(req.session.user.id) });
+    res.json({ dashboardVersion: await getDashboardVersion(prefsUserId(req)) });
   })
 );
 
@@ -260,7 +290,7 @@ router.post(
         .status(400)
         .json({ error: `dashboardVersion must be one of ${DASHBOARD_VERSIONS.join(', ')}` });
     }
-    const dashboardVersion = await setDashboardVersion(req.session.user.id, requested);
+    const dashboardVersion = await setDashboardVersion(prefsUserId(req), requested);
     res.json({ dashboardVersion });
   })
 );
@@ -284,6 +314,10 @@ router.use('/guilds/:guildId/tickets', ticketsRouter);
 router.use('/guilds/:guildId', loadGuildJson, requireGuildAdmin);
 // Appeals review, command limits and the moderation hub (v2Staff.js).
 router.use('/guilds/:guildId', staffRouter);
+
+// What the new dashboard needs to know about a server's platform: its capabilities (to hide
+// what the platform cannot do) and the per-module notes (what behaves differently there).
+router.get('/guilds/:guildId/platform', (req, res) => res.json(platformInfo(req.guild)));
 
 router.get(
   '/guilds/:guildId/overview',
@@ -1023,7 +1057,7 @@ router.post(
 async function inviteBoard(guild) {
   const rows = await topInviters(guild.id, 15);
   const tags = await resolveUserTags(
-    runtime.client,
+    guild.client,
     rows.map((r) => r.user_id)
   );
   return {
@@ -1703,7 +1737,7 @@ router.get(
     const { config: cfg } = await getGuildModule(req.guild.id, 'leveling');
     const rows = await topMembers(req.guild.id, 15);
     const tags = await resolveUserTags(
-      runtime.client,
+      clientOfGuild(req.guild),
       rows.map((r) => r.user_id)
     );
     res.json({
@@ -1798,7 +1832,7 @@ router.get(
     const total =
       period === 'all' ? await memberCount(guild.id) : await memberCountForPeriod(guild.id, keys[period]);
     const tags = await resolveUserTags(
-      runtime.client,
+      clientOfGuild(req.guild),
       rows.map((r) => r.user_id)
     );
     res.json({
@@ -1968,7 +2002,7 @@ router.post(
 // just in the admin's own guild, so requireGuildAdmin isn't strict enough.
 
 router.get('/personalizer', requireOwner, (req, res) => {
-  const u = runtime.client?.user ?? null;
+  const u = primaryClient()?.user ?? null;
   res.json({
     bot: u
       ? {
@@ -1999,7 +2033,7 @@ router.post(
   '/personalizer/identity',
   requireOwner,
   asyncHandler(async (req, res) => {
-    const u = runtime.client?.user;
+    const u = primaryClient()?.user;
     if (!u) return res.status(503).json({ error: 'The bot is not connected yet — try again in a moment.' });
 
     const isHttps = (s) => /^https:\/\/\S+$/i.test(s);
@@ -2138,8 +2172,8 @@ router.get(
   '/health',
   requireOwner,
   asyncHandler(async (req, res) => {
-    const client = runtime.client;
-    const guilds = client ? [...client.guilds.cache.values()] : [];
+    const client = primaryClient();
+    const guilds = allGuilds();
     const memberReach = guilds.reduce((sum, g) => sum + (g.memberCount ?? 0), 0);
     const gatewayPing = client?.ws?.ping;
 
@@ -2149,14 +2183,14 @@ router.get(
       .sort((a, b) => b.guilds - a.guilds);
 
     const dbInfo = await dbFileInfo();
-    const ready = isDiscordReady();
+    const ready = isAnyClientReady();
 
     res.json({
       ready,
       botTag: client?.user?.tag ?? null,
       version,
       uptime: formatUptime(uptimeSeconds()),
-      guildCount: guildCount(),
+      guildCount: totalGuildCount(),
       memberReach,
       gatewayPing: typeof gatewayPing === 'number' && gatewayPing >= 0 ? Math.round(gatewayPing) : null,
       pingHistory: runtime.pingHistory.slice(),
@@ -2279,13 +2313,13 @@ function roadmapGroupsWithHtml(posts) {
 router.get(
   '/roadmap',
   asyncHandler(async (req, res) => {
-    const userId = req.session?.user?.id ?? null;
+    const userId = sessionUserId(req);
     const posts = await listPublicPosts(userId);
     const mine = userId ? await listUserPending(userId) : [];
     res.json({
       groups: roadmapGroupsWithHtml(posts),
       mine: mine.map((p) => ({ ...withRoadmapHtml(p), ago: timeAgo(p.createdAt) })),
-      isOwner: userId ? isOwner(userId) : false,
+      isOwner: userId ? isOwner(req) : false,
     });
   })
 );
@@ -2298,7 +2332,7 @@ router.post(
     const id = Number(req.params.id);
     const post = Number.isInteger(id) ? await getRoadmapPost(id) : null;
     if (!post || post.status === 'pending') return res.status(404).json({ error: 'No such post' });
-    res.json(await toggleRoadmapVote(id, req.session.user.id));
+    res.json(await toggleRoadmapVote(id, sessionUserId(req)));
   })
 );
 
@@ -2312,7 +2346,7 @@ router.post(
     if (!title || !description) {
       return res.status(400).json({ error: 'Title (3-100 chars) and description are required.' });
     }
-    await createRoadmapPost({ title, description, userId: req.session.user.id, status: 'pending' });
+    await createRoadmapPost({ title, description, userId: sessionUserId(req), status: 'pending' });
     res.json({ ok: true });
   })
 );
@@ -2346,7 +2380,7 @@ router.post(
     const post = await createRoadmapPost({
       title,
       description,
-      userId: req.session.user.id,
+      userId: sessionUserId(req),
       status: 'planned',
     });
     res.json({ post: withRoadmapHtml(post) });
@@ -3097,7 +3131,7 @@ router.post(
     if (!/^[a-z0-9_-]{1,32}$/.test(name)) {
       return res.status(400).json({ error: 'Invalid name — lowercase letters, numbers, - and _ only.' });
     }
-    if (runtime.client?.commands?.has(name)) {
+    if (primaryClient()?.commands?.has(name)) {
       return res.status(400).json({ error: `/${name} is reserved by a built-in command.` });
     }
 

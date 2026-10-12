@@ -1,9 +1,9 @@
 // View-model for the guild "Combined Overview" page: a server-health card plus
 // category-grouped module status cards (YAGPDB-style), each summarising that
 // module's current configuration with a jump link to its settings.
+import { primaryClient, platformOfGuild } from '../../platform/platformOf.js';
 import { PermissionFlagsBits } from 'discord.js';
 import { config } from '../../config.js';
-import { runtime } from '../../runtime.js';
 import { MODULES, getModule, missingIntents } from '../../modules/registry.js';
 import { getGuildModules } from '../../db/modules.js';
 import { getGuildSettings } from '../../db/guildSettings.js';
@@ -111,14 +111,16 @@ async function buildHealth(guild, settings, state) {
   }
 
   const enabledCount = MODULES.filter((d) => state.get(d.id)?.enabled ?? d.defaultEnabled).length;
+  const discord = platformOfGuild(guild) === 'discord';
 
   return {
     perms: { ok: missingPerms.length === 0, missing: missingPerms },
     intents: {
       members: config.intentGuildMembers,
       content: config.intentMessageContent,
-      membersBlocking: needMembers && !config.intentGuildMembers,
-      contentBlocking: needContent && !config.intentMessageContent,
+      // Privileged intents are a Discord concept; Fluxer has none to warn about.
+      membersBlocking: discord && needMembers && !config.intentGuildMembers,
+      contentBlocking: discord && needContent && !config.intentMessageContent,
     },
     modlog: {
       set: Boolean(settings?.modlog_channel_id),
@@ -138,7 +140,7 @@ async function buildCard(id, guild, settings, state) {
   if (!def) return null;
   const row = state.get(id);
   const enabled = row?.enabled ?? def.defaultEnabled;
-  const missing = missingIntents(def);
+  const missing = platformOfGuild(guild) === 'discord' ? missingIntents(def) : [];
   return {
     kind: 'module',
     id,
@@ -443,7 +445,7 @@ function generalCard(guild, settings) {
 
 async function commandsCard(guild) {
   const overrides = [...(await getCommandOverrides(guild.id)).values()];
-  const total = runtime.client?.commands?.size ?? 0;
+  const total = primaryClient()?.commands?.size ?? 0;
   const disabled = overrides.filter((o) => !o.enabled).length;
   const limited = overrides.filter(
     (o) => o.enabled && (o.allowedChannels.length || o.allowedRoles.length)

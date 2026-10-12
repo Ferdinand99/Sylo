@@ -7,6 +7,11 @@ dashboard (`/guilds/<id>/m/<module>`), like MEE6 or Dyno plugins. Modules are
 Each page below lists what the module does, the Discord permissions and gateway
 intents it needs, its settings, and any slash commands.
 
+On [Fluxer](../fluxer.md) every module works per server in the same way. Commands there
+run from chat (`!command`) instead of `/command`, and buttons show as reactions. The
+page [What works differently](../fluxer.md#what-works-differently) lists the few
+platform gaps (native AutoMod rules, threads, moving members between voice).
+
 | Module | What it does | Default | Privileged intents |
 |---|---|---|---|
 | [Moderation](moderation.md) | Warnings, warning auto-actions, mod-log, ban/lock tools | **on** | — |

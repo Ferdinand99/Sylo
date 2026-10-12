@@ -118,6 +118,7 @@ export default function Sidebar({ activeGuildId, open, onClose }) {
       icon: 'gear',
       href: activeGuildId ? `/guilds/${activeGuildId}/settings` : '/',
     },
+    { key: 'account', label: 'Account', icon: 'id', href: '/account' },
     { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', href: '/roadmap' },
     { key: 'health', label: 'Health', icon: 'pulse', href: '/health' },
   ];

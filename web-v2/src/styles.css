@@ -2030,3 +2030,65 @@ form textarea,
   color: var(--text-muted);
   font-weight: 400;
 }
+
+/* Which platform a server is on, shown once an account spans more than one. */
+.v2-platform {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid var(--border, #2c3040);
+  color: var(--muted, #8b92a8);
+}
+.v2-platform-fluxer {
+  color: #3fb7a8;
+  border-color: rgba(63, 183, 168, 0.4);
+}
+.v2-platform-discord {
+  color: #8b9bff;
+  border-color: rgba(139, 155, 255, 0.4);
+}
+.v2-account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 560px;
+  margin-top: 16px;
+}
+.v2-account-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.v2-account-card h3 {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted, var(--muted, #8b92a8));
+}
+.v2-account-card p {
+  margin: 0;
+}
+
+.v2-platform-note-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-2);
+  color: var(--bg-surface);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}

@@ -95,7 +95,7 @@ export default function Health() {
       <p className="v2-state">
         {notAuthed ? (
           <>
-            Your session expired — <a href="/auth/discord/login">log in again</a>.
+            Your session expired — <a href="/auth/login">log in again</a>.
           </>
         ) : forbidden ? (
           "This page is restricted to Sylo's operators."

@@ -157,3 +157,29 @@ test('payloadsDiffer ignores action ordering', () => {
   const reordered = { ...desired, actions: [...desired.actions].reverse() };
   assert.equal(payloadsDiffer(reordered, desired), false);
 });
+
+test('a guild on a platform without native AutoMod is skipped without touching the guild', async () => {
+  const { runtime } = await import('../src/runtime.js');
+  const { syncGuildAutomod } = await import('../src/bot/lib/automodSync.js');
+  const fluxer = {};
+  runtime.clients.fluxer = fluxer;
+  try {
+    const guild = {
+      client: fluxer,
+      get members() {
+        throw new Error('the guild must not be touched');
+      },
+    };
+    const r = await syncGuildAutomod(guild, { native: { enabled: true, words: true } });
+    assert.deepEqual(r, {
+      ok: true,
+      skipped: 'unsupported-platform',
+      created: 0,
+      edited: 0,
+      removed: 0,
+      errors: [],
+    });
+  } finally {
+    runtime.clients.fluxer = null;
+  }
+});

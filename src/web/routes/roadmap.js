@@ -3,7 +3,7 @@
 // browse); voting and suggesting need any signed-in Discord account;
 // /roadmap/admin/* is restricted to OWNER_IDS, same as /health.
 import { Router } from 'express';
-import { requireAuth, requireOwner, requireRealUser, isOwner } from '../middleware/auth.js';
+import { requireAuth, requireOwner, requireRealUser, isOwner, sessionUserId } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { timeAgo } from '../lib/format.js';
@@ -33,13 +33,13 @@ const router = Router();
 export const voteLimit = rateLimit({
   windowMs: 60_000,
   max: 30,
-  keyFn: (req) => `rmvote:${req.session.user.id}`,
+  keyFn: (req) => `rmvote:${sessionUserId(req)}`,
   message: 'Too many votes — slow down.',
 });
 export const suggestLimit = rateLimit({
   windowMs: 86_400_000,
   max: 5,
-  keyFn: (req) => `rmsuggest:${req.session.user.id}`,
+  keyFn: (req) => `rmsuggest:${sessionUserId(req)}`,
   message: "You've hit today's suggestion limit — try again tomorrow.",
 });
 
@@ -76,14 +76,14 @@ router.get(
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const userId = req.session?.user?.id ?? null;
+    const userId = sessionUserId(req);
     const posts = await listPublicPosts(userId);
     const mine = userId ? await listUserPending(userId) : [];
     res.render('roadmap', {
       groups: withGroupHtml(groupPublicPosts(posts)),
       mine: mine.map((p) => ({ ...withHtml(p), ago: timeAgo(p.createdAt) })),
       loggedIn: Boolean(userId),
-      isOwner: userId ? isOwner(userId) : false,
+      isOwner: userId ? isOwner(req) : false,
       suggestErr: typeof req.query.suggesterr === 'string' ? req.query.suggesterr : null,
       suggestOk: req.query.suggested === '1',
     });
@@ -99,7 +99,7 @@ router.post(
     const id = Number(req.params.id);
     const post = Number.isInteger(id) ? await getPost(id) : null;
     if (!post || post.status === 'pending') return res.status(404).end();
-    const result = await toggleVote(id, req.session.user.id);
+    const result = await toggleVote(id, sessionUserId(req));
     res.json(result);
   })
 );
@@ -117,7 +117,7 @@ router.post(
         `/roadmap?suggesterr=${encodeURIComponent('Title (3-100 chars) and description are required.')}`
       );
     }
-    await createPost({ title, description, userId: req.session.user.id, status: 'pending' });
+    await createPost({ title, description, userId: sessionUserId(req), status: 'pending' });
     res.redirect('/roadmap?suggested=1');
   })
 );
@@ -156,7 +156,7 @@ admin.post(
         `/roadmap/admin?createerr=${encodeURIComponent('Title (3-100 chars) and description are required.')}`
       );
     }
-    await createPost({ title, description, userId: req.session.user.id, status: 'planned' });
+    await createPost({ title, description, userId: sessionUserId(req), status: 'planned' });
     res.redirect('/roadmap/admin');
   })
 );

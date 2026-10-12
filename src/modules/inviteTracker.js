@@ -3,6 +3,7 @@
 // if the joiner leaves within the grace window the inviter loses the credit.
 //
 // config shape: { joinLogChannelId: '', graceHours: 24 }
+import { allGuilds, guildKey } from '../platform/platformOf.js';
 import { on } from './dispatch.js';
 import { isModuleEnabled } from '../db/modules.js';
 import {
@@ -58,14 +59,14 @@ async function snapshot(guild) {
 /** Load a guild's current invite uses into the cache. */
 export async function primeGuild(guild) {
   const snap = await snapshot(guild);
-  if (snap) cache.set(guild.id, snap);
+  if (snap) cache.set(guildKey(guild), snap);
   return Boolean(snap);
 }
 
 /** Startup: prime every guild that has the module enabled. */
-export async function primeAllInviteCaches(client) {
-  for (const guild of client.guilds.cache.values()) {
-    if (await isModuleEnabled(guild.id, 'invite-tracker')) await primeGuild(guild);
+export async function primeAllInviteCaches() {
+  for (const guild of allGuilds()) {
+    if (await isModuleEnabled(guildKey(guild), 'invite-tracker')) await primeGuild(guild);
   }
 }
 

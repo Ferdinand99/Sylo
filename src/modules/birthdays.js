@@ -3,8 +3,8 @@
 // day. Cross-guild, so the tick runs once per day guarded by an app-setting.
 //
 // config shape: { channel, message, roleId, pingRole }
+import { allGuilds, allClientsReady, guildByKey, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
-import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { getAppSetting, setAppSetting } from '../db/appSettings.js';
 import { birthdaysOnDay, guildBirthdays } from '../db/birthdays.js';
@@ -75,7 +75,7 @@ async function celebrantsToday(guildId, now) {
 }
 
 async function celebrateGuild(guildId, now) {
-  const guild = runtime.client?.guilds.cache.get(guildId);
+  const guild = guildByKey(guildId);
   if (!guild) return;
   const cfg = normaliseBirthdaysConfig((await getGuildModule(guildId, 'birthdays')).config);
   const rows = await celebrantsToday(guildId, now);
@@ -124,12 +124,12 @@ export async function runBirthdaySweep(now = new Date()) {
   if ((await getAppSetting(LAST_RUN_KEY)) === today) return;
   await setAppSetting(LAST_RUN_KEY, today);
 
-  for (const guild of runtime.client?.guilds.cache.values() ?? []) {
-    if (!(await isModuleEnabled(guild.id, 'birthdays'))) continue;
+  for (const guild of allGuilds()) {
+    if (!(await isModuleEnabled(guildKey(guild), 'birthdays'))) continue;
     try {
-      await celebrateGuild(guild.id, now);
+      await celebrateGuild(guildKey(guild), now);
     } catch (err) {
-      log.error('module:birthdays', `sweep for ${guild.id} failed:`, err.message);
+      log.error('module:birthdays', `sweep for ${guildKey(guild)} failed:`, err.message);
     }
   }
 }
@@ -140,9 +140,9 @@ export { guildBirthdays };
 // does any work, and a mid-day restart doesn't re-post.
 const TICK_MS = 60 * 60 * 1000;
 const timer = setInterval(() => {
-  if (runtime.client?.isReady()) runBirthdaySweep().catch(() => {});
+  if (allClientsReady()) runBirthdaySweep().catch(() => {});
 }, TICK_MS);
 timer.unref();
 setTimeout(() => {
-  if (runtime.client?.isReady()) runBirthdaySweep().catch(() => {});
+  if (allClientsReady()) runBirthdaySweep().catch(() => {});
 }, 15_000).unref();

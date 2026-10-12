@@ -1,4 +1,5 @@
 // /voice-clean — delete every empty temporary voice channel in the server.
+import { deleteGuildChannel } from '../../platform/channels.js';
 import { SlashCommandBuilder, InteractionContextType, PermissionFlagsBits } from 'discord.js';
 import { isModuleEnabled } from '../../db/modules.js';
 import { listGuildTempChannels, removeTempChannel } from '../../db/tempVoice.js';
@@ -32,13 +33,15 @@ export async function execute(interaction) {
   for (const r of rows) {
     const ch = interaction.guild.channels.cache.get(r.channel_id);
     if (!ch) {
-      if (r.text_channel_id) await interaction.guild.channels.delete(r.text_channel_id).catch(() => {});
+      if (r.text_channel_id)
+        await deleteGuildChannel(interaction.guild, r.text_channel_id, 'Temp voice cleanup').catch(() => {});
       await removeTempChannel(r.channel_id);
       continue;
     }
     if (ch.members.size === 0) {
       await ch.delete('voice-clean').catch(() => {});
-      if (r.text_channel_id) await interaction.guild.channels.delete(r.text_channel_id).catch(() => {});
+      if (r.text_channel_id)
+        await deleteGuildChannel(interaction.guild, r.text_channel_id, 'Temp voice cleanup').catch(() => {});
       await removeTempChannel(r.channel_id);
       n += 1;
     }

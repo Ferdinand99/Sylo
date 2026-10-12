@@ -3,8 +3,8 @@
 // plus the dashboard, call endGiveaway() directly.
 //
 // config shape: { ping: 'none' | 'here' | 'everyone', dmWinners: boolean }
+import { allClientsReady, clientOfGuild, guildByKey } from '../platform/platformOf.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
-import { runtime } from '../runtime.js';
 import { registerComponent } from '../bot/lib/components.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import {
@@ -59,7 +59,8 @@ export function buildGiveawayPayload(g, { entryCount = 0 } = {}) {
   const embed = new EmbedBuilder()
     .setColor(ACCENT)
     .setTitle(`🎉 ${g.prize}`)
-    .setTimestamp(g.created_at || Date.now());
+    // Postgres hands BIGINT back as text, and the embed builder rejects a string timestamp.
+    .setTimestamp(Number(g.created_at) || Date.now());
 
   if (!g.ended) {
     embed.setDescription(
@@ -116,7 +117,7 @@ export async function endGiveaway(id, opts = {}) {
   const g = await getGiveaway(id);
   if (!g) return { ok: false, reason: 'not-found' };
 
-  const guild = runtime.client?.guilds.cache.get(g.guild_id);
+  const guild = guildByKey(g.guild_id);
   if (!guild) {
     await markGiveawayEnded(id, []);
     return { ok: false, reason: 'no-guild' };
@@ -174,7 +175,9 @@ export async function endGiveaway(id, opts = {}) {
 
     if (cfg.dmWinners && winners.length) {
       for (const w of winners) {
-        const user = await runtime.client.users.fetch(w).catch(() => null);
+        const user = await clientOfGuild(guild)
+          .users.fetch(w)
+          .catch(() => null);
         await user?.send(`You won **${g.prize}** in ${guild.name}! 🎉`).catch(() => {});
       }
     }
@@ -243,9 +246,9 @@ registerComponent('giveaways', 'gaw:enter:', (interaction) =>
 
 const TICK_MS = 20_000;
 async function tick() {
-  if (!runtime.client?.isReady()) return;
+  if (!allClientsReady()) return;
   for (const g of await dueGiveaways(Date.now())) {
-    if ((await isModuleEnabled(g.guild_id, 'giveaways')) && runtime.client.guilds.cache.has(g.guild_id)) {
+    if ((await isModuleEnabled(g.guild_id, 'giveaways')) && Boolean(guildByKey(g.guild_id))) {
       endGiveaway(g.id).catch((err) => log.error('giveaways', 'auto-end failed:', err.message));
     } else {
       await markGiveawayEnded(g.id, []); // module off / bot gone — just close it

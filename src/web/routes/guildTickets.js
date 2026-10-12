@@ -1,9 +1,9 @@
 // Tickets (modmail) dashboard: list, conversation view, reply, close.
+import { clientOfGuild } from '../../platform/platformOf.js';
 import { Router } from 'express';
-import { runtime } from '../../runtime.js';
 import { getGuild, baseContext } from '../lib/guildContext.js';
 import { requireTicketAccess } from '../middleware/ticketAccess.js';
-import { currentUser } from '../middleware/auth.js';
+import { actingUserId } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { resolveUserTags } from '../lib/discord.js';
 import { timeAgo } from '../lib/format.js';
@@ -26,7 +26,7 @@ router.get(
     const open = await listTickets(req.guild.id, 'open', 100);
     const closed = await listTickets(req.guild.id, 'closed', 25);
     const tags = await resolveUserTags(
-      runtime.client,
+      clientOfGuild(req.guild),
       [...open, ...closed].map((t) => t.user_id)
     );
     const shape = (t) => ({
@@ -56,7 +56,10 @@ router.get(
     }
     await markStaffSeen(ticket.id);
     const rows = await ticketMessages(ticket.id);
-    const tags = await resolveUserTags(runtime.client, [ticket.user_id, ...rows.map((r) => r.author_id)]);
+    const tags = await resolveUserTags(clientOfGuild(req.guild), [
+      ticket.user_id,
+      ...rows.map((r) => r.author_id),
+    ]);
     res.render('guild-ticket', {
       ...(await baseContext(req.guild, 'tickets')),
       ticket: {
@@ -134,7 +137,7 @@ router.post(
       .slice(0, 2000);
     if (!content) return res.redirect(`${back}?msg=empty`);
 
-    const staffId = currentUser(req)?.id ?? 'web';
+    const staffId = actingUserId(req, req.guild.id);
     const { delivered } = await relayStaffReply(ticket, staffId, content);
     res.redirect(`${back}?msg=${delivered ? 'sent' : 'undelivered'}`);
   })
@@ -148,7 +151,7 @@ router.post(
       const closingMessage = String(req.body.content ?? '')
         .trim()
         .slice(0, 2000);
-      await closeTicketWithNotice(ticket, currentUser(req)?.id ?? 'web', closingMessage);
+      await closeTicketWithNotice(ticket, actingUserId(req, req.guild.id), closingMessage);
     }
     res.redirect(`/guilds/${req.guild.id}/tickets`);
   })

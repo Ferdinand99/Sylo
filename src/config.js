@@ -128,22 +128,33 @@ if (databaseUrl && !/^postgres(ql)?:\/\//i.test(databaseUrl)) {
   process.exit(1);
 }
 
-// Dashboard auth. When DISCORD_CLIENT_SECRET is set, the dashboard requires
-// "Log in with Discord" and gates actions to guild admins. When unset, the
-// dashboard runs in open mode (localhost / trusted LAN only).
+// Dashboard auth. When a platform's client secret is set (DISCORD_CLIENT_SECRET /
+// FLUXER_CLIENT_SECRET) the dashboard requires "Log in with <platform>" and gates
+// actions to guild admins; with both set an account can hold both identities. When
+// neither is set the dashboard runs in open mode (localhost / trusted LAN only).
 const discordClientSecret = optionalOrNull('DISCORD_CLIENT_SECRET');
-// Bot-wide operator ids (comma/space-separated Discord user ids). Gates /health
-// — status, error log and database backup/restore across every server — to just
-// these accounts, instead of any signed-in dashboard user.
-const ownerIds = (optionalOrNull('OWNER_IDS') ?? '')
-  .split(/[\s,]+/)
-  .map((s) => s.trim())
-  .filter(Boolean);
-const badOwnerIds = ownerIds.filter((id) => !/^\d{17,20}$/.test(id));
-if (badOwnerIds.length) {
-  console.error(`[config] OWNER_IDS has invalid id(s): ${badOwnerIds.join(', ')}`);
-  process.exit(1);
+const fluxerClientSecret = optionalOrNull('FLUXER_CLIENT_SECRET');
+
+/** A comma/space-separated list of user ids from the environment, validated. */
+function idList(name) {
+  const ids = (optionalOrNull(name) ?? '')
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const bad = ids.filter((id) => !/^\d{17,20}$/.test(id));
+  if (bad.length) {
+    console.error(`[config] ${name} has invalid id(s): ${bad.join(', ')}`);
+    process.exit(1);
+  }
+  return ids;
 }
+
+// Bot-wide operator ids, per platform (a Discord user id and a Fluxer user id are
+// different numbers). Gates /health — status, error log and database backup/restore
+// across every server — to just these accounts, instead of any signed-in dashboard
+// user. An account is an operator when any identity it holds is on its platform's list.
+const ownerIds = idList('OWNER_IDS');
+const fluxerOwnerIds = idList('FLUXER_OWNER_IDS');
 // Channel Sylo posts its own operational errors to (a "dev-log", distinct from
 // any per-guild logging/modlog channel a server admin configures — this is
 // Sylo's own health signal, not moderation activity). Optional; unset means
@@ -166,7 +177,7 @@ const kickClientSecret = optionalOrNull('KICK_CLIENT_SECRET');
 let sessionSecret = optionalOrNull('SESSION_SECRET');
 if (!sessionSecret) {
   sessionSecret = randomBytes(32).toString('hex');
-  if (discordClientSecret) {
+  if (discordClientSecret || fluxerClientSecret) {
     console.warn(
       '[config] SESSION_SECRET is not set — generated a random one. ' +
         'Dashboard sessions will not survive a restart until you pin SESSION_SECRET.'
@@ -174,10 +185,40 @@ if (!sessionSecret) {
   }
 }
 
+// Platforms. Each one is optional, but at least one must be configured: a
+// Discord-only install sets DISCORD_TOKEN, a Fluxer-only one FLUXER_TOKEN, and
+// setting both runs Sylo on both from this one process.
+const fluxerToken = optionalOrNull('FLUXER_TOKEN');
+const discordToken = optionalOrNull('DISCORD_TOKEN') ?? (fluxerToken ? null : required('DISCORD_TOKEN'));
+const discordClientId = discordToken ? required('DISCORD_CLIENT_ID') : null;
+const fluxerClientId = fluxerToken ? required('FLUXER_CLIENT_ID') : null;
+
+// Which Fluxer instance to talk to. Unset = hosted Fluxer (fluxer.app). For a
+// self-hosted instance set FLUXER_WEB_URL (its web app origin, e.g.
+// https://chat.example.com); the API, gateway and CDN hosts are read from its
+// /.well-known/fluxer. FLUXER_API_URL overrides the API origin only.
+const fluxerWebUrl = optionalOrNull('FLUXER_WEB_URL')?.replace(/\/+$/, '') ?? null;
+const fluxerApiUrl = optionalOrNull('FLUXER_API_URL')?.replace(/\/+$/, '') ?? null;
+
+// Fluxer has no slash commands yet, so commands run from chat as <prefix>name.
+const commandPrefix = optional('COMMAND_PREFIX', '!');
+if (/\s/.test(commandPrefix) || commandPrefix.length > 5) {
+  console.error('[config] COMMAND_PREFIX must be 1-5 characters with no spaces.');
+  process.exit(1);
+}
+
 export const config = Object.freeze({
-  // Discord
-  discordToken: required('DISCORD_TOKEN'),
-  discordClientId: required('DISCORD_CLIENT_ID'),
+  // Discord (null when this install does not run on Discord)
+  discordToken,
+  discordClientId,
+  discordEnabled: Boolean(discordToken),
+  // Fluxer (null when this install does not run on Fluxer)
+  fluxerToken,
+  fluxerClientId,
+  fluxerEnabled: Boolean(fluxerToken),
+  fluxerWebUrl,
+  fluxerApiUrl,
+  commandPrefix,
   // Optional: register slash commands to these guild(s) for instant availability
   // during development (one id, or a comma/space-separated list). When empty,
   // commands are registered globally (can take up to ~1 hour to propagate).
@@ -194,10 +235,16 @@ export const config = Object.freeze({
   dashboardUrl: optionalOrNull('DASHBOARD_URL')?.replace(/\/+$/, '') ?? null,
 
   // Dashboard auth (see above)
-  authEnabled: Boolean(discordClientSecret),
+  // "Log in with …" is offered for a platform only when it is configured to run and has an OAuth secret.
+  discordAuthEnabled: Boolean(discordClientSecret && discordClientId),
+  fluxerAuthEnabled: Boolean(fluxerClientSecret && fluxerClientId),
+  authEnabled:
+    Boolean(discordClientSecret && discordClientId) || Boolean(fluxerClientSecret && fluxerClientId),
   discordClientSecret,
+  fluxerClientSecret,
   sessionSecret,
   ownerIds,
+  fluxerOwnerIds,
   devLogChannelId,
 
   // Cloudflare Turnstile — powers the Verification module's captcha mode. When

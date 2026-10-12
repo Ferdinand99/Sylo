@@ -1,6 +1,7 @@
 // /lockdown start|end — lock (or unlock) every text channel at once, for raids.
 // Each channel's prior overwrite is saved individually, so `/lockdown end`
 // restores them to exactly where they were.
+import { guildKey } from '../../platform/platformOf.js';
 import {
   SlashCommandBuilder,
   PermissionFlagsBits,
@@ -54,7 +55,7 @@ export async function execute(interaction) {
     let locked = 0;
     let skipped = 0;
     for (const channel of targets) {
-      if ((await isChannelLocked(guild.id, channel.id)) || lockPreflight(channel)) {
+      if ((await isChannelLocked(guildKey(guild), channel.id)) || lockPreflight(channel)) {
         skipped += 1;
         continue;
       }
@@ -82,7 +83,7 @@ export async function execute(interaction) {
   }
 
   // end
-  const rows = await lockdownChannelLocks(guild.id);
+  const rows = await lockdownChannelLocks(guildKey(guild));
   if (rows.length === 0) {
     await interaction.editReply({ content: 'No lockdown is active.' });
     return;
@@ -95,7 +96,7 @@ export async function execute(interaction) {
       guild.channels.cache.get(row.channel_id) ??
       (await guild.channels.fetch(row.channel_id).catch(() => null));
     if (!channel) {
-      await clearChannelLock(guild.id, row.channel_id); // channel gone — drop the stale row
+      await clearChannelLock(guildKey(guild), row.channel_id); // channel gone — drop the stale row
       failed += 1;
       continue;
     }

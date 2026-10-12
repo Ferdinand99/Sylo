@@ -14,6 +14,9 @@
     <h2>Servers</h2>
     <p class="big"><%= guildCount %></p>
     <p class="muted"><%= memberReach.toLocaleString('en') %> members reached</p>
+    <% if (platforms.length > 1) { %>
+      <p class="muted"><%= platforms.map((p) => p.platform[0].toUpperCase() + p.platform.slice(1) + ' ' + p.guilds).join(' · ') %></p>
+    <% } %>
   </div>
   <div class="card">
     <h2>Uptime</h2>

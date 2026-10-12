@@ -149,7 +149,7 @@ export default function ChannelCleanup() {
       <p className="v2-state">
         {notAuthed ? (
           <>
-            Your session expired — <a href="/auth/discord/login">log in again</a>.
+            Your session expired — <a href="/auth/login">log in again</a>.
           </>
         ) : (
           `Couldn't load Channel cleanup settings (${state.error.message}).`

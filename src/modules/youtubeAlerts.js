@@ -7,8 +7,8 @@
 //   { alerts: [ { id, ytChannelId, name, discordChannelId, roleId,
 //                 onVideo, onLive, videoMessage, liveMessage } ] }
 // message placeholders: {name} {title} {url}
+import { allGuilds, allClientsReady, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
-import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import {
   hasSeenAny,
@@ -247,15 +247,15 @@ function payload(alert, { name, title, url, thumb }, kind) {
 // --- poll loop -----------------------------------------------------
 
 async function tick() {
-  if (!runtime.client?.isReady()) return;
+  if (!allClientsReady()) return;
   await pruneYoutube();
 
-  for (const guild of runtime.client.guilds.cache.values()) {
-    if (!(await isModuleEnabled(guild.id, 'youtube-alerts'))) continue;
-    const cfg = normaliseYoutubeConfig((await getGuildModule(guild.id, 'youtube-alerts')).config);
+  for (const guild of allGuilds()) {
+    if (!(await isModuleEnabled(guildKey(guild), 'youtube-alerts'))) continue;
+    const cfg = normaliseYoutubeConfig((await getGuildModule(guildKey(guild), 'youtube-alerts')).config);
     for (const alert of cfg.alerts) {
       try {
-        await runAlert(guild.id, alert);
+        await runAlert(guildKey(guild), alert);
       } catch (err) {
         log.error('youtube-alerts', `${alert.ytChannelId}:`, err.message);
       }

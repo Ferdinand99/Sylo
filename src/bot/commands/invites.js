@@ -1,4 +1,6 @@
 // /invites [user] — a member's invite tally, plus a personal invite link.
+import { inviteUrl } from '../../platform/instance.js';
+import { guildKey } from '../../platform/platformOf.js';
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { isModuleEnabled } from '../../db/modules.js';
 import {
@@ -36,8 +38,8 @@ async function personalLink(guild, userId) {
   } catch {
     return { error: 'I need the **Manage Server** permission to hand out invite links.' };
   }
-  const existing = await getPersonalCode(guild.id, userId);
-  if (existing && all.has(existing)) return { url: `https://discord.gg/${existing}` };
+  const existing = await getPersonalCode(guildKey(guild), userId);
+  if (existing && all.has(existing)) return { url: inviteUrl(guild, existing) };
 
   const channel = pickInviteChannel(guild);
   if (!channel) return { error: 'I need the **Create Invite** permission in at least one channel.' };
@@ -47,9 +49,9 @@ async function personalLink(guild, userId) {
       unique: true,
       reason: `Personal invite link via /invites for ${userId}`,
     });
-    await setPersonalCode(guild.id, userId, invite.code);
+    await setPersonalCode(guildKey(guild), userId, invite.code);
     await primeGuild(guild); // teach the cache about the new code
-    return { url: invite.url };
+    return { url: inviteUrl(guild, invite.code) };
   } catch {
     return { error: 'I could not create an invite link — check my channel permissions.' };
   }

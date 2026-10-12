@@ -2,8 +2,9 @@
 // Reachable at /leaderboard/<guildId> and, when set, at /lb/<vanity-slug>
 // (the vanity URL is served directly, not redirected). Mounted before
 // requireAuth in server.js.
+import { guildByKey } from '../../platform/platformOf.js';
+import { isPlatformGuildId } from '../../lib/platformId.js';
 import { Router } from 'express';
-import { runtime } from '../../runtime.js';
 import { getGuildModule } from '../../db/modules.js';
 import {
   topMembers,
@@ -32,7 +33,7 @@ function notFound(res, message) {
  */
 async function renderLeaderboard(req, res, next, guildId, canonical) {
   try {
-    const guild = runtime.client?.guilds.cache.get(guildId);
+    const guild = guildByKey(guildId);
     if (!guild) return notFound(res, 'Sylo is not in that server.');
 
     const { enabled, config } = await getGuildModule(guildId, 'leveling');
@@ -113,7 +114,7 @@ async function renderLeaderboard(req, res, next, guildId, canonical) {
 const router = Router();
 router.get('/:guildId', (req, res, next) => {
   const { guildId } = req.params;
-  if (!/^\d{17,20}$/.test(guildId)) return notFound(res, 'Unknown server.');
+  if (!isPlatformGuildId(guildId)) return notFound(res, 'Unknown server.');
   return renderLeaderboard(req, res, next, guildId);
 });
 

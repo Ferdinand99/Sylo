@@ -95,7 +95,12 @@ async function getSql() {
   if (!readyPromise) {
     readyPromise = (async () => {
       const postgres = (await import('postgres')).default;
-      const client = postgres(config.databaseUrl);
+      // BIGINT (oid 20) comes back as a string by default. Every BIGINT here is an epoch-ms
+      // timestamp or a counter, well inside Number's exact range, and the code treats them
+      // as numbers — so convert, and Postgres returns what SQLite does.
+      const client = postgres(config.databaseUrl, {
+        types: { bigint: { to: 20, from: [20], parse: Number, serialize: String } },
+      });
       await client`SELECT pg_advisory_lock(${BOOTSTRAP_LOCK_KEY})`;
       try {
         for (const ddl of bootstrapStatements) {

@@ -1,6 +1,7 @@
 // Welcome Channel — build one rich, pinned message for a dedicated read-only
 // channel (welcome / rules / links). A thin, welcome-flavoured front-end over
 // the Message Creator's embed payload builder.
+import { createGuildChannel } from '../platform/channels.js';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { sendComposed, editComposed } from './messageCreator.js';
 
@@ -128,11 +129,14 @@ export function normaliseWelcomeChannelConfig(raw = {}) {
 }
 
 export function substitutePlaceholders(str, guild) {
-  return String(str ?? '')
-    .replaceAll('{server.name}', guild.name)
-    .replaceAll('{server.id}', guild.id)
-    .replaceAll('{server}', guild.name)
-    .replaceAll('{memberCount}', String(guild.memberCount ?? 0));
+  return (
+    String(str ?? '')
+      .replaceAll('{server.name}', guild.name)
+      // eslint-disable-next-line no-restricted-syntax -- the @everyone role id / template shows the platform guild id
+      .replaceAll('{server.id}', guild.id)
+      .replaceAll('{server}', guild.name)
+      .replaceAll('{memberCount}', String(guild.memberCount ?? 0))
+  );
 }
 
 /** Stored config -> a Message Creator spec with placeholders filled in. */
@@ -191,12 +195,13 @@ export async function createWelcomeChannel(guild) {
     return { ok: false, error: 'The bot needs Manage Channels.' };
   }
   try {
-    const ch = await guild.channels.create({
+    const ch = await createGuildChannel(guild, {
       name: 'welcome',
       type: ChannelType.GuildText,
       reason: 'Welcome Channel module',
       permissionOverwrites: [
         {
+          // eslint-disable-next-line no-restricted-syntax -- the @everyone role id / template shows the platform guild id
           id: guild.id,
           allow: [PermissionFlagsBits.ViewChannel],
           deny: [

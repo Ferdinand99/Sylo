@@ -14,6 +14,7 @@
 // those to match the config and never touches a rule it did not create. A hand
 // edit to a `Sylo:`-named rule is overwritten on the next dashboard save — edit
 // those from the dashboard, not in Discord.
+import { guildKey } from '../../platform/platformOf.js';
 import {
   AutoModerationRuleEventType,
   AutoModerationRuleTriggerType,
@@ -22,6 +23,7 @@ import {
   PermissionFlagsBits,
 } from 'discord.js';
 import { getGuildSettings } from '../../db/guildSettings.js';
+import { guildSupports } from '../../platform/platformOf.js';
 import { log } from '../../lib/log.js';
 
 export const SYLO_PREFIX = 'Sylo: ';
@@ -233,18 +235,21 @@ function forEdit(payload) {
  * Reconcile a guild's native AutoMod rules with its automod config. Never throws.
  * @param {import('discord.js').Guild} guild
  * @param {object} cfg  normalised automod config
- * @returns {Promise<{ ok: boolean, skipped?: string, created: number, edited: number,
+ * @returns {Promise<{ ok: boolean, skipped?: 'missing-permission'|'fetch-failed'|'unsupported-platform', created: number, edited: number,
  *   removed: number, errors: string[] }>}
  */
 export async function syncGuildAutomod(guild, cfg) {
   const result = { ok: true, created: 0, edited: 0, removed: 0, errors: [] };
+
+  // No server-side AutoMod on this platform: Sylo's own scanner does the enforcing.
+  if (!guildSupports(guild, 'nativeAutomod')) return { ...result, skipped: 'unsupported-platform' };
 
   const me = guild.members.me;
   if (!me?.permissions.has(PermissionFlagsBits.ManageGuild)) {
     return { ...result, ok: false, skipped: 'missing-permission' };
   }
 
-  const alertChannelId = (await getGuildSettings(guild.id))?.modlog_channel_id || null;
+  const alertChannelId = (await getGuildSettings(guildKey(guild)))?.modlog_channel_id || null;
   const desired = desiredRules(cfg, { alertChannelId });
 
   let existing;

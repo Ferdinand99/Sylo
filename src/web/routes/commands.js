@@ -1,9 +1,9 @@
 // GET /commands — lists the slash commands the bot currently has loaded.
 // The list is derived from the live command collection, so it always matches
 // what is actually registered.
+import { primaryClient } from '../../platform/platformOf.js';
 import { Router } from 'express';
 import { ApplicationCommandOptionType as OptType, PermissionsBitField } from 'discord.js';
-import { runtime } from '../../runtime.js';
 
 const router = Router();
 
@@ -75,7 +75,7 @@ function describeCommands(collection) {
 }
 
 router.get('/', (req, res) => {
-  res.render('commands', { commands: describeCommands(runtime.client?.commands) });
+  res.render('commands', { commands: describeCommands(primaryClient()?.commands) });
 });
 
 export default router;

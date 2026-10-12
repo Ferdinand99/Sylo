@@ -1,9 +1,9 @@
 // Public (no-auth) verification page: a member clicks the Verify button in
 // Discord, gets a signed link here, solves a Cloudflare Turnstile captcha, and
 // the bot grants the verified role.
+import { guildByKey } from '../../platform/platformOf.js';
 import { Router } from 'express';
 import { config } from '../../config.js';
-import { runtime } from '../../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../../db/modules.js';
 import { log } from '../../lib/log.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -73,7 +73,7 @@ router.post('/:guildId', async (req, res, next) => {
       return fail(res, 'The captcha check failed. Go back and try again.');
     }
 
-    const guild = runtime.client?.guilds.cache.get(guildId);
+    const guild = guildByKey(guildId);
     if (!guild || !(await isModuleEnabled(guildId, 'verification'))) {
       return fail(res, 'Verification is no longer active in that server.');
     }

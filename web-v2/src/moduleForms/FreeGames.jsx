@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useCmd } from '../platformContext.jsx';
 import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 
 export default function FreeGames() {
   const { guildId } = useParams();
+  const cmd = useCmd();
   const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'free-games'), [guildId]);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -23,7 +25,7 @@ export default function FreeGames() {
       <p className="v2-state">
         {notAuthed ? (
           <>
-            Your session expired — <a href="/auth/discord/login">log in again</a>.
+            Your session expired — <a href="/auth/login">log in again</a>.
           </>
         ) : (
           `Couldn't load Free games settings (${error.message}).`
@@ -55,7 +57,7 @@ export default function FreeGames() {
       <p className="v2-field-hint">
         Sylo checks hourly and posts an embed when a game becomes free to claim — from the Epic Games Store,
         plus Steam / GOG / Fanatical / Humble and more when an <code>ITAD_API_KEY</code> is set. DLC is
-        filtered out of announcements; <code>/freegames dlc:true</code> shows free DLC on demand.
+        filtered out of announcements; <code>{cmd('/freegames dlc:true')}</code> shows free DLC on demand.
       </p>
 
       <form onSubmit={onSave}>

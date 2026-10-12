@@ -13,12 +13,14 @@
 //     logChannelId: '',
 //     kickAfterMinutes: 0,              // 0 = never kick unverified
 //   }
+import { guildKey } from '../platform/platformOf.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { on } from './dispatch.js';
 import { registerComponent } from '../bot/lib/components.js';
 import { config } from '../config.js';
 import { getGuildModule, setGuildModule, isModuleEnabled } from '../db/modules.js';
+import { isPlatformGuildId } from '../lib/platformId.js';
 import { sendToChannel } from './lib/send.js';
 
 export const VERIFY_MODES = ['button', 'captcha'];
@@ -84,7 +86,7 @@ export function verifyVerifyToken(token) {
     const got = Buffer.from(sigB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
     if (got.length !== expected.length || !timingSafeEqual(got, expected)) return null;
     const [guildId, userId, exp] = body.split('.');
-    if (!/^\d{17,20}$/.test(guildId) || !/^\d{17,20}$/.test(userId)) return null;
+    if (!isPlatformGuildId(guildId) || !/^\d{17,20}$/.test(userId)) return null;
     if (Date.now() > Number(exp)) return null;
     return { guildId, userId };
   } catch {
@@ -120,8 +122,8 @@ export async function ensureVerifyMessage(guild, cfg) {
     .send({ embeds: [verifyEmbed(cfg)], components: [verifyButtonRow()] })
     .catch(() => null);
   if (!posted) return;
-  const fresh = (await getGuildModule(guild.id, 'verification')).config;
-  await setGuildModule(guild.id, 'verification', { config: { ...fresh, messageId: posted.id } });
+  const fresh = (await getGuildModule(guildKey(guild), 'verification')).config;
+  await setGuildModule(guildKey(guild), 'verification', { config: { ...fresh, messageId: posted.id } });
 }
 
 function verifyEmbed(cfg) {
@@ -147,7 +149,7 @@ export async function grantVerified(guild, userId, cfg) {
   }
 
   if (cfg.logChannelId) {
-    await sendToChannel(guild.id, cfg.logChannelId, {
+    await sendToChannel(guildKey(guild), cfg.logChannelId, {
       embeds: [
         new EmbedBuilder()
           .setColor(0x58d68d)
@@ -215,9 +217,9 @@ on('verification', 'guildMemberAdd', async (member, rawConfig) => {
   const graceMs = cfg.kickAfterMinutes * 60_000;
   setTimeout(async () => {
     try {
-      if (!(await isModuleEnabled(member.guild.id, 'verification'))) return;
+      if (!(await isModuleEnabled(guildKey(member.guild), 'verification'))) return;
       const fresh = normaliseVerificationConfig(
-        (await getGuildModule(member.guild.id, 'verification')).config
+        (await getGuildModule(guildKey(member.guild), 'verification')).config
       );
       const m = await member.guild.members.fetch(member.id).catch(() => null);
       if (!m || m.roles.cache.has(fresh.verifiedRoleId) || !m.kickable) return;

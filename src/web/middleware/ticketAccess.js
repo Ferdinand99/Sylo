@@ -1,9 +1,9 @@
 // Access guard for the tickets pages: a guild admin (Manage Server / owner) OR
 // a member holding one of the module's configured staff roles. Pass-through in
 // open mode.
+import { guildByKey } from '../../platform/platformOf.js';
 import { config } from '../../config.js';
-import { runtime } from '../../runtime.js';
-import { adminGuildIds } from './auth.js';
+import { adminGuildIds, userIdForGuild } from './auth.js';
 import { getGuildModule } from '../../db/modules.js';
 
 function deny(res) {
@@ -22,15 +22,16 @@ function deny(res) {
 export async function ticketAccessState(req) {
   if (!config.authEnabled) return 'ok';
 
-  const userId = req.session?.user?.id;
-  if (!userId) return 'login';
+  if (!req.account) return 'login';
   const guildId = req.params.guildId;
+  const userId = userIdForGuild(req, guildId);
   if (adminGuildIds(req).has(guildId)) return 'ok';
 
+  if (!userId) return 'denied'; // no identity on this guild's platform: nothing to look up
   const staffRoles = (await getGuildModule(guildId, 'tickets')).config.staffRoles ?? [];
   if (staffRoles.length === 0) return 'denied';
 
-  const guild = runtime.client?.guilds.cache.get(guildId);
+  const guild = guildByKey(guildId);
   if (!guild) return 'denied';
   try {
     const member = await guild.members.fetch(userId);
@@ -47,7 +48,7 @@ export async function requireTicketAccess(req, res, next) {
   if (state === 'ok') return next();
   if (state === 'login') {
     req.session.returnTo = req.originalUrl;
-    return res.redirect('/auth/discord/login');
+    return res.redirect('/auth/login');
   }
   deny(res);
 }

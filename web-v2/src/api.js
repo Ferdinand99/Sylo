@@ -30,7 +30,7 @@ export async function apiFetch(path, options = {}) {
   }
   const res = await fetch(path, { ...options, headers, credentials: 'same-origin' });
 
-  if (res.redirected && res.url.includes('/auth/discord/login')) {
+  if (res.redirected && /\/auth\/(login|discord\/login|fluxer\/login)/.test(res.url)) {
     throw new ApiError('Not signed in', { status: 401, notAuthenticated: true });
   }
 
@@ -59,6 +59,8 @@ export const setModuleEnabled = (guildId, moduleId, enabled) =>
   postJson(`/api/v2/guilds/${guildId}/modules/${moduleId}`, { enabled });
 export const setModulesEnabledBulk = (guildId, ids, enabled) =>
   postJson(`/api/v2/guilds/${guildId}/modules/bulk`, { ids, enabled });
+export const getPlatformInfo = (guildId) => apiFetch(`/api/v2/guilds/${guildId}/platform`);
+
 // Generic per-module config load/save — every module's V2 form (web-v2/src/
 // moduleForms/) uses these same two calls, one dedicated backend route per
 // module (see v2Api.js's "Per-module config" section) behind them.
@@ -240,3 +242,7 @@ export const setCaseDeleted = (guildId, n, deleted) =>
   postJson(`${g(guildId)}/moderation/cases/${n}/${deleted ? 'delete' : 'restore'}`, {});
 export const saveAutomodImmunity = (guildId, exemptRoles) =>
   postJson(`/api/v2/guilds/${guildId}/modules/automod/immunity`, { exemptRoles });
+
+export const getAccount = () => apiFetch('/api/v2/account');
+export const disconnectAccount = (platform) => postJson(`/api/v2/account/disconnect/${platform}`, {});
+export const getInvites = () => apiFetch('/api/v2/invites').then((d) => d.invites);

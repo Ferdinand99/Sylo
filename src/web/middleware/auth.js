@@ -1,22 +1,56 @@
-// Dashboard authentication: "Log in with Discord", gated to guild admins.
+// Dashboard authentication: "Log in with Discord" and/or "Log in with Fluxer", gated
+// to guild admins.
 //
-// Enabled when DISCORD_CLIENT_SECRET is set. Otherwise the dashboard runs in
-// "open mode" — every guard passes through — which is only safe on localhost or
-// a trusted LAN. A banner in the UI makes the mode obvious.
+// Enabled when a platform's OAuth secret is set (DISCORD_CLIENT_SECRET /
+// FLUXER_CLIENT_SECRET). Otherwise the dashboard runs in "open mode" — every guard
+// passes through — which is only safe on localhost or a trusted LAN. A banner in the
+// UI makes the mode obvious.
+//
+// Signing in resolves to an account (src/db/accounts.js) that can hold one identity per
+// platform. The cookie carries only a session id; who the account is, and which guilds
+// it administers, is read from the account's identities on every request.
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import cookieSession from 'cookie-session';
 import { config } from '../../config.js';
-import { runtime } from '../../runtime.js';
+import { splitPlatformGuildId } from '../../lib/platformId.js';
+import {
+  allGuildKeys,
+  guildByKey,
+  guildKey,
+  platformOfGuild,
+  primaryClient,
+} from '../../platform/platformOf.js';
 import { BUILD } from '../../bot/lib/buildInfo.js';
 import { buildSidebar } from '../lib/sidebarNav.js';
 import { getBotMasterRoles } from '../../db/guildSettings.js';
 import { getAnnouncement } from '../../db/appSettings.js';
+import {
+  IdentityLinkedError,
+  PlatformAlreadyLinkedError,
+  createSession,
+  deleteSession,
+  getSession,
+  identitiesOf,
+  linkIdentity,
+  purgeExpiredSessions,
+  signInIdentity,
+} from '../../db/accounts.js';
+import { enabledProviders, fluxerOrigins, providers, adminGuildIdsFromOAuth } from '../lib/oauthProviders.js';
+import { buildBotInvites } from '../lib/botInvites.js';
+import {
+  adminKeysOf,
+  identityFor,
+  isOperator,
+  primaryUserId,
+  sessionUserLabel,
+  staleIdentities,
+} from '../lib/accountAuth.js';
 import { rateLimit } from './rateLimit.js';
 import { log } from '../../lib/log.js';
 
-const DISCORD_API = 'https://discord.com/api/v10';
-const OAUTH_SCOPES = 'identify guilds';
+export { adminGuildIdsFromOAuth };
+
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
 /**
@@ -27,74 +61,24 @@ const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
  * never `//` or `/\` (both browser-recognized ways to smuggle a host in).
  */
 function safeReturnTo(path) {
-  return typeof path === 'string' && /^\/(?!\/|\\)/.test(path) ? path : '/';
+  if (typeof path !== 'string') return '/';
+  if (!path.startsWith('/') || path.startsWith('//') || path.startsWith('/\\')) return '/';
+  return path;
 }
-// req.session.guilds is a snapshot from login, not live — a server added or
-// left after that point won't show up until it's refreshed. Past this age, a
-// guild-list page transparently round-trips through Discord's OAuth again
-// instead of waiting for the user to notice and log out/in themselves.
+
+// An identity's guild list is a snapshot from login, not live — a server added or left
+// after that point won't show up until it is refreshed. Past this age, a guild-list
+// page transparently round-trips through the platform's OAuth again instead of waiting
+// for the user to notice and log out/in themselves.
 const GUILDS_TTL_MS = 10 * 60 * 1000;
 
-// `cookie-session` stores the whole session (base64 + signed) inside the
-// cookie itself — nothing server-side. Browsers silently drop a `Set-Cookie`
-// header over ~4093 bytes, which loses `session.user` along with everything
-// else, sending the OAuth callback straight back to `redirectToLogin` — an
-// infinite authorize-loop for an account in enough guilds (issue #163: an
-// account in 50+ servers hit this at the old `{ id, owner, permissions }`
-// storage shape). Only the guild ids the user actually manages are ever read
-// (see adminGuildIds below), so those are the only ones stored — filtered
-// here, not at read time, as plain id strings — and capped as a last line of
-// defense for an account managing (not just belonging to) an implausibly
-// large number of servers. 100 ids plus a full user object measures out to
-// ~3.3 KB once base64'd and signed (~800 bytes of headroom under the 4093
-// limit for the cookie name/attributes) — see test/auth.test.js for the
-// actual byte-budget check.
-export const MAX_STORED_GUILDS = 100;
-
-// "Add new server" bot-invite link. Scopes + a permission set that covers every
-// module: moderation (kick/ban/timeout), roles, channels & webhooks, reactions,
-// invites, audit log, nickname management and voice moves for temp channels.
-const BOT_INVITE_SCOPES = 'bot applications.commands';
-const BOT_INVITE_PERMISSIONS = [0, 1, 2, 4, 6, 7, 10, 11, 13, 14, 15, 16, 20, 24, 27, 28, 29, 40]
-  .reduce((acc, bit) => acc | (1n << BigInt(bit)), 0n)
-  .toString();
-
-/** Discord bot-invite URL for adding Sylo to another server. */
-export function botInviteUrl() {
-  const params = new URLSearchParams({
-    client_id: config.discordClientId,
-    scope: BOT_INVITE_SCOPES,
-    permissions: BOT_INVITE_PERMISSIONS,
+/** "Add new server" links, one per platform Sylo runs on. */
+export function botInviteUrls() {
+  return buildBotInvites({
+    discordClientId: config.discordClientId,
+    fluxerClientId: config.fluxerClientId,
+    fluxerWeb: fluxerOrigins().web,
   });
-  return `https://discord.com/oauth2/authorize?${params}`;
-}
-
-// Permission bits (Discord). Admin or Manage Server, or being the owner, counts.
-const PERM_ADMINISTRATOR = 1n << 3n;
-const PERM_MANAGE_GUILD = 1n << 5n;
-
-function hasAdminPerms(permissionsString) {
-  try {
-    const p = BigInt(permissionsString ?? '0');
-    return (p & PERM_ADMINISTRATOR) !== 0n || (p & PERM_MANAGE_GUILD) !== 0n;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Reduce the OAuth "current user guilds" payload to the id list actually
- * worth putting in the session cookie: only guilds the user owns or has
- * admin/Manage-Server on — everything else gets filtered out on every read
- * anyway (see adminGuildIds above), so there's no reason to store it.
- * Uncapped; the caller applies {@link MAX_STORED_GUILDS}. Exported pure so
- * the cookie-size fix can be unit tested without a real OAuth round-trip.
- * @param {Array<{ id: string, owner?: boolean, permissions?: string }>} guilds
- * @returns {string[]}
- */
-export function adminGuildIdsFromOAuth(guilds) {
-  if (!Array.isArray(guilds)) return [];
-  return guilds.filter((g) => g.owner || hasAdminPerms(g.permissions)).map((g) => g.id);
 }
 
 /** Public base URL for building the OAuth redirect URI. */
@@ -103,81 +87,114 @@ function baseUrl(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
 
+// --- who is signed in --------------------------------------------------------------
+
 /**
  * The signed-in user for a request, or null. In open mode returns a synthetic
  * "local admin" so templates can render consistently.
- * @returns {{ id: string|null, name: string, avatar: string|null, open: boolean } | null}
+ * @returns {{ id: string|null, name: string, avatar: string|null, open: boolean, platforms: string[] } | null}
  */
 export function currentUser(req) {
   if (!config.authEnabled) {
-    return { id: null, name: 'local admin', avatar: null, open: true };
+    return { id: null, name: 'local admin', avatar: null, open: true, platforms: [] };
   }
-  const u = req.session?.user;
-  if (!u) return null;
+  const account = req.account;
+  if (!account || !account.identities.length) return null;
+  const primary = account.identities.find((i) => i.platform === 'discord') ?? account.identities[0];
   return {
-    id: u.id,
-    name: u.global_name || u.username,
-    avatar: u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=64` : null,
+    id: primaryUserId(account),
+    name: sessionUserLabel(account),
+    avatar: primary.avatar,
     open: false,
+    platforms: account.identities.map((i) => i.platform),
   };
 }
 
+/** The id other features key the signed-in person on (roadmap votes, preferences), or null. */
+export function sessionUserId(req) {
+  return req.account ? primaryUserId(req.account) : null;
+}
+
+/** The signed-in person's user id on the platform a guild key belongs to, or null. */
+export function userIdForGuild(req, key) {
+  const platform = splitPlatformGuildId(key)?.platform ?? 'discord';
+  return identityFor(req.account, platform)?.platformUserId ?? null;
+}
+
 /**
- * Guilds the signed-in user can manage, resolved against the bot's cache so we
+ * Who a dashboard action in this guild is attributed to: the signed-in person's id on the
+ * guild's own platform (a Discord id for a Discord server, their Fluxer id for a Fluxer
+ * one), or `fallback` in open mode / when they have no identity there.
+ */
+export function actingUserId(req, key, fallback = 'web') {
+  return userIdForGuild(req, key) ?? fallback;
+}
+
+/**
+ * Guild keys the signed-in user can manage: the guilds each of their identities
+ * administers, limited to the guilds the bot is in. Open mode: every guild.
+ */
+export function adminGuildIds(req) {
+  const botKeys = allGuildKeys();
+  if (!config.authEnabled) return new Set(botKeys);
+  return adminKeysOf(req.account, botKeys);
+}
+
+/**
+ * Guilds the signed-in user can manage, resolved against the bots' caches so we
  * have names and icons. Used for the topbar server switcher.
- * @returns {Array<{ id: string, name: string, icon: string|null }>}
+ * @returns {Array<{ id: string, name: string, icon: string|null, platform: 'discord'|'fluxer' }>}
  */
 export function manageableGuilds(req) {
-  const cache = runtime.client?.guilds.cache;
-  if (!cache) return [];
   return [...adminGuildIds(req)]
-    .map((id) => cache.get(id))
+    .map((key) => guildByKey(key))
     .filter(Boolean)
-    .map((g) => ({ id: g.id, name: g.name, icon: g.iconURL({ size: 32 }) }))
+    .map((g) => ({
+      id: guildKey(g),
+      name: g.name,
+      icon: g.iconURL({ size: 32 }),
+      platform: platformOfGuild(g),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/**
- * Guild ids (bot ∩ user-is-admin) for the signed-in user. `req.session.guilds`
- * is already filtered to admin/owner guilds at login (see the callback route
- * below) — only the bot-membership half of the intersection happens here.
- */
-export function adminGuildIds(req) {
-  if (!config.authEnabled) {
-    return new Set(runtime.client?.guilds.cache.keys() ?? []);
-  }
-  const ids = req.session?.guilds ?? [];
-  const botGuilds = new Set(runtime.client?.guilds.cache.keys() ?? []);
-  return new Set(ids.filter((id) => botGuilds.has(id)));
+// --- login redirects -----------------------------------------------------------------
+
+/** Where an unauthenticated browser should go: straight to the only provider, else the chooser. */
+function loginPath() {
+  const enabled = enabledProviders();
+  return enabled.length === 1 ? `/auth/${enabled[0].platform}/login` : '/auth/login';
 }
 
 /**
- * Send the browser to /auth/discord/login. An hx-boost navigation fetches
- * with `fetch()`, which silently fails on a cross-origin redirect (Discord's
- * authorize page sends no CORS headers) — so a boosted request gets an
+ * Send the browser somewhere that may be cross-origin (a platform's authorize page). An
+ * hx-boost navigation fetches with `fetch()`, which silently fails on a cross-origin
+ * redirect (the authorize page sends no CORS headers) — so a boosted request gets an
  * `HX-Redirect` response instead, which htmx turns into a real top-level
  * `window.location` navigation rather than an AJAX swap.
  */
-function redirectToLogin(req, res) {
+function redirectTo(req, res, path) {
   if (req.get('HX-Request')) {
-    res.set('HX-Redirect', '/auth/discord/login').status(204).end();
+    res.set('HX-Redirect', path).status(204).end();
   } else {
-    res.redirect('/auth/discord/login');
+    res.redirect(path);
   }
 }
+const redirectToLogin = (req, res) => redirectTo(req, res, loginPath());
 
 /** Require any signed-in user (pass-through in open mode). */
 export function requireAuth(req, res, next) {
-  if (!config.authEnabled || req.session?.user) return next();
+  if (!config.authEnabled || req.account) return next();
   req.session.returnTo = req.originalUrl;
   redirectToLogin(req, res);
 }
 
 /** A "bot master" — holds one of the guild's designated dashboard-admin roles. */
-async function isBotMaster(guildId, userId) {
-  const roles = await getBotMasterRoles(guildId);
+async function isBotMaster(key, userId) {
+  if (!userId) return false;
+  const roles = await getBotMasterRoles(key);
   if (!roles.length) return false;
-  const guild = runtime.client?.guilds.cache.get(guildId);
+  const guild = guildByKey(key);
   if (!guild) return false;
   const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
   return Boolean(member && member.roles.cache.hasAny(...roles));
@@ -194,12 +211,13 @@ function forbidGuild(res) {
 /** Require the signed-in user to be an admin (or bot master) of req.params.guildId. */
 export function requireGuildAdmin(req, res, next) {
   if (!config.authEnabled) return next();
-  if (!req.session?.user) {
+  if (!req.account) {
     req.session.returnTo = req.originalUrl;
     return redirectToLogin(req, res);
   }
-  if (adminGuildIds(req).has(req.params.guildId)) return next();
-  isBotMaster(req.params.guildId, req.session.user.id)
+  const key = req.params.guildId;
+  if (adminGuildIds(req).has(key)) return next();
+  isBotMaster(key, userIdForGuild(req, key))
     .then((ok) => (ok ? next() : forbidGuild(res)))
     .catch(() => forbidGuild(res));
 }
@@ -207,9 +225,9 @@ export function requireGuildAdmin(req, res, next) {
 /** Kept for backwards compatibility with earlier route code. */
 export const requireAdmin = requireAuth;
 
-/** Is this user id one of the bot's operators (`OWNER_IDS`)? Always true in open mode. */
-export function isOwner(userId) {
-  return !config.authEnabled || config.ownerIds.includes(userId);
+/** Is the signed-in account one of the bot's operators (OWNER_IDS / FLUXER_OWNER_IDS)? Always true in open mode. */
+export function isOwner(req) {
+  return !config.authEnabled || isOperator(req.account);
 }
 
 /** Render the 403 for `requireOwner` — also used directly by /health's GET route. */
@@ -217,41 +235,95 @@ export function forbidOwner(res) {
   res.status(403).render('error', {
     title: 'Forbidden',
     heading: 'Not an operator',
-    message: config.ownerIds.length
-      ? "This page is restricted to Sylo's operators."
-      : 'OWNER_IDS is not set, so no account is authorized for this page. Set it to your Discord user id.',
+    message:
+      config.ownerIds.length || config.fluxerOwnerIds.length
+        ? "This page is restricted to Sylo's operators."
+        : 'OWNER_IDS (or FLUXER_OWNER_IDS) is not set, so no account is authorized for this page. Set it to your user id.',
   });
 }
 
 /**
- * Require the signed-in user to be one of the bot's operators (`OWNER_IDS`).
- * Gates bot-wide pages — /health's status, error log and database
- * backup/restore — that must not be reachable by an arbitrary guild admin,
- * let alone any signed-in user.
+ * Require the signed-in user to be one of the bot's operators. Gates bot-wide pages —
+ * /health's status, error log and database backup/restore — that must not be reachable by
+ * an arbitrary guild admin, let alone any signed-in user.
  */
 export function requireOwner(req, res, next) {
   if (!config.authEnabled) return next();
-  if (!req.session?.user) {
+  if (!req.account) {
     req.session.returnTo = req.originalUrl;
     return redirectToLogin(req, res);
   }
-  if (isOwner(req.session.user.id)) return next();
+  if (isOwner(req)) return next();
   forbidOwner(res);
 }
 
 /**
- * Require a real, non-synthetic signed-in Discord user id — stricter than
- * requireAuth, which passes through unconditionally in open mode (no
- * DISCORD_CLIENT_SECRET, self-hosted default). For actions that attribute
- * authorship to a specific account (e.g. a roadmap vote or suggestion) where
- * there's no real per-user identity to attach in open mode.
+ * Require a real, non-synthetic signed-in user — stricter than requireAuth, which passes
+ * through unconditionally in open mode (no OAuth secret set, self-hosted default). For
+ * actions that attribute authorship to a specific account (e.g. a roadmap vote or
+ * suggestion) where there's no real per-user identity to attach in open mode.
  */
 export function requireRealUser(req, res, next) {
-  if (req.session?.user?.id) return next();
+  if (req.account) return next();
   res
     .status(400)
     .type('text/plain')
-    .send('This action needs a real Discord login — not available in open/self-hosted mode.');
+    .send('This action needs a real login — not available in open/self-hosted mode.');
+}
+
+// --- sessions and the OAuth routes -------------------------------------------------
+
+/** Resolve the session cookie to an account for this request. */
+async function attachAccount(req, _res, next) {
+  try {
+    const sid = req.session?.sid;
+    if (sid) {
+      const session = await getSession(sid);
+      if (session) {
+        req.account = { id: session.accountId, identities: await identitiesOf(session.accountId) };
+      } else {
+        req.session.sid = undefined; // expired or unknown
+      }
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+const redirectUri = (req, provider) => `${baseUrl(req)}${provider.callbackPath}`;
+
+function loginError(res, message, status = 400) {
+  return res.status(status).render('error', { title: 'Login failed', heading: 'Login failed', message });
+}
+
+/** Start an OAuth round-trip. `connect` adds the identity to the signed-in account instead of signing in. */
+function beginOAuth(req, res, provider, { connect }) {
+  if (!provider.enabled()) return res.redirect('/');
+  const state = randomUUID();
+  req.session.oauthState = state;
+  req.session.oauthPlatform = provider.platform;
+  req.session.connect = connect ? provider.platform : undefined;
+  // Connecting is started from the account page, so that is where it should end.
+  if (connect) req.session.returnTo = '/account?msg=connected';
+  res.redirect(provider.authorizeUrl(redirectUri(req, provider), state));
+}
+
+/** Finish an OAuth round-trip: sign in (or link) the identity and start a fresh session. */
+async function completeOAuth(req, provider, identity) {
+  const connecting = req.session.connect === provider.platform && req.account;
+  let accountId;
+  if (connecting) {
+    await linkIdentity(req.account.id, identity);
+    accountId = req.account.id;
+  } else {
+    ({ accountId } = await signInIdentity(identity));
+  }
+  // A new session id on every login, so a fixated pre-login id is never promoted.
+  if (req.session.sid) await deleteSession(req.session.sid).catch(() => {});
+  req.session.sid = await createSession(accountId, SESSION_MAX_AGE);
+  req.session.oauthPlatform = undefined;
+  req.session.connect = undefined;
 }
 
 /**
@@ -271,27 +343,32 @@ export function mountAuth(app) {
         secure: Boolean(config.dashboardUrl?.startsWith('https://')),
       })
     );
+    app.use(attachAccount);
+    // Expired sessions are dead weight; sweep them a few times a day.
+    setInterval(
+      () => purgeExpiredSessions().catch((err) => log.error('auth', 'session purge failed:', err.message)),
+      6 * 60 * 60 * 1000
+    ).unref();
   }
 
-  // A guild-list page with a stale snapshot silently round-trips through
-  // Discord's OAuth to refresh it, instead of making the user log out/in
-  // themselves. Scoped to the pages that actually read the guild list — not
-  // every route, so a logged-in operator clicking a public link (leaderboard,
-  // verify, appeal) never sees an unexpected redirect through discord.com.
-  // Rate-limited even though the redirect target (/auth/discord) already is —
-  // this runs ahead of every other limiter in the chain (before requireAuth's
-  // own 300/min, mounted later in server.js), so it shouldn't be bare.
+  // An identity with a stale guild list silently round-trips through its platform's OAuth,
+  // instead of making the user log out/in themselves. Scoped to the pages that actually
+  // read the guild list — not every route, so a logged-in operator clicking a public link
+  // (leaderboard, verify, appeal) never sees an unexpected redirect. Rate-limited because
+  // it runs ahead of every other limiter in the chain.
   app.use(rateLimit({ windowMs: 60_000, max: 120 }));
   app.use((req, res, next) => {
     if (
       config.authEnabled &&
       req.method === 'GET' &&
-      req.session?.user &&
-      (req.path === '/' || req.path.startsWith('/guilds')) &&
-      (!req.session.guildsFetchedAt || Date.now() - req.session.guildsFetchedAt > GUILDS_TTL_MS)
+      req.account &&
+      (req.path === '/' || req.path.startsWith('/guilds'))
     ) {
-      req.session.returnTo = req.originalUrl;
-      return redirectToLogin(req, res);
+      const stale = staleIdentities(req.account, GUILDS_TTL_MS).find((i) => providers[i.platform]?.enabled());
+      if (stale) {
+        req.session.returnTo = req.originalUrl;
+        return redirectTo(req, res, `/auth/${stale.platform}/login`);
+      }
     }
     next();
   });
@@ -302,14 +379,15 @@ export function mountAuth(app) {
   app.use(async (req, res, next) => {
     res.locals.authEnabled = config.authEnabled;
     res.locals.syloVersion = BUILD.version;
-    res.locals.botInviteUrl = botInviteUrl();
+    res.locals.botInvites = botInviteUrls();
     // The bot's own avatar, used as the dashboard favicon (null until ready).
-    res.locals.botAvatarUrl = runtime.client?.user?.displayAvatarURL({ extension: 'png', size: 64 }) ?? null;
+    res.locals.botAvatarUrl = primaryClient()?.user?.displayAvatarURL({ extension: 'png', size: 64 }) ?? null;
     res.locals.user = currentUser(req);
     const mg = res.locals.user ? manageableGuilds(req) : [];
     res.locals.manageableGuilds = mg;
 
-    const urlGuildId = (req.path.match(/^\/guilds\/(\d{17,20})/) || [])[1] || null;
+    const urlGuildId =
+      (decodeURIComponent(req.path).match(/^\/guilds\/((?:fluxer:)?\d{17,20})/) || [])[1] || null;
     res.locals.currentGuildId = urlGuildId;
 
     // A server is always "in view": URL guild, else the remembered one, else the
@@ -324,89 +402,89 @@ export function mountAuth(app) {
 
   const router = Router();
 
-  // Throttle the OAuth endpoints (state-token guessing / callback hammering).
-  router.use('/discord', rateLimit({ windowMs: 60_000, max: 20 }));
+  // Throttle the OAuth endpoints (state-token guessing / callback hammering). Passed to
+  // each route rather than mounted on a path so every handler visibly carries its limit.
+  // One bucket per platform (login, callback and connect share it), as before.
+  const oauthLimit = rateLimit({
+    windowMs: 60_000,
+    max: 20,
+    keyFn: (req) => `oauth:${req.params.platform ?? req.path.split('/')[1]}|${req.ip}`,
+  });
+  const pageLimit = rateLimit({ windowMs: 60_000, max: 60 });
 
-  router.get('/discord/login', (req, res) => {
-    if (!config.authEnabled) return res.redirect('/');
-    const state = randomUUID();
-    req.session.oauthState = state;
-    const params = new URLSearchParams({
-      client_id: config.discordClientId,
-      redirect_uri: `${baseUrl(req)}/auth/discord/callback`,
-      response_type: 'code',
-      scope: OAUTH_SCOPES,
-      state,
+  // The chooser, shown when more than one login is offered.
+  router.get('/login', pageLimit, (req, res) => {
+    if (!config.authEnabled || req.account) return res.redirect('/');
+    const offered = enabledProviders();
+    if (offered.length === 1) return res.redirect(`/auth/${offered[0].platform}/login`);
+    res.render('login', {
+      title: 'Sign in',
+      providers: offered.map((p) => ({
+        platform: p.platform,
+        label: p.label,
+        href: `/auth/${p.platform}/login`,
+      })),
     });
-    res.redirect(`https://discord.com/oauth2/authorize?${params}`);
   });
 
-  router.get('/discord/callback', async (req, res, next) => {
-    if (!config.authEnabled) return res.redirect('/');
-    try {
-      const { code, state } = req.query;
-      if (!code || !state || state !== req.session.oauthState) {
-        return res.status(400).render('error', {
-          title: 'Login failed',
-          heading: 'Login failed',
-          message: 'The login response was invalid or expired. Please try again.',
-        });
+  for (const provider of Object.values(providers)) {
+    router.get(`/${provider.platform}/login`, oauthLimit, (req, res) => {
+      if (!config.authEnabled) return res.redirect('/');
+      beginOAuth(req, res, provider, { connect: false });
+    });
+
+    router.get(`/${provider.platform}/callback`, oauthLimit, async (req, res, next) => {
+      if (!config.authEnabled || !provider.enabled()) return res.redirect('/');
+      try {
+        const { code, state, error } = req.query;
+        const expected = req.session.oauthState;
+        const startedOn = req.session.oauthPlatform;
+        req.session.oauthState = undefined;
+        if (error || !code || !state || state !== expected || startedOn !== provider.platform) {
+          return loginError(
+            res,
+            error === 'access_denied'
+              ? `Login was cancelled on ${provider.label}.`
+              : 'The login response was invalid or expired. Please try again.'
+          );
+        }
+
+        const accessToken = await provider.exchange(String(code), redirectUri(req, provider));
+        const identity = await provider.fetchIdentity(accessToken);
+        try {
+          await completeOAuth(req, provider, identity);
+        } catch (err) {
+          if (err instanceof IdentityLinkedError || err instanceof PlatformAlreadyLinkedError) {
+            return loginError(res, err.message, 409);
+          }
+          throw err;
+        }
+
+        const dest = safeReturnTo(req.session.returnTo);
+        req.session.returnTo = undefined;
+        res.redirect(dest);
+      } catch (err) {
+        log.error('auth', `${provider.label} login failed:`, err.message);
+        next(err);
       }
-      req.session.oauthState = undefined;
+    });
+  }
 
-      const tokenRes = await fetch(`${DISCORD_API}/oauth2/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: config.discordClientId,
-          client_secret: config.discordClientSecret,
-          grant_type: 'authorization_code',
-          code: String(code),
-          redirect_uri: `${baseUrl(req)}/auth/discord/callback`,
-        }),
-      });
-      if (!tokenRes.ok) throw new Error(`token exchange failed: ${tokenRes.status}`);
-      const token = await tokenRes.json();
-
-      const headers = { Authorization: `Bearer ${token.access_token}` };
-      const [user, guilds] = await Promise.all([
-        fetch(`${DISCORD_API}/users/@me`, { headers }).then((r) => r.json()),
-        fetch(`${DISCORD_API}/users/@me/guilds`, { headers }).then((r) => r.json()),
-      ]);
-
-      req.session.user = {
-        id: user.id,
-        username: user.username,
-        global_name: user.global_name,
-        avatar: user.avatar,
-      };
-      const adminIds = adminGuildIdsFromOAuth(guilds);
-      if (adminIds.length > MAX_STORED_GUILDS) {
-        log.warn(
-          'auth',
-          `${user.id} manages ${adminIds.length} guilds — capping the stored session list at ${MAX_STORED_GUILDS} to stay under the cookie size limit`
-        );
-      }
-      req.session.guilds = adminIds.slice(0, MAX_STORED_GUILDS);
-      req.session.guildsFetchedAt = Date.now();
-
-      const dest = safeReturnTo(req.session.returnTo);
-      req.session.returnTo = undefined;
-      res.redirect(dest);
-    } catch (err) {
-      next(err);
-    }
+  // "Connect Fluxer / Discord" while signed in: links a second identity to this account.
+  router.get('/connect/:platform', oauthLimit, (req, res) => {
+    const provider = providers[req.params.platform];
+    if (!config.authEnabled || !req.account || !provider) return res.redirect('/');
+    beginOAuth(req, res, provider, { connect: true });
   });
 
-  router.post('/logout', (req, res) => {
+  const logout = async (req, res) => {
+    if (req.session?.sid) await deleteSession(req.session.sid).catch(() => {});
     req.session = null;
     res.redirect('/');
-  });
+  };
+  router.post('/logout', pageLimit, logout);
   // Allow GET for a plain link too.
-  router.get('/logout', (req, res) => {
-    req.session = null;
-    res.redirect('/');
-  });
+  router.get('/logout', pageLimit, logout);
 
   app.use('/auth', router);
 }

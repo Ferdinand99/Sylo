@@ -8,10 +8,10 @@
 //                  v2Api.js — staff-role holders may use tickets without being
 //                  server admins (same rule as V1, see ticketAccess.js).
 //   staffRouter    mounted at /guilds/:guildId AFTER the admin guard.
+import { clientOfGuild, primaryClient, rawGuildId } from '../../platform/platformOf.js';
 import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
-import { runtime } from '../../runtime.js';
-import { currentUser } from '../middleware/auth.js';
+import { currentUser, actingUserId } from '../middleware/auth.js';
 import { ticketAccessState } from '../middleware/ticketAccess.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild } from '../lib/guildContext.js';
@@ -48,7 +48,7 @@ import { formatDuration } from '../../bot/lib/duration.js';
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
 
-const webModeratorId = (req) => currentUser(req)?.id ?? WEB_MODERATOR;
+const webModeratorId = (req, guildKeyArg) => actingUserId(req, guildKeyArg, WEB_MODERATOR);
 const moderatorDisplayName = (req) =>
   currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`;
 
@@ -102,7 +102,7 @@ ticketsRouter.get(
     const open = await listTickets(req.guild.id, 'open', 100);
     const closed = await listTickets(req.guild.id, 'closed', 25);
     const tags = await resolveUserTags(
-      runtime.client,
+      clientOfGuild(req.guild),
       [...open, ...closed].map((t) => t.user_id)
     );
     const shape = (t) => ({
@@ -125,7 +125,10 @@ ticketsRouter.get(
     if (!ticket) return fail(res, 'Ticket not found', 404);
     await markStaffSeen(ticket.id);
     const rows = await ticketMessages(ticket.id);
-    const tags = await resolveUserTags(runtime.client, [ticket.user_id, ...rows.map((r) => r.author_id)]);
+    const tags = await resolveUserTags(clientOfGuild(req.guild), [
+      ticket.user_id,
+      ...rows.map((r) => r.author_id),
+    ]);
     const userTag = tags.get(ticket.user_id) ?? 'User';
     res.json({
       ticket: {
@@ -174,7 +177,7 @@ ticketsRouter.post(
       .trim()
       .slice(0, 2000);
     if (!content) return fail(res, 'Write a reply first.');
-    const { delivered } = await relayStaffReply(ticket, currentUser(req)?.id ?? 'web', content);
+    const { delivered } = await relayStaffReply(ticket, actingUserId(req, ticket.guild_id), content);
     res.json({ ok: true, delivered });
   })
 );
@@ -188,7 +191,7 @@ ticketsRouter.post(
       const closingMessage = String(req.body.content ?? '')
         .trim()
         .slice(0, 2000);
-      await closeTicketWithNotice(ticket, currentUser(req)?.id ?? 'web', closingMessage);
+      await closeTicketWithNotice(ticket, actingUserId(req, ticket.guild_id), closingMessage);
     }
     res.json({ ok: true });
   })
@@ -270,7 +273,7 @@ staffRouter.get(
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const overrides = await getCommandOverrides(guild.id);
-    const commands = [...(runtime.client?.commands?.values() ?? [])]
+    const commands = [...(primaryClient()?.commands?.values() ?? [])]
       .map(({ data }) => {
         const ov = overrides.get(data.name);
         return {
@@ -283,7 +286,7 @@ staffRouter.get(
       })
       .sort((a, b) => a.name.localeCompare(b.name));
     const roles = [...guild.roles.cache.values()]
-      .filter((r) => r.id !== guild.id)
+      .filter((r) => r.id !== rawGuildId(guild))
       .sort((a, b) => b.position - a.position)
       .map((r) => ({ id: r.id, name: r.name }));
     res.json({ commands, channels: guildTextChannels(guild), roles });
@@ -295,7 +298,7 @@ staffRouter.post(
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const command = req.params.command;
-    if (!runtime.client?.commands?.has(command)) return fail(res, 'Unknown command', 404);
+    if (!primaryClient()?.commands?.has(command)) return fail(res, 'Unknown command', 404);
     const toIds = (v) =>
       (Array.isArray(v) ? v : v == null ? [] : String(v).split(/[\s,]+/))
         .map((s) => String(s).trim())
@@ -321,7 +324,7 @@ staffRouter.get(
     const guild = req.guild;
     const { rows: caseRows, total: caseTotal } = await listGuildCases(guild.id, 200);
     const tags = await resolveUserTags(
-      runtime.client,
+      clientOfGuild(req.guild),
       caseRows.flatMap((c) => [c.user_id, c.moderator_id]).filter((id) => /^\d+$/.test(id))
     );
     const modLabels = { web: 'Dashboard', automod: 'AutoMod', auto: 'auto-threshold', '': 'system' };
@@ -368,7 +371,7 @@ staffRouter.get(
     }));
     const tbRows = await guildTempBans(guild.id);
     const tbTags = await resolveUserTags(
-      runtime.client,
+      clientOfGuild(req.guild),
       tbRows.map((r) => r.user_id)
     );
     const now = Date.now();
@@ -533,14 +536,16 @@ staffRouter.post(
       .slice(0, 400);
     if (!userId || reason === '') return fail(res, 'Enter a user ID or mention and a reason.');
 
-    const user = await runtime.client.users.fetch(userId).catch(() => null);
+    const user = await clientOfGuild(req.guild)
+      .users.fetch(userId)
+      .catch(() => null);
     if (!user) return fail(res, 'No such user.', 404);
     if (user.bot) return fail(res, 'Bots cannot be warned.');
 
     const { id, count } = await addWarning({
       guildId: guild.id,
       userId: user.id,
-      moderatorId: webModeratorId(req),
+      moderatorId: webModeratorId(req, guild.id),
       reason,
     });
     const dmed = await notifyTarget(user, {
@@ -576,7 +581,9 @@ staffRouter.post(
     if (!userId) return fail(res, 'That is not a user ID or mention.');
     const n = await clearWarnings(guild.id, userId);
     if (n === 0) return fail(res, 'That member has no warnings.', 404);
-    const target = await runtime.client.users.fetch(userId).catch(() => null);
+    const target = await clientOfGuild(req.guild)
+      .users.fetch(userId)
+      .catch(() => null);
     const embed = new EmbedBuilder()
       .setColor(MOD_COLOR)
       .setTitle('Warnings cleared')
@@ -629,7 +636,9 @@ staffRouter.post(
     if (!existing) return fail(res, 'Case not found.', 404);
     await setCaseActive(guild.id, n, active);
 
-    const target = await runtime.client.users.fetch(existing.user_id).catch(() => null);
+    const target = await clientOfGuild(req.guild)
+      .users.fetch(existing.user_id)
+      .catch(() => null);
     const embed = new EmbedBuilder()
       .setColor(MOD_COLOR)
       .setTitle(active ? `Case #${n} restored` : `Case #${n} deleted`)

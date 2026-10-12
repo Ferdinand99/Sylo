@@ -1,6 +1,7 @@
 // Bot Personalizer — bot-wide identity (username / avatar / banner) and
 // presence. Identity changes hit the Discord API live; presence is stored and
 // re-applied on every startup.
+import { primaryClient } from '../../platform/platformOf.js';
 import { Router } from 'express';
 import { runtime } from '../../runtime.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -31,7 +32,7 @@ function back(res, text, ok) {
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const u = runtime.client?.user ?? null;
+    const u = primaryClient()?.user ?? null;
     res.render('settings', {
       bot: u
         ? {
@@ -56,7 +57,7 @@ router.get(
 router.post(
   '/identity',
   asyncHandler(async (req, res) => {
-    const u = runtime.client?.user;
+    const u = primaryClient()?.user;
     if (!u) return back(res, 'The bot is not connected yet — try again in a moment.', false);
 
     const done = [];

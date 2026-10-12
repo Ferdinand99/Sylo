@@ -13,6 +13,7 @@ the optional Postgres backend instead.
 - [Quick start](#quick-start)
 - [Environment variables](#environment-variables)
 - [Discord application setup](#discord-application-setup)
+- [Running on Fluxer](fluxer.md) (separate page)
 - [Dashboard authentication](#dashboard-authentication)
 - [Behind a reverse proxy](#behind-a-reverse-proxy)
 - [Docker](#docker)
@@ -53,7 +54,9 @@ register` re-syncs commands without a restart.
 
 ## Environment variables
 
-Only `DISCORD_TOKEN` and `DISCORD_CLIENT_ID` are required.
+Only `DISCORD_TOKEN` and `DISCORD_CLIENT_ID` are required, unless you run on
+[Fluxer](fluxer.md) only: then `FLUXER_TOKEN` and `FLUXER_CLIENT_ID` replace them.
+At least one platform must be configured.
 
 | Variable                  | Default                         | Description |
 |---------------------------|---------------------------------|-------------|
@@ -61,6 +64,12 @@ Only `DISCORD_TOKEN` and `DISCORD_CLIENT_ID` are required.
 | `DISCORD_CLIENT_ID`       | —                               | Application (client) id (**required**) |
 | `DISCORD_DEV_GUILD_IDS`   | —                               | Register commands instantly to one or more servers (comma/space-separated) instead of globally. Old name `DISCORD_GUILD_ID` still works (warns). |
 | `DISCORD_SHARD_COUNT`     | `auto`                          | Internal gateway shards for this one process. `auto` follows Discord's recommendation and stays at 1 below ~2,500 servers; pin an integer to override. Multi-process sharding is not supported. |
+| `FLUXER_TOKEN`            | —                               | Optional: bot token for [Fluxer](fluxer.md). Setting it runs Sylo on Fluxer too (experimental) |
+| `FLUXER_CLIENT_ID`        | —                               | Fluxer application id (**required** with `FLUXER_TOKEN`) |
+| `FLUXER_WEB_URL`          | hosted Fluxer                   | Web app origin of a self-hosted Fluxer instance, e.g. `https://chat.example.com` |
+| `COMMAND_PREFIX`          | `!`                             | Chat prefix for commands on Fluxer, which has no slash commands (1–5 characters) |
+| `FLUXER_CLIENT_SECRET`    | —                               | Adds "Log in with Fluxer" to the dashboard |
+| `FLUXER_OWNER_IDS`        | —                               | Your Fluxer user id(s); the Fluxer counterpart of `OWNER_IDS` |
 | `WEB_PORT`                | `3000`                          | Dashboard HTTP port |
 | `DISCORD_CLIENT_SECRET`   | —                               | Set to require "Log in with Discord" on the dashboard |
 | `SESSION_SECRET`          | random                          | Signs the session cookie; pin it so logins survive restarts |
@@ -125,6 +134,9 @@ Discord's approval for Message Content.
 ---
 
 ## Dashboard authentication
+
+> Running on Fluxer too? The login steps for it (client secret, redirect URL,
+> `FLUXER_OWNER_IDS`, linking both accounts) are in [fluxer.md](fluxer.md#dashboard-login).
 
 By default the dashboard runs **open** (no login) — only safe on `localhost` or a
 trusted LAN. Even in open mode a same-origin check blocks cross-site form posts.

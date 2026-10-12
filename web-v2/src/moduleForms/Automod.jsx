@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getModuleConfig, saveModuleConfig, saveAutomodImmunity, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { PlatformContext } from '../platformContext.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
 
@@ -41,6 +42,7 @@ export default function Automod() {
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const { capabilities } = useContext(PlatformContext);
   const [nativeNote, setNativeNote] = useState(null);
   const [immune, setImmune] = useState([]);
   const [savingImmune, setSavingImmune] = useState(false);
@@ -60,7 +62,7 @@ export default function Automod() {
       <p className="v2-state">
         {notAuthed ? (
           <>
-            Your session expired — <a href="/auth/discord/login">log in again</a>.
+            Your session expired — <a href="/auth/login">log in again</a>.
           </>
         ) : (
           `Couldn't load Auto-moderation settings (${error.message}).`
@@ -248,52 +250,56 @@ export default function Automod() {
           ))}
         </div>
 
-        <h2 className="v2-group-title">Native Discord AutoMod</h2>
-        <p className="v2-field-hint">
-          Push the mappable checks onto Discord's built-in AutoMod so they are enforced before a message is
-          posted, and keep working while Sylo is offline. Needs the Manage Server permission. Sylo owns any
-          rule named "Sylo: …" — edit those here, not in Server Settings.
-        </p>
-        <div className="v2-field">
-          <label className="v2-check">
-            <input
-              type="checkbox"
-              checked={form.native.enabled}
-              onChange={(e) => setNative({ enabled: e.target.checked })}
-            />
-            Enforce natively
-          </label>
-          <div className="v2-check-grid">
-            {data.nativeMappable.map(([key, label]) => (
-              <label className="v2-check" key={key}>
+        {capabilities.nativeAutomod ? (
+          <>
+            <h2 className="v2-group-title">Native Discord AutoMod</h2>
+            <p className="v2-field-hint">
+              Push the mappable checks onto Discord's built-in AutoMod so they are enforced before a message
+              is posted, and keep working while Sylo is offline. Needs the Manage Server permission. Sylo owns
+              any rule named "Sylo: …" — edit those here, not in Server Settings.
+            </p>
+            <div className="v2-field">
+              <label className="v2-check">
                 <input
                   type="checkbox"
-                  checked={Boolean(form.native[key])}
-                  onChange={(e) => setNative({ [key]: e.target.checked })}
+                  checked={form.native.enabled}
+                  onChange={(e) => setNative({ enabled: e.target.checked })}
                 />
-                {label}
-                {mode(form.rules[key]) === 'off' ? (
-                  <span className="v2-field-hint"> — enable the check above first</span>
-                ) : null}
+                Enforce natively
               </label>
-            ))}
-          </div>
-          <p className="v2-field-hint">
-            Discord keyword presets <span>— Discord-maintained word lists</span>
-          </p>
-          <div className="v2-check-grid">
-            {data.presetKeys.map((p) => (
-              <label className="v2-check" key={p}>
-                <input
-                  type="checkbox"
-                  checked={form.native.presets.includes(p)}
-                  onChange={(e) => togglePreset(p, e.target.checked)}
-                />
-                {PRESET_LABELS[p] || p}
-              </label>
-            ))}
-          </div>
-        </div>
+              <div className="v2-check-grid">
+                {data.nativeMappable.map(([key, label]) => (
+                  <label className="v2-check" key={key}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.native[key])}
+                      onChange={(e) => setNative({ [key]: e.target.checked })}
+                    />
+                    {label}
+                    {mode(form.rules[key]) === 'off' ? (
+                      <span className="v2-field-hint"> — enable the check above first</span>
+                    ) : null}
+                  </label>
+                ))}
+              </div>
+              <p className="v2-field-hint">
+                Discord keyword presets <span>— Discord-maintained word lists</span>
+              </p>
+              <div className="v2-check-grid">
+                {data.presetKeys.map((p) => (
+                  <label className="v2-check" key={p}>
+                    <input
+                      type="checkbox"
+                      checked={form.native.presets.includes(p)}
+                      onChange={(e) => togglePreset(p, e.target.checked)}
+                    />
+                    {PRESET_LABELS[p] || p}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </>
+        ) : null}
 
         <div className="v2-field">
           <label htmlFor="timeoutMinutes">Timeout length for the "Delete + Timeout" action (minutes)</label>

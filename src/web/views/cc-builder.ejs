@@ -35,13 +35,14 @@
     <h2>Command</h2>
     <label class="small">Name</label>
     <div class="cc-name-wrap">
-      <span class="cc-slash">/</span>
+      <span class="cc-slash"><%= commandPrefix %></span>
       <input type="text" name="name" value="<%= cmd.name %>" maxlength="32" pattern="[a-z0-9_-]{1,32}"
              placeholder="my-command" required />
     </div>
-    <p class="muted small">Lowercase letters, numbers, <code>-</code> and <code>_</code>. This is the slash command.</p>
+    <p class="muted small">Lowercase letters, numbers, <code>-</code> and <code>_</code>.
+      <% if (platform === 'fluxer') { %>Members run it as <code><%= commandPrefix %>name</code> in chat.<% } else { %>This is the slash command.<% } %></p>
 
-    <label class="small">Description <span class="muted">— shown in Discord's command list</span></label>
+    <label class="small">Description <span class="muted">— <%= platform === 'fluxer' ? 'a note for you; Fluxer has no command list to show it in' : "shown in Discord's command list" %></span></label>
     <input type="text" name="description" value="<%= cmd.description %>" maxlength="100" placeholder="What this command does" />
   </section>
 

@@ -3,9 +3,9 @@
 // ITAD_API_KEY is set, IsThereAnyDeal's cross-store deals list.
 //
 // config shape: { channelId, roleId }
+import { allGuilds, allClientsReady, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
-import { runtime } from '../runtime.js';
 import { getGuildModule } from '../db/modules.js';
 import { wasPosted, markPosted, pruneFreeGames } from '../db/freeGames.js';
 import { sendToChannel } from './lib/send.js';
@@ -197,8 +197,7 @@ export function gameEmbed(game) {
 }
 
 async function tick() {
-  const client = runtime.client;
-  if (!client?.isReady()) return;
+  if (!allClientsReady()) return;
 
   let games;
   try {
@@ -210,22 +209,22 @@ async function tick() {
   if (games.length === 0) return;
   await pruneFreeGames();
 
-  for (const guild of client.guilds.cache.values()) {
-    const { enabled, config: cfg } = await getGuildModule(guild.id, 'free-games');
+  for (const guild of allGuilds()) {
+    const { enabled, config: cfg } = await getGuildModule(guildKey(guild), 'free-games');
     if (!enabled || !/^\d{17,20}$/.test(cfg.channelId ?? '')) continue;
 
     let postedThisTick = 0;
     for (const game of games) {
       if (postedThisTick >= 10) break; // don't wall the channel during a big sale
-      if (await wasPosted(guild.id, game.key)) continue;
+      if (await wasPosted(guildKey(guild), game.key)) continue;
       const content = /^\d{17,20}$/.test(cfg.roleId ?? '') ? `<@&${cfg.roleId}>` : undefined;
-      const sent = await sendToChannel(guild.id, cfg.channelId, {
+      const sent = await sendToChannel(guildKey(guild), cfg.channelId, {
         content,
         embeds: [gameEmbed(game)],
         allowedMentions: content ? { roles: [cfg.roleId] } : { parse: [] },
       });
       if (sent) {
-        await markPosted(guild.id, game.key);
+        await markPosted(guildKey(guild), game.key);
         postedThisTick += 1;
       }
     }

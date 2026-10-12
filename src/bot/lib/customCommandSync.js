@@ -2,6 +2,7 @@
 // them. guild.commands.set() REPLACES the guild's whole application-command
 // list, so when Sylo's built-in commands are guild-scoped for this guild (dev
 // mode, DISCORD_GUILD_ID) they must be included in the payload too.
+import { guildKey, guildSupports } from '../../platform/platformOf.js';
 import { MessageFlags } from 'discord.js';
 import { config } from '../../config.js';
 import { getGuildModule } from '../../db/modules.js';
@@ -26,10 +27,10 @@ function toSlashJSON(cmd) {
 
 /** Push the desired application-command set for one guild. */
 export async function syncGuildCustomCommands(guild) {
-  if (!guild) return;
-  const { enabled, config: cfg } = await getGuildModule(guild.id, 'custom-commands');
+  if (!guild || !guildSupports(guild, 'slashCommands')) return;
+  const { enabled, config: cfg } = await getGuildModule(guildKey(guild), 'custom-commands');
 
-  const builtins = config.discordGuildIds.includes(guild.id)
+  const builtins = config.discordGuildIds.includes(guildKey(guild))
     ? [...(guild.client.commands?.values() ?? [])].map((c) => c.data.toJSON())
     : [];
   const builtinNames = new Set(builtins.map((c) => c.name));
@@ -41,14 +42,14 @@ export async function syncGuildCustomCommands(guild) {
   try {
     await guild.commands.set([...builtins, ...customs]);
   } catch (err) {
-    log.error('custom-commands', `slash sync failed for guild ${guild.id}:`, err.message);
+    log.error('custom-commands', `slash sync failed for guild ${guildKey(guild)}:`, err.message);
   }
 }
 
 /** Startup: sync every guild that has the module enabled. */
 export async function syncAllGuildCustomCommands(client) {
   for (const guild of client.guilds.cache.values()) {
-    if ((await getGuildModule(guild.id, 'custom-commands')).enabled) {
+    if ((await getGuildModule(guildKey(guild), 'custom-commands')).enabled) {
       await syncGuildCustomCommands(guild);
     }
   }

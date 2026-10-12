@@ -10,9 +10,9 @@
 //          'url' it is the feed URL itself.
 //   url  — the resolved feed URL the poll loop actually fetches.
 // template placeholders: {title} {link} {author} {feed}
+import { allGuilds, allClientsReady, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { randomBytes } from 'node:crypto';
-import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { seen, anySeen, markSeen, pruneScopePrefixOlderThan } from '../db/postedKeys.js';
 import { parseFeed } from '../bot/lib/feed.js';
@@ -238,16 +238,16 @@ export async function runFeed(guildId, feed) {
 }
 
 async function tick() {
-  if (!runtime.client?.isReady()) return;
+  if (!allClientsReady()) return;
   let budget = MAX_FETCHES_PER_TICK;
 
-  for (const guild of runtime.client.guilds.cache.values()) {
-    if (!(await isModuleEnabled(guild.id, 'rss'))) continue;
-    const cfg = normaliseRssConfig((await getGuildModule(guild.id, 'rss')).config);
+  for (const guild of allGuilds()) {
+    if (!(await isModuleEnabled(guildKey(guild), 'rss'))) continue;
+    const cfg = normaliseRssConfig((await getGuildModule(guildKey(guild), 'rss')).config);
     for (const feed of cfg.feeds) {
       if (budget-- <= 0) return;
       try {
-        await runFeed(guild.id, feed);
+        await runFeed(guildKey(guild), feed);
       } catch (err) {
         log.error('rss', `${feed.url}: ${err.message}`);
       }

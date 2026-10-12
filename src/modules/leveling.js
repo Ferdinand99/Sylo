@@ -8,8 +8,8 @@
 //     voiceXpEnabled, voiceXpPerMin, voiceAfkExcluded,
 //     multipliers: [ { type: 'role'|'channel', id, factor } ],
 //     rewards: [ { level, roleId } ] }
+import { allGuilds, allClientsReady, guildByKey, guildKey } from '../platform/platformOf.js';
 import { on } from './dispatch.js';
-import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { addXp, prunePeriods } from '../db/leveling.js';
 import { sendToChannel } from './lib/send.js';
@@ -103,7 +103,7 @@ function fillMessage(template, member, level) {
 /** Announce a level-up. `channel` is where it happened (null for voice). */
 async function announceLevelUp(config, member, level, { message, channel } = {}) {
   const text = fillMessage(config.announceMessage, member, level);
-  const guildId = member.guild.id;
+  const guildId = guildKey(member.guild);
   try {
     if (config.announce === 'reply' && message) {
       await message.reply({
@@ -194,7 +194,7 @@ async function settleVoiceSession(guildId, member, session, now, rawConfig, { ke
   if (minutes < 1) return;
   if (keepOpen) session.at += minutes * 60_000; // carry the sub-minute remainder
 
-  const guild = runtime.client?.guilds.cache.get(guildId);
+  const guild = guildByKey(guildId);
   if (!guild || !voiceEarns(config, guild, session.channelId, member.id)) return;
 
   const mult = resolveMultiplier(config, {
@@ -232,12 +232,12 @@ on('leveling', 'voiceStateUpdate', async ({ old: before, new: after }, rawConfig
  * the process (re)started would otherwise never accrue voice XP.
  */
 async function discoverVoiceSessions(now) {
-  if (!runtime.client?.isReady()) return;
-  for (const guild of runtime.client.guilds.cache.values()) {
-    if (!(await isModuleEnabled(guild.id, 'leveling'))) continue;
-    if (!normaliseLevelingConfig((await getGuildModule(guild.id, 'leveling')).config).voiceXpEnabled)
+  if (!allClientsReady()) return;
+  for (const guild of allGuilds()) {
+    if (!(await isModuleEnabled(guildKey(guild), 'leveling'))) continue;
+    if (!normaliseLevelingConfig((await getGuildModule(guildKey(guild), 'leveling')).config).voiceXpEnabled)
       continue;
-    const sessions = sessionsFor(guild.id);
+    const sessions = sessionsFor(guildKey(guild));
     for (const vs of guild.voiceStates.cache.values()) {
       if (!vs.channelId || vs.member?.user?.bot) continue;
       if (!sessions.has(vs.id)) sessions.set(vs.id, { at: now, channelId: vs.channelId });
@@ -254,7 +254,7 @@ async function settleAllVoice(now = Date.now()) {
     }
     if (!(await isModuleEnabled(guildId, 'leveling'))) continue;
     const rawConfig = (await getGuildModule(guildId, 'leveling')).config;
-    const guild = runtime.client?.guilds.cache.get(guildId);
+    const guild = guildByKey(guildId);
     for (const [userId, session] of sessions) {
       const member = guild?.members.cache.get(userId);
       if (!member) continue;
@@ -301,7 +301,7 @@ async function applyRewards(member, level, config) {
   const earned = config.rewards.filter((r) => level >= r.level);
   if (earned.length === 0) return;
 
-  const me = runtime.client?.guilds.cache.get(member.guild.id)?.members.me;
+  const me = guildByKey(guildKey(member.guild))?.members.me;
   const canManage = me?.permissions.has('ManageRoles');
   if (!canManage) return;
 

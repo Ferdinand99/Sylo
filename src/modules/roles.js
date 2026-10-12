@@ -18,6 +18,7 @@
 //   }
 // `key` identifies a reaction (custom emoji id or unicode char). For the button
 // and select styles the emoji is optional; `label` / `btnStyle` drive the button.
+import { guildByKey } from '../platform/platformOf.js';
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -27,7 +28,6 @@ import {
 } from 'discord.js';
 import { on } from './dispatch.js';
 import { registerComponent } from '../bot/lib/components.js';
-import { runtime } from '../runtime.js';
 import { getGuildModule } from '../db/modules.js';
 import { buildEmbed, sendComposed, editComposed } from './messageCreator.js';
 import { log } from '../lib/log.js';
@@ -307,7 +307,7 @@ on('roles', 'reactionAdd', async (payload, config, guildId) => {
   if (!r) return;
   const hit = findPair(config, r.reaction);
   if (!hit) return;
-  const guild = runtime.client.guilds.cache.get(guildId);
+  const guild = guildByKey(guildId);
   const member = await guild.members.fetch(r.user.id).catch(() => null);
   const role = guild.roles.cache.get(hit.pair.roleId);
   if (!member || !role) return;
@@ -349,7 +349,7 @@ on('roles', 'reactionRemove', async (payload, config, guildId) => {
   if (!r) return;
   const hit = findPair(config, r.reaction);
   if (!hit) return;
-  const guild = runtime.client.guilds.cache.get(guildId);
+  const guild = guildByKey(guildId);
   const member = await guild.members.fetch(r.user.id).catch(() => null);
   const role = guild.roles.cache.get(hit.pair.roleId);
   if (!member || !role || !role.editable) return;

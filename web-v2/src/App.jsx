@@ -5,6 +5,7 @@ import Overview from './pages/Overview.jsx';
 import Leaderboard from './pages/Leaderboard.jsx';
 import Settings from './pages/Settings.jsx';
 import Personalizer from './pages/Personalizer.jsx';
+import Account from './pages/Account.jsx';
 import Health from './pages/Health.jsx';
 import Roadmap from './pages/Roadmap.jsx';
 import RoadmapAdmin from './pages/RoadmapAdmin.jsx';
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="guilds/:guildId/tickets" element={<TicketsInbox />} />
           <Route path="guilds/:guildId/tickets/:ticketId" element={<TicketView />} />
           <Route path="guilds/:guildId/moderation/:tab?" element={<ModerationHub />} />
+          <Route path="account" element={<Account />} />
           <Route path="settings" element={<Personalizer />} />
           <Route path="roadmap" element={<Roadmap />} />
           <Route path="roadmap/admin" element={<RoadmapAdmin />} />

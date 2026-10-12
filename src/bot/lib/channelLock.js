@@ -2,7 +2,10 @@
 // having first saved whatever @everyone overwrite was there before. Unlocking
 // restores that saved state exactly (or removes the overwrite if there wasn't
 // one). Shared by /lock, /unlock and /lockdown.
+import { guildKey } from '../../platform/platformOf.js';
 import { PermissionFlagsBits } from 'discord.js';
+import { platformOfGuild } from '../../platform/platformOf.js';
+import { supports } from '../../platform/capabilities.js';
 import { recordChannelLock, getChannelLock, clearChannelLock } from '../../db/channelLocks.js';
 
 // The permissions a lock takes away. Threads + reactions are included so a
@@ -14,6 +17,13 @@ export const LOCK_PERMS = [
   'CreatePrivateThreads',
   'AddReactions',
 ];
+
+const THREAD_PERMS = new Set(['SendMessagesInThreads', 'CreatePublicThreads', 'CreatePrivateThreads']);
+
+/** The lock permissions that exist on a platform (no thread permissions where there are no threads). */
+export function lockPermsFor(platform = 'discord') {
+  return supports(platform, 'threads') ? LOCK_PERMS : LOCK_PERMS.filter((p) => !THREAD_PERMS.has(p));
+}
 
 /** Channel types /lock and /lockdown can act on. */
 export function isLockableChannel(channel) {
@@ -37,8 +47,8 @@ export function lockPreflight(channel) {
 }
 
 /** `{ SendMessages: false, ... }` — deny every lock perm. */
-export function denyLockPerms() {
-  return Object.fromEntries(LOCK_PERMS.map((p) => [p, false]));
+export function denyLockPerms(platform = 'discord') {
+  return Object.fromEntries(lockPermsFor(platform).map((p) => [p, false]));
 }
 
 /**
@@ -47,11 +57,11 @@ export function denyLockPerms() {
  * neither → null (inherit). `prevAllow` / `prevDeny` are bitfields (BigInt or a
  * decimal string).
  */
-export function restoreLockPerms(prevAllow, prevDeny) {
+export function restoreLockPerms(prevAllow, prevDeny, platform = 'discord') {
   const allow = BigInt(prevAllow);
   const deny = BigInt(prevDeny);
   const out = {};
-  for (const p of LOCK_PERMS) {
+  for (const p of lockPermsFor(platform)) {
     const bit = PermissionFlagsBits[p];
     if ((allow & bit) === bit) out[p] = true;
     else if ((deny & bit) === bit) out[p] = false;
@@ -68,10 +78,10 @@ export function restoreLockPerms(prevAllow, prevDeny) {
  */
 export async function lockChannel(channel, { moderatorTag, lockdown = false }) {
   const everyone = channel.guild.roles.everyone;
-  if (!(await getChannelLock(channel.guild.id, channel.id))) {
+  if (!(await getChannelLock(guildKey(channel.guild), channel.id))) {
     const existing = channel.permissionOverwrites.cache.get(everyone.id);
     await recordChannelLock({
-      guildId: channel.guild.id,
+      guildId: guildKey(channel.guild),
       channelId: channel.id,
       prevAllow: existing?.allow.bitfield ?? 0n,
       prevDeny: existing?.deny.bitfield ?? 0n,
@@ -80,7 +90,9 @@ export async function lockChannel(channel, { moderatorTag, lockdown = false }) {
       lockdown,
     });
   }
-  await channel.permissionOverwrites.edit(everyone, denyLockPerms(), { reason: `Locked by ${moderatorTag}` });
+  await channel.permissionOverwrites.edit(everyone, denyLockPerms(platformOfGuild(channel.guild)), {
+    reason: `Locked by ${moderatorTag}`,
+  });
 }
 
 /**
@@ -92,19 +104,28 @@ export async function lockChannel(channel, { moderatorTag, lockdown = false }) {
  */
 export async function unlockChannel(channel, { moderatorTag }) {
   const everyone = channel.guild.roles.everyone;
-  const saved = await getChannelLock(channel.guild.id, channel.id);
+  const platform = platformOfGuild(channel.guild);
+  const saved = await getChannelLock(guildKey(channel.guild), channel.id);
   const reason = `Unlocked by ${moderatorTag}`;
 
   if (saved && !saved.had_overwrite) {
     await channel.permissionOverwrites.delete(everyone, reason);
   } else if (saved) {
-    await channel.permissionOverwrites.edit(everyone, restoreLockPerms(saved.prev_allow, saved.prev_deny), {
-      reason,
-    });
+    await channel.permissionOverwrites.edit(
+      everyone,
+      restoreLockPerms(saved.prev_allow, saved.prev_deny, platform),
+      {
+        reason,
+      }
+    );
   } else {
-    await channel.permissionOverwrites.edit(everyone, Object.fromEntries(LOCK_PERMS.map((p) => [p, null])), {
-      reason,
-    });
+    await channel.permissionOverwrites.edit(
+      everyone,
+      Object.fromEntries(lockPermsFor(platform).map((p) => [p, null])),
+      {
+        reason,
+      }
+    );
   }
-  await clearChannelLock(channel.guild.id, channel.id);
+  await clearChannelLock(guildKey(channel.guild), channel.id);
 }

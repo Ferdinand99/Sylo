@@ -9,9 +9,9 @@
 //     resultsMessage: { content, title, color, footer, image } }
 // pollMessage placeholders:    {question} {choices} {ends} {mode}
 // resultsMessage placeholders: {question} {results} {total} {winner} {mode}
+import { allClientsReady, guildByKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { on } from './dispatch.js';
-import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { getPoll, duePolls, deletePoll } from '../db/polls.js';
 import { log } from '../lib/log.js';
@@ -186,7 +186,7 @@ export async function endPoll(messageId) {
   if (!poll) return;
   await deletePoll(messageId); // claim it first so the loop / a race can't double-post
 
-  const guild = runtime.client?.guilds.cache.get(poll.guild_id);
+  const guild = guildByKey(poll.guild_id);
   const channel = guild?.channels.cache.get(poll.channel_id);
   if (!channel?.isTextBased()) return;
 
@@ -269,9 +269,9 @@ on('polls', 'reactionAdd', async ({ reaction, user }, rawConfig, _guildId) => {
 
 const TICK_MS = 15_000;
 const timer = setInterval(async () => {
-  if (!runtime.client?.isReady()) return;
+  if (!allClientsReady()) return;
   for (const poll of await duePolls(Date.now())) {
-    if ((await isModuleEnabled(poll.guild_id, 'polls')) && runtime.client.guilds.cache.has(poll.guild_id)) {
+    if ((await isModuleEnabled(poll.guild_id, 'polls')) && Boolean(guildByKey(poll.guild_id))) {
       endPoll(poll.message_id).catch((err) => log.error('module:polls', 'end failed:', err.message));
     } else {
       await deletePoll(poll.message_id); // module off or bot gone — just clear it

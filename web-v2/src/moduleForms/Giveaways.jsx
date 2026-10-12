@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useCmd } from '../platformContext.jsx';
 import { getModuleConfig, saveModuleConfig, endGiveaway, rerollGiveaway, ApiError } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
@@ -20,6 +21,7 @@ function rel(ms) {
 
 export default function Giveaways() {
   const { guildId } = useParams();
+  const cmd = useCmd();
   const { data, loading, error, setData } = useApiData(
     () => getModuleConfig(guildId, 'giveaways'),
     [guildId]
@@ -42,7 +44,7 @@ export default function Giveaways() {
       <p className="v2-state">
         {notAuthed ? (
           <>
-            Your session expired — <a href="/auth/discord/login">log in again</a>.
+            Your session expired — <a href="/auth/login">log in again</a>.
           </>
         ) : (
           `Couldn't load Giveaways settings (${error.message}).`
@@ -99,8 +101,9 @@ export default function Giveaways() {
     <>
       <h1 className="v2-section-title">Giveaways</h1>
       <p className="v2-field-hint">
-        Staff start giveaways with <code>/giveaway start</code>; members join by clicking the 🎉 Enter button.
-        Winners are drawn automatically at the end time — no reactions, no Message Content intent.
+        Staff start giveaways with <code>{cmd('/giveaway start')}</code>; members join by clicking the 🎉
+        Enter button. Winners are drawn automatically at the end time — no reactions, no Message Content
+        intent.
       </p>
 
       <form onSubmit={onSave}>
