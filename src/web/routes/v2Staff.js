@@ -11,7 +11,7 @@
 import { clientOfGuild, primaryClient, rawGuildId } from '../../platform/platformOf.js';
 import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
-import { currentUser } from '../middleware/auth.js';
+import { currentUser, actingUserId } from '../middleware/auth.js';
 import { ticketAccessState } from '../middleware/ticketAccess.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild } from '../lib/guildContext.js';
@@ -48,7 +48,7 @@ import { formatDuration } from '../../bot/lib/duration.js';
 const BAN_DISPLAY_LIMIT = 200;
 const WEB_MODERATOR = 'web';
 
-const webModeratorId = (req) => currentUser(req)?.id ?? WEB_MODERATOR;
+const webModeratorId = (req, guildKeyArg) => actingUserId(req, guildKeyArg, WEB_MODERATOR);
 const moderatorDisplayName = (req) =>
   currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`;
 
@@ -177,7 +177,7 @@ ticketsRouter.post(
       .trim()
       .slice(0, 2000);
     if (!content) return fail(res, 'Write a reply first.');
-    const { delivered } = await relayStaffReply(ticket, currentUser(req)?.id ?? 'web', content);
+    const { delivered } = await relayStaffReply(ticket, actingUserId(req, ticket.guild_id), content);
     res.json({ ok: true, delivered });
   })
 );
@@ -191,7 +191,7 @@ ticketsRouter.post(
       const closingMessage = String(req.body.content ?? '')
         .trim()
         .slice(0, 2000);
-      await closeTicketWithNotice(ticket, currentUser(req)?.id ?? 'web', closingMessage);
+      await closeTicketWithNotice(ticket, actingUserId(req, ticket.guild_id), closingMessage);
     }
     res.json({ ok: true });
   })
@@ -545,7 +545,7 @@ staffRouter.post(
     const { id, count } = await addWarning({
       guildId: guild.id,
       userId: user.id,
-      moderatorId: webModeratorId(req),
+      moderatorId: webModeratorId(req, guild.id),
       reason,
     });
     const dmed = await notifyTarget(user, {

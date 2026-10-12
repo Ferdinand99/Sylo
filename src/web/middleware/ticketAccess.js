@@ -27,6 +27,7 @@ export async function ticketAccessState(req) {
   const userId = userIdForGuild(req, guildId);
   if (adminGuildIds(req).has(guildId)) return 'ok';
 
+  if (!userId) return 'denied'; // no identity on this guild's platform: nothing to look up
   const staffRoles = (await getGuildModule(guildId, 'tickets')).config.staffRoles ?? [];
   if (staffRoles.length === 0) return 'denied';
 

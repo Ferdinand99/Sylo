@@ -2,7 +2,7 @@
 // time, or on a repeating interval with an optional start/end window and a
 // weekday filter. Not event-driven: a polling loop (started on import) checks
 // for due reminders.
-import { anyClientReady, guildByKey } from '../platform/platformOf.js';
+import { allClientsReady, guildByKey } from '../platform/platformOf.js';
 import { isModuleEnabled } from '../db/modules.js';
 import {
   dueScheduled,
@@ -55,7 +55,7 @@ function payloadFor(reminder) {
 }
 
 async function tick() {
-  if (!anyClientReady()) return;
+  if (!allClientsReady()) return;
   const now = Date.now();
 
   for (const r of await dueScheduled(now)) {

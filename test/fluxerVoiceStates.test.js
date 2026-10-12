@@ -117,3 +117,14 @@ test('track(): a listener that throws does not stop later updates', () => {
   assert.doesNotThrow(() => client.emit('voiceStateUpdate', raw({ channel_id: 'vc2' })));
   assert.equal(calls, 2);
 });
+
+test('a disconnect of another connection of the same user does not remove their tracked state', () => {
+  const { client, tracker } = setup();
+  tracker.apply(client, raw({ connection_id: 'conn-a' }));
+  const ignored = tracker.apply(client, raw({ channel_id: null, connection_id: 'conn-b' }));
+  assert.equal(ignored, null, 'no leave event for a connection that was never tracked');
+  assert.equal(tracker.statesFor(G).get('u1').channelId, 'vc1');
+  // The tracked connection leaving does remove it.
+  tracker.apply(client, raw({ channel_id: null, connection_id: 'conn-a' }));
+  assert.equal(tracker.statesFor(G).has('u1'), false);
+});

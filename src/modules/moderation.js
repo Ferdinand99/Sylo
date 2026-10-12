@@ -6,7 +6,7 @@
 //     dmOnPunish: boolean,
 //     warnThresholds: [ { count, action: 'timeout'|'kick'|'ban', durationMinutes? } ]
 //   }
-import { anyClientReady, guildByKey, guildKey } from '../platform/platformOf.js';
+import { allClientsReady, guildByKey, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder, RESTJSONErrorCodes } from 'discord.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { dueTempBans, clearTempBan } from '../db/tempBans.js';
@@ -160,7 +160,7 @@ export async function settleTempBan(row) {
 }
 
 const tempBanTimer = setInterval(async () => {
-  if (!anyClientReady()) return;
+  if (!allClientsReady()) return;
   for (const row of await dueTempBans(Date.now())) {
     const key = `${row.guild_id}:${row.user_id}`;
     if (settlingTempBans.has(key)) continue;

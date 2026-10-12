@@ -122,6 +122,15 @@ export function userIdForGuild(req, key) {
 }
 
 /**
+ * Who a dashboard action in this guild is attributed to: the signed-in person's id on the
+ * guild's own platform (a Discord id for a Discord server, their Fluxer id for a Fluxer
+ * one), or `fallback` in open mode / when they have no identity there.
+ */
+export function actingUserId(req, key, fallback = 'web') {
+  return userIdForGuild(req, key) ?? fallback;
+}
+
+/**
  * Guild keys the signed-in user can manage: the guilds each of their identities
  * administers, limited to the guilds the bot is in. Open mode: every guild.
  */

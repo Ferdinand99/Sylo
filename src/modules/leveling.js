@@ -8,7 +8,7 @@
 //     voiceXpEnabled, voiceXpPerMin, voiceAfkExcluded,
 //     multipliers: [ { type: 'role'|'channel', id, factor } ],
 //     rewards: [ { level, roleId } ] }
-import { allGuilds, anyClientReady, guildByKey, guildKey } from '../platform/platformOf.js';
+import { allGuilds, allClientsReady, guildByKey, guildKey } from '../platform/platformOf.js';
 import { on } from './dispatch.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { addXp, prunePeriods } from '../db/leveling.js';
@@ -232,7 +232,7 @@ on('leveling', 'voiceStateUpdate', async ({ old: before, new: after }, rawConfig
  * the process (re)started would otherwise never accrue voice XP.
  */
 async function discoverVoiceSessions(now) {
-  if (!anyClientReady()) return;
+  if (!allClientsReady()) return;
   for (const guild of allGuilds()) {
     if (!(await isModuleEnabled(guildKey(guild), 'leveling'))) continue;
     if (!normaliseLevelingConfig((await getGuildModule(guildKey(guild), 'leveling')).config).voiceXpEnabled)

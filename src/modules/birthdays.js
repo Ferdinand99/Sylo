@@ -3,7 +3,7 @@
 // day. Cross-guild, so the tick runs once per day guarded by an app-setting.
 //
 // config shape: { channel, message, roleId, pingRole }
-import { allGuilds, anyClientReady, guildByKey, guildKey } from '../platform/platformOf.js';
+import { allGuilds, allClientsReady, guildByKey, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { getAppSetting, setAppSetting } from '../db/appSettings.js';
@@ -140,9 +140,9 @@ export { guildBirthdays };
 // does any work, and a mid-day restart doesn't re-post.
 const TICK_MS = 60 * 60 * 1000;
 const timer = setInterval(() => {
-  if (anyClientReady()) runBirthdaySweep().catch(() => {});
+  if (allClientsReady()) runBirthdaySweep().catch(() => {});
 }, TICK_MS);
 timer.unref();
 setTimeout(() => {
-  if (anyClientReady()) runBirthdaySweep().catch(() => {});
+  if (allClientsReady()) runBirthdaySweep().catch(() => {});
 }, 15_000).unref();

@@ -10,7 +10,7 @@
 //          'url' it is the feed URL itself.
 //   url  — the resolved feed URL the poll loop actually fetches.
 // template placeholders: {title} {link} {author} {feed}
-import { allGuilds, anyClientReady, guildKey } from '../platform/platformOf.js';
+import { allGuilds, allClientsReady, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { randomBytes } from 'node:crypto';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
@@ -238,7 +238,7 @@ export async function runFeed(guildId, feed) {
 }
 
 async function tick() {
-  if (!anyClientReady()) return;
+  if (!allClientsReady()) return;
   let budget = MAX_FETCHES_PER_TICK;
 
   for (const guild of allGuilds()) {

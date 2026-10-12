@@ -3,7 +3,7 @@
 // plus the dashboard, call endGiveaway() directly.
 //
 // config shape: { ping: 'none' | 'here' | 'everyone', dmWinners: boolean }
-import { anyClientReady, clientOfGuild, guildByKey } from '../platform/platformOf.js';
+import { allClientsReady, clientOfGuild, guildByKey } from '../platform/platformOf.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { registerComponent } from '../bot/lib/components.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
@@ -246,7 +246,7 @@ registerComponent('giveaways', 'gaw:enter:', (interaction) =>
 
 const TICK_MS = 20_000;
 async function tick() {
-  if (!anyClientReady()) return;
+  if (!allClientsReady()) return;
   for (const g of await dueGiveaways(Date.now())) {
     if ((await isModuleEnabled(g.guild_id, 'giveaways')) && Boolean(guildByKey(g.guild_id))) {
       endGiveaway(g.id).catch((err) => log.error('giveaways', 'auto-end failed:', err.message));

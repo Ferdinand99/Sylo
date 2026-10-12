@@ -4,7 +4,7 @@
 import { clientOfGuild, primaryClient, rawGuildId } from '../../platform/platformOf.js';
 import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
-import { requireGuildAdmin, currentUser } from '../middleware/auth.js';
+import { requireGuildAdmin, currentUser, actingUserId } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
@@ -206,8 +206,8 @@ const WEB_MODERATOR = 'web';
 // so a POST that redirects back doesn't always snap to the first tab.
 const MOD_TABS = ['automod', 'actions', 'admin', 'infr', 'log', 'cmd'];
 
-function webModeratorId(req) {
-  return currentUser(req)?.id ?? WEB_MODERATOR;
+function webModeratorId(req, guildKeyArg) {
+  return actingUserId(req, guildKeyArg, WEB_MODERATOR);
 }
 function moderatorDisplayName(req) {
   return currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`;
@@ -3065,7 +3065,7 @@ router.post(
     const { id, count } = await addWarning({
       guildId: guild.id,
       userId: user.id,
-      moderatorId: webModeratorId(req),
+      moderatorId: webModeratorId(req, guild.id),
       reason,
     });
     const dmed = await notifyTarget(user, {

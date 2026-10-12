@@ -7,7 +7,7 @@
 //   { alerts: [ { id, ytChannelId, name, discordChannelId, roleId,
 //                 onVideo, onLive, videoMessage, liveMessage } ] }
 // message placeholders: {name} {title} {url}
-import { allGuilds, anyClientReady, guildKey } from '../platform/platformOf.js';
+import { allGuilds, allClientsReady, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import {
@@ -247,7 +247,7 @@ function payload(alert, { name, title, url, thumb }, kind) {
 // --- poll loop -----------------------------------------------------
 
 async function tick() {
-  if (!anyClientReady()) return;
+  if (!allClientsReady()) return;
   await pruneYoutube();
 
   for (const guild of allGuilds()) {

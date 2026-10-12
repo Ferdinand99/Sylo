@@ -7,7 +7,7 @@
 // message placeholders: {name} {title} {game} {url} {viewers}
 // plainText: send a plain message with no embed (for channels bridged elsewhere,
 // e.g. a RuneLite Discord->game-chat plugin that ignores embeds).
-import { allGuilds, anyClientReady, guildKey } from '../platform/platformOf.js';
+import { allGuilds, allClientsReady, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
@@ -160,7 +160,7 @@ export function buildPayload(stream, user, alert) {
 // --- poll loop -------------------------------------------------------
 
 async function tick() {
-  if (!anyClientReady() || !config.twitchEnabled) return;
+  if (!allClientsReady() || !config.twitchEnabled) return;
 
   // Gather every alert across enabled guilds.
   const jobs = [];

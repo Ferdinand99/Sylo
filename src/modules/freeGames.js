@@ -3,7 +3,7 @@
 // ITAD_API_KEY is set, IsThereAnyDeal's cross-store deals list.
 //
 // config shape: { channelId, roleId }
-import { allGuilds, anyClientReady, guildKey } from '../platform/platformOf.js';
+import { allGuilds, allClientsReady, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { getGuildModule } from '../db/modules.js';
@@ -197,7 +197,7 @@ export function gameEmbed(game) {
 }
 
 async function tick() {
-  if (!anyClientReady()) return;
+  if (!allClientsReady()) return;
 
   let games;
   try {

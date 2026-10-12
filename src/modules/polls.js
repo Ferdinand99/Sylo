@@ -9,7 +9,7 @@
 //     resultsMessage: { content, title, color, footer, image } }
 // pollMessage placeholders:    {question} {choices} {ends} {mode}
 // resultsMessage placeholders: {question} {results} {total} {winner} {mode}
-import { anyClientReady, guildByKey } from '../platform/platformOf.js';
+import { allClientsReady, guildByKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { on } from './dispatch.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
@@ -269,7 +269,7 @@ on('polls', 'reactionAdd', async ({ reaction, user }, rawConfig, _guildId) => {
 
 const TICK_MS = 15_000;
 const timer = setInterval(async () => {
-  if (!anyClientReady()) return;
+  if (!allClientsReady()) return;
   for (const poll of await duePolls(Date.now())) {
     if ((await isModuleEnabled(poll.guild_id, 'polls')) && Boolean(guildByKey(poll.guild_id))) {
       endPoll(poll.message_id).catch((err) => log.error('module:polls', 'end failed:', err.message));

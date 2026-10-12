@@ -10,6 +10,7 @@ import {
   allGuilds,
   guildByKey,
   anyClientReady,
+  allClientsReady,
   keyedGuild,
   allGuildKeys,
 } from '../src/platform/platformOf.js';
@@ -176,4 +177,18 @@ test('allGuildKeys: the key of every guild on every connected platform', () => {
   runtime.clients.fluxer = null;
   runtime.clients.discord = null;
   assert.deepEqual(allGuildKeys(), []);
+});
+
+test('allClientsReady: every connected client must be ready, so a sweep never reads a down platform as "guild gone"', () => {
+  runtime.clients.discord = null;
+  runtime.clients.fluxer = null;
+  assert.equal(allClientsReady(), false); // nothing connected
+  runtime.clients.discord = { isReady: () => true };
+  assert.equal(allClientsReady(), true);
+  runtime.clients.fluxer = { isReady: () => false }; // registered, still logging in or reconnecting
+  assert.equal(allClientsReady(), false);
+  runtime.clients.fluxer = { isReady: () => true };
+  assert.equal(allClientsReady(), true);
+  runtime.clients.discord = null;
+  runtime.clients.fluxer = null;
 });

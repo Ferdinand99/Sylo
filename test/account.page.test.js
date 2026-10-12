@@ -3,6 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   D_GUILD,
+  F_GUILD,
+  memberFetches,
   browser,
   guildIds,
   profiles,
@@ -187,4 +189,24 @@ test('the switcher offers to add a server on each platform, and V2 gets the same
     body.invites.map((i) => i.platform),
     ['discord', 'fluxer']
   );
+});
+
+test('ticket pages: an account with no identity on the guild platform is denied without a member lookup', async () => {
+  const { setGuildModule } = await import('../src/db/modules.js');
+  const { ticketAccessState } = await import('../src/web/middleware/ticketAccess.js');
+  await setGuildModule(`fluxer:${F_GUILD}`, 'tickets', {
+    enabled: true,
+    config: { staffRoles: ['888888888888888888'] },
+  });
+  // A Discord-only account: nothing to look up on Fluxer.
+  const req = {
+    account: {
+      id: 1,
+      identities: [{ platform: 'discord', platformUserId: '333333333333333333', guildIds: [] }],
+    },
+    params: { guildId: `fluxer:${F_GUILD}` },
+  };
+  memberFetches.length = 0;
+  assert.equal(await ticketAccessState(req), 'denied');
+  assert.deepEqual(memberFetches, [], 'no members.fetch(null), which would page through every member');
 });

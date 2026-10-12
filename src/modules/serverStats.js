@@ -1,7 +1,7 @@
 // Server statistics: keeps chosen voice channels named with a live count
 // (e.g. "Members: 1,234"). Not event-driven — a slow refresh loop, because
 // Discord rate-limits channel renames hard (~2 per 10 minutes per channel).
-import { allGuilds, anyClientReady, guildKey } from '../platform/platformOf.js';
+import { allGuilds, allClientsReady, guildKey } from '../platform/platformOf.js';
 import { getGuildModule } from '../db/modules.js';
 import { log } from '../lib/log.js';
 
@@ -88,7 +88,7 @@ async function refreshGuild(guild, cfg) {
 const lastRefresh = new Map(); // guildId -> timestamp of the last rename pass
 
 async function tick() {
-  if (!anyClientReady()) return;
+  if (!allClientsReady()) return;
   const now = Date.now();
   for (const guild of allGuilds()) {
     const { enabled, config } = await getGuildModule(guildKey(guild), 'server-stats');

@@ -12,7 +12,7 @@
 //     ownerPerms: { manageChannels, managePermissions, prioritySpeaker, moveMembers },
 //     textChannel: { enabled, restrictCommands, pinUsages, restrict } }
 import {
-  anyClientReady,
+  allClientsReady,
   guildByKey,
   guildKey,
   guildSupports,
@@ -379,7 +379,7 @@ on('temp-voice', 'voiceStateUpdate', async ({ old: oldState, new: newState }, ra
 // --- keep-alive sweep --------------------------------------------------
 
 export async function sweepTempChannels() {
-  if (!anyClientReady()) return;
+  if (!allClientsReady()) return;
   const now = Date.now();
   for (const row of await listAllTempChannels()) {
     const guild = guildByKey(row.guild_id);

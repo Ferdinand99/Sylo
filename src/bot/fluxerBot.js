@@ -18,6 +18,7 @@ import { register as registerDmTickets } from './events/dmTickets.js';
 import { fluxerReactionAdd } from '../platform/fluxerEvents.js';
 import { createVoiceTracker } from '../platform/voiceStates.js';
 import { handleReactionAdd } from '../platform/reactionBridge.js';
+import { purgeExpiredComponentActions } from '../db/componentReactions.js';
 
 /**
  * The `instance` client option: which Fluxer instance to talk to. Hosted Fluxer
@@ -97,7 +98,7 @@ export async function startFluxerBot(opts = {}) {
     voice,
     isCommand: (message) => isCommandMessage(message, { commands, prefix }),
   });
-  registerDmTickets(client); // a DM to the bot opens a ticket, as on Discord
+  registerDmTickets(client, { isCommand: (message) => isCommandMessage(message, { commands, prefix }) }); // a DM to the bot opens a ticket, as on Discord
   attachPrefixCommands(client, { commands, prefix });
   client.on('messageReactionAdd', async (payload) => {
     try {
@@ -108,7 +109,19 @@ export async function startFluxerBot(opts = {}) {
     }
   });
 
-  await client.login(token);
+  // Registered before login: events that arrive while logging in must already see this
+  // as the Fluxer client (guild keys, guildByKey), not fall back to Discord.
   setClientFor('fluxer', client);
+  try {
+    await client.login(token);
+  } catch (err) {
+    setClientFor('fluxer', null); // a client that never connected must not hold sweeps back
+    throw err;
+  }
+  // Expired reaction-menu rows (a /help reply lives 15 minutes) are not read after that.
+  setInterval(
+    () => purgeExpiredComponentActions().catch((err) => log.error('fluxer', 'component purge failed:', err)),
+    60 * 60 * 1000
+  ).unref();
   return client;
 }

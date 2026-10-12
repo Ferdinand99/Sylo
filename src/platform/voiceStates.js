@@ -80,6 +80,16 @@ export function createVoiceTracker({ Collection }) {
     const old =
       states.get(data.user_id) ??
       new VoiceState(client, guildId, { user_id: data.user_id, channel_id: null });
+    // Fluxer allows several voice connections per user. A disconnect of a connection we are
+    // not tracking (their phone, while the desktop stays in the channel) is not a leave.
+    if (
+      !data.channel_id &&
+      states.has(data.user_id) &&
+      data.connection_id &&
+      old.connectionId &&
+      data.connection_id !== old.connectionId
+    )
+      return null;
     const next = new VoiceState(client, guildId, data);
     if (next.channelId) states.set(next.id, next);
     else states.delete(next.id);

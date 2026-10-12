@@ -3,6 +3,7 @@
 // (the vanity URL is served directly, not redirected). Mounted before
 // requireAuth in server.js.
 import { guildByKey } from '../../platform/platformOf.js';
+import { isPlatformGuildId } from '../../lib/platformId.js';
 import { Router } from 'express';
 import { getGuildModule } from '../../db/modules.js';
 import {
@@ -113,7 +114,7 @@ async function renderLeaderboard(req, res, next, guildId, canonical) {
 const router = Router();
 router.get('/:guildId', (req, res, next) => {
   const { guildId } = req.params;
-  if (!/^\d{17,20}$/.test(guildId)) return notFound(res, 'Unknown server.');
+  if (!isPlatformGuildId(guildId)) return notFound(res, 'Unknown server.');
   return renderLeaderboard(req, res, next, guildId);
 });
 

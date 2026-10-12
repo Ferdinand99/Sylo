@@ -281,3 +281,30 @@ test('a DM to the Fluxer bot opens a ticket in the Fluxer server the sender is i
     runtime.clients.discord = null;
   }
 });
+
+test('the Fluxer client is registered before login, and unregistered again when login fails', async () => {
+  const sdk = fakeSdk();
+  const seen = [];
+  const original = sdk.Client.prototype.login;
+  sdk.Client.prototype.login = async function (token) {
+    seen.push(runtime.clients.fluxer === this);
+    return original.call(this, token);
+  };
+  const opts = {
+    sdk,
+    token: 't',
+    commands: new Map(),
+    prefix: '!',
+    loadModules: async () => {},
+    installCompat: () => {},
+  };
+  await startFluxerBot(opts);
+  assert.deepEqual(seen, [true], 'events during login are classified as Fluxer');
+  runtime.clients.fluxer = null;
+
+  sdk.Client.prototype.login = async () => {
+    throw new Error('bad token');
+  };
+  await assert.rejects(startFluxerBot(opts), /bad token/);
+  assert.equal(runtime.clients.fluxer, null, 'a client that never connected is not left registered');
+});

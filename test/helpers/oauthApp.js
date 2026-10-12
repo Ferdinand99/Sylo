@@ -60,12 +60,22 @@ const stubbedFetch = async (url, init) => {
   return json({}, 404);
 };
 
+/** Arguments of every guild.members.fetch() call the app made on the fake guilds. */
+export const memberFetches = [];
+
 const guild = (id, name, client) => ({
   id,
   name,
   client,
   iconURL: () => null,
-  members: { cache: new Map() },
+  members: {
+    cache: new Map(),
+    // Every member lookup is recorded; none of them succeeds.
+    fetch: async (arg) => {
+      memberFetches.push(arg);
+      throw new Error('Unknown Member');
+    },
+  },
   ownerId: 'x',
 });
 const base_client = () => ({

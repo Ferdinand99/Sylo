@@ -65,7 +65,18 @@ export function guildByKey(key) {
   return clientFor(parsed.platform)?.guilds.cache.get(parsed.rawId);
 }
 
-/** Is at least one connected platform client ready? Periodic sweeps wait on this. */
+/**
+ * Is every connected platform client ready (and at least one connected)? Periodic sweeps
+ * wait on this: a sweep resolves stored guild keys with guildByKey(), so one platform
+ * still logging in or reconnecting would make its guilds look gone, and a sweep may
+ * delete a "gone" guild's schedules, polls or giveaways.
+ */
+export function allClientsReady() {
+  const clients = PLATFORMS.map((p) => runtime.clients[p]).filter(Boolean);
+  return clients.length > 0 && clients.every((c) => Boolean(c.isReady?.()));
+}
+
+/** Is at least one connected platform client ready? */
 export function anyClientReady() {
   return PLATFORMS.some((p) => Boolean(runtime.clients[p]?.isReady?.()));
 }
