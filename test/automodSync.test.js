@@ -171,7 +171,14 @@ test('a guild on a platform without native AutoMod is skipped without touching t
       },
     };
     const r = await syncGuildAutomod(guild, { native: { enabled: true, words: true } });
-    assert.deepEqual(r, { ok: true, skipped: 'unsupported-platform', created: 0, edited: 0, removed: 0, errors: [] });
+    assert.deepEqual(r, {
+      ok: true,
+      skipped: 'unsupported-platform',
+      created: 0,
+      edited: 0,
+      removed: 0,
+      errors: [],
+    });
   } finally {
     runtime.clients.fluxer = null;
   }
