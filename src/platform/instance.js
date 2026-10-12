@@ -26,3 +26,22 @@ export function inviteUrl(guild, code) {
     ? `${fluxerEndpoints().invite}/${code}`
     : `https://discord.gg/${code}`;
 }
+
+/**
+ * Where the connected instance's invite links live, as "host/path" prefixes, for the
+ * link detectors: its invite host (e.g. "fluxer.opland.net/invite" or "fluxer.gg") and
+ * "<web app host>/invite". Empty-safe: an unparsable endpoint is skipped.
+ * @returns {string[]}
+ */
+export function instanceInvitePrefixes() {
+  const { invite, webapp } = fluxerEndpoints();
+  const prefix = (url, extra = '') => {
+    try {
+      const u = new URL(url);
+      return `${u.host}${u.pathname.replace(/\/+$/, '')}${extra}`.toLowerCase();
+    } catch {
+      return null;
+    }
+  };
+  return [...new Set([prefix(invite), prefix(webapp, '/invite')].filter(Boolean))];
+}

@@ -1,6 +1,7 @@
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { setFluxerInstance } from '../src/platform/instance.js';
 import {
   containsInvite,
   disallowedLink,
@@ -54,6 +55,31 @@ test('containsInvite: Fluxer invite links count too', () => {
   assert.ok(containsInvite('join fluxer.gg/AbC123'));
   assert.ok(containsInvite('https://web.fluxer.app/invite/AbC123'));
   assert.ok(!containsInvite('see fluxer.app/pricing'));
+});
+
+test('containsInvite: a self-hosted Fluxer instance’s own invite links count too', () => {
+  try {
+    assert.ok(
+      !containsInvite('join fluxer.opland.net/invite/AbC123'),
+      'unknown before the instance is known'
+    );
+    setFluxerInstance({
+      endpoints: { invite: 'https://fluxer.opland.net/invite', webapp: 'https://fluxer.opland.net' },
+    });
+    assert.ok(containsInvite('join https://fluxer.opland.net/invite/AbC123'));
+    assert.ok(containsInvite('FLUXER.OPLAND.NET/invite/xyz'));
+    assert.ok(!containsInvite('see https://fluxer.opland.net/channels/1/2'), 'only invite paths');
+    assert.ok(containsInvite('discord.gg/abc'), 'the built-in forms still match');
+    // An instance that publishes a bare invite host (like hosted fluxer.gg).
+    setFluxerInstance({
+      endpoints: { invite: 'https://inv.example.org', webapp: 'https://chat.example.org' },
+    });
+    assert.ok(containsInvite('inv.example.org/AbC123'));
+    assert.ok(containsInvite('chat.example.org/invite/AbC123'));
+    assert.ok(!containsInvite('chat.example.org/settings'));
+  } finally {
+    setFluxerInstance(null);
+  }
 });
 
 test('disallowedLink: no allowlist flags any URL, allowlist permits listed domains + subdomains', () => {

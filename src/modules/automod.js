@@ -27,6 +27,7 @@ import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { PRESET_KEYS } from '../bot/lib/automodSync.js';
 import { on } from './dispatch.js';
 import { markModerated } from './lib/messageModeration.js';
+import { instanceInvitePrefixes } from '../platform/instance.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget } from '../bot/lib/moderation.js';
 import { addCase } from '../db/modCases.js';
@@ -184,8 +185,21 @@ function isExempt(member, channelId, cfg) {
   return cfg.exemptRoles.some((r) => member.roles.cache.has(r));
 }
 
+// The connected Fluxer instance's own invite links (a self-hosted instance is not
+// fluxer.gg), compiled once per distinct set of prefixes.
+let instanceRe = { key: '', re: null };
+function instanceInviteRe() {
+  const prefixes = instanceInvitePrefixes();
+  const key = prefixes.join('|');
+  if (key !== instanceRe.key) {
+    const escaped = prefixes.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('/', '\\/'));
+    instanceRe = { key, re: escaped.length ? new RegExp(`(?:${escaped.join('|')})\\/[\\w-]+`, 'i') : null };
+  }
+  return instanceRe.re;
+}
+
 export function containsInvite(content) {
-  return INVITE_RE.test(content);
+  return INVITE_RE.test(content) || Boolean(instanceInviteRe()?.test(content));
 }
 
 export function disallowedLink(content, allowed = []) {
@@ -271,7 +285,7 @@ async function scan(message, config, opts) {
   const { rules } = cfg;
   const content = message.content;
 
-  if (rules.invites.enabled && INVITE_RE.test(content)) {
+  if (rules.invites.enabled && containsInvite(content)) {
     return act(message, member, rules.invites, 'Discord invite', cfg);
   }
   if (rules.links.enabled) {
