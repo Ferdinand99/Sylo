@@ -26,6 +26,11 @@ and **RuneScape** (OSRS / RS3) player lookups. Everything runs in **one Node
 process, one container, no build step** — and stays that way past Discord's
 2,500-guild gateway limit via in-process sharding.
 
+**Also runs on [Fluxer](https://fluxer.app)** (experimental): the same bot, modules and
+dashboard on Discord, on Fluxer, or on both from one process. Fluxer has no slash
+commands yet, so commands run from chat (`!ping`). See
+[docs/fluxer.md](docs/fluxer.md).
+
 Don't want to run your own instance? Sylo is a Discord-verified bot —
 [add it to your server](https://discord.com/oauth2/authorize?client_id=1374856793469227029)
 directly. The rest of this README, and [self-hosting](#self-hosting) below, is
@@ -55,6 +60,8 @@ GitHub alerts
 - **[docs/self-hosting.md](docs/self-hosting.md)** — install, environment
   variables, reverse proxy, Docker, Unraid, backups, upgrades and rollback,
   troubleshooting.
+- **[docs/fluxer.md](docs/fluxer.md)** — running Sylo on Fluxer, alone or next to Discord:
+  setup, the dashboard login, chat commands, and what differs from Discord.
 - **[docs/postgres.md](docs/postgres.md)** — optional Postgres backend for
   hosted-scale deployments, and how to move an existing SQLite install over
   without losing data.
