@@ -14,7 +14,13 @@ import { Router } from 'express';
 import cookieSession from 'cookie-session';
 import { config } from '../../config.js';
 import { splitPlatformGuildId } from '../../lib/platformId.js';
-import { allGuildKeys, guildByKey, guildKey, primaryClient } from '../../platform/platformOf.js';
+import {
+  allGuildKeys,
+  guildByKey,
+  guildKey,
+  platformOfGuild,
+  primaryClient,
+} from '../../platform/platformOf.js';
 import { BUILD } from '../../bot/lib/buildInfo.js';
 import { buildSidebar } from '../lib/sidebarNav.js';
 import { getBotMasterRoles } from '../../db/guildSettings.js';
@@ -30,7 +36,8 @@ import {
   purgeExpiredSessions,
   signInIdentity,
 } from '../../db/accounts.js';
-import { enabledProviders, providers, adminGuildIdsFromOAuth } from '../lib/oauthProviders.js';
+import { enabledProviders, fluxerOrigins, providers, adminGuildIdsFromOAuth } from '../lib/oauthProviders.js';
+import { buildBotInvites } from '../lib/botInvites.js';
 import {
   adminKeysOf,
   identityFor,
@@ -63,23 +70,13 @@ function safeReturnTo(path) {
 // for the user to notice and log out/in themselves.
 const GUILDS_TTL_MS = 10 * 60 * 1000;
 
-// "Add new server" bot-invite link. Scopes + a permission set that covers every
-// module: moderation (kick/ban/timeout), roles, channels & webhooks, reactions,
-// invites, audit log, nickname management and voice moves for temp channels.
-const BOT_INVITE_SCOPES = 'bot applications.commands';
-const BOT_INVITE_PERMISSIONS = [0, 1, 2, 4, 6, 7, 10, 11, 13, 14, 15, 16, 20, 24, 27, 28, 29, 40]
-  .reduce((acc, bit) => acc | (1n << BigInt(bit)), 0n)
-  .toString();
-
-/** Discord bot-invite URL for adding Sylo to another server (null when Sylo does not run on Discord). */
-export function botInviteUrl() {
-  if (!config.discordClientId) return null;
-  const params = new URLSearchParams({
-    client_id: config.discordClientId,
-    scope: BOT_INVITE_SCOPES,
-    permissions: BOT_INVITE_PERMISSIONS,
+/** "Add new server" links, one per platform Sylo runs on. */
+export function botInviteUrls() {
+  return buildBotInvites({
+    discordClientId: config.discordClientId,
+    fluxerClientId: config.fluxerClientId,
+    fluxerWeb: fluxerOrigins().web,
   });
-  return `https://discord.com/oauth2/authorize?${params}`;
 }
 
 /** Public base URL for building the OAuth redirect URI. */
@@ -135,13 +132,18 @@ export function adminGuildIds(req) {
 /**
  * Guilds the signed-in user can manage, resolved against the bots' caches so we
  * have names and icons. Used for the topbar server switcher.
- * @returns {Array<{ id: string, name: string, icon: string|null }>}
+ * @returns {Array<{ id: string, name: string, icon: string|null, platform: 'discord'|'fluxer' }>}
  */
 export function manageableGuilds(req) {
   return [...adminGuildIds(req)]
     .map((key) => guildByKey(key))
     .filter(Boolean)
-    .map((g) => ({ id: guildKey(g), name: g.name, icon: g.iconURL({ size: 32 }) }))
+    .map((g) => ({
+      id: guildKey(g),
+      name: g.name,
+      icon: g.iconURL({ size: 32 }),
+      platform: platformOfGuild(g),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -366,7 +368,7 @@ export function mountAuth(app) {
   app.use(async (req, res, next) => {
     res.locals.authEnabled = config.authEnabled;
     res.locals.syloVersion = BUILD.version;
-    res.locals.botInviteUrl = botInviteUrl();
+    res.locals.botInvites = botInviteUrls();
     // The bot's own avatar, used as the dashboard favicon (null until ready).
     res.locals.botAvatarUrl = primaryClient()?.user?.displayAvatarURL({ extension: 'png', size: 64 }) ?? null;
     res.locals.user = currentUser(req);

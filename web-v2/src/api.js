@@ -240,3 +240,7 @@ export const setCaseDeleted = (guildId, n, deleted) =>
   postJson(`${g(guildId)}/moderation/cases/${n}/${deleted ? 'delete' : 'restore'}`, {});
 export const saveAutomodImmunity = (guildId, exemptRoles) =>
   postJson(`/api/v2/guilds/${guildId}/modules/automod/immunity`, { exemptRoles });
+
+export const getAccount = () => apiFetch('/api/v2/account');
+export const disconnectAccount = (platform) => postJson(`/api/v2/account/disconnect/${platform}`, {});
+export const getInvites = () => apiFetch('/api/v2/invites').then((d) => d.invites);

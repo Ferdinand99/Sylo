@@ -87,3 +87,104 @@ test('disconnecting needs the CSRF token', async () => {
   assert.equal(res.status, 403);
   assert.ok(await findIdentity('fluxer', profiles.fluxer.id));
 });
+
+test('the server switcher tags each server with its platform once the account spans both', async () => {
+  setProfiles();
+  const solo = browser();
+  await signIn(solo, 'discord');
+  assert.doesNotMatch(
+    await (await solo.get('/roadmap')).text(),
+    /srv-badge/,
+    'a single platform needs no badges'
+  );
+
+  const both = browser();
+  await signIn(both, 'discord');
+  await signIn(both, 'fluxer', { connect: true });
+  const html = await (await both.get('/roadmap')).text();
+  assert.match(html, /srv-badge srv-badge-fluxer[^>]*>Fluxer</);
+  assert.match(html, /srv-badge srv-badge-discord[^>]*>Discord</);
+});
+
+// --- the same account, through the V2 API --------------------------------------------
+
+const v2Json = async (b, path, init) => {
+  const res = await b.get(path, init);
+  return { status: res.status, body: await res.json().catch(() => null) };
+};
+const v2Csrf = async (b) => (await (await b.get('/api/v2/csrf')).json()).token;
+
+test('GET /api/v2/account describes the connected platforms', async () => {
+  setProfiles();
+  const b = browser();
+  await signIn(b, 'discord');
+  const { status, body } = await v2Json(b, '/api/v2/account');
+  assert.equal(status, 200);
+  const by = Object.fromEntries(body.platforms.map((p) => [p.platform, p]));
+  assert.equal(by.discord.connected, true);
+  assert.equal(by.discord.username, 'ferdi');
+  assert.equal(by.discord.canDisconnect, false, 'the only sign-in');
+  assert.equal(by.fluxer.connected, false);
+  assert.equal(by.fluxer.connectHref, '/auth/connect/fluxer');
+});
+
+test('POST /api/v2/account/disconnect/:platform unlinks with the CSRF header, and refuses the last identity', async () => {
+  setProfiles();
+  const b = browser();
+  await signIn(b, 'discord');
+  await signIn(b, 'fluxer', { connect: true });
+  const token = await v2Csrf(b);
+
+  const noToken = await v2Json(b, '/api/v2/account/disconnect/fluxer', { method: 'POST' });
+  assert.equal(noToken.status, 403);
+
+  const off = await v2Json(b, '/api/v2/account/disconnect/fluxer', {
+    method: 'POST',
+    headers: { 'x-csrf-token': token },
+  });
+  assert.equal(off.status, 200);
+  assert.equal(await findIdentity('fluxer', profiles.fluxer.id), null);
+
+  const last = await v2Json(b, '/api/v2/account/disconnect/discord', {
+    method: 'POST',
+    headers: { 'x-csrf-token': token },
+  });
+  assert.equal(last.status, 409);
+  assert.ok(await findIdentity('discord', profiles.discord.id));
+});
+
+test('the V2 guild list carries each server platform', async () => {
+  setProfiles();
+  const b = browser();
+  await signIn(b, 'discord');
+  await signIn(b, 'fluxer', { connect: true });
+  const { body } = await v2Json(b, '/api/v2/guilds');
+  assert.deepEqual(
+    body.guilds.map((g) => [g.id.startsWith('fluxer:') ? 'fluxer' : 'discord', g.platform]).sort(),
+    [
+      ['discord', 'discord'],
+      ['fluxer', 'fluxer'],
+    ]
+  );
+});
+
+test('the switcher offers to add a server on each platform, and V2 gets the same links', async () => {
+  setProfiles();
+  const b = browser();
+  await signIn(b, 'discord');
+  const html = await (await b.get('/roadmap')).text();
+  assert.match(
+    html,
+    /href="https:\/\/discord\.com\/oauth2\/authorize\?[^"]*client_id=123456789012345678[^"]*"[^>]*>[\s\S]*?Add a server on Discord/
+  );
+  assert.match(
+    html,
+    /href="http:\/\/fluxer\.test\/oauth2\/authorize\?[^"]*client_id=223456789012345678[^"]*"[^>]*>[\s\S]*?Add a server on Fluxer/
+  );
+
+  const { body } = await v2Json(b, '/api/v2/invites');
+  assert.deepEqual(
+    body.invites.map((i) => i.platform),
+    ['discord', 'fluxer']
+  );
+});

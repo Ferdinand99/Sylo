@@ -3,8 +3,7 @@
 import { Router } from 'express';
 import { config } from '../../config.js';
 import { unlinkIdentity } from '../../db/accounts.js';
-import { identityFor } from '../lib/accountAuth.js';
-import { providers } from '../lib/oauthProviders.js';
+import { accountPlatforms } from '../lib/accountView.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 
 const router = Router();
@@ -17,21 +16,7 @@ const MESSAGES = {
 
 router.get('/', (req, res) => {
   if (!config.authEnabled || !req.account) return res.redirect('/');
-  const { identities } = req.account;
-  const platforms = Object.values(providers)
-    // A platform shows when it can be connected, or when it already is (even if its login was switched off since).
-    .filter((p) => p.enabled() || identityFor(req.account, p.platform))
-    .map((p) => {
-      const identity = identityFor(req.account, p.platform);
-      return {
-        platform: p.platform,
-        label: p.label,
-        identity,
-        guildCount: identity?.guildIds.length ?? 0,
-        connectHref: p.enabled() ? `/auth/connect/${p.platform}` : null,
-        canDisconnect: Boolean(identity) && identities.length > 1,
-      };
-    });
+  const platforms = accountPlatforms(req.account);
   const flash = MESSAGES[req.query.msg];
   res.render('account', {
     title: 'Account',

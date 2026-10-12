@@ -8,8 +8,8 @@
 <% platforms.forEach(function (p) { %>
   <section class="card">
     <h2><%= p.label %></h2>
-    <% if (p.identity) { %>
-      <p>Connected as <strong><%= p.identity.username %></strong>
+    <% if (p.connected) { %>
+      <p>Connected as <strong><%= p.username %></strong>
         <span class="muted">· manages <%= p.guildCount %> server<%= p.guildCount === 1 ? '' : 's' %> with Sylo</span></p>
       <% if (p.canDisconnect) { %>
         <form method="post" action="/account/disconnect/<%= p.platform %>">

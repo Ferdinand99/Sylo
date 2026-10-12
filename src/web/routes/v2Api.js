@@ -3,6 +3,8 @@
 // already has a signed-in req.session.user — same cookie-session V1 uses,
 // nothing new. Read-only reuse of V1's data-layer functions (baseContext,
 // getGuild, requireGuildAdmin) — none of them are modified by this file.
+import { accountPlatforms } from '../lib/accountView.js';
+import { unlinkIdentity } from '../../db/accounts.js';
 import { allGuilds, clientOfGuild, primaryClient } from '../../platform/platformOf.js';
 import { createRequire } from 'node:module';
 import { Router, raw } from 'express';
@@ -15,6 +17,7 @@ import {
   manageableGuilds,
   currentUser,
   sessionUserId,
+  botInviteUrls,
 } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -236,6 +239,27 @@ function clampDays(raw) {
 // (src/web/middleware/auth.js:129) — the SPA's own guild picker.
 router.get('/guilds', (req, res) => {
   res.json({ guilds: manageableGuilds(req) });
+});
+
+// The signed-in person's connected platforms (the account page), and disconnecting one.
+router.get('/account', (req, res) => {
+  if (!req.account) return res.json({ open: true, platforms: [] });
+  res.json({ open: false, platforms: accountPlatforms(req.account) });
+});
+
+router.post(
+  '/account/disconnect/:platform',
+  asyncHandler(async (req, res) => {
+    if (!req.account) return res.status(400).json({ error: 'Not signed in.' });
+    const ok = await unlinkIdentity(req.account.id, req.params.platform);
+    if (!ok) return res.status(409).json({ error: "You can't disconnect your only sign-in." });
+    res.json({ ok: true });
+  })
+);
+
+// The "add a server" links, one per platform Sylo runs on.
+router.get('/invites', (req, res) => {
+  res.json({ invites: botInviteUrls() });
 });
 
 // The SPA is served as static files (no EJS), so it has no <meta
