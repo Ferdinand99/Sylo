@@ -2,8 +2,8 @@
 // their DM, answers the guild's questions, and the appeal lands in the
 // dashboard's Appeals tab for staff to accept or deny. Reopening the same link
 // later shows the decision — notification never depends on a DM getting through.
+import { guildByKey } from '../../platform/platformOf.js';
 import { Router } from 'express';
-import { runtime } from '../../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../../db/modules.js';
 import { log } from '../../lib/log.js';
 import {
@@ -49,7 +49,7 @@ async function resolve(req) {
   if (!(await isModuleEnabled(guildId, 'appeals'))) {
     return { error: 'This server is not accepting ban appeals right now.' };
   }
-  const guild = runtime.client?.guilds.cache.get(guildId);
+  const guild = guildByKey(guildId);
   if (!guild) return { error: 'That server could not be found.' };
   const cfg = normaliseAppealsConfig((await getGuildModule(guildId, 'appeals')).config);
 

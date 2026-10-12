@@ -4,6 +4,7 @@
 //    connected, 503 otherwise.
 //  - browser request (a normal navigation *or* an hx-boost click from the
 //    dashboard sidebar) -> the human status page. Gated by auth when enabled.
+import { allGuilds, primaryClient } from '../../platform/platformOf.js';
 import { Router, raw } from 'express';
 import { createRequire } from 'node:module';
 import { config } from '../../config.js';
@@ -55,7 +56,7 @@ router.get(
     const wantsHtml = (req.headers.accept || '').includes('text/html') || Boolean(req.get('HX-Request'));
 
     if (!wantsHtml) {
-      const ping = runtime.client?.ws?.ping;
+      const ping = primaryClient()?.ws?.ping;
       return res.status(ready ? 200 : 503).json({
         status: ready ? 'ok' : 'degraded',
         version,
@@ -83,8 +84,8 @@ router.get(
       return forbidOwner(res);
     }
 
-    const client = runtime.client;
-    const guilds = client ? [...client.guilds.cache.values()] : [];
+    const client = primaryClient();
+    const guilds = allGuilds();
     const memberReach = guilds.reduce((sum, g) => sum + (g.memberCount ?? 0), 0);
     const gatewayPing = client?.ws?.ping;
 

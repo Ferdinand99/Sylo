@@ -3,11 +3,11 @@
 // Enabled when DISCORD_CLIENT_SECRET is set. Otherwise the dashboard runs in
 // "open mode" — every guard passes through — which is only safe on localhost or
 // a trusted LAN. A banner in the UI makes the mode obvious.
+import { allGuildKeys, guildByKey, guildKey, primaryClient } from '../../platform/platformOf.js';
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import cookieSession from 'cookie-session';
 import { config } from '../../config.js';
-import { runtime } from '../../runtime.js';
 import { BUILD } from '../../bot/lib/buildInfo.js';
 import { buildSidebar } from '../lib/sidebarNav.js';
 import { getBotMasterRoles } from '../../db/guildSettings.js';
@@ -128,12 +128,10 @@ export function currentUser(req) {
  * @returns {Array<{ id: string, name: string, icon: string|null }>}
  */
 export function manageableGuilds(req) {
-  const cache = runtime.client?.guilds.cache;
-  if (!cache) return [];
   return [...adminGuildIds(req)]
-    .map((id) => cache.get(id))
+    .map((key) => guildByKey(key))
     .filter(Boolean)
-    .map((g) => ({ id: g.id, name: g.name, icon: g.iconURL({ size: 32 }) }))
+    .map((g) => ({ id: guildKey(g), name: g.name, icon: g.iconURL({ size: 32 }) }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -144,10 +142,10 @@ export function manageableGuilds(req) {
  */
 export function adminGuildIds(req) {
   if (!config.authEnabled) {
-    return new Set(runtime.client?.guilds.cache.keys() ?? []);
+    return new Set(allGuildKeys());
   }
   const ids = req.session?.guilds ?? [];
-  const botGuilds = new Set(runtime.client?.guilds.cache.keys() ?? []);
+  const botGuilds = new Set(allGuildKeys());
   return new Set(ids.filter((id) => botGuilds.has(id)));
 }
 
@@ -177,7 +175,7 @@ export function requireAuth(req, res, next) {
 async function isBotMaster(guildId, userId) {
   const roles = await getBotMasterRoles(guildId);
   if (!roles.length) return false;
-  const guild = runtime.client?.guilds.cache.get(guildId);
+  const guild = guildByKey(guildId);
   if (!guild) return false;
   const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
   return Boolean(member && member.roles.cache.hasAny(...roles));
@@ -304,12 +302,13 @@ export function mountAuth(app) {
     res.locals.syloVersion = BUILD.version;
     res.locals.botInviteUrl = botInviteUrl();
     // The bot's own avatar, used as the dashboard favicon (null until ready).
-    res.locals.botAvatarUrl = runtime.client?.user?.displayAvatarURL({ extension: 'png', size: 64 }) ?? null;
+    res.locals.botAvatarUrl = primaryClient()?.user?.displayAvatarURL({ extension: 'png', size: 64 }) ?? null;
     res.locals.user = currentUser(req);
     const mg = res.locals.user ? manageableGuilds(req) : [];
     res.locals.manageableGuilds = mg;
 
-    const urlGuildId = (req.path.match(/^\/guilds\/(\d{17,20})/) || [])[1] || null;
+    const urlGuildId =
+      (decodeURIComponent(req.path).match(/^\/guilds\/((?:fluxer:)?\d{17,20})/) || [])[1] || null;
     res.locals.currentGuildId = urlGuildId;
 
     // A server is always "in view": URL guild, else the remembered one, else the

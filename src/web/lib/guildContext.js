@@ -1,20 +1,20 @@
 // Shared view-model for the per-guild control panel.
-import { runtime } from '../../runtime.js';
+import { guildByKey, keyedGuild, rawGuildId } from '../../platform/platformOf.js';
 import { MODULES, missingIntents } from '../../modules/registry.js';
 import { getGuildModules } from '../../db/modules.js';
 import { openTicketCount } from '../../db/tickets.js';
 import { countOpenAppeals } from '../../db/appeals.js';
 import { guildTextChannels } from './discord.js';
 
-/** The guild from the URL, or null. */
+/** The guild from the URL, or null. Its `.id` is the guild key ("fluxer:<id>" on Fluxer). */
 export function getGuild(req) {
-  return runtime.client?.guilds.cache.get(req.params.guildId) ?? null;
+  return keyedGuild(guildByKey(req.params.guildId));
 }
 
 /** Roles a form can reasonably offer (excludes @everyone and managed roles). */
 export function assignableRoles(guild) {
   return [...guild.roles.cache.values()]
-    .filter((r) => r.id !== guild.id && !r.managed)
+    .filter((r) => r.id !== rawGuildId(guild) && !r.managed)
     .sort((a, b) => b.position - a.position)
     .map((r) => ({ id: r.id, name: r.name }));
 }

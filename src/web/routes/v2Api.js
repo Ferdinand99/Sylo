@@ -3,6 +3,7 @@
 // already has a signed-in req.session.user — same cookie-session V1 uses,
 // nothing new. Read-only reuse of V1's data-layer functions (baseContext,
 // getGuild, requireGuildAdmin) — none of them are modified by this file.
+import { allGuilds, clientOfGuild, primaryClient } from '../../platform/platformOf.js';
 import { createRequire } from 'node:module';
 import { Router, raw } from 'express';
 import { PermissionFlagsBits } from 'discord.js';
@@ -1023,7 +1024,7 @@ router.post(
 async function inviteBoard(guild) {
   const rows = await topInviters(guild.id, 15);
   const tags = await resolveUserTags(
-    runtime.client,
+    guild.client,
     rows.map((r) => r.user_id)
   );
   return {
@@ -1703,7 +1704,7 @@ router.get(
     const { config: cfg } = await getGuildModule(req.guild.id, 'leveling');
     const rows = await topMembers(req.guild.id, 15);
     const tags = await resolveUserTags(
-      runtime.client,
+      clientOfGuild(req.guild),
       rows.map((r) => r.user_id)
     );
     res.json({
@@ -1798,7 +1799,7 @@ router.get(
     const total =
       period === 'all' ? await memberCount(guild.id) : await memberCountForPeriod(guild.id, keys[period]);
     const tags = await resolveUserTags(
-      runtime.client,
+      clientOfGuild(req.guild),
       rows.map((r) => r.user_id)
     );
     res.json({
@@ -1968,7 +1969,7 @@ router.post(
 // just in the admin's own guild, so requireGuildAdmin isn't strict enough.
 
 router.get('/personalizer', requireOwner, (req, res) => {
-  const u = runtime.client?.user ?? null;
+  const u = primaryClient()?.user ?? null;
   res.json({
     bot: u
       ? {
@@ -1999,7 +2000,7 @@ router.post(
   '/personalizer/identity',
   requireOwner,
   asyncHandler(async (req, res) => {
-    const u = runtime.client?.user;
+    const u = primaryClient()?.user;
     if (!u) return res.status(503).json({ error: 'The bot is not connected yet — try again in a moment.' });
 
     const isHttps = (s) => /^https:\/\/\S+$/i.test(s);
@@ -2138,8 +2139,8 @@ router.get(
   '/health',
   requireOwner,
   asyncHandler(async (req, res) => {
-    const client = runtime.client;
-    const guilds = client ? [...client.guilds.cache.values()] : [];
+    const client = primaryClient();
+    const guilds = allGuilds();
     const memberReach = guilds.reduce((sum, g) => sum + (g.memberCount ?? 0), 0);
     const gatewayPing = client?.ws?.ping;
 
@@ -3097,7 +3098,7 @@ router.post(
     if (!/^[a-z0-9_-]{1,32}$/.test(name)) {
       return res.status(400).json({ error: 'Invalid name — lowercase letters, numbers, - and _ only.' });
     }
-    if (runtime.client?.commands?.has(name)) {
+    if (primaryClient()?.commands?.has(name)) {
       return res.status(400).json({ error: `/${name} is reserved by a built-in command.` });
     }
 

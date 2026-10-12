@@ -1,9 +1,9 @@
 // View-model for the guild "Combined Overview" page: a server-health card plus
 // category-grouped module status cards (YAGPDB-style), each summarising that
 // module's current configuration with a jump link to its settings.
+import { primaryClient } from '../../platform/platformOf.js';
 import { PermissionFlagsBits } from 'discord.js';
 import { config } from '../../config.js';
-import { runtime } from '../../runtime.js';
 import { MODULES, getModule, missingIntents } from '../../modules/registry.js';
 import { getGuildModules } from '../../db/modules.js';
 import { getGuildSettings } from '../../db/guildSettings.js';
@@ -443,7 +443,7 @@ function generalCard(guild, settings) {
 
 async function commandsCard(guild) {
   const overrides = [...(await getCommandOverrides(guild.id)).values()];
-  const total = runtime.client?.commands?.size ?? 0;
+  const total = primaryClient()?.commands?.size ?? 0;
   const disabled = overrides.filter((o) => !o.enabled).length;
   const limited = overrides.filter(
     (o) => o.enabled && (o.allowedChannels.length || o.allowedRoles.length)

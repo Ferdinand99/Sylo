@@ -10,6 +10,8 @@ import {
   allGuilds,
   guildByKey,
   anyClientReady,
+  keyedGuild,
+  allGuildKeys,
 } from '../src/platform/platformOf.js';
 import { supports } from '../src/platform/capabilities.js';
 
@@ -122,4 +124,56 @@ test('anyClientReady: true when at least one connected client is ready', () => {
   assert.equal(anyClientReady(), true);
   runtime.clients.discord = null;
   assert.equal(anyClientReady(), false);
+});
+
+test('keyedGuild: a Discord guild is returned untouched', () => {
+  const g = { id: RAW, client: discord, name: 'D' };
+  assert.equal(keyedGuild(g), g);
+  assert.equal(keyedGuild(null), null);
+  assert.equal(keyedGuild(undefined), null);
+});
+
+test('keyedGuild: a Fluxer guild reports its key as .id and the SDK object for everything else', () => {
+  const calls = [];
+  const real = {
+    id: RAW,
+    client: fluxer,
+    name: 'F',
+    channels: { cache: new Map([['c', 1]]) },
+    rawIdSeenByMethod() {
+      calls.push(this.id);
+      return this.id;
+    },
+  };
+  const g = keyedGuild(real);
+  assert.equal(g.id, `fluxer:${RAW}`);
+  assert.equal(g.name, 'F');
+  assert.equal(g.channels, real.channels);
+  assert.equal(g.client, fluxer);
+  // Methods run against the real guild, so the SDK still sees its own id.
+  assert.equal(g.rawIdSeenByMethod(), RAW);
+  assert.equal(guildKey(g), `fluxer:${RAW}`); // and the key is stable through the wrapper
+});
+
+test('rawGuildId gives the platform id even through keyedGuild', async () => {
+  const { rawGuildId } = await import('../src/platform/platformOf.js');
+  const real = { id: RAW, client: fluxer };
+  assert.equal(rawGuildId(keyedGuild(real)), RAW);
+  assert.equal(rawGuildId({ id: RAW, client: discord }), RAW);
+});
+
+test('allGuildKeys: the key of every guild on every connected platform', () => {
+  runtime.clients.discord = {
+    guilds: {
+      cache: new Map([
+        [RAW, {}],
+        ['g1', {}],
+      ]),
+    },
+  };
+  runtime.clients.fluxer = { guilds: { cache: new Map([[RAW, {}]]) } };
+  assert.deepEqual(allGuildKeys(), [RAW, 'g1', `fluxer:${RAW}`]);
+  runtime.clients.fluxer = null;
+  runtime.clients.discord = null;
+  assert.deepEqual(allGuildKeys(), []);
 });

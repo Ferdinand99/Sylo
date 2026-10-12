@@ -4,6 +4,7 @@
 //
 // Gauges are computed here from live runtime state on every scrape. Counters come
 // from the in-process registry in ../../lib/metrics.js.
+import { primaryClient } from '../../platform/platformOf.js';
 import { Router } from 'express';
 import { runtime, uptimeSeconds, isDiscordReady, guildCount } from '../../runtime.js';
 import { renderCounters } from '../../lib/metrics.js';
@@ -21,7 +22,7 @@ function gauge(name, help, value) {
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const ping = runtime.client?.ws?.ping;
+    const ping = primaryClient()?.ws?.ping;
     const dbBytes = (await dbFileInfo()).size;
     const blocks = [
       gauge('sylo_up', '1 when the Discord gateway is connected, else 0', isDiscordReady() ? 1 : 0),

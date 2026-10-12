@@ -1,8 +1,8 @@
 // Access guard for the tickets pages: a guild admin (Manage Server / owner) OR
 // a member holding one of the module's configured staff roles. Pass-through in
 // open mode.
+import { guildByKey } from '../../platform/platformOf.js';
 import { config } from '../../config.js';
-import { runtime } from '../../runtime.js';
 import { adminGuildIds } from './auth.js';
 import { getGuildModule } from '../../db/modules.js';
 
@@ -30,7 +30,7 @@ export async function ticketAccessState(req) {
   const staffRoles = (await getGuildModule(guildId, 'tickets')).config.staffRoles ?? [];
   if (staffRoles.length === 0) return 'denied';
 
-  const guild = runtime.client?.guilds.cache.get(guildId);
+  const guild = guildByKey(guildId);
   if (!guild) return 'denied';
   try {
     const member = await guild.members.fetch(userId);

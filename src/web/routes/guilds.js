@@ -1,9 +1,9 @@
 // Per-guild control panel: module toggles, general settings, command
 // management, and the moderation panel (warnings + bans). Every route requires
 // the signed-in user to be an admin of that guild (pass-through in open mode).
+import { clientOfGuild, primaryClient, rawGuildId } from '../../platform/platformOf.js';
 import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
-import { runtime } from '../../runtime.js';
 import { requireGuildAdmin, currentUser } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
@@ -275,7 +275,7 @@ router.get(
 
     const roleView = (r) => ({ id: r.id, name: r.name, color: r.hexColor === '#000000' ? null : r.hexColor });
     const usable = [...guild.roles.cache.values()]
-      .filter((r) => r.id !== guild.id && !r.managed)
+      .filter((r) => r.id !== rawGuildId(guild) && !r.managed)
       .sort((a, b) => b.position - a.position);
     const adminRoles = usable.filter((r) => r.permissions.has(PermissionFlagsBits.Administrator));
     const adminIds = new Set(adminRoles.map((r) => r.id));
@@ -333,9 +333,9 @@ router.post(
 // --- Member data (data-subject requests) ---------------------------------
 
 /** Fetch a Discord user's tag + avatar for display; falls back to the raw id. */
-async function lookupProfile(userId) {
+async function lookupProfile(guild, userId) {
   try {
-    const u = await runtime.client.users.fetch(userId);
+    const u = await clientOfGuild(guild).users.fetch(userId);
     return { id: u.id, tag: u.tag, avatar: u.displayAvatarURL({ size: 64, extension: 'png' }) };
   } catch {
     return { id: userId, tag: null, avatar: null };
@@ -355,7 +355,7 @@ router.get(
       lookup = { error: 'notanid', raw };
     } else if (userId) {
       lookup = {
-        profile: await lookupProfile(userId),
+        profile: await lookupProfile(req.guild, userId),
         data: await describeUserData(req.guild.id, userId),
       };
     }
@@ -402,8 +402,8 @@ router.post(
       .setTimestamp(Date.now());
     if (reason) dm.addFields({ name: 'Note from staff', value: reason });
 
-    const dmDelivered = await runtime.client.users
-      .fetch(userId)
+    const dmDelivered = await clientOfGuild(req.guild)
+      .users.fetch(userId)
       .then((u) => u.send({ embeds: [dm] }))
       .then(() => true)
       .catch(() => false);
@@ -423,11 +423,11 @@ router.get(
   asyncHandler(async (req, res) => {
     const overrides = await getCommandOverrides(req.guild.id);
     const roles = [...req.guild.roles.cache.values()]
-      .filter((r) => r.id !== req.guild.id)
+      .filter((r) => r.id !== rawGuildId(req.guild))
       .sort((a, b) => b.position - a.position)
       .map((r) => ({ id: r.id, name: r.name }));
 
-    const commands = [...(runtime.client?.commands?.values() ?? [])]
+    const commands = [...(primaryClient()?.commands?.values() ?? [])]
       .map(({ data }) => {
         const ov = overrides.get(data.name);
         return {
@@ -455,7 +455,7 @@ router.get(
     const guild = req.guild;
     const { rows: caseRows, total: caseTotal } = await listGuildCases(guild.id, 200);
     const tags = await resolveUserTags(
-      runtime.client,
+      clientOfGuild(req.guild),
       caseRows.flatMap((c) => [c.user_id, c.moderator_id]).filter((id) => /^\d+$/.test(id))
     );
     const modLabels = { web: 'Dashboard', automod: 'AutoMod', auto: 'auto-threshold', '': 'system' };
@@ -494,7 +494,7 @@ router.get(
     }
 
     const overrides = await getCommandOverrides(guild.id);
-    const commands = [...(runtime.client?.commands?.values() ?? [])]
+    const commands = [...(primaryClient()?.commands?.values() ?? [])]
       .map(({ data }) => {
         const ov = overrides.get(data.name);
         return {
@@ -516,7 +516,7 @@ router.get(
     }));
     const tbRows = await guildTempBans(guild.id);
     const tbTags = await resolveUserTags(
-      runtime.client,
+      clientOfGuild(req.guild),
       tbRows.map((r) => r.user_id)
     );
     const now = Date.now();
@@ -633,7 +633,7 @@ router.get(
     const total =
       period === 'all' ? await memberCount(guild.id) : await memberCountForPeriod(guild.id, keys[period]);
     const tags = await resolveUserTags(
-      runtime.client,
+      clientOfGuild(req.guild),
       rows.map((r) => r.user_id)
     );
     res.render('guild', {
@@ -735,7 +735,7 @@ router.get(
     const cfg = (await getGuildModule(req.guild.id, 'welcome')).config || {};
     const png = await renderWelcomeCard({
       name: 'New Member',
-      avatarUrl: runtime.client?.user?.displayAvatarURL({ extension: 'png', size: 256 }),
+      avatarUrl: primaryClient()?.user?.displayAvatarURL({ extension: 'png', size: 256 }),
       memberCount: req.guild.memberCount || 0,
       accent: await guildEmbedColor(req.guild.id),
       backgroundUrl: cfg.cardBackground || undefined,
@@ -906,7 +906,7 @@ async function moduleViewLocals(mod, req, configOverride) {
       mod.id === 'leveling'
         ? ['rank', 'leaderboard']
             .map((name) => {
-              const cmd = runtime.client?.commands?.get(name);
+              const cmd = primaryClient()?.commands?.get(name);
               if (!cmd) return null;
               const ov = levelingOverrides.get(name);
               return {
@@ -2564,7 +2564,7 @@ router.post(
       .trim()
       .toLowerCase();
     if (!/^[a-z0-9_-]{1,32}$/.test(name)) return res.redirect(`${back}?msg=cc-name`);
-    if (runtime.client?.commands?.has(name)) return res.redirect(`${back}?msg=cc-reserved`);
+    if (primaryClient()?.commands?.has(name)) return res.redirect(`${back}?msg=cc-reserved`);
 
     const prev = normaliseCustomCommands((await getGuildModule(req.guild.id, 'custom-commands')).config);
     const id = /^\d+$/.test(req.body.id ?? '') ? String(req.body.id) : String(Date.now());
@@ -3008,7 +3008,7 @@ router.post(
     const guild = req.guild;
     const command = req.params.command;
     const hx = Boolean(req.get('HX-Request'));
-    if (!runtime.client?.commands?.has(command)) {
+    if (!primaryClient()?.commands?.has(command)) {
       if (hx) {
         return res
           .status(404)
@@ -3056,7 +3056,9 @@ router.post(
       .slice(0, 400);
     if (!userId || reason === '') return res.redirect(`${back}?tab=infr&msg=baduser`);
 
-    const user = await runtime.client.users.fetch(userId).catch(() => null);
+    const user = await clientOfGuild(req.guild)
+      .users.fetch(userId)
+      .catch(() => null);
     if (!user) return res.redirect(`${back}?tab=infr&msg=baduser`);
     if (user.bot) return res.redirect(`${back}?tab=infr&msg=botuser`);
 
@@ -3129,7 +3131,9 @@ router.post(
     if (!existing) return res.redirect(`${back}&msg=warn-gone`);
     await setCaseActive(guild.id, n, active);
 
-    const target = await runtime.client.users.fetch(existing.user_id).catch(() => null);
+    const target = await clientOfGuild(req.guild)
+      .users.fetch(existing.user_id)
+      .catch(() => null);
     const embed = new EmbedBuilder()
       .setColor(MOD_COLOR)
       .setTitle(active ? `Case #${n} restored` : `Case #${n} deleted`)
@@ -3164,7 +3168,9 @@ router.post(
     const n = await clearWarnings(guild.id, userId);
     if (n === 0) return res.redirect(`${back}&msg=warn-none`);
 
-    const target = await runtime.client.users.fetch(userId).catch(() => null);
+    const target = await clientOfGuild(req.guild)
+      .users.fetch(userId)
+      .catch(() => null);
     const embed = new EmbedBuilder()
       .setColor(MOD_COLOR)
       .setTitle('Warnings cleared')

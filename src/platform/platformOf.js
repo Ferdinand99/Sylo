@@ -44,6 +44,13 @@ export function guildKeyOf(entity) {
   return null;
 }
 
+/** The keys of every guild of every connected client (from each cache's own keys). */
+export function allGuildKeys() {
+  return PLATFORMS.flatMap((p) =>
+    [...(runtime.clients[p]?.guilds.cache.keys() ?? [])].map((id) => keyFor(p, id))
+  );
+}
+
 /** Every guild of every connected client — what a periodic sweep iterates. */
 export function allGuilds() {
   return PLATFORMS.flatMap((p) => [...(runtime.clients[p]?.guilds.cache.values() ?? [])]);
@@ -62,3 +69,38 @@ export function guildByKey(key) {
 export function anyClientReady() {
   return PLATFORMS.some((p) => Boolean(runtime.clients[p]?.isReady?.()));
 }
+
+/**
+ * The guild as the web dashboard and other key-oriented code should see it: its
+ * `.id` is the guild key. A Discord guild is returned as is (its id already is
+ * the key); a Fluxer guild is wrapped so `.id` reads "fluxer:<id>" while every
+ * other property, and every method (bound to the real guild, so the SDK keeps
+ * seeing its own id), is the SDK's own.
+ * @template T
+ * @param {T | null | undefined} guild
+ * @returns {T | null}
+ */
+export function keyedGuild(guild) {
+  if (!guild) return null;
+  if (platformOfGuild(guild) === 'discord') return guild;
+  const key = guildKey(guild);
+  return new Proxy(guild, {
+    get(target, prop) {
+      if (prop === 'id') return key;
+      if (prop === 'rawId') return target.id; // the platform's own id (e.g. the @everyone role's id)
+      const value = target[prop];
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+/** The client for the platform the process considers primary: Discord when configured, else Fluxer. */
+export function primaryClient() {
+  return runtime.clients.discord ?? runtime.clients.fluxer ?? null;
+}
+
+/** The platform's own id for a guild, even through keyedGuild() — what the @everyone role id equals. */
+export const rawGuildId = (guild) => guild.rawId ?? guild.id;
+
+/** The client a guild belongs to (its own, else the primary one — hand-built guilds in tests carry none). */
+export const clientOfGuild = (guild) => guild?.client ?? primaryClient();
