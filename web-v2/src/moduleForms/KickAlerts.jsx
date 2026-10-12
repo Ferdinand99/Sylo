@@ -82,7 +82,7 @@ export default function KickAlerts() {
     <>
       <h1 className="v2-section-title">Kick alerts</h1>
       <p className="v2-field-hint">
-        Sylo checks each streamer about once a minute and posts to the chosen channel when they go live.
+        Krip-bot checks each streamer about once a minute and posts to the chosen channel when they go live.
         Message placeholders: <code>{'{name}'}</code> <code>{'{title}'}</code> <code>{'{game}'}</code>{' '}
         <code>{'{url}'}</code> <code>{'{viewers}'}</code>.
       </p>

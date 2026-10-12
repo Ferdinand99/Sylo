@@ -3,14 +3,14 @@
    palette). Byte-matched to the real marketing-site values, not approximated. */
 :root {
   color-scheme: dark;
-  --bg-main: #0b0d17;
-  --bg-surface: #171b33;
-  --bg-surface-2: #111427;
-  --border-subtle: #262c4a;
-  --accent: #7c6cff;
-  --accent-2: #38bdf8;
+  --bg-main: #0e0b0d;
+  --bg-surface: #191417;
+  --bg-surface-2: #241b20;
+  --border-subtle: #382930;
+  --accent: #e11d48;
+  --accent-2: #fb7185;
   --text: #e7e9f5;
-  --text-muted: #a6accd;
+  --text-muted: #b7a9b0;
   --radius: 12px;
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }

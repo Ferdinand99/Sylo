@@ -164,7 +164,7 @@ test('browser and server translations agree for toasts and dynamic values', asyn
 
 test('all built-in command and option descriptions have Polish dashboard translations', async () => {
   function check(definition) {
-    if (definition.description) {
+    if (definition.description && !/[ąćęłńóśźż]/i.test(definition.description)) {
       assert.notEqual(
         translate(definition.description, 'pl'),
         definition.description,

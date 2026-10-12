@@ -1,15 +1,15 @@
 :root {
-  --bg: #0b0e14;
-  --surface: #141922;
-  --surface-2: #1b212c;
-  --surface-3: #232b38;
+  --bg: #0e0b0d;
+  --surface: #191417;
+  --surface-2: #241b20;
+  --surface-3: #302329;
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.14);
   --text: #e8ecf3;
   --muted: #8a94a6;
-  --accent: #7aa2f7;
-  --accent-strong: #5b7cfa;
-  --on-accent: #0a0f1e;
+  --accent: #fb7185;
+  --accent-strong: #e11d48;
+  --on-accent: #190a0e;
   --ok: #58d68d;
   --bad: #f2555a;
   --warn: #e5b567;
@@ -17,7 +17,7 @@
   --r: 12px;
   --r-lg: 16px;
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 28px -14px rgba(0, 0, 0, 0.6);
-  --ring: 0 0 0 2px rgba(122, 162, 247, 0.5);
+  --ring: 0 0 0 2px rgba(251, 113, 133, 0.5);
 
   /* spacing scale (4px base) */
   --sp-1: 4px;
@@ -60,14 +60,14 @@
   --border-strong: rgba(17, 24, 39, 0.18);
   --text: #1b2230;
   --muted: #5b6472;
-  --accent: #4c6ef5;
-  --accent-strong: #3b5bdb;
+  --accent: #be123c;
+  --accent-strong: #9f1239;
   --on-accent: #ffffff;
   --ok: #1f9d57;
   --bad: #d63b41;
   --warn: #b26a12;
   --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.08), 0 12px 28px -14px rgba(16, 24, 40, 0.22);
-  --ring: 0 0 0 2px rgba(76, 110, 245, 0.4);
+  --ring: 0 0 0 2px rgba(190, 18, 60, 0.4);
   color-scheme: light;
 }
 
@@ -81,14 +81,14 @@
     --border-strong: rgba(17, 24, 39, 0.18);
     --text: #1b2230;
     --muted: #5b6472;
-    --accent: #4c6ef5;
-    --accent-strong: #3b5bdb;
+    --accent: #be123c;
+    --accent-strong: #9f1239;
     --on-accent: #ffffff;
     --ok: #1f9d57;
     --bad: #d63b41;
     --warn: #b26a12;
     --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.08), 0 12px 28px -14px rgba(16, 24, 40, 0.22);
-    --ring: 0 0 0 2px rgba(76, 110, 245, 0.4);
+    --ring: 0 0 0 2px rgba(190, 18, 60, 0.4);
     color-scheme: light;
   }
 }
@@ -690,13 +690,13 @@ td.num, th.num { text-align: right; }
 .dc-chip.danger { background: #da373c; } .dc-chip.link { background: #4e5058; }
 
 /* Ban appeals review panel */
-.pill.open { background: rgba(122, 162, 247, 0.14); border-color: rgba(122, 162, 247, 0.3); color: var(--accent); }
+.pill.open { background: rgba(251, 113, 133, 0.14); border-color: rgba(251, 113, 133, 0.3); color: var(--accent); }
 .pill.on { background: rgba(88, 214, 141, 0.14); border-color: rgba(88, 214, 141, 0.3); color: var(--ok); }
 .pill.off { background: rgba(242, 85, 90, 0.14); border-color: rgba(242, 85, 90, 0.3); color: var(--bad); }
 .pill.beta { background: rgba(229, 181, 103, 0.14); border-color: rgba(229, 181, 103, 0.3); color: var(--warn); font-size: 10px; vertical-align: middle; }
 
 /* Roadmap board */
-.pill.planned { background: rgba(122, 162, 247, 0.14); border-color: rgba(122, 162, 247, 0.3); color: var(--accent); }
+.pill.planned { background: rgba(251, 113, 133, 0.14); border-color: rgba(251, 113, 133, 0.3); color: var(--accent); }
 .pill.started { background: rgba(229, 181, 103, 0.14); border-color: rgba(229, 181, 103, 0.3); color: var(--warn); }
 .pill.completed { background: rgba(88, 214, 141, 0.14); border-color: rgba(88, 214, 141, 0.3); color: var(--ok); }
 .pill.pending { background: rgba(138, 148, 166, 0.14); border-color: rgba(138, 148, 166, 0.3); color: var(--muted); }
@@ -1155,10 +1155,14 @@ label.checkline input { width: auto; }
 
 .language-switch { display:flex; gap:4px; padding:4px; margin:4px 12px 10px; border:1px solid var(--border, #444); border-radius:8px; }
 .language-switch a { flex:1; padding:6px 12px; text-align:center; text-decoration:none; color:inherit; border-radius:5px; font-size:13px; font-weight:600; }
-.language-switch a[aria-current="true"] { background:#5b7cfa; color:#fff; }
-.language-switch a:focus-visible { outline:2px solid #5b7cfa; outline-offset:2px; }
+.language-switch a[aria-current="true"] { background:#e11d48; color:#fff; }
+.language-switch a:focus-visible { outline:2px solid #e11d48; outline-offset:2px; }
 
 /* Native YouTube destination picker: options remain usable without Alpine. */
 .channel-multi-picker summary { cursor: pointer; }
 .channel-multi-picker [data-channel-option][hidden] { display: none !important; }
 .channel-multi-picker input[type="search"] { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); }
+
+/* Krip-bot identity: the same mark on desktop and mobile. */
+.sb-mark { width: 32px; height: 32px; background: none; border-radius: 0; }
+.brand { display: inline-flex; align-items: center; gap: 8px; }

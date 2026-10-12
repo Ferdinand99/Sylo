@@ -118,7 +118,7 @@ export default function Starboard() {
     <>
       <h1 className="v2-section-title">Starboard</h1>
       <p className="v2-field-hint">
-        When a message gets enough of a reaction, Sylo re-posts it into a highlights channel — like a
+        When a message gets enough of a reaction, Krip-bot re-posts it into a highlights channel — like a
         community pin board. Each board has its own emoji, threshold and rules.
       </p>
 

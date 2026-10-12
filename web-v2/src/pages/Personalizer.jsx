@@ -107,7 +107,7 @@ export default function Personalizer() {
           <img src={state.bot.avatar} alt="" />
           <div>
             <h2>{state.bot.tag}</h2>
-            <p>Bot-wide identity — affects every server Sylo is in.</p>
+            <p>Bot-wide identity — affects every server Krip-bot is in.</p>
           </div>
         </div>
       )}

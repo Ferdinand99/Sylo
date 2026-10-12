@@ -117,7 +117,7 @@ export function localizeTemplate(source) {
   const stack = [];
   function localized(text) {
     const key = normalize(decode(text));
-    if (!Object.hasOwn(polish, key)) return text;
+    if (!Object.hasOwn(polish, key)) return text.replace(/\bSylo\b/g, 'Krip-bot');
     const left = text.match(/^\s*/)[0];
     const right = text.match(/\s*$/)[0];
     return `${left}<%= uiText(${JSON.stringify(key)}) %>${right}`;
@@ -193,7 +193,7 @@ export function mountI18n(app) {
       });
     }
     res.locals.language = language;
-    res.locals.uiText = (text) => translate(text, language);
+    res.locals.uiText = (text) => translate(text, language).replace(/\bSylo\b/g, 'Krip-bot');
     const href = (locale) => {
       const url = new URL(req.originalUrl, 'http://dashboard.local');
       url.searchParams.set('lang', locale);

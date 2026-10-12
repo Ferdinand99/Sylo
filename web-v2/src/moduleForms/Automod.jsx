@@ -95,7 +95,7 @@ export default function Automod() {
       <p className="v2-field-hint">
         Each check scans new and edited messages and acts on the first match. Administrators are always
         skipped. Actions are logged to the mod-log channel
-        {data.modlogChannelId ? '' : ' (not set — see Settings)'}. Sylo never acts on other bots.
+        {data.modlogChannelId ? '' : ' (not set — see Settings)'}. Krip-bot never acts on other bots.
       </p>
 
       <form onSubmit={onSave}>
@@ -232,8 +232,8 @@ export default function Automod() {
         <h2 className="v2-group-title">Native Discord AutoMod</h2>
         <p className="v2-field-hint">
           Push the mappable checks onto Discord's built-in AutoMod so they are enforced before a message is
-          posted, and keep working while Sylo is offline. Needs the Manage Server permission. Sylo owns any
-          rule named "Sylo: …" — edit those here, not in Server Settings.
+          posted, and keep working while Krip-bot is offline. Needs the Manage Server permission.
+          Edit the rules managed by the bot here rather than in Server Settings.
         </p>
         <div className="v2-field">
           <label className="v2-check">

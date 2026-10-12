@@ -107,7 +107,7 @@ export default function YoutubeAlerts() {
     <>
       <h1 className="v2-section-title">YouTube alerts</h1>
       <p className="v2-field-hint">
-        Add a channel by URL or @handle — Sylo resolves it on save. New uploads come from YouTube's public
+        Add a channel by URL or @handle — Krip-bot resolves it on save. New uploads come from YouTube's public
         feed; "went live" is detected from the channel's live page (no API key needed). Checks run about every
         3 minutes. Message placeholders: <code>{'{name}'}</code> <code>{'{title}'}</code>{' '}
         <code>{'{url}'}</code>.

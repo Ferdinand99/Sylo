@@ -5,7 +5,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 
 // Poll/results messages only expose content, title, colour, footer and image
-// (src/modules/polls.js's normMsg) — the description is always Sylo's own
+// (src/modules/polls.js's normMsg) — the description is always Krip-bot's own
 // choices/results text, shown as EmbedEditor's greyed fixedBody instead of
 // an editable field.
 const EMBED_OPTS = {
@@ -28,7 +28,7 @@ function PollBodyPreview() {
       <div>🇦 First option</div>
       <div>🇧 Second option</div>
       <div>🇨 …</div>
-      <p className="v2-field-hint">Sylo fills the question &amp; choices here</p>
+      <p className="v2-field-hint">Krip-bot fills the question &amp; choices here</p>
     </div>
   );
 }
@@ -47,7 +47,7 @@ function ResultsBodyPreview() {
         <br />
         ████░░░░░░ 40.0% · 4 votes
       </div>
-      <p className="v2-field-hint">Sylo fills the results here</p>
+      <p className="v2-field-hint">Krip-bot fills the results here</p>
     </div>
   );
 }
@@ -148,7 +148,7 @@ export default function Polls() {
 
         <div className="v2-group">
           <h2 className="v2-group-title">Polls message</h2>
-          <p className="v2-field-hint">How a live poll looks. Sylo fills the greyed-out body.</p>
+          <p className="v2-field-hint">How a live poll looks. Krip-bot fills the greyed-out body.</p>
           <EmbedEditor
             spec={form.pollMessage}
             onChange={(pollMessage) => setForm((f) => ({ ...f, pollMessage }))}

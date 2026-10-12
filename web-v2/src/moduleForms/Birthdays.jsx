@@ -52,7 +52,7 @@ export default function Birthdays() {
     <>
       <h1 className="v2-section-title">Birthdays</h1>
       <p className="v2-field-hint">
-        Members save their own date with <code>/birthday set</code>. Sylo checks once a day and posts here.
+        Members save their own date with <code>/birthday set</code>. Krip-bot checks once a day and posts here.
         Placeholders: <code>{'{user}'}</code> <code>{'{age}'}</code> (blank unless a year was given).
       </p>
 
@@ -94,7 +94,7 @@ export default function Birthdays() {
             ))}
           </select>
           <p className="v2-field-hint">
-            Sylo's highest role must sit above this one, and it needs <strong>Manage Roles</strong>.
+            Krip-bot's highest role must sit above this one, and it needs <strong>Manage Roles</strong>.
           </p>
         </div>
 

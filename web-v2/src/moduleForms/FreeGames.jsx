@@ -99,7 +99,7 @@ export default function FreeGames() {
       </form>
 
       <p className="v2-field-hint v2-section-gap">
-        Sylo needs View Channel / Send Messages / Embed Links in that channel.
+        Krip-bot needs View Channel / Send Messages / Embed Links in that channel.
       </p>
     </>
   );

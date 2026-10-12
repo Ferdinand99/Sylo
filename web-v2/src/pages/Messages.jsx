@@ -55,7 +55,7 @@ export default function Messages() {
         </Link>
       </div>
       <p className="v2-field-hint">
-        Build rich embed messages with a live editor, then publish them to a channel as Sylo — and re-publish
+        Build rich embed messages with a live editor, then publish them to a channel as Krip-bot — and re-publish
         to edit the posted message in place.
       </p>
 

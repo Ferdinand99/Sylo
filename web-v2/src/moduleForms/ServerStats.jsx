@@ -73,8 +73,8 @@ export default function ServerStats() {
     <>
       <h1 className="v2-section-title">Server statistics</h1>
       <p className="v2-field-hint">
-        Pick a voice channel (make one, lock it so nobody can join) and Sylo renames it to show a live count.
-        Use <code>{'{count}'}</code> in the name, e.g. "Members: {'{count}'}". Sylo needs Manage Channels on
+        Pick a voice channel (make one, lock it so nobody can join) and Krip-bot renames it to show a live count.
+        Use <code>{'{count}'}</code> in the name, e.g. "Members: {'{count}'}". Krip-bot needs Manage Channels on
         each one.
       </p>
 

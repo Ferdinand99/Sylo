@@ -81,7 +81,7 @@ export default function Verification() {
         <div className="v2-field">
           <label htmlFor="verifiedRoleId">
             Verified role{' '}
-            <span className="v2-field-hint">— granted on success; put Sylo's role above it</span>
+            <span className="v2-field-hint">— granted on success; put Krip-bot's role above it</span>
           </label>
           <select
             id="verifiedRoleId"
@@ -187,7 +187,7 @@ export default function Verification() {
       </form>
 
       <p className="v2-field-hint v2-section-gap">
-        Saving (re)posts the verify message. Sylo needs <strong>Manage Roles</strong>, and — for the kick
+        Saving (re)posts the verify message. Krip-bot needs <strong>Manage Roles</strong>, and — for the kick
         option — <strong>Kick Members</strong>.
       </p>
     </>

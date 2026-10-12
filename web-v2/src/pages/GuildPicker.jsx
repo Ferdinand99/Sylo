@@ -24,7 +24,7 @@ export default function GuildPicker() {
   if (!guilds.length) {
     return (
       <p className="v2-state">
-        No servers found. Invite Sylo to a server where you have <strong>Manage Server</strong>, then reload.
+        No servers found. Invite Krip-bot to a server where you have <strong>Manage Server</strong>, then reload.
       </p>
     );
   }

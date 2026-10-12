@@ -243,7 +243,7 @@ export default function MessageBuilder() {
         <div className="v2-msg-head">
           <div className="v2-msg-avatar">S</div>
           <div className="v2-msg-head-text">
-            <span className="v2-msg-botname">Sylo</span>
+            <span className="v2-msg-botname">Krip-bot</span>
             <span className="v2-msg-botbadge">BOT</span>
             <span className="v2-msg-time">Today</span>
           </div>

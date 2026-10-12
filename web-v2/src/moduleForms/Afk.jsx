@@ -51,7 +51,7 @@ export default function Afk() {
     <>
       <h1 className="v2-section-title">AFK</h1>
       <p className="v2-note">
-        Members run <code>/afk [reason]</code>. Sylo replies to anyone who mentions them, and clears the
+        Members run <code>/afk [reason]</code>. Krip-bot replies to anyone who mentions them, and clears the
         status automatically when they next send a message.
       </p>
 

@@ -192,7 +192,7 @@ export default function Honeypot() {
 
         <h2 className="v2-group-title v2-section-gap">Message honeypots</h2>
         <p className="v2-field-hint">
-          Sylo posts a trap message in the chosen channel; any reaction to it triggers the punishment.
+          Krip-bot posts a trap message in the chosen channel; any reaction to it triggers the punishment.
         </p>
         {form.messages.map((m) => (
           <div className="v2-rule-card" key={m.key}>

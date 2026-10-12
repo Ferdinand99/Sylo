@@ -30,7 +30,7 @@ export default function GameStats() {
     <>
       <h1 className="v2-section-title">Game stats</h1>
       <p className="v2-field-hint">
-        Adds <code>/stats</code> — pick a game from the dropdown, give a player name, and Sylo returns an
+        Adds <code>/stats</code> — pick a game from the dropdown, give a player name, and Krip-bot returns an
         embed of their stats. Battlefield data comes from the public gametools.network API; RuneScape data
         from Jagex's official Hiscores. Enable this module here to make the command available in this server.
       </p>

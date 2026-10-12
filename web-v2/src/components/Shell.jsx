@@ -75,8 +75,8 @@ export default function Shell() {
           <span />
         </button>
         <Link className="v2-brand" to="/">
-          <span className="v2-brand-mark">S</span>
-          <span>Sylo</span>
+          <img src="/kripbot-mark.svg" width="32" height="32" alt="" />
+          <span>Krip-bot</span>
           <span
             className="v2-beta-badge"
             title="Not every module has a V2 page yet — some still open the classic dashboard"

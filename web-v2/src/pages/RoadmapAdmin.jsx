@@ -88,7 +88,7 @@ export default function RoadmapAdmin() {
             Your session expired — <a href="/auth/discord/login">log in again</a>.
           </>
         ) : forbidden ? (
-          "This page is restricted to Sylo's operators."
+          "This page is restricted to Krip-bot's operators."
         ) : (
           `Couldn't load the roadmap admin (${state.error.message}).`
         )}

@@ -94,8 +94,8 @@ export default function RssAlerts() {
     <>
       <h1 className="v2-section-title">RSS alerts</h1>
       <p className="v2-field-hint">
-        Sylo checks each feed every few minutes and posts new items to the chosen channel. Pick a source: a
-        raw RSS 2.0 / Atom URL, or a Reddit, Mastodon or Bluesky handle — Sylo turns the handle into that
+        Krip-bot checks each feed every few minutes and posts new items to the chosen channel. Pick a source: a
+        raw RSS 2.0 / Atom URL, or a Reddit, Mastodon or Bluesky handle — Krip-bot turns the handle into that
         platform's feed for you. Template placeholders: <code>{'{title}'}</code> <code>{'{link}'}</code>{' '}
         <code>{'{author}'}</code> <code>{'{feed}'}</code>. The first check only remembers the current items;
         new ones after that are posted (up to 15 feeds).

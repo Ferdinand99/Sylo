@@ -98,7 +98,7 @@ export default function Health() {
             Your session expired — <a href="/auth/discord/login">log in again</a>.
           </>
         ) : forbidden ? (
-          "This page is restricted to Sylo's operators."
+          "This page is restricted to Krip-bot's operators."
         ) : (
           `Couldn't load health status (${state.error.message}).`
         )}
@@ -203,8 +203,8 @@ export default function Health() {
             <div className="v2-row-main">
               <p>
                 {d.devLogConfigured
-                  ? 'Sylo posts its own errors here — separate from any per-guild logging/modlog channel.'
-                  : 'Not set up — set DEV_LOG_CHANNEL_ID to a channel id to get a proactive Discord message whenever Sylo logs an error.'}
+                  ? 'Krip-bot posts its own errors here — separate from any per-guild logging/modlog channel.'
+                  : 'Not set up — set DEV_LOG_CHANNEL_ID to a channel id to get a proactive Discord message whenever Krip-bot logs an error.'}
               </p>
             </div>
             {d.devLogConfigured ? (

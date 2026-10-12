@@ -164,8 +164,8 @@ export default function Counting() {
             ))}
           </select>
           <p className="v2-field-hint">
-            When someone breaks the streak, Sylo removes this role from them and gives it back later. Point it
-            at whatever role lets people type in the counting channel. Sylo's own top role must sit above it.
+            When someone breaks the streak, Krip-bot removes this role from them and gives it back later. Point it
+            at whatever role lets people type in the counting channel. Krip-bot's own top role must sit above it.
             This is not a ban or a timeout — only this one role is touched.
           </p>
         </div>

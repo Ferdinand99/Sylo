@@ -74,7 +74,7 @@ export default function EmbedEditor({
   fixedBody = null,
   vars = [],
   placeholders = {},
-  botName = 'Sylo',
+  botName = 'Krip-bot',
 }) {
   const opts = { content, author, description, fields, thumb, footerIcon, footerKey, timestamp };
   const [e, setE] = useState(() => initialState(spec, { footerKey, defaultColor }));

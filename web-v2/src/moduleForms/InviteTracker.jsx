@@ -82,7 +82,7 @@ export default function InviteTracker() {
 
       {!board.canReadInvites ? (
         <p className="v2-warn-text">
-          Sylo needs the Manage Server permission to read this server's invites — without it, joins can't be
+          Krip-bot needs the Manage Server permission to read this server's invites — without it, joins can't be
           attributed to an inviter.
         </p>
       ) : null}
@@ -104,7 +104,7 @@ export default function InviteTracker() {
               </option>
             ))}
           </select>
-          <p className="v2-field-hint">Sylo posts a line here each time someone joins or leaves.</p>
+          <p className="v2-field-hint">Krip-bot posts a line here each time someone joins or leaves.</p>
         </div>
 
         <div className="v2-field">

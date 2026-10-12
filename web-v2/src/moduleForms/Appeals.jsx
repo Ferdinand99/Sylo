@@ -62,7 +62,7 @@ export default function Appeals() {
     <>
       <h1 className="v2-section-title">Ban appeals</h1>
       <p className="v2-field-hint">
-        When a member is banned, Sylo DMs them a private link to an appeal form on this dashboard. Their
+        When a member is banned, Krip-bot DMs them a private link to an appeal form on this dashboard. Their
         answers show up on the <a href={`/guilds/${guildId}/appeals`}>Appeals tab</a>. The decision (and, on
         accept, a single-use rejoin invite) is always shown on that same link when they reopen it — Discord
         won't let a bot DM someone it no longer shares a server with, so the page is the reliable channel.
@@ -163,7 +163,7 @@ export default function Appeals() {
             onChange={(e) => set({ appealServerInvite: e.target.value })}
           />
           <p className="v2-field-hint">
-            A permanent invite to another server Sylo is in. If the banned user joins it, Sylo shares a server
+            A permanent invite to another server Krip-bot is in. If the banned user joins it, Krip-bot shares a server
             with them and can also DM the decision.
           </p>
         </div>
@@ -177,7 +177,7 @@ export default function Appeals() {
       </form>
 
       <p className="v2-field-hint v2-section-gap">
-        Sylo needs <strong>Ban Members</strong> to read ban reasons and auto-unban on accept, and{' '}
+        Krip-bot needs <strong>Ban Members</strong> to read ban reasons and auto-unban on accept, and{' '}
         <strong>Create Invite</strong> to mint the rejoin link. The review channel post always includes the
         appeal link so you can share it manually if a member's DMs are closed.
       </p>

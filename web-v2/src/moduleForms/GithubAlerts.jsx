@@ -94,7 +94,7 @@ function WatchForm({ initial, channels, roles, eventTypes, onSave, onCancel, sav
           onChange={(e) => setChangelogPath(e.target.value)}
         />
         <p className="v2-field-hint">
-          When a push changes this exact file, Sylo posts only its newest entry — independent of the event
+          When a push changes this exact file, Krip-bot posts only its newest entry — independent of the event
           checkboxes above. Public repos only.
         </p>
       </div>
@@ -134,7 +134,7 @@ function WebhookDetails({ watch, guildId, onRegenerated }) {
     <div className="v2-section-gap">
       <p className="v2-field-hint">
         In this repo on GitHub: Settings → Webhooks → Add webhook. Content type application/json, events{' '}
-        <strong>Send me everything</strong> — Sylo only posts the checked event types regardless.
+        <strong>Send me everything</strong> — Krip-bot only posts the checked event types regardless.
       </p>
       <div className="v2-field">
         <label>Payload URL</label>
