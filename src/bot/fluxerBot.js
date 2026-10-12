@@ -13,6 +13,7 @@ import { attachPrefixCommands, isCommandMessage } from './framework/router.js';
 import { installFluxerCompat } from '../platform/compat.js';
 import { installSendBridge } from '../platform/fluxerSendBridge.js';
 import { registerFluxerModuleEvents } from './fluxerModuleEvents.js';
+import { register as registerDmTickets } from './events/dmTickets.js';
 import { fluxerReactionAdd } from '../platform/fluxerEvents.js';
 import { createVoiceTracker } from '../platform/voiceStates.js';
 import { handleReactionAdd } from '../platform/reactionBridge.js';
@@ -94,6 +95,7 @@ export async function startFluxerBot(opts = {}) {
     voice,
     isCommand: (message) => isCommandMessage(message, { commands, prefix }),
   });
+  registerDmTickets(client); // a DM to the bot opens a ticket, as on Discord
   attachPrefixCommands(client, { commands, prefix });
   client.on('messageReactionAdd', async (payload) => {
     try {

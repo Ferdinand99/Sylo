@@ -220,3 +220,64 @@ test('the Fluxer client logs when it is ready, so a run can be told from a silen
     lines.join(' | ')
   );
 });
+
+test('a DM to the Fluxer bot opens a ticket in the Fluxer server the sender is in', async () => {
+  const { setGuildModule } = await import('../src/db/modules.js');
+  const { getOpenTicket } = await import('../src/db/tickets.js');
+  const RAW = '900000000000000150';
+  const KEY = `fluxer:${RAW}`;
+  const USER = '111111111111111150';
+  await setGuildModule(KEY, 'tickets', { enabled: true, config: {} });
+
+  const sdk = fakeSdk();
+  const client = await startFluxerBot({
+    sdk,
+    token: 't',
+    commands: new Map(),
+    prefix: '!',
+    loadModules: async () => {},
+    installCompat: () => {},
+  });
+  const sent = [];
+  const guild = {
+    id: RAW,
+    name: 'Fluxer Test',
+    client,
+    members: { fetch: async (id) => (id === USER ? { id } : null), me: null },
+    channels: { cache: new Map(), fetch: async () => null },
+  };
+  client.guilds = { cache: new Map([[RAW, guild]]) };
+  // A Discord guild the same user id means nothing in must not be consulted or matched.
+  runtime.clients.discord = {
+    guilds: {
+      cache: new Map([
+        [
+          'g-discord',
+          {
+            id: 'g-discord',
+            name: 'D',
+            members: { fetch: async () => ({ id: USER }) },
+            channels: { cache: new Map() },
+          },
+        ],
+      ]),
+    },
+  };
+  try {
+    await client.emit('messageCreate', {
+      guild: null,
+      client,
+      author: { id: USER, bot: false, send: async (p) => sent.push(p) },
+      content: 'I need help',
+      attachments: new Map(),
+      reply: async (p) => sent.push(p),
+      react: async () => {},
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    const ticket = await getOpenTicket(KEY, USER);
+    assert.ok(ticket, 'a ticket was opened for the Fluxer server');
+    assert.ok(!(await getOpenTicket('g-discord', USER)), 'nothing was opened on the Discord side');
+  } finally {
+    runtime.clients.discord = null;
+  }
+});

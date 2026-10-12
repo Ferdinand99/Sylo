@@ -38,7 +38,8 @@ async function handleDM(message) {
   };
   if (!payload.content && payload.attachments.length === 0) return;
 
-  const guilds = await ticketGuildsForUser(message.author);
+  // Only the servers on the platform this DM arrived on: a user id means nothing on the other one.
+  const guilds = await ticketGuildsForUser(message.author, message.client);
   if (guilds.length === 0) {
     await message
       .reply("I'm not set up to take messages for any server you're in right now.")

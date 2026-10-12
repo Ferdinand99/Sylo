@@ -1,9 +1,8 @@
 // Ticket / modmail helpers. Users DM the bot; staff reply from the dashboard.
 // The bot relays messages both ways. Staff replies are anonymous ("Staff").
-import { allGuilds, guildByKey, guildKey } from '../platform/platformOf.js';
+import { allGuilds, clientOfGuild, guildByKey, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { config } from '../config.js';
-import { runtime } from '../runtime.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import {
   getOpenTicket,
@@ -47,7 +46,9 @@ const fmtTs = (ts) => tsFmt.format(new Date(ts));
  */
 export async function buildTextTranscript(ticket) {
   const guild = guildByKey(ticket.guild_id);
-  const user = await runtime.client?.users.fetch(ticket.user_id).catch(() => null);
+  const user = await clientOfGuild(guild)
+    ?.users.fetch(ticket.user_id)
+    .catch(() => null);
   const userLabel = user ? user.tag : ticket.user_id;
   const rows = await ticketMessages(ticket.id);
 
@@ -83,7 +84,9 @@ export async function buildTextTranscript(ticket) {
  */
 export async function buildTranscript(ticket) {
   const guild = guildByKey(ticket.guild_id);
-  const user = await runtime.client?.users.fetch(ticket.user_id).catch(() => null);
+  const user = await clientOfGuild(guild)
+    ?.users.fetch(ticket.user_id)
+    .catch(() => null);
   const userLabel = user ? user.tag : ticket.user_id;
   const rows = await ticketMessages(ticket.id);
 
@@ -122,10 +125,13 @@ ${bubbles}
   return { filename: `ticket-${ticket.id}-transcript.html`, html };
 }
 
-/** Guilds where the tickets module is enabled and the user is a member. */
-export async function ticketGuildsForUser(user) {
+/**
+ * Guilds where the tickets module is enabled and the user is a member. Pass the client the
+ * DM arrived on to look only at that platform's servers.
+ */
+export async function ticketGuildsForUser(user, client) {
   const out = [];
-  for (const guild of allGuilds()) {
+  for (const guild of client ? [...client.guilds.cache.values()] : allGuilds()) {
     if (!(await isModuleEnabled(guildKey(guild), 'tickets'))) continue;
     const member = await guild.members.fetch(user.id).catch(() => null);
     if (member) out.push(guild);
@@ -212,7 +218,9 @@ export async function ingestUserDM(guild, user, payload) {
  */
 export async function relayStaffReply(ticket, staffUserId, content) {
   const guild = guildByKey(ticket.guild_id);
-  const user = await runtime.client.users.fetch(ticket.user_id).catch(() => null);
+  const user = await clientOfGuild(guild)
+    .users.fetch(ticket.user_id)
+    .catch(() => null);
   let delivered = Boolean(user);
   if (user) {
     try {
@@ -242,7 +250,9 @@ export async function relayStaffReply(ticket, staffUserId, content) {
 export async function closeTicketWithNotice(ticket, staffUserId, closingMessage) {
   const guild = guildByKey(ticket.guild_id);
   const cfg = (await getGuildModule(ticket.guild_id, 'tickets')).config;
-  const user = await runtime.client?.users.fetch(ticket.user_id).catch(() => null);
+  const user = await clientOfGuild(guild)
+    ?.users.fetch(ticket.user_id)
+    .catch(() => null);
 
   const text = (closingMessage ?? '').trim();
 
