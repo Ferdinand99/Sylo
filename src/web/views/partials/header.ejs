@@ -158,7 +158,7 @@
       <% if (typeof user !== 'undefined' && user && !user.open) { %>
         <div class="sb-user">
           <% if (user.avatar) { %><img class="avatar" src="<%= user.avatar %>" alt="" /><% } %>
-          <span class="sb-user-name"><%= user.name %></span>
+          <a class="sb-user-name" href="/account" title="Your account"><%= user.name %></a>
           <a href="/auth/logout" title="Log out" hx-boost="false">Log out</a>
         </div>
       <% } else if (typeof authEnabled !== 'undefined' && authEnabled) { %>

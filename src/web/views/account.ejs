@@ -1,0 +1,29 @@
+<%- include('partials/header', { title: 'Sylo — Account' }) %>
+
+<h1 class="page-title">Account</h1>
+<p class="muted">The platforms you sign in with. Connect a second one to manage your servers on both with the same account.</p>
+
+<% if (flash) { %><div class="banner banner-flash <%= flash.kind %>"><%= flash.text %></div><% } %>
+
+<% platforms.forEach(function (p) { %>
+  <section class="card">
+    <h2><%= p.label %></h2>
+    <% if (p.identity) { %>
+      <p>Connected as <strong><%= p.identity.username %></strong>
+        <span class="muted">· manages <%= p.guildCount %> server<%= p.guildCount === 1 ? '' : 's' %> with Sylo</span></p>
+      <% if (p.canDisconnect) { %>
+        <form method="post" action="/account/disconnect/<%= p.platform %>">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+          <button type="submit" class="btn">Disconnect <%= p.label %></button>
+        </form>
+      <% } else { %>
+        <p class="muted">This is your only sign-in, so it can't be disconnected.</p>
+      <% } %>
+    <% } else if (p.connectHref) { %>
+      <p class="muted">Not connected.</p>
+      <p><a class="btn" href="<%= p.connectHref %>" hx-boost="false">Connect <%= p.label %></a></p>
+    <% } %>
+  </section>
+<% }); %>
+
+<%- include('partials/footer') %>

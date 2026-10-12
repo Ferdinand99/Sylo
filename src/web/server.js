@@ -25,6 +25,7 @@ import githubWebhookRouter from './routes/githubWebhook.js';
 import v2ApiRouter from './routes/v2Api.js';
 import v2ClientRouter from './routes/v2Client.js';
 import roadmapRouter from './routes/roadmap.js';
+import accountRouter from './routes/account.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -83,6 +84,7 @@ export function createApp() {
   app.use('/', dashboardRouter);
   app.use('/stats', statsRouter);
   app.use('/commands', commandsRouter);
+  app.use('/account', accountRouter);
   // Bot-wide identity (name/avatar/banner) and presence — owner only, not any
   // signed-in guild admin (see requireOwner).
   app.use('/settings', requireOwner, settingsRouter);

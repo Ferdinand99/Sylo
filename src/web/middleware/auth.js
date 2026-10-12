@@ -291,6 +291,8 @@ function beginOAuth(req, res, provider, { connect }) {
   req.session.oauthState = state;
   req.session.oauthPlatform = provider.platform;
   req.session.connect = connect ? provider.platform : undefined;
+  // Connecting is started from the account page, so that is where it should end.
+  if (connect) req.session.returnTo = '/account?msg=connected';
   res.redirect(provider.authorizeUrl(redirectUri(req, provider), state));
 }
 
