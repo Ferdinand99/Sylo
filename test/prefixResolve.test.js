@@ -74,3 +74,34 @@ test('an unknown or malformed reference is a ParseError naming the option', asyn
     );
   }
 });
+
+test('a cached user the SDK only knows by id (no username) is refetched in full', async () => {
+  const bare = { id: UID, username: undefined };
+  const full = { id: UID, username: 'ferdi', tag: 'ferdi' };
+  const fetches = [];
+  const client = {
+    users: {
+      cache: new Map([[UID, bare]]),
+      fetch: async (id, opts) => {
+        fetches.push([id, opts]);
+        return full;
+      },
+    },
+  };
+  const { user } = (await resolveOptions({ who: { type: 6, value: `<@${UID}>` } }, { client, guild: null }))
+    .who;
+  assert.equal(user, full);
+  assert.deepEqual(fetches, [[UID, { force: true }]]);
+});
+
+test('a complete cached user is used as is, with no request', async () => {
+  const complete = { id: UID, username: 'ferdi' };
+  const client = {
+    users: {
+      cache: new Map([[UID, complete]]),
+      fetch: async () => assert.fail('must not fetch'),
+    },
+  };
+  const { user } = (await resolveOptions({ who: { type: 6, value: UID } }, { client, guild: null })).who;
+  assert.equal(user, complete);
+});

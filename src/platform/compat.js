@@ -11,6 +11,8 @@
 // Discord-only install. Installing is idempotent, and an alias never replaces a
 // member the SDK already has.
 
+import { fluxerEndpoints } from './instance.js';
+
 const WRAPPED = Symbol.for('sylo.fluxerCompat');
 const idOf = (x) => (typeof x === 'string' ? x : x?.id);
 
@@ -595,7 +597,7 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
     Message.prototype,
     'url',
     getter(function () {
-      const base = this.client.instance?.endpoints?.webapp ?? 'https://web.fluxer.app';
+      const base = this.client.instance?.endpoints?.webapp ?? fluxerEndpoints().webapp;
       return `${base}/channels/${this.guildId ?? '@me'}/${this.channelId}/${this.id}`;
     })
   );

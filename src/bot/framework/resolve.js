@@ -25,9 +25,17 @@ async function lookup(manager, id) {
   return (await manager.fetch(id).catch(() => null)) ?? null;
 }
 
+// A user the SDK has only seen by id (from a ban, a leave, a voice state) sits in the cache
+// without a username, which shows up as "undefined" in every embed; fetch the full one.
+async function lookupUser(users, id) {
+  const cached = users?.cache?.get(id);
+  if (cached?.username !== undefined || typeof users?.fetch !== 'function') return cached ?? null;
+  return (await users.fetch(id, { force: true }).catch(() => null)) ?? cached;
+}
+
 async function resolveUser(raw, name, { client, guild }) {
   const id = idFrom(raw, 'user');
-  const user = id ? await lookup(client?.users, id) : null;
+  const user = id ? ((await lookupUser(client?.users, id)) ?? (await lookup(client?.users, id))) : null;
   if (!user) throw new ParseError(`Could not find a user for "${name}" (use a mention or an id).`);
   return { user, member: guild ? await lookup(guild.members, id) : null };
 }

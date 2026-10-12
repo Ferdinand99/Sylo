@@ -50,6 +50,11 @@ test('containsInvite: matches common invite forms', () => {
   assert.ok(containsInvite('discordapp.com/invite/foo'));
   assert.ok(!containsInvite('just talking about discord in general'));
 });
+test('containsInvite: Fluxer invite links count too', () => {
+  assert.ok(containsInvite('join fluxer.gg/AbC123'));
+  assert.ok(containsInvite('https://web.fluxer.app/invite/AbC123'));
+  assert.ok(!containsInvite('see fluxer.app/pricing'));
+});
 
 test('disallowedLink: no allowlist flags any URL, allowlist permits listed domains + subdomains', () => {
   assert.equal(disallowedLink('see http://evil.test/x', []), 'evil.test');

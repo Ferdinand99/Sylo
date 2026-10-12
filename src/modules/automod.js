@@ -51,7 +51,9 @@ export const AUTOMOD_RULES = [
 const RULE_KEYS = AUTOMOD_RULES.map(([k]) => k);
 const AUTOMOD_COLOR = 0xe5b567;
 
-const INVITE_RE = /(?:discord\.(?:gg|io|me|li)|discord(?:app)?\.com\/invite)\/[\w-]+/i;
+// Discord invites, plus Fluxer's (fluxer.gg/<code>, and <web app>/invite/<code>).
+const INVITE_RE =
+  /(?:discord\.(?:gg|io|me|li)|discord(?:app)?\.com\/invite|fluxer\.gg|(?:web\.)?fluxer\.app\/invite)\/[\w-]+/i;
 const URL_RE = /\bhttps?:\/\/[^\s/$.?#][^\s]*/gi;
 
 // --- config normalisation ------------------------------------------------
