@@ -88,3 +88,20 @@ test('an edit keeps an empty content string so it can clear old text', () => {
   assert.equal(toFluxerPayload({ content: '' }, { edit: true }).payload.content, '');
   assert.equal('content' in toFluxerPayload({ content: '' }).payload, false);
 });
+
+test('timestamps in embed text that Fluxer does not render become plain UTC text', () => {
+  const ts = Date.UTC(2026, 9, 12, 19, 49, 5) / 1000; // 2026-10-12 19:49:05 UTC
+  const embed = new EmbedBuilder()
+    .setTitle(`Poll <t:${ts}:R>`)
+    .setDescription(`Description keeps <t:${ts}:R>`)
+    .setFooter({ text: `Ends <t:${ts}:R> · One vote each` })
+    .addFields({ name: `Closes <t:${ts}:t>`, value: `Value keeps <t:${ts}:R>` });
+  const { payload } = toFluxerPayload({ embeds: [embed] });
+  const [e] = payload.embeds;
+  assert.equal(e.footer.text, 'Ends 12 Oct 2026, 19:49 UTC · One vote each');
+  assert.equal(e.title, 'Poll 12 Oct 2026, 19:49 UTC');
+  assert.equal(e.fields[0].name, 'Closes 19:49 UTC');
+  // Descriptions and field values are markdown, which Fluxer does render.
+  assert.equal(e.description, `Description keeps <t:${ts}:R>`);
+  assert.equal(e.fields[0].value, `Value keeps <t:${ts}:R>`);
+});
