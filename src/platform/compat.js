@@ -151,6 +151,19 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
       }
   );
 
+  // The SDK shares one User object per id and overwrites its name on every payload that
+  // mentions the user. A ban event carries only the id, so it wipes the name of a cached
+  // user ("undefined" in every embed afterwards); a payload without one adds nothing.
+  wrap(
+    User.prototype,
+    '_patch',
+    (native) =>
+      function (data) {
+        if (data?.username === undefined) return;
+        return native.call(this, data);
+      }
+  );
+
   // User: discord.js `tag` (username, plus #discriminator when there is one).
   define(
     User.prototype,
@@ -212,6 +225,9 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
           if (id) {
             const hit = bans.find((b) => (b.user?.id ?? b.userId) === idOf(id));
             if (!hit) throw Object.assign(new Error('Unknown Ban'), { code: 10026 });
+            // The API lists a ban with only the user's id; discord.js callers expect a name.
+            if (hit.user && hit.user.username === undefined)
+              await guild.client.users.fetch(hit.user.id, { force: true }).catch(() => null);
             return hit;
           }
           return new Collection(bans.map((b) => [b.user?.id ?? b.userId, b]));

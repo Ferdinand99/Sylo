@@ -37,6 +37,7 @@ test('Guild.bans: create / remove / fetch over the SDK ban methods', async () =>
     ban: async (id, opts) => calls.push(['ban', id, opts]),
     unban: async (id, reason) => calls.push(['unban', id, reason]),
     fetchBans: async () => [{ user: { id: 'u1' } }, { user: { id: 'u2' } }],
+    client: { users: { fetch: async () => null } },
   };
   const bans = getterOf(sdk.Guild, 'bans').call(guild);
   await bans.create({ id: 'u1' }, { reason: 'spam' });
@@ -194,4 +195,42 @@ test('every SDK method the compat layer wraps still exists (guards an SDK upgrad
   ]) {
     for (const n of names) assert.equal(typeof Class.prototype[n], 'function', `${Class.name}.${n}`);
   }
+});
+
+test('User._patch: a bare payload (a ban event carries only the id) keeps the name already known', () => {
+  const user = new sdk.User({}, { id: '1', username: 'ferdi', discriminator: '2610', global_name: 'Ferdi' });
+  user._patch({ id: '1' });
+  assert.equal(user.username, 'ferdi');
+  assert.equal(user.discriminator, '2610');
+  assert.equal(user.globalName, 'Ferdi');
+  assert.equal(user.tag, 'ferdi#2610');
+  user._patch({ id: '1', username: 'renamed', discriminator: '0', global_name: null });
+  assert.equal(user.tag, 'renamed', 'a full payload still updates the user');
+  assert.equal(user.globalName, null);
+});
+
+test('Guild.bans.fetch(id): a banned user the SDK only knows by id is filled in from the API', async () => {
+  const fetched = [];
+  const bare = { id: 'u9', username: undefined };
+  const guild = {
+    fetchBans: async () => [{ user: bare }],
+    client: {
+      users: {
+        fetch: async (id, opts) => {
+          fetched.push([id, opts]);
+          bare.username = 'nine';
+          return bare;
+        },
+      },
+    },
+  };
+  const bans = getterOf(sdk.Guild, 'bans').call(guild);
+  const ban = await bans.fetch('u9');
+  assert.equal(ban.user.username, 'nine');
+  assert.deepEqual(fetched, [['u9', { force: true }]]);
+
+  // A known user costs no extra request.
+  fetched.length = 0;
+  await bans.fetch('u9');
+  assert.deepEqual(fetched, []);
 });
