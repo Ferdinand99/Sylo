@@ -19,6 +19,7 @@ side, how people use the bot there, and what is different from Discord.
 - [What works differently](#what-works-differently)
 - [Server ids](#server-ids)
 - [Upgrading an existing install](#upgrading-an-existing-install)
+- [Coming from Sylo-Fluxer](#coming-from-sylo-fluxer)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -262,6 +263,24 @@ with the same number apart.
   They are created on start-up, and the usual pre-migration backup runs first.
 - `FLUXER_CLIENT_SECRET` is only needed for dashboard login; the bot itself needs
   just the token and the application id.
+
+---
+
+## Coming from Sylo-Fluxer
+
+[Sylo-Fluxer](https://github.com/Ferdinand99/Sylo-Fluxer) was a separate fork of Sylo for
+Fluxer. It is **archived**: Sylo 4.0 runs on Fluxer natively, so there is no second
+codebase to keep up with and no separate releases.
+
+- **Switch by running Sylo.** Set `FLUXER_TOKEN` and `FLUXER_CLIENT_ID` (and, for
+  dashboard login, `FLUXER_CLIENT_SECRET`) as described above, and stop the old container.
+  Only one process can use a bot token at a time, so do not run both.
+- **Your data does not carry over automatically.** Sylo-Fluxer stored a server under its
+  plain id; Sylo 4 stores a Fluxer server as `fluxer:<id>` (see [Server ids](#server-ids)),
+  so the two databases are not interchangeable. Plan on setting the modules up again on
+  the new install.
+- **Commands and behaviour are the same shape.** Chat commands with a prefix, buttons as
+  reactions and so on; the difference is that the same bot can also run on Discord.
 
 ---
 

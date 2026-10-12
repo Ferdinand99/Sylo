@@ -31,6 +31,12 @@ dashboard on Discord, on Fluxer, or on both from one process. Fluxer has no slas
 commands yet, so commands run from chat (`!ping`). See
 [docs/fluxer.md](docs/fluxer.md).
 
+> **Coming from Sylo-Fluxer?** The separate
+> [Sylo-Fluxer](https://github.com/Ferdinand99/Sylo-Fluxer) fork is **archived**. Since
+> Sylo 4.0 this repository runs on Fluxer itself — alone or next to Discord — so there
+> is one codebase, one set of releases and one dashboard. Sylo-Fluxer's database is not
+> migrated automatically; see [Coming from Sylo-Fluxer](docs/fluxer.md#coming-from-sylo-fluxer).
+
 Don't want to run your own instance? Sylo is a Discord-verified bot —
 [add it to your server](https://discord.com/oauth2/authorize?client_id=1374856793469227029)
 directly. The rest of this README, and [self-hosting](#self-hosting) below, is
