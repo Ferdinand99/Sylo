@@ -47,3 +47,25 @@ test('isDiscordReady()/guildCount() keep reading the Discord client unchanged', 
   assert.equal(guildCount(), 2);
   setClient(null);
 });
+
+test('platformStatus() / totalGuildCount() / isAnyClientReady() cover every connected platform', async () => {
+  const { platformStatus, totalGuildCount, isAnyClientReady } = await import('../src/runtime.js');
+  assert.deepEqual(platformStatus(), []);
+  assert.equal(totalGuildCount(), 0);
+  assert.equal(isAnyClientReady(), false);
+
+  const guilds = (n) => ({ cache: new Map(Array.from({ length: n }, (_, i) => [`g${i}`, {}])) });
+  setClientFor('discord', { isReady: () => true, guilds: guilds(2), user: { tag: 'Sylo#0001' } });
+  setClientFor('fluxer', { isReady: () => false, guilds: guilds(1), user: { tag: 'Sylo_Test' } });
+  try {
+    assert.deepEqual(platformStatus(), [
+      { platform: 'discord', ready: true, guilds: 2, tag: 'Sylo#0001' },
+      { platform: 'fluxer', ready: false, guilds: 1, tag: 'Sylo_Test' },
+    ]);
+    assert.equal(totalGuildCount(), 3);
+    assert.equal(isAnyClientReady(), true);
+  } finally {
+    setClientFor('discord', null);
+    setClientFor('fluxer', null);
+  }
+});

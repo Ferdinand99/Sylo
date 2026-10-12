@@ -116,6 +116,8 @@ export function setClient(client) {
   setClientFor('discord', client);
 }
 
+const PLATFORM_ORDER = ['discord', 'fluxer'];
+
 /** Uptime in whole seconds since process start. */
 export function uptimeSeconds() {
   return Math.floor((Date.now() - runtime.startedAt) / 1000);
@@ -129,4 +131,27 @@ export function isDiscordReady() {
 /** Number of guilds the bot is currently in (0 when not ready). */
 export function guildCount() {
   return runtime.client?.guilds.cache.size ?? 0;
+}
+
+/** One entry per connected platform, for the health views. */
+export function platformStatus() {
+  return PLATFORM_ORDER.filter((p) => runtime.clients[p]).map((platform) => {
+    const client = runtime.clients[platform];
+    return {
+      platform,
+      ready: Boolean(client.isReady?.()),
+      guilds: client.guilds?.cache?.size ?? 0,
+      tag: client.user?.tag ?? null,
+    };
+  });
+}
+
+/** Guilds across every connected platform. */
+export function totalGuildCount() {
+  return platformStatus().reduce((sum, p) => sum + p.guilds, 0);
+}
+
+/** Is at least one connected platform ready? */
+export function isAnyClientReady() {
+  return platformStatus().some((p) => p.ready);
 }

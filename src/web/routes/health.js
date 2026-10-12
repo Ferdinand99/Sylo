@@ -11,7 +11,14 @@ import { config } from '../../config.js';
 import { requireOwner, isOwner, forbidOwner } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { runtime, uptimeSeconds, isDiscordReady, guildCount, errorScopeCounts } from '../../runtime.js';
+import {
+  runtime,
+  uptimeSeconds,
+  isAnyClientReady,
+  totalGuildCount,
+  platformStatus,
+  errorScopeCounts,
+} from '../../runtime.js';
 import { byMetric } from '../../lib/metrics.js';
 import { dashboardStats, moduleUsage } from '../../db/dashboardStats.js';
 import {
@@ -50,7 +57,7 @@ const backupLimit = rateLimit({
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const ready = isDiscordReady();
+    const ready = isAnyClientReady();
     // htmx (hx-boost) navigations fetch with `Accept: */*`, so fall back to the
     // HX-Request header — without this a boosted sidebar click renders the JSON.
     const wantsHtml = (req.headers.accept || '').includes('text/html') || Boolean(req.get('HX-Request'));
@@ -61,9 +68,10 @@ router.get(
         status: ready ? 'ok' : 'degraded',
         version,
         uptimeSeconds: uptimeSeconds(),
+        platforms: platformStatus(),
         discord: {
           ready,
-          guilds: guildCount(),
+          guilds: totalGuildCount(),
           gatewayPingMs: typeof ping === 'number' && ping >= 0 ? Math.round(ping) : null,
           gatewayPingHistory: runtime.pingHistory.slice(),
         },
@@ -98,9 +106,14 @@ router.get(
 
     res.render('health', {
       ready,
-      botTag: client?.user?.tag ?? null,
+      botTag:
+        platformStatus()
+          .map((p) => p.tag)
+          .filter(Boolean)
+          .join(' · ') || null,
+      platforms: platformStatus(),
       uptime: formatUptime(uptimeSeconds()),
-      guildCount: guildCount(),
+      guildCount: totalGuildCount(),
       memberReach,
       gatewayPing: typeof gatewayPing === 'number' && gatewayPing >= 0 ? Math.round(gatewayPing) : null,
       pingHistory: runtime.pingHistory.slice(),

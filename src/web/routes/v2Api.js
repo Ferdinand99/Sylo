@@ -169,7 +169,7 @@ import {
 } from '../../db/guildSettings.js';
 import { recordAudit } from '../../db/audit.js';
 import { recordBotAudit, listBotAudit } from '../../db/botAudit.js';
-import { runtime, uptimeSeconds, isDiscordReady, guildCount } from '../../runtime.js';
+import { runtime, uptimeSeconds, isAnyClientReady, totalGuildCount } from '../../runtime.js';
 import {
   getPresenceConfig,
   setPresenceConfig,
@@ -2178,14 +2178,14 @@ router.get(
       .sort((a, b) => b.guilds - a.guilds);
 
     const dbInfo = await dbFileInfo();
-    const ready = isDiscordReady();
+    const ready = isAnyClientReady();
 
     res.json({
       ready,
       botTag: client?.user?.tag ?? null,
       version,
       uptime: formatUptime(uptimeSeconds()),
-      guildCount: guildCount(),
+      guildCount: totalGuildCount(),
       memberReach,
       gatewayPing: typeof gatewayPing === 'number' && gatewayPing >= 0 ? Math.round(gatewayPing) : null,
       pingHistory: runtime.pingHistory.slice(),
