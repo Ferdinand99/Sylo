@@ -3,6 +3,7 @@
 // Enabled when DISCORD_CLIENT_SECRET is set. Otherwise the dashboard runs in
 // "open mode" — every guard passes through — which is only safe on localhost or
 // a trusted LAN. A banner in the UI makes the mode obvious.
+import { splitPlatformGuildId } from '../../lib/platformId.js';
 import { allGuildKeys, guildByKey, guildKey, primaryClient } from '../../platform/platformOf.js';
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
@@ -135,6 +136,8 @@ export function manageableGuilds(req) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+const isNonDiscordKey = (key) => splitPlatformGuildId(key)?.platform !== 'discord';
+
 /**
  * Guild ids (bot ∩ user-is-admin) for the signed-in user. `req.session.guilds`
  * is already filtered to admin/owner guilds at login (see the callback route
@@ -144,9 +147,14 @@ export function adminGuildIds(req) {
   if (!config.authEnabled) {
     return new Set(allGuildKeys());
   }
-  const ids = req.session?.guilds ?? [];
-  const botGuilds = new Set(allGuildKeys());
-  return new Set(ids.filter((id) => botGuilds.has(id)));
+  const botGuilds = allGuildKeys();
+  const own = (req.session?.guilds ?? []).filter((id) => botGuilds.includes(id));
+  // Interim, until accounts can be linked across platforms: a Fluxer user has no login here
+  // yet, so an operator (OWNER_IDS) signing in with Discord may also manage every guild on
+  // a platform other than Discord. Discord guilds keep the rule above.
+  const userId = req.session?.user?.id;
+  const elsewhere = userId && config.ownerIds.includes(userId) ? botGuilds.filter(isNonDiscordKey) : [];
+  return new Set([...own, ...elsewhere]);
 }
 
 /**
