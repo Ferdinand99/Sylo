@@ -1,0 +1,79 @@
+<% var cfg = moduleConfig || {}; var ev = cfg.events || {}; %>
+<% var aEnabled = typeof appleEnabled !== 'undefined' ? appleEnabled : false; %>
+
+<p class="muted small">
+  Alerts from your Apple Developer account through the App Store Connect API: an app version
+  moving through review, a TestFlight build finishing (or failing) processing, TestFlight review
+  results, new reviews, tester feedback and crashes, and certificates or profiles about to
+  expire. Sylo checks about every 5 minutes. <strong>This module is visible to the Sylo owner only.</strong>
+</p>
+
+<% if (!aEnabled) { %>
+  <div class="banner bad">
+    Set <code>APPLE_KEY_ID</code> and <code>APPLE_PRIVATE_KEY</code> (and <code>APPLE_ISSUER_ID</code> for a team key)
+    on the bot, from an API key created in App Store Connect under Users and Access → Integrations, for alerts to fire.
+    You can still configure them here.
+  </div>
+<% } %>
+
+<form method="POST" action="/guilds/<%= guild.id %>/m/apple-connect/config" hx-post="/guilds/<%= guild.id %>/m/apple-connect/config" hx-target="#module-config" hx-swap="outerHTML" class="stack u-mw-xl">
+  <div class="star-age">
+    <div class="stack u-grow">
+      <label class="small">Main channel <span class="muted">— used by every alert without its own</span></label>
+      <select name="channelId">
+        <option value="">— select a channel —</option>
+        <% channels.forEach(function (c) { %>
+          <option value="<%= c.id %>" <%= c.id === cfg.channelId ? 'selected' : '' %>>#<%= c.name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="stack u-grow">
+      <label class="small">Ping role <span class="muted">— optional</span></label>
+      <select name="roleId">
+        <option value="">— none —</option>
+        <% roles.forEach(function (r) { %>
+          <option value="<%= r.id %>" <%= r.id === cfg.roleId ? 'selected' : '' %>><%= r.name %></option>
+        <% }) %>
+      </select>
+    </div>
+  </div>
+
+  <label class="small">Apps <span class="muted">— App Store Connect app ids, one per line; leave empty for all your apps</span></label>
+  <textarea name="apps" rows="2" placeholder="6446998023"><%= (cfg.apps || []).join('\n') %></textarea>
+
+  <h3 class="u-mt-3">What to announce</h3>
+  <p class="muted small">Each alert can go to its own channel; leave it on <em>main channel</em> to use the one above.</p>
+  <% function ch(kind) { return { name: 'ev_' + kind + '_ch', value: (ev[kind] && ev[kind].channelId) || '', channels: channels }; } %>
+  <div class="checkline">
+    <label><input type="checkbox" name="ev_versionState" <%= !ev.versionState || ev.versionState.enabled ? 'checked' : '' %> /> App version state changes <span class="muted">— waiting for review, in review, rejected, ready for sale …</span></label>
+    <%- include('_apple-channel', ch('versionState')) %>
+  </div>
+  <div class="checkline">
+    <label><input type="checkbox" name="ev_build" <%= !ev.build || ev.build.enabled ? 'checked' : '' %> /> Builds finished or failed processing</label>
+    <%- include('_apple-channel', ch('build')) %>
+  </div>
+  <div class="checkline">
+    <label><input type="checkbox" name="ev_betaReview" <%= !ev.betaReview || ev.betaReview.enabled ? 'checked' : '' %> /> TestFlight review started, approved or rejected</label>
+    <%- include('_apple-channel', ch('betaReview')) %>
+  </div>
+  <div class="checkline">
+    <label><input type="checkbox" name="ev_feedback" <%= !ev.feedback || ev.feedback.enabled ? 'checked' : '' %> /> TestFlight feedback and crashes</label>
+    <%- include('_apple-channel', ch('feedback')) %>
+  </div>
+  <div class="checkline">
+    <label><input type="checkbox" name="ev_reviews" <%= !ev.reviews || ev.reviews.enabled ? 'checked' : '' %> /> New customer reviews
+      <span class="muted">— only up to</span>
+      <input type="number" name="rv_maxStars" class="u-w-num" min="1" max="5" value="<%= (ev.reviews && ev.reviews.maxStars) || 5 %>" />
+      <span class="muted">stars</span></label>
+    <%- include('_apple-channel', ch('reviews')) %>
+  </div>
+  <div class="checkline">
+    <label><input type="checkbox" name="ev_expiry" <%= !ev.expiry || ev.expiry.enabled ? 'checked' : '' %> /> Certificates and profiles expiring
+      <span class="muted">— from</span>
+      <input type="number" name="ex_days" class="u-w-num" min="1" max="365" value="<%= (ev.expiry && ev.expiry.days) || 30 %>" />
+      <span class="muted">days before (and at 7 and 1 days). Needs a team API key.</span></label>
+    <%- include('_apple-channel', ch('expiry')) %>
+  </div>
+
+  <div class="u-mt-3"><button type="submit">Save</button></div>
+</form>

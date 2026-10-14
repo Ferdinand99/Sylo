@@ -25,6 +25,7 @@ import './twitchAlerts.js';
 import './youtubeAlerts.js';
 import './kickAlerts.js';
 import './rss.js';
+import './appleConnect.js';
 import './insights.js';
 import './giveaways.js';
 import './messageCreator.js'; // registers the role-button / role-select component handlers

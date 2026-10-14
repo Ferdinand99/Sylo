@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildPayload,
+  channelFor,
   fetchSnapshot,
   normaliseAppleConfig,
   processGuild,
@@ -18,9 +19,9 @@ test('normaliseAppleConfig: defaults, channel/role ids, app ids and clamped numb
   const d = normaliseAppleConfig({});
   assert.equal(d.channelId, '');
   assert.deepEqual(d.apps, []);
-  assert.equal(d.events.versionState, true);
-  assert.equal(d.events.build, true);
-  assert.equal(d.events.sales, false);
+  assert.deepEqual(d.events.versionState, { enabled: true, channelId: '' });
+  assert.equal(d.events.build.enabled, true);
+  assert.equal(d.events.sales.enabled, false);
 
   const c = normaliseAppleConfig({
     channelId: '123456789012345678',
@@ -35,9 +36,28 @@ test('normaliseAppleConfig: defaults, channel/role ids, app ids and clamped numb
   assert.equal(c.channelId, '123456789012345678');
   assert.equal(c.roleId, '');
   assert.deepEqual(c.apps, ['6446998023', '42']);
-  assert.equal(c.events.versionState, false);
+  assert.equal(c.events.versionState.enabled, false);
   assert.equal(c.events.reviews.maxStars, 5);
   assert.equal(c.events.expiry.days, 1);
+});
+
+test('normaliseAppleConfig: each kind can have its own channel, falling back to the main one', () => {
+  const c = normaliseAppleConfig({
+    channelId: '123456789012345678',
+    events: {
+      versionState: { enabled: true, channelId: '223456789012345678' },
+      feedback: { enabled: true, channelId: 'not-an-id' },
+      reviews: { enabled: true, maxStars: 3, channelId: '323456789012345678' },
+      expiry: { channelId: '423456789012345678' },
+    },
+  });
+  assert.equal(c.events.versionState.channelId, '223456789012345678');
+  assert.equal(c.events.feedback.channelId, '');
+  assert.deepEqual(c.events.reviews, { enabled: true, maxStars: 3, channelId: '323456789012345678' });
+  assert.equal(c.events.expiry.enabled, true);
+  assert.equal(c.events.expiry.channelId, '423456789012345678');
+  assert.equal(channelFor(c, c.events.versionState), '223456789012345678');
+  assert.equal(channelFor(c, c.events.build), '123456789012345678');
 });
 
 test('versionState prefers the newer appVersionState, falls back to appStoreState', () => {
@@ -345,4 +365,36 @@ test('processGuild: without a channel nothing is sent and nothing is recorded', 
   // Once a channel is set, the first look still primes silently instead of replaying history.
   await processGuild('g-nc', cfg(), snapshotWith({ versions: [version('v1', 'REJECTED')] }), { send });
   assert.deepEqual(sent, []);
+});
+
+test('processGuild: a kind with its own channel posts there, the rest in the main channel', async () => {
+  const { sent, send } = collector();
+  const split = cfg({ events: { versionState: { channelId: '223456789012345678' } } });
+  await processGuild(
+    'g-split',
+    split,
+    snapshotWith({ versions: [version('v1', 'WAITING_FOR_REVIEW')], builds: [build('b1', 'PROCESSING')] }),
+    { send }
+  );
+  await processGuild(
+    'g-split',
+    split,
+    snapshotWith({ versions: [version('v1', 'IN_REVIEW')], builds: [build('b1', 'VALID')] }),
+    { send }
+  );
+  const byChannel = Object.fromEntries(sent.map((s) => [s.channel, s.payload.embeds[0].toJSON().title]));
+  assert.match(byChannel['223456789012345678'], /1\.2\.0/);
+  assert.match(byChannel['123456789012345678'], /57/);
+});
+
+test('processGuild: with no main channel only the kinds that have their own channel run', async () => {
+  const { sent, send } = collector();
+  const onlyVersions = normaliseAppleConfig({
+    events: { versionState: { enabled: true, channelId: '223456789012345678' } },
+  });
+  const snap = (vs, bs) => snapshotWith({ versions: [version('v1', vs)], builds: [build('b1', bs)] });
+  await processGuild('g-only', onlyVersions, snap('WAITING_FOR_REVIEW', 'PROCESSING'), { send });
+  await processGuild('g-only', onlyVersions, snap('IN_REVIEW', 'VALID'), { send });
+  assert.equal(sent.length, 1, 'the build kind has no channel, so it stays silent');
+  assert.equal(sent[0].channel, '223456789012345678');
 });

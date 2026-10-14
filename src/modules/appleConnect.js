@@ -41,6 +41,12 @@ const clampInt = (v, min, max, fallback) => {
 };
 const flag = (v, fallback) => (v === undefined ? fallback : Boolean(v));
 
+/** One alert kind: `{ enabled, channelId }` (a plain boolean, the older shape, is still accepted). */
+function kindConfig(v, enabledDefault) {
+  const o = v !== null && typeof v === 'object' ? v : { enabled: v };
+  return { enabled: flag(o.enabled, enabledDefault), channelId: isId(o.channelId) ? o.channelId : '' };
+}
+
 export function normaliseAppleConfig(raw = {}) {
   const e = raw.events ?? {};
   return {
@@ -52,16 +58,19 @@ export function normaliseAppleConfig(raw = {}) {
       ),
     ].slice(0, MAX_APPS),
     events: {
-      versionState: flag(e.versionState, true),
-      build: flag(e.build, true),
-      betaReview: flag(e.betaReview, true),
-      reviews: { enabled: flag(e.reviews?.enabled, true), maxStars: clampInt(e.reviews?.maxStars, 1, 5, 5) },
-      feedback: flag(e.feedback, true),
-      expiry: { enabled: flag(e.expiry?.enabled, true), days: clampInt(e.expiry?.days, 1, 365, 30) },
-      sales: flag(e.sales, false),
+      versionState: kindConfig(e.versionState, true),
+      build: kindConfig(e.build, true),
+      betaReview: kindConfig(e.betaReview, true),
+      reviews: { ...kindConfig(e.reviews, true), maxStars: clampInt(e.reviews?.maxStars, 1, 5, 5) },
+      feedback: kindConfig(e.feedback, true),
+      expiry: { ...kindConfig(e.expiry, true), days: clampInt(e.expiry?.days, 1, 365, 30) },
+      sales: kindConfig(e.sales, false),
     },
   };
 }
+
+/** Where an alert kind posts: its own channel, else the main one ('' = nowhere, so it stays off). */
+export const channelFor = (cfg, kind) => kind.channelId || cfg.channelId;
 
 // --- states -----------------------------------------------------------------------
 
@@ -447,12 +456,11 @@ const BETA_ANNOUNCED = new Set(['IN_REVIEW', 'APPROVED', 'REJECTED']);
  * @param {{ send?: (guildId: string, channelId: string, payload: object) => Promise<unknown> }} [deps]
  */
 export async function processGuild(guildId, cfg, snapshot, { send = sendToChannel, now = Date.now } = {}) {
-  if (!cfg.channelId) return;
   const apps = snapshot.apps.filter((a) => !cfg.apps.length || cfg.apps.includes(a.id));
 
   // A switched-off kind forgets its state, so switching it on again starts with a silent look.
-  if (!cfg.events.versionState) await clearScope(guildId, SCOPE_VERSIONS);
-  else {
+  if (!cfg.events.versionState.enabled) await clearScope(guildId, SCOPE_VERSIONS);
+  else if (channelFor(cfg, cfg.events.versionState)) {
     const primed = await anySeen(guildId, SCOPE_VERSIONS);
     for (const app of apps) {
       for (const v of app.versions) {
@@ -463,15 +471,15 @@ export async function processGuild(guildId, cfg, snapshot, { send = sendToChanne
         if (prev == null && v.state === 'PREPARE_FOR_SUBMISSION') continue; // a draft nobody has submitted
         await send(
           guildId,
-          cfg.channelId,
+          channelFor(cfg, cfg.events.versionState),
           versionPayload({ app, version: v, from: prev, roleId: cfg.roleId })
         );
       }
     }
   }
 
-  if (!cfg.events.build) await clearScope(guildId, SCOPE_BUILDS);
-  else {
+  if (!cfg.events.build.enabled) await clearScope(guildId, SCOPE_BUILDS);
+  else if (channelFor(cfg, cfg.events.build)) {
     const primed = await anySeen(guildId, SCOPE_BUILDS);
     for (const app of apps) {
       for (const b of app.builds) {
@@ -479,14 +487,18 @@ export async function processGuild(guildId, cfg, snapshot, { send = sendToChanne
         if (prev === b.processingState) continue;
         await markSeen(guildId, SCOPE_BUILDS, b.id, b.processingState, { upsert: true });
         if (!primed || !BUILD_FINAL.has(b.processingState)) continue;
-        await send(guildId, cfg.channelId, buildPayload({ app, build: b, roleId: cfg.roleId }));
+        await send(
+          guildId,
+          channelFor(cfg, cfg.events.build),
+          buildPayload({ app, build: b, roleId: cfg.roleId })
+        );
       }
     }
   }
 
   // TestFlight beta review: announced when it starts and when it is decided.
-  if (!cfg.events.betaReview) await clearScope(guildId, SCOPE_BETA);
-  else {
+  if (!cfg.events.betaReview.enabled) await clearScope(guildId, SCOPE_BETA);
+  else if (channelFor(cfg, cfg.events.betaReview)) {
     const primed = await anySeen(guildId, SCOPE_BETA);
     for (const app of apps) {
       for (const b of app.builds) {
@@ -497,7 +509,7 @@ export async function processGuild(guildId, cfg, snapshot, { send = sendToChanne
         if (!primed || !BETA_ANNOUNCED.has(b.betaReviewState)) continue;
         await send(
           guildId,
-          cfg.channelId,
+          channelFor(cfg, cfg.events.betaReview),
           betaReviewPayload({ app, build: b, state: b.betaReviewState, roleId: cfg.roleId })
         );
       }
@@ -506,35 +518,43 @@ export async function processGuild(guildId, cfg, snapshot, { send = sendToChanne
 
   // New customer reviews (the rating filter only decides what is posted, not what is remembered).
   if (!cfg.events.reviews.enabled) await clearScope(guildId, SCOPE_REVIEWS);
-  else {
+  else if (channelFor(cfg, cfg.events.reviews)) {
     const primed = await anySeen(guildId, SCOPE_REVIEWS);
     for (const app of apps) {
       for (const r of app.reviews ?? []) {
         if (await seen(guildId, SCOPE_REVIEWS, r.id)) continue;
         await markSeen(guildId, SCOPE_REVIEWS, r.id);
         if (!primed || r.rating > cfg.events.reviews.maxStars) continue;
-        await send(guildId, cfg.channelId, reviewPayload({ app, review: r, roleId: cfg.roleId }));
+        await send(
+          guildId,
+          channelFor(cfg, cfg.events.reviews),
+          reviewPayload({ app, review: r, roleId: cfg.roleId })
+        );
       }
     }
   }
 
   // New TestFlight feedback and crash reports.
-  if (!cfg.events.feedback) await clearScope(guildId, SCOPE_FEEDBACK);
-  else {
+  if (!cfg.events.feedback.enabled) await clearScope(guildId, SCOPE_FEEDBACK);
+  else if (channelFor(cfg, cfg.events.feedback)) {
     const primed = await anySeen(guildId, SCOPE_FEEDBACK);
     for (const app of apps) {
       for (const item of app.feedback ?? []) {
         if (await seen(guildId, SCOPE_FEEDBACK, item.id)) continue;
         await markSeen(guildId, SCOPE_FEEDBACK, item.id);
         if (!primed) continue;
-        await send(guildId, cfg.channelId, feedbackPayload({ app, item, roleId: cfg.roleId }));
+        await send(
+          guildId,
+          channelFor(cfg, cfg.events.feedback),
+          feedbackPayload({ app, item, roleId: cfg.roleId })
+        );
       }
     }
   }
 
   // Certificates and profiles close to (or past) their expiry. Not primed: if one is already
   // inside the window when the module is switched on, that is exactly what to hear about.
-  if (cfg.events.expiry.enabled && snapshot.credentials) {
+  if (cfg.events.expiry.enabled && snapshot.credentials && channelFor(cfg, cfg.events.expiry)) {
     const thresholds = [
       ...new Set([cfg.events.expiry.days, 7, 1].filter((d) => d <= cfg.events.expiry.days)),
     ].sort((a, b) => a - b);
@@ -547,7 +567,7 @@ export async function processGuild(guildId, cfg, snapshot, { send = sendToChanne
       await markSeen(guildId, SCOPE_EXPIRY, key);
       await send(
         guildId,
-        cfg.channelId,
+        channelFor(cfg, cfg.events.expiry),
         expiryPayload({
           kind: c.kind,
           name: c.name,
@@ -587,21 +607,23 @@ export async function runAppleTick({
     const key = guildKey(guild);
     if (!(await isModuleEnabled(key, MODULE_ID))) continue;
     const cfg = normaliseAppleConfig((await getGuildModule(key, MODULE_ID)).config);
-    if (cfg.channelId) jobs.push({ key, cfg });
+    if (Object.values(cfg.events).some((kind) => kind.enabled && channelFor(cfg, kind)))
+      jobs.push({ key, cfg });
   }
   if (!jobs.length) return;
 
   // Fetch only the apps somebody asked for (empty list = all of them).
   const everything = jobs.some((j) => !j.cfg.apps.length);
   const appIds = everything ? [] : [...new Set(jobs.flatMap((j) => j.cfg.apps))];
-  const wants = (pick) => jobs.some((j) => pick(j.cfg.events));
+  const wants = (kind) =>
+    jobs.some((j) => j.cfg.events[kind].enabled && channelFor(j.cfg, j.cfg.events[kind]));
   const want = {
-    reviews: wants((e) => e.reviews.enabled),
-    feedback: wants((e) => e.feedback),
-    betaReview: wants((e) => e.betaReview),
+    reviews: wants('reviews'),
+    feedback: wants('feedback'),
+    betaReview: wants('betaReview'),
   };
   const snapshot = await fetchSnapshot(client, { appIds, want });
-  if (wants((e) => e.expiry.enabled) && Date.now() - lastCredentialsAt >= CREDENTIALS_EVERY_MS) {
+  if (wants('expiry') && Date.now() - lastCredentialsAt >= CREDENTIALS_EVERY_MS) {
     lastCredentialsAt = Date.now();
     const credentials = await fetchCredentials(client);
     if (credentials) snapshot.credentials = credentials;

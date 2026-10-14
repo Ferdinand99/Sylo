@@ -16,6 +16,9 @@ import { config } from '../config.js';
  * @property {boolean} configurable     Whether it has a settings panel yet.
  * @property {boolean} [beta]           Shows a "Beta" tag wherever the module is listed.
  *   Set on a newly-added module and removed once it's proven stable in practice.
+ * @property {boolean} [ownerOnly]   Only the Sylo owner (OWNER_IDS / FLUXER_OWNER_IDS) may see,
+ *   enable, configure or read it: hidden from everyone else and refused server-side
+ *   (see web/middleware/ownerOnlyModules.js).
  */
 
 /** @type {ModuleDef[]} */
@@ -283,6 +286,18 @@ export const MODULES = [
     requiredIntents: [],
     defaultEnabled: false,
     configurable: true,
+  },
+  {
+    id: 'apple-connect',
+    name: 'App Store Connect',
+    description:
+      'Alerts for your Apple apps: version review state, builds, reviews, TestFlight and certificate expiry. Owner only.',
+    icon: '🍎',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+    ownerOnly: true,
   },
   {
     id: 'insights',

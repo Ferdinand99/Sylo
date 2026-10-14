@@ -359,6 +359,37 @@ test('processGuild: certificates warn at the configured days, again at 7 and 1, 
   assert.equal(sent.length, 4, 'only announced once');
 });
 
+test('processGuild: each alert kind goes to its own channel when one is set', async () => {
+  const { sent, send } = collector();
+  const per = cfg({
+    reviews: { enabled: true, maxStars: 5, channelId: '523456789012345678' },
+    feedback: { enabled: true, channelId: '623456789012345678' },
+    expiry: { enabled: true, days: 30, channelId: '723456789012345678' },
+  });
+  const first = withApp({
+    reviews: [review('r0', 5)],
+    feedback: [{ id: 'f0', kind: 'crash', comment: 'old' }],
+  });
+  first.credentials = [];
+  await processGuild('g-ch', per, first, { send, now: () => NOW });
+  const next = withApp({
+    reviews: [review('r9', 2), review('r0', 5)],
+    feedback: [
+      { id: 'f9', kind: 'crash', comment: 'x' },
+      { id: 'f0', kind: 'crash', comment: 'old' },
+    ],
+  });
+  next.credentials = [
+    { kind: 'certificate', id: 'c1', name: 'Dist', type: 'DISTRIBUTION', expiresAt: NOW + 3 * day },
+  ];
+  await processGuild('g-ch', per, next, { send, now: () => NOW });
+  assert.deepEqual(sent.map((s) => s.channel).sort(), [
+    '523456789012345678',
+    '623456789012345678',
+    '723456789012345678',
+  ]);
+});
+
 test('processGuild: switched-off kinds announce nothing', async () => {
   const off = cfg({
     reviews: { enabled: false },

@@ -5,7 +5,7 @@ import { clientOfGuild, primaryClient, rawGuildId, platformOfGuild } from '../..
 import { modulePlatformNote } from '../../platform/modulePlatformNotes.js';
 import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
-import { requireGuildAdmin, currentUser, actingUserId } from '../middleware/auth.js';
+import { requireGuildAdmin, currentUser, actingUserId, isOwner } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
@@ -81,6 +81,7 @@ import {
 } from '../../modules/twitchAlerts.js';
 import { normaliseKickConfig, DEFAULT_MESSAGE as KICK_DEFAULT_MESSAGE } from '../../modules/kickAlerts.js';
 import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TEMPLATE } from '../../modules/rss.js';
+import { normaliseAppleConfig } from '../../modules/appleConnect.js';
 import { clearScope } from '../../db/postedKeys.js';
 import {
   normaliseYoutubeConfig,
@@ -193,6 +194,7 @@ const CONFIG_VIEWS = new Set([
   'invite-tracker',
   'polls',
   'twitch-alerts',
+  'apple-connect',
   'youtube-alerts',
   'kick-alerts',
   'rss',
@@ -258,7 +260,7 @@ router.get(
   asyncHandler(async (req, res) => {
     res.render('guild', {
       ...(await baseContext(req.guild, 'overview')),
-      overview: await buildOverview(req.guild),
+      overview: await buildOverview(req.guild, { owner: isOwner(req) }),
       msg: typeof req.query.msg === 'string' ? req.query.msg : null,
     });
   })
@@ -819,6 +821,7 @@ async function moduleViewLocals(mod, req, configOverride) {
       'starboard',
       'polls',
       'twitch-alerts',
+      'apple-connect',
       'youtube-alerts',
       'kick-alerts',
       'rss',
@@ -842,6 +845,7 @@ async function moduleViewLocals(mod, req, configOverride) {
     verifyModes: VERIFY_MODES,
     turnstileEnabled: appConfig.turnstileEnabled,
     twitchEnabled: appConfig.twitchEnabled,
+    appleEnabled: appConfig.appleEnabled,
     twitchDefaultMessage: TWITCH_DEFAULT_MESSAGE,
     kickEnabled: appConfig.kickEnabled,
     kickDefaultMessage: KICK_DEFAULT_MESSAGE,
@@ -1378,6 +1382,22 @@ router.post(
         });
       }
       config = normaliseYoutubeConfig({ alerts });
+    } else if (mod.id === 'apple-connect') {
+      const on = (name) => req.body[name] === 'on';
+      const kind = (name) => ({ enabled: on(`ev_${name}`), channelId: req.body[`ev_${name}_ch`] ?? '' });
+      config = normaliseAppleConfig({
+        channelId: req.body.channelId ?? '',
+        roleId: req.body.roleId ?? '',
+        apps: String(req.body.apps ?? '').split(/[\s,]+/),
+        events: {
+          versionState: kind('versionState'),
+          build: kind('build'),
+          betaReview: kind('betaReview'),
+          feedback: kind('feedback'),
+          reviews: { ...kind('reviews'), maxStars: req.body.rv_maxStars },
+          expiry: { ...kind('expiry'), days: req.body.ex_days },
+        },
+      });
     } else if (mod.id === 'twitch-alerts') {
       const logins = [].concat(req.body.tw_login ?? []);
       const chans = [].concat(req.body.tw_channel ?? []);
@@ -2783,7 +2803,9 @@ router.post(
 router.post(
   '/:guildId/modules/bulk',
   asyncHandler(async (req, res) => {
-    const ids = [...new Set([].concat(req.body.ids ?? []))].filter((id) => getModule(id));
+    const ids = [...new Set([].concat(req.body.ids ?? []))].filter(
+      (id) => getModule(id) && (!getModule(id).ownerOnly || isOwner(req))
+    );
     const enabled = Boolean(req.body.enabled);
     for (const id of ids) {
       await setGuildModule(req.guild.id, id, { enabled });

@@ -170,6 +170,7 @@ import {
 import { recordAudit } from '../../db/audit.js';
 import { recordBotAudit, listBotAudit } from '../../db/botAudit.js';
 import { platformInfo } from '../../platform/modulePlatformNotes.js';
+import { normaliseAppleConfig } from '../../modules/appleConnect.js';
 import { runtime, uptimeSeconds, isAnyClientReady, totalGuildCount } from '../../runtime.js';
 import {
   getPresenceConfig,
@@ -328,7 +329,7 @@ router.get(
     // — reused wholesale rather than re-deriving the same grouping here.
     const [{ guild, openTickets, openAppeals }, { groups }] = await Promise.all([
       baseContext(req.guild, 'overview'),
-      buildOverview(req.guild),
+      buildOverview(req.guild, { owner: isOwner(req) }),
     ]);
     res.json({ guild, openTickets, openAppeals, groups });
   })
@@ -341,7 +342,13 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/bulk',
   asyncHandler(async (req, res) => {
-    const ids = [...new Set((Array.isArray(req.body.ids) ? req.body.ids : []).filter((id) => getModule(id)))];
+    const ids = [
+      ...new Set(
+        (Array.isArray(req.body.ids) ? req.body.ids : []).filter(
+          (id) => getModule(id) && (!getModule(id).ownerOnly || isOwner(req))
+        )
+      ),
+    ];
     const enabled = Boolean(req.body.enabled);
     for (const id of ids) {
       await setGuildModule(req.guild.id, id, { enabled });
@@ -1122,6 +1129,33 @@ router.post(
       detail: `${userId} bonus → ${bonus}`,
     });
     res.json({ board: await inviteBoard(req.guild) });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/apple-connect/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'apple-connect');
+    res.json({
+      config: normaliseAppleConfig(cfg),
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+      appleEnabled: config.appleEnabled,
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/apple-connect/config',
+  asyncHandler(async (req, res) => {
+    const cfg = normaliseAppleConfig(req.body ?? {});
+    await setGuildModule(req.guild.id, 'apple-connect', { config: cfg });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:apple-connect',
+      detail: 'settings saved',
+    });
+    res.json({ config: cfg });
   })
 );
 
