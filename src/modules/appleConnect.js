@@ -15,7 +15,7 @@ import { allClientsReady, allGuilds, guildKey } from '../platform/platformOf.js'
 import { EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
-import { anySeen, clearScope, markSeen, seenValue } from '../db/postedKeys.js';
+import { anySeen, clearScope, markSeen, seen, seenValue } from '../db/postedKeys.js';
 import { createAppStoreConnect } from '../lib/appStoreConnect.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
@@ -26,6 +26,12 @@ const POLL_MS = 5 * 60_000;
 const MAX_APPS = 20;
 const SCOPE_VERSIONS = 'apple:versions';
 const SCOPE_BUILDS = 'apple:builds';
+const SCOPE_BETA = 'apple:betareview';
+const SCOPE_REVIEWS = 'apple:reviews';
+const SCOPE_FEEDBACK = 'apple:feedback';
+const SCOPE_EXPIRY = 'apple:expiry';
+const DAY_MS = 24 * 60 * 60 * 1000;
+const CREDENTIALS_EVERY_MS = 60 * 60 * 1000;
 
 const isId = (v) => /^\d{17,20}$/.test(v ?? '');
 const isAppId = (v) => /^\d{1,20}$/.test(v ?? '');
@@ -59,7 +65,14 @@ export function normaliseAppleConfig(raw = {}) {
 
 // --- states -----------------------------------------------------------------------
 
-const COLORS = { bad: 0xe5484d, good: 0x30a46c, wait: 0xf5a524, busy: 0x3e63dd, neutral: 0x8b8d98 };
+const COLORS = {
+  bad: 0xe5484d,
+  urgent: 0xf76808,
+  good: 0x30a46c,
+  wait: 0xf5a524,
+  busy: 0x3e63dd,
+  neutral: 0x8b8d98,
+};
 
 const STATE_LABELS = {
   PREPARE_FOR_SUBMISSION: 'Prepare for submission',
@@ -182,15 +195,95 @@ export function buildPayload({ app, build, roleId = '' }) {
   return withRole(embed, roleId);
 }
 
+const clip = (text, max) => {
+  const s = String(text ?? '').trim();
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+};
+
+/** Whole days from `now` until `ms` (negative once it has passed). */
+export const daysUntil = (ms, now = Date.now()) => Math.floor((ms - now) / DAY_MS);
+
+const stars = (n) => '★'.repeat(Math.max(0, Math.min(5, n))) + '☆'.repeat(5 - Math.max(0, Math.min(5, n)));
+
+/** @param {{ app: {id,name}, review: {rating,title,body,nickname,territory}, roleId?: string }} a */
+export function reviewPayload({ app, review, roleId = '' }) {
+  const color = review.rating >= 4 ? COLORS.good : review.rating === 3 ? COLORS.wait : COLORS.bad;
+  const body = [review.title ? `**${clip(review.title, 200)}**` : '', clip(review.body, 1000)]
+    .filter(Boolean)
+    .join('\n');
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(`${review.rating}★ review — ${app.name}`)
+    .setURL(`https://appstoreconnect.apple.com/apps/${app.id}`)
+    .setDescription(`${stars(review.rating)}${body ? `\n${body}` : ''}`)
+    .setTimestamp(Date.now());
+  const by = [review.nickname, review.territory].filter(Boolean).join(' · ');
+  if (by) embed.setFooter({ text: by });
+  return withRole(embed, roleId);
+}
+
+const BETA_COLORS = { APPROVED: COLORS.good, REJECTED: COLORS.bad, IN_REVIEW: COLORS.wait };
+
+/** @param {{ app, build: {version,marketingVersion,platform}, state: string, roleId?: string }} a */
+export function betaReviewPayload({ app, build, state, roleId = '' }) {
+  const label = build.marketingVersion
+    ? `${build.marketingVersion} (${build.version})`
+    : `build ${build.version}`;
+  const embed = new EmbedBuilder()
+    .setColor(BETA_COLORS[state] ?? COLORS.neutral)
+    .setTitle(`🧪 TestFlight review — ${app.name}`)
+    .setURL(asc(app.id, `testflight/${testflightPlatform(build.platform)}`))
+    .setDescription(`${label}: **${stateLabel(state)}**`)
+    .setTimestamp(Date.now());
+  return withRole(embed, roleId);
+}
+
+/** @param {{ app, item: {kind,comment,deviceModel,osVersion,platform}, roleId?: string }} a */
+export function feedbackPayload({ app, item, roleId = '' }) {
+  const crash = item.kind === 'crash';
+  const embed = new EmbedBuilder()
+    .setColor(crash ? COLORS.bad : COLORS.busy)
+    .setTitle(`${crash ? '💥 TestFlight crash' : '💬 TestFlight feedback'} — ${app.name}`)
+    .setURL(asc(app.id, `testflight/${testflightPlatform(item.platform)}`))
+    .setDescription(
+      clip(item.comment, 1000) || (crash ? 'A tester sent a crash report.' : 'A tester sent feedback.')
+    )
+    .setTimestamp(Date.now());
+  const fields = [
+    item.deviceModel ? { name: 'Device', value: String(item.deviceModel), inline: true } : null,
+    item.osVersion ? { name: 'OS', value: String(item.osVersion), inline: true } : null,
+  ].filter(Boolean);
+  if (fields.length) embed.addFields(fields);
+  return withRole(embed, roleId);
+}
+
+/** @param {{ kind: 'certificate'|'profile', name: string, type?: string, daysLeft: number, roleId?: string }} a */
+export function expiryPayload({ kind, name, type = '', daysLeft, roleId = '' }) {
+  const noun = kind === 'profile' ? 'Provisioning profile' : 'Certificate';
+  const gone = daysLeft < 0;
+  const embed = new EmbedBuilder()
+    .setColor(gone ? COLORS.bad : daysLeft <= 7 ? COLORS.urgent : COLORS.wait)
+    .setTitle(
+      gone ? `⏳ ${noun} expired` : `⏳ ${noun} expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`
+    )
+    .setURL(
+      `https://developer.apple.com/account/resources/${kind === 'profile' ? 'profiles' : 'certificates'}/list`
+    )
+    .setDescription([name, type ? stateLabel(type) : ''].filter(Boolean).join(' — '))
+    .setTimestamp(Date.now());
+  return withRole(embed, roleId);
+}
+
 // --- reading the API --------------------------------------------------------------
 
 /**
  * One account-wide snapshot: each app with its recent App Store versions and TestFlight builds.
  * An app whose calls fail is skipped (and logged) so one problem does not blind the rest.
  * @param {{ get: Function, getAll: Function }} client
- * @param {{ appIds?: string[], maxApps?: number }} [opts]  appIds empty = every app
+ * @param {{ appIds?: string[], maxApps?: number, want?: { reviews?: boolean, feedback?: boolean, betaReview?: boolean } }} [opts]
+ *   appIds empty = every app; `want` switches on the optional parts (each one only costs calls when asked for)
  */
-export async function fetchSnapshot(client, { appIds = [], maxApps = MAX_APPS } = {}) {
+export async function fetchSnapshot(client, { appIds = [], maxApps = MAX_APPS, want = {} } = {}) {
   const all = (await client.getAll('/v1/apps', { limit: 200 })).data;
   const wanted = appIds.length ? all.filter((a) => appIds.includes(a.id)) : all;
   const apps = [];
@@ -212,23 +305,27 @@ export async function fetchSnapshot(client, { appIds = [], maxApps = MAX_APPS } 
       const pre = new Map(
         builds.included.filter((i) => i.type === 'preReleaseVersions').map((i) => [i.id, i.attributes ?? {}])
       );
+      const builtBuilds = builds.data.map((b) => {
+        const p = pre.get(b.relationships?.preReleaseVersion?.data?.id) ?? {};
+        return {
+          id: b.id,
+          version: b.attributes?.version ?? '',
+          uploadedDate: b.attributes?.uploadedDate ?? '',
+          processingState: b.attributes?.processingState ?? '',
+          expired: Boolean(b.attributes?.expired),
+          marketingVersion: p.version ?? '',
+          platform: p.platform ?? '',
+        };
+      });
+      if (want.betaReview) await addBetaReviewStates(client, builtBuilds);
       apps.push({
         id: a.id,
         name: a.attributes?.name ?? a.id,
         bundleId: a.attributes?.bundleId ?? '',
         versions,
-        builds: builds.data.map((b) => {
-          const p = pre.get(b.relationships?.preReleaseVersion?.data?.id) ?? {};
-          return {
-            id: b.id,
-            version: b.attributes?.version ?? '',
-            uploadedDate: b.attributes?.uploadedDate ?? '',
-            processingState: b.attributes?.processingState ?? '',
-            expired: Boolean(b.attributes?.expired),
-            marketingVersion: p.version ?? '',
-            platform: p.platform ?? '',
-          };
-        }),
+        builds: builtBuilds,
+        reviews: want.reviews ? await optional(() => fetchReviews(client, a.id), []) : [],
+        feedback: want.feedback ? await optional(() => fetchFeedback(client, a.id), []) : [],
       });
     } catch (err) {
       log.error('apple', `app ${a.id}: ${err.message}`);
@@ -237,9 +334,110 @@ export async function fetchSnapshot(client, { appIds = [], maxApps = MAX_APPS } 
   return { apps };
 }
 
+/** Run an optional part; a failure is logged and leaves the fallback in place. */
+async function optional(fn, fallback) {
+  try {
+    return await fn();
+  } catch (err) {
+    log.error('apple', err.message);
+    return fallback;
+  }
+}
+
+async function fetchReviews(client, appId) {
+  const { data } = await client.getAll(
+    `/v1/apps/${appId}/customerReviews`,
+    { sort: '-createdDate', limit: 20 },
+    { maxPages: 1 }
+  );
+  return data.map((r) => ({
+    id: r.id,
+    rating: Number(r.attributes?.rating) || 0,
+    title: r.attributes?.title ?? '',
+    body: r.attributes?.body ?? '',
+    nickname: r.attributes?.reviewerNickname ?? '',
+    territory: r.attributes?.territory ?? '',
+    createdDate: r.attributes?.createdDate ?? '',
+  }));
+}
+
+async function fetchFeedback(client, appId) {
+  const kinds = [
+    ['screenshot', `/v1/apps/${appId}/betaFeedbackScreenshotSubmissions`],
+    ['crash', `/v1/apps/${appId}/betaFeedbackCrashSubmissions`],
+  ];
+  const out = [];
+  for (const [kind, path] of kinds) {
+    const items = await optional(
+      async () => (await client.getAll(path, { limit: 50 }, { maxPages: 1 })).data,
+      []
+    );
+    for (const f of items) {
+      out.push({
+        id: f.id,
+        kind,
+        comment: f.attributes?.comment ?? '',
+        deviceModel: f.attributes?.deviceModel ?? '',
+        osVersion: f.attributes?.osVersion ?? '',
+        platform: f.attributes?.devicePlatform ?? f.attributes?.platform ?? '',
+        createdDate: f.attributes?.createdDate ?? '',
+      });
+    }
+  }
+  return out;
+}
+
+/** TestFlight review state for the newest few live builds (one call each). */
+async function addBetaReviewStates(client, builds) {
+  const live = builds.filter((b) => b.processingState === 'VALID' && !b.expired).slice(0, 3);
+  for (const b of builds) b.betaReviewState = '';
+  for (const b of live) {
+    b.betaReviewState = await optional(async () => {
+      const body = await client.get(`/v1/builds/${b.id}/betaAppReviewSubmission`);
+      const one = Array.isArray(body.data) ? body.data[0] : body.data;
+      return one?.attributes?.betaReviewState ?? '';
+    }, '');
+  }
+}
+
+/**
+ * Certificates and provisioning profiles with their expiry. Null when Apple refuses both
+ * (an individual API key cannot read them; a team key can).
+ * @returns {Promise<null | Array<{ kind: 'certificate'|'profile', id: string, name: string, type: string, expiresAt: number }>>}
+ */
+export async function fetchCredentials(client) {
+  const sources = [
+    ['certificate', '/v1/certificates', (a) => a.name ?? a.displayName ?? '', (a) => a.certificateType ?? ''],
+    ['profile', '/v1/profiles', (a) => a.name ?? '', (a) => a.profileState ?? ''],
+  ];
+  const out = [];
+  let reached = false;
+  for (const [kind, path, name, type] of sources) {
+    try {
+      const { data } = await client.getAll(path, { limit: 200 }, { maxPages: 2 });
+      reached = true;
+      for (const c of data) {
+        const expiresAt = Date.parse(c.attributes?.expirationDate ?? '');
+        if (Number.isNaN(expiresAt)) continue;
+        out.push({
+          kind,
+          id: c.id,
+          name: name(c.attributes ?? {}),
+          type: type(c.attributes ?? {}),
+          expiresAt,
+        });
+      }
+    } catch {
+      /* try the other kind */
+    }
+  }
+  return reached ? out : null;
+}
+
 // --- diffing and announcing -------------------------------------------------------
 
 const BUILD_FINAL = new Set(['VALID', 'INVALID', 'FAILED']);
+const BETA_ANNOUNCED = new Set(['IN_REVIEW', 'APPROVED', 'REJECTED']);
 
 /**
  * Compare the snapshot with what this server last saw and announce the differences.
@@ -248,7 +446,7 @@ const BUILD_FINAL = new Set(['VALID', 'INVALID', 'FAILED']);
  * @param {{ apps: any[] }} snapshot
  * @param {{ send?: (guildId: string, channelId: string, payload: object) => Promise<unknown> }} [deps]
  */
-export async function processGuild(guildId, cfg, snapshot, { send = sendToChannel } = {}) {
+export async function processGuild(guildId, cfg, snapshot, { send = sendToChannel, now = Date.now } = {}) {
   if (!cfg.channelId) return;
   const apps = snapshot.apps.filter((a) => !cfg.apps.length || cfg.apps.includes(a.id));
 
@@ -285,11 +483,88 @@ export async function processGuild(guildId, cfg, snapshot, { send = sendToChanne
       }
     }
   }
+
+  // TestFlight beta review: announced when it starts and when it is decided.
+  if (!cfg.events.betaReview) await clearScope(guildId, SCOPE_BETA);
+  else {
+    const primed = await anySeen(guildId, SCOPE_BETA);
+    for (const app of apps) {
+      for (const b of app.builds) {
+        if (!b.betaReviewState) continue;
+        const prev = await seenValue(guildId, SCOPE_BETA, b.id);
+        if (prev === b.betaReviewState) continue;
+        await markSeen(guildId, SCOPE_BETA, b.id, b.betaReviewState, { upsert: true });
+        if (!primed || !BETA_ANNOUNCED.has(b.betaReviewState)) continue;
+        await send(
+          guildId,
+          cfg.channelId,
+          betaReviewPayload({ app, build: b, state: b.betaReviewState, roleId: cfg.roleId })
+        );
+      }
+    }
+  }
+
+  // New customer reviews (the rating filter only decides what is posted, not what is remembered).
+  if (!cfg.events.reviews.enabled) await clearScope(guildId, SCOPE_REVIEWS);
+  else {
+    const primed = await anySeen(guildId, SCOPE_REVIEWS);
+    for (const app of apps) {
+      for (const r of app.reviews ?? []) {
+        if (await seen(guildId, SCOPE_REVIEWS, r.id)) continue;
+        await markSeen(guildId, SCOPE_REVIEWS, r.id);
+        if (!primed || r.rating > cfg.events.reviews.maxStars) continue;
+        await send(guildId, cfg.channelId, reviewPayload({ app, review: r, roleId: cfg.roleId }));
+      }
+    }
+  }
+
+  // New TestFlight feedback and crash reports.
+  if (!cfg.events.feedback) await clearScope(guildId, SCOPE_FEEDBACK);
+  else {
+    const primed = await anySeen(guildId, SCOPE_FEEDBACK);
+    for (const app of apps) {
+      for (const item of app.feedback ?? []) {
+        if (await seen(guildId, SCOPE_FEEDBACK, item.id)) continue;
+        await markSeen(guildId, SCOPE_FEEDBACK, item.id);
+        if (!primed) continue;
+        await send(guildId, cfg.channelId, feedbackPayload({ app, item, roleId: cfg.roleId }));
+      }
+    }
+  }
+
+  // Certificates and profiles close to (or past) their expiry. Not primed: if one is already
+  // inside the window when the module is switched on, that is exactly what to hear about.
+  if (cfg.events.expiry.enabled && snapshot.credentials) {
+    const thresholds = [
+      ...new Set([cfg.events.expiry.days, 7, 1].filter((d) => d <= cfg.events.expiry.days)),
+    ].sort((a, b) => a - b);
+    for (const c of snapshot.credentials) {
+      const remaining = (c.expiresAt - now()) / DAY_MS;
+      const bucket = remaining <= 0 ? 'expired' : thresholds.find((t) => remaining <= t);
+      if (bucket == null) continue;
+      const key = `${c.kind}:${c.id}:${bucket}`;
+      if (await seen(guildId, SCOPE_EXPIRY, key)) continue;
+      await markSeen(guildId, SCOPE_EXPIRY, key);
+      await send(
+        guildId,
+        cfg.channelId,
+        expiryPayload({
+          kind: c.kind,
+          name: c.name,
+          type: c.type,
+          daysLeft: daysUntil(c.expiresAt, now()),
+          roleId: cfg.roleId,
+        })
+      );
+    }
+  }
 }
 
 // --- the poll loop ----------------------------------------------------------------
 
 let sharedClient = null;
+let lastCredentialsAt = 0;
+let credentialsWarned = false;
 function appleClient() {
   if (!config.appleEnabled) return null;
   sharedClient ??= createAppStoreConnect({
@@ -319,7 +594,25 @@ export async function runAppleTick({
   // Fetch only the apps somebody asked for (empty list = all of them).
   const everything = jobs.some((j) => !j.cfg.apps.length);
   const appIds = everything ? [] : [...new Set(jobs.flatMap((j) => j.cfg.apps))];
-  const snapshot = await fetchSnapshot(client, { appIds });
+  const wants = (pick) => jobs.some((j) => pick(j.cfg.events));
+  const want = {
+    reviews: wants((e) => e.reviews.enabled),
+    feedback: wants((e) => e.feedback),
+    betaReview: wants((e) => e.betaReview),
+  };
+  const snapshot = await fetchSnapshot(client, { appIds, want });
+  if (wants((e) => e.expiry.enabled) && Date.now() - lastCredentialsAt >= CREDENTIALS_EVERY_MS) {
+    lastCredentialsAt = Date.now();
+    const credentials = await fetchCredentials(client);
+    if (credentials) snapshot.credentials = credentials;
+    else if (!credentialsWarned) {
+      credentialsWarned = true;
+      log.warn(
+        'apple',
+        'certificate expiry unavailable: Apple refused /v1/certificates and /v1/profiles (needs a team API key)'
+      );
+    }
+  }
   for (const { key, cfg } of jobs) {
     try {
       await processGuild(key, cfg, snapshot, { send });

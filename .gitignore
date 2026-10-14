@@ -144,3 +144,7 @@ dist
 # Internal-only notes/plans that shouldn't be public (not project docs).
 /internal/
 .env.fluxer-test
+# App Store Connect API keys (live-test credentials)
+.env.apple-test
+*.p8
+.apple-test/
