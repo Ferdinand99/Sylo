@@ -2,6 +2,7 @@
 // All secrets and tunables come from environment variables (see .env.example).
 import 'dotenv/config';
 import { randomBytes } from 'node:crypto';
+import { normalisePrivateKey } from './lib/appStoreConnect.js';
 
 /**
  * Read a required string env var, or exit with a clear message.
@@ -170,6 +171,15 @@ const itadApiKey = optionalOrNull('ITAD_API_KEY');
 const twitchClientId = optionalOrNull('TWITCH_CLIENT_ID');
 const twitchClientSecret = optionalOrNull('TWITCH_CLIENT_SECRET');
 const kickClientId = optionalOrNull('KICK_CLIENT_ID');
+// App Store Connect alerts (owner-only module). An API key (.p8) from App Store Connect ->
+// Users and Access -> Integrations. A team key also has an issuer id; an individual key has none.
+const appleKeyId = optionalOrNull('APPLE_KEY_ID');
+const appleIssuerId = optionalOrNull('APPLE_ISSUER_ID');
+const applePrivateKey = normalisePrivateKey(process.env.APPLE_PRIVATE_KEY);
+if (optionalOrNull('APPLE_PRIVATE_KEY') && !applePrivateKey) {
+  console.error('[config] APPLE_PRIVATE_KEY is not a valid private key (PEM, "\\n"-escaped PEM or base64).');
+}
+const appleVendorNumber = optionalOrNull('APPLE_VENDOR_NUMBER');
 const kickClientSecret = optionalOrNull('KICK_CLIENT_SECRET');
 // Signs session cookies and short-lived tokens (e.g. verification links), so it
 // must always exist. When unset we generate one; that only matters for
@@ -269,6 +279,11 @@ export const config = Object.freeze({
   kickClientId,
   kickClientSecret,
   kickEnabled: Boolean(kickClientId && kickClientSecret),
+  appleKeyId,
+  appleIssuerId,
+  applePrivateKey,
+  appleVendorNumber,
+  appleEnabled: Boolean(appleKeyId && applePrivateKey),
 
   // Game stats
   gametoolsApiBase: optional('GAMETOOLS_API_BASE', 'https://api.gametools.network').replace(/\/+$/, ''),
