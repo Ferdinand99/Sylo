@@ -25,7 +25,9 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-26
+    # GitHub's Xcode 27 image (macOS 27, arm64, public preview). Images are named after the Xcode
+    # major version, not the macOS one; macos-26 only goes up to Xcode 26.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
 
