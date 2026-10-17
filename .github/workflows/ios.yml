@@ -35,7 +35,10 @@ jobs:
       - name: Select Xcode 27
         run: |
           # The newest release; a beta only when the image has no release of Xcode 27 at all.
-          XCODE=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
+          # Names like Xcode_27.2.app can be links to a beta (Xcode_27.2_beta_2.app), so filter
+          # on the real paths.
+          XCODE=$(for x in /Applications/Xcode_27*.app; do realpath "$x"; done 2>/dev/null \
+            | grep -viE 'beta|release_candidate' | sort -uV | tail -1)
           [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)
           echo "Xcode 27 on this image:"; ls -d /Applications/Xcode_27*.app || true
           if [ -z "$XCODE" ]; then
