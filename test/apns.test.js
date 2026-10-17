@@ -207,20 +207,26 @@ test('410 and the bad-token 400s are "gone"; other answers are errors', async ()
   }
 });
 
-test('a provider-token rejection signs a fresh token next time', async () => {
+test('after a provider-token rejection, a fresh token is signed at most every 20 minutes', async () => {
+  // Apple answers TooManyProviderTokenUpdates when a key's token changes more often than that.
   let clock = 1_800_000_000_000;
   let status = 403;
-  const t = fakeTransport(() => ({ status, body: '{"reason":"ExpiredProviderToken"}' }));
+  const t = fakeTransport(() => ({ status, body: '{"reason":"InvalidProviderToken"}' }));
   const apns = client(t, { now: () => clock });
-  assert.equal(
-    (await apns.send({ deviceToken: DEVICE, environment: 'production', payload })).status,
-    'error'
-  );
-  const first = t.requests[0].headers.authorization;
-  clock += 1000; // a new iat, so a new signature
+  const send = async () =>
+    (await apns.send({ deviceToken: DEVICE, environment: 'production', payload })).status;
+  const auth = (i) => t.requests[i].headers.authorization;
+  assert.equal(await send(), 'error');
+  clock += 60_000;
+  assert.equal(await send(), 'error');
+  assert.equal(auth(1), auth(0), 'the same token again within 20 minutes');
+  clock += 19 * 60_000;
   status = 200;
-  assert.equal((await apns.send({ deviceToken: DEVICE, environment: 'production', payload })).status, 'ok');
-  assert.notEqual(t.requests[1].headers.authorization, first);
+  assert.equal(await send(), 'ok');
+  assert.notEqual(auth(2), auth(0), 'signed again once 20 minutes have passed');
+  clock += 60_000;
+  assert.equal(await send(), 'ok');
+  assert.equal(auth(3), auth(2), 'and kept while it works');
 });
 
 test('a stream error or a timeout is an error result, never a throw', async () => {

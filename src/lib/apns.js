@@ -18,6 +18,8 @@ export const APNS_HOSTS = Object.freeze({
 export const NOTIFICATION_LIMITS = Object.freeze({ title: 100, subtitle: 100, body: 180 });
 
 const TOKEN_REUSE_MS = 50 * 60 * 1000;
+// Apple refuses a key's token changing more often than this (TooManyProviderTokenUpdates).
+const MIN_RESIGN_MS = 20 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 10_000;
 const DEVICE_TOKEN = /^[0-9a-f]{64,200}$/i;
 // Apple's answers that mean this device token will never work again: drop it.
@@ -56,15 +58,18 @@ export function createApnsClient({
   now = Date.now,
   timeoutMs = REQUEST_TIMEOUT_MS,
 }) {
-  let cached = { token: null, at: 0 };
+  let cached = { token: null, at: 0, rejected: false };
   const sessions = new Map();
 
   function providerToken() {
-    if (!cached.token || now() - cached.at >= TOKEN_REUSE_MS) {
+    const age = now() - cached.at;
+    // A rejected token is replaced, but no sooner than Apple allows a new one.
+    if (!cached.token || age >= TOKEN_REUSE_MS || (cached.rejected && age >= MIN_RESIGN_MS)) {
       const iat = Math.floor(now() / 1000);
       cached = {
         token: signEs256Jwt({ alg: 'ES256', kid: keyId }, { iss: teamId, iat }, privateKey),
         at: now(),
+        rejected: false,
       };
     }
     return cached.token;
@@ -171,7 +176,7 @@ export function createApnsClient({
       if (res.status === 410 || (res.status === 400 && GONE_REASONS.has(reason))) {
         return { status: 'gone', reason: reason || 'Unregistered' };
       }
-      if (res.status === 403 && PROVIDER_TOKEN_REASONS.has(reason)) cached = { token: null, at: 0 };
+      if (res.status === 403 && PROVIDER_TOKEN_REASONS.has(reason)) cached.rejected = true;
       return { status: 'error', reason: reason || `HTTP ${res.status}` };
     },
 
