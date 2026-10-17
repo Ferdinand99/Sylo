@@ -51,3 +51,18 @@ test('extra string args are appended to the message', () => {
   const { out } = capture(() => log.info('web', 'listening on', 3000));
   assert.match(out[0], /web\s+listening on 3000$/);
 });
+
+// A connection URL with a password (a failed pg_dump, a feed URL with credentials) must not
+// reach the console, the /health error list or the dev-log channel in clear text.
+test('passwords in URLs are redacted everywhere a log line goes', () => {
+  const lines = capture(() =>
+    log.error(
+      'backup',
+      'failed',
+      new Error('Command failed: pg_dump postgres://sylo:hunter2@db:5432/sylo -Fc')
+    )
+  );
+  assert.doesNotMatch(lines.err.join('\n'), /hunter2/);
+  assert.match(lines.err.join('\n'), /postgres:\/\/sylo:\*\*\*@db/);
+  assert.doesNotMatch(runtime.errors[0].message, /hunter2/);
+});

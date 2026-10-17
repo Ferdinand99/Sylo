@@ -10,10 +10,10 @@
 
 <% if (msg) {
      var known = { saved: 'Saved.', sent: 'Published to the channel.', updated: 'The published message was updated.', unpublished: 'Removed the published message — the draft is kept.', deleted: 'Deleted in Discord and removed from the list.', removed: 'Removed from the list (the Discord message could not be deleted — it may already be gone).', bad: 'Could not read the editor — try again.', nochannel: 'Pick a channel before publishing.' };
+     known.failed = flashError ? 'Publishing failed: ' + flashError : 'Publishing failed.';
      var text = known[msg];
-     if (!text) { try { text = decodeURIComponent(msg); } catch (_) { text = msg; } }
 %>
-  <div class="banner banner-flash <%= (['saved','sent','updated','deleted'].indexOf(msg) >= 0) ? 'ok' : (['unpublished','removed'].indexOf(msg) >= 0 ? 'info' : 'bad') %>"><%= text %></div>
+  <% if (text) { %><div class="banner banner-flash <%= (['saved','sent','updated','deleted'].indexOf(msg) >= 0) ? 'ok' : (['unpublished','removed'].indexOf(msg) >= 0 ? 'info' : 'bad') %>"><%= text %></div><% } %>
 <% } %>
 
 <div class="rr-list-head u-mt-3">

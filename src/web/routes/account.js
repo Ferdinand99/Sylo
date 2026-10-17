@@ -3,7 +3,7 @@
 // and the Sylo app devices signed in to it, each with "Revoke".
 import { Router } from 'express';
 import { config } from '../../config.js';
-import { unlinkIdentity } from '../../db/accounts.js';
+import { deleteAccount, unlinkIdentity } from '../../db/accounts.js';
 import { revokeApiToken } from '../../db/apiTokens.js';
 import { accountDevices, accountPlatforms } from '../lib/accountView.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -17,6 +17,7 @@ const MESSAGES = {
   last: { kind: 'bad', text: "You can't disconnect your only sign-in — connect another account first." },
   revoked: { kind: 'ok', text: 'Device signed out.' },
   'no-device': { kind: 'bad', text: 'That device was already signed out.' },
+  'delete-unconfirmed': { kind: 'bad', text: 'Tick the box to confirm that the account should be deleted.' },
 };
 
 router.get(
@@ -54,8 +55,20 @@ router.post(
   '/disconnect/:platform',
   asyncHandler(async (req, res) => {
     if (!config.authEnabled || !req.account) return res.redirect('/');
-    const ok = await unlinkIdentity(req.account.id, req.params.platform);
+    const ok = await unlinkIdentity(req.account.id, req.params.platform, { keepSession: req.session?.sid });
     res.redirect(`/account?msg=${ok ? 'disconnected' : 'last'}`);
+  })
+);
+
+// Delete the whole dashboard account (sign-ins, sessions, app devices, preferences).
+router.post(
+  '/delete',
+  asyncHandler(async (req, res) => {
+    if (!config.authEnabled || !req.account) return res.redirect('/');
+    if (req.body?.confirm !== 'on') return res.redirect('/account?msg=delete-unconfirmed');
+    await deleteAccount(req.account.id);
+    req.session = null;
+    res.redirect('/');
   })
 );
 

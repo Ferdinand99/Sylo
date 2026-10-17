@@ -6,11 +6,16 @@
 //                 penaltyRoleId, penaltyMinutes }
 // Running state (current/record/last counter) lives in the `counting` table;
 // active "benches" live in `counting_penalties`.
-import { allClientsReady, guildByKey } from '../platform/platformOf.js';
+import { allClientsReady, guildByKey, guildKey } from '../platform/platformOf.js';
 import { on } from './dispatch.js';
 import { log } from '../lib/log.js';
 import { getCounting, advanceCount, resetCount } from '../db/counting.js';
-import { addCountingPenalty, clearCountingPenalty, dueCountingPenalties } from '../db/countingPenalties.js';
+import {
+  addCountingPenalty,
+  clearCountingPenalty,
+  dueCountingPenalties,
+  getCountingPenalty,
+} from '../db/countingPenalties.js';
 
 const OK = '✅';
 const BAD = '❌';
@@ -37,7 +42,21 @@ on('counting', 'messageCreate', async (message, config, guildId) => {
     });
   }
 
-  await advanceCount(guildId, { current: value, userId: message.author.id, messageId: message.id });
+  // Someone else's count landed between our read and now: this number is a repeat.
+  const advanced = await advanceCount(guildId, {
+    current: value,
+    userId: message.author.id,
+    messageId: message.id,
+    from: state.current,
+  });
+  if (!advanced) {
+    const now = await getCounting(guildId);
+    return fail(message, config, guildId, {
+      brokeAt: now.current,
+      record: now.record,
+      reason: `the next number was **${now.current + 1}**`,
+    });
+  }
 
   if (config.react !== false) {
     await message.react(value > state.record ? '🎉' : OK).catch(() => {});
@@ -121,9 +140,8 @@ on('counting', 'guildMemberRemove', async (member, _config, guildId) => {
 
 const PENALTY_TICK_MS = 30_000;
 
-async function restoreBench(row) {
+async function restoreBench(row, guild = guildByKey(row.guild_id)) {
   await clearCountingPenalty(row.guild_id, row.user_id); // clear first so a throw can't loop
-  const guild = guildByKey(row.guild_id);
   if (!guild) return;
 
   const role = guild.roles.cache.get(row.role_id);
@@ -135,6 +153,18 @@ async function restoreBench(row) {
   if (member.roles.cache.has(row.role_id)) return; // already re-added manually
 
   await member.roles.add(role, 'Counting: bench time served');
+}
+
+/**
+ * End a member's bench early (the dashboard's "Release"): hand back the role stored with their
+ * penalty. Nothing for someone who is not benched.
+ * @returns {Promise<boolean>} whether there was a bench to end
+ */
+export async function releaseCountingPenalty(guild, userId) {
+  const row = await getCountingPenalty(guildKey(guild), userId);
+  if (!row) return false;
+  await restoreBench(row, guild);
+  return true;
 }
 
 const penaltyTimer = setInterval(async () => {

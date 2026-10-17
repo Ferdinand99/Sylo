@@ -10,6 +10,7 @@
 import { guildByKey, guildKey } from '../platform/platformOf.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionsBitField } from 'discord.js';
 import { on } from './dispatch.js';
+import { log } from '../lib/log.js';
 import {
   getStarboardEntry,
   getStarboardEntryByPost,
@@ -174,6 +175,63 @@ async function fetchPost(guild, channelId, msgId) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Each watched channel costs a Discord call, and each message in it a database lookup.
+const MAX_RESCAN_CHANNELS = 50;
+
+/**
+ * Which saved boards need the catch-up rescan: new ones, and ones whose bar went down or whose
+ * scope (channel, emojis, watched channels, age limits) changed. A raised bar or a renamed
+ * board cannot make anything new qualify.
+ */
+export function boardsToRescan(prevBoards = [], nextBoards = []) {
+  const before = new Map(prevBoards.map((b) => [b.id, b]));
+  const scope = (b) =>
+    JSON.stringify([
+      b.channelId,
+      b.emojis,
+      b.channelMode,
+      b.channelList,
+      b.ignoreBotMessages,
+      b.minAgeMinutes,
+      b.maxAgeMinutes,
+    ]);
+  return nextBoards.filter((b) => {
+    const old = before.get(b.id);
+    return !old || b.threshold < old.threshold || scope(b) !== scope(old);
+  });
+}
+
+const rescanChains = new Map(); // guild key -> the last queued rescan
+const waitingRescans = new Map(); // "guild key:board id" -> the latest board to scan
+
+/**
+ * Queue a rescan: one server runs one at a time, and a board already waiting is not queued
+ * twice (the wait picks up its latest settings). Never rejects.
+ */
+export function scheduleRescan(guild, board) {
+  const key = guildKey(guild);
+  const job = `${key}:${board.id}`;
+  const waiting = waitingRescans.has(job);
+  waitingRescans.set(job, board);
+  if (waiting) return rescanChains.get(key) ?? Promise.resolve();
+
+  const run = (rescanChains.get(key) ?? Promise.resolve()).then(async () => {
+    const latest = waitingRescans.get(job) ?? board;
+    waitingRescans.delete(job);
+    try {
+      const r = await rescanBoard(guild, latest);
+      log.info('starboard', `rescan ${key}/${latest.id}: scanned ${r.scanned}, posted ${r.posted}`);
+    } catch (err) {
+      log.error('starboard', 'rescan failed:', err.message);
+    }
+  });
+  rescanChains.set(key, run);
+  run.then(() => {
+    if (rescanChains.get(key) === run) rescanChains.delete(key);
+  });
+  return run;
+}
+
 // Which non-thread text channels a board should look at, honouring its
 // channel restriction and the bot's read permissions.
 function watchedChannels(guild, board) {
@@ -206,7 +264,18 @@ export async function rescanBoard(guild, board) {
   let scanned = 0;
   let posted = 0;
 
-  for (const ch of watchedChannels(guild, board)) {
+  // The most recently active channels first: that is where qualifying messages are.
+  const lastActive = (c) => {
+    try {
+      return BigInt(c.lastMessageId ?? 0);
+    } catch {
+      return 0n;
+    }
+  };
+  const channels = watchedChannels(guild, board)
+    .sort((a, b) => (lastActive(b) > lastActive(a) ? 1 : lastActive(b) < lastActive(a) ? -1 : 0))
+    .slice(0, MAX_RESCAN_CHANNELS);
+  for (const ch of channels) {
     let msgs;
     try {
       msgs = await ch.messages.fetch({ limit: 100 });

@@ -1,6 +1,6 @@
 // /untimeout <user> [reason] — clear an active timeout.
 import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags } from 'discord.js';
-import { resultEmbed, NO_REASON } from '../lib/moderation.js';
+import { checkActable, resultEmbed, NO_REASON } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
 import { addCase, deactivateLatest } from '../../db/modCases.js';
 
@@ -35,6 +35,12 @@ export async function execute(interaction) {
       content: "⚠️ I can't modify that member (role hierarchy).",
       flags: MessageFlags.Ephemeral,
     });
+    return;
+  }
+  // The same hierarchy rule as /timeout: a moderator only acts on members below them.
+  const blocked = checkActable({ interaction, target, action: 'untimeout' });
+  if (blocked) {
+    await interaction.reply({ content: `⚠️ ${blocked}`, flags: MessageFlags.Ephemeral });
     return;
   }
 

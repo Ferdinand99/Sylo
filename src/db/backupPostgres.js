@@ -11,6 +11,30 @@ import { closePostgres, prepare } from './driver.js';
 
 const execFile = promisify(execFileCb);
 
+/**
+ * DATABASE_URL split for the CLI tools: the URL without its password, and the password in
+ * PGPASSWORD (libpq reads it from there). Passing the full URL as an argument put the password
+ * in the process list and, when the tool failed, in Node's error message ("Command failed:
+ * pg_dump postgres://user:password@…"), which is logged and shown on the health page.
+ */
+export function pgConnection(databaseUrl) {
+  const u = new URL(databaseUrl);
+  const password = u.password ? decodeURIComponent(u.password) : undefined;
+  u.password = '';
+  return { url: u.href, env: password === undefined ? {} : { PGPASSWORD: password } };
+}
+
+/** Run a Postgres CLI tool against the live database, without the password on the command line. */
+function runPgTool(tool, args) {
+  const { url, env } = pgConnection(config.databaseUrl);
+  return execFile(
+    tool,
+    args.map((a) => (a === DATABASE ? url : a)),
+    { env: { ...process.env, ...env } }
+  );
+}
+const DATABASE = Symbol('database url');
+
 // pg_dump's custom format (-Fc) starts every file with this 5-byte signature.
 export const PG_DUMP_MAGIC = 'PGDMP';
 
@@ -41,7 +65,7 @@ export async function pgDbSize() {
  * (e.g. a disaster-recovery restore onto a freshly provisioned instance).
  */
 export async function pgDump(destPath) {
-  await execFile('pg_dump', [config.databaseUrl, '-Fc', '--no-owner', '--no-privileges', '-f', destPath]);
+  await runPgTool('pg_dump', [DATABASE, '-Fc', '--no-owner', '--no-privileges', '-f', destPath]);
 }
 
 /**
@@ -102,13 +126,13 @@ function isBenignRestoreFailure(stderr) {
 export async function pgRestore(filePath) {
   await closePostgres();
   try {
-    await execFile('pg_restore', [
+    await runPgTool('pg_restore', [
       '--clean',
       '--if-exists',
       '--no-owner',
       '--no-privileges',
       '-d',
-      config.databaseUrl,
+      DATABASE,
       filePath,
     ]);
   } catch (err) {

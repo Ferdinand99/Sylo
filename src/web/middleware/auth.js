@@ -49,7 +49,8 @@ import {
   sessionUserLabel,
   staleIdentities,
 } from '../lib/accountAuth.js';
-import { rateLimit } from './rateLimit.js';
+import { clientKey, rateLimit } from './rateLimit.js';
+import { hasValidCsrfToken } from './csrf.js';
 import { log } from '../../lib/log.js';
 
 export { adminGuildIdsFromOAuth };
@@ -186,14 +187,15 @@ function redirectTo(req, res, path) {
 const redirectToLogin = (req, res) => redirectTo(req, res, loginPath());
 
 // An app request (Authorization: Bearer) cannot follow a login redirect or read an HTML error
-// page, so it gets the same answers as JSON.
+// page, so it gets the same answers as JSON; so does any /api/ request (the new dashboard).
+const wantsJson = (req) => isTokenRequest(req) || req.originalUrl.startsWith('/api/');
 const notSignedIn = (res) =>
   res.status(401).json({ error: 'Not signed in, or the token is no longer valid.' });
 
 /** Require any signed-in user (pass-through in open mode). */
 export function requireAuth(req, res, next) {
   if (!config.authEnabled || req.account) return next();
-  if (isTokenRequest(req)) return notSignedIn(res);
+  if (wantsJson(req)) return notSignedIn(res);
   req.session.returnTo = req.originalUrl;
   redirectToLogin(req, res);
 }
@@ -252,12 +254,23 @@ export async function accountManagesGuildLive(account, key, options) {
   return managesGuildLive(key, identityFor(account, platform)?.platformUserId ?? null, options);
 }
 
+/**
+ * Is the account's guild list for this guild's platform recent enough to trust without a live
+ * check? Past GUILDS_TTL_MS the list may hide a lost right (or a removal from the server).
+ */
+export function snapshotIsFresh(account, key, now = Date.now()) {
+  const platform = splitPlatformGuildId(key)?.platform ?? 'discord';
+  const identity = identityFor(account, platform);
+  return Boolean(identity) && now - identity.guildsFetchedAt <= GUILDS_TTL_MS;
+}
+
 function forbidGuild(req, res) {
-  if (isTokenRequest(req)) return res.status(403).json({ error: 'You do not manage this server.' });
+  if (wantsJson(req)) return res.status(403).json({ error: 'You do not manage this server.' });
   res.status(403).render('error', {
     title: 'Forbidden',
     heading: 'Not an admin',
-    message: 'You need Manage Server (or a bot-master role) in this server to manage it here.',
+    message:
+      'You need Manage Server (or a bot-master role) in this server to manage it here, and Sylo has to be in it.',
   });
 }
 
@@ -265,13 +278,21 @@ function forbidGuild(req, res) {
 export function requireGuildAdmin(req, res, next) {
   if (!config.authEnabled) return next();
   if (!req.account) {
-    if (isTokenRequest(req)) return notSignedIn(res);
+    if (wantsJson(req)) return notSignedIn(res);
     req.session.returnTo = req.originalUrl;
     return redirectToLogin(req, res);
   }
   const key = req.params.guildId;
   if (req.viaToken) {
     return tokenManagesGuild(req, key)
+      .then((ok) => (ok ? next() : forbidGuild(req, res)))
+      .catch(() => forbidGuild(req, res));
+  }
+  // The sign-in snapshot is only refreshed on GET / and /guilds pages, so V2 requests and form
+  // posts would trust it for the whole session. Past the refresh window, check live instead,
+  // like a token: someone who lost Manage Server is refused within minutes.
+  if (!snapshotIsFresh(req.account, key)) {
+    return accountManagesGuildLive(req.account, key)
       .then((ok) => (ok ? next() : forbidGuild(req, res)))
       .catch(() => forbidGuild(req, res));
   }
@@ -309,12 +330,12 @@ export function forbidOwner(res) {
 export function requireOwner(req, res, next) {
   if (!config.authEnabled) return next();
   if (!req.account) {
-    if (isTokenRequest(req)) return notSignedIn(res);
+    if (wantsJson(req)) return notSignedIn(res);
     req.session.returnTo = req.originalUrl;
     return redirectToLogin(req, res);
   }
   if (isOwner(req)) return next();
-  if (isTokenRequest(req)) return res.status(403).json({ error: "Restricted to Sylo's operators." });
+  if (wantsJson(req)) return res.status(403).json({ error: "Restricted to Sylo's operators." });
   forbidOwner(res);
 }
 
@@ -326,6 +347,7 @@ export function requireOwner(req, res, next) {
  */
 export function requireRealUser(req, res, next) {
   if (req.account) return next();
+  if (wantsJson(req)) return res.status(400).json({ error: 'This action needs a real login.' });
   res
     .status(400)
     .type('text/plain')
@@ -400,6 +422,8 @@ async function completeOAuth(req, provider, identity) {
   // A new session id on every login, so a fixated pre-login id is never promoted.
   if (req.session.sid) await deleteSession(req.session.sid).catch(() => {});
   req.session.sid = await createSession(accountId, SESSION_MAX_AGE);
+  // A new CSRF token with the new session (csrf.js mints it on the next request).
+  req.session.csrf = undefined;
   req.session.oauthPlatform = undefined;
   req.session.connect = undefined;
 }
@@ -466,11 +490,18 @@ export function mountAuth(app) {
     // The bot's own avatar, used as the dashboard favicon (null until ready).
     res.locals.botAvatarUrl = primaryClient()?.user?.displayAvatarURL({ extension: 'png', size: 64 }) ?? null;
     res.locals.user = currentUser(req);
+    res.locals.isOperator = isOwner(req); // bot-wide pages (/stats, /health) are operators only
     const mg = res.locals.user ? manageableGuilds(req) : [];
     res.locals.manageableGuilds = mg;
 
-    const urlGuildId =
+    let urlGuildId =
       (decodeURIComponent(req.path).match(/^\/guilds\/((?:fluxer:)?\d{17,20})/) || [])[1] || null;
+    // Only a server this person may manage is shown (sidebar, header): this runs before the
+    // access check, and the "Not an admin" page renders the same header.
+    if (urlGuildId && config.authEnabled && !mg.some((g) => g.id === urlGuildId)) {
+      const botMaster = await isBotMaster(urlGuildId, userIdForGuild(req, urlGuildId)).catch(() => false);
+      if (!botMaster) urlGuildId = null;
+    }
     res.locals.currentGuildId = urlGuildId;
 
     // A server is always "in view": URL guild, else the remembered one, else the
@@ -491,7 +522,7 @@ export function mountAuth(app) {
   const oauthLimit = rateLimit({
     windowMs: 60_000,
     max: 20,
-    keyFn: (req) => `oauth:${req.params.platform ?? req.path.split('/')[1]}|${req.ip}`,
+    keyFn: (req) => `oauth:${req.params.platform ?? req.path.split('/')[1]}|${clientKey(req)}`,
   });
   const pageLimit = rateLimit({ windowMs: 60_000, max: 60 });
 
@@ -561,13 +592,15 @@ export function mountAuth(app) {
   });
 
   const logout = async (req, res) => {
+    // /auth runs before the csrf middleware: check the token here, so another site cannot
+    // sign anyone out.
+    if (config.authEnabled && !hasValidCsrfToken(req)) return res.redirect('/');
     if (req.session?.sid) await deleteSession(req.session.sid).catch(() => {});
     req.session = null;
     res.redirect('/');
   };
+  // POST only, with the CSRF token (csrf.js): a link on another site must not sign anyone out.
   router.post('/logout', pageLimit, logout);
-  // Allow GET for a plain link too.
-  router.get('/logout', pageLimit, logout);
 
   app.use('/auth', router);
 }

@@ -146,6 +146,26 @@ export class MessageInteraction {
     }
   }
 
+  /**
+   * A private reply with a file, in a server channel: there are no private replies here, so it
+   * would sit in the channel for everyone until the cleanup. Send it to the author's DMs
+   * instead; the channel only gets a notice when that fails. Returns null when not applicable.
+   */
+  async _sendPrivateFile(out, ephemeral) {
+    if (!ephemeral || !this.guild || !out.payload.files?.length) return null;
+    try {
+      return await this.message.author.send(out.payload);
+    } catch {
+      const notice = await this._send({
+        content:
+          "⚠️ I couldn't send you that by DM, and it is private. Allow DMs from this server's members, then try again.",
+        allowedMentions: { parse: [] },
+      });
+      this._scheduleCleanup(notice);
+      return notice;
+    }
+  }
+
   _scheduleCleanup(sent) {
     const timer = setTimeout(() => {
       sent?.delete?.().catch(() => {});
@@ -168,6 +188,11 @@ export class MessageInteraction {
   async reply(input) {
     const out = prepareOutgoing(input);
     this.ephemeral = out.ephemeral;
+    const privately = await this._sendPrivateFile(out, out.ephemeral);
+    if (privately) {
+      this.replied = true;
+      return out.wantsResponse ? { resource: { message: privately } } : privately;
+    }
     const sent = await this._send(out.payload, out.ephemeral);
     this._sent = sent;
     this.replied = true;
@@ -177,6 +202,11 @@ export class MessageInteraction {
   }
 
   async editReply(input) {
+    const privately = await this._sendPrivateFile(prepareOutgoing(input), this.ephemeral);
+    if (privately) {
+      this.replied = true;
+      return privately;
+    }
     if (this._sent) {
       const out = prepareOutgoing(input, { edit: true });
       const edited = await this._sent.edit(out.payload);
@@ -194,6 +224,8 @@ export class MessageInteraction {
 
   async followUp(input) {
     const out = prepareOutgoing(input);
+    const privately = await this._sendPrivateFile(out, out.ephemeral);
+    if (privately) return privately;
     const sent = await this._send(out.payload, out.ephemeral);
     this.replied = true;
     await this._attach(sent, out);

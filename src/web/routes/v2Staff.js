@@ -12,6 +12,7 @@ import { clientOfGuild, primaryClient, rawGuildId } from '../../platform/platfor
 import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
 import { currentUser, actingUserId } from '../middleware/auth.js';
+import { config } from '../../config.js';
 import { ticketAccessState } from '../middleware/ticketAccess.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild } from '../lib/guildContext.js';
@@ -32,7 +33,7 @@ import {
   addWarning,
   clearWarnings,
 } from '../../db/modCases.js';
-import { notifyTarget, MOD_COLOR } from '../../bot/lib/moderation.js';
+import { notifyTarget, MOD_COLOR, warnRefusal } from '../../bot/lib/moderation.js';
 import { postModLog } from '../../bot/lib/modlog.js';
 import { applyWarnThresholds } from '../../modules/moderation.js';
 import {
@@ -73,13 +74,14 @@ function loadGuildJson(req, res, next) {
 
 export const ticketsRouter = Router({ mergeParams: true });
 
-ticketsRouter.use(loadGuildJson);
+// Access first: a 404 for a server Sylo is not in would otherwise tell anyone which servers it is in.
 ticketsRouter.use(async (req, res, next) => {
   const state = await ticketAccessState(req);
   if (state === 'ok') return next();
   if (state === 'login') return fail(res, 'Not signed in', 401);
   fail(res, 'You need Manage Server, or a configured staff role, to view tickets here.', 403);
 });
+ticketsRouter.use(loadGuildJson);
 
 const shapeTicketMessage = (m, ticketUserTag) => ({
   id: m.id,
@@ -540,10 +542,16 @@ staffRouter.post(
       .slice(0, 400);
     if (!userId || reason === '') return fail(res, 'Enter a user ID or mention and a reason.');
 
-    const user = await clientOfGuild(req.guild)
-      .users.fetch(userId)
-      .catch(() => null);
-    if (!user) return fail(res, 'No such user.', 404);
+    // Only members of this server: a warning DMs the person, and can escalate to a kick or ban.
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) return fail(res, 'That user is not a member of this server.', 404);
+    if (config.authEnabled) {
+      const actorId = actingUserId(req, guild.id, null);
+      const actor = actorId ? await guild.members.fetch(actorId).catch(() => null) : null;
+      const why = warnRefusal(guild, actor, member);
+      if (why) return fail(res, why, 403);
+    }
+    const user = member.user;
     if (user.bot) return fail(res, 'Bots cannot be warned.');
 
     const { id, count } = await addWarning({

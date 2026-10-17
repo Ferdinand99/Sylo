@@ -29,7 +29,7 @@ jobs:
     # major version, not the macOS one; macos-26 only goes up to Xcode 26.
     runs-on: xcode-27
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The project was created with Xcode 27 (project format 90); older Xcodes cannot open it.
       - name: Select Xcode 27

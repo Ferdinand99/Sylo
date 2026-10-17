@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { csrf } from '../src/web/middleware/csrf.js';
+import { csrf, hasValidCsrfToken } from '../src/web/middleware/csrf.js';
 
 function mk({ method = 'GET', path = '/guilds/1/general', session, headers = {}, body = {} } = {}) {
   const res = {
@@ -16,6 +16,11 @@ function mk({ method = 'GET', path = '/guilds/1/general', session, headers = {},
     },
     send(b) {
       this.body = b;
+      return this;
+    },
+    json(b) {
+      this.body = b;
+      this.isJson = true;
       return this;
     },
   };
@@ -96,7 +101,31 @@ test('POST with a wrong token is rejected', () => {
 
 test('the signed-token flows (/verify, /appeal, /auth) are exempt', () => {
   const session = { csrf: 'd'.repeat(48) };
-  for (const path of ['/verify/abc', '/appeal/xyz', '/auth/logout']) {
+  for (const path of ['/verify/abc', '/appeal/xyz', '/auth/discord/callback']) {
     assert.equal(mk({ method: 'POST', path, session }).nexted, true, path);
   }
+});
+
+// Logging out is a change too: another site must not be able to sign someone out.
+// /auth runs before the csrf middleware, so the logout route checks the token with this.
+test('hasValidCsrfToken: the session token, from the same origin', () => {
+  const session = { csrf: 'e'.repeat(48) };
+  const req = (headers) => ({ session, body: {}, get: (h) => headers[h.toLowerCase()] });
+  assert.equal(hasValidCsrfToken(req({})), false);
+  assert.equal(hasValidCsrfToken(req({ 'x-csrf-token': 'e'.repeat(48) })), true);
+  assert.equal(hasValidCsrfToken(req({ 'x-csrf-token': 'x' })), false);
+  assert.equal(
+    hasValidCsrfToken(
+      req({ 'x-csrf-token': 'e'.repeat(48), origin: 'https://evil.example', host: 'sylo.test' })
+    ),
+    false
+  );
+});
+
+// The new dashboard reads JSON errors; a text/plain 403 showed up as "Unexpected response".
+test('a failed check on an /api/ path answers JSON', () => {
+  const { res } = mk({ method: 'POST', path: '/api/v2/guilds/1/x', session: { csrf: 'abc' } });
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.isJson, true);
+  assert.match(res.body.error, /CSRF/);
 });

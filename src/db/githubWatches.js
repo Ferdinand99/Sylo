@@ -7,6 +7,7 @@
 // receiving end; src/modules/githubAlerts.js formats the payload.
 import { randomBytes } from 'node:crypto';
 import { prepare, registerPostgresBootstrap, registerPostgresMigration } from './driver.js';
+import { LIMITS, checkLimit } from '../lib/limits.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS github_watches (
@@ -46,6 +47,7 @@ const insertStmt = prepare(
 );
 const updateStmt = prepare(`
   UPDATE github_watches SET
+    repo = COALESCE(@repo, repo),
     channel_id = @channelId, role_id = @roleId, changelog_path = @changelogPath, events = @events
   WHERE id = @id AND guild_id = @guildId
 `);
@@ -89,7 +91,10 @@ export async function getGithubWatchByToken(token) {
  * @param {{ repo: string, channelId: string, roleId?: string, changelogPath?: string, events: string[] }} w
  * @returns {Promise<number>} the new row's id
  */
+const countForGuildStmt = prepare('SELECT COUNT(*) AS n FROM github_watches WHERE guild_id = ?');
+
 export async function createGithubWatch(guildId, w) {
+  checkLimit((await countForGuildStmt.get(guildId)).n, LIMITS.githubWatches, 'GitHub watches');
   const result = await insertStmt.run({
     guildId,
     repo: w.repo,
@@ -108,6 +113,7 @@ export async function updateGithubWatch(guildId, id, w) {
   await updateStmt.run({
     guildId,
     id,
+    repo: w.repo || null,
     channelId: w.channelId,
     roleId: w.roleId || null,
     changelogPath: w.changelogPath || null,

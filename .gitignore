@@ -74,6 +74,9 @@ web_modules/
 
 # dotenv environment variable files
 .env
+# Every local env file (.env.test, .env.fluxer-test, …); only the example is tracked.
+.env.*
+!.env.example
 .env.test
 .env.development.local
 .env.test.local

@@ -121,6 +121,22 @@ function buildComponents(spec) {
  * @param {object} spec
  * @returns {{ payload: import('discord.js').MessageCreateOptions, empty: boolean }}
  */
+const MAX_SPEC_BYTES = 64 * 1024;
+
+/**
+ * A saved message as the dashboard sent it, bounded to what one message can hold (2000
+ * characters, 10 embeds, 5 component rows) and to 64 KB in all. null for a bad or too-large spec.
+ */
+export function normaliseComposedSpec(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const spec = {
+    content: String(raw.content ?? '').slice(0, 2000),
+    embeds: (Array.isArray(raw.embeds) ? raw.embeds : []).slice(0, 10),
+    rows: (Array.isArray(raw.rows) ? raw.rows : []).slice(0, 5),
+  };
+  return JSON.stringify(spec).length > MAX_SPEC_BYTES ? null : spec;
+}
+
 export function buildPayload(spec) {
   const content = trimOr(spec.content, 2000);
   const embeds = (Array.isArray(spec.embeds) ? spec.embeds : []).slice(0, 10).map(buildEmbed).filter(Boolean);

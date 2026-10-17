@@ -6,9 +6,8 @@ import { config } from '../config.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { notifyTicketActivity } from '../lib/push.js';
 import {
-  getOpenTicket,
+  openOrCreateTicket,
   getTicket,
-  createTicket,
   addTicketMessage,
   closeTicket,
   ticketMessages,
@@ -165,9 +164,7 @@ async function notifyStaff(guild, text, embed) {
  */
 export async function ingestUserDM(guild, user, payload) {
   const cfg = (await getGuildModule(guildKey(guild), 'tickets')).config;
-  let ticket = await getOpenTicket(guildKey(guild), user.id);
-  const isNew = !ticket;
-  if (!ticket) ticket = await createTicket(guildKey(guild), user.id);
+  const { ticket, created: isNew } = await openOrCreateTicket(guildKey(guild), user.id);
 
   await addTicketMessage(ticket.id, {
     authorId: user.id,

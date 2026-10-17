@@ -27,10 +27,11 @@ export async function execute(interaction) {
     return interaction.reply({
       flags: MessageFlags.Ephemeral,
       content:
-        `This permanently deletes your **warnings**, **XP / level**, **ticket history**, **ban appeals**, ` +
+        `This permanently deletes your **XP / level**, **ticket history**, **ban appeals**, ` +
         `**invite records**, **AFK status**, **saved birthday** and **giveaway entries** in **${interaction.guild.name}**. ` +
         `Messages already posted to channels, a completed giveaway's winner list, and the server's ` +
-        `config-change log are not affected, and Sylo will still store new data going forward.` +
+        `config-change log are not affected, and Sylo will still store new data going forward. ` +
+        `Moderation cases (warnings, kicks, bans, notes) and other safety records are kept: they protect the server.` +
         `\n\nRun \`/forget confirm:True\` to proceed.`,
     });
   }
@@ -41,7 +42,6 @@ export async function execute(interaction) {
     .setTitle('Your data was deleted')
     .setDescription(`Removed in **${interaction.guild.name}**:`)
     .addFields(
-      { name: 'Warnings', value: String(r.warnings), inline: true },
       { name: 'Leveling records', value: String(r.leveling), inline: true },
       { name: 'Tickets', value: `${r.tickets} (${r.ticketMessages} msgs)`, inline: true },
       { name: 'Ban appeals', value: String(r.appeals), inline: true },
@@ -50,5 +50,11 @@ export async function execute(interaction) {
       { name: 'Saved birthday', value: String(r.birthdays), inline: true },
       { name: 'Giveaway entries', value: String(r.giveawayEntries), inline: true }
     );
+  if (r.keptCases > 0) {
+    embed.addFields({
+      name: 'Kept',
+      value: `${r.keptCases} moderation case${r.keptCases === 1 ? '' : 's'}: safety records stay with the server.`,
+    });
+  }
   return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }

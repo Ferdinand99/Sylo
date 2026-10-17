@@ -68,8 +68,22 @@ export async function isModuleEnabled(guildId, moduleId) {
  * @param {string} moduleId
  * @param {{ enabled?: boolean, config?: object }} patch
  */
+let configGuard = null;
+
+/**
+ * A check every config write passes first (src/web/middleware/roleGrants.js registers one); it
+ * throws to refuse the write. Set by the web layer so this file does not depend on it.
+ * @param {(write: { guildId: string, moduleId: string, prev: object, next: object }) => Promise<void>} fn
+ */
+export function setModuleConfigGuard(fn) {
+  configGuard = fn;
+}
+
 export async function setGuildModule(guildId, moduleId, patch) {
   const current = await getGuildModule(guildId, moduleId);
+  if (patch.config && configGuard) {
+    await configGuard({ guildId, moduleId, prev: current.config ?? {}, next: patch.config });
+  }
   await upsertStmt.run({
     guildId,
     moduleId,

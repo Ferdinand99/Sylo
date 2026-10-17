@@ -109,6 +109,9 @@ test('a DM has no guild', () => {
   assert.equal(ix.guild, null);
 });
 
+// A new message without its own allowedMentions may ping users only (src/platform/outgoing.js).
+const USERS_ONLY = { parse: ['users'] };
+
 test('reply() sends one reply and strips discord-only payload keys', async () => {
   const { ix, log } = make();
   const sent = await ix.reply({
@@ -128,7 +131,7 @@ test('reply() sends one reply and strips discord-only payload keys', async () =>
 test('reply() accepts a plain string', async () => {
   const { ix, log } = make();
   await ix.reply('just text');
-  assert.deepEqual(log.replies, [{ content: 'just text' }]);
+  assert.deepEqual(log.replies, [{ content: 'just text', allowedMentions: USERS_ONLY }]);
 });
 
 test('editReply() edits the reply; after deferReply() the first editReply() sends it', async () => {
@@ -143,7 +146,7 @@ test('editReply() edits the reply; after deferReply() the first editReply() send
   assert.equal(b.ix.deferred, true);
   assert.equal(b.log.replies.length, 0);
   await b.ix.editReply('done');
-  assert.deepEqual(b.log.replies, [{ content: 'done' }]);
+  assert.deepEqual(b.log.replies, [{ content: 'done', allowedMentions: USERS_ONLY }]);
   assert.equal(b.log.edits.length, 0);
 });
 
@@ -157,7 +160,7 @@ test('followUp() sends an additional message', async () => {
 test('an ephemeral reply is removed (with the invoking message) after the private TTL', async () => {
   const { ix, log } = make();
   await ix.reply({ content: 'secret', flags: MessageFlags.Ephemeral });
-  assert.deepEqual(log.replies, [{ content: 'secret' }]); // the flag itself is not sent
+  assert.deepEqual(log.replies, [{ content: 'secret', allowedMentions: USERS_ONLY }]); // the flag itself is not sent
   await new Promise((r) => setTimeout(r, 40));
   assert.ok(log.deletes.includes('sent:secret'));
   assert.ok(log.deletes.includes('invoker'));
@@ -221,4 +224,40 @@ test('options getters: coerced values, nulls for missing, resolved entities, sub
 test('getSubcommand() throws when the command has none', () => {
   const { ix } = make();
   assert.throws(() => ix.options.getSubcommand());
+});
+
+// Fluxer has no private replies: a "private" one is posted in the channel and removed later.
+// A file (the /mydata export, with tickets and mod cases) must never be shown there: it goes to
+// the author's DMs, and the channel only learns whether that worked.
+test('a private reply with a file goes to DMs, never the channel', async () => {
+  const { ix, log } = make();
+  const dms = [];
+  ix.message.author.send = async (p) => {
+    dms.push(p);
+    return { id: 'dm1' };
+  };
+  await ix.reply({
+    content: 'export',
+    files: [{ attachment: Buffer.from('{}'), name: 'x.json' }],
+    flags: MessageFlags.Ephemeral,
+  });
+  assert.equal(dms.length, 1);
+  assert.equal(dms[0].files.length, 1);
+  assert.ok(log.replies.every((p) => !p.files?.length) && log.sends.every((p) => !p.files?.length));
+});
+
+test('when the DM fails, the channel gets a notice without the file', async () => {
+  const { ix, log } = make();
+  ix.message.author.send = async () => {
+    throw new Error('Cannot send messages to this user');
+  };
+  await ix.reply({
+    content: 'export',
+    files: [{ attachment: Buffer.from('{}'), name: 'x.json' }],
+    flags: MessageFlags.Ephemeral,
+  });
+  const all = [...log.replies, ...log.sends];
+  assert.equal(all.length, 1);
+  assert.equal(all[0].files, undefined);
+  assert.match(all[0].content, /DM/);
 });

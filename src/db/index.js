@@ -931,6 +931,20 @@ export const MIGRATIONS = [
       UPDATE push_relay_registrations SET sent_at = last_used_at WHERE last_used_at > created_at;
     `);
   },
+
+  // Pending "kick if not verified" deadlines, stored so a restart does not forget them
+  // (src/db/verificationKicks.js, which bootstraps the same table on Postgres).
+  (database) => {
+    database.exec(`
+      CREATE TABLE verification_kicks (
+        guild_id TEXT NOT NULL,
+        user_id  TEXT NOT NULL,
+        due_at   INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE INDEX idx_verification_kicks_due ON verification_kicks (due_at);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

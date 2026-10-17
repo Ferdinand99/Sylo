@@ -6,7 +6,7 @@ import {
   MessageFlags,
   EmbedBuilder,
 } from 'discord.js';
-import { MOD_COLOR, INFO_COLOR, notifyTarget, resultEmbed } from '../lib/moderation.js';
+import { MOD_COLOR, INFO_COLOR, checkActable, notifyTarget, resultEmbed } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
 import { addWarning, listWarnings, getWarning, removeWarning, clearWarnings } from '../../db/modCases.js';
 import { applyWarnThresholds } from '../../modules/moderation.js';
@@ -57,6 +57,22 @@ export async function execute(interaction) {
 
     if (user.bot) {
       await interaction.reply({ content: "⚠️ You can't warn a bot.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    // Warnings can escalate to a kick or ban (warn thresholds), so the same hierarchy rules as
+    // /ban apply, and only members of this server can be warned.
+    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+    if (!member) {
+      await interaction.reply({
+        content: `⚠️ ${user.tag} is not a member of this server.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const blocked = checkActable({ interaction, target: member, action: 'warn', botActs: false });
+    if (blocked) {
+      await interaction.reply({ content: `⚠️ ${blocked}`, flags: MessageFlags.Ephemeral });
       return;
     }
 

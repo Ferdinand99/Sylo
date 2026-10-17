@@ -1296,6 +1296,23 @@ button.v2-toggle:disabled {
   opacity: 0.6;
   cursor: default;
 }
+.v2-btn-danger {
+  background: none;
+  border: 1px solid #f87171;
+  border-radius: 8px;
+  color: #f87171;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+.v2-btn-danger:hover {
+  background: rgba(248, 113, 113, 0.12);
+}
+.v2-btn-danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 .v2-btn-primary {
   background: var(--accent);
   border: 1px solid var(--accent);

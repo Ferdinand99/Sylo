@@ -11,12 +11,33 @@ import { readFile } from 'node:fs/promises';
 import { gzip as gzipCb } from 'node:zlib';
 import { promisify } from 'node:util';
 import { basename } from 'node:path';
+import { isIP } from 'node:net';
 import { config } from '../config.js';
 import { log } from '../lib/log.js';
+import { encryptBackup } from '../lib/backupCrypto.js';
+import { isLocalName, isPrivateAddress } from '../lib/safeFetch.js';
 
 const gzip = promisify(gzipCb);
 const DISCORD_ATTACH_MAX = 8 * 1024 * 1024;
 const TIMEOUT_MS = 60_000;
+
+/**
+ * May a WebDAV upload go to this URL? Basic auth over plain http sends the password in clear,
+ * so with credentials it must be https, unless the server is on this machine or the LAN (an
+ * address in a private range, or a name without dots such as a container name).
+ */
+export function webdavTransportOk(url, hasCredentials) {
+  if (!hasCredentials) return true;
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.protocol === 'https:') return true;
+  const host = u.hostname.replace(/^\[|\]$/g, '');
+  return isLocalName(host) || (isIP(host) !== 0 && isPrivateAddress(host));
+}
 
 /** True when at least one off-site destination is configured. */
 export function offsiteBackupConfigured() {
@@ -38,13 +59,15 @@ export function offsiteBackupStatus() {
  */
 export async function shipOffsiteBackup(filePath) {
   if (!offsiteBackupConfigured()) return;
-  const name = `${basename(filePath)}.gz`;
+  const encrypt = Boolean(config.backupEncryptionKey);
+  const name = `${basename(filePath)}.gz${encrypt ? '.enc' : ''}`;
 
   let body;
   try {
     body = await gzip(await readFile(filePath));
+    if (encrypt) body = encryptBackup(body, config.backupEncryptionKey);
   } catch (err) {
-    log.error('db', `Off-site backup: could not gzip ${basename(filePath)}: ${err.message}`);
+    log.error('db', `Off-site backup: could not prepare ${basename(filePath)}: ${err.message}`);
     return;
   }
 
@@ -56,6 +79,13 @@ export async function shipOffsiteBackup(filePath) {
 
 async function toWebdav(name, body) {
   const url = `${config.backupWebdavUrl.replace(/\/+$/, '')}/${name}`;
+  if (!webdavTransportOk(url, Boolean(config.backupWebdavUser))) {
+    log.error(
+      'db',
+      'Off-site backup → WebDAV skipped: a password over plain http; use an https BACKUP_WEBDAV_URL'
+    );
+    return;
+  }
   const headers = { 'content-type': 'application/gzip' };
   if (config.backupWebdavUser) {
     const auth = Buffer.from(`${config.backupWebdavUser}:${config.backupWebdavPass ?? ''}`).toString(

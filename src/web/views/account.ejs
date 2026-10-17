@@ -43,4 +43,16 @@
   <% }); %>
 </section>
 
+<section class="card">
+  <h2>Delete account</h2>
+  <p class="muted">Deletes your Sylo dashboard account: your sign-ins, every browser and Sylo app device
+    signed in with it, and your dashboard preferences. Data Sylo keeps per server (levels, birthdays,
+    tickets …) stays with each server; run <code>/forget</code> there to remove it.</p>
+  <form method="post" action="/account/delete" class="stack">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <label class="checkline"><input type="checkbox" name="confirm" /> I understand this can't be undone.</label>
+    <div><button type="submit" class="danger" data-confirm="Delete your Sylo account? This can't be undone.">Delete account</button></div>
+  </form>
+</section>
+
 <%- include('partials/footer') %>

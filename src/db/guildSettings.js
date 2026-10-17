@@ -1,6 +1,16 @@
 // Per-guild settings: mod-log channel, dashboard "bot master" roles, and a
 // default embed colour.
 import { prepare, registerPostgresBootstrap } from './driver.js';
+import { splitPlatformGuildId } from '../lib/platformId.js';
+
+/**
+ * A role id list without @everyone, whose id is the server's own id: as a bot-master or staff
+ * role it would match every member.
+ */
+export function withoutEveryone(guildId, roleIds) {
+  const everyone = splitPlatformGuildId(guildId)?.rawId ?? guildId;
+  return roleIds.filter((r) => r !== everyone);
+}
 
 export const DEFAULT_EMBED_COLOR = 0x7aa2f7; // Sylo brand blue
 
@@ -57,15 +67,19 @@ export async function setModlogChannel(guildId, channelId) {
 export async function getBotMasterRoles(guildId) {
   try {
     const v = JSON.parse((await getGuildSettings(guildId))?.bot_master_roles ?? '[]');
-    return Array.isArray(v) ? v.filter((r) => /^\d{17,20}$/.test(r)) : [];
+    return Array.isArray(v)
+      ? withoutEveryone(
+          guildId,
+          v.filter((r) => /^\d{17,20}$/.test(r))
+        )
+      : [];
   } catch {
     return [];
   }
 }
 export async function setBotMasterRoles(guildId, roleIds) {
-  const clean = [
-    ...new Set((Array.isArray(roleIds) ? roleIds : []).filter((r) => /^\d{17,20}$/.test(r))),
-  ].slice(0, 25);
+  const valid = (Array.isArray(roleIds) ? roleIds : []).filter((r) => /^\d{17,20}$/.test(r));
+  const clean = [...new Set(withoutEveryone(guildId, valid))].slice(0, 25);
   await put(guildId, 'bot_master_roles', JSON.stringify(clean));
   return clean;
 }

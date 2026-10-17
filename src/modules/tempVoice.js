@@ -39,6 +39,7 @@ import {
   setTempBans,
   setTempEmptySince,
 } from '../db/tempVoice.js';
+import { sweepMap } from '../lib/sweepMap.js';
 
 const DEFAULT_NAME = "#{index} - {username}'s Channel";
 const SWEEP_MS = 60 * 1000;
@@ -181,6 +182,7 @@ export function buildOverwrites(guild, hub, ownerId, { forText = false } = {}) {
 // --- create -----------------------------------------------------------------
 
 const lastCreate = new Map();
+sweepMap(lastCreate, (at, now) => now - at > CREATE_DEBOUNCE_MS);
 
 async function handleJoin(guild, member, hub) {
   const key = `${guildKey(guild)}:${member.id}`;
@@ -317,7 +319,8 @@ async function sendJoinLink(guild, member, channel) {
 
 // --- cleanup + ownership transfer -----------------------------------
 
-async function onLeaveTemp(guild, channelId) {
+/** Someone left a temp channel: move ownership on, or start the empty-channel clock. Exported for tests. */
+export async function onLeaveTemp(guild, channelId) {
   const row = await getTempChannel(channelId);
   if (!row) return;
   const channel = guild.channels.cache.get(channelId);
@@ -328,13 +331,9 @@ async function onLeaveTemp(guild, channelId) {
     // Owner left but others remain → transfer unless the hub locks ownership.
     const hub = await hubForChannel(guildKey(guild), row.hub_id);
     if (!channel.members.has(row.owner_id) && hub && !hub.ownershipLock) {
-      const next = channel.members.first();
-      if (next) {
-        await setTempOwner(channelId, next.id);
-        await channel.permissionOverwrites
-          .edit(next.id, Object.fromEntries(ownerAllowBits(hub).map((b) => [b, true])))
-          .catch(() => {});
-      }
+      // Like a manual transfer: the old owner's permissions go too, and a bot never owns it.
+      const next = channel.members.find((m) => !m.user?.bot);
+      if (next) await transferTemp(channel, guild, row, next.id);
     }
     return;
   }

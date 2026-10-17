@@ -21,6 +21,10 @@ import { supports } from './capabilities.js';
  */
 export function prepareOutgoing(input, { edit = false, platform = 'fluxer' } = {}) {
   const base = toFluxerPayload(input, { edit });
+  // The SDK's own default never reaches a plain-string message, and some replies echo user
+  // text: without an explicit allowedMentions, a new message may ping users only.
+  if (!edit && base.payload.allowedMentions === undefined)
+    base.payload.allowedMentions = { parse: ['users'] };
   const components = typeof input === 'object' ? input.components : undefined;
   if (supports(platform, 'components')) {
     // Native components: send them as built, nothing to bridge.

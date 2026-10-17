@@ -7,10 +7,12 @@ import { ticketGuildsForUser, ingestUserDM } from '../../modules/tickets.js';
 import { getOpenTicket } from '../../db/tickets.js';
 import { registerComponent } from '../lib/components.js';
 import { log } from '../../lib/log.js';
+import { sweepMap } from '../../lib/sweepMap.js';
 
 const SELECT_ID = 'ticket-guild';
 const pending = new Map(); // userId -> { content, attachments, at }
 const PENDING_TTL = 10 * 60 * 1000;
+sweepMap(pending, (p, now) => now - p.at > PENDING_TTL);
 
 function stash(userId, payload) {
   pending.set(userId, { ...payload, at: Date.now() });
@@ -80,7 +82,12 @@ async function handleDM(message) {
 }
 
 async function handleSelect(interaction) {
-  const guild = guildByKey(interaction.values[0]);
+  const picked = guildByKey(interaction.values[0]);
+  // Still one the member may open a ticket in (a member there, tickets on): the menu could be old.
+  const allowed = picked
+    ? await ticketGuildsForUser(interaction.user, interaction.client ?? picked.client)
+    : [];
+  const guild = allowed.find((g) => guildKey(g) === guildKey(picked));
   const payload = takeStash(interaction.user.id);
   if (!guild || !payload) {
     await interaction

@@ -20,6 +20,9 @@
 // correctness issue. So it runs as a plain sequence of awaited statements.
 import { prepare } from './driver.js';
 import { log } from '../lib/log.js';
+// Owners of the tables swept below, for their Postgres bootstrap.
+import './tickets.js';
+import './cache.js';
 
 const DAY_MS = 86_400_000;
 const MAX_DAYS = 3650; // 10 years — matches the dashboard input cap
@@ -32,6 +35,14 @@ const oldClosedTickets = prepare(
 );
 const delTicketMsgs = prepare('DELETE FROM ticket_messages WHERE ticket_id = ?');
 const delTicket = prepare('DELETE FROM tickets WHERE id = ?');
+// Messages whose ticket is gone (left behind by /forget before it took staff replies too):
+// nothing else could ever find them again.
+const delOrphanedTicketMsgs = prepare(
+  'DELETE FROM ticket_messages WHERE ticket_id NOT IN (SELECT id FROM tickets)'
+);
+// Game-stats lookups: otherwise only replaced when the same name is looked up again.
+const STATS_KEEP_MS = 30 * DAY_MS;
+const delStaleStats = prepare('DELETE FROM stats_cache WHERE created_at < ?');
 const delOldInactiveCases = prepare(
   'DELETE FROM infractions WHERE guild_id = ? AND active = 0 AND created_at < ?'
 );
@@ -50,7 +61,8 @@ function retentionDays(configJson, key) {
 /**
  * Delete tickets / cases past their guild's configured retention window.
  * @param {number} [now] epoch ms, overridable for tests
- * @returns {{ closedTickets: number, ticketMessages: number, inactiveCases: number }}
+ * Also drops ticket messages without a ticket, and game-stats lookups older than 30 days.
+ * @returns {{ closedTickets: number, ticketMessages: number, inactiveCases: number, orphanedTicketMessages: number, staleStats: number }}
  */
 export async function sweepRetention(now = Date.now()) {
   let closedTickets = 0;
@@ -73,7 +85,10 @@ export async function sweepRetention(now = Date.now()) {
     inactiveCases += (await delOldInactiveCases.run(row.guild_id, now - days * DAY_MS)).changes;
   }
 
-  const result = { closedTickets, ticketMessages, inactiveCases };
+  const orphanedTicketMessages = (await delOrphanedTicketMsgs.run()).changes;
+  const staleStats = (await delStaleStats.run(now - STATS_KEEP_MS)).changes;
+
+  const result = { closedTickets, ticketMessages, inactiveCases, orphanedTicketMessages, staleStats };
   if (result.closedTickets || result.inactiveCases) {
     log.info(
       'retention',

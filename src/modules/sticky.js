@@ -37,6 +37,8 @@ const embedIsEmpty = (e) =>
  * lastMessageId — callers on both the V1 and V2 dashboard routes already
  * have it at hand, so it's a plain param rather than a DB read in here.
  */
+const MAX_STICKIES = 50; // one per channel; a cap keeps a crafted save from storing thousands
+
 export function normaliseStickyConfig(raw = {}, prev = {}) {
   const prevById = new Map((Array.isArray(prev.stickies) ? prev.stickies : []).map((s) => [s.channelId, s]));
   const stickies = (Array.isArray(raw.stickies) ? raw.stickies : [])
@@ -51,7 +53,8 @@ export function normaliseStickyConfig(raw = {}, prev = {}) {
         cooldownSeconds: Math.max(0, Math.min(MAX_COOLDOWN_S, Math.floor(Number(s.cooldownSeconds)) || 0)),
       };
     })
-    .filter((s) => isId(s.channelId) && (s.content.trim() !== '' || s.embed));
+    .filter((s) => isId(s.channelId) && (s.content.trim() !== '' || s.embed))
+    .slice(0, MAX_STICKIES);
   return { stickies };
 }
 

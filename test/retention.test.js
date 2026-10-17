@@ -54,7 +54,13 @@ test('sweepRetention prunes only past-cutoff closed tickets / inactive cases', a
   kase(G2, 1, { active: false, ageDays: 400 }); // other guild, no window -> kept
 
   const r = await sweepRetention(Date.now());
-  assert.deepEqual(r, { closedTickets: 1, ticketMessages: 3, inactiveCases: 1 });
+  assert.deepEqual(r, {
+    closedTickets: 1,
+    ticketMessages: 3,
+    inactiveCases: 1,
+    orphanedTicketMessages: 0,
+    staleStats: 0,
+  });
 
   assert.equal(ticketExists(oldClosed), false);
   assert.equal(msgCount(oldClosed), 0);
@@ -73,5 +79,28 @@ test('sweepRetention is a no-op with nothing left to prune', async () => {
     closedTickets: 0,
     ticketMessages: 0,
     inactiveCases: 0,
+    orphanedTicketMessages: 0,
+    staleStats: 0,
   });
+});
+
+// /forget used to delete a ticket but leave its staff replies, which no purge could find again.
+test('sweepRetention removes ticket messages whose ticket is gone', async () => {
+  const id = ticket(G2, { status: 'open', ageDays: 1, msgs: 2 });
+  db.prepare('DELETE FROM tickets WHERE id = ?').run(id);
+  const r = await sweepRetention(Date.now());
+  assert.equal(r.orphanedTicketMessages, 2);
+  assert.equal(msgCount(id), 0);
+});
+
+// Game-stats lookups were only deleted when the same name was looked up again.
+test('sweepRetention drops game-stats lookups older than 30 days', async () => {
+  const insert = db.prepare(
+    "INSERT INTO stats_cache (cache_key, game, title, username, platform, payload, created_at) VALUES (?, 'bf', 't', ?, 'pc', '{}', ?)"
+  );
+  insert.run('old', 'olduser', Date.now() - 31 * DAY);
+  insert.run('new', 'newuser', Date.now() - DAY);
+  const r = await sweepRetention(Date.now());
+  assert.equal(r.staleStats, 1);
+  assert.ok(db.prepare("SELECT 1 FROM stats_cache WHERE cache_key = 'new'").get());
 });

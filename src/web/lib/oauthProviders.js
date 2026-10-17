@@ -73,6 +73,7 @@ export function fluxerOrigins() {
 
 async function exchangeCode({ tokenUrl, clientId, clientSecret, code, redirectUri }) {
   const res = await fetch(tokenUrl, {
+    signal: AbortSignal.timeout(10_000), // a hung provider must not hold the request forever
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -91,7 +92,10 @@ async function exchangeCode({ tokenUrl, clientId, clientSecret, code, redirectUr
 }
 
 async function getJson(base, path, accessToken) {
-  const res = await fetch(`${base}${path}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const res = await fetch(`${base}${path}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(10_000),
+  });
   if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
   return res.json();
 }

@@ -5,7 +5,7 @@
 // getGuild, requireGuildAdmin) — none of them are modified by this file.
 import { accountDevices, accountPlatforms } from '../lib/accountView.js';
 import { revokeApiToken } from '../../db/apiTokens.js';
-import { unlinkIdentity } from '../../db/accounts.js';
+import { deleteAccount, unlinkIdentity } from '../../db/accounts.js';
 import { openTicketCount, unreadTicketCount } from '../../db/tickets.js';
 import { allGuilds, clientOfGuild, primaryClient } from '../../platform/platformOf.js';
 import { createRequire } from 'node:module';
@@ -23,10 +23,12 @@ import {
   sessionUserId,
   botInviteUrls,
 } from '../middleware/auth.js';
+import { guardRoleGrants } from '../middleware/roleGrants.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
+import { idList, MAX_REACTION_MESSAGES, MAX_REACTION_PAIRS } from '../lib/idList.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { getDashboardVersion, setDashboardVersion, DASHBOARD_VERSIONS } from '../../db/userPrefs.js';
@@ -95,7 +97,7 @@ import {
 } from '../../db/githubWatches.js';
 import { GITHUB_EVENT_TYPES, sanitiseGithubEvents } from '../../modules/githubAlerts.js';
 import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
-import { normaliseStarboard, rescanBoard } from '../../modules/starboard.js';
+import { boardsToRescan, normaliseStarboard, scheduleRescan } from '../../modules/starboard.js';
 import {
   normaliseAutomodConfig,
   AUTOMOD_RULES,
@@ -121,6 +123,7 @@ import { normaliseKickConfig, DEFAULT_MESSAGE as KICK_DEFAULT_MSG } from '../../
 import {
   normaliseYoutubeConfig,
   resolveYtChannel,
+  MAX_YOUTUBE_ALERTS,
   DEFAULT_VIDEO_MESSAGE as YT_DEFAULT_VIDEO_MSG,
   DEFAULT_LIVE_MESSAGE as YT_DEFAULT_LIVE_MSG,
 } from '../../modules/youtubeAlerts.js';
@@ -137,7 +140,7 @@ import {
   updateComposed,
   deleteComposed,
 } from '../../db/composedMessages.js';
-import { sendComposed, editComposed } from '../../modules/messageCreator.js';
+import { sendComposed, editComposed, normaliseComposedSpec } from '../../modules/messageCreator.js';
 import {
   activeGiveaways,
   endedGiveaways,
@@ -145,7 +148,8 @@ import {
   getGiveawayInGuild,
 } from '../../db/giveaways.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
-import { listCountingPenalties, clearCountingPenalty } from '../../db/countingPenalties.js';
+import { listCountingPenalties } from '../../db/countingPenalties.js';
+import { releaseCountingPenalty } from '../../modules/counting.js';
 import { normaliseAutoReact, AUTO_REACT_MODES, AUTO_REACT_ROLE_ACTIONS } from '../../modules/autoReact.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import {
@@ -170,6 +174,7 @@ import {
   setBotMasterRoles,
   setEmbedColor,
   guildEmbedColor,
+  withoutEveryone,
 } from '../../db/guildSettings.js';
 import { recordAudit } from '../../db/audit.js';
 import { recordBotAudit, listBotAudit } from '../../db/botAudit.js';
@@ -293,8 +298,22 @@ router.post(
   '/account/disconnect/:platform',
   asyncHandler(async (req, res) => {
     if (!req.account) return res.status(400).json({ error: 'Not signed in.' });
-    const ok = await unlinkIdentity(req.account.id, req.params.platform);
+    const ok = await unlinkIdentity(req.account.id, req.params.platform, { keepSession: req.session?.sid });
     if (!ok) return res.status(409).json({ error: "You can't disconnect your only sign-in." });
+    res.json({ ok: true });
+  })
+);
+
+// Delete the whole dashboard account: sign-ins, sessions, app devices (this one too) and
+// preferences. Works with an app token, so the Sylo app can offer it.
+router.post(
+  '/account/delete',
+  asyncHandler(async (req, res) => {
+    if (!req.account) return res.status(400).json({ error: 'Not signed in.' });
+    if (req.body?.confirm !== true)
+      return res.status(400).json({ error: 'Send confirm: true to delete the account.' });
+    await deleteAccount(req.account.id);
+    if (req.session) req.session = null;
     res.json({ ok: true });
   })
 );
@@ -352,7 +371,7 @@ function loadGuildJson(req, res, next) {
 // Tickets go before the admin guard: members with a configured staff role may use
 // them without being server admins (ticketsRouter does its own access check).
 router.use('/guilds/:guildId/tickets', ticketsRouter);
-router.use('/guilds/:guildId', loadGuildJson, requireGuildAdmin);
+router.use('/guilds/:guildId', requireGuildAdmin, loadGuildJson, guardRoleGrants);
 // Appeals review, command limits and the moderation hub (v2Staff.js).
 router.use('/guilds/:guildId', staffRouter);
 
@@ -486,7 +505,7 @@ router.post(
     const config = {
       setNickname: Boolean(req.body.setNickname),
       mentionReply: Boolean(req.body.mentionReply),
-      ignoreChannels: [].concat(req.body.ignoreChannels ?? []).filter((id) => /^\d{17,20}$/.test(id)),
+      ignoreChannels: idList(req.body.ignoreChannels, 100),
     };
     await setGuildModule(req.guild.id, 'afk', { config });
     await recordAudit(req.guild.id, {
@@ -571,7 +590,7 @@ router.post(
     };
     const autoOn = Boolean(req.body.autoroleEnabled);
     config.autoroleEnabled = autoOn;
-    const newRoles = autoOn ? [].concat(req.body.autoroles ?? []).filter((r) => /^\d{17,20}$/.test(r)) : [];
+    const newRoles = autoOn ? idList(req.body.autoroles) : [];
     const rolesMod = await getGuildModule(guild.id, 'roles');
     await setGuildModule(guild.id, 'roles', {
       enabled: rolesMod.enabled || newRoles.length > 0,
@@ -834,13 +853,10 @@ router.post(
     const userId = String(req.body.userId ?? '');
     if (!/^\d{17,20}$/.test(userId)) return res.status(400).json({ error: 'Invalid user' });
 
-    const cfg = (await getGuildModule(guild.id, 'counting')).config;
-    const role = cfg.penaltyRoleId ? guild.roles.cache.get(cfg.penaltyRoleId) : null;
-    const member = await guild.members.fetch(userId).catch(() => null);
-    if (role && member && !member.roles.cache.has(role.id) && role.editable) {
-      await member.roles.add(role, 'Counting: bench ended early from the dashboard').catch(() => {});
+    // The role stored with the penalty, and only for someone who is benched.
+    if (!(await releaseCountingPenalty(guild, userId))) {
+      return res.status(404).json({ error: 'That member is not benched.' });
     }
-    await clearCountingPenalty(guild.id, userId);
     await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: 'counting:unbench',
@@ -1296,24 +1312,16 @@ router.post(
   '/guilds/:guildId/modules/starboard/config',
   asyncHandler(async (req, res) => {
     const config = normaliseStarboard({ boards: req.body.boards });
+    const prev = normaliseStarboard((await getGuildModule(req.guild.id, 'starboard')).config);
     await setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:starboard',
       detail: 'settings saved',
     });
-    // Catch up on messages that already clear a possibly-just-lowered bar —
-    // fire-and-forget, same as V1's save route.
-    for (const board of config.boards) {
-      rescanBoard(req.guild, board)
-        .then((r) =>
-          log.info(
-            'starboard',
-            `rescan ${req.guild.id}/${board.id}: scanned ${r.scanned}, posted ${r.posted}`
-          )
-        )
-        .catch((err) => log.error('starboard', 'rescan failed:', err.message));
-    }
+    // Catch up on messages that already clear a just-lowered bar (or a new board's) —
+    // queued in the background, one rescan per server at a time, same as V1's save route.
+    for (const board of boardsToRescan(prev.boards, config.boards)) scheduleRescan(req.guild, board);
     res.json({
       config: { boards: config.boards.map((b) => ({ ...b, emojiText: boardEmojiText(b, req.guild) })) },
     });
@@ -1371,7 +1379,10 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/youtube-alerts/config',
   asyncHandler(async (req, res) => {
-    const rows = Array.isArray(req.body.alerts) ? req.body.alerts : [];
+    // Each row may mean a youtube.com lookup: cap the rows before looking anything up.
+    const rows = (Array.isArray(req.body.alerts) ? req.body.alerts : [])
+      .filter((a) => a && (String(a.input ?? '').trim() || a.ytChannelId))
+      .slice(0, MAX_YOUTUBE_ALERTS);
     const UC_RE = /^UC[\w-]{20,}$/;
     const alerts = [];
     for (const a of rows) {
@@ -1451,8 +1462,9 @@ router.post(
 router.get(
   '/guilds/:guildId/modules/game-stats/config',
   asyncHandler(async (req, res) => {
+    // The cache holds every server's lookups: only operators see them.
     res.json({
-      recent: (await recentLookups(15)).map((r) => ({
+      recent: (isOwner(req) ? await recentLookups(15) : []).map((r) => ({
         game: r.game,
         title: r.title,
         username: r.username,
@@ -1521,7 +1533,7 @@ router.post(
       greeting: String(req.body.greeting ?? '').slice(0, 1500),
       closeMessage: String(req.body.closeMessage ?? '').slice(0, 1500),
       notifyChannel: /^\d{17,20}$/.test(req.body.notifyChannel ?? '') ? req.body.notifyChannel : '',
-      staffRoles: [].concat(req.body.staffRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)),
+      staffRoles: withoutEveryone(req.guild.id, idList(req.body.staffRoles)),
       transcriptRetentionDays: clampDays(req.body.transcriptRetentionDays),
       showMessageInAlert: Boolean(req.body.showMessageInAlert),
     };
@@ -1710,11 +1722,8 @@ router.post(
 
     const spec = req.body.spec;
     if (!spec || typeof spec !== 'object') return res.status(400).json({ error: "Missing 'spec'" });
-    const normalisedSpec = {
-      content: String(spec.content ?? ''),
-      embeds: Array.isArray(spec.embeds) ? spec.embeds : [],
-      rows: Array.isArray(spec.rows) ? spec.rows : [],
-    };
+    const normalisedSpec = normaliseComposedSpec(spec);
+    if (!normalisedSpec) return res.status(400).json({ error: 'The message is too large to save.' });
     const name =
       String(req.body.name ?? '')
         .trim()
@@ -2844,7 +2853,8 @@ router.get(
 );
 
 router.post(
-  '/guilds/:guildId/modules/reminders',
+  // Not /modules/reminders: that path is the module's on/off switch (POST /modules/:moduleId).
+  '/guilds/:guildId/modules/reminders/new',
   asyncHandler(async (req, res) => {
     const r = parseReminderBody(req.body);
     if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
@@ -2860,6 +2870,24 @@ router.post(
       detail: `created "${r.name}"`,
     });
     res.json({ reminder: shapeReminder(await getScheduled(req.guild.id, id)) });
+  })
+);
+
+// Before /reminders/:id, which would otherwise take "test" for an id.
+router.post(
+  '/guilds/:guildId/modules/reminders/test',
+  asyncHandler(async (req, res) => {
+    const r = parseReminderBody(req.body);
+    if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
+    if (!r.spec.content.trim() && !r.spec.embeds.length) {
+      return res.status(400).json({ error: 'Add a message or an embed.' });
+    }
+    try {
+      await sendComposed(req.guild, r.channelId, r.spec);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
   })
 );
 
@@ -2902,23 +2930,6 @@ router.post(
     const rec = Number.isInteger(id) ? await getScheduled(req.guild.id, id) : null;
     if (rec) await setScheduledEnabled(req.guild.id, id, rec.enabled !== 1);
     res.json({ reminder: rec ? shapeReminder(await getScheduled(req.guild.id, id)) : null });
-  })
-);
-
-router.post(
-  '/guilds/:guildId/modules/reminders/test',
-  asyncHandler(async (req, res) => {
-    const r = parseReminderBody(req.body);
-    if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
-    if (!r.spec.content.trim() && !r.spec.embeds.length) {
-      return res.status(400).json({ error: 'Add a message or an embed.' });
-    }
-    try {
-      await sendComposed(req.guild, r.channelId, r.spec);
-      res.json({ ok: true });
-    } catch (err) {
-      res.status(400).json({ error: err.message });
-    }
   })
 );
 
@@ -3066,9 +3077,7 @@ router.post(
   '/guilds/:guildId/modules/roles/autoroles',
   asyncHandler(async (req, res) => {
     const { config: cfg } = await getGuildModule(req.guild.id, 'roles');
-    const autoroles = (Array.isArray(req.body.autoroles) ? req.body.autoroles : []).filter((id) =>
-      /^\d{17,20}$/.test(id)
-    );
+    const autoroles = idList(Array.isArray(req.body.autoroles) ? req.body.autoroles : []);
     await setGuildModule(req.guild.id, 'roles', { config: { ...cfg, autoroles } });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -3092,7 +3101,7 @@ router.post(
     const style = ['buttons', 'select'].includes(req.body.style) ? req.body.style : 'reaction';
     const rawPairs = Array.isArray(req.body.pairs) ? req.body.pairs : [];
     const pairs = [];
-    for (const row of rawPairs) {
+    for (const row of rawPairs.slice(0, MAX_REACTION_PAIRS)) {
       const rid = row?.roleId;
       if (!/^\d{17,20}$/.test(rid ?? '')) continue;
       const parsed = parseEmoji(row?.emoji ?? '', guild);
@@ -3112,6 +3121,11 @@ router.post(
 
     const id = /^\d+$/.test(req.body.id ?? '') ? req.body.id : String(Date.now());
     const existing = list.find((x) => String(x.id) === id);
+    if (!existing && list.length >= MAX_REACTION_MESSAGES) {
+      return res.status(400).json({
+        error: `This server already has the maximum of ${MAX_REACTION_MESSAGES} reaction-role messages.`,
+      });
+    }
     const rm = {
       id,
       channelId,

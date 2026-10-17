@@ -40,6 +40,14 @@ test('bot master roles: defaults to [], round-trips, dedupes + caps at 25, rejec
   assert.equal(capped.length, 25);
 });
 
+test('bot master roles never include @everyone (its id is the server id)', async () => {
+  const F = 'fluxer:900000000000000061';
+  assert.deepEqual(await setBotMasterRoles(G, [G, '222222222222222222']), ['222222222222222222']);
+  assert.deepEqual(await setBotMasterRoles(F, ['900000000000000061', '222222222222222222']), [
+    '222222222222222222',
+  ]);
+});
+
 test('embed colour: defaults to DEFAULT_EMBED_COLOR, round-trips, null clears it', async () => {
   assert.equal(await guildEmbedColor(G), DEFAULT_EMBED_COLOR);
   await setEmbedColor(G, 0xff00ff);

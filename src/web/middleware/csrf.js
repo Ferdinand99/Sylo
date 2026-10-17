@@ -16,7 +16,7 @@
 // cannot attach that header to a cross-site request without a CORS preflight,
 // and Sylo answers no preflight, so such a request cannot be forged. It is
 // judged by its token alone (see attachAccount), never by a cookie.
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { isTokenRequest } from '../lib/bearer.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -25,6 +25,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // itself, with a JSON answer the app can read. /api/push-relay: instance-to-relay calls, no
 // account or cookie at all; a relay token is the proof (src/web/routes/pushRelay.js).
 const EXEMPT = [
+  // /auth/logout checks the token itself (auth.js): the /auth router runs before this one.
   /^\/auth(\/|$)/,
   /^\/verify(\/|$)/,
   /^\/appeal(\/|$)/,
@@ -44,12 +45,33 @@ function sameOrigin(req) {
   }
 }
 
+/** The new dashboard (and the app) read JSON errors; pages get plain text. */
+function refuse(req, res, message) {
+  if (req.path.startsWith('/api/')) return res.status(403).json({ error: message });
+  return res.status(403).type('text/plain').send(message);
+}
+
+function sameToken(sent, expected) {
+  const a = Buffer.from(String(sent));
+  const b = Buffer.from(String(expected));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * Does the request carry this session's CSRF token? For routes mounted before the csrf
+ * middleware runs (the /auth router, for logout).
+ */
+export function hasValidCsrfToken(req) {
+  const sent = req.get('x-csrf-token') || (req.body && req.body._csrf);
+  return Boolean(sent && req.session?.csrf && sameToken(sent, req.session.csrf) && sameOrigin(req));
+}
+
 export function csrf(req, res, next) {
   if (isTokenRequest(req)) return next();
   const stateChanging = !SAFE_METHODS.has(req.method) && !EXEMPT.some((re) => re.test(req.path));
 
   if (stateChanging && !sameOrigin(req)) {
-    return res.status(403).type('text/plain').send('Cross-origin request blocked.');
+    return refuse(req, res, 'Cross-origin request blocked.');
   }
 
   // Open mode: no session to bind a token to — the same-origin check above is the
@@ -62,7 +84,7 @@ export function csrf(req, res, next) {
   if (!stateChanging) return next();
 
   const sent = req.get('x-csrf-token') || (req.body && req.body._csrf);
-  if (sent && sent === req.session.csrf) return next();
+  if (sent && sameToken(sent, req.session.csrf)) return next();
 
-  res.status(403).type('text/plain').send('CSRF check failed — reload the page and try again.');
+  refuse(req, res, 'CSRF check failed — reload the page and try again.');
 }

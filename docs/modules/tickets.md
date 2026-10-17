@@ -33,5 +33,5 @@ server. Staff reply as **Staff** from the ticket page; the member sees Sylo's DM
 **Close ticket** sends a final reply (or the default closing notice if the box is
 empty) and closes it. The member can open a new one by DMing again.
 
-`/forget` removes the member's ticket history and the messages they sent; staff
-replies already delivered are not clawed back.
+`/forget` removes the member's ticket history: every message in their tickets,
+staff replies included. Replies already delivered by DM are not clawed back.

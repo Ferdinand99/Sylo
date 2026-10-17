@@ -75,3 +75,10 @@ test('decodeEntities: named, numeric and hex references', () => {
   assert.equal(decodeEntities('caf&#233; &#x2014; done'), 'café — done');
   assert.equal(decodeEntities('&amp;lt;'), '&lt;'); // single pass, no over-decode
 });
+
+// A feed with a huge number of tiny items would mean one database lookup per item every poll.
+test('parseFeed keeps at most 100 entries', () => {
+  const items = Array.from({ length: 500 }, (_, i) => `<item><title>t${i}</title><guid>g${i}</guid></item>`);
+  const entries = parseFeed(`<rss><channel><title>x</title>${items.join('')}</channel></rss>`);
+  assert.equal(entries.length, 100);
+});

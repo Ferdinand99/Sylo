@@ -65,14 +65,17 @@ test(
       assert.equal(dump.data.warnings[0].reason, 'x');
 
       const result = await forgetUser(g, U);
-      assert.equal(result.warnings, 1);
+      // Moderation cases are safety records: kept, and reported as kept.
+      assert.equal(result.keptCases, 1);
       // addXp() writes one `leveling` row plus one `leveling_periods` row per
       // period (week + month) — forgetUser's count is the sum of both deletes.
       assert.equal(result.leveling, 3);
       assert.equal(result.tickets, 1);
       assert.equal(result.afk, 1);
 
-      assert.equal((await describeUserData(g, U)).total, 0, 'nothing left after forgetUser');
+      const after = await describeUserData(g, U);
+      assert.equal(after.erasable, 0, 'nothing erasable left after forgetUser');
+      assert.equal(after.items.find((i) => i.key === 'warnings').count, 1, 'the case is kept');
       assert.ok((await describeUserData(g, KEEP)).total > 0, 'other member kept');
     });
   }

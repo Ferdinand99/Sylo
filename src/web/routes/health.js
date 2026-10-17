@@ -36,7 +36,7 @@ import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
 import { listBotAudit } from '../../db/botAudit.js';
 import { MODULES } from '../../modules/registry.js';
 import { timeAgo, formatUptime, formatBytes } from '../lib/format.js';
-import { log } from '../../lib/log.js';
+import { log, redactSecrets } from '../../lib/log.js';
 import { sendDevLogTest } from '../../lib/devLog.js';
 
 const require = createRequire(import.meta.url);
@@ -75,7 +75,8 @@ router.get(
           gatewayPingMs: typeof ping === 'number' && ping >= 0 ? Math.round(ping) : null,
           gatewayPingHistory: runtime.pingHistory.slice(),
         },
-        lastError: runtime.lastError,
+        // Error messages can carry a server admin's URL or an internal address: operators only.
+        ...(isOwner(req) ? { lastError: runtime.lastError } : {}),
         errorCount: runtime.errors.length,
         errorsByScope: errorScopeCounts(),
         commands: byMetric('sylo_commands_total')
@@ -199,7 +200,10 @@ router.post(
       const { name } = await runBackup('manual');
       res.redirect(`/health?backup=${encodeURIComponent(name)}`);
     } catch (err) {
-      res.redirect(`/health?backuperr=${encodeURIComponent(err.message || 'backup failed')}`);
+      // The full error goes to the log (redacted there); the URL gets a short, redacted summary.
+      log.error('backup', 'manual backup failed:', err);
+      const brief = redactSecrets(String(err.message || 'backup failed').split('\n', 1)[0]).slice(0, 200);
+      res.redirect(`/health?backuperr=${encodeURIComponent(brief)}`);
     }
   })
 );
