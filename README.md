@@ -68,6 +68,7 @@ GitHub alerts
   troubleshooting.
 - **[docs/fluxer.md](docs/fluxer.md)** — running Sylo on Fluxer, alone or next to Discord:
   setup, the dashboard login, chat commands, and what differs from Discord.
+- **[docs/mobile-app.md](docs/mobile-app.md)** — the Sylo iOS app (in development): what a self-hosted instance needs, and how its sign-in works.
 - **[docs/postgres.md](docs/postgres.md)** — optional Postgres backend for
   hosted-scale deployments, and how to move an existing SQLite install over
   without losing data.

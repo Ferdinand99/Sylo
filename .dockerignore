@@ -19,3 +19,4 @@ unraid
 Dockerfile
 docker-compose.yml
 .dockerignore
+apps

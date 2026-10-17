@@ -11,6 +11,7 @@
 // bug class behind issue #163), and the guild lists can live longer than a cookie.
 import { randomBytes, randomUUID } from 'node:crypto';
 import { prepare, registerPostgresBootstrap } from './driver.js';
+import { revokeAccountTokens } from './apiTokens.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS accounts (
@@ -152,10 +153,17 @@ export async function linkIdentity(accountId, identity) {
   await s.insertIdentity.run({ ...params(identity), accountId, linkedAt: Date.now() });
 }
 
-/** Remove an account's identity on a platform. Never removes the last one. @returns {Promise<boolean>} */
+/**
+ * Remove an account's identity on a platform. Never removes the last one. Also signs out every
+ * Sylo app device of the account: disconnecting a sign-in is what someone does when that login
+ * was lost or shared, so the app sessions it may have started must not outlive it.
+ * @returns {Promise<boolean>}
+ */
 export async function unlinkIdentity(accountId, platform) {
   const { n } = await s.countIdentities.get(accountId);
   if (Number(n) <= 1) return false;
+  // Tokens first: if this fails, the identity is still there and nothing is half done.
+  await revokeAccountTokens(accountId);
   await s.deleteIdentity.run(accountId, platform);
   return true;
 }

@@ -36,6 +36,9 @@ import {
   purgeExpiredSessions,
   signInIdentity,
 } from '../../db/accounts.js';
+import { API_TOKEN_TTL_MS, findApiToken, purgeExpiredApiTokens, touchApiToken } from '../../db/apiTokens.js';
+import { purgeStaleRelayRegistrations } from '../../db/pushRelay.js';
+import { bearerToken, isTokenRequest } from '../lib/bearer.js';
 import { enabledProviders, fluxerOrigins, providers, adminGuildIdsFromOAuth } from '../lib/oauthProviders.js';
 import { buildBotInvites } from '../lib/botInvites.js';
 import {
@@ -182,9 +185,15 @@ function redirectTo(req, res, path) {
 }
 const redirectToLogin = (req, res) => redirectTo(req, res, loginPath());
 
+// An app request (Authorization: Bearer) cannot follow a login redirect or read an HTML error
+// page, so it gets the same answers as JSON.
+const notSignedIn = (res) =>
+  res.status(401).json({ error: 'Not signed in, or the token is no longer valid.' });
+
 /** Require any signed-in user (pass-through in open mode). */
 export function requireAuth(req, res, next) {
   if (!config.authEnabled || req.account) return next();
+  if (isTokenRequest(req)) return notSignedIn(res);
   req.session.returnTo = req.originalUrl;
   redirectToLogin(req, res);
 }
@@ -200,7 +209,51 @@ async function isBotMaster(key, userId) {
   return Boolean(member && member.roles.cache.hasAny(...roles));
 }
 
-function forbidGuild(res) {
+/** How a live check looks up a member the bot has not cached: one platform API call. */
+export const fetchMemberFromGuild = async (guild, userId) => guild.members.fetch(userId);
+
+/**
+ * Does this person manage the guild right now, as the bot sees it: its owner, a member with
+ * Manage Server or Administrator, or a bot master? Used for app (token) requests, which cannot
+ * refresh the sign-in snapshot of guilds the web dashboard relies on, so a lost right must count
+ * at once. Works for Fluxer too: its members have the discord.js shape (src/platform/compat.js).
+ * `fetchMember` replaces the uncached lookup (push notifications cache misses, src/lib/push.js).
+ */
+export async function managesGuildLive(key, userId, { fetchMember = fetchMemberFromGuild } = {}) {
+  if (!userId) return false;
+  const guild = guildByKey(key);
+  if (!guild) return false;
+  if (guild.ownerId === userId) return true;
+  const member = guild.members.cache.get(userId) ?? (await fetchMember(guild, userId).catch(() => null));
+  if (!member) return false;
+  if (member.permissions?.has('ManageGuild') || member.permissions?.has('Administrator')) return true;
+  const roles = await getBotMasterRoles(key);
+  return roles.length > 0 && Boolean(member.roles?.cache.hasAny(...roles));
+}
+
+/**
+ * The live check for an app (token) request. Only for a guild the person administered at sign-in,
+ * or one with bot-master roles set: otherwise any signed-in token could make the bot look people
+ * up in every server it is in, one Discord API call per request.
+ */
+export async function tokenManagesGuild(req, key) {
+  return accountManagesGuildLive(req.account, key);
+}
+
+/**
+ * tokenManagesGuild for an account rather than a request, so a push notification's recipients
+ * (src/lib/push.js) are checked by the same rule. App tokens exist only with sign-in enabled, so
+ * the sign-in snapshot is the account's own guild lists.
+ * @param {{ identities: Array<{ platform: string, platformUserId: string, guildIds: string[] }> }} account
+ */
+export async function accountManagesGuildLive(account, key, options) {
+  if (!adminKeysOf(account, allGuildKeys()).has(key) && !(await getBotMasterRoles(key)).length) return false;
+  const platform = splitPlatformGuildId(key)?.platform ?? 'discord';
+  return managesGuildLive(key, identityFor(account, platform)?.platformUserId ?? null, options);
+}
+
+function forbidGuild(req, res) {
+  if (isTokenRequest(req)) return res.status(403).json({ error: 'You do not manage this server.' });
   res.status(403).render('error', {
     title: 'Forbidden',
     heading: 'Not an admin',
@@ -212,14 +265,20 @@ function forbidGuild(res) {
 export function requireGuildAdmin(req, res, next) {
   if (!config.authEnabled) return next();
   if (!req.account) {
+    if (isTokenRequest(req)) return notSignedIn(res);
     req.session.returnTo = req.originalUrl;
     return redirectToLogin(req, res);
   }
   const key = req.params.guildId;
+  if (req.viaToken) {
+    return tokenManagesGuild(req, key)
+      .then((ok) => (ok ? next() : forbidGuild(req, res)))
+      .catch(() => forbidGuild(req, res));
+  }
   if (adminGuildIds(req).has(key)) return next();
   isBotMaster(key, userIdForGuild(req, key))
-    .then((ok) => (ok ? next() : forbidGuild(res)))
-    .catch(() => forbidGuild(res));
+    .then((ok) => (ok ? next() : forbidGuild(req, res)))
+    .catch(() => forbidGuild(req, res));
 }
 
 /** Kept for backwards compatibility with earlier route code. */
@@ -250,10 +309,12 @@ export function forbidOwner(res) {
 export function requireOwner(req, res, next) {
   if (!config.authEnabled) return next();
   if (!req.account) {
+    if (isTokenRequest(req)) return notSignedIn(res);
     req.session.returnTo = req.originalUrl;
     return redirectToLogin(req, res);
   }
   if (isOwner(req)) return next();
+  if (isTokenRequest(req)) return res.status(403).json({ error: "Restricted to Sylo's operators." });
   forbidOwner(res);
 }
 
@@ -273,9 +334,26 @@ export function requireRealUser(req, res, next) {
 
 // --- sessions and the OAuth routes -------------------------------------------------
 
-/** Resolve the session cookie to an account for this request. */
+/**
+ * Resolve the request to an account: an app token on an /api/ path (src/web/lib/bearer.js), else
+ * the session cookie. A request that presents a token is judged by the token alone, so a bad
+ * token never falls back to a cookie.
+ */
 async function attachAccount(req, _res, next) {
   try {
+    const token = bearerToken(req);
+    if (token !== null) {
+      const record = await findApiToken(token);
+      if (record) {
+        req.account = { id: record.accountId, identities: await identitiesOf(record.accountId) };
+        req.viaToken = true;
+        req.apiTokenId = record.id;
+        touchApiToken(record, { ttlMs: API_TOKEN_TTL_MS }).catch((err) =>
+          log.error('auth', 'token touch failed:', err.message)
+        );
+      }
+      return next();
+    }
     const sid = req.session?.sid;
     if (sid) {
       const session = await getSession(sid);
@@ -344,9 +422,13 @@ export function mountAuth(app) {
       })
     );
     app.use(attachAccount);
-    // Expired sessions are dead weight; sweep them a few times a day.
+    // Expired sessions (and app tokens, sign-in codes and push relay registrations unused for 90
+    // days) are dead weight; sweep them a few times a day.
     setInterval(
-      () => purgeExpiredSessions().catch((err) => log.error('auth', 'session purge failed:', err.message)),
+      () =>
+        Promise.all([purgeExpiredSessions(), purgeExpiredApiTokens(), purgeStaleRelayRegistrations()]).catch(
+          (err) => log.error('auth', 'session purge failed:', err.message)
+        ),
       6 * 60 * 60 * 1000
     ).unref();
   }
@@ -362,6 +444,7 @@ export function mountAuth(app) {
       config.authEnabled &&
       req.method === 'GET' &&
       req.account &&
+      !req.viaToken &&
       (req.path === '/' || req.path.startsWith('/guilds'))
     ) {
       const stale = staleIdentities(req.account, GUILDS_TTL_MS).find((i) => providers[i.platform]?.enabled());

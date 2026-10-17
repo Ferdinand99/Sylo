@@ -1,7 +1,7 @@
 # Privacy Policy — Sylo
 
 **Effective date:** 2 September 2026
-**Last updated:** 4 September 2026
+**Last updated:** 17 October 2026
 
 This Privacy Policy explains what data the **Sylo** Discord application and its
 test instance **Sylo - Test** (the "Bot"), and the Sylo web dashboard (the
@@ -98,16 +98,37 @@ The Dashboard can run with or without login.
 
 - **Open mode (no login):** the Dashboard collects no personal data of its own
   beyond ordinary server request logs (section 5). It sets no cookies.
-- **Discord login enabled:** when you choose "Log in with Discord", the Operator
-  receives, via Discord OAuth2 (`identify` and `guilds` scopes), your Discord
-  user ID, username, avatar, and the list of servers you are in together with
-  your permission level in each. This is used only to show your name in the
-  Dashboard and to check that you administer a given server. It is held in **one
-  signed session cookie** in your browser (`httpOnly`, `SameSite=Lax`), is
-  **not** written to the database, and is cleared when you log out or the
-  session expires (7 days). No analytics or tracking cookies are used. The
-  Discord access token obtained during login is used once to read the above and
-  is not stored.
+- **Dashboard login enabled:** when you choose "Log in with Discord" or "Log in
+  with Fluxer", the Operator receives, via that platform's OAuth2 (`identify` and
+  `guilds` scopes), your user ID, username, avatar, and the list of servers you
+  are in together with your permission level in each. This is used only to show
+  your name in the Dashboard and to check that you administer a given server.
+  The Dashboard keeps a **dashboard account** in its database: for each platform
+  you signed in with, your user ID, username, avatar, the IDs of the servers you
+  administer (not every server you are in), and when that list was last
+  refreshed. Connecting a second platform adds it to the same account. Each
+  login also creates a **session record** in the database (a random session ID,
+  the account it belongs to, when it was created and when it expires). Your
+  browser holds **one signed session cookie** (`httpOnly`, `SameSite=Lax`) with
+  that session ID and short-lived sign-in state (a CSRF token, the login's
+  `state` value, the page to return to, the server you last viewed, and an app
+  sign-in in progress). No analytics or tracking cookies are used. The access
+  token obtained during login is used once to read the above and is not stored.
+- **Sylo app sign-in:** if you sign in to the Sylo app, you use the same login
+  in a browser window, and the Dashboard then stores one record per signed-in
+  device in its database: the account it belongs to, the device name the app
+  sends (for example "iPhone"), when the sign-in was created and last used, and
+  when it expires. The access token the app uses is stored **only as a hash**,
+  never in readable form. During sign-in, a one-time code (also stored only as a
+  hash) is valid for 60 seconds. Your account page lists your signed-in devices
+  and lets you revoke them.
+- **Sylo app notifications:** if you turn on notifications in the app, the
+  device's record also holds its Apple push token (or, on a self-hosted
+  instance, a relay token that stands for it), whether it is a development or
+  production build, and the servers you muted. When a member writes in a
+  ticket on a server whose tickets you may see, the notification (the server's
+  name, the member's name and the first 180 characters of the message) is sent
+  to Apple, which delivers it to your device.
 
 ## 4. Legal basis for processing
 
@@ -122,7 +143,9 @@ for modmail transcripts (section 1).
 | Running the modules a server enables (leveling, AFK, birthdays, counting, invite tracking, temporary voice channels, giveaways, polls, starboard, server statistics/insights) | Operating the features a server's administrators have turned on and its members choose to use |
 | Moderation & safety records (infractions/case log, ban appeals, auto-moderation, config audit log) | The interest of the server and its members in keeping the community safe and keeping an auditable record of moderation decisions |
 | Modmail ticket transcripts | Handling, and being able to review, the contact/support requests a member starts |
-| Dashboard login (Discord OAuth2 identity + guild list) | Authenticating server administrators; taken only when you choose "Log in with Discord" |
+| Dashboard login (Discord or Fluxer OAuth2 identity, the servers you administer, session records) | Authenticating server administrators; taken only when you choose "Log in with Discord" or "Log in with Fluxer" |
+| Sylo app sign-in (device name, sign-in times, hashed token) | Keeping you signed in on a device you chose to sign in on, and letting you see and revoke those devices |
+| Sylo app notifications (push or relay token, muted servers, notification text) | Telling staff about new ticket messages, which they turned on in the app |
 | Operational logs | Security, abuse prevention and debugging |
 | Game-stat cache | Serving `/stats` responses quickly without repeatedly querying the upstream provider |
 
@@ -159,6 +182,17 @@ operationally useful.
   backups (section 7), the encrypted-in-transit database snapshot is sent to that
   destination (a WebDAV server and/or a Discord webhook), which the Operator
   controls.
+- **Apple Push Notification service** — if you turn on notifications in the Sylo
+  app, each notification's text (server name, member name, message preview) and
+  your device's push token are sent to Apple to deliver it, under
+  [Apple's Privacy Policy](https://www.apple.com/legal/privacy/).
+- **The hosted Sylo as a notification relay** — a self-hosted instance cannot
+  talk to Apple for the Sylo app itself, so it sends each notification through
+  the hosted Sylo (`app.sylobot.com`), which passes it on to Apple and keeps no
+  copy of its text. The relay stores only the device's push token, a hashed
+  relay token, which instance registered it and when it was last used. An
+  Operator can turn this off (`PUSH_RELAY_URL` empty), which turns off
+  notifications for that instance.
 
 No other third parties receive your data.
 
@@ -185,7 +219,24 @@ No other third parties receive your data.
   data.
 - **Ephemeral rows** — ended polls and emptied temporary-voice-channel records —
   are deleted automatically.
-- **Session data** lives only in your browser cookie.
+- **Dashboard sessions** are deleted when you log out, and expire after 7 days;
+  expired session records are removed automatically a few times a day.
+- **Dashboard account:** a platform you connected is removed from your account
+  when you disconnect it on the account page (the last one cannot be
+  disconnected). To delete the whole account, contact the Operator (section 9).
+- **Sylo app sign-ins** are deleted when you sign out in the app, revoke the
+  device under **Signed-in devices** on the Dashboard's account page, or
+  disconnect a sign-in (Discord or Fluxer) from your account, which removes all
+  of the account's app sign-ins. A sign-in not used for 90 days expires and is
+  deleted automatically. One-time sign-in codes are deleted when used; an unused
+  one stops working after 60 seconds and is deleted automatically.
+- **Notification settings** (push or relay token, muted servers) are part of the
+  app sign-in and go with it; turning notifications off in the app removes the
+  token at once, and signing out or revoking the device removes it with the
+  sign-in. Relay registrations at the hosted Sylo are removed when the app turns
+  notifications off, when Apple reports the device gone, or after 90 days
+  without use (after a sign-out the instance no longer has the relay token, so
+  that registration can't be used and simply expires).
 
 For any request the above does not cover, contact the Operator (section 9).
 
@@ -208,7 +259,11 @@ For any request the above does not cover, contact the Operator (section 9).
 | Modmail ticket transcripts | Until erased, or the server's "delete closed tickets after N days" limit (off by default) | `/forget`; admin-assisted erasure; Bot removed; a closed ticket ageing past the server's limit |
 | Notifier bookkeeping *(no personal data)* | Rolling | Automatic pruning; Bot removed |
 | Game-stat cache | 5 minutes (configurable) | TTL expiry |
-| Dashboard session | 7 days | Logout or expiry (browser cookie only) |
+| Dashboard account (per platform: user ID, username, avatar, servers you administer) | Until removed | Disconnecting that platform on the account page; on request to the Operator |
+| Dashboard session (session record + browser cookie) | 7 days | Logout or expiry (expired records are removed automatically) |
+| Sylo app sign-in (device record, hashed token) | 90 days from the last use | Sign out in the app; revoke on the account page; a sign-in disconnected from the account; 90 days without use |
+| One-time app sign-in code (hashed) | 60 seconds | Used, or expired and deleted automatically |
+| Notification relay registration (push token, hashed relay token, instance) | 90 days from the last use | Notifications turned off in the app; Apple reports the device gone; 90 days without use |
 | Operational logs | As long as operationally useful | Rotated or discarded by the Operator |
 
 **Backups.** The database is snapshotted automatically for recovery; the newest
@@ -248,6 +303,15 @@ Consider your own legal obligations for the data your instance stores.
 This policy may be updated; the "Last updated" date will change and the revised
 version will be published at the same URL.
 
+- **17 October 2026** — added Sylo app notifications: what is stored for them
+  (section 3), Apple and the hosted relay as recipients (section 6), and when
+  they are deleted (section 7).
+- **17 October 2026** — added the Sylo app sign-in: what it stores about each
+  signed-in device (section 3), its legal basis (section 4), and when it is
+  deleted (section 7). Corrected the Dashboard login description: since Sylo 4.0
+  it covers Fluxer as well as Discord, and the dashboard account and session
+  records are stored in the database (the cookie holds only a session ID and
+  short-lived sign-in state); added both to the retention schedule.
 - **4 September 2026** — added a legal-basis section (section 4) and a retention
   schedule (section 7); documented off-site backup retention; refreshed the data
   inventory (case log, voice XP, birthdays, RSS/social notifier markers); added

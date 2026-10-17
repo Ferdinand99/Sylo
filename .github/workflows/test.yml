@@ -7,6 +7,9 @@ on:
   pull_request:
   push:
     branches: [main]
+    # The iOS app has its own workflow (ios.yml).
+    paths-ignore:
+      - 'apps/**'
 
 permissions:
   contents: read

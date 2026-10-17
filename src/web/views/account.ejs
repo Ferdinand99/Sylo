@@ -26,4 +26,21 @@
   </section>
 <% }); %>
 
+<section class="card">
+  <h2>Signed-in devices</h2>
+  <p class="muted">Devices signed in to the Sylo app with this account. Revoke one you no longer use or don't recognise; it is signed out at once.</p>
+  <% if (!devices.length) { %>
+    <p class="muted">No devices are signed in.</p>
+  <% } %>
+  <% devices.forEach(function (d) { %>
+    <div style="display: flex; gap: 0.75rem; justify-content: space-between; align-items: center; margin-top: 0.6rem;">
+      <span><strong><%= d.deviceName %></strong> <span class="muted">· last used <%= d.lastUsed %></span></span>
+      <form method="post" action="/account/devices/<%= d.id %>/revoke" class="u-m0">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="btn">Revoke</button>
+      </form>
+    </div>
+  <% }); %>
+</section>
+
 <%- include('partials/footer') %>

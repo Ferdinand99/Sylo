@@ -86,6 +86,13 @@ const base_client = () => ({
   ws: { ping: 5 },
   user: { displayAvatarURL: () => null },
   commands: new Map(),
+  // No user can be fetched: names fall back to their ids (resolveUserTags).
+  users: {
+    cache: new Map(),
+    fetch: async () => {
+      throw new Error('Unknown User');
+    },
+  },
 });
 const discordClient = base_client();
 discordClient.guilds = {

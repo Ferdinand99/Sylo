@@ -3,8 +3,10 @@
 // already has a signed-in req.session.user — same cookie-session V1 uses,
 // nothing new. Read-only reuse of V1's data-layer functions (baseContext,
 // getGuild, requireGuildAdmin) — none of them are modified by this file.
-import { accountPlatforms } from '../lib/accountView.js';
+import { accountDevices, accountPlatforms } from '../lib/accountView.js';
+import { revokeApiToken } from '../../db/apiTokens.js';
 import { unlinkIdentity } from '../../db/accounts.js';
+import { openTicketCount, unreadTicketCount } from '../../db/tickets.js';
 import { allGuilds, clientOfGuild, primaryClient } from '../../platform/platformOf.js';
 import { createRequire } from 'node:module';
 import { Router, raw } from 'express';
@@ -15,6 +17,8 @@ import {
   requireRealUser,
   isOwner,
   manageableGuilds,
+  managesGuildLive,
+  userIdForGuild,
   currentUser,
   sessionUserId,
   botInviteUrls,
@@ -239,15 +243,51 @@ function clampDays(raw) {
 
 // Same list V1's server switcher and "Choose a server" picker use
 // (src/web/middleware/auth.js:129) — the SPA's own guild picker.
-router.get('/guilds', (req, res) => {
-  res.json({ guilds: manageableGuilds(req) });
-});
+router.get(
+  '/guilds',
+  asyncHandler(async (req, res) => {
+    const guilds = manageableGuilds(req);
+    if (!req.viaToken) return res.json({ guilds });
+    // The Sylo app: the sign-in snapshot, minus any server where the person no longer has the
+    // rights (checked live, the same way requireGuildAdmin does for token requests).
+    const live = await Promise.all(guilds.map((g) => managesGuildLive(g.id, userIdForGuild(req, g.id))));
+    // Ticket counts for the app's server list: which servers have tickets waiting.
+    const withCounts = await Promise.all(
+      guilds
+        .filter((_, i) => live[i])
+        .map(async (g) => ({
+          ...g,
+          openTickets: await openTicketCount(g.id),
+          unreadTickets: await unreadTicketCount(g.id),
+        }))
+    );
+    res.json({ guilds: withCounts });
+  })
+);
 
-// The signed-in person's connected platforms (the account page), and disconnecting one.
-router.get('/account', (req, res) => {
-  if (!req.account) return res.json({ open: true, platforms: [] });
-  res.json({ open: false, platforms: accountPlatforms(req.account) });
-});
+// The signed-in person's connected platforms and signed-in Sylo app devices (the account
+// page), disconnecting a platform, and signing a device out.
+router.get(
+  '/account',
+  asyncHandler(async (req, res) => {
+    if (!req.account) return res.json({ open: true, platforms: [], devices: [] });
+    res.json({
+      open: false,
+      platforms: accountPlatforms(req.account),
+      devices: await accountDevices(req.account, req.apiTokenId),
+    });
+  })
+);
+
+router.post(
+  '/account/devices/:id/revoke',
+  asyncHandler(async (req, res) => {
+    if (!req.account) return res.status(400).json({ error: 'Not signed in.' });
+    const ok = await revokeApiToken(req.account.id, req.params.id);
+    if (!ok) return res.status(404).json({ error: 'That device was already signed out.' });
+    res.json({ ok: true });
+  })
+);
 
 router.post(
   '/account/disconnect/:platform',
@@ -905,6 +945,8 @@ router.get(
       nativeMappable: NATIVE_MAPPABLE,
       presetKeys: PRESET_KEYS,
       modlogChannelId: settings?.modlog_channel_id || '',
+      // Native AutoMod rules exist on Discord only; the Sylo app hides that section elsewhere.
+      nativeAutomod: Boolean(platformInfo(req.guild).capabilities.nativeAutomod),
     });
   })
 );

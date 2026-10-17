@@ -245,4 +245,5 @@ export const saveAutomodImmunity = (guildId, exemptRoles) =>
 
 export const getAccount = () => apiFetch('/api/v2/account');
 export const disconnectAccount = (platform) => postJson(`/api/v2/account/disconnect/${platform}`, {});
+export const revokeDevice = (id) => postJson(`/api/v2/account/devices/${encodeURIComponent(id)}/revoke`, {});
 export const getInvites = () => apiFetch('/api/v2/invites').then((d) => d.invites);

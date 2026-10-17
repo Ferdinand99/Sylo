@@ -873,6 +873,64 @@ export const MIGRATIONS = [
       CREATE INDEX idx_sessions_expires ON sessions (expires_at);
     `);
   },
+
+  // API tokens for the Sylo app and the one-time codes it trades for one — see
+  // src/db/apiTokens.js. Only SHA-256 hashes of either are stored.
+  (database) => {
+    database.exec(`
+      CREATE TABLE api_tokens (
+        id           TEXT PRIMARY KEY,
+        account_id   TEXT NOT NULL,
+        token_hash   TEXT NOT NULL UNIQUE,
+        device_name  TEXT NOT NULL DEFAULT '',
+        created_at   INTEGER NOT NULL,
+        last_used_at INTEGER NOT NULL,
+        expires_at   INTEGER NOT NULL
+      );
+      CREATE INDEX idx_api_tokens_account ON api_tokens (account_id);
+      CREATE INDEX idx_api_tokens_expires ON api_tokens (expires_at);
+      CREATE TABLE mobile_codes (
+        code_hash  TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        challenge  TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+    `);
+  },
+
+  // Push notifications for the Sylo app (internal/push-notifications-plan.md): the push fields on
+  // an app token's row, so revoking a device ends its notifications, and the hosted relay's
+  // registrations (src/db/pushRelay.js). See registerPostgresMigration(49, ...) in
+  // src/db/apiTokens.js for the Postgres catch-up.
+  (database) => {
+    database.exec(`
+      ALTER TABLE api_tokens ADD COLUMN push_token TEXT;
+      ALTER TABLE api_tokens ADD COLUMN push_relay_token TEXT;
+      ALTER TABLE api_tokens ADD COLUMN push_env TEXT;
+      ALTER TABLE api_tokens ADD COLUMN push_origin TEXT;
+      ALTER TABLE api_tokens ADD COLUMN push_muted TEXT NOT NULL DEFAULT '[]';
+      CREATE TABLE push_relay_registrations (
+        token_hash   TEXT PRIMARY KEY,
+        device_token TEXT NOT NULL,
+        environment  TEXT NOT NULL,
+        instance     TEXT NOT NULL,
+        created_at   INTEGER NOT NULL,
+        last_used_at INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_push_relay_device ON push_relay_registrations (device_token, instance);
+      CREATE INDEX idx_push_relay_used ON push_relay_registrations (last_used_at);
+    `);
+  },
+
+  // When a relay registration last sent a notification (NULL until its first): one that never
+  // sends is purged after 7 days rather than 90 — see registerPostgresMigration(50, ...) in
+  // src/db/pushRelay.js.
+  (database) => {
+    database.exec(`
+      ALTER TABLE push_relay_registrations ADD COLUMN sent_at INTEGER;
+      UPDATE push_relay_registrations SET sent_at = last_used_at WHERE last_used_at > created_at;
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

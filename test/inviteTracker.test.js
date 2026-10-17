@@ -30,6 +30,11 @@ test('normaliseInviteTrackerConfig: validates channel id, clamps grace hours', (
   assert.equal(normaliseInviteTrackerConfig({ graceHours: -5 }).graceHours, 0);
   assert.equal(normaliseInviteTrackerConfig({ graceHours: 9999 }).graceHours, 168);
   assert.equal(normaliseInviteTrackerConfig({ graceHours: '48' }).graceHours, 48);
+  // 0 turns the leave-early guard off; only a missing or unreadable value means the default.
+  assert.equal(normaliseInviteTrackerConfig({ graceHours: 0 }).graceHours, 0);
+  assert.equal(normaliseInviteTrackerConfig({ graceHours: '0' }).graceHours, 0);
+  assert.equal(normaliseInviteTrackerConfig({ graceHours: '' }).graceHours, 24);
+  assert.equal(normaliseInviteTrackerConfig({ graceHours: 'abc' }).graceHours, 24);
 });
 
 test('net invites = regular - leaves + bonus', async () => {

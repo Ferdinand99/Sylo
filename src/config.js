@@ -180,6 +180,25 @@ if (optionalOrNull('APPLE_PRIVATE_KEY') && !applePrivateKey) {
   console.error('[config] APPLE_PRIVATE_KEY is not a valid private key (PEM, "\\n"-escaped PEM or base64).');
 }
 const appleVendorNumber = optionalOrNull('APPLE_VENDOR_NUMBER');
+// Push notifications for the Sylo app (internal/push-notifications-plan.md). Only the holder of
+// the app's APNs key can talk to Apple: the hosted Sylo sets APNS_* and also relays for
+// self-hosted instances, which send through PUSH_RELAY_URL (unset = the hosted Sylo, set but
+// empty = no push).
+const apnsKeyId = optionalOrNull('APNS_KEY_ID');
+const apnsTeamId = optionalOrNull('APNS_TEAM_ID');
+const apnsPrivateKey = normalisePrivateKey(process.env.APNS_PRIVATE_KEY);
+if (optionalOrNull('APNS_PRIVATE_KEY') && !apnsPrivateKey) {
+  console.error('[config] APNS_PRIVATE_KEY is not a valid private key (PEM, "\\n"-escaped PEM or base64).');
+}
+const apnsTopic = optional('APNS_TOPIC', 'net.opland.sylo');
+let pushRelayUrl =
+  process.env.PUSH_RELAY_URL === undefined
+    ? 'https://app.sylobot.com'
+    : process.env.PUSH_RELAY_URL.trim().replace(/\/+$/, '') || null;
+if (pushRelayUrl && !/^https?:\/\/[^\s/]+[^\s]*$/i.test(pushRelayUrl)) {
+  console.error('[config] PUSH_RELAY_URL must be an http(s) URL; push through the relay is off.');
+  pushRelayUrl = null;
+}
 const kickClientSecret = optionalOrNull('KICK_CLIENT_SECRET');
 // Signs session cookies and short-lived tokens (e.g. verification links), so it
 // must always exist. When unset we generate one; that only matters for
@@ -284,6 +303,15 @@ export const config = Object.freeze({
   applePrivateKey,
   appleVendorNumber,
   appleEnabled: Boolean(appleKeyId && applePrivateKey),
+
+  // Push notifications (see above). apnsEnabled: this instance talks to Apple itself and serves
+  // the relay; otherwise it can push through pushRelayUrl when that is set.
+  apnsKeyId,
+  apnsTeamId,
+  apnsPrivateKey,
+  apnsTopic,
+  apnsEnabled: Boolean(apnsKeyId && apnsTeamId && apnsPrivateKey),
+  pushRelayUrl,
 
   // Game stats
   gametoolsApiBase: optional('GAMETOOLS_API_BASE', 'https://api.gametools.network').replace(/\/+$/, ''),
