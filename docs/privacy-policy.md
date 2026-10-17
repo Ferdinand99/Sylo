@@ -1,7 +1,7 @@
 # Privacy Policy — Sylo
 
 **Effective date:** 2 September 2026
-**Last updated:** 4 September 2026
+**Last updated:** 17 October 2026
 
 This Privacy Policy explains what data the **Sylo** Discord application and its
 test instance **Sylo - Test** (the "Bot"), and the Sylo web dashboard (the
@@ -108,6 +108,14 @@ The Dashboard can run with or without login.
   session expires (7 days). No analytics or tracking cookies are used. The
   Discord access token obtained during login is used once to read the above and
   is not stored.
+- **Sylo app sign-in:** if you sign in to the Sylo app, you use the same login
+  in a browser window, and the Dashboard then stores one record per signed-in
+  device in its database: the account it belongs to, the device name the app
+  sends (for example "iPhone"), when the sign-in was created and last used, and
+  when it expires. The access token the app uses is stored **only as a hash**,
+  never in readable form. During sign-in, a one-time code (also stored only as a
+  hash) is valid for 60 seconds. Your account page lists your signed-in devices
+  and lets you revoke them.
 
 ## 4. Legal basis for processing
 
@@ -123,6 +131,7 @@ for modmail transcripts (section 1).
 | Moderation & safety records (infractions/case log, ban appeals, auto-moderation, config audit log) | The interest of the server and its members in keeping the community safe and keeping an auditable record of moderation decisions |
 | Modmail ticket transcripts | Handling, and being able to review, the contact/support requests a member starts |
 | Dashboard login (Discord OAuth2 identity + guild list) | Authenticating server administrators; taken only when you choose "Log in with Discord" |
+| Sylo app sign-in (device name, sign-in times, hashed token) | Keeping you signed in on a device you chose to sign in on, and letting you see and revoke those devices |
 | Operational logs | Security, abuse prevention and debugging |
 | Game-stat cache | Serving `/stats` responses quickly without repeatedly querying the upstream provider |
 
@@ -186,6 +195,12 @@ No other third parties receive your data.
 - **Ephemeral rows** — ended polls and emptied temporary-voice-channel records —
   are deleted automatically.
 - **Session data** lives only in your browser cookie.
+- **Sylo app sign-ins** are deleted when you sign out in the app, revoke the
+  device under **Signed-in devices** on the Dashboard's account page, or
+  disconnect a sign-in (Discord or Fluxer) from your account, which removes all
+  of the account's app sign-ins. A sign-in not used for 90 days expires and is
+  deleted automatically. One-time sign-in codes are deleted when used; an unused
+  one stops working after 60 seconds and is deleted automatically.
 
 For any request the above does not cover, contact the Operator (section 9).
 
@@ -209,6 +224,8 @@ For any request the above does not cover, contact the Operator (section 9).
 | Notifier bookkeeping *(no personal data)* | Rolling | Automatic pruning; Bot removed |
 | Game-stat cache | 5 minutes (configurable) | TTL expiry |
 | Dashboard session | 7 days | Logout or expiry (browser cookie only) |
+| Sylo app sign-in (device record, hashed token) | 90 days from the last use | Sign out in the app; revoke on the account page; a sign-in disconnected from the account; 90 days without use |
+| One-time app sign-in code (hashed) | 60 seconds | Used, or expired and deleted automatically |
 | Operational logs | As long as operationally useful | Rotated or discarded by the Operator |
 
 **Backups.** The database is snapshotted automatically for recovery; the newest
@@ -248,6 +265,9 @@ Consider your own legal obligations for the data your instance stores.
 This policy may be updated; the "Last updated" date will change and the revised
 version will be published at the same URL.
 
+- **17 October 2026** — added the Sylo app sign-in: what it stores about each
+  signed-in device (section 3), its legal basis (section 4), and when it is
+  deleted (section 7).
 - **4 September 2026** — added a legal-basis section (section 4) and a retention
   schedule (section 7); documented off-site backup retention; refreshed the data
   inventory (case log, voice XP, birthdays, RSS/social notifier markers); added

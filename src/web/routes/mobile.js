@@ -10,10 +10,15 @@
 // 3. The app posts code + PKCE verifier to POST /api/mobile/token and gets an API token
 //    (src/db/apiTokens.js), used as `Authorization: Bearer`. DELETE /api/mobile/token signs out.
 //
-// Open mode (no OAuth configured) has no accounts to hand tokens to: every route here is a 404.
+// Before any of that, GET /api/mobile/info tells the app whether an address it was given is a
+// Sylo, whether it can sign in there and what this version's app API supports.
+//
+// Open mode (no OAuth configured) has no accounts to hand tokens to: every route here but
+// /api/mobile/info is a 404.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Router } from 'express';
 import { config } from '../../config.js';
+import { BUILD } from '../../bot/lib/buildInfo.js';
 import { identitiesOf } from '../../db/accounts.js';
 import {
   API_TOKEN_TTL_MS,
@@ -48,6 +53,22 @@ function currentFlow(req) {
   return flow;
 }
 
+/**
+ * When this browser has just finished an app sign-in: the browser could not open the app (no app
+ * installed for sylo://) or the person pressed Allow twice. Say so instead of "failed".
+ */
+function finishedRecently(req, res) {
+  const at = req.session?.mobileDone;
+  if (!at || Date.now() - at > FLOW_TTL_MS) return false;
+  res.status(409).render('error', {
+    title: 'Already signed in',
+    heading: 'Sign-in already complete',
+    message:
+      'This sign-in is already complete. Go back to the Sylo app. If the app did not open, start the sign-in again from the app.',
+  });
+  return true;
+}
+
 const authEnabled = (_req, res, next) => (config.authEnabled ? next() : res.status(404).end());
 
 // --- the browser part (/auth/mobile) -------------------------------------------------------
@@ -72,6 +93,7 @@ mobileAuthRouter.get('/start', (req, res) => {
     });
   }
   req.session.mobile = { challenge, state, nonce: randomBytes(24).toString('base64url'), at: Date.now() };
+  req.session.mobileDone = undefined;
   if (req.account) return res.redirect('/auth/mobile/confirm');
   req.session.returnTo = '/auth/mobile/confirm';
   const offered = enabledProviders();
@@ -81,6 +103,7 @@ mobileAuthRouter.get('/start', (req, res) => {
 
 mobileAuthRouter.get('/confirm', (req, res) => {
   const flow = currentFlow(req);
+  if (!flow && finishedRecently(req, res)) return;
   if (!flow || !req.account) {
     return res.status(400).render('error', {
       title: 'Sign-in failed',
@@ -101,6 +124,7 @@ mobileAuthRouter.get('/confirm', (req, res) => {
 mobileAuthRouter.post('/confirm', async (req, res, next) => {
   try {
     const flow = currentFlow(req);
+    if (!flow && finishedRecently(req, res)) return;
     if (!flow || !req.account || !sameString(req.body?.nonce, flow.nonce)) {
       return res.status(403).render('error', {
         title: 'Sign-in failed',
@@ -109,6 +133,7 @@ mobileAuthRouter.post('/confirm', async (req, res, next) => {
       });
     }
     req.session.mobile = undefined; // one code per flow
+    req.session.mobileDone = Date.now();
     const code = await createMobileCode(req.account.id, flow.challenge);
     res.redirect(callback({ code, state: flow.state }));
   } catch (err) {
@@ -119,6 +144,29 @@ mobileAuthRouter.post('/confirm', async (req, res, next) => {
 // --- the app part (/api/mobile) ------------------------------------------------------------
 
 export const mobileApiRouter = Router();
+
+// What this server's app API supports, so a newer app can tell what an older Sylo lacks.
+const FEATURES = Object.freeze(['app-login', 'live-access']);
+
+// Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode
+// server must still say it is a Sylo, just one the app cannot sign in to. Its own rate-limit bucket,
+// so looking a server up does not use up the sign-in attempts on /token.
+mobileApiRouter.get(
+  '/info',
+  rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `mobile-info|${req.ip}` }),
+  (_req, res) => {
+    res.json({
+      name: 'Sylo',
+      version: BUILD.version,
+      apiVersion: 1,
+      login: config.authEnabled,
+      loginProviders: config.authEnabled ? enabledProviders().map((p) => p.platform) : [],
+      platforms: [config.discordEnabled && 'discord', config.fluxerEnabled && 'fluxer'].filter(Boolean),
+      features: FEATURES,
+    });
+  }
+);
+
 mobileApiRouter.use(authEnabled);
 
 const badGrant = (res) => res.status(400).json({ error: 'invalid_grant' });

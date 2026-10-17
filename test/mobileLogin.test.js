@@ -151,3 +151,21 @@ test('the token endpoint rejects a missing or malformed request', async () => {
     assert.match(res.headers.get('content-type'), /json/);
   }
 });
+
+test('Allow pressed again after the sign-in finished says so, instead of a failure', async () => {
+  setProfiles();
+  const b = browser();
+  const { challenge } = pkce();
+  const { html, allow } = await browserFlow(b, challenge);
+  assert.match(allow.headers.get('location'), /^sylo:/);
+  // The browser could not open the app (or the person pressed again): same nonce, same page.
+  const again = await b.get('/auth/mobile/confirm', form({ nonce: nonceOf(html) }));
+  assert.equal(again.status, 409);
+  assert.match(await again.text(), /already (complete|finished)/i);
+  const reload = await b.get('/auth/mobile/confirm');
+  assert.equal(reload.status, 409);
+  // Starting over from the app works as before.
+  const restart = await b.get(`/auth/mobile/start?challenge=${challenge}&state=${STATE}&platform=discord`);
+  assert.equal(restart.headers.get('location'), '/auth/mobile/confirm');
+  assert.equal((await b.get('/auth/mobile/confirm')).status, 200);
+});

@@ -3,7 +3,8 @@
 // already has a signed-in req.session.user — same cookie-session V1 uses,
 // nothing new. Read-only reuse of V1's data-layer functions (baseContext,
 // getGuild, requireGuildAdmin) — none of them are modified by this file.
-import { accountPlatforms } from '../lib/accountView.js';
+import { accountDevices, accountPlatforms } from '../lib/accountView.js';
+import { revokeApiToken } from '../../db/apiTokens.js';
 import { unlinkIdentity } from '../../db/accounts.js';
 import { allGuilds, clientOfGuild, primaryClient } from '../../platform/platformOf.js';
 import { createRequire } from 'node:module';
@@ -253,11 +254,29 @@ router.get(
   })
 );
 
-// The signed-in person's connected platforms (the account page), and disconnecting one.
-router.get('/account', (req, res) => {
-  if (!req.account) return res.json({ open: true, platforms: [] });
-  res.json({ open: false, platforms: accountPlatforms(req.account) });
-});
+// The signed-in person's connected platforms and signed-in Sylo app devices (the account
+// page), disconnecting a platform, and signing a device out.
+router.get(
+  '/account',
+  asyncHandler(async (req, res) => {
+    if (!req.account) return res.json({ open: true, platforms: [], devices: [] });
+    res.json({
+      open: false,
+      platforms: accountPlatforms(req.account),
+      devices: await accountDevices(req.account, req.apiTokenId),
+    });
+  })
+);
+
+router.post(
+  '/account/devices/:id/revoke',
+  asyncHandler(async (req, res) => {
+    if (!req.account) return res.status(400).json({ error: 'Not signed in.' });
+    const ok = await revokeApiToken(req.account.id, req.params.id);
+    if (!ok) return res.status(404).json({ error: 'That device was already signed out.' });
+    res.json({ ok: true });
+  })
+);
 
 router.post(
   '/account/disconnect/:platform',

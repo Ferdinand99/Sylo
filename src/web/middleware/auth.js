@@ -321,6 +321,7 @@ async function attachAccount(req, _res, next) {
       if (record) {
         req.account = { id: record.accountId, identities: await identitiesOf(record.accountId) };
         req.viaToken = true;
+        req.apiTokenId = record.id;
         touchApiToken(record, { ttlMs: API_TOKEN_TTL_MS }).catch((err) =>
           log.error('auth', 'token touch failed:', err.message)
         );
