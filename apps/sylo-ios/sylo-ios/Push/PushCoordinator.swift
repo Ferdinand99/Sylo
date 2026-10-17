@@ -2,7 +2,8 @@ import Foundation
 import Observation
 import SyloKit
 import UIKit
-import UserNotifications
+// The delegate methods below take the framework's non-Sendable types onto the main actor.
+@preconcurrency import UserNotifications
 import os
 
 /// Ticket notifications on this device: the permission, the APNs device token and handing it to
@@ -162,22 +163,26 @@ final class PushCoordinator: NSObject {
     private static let log = Logger(subsystem: "net.opland.sylo", category: "push")
 }
 
-// The system calls these on a queue of its own: they are nonisolated, read the notification there,
-// and hand only the parsed (Sendable) ticket to the main actor.
+// Main-actor isolated on purpose. iOS calls these through an Objective-C completion handler, and
+// Swift calls that handler where the async method finishes. A nonisolated method finishes on a
+// background thread, and UIKit stops the app when the tap's handler is called there (the
+// TestFlight crash on tapping a ticket notification). Isolated to the main actor, the method hops
+// there however iOS calls it, and the handler runs on the main thread.
 extension PushCoordinator: UNUserNotificationCenterDelegate {
-    nonisolated func userNotificationCenter(
+    @MainActor
+    func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        let ticket = TicketNotification(userInfo: notification.request.content.userInfo)
-        return await presentationOptions(for: ticket)
+        presentationOptions(for: TicketNotification(userInfo: notification.request.content.userInfo))
     }
 
-    nonisolated func userNotificationCenter(
+    @MainActor
+    func userNotificationCenter(
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
         guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
             let ticket = TicketNotification(userInfo: response.notification.request.content.userInfo)
         else { return }
-        await handleTap(on: ticket)
+        handleTap(on: ticket)
     }
 }
