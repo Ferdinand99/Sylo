@@ -175,3 +175,21 @@ test('preparing an already-prepared edit payload does not lose the cleared legen
   assert.equal(first.payload.content, '');
   assert.equal(prepareOutgoing(first.payload, { edit: true }).payload.content, '');
 });
+
+// Fluxer's SDK only applies a default allowedMentions to object payloads, never to a plain
+// string, and Sylo echoes user text in places (an unknown subcommand, an AFK note). Every new
+// message without its own allowedMentions may ping users only: no @everyone, @here or roles.
+test('prepareOutgoing: a message without allowedMentions cannot ping @everyone or roles', () => {
+  assert.deepEqual(prepareOutgoing('Unknown subcommand "@everyone"').payload.allowedMentions, {
+    parse: ['users'],
+  });
+  assert.deepEqual(prepareOutgoing({ content: 'x' }).payload.allowedMentions, { parse: ['users'] });
+});
+
+test('prepareOutgoing: an explicit allowedMentions is kept', () => {
+  const allowedMentions = { parse: ['everyone'], users: ['1'] };
+  assert.deepEqual(
+    prepareOutgoing({ content: '@everyone', allowedMentions }).payload.allowedMentions,
+    allowedMentions
+  );
+});

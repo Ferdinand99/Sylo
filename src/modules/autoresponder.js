@@ -14,6 +14,7 @@
 //   }
 import { on } from './dispatch.js';
 import { buildCustomReply } from './customCommands.js';
+import { sweepMap } from '../lib/sweepMap.js';
 
 export const AR_MATCH_MODES = ['contains', 'exact', 'startswith', 'wholeword'];
 export const AR_PLACEHOLDERS = ['{user}', '{username}', '{server}', '{channel}'];
@@ -66,6 +67,7 @@ export function matchesTrigger(content, trigger, mode) {
 
 // Per-channel cooldown so one busy trigger can't flood a channel.
 const lastFire = new Map(); // `${guildId}:${channelId}` -> ts
+sweepMap(lastFire, (at, now) => now - at > 300_000); // past the longest cooldown (300 s)
 
 on('autoresponder', 'messageCreate', async (message, rawConfig, guildId) => {
   if (message.author?.bot || !message.content || !message.member) return;

@@ -59,3 +59,15 @@ test('setCount forces an exact value, clamps invalid input, updates the record',
   assert.equal(st.current, 0);
   assert.equal(st.record, 42); // never drops
 });
+
+// Two messages handled at once both read the old count: both "5"s were accepted, or one person
+// could post "5" and "6" past allowSameUser. A count only moves on from the value it was read at.
+test('advanceCount only succeeds from the count it expects', async () => {
+  const G = '900000000000000991';
+  await resetCount(G);
+  const a = advanceCount(G, { current: 1, userId: 'a', messageId: 'm1', from: 0 });
+  const b = advanceCount(G, { current: 1, userId: 'b', messageId: 'm2', from: 0 });
+  assert.deepEqual((await Promise.all([a, b])).sort(), [false, true]);
+  assert.equal((await getCounting(G)).current, 1);
+  assert.equal(await advanceCount(G, { current: 2, userId: 'b', messageId: 'm3', from: 1 }), true);
+});

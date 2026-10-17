@@ -12,12 +12,13 @@ import { relayStaffReply, closeTicketWithNotice, buildTranscript } from '../../m
 
 const router = Router({ mergeParams: true });
 
+// Access first: a "not found" for a server Sylo is not in would tell anyone which servers it is in.
+router.use(requireTicketAccess);
 router.use((req, res, next) => {
   req.guild = getGuild(req);
   if (!req.guild) return res.status(404).render('guild-missing', { guildId: req.params.guildId });
   next();
 });
-router.use(requireTicketAccess);
 
 // List open + recently closed tickets.
 router.get(

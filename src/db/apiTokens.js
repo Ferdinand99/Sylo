@@ -47,6 +47,8 @@ registerPostgresMigration(
 const TOKEN_PREFIX = 'sylo_';
 /** How long an app token lives without being used; each use slides it forward. */
 export const API_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+// However often a token is used, it ends a year after sign-in: then the app signs in again.
+export const API_TOKEN_MAX_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000;
 const CODE_TTL_MS = 60_000;
 // A token's expiry slides forward with use, but rewriting the row on every request would be a
 // write per API call; once an hour is plenty for a 90-day lifetime.
@@ -214,11 +216,13 @@ export async function findApiToken(token) {
 
 /**
  * Record a use and slide the expiry forward, unless the last recorded use was under an hour ago.
+ * Never past API_TOKEN_MAX_LIFETIME_MS after the token was made.
  * @returns {Promise<boolean>} whether the row was written
  */
 export async function touchApiToken(record, { ttlMs, now = Date.now() }) {
   if (now - record.lastUsedAt < TOUCH_EVERY_MS) return false;
-  await s.touch.run(now, now + ttlMs, record.id);
+  const cap = record.createdAt + API_TOKEN_MAX_LIFETIME_MS;
+  await s.touch.run(now, Math.min(now + ttlMs, cap), record.id);
   return true;
 }
 
@@ -313,15 +317,25 @@ export async function clearApiTokenPush(id, expected) {
  * Mute or unmute one server (a guild key) for a token.
  * @returns {Promise<string[]>} the token's muted servers afterwards
  */
-export async function setApiTokenPushMuted(id, key, muted) {
-  const row = await s.tokenById.get(id);
-  if (!row) return [];
-  const list = mutedOf(row).filter((k) => k !== key);
-  if (muted) list.push(key);
-  const kept = list.slice(-MAX_MUTED);
-  await s.setMuted.run(JSON.stringify(kept), id);
-  return kept;
+export function setApiTokenPushMuted(id, key, muted) {
+  // Read-modify-write: two changes for one token run one after the other, so neither is lost.
+  const run = (muteChains.get(id) ?? Promise.resolve()).then(async () => {
+    const row = await s.tokenById.get(id);
+    if (!row) return [];
+    const list = mutedOf(row).filter((k) => k !== key);
+    if (muted) list.push(key);
+    const kept = list.slice(-MAX_MUTED);
+    await s.setMuted.run(JSON.stringify(kept), id);
+    return kept;
+  });
+  const settled = run.catch(() => {});
+  muteChains.set(id, settled);
+  settled.then(() => {
+    if (muteChains.get(id) === settled) muteChains.delete(id);
+  });
+  return run;
 }
+const muteChains = new Map(); // token id -> the last queued mute change
 
 /** Every live token with push set up: who a notification may go to, before the access check. */
 export async function pushRecipientTokens() {

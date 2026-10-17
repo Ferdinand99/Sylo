@@ -13,8 +13,13 @@
 //     logChannelId: '',
 //     kickAfterMinutes: 0,              // 0 = never kick unverified
 //   }
-import { guildKey } from '../platform/platformOf.js';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { allClientsReady, guildByKey, guildKey } from '../platform/platformOf.js';
+import {
+  clearVerificationKick,
+  dueVerificationKicks,
+  scheduleVerificationKick,
+} from '../db/verificationKicks.js';
+import { signToken, verifyToken } from '../lib/signedToken.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { on } from './dispatch.js';
 import { registerComponent } from '../bot/lib/components.js';
@@ -22,6 +27,7 @@ import { config } from '../config.js';
 import { getGuildModule, setGuildModule, isModuleEnabled } from '../db/modules.js';
 import { isPlatformGuildId } from '../lib/platformId.js';
 import { sendToChannel } from './lib/send.js';
+import { log } from '../lib/log.js';
 
 export const VERIFY_MODES = ['button', 'captcha'];
 const TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -66,32 +72,18 @@ export function effectiveMode(cfg) {
 
 // --- signed link tokens --------------------------------------------------
 
-function b64url(buf) {
-  return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
+// Signed with the "verify" purpose, so an appeal link (same shape) is not a verification link.
 export function signVerifyToken(guildId, userId) {
-  const body = `${guildId}.${userId}.${Date.now() + TOKEN_TTL_MS}`;
-  const sig = createHmac('sha256', config.sessionSecret).update(body).digest();
-  return `${b64url(body)}.${b64url(sig)}`;
+  return signToken([guildId, userId], TOKEN_TTL_MS, { purpose: 'verify' });
 }
 
 /** @returns {{ guildId: string, userId: string } | null} */
 export function verifyVerifyToken(token) {
-  try {
-    const [bodyB64, sigB64] = String(token).split('.');
-    if (!bodyB64 || !sigB64) return null;
-    const body = Buffer.from(bodyB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString();
-    const expected = createHmac('sha256', config.sessionSecret).update(body).digest();
-    const got = Buffer.from(sigB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
-    if (got.length !== expected.length || !timingSafeEqual(got, expected)) return null;
-    const [guildId, userId, exp] = body.split('.');
-    if (!isPlatformGuildId(guildId) || !/^\d{17,20}$/.test(userId)) return null;
-    if (Date.now() > Number(exp)) return null;
-    return { guildId, userId };
-  } catch {
-    return null;
-  }
+  const parts = verifyToken(token, 2, { purpose: 'verify' });
+  if (!parts) return null;
+  const [guildId, userId] = parts;
+  if (!isPlatformGuildId(guildId) || !/^\d{17,20}$/.test(userId)) return null;
+  return { guildId, userId };
 }
 
 // --- the verify message ------------------------------------------------------
@@ -214,18 +206,34 @@ on('verification', 'guildMemberAdd', async (member, rawConfig) => {
   await ensureVerifyMessage(member.guild, cfg).catch(() => {});
 
   if (cfg.kickAfterMinutes <= 0 || !cfg.verifiedRoleId) return;
-  const graceMs = cfg.kickAfterMinutes * 60_000;
-  setTimeout(async () => {
-    try {
-      if (!(await isModuleEnabled(guildKey(member.guild), 'verification'))) return;
-      const fresh = normaliseVerificationConfig(
-        (await getGuildModule(guildKey(member.guild), 'verification')).config
-      );
-      const m = await member.guild.members.fetch(member.id).catch(() => null);
-      if (!m || m.roles.cache.has(fresh.verifiedRoleId) || !m.kickable) return;
-      await m.kick(`Did not verify within ${fresh.kickAfterMinutes} minutes`).catch(() => {});
-    } catch {
-      /* best-effort */
-    }
-  }, graceMs).unref();
+  // Stored, not a timer: a restart within the grace period must not cancel the kick.
+  await scheduleVerificationKick({
+    guildId: guildKey(member.guild),
+    userId: member.id,
+    dueAt: Date.now() + cfg.kickAfterMinutes * 60_000,
+  });
 });
+
+/** Kick the members whose grace period has passed and who are still not verified. */
+export async function sweepVerificationKicks(now = Date.now()) {
+  for (const row of await dueVerificationKicks(now)) {
+    await clearVerificationKick(row.guild_id, row.user_id); // first, so a failure cannot loop
+    try {
+      const guild = guildByKey(row.guild_id);
+      if (!guild || !(await isModuleEnabled(row.guild_id, 'verification'))) continue;
+      const fresh = normaliseVerificationConfig((await getGuildModule(row.guild_id, 'verification')).config);
+      if (!fresh.verifiedRoleId || fresh.kickAfterMinutes <= 0) continue;
+      const m = await guild.members.fetch(row.user_id).catch(() => null);
+      if (!m || m.roles.cache.has(fresh.verifiedRoleId) || !m.kickable) continue;
+      await m.kick(`Did not verify within ${fresh.kickAfterMinutes} minutes`).catch(() => {});
+    } catch (err) {
+      log.warn('verification', `kick check failed: ${err.message}`);
+    }
+  }
+}
+
+const KICK_TICK_MS = 60_000;
+setInterval(() => {
+  if (!allClientsReady()) return;
+  sweepVerificationKicks().catch((err) => log.error('verification', 'kick sweep failed:', err.message));
+}, KICK_TICK_MS).unref();

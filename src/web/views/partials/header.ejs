@@ -164,7 +164,10 @@
         <div class="sb-user">
           <% if (user.avatar) { %><img class="avatar" src="<%= user.avatar %>" alt="" /><% } %>
           <a class="sb-user-name" href="/account" title="Your account"><%= user.name %></a>
-          <a href="/auth/logout" title="Log out" hx-boost="false">Log out</a>
+          <form method="post" action="/auth/logout" class="sb-logout" hx-boost="false">
+            <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
+            <button type="submit" class="sb-logout-btn" title="Log out">Log out</button>
+          </form>
         </div>
       <% } else if (typeof authEnabled !== 'undefined' && authEnabled) { %>
         <a class="sb-login" href="/auth/login" hx-boost="false">Log in</a>

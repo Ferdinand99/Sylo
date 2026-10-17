@@ -52,3 +52,11 @@ test('both platforms give both invites, Discord first, each labelled', () => {
 test('nothing configured, nothing offered', () => {
   assert.deepEqual(buildBotInvites({}), []);
 });
+
+// Invite tracking reads the server's invites and native AutoMod manages rules: both need
+// Manage Server (bit 5), which the invite link used to leave out.
+test('the Discord invite asks for Manage Server', () => {
+  const [d] = buildBotInvites({ discordClientId: '123456789012345678' });
+  const perms = BigInt(new URL(d.url).searchParams.get('permissions'));
+  assert.equal(perms & (1n << 5n), 1n << 5n);
+});

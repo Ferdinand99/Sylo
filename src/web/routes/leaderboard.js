@@ -18,6 +18,57 @@ import { guildForVanity } from '../../db/leaderboardVanity.js';
 
 const PAGE_SIZE = 25;
 
+// Names and avatars of a page's members, for a minute. The page needs no login, and each
+// uncached view costs a gateway request plus a REST call per member who left: without this,
+// anyone reloading it could spend the bot's Discord budget.
+const PROFILE_TTL_MS = 60_000;
+const MAX_CACHED_PAGES = 2000;
+const profileCache = new Map(); // "guild|user ids" -> { at, profiles: Promise<Map> }
+
+/** @returns {Promise<Map<string, { name: string|null, avatar: string|null, member: boolean }>>} */
+function pageProfiles(guild, userIds) {
+  const key = `${guild.id}|${userIds.join(',')}`;
+  const hit = profileCache.get(key);
+  if (hit && Date.now() - hit.at < PROFILE_TTL_MS) return hit.profiles;
+  if (profileCache.size >= MAX_CACHED_PAGES) {
+    for (const [k, v] of profileCache) if (Date.now() - v.at >= PROFILE_TTL_MS) profileCache.delete(k);
+    while (profileCache.size >= MAX_CACHED_PAGES) profileCache.delete(profileCache.keys().next().value);
+  }
+  const profiles = lookUpProfiles(guild, userIds).catch((err) => {
+    profileCache.delete(key);
+    throw err;
+  });
+  profileCache.set(key, { at: Date.now(), profiles });
+  return profiles;
+}
+
+async function lookUpProfiles(guild, userIds) {
+  // One bulk gateway fetch for display names + avatars; fall back per-miss.
+  let fetched = new Map();
+  if (userIds.length) {
+    try {
+      fetched = await guild.members.fetch({ user: userIds, time: 10_000 });
+    } catch {
+      /* GuildMembers intent missing or timeout — degrade to ids */
+    }
+  }
+  const out = new Map();
+  for (const id of userIds) {
+    const member = fetched.get(id);
+    if (member) {
+      out.set(id, { name: member.displayName, avatar: member.displayAvatarURL({ size: 64 }), member: true });
+      continue;
+    }
+    const user = await guild.client.users.fetch(id).catch(() => null);
+    out.set(id, {
+      name: user ? user.globalName || user.username : null,
+      avatar: user ? user.displayAvatarURL({ size: 64 }) : null,
+      member: false,
+    });
+  }
+  return out;
+}
+
 function notFound(res, message) {
   return res.status(404).render('error', {
     title: 'Leaderboard unavailable',
@@ -53,31 +104,14 @@ async function renderLeaderboard(req, res, next, guildId, canonical) {
       ? await topMembersForPeriod(guildId, periodKey, PAGE_SIZE, offset)
       : await topMembers(guildId, PAGE_SIZE, offset);
 
-    // One bulk gateway fetch for display names + avatars; fall back per-miss.
-    let fetched = new Map();
-    if (rows.length) {
-      try {
-        fetched = await guild.members.fetch({ user: rows.map((r) => r.user_id), time: 10_000 });
-      } catch {
-        /* GuildMembers intent missing or timeout — degrade to ids */
-      }
-    }
+    const profiles = await pageProfiles(
+      guild,
+      rows.map((r) => r.user_id)
+    );
 
     const members = await Promise.all(
       rows.map(async (r, i) => {
-        let name = null;
-        let avatar = null;
-        const member = fetched.get(r.user_id);
-        if (member) {
-          name = member.displayName;
-          avatar = member.displayAvatarURL({ size: 64 });
-        } else {
-          const user = await guild.client.users.fetch(r.user_id).catch(() => null);
-          if (user) {
-            name = user.globalName || user.username;
-            avatar = user.displayAvatarURL({ size: 64 });
-          }
-        }
+        const { name = null, avatar = null, member = false } = profiles.get(r.user_id) ?? {};
         const p = periodKey ? null : levelProgress(r.xp);
         return {
           rank: offset + i + 1,

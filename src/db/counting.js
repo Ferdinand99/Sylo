@@ -25,6 +25,23 @@ const upsertStmt = prepare(`
     updated_at      = excluded.updated_at
 `);
 
+// Move the count on only from the value the caller read: two messages handled at once must not
+// both succeed. The insert covers a guild's very first count (no row yet).
+const advanceFromStmt = prepare(`
+  UPDATE counting SET
+    current = @current,
+    record = CASE WHEN record > @current THEN record ELSE @current END,
+    last_user_id = @lastUserId,
+    last_message_id = @lastMessageId,
+    updated_at = @updatedAt
+  WHERE guild_id = @guildId AND current = @from
+`);
+const firstCountStmt = prepare(`
+  INSERT INTO counting (guild_id, current, record, last_user_id, last_message_id, updated_at)
+  VALUES (@guildId, @current, @current, @lastUserId, @lastMessageId, @updatedAt)
+  ON CONFLICT (guild_id) DO NOTHING
+`);
+
 const EMPTY = { current: 0, record: 0, last_user_id: null, last_message_id: null };
 
 /** Current counting state for a guild (zeroed defaults if never played). */
@@ -35,9 +52,23 @@ export async function getCounting(guildId) {
 /**
  * Record a successful count.
  * @param {string} guildId
- * @param {{ current: number, userId: string, messageId: string }} next
+ * @param {{ current: number, userId: string, messageId: string, from?: number }} next
+ *   `from`: only advance if the count is still this value (the one the caller read)
+ * @returns {Promise<boolean>} false when `from` no longer matched
  */
-export async function advanceCount(guildId, { current, userId, messageId }) {
+export async function advanceCount(guildId, { current, userId, messageId, from }) {
+  if (from !== undefined) {
+    const row = {
+      guildId,
+      current,
+      from,
+      lastUserId: userId,
+      lastMessageId: messageId,
+      updatedAt: Date.now(),
+    };
+    if ((await advanceFromStmt.run(row)).changes === 1) return true;
+    return from === 0 && (await firstCountStmt.run(row)).changes === 1;
+  }
   const prev = await getCounting(guildId);
   await upsertStmt.run({
     guildId,
@@ -47,6 +78,7 @@ export async function advanceCount(guildId, { current, userId, messageId }) {
     lastMessageId: messageId,
     updatedAt: Date.now(),
   });
+  return true;
 }
 
 /** Reset the running count to 0 (keeps the record). */

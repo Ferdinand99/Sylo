@@ -70,13 +70,16 @@ export function normaliseYoutubeConfig(raw = {}) {
         seen.add(a.ytChannelId + a.discordChannelId);
         return true;
       })
-      .slice(0, 50),
+      .slice(0, MAX_YOUTUBE_ALERTS),
   };
 }
 
 // --- resolve a URL / @handle / UC id to a channel id + name --------------
 
 /** @returns {Promise<{ channelId: string, name: string } | null>} */
+/** Alerts per server; a save also looks up at most this many channels on youtube.com. */
+export const MAX_YOUTUBE_ALERTS = 50;
+
 export async function resolveYtChannel(input) {
   const raw = String(input ?? '').trim();
   if (!raw) return null;

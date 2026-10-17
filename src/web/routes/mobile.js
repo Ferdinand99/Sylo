@@ -45,7 +45,7 @@ import {
 import { enabledProviders, providers } from '../lib/oauthProviders.js';
 import { bearerToken } from '../lib/bearer.js';
 import { isOperator, sessionUserLabel } from '../lib/accountAuth.js';
-import { rateLimit } from '../middleware/rateLimit.js';
+import { clientKey, rateLimit } from '../middleware/rateLimit.js';
 import { accountMaySeeTickets } from '../middleware/ticketAccess.js';
 
 const APP_CALLBACK = 'sylo://auth';
@@ -179,7 +179,7 @@ const FEATURES = Object.freeze(['app-login', 'live-access']);
 // so looking a server up does not use up the sign-in attempts on /token.
 mobileApiRouter.get(
   '/info',
-  rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `mobile-info|${req.ip}` }),
+  rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `mobile-info|${clientKey(req)}` }),
   (_req, res) => {
     res.json({
       name: 'Sylo',
@@ -250,7 +250,7 @@ mobileApiRouter.delete('/token', async (req, res, next) => {
 const DEVICE_TOKEN = /^[0-9a-f]{64,200}$/i; // APNs device tokens are hex (32 bytes today)
 const RELAY_TOKEN = /^[A-Za-z0-9_-]{43}$/; // 32 random bytes, base64url, from the relay
 const PUSH_ENVIRONMENTS = new Set(['development', 'production']);
-const pushLimit = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `mobile-push|${req.ip}` });
+const pushLimit = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `mobile-push|${clientKey(req)}` });
 
 function appTokenOnly(req, res, next) {
   if (!req.account) return res.status(401).json({ error: 'Not signed in.' });

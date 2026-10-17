@@ -1,5 +1,6 @@
 // Storage for dashboard-composed bot messages ("Embed messages").
 import { prepare, registerPostgresBootstrap } from './driver.js';
+import { LIMITS, checkLimit } from '../lib/limits.js';
 
 // Column set reflects the CREATE TABLE migration PLUS a later
 // `ALTER TABLE composed_messages ADD COLUMN name ...` migration — the
@@ -50,7 +51,18 @@ export async function getComposedByMessage(guildId, messageId) {
   const row = await getByMsgStmt.get(guildId, messageId);
   return row ? parse(row) : null;
 }
+const countForGuildStmt = prepare('SELECT COUNT(*) AS n FROM composed_messages WHERE guild_id = ?');
+
+let specGuard = null;
+
+/** Like setModuleConfigGuard (db/modules.js), for a saved message's spec. */
+export function setComposedSpecGuard(fn) {
+  specGuard = fn;
+}
+
 export async function createComposed(guildId, { name, channelId, messageId, spec }) {
+  if (specGuard) await specGuard({ guildId, prev: {}, next: spec });
+  checkLimit((await countForGuildStmt.get(guildId)).n, LIMITS.composedMessages, 'saved messages');
   const info = await insertStmt.run({
     guildId,
     name: String(name ?? '').slice(0, 100),
@@ -62,6 +74,7 @@ export async function createComposed(guildId, { name, channelId, messageId, spec
   return getComposed(guildId, Number(info.lastInsertRowid));
 }
 export async function updateComposed(guildId, id, { name, channelId, messageId, spec }) {
+  if (specGuard) await specGuard({ guildId, prev: (await getComposed(guildId, id))?.spec ?? {}, next: spec });
   await updateStmt.run({
     guildId,
     id,

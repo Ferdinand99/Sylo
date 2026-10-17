@@ -20,3 +20,16 @@ Dockerfile
 docker-compose.yml
 .dockerignore
 apps
+# Secrets and local material that must never end up in an image (a local --build sends
+# the whole folder as build context).
+.apple-test
+*.p8
+*.pem
+*.key
+.fider-seed
+.claude
+.superpowers
+internal
+site
+docker-compose.test.yml
+ca_profile.xml

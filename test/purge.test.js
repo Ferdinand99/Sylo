@@ -31,6 +31,10 @@ function seed(guildId, userId) {
   db.prepare(
     'INSERT INTO ticket_messages (ticket_id, author_id, author_kind, content, created_at) VALUES (?,?,?,?,?)'
   ).run(t.lastInsertRowid, userId, 'user', 'hi', now);
+  // A staff reply in the member's ticket: it often quotes them, and goes with the ticket.
+  db.prepare(
+    'INSERT INTO ticket_messages (ticket_id, author_id, author_kind, content, created_at) VALUES (?,?,?,?,?)'
+  ).run(t.lastInsertRowid, 'staff1', 'staff', 'you said hi', now);
   db.prepare(
     'INSERT INTO scheduled_messages (guild_id, channel_id, content, interval_minutes, next_run_at, created_at) VALUES (?,?,?,?,?,?)'
   ).run(guildId, '9', 'x', 60, now, now);
@@ -128,10 +132,13 @@ test('forgetUser deletes only that member’s data in that guild', async () => {
 
   const result = await forgetUser(G, U);
 
-  assert.equal(result.warnings, 1);
+  // Moderation cases are kept: a member cannot wipe their record (or reset warn thresholds).
+  assert.equal(result.keptCases, 1);
+  assert.equal(countFor('infractions', G), 1, 'the case is still there');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM ticket_messages').get().n, 0, 'staff replies go too');
   assert.equal(result.leveling, 1);
   assert.equal(result.tickets, 1);
-  assert.equal(result.ticketMessages, 1);
+  assert.equal(result.ticketMessages, 2, "the member's message and the staff reply");
   assert.equal(result.afk, 1);
   assert.equal(result.birthdays, 1);
   assert.equal(result.giveawayEntries, 1);
@@ -168,7 +175,7 @@ test('describeUserData counts what forgetUser would remove, then reads zero afte
   assert.equal(byKey.warnings, 1);
   assert.equal(byKey.leveling, 1);
   assert.equal(byKey.tickets, 1);
-  assert.equal(byKey.ticketMessages, 1);
+  assert.equal(byKey.ticketMessages, 2);
   assert.equal(byKey.afk, 1);
   assert.equal(byKey.birthdays, 1);
   assert.equal(byKey.giveawayEntries, 1);
@@ -177,7 +184,10 @@ test('describeUserData counts what forgetUser would remove, then reads zero afte
 
   await forgetUser(G, U);
 
-  assert.equal((await describeUserData(G, U)).total, 0, 'nothing left after forgetUser');
+  const after = await describeUserData(G, U);
+  assert.equal(after.erasable, 0, 'nothing erasable left after forgetUser');
+  assert.equal(after.items.find((i) => i.key === 'warnings').count, 1, 'moderation cases are kept');
+  assert.equal(after.items.find((i) => i.key === 'warnings').kept, true);
 });
 
 test('exportUserData exposes exactly the sources describeUserData counts', async () => {
@@ -221,6 +231,49 @@ test('exportUserData returns the rows, then reads empty after forgetUser', async
     'summary pairs a label with each count'
   );
 
+  assert.equal(
+    'moderator_id' in dump.data.warnings[0],
+    false,
+    "the moderator's id is theirs, not the member's"
+  );
+
   await forgetUser(G, U);
-  assert.equal((await exportUserData(G, U)).total, 0, 'nothing left after forgetUser');
+  const left = await exportUserData(G, U);
+  assert.deepEqual(
+    left.summary.filter((s) => s.count > 0).map((s) => s.key),
+    ['warnings'],
+    'only the kept moderation cases are left'
+  );
+});
+
+// Safety records name the member too: they are exported, and kept by /forget like cases.
+test('exportUserData includes honeypot catches, counting penalties and temp bans', async () => {
+  const now = Date.now();
+  db.exec('DELETE FROM honeypot_catches; DELETE FROM counting_penalties; DELETE FROM temp_bans;');
+  db.prepare(
+    'INSERT INTO honeypot_catches (guild_id, user_id, user_tag, kind, channel_id, action, created_at) VALUES (?,?,?,?,?,?,?)'
+  ).run(G, U, 'user#1', 'message', '9', 'ban', now);
+  db.prepare(
+    'INSERT INTO counting_penalties (guild_id, user_id, role_id, restore_at, created_at) VALUES (?,?,?,?,?)'
+  ).run(G, U, '8', now + 1000, now);
+  db.prepare(
+    'INSERT INTO temp_bans (guild_id, user_id, mod_id, reason, unban_at, created_at) VALUES (?,?,?,?,?,?)'
+  ).run(G, U, 'mod', 'r', now + 1000, now);
+  const dump = await exportUserData(G, U);
+  assert.equal(dump.data.honeypotCatches.length, 1);
+  assert.equal(dump.data.countingPenalties.length, 1);
+  assert.equal(dump.data.tempBans.length, 1);
+  assert.equal('mod_id' in dump.data.tempBans[0], false);
+  await forgetUser(G, U);
+  assert.equal((await exportUserData(G, U)).data.tempBans.length, 1, 'kept');
+});
+
+test("invitedOthers lists join times, not the other members' ids", async () => {
+  db.exec('DELETE FROM invite_joins;');
+  db.prepare(
+    'INSERT INTO invite_joins (guild_id, user_id, inviter_id, source, joined_at, counted) VALUES (?,?,?,?,?,?)'
+  ).run(G, '555555555555555555', U, 'invite', Date.now(), 1);
+  const dump = await exportUserData(G, U);
+  assert.equal(dump.data.invitedOthers.length, 1);
+  assert.equal('user_id' in dump.data.invitedOthers[0], false);
 });

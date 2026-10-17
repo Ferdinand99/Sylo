@@ -127,3 +127,13 @@ test('a row with corrupted events JSON hydrates to an empty list instead of thro
   const row = await getGithubWatch(G, id);
   assert.deepEqual(row.events, []);
 });
+
+// The dashboard lets you change a watch's repo, and the audit log said so, but the repo
+// was never saved.
+test('an update can change the repo, and leaves it alone when none is given', async () => {
+  const id = await createGithubWatch(G, { repo: 'o/old', channelId: CH, events: ['push'] });
+  await updateGithubWatch(G, id, { repo: 'o/new', channelId: CH, events: ['push'] });
+  assert.equal((await getGithubWatch(G, id)).repo, 'o/new');
+  await updateGithubWatch(G, id, { channelId: CH, events: ['push'] });
+  assert.equal((await getGithubWatch(G, id)).repo, 'o/new');
+});

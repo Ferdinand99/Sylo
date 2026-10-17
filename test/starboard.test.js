@@ -1,7 +1,7 @@
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normaliseStarboard } from '../src/modules/starboard.js';
+import { normaliseStarboard, boardsToRescan, rescanBoard, scheduleRescan } from '../src/modules/starboard.js';
 import {
   getStarboardEntry,
   getStarboardEntryByPost,
@@ -145,4 +145,72 @@ test('deleteStarboardEntry, deleteBoardEntries, clearGuildStarboard scope correc
 
   await clearGuildStarboard(G);
   assert.equal(await getStarboardEntry(G, B2, M1), null);
+});
+
+// A save used to rescan every board across every channel: one save could mean thousands of
+// Discord calls. Only a board whose bar may have dropped needs the catch-up, it looks at a
+// bounded number of channels, and one server runs one rescan at a time.
+test('boardsToRescan: new boards and boards with a lower bar or a new scope', () => {
+  const base = normaliseStarboard({
+    boards: [
+      { id: 'a', channelId: '100000000000000001', threshold: 5 },
+      { id: 'b', channelId: '100000000000000002', threshold: 5 },
+      { id: 'c', channelId: '100000000000000003', threshold: 5 },
+    ],
+  }).boards;
+  const next = normaliseStarboard({
+    boards: [
+      { id: 'a', channelId: '100000000000000001', threshold: 5 }, // unchanged
+      { id: 'b', channelId: '100000000000000002', threshold: 3 }, // lower bar
+      { id: 'c', channelId: '100000000000000003', threshold: 7 }, // higher bar: nothing new to post
+      { id: 'd', channelId: '100000000000000004', threshold: 5 }, // new
+    ],
+  }).boards;
+  assert.deepEqual(
+    boardsToRescan(base, next).map((b) => b.id),
+    ['b', 'd']
+  );
+});
+
+function scanGuild(channelCount) {
+  const fetched = [];
+  const channels = new Map();
+  const dest = { id: '100000000000000999', isTextBased: () => true };
+  channels.set(dest.id, dest);
+  for (let i = 0; i < channelCount; i++) {
+    const id = String(200000000000000000n + BigInt(i));
+    channels.set(id, {
+      id,
+      isTextBased: () => true,
+      isThread: () => false,
+      permissionsFor: () => ({ has: () => true }),
+      messages: {
+        fetch: async () => {
+          fetched.push(id);
+          return new Map();
+        },
+      },
+    });
+  }
+  return { fetched, guild: { id: '900000000000000555', channels: { cache: channels }, members: { me: {} } } };
+}
+
+const scanBoard = () =>
+  normaliseStarboard({ boards: [{ id: 'z', channelId: '100000000000000999', threshold: 3 }] }).boards[0];
+
+test('rescanBoard looks at a bounded number of channels', async () => {
+  const { guild, fetched } = scanGuild(400);
+  await rescanBoard(guild, scanBoard());
+  assert.ok(fetched.length <= 50, `fetched ${fetched.length}`);
+});
+
+test('scheduleRescan runs one rescan per server at a time and skips a duplicate', async () => {
+  const { guild, fetched } = scanGuild(3);
+  const board = scanBoard();
+  await Promise.all([
+    scheduleRescan(guild, board),
+    scheduleRescan(guild, board),
+    scheduleRescan(guild, board),
+  ]);
+  assert.ok(fetched.length <= 6, `fetched ${fetched.length}`);
 });

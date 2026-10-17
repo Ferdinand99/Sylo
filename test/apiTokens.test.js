@@ -9,6 +9,7 @@ import {
   createApiToken,
   findApiToken,
   touchApiToken,
+  setApiTokenPushMuted,
   listApiTokens,
   revokeApiToken,
   revokeApiTokenValue,
@@ -62,6 +63,30 @@ test('touchApiToken: slides the expiry forward, at most once an hour', async () 
   assert.ok(t1.expiresAt >= later + 90 * DAY - 1000);
   assert.equal(t1.lastUsedAt, later);
   assert.equal(await touchApiToken(t1, { ttlMs: 90 * DAY, now: later + 60_000 }), false, 'within the hour');
+});
+
+// A token in daily use would otherwise live forever: the sliding expiry stops a year after sign-in.
+test('touchApiToken never slides past a year after the token was made', async () => {
+  const a = account();
+  const { token } = await createApiToken(a, { deviceName: 'x', ttlMs: DAY });
+  const t0 = await findApiToken(token);
+  const muchLater = t0.createdAt + 360 * DAY;
+  await touchApiToken(t0, { ttlMs: 90 * DAY, now: muchLater });
+  const row = await findApiToken(token);
+  assert.ok(row.expiresAt <= t0.createdAt + 365 * DAY, 'capped at a year');
+});
+
+test('two mute changes at once both count', async () => {
+  const a = account();
+  const { id } = await createApiToken(a, { deviceName: 'x', ttlMs: DAY });
+  await Promise.all([
+    setApiTokenPushMuted(id, '900000000000000001', true),
+    setApiTokenPushMuted(id, '900000000000000002', true),
+  ]);
+  assert.deepEqual((await setApiTokenPushMuted(id, '900000000000000003', false)).sort(), [
+    '900000000000000001',
+    '900000000000000002',
+  ]);
 });
 
 test('listing and revoking: per device, by value, and every token of an account', async () => {

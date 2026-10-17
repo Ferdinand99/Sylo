@@ -8,6 +8,7 @@ import { config } from '../../config.js';
 import { getGuildModule } from '../../db/modules.js';
 import { usesArgs, pickMessage, buildActionPayload } from '../../modules/customCommands.js';
 import { log } from '../../lib/log.js';
+import { sweepMap } from '../../lib/sweepMap.js';
 
 function toSlashJSON(cmd) {
   let description = String(cmd.description || cmd.name || 'Custom command')
@@ -58,6 +59,7 @@ export async function syncAllGuildCustomCommands(client) {
 // --- execution ---------------------------------------------------------------
 
 const cooldowns = new Map(); // `${guildId}:${name}:${userId}` -> expiresAt (ms)
+sweepMap(cooldowns, (until, now) => until <= now);
 
 function blockReason(cmd, interaction) {
   if (cmd.allowedChannels?.length && !cmd.allowedChannels.includes(interaction.channelId)) {

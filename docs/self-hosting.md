@@ -72,11 +72,12 @@ At least one platform must be configured.
 | `APPLE_ISSUER_ID`         | —                               | Issuer id of a team API key (leave unset for an individual key) |
 | `APPLE_PRIVATE_KEY`       | —                               | The key's `.p8` file: PEM text, PEM on one line with literal `\n`, or base64 |
 | `APPLE_VENDOR_NUMBER`     | —                               | Optional vendor number for a planned daily downloads digest |
+| `TRUST_PROXY`             | one private hop with `DASHBOARD_URL` | Which proxies may set `X-Forwarded-For`: `false`, a hop count, or addresses/subnets. See [Behind a reverse proxy](#behind-a-reverse-proxy) |
+| `ALLOW_PRIVATE_URLS`      | `false`                         | Let server admins use feed and image URLs on private, loopback or link-local addresses (your own network). Off by default: those URLs are fetched by the server |
 | `PUSH_RELAY_URL`          | `https://app.sylobot.com`       | Where this instance sends [Sylo app notifications](mobile-app.md#notifications); empty turns them off |
 | `APNS_KEY_ID`             | —                               | Only for the instance that talks to Apple itself (the hosted Sylo): APNs auth key id |
 | `APNS_TEAM_ID`            | —                               | The Apple developer team id that owns the key |
-| `APNS_PRIVATE_KEY`        | —                               | The APNs key's `.p8` file: PEM text, PEM on one line with literal `
-`, or base64 |
+| `APNS_PRIVATE_KEY`        | —                               | The APNs key's `.p8` file: PEM text, PEM on one line with literal `\n`, or base64 |
 | `APNS_TOPIC`              | `net.opland.sylo`               | The app's bundle id |
 | `FLUXER_CLIENT_SECRET`    | —                               | Adds "Log in with Fluxer" to the dashboard |
 | `FLUXER_OWNER_IDS`        | —                               | Your Fluxer user id(s); the Fluxer counterpart of `OWNER_IDS` |
@@ -183,6 +184,20 @@ Nextcloud folder) or `BACKUP_WEBHOOK_URL` (a Discord webhook; attachments over
 ~8 MiB are skipped). Uploads are best-effort and logged; they never hold up the
 local backup. The Health page shows which targets are active.
 
+An off-site copy is the whole database (webhook secrets, ticket text, push
+tokens). Set `BACKUP_ENCRYPTION_KEY` to a long passphrase and each copy leaves
+encrypted (AES-256-GCM, `<name>.db.gz.enc`). Keep the passphrase somewhere other
+than the server: without it the copies cannot be read. To restore one, decrypt it
+first, then restore the `.db` file as usual:
+
+```bash
+BACKUP_ENCRYPTION_KEY='your passphrase' node scripts/decrypt-backup.js sylo-2026-10-17.db.gz.enc
+```
+
+With `BACKUP_WEBDAV_USER` set, `BACKUP_WEBDAV_URL` must be `https://` (or an
+address on your own network, such as a container name or a `192.168.x.x`
+address): Basic auth over plain http sends the password in clear text.
+
 ---
 
 ## Behind a reverse proxy
@@ -195,6 +210,17 @@ Developer Portal matches `<DASHBOARD_URL>/auth/discord/callback`.
 Exactly one hop: with two proxies in a row (for example Cloudflare in front of
 nginx), every request looks like it comes from the inner proxy, so all clients
 share one rate-limit bucket. Put only one HTTP proxy in front of Sylo.
+
+The proxy must connect from this machine or the local network (a loopback or
+private address, such as another container). `X-Forwarded-For` from any other
+address is ignored, so a client that reaches Sylo's port directly cannot choose
+its own IP. For another setup, set `TRUST_PROXY`: `false`, a hop count, or the
+proxy's addresses or subnets (comma-separated, as Express takes them).
+
+Without a login (open mode), the dashboard only answers on local names and
+addresses (`localhost`, an IP address, a name without dots, `.local`, `.lan`,
+`.home.arpa`, `.internal`) and on the host in `DASHBOARD_URL`. That blocks other
+websites from reaching it through DNS rebinding.
 
 **Caddy**
 

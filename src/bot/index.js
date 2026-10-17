@@ -64,6 +64,9 @@ export async function startBot() {
     ...resolveShardOptions(config.discordShardCount),
     // Needed to receive reaction/message events for messages not in cache.
     partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.GuildMember, Partials.User],
+    // A message without its own allowedMentions may ping users only, never @everyone, @here or
+    // roles: some replies echo user text (a lock reason, an AFK note).
+    allowedMentions: { parse: ['users'], repliedUser: true },
   });
 
   const commands = await loadCommands();

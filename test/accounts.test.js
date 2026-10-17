@@ -152,3 +152,64 @@ test('an account cannot link a second identity on a platform it already has one 
   );
   assert.equal(await findIdentity('discord', otherDiscord.platformUserId), null);
 });
+
+// --- security review fixes -------------------------------------------------------------------
+
+const { createApiToken, listApiTokens } = await import('../src/db/apiTokens.js');
+const { deleteAccount } = await import('../src/db/accounts.js');
+const { prepare } = await import('../src/db/driver.js');
+
+async function twoLogins() {
+  const { accountId } = await signInIdentity({ ...discordMe, guildIds: [] });
+  await linkIdentity(accountId, { ...fluxerMe, guildIds: [] });
+  return accountId;
+}
+
+test('disconnecting a platform that is not linked changes nothing', async () => {
+  const accountId = await twoLogins();
+  await createApiToken(accountId, { deviceName: 'iPhone', ttlMs: 60_000 });
+  assert.equal(await unlinkIdentity(accountId, 'xyz'), false);
+  assert.equal((await identitiesOf(accountId)).length, 2);
+  assert.equal((await listApiTokens(accountId)).length, 1, 'the app stays signed in');
+});
+
+test('two disconnects at once never leave an account without a sign-in', async () => {
+  const accountId = await twoLogins();
+  await Promise.all([unlinkIdentity(accountId, 'discord'), unlinkIdentity(accountId, 'fluxer')]);
+  assert.equal((await identitiesOf(accountId)).length, 1);
+});
+
+test('disconnecting a sign-in ends the account’s other web sessions', async () => {
+  const accountId = await twoLogins();
+  const here = await createSession(accountId, 60_000);
+  const elsewhere = await createSession(accountId, 60_000);
+  assert.equal(await unlinkIdentity(accountId, 'fluxer', { keepSession: here }), true);
+  assert.ok(await getSession(here), 'the session that did it stays');
+  assert.equal(await getSession(elsewhere), null);
+});
+
+test('deleteAccount removes the account, its sign-ins, sessions, app tokens and preferences', async () => {
+  const accountId = await twoLogins();
+  const sid = await createSession(accountId, 60_000);
+  await createApiToken(accountId, { deviceName: 'iPhone', ttlMs: 60_000 });
+  const userId = discordMe.platformUserId;
+  await prepare("INSERT INTO user_prefs (user_id, dashboard_version, updated_at) VALUES (?, 'v2', 1)").run(
+    userId
+  );
+  await prepare('INSERT INTO roadmap_votes (post_id, user_id, created_at) VALUES (1, ?, 1)').run(userId);
+  const post = await prepare(
+    "INSERT INTO roadmap_posts (title, description, status, created_by, created_at, updated_at) VALUES ('t', 'd', 'pending', ?, 1, 1)"
+  ).run(userId);
+
+  await deleteAccount(accountId);
+
+  assert.deepEqual(await identitiesOf(accountId), []);
+  assert.equal(await findIdentity('discord', userId), null);
+  assert.equal(await getSession(sid), null);
+  assert.deepEqual(await listApiTokens(accountId), []);
+  assert.equal(await prepare('SELECT * FROM user_prefs WHERE user_id = ?').get(userId), undefined);
+  assert.equal(await prepare('SELECT * FROM roadmap_votes WHERE user_id = ?').get(userId), undefined);
+  const kept = await prepare('SELECT created_by FROM roadmap_posts WHERE id = ?').get(post.lastInsertRowid);
+  assert.notEqual(kept.created_by, userId, 'a suggestion stays, without who made it');
+  assert.equal(await prepare('SELECT * FROM accounts WHERE id = ?').get(accountId), undefined);
+});

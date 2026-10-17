@@ -82,6 +82,8 @@ const backupWebdavUrl = optionalOrNull('BACKUP_WEBDAV_URL');
 const backupWebdavUser = optionalOrNull('BACKUP_WEBDAV_USER');
 const backupWebdavPass = optionalOrNull('BACKUP_WEBDAV_PASS');
 const backupWebhookUrl = optionalOrNull('BACKUP_WEBHOOK_URL');
+// Optional passphrase: off-site copies leave encrypted (src/lib/backupCrypto.js).
+const backupEncryptionKey = optionalOrNull('BACKUP_ENCRYPTION_KEY');
 if (backupWebhookUrl && !/^https:\/\//i.test(backupWebhookUrl)) {
   console.warn('[config] BACKUP_WEBHOOK_URL should be an https Discord webhook URL.');
 }
@@ -184,6 +186,24 @@ const appleVendorNumber = optionalOrNull('APPLE_VENDOR_NUMBER');
 // the app's APNs key can talk to Apple: the hosted Sylo sets APNS_* and also relays for
 // self-hosted instances, which send through PUSH_RELAY_URL (unset = the hosted Sylo, set but
 // empty = no push).
+/**
+ * DASHBOARD_URL in its canonical form: lowercase host, no default port, no query, fragment or
+ * trailing slash. It is the instance's address for the push relay, which compares it exactly.
+ * @returns {string|null}
+ */
+export function normaliseDashboardUrl(raw) {
+  const value = String(raw ?? '').trim();
+  if (!value) return null;
+  try {
+    const u = new URL(value);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return `${u.origin}${u.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    console.error('[config] DASHBOARD_URL is not a valid URL; ignoring it.');
+    return null;
+  }
+}
+
 const apnsKeyId = optionalOrNull('APNS_KEY_ID');
 const apnsTeamId = optionalOrNull('APNS_TEAM_ID');
 const apnsPrivateKey = normalisePrivateKey(process.env.APNS_PRIVATE_KEY);
@@ -261,7 +281,7 @@ export const config = Object.freeze({
   // Public base URL of the dashboard, used to build the OAuth2 redirect URI.
   // When null it is derived per-request (fine for direct access; set this
   // behind a reverse proxy).
-  dashboardUrl: optionalOrNull('DASHBOARD_URL')?.replace(/\/+$/, '') ?? null,
+  dashboardUrl: normaliseDashboardUrl(process.env.DASHBOARD_URL),
 
   // Dashboard auth (see above)
   // "Log in with …" is offered for a platform only when it is configured to run and has an OAuth secret.
@@ -312,6 +332,12 @@ export const config = Object.freeze({
   apnsTopic,
   apnsEnabled: Boolean(apnsKeyId && apnsTeamId && apnsPrivateKey),
   pushRelayUrl,
+  // URLs that server admins type in (RSS feeds, the welcome card background) are fetched by
+  // the server, so private, loopback and link-local addresses are refused (src/lib/safeFetch.js).
+  // A self-hosted instance that wants feeds from its own network can allow them.
+  // Which proxies may set X-Forwarded-For (see trustProxySetting in src/web/server.js).
+  trustProxy: optionalOrNull('TRUST_PROXY'),
+  allowPrivateUrls: /^(1|true|yes|on)$/i.test(process.env.ALLOW_PRIVATE_URLS ?? ''),
 
   // Game stats
   gametoolsApiBase: optional('GAMETOOLS_API_BASE', 'https://api.gametools.network').replace(/\/+$/, ''),
@@ -332,6 +358,7 @@ export const config = Object.freeze({
   backupWebdavUser,
   backupWebdavPass,
   backupWebhookUrl,
+  backupEncryptionKey,
 
   // Privileged gateway intents. Enable the matching toggles in the Discord
   // Developer Portal (Bot page). Verified bots may also need Discord's approval.

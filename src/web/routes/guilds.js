@@ -6,8 +6,10 @@ import { modulePlatformNote } from '../../platform/modulePlatformNotes.js';
 import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
 import { requireGuildAdmin, currentUser, actingUserId, isOwner } from '../middleware/auth.js';
+import { guardRoleGrants } from '../middleware/roleGrants.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
+import { idList, MAX_REACTION_MESSAGES, MAX_REACTION_PAIRS } from '../lib/idList.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { getModule, missingIntents } from '../../modules/registry.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
@@ -19,6 +21,7 @@ import {
   setBotMasterRoles,
   setEmbedColor,
   guildEmbedColor,
+  withoutEveryone,
 } from '../../db/guildSettings.js';
 import {
   listGuildCases,
@@ -28,7 +31,7 @@ import {
   addWarning,
   clearWarnings,
 } from '../../db/modCases.js';
-import { notifyTarget, MOD_COLOR } from '../../bot/lib/moderation.js';
+import { notifyTarget, MOD_COLOR, warnRefusal } from '../../bot/lib/moderation.js';
 import { postModLog } from '../../bot/lib/modlog.js';
 import { timeAgo } from '../lib/format.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
@@ -58,7 +61,8 @@ import { getVanitySlug, setVanitySlug, clearVanitySlug } from '../../db/leaderbo
 import { normaliseEmbedSpec } from '../../modules/welcomeChannel.js';
 import { normaliseStickyConfig } from '../../modules/sticky.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
-import { listCountingPenalties, clearCountingPenalty } from '../../db/countingPenalties.js';
+import { listCountingPenalties } from '../../db/countingPenalties.js';
+import { releaseCountingPenalty } from '../../modules/counting.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
 import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
 import { normaliseAutoReact, AUTO_REACT_MODES, AUTO_REACT_ROLE_ACTIONS } from '../../modules/autoReact.js';
@@ -70,7 +74,7 @@ import {
 import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
 import { normaliseAppealsConfig, decideAndNotify } from '../../modules/appeals.js';
 import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
-import { normaliseStarboard, rescanBoard } from '../../modules/starboard.js';
+import { boardsToRescan, normaliseStarboard, scheduleRescan } from '../../modules/starboard.js';
 import { deleteBoardEntries } from '../../db/starboard.js';
 import { normaliseInviteTrackerConfig, primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { topInviters, inviterCount, setBonus } from '../../db/inviteTracker.js';
@@ -86,6 +90,7 @@ import { clearScope } from '../../db/postedKeys.js';
 import {
   normaliseYoutubeConfig,
   resolveYtChannel,
+  MAX_YOUTUBE_ALERTS,
   DEFAULT_VIDEO_MESSAGE as YT_VIDEO_MSG,
   DEFAULT_LIVE_MESSAGE as YT_LIVE_MSG,
 } from '../../modules/youtubeAlerts.js';
@@ -238,7 +243,7 @@ function loadGuild(req, res, next) {
   if (req.session) req.session.lastGuild = req.guild.id;
   next();
 }
-router.use('/:guildId', loadGuild, requireGuildAdmin);
+router.use('/:guildId', requireGuildAdmin, loadGuild, guardRoleGrants);
 
 router.get('/', (req, res) => res.redirect('/'));
 router.get('/:guildId', (req, res) => res.redirect(`/guilds/${req.params.guildId}/overview`));
@@ -311,6 +316,10 @@ router.post(
     if (channelId === '') {
       await setModlogChannel(guild.id, null);
     } else if (guildTextChannels(guild).some((c) => c.id === channelId)) {
+      const channel = guild.channels.cache.get(channelId);
+      if (!channel?.permissionsFor(guild.members.me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) {
+        return res.redirect(`${back}?msg=perms`);
+      }
       await setModlogChannel(guild.id, channelId);
     } else {
       return res.redirect(`${back}?msg=badchannel`);
@@ -346,7 +355,8 @@ async function lookupProfile(guild, userId) {
 }
 
 const MEMBER_DATA_UNAFFECTED =
-  'Messages already posted to channels, a completed giveaway’s winner list, and the server’s config-change log are not affected.';
+  'Messages already posted to channels, a completed giveaway’s winner list, and the server’s config-change log are not affected. ' +
+  'Moderation cases and other safety records (a temporary ban, honeypot catches, a counting penalty) are kept.';
 
 router.get(
   '/:guildId/member-data',
@@ -392,7 +402,6 @@ router.post(
         'A server administrator deleted the data Sylo had stored about you in this server, at your request.'
       )
       .addFields(
-        { name: 'Moderation cases', value: String(r.warnings), inline: true },
         { name: 'Leveling record', value: String(r.leveling), inline: true },
         { name: 'Tickets', value: `${r.tickets} (${r.ticketMessages} msgs)`, inline: true },
         { name: 'Ban appeals', value: String(r.appeals), inline: true },
@@ -710,7 +719,7 @@ router.post(
   '/:guildId/m/automod/immunity',
   asyncHandler(async (req, res) => {
     const prev = (await getGuildModule(req.guild.id, 'automod')).config;
-    const roles = [].concat(req.body.immunityRoles ?? []).filter((r) => /^\d{17,20}$/.test(r));
+    const roles = idList(req.body.immunityRoles);
     await setGuildModule(req.guild.id, 'automod', {
       config: normaliseAutomodConfig({ ...prev, exemptRoles: roles }),
     });
@@ -956,7 +965,7 @@ async function moduleViewLocals(mod, req, configOverride) {
           }
         : null,
     gameStatsRecent:
-      mod.id === 'game-stats'
+      mod.id === 'game-stats' && isOwner(req) // the cache holds every server's lookups
         ? (await recentLookups(15)).map((r) => ({
             game: r.game,
             title: r.title,
@@ -1099,7 +1108,7 @@ router.post(
       // not read back as off.
       const autoOn = req.body.enable_autorole === 'on';
       config.autoroleEnabled = autoOn;
-      const newRoles = autoOn ? [].concat(req.body.newRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)) : [];
+      const newRoles = autoOn ? idList(req.body.newRoles) : [];
       const rolesMod = await getGuildModule(req.guild.id, 'roles');
       await setGuildModule(req.guild.id, 'roles', {
         enabled: rolesMod.enabled || newRoles.length > 0,
@@ -1107,7 +1116,7 @@ router.post(
       });
     } else if (mod.id === 'roles') {
       const existing = (await getGuildModule(req.guild.id, 'roles')).config;
-      const autoroles = [].concat(req.body.autoroles ?? []).filter((r) => /^\d{17,20}$/.test(r));
+      const autoroles = idList(req.body.autoroles);
       config = { autoroles, reactionMessages: existing.reactionMessages ?? [] };
     } else if (mod.id === 'sticky') {
       // No embed editing UI here yet (only V2's dashboard has one) — carry
@@ -1136,7 +1145,7 @@ router.post(
         greeting: String(req.body.greeting ?? '').slice(0, 1500),
         closeMessage: String(req.body.closeMessage ?? '').slice(0, 1500),
         notifyChannel: /^\d{17,20}$/.test(req.body.notifyChannel ?? '') ? req.body.notifyChannel : '',
-        staffRoles: [].concat(req.body.staffRoles ?? []).filter((r) => /^\d{17,20}$/.test(r)),
+        staffRoles: withoutEveryone(req.guild.id, idList(req.body.staffRoles)),
         transcriptRetentionDays: clampDays(req.body.transcriptRetentionDays),
         showMessageInAlert: req.body.showMessageInAlert === 'on',
       };
@@ -1299,7 +1308,7 @@ router.post(
       config = {
         setNickname: req.body.setNickname === 'on',
         mentionReply: req.body.mentionReply === 'on',
-        ignoreChannels: [].concat(req.body.ignoreChannels ?? []).filter((c) => /^\d{17,20}$/.test(c)),
+        ignoreChannels: idList(req.body.ignoreChannels, 100),
       };
     } else if (mod.id === 'free-games') {
       config = {
@@ -1357,9 +1366,11 @@ router.post(
       const lMsg = [].concat(req.body.yt_liveMessage ?? []);
 
       const alerts = [];
-      for (let i = 0; i < inputs.length; i += 1) {
+      let looked = 0; // each row may mean a youtube.com lookup: cap them, not just the result
+      for (let i = 0; i < inputs.length && looked < MAX_YOUTUBE_ALERTS; i += 1) {
         const input = String(inputs[i] ?? '').trim();
         if (!input && !prevId[i]) continue;
+        looked += 1;
         let resolved =
           /^UC[\w-]{20,}$/.test(prevId[i] ?? '') && !input
             ? { channelId: prevId[i], name: prevName[i] || '' }
@@ -1627,13 +1638,8 @@ router.post(
     const userId = String(req.body.userId ?? '');
     if (!/^\d{17,20}$/.test(userId)) return res.redirect(`${back}?msg=count-bad`);
 
-    const cfg = (await getGuildModule(req.guild.id, 'counting')).config;
-    const role = cfg.penaltyRoleId ? req.guild.roles.cache.get(cfg.penaltyRoleId) : null;
-    const member = await req.guild.members.fetch(userId).catch(() => null);
-    if (role && member && !member.roles.cache.has(role.id) && role.editable) {
-      await member.roles.add(role, 'Counting: bench ended early from the dashboard').catch(() => {});
-    }
-    await clearCountingPenalty(req.guild.id, userId);
+    // The role stored with the penalty, and only for someone who is benched.
+    if (!(await releaseCountingPenalty(req.guild, userId))) return res.redirect(back);
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'counting:unbench',
@@ -2270,6 +2276,11 @@ router.post(
     const errors = [];
     const channelId = /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '';
     if (!channelId) errors.push('Select a channel.');
+    if (!existing && list.length >= MAX_REACTION_MESSAGES) {
+      errors.push(`This server already has the maximum of ${MAX_REACTION_MESSAGES} reaction-role messages.`);
+    }
+    if (roleIds.length > MAX_REACTION_PAIRS)
+      errors.push(`Use at most ${MAX_REACTION_PAIRS} roles per message.`);
 
     const pairs = [];
     let hadRowError = false;
@@ -2486,9 +2497,9 @@ router.post(
       minAgeMinutes: b.minAgeMinutes,
       maxAgeMinutes: b.maxAgeMinutes,
       roleMode: b.roleMode === 'deny' ? 'deny' : 'allow',
-      roleList: [].concat(b.roleList ?? []).filter((r) => /^\d{17,20}$/.test(r)),
+      roleList: idList(b.roleList, 100),
       channelMode: b.channelMode === 'deny' ? 'deny' : 'allow',
-      channelList: [].concat(b.channelList ?? []).filter((c) => /^\d{17,20}$/.test(c)),
+      channelList: idList(b.channelList, 100),
     };
 
     const nextBoards = existing ? list.map((x) => (x.id === id ? board : x)) : [...list, board];
@@ -2500,15 +2511,11 @@ router.post(
       detail: `${existing ? 'updated' : 'created'} board "${board.name}"`,
     });
 
-    // Catch up on messages that already clear the (possibly just-lowered) bar.
+    // Catch up on messages that already clear a just-lowered bar (or a new board's), queued
+    // in the background: one rescan per server at a time.
     const saved = config.boards.find((x) => x.id === id);
-    if (saved) {
-      rescanBoard(req.guild, saved)
-        .then((r) =>
-          log.info('starboard', `rescan ${req.guild.id}/${id}: scanned ${r.scanned}, posted ${r.posted}`)
-        )
-        .catch((err) => log.error('starboard', 'rescan failed:', err.message));
-    }
+    const before = existing ? normaliseStarboard({ boards: list }).boards : [];
+    if (saved && boardsToRescan(before, [saved]).length) scheduleRescan(req.guild, saved);
     res.redirect(`${back}?msg=sb-saved`);
   })
 );
@@ -2993,40 +3000,6 @@ router.post(
 );
 
 router.post(
-  '/:guildId/general',
-  asyncHandler(async (req, res) => {
-    const guild = req.guild;
-    const back = `/guilds/${guild.id}/general`;
-
-    // Mod-log channel (empty = disabled).
-    const channelId = String(req.body.modlogChannelId ?? '').trim();
-    if (channelId === '') {
-      await setModlogChannel(guild.id, null);
-      await recordAudit(guild.id, {
-        actor: moderatorDisplayName(req),
-        action: 'settings:modlog',
-        detail: 'disabled',
-      });
-      return res.redirect(`${back}?msg=saved`);
-    }
-    const channel = guild.channels.cache.get(channelId);
-    if (!channel || !guildTextChannels(guild).some((c) => c.id === channelId)) {
-      return res.redirect(`${back}?msg=badchannel`);
-    }
-    if (!channel.permissionsFor(guild.members.me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) {
-      return res.redirect(`${back}?msg=perms`);
-    }
-    await setModlogChannel(guild.id, channelId);
-    await recordAudit(guild.id, {
-      actor: moderatorDisplayName(req),
-      action: 'settings:modlog',
-      detail: `#${channel.name}`,
-    });
-    res.redirect(`${back}?msg=saved`);
-  })
-);
-
-router.post(
   '/:guildId/commands/:command',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
@@ -3080,10 +3053,15 @@ router.post(
       .slice(0, 400);
     if (!userId || reason === '') return res.redirect(`${back}?tab=infr&msg=baduser`);
 
-    const user = await clientOfGuild(req.guild)
-      .users.fetch(userId)
-      .catch(() => null);
-    if (!user) return res.redirect(`${back}?tab=infr&msg=baduser`);
+    // Only members of this server: a warning DMs the person, and can escalate to a kick or ban.
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) return res.redirect(`${back}?tab=infr&msg=notmember`);
+    if (appConfig.authEnabled) {
+      const actorId = actingUserId(req, guild.id, null);
+      const actor = actorId ? await guild.members.fetch(actorId).catch(() => null) : null;
+      if (warnRefusal(guild, actor, member)) return res.redirect(`${back}?tab=infr&msg=outranked`);
+    }
+    const user = member.user;
     if (user.bot) return res.redirect(`${back}?tab=infr&msg=botuser`);
 
     const { id, count } = await addWarning({
@@ -3137,7 +3115,7 @@ router.post(
       action: 'moderation:case-reason',
       detail: `#${n}`,
     });
-    res.redirect(`${back}&msg=warn-removed`);
+    res.redirect(`${back}&msg=case-reason`);
   })
 );
 
@@ -3176,7 +3154,7 @@ router.post(
       action: `moderation:case-${req.params.op}`,
       detail: `#${n}`,
     });
-    res.redirect(`${back}&msg=warn-removed`);
+    res.redirect(`${back}&msg=${active ? 'case-restored' : 'case-deleted'}`);
   })
 );
 

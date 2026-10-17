@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { requireGuildAdmin } from '../middleware/auth.js';
+import { guardRoleGrants } from '../middleware/roleGrants.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { guildTextChannels } from '../lib/discord.js';
 import { timeAgo } from '../lib/format.js';
@@ -15,29 +16,25 @@ import {
   updateComposed,
   deleteComposed,
 } from '../../db/composedMessages.js';
-import { sendComposed, editComposed } from '../../modules/messageCreator.js';
+import { sendComposed, editComposed, normaliseComposedSpec } from '../../modules/messageCreator.js';
 
 const router = Router({ mergeParams: true });
 
+// Access first: a "not found" for a server Sylo is not in would tell anyone which servers it is in.
+router.use(requireGuildAdmin);
 router.use((req, res, next) => {
   req.guild = getGuild(req);
   if (!req.guild) return res.status(404).render('guild-missing', { guildId: req.params.guildId });
   next();
 });
-router.use(requireGuildAdmin);
+router.use(guardRoleGrants);
 
 const isId = (v) => /^\d{17,20}$/.test(v ?? '');
 const specTitle = (spec) => spec?.embeds?.[0]?.title || spec?.content?.slice(0, 60) || '(no text)';
 
 function parseSpec(body) {
   try {
-    const s = JSON.parse(body.spec ?? '{}');
-    if (!s || typeof s !== 'object') return null;
-    return {
-      content: String(s.content ?? ''),
-      embeds: Array.isArray(s.embeds) ? s.embeds : [],
-      rows: Array.isArray(s.rows) ? s.rows : [],
-    };
+    return normaliseComposedSpec(JSON.parse(body.spec ?? '{}'));
   } catch {
     return null;
   }
@@ -59,15 +56,25 @@ router.get(
         when: timeAgo(c.updated_at),
       })),
       msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+      flashError: takeFlashError(req),
     });
   })
 );
 
 // --- builder -----------------------------------------------------------
 
+/** The last publish error for this session, once. */
+function takeFlashError(req) {
+  const text = req.session?.flashError ?? null;
+  if (req.session) req.session.flashError = undefined;
+  return text;
+}
+
 async function renderBuilder(req, res, rec) {
   res.render('msg-builder', {
     ...(await baseContext(req.guild, 'messages')),
+    msg: typeof req.query.msg === 'string' ? req.query.msg : null,
+    flashError: takeFlashError(req),
     channels: guildTextChannels(req.guild),
     roles: assignableRoles(req.guild),
     guildId: req.guild.id,
@@ -151,7 +158,10 @@ router.post(
         res.redirect(`${dest}?msg=sent`);
       }
     } catch (err) {
-      res.redirect(`${dest}?msg=${encodeURIComponent(err.message).slice(0, 120)}`);
+      // The reason travels in the session, not the URL: a link must not be able to put
+      // arbitrary text in a Sylo banner.
+      if (req.session) req.session.flashError = String(err.message).slice(0, 200);
+      res.redirect(`${dest}?msg=failed`);
     }
   })
 );

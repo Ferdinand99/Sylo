@@ -11,6 +11,7 @@ import {
   getGiveaway,
   dueGiveaways,
   markGiveawayEnded,
+  claimGiveawayEnd,
   setGiveawayWinners,
   addGiveawayEntry,
   removeGiveawayEntry,
@@ -116,6 +117,10 @@ export function buildGiveawayPayload(g, { entryCount = 0 } = {}) {
 export async function endGiveaway(id, opts = {}) {
   const g = await getGiveaway(id);
   if (!g) return { ok: false, reason: 'not-found' };
+
+  // Only one caller draws: the expiry tick does not wait for a draw, and the dashboard or
+  // /giveaway end may run at the same moment. A reroll is meant for an ended giveaway.
+  if (!opts.rerollCount && !(await claimGiveawayEnd(id))) return { ok: false, reason: 'already-ended' };
 
   const guild = guildByKey(g.guild_id);
   if (!guild) {

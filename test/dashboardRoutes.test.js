@@ -78,6 +78,12 @@ test('GET /member-data with a user id renders the lookup + data table', async ()
 
 test('POST /member-data/forget deletes the data, DMs the member, and redirects', async () => {
   const { db } = await import('../src/db/index.js');
+  db.prepare('INSERT OR REPLACE INTO afk (guild_id, user_id, reason, since) VALUES (?,?,?,?)').run(
+    GID,
+    MEMBER,
+    'brb',
+    Date.now()
+  );
   assert.ok(
     db.prepare('SELECT COUNT(*) AS n FROM infractions WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER)
       .n >= 1
@@ -92,8 +98,13 @@ test('POST /member-data/forget deletes the data, DMs the member, and redirects',
   assert.equal(res.status, 302);
   assert.match(res.headers.get('location'), /msg=forgot/);
   assert.equal(
-    db.prepare('SELECT COUNT(*) AS n FROM infractions WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER).n,
+    db.prepare('SELECT COUNT(*) AS n FROM afk WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER).n,
     0
+  );
+  // Moderation cases are safety records: erasure keeps them (src/db/purge.js).
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS n FROM infractions WHERE guild_id = ? AND user_id = ?').get(GID, MEMBER).n,
+    1
   );
   assert.equal(app.sink.dms.length, 1);
   assert.equal(app.sink.dms[0].id, MEMBER);
@@ -103,4 +114,11 @@ test('POST /member-data/forget without the confirm box does nothing', async () =
   const res = await post(app.base, `/guilds/${GID}/member-data/forget`, `userId=${MEMBER}`);
   assert.equal(res.status, 302);
   assert.match(res.headers.get('location'), /msg=noconfirm/);
+});
+
+// Express 5 leaves req.body undefined when a request has no body, and handlers read
+// req.body.field directly: an empty POST was a 500.
+test('a POST without a body is handled, not a server error', async () => {
+  const res = await fetch(`${app.base}/guilds/${GID}/unban`, { method: 'POST', redirect: 'manual' });
+  assert.notEqual(res.status, 500);
 });

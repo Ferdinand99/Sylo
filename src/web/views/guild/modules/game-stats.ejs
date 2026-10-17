@@ -39,7 +39,7 @@
     </table>
   <% } %>
   <p class="muted small u-m0 u-mt-2">
-    The lookup cache is shared across every server this bot is in.
-    <a href="/stats">Full cache view &rarr;</a>
+    The lookup cache is shared across every server this bot is in, so only Sylo's operators see it.
+    <% if (typeof isOperator !== 'undefined' && isOperator) { %><a href="/stats">Full cache view &rarr;</a><% } %>
   </p>
 </section>

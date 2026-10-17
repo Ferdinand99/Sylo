@@ -22,7 +22,7 @@ import {
   findRelayRegistration,
   touchRelayRegistration,
 } from '../../db/pushRelay.js';
-import { rateLimit } from '../middleware/rateLimit.js';
+import { clientKey, rateLimit } from '../middleware/rateLimit.js';
 
 const DEVICE_TOKEN = /^[0-9a-f]{64,200}$/i;
 const RELAY_TOKEN = /^[A-Za-z0-9_-]{43}$/; // 32 random bytes, base64url
@@ -84,14 +84,15 @@ let routers = 0;
 
 /**
  * @param {{ apns: { send: Function }, now?: () => number,
- *   limits?: { register?: number, send?: number, unregister?: number } }} opts
- *   `limits`: requests per minute per IP for each endpoint.
+ *   limits?: { register?: number, send?: number, unregister?: number, newPerHour?: number } }} opts
+ *   `limits`: requests per minute per IP for each endpoint; `newPerHour`, new registrations an
+ *   hour from all clients together.
  */
 export function createPushRelayRouter({ apns, now = Date.now, limits = {} }) {
   const router = Router();
   const id = ++routers;
   const perIp = (name, max) =>
-    rateLimit({ windowMs: 60_000, max, keyFn: (req) => `push-relay${id}:${name}|${req.ip}` });
+    rateLimit({ windowMs: 60_000, max, keyFn: (req) => `push-relay${id}:${name}|${clientKey(req)}` });
 
   // Sends in the last hour (a rolling window) per registration and per device token, so one
   // device registered for several instances is capped too. In memory: one process serves the
@@ -120,8 +121,19 @@ export function createPushRelayRouter({ apns, now = Date.now, limits = {} }) {
     return true;
   }
 
+  // /register needs no account, so random device tokens could fill the table from many
+  // addresses. Real sign-ins are far fewer: cap new registrations an hour across all clients.
+  const newPerHour = limits.newPerHour ?? 5000;
+  const recentRegistrations = [];
+
   router.post('/register', perIp('register', limits.register ?? 30), async (req, res, next) => {
     try {
+      const t = now();
+      while (recentRegistrations.length && recentRegistrations[0] <= t - HOUR_MS) recentRegistrations.shift();
+      if (recentRegistrations.length >= newPerHour) {
+        res.setHeader('Retry-After', String(Math.ceil((recentRegistrations[0] + HOUR_MS - t) / 1000)));
+        return res.status(429).json({ error: 'rate_limited' });
+      }
       const body = req.body;
       if (
         !shaped(body, ['deviceToken', 'environment', 'instance']) ||
@@ -132,6 +144,7 @@ export function createPushRelayRouter({ apns, now = Date.now, limits = {} }) {
       ) {
         return invalid(res);
       }
+      recentRegistrations.push(t);
       const relayToken = await createRelayRegistration({
         deviceToken: body.deviceToken.toLowerCase(),
         environment: body.environment,

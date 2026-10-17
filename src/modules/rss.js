@@ -16,6 +16,7 @@ import { randomBytes } from 'node:crypto';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { seen, anySeen, markSeen, pruneScopePrefixOlderThan } from '../db/postedKeys.js';
 import { parseFeed } from '../bot/lib/feed.js';
+import { safeFetch } from '../lib/safeFetch.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
 
@@ -205,13 +206,14 @@ export function buildPayload(feed, entry) {
 // --- poll loop -------------------------------------------------------
 
 async function fetchEntries(url) {
-  const res = await fetch(url, {
+  // The URL comes from a server admin: never let it reach the host's own network, and cap the size.
+  const res = await safeFetch(url, {
     headers: { 'User-Agent': UA, Accept: ACCEPT },
-    signal: AbortSignal.timeout(10_000),
-    redirect: 'follow',
+    timeoutMs: 10_000,
+    maxBytes: 4_000_000,
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return parseFeed(await res.text());
+  return parseFeed(res.body.toString('utf8'));
 }
 
 /** @param {string} guildId @param {{ id, type, ref, url, channelId, roleId, template }} feed */

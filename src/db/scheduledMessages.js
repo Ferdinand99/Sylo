@@ -2,6 +2,7 @@
 // reminder; the loop in modules/scheduledMessages.js polls dueReminders() and
 // advances next_run_at (recurring) or disables the row (single).
 import { prepare, registerPostgresBootstrap } from './driver.js';
+import { LIMITS, checkLimit } from '../lib/limits.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS scheduled_messages (
@@ -94,7 +95,10 @@ export async function dueScheduled(now = Date.now()) {
  * @param {string} guildId
  * @param {object} r  { name, channelId, spec, mode, days:number[], intervalMinutes, startAt, endAt, runAt }
  */
+const countForGuildStmt = prepare('SELECT COUNT(*) AS n FROM scheduled_messages WHERE guild_id = ?');
+
 export async function createReminder(guildId, r) {
+  checkLimit((await countForGuildStmt.get(guildId)).n, LIMITS.reminders, 'reminders');
   const now = Date.now();
   // next_run_at is NOT NULL on the table; for single-mode it's unused (the loop
   // keys off run_at) so park it at the run time or the far future.

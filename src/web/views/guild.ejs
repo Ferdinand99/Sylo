@@ -18,6 +18,8 @@
        warned: 'Warning added.',
        'warned-nolog': 'Warning added — no mod-log channel is set, so it was not logged.',
        baduser: 'Enter a valid user ID (or @mention) and a reason.',
+       notmember: 'That user is not a member of this server.',
+       outranked: 'You can only warn members ranked below you (warnings can lead to a kick or ban).',
        botuser: "You can't warn a bot.",
        unbanned: 'Ban removed.',
        notbanned: 'That user is not banned.',
@@ -26,6 +28,9 @@
        'unlocked-one': 'Channel unlocked.',
        'lock-gone': 'That channel is no longer locked.',
        'warn-removed': 'Warning removed.',
+       'case-reason': 'Case reason updated.',
+       'case-deleted': 'Case deleted.',
+       'case-restored': 'Case restored.',
        'warn-cleared': "That member's warnings were cleared.",
        'warn-gone': 'That warning no longer exists.',
        'warn-none': 'That member has no warnings to clear.',
@@ -73,7 +78,7 @@
        noconfirm: 'Tick the confirmation box to delete the member\'s data.',
        'md-baduser': 'Enter a valid Discord user ID or @mention.',
      };
-     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'locked-all', 'unlocked-all', 'unlocked-one', 'warn-removed', 'warn-cleared', 'bulk-on', 'bulk-off', 'test-sent', 'count-set', 'count-reset', 'count-unbenched', 'gh-resecret', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
+     const ok = ['saved', 'cleared', 'warned', 'unbanned', 'locked-all', 'unlocked-all', 'unlocked-one', 'warn-removed', 'case-reason', 'case-deleted', 'case-restored', 'warn-cleared', 'bulk-on', 'bulk-off', 'test-sent', 'count-set', 'count-reset', 'count-unbenched', 'gh-resecret', 'lvl-set', 'lvl-reset', 'appeal-accepted', 'appeal-denied', 'wc-published', 'wc-channel', 'wc-unpub', 'sb-saved', 'vanity-set', 'vanity-cleared', 'forgot'].includes(msg);
      const cls = ok ? 'ok' : (msg === 'warned-nolog' || msg === 'forgot-nodm' || /^appeal-(accepted|denied)-nodm$/.test(msg) ? 'info' : 'bad');
 %>
   <div class="banner banner-flash <%= cls %>"><%= messages[msg] || 'Done.' %></div>
@@ -428,7 +433,9 @@
             </table>
             <p class="muted small u-mt-2">Not shown here: messages already posted to channels, a completed
               giveaway’s winner list, and the config-change log (which records a display name, not an ID).
-              Deleting also anonymises this member as an inviter and as “last counter” where applicable.</p>
+              Deleting also anonymises this member as an inviter and as “last counter” where applicable.
+              Safety records (moderation cases, a temporary ban, honeypot catches, a counting penalty)
+              are kept; remove a case on the Moderation page if it should go.</p>
 
             <form method="POST" action="/guilds/<%= guild.id %>/member-data/forget" class="stack u-mt-3">
               <input type="hidden" name="userId" value="<%= lookup.profile.id %>" />

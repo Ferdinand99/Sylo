@@ -35,6 +35,7 @@ import { decideAppeal, setAppealInvite } from '../db/appeals.js';
 import { sendToChannel } from './lib/send.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { log } from '../lib/log.js';
+import { sweepMap } from '../lib/sweepMap.js';
 
 const TOKEN_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days — link must outlast a slow review
 const COLOR = 0xb4472b;
@@ -79,12 +80,13 @@ export function normaliseAppealsConfig(raw = {}) {
 // --- signed appeal link --------------------------------------------------
 
 export function signAppealToken(guildId, userId) {
-  return signToken([guildId, userId], TOKEN_TTL_MS);
+  return signToken([guildId, userId], TOKEN_TTL_MS, { purpose: 'appeal' });
 }
 
 /** @returns {{ guildId: string, userId: string } | null} */
 export function verifyAppealToken(token) {
-  const parts = verifyToken(token, 2);
+  // Links sent before tokens had a purpose stay valid for their 60 days.
+  const parts = verifyToken(token, 2, { purpose: 'appeal', acceptLegacy: true });
   if (!parts) return null;
   const [guildId, userId] = parts;
   if (!isPlatformGuildId(guildId) || !/^\d{17,20}$/.test(userId)) return null;
@@ -139,6 +141,7 @@ function banAppealEmbed(guildName, reason, link, cfg) {
 // (you can't DM a user you no longer share a guild with). This short-lived map
 // lets the guildBanAdd handler below skip a doomed second attempt.
 const preBanDmed = new Map(); // `${guildId}:${userId}` -> { expires, sent }
+sweepMap(preBanDmed, (rec, now) => rec.expires <= now); // a ban that failed never reads its entry
 const PRE_BAN_TTL_MS = 60_000;
 
 function rememberPreBanDm(guildId, userId, sent) {

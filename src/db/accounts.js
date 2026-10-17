@@ -12,6 +12,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { prepare, registerPostgresBootstrap } from './driver.js';
 import { revokeAccountTokens } from './apiTokens.js';
+// Tables an account's people are named in; imported for their Postgres bootstrap (deleteAccount).
+import './userPrefs.js';
+import './roadmap.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS accounts (
@@ -73,7 +76,21 @@ const s = {
   setGuilds: prepare(`
     UPDATE account_identities SET guild_ids = ?, guilds_fetched_at = ? WHERE platform = ? AND platform_user_id = ?
   `),
-  deleteIdentity: prepare('DELETE FROM account_identities WHERE account_id = ? AND platform = ?'),
+  // Only while the account keeps another sign-in: the check and the delete are one statement.
+  deleteIdentity: prepare(`
+    DELETE FROM account_identities
+    WHERE account_id = @accountId AND platform = @platform
+      AND EXISTS (SELECT 1 FROM account_identities o WHERE o.account_id = @accountId AND o.platform <> @platform)
+  `),
+  getIdentityOn: prepare('SELECT 1 FROM account_identities WHERE account_id = ? AND platform = ?'),
+  deleteOtherSessions: prepare('DELETE FROM sessions WHERE account_id = ? AND id <> ?'),
+  deleteAccountSessions: prepare('DELETE FROM sessions WHERE account_id = ?'),
+  deleteAccountIdentities: prepare('DELETE FROM account_identities WHERE account_id = ?'),
+  deleteAccountCodes: prepare('DELETE FROM mobile_codes WHERE account_id = ?'),
+  deleteAccount: prepare('DELETE FROM accounts WHERE id = ?'),
+  deletePrefs: prepare('DELETE FROM user_prefs WHERE user_id = ?'),
+  deleteVotes: prepare('DELETE FROM roadmap_votes WHERE user_id = ?'),
+  anonymisePosts: prepare("UPDATE roadmap_posts SET created_by = '' WHERE created_by = ?"),
   countIdentities: prepare('SELECT COUNT(*) AS n FROM account_identities WHERE account_id = ?'),
   insertSession: prepare('INSERT INTO sessions (id, account_id, created_at, expires_at) VALUES (?, ?, ?, ?)'),
   getSession: prepare('SELECT account_id, expires_at FROM sessions WHERE id = ?'),
@@ -155,17 +172,41 @@ export async function linkIdentity(accountId, identity) {
 
 /**
  * Remove an account's identity on a platform. Never removes the last one. Also signs out every
- * Sylo app device of the account: disconnecting a sign-in is what someone does when that login
- * was lost or shared, so the app sessions it may have started must not outlive it.
- * @returns {Promise<boolean>}
+ * Sylo app device of the account, and every other web session: disconnecting a sign-in is what
+ * someone does when that login was lost or shared, so the sessions it may have started must not
+ * outlive it. `keepSession` is the web session doing the disconnect, which stays signed in.
+ * @returns {Promise<boolean>} false when that platform is not linked, or is the only sign-in
  */
-export async function unlinkIdentity(accountId, platform) {
+export async function unlinkIdentity(accountId, platform, { keepSession = null } = {}) {
+  if (!(await s.getIdentityOn.get(accountId, platform))) return false;
   const { n } = await s.countIdentities.get(accountId);
   if (Number(n) <= 1) return false;
   // Tokens first: if this fails, the identity is still there and nothing is half done.
   await revokeAccountTokens(accountId);
-  await s.deleteIdentity.run(accountId, platform);
+  const { changes } = await s.deleteIdentity.run({ accountId, platform });
+  if (changes !== 1) return false; // a concurrent disconnect took the other sign-in
+  await s.deleteOtherSessions.run(accountId, keepSession ?? '');
   return true;
+}
+
+/**
+ * Delete a dashboard account: its sign-ins, web sessions, Sylo app tokens (their push
+ * registrations go with them), unused app sign-in codes, dashboard preferences and roadmap
+ * votes. Roadmap suggestions stay, without who made them. What Sylo stores per server
+ * (levels, birthdays, tickets …) is not touched: members remove that with /forget in each server.
+ */
+export async function deleteAccount(accountId) {
+  const people = (await identitiesOf(accountId)).map((i) => i.platformUserId);
+  await revokeAccountTokens(accountId);
+  await s.deleteAccountCodes.run(accountId);
+  for (const id of [...people, accountId]) {
+    await s.deletePrefs.run(id);
+    await s.deleteVotes.run(id);
+    await s.anonymisePosts.run(id);
+  }
+  await s.deleteAccountSessions.run(accountId);
+  await s.deleteAccountIdentities.run(accountId);
+  await s.deleteAccount.run(accountId);
 }
 
 export async function setIdentityGuilds(platform, platformUserId, guildIds) {

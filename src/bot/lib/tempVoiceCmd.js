@@ -50,6 +50,8 @@ export function targetActable(ctx, targetMember) {
   if (!targetMember) return 'That member is not in the channel.';
   if (targetMember.id === ctx.row.owner_id && !ctx.isModerator) return "You can't target the channel owner.";
   if (targetMember.id === ctx.member.id) return "You can't target yourself.";
+  // Banning or hiding Sylo would lock it out of the channel it has to clean up.
+  if (targetMember.id === ctx.channel?.guild?.members?.me?.id) return "You can't target Sylo.";
   const tRoles = [...(targetMember.roles?.cache?.keys() ?? [])];
   if (ctx.hub.ignoredRoles?.some((r) => tRoles.includes(r)))
     return 'That member is exempt from voice commands.';

@@ -99,6 +99,27 @@ export async function createTicket(guildId, userId) {
   return toTicket(await getStmt.get(Number(info.lastInsertRowid)));
 }
 
+// SQLite says "UNIQUE constraint failed", Postgres error code 23505 (see db/appeals.js).
+const isUniqueViolation = (err) => err.code === '23505' || /unique/i.test(String(err.message));
+
+/**
+ * The member's open ticket in a guild, made if there is none. Two DMs arriving together both
+ * find none; the partial unique index refuses the second insert, which then joins the first.
+ * @returns {Promise<{ ticket: object, created: boolean }>}
+ */
+export async function openOrCreateTicket(guildId, userId) {
+  const open = await getOpenTicket(guildId, userId);
+  if (open) return { ticket: open, created: false };
+  try {
+    return { ticket: await createTicket(guildId, userId), created: true };
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+    const ticket = await getOpenTicket(guildId, userId);
+    if (!ticket) throw err;
+    return { ticket, created: false };
+  }
+}
+
 /**
  * @param {number} ticketId
  * @param {{ authorId: string, authorKind: 'user'|'staff'|'system', content?: string, attachments?: string[], delivered?: boolean }} m

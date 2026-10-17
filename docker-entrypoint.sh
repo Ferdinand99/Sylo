@@ -6,6 +6,8 @@
 # write to. When started as root, fix ownership of the data directory and then
 # drop privileges so the Node process still runs as a non-root user.
 set -e
+# New files (the database, its backups) readable by their owner only, also on a host folder.
+umask 077
 
 DATA_DIR=$(dirname "${DATABASE_PATH:-/app/data/sylo.db}")
 

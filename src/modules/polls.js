@@ -155,17 +155,35 @@ function allowedToVote(member, config) {
  * Count reactions on a poll message.
  * @returns {Promise<Array<{ count: number, voters: Set<string> }>>} one entry per option
  */
+const MAX_VOTERS_PER_OPTION = 5000; // 50 pages: a bound on the API calls one tally makes
+
+/**
+ * Everyone who reacted, page by page (the API gives 100 at a time), up to `cap`. Falls back to
+ * the cache when fetching fails.
+ * @returns {Promise<Map<string, object>>}
+ */
+export async function reactors(rx, cap = MAX_VOTERS_PER_OPTION) {
+  const all = new Map();
+  let after;
+  try {
+    while (all.size < cap) {
+      const page = await rx.users.fetch({ limit: 100, ...(after ? { after } : {}) });
+      for (const [id, user] of page) if (all.size < cap) all.set(id, user);
+      if (page.size < 100) break;
+      after = [...page.keys()].at(-1);
+    }
+  } catch {
+    if (all.size === 0) return rx.users.cache;
+  }
+  return all;
+}
+
 async function tally(message, poll, config) {
   const out = poll.options.map(() => ({ count: 0, voters: new Set() }));
   for (let i = 0; i < poll.options.length; i += 1) {
     const rx = message.reactions.cache.get(LETTERS[i]);
     if (!rx) continue;
-    let users;
-    try {
-      users = await rx.users.fetch({ limit: 100 });
-    } catch {
-      users = rx.users.cache;
-    }
+    const users = await reactors(rx);
     for (const [uid, user] of users) {
       if (user.bot) continue;
       const member =
@@ -256,8 +274,20 @@ on('polls', 'reactionAdd', async ({ reaction, user }, rawConfig, _guildId) => {
     }
   }
 
-  // Max-votes cap → close early.
+  // Max-votes cap → close early. The reaction counts are an upper bound on the voters (they
+  // include the bot's own and anyone ineligible), so a full tally only runs once it could be met.
   if (poll.max_votes) {
+    let upperBound = 0;
+    for (let i = 0; i < poll.options.length; i += 1) {
+      const rx = message.reactions.cache.get(LETTERS[i]);
+      if (!rx) continue;
+      if (typeof rx.count !== 'number') {
+        upperBound = Infinity; // no count on this platform: tally to be sure
+        break;
+      }
+      upperBound += Math.max(0, rx.count - (rx.me ? 1 : 0));
+    }
+    if (upperBound < poll.max_votes) return;
     const counts = await tally(message, poll, config);
     const voters = new Set();
     counts.forEach((c) => c.voters.forEach((v) => voters.add(v)));

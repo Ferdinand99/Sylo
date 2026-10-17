@@ -32,6 +32,12 @@ export function normaliseThresholds(list) {
     .sort((a, b) => a.count - b.count);
 }
 
+/** The server's owner, or a member with Administrator or Manage Server. */
+const isServerManager = (guild, member) =>
+  member.id === guild.ownerId ||
+  Boolean(member.permissions?.has('Administrator')) ||
+  Boolean(member.permissions?.has('ManageGuild'));
+
 /**
  * After a warning is issued, apply the strictest matching threshold rule.
  * @param {import('discord.js').Guild} guild
@@ -52,6 +58,9 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
   // Immunity roles (shared with Auto-moderation) are never auto-punished.
   const immune = (await getGuildModule(guildKey(guild), 'automod')).config.exemptRoles;
   if (member && Array.isArray(immune) && immune.some((r) => member.roles.cache.has(r))) return;
+  // The punishment runs with the bot's permissions, not the moderator's: never let warnings
+  // escalate to the owner or to people who run the server.
+  if (member && isServerManager(guild, member)) return;
   const reason = `Auto: reached ${warnCount} warning(s) (rule at ${rule.count})`;
   let done = null;
 
@@ -65,7 +74,11 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
       }
       await member.kick(reason);
       done = 'kicked';
-    } else if (rule.action === 'ban' && guild.members.me?.permissions.has('BanMembers')) {
+    } else if (
+      rule.action === 'ban' &&
+      guild.members.me?.permissions.has('BanMembers') &&
+      (!member || member.bannable)
+    ) {
       if (config.dmOnPunish !== false) {
         // DM before the ban; the appeals module adds the appeal link when active.
         const appeal = await sendPreBanAppealDm(guild, targetUser, reason);

@@ -23,6 +23,14 @@ const asJson =
   /^(1|true|yes|on)$/i.test(process.env.LOG_JSON || '') ||
   String(process.env.LOG_FORMAT || '').toLowerCase() === 'json';
 
+/**
+ * Hide the password in any `scheme://user:password@host` in a log text: a failed pg_dump puts
+ * DATABASE_URL in its error, and log lines reach the console, /health and the dev-log channel.
+ */
+export function redactSecrets(text) {
+  return String(text).replace(/([a-z][a-z0-9+.-]*:\/\/[^\s:/@]*):[^\s@/]+@/gi, '$1:***@');
+}
+
 /** Split trailing args into a text tail, an Error, and a plain-object meta bag. */
 function splitArgs(args) {
   const parts = [];
@@ -38,8 +46,15 @@ function splitArgs(args) {
 
 function emit(level, scope, msg, args) {
   if (LEVELS[level] < threshold) return;
-  const { tail, err, meta } = splitArgs(args);
-  const message = [msg, tail].filter(Boolean).join(' ');
+  const { tail, err: rawErr, meta } = splitArgs(args);
+  const message = redactSecrets([msg, tail].filter(Boolean).join(' '));
+  let err = rawErr;
+  if (rawErr) {
+    err = new Error(redactSecrets(rawErr.message ?? ''), { cause: rawErr.cause });
+    err.stack = rawErr.stack ? redactSecrets(rawErr.stack) : err.stack;
+    if (rawErr.code !== undefined) err.code = rawErr.code;
+    err.name = rawErr.name;
+  }
   const fullMessage = err?.message ? `${message} ${err.message}`.trim() : message;
   const ts = new Date().toISOString();
 

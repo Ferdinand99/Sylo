@@ -269,6 +269,9 @@ body {
 .sb-user-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .sb-user a, .sb-login { color: var(--muted); text-decoration: none; }
 .sb-user a:hover, .sb-login:hover { color: var(--text); }
+.sb-logout { margin: 0; }
+.sb-logout-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); cursor: pointer; }
+.sb-logout-btn:hover { color: var(--text); }
 .sb-login { display: block; padding: 8px 10px; font-size: 13px; font-weight: 600; }
 .tag-open {
   display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;

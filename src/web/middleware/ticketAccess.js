@@ -5,8 +5,9 @@ import { allGuildKeys, guildByKey } from '../../platform/platformOf.js';
 import { config } from '../../config.js';
 import { splitPlatformGuildId } from '../../lib/platformId.js';
 import { adminKeysOf, identityFor } from '../lib/accountAuth.js';
-import { accountManagesGuildLive, fetchMemberFromGuild } from './auth.js';
+import { accountManagesGuildLive, fetchMemberFromGuild, snapshotIsFresh } from './auth.js';
 import { getGuildModule } from '../../db/modules.js';
+import { withoutEveryone } from '../../db/guildSettings.js';
 
 function deny(res) {
   res.status(403).render('error', {
@@ -36,7 +37,8 @@ export async function accountMaySeeTickets(account, guildId, { live, fetchMember
   }
 
   if (!userId) return false; // no identity on this guild's platform: nothing to look up
-  const staffRoles = (await getGuildModule(guildId, 'tickets')).config.staffRoles ?? [];
+  const stored = (await getGuildModule(guildId, 'tickets')).config.staffRoles;
+  const staffRoles = withoutEveryone(guildId, Array.isArray(stored) ? stored : []);
   if (staffRoles.length === 0) return false;
 
   const guild = guildByKey(guildId);
@@ -59,7 +61,9 @@ export async function ticketAccessState(req) {
   if (!config.authEnabled) return 'ok';
 
   if (!req.account) return 'login';
-  const ok = await accountMaySeeTickets(req.account, req.params.guildId, { live: Boolean(req.viaToken) });
+  // Tokens never refresh their snapshot, and a web session's snapshot goes stale: check live then.
+  const live = Boolean(req.viaToken) || !snapshotIsFresh(req.account, req.params.guildId);
+  const ok = await accountMaySeeTickets(req.account, req.params.guildId, { live });
   return ok ? 'ok' : 'denied';
 }
 

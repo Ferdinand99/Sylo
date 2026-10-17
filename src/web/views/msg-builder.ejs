@@ -16,7 +16,7 @@
 
 <% if (typeof msg !== 'undefined' && msg) { %>
   <div class="banner banner-flash <%= (['saved','sent','updated'].indexOf(msg) >= 0) ? 'ok' : (msg === 'unpublished' ? 'info' : 'bad') %>">
-    <%= ({ saved:'Draft saved.', sent:'Published to the channel.', updated:'Published message updated.', unpublished:'Unpublished — draft kept.', bad:'Could not read the editor.', nochannel:'Pick a channel before publishing.' })[msg] || (function(){ try { return decodeURIComponent(msg); } catch(e){ return msg; } })() %>
+    <%= ({ saved:'Draft saved.', sent:'Published to the channel.', updated:'Published message updated.', unpublished:'Unpublished — draft kept.', bad:'Could not read the editor.', nochannel:'Pick a channel before publishing.', failed: flashError ? 'Publishing failed: ' + flashError : 'Publishing failed.' })[msg] || 'Something went wrong.' %>
   </div>
 <% } %>
 

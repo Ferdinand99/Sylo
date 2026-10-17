@@ -203,12 +203,16 @@ No other third parties receive your data.
   in that server (the same scope as `/forget`, below). Nothing is deleted. Rate
   limited to one export per member per server every few minutes.
 - **`/forget`** — any member can run `/forget confirm:True` in a server to delete
-  the data Sylo keys to their Discord account **in that server**: infractions,
-  leveling XP (including period rows), ticket history (including their ticket
-  messages), ban appeals, invite records, AFK status, birthday and giveaway
+  the data Sylo keys to their Discord account **in that server**: leveling XP
+  (including period rows), ticket history (the whole conversation, staff replies
+  included), ban appeals, invite records, AFK status, birthday and giveaway
   entries. It does **not** remove messages already posted to channels, a
   completed giveaway's winner list, or the display name recorded in that server's
-  config audit log.
+  config audit log. **Safety records are kept**: moderation cases (warnings,
+  notes, timeouts, kicks, bans), an active temporary ban, honeypot catches and a
+  counting penalty. They protect the server and its members (section 4), so a
+  member cannot erase their own record; the server's staff can remove a case, and
+  you can ask the Operator (section 9). `/mydata` includes them.
 - **Admin-assisted erasure** — a server's administrators can look up and delete a
   specific member's data from the Dashboard's **Member data** page (same scope as
   `/forget`). When they do, Sylo sends that member a direct message confirming
@@ -223,7 +227,10 @@ No other third parties receive your data.
   expired session records are removed automatically a few times a day.
 - **Dashboard account:** a platform you connected is removed from your account
   when you disconnect it on the account page (the last one cannot be
-  disconnected). To delete the whole account, contact the Operator (section 9).
+  disconnected). **Delete account** on the account page (or in the Sylo app)
+  deletes the whole account at once: its sign-ins, every web session and app
+  device, dashboard preferences and roadmap votes; your roadmap suggestions stay,
+  without your name. Data kept per server is removed with `/forget` there.
 - **Sylo app sign-ins** are deleted when you sign out in the app, revoke the
   device under **Signed-in devices** on the Dashboard's account page, or
   disconnect a sign-in (Discord or Fluxer) from your account, which removes all
@@ -245,7 +252,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | Data | Retained for | Deleted when |
 | --- | --- | --- |
 | Server configuration & module settings | As long as the Bot is in the server | Bot removed from the server; or the setting is changed or cleared |
-| Infractions / moderation case log | Indefinitely, as a moderation record | `/forget`; admin-assisted erasure; Bot removed. Inactive cases (`/case delete`, expired temp-bans) are kept for audit unless the server sets a "delete inactive cases after N days" limit |
+| Infractions / moderation case log | Indefinitely, as a moderation record | Staff remove the case; Bot removed. Not by `/forget` or admin-assisted erasure (a safety record). Inactive cases (`/case delete`, expired temp-bans) are kept for audit unless the server sets a "delete inactive cases after N days" limit |
 | Ban appeals | Indefinitely | `/forget`; admin-assisted erasure; Bot removed |
 | Config audit log | Indefinitely | Bot removed from the server (not covered by `/forget` — it records only a display name) |
 | Leveling XP, level, message/voice counters | Until erased | `/forget`; admin-assisted erasure; Bot removed; leaderboard reset by an admin |
@@ -258,8 +265,8 @@ For any request the above does not cover, contact the Operator (section 9).
 | Temporary voice channel owner + ban list | Until the channel empties | Channel empties (row deleted automatically); Bot removed |
 | Modmail ticket transcripts | Until erased, or the server's "delete closed tickets after N days" limit (off by default) | `/forget`; admin-assisted erasure; Bot removed; a closed ticket ageing past the server's limit |
 | Notifier bookkeeping *(no personal data)* | Rolling | Automatic pruning; Bot removed |
-| Game-stat cache | 5 minutes (configurable) | TTL expiry |
-| Dashboard account (per platform: user ID, username, avatar, servers you administer) | Until removed | Disconnecting that platform on the account page; on request to the Operator |
+| Game-stat cache | 5 minutes (configurable) for answers; lookups are deleted after 30 days | TTL expiry; daily sweep |
+| Dashboard account (per platform: user ID, username, avatar, servers you administer) | Until removed | Disconnecting that platform, or **Delete account**, on the account page or in the Sylo app; on request to the Operator |
 | Dashboard session (session record + browser cookie) | 7 days | Logout or expiry (expired records are removed automatically) |
 | Sylo app sign-in (device record, hashed token) | 90 days from the last use | Sign out in the app; revoke on the account page; a sign-in disconnected from the account; 90 days without use |
 | One-time app sign-in code (hashed) | 60 seconds | Used, or expired and deleted automatically |

@@ -121,7 +121,15 @@ test('logging out ends the session on the server', async () => {
   await signIn(b, 'discord');
   assert.deepEqual(await guildIds(b), [D_GUILD]);
   const cookieBefore = new Map(b.jar);
-  await b.get('/auth/logout');
+  // A plain GET (a link on another site) does not sign anyone out.
+  assert.equal(await guildIds(b).then((g) => g.length), 1);
+  assert.equal((await b.get('/auth/logout')).status, 404);
+  assert.deepEqual(await guildIds(b), [D_GUILD], 'still signed in');
+  // A POST from another site has no CSRF token: it does not sign anyone out either.
+  await b.get('/auth/logout', { method: 'POST' });
+  assert.deepEqual(await guildIds(b), [D_GUILD], 'still signed in after a POST without a token');
+  const csrf = (await (await b.get('/api/v2/csrf')).json()).token;
+  await b.get('/auth/logout', { method: 'POST', headers: { 'x-csrf-token': csrf } });
   const replay = browser();
   for (const [k, v] of cookieBefore) replay.jar.set(k, v);
   const res = await replay.get('/api/v2/guilds');

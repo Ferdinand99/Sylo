@@ -4,6 +4,7 @@
 // server's local calendar day) stops a schedule firing twice inside one day
 // without needing minute-precision timing.
 import { prepare, registerPostgresBootstrap } from './driver.js';
+import { LIMITS, checkLimit } from '../lib/limits.js';
 
 const ALL_DAYS = '0,1,2,3,4,5,6';
 
@@ -79,7 +80,10 @@ export async function dueCandidates(today) {
  * @param {string} guildId
  * @param {{ channelId: string, days: number[], timeHhmm: string, maxAgeHours: number, skipPinned: boolean }} s
  */
+const countForGuildStmt = prepare('SELECT COUNT(*) AS n FROM channel_cleanup_schedules WHERE guild_id = ?');
+
 export async function createCleanupSchedule(guildId, s) {
+  checkLimit((await countForGuildStmt.get(guildId)).n, LIMITS.cleanupSchedules, 'cleanup schedules');
   const result = await insertStmt.run({
     guildId,
     channelId: s.channelId,

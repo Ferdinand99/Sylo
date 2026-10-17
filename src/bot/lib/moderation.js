@@ -18,7 +18,7 @@ export const NO_REASON = 'No reason provided';
  * @param {string} args.action  e.g. "kick", "ban", "time out"
  * @returns {string | null}
  */
-export function checkActable({ interaction, target, action }) {
+export function checkActable({ interaction, target, action, botActs = true }) {
   const { guild, member: moderator } = interaction;
   const me = guild.members.me;
 
@@ -39,11 +39,27 @@ export function checkActable({ interaction, target, action }) {
     return `You can't ${action} ${target.user.tag} — their highest role is above or equal to yours.`;
   }
 
-  // The bot must outrank the target too.
-  if (me.roles.highest.comparePositionTo(target.roles.highest) <= 0) {
+  // The bot must outrank the target too, when it is the bot that acts (not for a warning record).
+  if (botActs && me.roles.highest.comparePositionTo(target.roles.highest) <= 0) {
     return `I can't ${action} ${target.user.tag} — my highest role is below theirs. Move my role higher in Server Settings.`;
   }
 
+  return null;
+}
+
+/**
+ * Why a dashboard user may not warn `target`, or null. Warnings can escalate to a kick or ban
+ * (warn thresholds), so the same rule as /warn: the server owner may warn anyone, everyone
+ * else only members ranked below them.
+ * @returns {string|null}
+ */
+export function warnRefusal(guild, actor, target) {
+  if (target.id === guild.ownerId) return "You can't warn the server owner.";
+  if (!actor) return "You're not a member of this server, so you can't warn members here.";
+  if (actor.id === guild.ownerId) return null;
+  if ((target.roles?.highest?.position ?? 0) >= (actor.roles?.highest?.position ?? 0)) {
+    return `You can't warn ${target.user?.tag ?? target.id} — their highest role is above or equal to yours.`;
+  }
   return null;
 }
 

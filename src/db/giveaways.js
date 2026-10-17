@@ -45,6 +45,7 @@ const s = {
   ),
   due: prepare('SELECT * FROM giveaways WHERE ended = 0 AND ends_at <= ?'),
   markEnded: prepare('UPDATE giveaways SET ended = 1, won_ids = ? WHERE id = ?'),
+  claimEnd: prepare('UPDATE giveaways SET ended = 1 WHERE id = ? AND ended = 0'),
   setWinners: prepare('UPDATE giveaways SET won_ids = ? WHERE id = ?'),
   delGuild: prepare('DELETE FROM giveaways WHERE guild_id = ?'),
 
@@ -105,6 +106,8 @@ export const endedGiveaways = async (guildId, limit = 10) =>
   (await s.recentEnded.all(guildId, limit)).map(hydrate);
 export const dueGiveaways = async (now) => (await s.due.all(now)).map(hydrate);
 export const markGiveawayEnded = async (id, wonIds) => s.markEnded.run(JSON.stringify(wonIds ?? []), id);
+/** Mark a giveaway ended unless it already is: true only for the one caller that may draw it. */
+export const claimGiveawayEnd = async (id) => (await s.claimEnd.run(id)).changes === 1;
 export const setGiveawayWinners = async (id, wonIds) => s.setWinners.run(JSON.stringify(wonIds ?? []), id);
 
 export const addGiveawayEntry = async (id, userId) => s.addEntry.run(id, userId, Date.now());

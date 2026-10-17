@@ -51,6 +51,7 @@ import './insights.js';
 import './channelCleanup.js';
 import './honeypotCatches.js';
 import './componentReactions.js';
+import './verificationKicks.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -89,6 +90,7 @@ export const GUILD_TABLES = [
   'github_watches',
   'honeypot_catches',
   'component_reactions',
+  'verification_kicks',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -109,14 +111,15 @@ export async function purgeGuild(guildId) {
 // --- per-user erasure (for /forget) -----------------------------------------
 
 const userStmts = {
-  warnings: prepare('DELETE FROM infractions WHERE guild_id = ? AND user_id = ?'),
+  keptCases: prepare('SELECT COUNT(*) AS n FROM infractions WHERE guild_id = ? AND user_id = ?'),
   leveling: prepare('DELETE FROM leveling WHERE guild_id = ? AND user_id = ?'),
   levelingPeriods: prepare('DELETE FROM leveling_periods WHERE guild_id = ? AND user_id = ?'),
   counting: prepare('UPDATE counting SET last_user_id = NULL WHERE guild_id = ? AND last_user_id = ?'),
+  // Every message in the member's tickets, staff replies too: they go with the ticket (and
+  // often quote the member). Left behind, they could never be found again by any purge.
   ticketMsgs: prepare(`
     DELETE FROM ticket_messages
-    WHERE author_kind = 'user'
-      AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ? AND user_id = ?)
+    WHERE ticket_id IN (SELECT id FROM tickets WHERE guild_id = ? AND user_id = ?)
   `),
   tickets: prepare('DELETE FROM tickets WHERE guild_id = ? AND user_id = ?'),
   appeals: prepare('DELETE FROM appeals WHERE guild_id = ? AND user_id = ?'),
@@ -140,10 +143,15 @@ const userStmts = {
  * a Discord user id; a completed giveaway's host/winner list and the config
  * audit log (which records a display name, not an id) are guild records and are
  * only removed by {@link purgeGuild}.
- * @returns {{ warnings: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, invites: number }}
+ *
+ * Safety records are kept: moderation cases (warnings, kicks, bans, notes), temp bans,
+ * honeypot catches and counting penalties. They exist to protect the server, so a member
+ * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
+ * the dashboard. `keptCases` says how many cases stayed.
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, invites: number }}
  */
 export async function forgetUser(guildId, userId) {
-  const warnings = (await userStmts.warnings.run(guildId, userId)).changes;
+  const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
   const leveling =
     (await userStmts.leveling.run(guildId, userId)).changes +
     (await userStmts.levelingPeriods.run(guildId, userId)).changes;
@@ -160,7 +168,7 @@ export async function forgetUser(guildId, userId) {
     (await userStmts.inviteJoinsAsInviter.run(guildId, userId)).changes +
     (await userStmts.invitePersonal.run(guildId, userId)).changes;
   return {
-    warnings,
+    keptCases,
     leveling,
     tickets,
     ticketMessages: ticketMsgs,
@@ -184,10 +192,38 @@ export async function forgetUser(guildId, userId) {
 const USER_DATA_SOURCES = [
   {
     key: 'warnings',
-    label: 'Moderation cases',
+    label: 'Moderation cases (kept by /forget)',
     order: 'gu',
+    kept: true,
     countSql: 'SELECT COUNT(*) AS n FROM infractions WHERE guild_id = ? AND user_id = ?',
-    rowsSql: 'SELECT * FROM infractions WHERE guild_id = ? AND user_id = ? ORDER BY case_number',
+    // Not moderator_id: who took the action is the moderator's data, not the member's.
+    rowsSql:
+      'SELECT guild_id, case_number, user_id, action, reason, detail, active, created_at FROM infractions WHERE guild_id = ? AND user_id = ? ORDER BY case_number',
+  },
+  {
+    key: 'tempBans',
+    label: 'Temporary ban (kept by /forget)',
+    order: 'gu',
+    kept: true,
+    countSql: 'SELECT COUNT(*) AS n FROM temp_bans WHERE guild_id = ? AND user_id = ?',
+    rowsSql:
+      'SELECT guild_id, user_id, reason, unban_at, created_at FROM temp_bans WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'honeypotCatches',
+    label: 'Honeypot catches (kept by /forget)',
+    order: 'gu',
+    kept: true,
+    countSql: 'SELECT COUNT(*) AS n FROM honeypot_catches WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM honeypot_catches WHERE guild_id = ? AND user_id = ? ORDER BY created_at',
+  },
+  {
+    key: 'countingPenalties',
+    label: 'Counting penalty (kept by /forget)',
+    order: 'gu',
+    kept: true,
+    countSql: 'SELECT COUNT(*) AS n FROM counting_penalties WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM counting_penalties WHERE guild_id = ? AND user_id = ?',
   },
   {
     key: 'leveling',
@@ -212,12 +248,13 @@ const USER_DATA_SOURCES = [
   },
   {
     key: 'ticketMessages',
-    label: 'Modmail messages they sent',
+    label: 'Messages in their modmail tickets',
     order: 'gu',
     countSql:
-      "SELECT COUNT(*) AS n FROM ticket_messages WHERE author_kind = 'user' AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ? AND user_id = ?)",
+      'SELECT COUNT(*) AS n FROM ticket_messages WHERE ticket_id IN (SELECT id FROM tickets WHERE guild_id = ? AND user_id = ?)',
+    // Staff replies are part of the member's conversation, but not who on the staff wrote them.
     rowsSql:
-      "SELECT * FROM ticket_messages WHERE author_kind = 'user' AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ? AND user_id = ?) ORDER BY id",
+      "SELECT id, ticket_id, CASE WHEN author_kind = 'user' THEN author_id ELSE NULL END AS author_id, author_kind, content, attachments, created_at FROM ticket_messages WHERE ticket_id IN (SELECT id FROM tickets WHERE guild_id = ? AND user_id = ?) ORDER BY id",
   },
   {
     key: 'appeals',
@@ -268,7 +305,9 @@ const USER_DATA_SOURCES = [
     label: 'Members they are credited with inviting',
     order: 'gu',
     countSql: 'SELECT COUNT(*) AS n FROM invite_joins WHERE guild_id = ? AND inviter_id = ?',
-    rowsSql: 'SELECT * FROM invite_joins WHERE guild_id = ? AND inviter_id = ? ORDER BY joined_at',
+    // When and how, not who: the members they invited are other people.
+    rowsSql:
+      'SELECT source, joined_at, counted FROM invite_joins WHERE guild_id = ? AND inviter_id = ? ORDER BY joined_at',
   },
   {
     key: 'invitePersonal',
@@ -295,11 +334,16 @@ const bindArgs = (order, guildId, userId) => (order === 'ug' ? [userId, guildId]
  */
 export async function describeUserData(guildId, userId) {
   const items = [];
-  for (const { key, label, countStmt, order } of USER_DATA_SOURCES) {
+  for (const { key, label, countStmt, order, kept = false } of USER_DATA_SOURCES) {
     const row = await countStmt.get(...bindArgs(order, guildId, userId));
-    items.push({ key, label, count: Number(row.n) || 0 });
+    items.push({ key, label, count: Number(row.n) || 0, kept });
   }
-  return { items, total: items.reduce((sum, i) => sum + i.count, 0) };
+  return {
+    items,
+    total: items.reduce((sum, i) => sum + i.count, 0),
+    // What forgetUser removes or anonymises; the rest are kept safety records.
+    erasable: items.filter((i) => !i.kept).reduce((sum, i) => sum + i.count, 0),
+  };
 }
 
 /**

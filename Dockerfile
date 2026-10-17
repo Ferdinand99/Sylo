@@ -42,11 +42,13 @@ WORKDIR /app
 # actually runs against); a v16 client would refuse a v18 server.
 RUN apk add --no-cache su-exec tzdata font-dejavu postgresql18-client \
   && addgroup -S sylo && adduser -S sylo -G sylo \
-  && mkdir -p /app/data && chown -R sylo:sylo /app
+  && mkdir -p /app/data && chown sylo:sylo /app/data
 
-COPY --from=builder --chown=sylo:sylo /app/node_modules ./node_modules
-COPY --from=builder --chown=sylo:sylo /app/web-v2/dist ./web-v2/dist
-COPY --chown=sylo:sylo . .
+# The code stays owned by root: the app user can write only its data directory, so a
+# compromised process cannot rewrite the code it runs.
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/web-v2/dist ./web-v2/dist
+COPY . .
 RUN chmod +x /app/docker-entrypoint.sh
 
 # Starts as root so the entrypoint can chown a root-owned data volume, then

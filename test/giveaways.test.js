@@ -1,7 +1,7 @@
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pickWinners, normaliseGiveawaysConfig } from '../src/modules/giveaways.js';
+import { pickWinners, normaliseGiveawaysConfig, endGiveaway } from '../src/modules/giveaways.js';
 import {
   createGiveaway,
   getGiveaway,
@@ -12,6 +12,7 @@ import {
   giveawayEntryCount,
   giveawayEntrantIds,
   markGiveawayEnded,
+  claimGiveawayEnd,
   activeGiveaways,
   endedGiveaways,
   dueGiveaways,
@@ -120,4 +121,33 @@ test('buildGiveawayPayload copes with timestamps that arrive as strings (Postgre
     { entryCount: 1 }
   );
   assert.match(ended.embeds[0].toJSON().description, /Winner: <@222222222222222222>/);
+});
+
+// The expiry tick does not wait for a draw, and the dashboard or /giveaway end can run at the
+// same moment: only the first caller may draw, or there are two winner announcements.
+test('claimGiveawayEnd: only the first claim wins', async () => {
+  const { id } = await createGiveaway({
+    guildId: G,
+    channelId: '100000000000000001',
+    hostId: '1',
+    prize: 'p',
+    winners: 1,
+    endsAt: Date.now() - 1,
+  });
+  assert.equal(await claimGiveawayEnd(id), true);
+  assert.equal(await claimGiveawayEnd(id), false);
+  assert.equal((await getGiveaway(id)).ended, true);
+});
+
+test('endGiveaway: a second end of the same giveaway does not draw again', async () => {
+  const { id } = await createGiveaway({
+    guildId: G,
+    channelId: '100000000000000001',
+    hostId: '1',
+    prize: 'p',
+    winners: 1,
+    endsAt: Date.now() - 1,
+  });
+  await claimGiveawayEnd(id);
+  assert.deepEqual(await endGiveaway(id), { ok: false, reason: 'already-ended' });
 });

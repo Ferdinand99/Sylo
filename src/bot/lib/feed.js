@@ -9,6 +9,7 @@
 // from turning a lazy match into quadratic backtracking.
 
 const MAX_DOC = 4_000_000; // ~4 MB — far above any real feed
+const MAX_ENTRIES = 100; // a feed of countless tiny items would mean a DB lookup per item per poll
 const MAX_SCAN = 300_000; // per grab() call
 const MAX_FIELD = 200_000; // per CDATA / tag-text capture
 
@@ -117,7 +118,7 @@ export function parseFeed(xml) {
         .map((b) => `<item ${b}`);
 
   const entries = [];
-  for (const block of blocks) {
+  for (const block of blocks.slice(0, MAX_ENTRIES)) {
     const title = tagText('title', block) || 'Untitled';
     const link = atom ? atomLink(block) : tagText('link', block);
     const idTag = atom ? tagText('id', block) : tagText('guid', block);

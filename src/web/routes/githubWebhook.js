@@ -30,8 +30,13 @@ const webhookLimit = rateLimit({
   keyFn: (req) => `gh|${req.params.token}`,
 });
 
+// The token above is chosen by the caller, so random tokens would each get a fresh bucket (and a
+// database lookup). A generous per-client ceiling stops that without touching GitHub's traffic.
+const clientLimit = rateLimit({ windowMs: 60_000, max: 600 });
+
 router.post(
   '/:token',
+  clientLimit,
   webhookLimit,
   raw({ type: 'application/json', limit: '1mb' }),
   asyncHandler(async (req, res) => {

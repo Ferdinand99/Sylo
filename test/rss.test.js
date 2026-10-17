@@ -8,6 +8,7 @@ import {
   buildPayload,
   parseFeedRef,
   sourceLabel,
+  runFeed,
 } from '../src/modules/rss.js';
 
 const CH = '123456789012345678';
@@ -152,4 +153,17 @@ test('buildPayload: embed + role ping; relative link is not used as a URL', () =
   );
   assert.equal(rel.embeds[0].data.url, undefined); // relative link not passed to setURL
   assert.equal(rel.content, undefined); // {link} -> '' -> trimmed empty -> undefined
+});
+
+// A feed URL is typed in by a server admin and fetched by the server: it must not reach the
+// host's own network (src/lib/safeFetch.js).
+test('runFeed refuses a feed on a private address', async () => {
+  await assert.rejects(
+    runFeed('900000000000000777', { id: 'f1', url: 'http://127.0.0.1:9/feed.xml', channelId: '1' }),
+    /private address/
+  );
+  await assert.rejects(
+    runFeed('900000000000000777', { id: 'f2', url: 'http://169.254.169.254/latest/', channelId: '1' }),
+    /private address/
+  );
 });

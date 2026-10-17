@@ -2,9 +2,10 @@
 
 // Discord: scopes + a permission set that covers every module: moderation
 // (kick/ban/timeout), roles, channels & webhooks, reactions, invites, audit log,
-// nickname management and voice moves for temp channels.
+// nickname management, voice moves for temp channels, and Manage Server (invite tracking
+// reads the invite list; native AutoMod rules need it).
 const DISCORD_SCOPES = 'bot applications.commands';
-const DISCORD_PERMISSIONS = [0, 1, 2, 4, 6, 7, 10, 11, 13, 14, 15, 16, 20, 24, 27, 28, 29, 40]
+const DISCORD_PERMISSIONS = [0, 1, 2, 4, 5, 6, 7, 10, 11, 13, 14, 15, 16, 20, 24, 27, 28, 29, 40]
   .reduce((acc, bit) => acc | (1n << BigInt(bit)), 0n)
   .toString();
 

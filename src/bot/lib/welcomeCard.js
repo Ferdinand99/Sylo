@@ -4,6 +4,8 @@
 // message instead.
 import { existsSync } from 'node:fs';
 import { log } from '../../lib/log.js';
+import { safeFetch } from '../../lib/safeFetch.js';
+import { imageDimensions } from '../../lib/imageSize.js';
 
 let canvasMod = null;
 try {
@@ -37,6 +39,29 @@ if (canvasMod) {
 
 const nf = new Intl.NumberFormat('en-US');
 const fmt = (n) => nf.format(Math.max(0, Math.round(Number(n) || 0)));
+
+const MAX_CARD_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_CARD_IMAGE_PIXELS = 25_000_000; // e.g. 5000×5000; a card is 1000×340
+
+/**
+ * Download a background image a server admin chose, or null. The URL is theirs, so the fetch
+ * may not reach the host's own network, the file is size-capped, and its pixel size is read
+ * from the header before the canvas library decodes it (a tiny file can claim 30000×30000).
+ * @param {string} url
+ * @param {{ allowPrivate?: boolean }} [opts]
+ * @returns {Promise<Buffer|null>}
+ */
+export async function fetchCardImage(url, { allowPrivate } = {}) {
+  try {
+    const res = await safeFetch(url, { maxBytes: MAX_CARD_IMAGE_BYTES, timeoutMs: 6000, allowPrivate });
+    if (!res.ok) return null;
+    const size = imageDimensions(res.body);
+    if (!size || size.width * size.height > MAX_CARD_IMAGE_PIXELS) return null;
+    return res.body;
+  } catch {
+    return null;
+  }
+}
 
 /** loadImage with a hard timeout — a slow/hanging URL must not stall a join. */
 function loadImageBounded(loadImage, url, ms = 6000) {
@@ -86,7 +111,8 @@ export async function renderWelcomeCard(o) {
   const ctx = canvas.getContext('2d');
 
   // Background: a cover-fit image behind a scrim, else an accent gradient.
-  const bg = await loadImageBounded(loadImage, o.backgroundUrl);
+  const bgFile = o.backgroundUrl ? await fetchCardImage(o.backgroundUrl) : null;
+  const bg = bgFile ? await loadImageBounded(loadImage, bgFile) : null;
   roundRect(ctx, 0, 0, W, H, 28);
   ctx.save();
   ctx.clip();

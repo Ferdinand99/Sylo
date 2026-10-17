@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ApiError, disconnectAccount, getAccount, revokeDevice } from '../api.js';
+import { ApiError, deleteAccount, disconnectAccount, getAccount, revokeDevice } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 
@@ -48,6 +48,18 @@ export default function Account() {
     } catch (err) {
       notify(err.message);
     } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removeAccount() {
+    if (!window.confirm("Delete your Sylo account? This can't be undone.")) return;
+    setBusy('delete');
+    try {
+      await deleteAccount();
+      window.location.assign('/');
+    } catch (err) {
+      notify(err.message);
       setBusy(null);
     }
   }
@@ -137,6 +149,16 @@ export default function Account() {
       ) : (
         <p className="v2-muted">No devices are signed in.</p>
       )}
+
+      <h2 className="v2-section-title">Delete account</h2>
+      <p className="v2-muted">
+        Deletes your Sylo dashboard account: your sign-ins, every browser and Sylo app device signed in with
+        it, and your dashboard preferences. Data Sylo keeps per server (levels, birthdays, tickets …) stays
+        with each server; run <code>/forget</code> there to remove it.
+      </p>
+      <button type="button" className="v2-btn-danger" disabled={busy === 'delete'} onClick={removeAccount}>
+        Delete account
+      </button>
     </>
   );
 }

@@ -268,3 +268,19 @@ test('every endpoint is rate limited per IP', async () => {
     assert.deepEqual(codes, [400, 400, 400, 429], path);
   }
 });
+
+// /register needs no account (a self-hosted instance's app registers itself), so random device
+// tokens could fill the table. New registrations across all clients are capped per hour.
+test('the relay refuses new registrations past its hourly ceiling', async () => {
+  const capped = express();
+  capped.use(express.json());
+  capped.use(
+    '/api/push-relay/v1',
+    createPushRelayRouter({ apns, limits: { register: 1000, newPerHour: 2 } })
+  );
+  const root = await listen(capped);
+  const body = () => ({ deviceToken: device(), environment: 'production', instance: INSTANCE });
+  assert.equal((await post('/register', body(), root)).status, 200);
+  assert.equal((await post('/register', body(), root)).status, 200);
+  assert.equal((await post('/register', body(), root)).status, 429);
+});
