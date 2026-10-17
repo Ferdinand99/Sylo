@@ -43,7 +43,7 @@ enum Fixtures {
     static let servers = """
     {
       "guilds": [
-        { "id": "123456789012345678", "name": "Alpha", "icon": "https://cdn.discordapp.com/icons/123/a.png?size=32", "platform": "discord" },
+        { "id": "123456789012345678", "name": "Alpha", "icon": "https://cdn.discordapp.com/icons/123/a.png?size=32", "platform": "discord", "openTickets": 2, "unreadTickets": 1 },
         { "id": "fluxer:223456789012345678", "name": "Beta", "icon": null, "platform": "fluxer", "unread": 3 },
         { "id": "9", "name": "Gamma", "platform": "matrix" },
         { "id": "10", "platform": "discord" }

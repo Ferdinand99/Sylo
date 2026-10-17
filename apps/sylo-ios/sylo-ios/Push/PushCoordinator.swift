@@ -23,6 +23,9 @@ final class PushCoordinator: NSObject {
     private(set) var authorization: Authorization
     /// A tapped ticket notification from the signed-in server, for ``MainView`` to open and clear.
     var pendingTicket: TicketNotification?
+    /// Goes up whenever a ticket notification arrives while the app is open, so lists with
+    /// ticket counts can reload.
+    private(set) var ticketActivity = 0
     /// The ticket conversation on screen, if any: its notifications show no banner.
     @ObservationIgnored var visibleTicket: (server: ServerID, id: Int)?
     /// What the signed-in server knows: whether it can push, on or off, muted servers.
@@ -118,6 +121,7 @@ final class PushCoordinator: NSObject {
 
     /// No banner for the conversation on screen; every other notification shows.
     private func presentationOptions(for ticket: TicketNotification?) -> UNNotificationPresentationOptions {
+        if ticket != nil { ticketActivity += 1 }
         if let ticket, let visibleTicket, let server = session.server, ticket.matches(server),
             visibleTicket.server == ticket.guildID, visibleTicket.id == ticket.ticketID {
             return []

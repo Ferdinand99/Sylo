@@ -6,6 +6,7 @@
 import { accountDevices, accountPlatforms } from '../lib/accountView.js';
 import { revokeApiToken } from '../../db/apiTokens.js';
 import { unlinkIdentity } from '../../db/accounts.js';
+import { openTicketCount, unreadTicketCount } from '../../db/tickets.js';
 import { allGuilds, clientOfGuild, primaryClient } from '../../platform/platformOf.js';
 import { createRequire } from 'node:module';
 import { Router, raw } from 'express';
@@ -250,7 +251,17 @@ router.get(
     // The Sylo app: the sign-in snapshot, minus any server where the person no longer has the
     // rights (checked live, the same way requireGuildAdmin does for token requests).
     const live = await Promise.all(guilds.map((g) => managesGuildLive(g.id, userIdForGuild(req, g.id))));
-    res.json({ guilds: guilds.filter((_, i) => live[i]) });
+    // Ticket counts for the app's server list: which servers have tickets waiting.
+    const withCounts = await Promise.all(
+      guilds
+        .filter((_, i) => live[i])
+        .map(async (g) => ({
+          ...g,
+          openTickets: await openTicketCount(g.id),
+          unreadTickets: await unreadTicketCount(g.id),
+        }))
+    );
+    res.json({ guilds: withCounts });
   })
 );
 

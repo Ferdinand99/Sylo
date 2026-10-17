@@ -10,9 +10,9 @@ nonisolated enum PreviewData {
     static let pushSettings = PushSettingsInfo(isEnabled: true, mutedServers: ["2"])
 
     static let servers = [
-        ServerSummary(id: "1", name: "Sylo Test Server", platform: .discord),
+        ServerSummary(id: "1", name: "Sylo Test Server", platform: .discord, openTickets: 2, unreadTickets: 1),
         ServerSummary(id: "2", name: "Gaming Night", platform: .discord),
-        ServerSummary(id: "fluxer:3", name: "Fluxer Friends", platform: .fluxer),
+        ServerSummary(id: "fluxer:3", name: "Fluxer Friends", platform: .fluxer, openTickets: 1),
     ]
 
     static let overview = ServerOverview(

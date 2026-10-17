@@ -109,3 +109,21 @@ test('a token does not make the bot look people up in servers they never adminis
   }
   assert.equal(memberFetches.length, before, 'no member fetch for a server outside the snapshot');
 });
+
+test('the app server list carries open and unread ticket counts', async () => {
+  const { createTicket, addTicketMessage, markStaffSeen } = await import('../src/db/tickets.js');
+  const { id, token } = await person();
+  member(id, { perms: ['ManageGuild'] });
+  const row = async () =>
+    (await (await get('/api/v2/guilds', token)).json()).guilds.find((g) => g.id === D_GUILD);
+  const before = await row();
+  const seen = await createTicket(D_GUILD, '810000000000000001');
+  await addTicketMessage(seen.id, { authorId: '810000000000000001', authorKind: 'user', content: 'a' });
+  await markStaffSeen(seen.id);
+  const unseen = await createTicket(D_GUILD, '810000000000000002');
+  await new Promise((resolve) => setTimeout(resolve, 5)); // a message after the "seen" moment
+  await addTicketMessage(unseen.id, { authorId: '810000000000000002', authorKind: 'user', content: 'b' });
+  const after = await row();
+  assert.equal(after.openTickets, before.openTickets + 2);
+  assert.equal(after.unreadTickets, before.unreadTickets + 1);
+});

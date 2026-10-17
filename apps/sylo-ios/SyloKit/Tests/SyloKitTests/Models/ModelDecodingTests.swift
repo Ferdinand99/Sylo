@@ -75,6 +75,11 @@ struct ModelDecodingTests {
         #expect(list.servers[2].platform == .other("matrix"))
         #expect(list.servers[2].platform.displayName == "matrix")
         #expect(Platform.fluxer.displayName == "Fluxer")
+        // Ticket counts: sent to the app; missing on the web dashboard's list and older servers.
+        #expect(list.servers[0].openTickets == 2)
+        #expect(list.servers[0].unreadTickets == 1)
+        #expect(list.servers[1].openTickets == 0)
+        #expect(list.servers[1].unreadTickets == 0)
     }
 
     @Test("Server overview: header, groups, module and link cards")
