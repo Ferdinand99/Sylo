@@ -203,7 +203,7 @@ test('fetchSnapshot: a failing optional part is left empty and does not drop the
   });
   const snap = await fetchSnapshot(client, { want: { reviews: true, feedback: true, betaReview: true } });
   const a = snap.apps[0];
-  assert.deepEqual(a.reviews, []);
+  assert.equal(a.reviews, null, 'null means "could not be read", unlike an empty list');
   assert.deepEqual(
     a.feedback.map((f) => f.id),
     ['f1']
@@ -403,4 +403,24 @@ test('processGuild: switched-off kinds announce nothing', async () => {
   await processGuild('g-offs', off, snap, { send, now: () => NOW });
   await processGuild('g-offs', off, snap, { send, now: () => NOW });
   assert.deepEqual(sent, []);
+});
+
+test('processGuild: the first review and feedback are announced even when the first look found none', async () => {
+  const first = collector();
+  await processGuild('g-empty', cfg(), withApp(), first);
+  assert.deepEqual(first.sent, []);
+  const { sent, send } = collector();
+  const crash = { id: 'f1', kind: 'crash', comment: 'boom', deviceModel: '', osVersion: '', platform: 'IOS' };
+  await processGuild('g-empty', cfg(), withApp({ reviews: [review('r1', 1)], feedback: [crash] }), { send });
+  assert.equal(sent.length, 2, 'the review and the crash are both news, not history');
+});
+
+test('processGuild: a part that could not be read does not count as a first look', async () => {
+  const s = collector();
+  await processGuild('g-null', cfg(), withApp({ reviews: null, feedback: null }), s);
+  // Apple answers properly now: what it lists is old, so it is recorded silently.
+  await processGuild('g-null', cfg(), withApp({ reviews: [review('old', 1)] }), s);
+  assert.deepEqual(s.sent, []);
+  await processGuild('g-null', cfg(), withApp({ reviews: [review('new', 1), review('old', 1)] }), s);
+  assert.equal(s.sent.length, 1);
 });

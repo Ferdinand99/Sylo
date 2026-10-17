@@ -333,8 +333,9 @@ export async function fetchSnapshot(client, { appIds = [], maxApps = MAX_APPS, w
         bundleId: a.attributes?.bundleId ?? '',
         versions,
         builds: builtBuilds,
-        reviews: want.reviews ? await optional(() => fetchReviews(client, a.id), []) : [],
-        feedback: want.feedback ? await optional(() => fetchFeedback(client, a.id), []) : [],
+        // null = asked for but Apple could not be read; [] = nothing there (or not asked for)
+        reviews: want.reviews ? await optional(() => fetchReviews(client, a.id), null) : [],
+        feedback: want.feedback ? await optional(() => fetchFeedback(client, a.id), null) : [],
       });
     } catch (err) {
       log.error('apple', `app ${a.id}: ${err.message}`);
@@ -445,6 +446,10 @@ export async function fetchCredentials(client) {
 
 // --- diffing and announcing -------------------------------------------------------
 
+// Written once a scope has had a complete first look, so a scope that was empty then (no reviews
+// yet) still counts as primed and the first real item is announced instead of swallowed.
+const PRIMED_KEY = '__primed';
+
 const BUILD_FINAL = new Set(['VALID', 'INVALID', 'FAILED']);
 const BETA_ANNOUNCED = new Set(['IN_REVIEW', 'APPROVED', 'REJECTED']);
 
@@ -532,6 +537,7 @@ export async function processGuild(guildId, cfg, snapshot, { send = sendToChanne
         );
       }
     }
+    if (!primed && apps.every((a) => a.reviews != null)) await markSeen(guildId, SCOPE_REVIEWS, PRIMED_KEY);
   }
 
   // New TestFlight feedback and crash reports.
@@ -550,6 +556,7 @@ export async function processGuild(guildId, cfg, snapshot, { send = sendToChanne
         );
       }
     }
+    if (!primed && apps.every((a) => a.feedback != null)) await markSeen(guildId, SCOPE_FEEDBACK, PRIMED_KEY);
   }
 
   // Certificates and profiles close to (or past) their expiry. Not primed: if one is already
@@ -583,6 +590,7 @@ export async function processGuild(guildId, cfg, snapshot, { send = sendToChanne
 // --- the poll loop ----------------------------------------------------------------
 
 let sharedClient = null;
+let running = false;
 let lastCredentialsAt = 0;
 let credentialsWarned = false;
 function appleClient() {
@@ -601,7 +609,16 @@ export async function runAppleTick({
   guilds = allGuilds(),
   send = sendToChannel,
 } = {}) {
-  if (!client) return;
+  if (!client || running) return; // a slow pass must not overlap the next one (double alerts)
+  running = true;
+  try {
+    await pass(client, guilds, send);
+  } finally {
+    running = false;
+  }
+}
+
+async function pass(client, guilds, send) {
   const jobs = [];
   for (const guild of guilds) {
     const key = guildKey(guild);

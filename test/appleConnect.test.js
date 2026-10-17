@@ -398,3 +398,33 @@ test('processGuild: with no main channel only the kinds that have their own chan
   assert.equal(sent.length, 1, 'the build kind has no channel, so it stays silent');
   assert.equal(sent[0].channel, '223456789012345678');
 });
+
+// --- the poll loop ---------------------------------------------------------------------
+
+test('runAppleTick: a pass that is still running is not started a second time', async () => {
+  const { setGuildModule } = await import('../src/db/modules.js');
+  const { runAppleTick } = await import('../src/modules/appleConnect.js');
+  const guild = { id: '900000000000000777' };
+  await setGuildModule(guild.id, 'apple-connect', {
+    enabled: true,
+    config: { channelId: '123456789012345678' },
+  });
+  let release;
+  const gate = new Promise((r) => (release = r));
+  let started = 0;
+  const client = {
+    get: async () => ({}),
+    getAll: async (path) => {
+      if (path === '/v1/apps') started += 1;
+      await gate;
+      return { data: [], included: [] };
+    },
+  };
+  const first = runAppleTick({ client, guilds: [guild], send: async () => true });
+  await new Promise((r) => setTimeout(r, 50));
+  const second = runAppleTick({ client, guilds: [guild], send: async () => true });
+  await new Promise((r) => setTimeout(r, 50));
+  release();
+  await Promise.all([first, second]);
+  assert.equal(started, 1, 'the second call returned at once');
+});

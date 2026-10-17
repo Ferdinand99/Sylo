@@ -141,3 +141,39 @@ test('the classic settings form: saved by the owner, 403 for an admin', async ()
   assert.equal(config.events.build.enabled, false, 'an unticked box is off');
   assert.equal(config.events.feedback.channelId, '555555555555555555', 'a per-alert channel is kept');
 });
+
+// Express matches paths case-insensitively and decodes %xx in route params, so the owner check
+// has to hold for those spellings too.
+test('odd spellings of the module path are refused for an admin', async () => {
+  const paths = [
+    `/guilds/${D_GUILD}/M/apple-connect`,
+    `/guilds/${D_GUILD}/m/Apple-Connect`,
+    `/guilds/${D_GUILD}/m/apple%2Dconnect`,
+    `/guilds/${D_GUILD}/m/apple-connect/`,
+    `/guilds/${D_GUILD}/m/%61pple-connect`,
+    `/guilds/${D_GUILD}/M/apple-connect/config`,
+  ];
+  for (const p of paths) {
+    const r = await admin.get(p, { headers: { accept: 'text/html' } });
+    assert.ok([403, 404].includes(r.status), `${p} gave ${r.status}`);
+  }
+  const v2 = [
+    `${V2}/Modules/apple-connect/config`,
+    `${V2}/modules/apple%2Dconnect/config`,
+    `${V2}/MODULES/apple-connect/config`,
+  ];
+  for (const p of v2) {
+    const r = await admin.get(p);
+    assert.ok([403, 404].includes(r.status), `${p} gave ${r.status}`);
+    const body = await r.text();
+    assert.doesNotMatch(body, /appleEnabled/, `${p} leaked the settings`);
+  }
+  const toggle = await json(admin, `${V2}/modules/apple%2Dconnect`, {
+    method: 'POST',
+    body: { enabled: true },
+  });
+  assert.ok([403, 404].includes(toggle.status), `encoded toggle gave ${toggle.status}`);
+  const upper = await json(admin, `${V2}/Modules/apple-connect`, { method: 'POST', body: { enabled: true } });
+  assert.ok([403, 404].includes(upper.status), `upper toggle gave ${upper.status}`);
+  assert.equal(await isModuleEnabled(D_GUILD, 'apple-connect'), false);
+});
