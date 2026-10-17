@@ -2,7 +2,7 @@
 import Foundation
 import Security
 
-/// Keeps app tokens in the Keychain: one generic-password item per server origin, readable after
+/// Keeps app tokens in the Keychain: one generic-password item per server key, readable after
 /// the first unlock, on this device only (no iCloud Keychain sync, not in a backup restored to
 /// another device). Every Keychain failure is thrown, never swallowed, so a failed save is not
 /// mistaken for being signed out.

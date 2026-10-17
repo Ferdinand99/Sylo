@@ -67,6 +67,13 @@ public struct ServerURL: Hashable, Sendable, CustomStringConvertible {
 
     public var description: String { baseURL.absoluteString }
 
+    /// How the app names the server: "Sylo" for the hosted one, else host, port and sub-path
+    /// (`example.com:8443/sylo`).
+    public var displayName: String {
+        if self == .hosted { return "Sylo" }
+        return host + (port.map { ":\($0)" } ?? "") + (path.removingPercentEncoding ?? path)
+    }
+
     /// The URL for an API path below this server, keeping any sub-path. `path` is percent-encoded
     /// already (use encoded path segments for ids); a leading slash is optional.
     public func url(for path: String, query: [URLQueryItem] = []) -> URL {

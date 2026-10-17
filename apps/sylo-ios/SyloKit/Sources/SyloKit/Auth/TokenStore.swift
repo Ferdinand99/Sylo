@@ -28,8 +28,9 @@ extension StoredToken: CustomStringConvertible, CustomDebugStringConvertible, Cu
     public var customMirror: Mirror { Mirror(self, children: ["expiresAt": expiresAt]) }
 }
 
-/// Where the app keeps its token for each server, keyed by the server's origin
-/// (`scheme://host[:port]`). A protocol so models and previews can use ``InMemoryTokenStore``.
+/// Where the app keeps its token for each server, keyed by a string naming the server (the
+/// session uses the full server address, so two Sylo servers under one domain on different
+/// paths keep separate tokens). A protocol so models and previews can use ``InMemoryTokenStore``.
 public protocol TokenStore: Sendable {
     /// The token saved for `origin`, or nil when there is none.
     func token(for origin: String) throws -> StoredToken?
