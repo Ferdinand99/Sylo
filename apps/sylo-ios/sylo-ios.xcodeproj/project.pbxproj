@@ -261,6 +261,7 @@
 		000000000000000111000000 /* Debug configuration for PBXNativeTarget "sylo-ios" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "sylo-ios/sylo-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 76M3G78HV8;
@@ -304,6 +305,7 @@
 		000000000000000112000000 /* Release configuration for PBXNativeTarget "sylo-ios" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "sylo-ios/sylo-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 76M3G78HV8;
