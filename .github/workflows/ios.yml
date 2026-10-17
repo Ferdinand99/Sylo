@@ -52,10 +52,13 @@ jobs:
       - name: Test SyloKit
         run: swift test --package-path apps/sylo-ios/SyloKit
 
+      # A scheme, not -target: only a scheme build resolves and builds the SyloKit package the app
+      # links. The project has no shared scheme, so xcodebuild uses the one it creates per target.
       - name: Build for the iOS simulator
         run: |
+          xcodebuild -list -project apps/sylo-ios/sylo-ios.xcodeproj
           xcodebuild build \
             -project apps/sylo-ios/sylo-ios.xcodeproj \
-            -target sylo-ios \
-            -sdk iphonesimulator \
+            -scheme sylo-ios \
+            -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO
