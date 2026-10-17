@@ -33,6 +33,40 @@ nonisolated enum PreviewData {
             ]),
         ])
 
+    static let tickets: TicketList = decode(#"""
+    {"open": [
+      {"id": 1, "user": "member#0001", "userId": "1", "preview": "My role is gone after the update, can you check?",
+       "previewKind": "user", "ago": "2m ago", "lastAt": \#(nowMillis - 120_000), "unread": true},
+      {"id": 2, "user": "gamer#4242", "userId": "2", "preview": "Thanks, that worked!", "previewKind": "staff",
+       "ago": "3h ago", "lastAt": \#(nowMillis - 10_800_000), "unread": false}
+    ], "closed": [
+      {"id": 3, "user": "old#1111", "userId": "3", "preview": "Ticket closed.", "previewKind": "system",
+       "ago": "4d ago", "lastAt": \#(nowMillis - 345_600_000), "unread": false}
+    ]}
+    """#)
+
+    static let ticketThread: TicketThread = decode(#"""
+    {"ticket": {"id": 1, "status": "open", "user": "member#0001", "userId": "1", "openedAgo": "1h ago",
+                "openedAt": \#(nowMillis - 3_600_000)},
+     "messages": [
+      {"id": 1, "kind": "system", "who": "System", "content": "Ticket opened.", "attachments": [], "delivered": true,
+       "ago": "1h ago", "at": \#(nowMillis - 3_600_000)},
+      {"id": 2, "kind": "user", "who": "member#0001", "content": "Hi! My role is gone after the update.",
+       "attachments": [], "delivered": true, "ago": "1h ago", "at": \#(nowMillis - 3_590_000)},
+      {"id": 3, "kind": "staff", "who": "Staff", "content": "Hi! Which role was it?", "attachments": [],
+       "delivered": true, "ago": "5m ago", "at": \#(nowMillis - 300_000)},
+      {"id": 4, "kind": "user", "who": "member#0001", "content": "Supporter. Can you check?", "attachments": [],
+       "delivered": true, "ago": "2m ago", "at": \#(nowMillis - 120_000)}
+     ], "lastId": 4}
+    """#)
+
+    private static var nowMillis: Int { Int(Date().timeIntervalSince1970 * 1000) }
+
+    private static func decode<T: Decodable>(_ json: String) -> T {
+        // Sample data spelled out above; a typo here is a programming error in the previews.
+        try! JSONDecoder().decode(T.self, from: Data(json.utf8))
+    }
+
     static let account = AccountInfo(
         platforms: [
             PlatformConnection(platform: .discord, isConnected: true, username: "ferdi", serverCount: 2),

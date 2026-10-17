@@ -1,31 +1,22 @@
 import SwiftUI
 import SyloKit
 
-/// One server: its header, then its modules grouped like the web overview, each with a switch.
-/// A module with a settings screen in the app opens it; cards without a switch (Settings,
-/// Commands, Embed messages) open in the web dashboard.
+/// The Modules tab of a server: its header, then its modules grouped like the web overview, each
+/// with a switch. A module with a settings screen in the app opens it (``ModuleRoute``, handled by
+/// ``ServerView``); other cards without a switch (Commands, Embed messages) open in the web
+/// dashboard. The server's general settings are their own tab, so that card is left out here.
 struct OverviewView: View {
     let summary: ServerSummary
+    let model: OverviewModel
 
     @Environment(AppSession.self) private var session
-    @State private var model: OverviewModel
-
-    init(summary: ServerSummary, session: AppSession) {
-        self.summary = summary
-        _model = State(initialValue: OverviewModel(server: summary.id, session: session))
-    }
 
     var body: some View {
         content
-            .navigationTitle(summary.name)
-            .navigationBarTitleDisplayMode(.inline)
-            .task { await model.load() }
-            // Back from a module's settings: its summary lines may have changed.
+            .task { if model.overview == nil { await model.load() } }
+            // Back from a module's settings or another tab: summary lines may have changed.
             .onAppear {
                 if model.overview != nil { Task { await model.load() } }
-            }
-            .navigationDestination(for: ModuleRoute.self) { route in
-                ModuleScreens.screen(for: route.moduleID, server: summary.id, session: session)
             }
             .alert(
                 "Couldn't Change Module", isPresented: isShowingToggleError, presenting: model.toggleError
@@ -49,9 +40,9 @@ struct OverviewView: View {
                 Section {
                     OverviewHeader(summary: summary, overview: overview)
                 }
-                ForEach(overview.groups.filter { !$0.cards.isEmpty }) { group in
+                ForEach(overview.groups.filter { $0.cards.contains { $0.id != Self.settingsCardID } }) { group in
                     Section(group.title) {
-                        ForEach(group.cards) { card in
+                        ForEach(group.cards.filter { $0.id != Self.settingsCardID }) { card in
                             if card.hasToggle, ModuleScreens.hasScreen(card.id) {
                                 NavigationLink(value: ModuleRoute(moduleID: card.id)) {
                                     moduleRow(card)
@@ -78,6 +69,9 @@ struct OverviewView: View {
             ProgressView()
         }
     }
+
+    /// The "Settings" card: the Settings tab instead.
+    private static let settingsCardID = "general"
 
     private func moduleRow(_ card: OverviewCard) -> some View {
         ModuleRow(card: card, isPending: model.isPending(card.id)) { enabled in
@@ -130,7 +124,7 @@ private struct OverviewHeader: View {
 #Preview {
     let session = AppSession.preview(.signedIn)
     NavigationStack {
-        OverviewView(summary: PreviewData.servers[0], session: session)
+        OverviewView(summary: PreviewData.servers[0], model: OverviewModel(server: PreviewData.servers[0].id, session: session))
     }
     .environment(session)
 }
@@ -138,7 +132,7 @@ private struct OverviewHeader: View {
 #Preview("Largest text, dark") {
     let session = AppSession.preview(.signedIn)
     NavigationStack {
-        OverviewView(summary: PreviewData.servers[0], session: session)
+        OverviewView(summary: PreviewData.servers[0], model: OverviewModel(server: PreviewData.servers[0].id, session: session))
     }
     .environment(session)
     .dynamicTypeSize(.accessibility3)

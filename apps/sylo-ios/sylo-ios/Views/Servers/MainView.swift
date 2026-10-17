@@ -46,7 +46,7 @@ struct MainView: View {
         } detail: {
             NavigationStack {
                 if let summary = servers.server(selection) {
-                    OverviewView(summary: summary, session: session)
+                    ServerView(summary: summary, session: session)
                         .id(summary.id)
                 } else {
                     ContentUnavailableView(

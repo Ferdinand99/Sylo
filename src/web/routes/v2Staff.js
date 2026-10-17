@@ -89,6 +89,8 @@ const shapeTicketMessage = (m, ticketUserTag) => ({
   attachments: m.attachments,
   delivered: m.delivered === 1,
   ago: timeAgo(m.created_at),
+  // Epoch milliseconds, for clients that group and label messages themselves (the Sylo app).
+  at: m.created_at,
 });
 
 async function ticketInGuild(req) {
@@ -112,6 +114,7 @@ ticketsRouter.get(
       preview: t.preview,
       previewKind: t.previewKind,
       ago: timeAgo(t.last_at),
+      lastAt: t.last_at,
       unread: t.status === 'open' && t.last_at > t.staff_seen_at,
     });
     res.json({ open: open.map(shape), closed: closed.map(shape) });
@@ -137,6 +140,7 @@ ticketsRouter.get(
         user: tags.get(ticket.user_id) ?? ticket.user_id,
         userId: ticket.user_id,
         openedAgo: timeAgo(ticket.created_at),
+        openedAt: ticket.created_at,
       },
       messages: rows.map((m) => shapeTicketMessage(m, userTag)),
       lastId: rows.length ? rows[rows.length - 1].id : 0,
