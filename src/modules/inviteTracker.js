@@ -18,10 +18,16 @@ import {
 
 const isId = (v) => /^\d{17,20}$/.test(v ?? '');
 
+// 0–168 hours; 0 turns the guard off, so only a missing or unreadable value falls back to 24.
+function graceHours(v) {
+  const n = v === '' || v == null ? NaN : Math.floor(Number(v));
+  return Number.isFinite(n) ? Math.max(0, Math.min(168, n)) : 24;
+}
+
 export function normaliseInviteTrackerConfig(raw = {}) {
   return {
     joinLogChannelId: isId(raw.joinLogChannelId) ? raw.joinLogChannelId : '',
-    graceHours: Math.max(0, Math.min(168, Math.floor(Number(raw.graceHours) || 24))),
+    graceHours: graceHours(raw.graceHours),
   };
 }
 

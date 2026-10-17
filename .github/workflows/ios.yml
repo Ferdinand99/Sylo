@@ -1,0 +1,64 @@
+name: iOS app
+
+# Builds the SwiftUI app in apps/sylo-ios on a macOS runner, on any branch, only when the app
+# (or this workflow) changes. Unsigned simulator build: no certificates or secrets are needed here;
+# signing and App Store uploads happen in Xcode (or Xcode Cloud).
+
+on:
+  pull_request:
+    paths:
+      - 'apps/sylo-ios/**'
+      - '.github/workflows/ios.yml'
+  # Every branch, so a work-in-progress branch gets a build before it has a pull request.
+  push:
+    paths:
+      - 'apps/sylo-ios/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # GitHub's Xcode 27 image (macOS 27, arm64, public preview). Images are named after the Xcode
+    # major version, not the macOS one; macos-26 only goes up to Xcode 26.
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v7
+
+      # The project was created with Xcode 27 (project format 90); older Xcodes cannot open it.
+      - name: Select Xcode 27
+        run: |
+          # The newest release; a beta only when the image has no release of Xcode 27 at all.
+          # Names like Xcode_27.2.app can be links to a beta (Xcode_27.2_beta_2.app), so filter
+          # on the real paths.
+          XCODE=$(for x in /Applications/Xcode_27*.app; do realpath "$x"; done 2>/dev/null \
+            | grep -viE 'beta|release_candidate' | sort -uV | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)
+          echo "Xcode 27 on this image:"; ls -d /Applications/Xcode_27*.app || true
+          if [ -z "$XCODE" ]; then
+            echo "::error::No Xcode 27 on this runner. Installed:"; ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      # SyloKit (apps/sylo-ios/SyloKit): the app's non-UI code, tested on its own with Swift Testing.
+      - name: Test SyloKit
+        run: swift test --package-path apps/sylo-ios/SyloKit
+
+      # A scheme, not -target: only a scheme build resolves and builds the SyloKit package the app
+      # links. The project has no shared scheme, so xcodebuild uses the one it creates per target.
+      - name: Build for the iOS simulator
+        run: |
+          xcodebuild -list -project apps/sylo-ios/sylo-ios.xcodeproj
+          xcodebuild build \
+            -project apps/sylo-ios/sylo-ios.xcodeproj \
+            -scheme sylo-ios \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO

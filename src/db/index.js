@@ -873,6 +873,30 @@ export const MIGRATIONS = [
       CREATE INDEX idx_sessions_expires ON sessions (expires_at);
     `);
   },
+
+  // API tokens for the Sylo app and the one-time codes it trades for one — see
+  // src/db/apiTokens.js. Only SHA-256 hashes of either are stored.
+  (database) => {
+    database.exec(`
+      CREATE TABLE api_tokens (
+        id           TEXT PRIMARY KEY,
+        account_id   TEXT NOT NULL,
+        token_hash   TEXT NOT NULL UNIQUE,
+        device_name  TEXT NOT NULL DEFAULT '',
+        created_at   INTEGER NOT NULL,
+        last_used_at INTEGER NOT NULL,
+        expires_at   INTEGER NOT NULL
+      );
+      CREATE INDEX idx_api_tokens_account ON api_tokens (account_id);
+      CREATE INDEX idx_api_tokens_expires ON api_tokens (expires_at);
+      CREATE TABLE mobile_codes (
+        code_hash  TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        challenge  TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

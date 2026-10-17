@@ -16,6 +16,7 @@ on:
       - 'unraid/**'
       - 'ca_profile.xml'
       - 'LICENSE'
+      - 'apps/**'
   pull_request:
     branches: [main]
   workflow_dispatch:
