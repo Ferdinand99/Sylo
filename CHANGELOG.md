@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.3.0](https://github.com/Ferdinand99/Sylo/compare/v4.2.0...v4.3.0) (2026-10-17)
+
+
+### Features
+
+* security review fixes, account deletion and encrypted off-site backups ([#254](https://github.com/Ferdinand99/Sylo/issues/254)) ([2939451](https://github.com/Ferdinand99/Sylo/commit/2939451cab3f83f63cdb54d63a4ad72a53ce50e6))
+
 ## [4.2.0](https://github.com/Ferdinand99/Sylo/compare/v4.1.0...v4.2.0) (2026-10-17)
 
 
