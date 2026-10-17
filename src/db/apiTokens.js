@@ -63,6 +63,10 @@ const s = {
   purgeCodes: prepare('DELETE FROM mobile_codes WHERE expires_at <= ?'),
 };
 
+// A fast hash is the right tool here, not bcrypt/scrypt: every stored value comes from secret()
+// (256 random bits from the OS CSPRNG), which cannot be guessed however fast the hash is, and
+// the hash is the lookup key on every API call (a salted slow hash could be neither). Slow,
+// salted hashing is for low-entropy, person-chosen passwords. Keep secret() at 256 random bits.
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 const secret = () => randomBytes(32).toString('base64url');
 
