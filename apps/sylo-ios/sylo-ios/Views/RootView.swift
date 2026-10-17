@@ -16,7 +16,7 @@ struct RootView: View {
                 SignInView(server: server)
                     .id(server)
             case .signedIn(let server):
-                SignedInView(server: server)
+                MainView(server: server, session: session)
                     .id(server)
             }
         }

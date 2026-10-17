@@ -60,3 +60,18 @@ final class MemoryServerPreference: ServerPreference {
     var server: ServerURL?
     init(_ server: ServerURL? = nil) { self.server = server }
 }
+
+/// A session signed in to `server` whose calls are answered by `clients`.
+@MainActor
+func makeSignedInSession(
+    clients: StubClients, server: ServerURL = try! ServerURL("https://sylo.example.com")
+) -> AppSession {
+    let tokens = InMemoryTokenStore(tokens: [
+        server.description: StoredToken(token: "sylo_live", expiresAt: Date().addingTimeInterval(86_400)),
+    ])
+    let session = AppSession(
+        tokens: tokens, preference: MemoryServerPreference(server), deviceName: "Test",
+        makeClient: { [clients] in clients.make($0, $1) })
+    session.start()
+    return session
+}
