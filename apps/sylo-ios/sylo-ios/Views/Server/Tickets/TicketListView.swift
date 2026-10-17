@@ -110,7 +110,7 @@ private struct TicketRow: View {
     }
 
     private var when: String {
-        ticket.lastAt.map(MessageTime.listLabel(for:)) ?? ticket.ago
+        ticket.lastAt.map { MessageTime.listLabel(for: $0) } ?? ticket.ago
     }
 
     private var preview: String {
