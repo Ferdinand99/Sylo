@@ -35,6 +35,18 @@ const ownerToken = await tokenFor(OWNER);
 setProfiles(); // an admin of D_GUILD who is not a Sylo operator; no rights in OTHER_D_GUILD
 const adminToken = await tokenFor();
 
+// App requests are checked live through the bot (test/mobileAccess.test.js): both people are
+// members of D_GUILD with Manage Server.
+const { runtime } = await import('../src/runtime.js');
+const dGuild = runtime.clients.discord.guilds.cache.get(D_GUILD);
+for (const id of [OWNER.id, profiles.discord.id]) {
+  dGuild.members.cache.set(id, {
+    id,
+    permissions: { has: (p) => p === 'ManageGuild' },
+    roles: { cache: { hasAny: () => false } },
+  });
+}
+
 const app = browser(); // no cookies are ever set for it in these tests
 const call = (path, token, init = {}) =>
   app.get(path, {

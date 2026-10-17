@@ -208,6 +208,24 @@ async function isBotMaster(key, userId) {
   return Boolean(member && member.roles.cache.hasAny(...roles));
 }
 
+/**
+ * Does this person manage the guild right now, as the bot sees it: its owner, a member with
+ * Manage Server or Administrator, or a bot master? Used for app (token) requests, which cannot
+ * refresh the sign-in snapshot of guilds the web dashboard relies on, so a lost right must count
+ * at once. Works for Fluxer too: its members have the discord.js shape (src/platform/compat.js).
+ */
+export async function managesGuildLive(key, userId) {
+  if (!userId) return false;
+  const guild = guildByKey(key);
+  if (!guild) return false;
+  if (guild.ownerId === userId) return true;
+  const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+  if (!member) return false;
+  if (member.permissions?.has('ManageGuild') || member.permissions?.has('Administrator')) return true;
+  const roles = await getBotMasterRoles(key);
+  return roles.length > 0 && Boolean(member.roles?.cache.hasAny(...roles));
+}
+
 function forbidGuild(req, res) {
   if (isTokenRequest(req)) return res.status(403).json({ error: 'You do not manage this server.' });
   res.status(403).render('error', {
@@ -226,6 +244,11 @@ export function requireGuildAdmin(req, res, next) {
     return redirectToLogin(req, res);
   }
   const key = req.params.guildId;
+  if (req.viaToken) {
+    return managesGuildLive(key, userIdForGuild(req, key))
+      .then((ok) => (ok ? next() : forbidGuild(req, res)))
+      .catch(() => forbidGuild(req, res));
+  }
   if (adminGuildIds(req).has(key)) return next();
   isBotMaster(key, userIdForGuild(req, key))
     .then((ok) => (ok ? next() : forbidGuild(req, res)))

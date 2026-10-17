@@ -15,6 +15,8 @@ import {
   requireRealUser,
   isOwner,
   manageableGuilds,
+  managesGuildLive,
+  userIdForGuild,
   currentUser,
   sessionUserId,
   botInviteUrls,
@@ -239,9 +241,17 @@ function clampDays(raw) {
 
 // Same list V1's server switcher and "Choose a server" picker use
 // (src/web/middleware/auth.js:129) — the SPA's own guild picker.
-router.get('/guilds', (req, res) => {
-  res.json({ guilds: manageableGuilds(req) });
-});
+router.get(
+  '/guilds',
+  asyncHandler(async (req, res) => {
+    const guilds = manageableGuilds(req);
+    if (!req.viaToken) return res.json({ guilds });
+    // The Sylo app: the sign-in snapshot, minus any server where the person no longer has the
+    // rights (checked live, the same way requireGuildAdmin does for token requests).
+    const live = await Promise.all(guilds.map((g) => managesGuildLive(g.id, userIdForGuild(req, g.id))));
+    res.json({ guilds: guilds.filter((_, i) => live[i]) });
+  })
+);
 
 // The signed-in person's connected platforms (the account page), and disconnecting one.
 router.get('/account', (req, res) => {
