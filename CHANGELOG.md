@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.0](https://github.com/Ferdinand99/Sylo/compare/v4.1.0...v4.2.0) (2026-10-17)
+
+
+### Features
+
+* add the Sylo iOS app API, ticket push notifications and the notification relay ([#251](https://github.com/Ferdinand99/Sylo/issues/251)) ([dae07bc](https://github.com/Ferdinand99/Sylo/commit/dae07bc7bd439d259b327a893290b3cec730b799))
+
 ## [4.1.0](https://github.com/Ferdinand99/Sylo/compare/v4.0.0...v4.1.0) (2026-10-17)
 
 
