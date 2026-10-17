@@ -45,6 +45,10 @@ jobs:
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
 
+      # SyloKit (apps/sylo-ios/SyloKit): the app's non-UI code, tested on its own with Swift Testing.
+      - name: Test SyloKit
+        run: swift test --package-path apps/sylo-ios/SyloKit
+
       - name: Build for the iOS simulator
         run: |
           xcodebuild build \

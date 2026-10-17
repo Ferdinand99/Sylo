@@ -1,6 +1,6 @@
 import SwiftUI
 
-@main struct MyApp: App {
+@main struct SyloApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
