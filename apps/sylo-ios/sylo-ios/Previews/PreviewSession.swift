@@ -48,19 +48,27 @@ nonisolated enum PreviewData {
 
 /// Answers like a current Sylo, without a network.
 nonisolated struct PreviewClient: APIClient {
+    /// Answers a screen's own calls (a module's settings page) before the shared ones.
+    typealias Answer = @Sendable (any APIEndpoint) -> Any?
+    var extra: Answer?
+
     func send<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response {
-        let answer: Any =
-            switch endpoint {
-            case is Endpoints.ServerInfo: PreviewData.info
-            case is Endpoints.Servers: ServerList(servers: PreviewData.servers)
-            case is Endpoints.Overview: PreviewData.overview
-            case let set as Endpoints.SetModule: ModuleToggleResult(isEnabled: set.enabled)
-            case is Endpoints.Account: PreviewData.account
-            case is Endpoints.RevokeDevice: OKResponse()
-            default: EmptyResponse()
-            }
-        guard let response = answer as? E.Response else { throw NetworkError.notFound }
+        guard let response = (extra?(endpoint) ?? Self.shared(endpoint)) as? E.Response else {
+            throw NetworkError.notFound
+        }
         return response
+    }
+
+    private static func shared(_ endpoint: any APIEndpoint) -> Any {
+        switch endpoint {
+        case is Endpoints.ServerInfo: PreviewData.info
+        case is Endpoints.Servers: ServerList(servers: PreviewData.servers)
+        case is Endpoints.Overview: PreviewData.overview
+        case let set as Endpoints.SetModule: ModuleToggleResult(isEnabled: set.enabled)
+        case is Endpoints.Account: PreviewData.account
+        case is Endpoints.RevokeDevice: OKResponse()
+        default: EmptyResponse()
+        }
     }
 }
 
@@ -77,7 +85,10 @@ extension AppSession {
     }
 
     /// A session already in `state`, for previews.
-    static func preview(_ state: PreviewState, server: ServerURL = .hosted) -> AppSession {
+    /// - Parameter answer: Answers the screen's own calls; nil falls back to ``PreviewData``.
+    static func preview(
+        _ state: PreviewState, server: ServerURL = .hosted, answer: PreviewClient.Answer? = nil
+    ) -> AppSession {
         let tokens = InMemoryTokenStore()
         if state == .signedIn {
             try? tokens.save(StoredToken(token: "sylo_preview", expiresAt: .distantFuture), for: server.description)
@@ -86,7 +97,7 @@ extension AppSession {
             tokens: tokens,
             preference: PreviewServerPreference(state == .choosingServer ? nil : server),
             deviceName: "Preview",
-            makeClient: { _, _ in PreviewClient() }
+            makeClient: { _, _ in PreviewClient(extra: answer) }
         )
         session.start()
         return session

@@ -2,7 +2,8 @@ import SwiftUI
 import SyloKit
 
 /// One server: its header, then its modules grouped like the web overview, each with a switch.
-/// Cards without a switch (Settings, Commands, Embed messages) open in the web dashboard.
+/// A module with a settings screen in the app opens it; cards without a switch (Settings,
+/// Commands, Embed messages) open in the web dashboard.
 struct OverviewView: View {
     let summary: ServerSummary
 
@@ -19,6 +20,13 @@ struct OverviewView: View {
             .navigationTitle(summary.name)
             .navigationBarTitleDisplayMode(.inline)
             .task { await model.load() }
+            // Back from a module's settings: its summary lines may have changed.
+            .onAppear {
+                if model.overview != nil { Task { await model.load() } }
+            }
+            .navigationDestination(for: ModuleRoute.self) { route in
+                ModuleScreens.screen(for: route.moduleID, server: summary.id, session: session)
+            }
             .alert(
                 "Couldn't Change Module", isPresented: isShowingToggleError, presenting: model.toggleError
             ) { _ in
@@ -44,10 +52,12 @@ struct OverviewView: View {
                 ForEach(overview.groups.filter { !$0.cards.isEmpty }) { group in
                     Section(group.title) {
                         ForEach(group.cards) { card in
-                            if card.hasToggle {
-                                ModuleRow(card: card, isPending: model.isPending(card.id)) { enabled in
-                                    model.setModule(card.id, enabled: enabled)
+                            if card.hasToggle, ModuleScreens.hasScreen(card.id) {
+                                NavigationLink(value: ModuleRoute(moduleID: card.id)) {
+                                    moduleRow(card)
                                 }
+                            } else if card.hasToggle {
+                                moduleRow(card)
                             } else {
                                 LinkCardRow(card: card, url: webURL(for: card))
                             }
@@ -66,6 +76,12 @@ struct OverviewView: View {
             }
         } else {
             ProgressView()
+        }
+    }
+
+    private func moduleRow(_ card: OverviewCard) -> some View {
+        ModuleRow(card: card, isPending: model.isPending(card.id)) { enabled in
+            model.setModule(card.id, enabled: enabled)
         }
     }
 
