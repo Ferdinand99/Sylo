@@ -5,7 +5,7 @@ import SyloKit
 struct ModuleRow: View {
     let card: OverviewCard
     let isPending: Bool
-    let setEnabled: (Bool) -> Void
+    let setEnabled: @MainActor (Bool) -> Void
 
     @ScaledMetric(relativeTo: .body) private var iconWidth = 28
 
