@@ -162,3 +162,35 @@ test('an API error carries the status and Apple detail, never the token', async 
     return true;
   });
 });
+
+test('getAll: a next link to another host is refused, so the token never leaves Apple', async () => {
+  const { client, calls } = make([
+    { body: { data: [1], links: { next: 'https://evil.example/v1/apps?cursor=x' } } },
+    { body: { data: [2] } },
+  ]);
+  await assert.rejects(() => client.getAll('/v1/apps'), AppStoreConnectError);
+  assert.equal(calls.length, 1, 'no request went to the other host');
+  assert.ok(calls.every((c) => c.url.startsWith('https://api.appstoreconnect.apple.com/')));
+});
+
+test('a timeout or network error is retried once, then reported', async () => {
+  let n = 0;
+  const flaky = async () => {
+    n += 1;
+    if (n === 1)
+      throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+    return new Response(JSON.stringify({ data: [7] }), { status: 200 });
+  };
+  const { client } = make([], { fetchImpl: flaky });
+  assert.deepEqual(await client.get('/v1/apps'), { data: [7] });
+  assert.equal(n, 2);
+
+  let calls = 0;
+  const down = async () => {
+    calls += 1;
+    throw new TypeError('fetch failed');
+  };
+  const { client: broken } = make([], { fetchImpl: down });
+  await assert.rejects(() => broken.get('/v1/apps'), /fetch failed/);
+  assert.equal(calls, 2, 'one retry, not a loop');
+});

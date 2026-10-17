@@ -101,6 +101,7 @@ const CATEGORIES = [
       { module: 'youtube-alerts', label: 'YouTube alerts' },
       { module: 'kick-alerts', label: 'Kick alerts' },
       { module: 'rss', label: 'RSS alerts' },
+      { module: 'apple-connect', label: 'App Store Connect' },
       { module: 'github', label: 'GitHub alerts' },
     ],
   },
@@ -138,6 +139,7 @@ export async function buildSidebar(req, gid = null) {
     if (it.module) {
       const def = getModule(it.module);
       if (!def) return null;
+      if (def.ownerOnly && !isOwner) return null; // an owner-only module is not even listed
       const href = `${base}/m/${it.module}`;
       return {
         id: it.module,

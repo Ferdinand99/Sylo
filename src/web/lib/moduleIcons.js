@@ -35,6 +35,7 @@ export const MODULE_ICONS = {
   'youtube-alerts': 'youtube',
   'kick-alerts': 'kick',
   rss: 'rss',
+  'apple-connect': 'activity',
   insights: 'trending-up',
   'channel-cleanup': 'trash-2',
   github: 'github',

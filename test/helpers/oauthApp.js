@@ -77,6 +77,9 @@ const guild = (id, name, client) => ({
     },
   },
   ownerId: 'x',
+  channels: { cache: new Map() },
+  roles: { cache: new Map() },
+  emojis: { cache: new Map() },
 });
 const base_client = () => ({
   isReady: () => true,

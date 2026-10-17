@@ -43,6 +43,7 @@ platform gaps (native AutoMod rules, threads, moving members between voice).
 | [YouTube alerts](youtube-alerts.md) | Announce a channel's new uploads and going live | off | — |
 | [Kick alerts](kick-alerts.md) | Announce when a Kick.com streamer goes live | off | — |
 | [RSS alerts](rss.md) | Post new items from followed RSS / Atom feeds | off | — |
+| [App Store Connect](apple-connect.md) | Owner-only alerts for your Apple apps: review state, builds, reviews, TestFlight, certificate expiry (beta) | off | — |
 | [Free games](free-games.md) | Announce games free to claim on the Epic Games Store | off | — |
 | [Game stats](game-stats.md) | Battlefield-series player lookups via `/stats` | off | — |
 | [Channel cleanup](channel-cleanup.md) | Auto-delete old messages from a channel on a weekly schedule | off | — |

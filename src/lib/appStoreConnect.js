@@ -10,6 +10,7 @@ const BASE_URL = 'https://api.appstoreconnect.apple.com';
 const TOKEN_LIFETIME_S = 20 * 60;
 const TOKEN_REUSE_MS = 15 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 20_000;
+const NETWORK_RETRY_MS = 2_000;
 
 export class AppStoreConnectError extends Error {
   /** @param {string} message @param {number} [status] */
@@ -88,6 +89,7 @@ export function createAppStoreConnect({
   baseUrl = BASE_URL,
 }) {
   let cached = { token: null, at: 0 };
+  const apiOrigin = new URL(baseUrl).origin;
 
   function token() {
     if (!cached.token || now() - cached.at > TOKEN_REUSE_MS) {
@@ -104,10 +106,23 @@ export function createAppStoreConnect({
   };
 
   async function request(url, { retry = true, accept = 'application/json' } = {}) {
-    const res = await fetchImpl(url, {
-      headers: { Authorization: `Bearer ${token()}`, Accept: accept },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+    // The bearer token only ever goes to Apple: a pagination link (or a path) that points
+    // anywhere else is refused before anything is sent.
+    if (new URL(url).origin !== apiOrigin) {
+      throw new AppStoreConnectError(`Refusing to send the API token to ${new URL(url).origin}`);
+    }
+    let res;
+    try {
+      res = await fetchImpl(url, {
+        headers: { Authorization: `Bearer ${token()}`, Accept: accept },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (err) {
+      // A timeout or a dropped connection: one more try, then let the caller see the error.
+      if (!retry) throw err;
+      await sleep(NETWORK_RETRY_MS);
+      return request(url, { retry: false, accept });
+    }
     if (res.status === 429 && retry) {
       const wait = Math.min(Math.max(Number(res.headers.get('retry-after')) || 5, 1), 60);
       await sleep(wait * 1000);

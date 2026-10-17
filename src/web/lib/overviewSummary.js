@@ -63,7 +63,10 @@ const LAYOUT = [
       'channel-cleanup',
     ],
   },
-  { title: 'Social alerts', ids: ['twitch-alerts', 'youtube-alerts', 'kick-alerts', 'rss', 'github'] },
+  {
+    title: 'Social alerts',
+    ids: ['twitch-alerts', 'youtube-alerts', 'kick-alerts', 'rss', 'github', 'apple-connect'],
+  },
 ];
 
 const line = (label, value, state) => ({ label, value, state });
@@ -79,23 +82,31 @@ function channelName(guild, id) {
 /**
  * Build the whole overview view-model for a guild.
  * @param {import('discord.js').Guild} guild
+ * @param {{ owner?: boolean }} [viewer]  a non-owner never sees an owner-only module's card
  */
-export async function buildOverview(guild) {
+export async function buildOverview(guild, { owner = true } = {}) {
   const settings = await getGuildSettings(guild.id);
   const state = new Map((await getGuildModules(guild.id)).map((m) => [m.id, m]));
 
   return {
-    health: await buildHealth(guild, settings, state),
+    health: await buildHealth(guild, settings, state, owner),
     groups: await Promise.all(
       LAYOUT.map(async (g) => ({
         title: g.title,
-        cards: (await Promise.all(g.ids.map((id) => buildCard(id, guild, settings, state)))).filter(Boolean),
+        cards: (
+          await Promise.all(
+            g.ids
+              .filter((id) => owner || !getModule(id)?.ownerOnly)
+              .map((id) => buildCard(id, guild, settings, state))
+          )
+        ).filter(Boolean),
       }))
     ),
   };
 }
 
-async function buildHealth(guild, settings, state) {
+async function buildHealth(guild, settings, state, owner = true) {
+  const visible = MODULES.filter((d) => owner || !d.ownerOnly);
   const me = guild.members.me;
   const missingPerms = me
     ? KEY_PERMS.filter(([bit]) => !me.permissions.has(PermissionFlagsBits[bit])).map(([, l]) => l)
@@ -110,7 +121,7 @@ async function buildHealth(guild, settings, state) {
     if (def.requiredIntents.includes('MessageContent')) needContent = true;
   }
 
-  const enabledCount = MODULES.filter((d) => state.get(d.id)?.enabled ?? d.defaultEnabled).length;
+  const enabledCount = visible.filter((d) => state.get(d.id)?.enabled ?? d.defaultEnabled).length;
   const discord = platformOfGuild(guild) === 'discord';
 
   return {
@@ -127,7 +138,7 @@ async function buildHealth(guild, settings, state) {
       name: channelName(guild, settings?.modlog_channel_id),
     },
     tickets: { open: await openTicketCount(guild.id), unread: await unreadTicketCount(guild.id) },
-    modules: { enabled: enabledCount, total: MODULES.length },
+    modules: { enabled: enabledCount, total: visible.length },
   };
 }
 
@@ -278,6 +289,17 @@ async function moduleLines(id, guild, cfg) {
       return [
         alerts.length ? on('Streamers', String(alerts.length)) : off('Streamers', 'none'),
         config.kickEnabled ? neutral('API', 'connected') : off('API', 'KICK_CLIENT_ID/SECRET not set'),
+      ];
+    }
+    case 'apple-connect': {
+      const watching = cfg.channelId
+        ? on('Channel', `#${channelName(guild, cfg.channelId) ?? 'unknown'}`)
+        : off('Channel', 'not set');
+      return [
+        watching,
+        config.appleEnabled
+          ? neutral('API', 'connected')
+          : off('API', 'APPLE_KEY_ID / APPLE_PRIVATE_KEY not set'),
       ];
     }
     case 'rss': {

@@ -68,6 +68,10 @@ At least one platform must be configured.
 | `FLUXER_CLIENT_ID`        | —                               | Fluxer application id (**required** with `FLUXER_TOKEN`) |
 | `FLUXER_WEB_URL`          | hosted Fluxer                   | Web app origin of a self-hosted Fluxer instance, e.g. `https://chat.example.com` |
 | `COMMAND_PREFIX`          | `!`                             | Chat prefix for commands on Fluxer, which has no slash commands (1–5 characters) |
+| `APPLE_KEY_ID`            | —                               | Optional: App Store Connect API key id for the owner-only [App Store Connect module](modules/apple-connect.md) |
+| `APPLE_ISSUER_ID`         | —                               | Issuer id of a team API key (leave unset for an individual key) |
+| `APPLE_PRIVATE_KEY`       | —                               | The key's `.p8` file: PEM text, PEM on one line with literal `\n`, or base64 |
+| `APPLE_VENDOR_NUMBER`     | —                               | Optional vendor number for a planned daily downloads digest |
 | `FLUXER_CLIENT_SECRET`    | —                               | Adds "Log in with Fluxer" to the dashboard |
 | `FLUXER_OWNER_IDS`        | —                               | Your Fluxer user id(s); the Fluxer counterpart of `OWNER_IDS` |
 | `WEB_PORT`                | `3000`                          | Dashboard HTTP port |

@@ -37,6 +37,7 @@ import Polls from './Polls.jsx';
 import WelcomeChannel from './WelcomeChannel.jsx';
 import Roles from './Roles.jsx';
 import CustomCommands from './CustomCommands.jsx';
+import AppleConnect from './AppleConnect.jsx';
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -60,6 +61,7 @@ export const MODULE_FORMS = {
   'welcome-channel': WelcomeChannel,
   roles: Roles,
   'custom-commands': CustomCommands,
+  'apple-connect': AppleConnect,
   rss: RssAlerts,
   'game-stats': GameStats,
   welcome: Welcome,

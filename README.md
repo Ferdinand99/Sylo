@@ -49,7 +49,7 @@ moderation · logging · tickets · reaction roles · verification · welcome ·
 welcome channel · birthdays · sticky messages · auto-moderation · counting · custom commands ·
 autoresponder · auto-react · reminders · leveling · AFK · server statistics · server insights · free games ·
 ban appeals · temporary voice channels · starboard · invite tracker · polls ·
-giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS alerts · channel cleanup ·
+giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS alerts · App Store Connect alerts (owner only) · channel cleanup ·
 GitHub alerts
 
 </details>
