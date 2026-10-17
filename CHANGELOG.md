@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.1.0](https://github.com/Ferdinand99/Sylo/compare/v4.0.0...v4.1.0) (2026-10-17)
+
+
+### Features
+
+* **apple:** add an App Store Connect API client and its settings ([68d4f73](https://github.com/Ferdinand99/Sylo/commit/68d4f73353b9ea39c37f9cfa5a1ac53ec4137d3e))
+* **apple:** add an owner-only App Store Connect alerts module ([#247](https://github.com/Ferdinand99/Sylo/issues/247)) ([2c379af](https://github.com/Ferdinand99/Sylo/commit/2c379af1374eb980374b8516c9355d01c50d22d0))
+
 ## [4.0.0](https://github.com/Ferdinand99/Sylo/compare/v3.41.1...v4.0.0) (2026-10-12)
 
 
