@@ -1,7 +1,7 @@
 name: iOS app
 
-# Builds the SwiftUI app in apps/sylo-ios on a macOS runner, only when the app (or this
-# workflow) changes. Unsigned simulator build: no certificates or secrets are needed here;
+# Builds the SwiftUI app in apps/sylo-ios on a macOS runner, on any branch, only when the app
+# (or this workflow) changes. Unsigned simulator build: no certificates or secrets are needed here;
 # signing and App Store uploads happen in Xcode (or Xcode Cloud).
 
 on:
@@ -9,8 +9,8 @@ on:
     paths:
       - 'apps/sylo-ios/**'
       - '.github/workflows/ios.yml'
+  # Every branch, so a work-in-progress branch gets a build before it has a pull request.
   push:
-    branches: [main]
     paths:
       - 'apps/sylo-ios/**'
       - '.github/workflows/ios.yml'
