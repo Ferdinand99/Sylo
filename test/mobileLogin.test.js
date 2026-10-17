@@ -169,3 +169,21 @@ test('Allow pressed again after the sign-in finished says so, instead of a failu
   assert.equal(restart.headers.get('location'), '/auth/mobile/confirm');
   assert.equal((await b.get('/auth/mobile/confirm')).status, 200);
 });
+
+test('start: an inherited property name as platform is a 400, not a 500', async () => {
+  const { challenge } = pkce();
+  for (const platform of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    const res = await browser().get(
+      `/auth/mobile/start?challenge=${challenge}&state=${STATE}&platform=${platform}`
+    );
+    assert.equal(res.status, 400, platform);
+  }
+});
+
+test('the app sign-in pages refuse to be framed', async () => {
+  // Any answer from these pages carries it (this file may have used up the rate limit by now).
+  const page = await browser().get('/auth/mobile/confirm');
+  assert.ok([400, 429].includes(page.status), String(page.status));
+  assert.equal(page.headers.get('x-frame-options'), 'DENY');
+  assert.match(page.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/);
+});

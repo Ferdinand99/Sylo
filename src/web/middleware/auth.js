@@ -226,6 +226,16 @@ export async function managesGuildLive(key, userId) {
   return roles.length > 0 && Boolean(member.roles?.cache.hasAny(...roles));
 }
 
+/**
+ * The live check for an app (token) request. Only for a guild the person administered at sign-in,
+ * or one with bot-master roles set: otherwise any signed-in token could make the bot look people
+ * up in every server it is in, one Discord API call per request.
+ */
+export async function tokenManagesGuild(req, key) {
+  if (!adminGuildIds(req).has(key) && !(await getBotMasterRoles(key)).length) return false;
+  return managesGuildLive(key, userIdForGuild(req, key));
+}
+
 function forbidGuild(req, res) {
   if (isTokenRequest(req)) return res.status(403).json({ error: 'You do not manage this server.' });
   res.status(403).render('error', {
@@ -245,7 +255,7 @@ export function requireGuildAdmin(req, res, next) {
   }
   const key = req.params.guildId;
   if (req.viaToken) {
-    return managesGuildLive(key, userIdForGuild(req, key))
+    return tokenManagesGuild(req, key)
       .then((ok) => (ok ? next() : forbidGuild(req, res)))
       .catch(() => forbidGuild(req, res));
   }

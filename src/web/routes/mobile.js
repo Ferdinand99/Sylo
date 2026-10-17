@@ -23,6 +23,7 @@ import { identitiesOf } from '../../db/accounts.js';
 import {
   API_TOKEN_TTL_MS,
   createApiToken,
+  cleanDeviceName,
   createMobileCode,
   redeemMobileCode,
   revokeApiTokenValue,
@@ -74,11 +75,20 @@ const authEnabled = (_req, res, next) => (config.authEnabled ? next() : res.stat
 // --- the browser part (/auth/mobile) -------------------------------------------------------
 
 export const mobileAuthRouter = Router();
+// These pages hand out sign-ins: never inside someone else's frame (clickjacking on "Allow").
+// First, so every answer carries it, a rate-limited one too.
+mobileAuthRouter.use((_req, res, next) => {
+  res.set('X-Frame-Options', 'DENY');
+  res.set('Content-Security-Policy', "frame-ancestors 'none'");
+  next();
+});
 mobileAuthRouter.use(authEnabled, rateLimit({ windowMs: 60_000, max: 30 }));
 
 mobileAuthRouter.get('/start', (req, res) => {
   const { challenge, state, platform } = req.query;
-  const provider = platform === undefined ? null : providers[platform];
+  // Object.hasOwn: `constructor` or `__proto__` must not resolve to an inherited property.
+  const provider =
+    typeof platform === 'string' && Object.hasOwn(providers, platform) ? providers[platform] : null;
   if (
     typeof challenge !== 'string' ||
     !CHALLENGE.test(challenge) ||
@@ -182,11 +192,8 @@ mobileApiRouter.post('/token', rateLimit({ windowMs: 60_000, max: 20 }), async (
     const accountId = await redeemMobileCode(code, verifier);
     if (!accountId) return badGrant(res);
 
-    const name = String(deviceName ?? '')
-      .replace(/\p{Cc}/gu, '') // control characters
-      .trim();
     const { token, expiresAt } = await createApiToken(accountId, {
-      deviceName: name || 'Sylo app',
+      deviceName: cleanDeviceName(deviceName) || 'Sylo app',
       ttlMs: API_TOKEN_TTL_MS,
     });
     const account = { id: accountId, identities: await identitiesOf(accountId) };

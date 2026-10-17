@@ -38,6 +38,9 @@ const CODE_TTL_MS = 60_000;
 // write per API call; once an hour is plenty for a 90-day lifetime.
 const TOUCH_EVERY_MS = 60 * 60 * 1000;
 const MAX_DEVICE_NAME = 100;
+// Each sign-in from the app adds a token; past this many the least recently used is signed out,
+// so neither the table nor the account page's device list can grow without bound.
+const MAX_TOKENS_PER_ACCOUNT = 20;
 
 const s = {
   insertToken: prepare(`
@@ -47,8 +50,15 @@ const s = {
   tokenByHash: prepare('SELECT * FROM api_tokens WHERE token_hash = ?'),
   touch: prepare('UPDATE api_tokens SET last_used_at = ?, expires_at = ? WHERE id = ?'),
   tokensOf: prepare(
-    'SELECT * FROM api_tokens WHERE account_id = ? AND expires_at > ? ORDER BY last_used_at DESC'
+    `SELECT * FROM api_tokens WHERE account_id = ? AND expires_at > ?
+     ORDER BY last_used_at DESC, created_at DESC LIMIT ${MAX_TOKENS_PER_ACCOUNT}`
   ),
+  trimAccount: prepare(`
+    DELETE FROM api_tokens WHERE account_id = ? AND id NOT IN (
+      SELECT id FROM api_tokens WHERE account_id = ?
+      ORDER BY last_used_at DESC, created_at DESC LIMIT ${MAX_TOKENS_PER_ACCOUNT}
+    )
+  `),
   revoke: prepare('DELETE FROM api_tokens WHERE id = ? AND account_id = ?'),
   revokeHash: prepare('DELETE FROM api_tokens WHERE token_hash = ?'),
   revokeAccount: prepare('DELETE FROM api_tokens WHERE account_id = ?'),
@@ -93,7 +103,20 @@ const tokenFromRow = (r) => ({
 // --- tokens --------------------------------------------------------------------------
 
 /**
- * Issue a token for an account. The returned `token` is the only time the value exists.
+ * A device name as the app sent it, made safe to show: no control or format characters (a
+ * right-to-left override or zero-width space could disguise one device as another in the
+ * revoke list), at most 100 characters, never cutting a character in half.
+ */
+export function cleanDeviceName(name) {
+  const clean = String(name ?? '')
+    .replace(/[\p{Cc}\p{Cf}]/gu, '')
+    .trim();
+  return [...clean].slice(0, MAX_DEVICE_NAME).join('').trim();
+}
+
+/**
+ * Issue a token for an account. The returned `token` is the only time the value exists. Past
+ * MAX_TOKENS_PER_ACCOUNT, the account's least recently used tokens are revoked.
  * @returns {Promise<{ id: string, token: string, expiresAt: number }>}
  */
 export async function createApiToken(accountId, { deviceName = '', ttlMs }) {
@@ -105,10 +128,11 @@ export async function createApiToken(accountId, { deviceName = '', ttlMs }) {
     id,
     accountId,
     hash: sha256(token),
-    deviceName: String(deviceName).slice(0, MAX_DEVICE_NAME),
+    deviceName: cleanDeviceName(deviceName),
     now,
     expiresAt,
   });
+  await s.trimAccount.run(accountId, accountId);
   return { id, token, expiresAt };
 }
 

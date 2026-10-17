@@ -162,8 +162,9 @@ export async function linkIdentity(accountId, identity) {
 export async function unlinkIdentity(accountId, platform) {
   const { n } = await s.countIdentities.get(accountId);
   if (Number(n) <= 1) return false;
-  await s.deleteIdentity.run(accountId, platform);
+  // Tokens first: if this fails, the identity is still there and nothing is half done.
   await revokeAccountTokens(accountId);
+  await s.deleteIdentity.run(accountId, platform);
   return true;
 }
 

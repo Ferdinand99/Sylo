@@ -192,7 +192,12 @@ The usual per-IP rate limits apply. On top of them, per minute: 60 calls to
   - the device is revoked on the account page,
   - a sign-in (Discord or Fluxer) is disconnected from the account: this revokes
     all of the account's app tokens, and the app has to sign in again,
-  - it has not been used for 90 days.
+  - it has not been used for 90 days,
+  - the account signs in on a 21st device: an account keeps at most 20, and the
+    least recently used one is signed out.
+
+Device names are shown as sent, minus control and invisible formatting
+characters, cut to 100 characters.
 
 Token lookups are not cached, so a revocation counts on the next request.
 
@@ -209,7 +214,10 @@ difference is how server access is checked:
 - So for app requests Sylo checks **live, through the bot, on every request**:
   the person must own the server, have Manage Server or Administrator there, or
   hold one of its bot-master roles. Someone who loses those rights loses access
-  from the app at once. The bot has to be in the server.
+  from the app at once. The bot has to be in the server. The live check only
+  runs for a server that was in the stored list at sign-in, or that has
+  bot-master roles set, so a token cannot make the bot look people up in every
+  server it is in. This covers the ticket pages too.
 - The server list (`GET /api/v2/guilds`) is the stored list filtered by the same
   live check. A server where you newly gained rights shows up after the next
   sign-in.

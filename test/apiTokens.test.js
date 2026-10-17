@@ -138,3 +138,23 @@ test('mobile codes: redeemed once with the right verifier, before they expire', 
   assert.equal(await redeemMobileCode('', verifier), null);
   assert.equal(await redeemMobileCode(undefined, undefined), null);
 });
+
+test('an account keeps at most 20 tokens: the least recently used go first', async () => {
+  const a = account();
+  const first = await createApiToken(a, { deviceName: 'oldest', ttlMs: DAY });
+  await new Promise((r) => setTimeout(r, 5)); // strictly older than the rest
+  for (let i = 0; i < 25; i += 1) await createApiToken(a, { deviceName: `d${i}`, ttlMs: DAY });
+  const list = await listApiTokens(a);
+  assert.equal(list.length, 20);
+  assert.equal(await findApiToken(first.token), null, 'the oldest was signed out');
+});
+
+test('device names lose control and format characters, and are cut by whole characters', async () => {
+  const a = account();
+  const { id } = await createApiToken(a, { deviceName: 'iPh‮one​\u0007 Pro', ttlMs: DAY });
+  assert.equal((await listApiTokens(a)).find((t) => t.id === id).deviceName, 'iPhone Pro');
+  const long = await createApiToken(a, { deviceName: `${'x'.repeat(99)}😀😀`, ttlMs: DAY });
+  const name = (await listApiTokens(a)).find((t) => t.id === long.id).deviceName;
+  assert.equal([...name].length, 100);
+  assert.ok(!/[\uD800-\uDBFF]$/.test(name), 'no half surrogate pair at the end');
+});

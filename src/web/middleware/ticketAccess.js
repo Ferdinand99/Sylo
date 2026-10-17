@@ -3,7 +3,7 @@
 // open mode.
 import { guildByKey } from '../../platform/platformOf.js';
 import { config } from '../../config.js';
-import { adminGuildIds, userIdForGuild } from './auth.js';
+import { adminGuildIds, tokenManagesGuild, userIdForGuild } from './auth.js';
 import { getGuildModule } from '../../db/modules.js';
 
 function deny(res) {
@@ -25,7 +25,9 @@ export async function ticketAccessState(req) {
   if (!req.account) return 'login';
   const guildId = req.params.guildId;
   const userId = userIdForGuild(req, guildId);
-  if (adminGuildIds(req).has(guildId)) return 'ok';
+  // An app (token) request is checked live through the bot, like requireGuildAdmin does: its
+  // sign-in snapshot of guilds is never refreshed, so it must not outlast lost rights.
+  if (req.viaToken ? await tokenManagesGuild(req, guildId) : adminGuildIds(req).has(guildId)) return 'ok';
 
   if (!userId) return 'denied'; // no identity on this guild's platform: nothing to look up
   const staffRoles = (await getGuildModule(guildId, 'tickets')).config.staffRoles ?? [];

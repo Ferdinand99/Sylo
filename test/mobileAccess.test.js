@@ -88,3 +88,24 @@ test('a bot-master role gives access', async () => {
     await setBotMasterRoles(D_GUILD, []);
   }
 });
+
+// --- from the security review ------------------------------------------------------------
+
+const { memberFetches, OTHER_D_GUILD } = await import('./helpers/oauthApp.js');
+
+test('tickets: an app token is checked live too, not against the sign-in snapshot', async () => {
+  const { id, token } = await person();
+  const tickets = () => get(`/api/v2/guilds/${D_GUILD}/tickets`, token);
+  assert.equal((await tickets()).status, 403, 'no longer a member: no tickets');
+  member(id, { perms: ['ManageGuild'] });
+  assert.equal((await tickets()).status, 200);
+});
+
+test('a token does not make the bot look people up in servers they never administered', async () => {
+  const { token } = await person(); // the snapshot has D_GUILD only
+  const before = memberFetches.length;
+  for (let i = 0; i < 5; i += 1) {
+    assert.equal((await get(`/api/v2/guilds/${OTHER_D_GUILD}/overview`, token)).status, 403);
+  }
+  assert.equal(memberFetches.length, before, 'no member fetch for a server outside the snapshot');
+});
