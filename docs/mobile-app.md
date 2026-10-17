@@ -63,8 +63,9 @@ Access, Authelia, nginx basic auth and so on), split the paths:
 | `/api/v2/*` | Bypass |
 | Everything else | Up to you |
 
-For example, in Pangolin add resource rules with the action **Always Allow**
-for the paths `/api/mobile/*` and `/api/v2/*`; in Cloudflare Access add a second application for
+For example, in Pangolin turn on the resource's **Access Rules** and add two
+rules with the action **Bypass Auth**, match type **Path**, for `/api/mobile/*`
+and `/api/v2/*`; in Cloudflare Access add a second application for
 `sylo.example.com/api/mobile` and `sylo.example.com/api/v2` with a **Bypass**
 policy; in Authelia add rules for `^/api/(mobile|v2)/` with `policy: bypass`
 above the rule that protects the domain; in nginx put `auth_basic off;` in a
