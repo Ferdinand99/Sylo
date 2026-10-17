@@ -49,6 +49,16 @@ export function normalisePrivateKey(raw) {
 const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
 
 /**
+ * An ES256 JWT with exactly this header and these claims (also the APNs provider token, see
+ * src/lib/apns.js). The signature is raw r||s (IEEE P1363), as JWS requires, not DER.
+ */
+export function signEs256Jwt(header, claims, privateKey) {
+  const input = `${b64url(header)}.${b64url(claims)}`;
+  const signature = createSign('SHA256').update(input).sign({ key: privateKey, dsaEncoding: 'ieee-p1363' });
+  return `${input}.${signature.toString('base64url')}`;
+}
+
+/**
  * @param {{ keyId: string, issuerId?: string | null, privateKey: string, iat?: number, lifetime?: number }} opts
  *   `issuerId` null/empty means an individual key (sub "user", no iss).
  */
@@ -66,9 +76,7 @@ export function signJwt({
     exp: iat + Math.min(lifetime, TOKEN_LIFETIME_S),
     aud: 'appstoreconnect-v1',
   };
-  const input = `${b64url(header)}.${b64url(claims)}`;
-  const signature = createSign('SHA256').update(input).sign({ key: privateKey, dsaEncoding: 'ieee-p1363' });
-  return `${input}.${signature.toString('base64url')}`;
+  return signEs256Jwt(header, claims, privateKey);
 }
 
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -13,6 +13,9 @@
 // Before any of that, GET /api/mobile/info tells the app whether an address it was given is a
 // Sylo, whether it can sign in there and what this version's app API supports.
 //
+// Signed in, the app turns on push notifications for tickets with /api/mobile/push
+// (internal/push-notifications-plan.md, src/lib/push.js).
+//
 // Open mode (no OAuth configured) has no accounts to hand tokens to: every route here but
 // /api/mobile/info is a 404.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -27,11 +30,23 @@ import {
   createMobileCode,
   redeemMobileCode,
   revokeApiTokenValue,
+  apiTokenPush,
+  setApiTokenPushMuted,
 } from '../../db/apiTokens.js';
+import { isPlatformGuildId } from '../../lib/platformId.js';
+import {
+  PushError,
+  canPush,
+  pushMode,
+  pushRelayUrl,
+  registerDevice,
+  unregisterDevice,
+} from '../../lib/push.js';
 import { enabledProviders, providers } from '../lib/oauthProviders.js';
 import { bearerToken } from '../lib/bearer.js';
 import { isOperator, sessionUserLabel } from '../lib/accountAuth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
+import { accountMaySeeTickets } from '../middleware/ticketAccess.js';
 
 const APP_CALLBACK = 'sylo://auth';
 const FLOW_TTL_MS = 10 * 60 * 1000;
@@ -155,7 +170,8 @@ mobileAuthRouter.post('/confirm', async (req, res, next) => {
 
 export const mobileApiRouter = Router();
 
-// What this server's app API supports, so a newer app can tell what an older Sylo lacks.
+// What this server's app API supports, so a newer app can tell what an older Sylo lacks. `push`
+// is added when this instance can send notifications (APNs keys, or a relay) to signed-in apps.
 const FEATURES = Object.freeze(['app-login', 'live-access']);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode
@@ -172,7 +188,10 @@ mobileApiRouter.get(
       login: config.authEnabled,
       loginProviders: config.authEnabled ? enabledProviders().map((p) => p.platform) : [],
       platforms: [config.discordEnabled && 'discord', config.fluxerEnabled && 'fluxer'].filter(Boolean),
-      features: FEATURES,
+      features: config.authEnabled && canPush() ? [...FEATURES, 'push'] : FEATURES,
+      // In relay mode the app registers its device token at this relay itself and gives this
+      // server only the relay token (src/lib/push.js).
+      ...(config.authEnabled && pushRelayUrl() ? { pushRelay: pushRelayUrl() } : {}),
     });
   }
 );
@@ -219,6 +238,101 @@ mobileApiRouter.delete('/token', async (req, res, next) => {
     if (!req.viaToken) return res.status(401).json({ error: 'Not signed in.' });
     await revokeApiTokenValue(bearerToken(req));
     res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- push notifications (/api/mobile/push) --------------------------------------------------
+// Only for app tokens: the push setup lives on the token's row, and a browser has no device to
+// notify. A cookie request is refused here, which is also why these paths need no CSRF token.
+
+const DEVICE_TOKEN = /^[0-9a-f]{64,200}$/i; // APNs device tokens are hex (32 bytes today)
+const RELAY_TOKEN = /^[A-Za-z0-9_-]{43}$/; // 32 random bytes, base64url, from the relay
+const PUSH_ENVIRONMENTS = new Set(['development', 'production']);
+const pushLimit = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `mobile-push|${req.ip}` });
+
+function appTokenOnly(req, res, next) {
+  if (!req.account) return res.status(401).json({ error: 'Not signed in.' });
+  if (!req.viaToken) return res.status(403).json({ error: 'Push notifications are for the Sylo app only.' });
+  next();
+}
+
+/** The address the app reaches this server at: DASHBOARD_URL, else the host it called. */
+function serverOrigin(req) {
+  if (config.dashboardUrl) return config.dashboardUrl;
+  try {
+    return new URL(`${req.protocol}://${req.get('host')}`).origin;
+  } catch {
+    return null;
+  }
+}
+
+mobileApiRouter.post('/push', pushLimit, appTokenOnly, async (req, res, next) => {
+  try {
+    const { deviceToken, relayToken, environment } = req.body ?? {};
+    const mode = pushMode();
+    const origin = serverOrigin(req);
+    if (!mode || !origin) return res.status(503).json({ error: 'push_unavailable' });
+    const bad = (error) => res.status(400).json({ error });
+    // Relay mode: the app registered at the relay itself; a device token is never taken here.
+    if (mode === 'relay') {
+      if (deviceToken !== undefined) return bad('relay_token_required');
+      if (
+        typeof relayToken !== 'string' ||
+        !RELAY_TOKEN.test(relayToken) ||
+        !PUSH_ENVIRONMENTS.has(environment)
+      ) {
+        return bad('invalid_push_token');
+      }
+      await registerDevice(req.apiTokenId, { relayToken, environment, origin });
+    } else {
+      if (relayToken !== undefined) return bad('device_token_required');
+      if (
+        typeof deviceToken !== 'string' ||
+        !DEVICE_TOKEN.test(deviceToken) ||
+        !PUSH_ENVIRONMENTS.has(environment)
+      ) {
+        return bad('invalid_push_token');
+      }
+      await registerDevice(req.apiTokenId, { deviceToken: deviceToken.toLowerCase(), environment, origin });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof PushError) return res.status(503).json({ error: err.code });
+    next(err);
+  }
+});
+
+mobileApiRouter.delete('/push', pushLimit, appTokenOnly, async (req, res, next) => {
+  try {
+    await unregisterDevice(req.apiTokenId);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+mobileApiRouter.get('/push', pushLimit, appTokenOnly, async (req, res, next) => {
+  try {
+    const push = await apiTokenPush(req.apiTokenId);
+    res.json({ enabled: Boolean(push?.enabled && canPush()), mutedServers: push?.mutedServers ?? [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Mute or unmute one server. Only one whose tickets this person may see: the same rule that
+// decides who gets a notification.
+mobileApiRouter.put('/push/servers/:guildId', pushLimit, appTokenOnly, async (req, res, next) => {
+  try {
+    const key = req.params.guildId;
+    const muted = req.body?.muted;
+    if (typeof muted !== 'boolean') return res.status(400).json({ error: 'invalid_request' });
+    if (!isPlatformGuildId(key) || !(await accountMaySeeTickets(req.account, key, { live: true }))) {
+      return res.status(403).json({ error: 'You cannot see the tickets of this server.' });
+    }
+    res.json({ mutedServers: await setApiTokenPushMuted(req.apiTokenId, key, muted) });
   } catch (err) {
     next(err);
   }

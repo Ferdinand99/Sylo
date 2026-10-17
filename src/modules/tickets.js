@@ -4,6 +4,7 @@ import { allGuilds, clientOfGuild, guildByKey, guildKey } from '../platform/plat
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
+import { notifyTicketActivity } from '../lib/push.js';
 import {
   getOpenTicket,
   getTicket,
@@ -173,6 +174,15 @@ export async function ingestUserDM(guild, user, payload) {
     authorKind: 'user',
     content: payload.content ?? '',
     attachments: payload.attachments ?? [],
+  });
+  // Staff devices with the Sylo app. Not awaited, and it never throws: a slow or failing push
+  // must not hold up the member's DM.
+  notifyTicketActivity({
+    guild,
+    ticketId: ticket.id,
+    member: user.tag ?? user.username,
+    content: payload.content ?? '',
+    isNew,
   });
 
   const link = config.dashboardUrl

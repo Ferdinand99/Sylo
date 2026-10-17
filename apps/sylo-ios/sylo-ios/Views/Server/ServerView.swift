@@ -9,9 +9,10 @@ import SyloKit
 /// the selected tab, rather than inside the tabs.
 struct ServerView: View {
     let summary: ServerSummary
+    /// The selected tab, kept by ``MainView`` so a tapped notification can open Tickets.
+    @Binding var tab: ServerTab
 
     @Environment(AppSession.self) private var session
-    @State private var tab = ServerTab.modules
     @State private var overview: OverviewModel
     @State private var tickets: TicketsModel
     @State private var settings: GuildSettingsModel
@@ -21,8 +22,9 @@ struct ServerView: View {
         case modules, tickets, settings
     }
 
-    init(summary: ServerSummary, session: AppSession) {
+    init(summary: ServerSummary, session: AppSession, tab: Binding<ServerTab>) {
         self.summary = summary
+        _tab = tab
         _overview = State(initialValue: OverviewModel(server: summary.id, session: session))
         _tickets = State(initialValue: TicketsModel(server: summary.id, session: session))
         _settings = State(initialValue: GuildSettingsModel(server: summary.id, session: session))
@@ -106,9 +108,11 @@ struct TicketRoute: Hashable {
 }
 
 #Preview {
+    @Previewable @State var tab = ServerView.ServerTab.modules
     let session = AppSession.preview(.signedIn)
     NavigationStack {
-        ServerView(summary: PreviewData.servers[0], session: session)
+        ServerView(summary: PreviewData.servers[0], session: session, tab: $tab)
     }
     .environment(session)
+    .environment(PushCoordinator(session: session))
 }

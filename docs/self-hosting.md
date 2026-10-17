@@ -192,6 +192,10 @@ then trusts one proxy hop (`X-Forwarded-*`), which it needs for correct client
 IPs (rate limiting) and OAuth redirects. Make sure the OAuth **redirect** in the
 Developer Portal matches `<DASHBOARD_URL>/auth/discord/callback`.
 
+Exactly one hop: with two proxies in a row (for example Cloudflare in front of
+nginx), every request looks like it comes from the inner proxy, so all clients
+share one rate-limit bucket. Put only one HTTP proxy in front of Sylo.
+
 **Caddy**
 
 ```caddy

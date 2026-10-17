@@ -6,6 +6,9 @@ import SyloKit
 struct TicketListView: View {
     let model: TicketsModel
 
+    @Environment(PushCoordinator.self) private var push
+    @AppStorage("ticketNotificationCardDismissed") private var isNotificationCardDismissed = false
+
     var body: some View {
         content
             // Runs while the tab is on screen: comes back from a conversation fresh, and picks up
@@ -16,12 +19,28 @@ struct TicketListView: View {
                     try? await Task.sleep(for: .seconds(30))
                 }
             }
+            .task { await push.settings.loadAvailability() }
+    }
+
+    /// Asks here, where notifications make sense, rather than at launch: once, until answered or
+    /// put off with Not Now.
+    private var showsNotificationCard: Bool {
+        !isNotificationCardDismissed && push.authorization == .notDetermined && push.settings.isAvailable
     }
 
     @ViewBuilder
     private var content: some View {
         if let list = model.list {
             List {
+                if showsNotificationCard {
+                    Section {
+                        NotificationCard {
+                            Task { await push.requestAuthorization() }
+                        } notNow: {
+                            isNotificationCardDismissed = true
+                        }
+                    }
+                }
                 if let message = model.errorMessage {
                     Section {
                         StatusMessage(message, kind: .error)
@@ -67,6 +86,37 @@ struct TicketListView: View {
         } else {
             ProgressView()
         }
+    }
+}
+
+/// The one-time offer to turn on ticket notifications.
+private struct NotificationCard: View {
+    let turnOn: () -> Void
+    let notNow: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Get notified about new tickets")
+                        .font(.headline)
+                    Text("Sylo can tell you when a member opens a ticket or writes in one, so you can answer right away.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                Image(systemName: "bell.badge")
+                    .foregroundStyle(.tint)
+            }
+            HStack(spacing: 12) {
+                Button("Turn On", action: turnOn)
+                    .primaryActionStyle()
+                Button("Not Now", action: notNow)
+                    .secondaryActionStyle()
+            }
+        }
+        .padding(.vertical, 6)
     }
 }
 
@@ -157,4 +207,5 @@ enum MessageTime {
             .navigationTitle("Tickets")
     }
     .environment(session)
+    .environment(PushCoordinator(session: session))
 }

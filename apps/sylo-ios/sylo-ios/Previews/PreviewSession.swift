@@ -4,7 +4,10 @@ import SyloKit
 /// Sample answers, the shapes a current Sylo sends.
 nonisolated enum PreviewData {
     static let info = ServerInfo(
-        version: "4.1.0", loginProviders: [.discord, .fluxer], platforms: [.discord, .fluxer])
+        version: "4.1.0", loginProviders: [.discord, .fluxer], platforms: [.discord, .fluxer],
+        features: [.appLogin, .liveAccess, .push])
+
+    static let pushSettings = PushSettingsInfo(isEnabled: true, mutedServers: ["2"])
 
     static let servers = [
         ServerSummary(id: "1", name: "Sylo Test Server", platform: .discord),
@@ -101,6 +104,9 @@ nonisolated struct PreviewClient: APIClient {
         case let set as Endpoints.SetModule: ModuleToggleResult(isEnabled: set.enabled)
         case is Endpoints.Account: PreviewData.account
         case is Endpoints.RevokeDevice: OKResponse()
+        case is Endpoints.PushSettings: PreviewData.pushSettings
+        case is Endpoints.RegisterPush: OKResponse()
+        case let mute as Endpoints.MutePushForServer: PushMuteResult(mutedServers: mute.muted ? [mute.server] : [])
         default: EmptyResponse()
         }
     }

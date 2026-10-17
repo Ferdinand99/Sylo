@@ -21,8 +21,17 @@ import { isTokenRequest } from '../lib/bearer.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // /api/mobile/token: the Sylo app's code-for-token exchange (no cookie involved; the one-time
-// code and its PKCE verifier are the proof).
-const EXEMPT = [/^\/auth(\/|$)/, /^\/verify(\/|$)/, /^\/appeal(\/|$)/, /^\/api\/mobile\/token$/];
+// code and its PKCE verifier are the proof). /api/mobile/push: refuses every cookie request
+// itself, with a JSON answer the app can read. /api/push-relay: instance-to-relay calls, no
+// account or cookie at all; a relay token is the proof (src/web/routes/pushRelay.js).
+const EXEMPT = [
+  /^\/auth(\/|$)/,
+  /^\/verify(\/|$)/,
+  /^\/appeal(\/|$)/,
+  /^\/api\/mobile\/token$/,
+  /^\/api\/mobile\/push(\/|$)/,
+  /^\/api\/push-relay\//,
+];
 
 /** True when the request's Origin/Referer host matches the Host it was sent to. */
 function sameOrigin(req) {

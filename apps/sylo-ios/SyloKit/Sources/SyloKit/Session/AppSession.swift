@@ -208,6 +208,12 @@ public final class AppSession {
         }
     }
 
+    /// Sends a call that needs no sign-in to another server (the notification relay), with a
+    /// client that has no token: the Sylo server's token never goes anywhere else.
+    public func send<E: APIEndpoint>(_ endpoint: E, to server: ServerURL) async throws -> E.Response {
+        try await makeClient(server, nil).send(endpoint)
+    }
+
     /// The token sent with a call started at `generation` was refused.
     func handleUnauthorized(generation: Int) {
         guard generation == self.generation, case .signedIn(let server) = phase else { return }

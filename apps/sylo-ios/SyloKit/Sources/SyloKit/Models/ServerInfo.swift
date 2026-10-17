@@ -18,6 +18,9 @@ public struct ServerInfo: Decodable, Sendable, Equatable {
     /// The platforms the bot runs on.
     public let platforms: [Platform]
     public let features: [ServerFeature]
+    /// The notification relay the server sends through, when it has no APNs key of its own. The
+    /// app registers there itself, so the server never sees the device token.
+    public let pushRelay: URL?
 
     /// Whether the answer came from a Sylo at all.
     public var isSylo: Bool { name == "Sylo" }
@@ -27,7 +30,8 @@ public struct ServerInfo: Decodable, Sendable, Equatable {
     public init(
         name: String = "Sylo", version: String? = nil, apiVersion: Int = supportedAPIVersion,
         isLoginEnabled: Bool = true, loginProviders: [Platform] = [.discord],
-        platforms: [Platform] = [.discord], features: [ServerFeature] = [.appLogin, .liveAccess]
+        platforms: [Platform] = [.discord], features: [ServerFeature] = [.appLogin, .liveAccess],
+        pushRelay: URL? = nil
     ) {
         self.name = name
         self.version = version
@@ -36,10 +40,11 @@ public struct ServerInfo: Decodable, Sendable, Equatable {
         self.loginProviders = loginProviders
         self.platforms = platforms
         self.features = features
+        self.pushRelay = pushRelay
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, version, apiVersion, login, loginProviders, platforms, features
+        case name, version, apiVersion, login, loginProviders, platforms, features, pushRelay
     }
 
     public init(from decoder: any Decoder) throws {
@@ -51,5 +56,8 @@ public struct ServerInfo: Decodable, Sendable, Equatable {
         loginProviders = try c.decodeIfPresent([Platform].self, forKey: .loginProviders) ?? []
         platforms = try c.decodeIfPresent([Platform].self, forKey: .platforms) ?? []
         features = try c.decodeIfPresent([ServerFeature].self, forKey: .features) ?? []
+        // Lenient: anything but a non-empty string reads as no relay.
+        let relay = try? c.decodeIfPresent(String.self, forKey: .pushRelay)
+        pushRelay = relay.flatMap { $0.isEmpty ? nil : URL(string: $0) }
     }
 }

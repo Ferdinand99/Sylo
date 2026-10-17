@@ -232,9 +232,11 @@ No other third parties receive your data.
   one stops working after 60 seconds and is deleted automatically.
 - **Notification settings** (push or relay token, muted servers) are part of the
   app sign-in and go with it; turning notifications off in the app removes the
-  token at once. Relay registrations at the hosted Sylo are removed when the app
-  turns notifications off or signs out, when Apple reports the device gone, or
-  after 90 days without use.
+  token at once, and signing out or revoking the device removes it with the
+  sign-in. Relay registrations at the hosted Sylo are removed when the app turns
+  notifications off, when Apple reports the device gone, or after 90 days
+  without use (after a sign-out the instance no longer has the relay token, so
+  that registration can't be used and simply expires).
 
 For any request the above does not cover, contact the Operator (section 9).
 
@@ -261,7 +263,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | Dashboard session (session record + browser cookie) | 7 days | Logout or expiry (expired records are removed automatically) |
 | Sylo app sign-in (device record, hashed token) | 90 days from the last use | Sign out in the app; revoke on the account page; a sign-in disconnected from the account; 90 days without use |
 | One-time app sign-in code (hashed) | 60 seconds | Used, or expired and deleted automatically |
-| Notification relay registration (push token, hashed relay token, instance) | 90 days from the last use | Notifications turned off or sign-out in the app; Apple reports the device gone; 90 days without use |
+| Notification relay registration (push token, hashed relay token, instance) | 90 days from the last use | Notifications turned off in the app; Apple reports the device gone; 90 days without use |
 | Operational logs | As long as operationally useful | Rotated or discarded by the Operator |
 
 **Backups.** The database is snapshotted automatically for recovery; the newest

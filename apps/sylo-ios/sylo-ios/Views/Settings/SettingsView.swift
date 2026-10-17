@@ -1,17 +1,22 @@
 import SwiftUI
 import SyloKit
+import UIKit
 
-/// Account, signed-in devices, the Sylo server, the policies, and Sign Out.
+/// Account, notifications, signed-in devices, the Sylo server, the policies, and Sign Out.
 struct SettingsView: View {
     let server: ServerURL
+    /// The servers the person manages, for a notification switch each.
+    let servers: ServersModel
 
     @Environment(AppSession.self) private var session
+    @Environment(PushCoordinator.self) private var push
     @Environment(\.dismiss) private var dismiss
     @State private var account: AccountModel
     @State private var isConfirmingSignOut = false
 
-    init(server: ServerURL, session: AppSession) {
+    init(server: ServerURL, session: AppSession, servers: ServersModel) {
         self.server = server
+        self.servers = servers
         _account = State(initialValue: AccountModel(session: session))
     }
 
@@ -19,6 +24,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 accountSection
+                NotificationsSection(push: push, servers: servers.servers)
                 DevicesSection(account: account)
                 serverSection
                 aboutSection
@@ -36,7 +42,11 @@ struct SettingsView: View {
                 }
             }
             .task { await account.load() }
-            .refreshable { await account.load() }
+            .task { await push.settings.load() }
+            .refreshable {
+                await account.load()
+                await push.settings.load()
+            }
             .confirmationDialog(
                 "Sign out of \(server.displayName)?", isPresented: $isConfirmingSignOut,
                 titleVisibility: .visible
@@ -104,6 +114,91 @@ struct SettingsView: View {
 
     private static let privacyPolicy = URL(string: "https://github.com/Ferdinand99/Sylo/blob/main/docs/privacy-policy.md")!
     private static let terms = URL(string: "https://github.com/Ferdinand99/Sylo/blob/main/docs/terms-of-service.md")!
+}
+
+/// Ticket notifications: whether this Sylo server can send them, the permission, on or off, and a
+/// switch per server (off mutes that server on the Sylo server).
+private struct NotificationsSection: View {
+    let push: PushCoordinator
+    let servers: [ServerSummary]
+
+    private var settings: NotificationSettingsModel { push.settings }
+
+    var body: some View {
+        Section {
+            if !settings.hasLoadedAvailability {
+                if let message = settings.errorMessage {
+                    StatusMessage(message, kind: .error)
+                } else {
+                    ProgressView()
+                }
+            } else if !settings.isAvailable {
+                Label("Not available on this Sylo server", systemImage: "bell.slash")
+            } else {
+                switch push.authorization {
+                case .notDetermined:
+                    Button("Turn On Notifications") {
+                        Task { await push.requestAuthorization() }
+                    }
+                case .denied:
+                    Label("Turned off in Settings", systemImage: "bell.slash")
+                    Link(destination: Self.appSettings) {
+                        Label("Open Settings", systemImage: "gear")
+                    }
+                case .authorized:
+                    Toggle("Ticket Notifications", isOn: isEnabled)
+                    if settings.isEnabled {
+                        ForEach(servers) { server in
+                            Toggle(isOn: isNotified(server.id)) {
+                                Label {
+                                    Text(verbatim: server.name)
+                                } icon: {
+                                    ServerIcon(url: server.iconURL, name: server.name)
+                                }
+                            }
+                            .disabled(settings.isPending(server.id))
+                        }
+                    }
+                }
+                if let message = settings.errorMessage {
+                    StatusMessage(message, kind: .error)
+                }
+            }
+        } header: {
+            Text("Notifications")
+        } footer: {
+            footer
+        }
+    }
+
+    @ViewBuilder
+    private var footer: some View {
+        if let reason = settings.unavailableReason {
+            Text(reason)
+        } else if settings.hasLoadedAvailability, !settings.isAvailable {
+            Text("This Sylo server can't send notifications. It may need an update, or notifications are turned off on it.")
+        } else if settings.isAvailable, push.authorization == .denied {
+            Text("To get ticket notifications, allow notifications for Sylo in the Settings app.")
+        } else if settings.isAvailable, push.authorization == .authorized, settings.isEnabled {
+            Text("New tickets and member messages. Turn a server off to stop its notifications on this device.")
+        }
+    }
+
+    private var isEnabled: Binding<Bool> {
+        Binding(
+            get: { settings.isEnabled },
+            set: { isOn in Task { await push.setEnabled(isOn) } })
+    }
+
+    /// On means not muted.
+    private func isNotified(_ server: ServerID) -> Binding<Bool> {
+        Binding(
+            get: { !settings.isMuted(server) },
+            set: { settings.setMuted(server, !$0) })
+    }
+
+    // A constant the system defines; it always forms a URL.
+    private static let appSettings = URL(string: UIApplication.openSettingsURLString)!
 }
 
 /// Every device signed in to this account with the Sylo app. Any device but this one can be
@@ -174,6 +269,9 @@ private struct DeviceRow: View {
 
 #Preview {
     let session = AppSession.preview(.signedIn)
-    SettingsView(server: .hosted, session: session)
+    let servers = ServersModel(session: session)
+    SettingsView(server: .hosted, session: session, servers: servers)
         .environment(session)
+        .environment(PushCoordinator(session: session, authorization: .authorized))
+        .task { await servers.load() }
 }

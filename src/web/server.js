@@ -11,6 +11,8 @@ import { csrf } from './middleware/csrf.js';
 import { platformCommands } from './middleware/platformCommands.js';
 import { ownerOnlyModules } from './middleware/ownerOnlyModules.js';
 import { mobileApiRouter, mobileAuthRouter } from './routes/mobile.js';
+import { createPushRelayRouter } from './routes/pushRelay.js';
+import { defaultApnsClient } from '../lib/push.js';
 import { requestLog } from './middleware/requestLog.js';
 import healthRouter from './routes/health.js';
 import metricsRouter from './routes/metrics.js';
@@ -69,6 +71,10 @@ export function createApp() {
   // before requireAuth (the exchange is how the app becomes signed in).
   app.use('/auth/mobile', mobileAuthRouter);
   app.use('/api/mobile', mobileApiRouter);
+  // The push relay for self-hosted instances, only where the app's APNs key is (the hosted Sylo).
+  if (config.apnsEnabled) {
+    app.use('/api/push-relay/v1', createPushRelayRouter({ apns: defaultApnsClient() }));
+  }
 
   // Public routes: healthcheck, metrics, the shareable leaderboard, and member
   // verification.

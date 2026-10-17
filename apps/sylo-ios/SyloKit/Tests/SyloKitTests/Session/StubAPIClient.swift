@@ -2,11 +2,12 @@ import Foundation
 @testable import SyloKit
 
 /// Makes ``APIClient``s that answer from one shared handler, and records every call they send
-/// with the token the client was made with.
+/// with the server and token the client was made with.
 final class StubClients: @unchecked Sendable {
     // @unchecked: `handler` and `sent` are only touched while holding `lock`.
     struct Call {
         let endpoint: any APIEndpoint
+        let server: ServerURL
         let token: String?
     }
 
@@ -27,12 +28,12 @@ final class StubClients: @unchecked Sendable {
     }
 
     func make(_ server: ServerURL, _ token: String?) -> any APIClient {
-        Client(owner: self, token: token)
+        Client(owner: self, server: server, token: token)
     }
 
-    fileprivate func answer(_ endpoint: any APIEndpoint, token: String?) throws -> Any {
+    fileprivate func answer(_ endpoint: any APIEndpoint, server: ServerURL, token: String?) throws -> Any {
         let handler = lock.withLock {
-            sent.append(Call(endpoint: endpoint, token: token))
+            sent.append(Call(endpoint: endpoint, server: server, token: token))
             return self.handler
         }
         return try handler(endpoint)
@@ -40,11 +41,12 @@ final class StubClients: @unchecked Sendable {
 
     private struct Client: APIClient {
         let owner: StubClients
+        let server: ServerURL
         let token: String?
 
         func send<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response {
             do {
-                guard let response = try owner.answer(endpoint, token: token) as? E.Response else {
+                guard let response = try owner.answer(endpoint, server: server, token: token) as? E.Response else {
                     throw NetworkError.decoding("stub answered \(E.self) with the wrong type")
                 }
                 return response

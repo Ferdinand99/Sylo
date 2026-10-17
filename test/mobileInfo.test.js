@@ -18,7 +18,13 @@ test('GET /api/mobile/info describes a server with login on, without a cookie or
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type'), /application\/json/);
   const info = await res.json();
-  assert.deepEqual(Object.keys(info).sort(), KEYS);
+  // pushRelay is there when this Sylo pushes through a relay (the default).
+  assert.deepEqual(
+    Object.keys(info)
+      .filter((k) => k !== 'pushRelay')
+      .sort(),
+    KEYS
+  );
   assert.equal(info.name, 'Sylo');
   assert.equal(info.version, version);
   assert.equal(info.apiVersion, 1);
@@ -78,4 +84,5 @@ test('GET /api/mobile/info answers in open mode and says login is unavailable', 
   assert.deepEqual(info.loginProviders, []);
   assert.deepEqual(info.platforms, ['discord']);
   assert.equal(info.apiVersion, 1);
+  assert.ok(!info.features.includes('push'), 'no app sign-in, so no push either');
 });

@@ -41,6 +41,8 @@ public struct ServerFeature: RawRepresentable, Hashable, Sendable, Codable {
     public static let appLogin = ServerFeature(rawValue: "app-login")
     /// Server rights are checked live on every app request.
     public static let liveAccess = ServerFeature(rawValue: "live-access")
+    /// The server can send ticket notifications to the app (`/api/mobile/push`).
+    public static let push = ServerFeature(rawValue: "push")
 
     public let rawValue: String
 

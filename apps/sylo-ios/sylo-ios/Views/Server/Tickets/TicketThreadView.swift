@@ -6,14 +6,17 @@ import UIKit
 /// on the right in the accent colour, system notes centred, a time above each burst of messages,
 /// and a reply field at the bottom. New messages arrive every few seconds while it is open.
 struct TicketThreadView: View {
+    let server: ServerID
     let route: TicketRoute
 
+    @Environment(PushCoordinator.self) private var push
     @State private var model: TicketThreadModel
     @State private var reply = ""
     @State private var isConfirmingClose = false
     @State private var closingMessage = ""
 
     init(server: ServerID, route: TicketRoute, session: AppSession) {
+        self.server = server
         self.route = route
         _model = State(initialValue: TicketThreadModel(server: server, ticketID: route.id, session: session))
     }
@@ -35,6 +38,13 @@ struct TicketThreadView: View {
             .task {
                 await model.load()
                 await model.poll(every: .seconds(5))
+            }
+            // New messages show here anyway: no banner for this conversation while it is open.
+            .onAppear { push.visibleTicket = (server: server, id: route.id) }
+            .onDisappear {
+                if push.visibleTicket?.server == server, push.visibleTicket?.id == route.id {
+                    push.visibleTicket = nil
+                }
             }
             .alert("Close This Ticket?", isPresented: $isConfirmingClose) {
                 TextField("Closing message (optional)", text: $closingMessage)
@@ -299,4 +309,5 @@ private struct OutgoingBubble: View {
         TicketThreadView(server: "1", route: TicketRoute(id: 1, user: "member#0001"), session: session)
     }
     .environment(session)
+    .environment(PushCoordinator(session: session))
 }

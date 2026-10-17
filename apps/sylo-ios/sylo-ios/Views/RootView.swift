@@ -35,6 +35,8 @@ struct RootView: View {
 }
 
 #Preview("Signed in") {
+    let session = AppSession.preview(.signedIn)
     RootView()
-        .environment(AppSession.preview(.signedIn))
+        .environment(session)
+        .environment(PushCoordinator(session: session))
 }

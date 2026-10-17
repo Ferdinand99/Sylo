@@ -37,6 +37,7 @@ import {
   signInIdentity,
 } from '../../db/accounts.js';
 import { API_TOKEN_TTL_MS, findApiToken, purgeExpiredApiTokens, touchApiToken } from '../../db/apiTokens.js';
+import { purgeStaleRelayRegistrations } from '../../db/pushRelay.js';
 import { bearerToken, isTokenRequest } from '../lib/bearer.js';
 import { enabledProviders, fluxerOrigins, providers, adminGuildIdsFromOAuth } from '../lib/oauthProviders.js';
 import { buildBotInvites } from '../lib/botInvites.js';
@@ -208,18 +209,22 @@ async function isBotMaster(key, userId) {
   return Boolean(member && member.roles.cache.hasAny(...roles));
 }
 
+/** How a live check looks up a member the bot has not cached: one platform API call. */
+export const fetchMemberFromGuild = async (guild, userId) => guild.members.fetch(userId);
+
 /**
  * Does this person manage the guild right now, as the bot sees it: its owner, a member with
  * Manage Server or Administrator, or a bot master? Used for app (token) requests, which cannot
  * refresh the sign-in snapshot of guilds the web dashboard relies on, so a lost right must count
  * at once. Works for Fluxer too: its members have the discord.js shape (src/platform/compat.js).
+ * `fetchMember` replaces the uncached lookup (push notifications cache misses, src/lib/push.js).
  */
-export async function managesGuildLive(key, userId) {
+export async function managesGuildLive(key, userId, { fetchMember = fetchMemberFromGuild } = {}) {
   if (!userId) return false;
   const guild = guildByKey(key);
   if (!guild) return false;
   if (guild.ownerId === userId) return true;
-  const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+  const member = guild.members.cache.get(userId) ?? (await fetchMember(guild, userId).catch(() => null));
   if (!member) return false;
   if (member.permissions?.has('ManageGuild') || member.permissions?.has('Administrator')) return true;
   const roles = await getBotMasterRoles(key);
@@ -232,8 +237,19 @@ export async function managesGuildLive(key, userId) {
  * up in every server it is in, one Discord API call per request.
  */
 export async function tokenManagesGuild(req, key) {
-  if (!adminGuildIds(req).has(key) && !(await getBotMasterRoles(key)).length) return false;
-  return managesGuildLive(key, userIdForGuild(req, key));
+  return accountManagesGuildLive(req.account, key);
+}
+
+/**
+ * tokenManagesGuild for an account rather than a request, so a push notification's recipients
+ * (src/lib/push.js) are checked by the same rule. App tokens exist only with sign-in enabled, so
+ * the sign-in snapshot is the account's own guild lists.
+ * @param {{ identities: Array<{ platform: string, platformUserId: string, guildIds: string[] }> }} account
+ */
+export async function accountManagesGuildLive(account, key, options) {
+  if (!adminKeysOf(account, allGuildKeys()).has(key) && !(await getBotMasterRoles(key)).length) return false;
+  const platform = splitPlatformGuildId(key)?.platform ?? 'discord';
+  return managesGuildLive(key, identityFor(account, platform)?.platformUserId ?? null, options);
 }
 
 function forbidGuild(req, res) {
@@ -406,11 +422,12 @@ export function mountAuth(app) {
       })
     );
     app.use(attachAccount);
-    // Expired sessions (and app tokens and sign-in codes) are dead weight; sweep them a few times a day.
+    // Expired sessions (and app tokens, sign-in codes and push relay registrations unused for 90
+    // days) are dead weight; sweep them a few times a day.
     setInterval(
       () =>
-        Promise.all([purgeExpiredSessions(), purgeExpiredApiTokens()]).catch((err) =>
-          log.error('auth', 'session purge failed:', err.message)
+        Promise.all([purgeExpiredSessions(), purgeExpiredApiTokens(), purgeStaleRelayRegistrations()]).catch(
+          (err) => log.error('auth', 'session purge failed:', err.message)
         ),
       6 * 60 * 60 * 1000
     ).unref();

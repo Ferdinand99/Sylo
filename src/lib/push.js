@@ -1,0 +1,379 @@
+// Push notifications to the Sylo app for tickets (internal/push-notifications-plan.md).
+//
+// An instance can push in one of two ways:
+// - direct: it holds the app's APNs key (APNS_*, the hosted Sylo); the app gives it its device
+//   token and the instance talks to Apple itself;
+// - relay: the app registers its device token with the hosted relay itself (PUSH_RELAY_URL,
+//   src/web/routes/pushRelay.js, announced in /api/mobile/info) and gives this instance only the
+//   relay token, so a self-hosted instance never sees a device token.
+// The app token's row holds the device's push setup (src/db/apiTokens.js), so revoking a device
+// or signing out ends its notifications at once, and its relay registration is dropped too.
+//
+// A member's message in a ticket (tickets.js) notifies every device whose account may see that
+// server's tickets (accountMaySeeTickets, cached for 2 minutes) and has not muted it. A burst of
+// replies is one notification per device per 30 seconds, and a device gets at most 60 an hour.
+import { config } from '../config.js';
+import { log } from './log.js';
+import { buildApnsPayload, createApnsClient, NOTIFICATION_LIMITS } from './apns.js';
+import { guildKey } from '../platform/platformOf.js';
+import { identitiesOf } from '../db/accounts.js';
+import {
+  apiTokenPush,
+  clearApiTokenPush,
+  onApiTokensDeleted,
+  pushRecipientTokens,
+  setApiTokenPush,
+} from '../db/apiTokens.js';
+import { accountMaySeeTickets } from '../web/middleware/ticketAccess.js';
+
+const RELAY_PATH = '/api/push-relay/v1';
+const RELAY_TIMEOUT_MS = 10_000;
+const ACCESS_TTL_MS = 2 * 60_000; // how long an access check is reused
+const MEMBER_MISS_TTL_MS = 10 * 60_000; // how long "the bot cannot find this member" is believed
+const ACCESS_CONCURRENCY = 5;
+const COALESCE_MS = 30_000;
+const SENDS_PER_HOUR = 60; // per device, as the relay allows
+const HOUR_MS = 60 * 60_000;
+
+let sharedApns = null;
+
+/** This instance's APNs client, when it holds the key; also what the relay sends with. */
+export function defaultApnsClient() {
+  if (!config.apnsEnabled) return null;
+  sharedApns ??= createApnsClient({
+    keyId: config.apnsKeyId,
+    teamId: config.apnsTeamId,
+    privateKey: config.apnsPrivateKey,
+    topic: config.apnsTopic,
+  });
+  return sharedApns;
+}
+
+// `apns` undefined means "from config"; tests set every field through configurePush().
+const settings = {
+  relayUrl: config.pushRelayUrl,
+  apns: undefined,
+  fetchImpl: null,
+  deliver: null,
+  now: Date.now,
+};
+
+/**
+ * Tests only: swap the relay URL, the APNs client (null = none), fetch, the clock, or what
+ * delivers one notification to one device.
+ */
+export function configurePush(overrides) {
+  Object.assign(settings, overrides);
+}
+
+const apns = () => (settings.apns !== undefined ? settings.apns : defaultApnsClient());
+const now = () => settings.now();
+
+/** @returns {'direct' | 'relay' | null} how this instance sends, or null when it cannot */
+export function pushMode() {
+  if (apns()) return 'direct';
+  return settings.relayUrl ? 'relay' : null;
+}
+
+export const canPush = () => pushMode() !== null;
+
+/** The relay the app registers its device token at, in relay mode; otherwise null. */
+export const pushRelayUrl = () => (pushMode() === 'relay' ? settings.relayUrl : null);
+
+// --- in-memory state: caches, coalescing, the per-device cap ----------------------------------
+
+const accessCache = new Map(); // `${accountId}|${guildKey}` -> { ok, at }
+const memberMisses = new Map(); // `${guildKey}|${userId}` -> at
+const lastNotified = new Map(); // `${tokenId}|${guildKey}:${ticketId}` -> at
+const deviceSends = new Map(); // device token -> send times in the last hour
+
+/** Tests only: forget every cached check, coalescing window and send count. */
+export function resetPushState() {
+  for (const map of [accessCache, memberMisses, lastNotified, deviceSends]) map.clear();
+}
+
+setInterval(() => {
+  const t = now();
+  for (const [k, v] of accessCache) if (t - v.at >= ACCESS_TTL_MS) accessCache.delete(k);
+  for (const [k, at] of memberMisses) if (t - at >= MEMBER_MISS_TTL_MS) memberMisses.delete(k);
+  for (const [k, at] of lastNotified) if (t - at >= COALESCE_MS) lastNotified.delete(k);
+  for (const [k, times] of deviceSends) if (!times.some((at) => t - at < HOUR_MS)) deviceSends.delete(k);
+}, 5 * 60_000).unref();
+
+/** Count a send to a device, unless it already had 60 in the last hour. */
+function allowDeviceSend(deviceToken) {
+  const t = now();
+  const recent = (deviceSends.get(deviceToken) ?? []).filter((at) => t - at < HOUR_MS);
+  deviceSends.set(deviceToken, recent);
+  if (recent.length >= SENDS_PER_HOUR) return false;
+  recent.push(t);
+  return true;
+}
+
+// --- registration -----------------------------------------------------------------------------
+
+/** A registration the app should hear about: `code` is the API's error string. */
+export class PushError extends Error {
+  /** @param {'push_unavailable'} code */
+  constructor(code, message = code) {
+    super(message);
+    this.name = 'PushError';
+    this.code = code;
+  }
+}
+
+function relay(path, body) {
+  const doFetch = settings.fetchImpl ?? fetch;
+  return doFetch(`${settings.relayUrl}${RELAY_PATH}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
+  });
+}
+
+/** Tell the relay to forget a registration. Best effort and never throws: it purges idle ones too. */
+async function unregisterAtRelay(relayToken) {
+  if (!relayToken || !settings.relayUrl) return;
+  try {
+    await relay('/unregister', { relayToken });
+  } catch (err) {
+    log.warn('push', `relay unregister failed: ${err.message}`);
+  }
+}
+
+// A deleted app token (signed out, revoked, trimmed, expired) takes its relay registration along,
+// without making whoever deleted it wait for the relay.
+onApiTokensDeleted((relayTokens) => {
+  for (const relayToken of relayTokens) void unregisterAtRelay(relayToken);
+});
+
+/**
+ * Turn push on for an app token, replacing what it had: a device token in direct mode, the relay
+ * token the app registered at the relay in relay mode (the caller checks which one it got).
+ * @param {string} tokenId
+ * @param {{ deviceToken?: string, relayToken?: string, environment: 'development' | 'production',
+ *   origin: string }} device  `origin`: this server's address, the `server` of a notification
+ * @throws {PushError}
+ */
+export async function registerDevice(tokenId, { deviceToken, relayToken, environment, origin }) {
+  const mode = pushMode();
+  if (!mode) throw new PushError('push_unavailable');
+  const previous = await apiTokenPush(tokenId);
+  if (mode === 'direct') await setApiTokenPush(tokenId, { deviceToken, environment, origin });
+  else await setApiTokenPush(tokenId, { relayToken, environment, origin });
+  if (previous?.relayToken && previous.relayToken !== relayToken) void unregisterAtRelay(previous.relayToken);
+}
+
+/** Turn push off for an app token (and unregister it at the relay, best effort, not awaited). */
+export async function unregisterDevice(tokenId) {
+  const previous = await apiTokenPush(tokenId);
+  await clearApiTokenPush(tokenId);
+  if (previous?.relayToken) void unregisterAtRelay(previous.relayToken);
+}
+
+/**
+ * Send one notification to one device.
+ * @returns {Promise<'ok' | 'gone' | 'limited' | 'skipped'>} `gone`: its push setup was cleared
+ * @throws when Apple or the relay failed otherwise
+ */
+async function deliver(recipient, notification) {
+  const mode = pushMode();
+  // Each device is registered for the way the instance sent when it signed up; after a switch
+  // it is skipped until the app registers again (it does on every launch).
+  if (mode === 'direct' && recipient.deviceToken) {
+    if (!allowDeviceSend(recipient.deviceToken)) return 'limited';
+    const result = await apns().send({
+      deviceToken: recipient.deviceToken,
+      environment: recipient.environment,
+      payload: buildApnsPayload(notification),
+    });
+    if (result.status === 'gone') {
+      await clearApiTokenPush(recipient.id, { deviceToken: recipient.deviceToken });
+      return 'gone';
+    }
+    if (result.status !== 'ok') throw new Error(`APNs: ${result.reason}`);
+    return 'ok';
+  }
+  if (mode === 'relay' && recipient.relayToken) {
+    const res = await relay('/send', { relayToken: recipient.relayToken, notification });
+    if (res.status === 410) {
+      await clearApiTokenPush(recipient.id, { relayToken: recipient.relayToken });
+      return 'gone';
+    }
+    if (res.status === 429) return 'limited';
+    if (!res.ok) throw new Error(`relay: HTTP ${res.status}`);
+    return 'ok';
+  }
+  return 'skipped';
+}
+
+// --- the ticket notification ---------------------------------------------------------------
+
+// One line of lock-screen text: no lone surrogates, no format characters (a right-to-left
+// override could disguise who wrote), control characters and separators become spaces, and
+// whitespace runs collapse. The relay refuses anything else.
+const oneLine = (value) =>
+  String(value ?? '')
+    .toWellFormed()
+    .replace(/\p{Cf}/gu, '')
+    .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** At most `max` code points (never half an emoji), ending in "…" when cut. */
+export function clip(text, max) {
+  const points = [...text];
+  return points.length <= max ? text : `${points.slice(0, max - 1).join('')}…`;
+}
+
+/** "<member>: <preview>", or "<member> sent an attachment" when there is no text. */
+export function ticketBody(member, content) {
+  const who = oneLine(member) || 'A member';
+  const text = oneLine(content);
+  return clip(text ? `${who}: ${text}` : `${who} sent an attachment`, NOTIFICATION_LIMITS.body);
+}
+
+/**
+ * The notification for a member's message in a ticket, without `data.server` (each device gets
+ * the address it registered from).
+ */
+export function ticketNotification({ guildName, guildId, ticketId, member, content, isNew }) {
+  return {
+    title: clip(oneLine(guildName) || 'Sylo', NOTIFICATION_LIMITS.title),
+    ...(isNew ? { subtitle: 'New ticket' } : {}),
+    body: ticketBody(member, content),
+    threadId: `${guildId}:${ticketId}`,
+    data: { kind: 'ticket', guildId, ticketId },
+  };
+}
+
+/** `fn` over `items`, at most `limit` at a time. */
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+/**
+ * A member lookup for one round of access checks: the bot's cache, else one platform call per
+ * member per round, and none at all for 10 minutes after the member could not be found.
+ */
+function memberFetcher() {
+  const round = new Map();
+  return (guild, userId) => {
+    const cached = guild.members.cache.get(userId);
+    if (cached) return Promise.resolve(cached);
+    const key = `${guildKey(guild)}|${userId}`;
+    const missedAt = memberMisses.get(key);
+    if (missedAt !== undefined && now() - missedAt < MEMBER_MISS_TTL_MS) return Promise.resolve(null);
+    if (!round.has(key)) {
+      round.set(
+        key,
+        guild.members.fetch(userId).then(
+          (member) => {
+            memberMisses.delete(key);
+            return member;
+          },
+          () => {
+            memberMisses.set(key, now());
+            return null;
+          }
+        )
+      );
+    }
+    return round.get(key);
+  };
+}
+
+/** May this account see the server's tickets? Reused for 2 minutes; a failed check is a no. */
+async function accountMayReceive(accountId, key, fetchMember) {
+  const cacheKey = `${accountId}|${key}`;
+  const hit = accessCache.get(cacheKey);
+  if (hit && now() - hit.at < ACCESS_TTL_MS) return hit.ok;
+  let ok;
+  try {
+    const account = { id: accountId, identities: await identitiesOf(accountId) };
+    ok = await accountMaySeeTickets(account, key, { live: true, fetchMember });
+  } catch {
+    ok = false;
+  }
+  accessCache.set(cacheKey, { ok, at: now() });
+  return ok;
+}
+
+/**
+ * Who a ticket notification for this server goes to: devices with push set up, not muted for
+ * it, whose account may see its tickets. One check per account, at most 5 at a time.
+ */
+export async function ticketRecipients(key) {
+  const tokens = (await pushRecipientTokens()).filter((t) => !t.mutedServers.includes(key));
+  const accounts = [...new Set(tokens.map((t) => t.accountId))];
+  const fetchMember = memberFetcher();
+  const allowed = await mapLimit(accounts, ACCESS_CONCURRENCY, (id) =>
+    accountMayReceive(id, key, fetchMember)
+  );
+  const may = new Set(accounts.filter((_, i) => allowed[i]));
+  return tokens.filter((t) => may.has(t.accountId));
+}
+
+/**
+ * Notify staff devices about a member's message in a ticket (a new ticket, or a reply in an open
+ * one). Never throws: tickets.js fires this and forgets it, and a failure is logged once.
+ * @param {{ guild: object, ticketId: number, member: string, content: string, isNew: boolean }} activity
+ * @returns {Promise<{ sent: number, recipients: string[] }>} for tests: token ids sent to
+ */
+export async function notifyTicketActivity({ guild, ticketId, member, content, isNew }) {
+  const none = { sent: 0, recipients: [] };
+  try {
+    if (!canPush()) return none;
+    const key = guildKey(guild);
+    const recipients = await ticketRecipients(key);
+    if (!recipients.length) return none;
+    const base = ticketNotification({
+      guildName: guild.name,
+      guildId: key,
+      ticketId,
+      member,
+      content,
+      isNew,
+    });
+    // A new ticket always goes; replies in it coalesce to one per device per 30 seconds.
+    const t = now();
+    const targets = recipients.filter((r) => {
+      if (!(r.origin ?? config.dashboardUrl)) return false;
+      const k = `${r.id}|${key}:${ticketId}`;
+      const last = lastNotified.get(k);
+      if (!isNew && last !== undefined && t - last < COALESCE_MS) return false;
+      lastNotified.set(k, t);
+      return true;
+    });
+    const send = settings.deliver ?? deliver;
+    const results = await Promise.allSettled(
+      targets.map((r) =>
+        send(r, { ...base, data: { ...base.data, server: r.origin ?? config.dashboardUrl } })
+      )
+    );
+    const failed = results.filter((r) => r.status === 'rejected');
+    if (failed.length) {
+      log.warn(
+        'push',
+        `${failed.length} of ${results.length} ticket notifications failed: ${failed[0].reason?.message ?? failed[0].reason}`
+      );
+    }
+    return {
+      sent: results.filter((r) => r.status === 'fulfilled' && r.value === 'ok').length,
+      recipients: targets.map((r) => r.id),
+    };
+  } catch (err) {
+    log.error('push', 'ticket notification failed:', err.message);
+    return none;
+  }
+}
