@@ -1,0 +1,49 @@
+name: iOS app
+
+# Builds the SwiftUI app in apps/sylo-ios on a macOS runner, only when the app (or this
+# workflow) changes. Unsigned simulator build: no certificates or secrets are needed here;
+# signing and App Store uploads happen in Xcode (or Xcode Cloud).
+
+on:
+  pull_request:
+    paths:
+      - 'apps/sylo-ios/**'
+      - '.github/workflows/ios.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/sylo-ios/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      # The project was created with Xcode 27 (project format 90); older Xcodes cannot open it.
+      - name: Select Xcode 27
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then
+            echo "::error::No Xcode 27 on this runner. Installed:"; ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Build for the iOS simulator
+        run: |
+          xcodebuild build \
+            -project apps/sylo-ios/sylo-ios.xcodeproj \
+            -target sylo-ios \
+            -sdk iphonesimulator \
+            CODE_SIGNING_ALLOWED=NO

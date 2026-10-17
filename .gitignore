@@ -148,3 +148,8 @@ dist
 .env.apple-test
 *.p8
 .apple-test/
+# Xcode / macOS (the iOS app in apps/sylo-ios)
+.DS_Store
+xcuserdata/
+*.xcuserstate
+DerivedData/
