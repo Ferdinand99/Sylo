@@ -20,7 +20,9 @@ import { randomBytes } from 'node:crypto';
 import { isTokenRequest } from '../lib/bearer.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const EXEMPT = [/^\/auth(\/|$)/, /^\/verify(\/|$)/, /^\/appeal(\/|$)/];
+// /api/mobile/token: the Sylo app's code-for-token exchange (no cookie involved; the one-time
+// code and its PKCE verifier are the proof).
+const EXEMPT = [/^\/auth(\/|$)/, /^\/verify(\/|$)/, /^\/appeal(\/|$)/, /^\/api\/mobile\/token$/];
 
 /** True when the request's Origin/Referer host matches the Host it was sent to. */
 function sameOrigin(req) {

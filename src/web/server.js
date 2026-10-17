@@ -10,6 +10,7 @@ import { rateLimit } from './middleware/rateLimit.js';
 import { csrf } from './middleware/csrf.js';
 import { platformCommands } from './middleware/platformCommands.js';
 import { ownerOnlyModules } from './middleware/ownerOnlyModules.js';
+import { mobileApiRouter, mobileAuthRouter } from './routes/mobile.js';
 import { requestLog } from './middleware/requestLog.js';
 import healthRouter from './routes/health.js';
 import metricsRouter from './routes/metrics.js';
@@ -63,6 +64,11 @@ export function createApp() {
   // CSRF protection for state-changing requests (a no-op in open mode, which has
   // no session). Exempts /auth, /verify and /appeal, which carry signed tokens.
   app.use(csrf);
+
+  // Signing in to the Sylo app: the browser part and the code-for-token exchange. Both run
+  // before requireAuth (the exchange is how the app becomes signed in).
+  app.use('/auth/mobile', mobileAuthRouter);
+  app.use('/api/mobile', mobileApiRouter);
 
   // Public routes: healthcheck, metrics, the shareable leaderboard, and member
   // verification.
