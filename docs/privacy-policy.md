@@ -122,6 +122,13 @@ The Dashboard can run with or without login.
   never in readable form. During sign-in, a one-time code (also stored only as a
   hash) is valid for 60 seconds. Your account page lists your signed-in devices
   and lets you revoke them.
+- **Sylo app notifications:** if you turn on notifications in the app, the
+  device's record also holds its Apple push token (or, on a self-hosted
+  instance, a relay token that stands for it), whether it is a development or
+  production build, and the servers you muted. When a member writes in a
+  ticket on a server whose tickets you may see, the notification (the server's
+  name, the member's name and the first 180 characters of the message) is sent
+  to Apple, which delivers it to your device.
 
 ## 4. Legal basis for processing
 
@@ -138,6 +145,7 @@ for modmail transcripts (section 1).
 | Modmail ticket transcripts | Handling, and being able to review, the contact/support requests a member starts |
 | Dashboard login (Discord or Fluxer OAuth2 identity, the servers you administer, session records) | Authenticating server administrators; taken only when you choose "Log in with Discord" or "Log in with Fluxer" |
 | Sylo app sign-in (device name, sign-in times, hashed token) | Keeping you signed in on a device you chose to sign in on, and letting you see and revoke those devices |
+| Sylo app notifications (push or relay token, muted servers, notification text) | Telling staff about new ticket messages, which they turned on in the app |
 | Operational logs | Security, abuse prevention and debugging |
 | Game-stat cache | Serving `/stats` responses quickly without repeatedly querying the upstream provider |
 
@@ -174,6 +182,17 @@ operationally useful.
   backups (section 7), the encrypted-in-transit database snapshot is sent to that
   destination (a WebDAV server and/or a Discord webhook), which the Operator
   controls.
+- **Apple Push Notification service** — if you turn on notifications in the Sylo
+  app, each notification's text (server name, member name, message preview) and
+  your device's push token are sent to Apple to deliver it, under
+  [Apple's Privacy Policy](https://www.apple.com/legal/privacy/).
+- **The hosted Sylo as a notification relay** — a self-hosted instance cannot
+  talk to Apple for the Sylo app itself, so it sends each notification through
+  the hosted Sylo (`app.sylobot.com`), which passes it on to Apple and keeps no
+  copy of its text. The relay stores only the device's push token, a hashed
+  relay token, which instance registered it and when it was last used. An
+  Operator can turn this off (`PUSH_RELAY_URL` empty), which turns off
+  notifications for that instance.
 
 No other third parties receive your data.
 
@@ -211,6 +230,11 @@ No other third parties receive your data.
   of the account's app sign-ins. A sign-in not used for 90 days expires and is
   deleted automatically. One-time sign-in codes are deleted when used; an unused
   one stops working after 60 seconds and is deleted automatically.
+- **Notification settings** (push or relay token, muted servers) are part of the
+  app sign-in and go with it; turning notifications off in the app removes the
+  token at once. Relay registrations at the hosted Sylo are removed when the app
+  turns notifications off or signs out, when Apple reports the device gone, or
+  after 90 days without use.
 
 For any request the above does not cover, contact the Operator (section 9).
 
@@ -237,6 +261,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | Dashboard session (session record + browser cookie) | 7 days | Logout or expiry (expired records are removed automatically) |
 | Sylo app sign-in (device record, hashed token) | 90 days from the last use | Sign out in the app; revoke on the account page; a sign-in disconnected from the account; 90 days without use |
 | One-time app sign-in code (hashed) | 60 seconds | Used, or expired and deleted automatically |
+| Notification relay registration (push token, hashed relay token, instance) | 90 days from the last use | Notifications turned off or sign-out in the app; Apple reports the device gone; 90 days without use |
 | Operational logs | As long as operationally useful | Rotated or discarded by the Operator |
 
 **Backups.** The database is snapshotted automatically for recovery; the newest
@@ -276,6 +301,9 @@ Consider your own legal obligations for the data your instance stores.
 This policy may be updated; the "Last updated" date will change and the revised
 version will be published at the same URL.
 
+- **17 October 2026** — added Sylo app notifications: what is stored for them
+  (section 3), Apple and the hosted relay as recipients (section 6), and when
+  they are deleted (section 7).
 - **17 October 2026** — added the Sylo app sign-in: what it stores about each
   signed-in device (section 3), its legal basis (section 4), and when it is
   deleted (section 7). Corrected the Dashboard login description: since Sylo 4.0

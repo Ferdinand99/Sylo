@@ -72,6 +72,12 @@ At least one platform must be configured.
 | `APPLE_ISSUER_ID`         | —                               | Issuer id of a team API key (leave unset for an individual key) |
 | `APPLE_PRIVATE_KEY`       | —                               | The key's `.p8` file: PEM text, PEM on one line with literal `\n`, or base64 |
 | `APPLE_VENDOR_NUMBER`     | —                               | Optional vendor number for a planned daily downloads digest |
+| `PUSH_RELAY_URL`          | `https://app.sylobot.com`       | Where this instance sends [Sylo app notifications](mobile-app.md#notifications); empty turns them off |
+| `APNS_KEY_ID`             | —                               | Only for the instance that talks to Apple itself (the hosted Sylo): APNs auth key id |
+| `APNS_TEAM_ID`            | —                               | The Apple developer team id that owns the key |
+| `APNS_PRIVATE_KEY`        | —                               | The APNs key's `.p8` file: PEM text, PEM on one line with literal `
+`, or base64 |
+| `APNS_TOPIC`              | `net.opland.sylo`               | The app's bundle id |
 | `FLUXER_CLIENT_SECRET`    | —                               | Adds "Log in with Fluxer" to the dashboard |
 | `FLUXER_OWNER_IDS`        | —                               | Your Fluxer user id(s); the Fluxer counterpart of `OWNER_IDS` |
 | `WEB_PORT`                | `3000`                          | Dashboard HTTP port |

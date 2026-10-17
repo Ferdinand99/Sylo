@@ -15,6 +15,7 @@ reviewing it.
 - [Endpoints](#endpoints)
 - [Tokens and signed-in devices](#tokens-and-signed-in-devices)
 - [Permissions](#permissions)
+- [Notifications](#notifications)
 - [Security notes](#security-notes)
 
 ---
@@ -224,6 +225,57 @@ difference is how server access is checked:
   sign-in.
 - Owner-only modules and bot-wide pages stay limited to `OWNER_IDS` /
   `FLUXER_OWNER_IDS`, the same as in the browser.
+
+---
+
+## Notifications
+
+The app can tell a server's staff about new ticket messages: a notification
+when a member opens a ticket, and one for each new message a member writes in
+an open ticket. Staff and system messages never notify. It shows the server's
+name, the member and the first 180 characters of the message; iOS groups a
+ticket's notifications, and a tap opens the conversation.
+
+- **Who gets one:** every signed-in device with notifications turned on whose
+  account may see that server's tickets at that moment (the same live check as
+  for the app's requests, or a tickets staff role), unless that server is muted
+  in the app's settings.
+- **Turning it on:** the app asks the first time you open a server's Tickets
+  tab; the app's settings have the switch and one per server. Signing out or
+  revoking the device stops its notifications at once.
+
+### How they reach the phone
+
+Apple only accepts notifications for the Sylo app from whoever holds the app's
+push key, so a self-hosted instance cannot send them to Apple itself. It sends
+them through the hosted Sylo instead:
+
+- **Self-hosted (the default):** when the app turns notifications on, your
+  instance registers the device with the relay at `PUSH_RELAY_URL`
+  (`https://app.sylobot.com`) and keeps only the relay token it gets back. Each
+  notification goes from your instance to the relay, which passes it to Apple
+  and keeps no copy of its text. Your instance only makes outgoing HTTPS
+  requests; nothing needs to reach it from outside, and a login proxy in front
+  of it needs no new rule.
+- **Off:** set `PUSH_RELAY_URL` to an empty value. `/api/mobile/info` then
+  leaves out `push` and the app says notifications aren't available.
+- **The hosted Sylo** holds the key (`APNS_KEY_ID`, `APNS_TEAM_ID`,
+  `APNS_PRIVATE_KEY`, `APNS_TOPIC`) and talks to Apple directly.
+
+The relay only sends ticket notifications in a fixed shape, at most 60 an hour
+for one device registration, and forgets a registration when the app turns
+notifications off, when Apple reports the device gone, or after 90 days
+without use.
+
+### Endpoints
+
+| Method and path | Auth | Answer |
+| --- | --- | --- |
+| `POST /api/mobile/push` | Bearer token | `{ deviceToken, environment }` → `{ ok: true }`; `503` when this instance can't send |
+| `GET /api/mobile/push` | Bearer token | `{ enabled, mutedServers }` |
+| `PUT /api/mobile/push/servers/:guildId` | Bearer token | `{ muted }` → `{ mutedServers }` |
+| `DELETE /api/mobile/push` | Bearer token | `204`; notifications off for this device |
+| `POST /api/push-relay/v1/register`, `/send`, `/unregister` | Relay token | Only on an instance with the APNs key |
 
 ---
 
