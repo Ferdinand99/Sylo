@@ -195,13 +195,30 @@ test('recipients: Manage Server, owner, bot master or a staff role; not muted; p
   }
 });
 
-test('an access check is reused for 2 minutes, so a lost right counts within that', async () => {
+test("a member in the bot's cache is checked fresh every time: a lost right counts at once", async () => {
+  // The gateway keeps the bot's member cache current (GuildMembers intent; Fluxer always), so
+  // a check that only reads it costs nothing and is never reused.
   const staff = await staffDevice({ roles: [STAFF_ROLE] });
+  const has = async () => (await ticketRecipients(D_GUILD)).some((r) => r.id === staff.tokenId);
+  assert.ok(await has());
+  member(staff.id, { roles: [] }); // the gateway reports the role taken away
+  assert.ok(!(await has()), 'the next notification already leaves them out');
+  member(staff.id, { roles: [STAFF_ROLE] });
+  assert.ok(await has());
+  await setGuildModule(D_GUILD, 'tickets', { enabled: true, config: { staffRoles: [] } });
+  assert.ok(!(await has()), 'a staff-role change on the dashboard counts at once too');
+  assert.ok(!fetches.includes(staff.id), 'and the member was never looked up outside the cache');
+});
+
+test('a check that needed a lookup outside the cache is reused for 2 minutes', async () => {
+  const staff = await staffDevice({ roles: [STAFF_ROLE], cached: false });
+  fetchable.set(staff.id, memberObject(staff.id, { roles: [STAFF_ROLE] }));
   const has = async () => (await ticketRecipients(D_GUILD)).some((r) => r.id === staff.tokenId);
   assert.ok(await has());
   await setGuildModule(D_GUILD, 'tickets', { enabled: true, config: { staffRoles: [] } });
   clock += MINUTE;
-  assert.ok(await has(), 'still cached');
+  assert.ok(await has(), 'still reused');
+  assert.equal(fetches.filter((id) => id === staff.id).length, 1, 'without looking the member up again');
   clock += MINUTE + 1;
   assert.ok(!(await has()), 'checked again after 2 minutes');
 });
@@ -298,6 +315,25 @@ test('replies in one ticket coalesce: one notification per device per 30 seconds
   assert.equal((await notify(72, true)).sent, 1);
   assert.equal((await notify(72, true)).sent, 1);
   assert.equal(delivered.filter((d) => d.recipient.id === manager.tokenId).length, 5);
+});
+
+test('a reply coalesced away costs no access check', async () => {
+  const manager = await staffDevice({ perms: ['ManageGuild'] });
+  const notify = () => notifyTicketActivity({ guild, ticketId: 80, member: 'm', content: 'x', isNew: false });
+  assert.equal((await notify()).sent, 1);
+  const reads = [];
+  const realGet = guild.members.cache.get;
+  guild.members.cache.get = function (id) {
+    reads.push(id);
+    return realGet.call(this, id);
+  };
+  try {
+    clock += 5_000;
+    assert.equal((await notify()).sent, 0);
+  } finally {
+    guild.members.cache.get = realGet;
+  }
+  assert.ok(!reads.includes(manager.id), 'the member was not even read from the cache');
 });
 
 test('a failing send or a broken lookup never reaches the DM relay', async () => {

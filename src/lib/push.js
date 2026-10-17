@@ -293,19 +293,33 @@ function memberFetcher() {
   };
 }
 
-/** May this account see the server's tickets? Reused for 2 minutes; a failed check is a no. */
+/**
+ * May this account see the server's tickets? Checked fresh while the member is in the bot's
+ * cache, which the gateway keeps current (GuildMembers intent on Discord; always on Fluxer), so a
+ * lost right counts at the next notification and costs no platform call. Only a check that had
+ * to look the member up outside the cache is reused, for 2 minutes. A failed check is a no.
+ */
 async function accountMayReceive(accountId, key, fetchMember) {
   const cacheKey = `${accountId}|${key}`;
   const hit = accessCache.get(cacheKey);
   if (hit && now() - hit.at < ACCESS_TTL_MS) return hit.ok;
+  let lookedOutside = false;
+  const lookup = async (guild, userId) => {
+    const cached = guild.members.cache.get(userId);
+    if (cached) return cached;
+    lookedOutside = true;
+    return fetchMember(guild, userId);
+  };
   let ok;
   try {
     const account = { id: accountId, identities: await identitiesOf(accountId) };
-    ok = await accountMaySeeTickets(account, key, { live: true, fetchMember });
+    ok = await accountMaySeeTickets(account, key, { live: true, fetchMember: lookup });
   } catch {
     ok = false;
+    lookedOutside = true;
   }
-  accessCache.set(cacheKey, { ok, at: now() });
+  if (lookedOutside) accessCache.set(cacheKey, { ok, at: now() });
+  else accessCache.delete(cacheKey);
   return ok;
 }
 
@@ -313,8 +327,8 @@ async function accountMayReceive(accountId, key, fetchMember) {
  * Who a ticket notification for this server goes to: devices with push set up, not muted for
  * it, whose account may see its tickets. One check per account, at most 5 at a time.
  */
-export async function ticketRecipients(key) {
-  const tokens = (await pushRecipientTokens()).filter((t) => !t.mutedServers.includes(key));
+export async function ticketRecipients(key, { want = () => true } = {}) {
+  const tokens = (await pushRecipientTokens()).filter((t) => !t.mutedServers.includes(key) && want(t));
   const accounts = [...new Set(tokens.map((t) => t.accountId))];
   const fetchMember = memberFetcher();
   const allowed = await mapLimit(accounts, ACCESS_CONCURRENCY, (id) =>
@@ -335,8 +349,18 @@ export async function notifyTicketActivity({ guild, ticketId, member, content, i
   try {
     if (!canPush()) return none;
     const key = guildKey(guild);
-    const recipients = await ticketRecipients(key);
-    if (!recipients.length) return none;
+    // A new ticket always goes; replies in it coalesce to one per device per 30 seconds. Decided
+    // before the access checks, so a burst of replies costs one round of checks.
+    const t = now();
+    const due = (r) => {
+      if (!(r.origin ?? config.dashboardUrl)) return false;
+      if (isNew) return true;
+      const last = lastNotified.get(`${r.id}|${key}:${ticketId}`);
+      return last === undefined || t - last >= COALESCE_MS;
+    };
+    const targets = await ticketRecipients(key, { want: due });
+    if (!targets.length) return none;
+    for (const r of targets) lastNotified.set(`${r.id}|${key}:${ticketId}`, t);
     const base = ticketNotification({
       guildName: guild.name,
       guildId: key,
@@ -344,16 +368,6 @@ export async function notifyTicketActivity({ guild, ticketId, member, content, i
       member,
       content,
       isNew,
-    });
-    // A new ticket always goes; replies in it coalesce to one per device per 30 seconds.
-    const t = now();
-    const targets = recipients.filter((r) => {
-      if (!(r.origin ?? config.dashboardUrl)) return false;
-      const k = `${r.id}|${key}:${ticketId}`;
-      const last = lastNotified.get(k);
-      if (!isNew && last !== undefined && t - last < COALESCE_MS) return false;
-      lastNotified.set(k, t);
-      return true;
     });
     const send = settings.deliver ?? deliver;
     const results = await Promise.allSettled(

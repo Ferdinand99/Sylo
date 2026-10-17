@@ -237,7 +237,7 @@ name, the member and the first 180 characters of the message; iOS groups a
 ticket's notifications, and a tap opens the conversation.
 
 - **Who gets one:** every signed-in device with notifications turned on whose
-  account may see that server's tickets (checked again at least every 2 minutes) (the same live check as
+  account may see that server's tickets at that moment (the same live check as
   for the app's requests, or a tickets staff role), unless that server is muted
   in the app's settings.
 - **Turning it on:** the app asks the first time you open a server's Tickets
