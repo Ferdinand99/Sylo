@@ -11,8 +11,13 @@
 //     as `res.locals.csrfToken` (a <meta> tag, echoed by htmx-setup.js / app.js).
 //
 // Exempt: safe methods, and the /auth, /verify and /appeal flows, which are
-// unauthenticated and already gated by their own signed tokens.
+// unauthenticated and already gated by their own signed tokens. Also exempt: an
+// /api/ request that carries an app token (Authorization: Bearer). A browser
+// cannot attach that header to a cross-site request without a CORS preflight,
+// and Sylo answers no preflight, so such a request cannot be forged. It is
+// judged by its token alone (see attachAccount), never by a cookie.
 import { randomBytes } from 'node:crypto';
+import { isTokenRequest } from '../lib/bearer.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const EXEMPT = [/^\/auth(\/|$)/, /^\/verify(\/|$)/, /^\/appeal(\/|$)/];
@@ -29,6 +34,7 @@ function sameOrigin(req) {
 }
 
 export function csrf(req, res, next) {
+  if (isTokenRequest(req)) return next();
   const stateChanging = !SAFE_METHODS.has(req.method) && !EXEMPT.some((re) => re.test(req.path));
 
   if (stateChanging && !sameOrigin(req)) {

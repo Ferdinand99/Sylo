@@ -31,6 +31,8 @@ registerPostgresBootstrap(`
 `);
 
 const TOKEN_PREFIX = 'sylo_';
+/** How long an app token lives without being used; each use slides it forward. */
+export const API_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const CODE_TTL_MS = 60_000;
 // A token's expiry slides forward with use, but rewriting the row on every request would be a
 // write per API call; once an hour is plenty for a 90-day lifetime.
