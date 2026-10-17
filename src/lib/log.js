@@ -28,7 +28,9 @@ const asJson =
  * DATABASE_URL in its error, and log lines reach the console, /health and the dev-log channel.
  */
 export function redactSecrets(text) {
-  return String(text).replace(/([a-z][a-z0-9+.-]*:\/\/[^\s:/@]*):[^\s@/]+@/gi, '$1:***@');
+  // Anchored on the literal "://": a scheme pattern in front made the match polynomial on long
+  // runs of letters (CodeQL js/polynomial-redos).
+  return String(text).replace(/:\/\/([^\s:/@]*):[^\s@/]+@/g, '://$1:***@');
 }
 
 /** Split trailing args into a text tail, an Error, and a plain-object meta bag. */

@@ -16,7 +16,7 @@ test('a save looks up at most 50 channels', async () => {
   const inner = globalThis.fetch;
   let lookups = 0;
   globalThis.fetch = async (url, init) => {
-    if (String(url).includes('youtube.com')) {
+    if (/(^|\.)youtube\.com$/.test(new URL(String(url)).hostname)) {
       lookups += 1;
       return new Response('not found', { status: 404 });
     }
