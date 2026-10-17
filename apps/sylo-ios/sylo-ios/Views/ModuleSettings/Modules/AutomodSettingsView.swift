@@ -6,12 +6,9 @@ import SyloKit
 /// web-v2/src/moduleForms/Automod.jsx.
 struct AutomodSettingsView: View {
     @State private var model: ModuleSettingsModel<AutomodPage>
-    /// Native AutoMod exists on Discord only; other platforms' server ids carry a `platform:` prefix.
-    private let supportsNativeAutomod: Bool
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
-        supportsNativeAutomod = !server.rawValue.contains(":")
     }
 
     var body: some View {
@@ -143,7 +140,7 @@ struct AutomodSettingsView: View {
                 }
             }
 
-            if supportsNativeAutomod {
+            if page.supportsNativeAutomod {
                 Section {
                     Toggle("Enforce natively", isOn: $settings.native.enabled)
                     if settings.native.enabled {

@@ -20,21 +20,27 @@ public struct AutomodPage: ModuleSettingsPage {
     public let presetKeys: [String]
     /// Where actions are logged ("" when the server has no mod-log channel).
     public let modlogChannelId: String
+    /// Whether the server's platform has native AutoMod rules (Discord); from the server, so
+    /// the app never guesses. False on a Sylo from before the flag.
+    public let supportsNativeAutomod: Bool
 
     public static let defaultPresetKeys = ["profanity", "sexual", "slurs"]
 
     public init(settings: AutomodSettings, channels: [ChannelOption] = [], roles: [RoleOption] = [],
-                presetKeys: [String] = AutomodPage.defaultPresetKeys, modlogChannelId: String = "") {
+                presetKeys: [String] = AutomodPage.defaultPresetKeys, modlogChannelId: String = "",
+                supportsNativeAutomod: Bool = true) {
         self.settings = settings
         self.channels = channels
         self.roles = roles
         self.presetKeys = presetKeys
         self.modlogChannelId = modlogChannelId
+        self.supportsNativeAutomod = supportsNativeAutomod
     }
 
     private enum CodingKeys: String, CodingKey {
         case settings = "config"
         case channels, roles, presetKeys, modlogChannelId
+        case supportsNativeAutomod = "nativeAutomod"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -44,6 +50,7 @@ public struct AutomodPage: ModuleSettingsPage {
         roles = try c.decode(forKey: .roles, or: [])
         presetKeys = try c.decode(forKey: .presetKeys, or: AutomodPage.defaultPresetKeys)
         modlogChannelId = try c.decode(forKey: .modlogChannelId, or: "")
+        supportsNativeAutomod = try c.decode(forKey: .supportsNativeAutomod, or: false)
     }
 }
 

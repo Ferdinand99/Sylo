@@ -153,4 +153,15 @@ struct AutomodSettingsTests {
         native[preset: "slurs"] = false
         #expect(native.presets == ["sexual"])
     }
+
+    @Test("native AutoMod shows only where the server says the platform has it")
+    func nativeAutomodFlag() throws {
+        let discord = try JSONDecoder().decode(AutomodPage.self, from: Data(#"{"config":{},"nativeAutomod":true}"#.utf8))
+        #expect(discord.supportsNativeAutomod)
+        let fluxer = try JSONDecoder().decode(AutomodPage.self, from: Data(#"{"config":{},"nativeAutomod":false}"#.utf8))
+        #expect(!fluxer.supportsNativeAutomod)
+        // A Sylo from before the flag: hidden rather than guessed.
+        let older = try JSONDecoder().decode(AutomodPage.self, from: Data(#"{"config":{}}"#.utf8))
+        #expect(!older.supportsNativeAutomod)
+    }
 }

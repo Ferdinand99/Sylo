@@ -934,6 +934,8 @@ router.get(
       nativeMappable: NATIVE_MAPPABLE,
       presetKeys: PRESET_KEYS,
       modlogChannelId: settings?.modlog_channel_id || '',
+      // Native AutoMod rules exist on Discord only; the Sylo app hides that section elsewhere.
+      nativeAutomod: Boolean(platformInfo(req.guild).capabilities.nativeAutomod),
     });
   })
 );
