@@ -210,10 +210,13 @@ Token lookups are not cached, so a revocation counts on the next request.
 The app has exactly the rights the web dashboard gives the same person. The one
 difference is how server access is checked:
 
-- The web dashboard uses the server list stored at login and refreshes it by
-  re-running the platform login about every 10 minutes. The app cannot do that
-  in the background.
-- So for app requests Sylo checks **live, through the bot, on every request**:
+- Both use the server list stored at login. The bot keeps it current: when it
+  sees someone gain or lose Manage Server or Administrator, or become the owner,
+  that server is added to or removed from their list. Neither the dashboard nor
+  the app sends anyone through the platform login again to refresh it.
+- The web dashboard trusts that list for 10 minutes after login, then checks
+  live through the bot, like the app.
+- For app requests Sylo checks **live, through the bot, on every request**:
   the person must own the server, have Manage Server or Administrator there, or
   hold one of its bot-master roles. Someone who loses those rights loses access
   from the app at once. The bot has to be in the server. The live check only
