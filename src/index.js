@@ -10,6 +10,9 @@ import { startRetentionSchedule } from './db/retention.js';
 import { startBot } from './bot/index.js';
 import { startFluxerBot } from './bot/fluxerBot.js';
 import { startWeb } from './web/server.js';
+import { addDevLogSink } from './lib/devLog.js';
+import { addDevLogEntry } from './db/devLogEntries.js';
+import { notifyDevLogEvent } from './lib/push.js';
 
 /** Set once the HTTP server is listening; used by the shutdown path. */
 let httpServer = null;
@@ -55,6 +58,10 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 
 async function main() {
+  // Sylo's own errors and warnings: stored for the app's Health page, and pushed to operators'
+  // devices at the level each chose (src/lib/devLog.js). Neither sink logs through log.js.
+  addDevLogSink((event) => addDevLogEntry(event));
+  addDevLogSink((event) => notifyDevLogEvent(event));
   log.info('sylo', `Starting in ${config.nodeEnv} mode`);
   // Every configured platform starts in parallel; one that is not configured is never loaded.
   await Promise.all([config.discordEnabled && startBot(), config.fluxerEnabled && startFluxerBot()]);

@@ -5,21 +5,27 @@ import Foundation
 public struct AccountInfo: Decodable, Sendable, Equatable {
     /// An open-mode server (no login); the app never gets a token there, so this stays false.
     public let isOpen: Bool
+    /// Runs this Sylo (OWNER_IDS / FLUXER_OWNER_IDS): gets the Health page and dev-log notifications.
+    public let isOperator: Bool
     public let platforms: [PlatformConnection]
     /// Signed-in app devices, most recently used first.
     public let devices: [SignedInDevice]
 
-    public init(isOpen: Bool = false, platforms: [PlatformConnection], devices: [SignedInDevice]) {
+    public init(
+        isOpen: Bool = false, isOperator: Bool = false, platforms: [PlatformConnection], devices: [SignedInDevice]
+    ) {
         self.isOpen = isOpen
+        self.isOperator = isOperator
         self.platforms = platforms
         self.devices = devices
     }
 
-    private enum CodingKeys: String, CodingKey { case open, platforms, devices }
+    private enum CodingKeys: String, CodingKey { case open, isOperator = "operator", platforms, devices }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         isOpen = try c.decodeIfPresent(Bool.self, forKey: .open) ?? false
+        isOperator = try c.decodeIfPresent(Bool.self, forKey: .isOperator) ?? false
         platforms = try c.decodeLossyArray(of: PlatformConnection.self, forKey: .platforms)
         devices = try c.decodeLossyArray(of: SignedInDevice.self, forKey: .devices)
     }

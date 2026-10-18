@@ -4,7 +4,8 @@
 
 # Sylo
 
-**Multi-function Discord bot with a MEE6-style web dashboard — add the hosted instance, or self-host on Unraid via Docker.**
+**A multi-function Discord and Fluxer bot with a MEE6-style web dashboard.**
+Add the hosted instance in one click, or self-host it with Docker or Unraid.
 
 [![Add to Discord](https://img.shields.io/badge/add%20to-Discord-5865F2?logo=discord&logoColor=white)](https://discord.com/oauth2/authorize?client_id=1374856793469227029)
 [![Discord](https://img.shields.io/discord/1545464180340039751?logo=discord&logoColor=white&label=community&color=5865F2)](https://discord.gg/GAzR9k5hhS)
@@ -18,559 +19,311 @@
 [![Website](https://img.shields.io/badge/website-sylobot.com-7C6CFF)](https://sylobot.com)
 [![Roadmap](https://img.shields.io/badge/roadmap-sylobot.com-8B5CF6)](https://roadmap.sylobot.com/roadmap)
 
+[Add to Discord](https://discord.com/oauth2/authorize?client_id=1374856793469227029) ·
+[Dashboard](https://app.sylobot.com) ·
+[Self-host](#self-host) ·
+[Docs](#documentation) ·
+[Community](https://discord.gg/GAzR9k5hhS)
+
 </div>
 
-Thirty-three per-guild **modules**, Discord **OAuth2 login**, a public leveling
-**leaderboard**, and — via the optional Game stats module — **Battlefield-series**
-and **RuneScape** (OSRS / RS3) player lookups. Everything runs in **one Node
-process, one container, no build step** — and stays that way past Discord's
-2,500-guild gateway limit via in-process sharding.
+---
 
-**Also runs on [Fluxer](https://fluxer.app)** (experimental): the same bot, modules and
-dashboard on Discord, on Fluxer, or on both from one process. Fluxer has no slash
-commands yet, so commands run from chat (`!ping`). See
+## What Sylo does
+
+Sylo bundles 35 per-server **modules**. Each one is switched on and configured
+from the dashboard. The bot, the dashboard and every module run in **one Node
+process and one container**, and in-process sharding keeps it that way past
+Discord's 2,500-server gateway limit.
+
+| Area | Modules |
+|---|---|
+| **Moderation & safety** | [Moderation](docs/modules/moderation.md) (case log, warnings, auto-actions) · [Auto-moderation](docs/modules/automod.md) (can sync to Discord's native AutoMod) · [Server logging](docs/modules/logging.md) · [Verification](docs/modules/verification.md) (button or Turnstile captcha) · [Ban appeals](docs/modules/appeals.md) · [Tickets / modmail](docs/modules/tickets.md) · [Channel cleanup](docs/modules/channel-cleanup.md) · Honeypot (beta) |
+| **Welcome & roles** | [Welcome & leave](docs/modules/welcome.md) · [Welcome channel](docs/modules/welcome-channel.md) · [Reaction roles & autoroles](docs/modules/roles.md) (emoji, buttons or dropdown) · [Birthdays](docs/modules/birthdays.md) |
+| **Engagement** | [Leveling](docs/modules/leveling.md) (image rank cards, public leaderboard) · [Invite tracker](docs/modules/invite-tracker.md) · [Starboard](docs/modules/starboard.md) · [Polls](docs/modules/polls.md) · [Giveaways](docs/modules/giveaways.md) · [Counting](docs/modules/counting.md) · [Game stats](docs/modules/game-stats.md) (Battlefield, OSRS, RS3) |
+| **Automation** | [Custom commands](docs/modules/custom-commands.md) · [Autoresponder](docs/modules/autoresponder.md) · [Auto-react](docs/modules/auto-react.md) · [Reminders](docs/modules/reminders.md) · [Sticky messages](docs/modules/sticky.md) · [AFK](docs/modules/afk.md) · [Temporary voice channels](docs/modules/temp-voice.md) |
+| **Alerts** | [Twitch](docs/modules/twitch-alerts.md) · [YouTube](docs/modules/youtube-alerts.md) · [Kick](docs/modules/kick-alerts.md) · [RSS / Atom](docs/modules/rss.md) (also Reddit, Mastodon, Bluesky) · [GitHub](docs/modules/github.md) · [Free games](docs/modules/free-games.md) · [App Store Connect](docs/modules/apple-connect.md) (owner only) |
+| **Insights** | [Server statistics](docs/modules/server-stats.md) (live counter channels) · [Server insights](docs/modules/insights.md) (activity charts, aggregate counts only) |
+
+The [module index](docs/modules/README.md) has one page per module: what it
+does, the permissions and intents it needs, its settings and its commands.
+
+**Fluxer (experimental).** The same bot, modules and dashboard also run on
+[Fluxer](https://fluxer.app), alone or next to Discord from one process. Fluxer
+has no slash commands yet, so commands run from chat (`!ping`). See
 [docs/fluxer.md](docs/fluxer.md).
 
 > **Coming from Sylo-Fluxer?** The separate
-> [Sylo-Fluxer](https://github.com/Ferdinand99/Sylo-Fluxer) fork is **archived**. Since
-> Sylo 4.0 this repository runs on Fluxer itself — alone or next to Discord — so there
-> is one codebase, one set of releases and one dashboard. Sylo-Fluxer's database is not
-> migrated automatically; see [Coming from Sylo-Fluxer](docs/fluxer.md#coming-from-sylo-fluxer).
+> [Sylo-Fluxer](https://github.com/Ferdinand99/Sylo-Fluxer) fork is archived.
+> Since 4.0 this repository covers Fluxer itself. Its database is not migrated
+> automatically; see [Coming from Sylo-Fluxer](docs/fluxer.md#coming-from-sylo-fluxer).
 
-Don't want to run your own instance? Sylo is a Discord-verified bot —
-[add it to your server](https://discord.com/oauth2/authorize?client_id=1374856793469227029)
-directly. The rest of this README, and [self-hosting](#self-hosting) below, is
-for running your own copy instead.
+## How it works
 
-<details>
-<summary>The 33 modules</summary>
+```mermaid
+flowchart LR
+  subgraph platforms["Chat platforms"]
+    DG["Discord gateway"]
+    FG["Fluxer gateway"]
+  end
 
-moderation · logging · tickets · reaction roles · verification · welcome ·
-welcome channel · birthdays · sticky messages · auto-moderation · counting · custom commands ·
-autoresponder · auto-react · reminders · leveling · AFK · server statistics · server insights · free games ·
-ban appeals · temporary voice channels · starboard · invite tracker · polls ·
-giveaways · game stats · Twitch alerts · YouTube alerts · Kick alerts · RSS alerts · App Store Connect alerts (owner only) · channel cleanup ·
-GitHub alerts
+  subgraph sylo["Sylo (one Node process)"]
+    DBOT["Discord bot<br/>discord.js"]
+    FBOT["Fluxer bot<br/>@fluxerjs/core"]
+    PL["Platform layer"]
+    MOD["Modules<br/>via dispatch"]
+    DATA[("SQLite<br/>or Postgres")]
+    WEB["Web server<br/>Express"]
+    PUSH["Push"]
+    OPS["Backups · dev-log<br/>/health · /metrics"]
+  end
 
-</details>
+  subgraph clients["Clients"]
+    V1["Classic dashboard<br/>EJS + htmx"]
+    V2["Dashboard V2<br/>React"]
+    IOS["Sylo iOS app"]
+  end
 
-## Documentation
+  subgraph outside["Outside services"]
+    FEEDS["RSS · YouTube · Twitch · Kick<br/>Free games · App Store Connect"]
+    GH["GitHub"]
+    RELAY["Push relay<br/>app.sylobot.com"]
+    APNS["Apple Push (APNs)"]
+    OFF["WebDAV /<br/>Discord webhook"]
+  end
 
-- **[sylobot.com](https://sylobot.com)** — the project site: what Sylo does at a
-  glance, the "Add to Discord" link for the hosted instance, and a self-host
-  quick-start.
-- **[docs/modules/](docs/modules/README.md)** — a page per module: what it does,
-  the permissions and intents it needs, its settings, and its commands.
-- **[docs/dashboard-v2.md](docs/dashboard-v2.md)** — the new React dashboard
-  (Beta, opt-in): what's different, module coverage, and how to try it.
-- **[docs/self-hosting.md](docs/self-hosting.md)** — install, environment
-  variables, reverse proxy, Docker, Unraid, backups, upgrades and rollback,
-  troubleshooting.
-- **[docs/fluxer.md](docs/fluxer.md)** — running Sylo on Fluxer, alone or next to Discord:
-  setup, the dashboard login, chat commands, and what differs from Discord.
-- **[docs/mobile-app.md](docs/mobile-app.md)** — the Sylo iOS app (in development): what a self-hosted instance needs, and how its sign-in works.
-- **[docs/postgres.md](docs/postgres.md)** — optional Postgres backend for
-  hosted-scale deployments, and how to move an existing SQLite install over
-  without losing data.
-- **[Roadmap](https://roadmap.sylobot.com/roadmap)** — what's planned and what's
-  shipped; suggest features and vote.
-- **[Discord](https://discord.gg/GAzR9k5hhS)** — the community server: support,
-  announcements, and where development discussion happens.
-- [Privacy policy](docs/privacy-policy.md) · [Terms of service](docs/terms-of-service.md)
+  DG <--> DBOT
+  FG <--> FBOT
+  DBOT --> PL
+  FBOT --> PL
+  PL --> MOD
+  MOD <--> DATA
+  WEB <--> DATA
+  MOD -->|polls| FEEDS
+  GH -->|webhooks| WEB
 
-## Contents
+  V1 -->|"Discord / Fluxer OAuth"| WEB
+  V2 -->|"/api/v2"| WEB
+  IOS -->|"PKCE sign-in<br/>/api/v2 · /api/mobile"| WEB
 
-- [What's new](#whats-new-since-20) · [Features](#features) · [Screenshots](#screenshots)
-- [Project structure](#project-structure) · [Local setup](#local-setup)
-- [Self-hosting](#self-hosting) · [Releases & CI](#releases--ci) · [Tests](#tests)
-- [Adding another game](#adding-another-game) · [Legal](#legal) · [License](#license)
+  MOD -->|tickets| PUSH
+  OPS -->|"dev-log events"| PUSH
+  PUSH -->|hosted: direct| APNS
+  PUSH -->|self-hosted| RELAY
+  RELAY --> APNS
+  APNS --> IOS
 
-## Screenshots
-
-The dashboard is server-rendered EJS with a small htmx + Alpine layer (no build
-step): a fixed sidebar with a server switcher, a MEE6-style plugin grid, and a
-settings panel per module — saves swap in place with a toast.
-
-<!-- Drop PNGs in docs/screenshots/ and uncomment:
-![Overview](docs/screenshots/overview.png)
-![Module page](docs/screenshots/module-page.png)
-![Embed builder](docs/screenshots/embed-builder.png)
--->
-
-## Breaking changes in 3.0
-
-- **Node 22** is now required (Node 20 is end-of-life). The Docker image is
-  `node:22-alpine`.
-- **`DISCORD_GUILD_ID` → `DISCORD_DEV_GUILD_IDS`.** The old name still works but
-  logs a deprecation warning on boot — rename it in your `.env`.
-- **Game stats module** (off by default) — enable it per server before `/stats`
-  responds. `/stats` is one flat command: pick the game (7 Battlefield titles,
-  Old School RuneScape, RuneScape 3) from the `game` dropdown.
-- **The "Reminders" module's id changed** from `scheduled-messages` to
-  `reminders`. A migration updates existing servers automatically; only matters
-  if you script against the module id or a config-export JSON.
-
-## What's new since 2.0
-
-- **Giveaways** — `/giveaway start prize:… duration:30m` posts an embed with a
-  **🎉 Enter** button; members join with one click (click again to leave). Winners
-  are drawn automatically at the end time — no reactions, no Message Content
-  intent. Optional `winners:` count and `required_role:`. `/giveaway end`,
-  `/giveaway reroll` (excludes previous winners) and `/giveaway list`, plus an
-  End / Reroll list on the dashboard. Winner ping (@here / @everyone) and
-  optional winner DMs are configurable.
-- **Image rank & leaderboard cards** — `/rank` replies with a rendered card
-  (avatar, level, server rank, XP bar, message count) and `/leaderboard` with a
-  rendered top-10 (medal badges, avatars, level, XP), both drawn in-process with
-  `@napi-rs/canvas`. Each falls back to the old embed automatically if the image
-  renderer is unavailable on the host.
-- **Button & dropdown self-assign roles** — a reaction-role message can now use
-  clickable **buttons** or a **select menu** instead of emoji reactions (pick the
-  style in the builder). Buttons/dropdowns need no Add Reactions permission and
-  no Message Content intent, handle up to 25 roles, and still honour the
-  *exclusive* / *reverse* options. Emoji reactions remain the default.
-- **Structured logging + error history** — every log line is now
-  `<ISO timestamp>  LEVEL  scope  message`; set `LOG_LEVEL` (`debug`/`info`/
-  `warn`/`error`) and `LOG_FORMAT=json` (or `LOG_JSON=1`) for machine-readable
-  output. `LOG_LEVEL=debug` also emits one line per HTTP request
-  (`method path status durationMs`). The **Health** page shows the last ~25
-  errors (time, scope, message) and a gateway-ping sparkline; `GET /health`
-  reports `errorCount`, `errorsByScope`, `commands` and a ping history. Dashboard
-  forms and JSON actions now carry a CSRF token (enforced when "Log in with
-  Discord" is enabled).
-- **Prometheus metrics** — `GET /metrics` serves the standard text format
-  (unauthenticated, rate-limited, same trust level as the `/health` JSON):
-  `sylo_up`, `sylo_uptime_seconds`, `sylo_guilds`, `sylo_gateway_ping_ms`,
-  `sylo_db_bytes`, `sylo_module_enabled{module}`, plus counters
-  `sylo_commands_total{command}`, `sylo_component_interactions_total{scope}`,
-  `sylo_errors_total{scope}` and `sylo_http_requests_total{route,status}`. Import
-  [`docs/grafana-dashboard.json`](docs/grafana-dashboard.json) for a ready-made
-  Grafana overview.
-- **Automatic database backups + restore** — Sylo writes compacted single-file
-  snapshots of `sylo.db` to `<data>/backups`: just before every schema migration,
-  shortly after boot, and on a schedule (`BACKUP_INTERVAL_HOURS`, default 24;
-  keeps `BACKUP_RETENTION`, default 14). The dashboard's **Health** page lists
-  them and can create, download, **import** (upload a `.db` from elsewhere, with
-  validation), and **restore** one — restore snapshots the current database
-  first, then swaps the file and restarts the bot on the restored data. A WAL
-  checkpoint runs alongside each backup and on shutdown so the `-wal` sidecar
-  stays small. Optionally each snapshot is also shipped **off-site** (gzipped) to
-  a WebDAV target (`BACKUP_WEBDAV_URL` + `_USER`/`_PASS`, e.g. a Nextcloud
-  folder) and/or a Discord webhook (`BACKUP_WEBHOOK_URL`) — best-effort, and the
-  Health page shows which targets are active.
-- **YouTube alerts** — announce a channel's new uploads and when it goes live.
-  Add channels by URL or `@handle` (resolved on save); new videos come from
-  YouTube's public feed and live status from a light page check — no API key
-  needed. Per-channel Discord channel, ping role and custom messages.
-- **Twitch alerts** — announce in a channel when a streamer goes live. Add
-  streamers on the dashboard (channel + optional ping role + custom message with
-  `{name}`/`{title}`/`{game}`/`{url}` placeholders); Sylo polls the Twitch API
-  ~once a minute. Needs a free `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET`.
-- **Kick alerts** — the same "go live" notification for [Kick.com](https://kick.com)
-  streamers (channel + optional ping role + `{name}`/`{title}`/`{game}`/`{url}`/`{viewers}`
-  message). Sylo polls the official Kick API ~once a minute; needs a free
-  `KICK_CLIENT_ID` / `KICK_CLIENT_SECRET` (kick.com/settings/developer).
-- Twitch / YouTube / Kick alerts each have a per-streamer **Embed / Plain text**
-  choice, and a **when the stream ends** action — delete the "went live" message
-  (default), mark it as ended, or leave it.
-- **RSS alerts** — follow any RSS 2.0 or Atom feed, or give a **Reddit**,
-  **Mastodon** or **Bluesky** handle and Sylo resolves it to that platform's
-  feed. New items post to a channel with a `{title}`/`{link}`/`{author}`/`{feed}`
-  template. Up to 15 feeds per server, polled every ~5 minutes; the first check
-  only seeds, so no backlog dump.
-- **Polls** — members run `/poll question:… choices:A | B | C` (optional
-  `duration`, `multiple`, `max_votes`); people vote by reacting with the option
-  letter. Auto-closes on its timer or vote cap, posts a results embed with a
-  bar chart, and `/poll-end` closes one early. Optional allow/deny role list for
-  who may vote — disallowed reactions are removed.
-- **Invite tracker** — credits the member whose invite link each new joiner used,
-  keeps a per-member tally (joined / left / bonus), and ranks everyone.
-  `/invites` (your count + a personal link), `/inviter`, `/invites-leaderboard`;
-  optional join/leave log channel; a fake-invite grace window so a quick leave
-  removes the credit. Needs the **Manage Server** permission.
-- **Custom commands, rebuilt MEE6-style** — each command is now a `/slash`
-  command that runs an ordered list of actions: reply in the channel (text /
-  embed, optionally private, or a random pick from several messages), post to
-  another channel, or add / remove a role. Per-command role and channel
-  restrictions and a cooldown. Existing text/embed commands migrate automatically
-  (they become a single reply action); the chat-prefix trigger is retired.
-- **Starboard** — react to a message enough times and Sylo re-posts it into a
-  highlights channel. MEE6-style per-server boards: pick the emoji(s) and
-  threshold, auto-react on the post, remove it if it drops back below the bar or
-  the original is deleted, ignore self-stars and bot messages, and restrict which
-  roles' reactions count and which channels a board watches.
-- **MEE6-style dashboard redesign** — a fixed left sidebar with a server switcher
-  and collapsible plugin categories; the dashboard is a plugin grid; a
-  **Bot Personalizer** (username / avatar / banner / presence), a per-server
-  **Settings** page (bot-master roles, mod-log channel, embed colour, backup), a
-  **Leaderboard** page, and a tabbed **Moderator** page (automod, warning
-  auto-actions, infractions, immunity roles, audit logging, command
-  permissions). Welcome Channel and Reaction Roles get a WYSIWYG embed editor.
-- **Eight more modules**: Verification (button or Cloudflare Turnstile captcha),
-  Autoresponder, AFK, Server statistics (live count voice channels), Free games
-  (Epic + IsThereAnyDeal), Ban appeals (DM'd appeal link → dashboard review →
-  decision shown on the link, with a single-use rejoin invite on accept),
-  Temporary voice channels (MEE6-style hubs + 13 /voice-* control commands),
-  and Welcome Channel (a builder for one pinned message in a read-only channel)
-  — all functional and configurable from the dashboard (26 in total)
-- Editable Discord **presence / activity** from the dashboard (`/settings`)
-- 2.0 groundwork still current: action-based custom `/slash` commands,
-  scheduled messages, full leveling with a public leaderboard, auto-moderation,
-  the Counting mini-game, a YAGPDB-style combined overview and a topbar server
-  switcher; `/mydata` export + `/forget` + guild-leave data purge; per-server **audit log** and
-  JSON **config export**; CI test gate before any image publish; rate-limited
-  public/auth routes; a database integrity check on boot
-
-## Features
-
-- **Discord bot** (discord.js v14, slash commands)
-  - `/help` — command overview + a link to the dashboard
-  - `/ping` — health check with gateway + round-trip latency
-  - `/version` — the release this instance is running · `/about` — version,
-    uptime and runtime info
-  - `/rank` · `/leaderboard` — leveling progress (when the module is enabled)
-  - `/mydata` — DMs you a JSON export of the data Sylo stores about you in the
-    current server · `/forget` — delete it
-  - `/stats game:<Battlefield … | Old School RuneScape | RuneScape 3> username:…
-    [platform:…]` — player stats as an embed (Battlefield: K/D, win rate, best
-    class, …; RuneScape: combat / total level, top skills, boss KCs)
-  - `/history @user` · `/case view|reason|delete|note` — the moderation case log
-  - Friendly, non-crashing error handling (unknown player, API down, rate-limited)
-- **Moderation** — `/kick`, `/ban`, `/unban`, `/timeout`, `/untimeout`, `/purge`,
-  `/slowmode`, `/warn`, `/modlog`, plus a numbered **case log**: every action is a
-  case, browsable with `/history @user` and manageable with `/case`
-  (view / reason / delete / note). Role-hierarchy and permission checks, optional DM to the
-  target, and per-command default permissions so Discord hides them from
-  non-moderators.
-- **Extensible game adapters** — one file per game, registered in a central
-  registry. Adding a game does not touch bot or web code.
-- **Per-guild modules** — 33 feature groups, each toggled and configured from the
-  dashboard:
-  - **Moderation** — warning thresholds that auto-timeout/kick/ban, one-click unban
-  - **Server logging** — member / message / role / channel events to a log channel
-  - **Reaction roles & autoroles** — dashboard-built reaction-role embeds; roles on join
-  - **Verification** — gate new members behind a Verify button, or a Cloudflare
-    Turnstile captcha on the dashboard, before granting a role; optional
-    auto-kick of unverified members
-  - **Welcome & leave** — join/leave messages with placeholders, optional DM,
-    plus a shared "give roles to new members" picker
-  - **Welcome channel** — a MEE6-style builder for one rich, pinned message in a
-    dedicated read-only channel (welcome / rules / links / banner elements, live
-    preview); can create the `#welcome` channel for you and publish/update it
-  - **Sticky messages** — keep a message pinned to the bottom of a channel;
-    per-channel option to also bump it for other bots/webhooks and a configurable
-    minimum gap between reposts
-  - **Tickets (modmail)** — members DM the bot; staff read and reply from the
-    dashboard (replies arrive as an anonymous "Staff" DM)
-  - **Moderator** — a tabbed page consolidating **Auto-moderation** (bad words,
-    repeated text, invites, links, caps, emojis, spoilers, mentions, zalgo,
-    anti-spam — each Disabled / Delete / Delete + Warn / Delete + Timeout), with
-    an optional **push to Discord's native AutoMod** for the mappable checks
-    (bad words, mentions, anti-spam) plus Discord's profanity / sexual-content /
-    slurs preset lists — reconciled as `Sylo:`-named rules, needs Manage Server,
-    **auto-actions** (warning-count thresholds → timeout/kick/ban), **infractions**
-    (warnings + ban manager), **immunity roles** (skip automod + auto-actions),
-    **audit logging** (server events → a channel), and per-command permissions
-  - **Counting** — members count upward one number per message in a chosen channel;
-    correct or reset the running number from the dashboard
-  - **Custom commands** — MEE6-style `/slash` commands built from an ordered list
-    of actions: reply in the channel (text and/or embed, optionally private, or a
-    random pick from several messages), post a message to another channel, or add
-    / remove a role. Per-command role/channel restrictions and cooldown; synced
-    to Discord on save
-  - **Invite tracker** — attributes each new member to the invite link they used
-    and ranks inviters. `/invites` gives a member a personal invite link plus
-    their count, `/inviter` looks up who invited someone, `/invites-leaderboard`
-    ranks the server. Optional join/leave log channel and a fake-invite grace
-    window (a join that leaves inside it doesn't count). Needs Manage Server
-  - **Polls** — `/poll question:… choices:A | B | C` with optional `duration`,
-    `multiple` and `max_votes`; members vote by reacting with the option letter.
-    Auto-closes on the timer or vote cap and posts a bar-chart results embed;
-    `/poll-end` closes one early. Optional allow/deny role list for voters
-  - **Twitch alerts** — post a "go live" notification to a channel when a Twitch
-    streamer starts streaming. Per-streamer channel, optional ping role and a
-    custom message (`{name}` `{title}` `{game}` `{url}` `{viewers}`). Polls the
-    Twitch Helix API ~once a minute; needs `TWITCH_CLIENT_ID` /
-    `TWITCH_CLIENT_SECRET` (free app at dev.twitch.tv)
-  - **YouTube alerts** — announce a channel's new uploads and/or "went live" in a
-    Discord channel. Add channels by URL or `@handle` (Sylo resolves them on
-    save); new videos read from YouTube's public Atom feed, live status from a
-    light `/live` page check — no API key. Per-channel ping role and custom
-    messages (`{name}` `{title}` `{url}`); polled every ~3 minutes
-  - **Kick alerts** — post a "go live" notification when a Kick.com streamer
-    starts. Per-streamer channel, optional ping role and a custom message
-    (`{name}` `{title}` `{game}` `{url}` `{viewers}`). Polls the official Kick API
-    ~once a minute; needs `KICK_CLIENT_ID` / `KICK_CLIENT_SECRET` (free app at
-    kick.com/settings/developer)
-  - **RSS alerts** — follow up to 15 RSS 2.0 / Atom feeds per server and post new
-    items to a channel. Per-feed channel, optional ping role and a `{title}` /
-    `{link}` / `{author}` / `{feed}` template. No API key; polled every ~5
-    minutes; the first check only seeds so there is no backlog dump. Dedupe rides
-    on the shared `posted_keys` table (scope `rss:<feedId>`)
-  - **Autoresponder** — auto-reply when a message matches a trigger (contains /
-    exact / starts-with / whole-word), optionally deleting the trigger
-  - **Auto-react** — automatically react to messages from chosen users or roles,
-    every message or at a random chance, with an optional role add/remove on the
-    same trigger (e.g. tracking a status like "infected"); per-rule channel lock
-    and an optional log channel
-  - **Scheduled messages** — recurring posts to a channel, every minute to every
-    4 weeks, with pause/resume
-  - **Leveling** — 15–25 XP per message on a MEE6-style curve, optional **voice
-    XP**, per-role/channel **XP multipliers**, level-up announcements, per-level
-    role rewards, `/rank`, and a public leaderboard with all-time / weekly /
-    monthly views
-  - **AFK** — `/afk [reason]`; Sylo replies to anyone who mentions an away
-    member and clears the status when they next speak
-  - **Server statistics** — keep chosen voice channels named with a live
-    member / role / boost count, on a configurable 5–60 minute refresh
-  - **Server insights** — charts of messages, joins and leaves, member growth,
-    voice-channel usage (minutes, peak in voice) and the busiest text/voice
-    channels, per hour or per day (24h / 48h / 7d / 30d / 90d range). Off by
-    default; enabling it starts the counting. Only aggregate counts are stored —
-    never message content or per-user rows — with ~180-day (hourly: ~3-day)
-    retention
-  - **Free games** — announces games that become free to claim (hourly poll):
-    the Epic Games Store, plus Steam / GOG / Fanatical / Humble and more with an
-    `ITAD_API_KEY`. Optional ping role; `/freegames [dlc]` on demand
-  - **Ban appeals** — banned members are DM'd a signed link to an appeal form
-    (sent *before* the ban lands, since a bot can't DM a user it no longer shares
-    a server with). Staff accept (auto-unban + single-use rejoin invite) or deny
-    with a reason from the Appeals tab. The decision, reason and rejoin invite are
-    always shown on the same link when the user reopens it, so notification never
-    depends on the DM. Configurable questions, post-denial cooldown, and an
-    optional "appeals server" invite so Sylo can DM the outcome too; needs
-    `DASHBOARD_URL` set
-  - **Temporary voice channels** — MEE6-style hubs: a member joins a "join to
-    create" voice channel and Sylo spawns their own VC (name template with
-    `{index}`/`{username}`, user limit, bitrate, keep-alive delay, ownership
-    lock, permission sync, role allow/deny + moderator/ignored roles, owner
-    permissions, an optional paired text channel). Owners and voice moderators
-    control it with 13 `/voice-*` commands (lock/unlock, hide/reveal, limit,
-    rename, kick, ban/unban, claim/transfer, owner, clean). Multiple hubs;
-    survives a restart via a sweep
-  - **Starboard** — when a message gets enough of a chosen reaction, Sylo re-posts
-    it (as an embed with a jump link) into a highlights channel and keeps the
-    count live. Per-server boards: custom emoji(s) and threshold, auto-react on
-    the post, remove-below-threshold and remove-on-delete, self-star and bot
-    filtering, message-age limits, and role / channel restrictions
-- **Command management** — disable a command per server or restrict it to
-  channels / roles (admins bypass).
-- **Operations** — per-server config **audit log** and JSON **config export**,
-  `/forget` self-service data deletion, automatic data purge on guild removal,
-  a database integrity check at startup, and rate-limited public / auth routes.
-- **Web dashboard** (Express + EJS, server-rendered) — **htmx 2** and
-  **Alpine.js 3** are vendored as static files under `src/web/public/vendor/`
-  (pinned, no CDN, no build step). Settings saves swap a page fragment in place
-  with a toast; every route keeps a no-JS fallback (full render + redirect). The
-  builders (embed editor, reaction roles, custom commands, welcome channel, …)
-  are Alpine components. The public pages below stay framework-free.
-  - `GET /health` — JSON status (uptime, guild count, gateway-ping history,
-    per-scope error counts, command counts) for healthchecks
-  - `GET /metrics` — Prometheus text exposition (uptime, guilds, gateway ping,
-    per-command / per-scope counters, module adoption), unauthenticated like
-    `/health`; scrape it from your LAN or your own proxy
-  - `/` — bot status, activity stats and module adoption; sidebar server switcher
-  - `/stats` — cached lookups · `/health` — status page (JSON for monitors)
-  - `/settings` — **Bot Personalizer**: bot username / avatar / banner + presence
-  - `/guilds/<id>` — per-server control panel: a MEE6-style plugin grid, a
-    **Leaderboard** page, **Settings** (bot-master roles, mod-log channel, embed
-    colour, backup), Commands, Moderator (auto-mod + warnings/bans), Tickets,
-    Ban appeals, Embed messages, an audit log, and a settings panel per module
-  - **public, zero-JS pages** — the shareable leaderboard (`/leaderboard/:id`,
-    `/lb/:slug`), member verification (`/verify`) and ban-appeal forms (`/appeal`)
-  - **Discord OAuth2 login** (optional) — gate the dashboard to server admins
-    (and configurable staff roles for tickets); runs open on a trusted LAN when
-    unconfigured. See *Dashboard authentication*.
-- **SQLite persistence** (`better-sqlite3`) — guild settings, module config,
-  warnings, tickets and a TTL stats cache, in a single volume-mounted file.
-- **Lean Docker image** — multi-stage `node:22-alpine`, non-root, `HEALTHCHECK`.
-  Ships prebuilt native modules (`better-sqlite3`, `@napi-rs/canvas` for the rank
-  card) and the DejaVu fonts the card needs.
-
-## Project structure
-
-```
-src/
-  index.js              Entrypoint — boots DB, bot, and web in one process
-  config.js             Loads/validates env vars
-  runtime.js            Shared in-memory state (uptime, last error, client)
-  bot/
-    index.js            Discord client bootstrap (intents, partials)
-    loadCommands.js / registerCommands.js
-    commands/           help, ping, about, version, stats, rank, leaderboard, forget,
-                        afk, freegames, history, case, kick/ban/unban/timeout/untimeout/purge/slowmode/warn/modlog
-    events/             ready, interactionCreate, moduleEvents (gateway → modules),
-                        dmTickets (DM → ticket), guildDelete (purge on leave)
-    embeds/ lib/        embed builders; duration, moderation, modlog, custom-command sync
-  modules/
-    registry.js         module catalogue (id, intents, defaults)
-    dispatch.js         fans gateway events out to enabled modules
-    index.js            loads module implementations
-    moderation automod logging tickets roles welcome welcomeChannel sticky
-    counting customCommands autoresponder verification scheduledMessages
-    leveling afk serverStats insights freeGames appeals tempVoice polls giveaways
-    starboard inviteTracker twitchAlerts youtubeAlerts kickAlerts rss
-    messageCreator
-  adapters/games/       gameAdapter, registry, battlefield, runescape
-  db/
-    index.js            SQLite connection + migrations
-    cache guildSettings modules commandOverrides modCases tickets audit
-    composedMessages counting scheduledMessages leveling appeals tempVoice
-    polls giveaways starboard inviteTracker twitchAlerts youtubeAlerts
-    leaderboardVanity backup exportConfig purge
-  web/
-    server.js           Express app (createApp() is exported for tests)
-    routes/             health, dashboard, commands, stats, settings, guilds,
-                        guildTickets, guildMessages,
-                        verify + appeal + leaderboard (public, framework-free)
-    middleware/         auth (OAuth2), csrf, rateLimit, ticketAccess
-    lib/                guildContext, sidebarNav, moduleIcons, overviewSummary, …
-    views/              EJS templates; guild.ejs + guild/_*.ejs fragment partials
-    public/             styles.css, app.js (CSRF + confirm), htmx-setup.js,
-                        alpine-components.js, vendor/{htmx,alpine}.min.js
-scripts/register-commands.js
-test/                   node --test; unit tests + dashboardRoutes.test.js (HTTP)
-data/                   SQLite file lives here (git-ignored, volume-mounted)
+  DATA --> OPS
+  OPS -->|"off-site copies"| OFF
 ```
 
-## Local setup
+- **Bots.** `src/bot/index.js` (Discord) and `src/bot/fluxerBot.js` (Fluxer)
+  feed gateway events through the platform layer (`src/platform/`) to the
+  enabled modules (`src/modules/dispatch.js`).
+- **Storage.** One SQLite file by default; Postgres when `DATABASE_URL` is set
+  (`src/db/driver.js`, see [docs/postgres.md](docs/postgres.md)).
+- **Web.** `src/web/server.js` serves both dashboards, the JSON API at
+  `/api/v2`, the app's `/api/mobile`, the public pages (leaderboard,
+  verification, appeals) and the GitHub webhook endpoint.
+- **Push.** Ticket notifications go to APNs directly when the instance holds
+  the APNs key (the hosted Sylo), otherwise through the relay on
+  `app.sylobot.com` (`src/lib/push.js`, `src/web/routes/pushRelay.js`).
 
-Requires **Node.js 22+** and a Discord application with a bot.
+## Use the hosted Sylo
 
-```bash
-git clone <this repo>
-cd Sylo
-npm install
-cp .env.example .env     # then edit .env (see docs/self-hosting.md)
-npm test                 # optional: run the adapter test suite
-npm start
-```
+You don't have to run anything yourself. Sylo is a Discord-verified bot:
 
-For fast iteration, set `DISCORD_DEV_GUILD_IDS` in `.env` to a test server's ID —
-commands then register instantly instead of taking up to ~1 hour globally. Pass
-several ids comma-separated (`DISCORD_DEV_GUILD_IDS=id1,id2`) to cover more than one
-test server. `npm run register` re-syncs commands without a restart.
+1. [Add Sylo to your server](https://discord.com/oauth2/authorize?client_id=1374856793469227029).
+2. Sign in to the dashboard at **[app.sylobot.com](https://app.sylobot.com)**
+   with Discord (or Fluxer) and turn on the modules you want.
 
-## Self-hosting
+Questions and announcements live on the
+[community Discord](https://discord.gg/GAzR9k5hhS). Service status:
+[status.sylobot.com](https://status.sylobot.com/status/default).
 
-Don't need your own instance? [Add the hosted bot](https://discord.com/oauth2/authorize?client_id=1374856793469227029)
-instead — this section is for running your own copy.
+## Self-host
 
-The full guide — every environment variable, Discord application setup, running
-behind a reverse proxy, Docker, Unraid, backups, upgrades and rollback, and a
-troubleshooting table — is in **[docs/self-hosting.md](docs/self-hosting.md)**.
-
-Only two variables are required:
-
-| Variable | Description |
-|---|---|
-| `DISCORD_TOKEN` | Bot token (Developer Portal → Bot → Reset Token) |
-| `DISCORD_CLIENT_ID` | Application ID (Developer Portal → General Information) |
-
-The dashboard runs **open** (no login) until you set `DISCORD_CLIENT_SECRET` —
-only expose it beyond `localhost` / a trusted LAN after you do. Both privileged
-gateway intents default on; disable the ones you don't need with
-`INTENT_GUILD_MEMBERS=false` / `INTENT_MESSAGE_CONTENT=false`.
+Sylo needs **Node.js 22+** (or Docker) and a Discord application with a bot. The
+full guide, with every environment variable, the Discord application setup, a
+reverse proxy, backups, upgrades, rollback and troubleshooting, is
+**[docs/self-hosting.md](docs/self-hosting.md)**.
 
 ### Docker
 
 ```bash
-cp .env.example .env      # DISCORD_TOKEN + DISCORD_CLIENT_ID
-docker compose up -d --build
+cp .env.example .env              # set DISCORD_TOKEN and DISCORD_CLIENT_ID
+docker compose up -d --build      # builds from source, data in ./data
 ```
 
-Or a prebuilt multi-arch image (`linux/amd64` + `linux/arm64`):
+Or run a prebuilt multi-arch image (`linux/amd64` + `linux/arm64`):
+
+```bash
+docker run -d --name sylo -p 3000:3000 --env-file .env \
+  -v "$PWD/data:/app/data" --restart unless-stopped iwgamin/sylo:latest
+```
 
 | Tag | What it is |
-| --- | --- |
+|---|---|
 | `iwgamin/sylo:latest`, `:X.Y.Z`, `:X.Y` ([Docker Hub](https://hub.docker.com/r/iwgamin/sylo) · [GHCR](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)) | Stable releases. What the Unraid template pulls. |
-| `ghcr.io/ferdinand99/sylo:main`, `:sha-<short>` (GHCR) | Rolling build of `main`. |
+| `ghcr.io/ferdinand99/sylo:main`, `:sha-<short>` (GHCR only) | Rolling build of every push to `main`. |
 
 ### Unraid
 
-Sylo is in **Community Applications** — search "Sylo". The template's source of
-truth is [Ferdinand99/unraid-templates](https://github.com/Ferdinand99/unraid-templates);
-if CA hasn't picked that repo up yet, add
-`https://github.com/Ferdinand99/unraid-templates` under Docker → Template
-repositories to get the current template directly. Put the data directory on
-a real local disk (e.g. `/mnt/cache/appdata/sylo`), **not** `/mnt/user` — SQLite
-in WAL mode needs working file locks. See
-[docs/self-hosting.md](docs/self-hosting.md#unraid) for the container fields and
-[the SQLite-on-a-network-mount note](docs/self-hosting.md#sqlite-on-a-network-mount).
+Sylo is in **Community Applications**: search for "Sylo". The template lives in
+[Ferdinand99/unraid-templates](https://github.com/Ferdinand99/unraid-templates).
+Put the data directory on a real local disk (for example
+`/mnt/cache/appdata/sylo`), **not** `/mnt/user`, because SQLite in WAL mode needs
+working file locks. Details: [Unraid](docs/self-hosting.md#unraid) and
+[SQLite on a network mount](docs/self-hosting.md#sqlite-on-a-network-mount).
 
-## Releases & CI
-
-Three GitHub Actions workflows drive the images. `test.yml` runs the suite
-(`npm test` + syntax + template compile) and is a required dependency of every
-image build — nothing publishes on a red suite.
-
-| Workflow | Trigger | Publishes |
-|---|---|---|
-| `.github/workflows/test.yml` | called by the two below | — (gate only) |
-| `.github/workflows/docker-publish.yml` | every push to `main` (PRs build only) | GHCR `:main`, `:sha-<short>` — rolling dev image |
-| `.github/workflows/release-please.yml` | merging a **release PR** | Docker Hub **and** GHCR `:latest`, `:X.Y.Z`, `:X.Y` — stable release |
-
-**Cutting a release** is automated with
-[release-please](https://github.com/googleapis/release-please):
-
-1. Land changes on `main` using [Conventional Commits](https://www.conventionalcommits.org)
-   (`feat: …`, `fix: …`, `refactor: …`, `chore: …`, `feat!: …`/`BREAKING CHANGE:`
-   for a major bump).
-2. release-please keeps a PR titled *"chore(main): release X.Y.Z"* open,
-   accumulating a changelog. When you're ready, **merge it**.
-3. Merging tags the commit `vX.Y.Z`, creates the GitHub Release with notes,
-   bumps `package.json` + `CHANGELOG.md`, then builds and pushes the versioned
-   images — including `:latest`, which is what the Unraid template tracks.
-
-`docker-publish.yml` needs no secrets (built-in `GITHUB_TOKEN`). `release-please.yml`
-also pushes to Docker Hub, so it needs a repo **variable** `DOCKERHUB_USERNAME`
-(e.g. `iwgamin`) and a repo **secret** `DOCKERHUB_TOKEN` (a Docker Hub personal
-access token with Read & Write). Set both under Settings → Secrets and variables →
-Actions. Note that a tag/Release created by CI does **not** trigger other
-workflows, which is why `release-please.yml` builds the image itself rather than
-relying on the tag trigger.
-
-For a clean starting point, tag the current commit once so release-please has a
-baseline: `git tag v1.0.0 && git push origin v1.0.0`
-(keep `.release-please-manifest.json` at `1.0.0`).
-
-Unraid users who want the bleeding edge can point the container at
-`ghcr.io/ferdinand99/sylo:main` (dev images are GHCR-only) instead of `:latest`;
-pin to `:X.Y.Z` on either registry to freeze a version.
-
-## Adding another game
-
-1. Create `src/adapters/games/<game>.js` exporting an adapter with
-   `id`, `titles()`, `platformsFor(title)`, and
-   `getPlayerStats(username, platform, { title })` — throw the typed errors from
-   `gameAdapter.js` for failure cases.
-2. Register it in `src/adapters/games/index.js` (one `import` + `register(...)`).
-3. Add a `game` choice (`<adapter>:<title>`) to `GAME_CHOICES` in
-   `src/bot/commands/stats.js`, and an embed builder if the stats shape differs.
-   The shared `runStatsLookup()` helper and the cache layer need no changes.
-
-## Tests
+### From source
 
 ```bash
-npm test
+git clone https://github.com/Ferdinand99/Sylo.git
+cd Sylo
+npm install
+cp .env.example .env
+npm run build:v2     # once, so the dashboard can serve /v2
+npm start
 ```
 
-Runs the `node:test` suite — module normalisers and helpers, the CSRF
-middleware, and `dashboardRoutes.test.js`, which boots `createApp()` over HTTP to
-assert the htmx fragment contract. No network: `fetch` is stubbed where adapters
-need it, and DB tests write to a throwaway SQLite file.
+The dashboard is then on `http://<host>:3000` (`WEB_PORT`).
 
-## Legal
+### Minimal configuration
 
-For the instances operated by Ferdinand99 (the public **Sylo** and **Sylo -
-Test** Discord applications):
+| Variable | Needed for |
+|---|---|
+| `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` | Running on Discord (Developer Portal → Bot / General Information) |
+| `FLUXER_TOKEN`, `FLUXER_CLIENT_ID` | Running on Fluxer, instead of or next to Discord ([docs/fluxer.md](docs/fluxer.md)) |
+| `DISCORD_CLIENT_SECRET` | "Log in with Discord" on the dashboard. Without a client secret the dashboard runs **open** |
+| `SESSION_SECRET` | Keeping logins across restarts (any long random string) |
+| `DASHBOARD_URL` | The public URL behind a reverse proxy; also used for captcha and appeal links |
+| `OWNER_IDS` | Your Discord user id(s); limits `/health` and the bot-wide pages to you |
 
-- [Terms of Service](docs/terms-of-service.md)
-- [Privacy Policy](docs/privacy-policy.md)
+At least one platform must be configured. Keep an open dashboard on `localhost`
+or a trusted LAN only. Both privileged gateway intents are on by default; turn
+off the ones you don't need with `INTENT_GUILD_MEMBERS=false` /
+`INTENT_MESSAGE_CONTENT=false`. Everything else (alert API keys, backups,
+logging, push) is optional and listed in [`.env.example`](.env.example) and the
+[environment variable table](docs/self-hosting.md#environment-variables).
 
-Self-hosted instances are run by their own operators; adjust these documents if
-you publish your own.
+### Backups and monitoring
+
+Sylo snapshots its database to `<data>/backups` before every schema migration
+and on a schedule. The **Health** page lists, creates, downloads, imports and
+restores snapshots. Copies can also go off-site to WebDAV (for example
+Nextcloud) or a Discord webhook, optionally encrypted with
+`BACKUP_ENCRYPTION_KEY`. `GET /health` returns JSON status for health checks,
+and `GET /metrics` serves Prometheus metrics; a ready-made Grafana dashboard is
+in [docs/grafana-dashboard.json](docs/grafana-dashboard.json). See
+[Backups](docs/self-hosting.md#backups) and
+[Off-site backups](docs/self-hosting.md#off-site-backups).
+
+## Sylo app (iOS)
+
+**Sylo – Server Manager** is a native SwiftUI app (source in
+[`apps/sylo-ios`](apps/sylo-ios)) that signs in to the hosted Sylo or your own
+instance and manages your servers through the same API as the new dashboard,
+with push notifications for new tickets. It is in beta on TestFlight and not on
+the App Store yet.
+
+A self-hosted instance needs nothing extra beyond a working dashboard login
+(Discord or Fluxer OAuth). Notifications reach the phone through the hosted
+relay unless you set `PUSH_RELAY_URL=` to turn them off. Sign-in flow,
+endpoints, tokens and permissions: [docs/mobile-app.md](docs/mobile-app.md).
+
+## Dashboard
+
+- **Classic dashboard.** Server-rendered EJS with a small htmx + Alpine layer,
+  vendored, with no CDN. It has a sidebar server switcher, a plugin grid, a
+  settings page per module and builders for embeds, reaction roles, custom
+  commands and the welcome channel. Saves swap in place with a toast, and every
+  page still works without JavaScript.
+- **[Dashboard V2](docs/dashboard-v2.md) (beta).** A React single-page app at
+  `/v2`, opt-in, using the same login and the same data. Module coverage is
+  still growing.
+- **Public pages.** Shareable leaderboards (`/leaderboard/:id`, `/lb/:slug`),
+  member verification (`/verify`) and ban appeals (`/appeal`). These pages use
+  no JavaScript framework.
+
+## Development
+
+```bash
+npm install
+cp .env.example .env     # use a separate test bot
+npm run dev              # node --watch
+```
+
+Set `DISCORD_DEV_GUILD_IDS` to one or more test server ids (comma-separated) so
+slash commands register instantly instead of taking up to an hour globally.
+
+| Script | What it does |
+|---|---|
+| `npm test` | The `node:test` suite (no network; DB tests use a throwaway SQLite file) |
+| `npm run lint` / `lint:fix` | ESLint |
+| `npm run format` / `format:check` | Prettier |
+| `npm run build:v2` / `dev:v2` | Build or serve the React dashboard (Vite) |
+| `npm run register` | Re-sync slash commands without a restart |
+| `npm run migrate-to-postgres` | Copy an SQLite install into Postgres ([docs/postgres.md](docs/postgres.md)) |
+
+**Postgres.** SQLite is the default and what nearly every self-host should use.
+CI runs the whole suite twice, once on SQLite and once on Postgres 16 with
+`DATABASE_URL` set. Tests that need Postgres fail fast locally unless you point
+`DATABASE_URL` at a throwaway database.
+
+CI (`test.yml`) gates every image build. Releases are cut with
+[release-please](https://github.com/googleapis/release-please) from
+[Conventional Commits](https://www.conventionalcommits.org): merging its release
+PR tags the version, writes [CHANGELOG.md](CHANGELOG.md) and publishes the
+Docker Hub and GHCR images. Architecture, conventions and how to add a module
+are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Adding another game
+
+1. Create `src/adapters/games/<game>.js` exporting an adapter with `id`,
+   `titles()`, `platformsFor(title)` and
+   `getPlayerStats(username, platform, { title })`. Throw the typed errors from
+   `gameAdapter.js` for failures.
+2. Register it in `src/adapters/games/index.js` (one `import` + `register(...)`).
+3. Add a `game` choice (`<adapter>:<title>`) to `GAME_CHOICES` in
+   `src/bot/commands/stats.js`, plus an embed builder if the stats shape
+   differs. The shared `runStatsLookup()` helper and the cache need no changes.
+
+## Documentation
+
+| Page | What's in it |
+|---|---|
+| [docs/modules/](docs/modules/README.md) | One page per module: settings, commands, permissions, intents |
+| [docs/self-hosting.md](docs/self-hosting.md) | Install, environment variables, reverse proxy, Docker, Unraid, backups, upgrades, troubleshooting |
+| [docs/fluxer.md](docs/fluxer.md) | Running on Fluxer, alone or next to Discord |
+| [docs/mobile-app.md](docs/mobile-app.md) | The iOS app: what an instance needs, sign-in, endpoints, notifications |
+| [docs/dashboard-v2.md](docs/dashboard-v2.md) | The React dashboard (beta) |
+| [docs/postgres.md](docs/postgres.md) | Optional Postgres backend and moving an SQLite install over |
+| [CHANGELOG.md](CHANGELOG.md) | Every release |
+| [Roadmap](https://roadmap.sylobot.com/roadmap) | What's planned; suggest features and vote |
+| [sylobot.com](https://sylobot.com) | The project site |
+
+## Privacy and security
+
+- Message content is read only by the modules that need it and is not stored,
+  except for modmail ticket transcripts. You can export
+  your data with `/mydata` and delete it with `/forget`, and a server's data is
+  purged when Sylo leaves it. Dashboard accounts can be deleted from the account
+  page or in the app.
+- The instances run by Ferdinand99 (**Sylo** and **Sylo - Test**) are covered by
+  the [Privacy Policy](docs/privacy-policy.md) and
+  [Terms of Service](docs/terms-of-service.md). Self-hosted instances are run by
+  their own operators, who should adjust these documents if they publish their
+  own.
+- Found a vulnerability? Please report it privately as described in
+  [SECURITY.md](SECURITY.md), not in a public issue.
+
+## Contributing
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md)
+first: it covers setup, the architecture, the checks a PR must pass
+(`npm test`, `npm run lint`, `npm run format:check`) and the commit style.
 
 ## License
 
-MIT © Ferdinand99
+[MIT](LICENSE) © Ferdinand99

@@ -32,6 +32,8 @@ import {
   revokeApiTokenValue,
   apiTokenPush,
   setApiTokenPushMuted,
+  DEV_LOG_LEVELS,
+  setApiTokenDevLog,
 } from '../../db/apiTokens.js';
 import { isPlatformGuildId } from '../../lib/platformId.js';
 import {
@@ -316,7 +318,26 @@ mobileApiRouter.delete('/push', pushLimit, appTokenOnly, async (req, res, next) 
 mobileApiRouter.get('/push', pushLimit, appTokenOnly, async (req, res, next) => {
   try {
     const push = await apiTokenPush(req.apiTokenId);
-    res.json({ enabled: Boolean(push?.enabled && canPush()), mutedServers: push?.mutedServers ?? [] });
+    res.json({
+      enabled: Boolean(push?.enabled && canPush()),
+      mutedServers: push?.mutedServers ?? [],
+      // Operators only: which of Sylo's own errors and warnings this device is notified about.
+      ...(isOperator(req.account) ? { devLog: push?.devLog ?? 'errors' } : {}),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// An operator's choice of dev-log notifications on this device: 'off', 'errors' or 'warnings'
+// (errors and warnings).
+mobileApiRouter.put('/push/dev-log', pushLimit, appTokenOnly, async (req, res, next) => {
+  try {
+    if (!isOperator(req.account)) return res.status(403).json({ error: "Restricted to Sylo's operators." });
+    const level = req.body?.level;
+    if (!DEV_LOG_LEVELS.includes(level)) return res.status(400).json({ error: 'invalid_request' });
+    await setApiTokenDevLog(req.apiTokenId, level);
+    res.json({ devLog: level });
   } catch (err) {
     next(err);
   }

@@ -48,6 +48,7 @@ test('a new token has no push set up and no muted servers', async () => {
     environment: null,
     origin: null,
     mutedServers: [],
+    devLog: 'errors', // an operator's device hears about errors until it chooses otherwise
   });
   assert.equal(await apiTokenPush('no-such-token'), null);
 });

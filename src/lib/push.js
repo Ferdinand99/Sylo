@@ -25,6 +25,7 @@ import {
   setApiTokenPush,
 } from '../db/apiTokens.js';
 import { accountMaySeeTickets } from '../web/middleware/ticketAccess.js';
+import { isOperator } from '../web/lib/accountAuth.js';
 
 const RELAY_PATH = '/api/push-relay/v1';
 const RELAY_TIMEOUT_MS = 10_000;
@@ -388,6 +389,75 @@ export async function notifyTicketActivity({ guild, ticketId, member, content, i
     };
   } catch (err) {
     log.error('push', 'ticket notification failed:', err.message);
+    return none;
+  }
+}
+
+// --- the dev-log notification ------------------------------------------------------------------
+
+/** "app.sylobot.com" from an instance address, to tell instances apart on a lock screen. */
+function hostOf(instance) {
+  try {
+    return new URL(instance).host;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * The notification for one of Sylo's own errors or warnings, for an operator's device. Without
+ * `data.server` (each device gets the address it registered from).
+ */
+export function devLogNotification({ level, scope, message, instance }) {
+  const host = hostOf(instance);
+  return {
+    title: clip(host ? `Sylo dev log · ${host}` : 'Sylo dev log', NOTIFICATION_LIMITS.title),
+    subtitle: clip(
+      `${level === 'error' ? 'Error' : 'Warning'} · ${oneLine(scope) || 'sylo'}`,
+      NOTIFICATION_LIMITS.subtitle
+    ),
+    body: clip(oneLine(message) || '(no message)', NOTIFICATION_LIMITS.body),
+    threadId: 'devlog',
+    data: { kind: 'devlog', level: level === 'error' ? 'error' : 'warn' },
+  };
+}
+
+const wantsDevLog = (choice, level) => choice === 'warnings' || (choice === 'errors' && level === 'error');
+
+/**
+ * Notify operators' devices about one dev-log event (src/lib/devLog.js), at the level each
+ * device chose. Never throws and never logs through log.js above debug: a failure here must not
+ * feed the dev log again.
+ * @returns {Promise<{ sent: number, recipients: string[] }>} for tests: token ids sent to
+ */
+export async function notifyDevLogEvent({ level, scope, message }) {
+  const none = { sent: 0, recipients: [] };
+  try {
+    if (!canPush()) return none;
+    const tokens = (await pushRecipientTokens()).filter(
+      (t) => wantsDevLog(t.devLog, level) && (t.origin ?? config.dashboardUrl)
+    );
+    const operators = new Map();
+    for (const accountId of new Set(tokens.map((t) => t.accountId))) {
+      operators.set(accountId, isOperator({ identities: await identitiesOf(accountId) }));
+    }
+    const targets = tokens.filter((t) => operators.get(t.accountId));
+    const send = settings.deliver ?? deliver;
+    const results = await Promise.allSettled(
+      targets.map((r) => {
+        const server = r.origin ?? config.dashboardUrl;
+        const n = devLogNotification({ level, scope, message, instance: server });
+        return send(r, { ...n, data: { ...n.data, server } });
+      })
+    );
+    const failed = results.filter((r) => r.status === 'rejected');
+    if (failed.length) log.debug('push', `${failed.length} dev-log notifications failed`);
+    return {
+      sent: results.filter((r) => r.status === 'fulfilled' && r.value === 'ok').length,
+      recipients: targets.map((r) => r.id),
+    };
+  } catch (err) {
+    log.debug('push', `dev-log notification failed: ${err.message}`);
     return none;
   }
 }

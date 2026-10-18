@@ -129,18 +129,22 @@ extension Endpoints {
 public struct PushSettingsInfo: Decodable, Sendable, Equatable {
     public let isEnabled: Bool
     public let mutedServers: [ServerID]
+    /// Which dev-log events this device is notified about; only an operator gets it.
+    public let devLog: DevLogNotificationLevel?
 
-    public init(isEnabled: Bool, mutedServers: [ServerID] = []) {
+    public init(isEnabled: Bool, mutedServers: [ServerID] = [], devLog: DevLogNotificationLevel? = nil) {
         self.isEnabled = isEnabled
         self.mutedServers = mutedServers
+        self.devLog = devLog
     }
 
-    private enum CodingKeys: String, CodingKey { case enabled, mutedServers }
+    private enum CodingKeys: String, CodingKey { case enabled, mutedServers, devLog }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         isEnabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
         mutedServers = try c.decodeIfPresent([ServerID].self, forKey: .mutedServers) ?? []
+        devLog = try? c.decodeIfPresent(DevLogNotificationLevel.self, forKey: .devLog)
     }
 }
 

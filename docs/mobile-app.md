@@ -6,8 +6,9 @@ JSON API the new dashboard uses. This page covers what a self-hosted instance
 needs for the app to work, and how the app's sign-in works for anyone reading or
 reviewing it.
 
-> **In development.** The app is not on the App Store yet. The server side
-> described here is part of Sylo; it does nothing until an app signs in.
+> **In TestFlight.** The app ("Sylo – Server Manager") is in beta and not on the
+> App Store yet. The server side described here is part of Sylo; it does nothing
+> until an app signs in.
 
 - [What a self-hosted instance needs](#what-a-self-hosted-instance-needs)
 - [Behind a proxy with its own login](#behind-a-proxy-with-its-own-login)
@@ -16,6 +17,7 @@ reviewing it.
 - [Tokens and signed-in devices](#tokens-and-signed-in-devices)
 - [Permissions](#permissions)
 - [Notifications](#notifications)
+- [Health and the dev log (operators)](#health-and-the-dev-log-operators)
 - [Security notes](#security-notes)
 
 ---
@@ -267,7 +269,7 @@ them through the hosted Sylo instead:
 - **The hosted Sylo** holds the key (`APNS_KEY_ID`, `APNS_TEAM_ID`,
   `APNS_PRIVATE_KEY`, `APNS_TOPIC`) and talks to Apple directly.
 
-The relay only sends ticket notifications in a fixed shape, at most 60 an hour
+The relay only sends ticket and dev-log notifications in a fixed shape, at most 60 an hour
 for one device (across all its registrations, at most 10), and forgets a registration when the app turns
 notifications off, when Apple reports the device gone, or after 90 days
 without use.
@@ -277,11 +279,38 @@ without use.
 | Method and path | Auth | Answer |
 | --- | --- | --- |
 | `POST /api/mobile/push` | Bearer token | `{ relayToken, environment }` (relay) or `{ deviceToken, environment }` (direct) → `{ ok: true }`; `503` when this instance can't send |
-| `GET /api/mobile/push` | Bearer token | `{ enabled, mutedServers }` |
+| `GET /api/mobile/push` | Bearer token | `{ enabled, mutedServers }`, plus `devLog` for an operator |
+| `PUT /api/mobile/push/dev-log` | Bearer token, operators only | `{ level: "off" \| "errors" \| "warnings" }` → `{ devLog }` |
 | `PUT /api/mobile/push/servers/:guildId` | Bearer token | `{ muted }` → `{ mutedServers }` |
 | `DELETE /api/mobile/push` | Bearer token | `204`; notifications off for this device |
 | `POST /api/push-relay/v1/register` | None (called by the app) | `{ deviceToken, environment, instance }` → `{ relayToken }`; only on an instance with the APNs key |
 | `POST /api/push-relay/v1/send`, `/unregister` | Relay token | Called by the instance; only on an instance with the APNs key |
+
+## Health and the dev log (operators)
+
+The people who run an instance, its operators (`OWNER_IDS` and
+`FLUXER_OWNER_IDS`), get two more things in the app. Someone who only has Manage
+Server never does: the app hides them, and the server answers `403` to anyone
+else.
+
+- **Health**, under Settings: whether the bot is up, its version, uptime,
+  gateway ping, servers and members, the database and the latest backups, and
+  the dev log. It is read only; backups are made, restored and downloaded from
+  the web dashboard.
+- **The dev log**: Sylo's own errors and warnings, stored in the database for
+  30 days (the newest 500). It works with or without a dev-log channel
+  (`DEV_LOG_CHANNEL_ID`); the channel still gets errors only.
+- **Dev-log notifications**: each device chooses Off, Errors, or Errors and
+  Warnings in the notification settings (Errors to begin with). A notification
+  names the instance, the level and where in Sylo it happened, and a tap opens
+  Health. The same message is sent at most once every 5 minutes.
+
+| Method and path | Auth | Answer |
+| --- | --- | --- |
+| `GET /api/v2/health` | Operators only | The Health report |
+| `GET /api/v2/dev-log?level=error&limit=100` | Operators only | `{ entries: [{ id, level, scope, message, at }] }`, newest first |
+| `POST /api/v2/health/dev-log-test` | Operators only | Posts a test message to the dev-log channel; `{ ok }` or `{ ok: false, error }` |
+| `GET /api/v2/account` | Bearer token or session | Includes `operator: true` for an operator |
 
 ---
 

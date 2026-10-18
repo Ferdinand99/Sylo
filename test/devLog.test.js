@@ -169,3 +169,68 @@ test('notifyDevLog: never throws even if channels.fetch rejects', async () => {
     }
   );
 });
+
+// --- sinks: the stored dev log and the app's notifications --------------------------------------
+
+const { addDevLogSink, _clearDevLogSinks } = await import('../src/lib/devLog.js');
+
+// Every event reaches the sinks (the stored log, push to operators), whether or not a dev-log
+// channel is set: an operator sees the log and gets notified without one.
+test('notifyDevLog: errors and warnings reach the sinks, with no channel set', async () => {
+  const seen = [];
+  _clearDevLogSinks();
+  addDevLogSink(async (e) => seen.push(e));
+  await withClient(null, async () => {
+    notifyDevLog('error', 'db', 'boom', { channelId: null });
+    notifyDevLog('warn', 'push', 'relay slow', { channelId: null });
+  });
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(
+    seen.map((e) => [e.level, e.scope, e.message]),
+    [
+      ['error', 'db', 'boom'],
+      ['warn', 'push', 'relay slow'],
+    ]
+  );
+  assert.ok(seen.every((e) => typeof e.at === 'number'));
+  _clearDevLogSinks();
+});
+
+test('notifyDevLog: the channel gets errors only, as before', async () => {
+  const channel = fakeChannel();
+  await withClient({ isReady: () => true, channels: { fetch: async () => channel } }, async () => {
+    notifyDevLog('warn', 'push', 'relay slow', { channelId: '111111111111111111' });
+    notifyDevLog('error', 'db', 'boom', { channelId: '111111111111111111' });
+    await new Promise((r) => setTimeout(r, 10));
+  });
+  assert.equal(channel.sent.length, 1);
+  assert.match(channel.sent[0].embeds[0].title, /db/);
+});
+
+test('notifyDevLog: a throttled repeat does not reach the sinks either', async () => {
+  const seen = [];
+  _clearDevLogSinks();
+  addDevLogSink(async (e) => seen.push(e));
+  await withClient(null, async () => {
+    notifyDevLog('error', 'db', 'same', { channelId: null });
+    notifyDevLog('error', 'db', 'same', { channelId: null });
+  });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(seen.length, 1);
+  _clearDevLogSinks();
+});
+
+test('notifyDevLog: a failing sink never throws', async () => {
+  _clearDevLogSinks();
+  addDevLogSink(async () => {
+    throw new Error('db down');
+  });
+  addDevLogSink(() => {
+    throw new Error('sync throw');
+  });
+  await withClient(null, async () => {
+    assert.doesNotThrow(() => notifyDevLog('error', 'x', 'y', { channelId: null }));
+  });
+  await new Promise((r) => setImmediate(r));
+  _clearDevLogSinks();
+});

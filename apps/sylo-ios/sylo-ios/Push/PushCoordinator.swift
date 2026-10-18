@@ -24,6 +24,9 @@ final class PushCoordinator: NSObject {
     private(set) var authorization: Authorization
     /// A tapped ticket notification from the signed-in server, for ``MainView`` to open and clear.
     var pendingTicket: TicketNotification?
+    /// A tapped dev-log notification from the signed-in server: ``MainView`` opens Settings, and
+    /// Settings opens Health and clears it.
+    var pendingDevLog = false
     /// Goes up whenever a ticket notification arrives while the app is open, so lists with
     /// ticket counts can reload.
     private(set) var ticketActivity = 0
@@ -136,6 +139,12 @@ final class PushCoordinator: NSObject {
         pendingTicket = ticket
     }
 
+    /// A tap on a dev-log notification from the server the app is signed in to.
+    private func handleTap(on devLog: DevLogNotification) {
+        guard case .signedIn(let server) = session.phase, devLog.matches(server) else { return }
+        pendingDevLog = true
+    }
+
     // MARK: - Helpers
 
     private func isTurnedOff(on server: ServerURL) -> Bool {
@@ -180,9 +189,12 @@ extension PushCoordinator: UNUserNotificationCenterDelegate {
     func userNotificationCenter(
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
-        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
-            let ticket = TicketNotification(userInfo: response.notification.request.content.userInfo)
-        else { return }
-        handleTap(on: ticket)
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else { return }
+        let userInfo = response.notification.request.content.userInfo
+        if let ticket = TicketNotification(userInfo: userInfo) {
+            handleTap(on: ticket)
+        } else if let devLog = DevLogNotification(userInfo: userInfo) {
+            handleTap(on: devLog)
+        }
     }
 }

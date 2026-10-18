@@ -61,14 +61,27 @@ export function validInstance(value) {
   return `${url.origin}${url.pathname.replace(/\/+$/, '')}` === value;
 }
 
-/** A notification the relay will send. Its `data.server` is replaced by the registration's own. */
+/**
+ * A notification the relay will send: a ticket, or an operator's dev-log event. Its
+ * `data.server` is replaced by the registration's own.
+ */
 export function validNotification(n) {
   if (!shaped(n, ['title', 'body', 'threadId', 'data'], ['subtitle'])) return false;
   const { data } = n;
-  return (
+  const texts =
     text(n.title, NOTIFICATION_LIMITS.title) &&
     (n.subtitle === undefined || text(n.subtitle, NOTIFICATION_LIMITS.subtitle)) &&
-    text(n.body, NOTIFICATION_LIMITS.body) &&
+    text(n.body, NOTIFICATION_LIMITS.body);
+  if (!texts) return false;
+  if (data?.kind === 'devlog') {
+    return (
+      shaped(data, ['kind', 'server', 'level']) &&
+      (data.level === 'error' || data.level === 'warn') &&
+      validInstance(data.server) &&
+      n.threadId === 'devlog'
+    );
+  }
+  return (
     shaped(data, ['kind', 'server', 'guildId', 'ticketId']) &&
     data.kind === 'ticket' &&
     validInstance(data.server) &&

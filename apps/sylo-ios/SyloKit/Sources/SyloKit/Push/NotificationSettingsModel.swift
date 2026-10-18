@@ -14,6 +14,9 @@ public final class NotificationSettingsModel {
     /// Notifications are on for this sign-in (the server has this device's token).
     public private(set) var isEnabled = false
     public private(set) var mutedServers: Set<ServerID> = []
+    /// Which of Sylo's own errors and warnings this device hears about; nil for anyone who is not
+    /// an operator of the signed-in server.
+    public private(set) var devLog: DevLogNotificationLevel?
     /// Whether the push settings were loaded at least once for the signed-in server.
     public private(set) var hasLoaded = false
     public private(set) var isLoading = false
@@ -79,6 +82,7 @@ public final class NotificationSettingsModel {
             loadedFor = server
             isEnabled = false
             mutedServers = []
+            devLog = nil
             hasLoaded = false
         }
         isLoading = true
@@ -92,6 +96,7 @@ public final class NotificationSettingsModel {
             let settings = try await session.send(Endpoints.PushSettings())
             isEnabled = settings.isEnabled
             mutedServers = Set(settings.mutedServers)
+            devLog = settings.devLog
             hasLoaded = true
             errorMessage = nil
         } catch {
@@ -195,6 +200,24 @@ public final class NotificationSettingsModel {
                 apply(server, muted: !muted)
                 show(error)
             }
+        }
+    }
+
+    // MARK: - Dev log
+
+    /// Chooses which dev-log events this device is notified about. Shows the choice at once and
+    /// goes back, with an ``errorMessage``, when the server refuses it.
+    public func setDevLog(_ level: DevLogNotificationLevel) async {
+        guard let previous = devLog, previous != level else { return }
+        devLog = level
+        errorMessage = nil
+        do {
+            devLog = try await session.send(Endpoints.SetDevLogNotifications(level: level)).devLog
+        } catch {
+            devLog = previous
+            let error = NetworkError(error)
+            if error == .cancelled { return }
+            errorMessage = error.userMessage
         }
     }
 
