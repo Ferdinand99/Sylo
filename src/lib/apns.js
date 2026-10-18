@@ -36,7 +36,10 @@ export function buildApnsPayload(n) {
   const alert = { title: n.title, ...(n.subtitle ? { subtitle: n.subtitle } : {}), body: n.body };
   return {
     aps: { alert, sound: 'default', 'thread-id': n.threadId },
-    sylo: { kind: n.data.kind, server: n.data.server, guildId: n.data.guildId, ticketId: n.data.ticketId },
+    sylo:
+      n.data.kind === 'devlog'
+        ? { kind: 'devlog', server: n.data.server, level: n.data.level }
+        : { kind: n.data.kind, server: n.data.server, guildId: n.data.guildId, ticketId: n.data.ticketId },
   };
 }
 

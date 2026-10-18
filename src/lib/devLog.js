@@ -65,10 +65,28 @@ async function post(channelId, level, scope, message) {
   });
 }
 
+// Where else an event goes besides the channel: the stored log the Sylo app reads, and push to
+// operators' devices. Registered at startup (src/index.js), once the database is ready.
+const sinks = [];
+
 /**
- * Fire-and-forget: notify the dev-log channel of an error/warn event.
- * No-op if no channel is configured, the client isn't ready yet, or the same
- * scope+message combo already posted within THROTTLE_MS.
+ * Receive every dev-log event (errors and warnings, after the throttle). A sink must not log
+ * through log.js itself: that would feed the dev log again.
+ * @param {(event: { level: 'error'|'warn', scope: string, message: string, at: number }) => unknown} fn
+ */
+export function addDevLogSink(fn) {
+  sinks.push(fn);
+}
+
+/** Tests only. */
+export function _clearDevLogSinks() {
+  sinks.length = 0;
+}
+
+/**
+ * Fire-and-forget: an error or warning for the dev log. It goes to every sink (the stored log,
+ * operators' devices), and an error also to the dev-log channel when one is set and the client is
+ * ready. The same scope+message within THROTTLE_MS goes nowhere.
  * @param {'error'|'warn'} level
  * @param {string} scope
  * @param {string} message
@@ -76,10 +94,18 @@ async function post(channelId, level, scope, message) {
  */
 export function notifyDevLog(level, scope, message, { channelId = config.devLogChannelId } = {}) {
   try {
-    if (!channelId) return;
-    if (!runtime.client?.isReady()) return;
     if (throttled(`${scope}|${message}`)) return;
-    post(channelId, level, scope, message).catch(() => {});
+    const event = { level, scope: String(scope), message: String(message), at: Date.now() };
+    for (const sink of sinks) {
+      try {
+        Promise.resolve(sink(event)).catch(() => {});
+      } catch {
+        // A broken sink must not stop the others, or the caller.
+      }
+    }
+    if (level === 'error' && channelId && runtime.client?.isReady()) {
+      post(channelId, level, scope, message).catch(() => {});
+    }
   } catch {
     // Never let dev-log notification throw or reject unhandled.
   }

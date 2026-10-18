@@ -2,7 +2,8 @@ import SwiftUI
 import SyloKit
 import UIKit
 
-/// Account, notifications, signed-in devices, the Sylo server, the policies, and Sign Out.
+/// Account, notifications, signed-in devices, the Sylo server (with Health for its operators), the
+/// policies, and Sign Out.
 struct SettingsView: View {
     let server: ServerURL
     /// The servers the person manages, for a notification switch each.
@@ -13,6 +14,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var account: AccountModel
     @State private var isConfirmingSignOut = false
+    @State private var isShowingHealth = false
 
     init(server: ServerURL, session: AppSession, servers: ServersModel) {
         self.server = server
@@ -27,6 +29,9 @@ struct SettingsView: View {
                 NotificationsSection(push: push, servers: servers.servers)
                 DevicesSection(account: account)
                 serverSection
+                if account.account?.isOperator == true {
+                    operatorSection
+                }
                 aboutSection
                 Section {
                     Button("Sign Out", role: .destructive) {
@@ -43,6 +48,15 @@ struct SettingsView: View {
             }
             .task { await account.load() }
             .task { await push.settings.load() }
+            .navigationDestination(isPresented: $isShowingHealth) {
+                HealthView(session: session)
+            }
+            // A tapped dev-log notification opens Settings (MainView) and then Health here.
+            .onChange(of: push.pendingDevLog, initial: true) {
+                guard push.pendingDevLog else { return }
+                push.pendingDevLog = false
+                isShowingHealth = true
+            }
             .refreshable {
                 await account.load()
                 await push.settings.load()
@@ -92,6 +106,22 @@ struct SettingsView: View {
             Link(destination: server.baseURL) {
                 Label("Open Dashboard", systemImage: "safari")
             }
+        }
+    }
+
+    /// Only for the people who run this Sylo (its operators), never for someone who only manages
+    /// a server: the server refuses Health to anyone else too.
+    private var operatorSection: some View {
+        Section {
+            NavigationLink {
+                HealthView(session: session)
+            } label: {
+                Label("Health", systemImage: "stethoscope")
+            }
+        } header: {
+            Text("Operator")
+        } footer: {
+            Text("You run this Sylo. Health shows its status, database, backups and dev log.")
         }
     }
 
@@ -147,6 +177,14 @@ private struct NotificationsSection: View {
                     }
                 case .authorized:
                     Toggle("Ticket Notifications", isOn: isEnabled)
+                    if settings.isEnabled, let devLog = settings.devLog {
+                        // Operators only: the server sends the setting to no one else.
+                        Picker("Dev Log", selection: devLogLevel(devLog)) {
+                            Text("Off").tag(DevLogNotificationLevel.off)
+                            Text("Errors").tag(DevLogNotificationLevel.errors)
+                            Text("Errors and Warnings").tag(DevLogNotificationLevel.warnings)
+                        }
+                    }
                     if settings.isEnabled {
                         ForEach(servers) { server in
                             Toggle(isOn: isNotified(server.id)) {
@@ -180,7 +218,10 @@ private struct NotificationsSection: View {
         } else if settings.isAvailable, push.authorization == .denied {
             Text("To get ticket notifications, allow notifications for Sylo in the Settings app.")
         } else if settings.isAvailable, push.authorization == .authorized, settings.isEnabled {
-            Text("New tickets and member messages. Turn a server off to stop its notifications on this device.")
+            Text(
+                settings.devLog == nil
+                    ? "New tickets and member messages. Turn a server off to stop its notifications on this device."
+                    : "New tickets and member messages, and Sylo's own errors (Dev Log, for operators). Turn a server off to stop its ticket notifications on this device.")
         }
     }
 
@@ -188,6 +229,12 @@ private struct NotificationsSection: View {
         Binding(
             get: { settings.isEnabled },
             set: { isOn in Task { await push.setEnabled(isOn) } })
+    }
+
+    private func devLogLevel(_ current: DevLogNotificationLevel) -> Binding<DevLogNotificationLevel> {
+        Binding(
+            get: { settings.devLog ?? current },
+            set: { level in Task { await settings.setDevLog(level) } })
     }
 
     /// On means not muted.

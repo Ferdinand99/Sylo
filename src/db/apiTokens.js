@@ -23,7 +23,8 @@ registerPostgresBootstrap(`
     push_relay_token TEXT,
     push_env         TEXT,
     push_origin      TEXT,
-    push_muted       TEXT NOT NULL DEFAULT '[]'
+    push_muted       TEXT NOT NULL DEFAULT '[]',
+    push_dev_log     TEXT NOT NULL DEFAULT 'errors'
   );
   CREATE INDEX IF NOT EXISTS idx_api_tokens_account ON api_tokens (account_id);
   CREATE INDEX IF NOT EXISTS idx_api_tokens_expires ON api_tokens (expires_at);
@@ -42,6 +43,11 @@ registerPostgresMigration(
    ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS push_env TEXT;
    ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS push_origin TEXT;
    ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS push_muted TEXT NOT NULL DEFAULT '[]';`
+);
+// Which dev-log events a device is notified about; mirrors SQLite migration 52.
+registerPostgresMigration(
+  52,
+  `ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS push_dev_log TEXT NOT NULL DEFAULT 'errors';`
 );
 
 const TOKEN_PREFIX = 'sylo_';
@@ -112,6 +118,7 @@ const s = {
     UPDATE api_tokens SET push_token = NULL, push_relay_token = NULL, push_env = NULL, push_origin = NULL
     WHERE id = @id AND COALESCE(push_token, '') = @deviceToken AND COALESCE(push_relay_token, '') = @relayToken
   `),
+  setDevLog: prepare('UPDATE api_tokens SET push_dev_log = ? WHERE id = ?'),
   setMuted: prepare('UPDATE api_tokens SET push_muted = ? WHERE id = ?'),
   pushTokens: prepare(`
     SELECT * FROM api_tokens
@@ -275,7 +282,17 @@ const pushFromRow = (r) => ({
   environment: r.push_env ?? null,
   origin: r.push_origin ?? null,
   mutedServers: mutedOf(r),
+  devLog: DEV_LOG_LEVELS.includes(r.push_dev_log) ? r.push_dev_log : 'errors',
 });
+
+/** Which dev-log events an operator's device is notified about. */
+export const DEV_LOG_LEVELS = ['off', 'errors', 'warnings'];
+
+/** Set a device's dev-log notification level ('off', 'errors' or 'warnings'). */
+export async function setApiTokenDevLog(id, level) {
+  if (!DEV_LOG_LEVELS.includes(level)) throw new Error(`Unknown dev-log level: ${level}`);
+  await s.setDevLog.run(level, id);
+}
 
 /** A token's push setup, or null when there is no such token. */
 export async function apiTokenPush(id) {

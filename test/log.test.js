@@ -66,3 +66,23 @@ test('passwords in URLs are redacted everywhere a log line goes', () => {
   assert.match(lines.err.join('\n'), /postgres:\/\/sylo:\*\*\*@db/);
   assert.doesNotMatch(runtime.errors[0].message, /hunter2/);
 });
+
+// Warnings go to the dev log too (stored, and pushed to operators who chose warnings); only
+// errors go to the /health error list and the dev-log channel.
+test('log.warn and log.error reach the dev log', async () => {
+  const { addDevLogSink, _clearDevLogSinks, _resetDevLogThrottle } = await import('../src/lib/devLog.js');
+  _clearDevLogSinks();
+  _resetDevLogThrottle();
+  const seen = [];
+  addDevLogSink((e) => seen.push([e.level, e.scope]));
+  capture(() => {
+    log.warn('relay', 'slow answer');
+    log.error('db', 'gone');
+    log.info('web', 'listening');
+  });
+  assert.deepEqual(seen, [
+    ['warn', 'relay'],
+    ['error', 'db'],
+  ]);
+  _clearDevLogSinks();
+});

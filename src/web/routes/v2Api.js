@@ -6,6 +6,7 @@
 import { accountDevices, accountPlatforms } from '../lib/accountView.js';
 import { revokeApiToken } from '../../db/apiTokens.js';
 import { deleteAccount, unlinkIdentity } from '../../db/accounts.js';
+import { listDevLogEntries } from '../../db/devLogEntries.js';
 import { openTicketCount, unreadTicketCount } from '../../db/tickets.js';
 import { allGuilds, clientOfGuild, primaryClient } from '../../platform/platformOf.js';
 import { createRequire } from 'node:module';
@@ -278,6 +279,8 @@ router.get(
     if (!req.account) return res.json({ open: true, platforms: [], devices: [] });
     res.json({
       open: false,
+      // Whether this person runs this Sylo (OWNER_IDS / FLUXER_OWNER_IDS): the app shows Health.
+      operator: isOwner(req),
       platforms: accountPlatforms(req.account),
       devices: await accountDevices(req.account, req.apiTokenId),
     });
@@ -2305,6 +2308,16 @@ router.get(
         .map((b) => ({ name: b.name, size: formatBytes(b.size), ago: timeAgo(b.mtime) })),
       devLogConfigured: Boolean(config.devLogChannelId),
     });
+  })
+);
+
+// Sylo's own errors and warnings, stored (src/db/devLogEntries.js): the app's Health page.
+router.get(
+  '/dev-log',
+  requireOwner,
+  asyncHandler(async (req, res) => {
+    const level = req.query.level === 'error' ? 'error' : undefined;
+    res.json({ entries: await listDevLogEntries({ limit: req.query.limit, level }) });
   })
 );
 

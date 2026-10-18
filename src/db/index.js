@@ -945,6 +945,23 @@ export const MIGRATIONS = [
       CREATE INDEX idx_verification_kicks_due ON verification_kicks (due_at);
     `);
   },
+
+  // The stored dev log the Sylo app's Health page reads (src/db/devLogEntries.js), and which
+  // dev-log events each app device is notified about (src/db/apiTokens.js). Postgres: the
+  // bootstrap in devLogEntries.js and registerPostgresMigration(52, ...) in apiTokens.js.
+  (database) => {
+    database.exec(`
+      CREATE TABLE dev_log_entries (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        level      TEXT NOT NULL,
+        scope      TEXT NOT NULL,
+        message    TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_dev_log_entries_created ON dev_log_entries (created_at DESC);
+      ALTER TABLE api_tokens ADD COLUMN push_dev_log TEXT NOT NULL DEFAULT 'errors';
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

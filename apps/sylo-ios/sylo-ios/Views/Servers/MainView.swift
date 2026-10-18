@@ -74,6 +74,10 @@ struct MainView: View {
         .onChange(of: scenePhase) { if scenePhase == .active { Task { await loadServers() } } }
         .onChange(of: detailPath) { Task { await loadServers() } }
         .onChange(of: push.pendingTicket, initial: true) { openPendingTicket() }
+        // A tapped dev-log notification: Settings opens Health (SettingsView clears the flag).
+        .onChange(of: push.pendingDevLog, initial: true) {
+            if push.pendingDevLog { isShowingSettings = true }
+        }
         .onChange(of: servers.hasLoaded) { openPendingTicket() }
     }
 

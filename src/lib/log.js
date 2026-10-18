@@ -82,6 +82,9 @@ function emit(level, scope, msg, args) {
     // Proactive notification to the operator's dev-log channel, if configured
     // (see src/lib/devLog.js) — fully guarded there, never throws.
     notifyDevLog('error', scope, fullMessage);
+  } else if (level === 'warn') {
+    // Warnings reach the stored dev log and operators who chose them; not the channel.
+    notifyDevLog('warn', scope, fullMessage);
   }
 }
 
