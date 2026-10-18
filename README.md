@@ -16,6 +16,7 @@ Add the hosted instance in one click, or self-host it with Docker or Unraid.
 [![GHCR](https://img.shields.io/badge/ghcr.io-Ferdinand99%2FSylo-2496ED?logo=github&logoColor=white)](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/github/license/Ferdinand99/Sylo)](LICENSE)
+[![iOS app: TestFlight soon](https://img.shields.io/badge/iOS%20app-TestFlight%20soon-F5A524?logo=apple&logoColor=white)](#sylo-app-ios)
 [![Website](https://img.shields.io/badge/website-sylobot.com-7C6CFF)](https://sylobot.com)
 [![Roadmap](https://img.shields.io/badge/roadmap-sylobot.com-8B5CF6)](https://roadmap.sylobot.com/roadmap)
 
@@ -26,6 +27,15 @@ Add the hosted instance in one click, or self-host it with Docker or Unraid.
 [Community](https://discord.gg/GAzR9k5hhS)
 
 </div>
+
+> [!IMPORTANT]
+> ### 📱 Public TestFlight beta: coming soon
+>
+> [![TestFlight: waiting for review](https://img.shields.io/badge/TestFlight-waiting%20for%20review-F5A524?logo=apple&logoColor=white&style=for-the-badge)](#sylo-app-ios)
+>
+> The first public build of **Sylo – Server Manager** is waiting for Apple's beta
+> review. As soon as it is approved, the link to join the beta goes here, so you
+> can install it on your iPhone or iPad with the TestFlight app.
 
 ---
 
@@ -226,6 +236,10 @@ in [docs/grafana-dashboard.json](docs/grafana-dashboard.json). See
 instance and manages your servers through the same API as the new dashboard,
 with push notifications for new tickets. It is in beta on TestFlight and not on
 the App Store yet.
+
+The first public TestFlight build is waiting for Apple's beta review; the join
+link will be posted [at the top of this README](#readme)
+once it is approved.
 
 A self-hosted instance needs nothing extra beyond a working dashboard login
 (Discord or Fluxer OAuth). Notifications reach the phone through the hosted
