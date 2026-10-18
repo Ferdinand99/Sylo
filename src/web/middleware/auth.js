@@ -41,14 +41,7 @@ import { purgeStaleRelayRegistrations } from '../../db/pushRelay.js';
 import { bearerToken, isTokenRequest } from '../lib/bearer.js';
 import { enabledProviders, fluxerOrigins, providers, adminGuildIdsFromOAuth } from '../lib/oauthProviders.js';
 import { buildBotInvites } from '../lib/botInvites.js';
-import {
-  adminKeysOf,
-  identityFor,
-  isOperator,
-  primaryUserId,
-  sessionUserLabel,
-  staleIdentities,
-} from '../lib/accountAuth.js';
+import { adminKeysOf, identityFor, isOperator, primaryUserId, sessionUserLabel } from '../lib/accountAuth.js';
 import { clientKey, rateLimit } from './rateLimit.js';
 import { hasValidCsrfToken } from './csrf.js';
 import { log } from '../../lib/log.js';
@@ -70,10 +63,9 @@ function safeReturnTo(path) {
   return path;
 }
 
-// An identity's guild list is a snapshot from login, not live — a server added or left
-// after that point won't show up until it is refreshed. Past this age, a guild-list
-// page transparently round-trips through the platform's OAuth again instead of waiting
-// for the user to notice and log out/in themselves.
+// An identity's guild list is a snapshot from login, kept current by the bot's own events
+// (src/bot/lib/adminSnapshot.js) but not checked against the platform. Past this age, access
+// to a server is checked live through the bot instead of trusting the list.
 const GUILDS_TTL_MS = 10 * 60 * 1000;
 
 /** "Add new server" links, one per platform Sylo runs on. */
@@ -457,28 +449,11 @@ export function mountAuth(app) {
     ).unref();
   }
 
-  // An identity with a stale guild list silently round-trips through its platform's OAuth,
-  // instead of making the user log out/in themselves. Scoped to the pages that actually
-  // read the guild list — not every route, so a logged-in operator clicking a public link
-  // (leaderboard, verify, appeal) never sees an unexpected redirect. Rate-limited because
-  // it runs ahead of every other limiter in the chain.
+  // The guild list from sign-in is not refreshed by sending the browser through the platform's
+  // login again: the bot keeps it current from its own events (src/bot/lib/adminSnapshot.js),
+  // and once it is older than GUILDS_TTL_MS access is checked live (requireGuildAdmin).
+  // Rate-limited because the view setup below runs ahead of every other limiter in the chain.
   app.use(rateLimit({ windowMs: 60_000, max: 120 }));
-  app.use((req, res, next) => {
-    if (
-      config.authEnabled &&
-      req.method === 'GET' &&
-      req.account &&
-      !req.viaToken &&
-      (req.path === '/' || req.path.startsWith('/guilds'))
-    ) {
-      const stale = staleIdentities(req.account, GUILDS_TTL_MS).find((i) => providers[i.platform]?.enabled());
-      if (stale) {
-        req.session.returnTo = req.originalUrl;
-        return redirectTo(req, res, `/auth/${stale.platform}/login`);
-      }
-    }
-    next();
-  });
 
   // Expose auth state to every view. Express 5 forwards a rejected promise
   // from an async middleware to the error handler automatically, so this

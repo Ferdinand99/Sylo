@@ -70,3 +70,15 @@ test('the 403 page for a server you do not manage does not show that server', as
   assert.equal(res.status, 403);
   assert.doesNotMatch(await res.text(), /D-other/);
 });
+
+// The guild list used to be refreshed by sending the browser through the platform's login every
+// 10 minutes (with Discord's "Authorize" page each time). Access is checked live through the bot
+// once the list is old, and the bot's own events keep the list current, so no round trip.
+test('an old guild list does not send the browser through the login again', async () => {
+  const { id, b } = await person();
+  await ageSnapshot.run(id);
+  for (const path of ['/', `/guilds/${D_GUILD}/overview`]) {
+    const res = await b.get(path, { headers: { accept: 'text/html' } });
+    assert.doesNotMatch(res.headers.get('location') ?? '', /\/auth\//, path);
+  }
+});

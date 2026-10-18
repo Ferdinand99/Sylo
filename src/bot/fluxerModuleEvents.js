@@ -9,6 +9,7 @@ import { makePlatformGuildId } from '../lib/platformId.js';
 import { fluxerReactionAdd } from '../platform/fluxerEvents.js';
 import { beginModeration } from '../modules/lib/messageModeration.js';
 import { log } from '../lib/log.js';
+import { syncAdminSnapshot, syncNewOwner } from './lib/adminSnapshot.js';
 
 const keyOf = (rawGuildId) => (rawGuildId ? makePlatformGuildId('fluxer', rawGuildId) : null);
 
@@ -45,12 +46,20 @@ export function registerFluxerModuleEvents(
     }
     return send('guildMemberRemove', member.guild?.id ?? member.guildId, full);
   });
-  on('guildMemberUpdate', (oldMember, newMember) =>
-    send('guildMemberUpdate', newMember.guild?.id ?? newMember.guildId, {
+  on('guildMemberUpdate', (oldMember, newMember) => {
+    // The signed-in person's list of servers they run follows their rights (src/bot/lib/adminSnapshot.js).
+    const key = keyOf(newMember.guild?.id ?? newMember.guildId);
+    if (newMember.guild) void syncAdminSnapshot('fluxer', key, newMember.guild, newMember);
+    return send('guildMemberUpdate', newMember.guild?.id ?? newMember.guildId, {
       old: oldMember ?? newMember,
       new: newMember,
-    })
-  );
+    });
+  });
+  on('guildUpdate', (before, after) => {
+    const guild = after ?? before;
+    if (!guild?.ownerId || before?.ownerId === guild.ownerId) return;
+    return syncNewOwner('fluxer', keyOf(guild.id), guild.ownerId);
+  });
 
   on('guildBanAdd', (ban) => send('guildBanAdd', ban.guildId, ban));
   on('guildBanRemove', (ban) => send('guildBanRemove', ban.guildId, ban));

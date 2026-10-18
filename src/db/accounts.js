@@ -73,6 +73,9 @@ const s = {
     SET username = @username, avatar = @avatar, guild_ids = @guildIds, guilds_fetched_at = @fetchedAt
     WHERE platform = @platform AND platform_user_id = @platformUserId
   `),
+  setGuildList: prepare(
+    'UPDATE account_identities SET guild_ids = ? WHERE platform = ? AND platform_user_id = ?'
+  ),
   setGuilds: prepare(`
     UPDATE account_identities SET guild_ids = ?, guilds_fetched_at = ? WHERE platform = ? AND platform_user_id = ?
   `),
@@ -207,6 +210,23 @@ export async function deleteAccount(accountId) {
   await s.deleteAccountSessions.run(accountId);
   await s.deleteAccountIdentities.run(accountId);
   await s.deleteAccount.run(accountId);
+}
+
+/**
+ * Add a guild key to (or take it from) a signed-in person's list of guilds they run, when the bot
+ * sees their rights change. Nobody signed in under that id: nothing is stored. The time of the
+ * last full refresh is left alone, so access is still checked live once it is old.
+ * @returns {Promise<boolean>} whether the list changed
+ */
+export async function setIdentityGuildAdmin(platform, platformUserId, guildKey, isAdmin) {
+  const row = await s.getIdentity.get(platform, platformUserId);
+  if (!row) return false;
+  const list = identityFromRow(row).guildIds;
+  const has = list.includes(guildKey);
+  if (has === isAdmin) return false;
+  const next = isAdmin ? [...list, guildKey] : list.filter((k) => k !== guildKey);
+  await s.setGuildList.run(JSON.stringify(next), platform, platformUserId);
+  return true;
 }
 
 export async function setIdentityGuilds(platform, platformUserId, guildIds) {
