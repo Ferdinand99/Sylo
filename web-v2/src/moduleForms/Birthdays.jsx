@@ -21,7 +21,7 @@ export default function Birthdays() {
         here. Placeholders: <code>{'{user}'}</code> <code>{'{age}'}</code> (blank unless a year was given).
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="channel">Announcement channel</label>
           <select id="channel" value={form.channel} onChange={(e) => set({ channel: e.target.value })}>

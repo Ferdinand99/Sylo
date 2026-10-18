@@ -54,7 +54,7 @@ export default function Sticky() {
         whenever someone else writes in that channel.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         {form.stickies.length === 0 ? (
           <p className="v2-field-hint">No sticky messages yet — add a channel below.</p>
         ) : null}

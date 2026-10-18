@@ -112,7 +112,7 @@ export default function Leveling() {
         the Leaderboard page.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-group">
           <h2 className="v2-group-title">Leveling up</h2>
           <div className="v2-field">

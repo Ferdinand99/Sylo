@@ -46,3 +46,21 @@ test('isDirty: false until both sides are loaded, then structural', () => {
   assert.equal(isDirty(edited, saved), true);
   assert.equal(isDirty({ ...edited, name: 'x' }, saved), false);
 });
+
+test('isDirty ignores what an input does to a value without the user changing it', () => {
+  // A number input hands back the string "5" for a saved 5.
+  assert.equal(isDirty({ limit: '5' }, { limit: 5 }), false);
+  assert.equal(isDirty({ limit: '6' }, { limit: 5 }), true);
+  // A cleared optional field is '' where the server had null or nothing.
+  assert.equal(isDirty({ channelId: '' }, { channelId: null }), false);
+  assert.equal(isDirty({ channelId: '' }, {}), false);
+  assert.equal(isDirty({ channelId: '1' }, { channelId: null }), true);
+  // Nested values get the same treatment.
+  assert.equal(
+    isDirty({ tiers: [{ level: '10', roleId: '' }] }, { tiers: [{ level: 10, roleId: null }] }),
+    false
+  );
+  // A real change to 0 or false is still a change.
+  assert.equal(isDirty({ limit: '0' }, { limit: null }), true);
+  assert.equal(isDirty({ on: false }, { on: null }), true);
+});

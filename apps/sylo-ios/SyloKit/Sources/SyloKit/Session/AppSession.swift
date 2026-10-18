@@ -193,6 +193,16 @@ public final class AppSession {
         _ = try? await client?.send(Endpoints.SignOut())
     }
 
+    /// Deletes the account on this server, then forgets the token here. There is no sign-out call:
+    /// the server already revoked every token of the account. A failure is rethrown and leaves the
+    /// person signed in.
+    public func deleteAccount() async throws {
+        guard case .signedIn(let server) = phase else { throw NetworkError.unauthorized }
+        _ = try await send(Endpoints.DeleteAccount())
+        guard phase == .signedIn(server) else { return }
+        signOutLocally(of: server)
+    }
+
     // MARK: - Signed-in calls
 
     /// Sends a call with the token. A 401 signs the app out of this server (with a ``notice``)

@@ -404,7 +404,7 @@ export default function Roles() {
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Autoroles on join</h2>
         <p className="v2-field-hint">Given automatically when a member joins.</p>
-        <form onSubmit={onSaveAutoroles}>
+        <form onSubmit={onSaveAutoroles} data-savebar>
           <ChipPicker kind="role" items={d.roles} value={autoroles.form} onChange={autoroles.setForm} />
         </form>
       </div>

@@ -136,11 +136,7 @@ export default function Toasts() {
       }}
     >
       {items.map((t) => (
-        <div
-          key={t.id}
-          className={`v2-toast is-${t.kind}${t.leaving ? ' is-leaving' : ''}`}
-          role={t.kind === 'error' ? 'alert' : undefined}
-        >
+        <div key={t.id} className={`v2-toast is-${t.kind}${t.leaving ? ' is-leaving' : ''}`}>
           <span>{t.message}</span>
           <button type="button" aria-label="Dismiss" onClick={() => dismiss(t.id)}>
             &times;

@@ -19,7 +19,7 @@ export default function Afk() {
         the status automatically when they next send a message.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label className="v2-check">
             <input

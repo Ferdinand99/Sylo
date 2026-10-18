@@ -22,7 +22,7 @@ export default function FreeGames() {
         filtered out of announcements; <code>{cmd('/freegames dlc:true')}</code> shows free DLC on demand.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="channelId">Announcement channel</label>
           <select

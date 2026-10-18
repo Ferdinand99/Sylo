@@ -82,7 +82,7 @@ export default function Counting() {
           : 'breaks the streak and it starts over from 1.'}
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="channelId">Counting channel</label>
           <select id="channelId" value={form.channelId} onChange={(e) => set({ channelId: e.target.value })}>

@@ -46,7 +46,7 @@ export default function Appeals() {
         ) : null}
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label>
             Appeal form questions <span className="v2-field-hint">— 1 to 5; blank rows are dropped</span>

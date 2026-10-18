@@ -254,6 +254,27 @@ struct AppSessionTests {
         #expect(try tokens.token(for: key) == nil)
     }
 
+    @Test("deleting the account asks the server, then forgets the token here without a sign-out call")
+    func deletesAccount() async throws {
+        let session = try signedIn()
+        clients.setHandler { _ in OKResponse() }
+        try await session.deleteAccount()
+        let delete = try #require(clients.calls.last?.endpoint as? Endpoints.DeleteAccount)
+        #expect(delete.path == "/api/v2/account/delete")
+        #expect(!clients.calls.contains { $0.endpoint is Endpoints.SignOut }, "the token is already gone on the server")
+        #expect(session.phase == .signIn(server))
+        #expect(try tokens.token(for: key) == nil)
+    }
+
+    @Test("a failed account deletion keeps the person signed in")
+    func failedAccountDeletion() async throws {
+        let session = try signedIn()
+        clients.setHandler { _ in throw NetworkError.offline }
+        await #expect(throws: NetworkError.offline) { try await session.deleteAccount() }
+        #expect(session.phase == .signedIn(server))
+        #expect(try tokens.token(for: key) != nil)
+    }
+
     @Test("sign-in loads the server's info after a restart, and a retry clears the old error")
     func loadsServerInfo() async {
         preference.server = server

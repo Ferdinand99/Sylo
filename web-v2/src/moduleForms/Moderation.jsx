@@ -56,7 +56,7 @@ export default function Moderation() {
         <a href={`/guilds/${guildId}/moderation`}>Moderation</a> page, not here.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label className="v2-check">
             <input

@@ -100,7 +100,7 @@ export default function TempVoice() {
         and <strong>Move Members</strong>.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         {form.hubs.map((h) => (
           <div className="v2-rule-card" key={h.key}>
             <div className="v2-rule-head">

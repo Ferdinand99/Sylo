@@ -52,7 +52,7 @@ export default function AppleConnect() {
         </p>
       ) : null}
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="apple-channel">
             Main channel <span className="v2-field-hint">— used by every alert without its own</span>

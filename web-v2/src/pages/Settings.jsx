@@ -73,7 +73,7 @@ export default function Settings() {
     <>
       <h1 className="v2-section-title">Settings</h1>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <Field label="Mod-log channel" hint="Every moderation action posts an embed here.">
           <select
             id="modlog"

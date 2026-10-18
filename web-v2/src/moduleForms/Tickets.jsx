@@ -21,7 +21,7 @@ export default function Tickets() {
         "Staff" DM.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="greeting">
             Greeting sent when a ticket opens{' '}

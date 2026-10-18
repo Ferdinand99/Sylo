@@ -47,7 +47,7 @@ export default function ServerStats() {
         each one.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         {form.channels.length === 0 ? (
           <p className="v2-field-hint">No stat channels yet — add one below.</p>
         ) : null}

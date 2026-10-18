@@ -72,7 +72,7 @@ export default function YoutubeAlerts() {
         <code>{'{url}'}</code>.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         {form.alerts.map((a) => (
           <div className="v2-rule-card" key={a.key}>
             <div className="v2-rule-head">

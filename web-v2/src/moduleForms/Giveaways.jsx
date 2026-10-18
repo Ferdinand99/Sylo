@@ -81,7 +81,7 @@ export default function Giveaways() {
         intent.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="ping">Ping with the winner message</label>
           <select

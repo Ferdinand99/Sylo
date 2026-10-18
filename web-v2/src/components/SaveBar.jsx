@@ -2,6 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { useUnsavedChangesGuard } from './useUnsavedChangesGuard.js';
 
 const SAVED_MS = 2000;
+const TEXT_LIKE = new Set([
+  'text',
+  'search',
+  'url',
+  'email',
+  'number',
+  'tel',
+  'password',
+  'datetime-local',
+  'date',
+  'time',
+]);
 
 /**
  * Sticky bar at the bottom of the page content that appears while a form has
@@ -52,6 +64,25 @@ export default function SaveBar({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Enter in a text field saves, as it did when each form had its own submit
+  // button. Only in the page's settings form (marked data-savebar), never in a
+  // row editor, a form with its own submit button, or a dialog.
+  useEffect(() => {
+    const onEnter = (e) => {
+      if (e.key !== 'Enter' || e.isComposing || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target;
+      if (!(el instanceof HTMLInputElement) || !TEXT_LIKE.has(el.type)) return;
+      const form = el.form;
+      if (!form?.hasAttribute('data-savebar') || el.closest('dialog')) return;
+      if (form.querySelector('button[type="submit"], input[type="submit"]')) return;
+      e.preventDefault();
+      const { dirty: d, saving: s, onSave: save } = latest.current;
+      if (d && !s) save?.();
+    };
+    document.addEventListener('keydown', onEnter);
+    return () => document.removeEventListener('keydown', onEnter);
   }, []);
 
   return (

@@ -87,7 +87,7 @@ export default function Honeypot() {
         acted on. Every trigger is logged to the mod-log channel.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <h2 className="v2-group-title">Channel honeypots</h2>
         <p className="v2-field-hint">Any message posted in one of these channels triggers the punishment.</p>
         {form.channels.map((c) => (

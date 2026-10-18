@@ -71,7 +71,7 @@ export default function AutoReact() {
         "Infected" role, and also give the "Infected" role to a few specific people to kick off the game.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="cooldownSeconds">Per-user cooldown (seconds)</label>
           <input

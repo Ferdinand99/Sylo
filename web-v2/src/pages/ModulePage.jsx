@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { useParams } from 'react-router-dom';
 import { MODULE_FORMS } from '../moduleForms/index.js';
 import { usePlatformInfo } from '../usePlatformInfo.js';
@@ -27,7 +28,9 @@ export default function ModulePage() {
       ) : null}
       {/* Keyed by server, so switching server starts the form from scratch
           instead of briefly showing (and saving) the previous server's settings. */}
-      <Form key={guildId} />
+      <Suspense fallback={<p className="v2-state">Loading…</p>}>
+        <Form key={guildId} />
+      </Suspense>
     </PlatformContext.Provider>
   );
 }

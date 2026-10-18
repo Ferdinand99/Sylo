@@ -72,7 +72,7 @@ export default function Autoresponder() {
         . Deleting the trigger needs the Manage Messages permission.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="cooldownSeconds">Per-channel cooldown (seconds)</label>
           <input

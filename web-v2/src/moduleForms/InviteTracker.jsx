@@ -52,7 +52,7 @@ export default function InviteTracker() {
         </p>
       ) : null}
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="joinLogChannelId">
             Join / leave log channel <span className="v2-field-hint">— optional</span>

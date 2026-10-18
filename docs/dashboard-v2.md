@@ -21,10 +21,17 @@ Click **Try the new dashboard** near the top of the classic dashboard's
 sidebar, or go straight to `/v2` on your instance. It's gated behind the same
 login as the rest of the dashboard — nothing extra to set up.
 
-There's currently no remembered "always open V2" preference — each session
-starts on the classic dashboard, and V2 is one click away. (A per-account
-preference is planned; the database side of it already exists but isn't wired
-up to anything yet.)
+To make V2 your default, turn on **Open the new dashboard by default** under
+**Dashboard** on V2's Account page. It's saved per account, so it follows you
+to every browser: from then on, opening the dashboard's home page (`/`, which
+is where signing in lands) takes you to `/v2`. It only applies when you're
+signed in — a dashboard running without login always opens the classic one —
+and only when the V2 build is present.
+
+**Back to classic dashboard** in V2's top bar still works with the switch on:
+it keeps you on the classic dashboard for the rest of that browser session.
+Opening `/v2` again (for example via **Try the new dashboard**) ends that, so
+the next visit to `/` goes back to V2.
 
 ## What's different from the classic dashboard
 
@@ -76,8 +83,10 @@ other issue.
 
 ## Switching back
 
-**Back to classic dashboard** sits in V2's top bar and returns you to `/` at
-any time — nothing about your settings depends on which dashboard you use.
+**Back to classic dashboard** sits in V2's top bar and returns you to the
+classic dashboard at any time (for the rest of the session, even if V2 is your
+default — see [Trying it](#trying-it)). Nothing about your settings depends on
+which dashboard you use.
 
 ## For self-hosters
 

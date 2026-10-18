@@ -18,7 +18,7 @@ export default function Logging() {
         Posts member / message / role / channel events to a log channel as they happen.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="channel">Log channel</label>
           <select

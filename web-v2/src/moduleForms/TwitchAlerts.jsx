@@ -61,7 +61,7 @@ export default function TwitchAlerts() {
         </p>
       ) : null}
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         {form.alerts.map((a) => (
           <div className="v2-rule-card" key={a.key}>
             <div className="v2-rule-head">

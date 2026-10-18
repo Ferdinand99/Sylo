@@ -145,4 +145,23 @@ struct AccountModelTests {
         #expect(model.revokeError == nil)
         await task?.value
     }
+
+    @Test("deleting the account signs out here; a failure explains and stays signed in")
+    func deletesAccount() async {
+        let clients = Self.clients()
+        let session = makeSignedInSession(clients: clients)
+        let model = AccountModel(session: session)
+        await model.load()
+
+        clients.setHandler { _ in throw NetworkError.offline }
+        await model.deleteAccount()
+        #expect(model.deleteError == NetworkError.offline.userMessage)
+        #expect(!model.isDeleting)
+        if case .signedIn = session.phase {} else { Issue.record("still signed in after a failed delete") }
+
+        clients.setHandler { _ in OKResponse() }
+        await model.deleteAccount()
+        #expect(model.deleteError == nil)
+        if case .signIn = session.phase {} else { Issue.record("signed out after the delete") }
+    }
 }

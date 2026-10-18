@@ -91,7 +91,7 @@ export default function Starboard() {
         community pin board. Each board has its own emoji, threshold and rules.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         {form.boards.map((b) => (
           <div className="v2-rule-card" key={b.key}>
             <div className="v2-rule-head">

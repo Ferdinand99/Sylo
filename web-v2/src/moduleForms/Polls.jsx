@@ -89,7 +89,7 @@ export default function Polls() {
         <code>{cmd('/poll-end')}</code>.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-group">
           <h2 className="v2-group-title">Who can vote</h2>
           <div className="v2-field">

@@ -68,7 +68,7 @@ export default function RssAlerts() {
         new ones after that are posted (up to 15 feeds).
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         {form.feeds.map((row) => {
           const hint = HINTS[row.type] || HINTS.url;
           return (

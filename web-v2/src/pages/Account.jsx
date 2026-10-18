@@ -1,8 +1,16 @@
 import { useState } from 'react';
-import { deleteAccount, disconnectAccount, getAccount, revokeDevice } from '../api.js';
+import {
+  deleteAccount,
+  disconnectAccount,
+  getAccount,
+  getPrefs,
+  revokeDevice,
+  setDashboardVersion,
+} from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
+import Switch from '../components/Switch.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { plural } from '../components/Meta.jsx';
 
@@ -21,6 +29,7 @@ function lastUsed(ms) {
 export default function Account() {
   const { data, loading, error, setData } = useApiData(() => getAccount(), []);
   const [busy, setBusy] = useState(null);
+  const prefs = useApiData(() => getPrefs(), []);
 
   if (error) return <LoadError error={error} what="your account" />;
   if (loading || !data) return <p className="v2-state">Loading your account…</p>;
@@ -28,6 +37,21 @@ export default function Account() {
     return (
       <p className="v2-state">The dashboard is running without login, so there is no account to manage.</p>
     );
+  }
+
+  // Optimistic: flip the switch at once, put it back if the save fails.
+  async function setV2Default(on) {
+    const previous = prefs.data;
+    prefs.setData({ dashboardVersion: on ? 'v2' : 'v1' });
+    setBusy('prefs');
+    try {
+      prefs.setData(await setDashboardVersion(on ? 'v2' : 'v1'));
+    } catch (err) {
+      prefs.setData(previous);
+      notify(err.message);
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function revoke(device) {
@@ -149,6 +173,27 @@ export default function Account() {
       ) : (
         <p className="v2-muted">No devices are signed in.</p>
       )}
+
+      <h2 className="v2-section-title">Dashboard</h2>
+      <div className="v2-group">
+        <div className="v2-list">
+          <div className="v2-row">
+            <div className="v2-row-main">
+              <h3>Open the new dashboard by default</h3>
+              <p>
+                When on, signing in opens this dashboard. &lsquo;Back to classic dashboard&rsquo; still works
+                for the rest of your visit.
+              </p>
+            </div>
+            <Switch
+              checked={prefs.data?.dashboardVersion === 'v2'}
+              onChange={setV2Default}
+              label="Open the new dashboard by default"
+              disabled={!prefs.data || busy === 'prefs'}
+            />
+          </div>
+        </div>
+      </div>
 
       <h2 className="v2-section-title">Delete account</h2>
       <p className="v2-muted">

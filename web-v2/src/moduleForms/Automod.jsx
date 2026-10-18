@@ -90,7 +90,7 @@ export default function Automod() {
         {data.modlogChannelId ? '' : ' (not set — see Settings)'}. Sylo never acts on other bots.
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-am-rules">
           {data.automodRules.map(([key, label, hint]) => (
             <div className="v2-am-rule" key={key}>

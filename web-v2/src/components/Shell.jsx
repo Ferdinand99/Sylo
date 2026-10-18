@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom';
 import { getGuilds } from '../api.js';
 import { readLastGuildId, writeLastGuildId, readTheme, writeTheme } from '../util.js';
@@ -118,7 +118,7 @@ export default function Shell() {
         <ServerSwitcher guilds={guilds} activeGuildId={lastGuildId} onSelectGuild={selectGuild} />
         {/* Two labels, one shown at a time — styles.css swaps to the short
             one on narrow screens so the topbar keeps to one row. */}
-        <a className="v2-classic-link" href="/" aria-label="Back to classic dashboard">
+        <a className="v2-classic-link" href="/?classic=1" aria-label="Back to classic dashboard">
           <span className="v2-classic-full">Back to classic dashboard</span>
           <span className="v2-classic-short">Classic</span>
         </a>
@@ -134,7 +134,9 @@ export default function Shell() {
           />
           <main className="v2-page">
             <Announcement />
-            <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
+            <Suspense fallback={<p className="v2-state">Loading…</p>}>
+              <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
+            </Suspense>
           </main>
         </div>
       </OverviewProvider>

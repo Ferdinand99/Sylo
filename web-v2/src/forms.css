@@ -218,10 +218,11 @@ body:has(.v2-savebar.is-visible) .v2-toasts {
 /* ---------- ToggleSection header (components/ToggleSection.jsx) ---------- */
 /* The whole header row is the switch button. */
 .v2-ts-head {
-  width: 100%;
+  /* Bleeds 8px past the row on both sides for a larger hover/tap area. */
+  width: calc(100% + 16px);
   margin: -6px -8px;
   padding: 6px 8px;
-  box-sizing: content-box;
+  box-sizing: border-box;
   background: none;
   border: none;
   border-radius: 8px;

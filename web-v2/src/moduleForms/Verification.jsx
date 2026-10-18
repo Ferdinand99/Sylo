@@ -28,7 +28,7 @@ export default function Verification() {
         ) : null}
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="mode">Mode</label>
           <select id="mode" value={form.mode} onChange={(e) => set({ mode: e.target.value })}>

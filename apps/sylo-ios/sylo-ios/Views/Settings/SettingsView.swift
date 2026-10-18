@@ -3,7 +3,7 @@ import SyloKit
 import UIKit
 
 /// Account, notifications, signed-in devices, the Sylo server (with Health for its operators), the
-/// policies, and Sign Out.
+/// policies, Sign Out, and deleting the account.
 struct SettingsView: View {
     let server: ServerURL
     /// The servers the person manages, for a notification switch each.
@@ -14,6 +14,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var account: AccountModel
     @State private var isConfirmingSignOut = false
+    @State private var isConfirmingDelete = false
     @State private var isShowingHealth = false
 
     init(server: ServerURL, session: AppSession, servers: ServersModel) {
@@ -37,6 +38,24 @@ struct SettingsView: View {
                     Button("Sign Out", role: .destructive) {
                         isConfirmingSignOut = true
                     }
+                }
+                Section {
+                    Button(role: .destructive) {
+                        isConfirmingDelete = true
+                    } label: {
+                        if account.isDeleting {
+                            HStack {
+                                Text("Deleting Account…")
+                                Spacer()
+                                ProgressView()
+                            }
+                        } else {
+                            Text("Delete Account")
+                        }
+                    }
+                    .disabled(account.isDeleting)
+                } footer: {
+                    Text("Deletes your Sylo account on \(server.displayName). Your servers and their settings stay as they are.")
                 }
             }
             .navigationTitle("Settings")
@@ -71,6 +90,22 @@ struct SettingsView: View {
                 }
             } message: {
                 Text("You'll need to sign in again to manage your servers on this device.")
+            }
+            .alert("Delete your Sylo account?", isPresented: $isConfirmingDelete) {
+                Button("Delete Account", role: .destructive) {
+                    Task {
+                        await account.deleteAccount()
+                        if account.deleteError == nil { dismiss() }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes your sign-in, your linked Discord and Fluxer accounts, your devices and your preferences on \(server.displayName). It can't be undone.")
+            }
+            .alert("Couldn't Delete Account", isPresented: isShowingDeleteError, presenting: account.deleteError) { _ in
+                Button("OK") {}
+            } message: { message in
+                Text(message)
             }
             .alert("Couldn't Revoke Device", isPresented: isShowingRevokeError, presenting: account.revokeError) { _ in
                 Button("OK") {}
@@ -140,6 +175,12 @@ struct SettingsView: View {
         Binding(
             get: { account.revokeError != nil },
             set: { if !$0 { account.revokeError = nil } })
+    }
+
+    private var isShowingDeleteError: Binding<Bool> {
+        Binding(
+            get: { account.deleteError != nil },
+            set: { if !$0 { account.deleteError = nil } })
     }
 
     private static let privacyPolicy = URL(string: "https://github.com/Ferdinand99/Sylo/blob/main/docs/privacy-policy.md")!

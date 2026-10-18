@@ -252,3 +252,14 @@
 .v2-member-data-head .v2-field-hint {
   margin: 0;
 }
+
+/* RouteError.jsx — a page that failed to render, or a page file gone after a deploy. */
+.v2-route-error {
+  text-align: left;
+}
+.v2-route-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}

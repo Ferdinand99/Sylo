@@ -24,7 +24,7 @@ export default function Welcome() {
         ))}
       </p>
 
-      <form onSubmit={save}>
+      <form onSubmit={save} data-savebar>
         <ToggleSection
           title="Send a message when a member joins the server"
           on={form.joinEnabled}
