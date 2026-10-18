@@ -1,9 +1,7 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
 import ChipPicker from '../components/ChipPicker.jsx';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 const MATCH_LABELS = {
   contains: 'contains',
@@ -27,40 +25,33 @@ function toFormRow(r = {}) {
   };
 }
 
+const toForm = (config) => ({
+  cooldownSeconds: config.cooldownSeconds,
+  ignoreChannels: config.ignoreChannels,
+  ignoreRoles: config.ignoreRoles,
+  responders: config.responders.length ? config.responders.map(toFormRow) : [toFormRow()],
+});
+const fromForm = (form) => ({
+  cooldownSeconds: form.cooldownSeconds,
+  ignoreChannels: form.ignoreChannels,
+  ignoreRoles: form.ignoreRoles,
+  responders: form.responders.map((r) => ({
+    trigger: r.trigger,
+    match: r.match,
+    response: r.response,
+    embed: r.embed,
+    deleteTrigger: r.deleteTrigger,
+  })),
+});
+
 export default function Autoresponder() {
-  const { guildId } = useParams();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'autoresponder'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('autoresponder', {
+    toForm,
+    fromForm,
+  });
 
-  useEffect(() => {
-    if (data) {
-      setForm({
-        cooldownSeconds: data.config.cooldownSeconds,
-        ignoreChannels: data.config.ignoreChannels,
-        ignoreRoles: data.config.ignoreRoles,
-        responders: data.config.responders.length ? data.config.responders.map(toFormRow) : [toFormRow()],
-      });
-    }
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Autoresponder settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="Autoresponder settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const updateRow = (key, patch) =>
@@ -68,38 +59,6 @@ export default function Autoresponder() {
   const addRow = () => setForm((f) => ({ ...f, responders: [...f.responders, toFormRow()] }));
   const removeRow = (key) =>
     setForm((f) => ({ ...f, responders: f.responders.filter((r) => r.key !== key) }));
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const body = {
-        cooldownSeconds: form.cooldownSeconds,
-        ignoreChannels: form.ignoreChannels,
-        ignoreRoles: form.ignoreRoles,
-        responders: form.responders.map((r) => ({
-          trigger: r.trigger,
-          match: r.match,
-          response: r.response,
-          embed: r.embed,
-          deleteTrigger: r.deleteTrigger,
-        })),
-      };
-      const { config } = await saveModuleConfig(guildId, 'autoresponder', body);
-      setForm({
-        cooldownSeconds: config.cooldownSeconds,
-        ignoreChannels: config.ignoreChannels,
-        ignoreRoles: config.ignoreRoles,
-        responders: config.responders.length ? config.responders.map(toFormRow) : [toFormRow()],
-      });
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <>
@@ -113,7 +72,7 @@ export default function Autoresponder() {
         . Deleting the trigger needs the Manage Messages permission.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save}>
         <div className="v2-field">
           <label htmlFor="cooldownSeconds">Per-channel cooldown (seconds)</label>
           <input
@@ -212,14 +171,8 @@ export default function Autoresponder() {
             onChange={(ignoreRoles) => set({ ignoreRoles })}
           />
         </div>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

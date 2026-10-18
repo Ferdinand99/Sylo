@@ -8,6 +8,7 @@ the same data, and every setting saved in one is visible in the other.
 - [Trying it](#trying-it)
 - [What's different from the classic dashboard](#whats-different-from-the-classic-dashboard)
 - [Module coverage](#module-coverage)
+- [Saving and unsaved changes](#saving-and-unsaved-changes)
 - [Beta status](#beta-status)
 - [Switching back](#switching-back)
 - [For self-hosters](#for-self-hosters)
@@ -46,20 +47,24 @@ the module reference itself.
 
 ## Module coverage
 
-Not every module has its own V2 page yet. One that doesn't is marked
-**Classic** (with a tooltip explaining why) wherever it's linked from — on the
-Dashboard/Overview grid and in the sidebar — and clicking it opens that
-module's classic-dashboard config page instead. It's still fully
-configurable, just not on a V2-native page yet.
+Every module has its own V2 settings page, and so do the staff pages (tickets,
+ban appeals, the moderation hub with commands, automod and logging), embed
+messages, insights, the leaderboard, Health and the Bot Personalizer. A few
+server tools still live only in the classic dashboard: the server audit log,
+config export, and member data (forget a member). Everything you save in V2 is
+the same setting the classic dashboard shows.
 
-Modules with a real V2 page today: AFK, Welcome & leave, Birthdays,
-Verification, Free games, Counting, Auto-react. This list grows over time —
-the **Classic** tag is the accurate, live answer for any module not listed
-here.
+## Saving and unsaved changes
+
+A settings page shows a bar at the bottom as soon as something differs from
+what is saved: **Reset** puts the page back, **Save** (or Ctrl/Cmd+S) saves it.
+Leaving the page, switching server or closing the tab with unsaved changes asks
+first. Actions that can't be undone, like wiping all levels or restoring a
+database backup, ask for confirmation and some ask you to type a word or name.
 
 ## Beta status
 
-V2 is new and still filling in module coverage — expect rough edges. The
+V2 is new — expect rough edges. The
 "Beta" badge next to the Sylo logo in V2's top bar is a reminder, not a
 warning to avoid it: everything that has shipped has the same real
 functionality (and the same save behavior and side effects) as its classic

@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 const MODE_LABELS = { always: 'React to every message', random: 'React at a random chance' };
 const ROLE_ACTION_LABELS = { add: 'Give them the role', remove: 'Take the role away' };
@@ -29,78 +27,40 @@ function emptyFormRule() {
   return toFormRule({});
 }
 
+const toForm = (config) => ({
+  cooldownSeconds: config.cooldownSeconds,
+  logChannelId: config.logChannelId,
+  rules: config.rules.length ? config.rules.map(toFormRule) : [emptyFormRule()],
+});
+const fromForm = (form) => ({
+  cooldownSeconds: form.cooldownSeconds,
+  logChannelId: form.logChannelId,
+  rules: form.rules.map((r) => ({
+    targetUsersText: r.targetUsersText,
+    targetRoleId: r.targetRoleId,
+    channelId: r.channelId,
+    emojis: r.emojisText,
+    mode: r.mode,
+    chance: r.chance,
+    roleId: r.roleId,
+    roleAction: r.roleAction,
+  })),
+});
+
 export default function AutoReact() {
-  const { guildId } = useParams();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'auto-react'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('auto-react', {
+    toForm,
+    fromForm,
+  });
 
-  useEffect(() => {
-    if (data) {
-      setForm({
-        cooldownSeconds: data.config.cooldownSeconds,
-        logChannelId: data.config.logChannelId,
-        rules: data.config.rules.length ? data.config.rules.map(toFormRule) : [emptyFormRule()],
-      });
-    }
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Auto-react settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="Auto-react settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const updateRule = (key, patch) =>
     setForm((f) => ({ ...f, rules: f.rules.map((r) => (r.key === key ? { ...r, ...patch } : r)) }));
   const addRule = () => setForm((f) => ({ ...f, rules: [...f.rules, emptyFormRule()] }));
   const removeRule = (key) => setForm((f) => ({ ...f, rules: f.rules.filter((r) => r.key !== key) }));
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const body = {
-        cooldownSeconds: form.cooldownSeconds,
-        logChannelId: form.logChannelId,
-        rules: form.rules.map((r) => ({
-          targetUsersText: r.targetUsersText,
-          targetRoleId: r.targetRoleId,
-          channelId: r.channelId,
-          emojis: r.emojisText,
-          mode: r.mode,
-          chance: r.chance,
-          roleId: r.roleId,
-          roleAction: r.roleAction,
-        })),
-      };
-      const { config } = await saveModuleConfig(guildId, 'auto-react', body);
-      setForm({
-        cooldownSeconds: config.cooldownSeconds,
-        logChannelId: config.logChannelId,
-        rules: config.rules.length ? config.rules.map(toFormRule) : [emptyFormRule()],
-      });
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <>
@@ -111,7 +71,7 @@ export default function AutoReact() {
         "Infected" role, and also give the "Infected" role to a few specific people to kick off the game.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save}>
         <div className="v2-field">
           <label htmlFor="cooldownSeconds">Per-user cooldown (seconds)</label>
           <input
@@ -283,14 +243,8 @@ export default function AutoReact() {
         <button type="button" className="v2-btn-ghost" onClick={addRule}>
           + Add rule
         </button>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

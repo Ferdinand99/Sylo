@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -34,67 +32,34 @@ function toFormRow(a = {}) {
   };
 }
 
+const toForm = (config) => ({ alerts: config.alerts.length ? config.alerts.map(toFormRow) : [toFormRow()] });
+const fromForm = (form) => ({
+  alerts: form.alerts.map((a) => ({
+    input: a.input,
+    ytChannelId: a.ytChannelId,
+    name: a.name,
+    discordChannelId: a.discordChannelId,
+    roleId: a.roleId,
+    notify: a.notify,
+    onEnd: a.onEnd,
+    videoMessage: a.videoMessage,
+    liveMessage: a.liveMessage,
+  })),
+});
+
 export default function YoutubeAlerts() {
-  const { guildId } = useParams();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'youtube-alerts'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('youtube-alerts', {
+    toForm,
+    fromForm,
+  });
 
-  useEffect(() => {
-    if (data)
-      setForm({ alerts: data.config.alerts.length ? data.config.alerts.map(toFormRow) : [toFormRow()] });
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load YouTube alerts settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="YouTube alerts settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const updateRow = (key, patch) =>
     setForm((f) => ({ ...f, alerts: f.alerts.map((a) => (a.key === key ? { ...a, ...patch } : a)) }));
   const addRow = () => setForm((f) => ({ ...f, alerts: [...f.alerts, toFormRow()] }));
   const removeRow = (key) => setForm((f) => ({ ...f, alerts: f.alerts.filter((a) => a.key !== key) }));
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const body = {
-        alerts: form.alerts.map((a) => ({
-          input: a.input,
-          ytChannelId: a.ytChannelId,
-          name: a.name,
-          discordChannelId: a.discordChannelId,
-          roleId: a.roleId,
-          notify: a.notify,
-          onEnd: a.onEnd,
-          videoMessage: a.videoMessage,
-          liveMessage: a.liveMessage,
-        })),
-      };
-      const { config } = await saveModuleConfig(guildId, 'youtube-alerts', body);
-      setForm({ alerts: config.alerts.length ? config.alerts.map(toFormRow) : [toFormRow()] });
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <>
@@ -106,7 +71,7 @@ export default function YoutubeAlerts() {
         <code>{'{url}'}</code>.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save}>
         {form.alerts.map((a) => (
           <div className="v2-rule-card" key={a.key}>
             <div className="v2-rule-head">
@@ -204,14 +169,8 @@ export default function YoutubeAlerts() {
         <button type="button" className="v2-btn-ghost" onClick={addRow}>
           + Add channel
         </button>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

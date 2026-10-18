@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import { useCmd } from '../platformContext.jsx';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 // Poll/results messages only expose content, title, colour, footer and image
 // (src/modules/polls.js's normMsg) — the description is always Sylo's own
@@ -54,69 +53,32 @@ function ResultsBodyPreview() {
   );
 }
 
+const pick = (config) => ({
+  voteRoleMode: config.voteRoleMode,
+  voteRoles: config.voteRoles,
+  pollMessage: config.pollMessage,
+  resultsMessage: config.resultsMessage,
+});
+
 export default function Polls() {
-  const { guildId } = useParams();
   const cmd = useCmd();
-  const [state, setState] = useState({ loading: true, data: null, error: null });
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const {
+    data: d,
+    form,
+    setForm,
+    status,
+    error,
+    dirty,
+    saving,
+    save,
+    reset,
+    formKey,
+  } = useModuleForm('polls', {
+    toForm: pick,
+  });
 
-  function load() {
-    return getModuleConfig(guildId, 'polls')
-      .then((data) => {
-        setState({ loading: false, data, error: null });
-        setForm({
-          voteRoleMode: data.config.voteRoleMode,
-          voteRoles: data.config.voteRoles,
-          pollMessage: data.config.pollMessage,
-          resultsMessage: data.config.resultsMessage,
-        });
-      })
-      .catch((error) => setState({ loading: false, data: null, error }));
-  }
-
-  useEffect(() => {
-    load();
-  }, [guildId]);
-
-  if ((state.loading && !state.data) || !form) return <p className="v2-state">Loading…</p>;
-  if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Polls settings (${state.error.message}).`
-        )}
-      </p>
-    );
-  }
-
-  const d = state.data;
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const { config } = await saveModuleConfig(guildId, 'polls', form);
-      setForm({
-        voteRoleMode: config.voteRoleMode,
-        voteRoles: config.voteRoles,
-        pollMessage: config.pollMessage,
-        resultsMessage: config.resultsMessage,
-      });
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
+  if (status === 'error') return <LoadError error={error} what="Polls settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   return (
     <>
@@ -127,7 +89,7 @@ export default function Polls() {
         <code>{cmd('/poll-end')}</code>.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save}>
         <div className="v2-group">
           <h2 className="v2-group-title">Who can vote</h2>
           <div className="v2-field">
@@ -154,6 +116,7 @@ export default function Polls() {
           <h2 className="v2-group-title">Polls message</h2>
           <p className="v2-field-hint">How a live poll looks. Sylo fills the greyed-out body.</p>
           <EmbedEditor
+            key={`poll-${formKey}`}
             spec={form.pollMessage}
             onChange={(pollMessage) => setForm((f) => ({ ...f, pollMessage }))}
             {...EMBED_OPTS}
@@ -167,6 +130,7 @@ export default function Polls() {
           <h2 className="v2-group-title">Results message</h2>
           <p className="v2-field-hint">Posted when a poll closes.</p>
           <EmbedEditor
+            key={`results-${formKey}`}
             spec={form.resultsMessage}
             onChange={(resultsMessage) => setForm((f) => ({ ...f, resultsMessage }))}
             {...EMBED_OPTS}
@@ -178,14 +142,8 @@ export default function Polls() {
             vars={toVars(d.resultsPlaceholders)}
           />
         </div>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

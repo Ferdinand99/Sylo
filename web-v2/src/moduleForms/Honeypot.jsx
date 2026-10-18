@@ -1,10 +1,8 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import { useMessageLink } from '../platformContext.jsx';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
 import ChipPicker from '../components/ChipPicker.jsx';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 const ACTION_LABELS = { kick: 'Kick', timeout: 'Timeout', ban: 'Ban' };
 
@@ -35,40 +33,36 @@ function toMessageRow(m = {}) {
   };
 }
 
+const toForm = (config) => ({
+  exemptRoles: config.exemptRoles,
+  channels: config.channels.map(toChannelRow),
+  messages: config.messages.map(toMessageRow),
+});
+const fromForm = (form) => ({
+  exemptRoles: form.exemptRoles,
+  channels: form.channels.map((c) => ({
+    channelId: c.channelId,
+    action: c.action,
+    timeoutMinutes: c.timeoutMinutes,
+    deleteMessage: c.deleteMessage,
+  })),
+  messages: form.messages.map((m) => ({
+    channelId: m.channelId,
+    bait: m.bait,
+    action: m.action,
+    timeoutMinutes: m.timeoutMinutes,
+  })),
+});
+
 export default function Honeypot() {
-  const { guildId } = useParams();
   const messageLink = useMessageLink();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'honeypot'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm(
+    'honeypot',
+    { toForm, fromForm }
+  );
 
-  useEffect(() => {
-    if (data) {
-      setForm({
-        exemptRoles: data.config.exemptRoles,
-        channels: data.config.channels.map(toChannelRow),
-        messages: data.config.messages.map(toMessageRow),
-      });
-    }
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Honeypot settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="Honeypot settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const updateChannelRow = (key, patch) =>
     setForm((f) => ({ ...f, channels: f.channels.map((c) => (c.key === key ? { ...c, ...patch } : c)) }));
@@ -82,40 +76,6 @@ export default function Honeypot() {
   const removeMessageRow = (key) =>
     setForm((f) => ({ ...f, messages: f.messages.filter((m) => m.key !== key) }));
 
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const body = {
-        exemptRoles: form.exemptRoles,
-        channels: form.channels.map((c) => ({
-          channelId: c.channelId,
-          action: c.action,
-          timeoutMinutes: c.timeoutMinutes,
-          deleteMessage: c.deleteMessage,
-        })),
-        messages: form.messages.map((m) => ({
-          channelId: m.channelId,
-          bait: m.bait,
-          action: m.action,
-          timeoutMinutes: m.timeoutMinutes,
-        })),
-      };
-      const { config } = await saveModuleConfig(guildId, 'honeypot', body);
-      setForm({
-        exemptRoles: config.exemptRoles,
-        channels: config.channels.map(toChannelRow),
-        messages: config.messages.map(toMessageRow),
-      });
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <>
       <h1 className="v2-section-title">
@@ -127,7 +87,7 @@ export default function Honeypot() {
         acted on. Every trigger is logged to the mod-log channel.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save}>
         <h2 className="v2-group-title">Channel honeypots</h2>
         <p className="v2-field-hint">Any message posted in one of these channels triggers the punishment.</p>
         {form.channels.map((c) => (
@@ -291,13 +251,6 @@ export default function Honeypot() {
             Members with any of these roles are never punished (Administrators are always exempt).
           </p>
         </div>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
 
       <h2 className="v2-group-title v2-section-gap">Recent catches</h2>
@@ -317,6 +270,7 @@ export default function Honeypot() {
           ))}
         </div>
       )}
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

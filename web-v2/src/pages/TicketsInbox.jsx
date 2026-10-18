@@ -2,36 +2,36 @@ import { Link, useParams } from 'react-router-dom';
 import { getTickets } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import LoadError from '../components/LoadError.jsx';
+import { formatCount } from '../util.js';
 
 function TicketRow({ ticket, guildId }) {
-  const preview = ticket.preview || '(no text)';
+  const preview = `${ticket.previewKind === 'staff' ? 'You: ' : ''}${ticket.preview || '(no text)'}`;
   return (
     <Link
       className={`v2-row v2-ticket-row${ticket.unread ? ' is-unread' : ''}`}
       to={`/guilds/${guildId}/tickets/${ticket.id}`}
     >
       <div className="v2-row-main">
-        <h3>
+        <h3 className="v2-break">
           <span className="v2-id">#{ticket.id}</span>
           {ticket.user}
-          {ticket.unread ? <span className="v2-unread-dot" title="New messages" /> : null}
+          {ticket.unread ? (
+            <span className="v2-unread-dot" title="New messages" role="img" aria-label="New messages" />
+          ) : null}
         </h3>
-        <p>
-          {ticket.previewKind === 'staff' ? 'You: ' : ''}
-          {preview}
-        </p>
+        <p title={preview}>{preview}</p>
       </div>
-      <span className="v2-field-hint">{ticket.ago}</span>
+      <span className="v2-field-hint v2-row-time">{ticket.ago}</span>
     </Link>
   );
 }
 
 export default function TicketsInbox() {
   const { guildId } = useParams();
-  const { data, loading, error } = useApiData(() => getTickets(guildId), [guildId]);
+  const { data, error } = useApiData(() => getTickets(guildId), [guildId]);
 
-  if (loading && !data) return <p className="v2-state">Loading…</p>;
   if (error) return <LoadError error={error} what="the tickets" />;
+  if (!data) return <p className="v2-state">Loading…</p>;
 
   return (
     <>
@@ -41,7 +41,7 @@ export default function TicketsInbox() {
         "Staff" DM.
       </p>
 
-      <h2 className="v2-group-title">Open ({data.open.length})</h2>
+      <h2 className="v2-group-title">Open ({formatCount(data.open.length)})</h2>
       {data.open.length ? (
         <div className="v2-list">
           {data.open.map((t) => (

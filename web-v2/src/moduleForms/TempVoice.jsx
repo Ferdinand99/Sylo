@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import ChipPicker from '../components/ChipPicker.jsx';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -59,70 +58,38 @@ function keepAliveLabel(m) {
   return `${m} minute${m === 1 ? '' : 's'}`;
 }
 
+const toForm = (config) => ({ hubs: config.hubs.map(toFormRow) });
+const fromForm = (form) => ({
+  hubs: form.hubs.map((h) => {
+    const copy = { ...h };
+    delete copy.key;
+    return copy;
+  }),
+});
+
 export default function TempVoice() {
-  const { guildId } = useParams();
-  const [state, setState] = useState({ loading: true, data: null, error: null });
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const {
+    data: d,
+    form,
+    setForm,
+    status,
+    error,
+    dirty,
+    saving,
+    save,
+    reset,
+  } = useModuleForm('temp-voice', {
+    toForm,
+    fromForm,
+  });
 
-  function load() {
-    return getModuleConfig(guildId, 'temp-voice')
-      .then((data) => {
-        setState({ loading: false, data, error: null });
-        setForm({ hubs: data.config.hubs.map(toFormRow) });
-      })
-      .catch((error) => setState({ loading: false, data: null, error }));
-  }
-
-  useEffect(() => {
-    load();
-  }, [guildId]);
-
-  if ((state.loading && !state.data) || !form) return <p className="v2-state">Loading…</p>;
-  if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Temporary voice settings (${state.error.message}).`
-        )}
-      </p>
-    );
-  }
-
-  const d = state.data;
+  if (status === 'error') return <LoadError error={error} what="Temporary voice settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const updateHub = (key, patch) =>
     setForm((f) => ({ hubs: f.hubs.map((h) => (h.key === key ? { ...h, ...patch } : h)) }));
   const addHub = () => setForm((f) => ({ hubs: [...f.hubs, toFormRow()] }));
   const removeHub = (key) => setForm((f) => ({ hubs: f.hubs.filter((h) => h.key !== key) }));
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const body = {
-        hubs: form.hubs.map((h) => {
-          const copy = { ...h };
-          delete copy.key;
-          return copy;
-        }),
-      };
-      const { config } = await saveModuleConfig(guildId, 'temp-voice', body);
-      setForm({ hubs: config.hubs.map(toFormRow) });
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <>
@@ -133,7 +100,7 @@ export default function TempVoice() {
         and <strong>Move Members</strong>.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save}>
         {form.hubs.map((h) => (
           <div className="v2-rule-card" key={h.key}>
             <div className="v2-rule-head">
@@ -356,14 +323,8 @@ export default function TempVoice() {
         <button type="button" className="v2-btn-ghost" onClick={addHub}>
           + Add hub
         </button>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

@@ -1,5 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
-import { getComposedMessages, unpublishComposedMessage, deleteComposedMessage, ApiError } from '../api.js';
+import { getComposedMessages, unpublishComposedMessage, deleteComposedMessage } from '../api.js';
+import LoadError from '../components/LoadError.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 
@@ -7,25 +9,16 @@ export default function Messages() {
   const { guildId } = useParams();
   const { data, loading, error, setData } = useApiData(() => getComposedMessages(guildId), [guildId]);
 
+  if (error) return <LoadError error={error} what="Embed messages" />;
   if (loading && !data) return <p className="v2-state">Loading…</p>;
 
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Embed messages (${error.message}).`
-        )}
-      </p>
-    );
-  }
-
   async function onUnpublish(id) {
-    if (!confirm('Delete the posted message? The draft stays here.')) return;
+    const ok = await confirmDialog({
+      title: 'Unpublish this message?',
+      body: 'The posted message is deleted from the channel. The draft stays here, so you can publish it again.',
+      confirmLabel: 'Unpublish',
+    });
+    if (!ok) return;
     try {
       await unpublishComposedMessage(guildId, id);
       setData((d) => ({
@@ -38,7 +31,12 @@ export default function Messages() {
   }
 
   async function onDelete(id) {
-    if (!confirm('Delete this embed message (and the posted message, if any)?')) return;
+    const ok = await confirmDialog({
+      title: 'Delete this embed message?',
+      body: "The draft is deleted, and so is the posted message if it's published. This can't be undone.",
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
     try {
       await deleteComposedMessage(guildId, id);
       setData((d) => ({ ...d, items: d.items.filter((it) => it.id !== id) }));
@@ -83,7 +81,7 @@ export default function Messages() {
                     Unpublish
                   </button>
                 ) : null}
-                <button type="button" className="v2-btn-ghost" onClick={() => onDelete(it.id)}>
+                <button type="button" className="v2-btn-danger" onClick={() => onDelete(it.id)}>
                   Delete
                 </button>
               </div>

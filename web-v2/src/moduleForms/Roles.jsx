@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getRoles, saveAutoroles, saveReactionRole, deleteReactionRole, ApiError } from '../api.js';
+import { getRoles, saveAutoroles, saveReactionRole, deleteReactionRole } from '../api.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useFormState } from '../components/useModuleForm.js';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
@@ -248,52 +252,41 @@ function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }
 export default function Roles() {
   const { guildId } = useParams();
   const [state, setState] = useState({ loading: true, data: null, error: null });
-  const [autoroles, setAutoroles] = useState([]);
+  // Autoroles are a plain settings form → SaveBar; the reaction-role sets
+  // above them are records with their own Publish / Cancel.
+  const autoroles = useFormState(null);
   const [savingAutoroles, setSavingAutoroles] = useState(false);
-  const [autorolesSaved, setAutorolesSaved] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState(null);
 
-  function load() {
+  // `initial` (first load / server switch) also resets the autoroles form;
+  // a refresh after a reaction-role change leaves unsaved autorole edits alone.
+  function load({ initial = false } = {}) {
     return getRoles(guildId)
       .then((data) => {
         setState({ loading: false, data, error: null });
-        setAutoroles(data.autoroles);
+        if (initial) autoroles.load(data.autoroles, { remount: true });
       })
       .catch((error) => setState({ loading: false, data: null, error }));
   }
 
   useEffect(() => {
-    load();
+    load({ initial: true });
   }, [guildId]);
 
-  if (state.loading) return <p className="v2-state">Loading…</p>;
-  if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Reaction roles settings (${state.error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (state.error) return <LoadError error={state.error} what="Reaction roles settings" />;
+  if (state.loading || !autoroles.form) return <p className="v2-state">Loading…</p>;
 
   const d = state.data;
 
   async function onSaveAutoroles(e) {
-    e.preventDefault();
+    e?.preventDefault?.();
+    const sent = autoroles.form;
     setSavingAutoroles(true);
-    setAutorolesSaved(false);
     try {
-      await saveAutoroles(guildId, autoroles);
-      setAutorolesSaved(true);
+      await saveAutoroles(guildId, sent);
+      autoroles.commit(sent);
     } catch (err) {
       notify(err.message);
     } finally {
@@ -307,22 +300,27 @@ export default function Roles() {
       const { error } = await saveReactionRole(guildId, body);
       setCreating(false);
       setEditingId(null);
-      setNotice(error || null);
+      if (error) notify(error);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
   }
 
   async function onDelete(id) {
-    if (!confirm('Delete this reaction-role set and its message?')) return;
+    const ok = await confirmDialog({
+      title: 'Delete this reaction-role set?',
+      body: 'Its message is deleted from the channel too. Roles members already picked are kept.',
+      confirmLabel: 'Delete set',
+    });
+    if (!ok) return;
     try {
       await deleteReactionRole(guildId, id);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     }
   }
 
@@ -330,8 +328,6 @@ export default function Roles() {
     <>
       <h1 className="v2-section-title">Reaction roles &amp; autoroles</h1>
       <p className="v2-field-hint">Self-assign roles from a message; roles automatically on join.</p>
-
-      {notice ? <p className="v2-note">{notice}</p> : null}
 
       <div className="v2-group">
         <h2 className="v2-group-title">Reaction roles ({d.reactionMessages.length})</h2>
@@ -371,7 +367,11 @@ export default function Roles() {
                       <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(rm.id)}>
                         Edit
                       </button>
-                      <button type="button" className="v2-btn-ghost" onClick={() => onDelete(rm.id)}>
+                      <button
+                        type="button"
+                        className="v2-btn-danger v2-danger-sep"
+                        onClick={() => onDelete(rm.id)}
+                      >
                         Delete
                       </button>
                     </div>
@@ -405,15 +405,16 @@ export default function Roles() {
         <h2 className="v2-group-title">Autoroles on join</h2>
         <p className="v2-field-hint">Given automatically when a member joins.</p>
         <form onSubmit={onSaveAutoroles}>
-          <ChipPicker kind="role" items={d.roles} value={autoroles} onChange={setAutoroles} />
-          <div className="v2-section-gap">
-            <button type="submit" className="v2-btn-primary" disabled={savingAutoroles}>
-              {savingAutoroles ? 'Saving…' : 'Save autoroles'}
-            </button>
-            {autorolesSaved ? <span className="v2-field-hint"> Saved.</span> : null}
-          </div>
+          <ChipPicker kind="role" items={d.roles} value={autoroles.form} onChange={autoroles.setForm} />
         </form>
       </div>
+      <SaveBar
+        dirty={autoroles.dirty}
+        saving={savingAutoroles}
+        onSave={onSaveAutoroles}
+        onReset={autoroles.reset}
+        saveLabel="Save autoroles"
+      />
     </>
   );
 }

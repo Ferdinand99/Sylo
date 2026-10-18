@@ -6,8 +6,12 @@ import {
   publishWelcomeChannel,
   unpublishWelcomeChannel,
   createWelcomeReadOnlyChannel,
-  ApiError,
 } from '../api.js';
+import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { isDirty } from '../components/formEqual.js';
+import { useUnsavedChangesGuard } from '../components/useUnsavedChangesGuard.js';
 import EmbedCard, { EmbedToolbar, pickImage, newKey } from '../components/EmbedCard.jsx';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
@@ -98,13 +102,18 @@ export default function WelcomeChannel() {
   const [messageId, setMessageId] = useState('');
   const [channels, setChannels] = useState([]);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState(null);
+  // What the server last had — the page is "dirty" while channel + message differ.
+  const [savedSnapshot, setSavedSnapshot] = useState(null);
+  const dirty = form !== null && isDirty({ channelId, form }, savedSnapshot);
+  useUnsavedChangesGuard(dirty);
 
   function load() {
     return getWelcomeChannel(guildId)
       .then((d) => {
-        setForm(specToForm(d.config.spec));
+        const loaded = specToForm(d.config.spec);
+        setForm(loaded);
         setChannelId(d.config.channelId);
+        setSavedSnapshot({ channelId: d.config.channelId, form: loaded });
         setMessageId(d.config.messageId);
         setChannels(d.channels);
         setState({ loading: false, data: d, error: null });
@@ -116,21 +125,8 @@ export default function WelcomeChannel() {
     load();
   }, [guildId]);
 
+  if (state.error) return <LoadError error={state.error} what="Welcome channel settings" />;
   if (state.loading || !form) return <p className="v2-state">Loading…</p>;
-  if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Welcome channel settings (${state.error.message}).`
-        )}
-      </p>
-    );
-  }
 
   const d = state.data;
   const full = form.items.length >= MAX_ITEMS;
@@ -162,14 +158,19 @@ export default function WelcomeChannel() {
       return { ...f, items };
     });
 
-  function resetAll() {
-    if (!confirm('Clear all elements and the message text?')) return;
+  async function resetAll() {
+    const ok = await confirmDialog({
+      title: 'Clear the whole message?',
+      body: 'Removes every element and the message text from the editor. Nothing changes in the channel until you save or publish.',
+      confirmLabel: 'Clear message',
+    });
+    if (!ok) return;
     setForm({ content: '', items: [] });
   }
 
   async function submit(action) {
     setBusy(true);
-    setNotice(null);
+    const sentForm = form;
     try {
       const body = { channelId, spec: formToSpec(form) };
       const { config } =
@@ -178,23 +179,29 @@ export default function WelcomeChannel() {
           : await saveWelcomeChannel(guildId, body);
       setChannelId(config.channelId);
       setMessageId(config.messageId);
-      setNotice({ kind: 'ok', text: action === 'publish' ? 'Published to the channel.' : 'Draft saved.' });
+      setSavedSnapshot({ channelId: config.channelId, form: sentForm });
+      notify(action === 'publish' ? 'Published to the channel.' : 'Draft saved.', 'info');
     } catch (err) {
-      setNotice({ kind: 'bad', text: err.message });
+      notify(err.message);
     } finally {
       setBusy(false);
     }
   }
 
   async function onUnpublish() {
+    const ok = await confirmDialog({
+      title: 'Remove the published message?',
+      body: 'The message is deleted from the channel. Your draft stays here, so you can publish it again.',
+      confirmLabel: 'Remove message',
+    });
+    if (!ok) return;
     setBusy(true);
-    setNotice(null);
     try {
       const { config } = await unpublishWelcomeChannel(guildId);
       setMessageId(config.messageId);
-      setNotice({ kind: 'ok', text: 'Published message removed.' });
+      notify('Published message removed.', 'info');
     } catch (err) {
-      setNotice({ kind: 'bad', text: err.message });
+      notify(err.message);
     } finally {
       setBusy(false);
     }
@@ -202,14 +209,15 @@ export default function WelcomeChannel() {
 
   async function onCreateChannel() {
     setBusy(true);
-    setNotice(null);
     try {
       const { config, channels: chans } = await createWelcomeReadOnlyChannel(guildId);
       setChannelId(config.channelId);
       setChannels(chans);
-      setNotice({ kind: 'ok', text: 'Created #welcome.' });
+      // The server stores the new channel as this message's channel.
+      setSavedSnapshot((s) => (s ? { ...s, channelId: config.channelId } : s));
+      notify('Created #welcome.', 'info');
     } catch (err) {
-      setNotice({ kind: 'bad', text: err.message });
+      notify(err.message);
     } finally {
       setBusy(false);
     }
@@ -227,8 +235,6 @@ export default function WelcomeChannel() {
         Build one rich message for a dedicated <strong>read-only</strong> channel. Placeholders:{' '}
         <code>{'{server}'}</code>, <code>{'{memberCount}'}</code>.
       </p>
-
-      {notice ? <p className={notice.kind === 'ok' ? 'v2-note' : 'v2-row-warn'}>{notice.text}</p> : null}
 
       <div className="v2-field-row v2-section-gap">
         <div className="v2-field" style={{ flex: 1, marginBottom: 0 }}>
@@ -307,7 +313,10 @@ export default function WelcomeChannel() {
         </div>
       </div>
 
-      <div className="v2-field-row v2-section-gap">
+      <div className="v2-composer-actions v2-section-gap">
+        <span className="v2-composer-status" aria-live="polite">
+          {dirty ? 'Unsaved changes' : ''}
+        </span>
         <button type="button" className="v2-btn-ghost" disabled={busy} onClick={() => submit('save')}>
           Save draft
         </button>
@@ -315,7 +324,12 @@ export default function WelcomeChannel() {
           Publish to channel
         </button>
         {messageId ? (
-          <button type="button" className="v2-btn-ghost" disabled={busy} onClick={onUnpublish}>
+          <button
+            type="button"
+            className="v2-btn-danger v2-danger-push"
+            disabled={busy}
+            onClick={onUnpublish}
+          >
             Remove published message
           </button>
         ) : null}

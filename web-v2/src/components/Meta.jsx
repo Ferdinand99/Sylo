@@ -15,4 +15,6 @@ export default function Meta({ items }) {
     ));
 }
 
-export const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+// "1 warning" / "1,284 warnings" — a number also gets its thousands separators.
+export const plural = (n, one, many = `${one}s`) =>
+  `${typeof n === 'number' ? n.toLocaleString() : n} ${n === 1 ? one : many}`;

@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
 import ChipPicker from '../components/ChipPicker.jsx';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -49,71 +48,39 @@ const CHECKS_ANTIABUSE = [
   ['removeBotReactions', '…and clear reactions members add to bot messages'],
 ];
 
+const toForm = (config) => ({ boards: config.boards.map(toFormRow) });
+const fromForm = (form) => ({
+  boards: form.boards.map((b) => {
+    const copy = { ...b, emojis: b.emojiText };
+    delete copy.key;
+    delete copy.emojiText;
+    return copy;
+  }),
+});
+
 export default function Starboard() {
-  const { guildId } = useParams();
-  const [state, setState] = useState({ loading: true, data: null, error: null });
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const {
+    data: d,
+    form,
+    setForm,
+    status,
+    error,
+    dirty,
+    saving,
+    save,
+    reset,
+  } = useModuleForm('starboard', {
+    toForm,
+    fromForm,
+  });
 
-  function load() {
-    return getModuleConfig(guildId, 'starboard')
-      .then((data) => {
-        setState({ loading: false, data, error: null });
-        setForm({ boards: data.config.boards.map(toFormRow) });
-      })
-      .catch((error) => setState({ loading: false, data: null, error }));
-  }
-
-  useEffect(() => {
-    load();
-  }, [guildId]);
-
-  if ((state.loading && !state.data) || !form) return <p className="v2-state">Loading…</p>;
-  if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Starboard settings (${state.error.message}).`
-        )}
-      </p>
-    );
-  }
-
-  const d = state.data;
+  if (status === 'error') return <LoadError error={error} what="Starboard settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const updateBoard = (key, patch) =>
     setForm((f) => ({ boards: f.boards.map((b) => (b.key === key ? { ...b, ...patch } : b)) }));
   const addBoard = () => setForm((f) => ({ boards: [...f.boards, toFormRow()] }));
   const removeBoard = (key) => setForm((f) => ({ boards: f.boards.filter((b) => b.key !== key) }));
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const body = {
-        boards: form.boards.map((b) => {
-          const copy = { ...b, emojis: b.emojiText };
-          delete copy.key;
-          delete copy.emojiText;
-          return copy;
-        }),
-      };
-      const { config } = await saveModuleConfig(guildId, 'starboard', body);
-      setForm({ boards: config.boards.map(toFormRow) });
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <>
@@ -123,7 +90,7 @@ export default function Starboard() {
         community pin board. Each board has its own emoji, threshold and rules.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save}>
         {form.boards.map((b) => (
           <div className="v2-rule-card" key={b.key}>
             <div className="v2-rule-head">
@@ -287,14 +254,8 @@ export default function Starboard() {
         <button type="button" className="v2-btn-ghost" onClick={addBoard}>
           + Add board
         </button>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { ApiError, deleteAccount, disconnectAccount, getAccount, revokeDevice } from '../api.js';
+import { deleteAccount, disconnectAccount, getAccount, revokeDevice } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { plural } from '../components/Meta.jsx';
 
 // Which platforms this dashboard account is connected to: "Connect" for the ones that
 // are not (a full-page navigation — the platform's login lives on another site), and
@@ -9,6 +12,7 @@ import { notify } from '../notify.js';
 // signed in to the account, each with "Revoke".
 
 function lastUsed(ms) {
+  if (!Number.isFinite(ms)) return 'unknown';
   const minutes = Math.max(0, Math.floor((Date.now() - ms) / 60_000));
   if (minutes < 60) return minutes < 1 ? 'just now' : `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
@@ -18,21 +22,8 @@ export default function Account() {
   const { data, loading, error, setData } = useApiData(() => getAccount(), []);
   const [busy, setBusy] = useState(null);
 
-  if (loading) return <p className="v2-state">Loading your account…</p>;
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load your account (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (error) return <LoadError error={error} what="your account" />;
+  if (loading || !data) return <p className="v2-state">Loading your account…</p>;
   if (data.open) {
     return (
       <p className="v2-state">The dashboard is running without login, so there is no account to manage.</p>
@@ -44,7 +35,7 @@ export default function Account() {
     try {
       await revokeDevice(device.id);
       setData(await getAccount());
-      notify(`${device.deviceName} signed out`, 'info');
+      notify(`${device.deviceName || 'Device'} signed out`, 'info');
     } catch (err) {
       notify(err.message);
     } finally {
@@ -53,7 +44,13 @@ export default function Account() {
   }
 
   async function removeAccount() {
-    if (!window.confirm("Delete your Sylo account? This can't be undone.")) return;
+    const ok = await confirmDialog({
+      title: 'Delete your Sylo account?',
+      body: "Your sign-ins, every signed-in browser and app device, and your dashboard preferences are deleted. This can't be undone.",
+      confirmLabel: 'Delete account',
+      typeToConfirm: 'DELETE',
+    });
+    if (!ok) return;
     setBusy('delete');
     try {
       await deleteAccount();
@@ -65,6 +62,12 @@ export default function Account() {
   }
 
   async function disconnect(platform, label) {
+    const ok = await confirmDialog({
+      title: `Disconnect ${label}?`,
+      body: `You can no longer sign in with ${label} until you connect it again.`,
+      confirmLabel: `Disconnect ${label}`,
+    });
+    if (!ok) return;
     setBusy(platform);
     try {
       await disconnectAccount(platform);
@@ -90,17 +93,14 @@ export default function Account() {
             <h3>{p.label}</h3>
             {p.connected ? (
               <>
-                <p>
-                  Connected as <strong>{p.username}</strong>
-                  <span className="v2-muted">
-                    {' '}
-                    · manages {p.guildCount} server{p.guildCount === 1 ? '' : 's'} with Sylo
-                  </span>
+                <p className="v2-break">
+                  Connected as <strong>{p.username || 'unknown user'}</strong>
+                  <span className="v2-muted"> · manages {plural(p.guildCount ?? 0, 'server')} with Sylo</span>
                 </p>
                 {p.canDisconnect ? (
                   <button
                     type="button"
-                    className="v2-btn-ghost"
+                    className="v2-btn-danger"
                     disabled={busy === p.platform}
                     onClick={() => disconnect(p.platform, p.label)}
                   >
@@ -133,11 +133,11 @@ export default function Account() {
         <div className="v2-account-list">
           {data.devices.map((d) => (
             <section key={d.id} className="v2-account-card">
-              <h3>{d.deviceName}</h3>
+              <h3 className="v2-break">{d.deviceName || 'Unnamed device'}</h3>
               <p className="v2-muted">Last used {lastUsed(d.lastUsedAt)}</p>
               <button
                 type="button"
-                className="v2-btn-ghost"
+                className="v2-btn-danger"
                 disabled={busy === d.id}
                 onClick={() => revoke(d)}
               >

@@ -6,8 +6,10 @@ import {
   updateCleanupSchedule,
   deleteCleanupSchedule,
   toggleCleanupSchedule,
-  ApiError,
 } from '../api.js';
+import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 function dayLabel(days, weekdays) {
   if (days.length === 7) return 'every day';
@@ -127,7 +129,6 @@ const BLANK = {
 export default function ChannelCleanup() {
   const { guildId } = useParams();
   const [state, setState] = useState({ loading: true, data: null, error: null });
-  const [notice, setNotice] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -142,33 +143,19 @@ export default function ChannelCleanup() {
     load();
   }, [guildId]);
 
+  if (state.error) return <LoadError error={state.error} what="Channel cleanup settings" />;
   if (state.loading) return <p className="v2-state">Loading…</p>;
-  if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Channel cleanup settings (${state.error.message}).`
-        )}
-      </p>
-    );
-  }
 
   const d = state.data;
 
   async function onCreate(body) {
     setSaving(true);
-    setNotice(null);
     try {
       await createCleanupSchedule(guildId, body);
       setCreating(false);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
@@ -176,25 +163,29 @@ export default function ChannelCleanup() {
 
   async function onEdit(id, body) {
     setSaving(true);
-    setNotice(null);
     try {
       await updateCleanupSchedule(guildId, id, body);
       setEditingId(null);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
   }
 
   async function onDelete(id) {
-    if (!confirm('Delete this schedule?')) return;
+    const ok = await confirmDialog({
+      title: 'Delete this cleanup schedule?',
+      body: 'It stops running straight away. Messages it already deleted stay deleted.',
+      confirmLabel: 'Delete schedule',
+    });
+    if (!ok) return;
     try {
       await deleteCleanupSchedule(guildId, id);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     }
   }
 
@@ -203,7 +194,7 @@ export default function ChannelCleanup() {
       await toggleCleanupSchedule(guildId, id);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     }
   }
 
@@ -214,8 +205,6 @@ export default function ChannelCleanup() {
         Auto-delete messages older than a threshold from a channel, on a weekly schedule you pick. Needs{' '}
         <strong>Manage Messages</strong> in the target channel.
       </p>
-
-      {notice ? <p className="v2-note">{notice}</p> : null}
 
       <div className="v2-group">
         <h2 className="v2-group-title">Your schedules ({d.schedules.length})</h2>
@@ -257,7 +246,11 @@ export default function ChannelCleanup() {
                       <button type="button" className="v2-btn-ghost" onClick={() => onToggle(s.id)}>
                         {s.enabled ? 'Pause' : 'Resume'}
                       </button>
-                      <button type="button" className="v2-btn-ghost" onClick={() => onDelete(s.id)}>
+                      <button
+                        type="button"
+                        className="v2-btn-danger v2-danger-sep"
+                        onClick={() => onDelete(s.id)}
+                      >
                         Delete
                       </button>
                     </div>

@@ -9,6 +9,10 @@ import {
   importBackup,
   ApiError,
 } from '../api.js';
+import LoadError from '../components/LoadError.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { plural } from '../components/Meta.jsx';
+import { formatCount } from '../util.js';
 
 function Sparkline({ history }) {
   if (!history || history.length < 2) return null;
@@ -29,16 +33,22 @@ function Sparkline({ history }) {
       <svg
         className="v2-sparkline"
         viewBox={`0 0 ${w} ${h}`}
-        width={w}
+        width="100%"
         height={h}
         preserveAspectRatio="none"
         role="img"
         aria-label={`Gateway ping, last ${history.length} samples, ${lo} to ${hi} ms`}
       >
-        <polyline fill="none" stroke="currentColor" strokeWidth="1.5" points={points} />
+        <polyline
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          vectorEffect="non-scaling-stroke"
+          points={points}
+        />
       </svg>
       <p className="v2-field-hint">
-        {lo}–{hi} ms over the last {history.length} min
+        {lo}–{hi} ms over the last {plural(history.length, 'minute')}
       </p>
     </>
   );
@@ -78,8 +88,8 @@ export default function Health() {
     return () => clearInterval(id);
   }, [restoring]);
 
-  if (state.loading) return <p className="v2-state">Loading…</p>;
-
+  // Restoring comes first: the bot is going down on purpose, so a failed
+  // reload in the meantime is expected, not an error to show.
   if (restoring) {
     return (
       <p className="v2-state">
@@ -89,22 +99,13 @@ export default function Health() {
   }
 
   if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    const forbidden = state.error instanceof ApiError && state.error.status === 403;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : forbidden ? (
-          "This page is restricted to Sylo's operators."
-        ) : (
-          `Couldn't load health status (${state.error.message}).`
-        )}
-      </p>
-    );
+    if (state.error instanceof ApiError && state.error.status === 403) {
+      return <p className="v2-state">This page is restricted to Sylo's operators.</p>;
+    }
+    return <LoadError error={state.error} what="health status" />;
   }
+
+  if (state.loading || !state.data) return <p className="v2-state">Loading…</p>;
 
   const d = state.data;
 
@@ -129,7 +130,16 @@ export default function Health() {
   }
 
   async function onDeleteBackup(name) {
-    if (!confirm('Delete this backup permanently?')) return;
+    const ok = await confirmDialog({
+      title: 'Delete this backup?',
+      body: (
+        <>
+          <strong className="v2-break">{name}</strong> is removed from the backups folder for good.
+        </>
+      ),
+      confirmLabel: 'Delete backup',
+    });
+    if (!ok) return;
     await run(
       () => deleteBackup(name),
       () => `Deleted ${name}.`
@@ -137,8 +147,18 @@ export default function Health() {
   }
 
   async function onRestoreBackup(name) {
-    if (!confirm(`Restore the database from "${name}"? This replaces all current data and restarts the bot.`))
-      return;
+    const ok = await confirmDialog({
+      title: 'Restore the database?',
+      body: (
+        <>
+          All current data is replaced with <strong className="v2-break">{name}</strong> and the bot restarts.
+          A <code>prerestore</code> snapshot is taken first.
+        </>
+      ),
+      confirmLabel: 'Restore and restart',
+      typeToConfirm: name,
+    });
+    if (!ok) return;
     const result = await run(
       () => restoreBackup(name),
       () => 'Restoring…'
@@ -150,7 +170,18 @@ export default function Health() {
     const file = fileInputRef.current?.files?.[0];
     e.preventDefault();
     if (!file) return;
-    if (!confirm(`Upload "${file.name}" as a backup snapshot?`)) return;
+    const ok = await confirmDialog({
+      title: 'Import this backup file?',
+      body: (
+        <>
+          <strong className="v2-break">{file.name}</strong> is stored as a snapshot. Nothing is restored until
+          you press Restore on its row.
+        </>
+      ),
+      confirmLabel: 'Import',
+      tone: 'default',
+    });
+    if (!ok) return;
     const result = await run(
       () => importBackup(file),
       (r) => `Imported ${r.name} — use Restore on that row to load it.`
@@ -186,8 +217,8 @@ export default function Health() {
           </span>
         </div>
         <div className="v2-stat">
-          <strong>{d.guildCount}</strong>
-          <span>{d.memberReach.toLocaleString()} members reached</span>
+          <strong>{plural(d.guildCount, 'server')}</strong>
+          <span>{formatCount(d.memberReach)} members reached</span>
         </div>
         <div className="v2-stat">
           <strong>{d.uptime}</strong>
@@ -199,16 +230,16 @@ export default function Health() {
       <div className="v2-group">
         <h2 className="v2-group-title">Dev-log channel</h2>
         <div className="v2-list">
-          <div className="v2-row">
+          <div className="v2-row v2-row-stack">
             <div className="v2-row-main">
-              <p>
+              <p className="is-wrap">
                 {d.devLogConfigured
                   ? 'Sylo posts its own errors here — separate from any per-guild logging/modlog channel.'
                   : 'Not set up — set DEV_LOG_CHANNEL_ID to a channel id to get a proactive Discord message whenever Sylo logs an error.'}
               </p>
             </div>
             {d.devLogConfigured ? (
-              <div className="v2-field-row">
+              <div className="v2-row-actions">
                 <button type="button" className="v2-btn-ghost" onClick={onDevLogTest} disabled={busy}>
                   Send test message
                 </button>
@@ -228,10 +259,12 @@ export default function Health() {
             {d.errors.map((e, i) => (
               <div className="v2-row" key={i}>
                 <div className="v2-row-main">
-                  <h3>{e.scope || '—'}</h3>
-                  <p>{e.message}</p>
+                  <h3 className="v2-break">{e.scope || 'Unscoped'}</h3>
+                  <p className="is-wrap v2-break" title={e.message}>
+                    {e.message}
+                  </p>
                 </div>
-                <span className="v2-field-hint">{e.ago}</span>
+                <span className="v2-field-hint v2-row-time">{e.ago}</span>
               </div>
             ))}
           </div>
@@ -249,11 +282,11 @@ export default function Health() {
               <div className="v2-row" key={i}>
                 <div className="v2-row-main">
                   <h3>{a.action}</h3>
-                  <p>
+                  <p title={`${a.actor} — ${a.detail}`}>
                     {a.actor} — {a.detail}
                   </p>
                 </div>
-                <span className="v2-field-hint">{a.ago}</span>
+                <span className="v2-field-hint v2-row-time">{a.ago}</span>
               </div>
             ))}
           </div>
@@ -262,19 +295,19 @@ export default function Health() {
 
       <div className="v2-stat-strip v2-section-gap">
         <div className="v2-stat">
-          <strong>{d.stats.openTickets}</strong>
-          <span>{d.stats.ticketsTotal} tickets all-time</span>
+          <strong>{formatCount(d.stats.openTickets)}</strong>
+          <span>open · {plural(d.stats.ticketsTotal, 'ticket')} all-time</span>
         </div>
         <div className="v2-stat">
-          <strong>{d.stats.warningsTotal}</strong>
-          <span>{d.stats.warningsWeek} warnings in 7 days</span>
+          <strong>{formatCount(d.stats.warningsTotal)}</strong>
+          <span>warnings · {formatCount(d.stats.warningsWeek)} in 7 days</span>
         </div>
         <div className="v2-stat">
-          <strong>{d.stats.composedTotal}</strong>
+          <strong>{formatCount(d.stats.composedTotal)}</strong>
           <span>composed messages</span>
         </div>
         <div className="v2-stat">
-          <strong>{d.stats.cachedLookups}</strong>
+          <strong>{formatCount(d.stats.cachedLookups)}</strong>
           <span>cached stat lookups</span>
         </div>
       </div>
@@ -292,7 +325,7 @@ export default function Health() {
                     {m.icon} {m.name}
                   </h3>
                 </div>
-                <span>{m.guilds}</span>
+                <span className="v2-row-time">{plural(m.guilds, 'server')}</span>
               </div>
             ))}
           </div>
@@ -312,16 +345,17 @@ export default function Health() {
           Snapshots are written to <code>&lt;data&gt;/backups</code> on the mounted volume.
           {d.db.offsite ? ` A gzipped copy of each is also shipped off-site (${d.db.offsite}).` : ''}
         </p>
-        <div className="v2-field-row v2-section-gap">
+        <div className="v2-backup-tools v2-section-gap">
           <button type="button" className="v2-btn-primary" onClick={onCreateBackup} disabled={busy}>
             Create backup now
           </button>
-          <form onSubmit={onImportFile} className="v2-field-row">
+          <form onSubmit={onImportFile} className="v2-backup-import">
             <input
               ref={fileInputRef}
               type="file"
               accept=".db,.sqlite,.sqlite3,.dump,application/octet-stream"
-              className="v2-field-hint"
+              className="v2-file-input"
+              aria-label="Backup file to import"
             />
             <button type="submit" className="v2-btn-ghost" disabled={busy}>
               Import backup file…
@@ -338,19 +372,19 @@ export default function Health() {
         ) : (
           <div className="v2-list v2-section-gap">
             {d.backups.map((b) => (
-              <div className="v2-row" key={b.name}>
+              <div className="v2-row v2-row-stack" key={b.name}>
                 <div className="v2-row-main">
-                  <h3>
+                  <h3 className="v2-break">
                     <a href={`/health/backups/${encodeURIComponent(b.name)}`}>{b.name}</a>
                   </h3>
                   <p>
                     {b.size} · {b.ago}
                   </p>
                 </div>
-                <div className="v2-field-row">
+                <div className="v2-row-actions">
                   <button
                     type="button"
-                    className="v2-btn-ghost"
+                    className="v2-btn-danger"
                     onClick={() => onRestoreBackup(b.name)}
                     disabled={busy}
                   >
@@ -358,7 +392,7 @@ export default function Health() {
                   </button>
                   <button
                     type="button"
-                    className="v2-btn-ghost"
+                    className="v2-btn-danger"
                     onClick={() => onDeleteBackup(b.name)}
                     disabled={busy}
                   >

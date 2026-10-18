@@ -87,6 +87,8 @@ export const SPECIAL_V2_PATHS = {
   messages: (guildId) => `/guilds/${guildId}/messages`,
   general: (guildId) => `/guilds/${guildId}/settings`,
   insights: (guildId) => `/guilds/${guildId}/insights`,
+  // The Commands overview card — V2's page is the Moderation hub's Commands tab.
+  commands: (guildId) => `/guilds/${guildId}/moderation/commands`,
 };
 
 export function hasV2Page(card) {

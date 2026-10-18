@@ -25,7 +25,9 @@ export default function ModulePage() {
           <span className="v2-platform-note-tag">{platform === 'fluxer' ? 'Fluxer' : 'Discord'}</span> {note}
         </p>
       ) : null}
-      <Form />
+      {/* Keyed by server, so switching server starts the form from scratch
+          instead of briefly showing (and saving) the previous server's settings. */}
+      <Form key={guildId} />
     </PlatformContext.Provider>
   );
 }

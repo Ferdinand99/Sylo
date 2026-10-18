@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, apiFetch, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
+import { useState } from 'react';
+import { apiFetch } from '../api.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -16,43 +18,35 @@ const ANNOUNCE_LABELS = {
   off: 'No announcement',
 };
 
+const toForm = (config) => ({
+  ...config,
+  rewards: config.rewards.map((r) => ({ key: newKey(), ...r })),
+  multipliers: config.multipliers.map((m) => ({ key: newKey(), ...m })),
+});
+const fromForm = (form) => {
+  const body = {
+    ...form,
+    rewards: form.rewards.map(({ level, roleId }) => ({ level, roleId })),
+    multipliers: form.multipliers.map(({ type, id, factor }) => ({ type, id, factor })),
+  };
+  delete body.key;
+  return body;
+};
+
 export default function Leveling() {
-  const { guildId } = useParams();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'leveling'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm(
+    'leveling',
+    {
+      toForm,
+      fromForm,
+    }
+  );
   const [xpUserId, setXpUserId] = useState('');
   const [xpValue, setXpValue] = useState('');
-  const [xpNotice, setXpNotice] = useState(null);
   const [xpBusy, setXpBusy] = useState(false);
 
-  useEffect(() => {
-    if (data) {
-      setForm({
-        ...data.config,
-        rewards: data.config.rewards.map((r) => ({ key: newKey(), ...r })),
-        multipliers: data.config.multipliers.map((m) => ({ key: newKey(), ...m })),
-      });
-    }
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Leveling settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="Leveling settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
 
@@ -67,64 +61,43 @@ export default function Leveling() {
     set({ multipliers: form.multipliers.map((m) => (m.key === key ? { ...m, ...patch } : m)) });
   const removeMultiplier = (key) => set({ multipliers: form.multipliers.filter((m) => m.key !== key) });
 
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const body = {
-        ...form,
-        rewards: form.rewards.map(({ level, roleId }) => ({ level, roleId })),
-        multipliers: form.multipliers.map(({ type, id, factor }) => ({ type, id, factor })),
-      };
-      delete body.key;
-      const { config } = await saveModuleConfig(guildId, 'leveling', body);
-      setForm({
-        ...config,
-        rewards: config.rewards.map((r) => ({ key: newKey(), ...r })),
-        multipliers: config.multipliers.map((m) => ({ key: newKey(), ...m })),
-      });
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function onSetXp(e) {
     e.preventDefault();
     setXpBusy(true);
-    setXpNotice(null);
     try {
       await apiFetch(`/api/v2/guilds/${guildId}/modules/leveling/xp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: xpUserId, xp: Number(xpValue) }),
       });
-      setXpNotice('Updated.');
+      notify('XP updated.', 'info');
       setXpUserId('');
       setXpValue('');
     } catch (err) {
-      setXpNotice(err.message);
+      notify(err.message);
     } finally {
       setXpBusy(false);
     }
   }
 
   async function onResetAll() {
-    if (!confirm('Wipe ALL leveling data for this server?')) return;
+    const ok = await confirmDialog({
+      title: 'Wipe all leveling data?',
+      body: "Every member's XP, level and message count on this server is deleted. This can't be undone.",
+      confirmLabel: 'Wipe all leveling data',
+      typeToConfirm: 'RESET',
+    });
+    if (!ok) return;
     setXpBusy(true);
-    setXpNotice(null);
     try {
       await apiFetch(`/api/v2/guilds/${guildId}/modules/leveling/xp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true }),
       });
-      setXpNotice('All leveling data wiped.');
+      notify('All leveling data wiped.', 'info');
     } catch (err) {
-      setXpNotice(err.message);
+      notify(err.message);
     } finally {
       setXpBusy(false);
     }
@@ -139,7 +112,7 @@ export default function Leveling() {
         the Leaderboard page.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save}>
         <div className="v2-group">
           <h2 className="v2-group-title">Leveling up</h2>
           <div className="v2-field">
@@ -416,13 +389,6 @@ export default function Leveling() {
             onChange={(noXpChannels) => set({ noXpChannels })}
           />
         </div>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save leveling settings'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
 
       <div className="v2-group">
@@ -451,7 +417,6 @@ export default function Leveling() {
 
       <div className="v2-group">
         <h2 className="v2-group-title">Set XP for a user</h2>
-        {xpNotice ? <p className="v2-note">{xpNotice}</p> : null}
         <form onSubmit={onSetXp} className="v2-field-row">
           <input
             type="text"
@@ -467,14 +432,22 @@ export default function Leveling() {
             value={xpValue}
             onChange={(e) => setXpValue(e.target.value)}
           />
-          <button type="submit" className="v2-btn-primary" disabled={xpBusy}>
+          <button type="submit" className="v2-btn-ghost" disabled={xpBusy}>
             Update
-          </button>
-          <button type="button" className="v2-btn-ghost" onClick={onResetAll} disabled={xpBusy}>
-            Reset all
           </button>
         </form>
       </div>
+
+      <div className="v2-danger-zone">
+        <p className="v2-danger-zone-text">
+          <strong>Reset all leveling data</strong>
+          <span>Wipes every member's XP, level and message count on this server.</span>
+        </p>
+        <button type="button" className="v2-btn-danger" onClick={onResetAll} disabled={xpBusy}>
+          Reset all…
+        </button>
+      </div>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

@@ -5,11 +5,13 @@
    dark-only) — light is an explicit opt-in via the topbar toggle
    (components/Shell.jsx), not a prefers-color-scheme auto-switch, so the
    dashboard doesn't change look out from under someone who didn't ask.
-   --accent/--accent-2 are identical in both themes: neither is ever used as
-   plain text-on-background color (only as a button/border/accent-color
-   tint), so there's no contrast reason to adjust them for light. */
+   --accent is the same in both themes. --accent-2 IS used as text (links,
+   info text, the focus ring), so light overrides it with a darker sky blue:
+   #38bdf8 on white is ~2.1:1, #0369a1 is ~5.9:1. Same reason --warn/
+   --danger/--success have a darker light-theme variant. */
 :root {
   color-scheme: dark;
+  accent-color: var(--accent);
   --bg-main: #0b0d17;
   --bg-surface: #171b33;
   --bg-surface-2: #111427;
@@ -18,10 +20,30 @@
   --accent-2: #38bdf8;
   --text: #e7e9f5;
   --text-muted: #a6accd;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  --success: #4ade80;
   --radius: 12px;
+  --radius-sm: 8px;
   --font:
     'Schibsted Grotesk Variable', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     sans-serif;
+  /* Type scale. Nothing goes below 0.68rem (~11px). */
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.82rem;
+  --fs-md: 0.9rem;
+  --fs-lg: 1.05rem;
+  --fs-xl: 1.375rem;
+  /* Motion. Strong ease-out for enter/exit and press feedback, ease-in-out
+     for things moving on screen, the iOS-like curve for the drawer. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Elevation for floating surfaces (menus, popovers, toasts). */
+  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.35);
+  --shadow-toast: 0 8px 24px rgb(0 0 0 / 0.35);
+  /* The topbar is sticky; the desktop sidebar sticks just below it. */
+  --topbar-h: 64px;
   /* Rim around a colour-preset dot (ColorPicker.jsx) — needs to read against
      arbitrary swatch fills, not page background, so it's its own token
      rather than --border-subtle: a light rim on dark, a dark rim on light. */
@@ -36,10 +58,31 @@
   --swatch-border: rgba(0, 0, 0, 0.15);
   --text: #171a2b;
   --text-muted: #5b6080;
+  --accent-2: #0369a1;
+  --warn: #b45309;
+  --danger: #b91c1c;
+  --success: #15803d;
+  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.12);
+  --shadow-toast: 0 8px 24px rgb(0 0 0 / 0.1);
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Phone polish: no grey tap flash (every control has its own :active
+   state), no landscape font inflation, no 300ms double-tap-zoom wait. */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Anchors and focused fields scroll clear of the sticky topbar. */
+  scroll-padding-top: calc(var(--topbar-h) + 8px);
+}
+button,
+a,
+summary {
+  touch-action: manipulation;
 }
 
 body {
@@ -65,27 +108,42 @@ a:hover {
   outline-offset: 2px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+/* iOS Safari zooms into any field under 16px and never zooms back out.
+   !important because component rules (.v2-inline-input, .v2-embed-input,
+   …) set smaller sizes with higher specificity. Larger sizes are restored
+   below. Never fixed with maximum-scale — that blocks pinch zoom. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+  .v2-mb-name {
+    font-size: 1.3rem !important;
   }
 }
 
+/* Reduced motion lives at the end of this file (it has to come after the
+   rules it overrides) — it drops slides and scales, keeps fades. */
+
 .v2-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
 
 .v2-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 14px 24px;
+  min-height: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) max(24px, env(safe-area-inset-right, 0px)) 0
+    max(24px, env(safe-area-inset-left, 0px));
+  background: var(--bg-main);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -100,14 +158,27 @@ a:hover {
   height: 32px;
   background: none;
   border: 0;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  padding: 0;
+  padding: 0 6px;
+  transition: background-color 150ms ease;
 }
 .v2-nav-toggle span {
   display: block;
   height: 2px;
   border-radius: 1px;
   background: var(--text);
+}
+.v2-nav-toggle:active {
+  background: var(--bg-surface);
+}
+@media (pointer: coarse) {
+  .v2-nav-toggle {
+    width: 44px;
+    height: 44px;
+    padding: 0 12px;
+    margin-left: -6px;
+  }
 }
 
 .v2-brand {
@@ -128,7 +199,7 @@ a:hover {
   color: #fff;
 }
 .v2-beta-badge {
-  font-size: 0.62rem;
+  font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -146,14 +217,27 @@ a:hover {
   padding: 6px 14px;
   margin-left: auto;
   flex: none;
+  white-space: nowrap;
+  transition:
+    color 150ms ease,
+    border-color 150ms ease;
+}
+/* Shell.jsx renders both labels; only one shows at a time. */
+.v2-classic-short {
+  display: none;
 }
 .v2-classic-link:hover {
-  color: var(--text);
-  border-color: var(--accent);
   text-decoration: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-classic-link:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
 }
 
 .v2-theme-toggle {
+  position: relative;
   display: grid;
   place-items: center;
   width: 32px;
@@ -164,19 +248,37 @@ a:hover {
   border-radius: 999px;
   color: var(--text-muted);
   cursor: pointer;
+  transition:
+    color 150ms ease,
+    border-color 150ms ease,
+    transform 160ms var(--ease-out);
 }
-.v2-theme-toggle:hover {
-  color: var(--text);
-  border-color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .v2-theme-toggle:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+}
+.v2-theme-toggle:active {
+  transform: scale(0.94);
 }
 .v2-theme-toggle svg {
   width: 17px;
   height: 17px;
 }
+/* 44px hit area around the 32px visual circle on touch screens. */
+@media (pointer: coarse) {
+  .v2-theme-toggle::before {
+    content: '';
+    position: absolute;
+    inset: -7px;
+  }
+}
 
 /* Server switcher, in the topbar (not the sidebar) — native <details>, no JS. */
 .v2-switch {
   position: relative;
+  min-width: 0;
 }
 .v2-switch summary {
   display: flex;
@@ -189,13 +291,21 @@ a:hover {
   border-radius: 999px;
   font-size: 0.88rem;
   max-width: 220px;
+  min-width: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: border-color 150ms ease;
 }
 .v2-switch summary::-webkit-details-marker {
   display: none;
 }
-.v2-switch[open] summary,
-.v2-switch summary:hover {
+.v2-switch[open] summary {
   border-color: var(--accent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-switch summary:hover {
+    border-color: var(--accent);
+  }
 }
 .v2-switch summary img,
 .v2-switch-ph,
@@ -228,13 +338,39 @@ a:hover {
   top: calc(100% + 6px);
   left: 0;
   min-width: 220px;
+  max-width: min(320px, calc(100vw - 32px));
   max-height: 320px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
   padding: 6px;
   z-index: 20;
+  transform-origin: top left;
+}
+/* Opening pops in from the trigger corner; closing stays instant (the
+   native <details> just hides it). Reduced motion swaps in a plain fade. */
+@keyframes v2-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes v2-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.v2-switch[open] .v2-switch-menu {
+  animation: v2-pop-in 150ms var(--ease-out);
+}
+/* Server names are user-provided — wrap a long unbroken one rather than
+   pushing the menu wider than the screen. */
+.v2-switch-menu :is(a, button) > span:not([class]) {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .v2-switch-menu a,
 .v2-switch-menu button {
@@ -252,12 +388,26 @@ a:hover {
   text-align: left;
   cursor: pointer;
 }
-.v2-switch-menu a:hover,
-.v2-switch-menu a.active,
-.v2-switch-menu button:hover,
-.v2-switch-menu button.active {
-  background: var(--bg-surface-2);
+.v2-switch-menu a:hover {
   text-decoration: none;
+}
+.v2-switch-menu a.active,
+.v2-switch-menu button.active,
+.v2-switch-menu a:active,
+.v2-switch-menu button:active {
+  background: var(--bg-surface-2);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-switch-menu a:hover,
+  .v2-switch-menu button:hover {
+    background: var(--bg-surface-2);
+  }
+}
+@media (pointer: coarse) {
+  .v2-switch-menu a,
+  .v2-switch-menu button {
+    min-height: 44px;
+  }
 }
 .v2-switch-menu img {
   width: 20px;
@@ -286,9 +436,11 @@ a:hover {
   flex: none;
   padding: 24px 12px;
   position: sticky;
-  top: 0;
-  max-height: 100vh;
+  top: var(--topbar-h);
+  max-height: calc(100vh - var(--topbar-h));
+  max-height: calc(100dvh - var(--topbar-h));
   overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -316,15 +468,9 @@ a:hover {
   color: var(--text-muted);
   font-size: 0.82rem;
   font-weight: 500;
-}
-.v2-sidebar-sublink:hover {
-  color: var(--text);
-  background: var(--bg-surface);
-  text-decoration: none;
-}
-.v2-sidebar-sublink.is-active {
-  color: var(--text);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
 }
 .v2-sidebar-link {
   display: flex;
@@ -335,15 +481,46 @@ a:hover {
   color: var(--text-muted);
   font-size: 0.88rem;
   font-weight: 600;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
 }
-.v2-sidebar-link:hover {
-  color: var(--text);
-  background: var(--bg-surface);
+.v2-sidebar-link:hover,
+.v2-sidebar-sublink:hover {
   text-decoration: none;
 }
-.v2-sidebar-link.is-active {
+@media (hover: hover) and (pointer: fine) {
+  .v2-sidebar-link:not(.is-disabled):hover,
+  .v2-sidebar-sublink:hover {
+    color: var(--text);
+    background: var(--bg-surface);
+  }
+}
+.v2-sidebar-link:not(.is-disabled):active,
+.v2-sidebar-sublink:active {
+  background: var(--bg-surface);
+}
+.v2-sidebar-link.is-active,
+.v2-sidebar-sublink.is-active {
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+/* Guild-scoped links while no server is picked yet (Sidebar.jsx): shown so
+   the nav doesn't jump around, but they go nowhere until a server is chosen. */
+.v2-sidebar-link.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+@media (pointer: coarse) {
+  .v2-sidebar-link,
+  .v2-sidebar-sublink {
+    min-height: 44px;
+  }
+  .v2-sidebar-sublink {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
 }
 .v2-sidebar-icon {
   width: 18px;
@@ -352,14 +529,19 @@ a:hover {
 }
 
 .v2-page {
+  /* Side padding, also read by the phone SaveBar to run edge to edge. */
+  --page-gutter: 24px;
   flex: 1;
   min-width: 0;
   padding: 32px 24px 60px;
+  padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   max-width: 900px;
   width: 100%;
 }
 
-/* Scrim behind the off-canvas sidebar on mobile — only rendered while open. */
+/* Scrim behind the off-canvas sidebar on mobile. Always rendered (Sidebar.jsx)
+   so it can fade both ways; visibility flips after the fade-out so the
+   invisible scrim never eats taps. */
 .v2-scrim {
   display: none;
   position: fixed;
@@ -369,12 +551,26 @@ a:hover {
   padding: 0;
   z-index: 40;
   cursor: default;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 280ms var(--ease-drawer),
+    visibility 0s linear 280ms;
+}
+.v2-scrim.is-open {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 280ms var(--ease-drawer),
+    visibility 0s;
 }
 
 @media (max-width: 860px) {
   .v2-topbar {
     flex-wrap: wrap;
-    row-gap: 8px;
+    gap: 8px 12px;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+    padding-bottom: 8px;
   }
   .v2-nav-toggle {
     display: flex;
@@ -387,16 +583,58 @@ a:hover {
     top: 0;
     left: 0;
     height: 100vh;
+    height: 100dvh;
+    max-height: none;
     width: 240px;
     background: var(--bg-main);
     border-right: 1px solid var(--border-subtle);
-    padding: 72px 12px 24px;
+    padding: calc(20px + env(safe-area-inset-top, 0px)) 12px calc(24px + env(safe-area-inset-bottom, 0px))
+      max(12px, env(safe-area-inset-left, 0px));
     transform: translateX(-100%);
-    transition: transform 0.2s ease;
+    transition: transform 280ms var(--ease-drawer);
     z-index: 50;
   }
   .v2-sidebar.is-open {
     transform: translateX(0);
+  }
+  .v2-page {
+    --page-gutter: max(24px, env(safe-area-inset-left, 0px));
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+  }
+}
+
+/* "Back to classic dashboard" → "Classic" once the topbar gets tight. */
+@media (max-width: 700px) {
+  .v2-classic-full {
+    display: none;
+  }
+  .v2-classic-short {
+    display: inline;
+  }
+  .v2-classic-link {
+    padding: 6px 12px;
+  }
+}
+
+/* Phones: the server switcher drops to its own full-width row so the first
+   row (menu, brand, Classic, theme) never squeezes; page gutters go to 16px. */
+@media (max-width: 560px) {
+  .v2-topbar {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .v2-switch {
+    order: 1;
+    flex: 1 1 100%;
+  }
+  .v2-switch summary {
+    max-width: none;
+  }
+  .v2-page {
+    --page-gutter: max(16px, env(safe-area-inset-left, 0px));
+    padding: 24px max(16px, env(safe-area-inset-right, 0px)) calc(48px + env(safe-area-inset-bottom, 0px))
+      max(16px, env(safe-area-inset-left, 0px));
   }
 }
 
@@ -407,11 +645,16 @@ a:hover {
   margin-bottom: 28px;
 }
 .v2-hero img {
+  flex: none;
   width: 56px;
   height: 56px;
   border-radius: 14px;
 }
+.v2-hero > div {
+  min-width: 0;
+}
 .v2-hero-ph {
+  flex: none;
   width: 56px;
   height: 56px;
   border-radius: 14px;
@@ -455,6 +698,7 @@ a:hover {
 .v2-stat strong {
   display: block;
   font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
 }
 .v2-stat span {
   display: block;
@@ -463,20 +707,35 @@ a:hover {
 }
 .v2-sparkline {
   display: block;
+  width: 100%;
+  max-width: 240px;
+  height: 32px;
   color: var(--accent-2);
   margin-top: 8px;
 }
 
+/* Used as the page <h1> almost everywhere. */
 .v2-section-title {
-  font-size: 1.05rem;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  line-height: 1.25;
   margin: 0 0 14px;
   color: var(--text);
+}
+
+/* User-provided names (servers, modules, rules) can be one long unbroken
+   string — let them break instead of widening the page. */
+.v2-row-main h3,
+.v2-hero h1,
+.v2-card h3,
+.v2-section-title {
+  overflow-wrap: anywhere;
 }
 
 /* Server picker — a handful of items, a card grid reads fine here. */
 .v2-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
   gap: 12px;
 }
 .v2-card {
@@ -489,15 +748,21 @@ a:hover {
   justify-content: space-between;
   gap: 10px;
   transition:
-    border-color 0.15s ease,
-    transform 0.15s ease;
+    border-color 150ms ease,
+    transform 160ms var(--ease-out);
 }
-.v2-card:hover {
+@media (hover: hover) and (pointer: fine) {
+  .v2-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+}
+.v2-card:active {
   border-color: var(--accent);
-  transform: translateY(-1px);
 }
 .v2-card h3 {
   margin: 0;
+  min-width: 0;
   font-size: 0.95rem;
 }
 
@@ -521,6 +786,7 @@ a:hover {
 .v2-search:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 /* The Overview page's search bar gains a "Select" button alongside it for
    bulk enable/disable — the input gives up its own bottom margin to the
@@ -572,7 +838,7 @@ a:hover {
   gap: 12px;
   padding: 11px 16px;
   border-bottom: 1px solid var(--border-subtle);
-  transition: background 0.12s ease;
+  transition: background-color 120ms ease;
   color: inherit;
   text-decoration: none;
 }
@@ -580,11 +846,35 @@ a:hover {
   border-bottom: 0;
 }
 .v2-row:hover {
-  background: var(--bg-surface-2);
   text-decoration: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-row:hover {
+    background: var(--bg-surface-2);
+  }
+}
+a.v2-row:active {
+  background: var(--bg-surface-2);
 }
 .v2-row-main {
   min-width: 0;
+}
+/* A short meta hint at the row's end ("3 days ago") stays on one line. */
+.v2-row > .v2-field-hint {
+  flex: none;
+  white-space: nowrap;
+}
+/* Narrow screens: rows wrap their trailing controls under the text rather
+   than squeezing the title to nothing or pushing buttons off the edge. */
+@media (max-width: 600px) {
+  .v2-row,
+  .v2-field-row {
+    flex-wrap: wrap;
+  }
+  .v2-row-main {
+    flex: 1 1 12rem;
+    min-width: 0;
+  }
 }
 .v2-row-main h3 {
   margin: 0;
@@ -595,9 +885,11 @@ a:hover {
   color: inherit;
   text-decoration: none;
 }
-.v2-row-title-link:hover h3 {
-  color: var(--accent-2);
-  text-decoration: underline;
+@media (hover: hover) and (pointer: fine) {
+  .v2-row-title-link:hover h3 {
+    color: var(--accent-2);
+    text-decoration: underline;
+  }
 }
 .v2-row-main p {
   margin: 2px 0 0;
@@ -607,8 +899,13 @@ a:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Error text etc. that must be read in full (Health.jsx). */
+.v2-row-main p.is-wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .v2-row-warn {
-  color: #f0b132;
+  color: var(--warn);
 }
 .v2-row-main p.v2-row-warn {
   white-space: normal;
@@ -618,7 +915,7 @@ a:hover {
 }
 .v2-classic-tag {
   display: inline-block;
-  font-size: 0.6rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -633,12 +930,12 @@ a:hover {
    two read as distinct signals at a glance. */
 .v2-beta-tag {
   display: inline-block;
-  font-size: 0.6rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: #f0b132;
-  border: 1px solid rgba(240, 177, 50, 0.35);
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
   border-radius: 999px;
   padding: 1px 7px;
   vertical-align: middle;
@@ -647,7 +944,7 @@ a:hover {
   opacity: 0.55;
 }
 .v2-sidebar-beta-mark {
-  color: #f0b132;
+  color: var(--warn);
   opacity: 0.85;
 }
 .v2-row-arrow {
@@ -687,10 +984,15 @@ a:hover {
   width: 100%;
   max-width: 420px;
 }
-.v2-mb-name:hover,
 .v2-mb-name:focus {
-  border-bottom-color: var(--border-subtle);
+  border-bottom-color: var(--accent);
   outline: none;
+  box-shadow: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-mb-name:hover:not(:focus) {
+    border-bottom-color: var(--border-subtle);
+  }
 }
 /* Embed builder, MEE6-style: a live "fake Discord message" you edit
    straight inside rather than a labeled form. The trick is styling real
@@ -731,7 +1033,7 @@ a:hover {
   font-size: 0.95rem;
 }
 .v2-msg-botbadge {
-  font-size: 0.6rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   background: var(--accent);
@@ -757,12 +1059,15 @@ a:hover {
   padding: 2px 4px;
   border-radius: 4px;
 }
-.v2-msg-preview .v2-msg-content:hover {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
+@media (hover: hover) and (pointer: fine) {
+  .v2-msg-preview .v2-msg-content:hover {
+    background: color-mix(in srgb, var(--text) 5%, transparent);
+  }
 }
 .v2-msg-preview .v2-msg-content:focus {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   outline: none;
+  box-shadow: none;
 }
 .v2-msg-preview .v2-msg-content::placeholder {
   color: var(--text-muted);
@@ -781,6 +1086,15 @@ a:hover {
 .v2-embed-preview:hover,
 .v2-embed-preview:focus-within {
   z-index: 1;
+}
+/* Phones: no 48px avatar indent under the bot name — the embed and the
+   message text get the full width. */
+@media (max-width: 560px) {
+  .v2-msg-preview .v2-msg-content,
+  .v2-msg-preview .v2-embed-preview {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 /* welcome-channel's element list (moduleForms/WelcomeChannel.jsx) has no
    avatar/username header to align the 48px indent under, so it isn't a
@@ -819,6 +1133,7 @@ a:hover {
   z-index: 5;
 }
 .v2-colorpicker-swatch {
+  position: relative;
   display: grid;
   place-items: center;
   width: 24px;
@@ -832,6 +1147,13 @@ a:hover {
 .v2-colorpicker-swatch::-webkit-details-marker {
   display: none;
 }
+@media (pointer: coarse) {
+  .v2-colorpicker-swatch::before {
+    content: '';
+    position: absolute;
+    inset: -10px;
+  }
+}
 .v2-colorpicker-swatch svg {
   width: 13px;
   height: 13px;
@@ -843,10 +1165,15 @@ a:hover {
   left: 0;
   width: 220px;
   background: var(--bg-surface);
+  max-width: calc(100vw - 32px);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   padding: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-pop);
+  transform-origin: top left;
+}
+.v2-colorpicker[open] .v2-colorpicker-panel {
+  animation: v2-pop-in 150ms var(--ease-out);
 }
 .v2-colorpicker-label {
   font-size: 0.7rem;
@@ -865,15 +1192,41 @@ a:hover {
   gap: 6px;
 }
 .v2-colorpicker-dot {
+  position: relative;
   width: 20px;
   height: 20px;
   border-radius: 50%;
   border: 1px solid var(--swatch-border);
   padding: 0;
   cursor: pointer;
+  transition: transform 160ms var(--ease-out);
 }
-.v2-colorpicker-dot:hover {
-  transform: scale(1.12);
+@media (hover: hover) and (pointer: fine) {
+  .v2-colorpicker-dot:hover {
+    transform: scale(1.12);
+  }
+}
+.v2-colorpicker-dot:active {
+  transform: scale(0.92);
+}
+/* Touch: bigger dots plus a hit area that fills the gap between them. */
+@media (pointer: coarse) {
+  .v2-colorpicker-panel {
+    width: 252px;
+  }
+  .v2-colorpicker-row {
+    gap: 8px;
+  }
+  .v2-colorpicker-dot,
+  .v2-colorpicker-more {
+    width: 36px;
+    height: 36px;
+  }
+  .v2-colorpicker-dot::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+  }
 }
 .v2-colorpicker-footer {
   display: flex;
@@ -906,6 +1259,7 @@ a:hover {
 .v2-colorpicker-panel .v2-colorpicker-hex:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .v2-colorpicker-native {
   position: absolute;
@@ -936,6 +1290,7 @@ a:hover {
   opacity: 1;
 }
 .v2-embed-toolbar button {
+  position: relative;
   width: 26px;
   height: 26px;
   display: grid;
@@ -945,14 +1300,48 @@ a:hover {
   border-radius: 6px;
   color: var(--text-muted);
   cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
 }
-.v2-embed-toolbar button:hover {
-  background: var(--bg-surface);
+@media (hover: hover) and (pointer: fine) {
+  .v2-embed-toolbar button:hover:not(:disabled) {
+    background: var(--bg-surface-2);
+    color: var(--text);
+  }
+}
+.v2-embed-toolbar button:active:not(:disabled) {
+  background: var(--bg-surface-2);
   color: var(--text);
 }
 .v2-embed-toolbar button:disabled {
   opacity: 0.35;
-  cursor: default;
+  cursor: not-allowed;
+}
+/* Touch has no hover to reveal the toolbar — and an invisible toolbar can
+   still be tapped — so it's always shown, with 44px-tall targets. */
+@media (hover: none) {
+  .v2-embed-toolbar {
+    opacity: 1;
+  }
+}
+@media (pointer: coarse) {
+  .v2-embed-preview {
+    margin-top: 30px;
+  }
+  .v2-embed-toolbar {
+    top: -22px;
+    gap: 4px;
+  }
+  .v2-embed-toolbar button {
+    width: 40px;
+    height: 36px;
+  }
+  .v2-embed-toolbar button::before {
+    content: '';
+    position: absolute;
+    inset: -4px -2px;
+  }
 }
 .v2-embed-toolbar svg {
   width: 15px;
@@ -985,8 +1374,10 @@ a:hover {
   overflow: hidden;
   cursor: pointer;
 }
-.v2-embed-avatar-pick:hover {
-  border-color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .v2-embed-avatar-pick:hover {
+    border-color: var(--accent);
+  }
 }
 .v2-embed-avatar-pick img {
   width: 100%;
@@ -1010,12 +1401,15 @@ a:hover {
   border-radius: 4px;
   resize: none;
 }
-.v2-embed-preview .v2-embed-input:hover {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
+@media (hover: hover) and (pointer: fine) {
+  .v2-embed-preview .v2-embed-input:hover {
+    background: color-mix(in srgb, var(--text) 5%, transparent);
+  }
 }
 .v2-embed-preview .v2-embed-input:focus {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   outline: none;
+  box-shadow: none;
 }
 .v2-embed-preview .v2-embed-input::placeholder {
   color: var(--text-muted);
@@ -1054,25 +1448,56 @@ a:hover {
 .v2-embed-field-value {
   font-size: 0.82rem;
 }
+/* Hidden with opacity (not display:none) so it stays in the tab order —
+   tabbing onto it makes the block :focus-within, which shows it. */
 .v2-embed-field-remove {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   position: absolute;
-  top: -6px;
-  right: -6px;
-  width: 16px;
-  height: 16px;
+  z-index: 1;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 50%;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
   cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 150ms ease,
+    color 150ms ease;
 }
-.v2-embed-field-block:hover .v2-embed-field-remove {
-  display: flex;
+.v2-embed-field-remove::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+.v2-embed-field-block:hover .v2-embed-field-remove,
+.v2-embed-field-block:focus-within .v2-embed-field-remove {
+  opacity: 1;
+}
+.v2-embed-field-remove:hover,
+.v2-embed-field-remove:active {
+  color: var(--danger);
+}
+@media (hover: none) {
+  .v2-embed-field-remove {
+    opacity: 1;
+    width: 28px;
+    height: 28px;
+    top: -12px;
+    right: -12px;
+    font-size: 12px;
+  }
+  .v2-embed-field-remove::before {
+    inset: -8px;
+  }
 }
 
 .v2-embed-addfield {
@@ -1086,8 +1511,10 @@ a:hover {
   font-weight: 600;
   cursor: pointer;
 }
-.v2-embed-addfield:hover {
-  text-decoration: underline;
+@media (hover: hover) and (pointer: fine) {
+  .v2-embed-addfield:hover {
+    text-decoration: underline;
+  }
 }
 
 .v2-embed-thumb-pick {
@@ -1098,7 +1525,7 @@ a:hover {
   background: var(--bg-surface);
   border: 1px dashed var(--border-subtle);
   color: var(--text-muted);
-  font-size: 0.6rem;
+  font-size: 0.68rem;
   text-align: center;
   overflow: hidden;
   padding: 4px;
@@ -1113,8 +1540,10 @@ a:hover {
   height: 100%;
   object-fit: cover;
 }
-.v2-embed-thumb-pick:hover {
-  border-color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .v2-embed-thumb-pick:hover {
+    border-color: var(--accent);
+  }
 }
 
 .v2-embed-image-pick {
@@ -1140,8 +1569,10 @@ a:hover {
   max-height: 220px;
   object-fit: cover;
 }
-.v2-embed-image-pick:hover {
-  border-color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .v2-embed-image-pick:hover {
+    border-color: var(--accent);
+  }
 }
 
 .v2-embed-footer-row {
@@ -1165,13 +1596,19 @@ a:hover {
   font-weight: 600;
   cursor: pointer;
 }
-.v2-embed-add:hover {
+@media (hover: hover) and (pointer: fine) {
+  .v2-embed-add:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+}
+.v2-embed-add:active:not(:disabled) {
   border-color: var(--accent);
   color: var(--text);
 }
 .v2-embed-add:disabled {
   opacity: 0.5;
-  cursor: default;
+  cursor: not-allowed;
 }
 
 /* Animated toggle switch, accent color when on — replaces V1's pill button.
@@ -1189,13 +1626,16 @@ a:hover {
   padding: 0;
   font: inherit;
   appearance: none;
+  transition:
+    background-color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out);
 }
 button.v2-toggle {
   cursor: pointer;
 }
 button.v2-toggle:disabled {
-  cursor: default;
-  opacity: 0.6;
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .v2-toggle::after {
   content: '';
@@ -1207,8 +1647,8 @@ button.v2-toggle:disabled {
   border-radius: 50%;
   background: var(--text-muted);
   transition:
-    transform 0.18s ease,
-    background 0.18s ease;
+    transform 160ms var(--ease-out),
+    background-color 160ms var(--ease-out);
 }
 .v2-toggle.is-on {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
@@ -1252,9 +1692,28 @@ button.v2-toggle:disabled {
   font-size: 0.82rem;
   padding: 5px 12px;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease;
 }
-.v2-tab:hover {
+@media (hover: hover) and (pointer: fine) {
+  .v2-tab:hover {
+    color: var(--text);
+  }
+}
+.v2-tab:active {
   color: var(--text);
+}
+@media (pointer: coarse) {
+  .v2-tab {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 16px;
+  }
 }
 .v2-tab.is-active {
   color: var(--text);
@@ -1276,55 +1735,92 @@ button.v2-toggle:disabled {
 .v2-inline-input:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+@media (max-width: 600px) {
+  .v2-inline-input {
+    flex: 1 1 8rem;
+    width: auto;
+    min-width: 0;
+  }
 }
 
-.v2-btn-ghost {
-  background: none;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  color: var(--text);
+/* One base for every button variant: same height, padding and press
+   feedback, so a primary next to a ghost lines up. */
+.v2-btn-primary,
+.v2-btn-ghost,
+.v2-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   font: inherit;
-  font-size: 0.85rem;
-  padding: 7px 14px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: none;
   cursor: pointer;
   flex: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 150ms ease,
+    border-color 150ms ease,
+    filter 150ms ease;
 }
-.v2-btn-ghost:hover {
-  border-color: var(--accent);
+.v2-btn-primary:hover,
+.v2-btn-ghost:hover,
+.v2-btn-danger:hover {
+  text-decoration: none;
 }
-.v2-btn-ghost:disabled {
-  opacity: 0.6;
-  cursor: default;
+.v2-btn-primary:active:not(:disabled),
+.v2-btn-ghost:active:not(:disabled),
+.v2-btn-danger:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.v2-btn-primary:disabled,
+.v2-btn-ghost:disabled,
+.v2-btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.v2-btn-ghost {
+  background: none;
+  border-color: var(--border-subtle);
+  color: var(--text);
 }
 .v2-btn-danger {
   background: none;
-  border: 1px solid #f87171;
-  border-radius: 8px;
-  color: #f87171;
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 7px 14px;
-  cursor: pointer;
-}
-.v2-btn-danger:hover {
-  background: rgba(248, 113, 113, 0.12);
-}
-.v2-btn-danger:disabled {
-  opacity: 0.6;
-  cursor: default;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 .v2-btn-primary {
   background: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-color: var(--accent);
   color: #fff;
-  font: inherit;
-  font-size: 0.88rem;
   font-weight: 600;
-  padding: 9px 18px;
-  cursor: pointer;
-  text-decoration: none;
-  display: inline-block;
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-btn-ghost:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+  .v2-btn-danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+  }
+  .v2-btn-primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+}
+.v2-btn-ghost:active:not(:disabled) {
+  border-color: var(--accent);
+}
+.v2-btn-danger:active:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 /* A page title with an action button on the same line (e.g. "+ New…") —
    used where a page needs one, most don't. */
@@ -1334,14 +1830,6 @@ button.v2-toggle:disabled {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-}
-.v2-btn-primary:hover {
-  filter: brightness(1.08);
-  text-decoration: none;
-}
-.v2-btn-primary:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 
 .v2-field {
@@ -1354,8 +1842,9 @@ button.v2-toggle:disabled {
 }
 .v2-field label {
   display: block;
-  font-size: 0.82rem;
-  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text);
   margin-bottom: 6px;
 }
 .v2-field label.v2-check {
@@ -1364,6 +1853,7 @@ button.v2-toggle:disabled {
   gap: 8px;
   color: var(--text);
   font-size: 0.88rem;
+  font-weight: 400;
   margin-bottom: 10px;
 }
 .v2-check input {
@@ -1371,7 +1861,7 @@ button.v2-toggle:disabled {
 }
 .v2-check-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
   gap: 6px 16px;
 }
 .v2-check-grid .v2-check {
@@ -1393,6 +1883,7 @@ button.v2-toggle:disabled {
 .v2-input-sm:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 /* Auto-moderation (Automod.jsx) — one row per check (mode select + an
    optional collapsible params panel), lighter than .v2-rule-card since
@@ -1426,28 +1917,27 @@ button.v2-toggle:disabled {
   margin-top: 8px;
 }
 .v2-warn-text {
-  color: #f5a524;
+  color: var(--warn);
   font-size: 0.82rem;
   margin: 6px 0 0;
 }
 /* Scoped to any form, not just .v2-field, so a card of raw inputs (e.g.
    .v2-rule-card's embed fields) gets the same look without every single
    input needing its own .v2-field wrapper (and that wrapper's label-sized
-   margin, which doesn't fit a dense card layout). */
-form input[type='text'],
-form input[type='url'],
-form input[type='number'],
-form input[type='time'],
-form input[type='datetime-local'],
-form select,
-form textarea,
-.v2-field input[type='text'],
-.v2-field input[type='url'],
-.v2-field input[type='number'],
-.v2-field input[type='time'],
-.v2-field input[type='datetime-local'],
-.v2-field select,
-.v2-field textarea {
+   margin, which doesn't fit a dense card layout).
+   Zero specificity (:where) on purpose: it's the default look, so any
+   component class (.v2-mb-name, .v2-input-sm, .v2-inline-input, …) wins
+   without needing to out-specify a `form input[type=…]` selector. */
+:where(form, .v2-field)
+  :where(
+    input[type='text'],
+    input[type='url'],
+    input[type='number'],
+    input[type='time'],
+    input[type='datetime-local'],
+    select,
+    textarea
+  ) {
   width: 100%;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -1458,11 +1948,31 @@ form textarea,
   font-size: 0.9rem;
   resize: vertical;
 }
-.v2-field input:focus,
-.v2-field select:focus,
-.v2-field textarea:focus {
+/* Text-like fields swap the outline for an accent border + soft ring.
+   Checkboxes, radios and colour inputs keep the global :focus-visible
+   outline — an earlier `.v2-field input:focus { outline: none }` hid
+   keyboard focus on them entirely. */
+:where(form, .v2-field)
+  :is(
+    input:not([type='checkbox'], [type='radio'], [type='color'], [type='range'], [type='file']),
+    select,
+    textarea
+  ):focus-visible {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.v2-field-row + .v2-field-row {
+  margin-top: 8px;
+}
+.u-mt-2 {
+  margin-top: 8px;
 }
 .v2-field-hint {
   color: var(--text-muted);
@@ -1493,6 +2003,8 @@ form textarea,
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  max-width: 100%;
+  min-width: 0;
   padding: 3px 8px 3px 7px;
   background: var(--bg-surface-2);
   border: 1px solid var(--border-subtle);
@@ -1500,6 +2012,12 @@ form textarea,
   font-size: 0.78rem;
   font-weight: 600;
   white-space: nowrap;
+}
+/* ChipPicker.jsx puts the full name in a title attribute. */
+.v2-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .v2-chip-dot {
   width: 10px;
@@ -1513,17 +2031,31 @@ form textarea,
   flex: none;
   font-size: 0.8rem;
 }
+/* 28px hit area; the negative margins keep the chip itself compact. */
 .v2-chip-x {
+  display: grid;
+  place-items: center;
+  flex: none;
+  min-width: 28px;
+  min-height: 28px;
+  margin: -6px -8px -6px -6px;
   background: none;
   border: 0;
+  border-radius: 999px;
   color: var(--text-muted);
   font-size: 0.95rem;
   line-height: 1;
-  padding: 0 0 0 2px;
+  padding: 0;
   cursor: pointer;
+  transition: color 150ms ease;
 }
-.v2-chip-x:hover {
-  color: #f87171;
+.v2-chip-x:active {
+  color: var(--danger);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-chip-x:hover {
+    color: var(--danger);
+  }
 }
 .v2-chip-add {
   max-width: 320px;
@@ -1597,6 +2129,24 @@ form textarea,
   font: inherit;
   font-size: 0.78rem;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+.v2-pill:active:not(.is-on) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+@media (pointer: coarse) {
+  .v2-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 16px;
+  }
 }
 .v2-pill.is-on {
   background: var(--accent);
@@ -1614,19 +2164,19 @@ form textarea,
   letter-spacing: 0.02em;
 }
 .v2-status-pill.planned {
-  background: rgba(56, 189, 248, 0.16);
+  background: color-mix(in srgb, var(--accent-2) 16%, transparent);
   color: var(--accent-2);
 }
 .v2-status-pill.started {
-  background: rgba(251, 191, 36, 0.16);
-  color: #fbbf24;
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: var(--warn);
 }
 .v2-status-pill.completed {
-  background: rgba(74, 222, 128, 0.16);
-  color: #4ade80;
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
 }
 .v2-status-pill.pending {
-  background: rgba(166, 172, 205, 0.16);
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
   color: var(--text-muted);
 }
 .v2-roadmap-vote {
@@ -1649,10 +2199,11 @@ form textarea,
 }
 .v2-roadmap-vote:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 .v2-roadmap-vote strong {
   font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
 }
 .v2-roadmap-desc :first-child {
   margin-top: 0;
@@ -1694,16 +2245,17 @@ form textarea,
   font-size: 1.3rem;
   font-weight: 800;
   letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 .v2-ins-ok {
-  color: #4ade80;
+  color: var(--success);
 }
 .v2-ins-bad {
-  color: #f87171;
+  color: var(--danger);
 }
 .v2-ins-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
   gap: 14px;
 }
 .v2-ins-chart {
@@ -1725,22 +2277,23 @@ form textarea,
   fill: var(--accent);
 }
 .v2-ins-bar-voice {
-  fill: #4ade80;
+  fill: var(--success);
 }
 .v2-ins-line-grow {
   stroke: var(--accent);
   stroke-width: 2;
 }
 .v2-ins-line-join {
-  stroke: #4ade80;
+  stroke: var(--success);
   stroke-width: 2;
 }
 .v2-ins-line-leave {
-  stroke: #f87171;
+  stroke: var(--danger);
   stroke-width: 2;
 }
 .v2-ins-key {
   font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
 }
 .v2-ins-bars {
   list-style: none;
@@ -1775,11 +2328,12 @@ form textarea,
   border-radius: 999px;
 }
 .v2-ins-bar-fill-voice {
-  background: #4ade80;
+  background: var(--success);
 }
 .v2-ins-bar-val {
   font-size: 0.78rem;
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Embed editor (components/EmbedEditor.jsx) ----------
@@ -1819,16 +2373,22 @@ form textarea,
   cursor: pointer;
 }
 
-/* Toasts (components/Toasts.jsx) — messages that replace window.alert(). */
+/* Toasts (components/Toasts.jsx) — messages that replace window.alert().
+   The stack is always mounted (it's the live region); it lets taps through
+   wherever there's no toast. Each toast slides in from the right edge it
+   lives on and leaves the same way (.is-leaving, set by Toasts.jsx for
+   200ms before it's removed). Transitions, not keyframes, so a toast that
+   is dismissed mid-entry reverses smoothly from where it is. */
 .v2-toasts {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   z-index: 100;
   display: flex;
   flex-direction: column;
   gap: 8px;
   width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
 }
 .v2-toast {
   display: flex;
@@ -1841,12 +2401,30 @@ form textarea,
   border-left: 3px solid var(--accent-2);
   border-radius: 10px;
   font-size: 0.9rem;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  overflow-wrap: anywhere;
+  box-shadow: var(--shadow-toast);
+  pointer-events: auto;
+  transition:
+    opacity 300ms var(--ease-out),
+    transform 300ms var(--ease-out);
+}
+@starting-style {
+  .v2-toast {
+    opacity: 0;
+    transform: translateX(calc(100% + 16px));
+  }
+}
+.v2-toast.is-leaving {
+  opacity: 0;
+  transform: translateX(calc(100% + 16px));
+  pointer-events: none;
+  transition-duration: 200ms;
 }
 .v2-toast.is-error {
-  border-left-color: #f87171;
+  border-left-color: var(--danger);
 }
 .v2-toast button {
+  position: relative;
   flex: none;
   background: none;
   border: 0;
@@ -1855,9 +2433,15 @@ form textarea,
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
+  transition: color 150ms ease;
 }
-.v2-toast button:hover {
+.v2-toast button:active {
   color: var(--text);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-toast button:hover {
+    color: var(--text);
+  }
 }
 
 /* components/Announcement.jsx: bot-wide notice from Bot Personalizer. Full
@@ -1877,21 +2461,22 @@ form textarea,
   opacity: 0.85;
 }
 .v2-ann-info {
-  background: rgba(56, 189, 248, 0.12);
-  border-color: rgba(56, 189, 248, 0.28);
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent-2) 28%, transparent);
   color: var(--accent-2);
 }
 .v2-ann-warning {
-  background: rgba(251, 191, 36, 0.12);
-  border-color: rgba(251, 191, 36, 0.28);
-  color: #fbbf24;
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 28%, transparent);
+  color: var(--warn);
 }
 .v2-ann-critical {
-  background: rgba(248, 113, 113, 0.14);
-  border-color: rgba(248, 113, 113, 0.32);
-  color: #f87171;
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 32%, transparent);
+  color: var(--danger);
 }
 .v2-ann-dismiss {
+  position: relative;
   margin-left: auto;
   flex: none;
   background: none;
@@ -1901,9 +2486,24 @@ form textarea,
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
+  transition: color 150ms ease;
 }
-.v2-ann-dismiss:hover {
+.v2-ann-dismiss:active {
   color: var(--text);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-ann-dismiss:hover {
+    color: var(--text);
+  }
+}
+/* 44px hit areas for the two small "×" buttons on touch screens. */
+@media (pointer: coarse) {
+  .v2-toast button::before,
+  .v2-ann-dismiss::before {
+    content: '';
+    position: absolute;
+    inset: -12px -14px;
+  }
 }
 
 /* components/Meta.jsx: facts side by side with space between, no separator character. */
@@ -1978,6 +2578,7 @@ form textarea,
   gap: 10px;
   max-height: 55vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px;
   margin-bottom: 18px;
   background: var(--bg-surface-2);
@@ -2054,12 +2655,12 @@ form textarea,
   margin-left: auto;
   padding: 1px 6px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  border: 1px solid var(--border, #2c3040);
-  color: var(--muted, #8b92a8);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
 }
 .v2-platform-fluxer {
   color: #3fb7a8;
@@ -2091,7 +2692,7 @@ form textarea,
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--text-muted, var(--muted, #8b92a8));
+  color: var(--text-muted);
 }
 .v2-account-card p {
   margin: 0;
@@ -2108,4 +2709,42 @@ form textarea,
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* Reduced motion: fewer and gentler, not zero. Slides and scales go (the
+   drawer, toasts, press/hover scale, the toggle knob); fades and colour
+   changes stay because they still explain what changed. Kept last so it
+   overrides the rules above at equal specificity. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .v2-sidebar {
+    transition: none;
+  }
+  .v2-toast,
+  .v2-toast.is-leaving {
+    transform: none;
+  }
+  @starting-style {
+    .v2-toast {
+      transform: none;
+    }
+  }
+  .v2-btn-primary:active:not(:disabled),
+  .v2-btn-ghost:active:not(:disabled),
+  .v2-btn-danger:active:not(:disabled),
+  .v2-theme-toggle:active,
+  .v2-colorpicker-dot:active,
+  .v2-colorpicker-dot:hover,
+  .v2-card:hover {
+    transform: none;
+  }
+  .v2-toggle::after {
+    transition-property: background-color;
+  }
+  .v2-switch[open] .v2-switch-menu,
+  .v2-colorpicker[open] .v2-colorpicker-panel {
+    animation-name: v2-fade-in;
+  }
 }

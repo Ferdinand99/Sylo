@@ -1,61 +1,23 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState } from 'react';
 import { useCmd } from '../platformContext.jsx';
-import { getModuleConfig, saveModuleConfig, setInviteBonus, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
+import { setInviteBonus } from '../api.js';
 import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 export default function InviteTracker() {
-  const { guildId } = useParams();
   const cmd = useCmd();
-  const { data, loading, error, setData } = useApiData(
-    () => getModuleConfig(guildId, 'invite-tracker'),
-    [guildId]
-  );
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [bonusUser, setBonusUser] = useState('');
   const [bonusValue, setBonusValue] = useState(0);
   const [bonusBusy, setBonusBusy] = useState(false);
+  const { guildId, data, setData, form, setForm, status, error, dirty, saving, save, reset } =
+    useModuleForm('invite-tracker');
 
-  useEffect(() => {
-    if (data) setForm(data.config);
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Invite tracker settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="Invite tracker settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const { config } = await saveModuleConfig(guildId, 'invite-tracker', form);
-      setForm(config);
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function onSetBonus(e) {
     e.preventDefault();
@@ -90,7 +52,7 @@ export default function InviteTracker() {
         </p>
       ) : null}
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save}>
         <div className="v2-field">
           <label htmlFor="joinLogChannelId">
             Join / leave log channel <span className="v2-field-hint">— optional</span>
@@ -123,13 +85,6 @@ export default function InviteTracker() {
           <p className="v2-field-hint">
             A join that leaves inside this window is not counted. 0 disables the guard.
           </p>
-        </div>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
         </div>
       </form>
 
@@ -184,6 +139,7 @@ export default function InviteTracker() {
           </button>
         </div>
       </form>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

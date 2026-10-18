@@ -20,6 +20,8 @@ import ModerationSettings from '../moduleForms/Moderation.jsx';
 import Logging from '../moduleForms/Logging.jsx';
 import Commands from './Commands.jsx';
 import Meta, { plural } from '../components/Meta.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { formatCount } from '../util.js';
 
 const SUB_TABS = [
   ['cases', 'Cases'],
@@ -62,7 +64,12 @@ function WarnPanel({ guildId, run, busy }) {
   }
   async function clear() {
     if (!userId.trim()) return notify('Enter a user ID or mention first.');
-    if (!confirm('Clear every warning for this member?')) return;
+    const ok = await confirmDialog({
+      title: 'Clear their warnings?',
+      body: 'Every warning on record for this member is removed, so they count from zero again.',
+      confirmLabel: 'Clear warnings',
+    });
+    if (!ok) return;
     await run(
       () => clearMemberWarnings(guildId, userId),
       (res) => `Removed ${plural(res.removed, 'warning')}.`
@@ -72,10 +79,13 @@ function WarnPanel({ guildId, run, busy }) {
   return (
     <form className="v2-rule-card" onSubmit={warn}>
       <h2 className="v2-group-title">Warn a member</h2>
-      <div className="v2-field-row">
+      <div className="v2-field-row v2-wrap-row">
         <input
           type="text"
           aria-label="User ID or mention"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           placeholder="User ID or @mention"
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
@@ -90,11 +100,11 @@ function WarnPanel({ guildId, run, busy }) {
           onChange={(e) => setReason(e.target.value)}
         />
       </div>
-      <div className="v2-field-row v2-section-gap-sm">
+      <div className="v2-field-row v2-wrap-row v2-section-gap-sm">
         <button type="submit" className="v2-btn-primary" disabled={busy || !reason.trim()}>
           Warn
         </button>
-        <button type="button" className="v2-btn-ghost" disabled={busy} onClick={clear}>
+        <button type="button" className="v2-btn-danger v2-btn-apart" disabled={busy} onClick={clear}>
           Clear their warnings
         </button>
       </div>
@@ -116,18 +126,19 @@ function CaseRow({ c, guildId, run, busy }) {
   }
 
   return (
-    <div className={`v2-row v2-case-row${c.active ? '' : ' is-deleted'}`}>
+    <div className={`v2-row v2-row-stack v2-case-row${c.active ? '' : ' is-deleted'}`}>
       <div className="v2-row-main">
-        <h3>
+        <h3 className="v2-break">
           <span className="v2-id">#{c.caseNumber}</span>
           {c.user}
           <span className="v2-case-action">{c.action}</span>
           {!c.active ? <span className="v2-case-action">deleted</span> : null}
         </h3>
         {editing ? (
-          <div className="v2-field-row">
+          <div className="v2-field-row v2-wrap-row">
             <input
               type="text"
+              className="v2-grow-input"
               aria-label={`Reason for case ${c.caseNumber}`}
               maxLength={1000}
               value={reason}
@@ -146,19 +157,19 @@ function CaseRow({ c, guildId, run, busy }) {
             </button>
           </div>
         ) : (
-          <p className="v2-case-reason">
+          <p className="v2-case-reason v2-break">
             <Meta items={[c.reason || 'No reason', c.detail, `by ${c.moderator}`, c.ago]} />
           </p>
         )}
       </div>
       {!editing ? (
-        <div className="v2-field-row">
+        <div className="v2-row-actions">
           <button type="button" className="v2-btn-ghost" disabled={busy} onClick={() => setEditing(true)}>
             Edit reason
           </button>
           <button
             type="button"
-            className="v2-btn-ghost"
+            className={c.active ? 'v2-btn-danger' : 'v2-btn-ghost'}
             disabled={busy}
             onClick={() =>
               run(
@@ -177,13 +188,13 @@ function CaseRow({ c, guildId, run, busy }) {
 
 function InfractionsTab() {
   const { guildId } = useParams();
-  const { data, loading, error, setData } = useApiData(() => getModeration(guildId), [guildId]);
+  const { data, error, setData } = useApiData(() => getModeration(guildId), [guildId]);
   const [tab, setTab] = useState('cases');
   const reload = async () => setData(await getModeration(guildId));
   const { busy, run } = useAction(reload);
 
-  if (loading && !data) return <p className="v2-state">Loading…</p>;
   if (error) return <LoadError error={error} what="the moderation page" />;
+  if (!data) return <p className="v2-state">Loading…</p>;
 
   return (
     <>
@@ -208,7 +219,7 @@ function InfractionsTab() {
         data.cases.length ? (
           <>
             <p className="v2-field-hint">
-              Showing the newest {data.cases.length} of {data.caseTotal}.
+              Showing the newest {formatCount(data.cases.length)} of {formatCount(data.caseTotal)}.
             </p>
             <div className="v2-list">
               {data.cases.map((c) => (
@@ -224,14 +235,14 @@ function InfractionsTab() {
       {tab === 'bans' ? (
         <>
           {data.bansError ? <p className="v2-note">{data.bansError}</p> : null}
-          <h2 className="v2-group-title">Banned ({data.bansTotal})</h2>
+          <h2 className="v2-group-title">Banned ({formatCount(data.bansTotal)})</h2>
           {data.bans.length ? (
             <div className="v2-list">
               {data.bans.map((b) => (
                 <div className="v2-row" key={b.id}>
                   <div className="v2-row-main">
-                    <h3>{b.tag}</h3>
-                    <p>
+                    <h3 className="v2-break">{b.tag}</h3>
+                    <p title={b.reason || undefined}>
                       <Meta items={[b.id, b.reason]} />
                     </p>
                   </div>
@@ -250,7 +261,7 @@ function InfractionsTab() {
             <p className="v2-field-hint">Nobody is banned.</p>
           ) : null}
           {data.bansTotal > data.bans.length ? (
-            <p className="v2-field-hint">Showing the first {data.banLimit} bans.</p>
+            <p className="v2-field-hint">Showing the first {plural(data.banLimit, 'ban')}.</p>
           ) : null}
 
           <h2 className="v2-group-title v2-section-gap">Temporary bans ({data.tempBans.length})</h2>
@@ -259,8 +270,8 @@ function InfractionsTab() {
               {data.tempBans.map((t) => (
                 <div className="v2-row" key={t.userId}>
                   <div className="v2-row-main">
-                    <h3>{t.tag}</h3>
-                    <p>
+                    <h3 className="v2-break">{t.tag}</h3>
+                    <p title={t.reason || undefined}>
                       <Meta items={[`unbanned in ${t.remaining}`, t.reason]} />
                     </p>
                   </div>
@@ -283,13 +294,18 @@ function InfractionsTab() {
 
       {tab === 'locks' ? (
         <>
-          <div className="v2-field-row">
+          <div className="v2-field-row v2-wrap-row">
             <button
               type="button"
-              className="v2-btn-primary"
+              className="v2-btn-danger"
               disabled={busy}
-              onClick={() => {
-                if (confirm('Lock every text channel in this server?'))
+              onClick={async () => {
+                const ok = await confirmDialog({
+                  title: 'Lock every text channel?',
+                  body: "Members can't send messages in any text channel until you end the lockdown.",
+                  confirmLabel: 'Lock all channels',
+                });
+                if (ok)
                   run(
                     () => lockAllChannels(guildId),
                     (r) => `Locked ${plural(r.locked, 'channel')}.`
@@ -318,7 +334,7 @@ function InfractionsTab() {
               {data.channelLocks.map((l) => (
                 <div className="v2-row" key={l.channelId}>
                   <div className="v2-row-main">
-                    <h3>#{l.name ?? 'deleted channel'}</h3>
+                    <h3 className="v2-break">#{l.name ?? 'deleted channel'}</h3>
                     <p>
                       <Meta
                         items={[
@@ -395,7 +411,7 @@ export default function ModerationHub() {
         ))}
       </div>
       <div className="v2-embedded">
-        <Content />
+        <Content key={guildId} />
       </div>
     </>
   );

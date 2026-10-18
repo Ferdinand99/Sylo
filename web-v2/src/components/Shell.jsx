@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom';
 import { getGuilds } from '../api.js';
 import { readLastGuildId, writeLastGuildId, readTheme, writeTheme } from '../util.js';
@@ -9,6 +9,9 @@ import Sidebar from './Sidebar.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import Toasts from './Toasts.jsx';
 import useLabelLinks from './useLabelLinks.js';
+
+// --bg-main per theme (styles.css) — what the browser chrome should match.
+const THEME_COLOR = { dark: '#0b0d17', light: '#f5f6fb' };
 
 // Top-level layout for every V2 page: topbar (brand, server switcher — kept
 // out of the sidebar per request, it's app-wide not tied to one guild page —
@@ -34,15 +37,22 @@ export default function Shell() {
   // Off-canvas sidebar below the 860px breakpoint (see .v2-sidebar in
   // styles.css) — above it this is unused, the sidebar is always visible.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // The drawer hands focus back here when it closes (Sidebar.jsx).
+  const navToggleRef = useRef(null);
   const [theme, setTheme] = useState(() => readTheme() ?? 'dark');
   const { pathname } = useLocation();
 
   // index.html's inline script already set data-theme before first paint for
   // a saved "light" choice (avoids a flash of dark-then-light) — this just
   // keeps it in sync as the user toggles, and handles switching back to dark.
+  // Also keeps the browser chrome / status bar colour (theme-color meta in
+  // index.html) matched to the topbar background of the active theme.
   useEffect(() => {
     if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
     else document.documentElement.removeAttribute('data-theme');
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', theme === 'light' ? THEME_COLOR.light : THEME_COLOR.dark);
   }, [theme]);
 
   function toggleTheme() {
@@ -86,10 +96,12 @@ export default function Shell() {
     <div className="v2-shell">
       <header className="v2-topbar">
         <button
+          ref={navToggleRef}
           type="button"
           className="v2-nav-toggle"
           aria-label="Menu"
           aria-expanded={mobileNavOpen}
+          aria-controls="v2-sidebar"
           onClick={() => setMobileNavOpen((v) => !v)}
         >
           <span />
@@ -99,22 +111,27 @@ export default function Shell() {
         <Link className="v2-brand" to="/">
           <span className="v2-brand-mark">S</span>
           <span>Sylo</span>
-          <span
-            className="v2-beta-badge"
-            title="Not every module has a V2 page yet — some still open the classic dashboard"
-          >
+          <span className="v2-beta-badge" title="V2 is in beta — the classic dashboard is still available">
             Beta
           </span>
         </Link>
         <ServerSwitcher guilds={guilds} activeGuildId={lastGuildId} onSelectGuild={selectGuild} />
-        <a className="v2-classic-link" href="/">
-          Back to classic dashboard
+        {/* Two labels, one shown at a time — styles.css swaps to the short
+            one on narrow screens so the topbar keeps to one row. */}
+        <a className="v2-classic-link" href="/" aria-label="Back to classic dashboard">
+          <span className="v2-classic-full">Back to classic dashboard</span>
+          <span className="v2-classic-short">Classic</span>
         </a>
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
       </header>
       <OverviewProvider guildId={lastGuildId}>
         <div className="v2-body">
-          <Sidebar activeGuildId={lastGuildId} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+          <Sidebar
+            activeGuildId={lastGuildId}
+            open={mobileNavOpen}
+            onClose={() => setMobileNavOpen(false)}
+            returnFocusRef={navToggleRef}
+          />
           <main className="v2-page">
             <Announcement />
             <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />

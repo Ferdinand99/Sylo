@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   getRoadmapAdmin,
@@ -10,11 +10,15 @@ import {
   deleteRoadmapPost,
   ApiError,
 } from '../api.js';
+import LoadError from '../components/LoadError.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { formatCount } from '../util.js';
 
 function EditRow({ post, onSave, onCancel }) {
   const [title, setTitle] = useState(post.title);
   const [description, setDescription] = useState(post.description);
   const [busy, setBusy] = useState(false);
+  const id = useId();
 
   async function submit(e) {
     e.preventDefault();
@@ -29,8 +33,9 @@ function EditRow({ post, onSave, onCancel }) {
   return (
     <form onSubmit={submit} className="v2-section-gap">
       <div className="v2-field">
-        <label>Title</label>
+        <label htmlFor={`${id}-title`}>Title</label>
         <input
+          id={`${id}-title`}
           type="text"
           maxLength={100}
           required
@@ -39,8 +44,9 @@ function EditRow({ post, onSave, onCancel }) {
         />
       </div>
       <div className="v2-field">
-        <label>Description</label>
+        <label htmlFor={`${id}-desc`}>Description</label>
         <textarea
+          id={`${id}-desc`}
           rows={5}
           maxLength={2000}
           required
@@ -77,24 +83,13 @@ export default function RoadmapAdmin() {
     load();
   }, []);
 
-  if (state.loading) return <p className="v2-state">Loading…</p>;
   if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    const forbidden = state.error instanceof ApiError && state.error.status === 403;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : forbidden ? (
-          "This page is restricted to Sylo's operators."
-        ) : (
-          `Couldn't load the roadmap admin (${state.error.message}).`
-        )}
-      </p>
-    );
+    if (state.error instanceof ApiError && state.error.status === 403) {
+      return <p className="v2-state">This page is restricted to Sylo's operators.</p>;
+    }
+    return <LoadError error={state.error} what="the roadmap admin" />;
   }
+  if (state.loading || !state.data) return <p className="v2-state">Loading…</p>;
 
   const d = state.data;
 
@@ -125,14 +120,32 @@ export default function RoadmapAdmin() {
     setEditingId(null);
   }
 
-  async function onDelete(id) {
-    if (!confirm('Delete this post permanently?')) return;
-    await run(() => deleteRoadmapPost(id));
+  async function onDelete(post) {
+    const ok = await confirmDialog({
+      title: 'Delete this post?',
+      body: (
+        <>
+          <strong className="v2-break">{post.title}</strong> is removed from the public board for good.
+        </>
+      ),
+      confirmLabel: 'Delete post',
+    });
+    if (!ok) return;
+    await run(() => deleteRoadmapPost(post.id));
   }
 
-  async function onReject(id) {
-    if (!confirm('Reject and delete this suggestion?')) return;
-    await run(() => rejectRoadmapPost(id));
+  async function onReject(post) {
+    const ok = await confirmDialog({
+      title: 'Reject this suggestion?',
+      body: (
+        <>
+          <strong className="v2-break">{post.title}</strong> is deleted and never shows on the board.
+        </>
+      ),
+      confirmLabel: 'Reject and delete',
+    });
+    if (!ok) return;
+    await run(() => rejectRoadmapPost(post.id));
   }
 
   return (
@@ -146,19 +159,22 @@ export default function RoadmapAdmin() {
       {notice ? <p className="v2-note">{notice}</p> : null}
 
       <div className="v2-group">
-        <h2 className="v2-group-title">Pending suggestions ({d.pending.length})</h2>
+        <h2 className="v2-group-title">Pending suggestions ({formatCount(d.pending.length)})</h2>
         {d.pending.length === 0 ? (
           <p className="v2-note">Nothing waiting on review.</p>
         ) : (
           <div className="v2-list">
             {d.pending.map((p) => (
-              <div className="v2-row" key={p.id}>
+              <div className="v2-row v2-row-stack v2-roadmap-row" key={p.id}>
                 <div className="v2-row-main">
-                  <h3>{p.title}</h3>
-                  <div className="v2-roadmap-desc" dangerouslySetInnerHTML={{ __html: p.descriptionHtml }} />
+                  <h3 className="v2-break">{p.title}</h3>
+                  <div
+                    className="v2-roadmap-desc v2-break"
+                    dangerouslySetInnerHTML={{ __html: p.descriptionHtml }}
+                  />
                   <span className="v2-field-hint">{p.ago}</span>
                 </div>
-                <div className="v2-field-row">
+                <div className="v2-row-actions">
                   <button
                     type="button"
                     className="v2-btn-primary"
@@ -166,7 +182,7 @@ export default function RoadmapAdmin() {
                   >
                     Approve
                   </button>
-                  <button type="button" className="v2-btn-ghost" onClick={() => onReject(p.id)}>
+                  <button type="button" className="v2-btn-danger" onClick={() => onReject(p)}>
                     Reject
                   </button>
                 </div>
@@ -211,20 +227,23 @@ export default function RoadmapAdmin() {
       </div>
 
       <div className="v2-group">
-        <h2 className="v2-group-title">Public posts ({d.posts.length})</h2>
+        <h2 className="v2-group-title">Public posts ({formatCount(d.posts.length)})</h2>
         {d.posts.length === 0 ? (
           <p className="v2-note">Nothing posted yet.</p>
         ) : (
           <div className="v2-list">
             {d.posts.map((p) => (
-              <div className="v2-row" key={p.id}>
+              <div className="v2-row v2-row-stack v2-roadmap-row" key={p.id}>
                 <div className="v2-row-main">
-                  <h3>
+                  <h3 className="v2-break">
                     <span className={`v2-status-pill ${p.status}`}>{p.status}</span> {p.title}
                   </h3>
-                  <div className="v2-roadmap-desc" dangerouslySetInnerHTML={{ __html: p.descriptionHtml }} />
+                  <div
+                    className="v2-roadmap-desc v2-break"
+                    dangerouslySetInnerHTML={{ __html: p.descriptionHtml }}
+                  />
                   <span className="v2-field-hint">
-                    {p.votes} vote{p.votes === 1 ? '' : 's'} · posted {p.ago}
+                    {formatCount(p.votes)} vote{p.votes === 1 ? '' : 's'} · posted {p.ago}
                   </span>
 
                   {editingId === p.id ? (
@@ -238,8 +257,9 @@ export default function RoadmapAdmin() {
                   )}
                 </div>
 
-                <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div className="v2-row-actions v2-roadmap-admin-actions">
                   <select
+                    aria-label={`Status of ${p.title}`}
                     value={p.status}
                     onChange={(e) => run(() => setRoadmapPostStatus(p.id, e.target.value))}
                   >
@@ -249,7 +269,7 @@ export default function RoadmapAdmin() {
                       </option>
                     ))}
                   </select>
-                  <button type="button" className="v2-btn-ghost" onClick={() => onDelete(p.id)}>
+                  <button type="button" className="v2-btn-danger" onClick={() => onDelete(p)}>
                     Delete
                   </button>
                 </div>

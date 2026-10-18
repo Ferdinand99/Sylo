@@ -7,8 +7,10 @@ import {
   deleteReminder,
   toggleReminder,
   testReminder,
-  ApiError,
 } from '../api.js';
+import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 
 function msToLocalInput(ms) {
@@ -65,7 +67,6 @@ function ReminderForm({
   const [enableEnd, setEnableEnd] = useState(Boolean(initial.endAt));
   const [endAt, setEndAt] = useState(msToLocalInput(initial.endAt));
   const [days, setDays] = useState(new Set(initial.days.length ? initial.days : [0, 1, 2, 3, 4, 5, 6]));
-  const [testNotice, setTestNotice] = useState(null);
   const [testing, setTesting] = useState(false);
 
   function toggleDay(n) {
@@ -102,12 +103,11 @@ function ReminderForm({
 
   async function onTest() {
     setTesting(true);
-    setTestNotice(null);
     try {
       await testReminder(guildId, body());
-      setTestNotice('Test message sent to the channel.');
+      notify('Test message sent to the channel.', 'info');
     } catch (err) {
-      setTestNotice(err.message);
+      notify(err.message);
     } finally {
       setTesting(false);
     }
@@ -180,7 +180,6 @@ function ReminderForm({
           <button type="button" className="v2-btn-ghost" onClick={onTest} disabled={testing || !channelId}>
             {testing ? 'Sending…' : 'Send test message'}
           </button>
-          {testNotice ? <span className="v2-field-hint">{testNotice}</span> : null}
         </div>
       </div>
 
@@ -306,7 +305,6 @@ const BLANK = {
 export default function Reminders() {
   const { guildId } = useParams();
   const [state, setState] = useState({ loading: true, data: null, error: null });
-  const [notice, setNotice] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -321,33 +319,19 @@ export default function Reminders() {
     load();
   }, [guildId]);
 
+  if (state.error) return <LoadError error={state.error} what="Reminders" />;
   if (state.loading) return <p className="v2-state">Loading…</p>;
-  if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Reminders (${state.error.message}).`
-        )}
-      </p>
-    );
-  }
 
   const d = state.data;
 
   async function onCreate(body) {
     setSaving(true);
-    setNotice(null);
     try {
       await createReminder(guildId, body);
       setCreating(false);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
@@ -355,25 +339,29 @@ export default function Reminders() {
 
   async function onEdit(id, body) {
     setSaving(true);
-    setNotice(null);
     try {
       await updateReminder(guildId, id, body);
       setEditingId(null);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
   }
 
   async function onDelete(id) {
-    if (!confirm('Delete this reminder?')) return;
+    const ok = await confirmDialog({
+      title: 'Delete this reminder?',
+      body: "It won't be posted again. This can't be undone.",
+      confirmLabel: 'Delete reminder',
+    });
+    if (!ok) return;
     try {
       await deleteReminder(guildId, id);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     }
   }
 
@@ -382,7 +370,7 @@ export default function Reminders() {
       await toggleReminder(guildId, id);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     }
   }
 
@@ -402,8 +390,6 @@ export default function Reminders() {
       <p className="v2-field-hint">
         Post a text or embed message to a channel — once, or on a repeating schedule.
       </p>
-
-      {notice ? <p className="v2-note">{notice}</p> : null}
 
       <div className="v2-group">
         <h2 className="v2-group-title">Your reminders ({d.reminders.length})</h2>
@@ -441,7 +427,11 @@ export default function Reminders() {
                       <button type="button" className="v2-btn-ghost" onClick={() => onToggle(r.id)}>
                         {r.enabled ? 'Pause' : 'Resume'}
                       </button>
-                      <button type="button" className="v2-btn-ghost" onClick={() => onDelete(r.id)}>
+                      <button
+                        type="button"
+                        className="v2-btn-danger v2-danger-sep"
+                        onClick={() => onDelete(r.id)}
+                      >
                         Delete
                       </button>
                     </div>

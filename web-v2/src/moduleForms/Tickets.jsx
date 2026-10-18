@@ -1,54 +1,16 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
 import ChipPicker from '../components/ChipPicker.jsx';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 export default function Tickets() {
-  const { guildId } = useParams();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'tickets'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } =
+    useModuleForm('tickets');
 
-  useEffect(() => {
-    if (data) setForm(data.config);
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Tickets settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="Tickets settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const { config } = await saveModuleConfig(guildId, 'tickets', form);
-      setForm(config);
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <>
@@ -59,7 +21,7 @@ export default function Tickets() {
         "Staff" DM.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save}>
         <div className="v2-field">
           <label htmlFor="greeting">
             Greeting sent when a ticket opens{' '}
@@ -151,14 +113,8 @@ export default function Tickets() {
             tickets are never affected.
           </p>
         </div>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

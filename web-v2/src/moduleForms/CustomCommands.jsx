@@ -1,6 +1,9 @@
 import { useContext, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getCustomCommands, saveCustomCommand, deleteCustomCommand, ApiError } from '../api.js';
+import { getCustomCommands, saveCustomCommand, deleteCustomCommand } from '../api.js';
+import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
@@ -362,7 +365,6 @@ export default function CustomCommands() {
   const [editingId, setEditingId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState(null);
 
   function load() {
     return getCustomCommands(guildId)
@@ -374,46 +376,37 @@ export default function CustomCommands() {
     load();
   }, [guildId]);
 
+  if (state.error) return <LoadError error={state.error} what="Custom commands" />;
   if (state.loading) return <p className="v2-state">Loading…</p>;
-  if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Custom commands (${state.error.message}).`
-        )}
-      </p>
-    );
-  }
 
   const d = state.data;
 
   async function onSave(body) {
     setSaving(true);
-    setNotice(null);
     try {
       await saveCustomCommand(guildId, body);
       setCreating(false);
       setEditingId(null);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
   }
 
   async function onDelete(id) {
-    if (!confirm('Delete this command?')) return;
+    const ok = await confirmDialog({
+      title: 'Delete this command?',
+      body: 'Members can no longer run it. This can’t be undone.',
+      confirmLabel: 'Delete command',
+    });
+    if (!ok) return;
     try {
       await deleteCustomCommand(guildId, id);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     }
   }
 
@@ -424,8 +417,6 @@ export default function CustomCommands() {
         Build {platform === 'fluxer' ? 'chat commands' : '/slash commands'} from an ordered list of actions:
         reply, post to a channel, add or remove a role.
       </p>
-
-      {notice ? <p className="v2-row-warn">{notice}</p> : null}
 
       <div className="v2-group">
         <h2 className="v2-group-title">Your commands ({d.commands.length})</h2>
@@ -459,7 +450,11 @@ export default function CustomCommands() {
                     <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(c.id)}>
                       Edit
                     </button>
-                    <button type="button" className="v2-btn-ghost" onClick={() => onDelete(c.id)}>
+                    <button
+                      type="button"
+                      className="v2-btn-danger v2-danger-sep"
+                      onClick={() => onDelete(c.id)}
+                    >
                       Delete
                     </button>
                   </div>

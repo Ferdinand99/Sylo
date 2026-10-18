@@ -1,9 +1,10 @@
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useOverview } from '../OverviewContext.jsx';
 import { hasV2Page, v2Href } from '../moduleForms/index.js';
 
 // Small inline icon set — kept self-contained rather than porting V1's full
-// sprite (src/web/views/partials/header.ejs) just for these five.
+// sprite (src/web/views/partials/header.ejs) just for the sidebar.
 const ICONS = {
   grid: (
     <>
@@ -24,6 +25,12 @@ const ICONS = {
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <circle cx="9" cy="10" r="2" />
       <path d="M15 8h3M15 12h3M6 16h12" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0 1 16 0" />
     </>
   ),
   gear: (
@@ -66,62 +73,78 @@ function Icon({ name }) {
   );
 }
 
+// Below this width the sidebar is an off-canvas drawer (styles.css).
+const DRAWER_QUERY = '(max-width: 860px)';
+function subscribeDrawerQuery(onChange) {
+  const mq = window.matchMedia(DRAWER_QUERY);
+  mq.addEventListener('change', onChange);
+  return () => mq.removeEventListener('change', onChange);
+}
+function isDrawerLayout() {
+  return window.matchMedia(DRAWER_QUERY).matches;
+}
+
 // `open`/`onClose` only matter below the 860px breakpoint, where the
-// sidebar becomes an off-canvas drawer (see Shell.jsx, which owns the open
-// state and renders the hamburger button + scrim) — above it the sidebar is
-// always visible and these are unused.
-export default function Sidebar({ activeGuildId, open, onClose }) {
+// sidebar becomes an off-canvas drawer (Shell.jsx owns the open state and
+// the hamburger button, passed in as `returnFocusRef`) — above it the
+// sidebar is always visible and these are unused. As a drawer it behaves
+// like a modal: focus moves into it on open and back to the hamburger on
+// close, Escape closes it, the page behind doesn't scroll, and while closed
+// it's `inert` so Tab can't wander into the off-screen links.
+export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }) {
   const { pathname } = useLocation();
   // Same overview data the Dashboard page reads (OverviewContext, provided
   // in Shell.jsx) — not a separate fetch, so toggling a module there is
   // reflected here immediately, no refresh needed.
   const { data } = useOverview();
+  const navRef = useRef(null);
+  const isDrawer = useSyncExternalStore(subscribeDrawerQuery, isDrawerLayout);
+  const drawerOpen = isDrawer && open;
 
+  useEffect(() => {
+    if (!drawerOpen) return undefined;
+    function onKeyDown(e) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [drawerOpen, onClose]);
+
+  useEffect(() => {
+    if (!drawerOpen) return undefined;
+    const toggle = returnFocusRef?.current;
+    navRef.current?.querySelector('a[href]')?.focus({ preventScroll: true });
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      toggle?.focus({ preventScroll: true });
+    };
+  }, [drawerOpen, returnFocusRef]);
+
+  // Guild-scoped links need a selected server. Without one (a fresh visit
+  // to the picker) they're shown but disabled, rather than all pointing at
+  // "/" — which also marked every one of them active on the picker page.
+  const guildBase = activeGuildId ? `/guilds/${activeGuildId}` : null;
   const items = [
-    {
-      key: 'dashboard',
-      label: 'Dashboard',
-      icon: 'grid',
-      href: activeGuildId ? `/guilds/${activeGuildId}` : '/',
-    },
-    {
-      key: 'leaderboard',
-      label: 'Leaderboard',
-      icon: 'trophy',
-      href: activeGuildId ? `/guilds/${activeGuildId}/leaderboard` : '/',
-    },
+    { key: 'dashboard', label: 'Dashboard', icon: 'grid', path: '', guild: true },
+    { key: 'leaderboard', label: 'Leaderboard', icon: 'trophy', path: '/leaderboard', guild: true },
     {
       key: 'moderation',
       label: 'Moderation',
       icon: 'shield',
-      href: activeGuildId ? `/guilds/${activeGuildId}/moderation` : '/',
+      path: '/moderation',
+      guild: true,
       prefix: true,
     },
-    {
-      key: 'tickets',
-      label: 'Tickets',
-      icon: 'inbox',
-      href: activeGuildId ? `/guilds/${activeGuildId}/tickets` : '/',
-      prefix: true,
-    },
-    {
-      key: 'appeals',
-      label: 'Appeals',
-      icon: 'flag',
-      href: activeGuildId ? `/guilds/${activeGuildId}/appeals` : '/',
-      prefix: true,
-    },
-    { key: 'personalizer', label: 'Bot Personalizer', icon: 'id', href: '/settings' },
-    {
-      key: 'settings',
-      label: 'Settings',
-      icon: 'gear',
-      href: activeGuildId ? `/guilds/${activeGuildId}/settings` : '/',
-    },
-    { key: 'account', label: 'Account', icon: 'id', href: '/account' },
-    { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', href: '/roadmap' },
-    { key: 'health', label: 'Health', icon: 'pulse', href: '/health' },
-  ];
+    { key: 'tickets', label: 'Tickets', icon: 'inbox', path: '/tickets', guild: true, prefix: true },
+    { key: 'appeals', label: 'Appeals', icon: 'flag', path: '/appeals', guild: true, prefix: true },
+    { key: 'personalizer', label: 'Bot Personalizer', icon: 'id', path: '/settings' },
+    { key: 'settings', label: 'Settings', icon: 'gear', path: '/settings', guild: true },
+    { key: 'account', label: 'Account', icon: 'user', path: '/account' },
+    { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', path: '/roadmap' },
+    { key: 'health', label: 'Health', icon: 'pulse', path: '/health' },
+  ].map((it) => ({ ...it, href: it.guild ? (guildBase ? `${guildBase}${it.path}` : null) : it.path }));
 
   // Only modules actually turned on for this server, grouped the same way
   // the Dashboard page groups them. A module gets enabled from there, not
@@ -132,19 +155,51 @@ export default function Sidebar({ activeGuildId, open, onClose }) {
 
   return (
     <>
-      {open ? <button type="button" className="v2-scrim" aria-label="Close menu" onClick={onClose} /> : null}
-      <nav className={`v2-sidebar${open ? ' is-open' : ''}`} aria-label="Dashboard">
-        {items.map((it) => (
-          <Link
-            key={it.key}
-            to={it.href}
-            className={`v2-sidebar-link${pathname === it.href || (it.prefix && activeGuildId && pathname.startsWith(`${it.href}/`)) ? ' is-active' : ''}`}
-            onClick={onClose}
-          >
-            <Icon name={it.icon} />
-            <span>{it.label}</span>
-          </Link>
-        ))}
+      {/* Always rendered so it can fade out as well as in; hidden (and out
+          of the accessibility tree) via visibility while closed. */}
+      <button
+        type="button"
+        className={`v2-scrim${drawerOpen ? ' is-open' : ''}`}
+        aria-label="Close menu"
+        tabIndex={-1}
+        onClick={onClose}
+      />
+      <nav
+        id="v2-sidebar"
+        ref={navRef}
+        className={`v2-sidebar${open ? ' is-open' : ''}`}
+        aria-label="Dashboard"
+        inert={isDrawer && !open}
+      >
+        {items.map((it) => {
+          if (!it.href) {
+            return (
+              <a
+                key={it.key}
+                role="link"
+                aria-disabled="true"
+                className="v2-sidebar-link is-disabled"
+                title="Pick a server first"
+              >
+                <Icon name={it.icon} />
+                <span>{it.label}</span>
+              </a>
+            );
+          }
+          const active = pathname === it.href || (it.prefix && pathname.startsWith(`${it.href}/`));
+          return (
+            <Link
+              key={it.key}
+              to={it.href}
+              className={`v2-sidebar-link${active ? ' is-active' : ''}`}
+              aria-current={active ? 'page' : undefined}
+              onClick={onClose}
+            >
+              <Icon name={it.icon} />
+              <span>{it.label}</span>
+            </Link>
+          );
+        })}
 
         {activeGuildId && moduleGroups.length ? (
           <div className="v2-sidebar-modules">
@@ -159,6 +214,7 @@ export default function Sidebar({ activeGuildId, open, onClose }) {
                       key={card.id}
                       to={href}
                       className={`v2-sidebar-sublink${pathname === href ? ' is-active' : ''}`}
+                      aria-current={pathname === href ? 'page' : undefined}
                       onClick={onClose}
                     >
                       {card.name}{' '}

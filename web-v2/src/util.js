@@ -85,3 +85,44 @@ export function addRecentColor(color) {
     // ignore — nothing to fall back to, this is just a convenience
   }
 }
+
+// Intl.Segmenter splits on grapheme clusters, so a flag, a skin-toned emoji or
+// an accented letter built from two code points stays one "character". Built
+// lazily — older browsers without it fall back to code points below.
+let segmenter;
+function firstGrapheme(text) {
+  if (segmenter === undefined) {
+    segmenter =
+      typeof Intl !== 'undefined' && Intl.Segmenter
+        ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+        : null;
+  }
+  if (segmenter) {
+    const first = segmenter.segment(text)[Symbol.iterator]().next();
+    return first.done ? '' : first.value.segment;
+  }
+  return [...text][0] ?? '';
+}
+
+/**
+ * The placeholder letter shown in place of a missing server/bot icon:
+ * the name's first visible character, uppercased. Unlike `name.charAt(0)`
+ * this keeps an emoji-first name ("🎮 Gaming Hub") whole instead of
+ * cutting a surrogate pair in half and rendering "�". '?' for no name.
+ */
+export function initial(name) {
+  const text = String(name ?? '').trim();
+  if (!text) return '?';
+  return firstGrapheme(text).toUpperCase();
+}
+
+/**
+ * A count for display: thousands separators in the viewer's locale
+ * ("1,284"), and '—' when the value is missing instead of "undefined"/"NaN".
+ * Non-number values (an already-formatted string) pass through unchanged.
+ */
+export function formatCount(value) {
+  if (value === null || value === undefined) return '—';
+  if (typeof value !== 'number') return value;
+  return Number.isFinite(value) ? value.toLocaleString() : '—';
+}

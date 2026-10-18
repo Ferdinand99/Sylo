@@ -1,0 +1,318 @@
+/* Shared form pieces (SaveBar, ConfirmDialog, Switch, Field) — see components/. */
+
+/* ---------- ConfirmDialog (components/ConfirmDialog.jsx) ---------- */
+.v2-dialog {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  max-width: min(440px, calc(100vw - 32px));
+  width: 100%;
+  overflow: visible;
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    transform 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+.v2-dialog.is-open {
+  opacity: 1;
+  transform: none;
+  transition-duration: 200ms;
+}
+.v2-dialog::backdrop {
+  background: rgba(5, 6, 14, 0.55);
+}
+.v2-dialog-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius, 12px);
+  padding: 20px;
+  box-shadow: var(--shadow-pop, 0 12px 32px rgb(0 0 0 / 0.35));
+}
+.v2-dialog-title {
+  font-size: 1.02rem;
+  font-weight: 650;
+  margin: 0 0 8px;
+  line-height: 1.35;
+}
+.v2-dialog-body {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin: 0 0 4px;
+}
+.v2-dialog-body p {
+  margin: 0 0 8px;
+}
+.v2-dialog-type {
+  margin-top: 14px;
+}
+.v2-dialog-type label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.v2-dialog-type code {
+  color: var(--text);
+  background: var(--bg-surface-2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  user-select: all;
+}
+.v2-dialog-type input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 8px 10px;
+}
+.v2-dialog-type input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.v2-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .v2-dialog,
+  .v2-dialog.is-open {
+    transform: none;
+    transition-property: opacity;
+  }
+}
+
+/* Solid red confirm button — the dialog's destructive action. Same box as
+   styles.css's shared button base; the outlined .v2-btn-danger stays for
+   in-page destructive triggers. */
+.v2-btn-danger-solid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  background: var(--danger, #ef4444);
+  border: 1px solid var(--danger, #ef4444);
+  border-radius: var(--radius-sm, 8px);
+  color: #fff;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    filter 150ms ease,
+    transform 160ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-btn-danger-solid:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+}
+.v2-btn-danger-solid:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.v2-btn-danger-solid:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---------- SaveBar (components/SaveBar.jsx) ---------- */
+/* Sits at the end of the page content and sticks to the viewport bottom.
+   Always mounted so it can animate out; hidden = transparent, shifted down,
+   inert, and visibility:hidden once the fade has finished. */
+.v2-savebar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 20;
+  margin-top: 24px;
+  opacity: 0;
+  transform: translateY(8px);
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 200ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    transform 200ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    visibility 0s linear 200ms;
+}
+.v2-savebar.is-visible {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+.v2-savebar-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius, 12px);
+  box-shadow: var(--shadow-pop, 0 12px 32px rgb(0 0 0 / 0.35));
+}
+.v2-savebar[data-mode='dirty'] .v2-savebar-inner {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+}
+.v2-savebar-text {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.v2-savebar-check {
+  color: var(--success, #34d399);
+}
+.v2-savebar-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+  transition: opacity 150ms ease;
+}
+.v2-savebar[data-mode='saved'] .v2-savebar-actions {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (max-width: 640px) {
+  .v2-savebar {
+    bottom: 0;
+    margin-inline: calc(-1 * var(--page-gutter));
+  }
+  .v2-savebar-inner {
+    border-radius: 0;
+    border-width: 1px 0 0;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+  .v2-savebar-actions button {
+    min-height: 40px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .v2-savebar,
+  .v2-savebar.is-visible {
+    transform: none;
+  }
+}
+/* While the bar is up, lift the toast stack (styles.css .v2-toasts, fixed
+   bottom-right) above it so a "save failed" toast never covers Save. */
+body:has(.v2-savebar.is-visible) .v2-toasts {
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+}
+
+/* ---------- Switch (components/Switch.jsx) ---------- */
+.v2-switch-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- ToggleSection header (components/ToggleSection.jsx) ---------- */
+/* The whole header row is the switch button. */
+.v2-ts-head {
+  width: 100%;
+  margin: -6px -8px;
+  padding: 6px 8px;
+  box-sizing: content-box;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.v2-ts-head:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.v2-ts-head .v2-toggle {
+  cursor: inherit;
+}
+.v2-ts-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-ts-head:hover:not(:disabled) .v2-toggle {
+    border-color: var(--accent);
+  }
+}
+.v2-toggle-section > .v2-field-hint {
+  margin-top: 6px;
+}
+
+/* ---------- Field (components/Field.jsx) — inline validation ---------- */
+.v2-field-error {
+  color: var(--danger, #f87171);
+  font-size: 0.8rem;
+  margin: 6px 0 0;
+}
+.v2-field [aria-invalid='true'],
+input[aria-invalid='true'],
+select[aria-invalid='true'],
+textarea[aria-invalid='true'] {
+  border-color: var(--danger, #f87171);
+}
+
+/* ---------- Destructive actions ---------- */
+/* A row whose destructive button is pushed to the far right, away from the
+   everyday actions next to it. */
+.v2-danger-push {
+  margin-left: auto;
+}
+/* "Danger zone" block for wipe-everything actions at the end of a form. */
+.v2-danger-zone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 28px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--danger, #f87171) 35%, var(--border-subtle));
+  border-radius: var(--radius, 12px);
+}
+.v2-danger-zone-text {
+  flex: 1;
+  min-width: 200px;
+  margin: 0;
+}
+.v2-danger-zone-text strong {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 2px;
+}
+.v2-danger-zone-text span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+/* A destructive button at the end of a vertical stack of row actions. */
+.v2-danger-sep {
+  margin-top: 6px;
+}
+
+/* ---------- Composer pages (MessageBuilder, Welcome channel) ---------- */
+/* Save draft / Publish row with an "Unsaved changes" marker in front. These
+   pages keep explicit buttons (two save kinds) instead of the SaveBar. */
+.v2-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.v2-composer-status {
+  color: var(--warn, #fbbf24);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.v2-composer-status:empty {
+  display: none;
+}

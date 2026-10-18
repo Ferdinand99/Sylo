@@ -7,8 +7,12 @@ import {
   getAnnouncement,
   savePersonalizerAnnouncement,
   clearPersonalizerAnnouncement,
-  ApiError,
 } from '../api.js';
+import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { isDirty } from '../components/formEqual.js';
+import { useUnsavedChangesGuard } from '../components/useUnsavedChangesGuard.js';
 
 export default function Personalizer() {
   const [state, setState] = useState({
@@ -30,7 +34,14 @@ export default function Personalizer() {
   const [presence, setPresence] = useState({ status: 'online', type: 'Listening', text: '' });
   const [announcement, setAnnouncement] = useState({ title: '', body: '', severity: 'info' });
   const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState(null);
+  // Three independent forms (identity, presence, announcement), each with its
+  // own submit — what was last loaded/saved for each, to flag unsaved edits.
+  const [saved, setSaved] = useState(null);
+  const dirtyIdentity = isDirty(identity, saved?.identity);
+  const dirtyPresence = isDirty(presence, saved?.presence);
+  const dirtyAnnouncement = isDirty(announcement, saved?.announcement);
+  useUnsavedChangesGuard(dirtyIdentity || dirtyPresence || dirtyAnnouncement);
+  const markSaved = (patch) => setSaved((s) => ({ ...s, ...patch }));
 
   useEffect(() => {
     let cancelled = false;
@@ -38,9 +49,17 @@ export default function Personalizer() {
       .then(([p, pr, a]) => {
         if (cancelled) return;
         setState({ loading: false, ...p, ...pr, announcement: a.announcement, error: null });
-        setIdentity({ username: p.bot?.username ?? '', avatarUrl: '', bannerUrl: '', resetAvatar: false });
+        const loadedIdentity = {
+          username: p.bot?.username ?? '',
+          avatarUrl: '',
+          bannerUrl: '',
+          resetAvatar: false,
+        };
+        const loadedAnnouncement = a.announcement || { title: '', body: '', severity: 'info' };
+        setIdentity(loadedIdentity);
         setPresence(pr.presence);
         if (a.announcement) setAnnouncement(a.announcement);
+        setSaved({ identity: loadedIdentity, presence: pr.presence, announcement: loadedAnnouncement });
       })
       .catch((error) => {
         if (!cancelled) setState((s) => ({ ...s, loading: false, error }));
@@ -50,39 +69,21 @@ export default function Personalizer() {
     };
   }, []);
 
+  if (state.error) return <LoadError error={state.error} what="the bot personalizer" />;
   if (state.loading) return <p className="v2-state">Loading…</p>;
-
-  if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load the bot personalizer (${state.error.message}).`
-        )}
-      </p>
-    );
-  }
 
   async function onSaveIdentity(e) {
     e.preventDefault();
     setSaving(true);
-    setNotice(null);
+    const sent = identity;
     try {
-      const { done, failed } = await savePersonalizerIdentity(identity);
-      setNotice(
-        [
-          done.length ? `Updated ${done.join(', ')}.` : '',
-          failed.length ? `Failed: ${failed.join('; ')}.` : '',
-        ]
-          .filter(Boolean)
-          .join(' ') || 'Nothing to change.'
-      );
+      const { done, failed } = await savePersonalizerIdentity(sent);
+      if (done.length) notify(`Updated ${done.join(', ')}.`, 'info');
+      if (failed.length) notify(`Failed: ${failed.join('; ')}.`);
+      if (!done.length && !failed.length) notify('Nothing to change.', 'info');
+      if (!failed.length) markSaved({ identity: sent });
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
@@ -91,13 +92,13 @@ export default function Personalizer() {
   async function onSavePresence(e) {
     e.preventDefault();
     setSaving(true);
-    setNotice(null);
     try {
-      const { presence: saved } = await savePersonalizerPresence(presence);
-      setPresence(saved);
-      setNotice('Presence updated.');
+      const { presence: savedPresence } = await savePersonalizerPresence(presence);
+      setPresence(savedPresence);
+      markSaved({ presence: savedPresence });
+      notify('Presence updated.', 'info');
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
@@ -106,28 +107,39 @@ export default function Personalizer() {
   async function onSaveAnnouncement(e) {
     e.preventDefault();
     setSaving(true);
-    setNotice(null);
+    const sent = announcement;
     try {
-      const { announcement: saved } = await savePersonalizerAnnouncement(announcement);
-      setState((s) => ({ ...s, announcement: saved }));
-      setNotice(saved ? 'Announcement published.' : 'Announcement cleared (title was blank).');
+      const { announcement: savedAnnouncement } = await savePersonalizerAnnouncement(sent);
+      setState((s) => ({ ...s, announcement: savedAnnouncement }));
+      markSaved({ announcement: sent });
+      notify(
+        savedAnnouncement ? 'Announcement published.' : 'Announcement cleared (title was blank).',
+        'info'
+      );
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
   }
 
   async function onClearAnnouncement() {
+    const ok = await confirmDialog({
+      title: 'Clear the live announcement?',
+      body: 'It disappears from every dashboard page for everyone straight away.',
+      confirmLabel: 'Clear announcement',
+    });
+    if (!ok) return;
     setSaving(true);
-    setNotice(null);
     try {
       await clearPersonalizerAnnouncement();
+      const blank = { title: '', body: '', severity: 'info' };
       setState((s) => ({ ...s, announcement: null }));
-      setAnnouncement({ title: '', body: '', severity: 'info' });
-      setNotice('Announcement cleared.');
+      setAnnouncement(blank);
+      markSaved({ announcement: blank });
+      notify('Announcement cleared.', 'info');
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
@@ -148,8 +160,6 @@ export default function Personalizer() {
           </div>
         </div>
       )}
-
-      {notice ? <p className="v2-note">{notice}</p> : null}
 
       <form onSubmit={onSaveIdentity}>
         <div className="v2-field">
@@ -191,9 +201,14 @@ export default function Personalizer() {
             onChange={(e) => setIdentity((f) => ({ ...f, bannerUrl: e.target.value }))}
           />
         </div>
-        <button type="submit" className="v2-btn-primary" disabled={saving}>
-          {saving ? 'Saving…' : 'Save identity'}
-        </button>
+        <div className="v2-composer-actions">
+          <button type="submit" className="v2-btn-primary" disabled={saving}>
+            {saving ? 'Saving…' : 'Save identity'}
+          </button>
+          <span className="v2-composer-status" aria-live="polite">
+            {dirtyIdentity ? 'Unsaved changes' : ''}
+          </span>
+        </div>
       </form>
 
       <h2 className="v2-group-title v2-section-gap">Presence</h2>
@@ -235,9 +250,14 @@ export default function Personalizer() {
             onChange={(e) => setPresence((p) => ({ ...p, text: e.target.value }))}
           />
         </div>
-        <button type="submit" className="v2-btn-primary" disabled={saving}>
-          {saving ? 'Saving…' : 'Save presence'}
-        </button>
+        <div className="v2-composer-actions">
+          <button type="submit" className="v2-btn-primary" disabled={saving}>
+            {saving ? 'Saving…' : 'Save presence'}
+          </button>
+          <span className="v2-composer-status" aria-live="polite">
+            {dirtyPresence ? 'Unsaved changes' : ''}
+          </span>
+        </div>
       </form>
 
       <h2 className="v2-group-title v2-section-gap">Announcement</h2>
@@ -287,14 +307,24 @@ export default function Personalizer() {
             ))}
           </select>
         </div>
-        <button type="submit" className="v2-btn-primary" disabled={saving}>
-          {saving ? 'Saving…' : 'Publish announcement'}
-        </button>{' '}
-        {state.announcement ? (
-          <button type="button" className="v2-btn-ghost" disabled={saving} onClick={onClearAnnouncement}>
-            Clear
+        <div className="v2-composer-actions">
+          <button type="submit" className="v2-btn-primary" disabled={saving}>
+            {saving ? 'Saving…' : 'Publish announcement'}
           </button>
-        ) : null}
+          <span className="v2-composer-status" aria-live="polite">
+            {dirtyAnnouncement ? 'Unpublished changes' : ''}
+          </span>
+          {state.announcement ? (
+            <button
+              type="button"
+              className="v2-btn-danger v2-danger-push"
+              disabled={saving}
+              onClick={onClearAnnouncement}
+            >
+              Clear announcement
+            </button>
+          ) : null}
+        </div>
       </form>
     </>
   );

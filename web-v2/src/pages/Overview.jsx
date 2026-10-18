@@ -1,9 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { setModuleEnabled, setModulesEnabledBulk, ApiError } from '../api.js';
+import { setModuleEnabled, setModulesEnabledBulk } from '../api.js';
 import { useOverview } from '../OverviewContext.jsx';
 import { hasV2Page, v2Href } from '../moduleForms/index.js';
 import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import Switch from '../components/Switch.jsx';
+import { plural } from '../components/Meta.jsx';
+import { formatCount, initial } from '../util.js';
 
 // A module without a V2 page yet gets this tag next to its name, wherever
 // its title is shown — the click still works (falls back to `card.href`,
@@ -49,7 +53,7 @@ function ModuleTitle({ card, guildId }) {
   );
 }
 
-function ModuleRow({ card, guildId, busy, onToggle, selecting, picked, onPick }) {
+function ModuleRow({ card, guildId, onToggle, selecting, picked, onPick }) {
   if (!card.hasToggle) {
     const rowContent = (
       <>
@@ -57,7 +61,7 @@ function ModuleRow({ card, guildId, busy, onToggle, selecting, picked, onPick })
           <h3>
             {card.name} {hasV2Page(card) ? null : <ClassicTag />} {card.beta ? <BetaTag /> : null}
           </h3>
-          <p>{card.description}</p>
+          <p title={card.description}>{card.description}</p>
         </div>
         <span className="v2-row-arrow" aria-hidden="true">
           →
@@ -81,7 +85,7 @@ function ModuleRow({ card, guildId, busy, onToggle, selecting, picked, onPick })
     <div className="v2-row">
       <div className="v2-row-main">
         <ModuleTitle card={card} guildId={guildId} />
-        <p>{card.description}</p>
+        <p title={card.description}>{card.description}</p>
         {blocked ? (
           <p className="v2-row-warn">
             Needs the {card.missingIntents.join(', ')} intent — see docs/self-hosting.md.
@@ -97,12 +101,11 @@ function ModuleRow({ card, guildId, busy, onToggle, selecting, picked, onPick })
           onChange={(e) => onPick(card.id, e.target.checked)}
         />
       ) : (
-        <button
-          type="button"
-          className={`v2-toggle${card.enabled ? ' is-on' : ''}`}
-          aria-label={card.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}
-          disabled={busy || blocked}
-          onClick={() => onToggle(card.id, !card.enabled)}
+        <Switch
+          checked={card.enabled}
+          onChange={(on) => onToggle(card.id, on)}
+          label={card.name}
+          disabled={blocked}
         />
       )}
     </div>
@@ -112,11 +115,15 @@ function ModuleRow({ card, guildId, busy, onToggle, selecting, picked, onPick })
 export default function Overview() {
   const { guildId } = useParams();
   const [query, setQuery] = useState('');
-  const [togglingId, setTogglingId] = useState(null);
+  // Module ids with a save in flight — a second click on the same switch
+  // waits for the first to land instead of racing it.
+  const toggling = useRef(new Set());
+  const currentGuild = useRef(guildId);
+  currentGuild.current = guildId;
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
-  const { data, loading, error, setData } = useOverview();
+  const { data, error, setData } = useOverview();
 
   const filteredGroups = useMemo(() => {
     if (!data) return [];
@@ -132,38 +139,31 @@ export default function Overview() {
       .filter((g) => g.cards.length);
   }, [data, query]);
 
-  if (loading && !data) return <p className="v2-state">Loading…</p>;
+  if (error) return <LoadError error={error} what="this server" />;
+  if (!data) return <p className="v2-state">Loading…</p>;
 
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load this server (${error.message}).`
-        )}
-      </p>
-    );
-  }
-
+  // Optimistic: the switch flips at once, and flips back (with the error as
+  // a toast) if the save fails — no disabled/dimmed flash while it saves.
   async function onToggle(moduleId, enabled) {
-    setTogglingId(moduleId);
-    try {
-      await setModuleEnabled(guildId, moduleId, enabled);
+    if (toggling.current.has(moduleId)) return;
+    toggling.current.add(moduleId);
+    const apply = (on) =>
       setData((d) => ({
         ...d,
         groups: d.groups.map((g) => ({
           ...g,
-          cards: g.cards.map((c) => (c.id === moduleId ? { ...c, enabled } : c)),
+          cards: g.cards.map((c) => (c.id === moduleId ? { ...c, enabled: on } : c)),
         })),
       }));
+    apply(enabled);
+    try {
+      await setModuleEnabled(guildId, moduleId, enabled);
     } catch (err) {
+      // Not if the user has switched server since: the same card id there is another server's.
+      if (currentGuild.current === guildId) apply(!enabled);
       notify(err.message);
     } finally {
-      setTogglingId(null);
+      toggling.current.delete(moduleId);
     }
   }
 
@@ -211,34 +211,35 @@ export default function Overview() {
         {guild.icon ? (
           <img src={guild.icon} alt="" />
         ) : (
-          <div className="v2-hero-ph">{guild.name.charAt(0)}</div>
+          <div className="v2-hero-ph" aria-hidden="true">
+            {initial(guild.name)}
+          </div>
         )}
-        <div>
+        <div className="v2-hero-text">
           <h1>{guild.name}</h1>
-          <p>{guild.memberCount.toLocaleString()} members</p>
+          <p>{plural(guild.memberCount, 'member')}</p>
         </div>
       </div>
 
       <p className="v2-note">
-        <strong>V2 is in beta.</strong> Not every module has its own V2 page yet — those marked{' '}
-        <span className="v2-classic-tag">Classic</span> still open the classic dashboard when clicked.
-        Everything is fully configurable either way.
+        <strong>V2 is in beta.</strong> Every module has its own page here now. If something looks off, the{' '}
+        <a href="/">classic dashboard</a> is still available and edits the same settings.
       </p>
 
       <div className="v2-stat-strip">
         <div className="v2-stat">
           <strong>
-            {enabledCount}/{toggleCards.length}
+            {formatCount(enabledCount)}/{formatCount(toggleCards.length)}
           </strong>
           <span>modules active</span>
         </div>
         <div className="v2-stat">
-          <strong>{openTickets}</strong>
-          <span>open tickets</span>
+          <strong>{formatCount(openTickets)}</strong>
+          <span>open {openTickets === 1 ? 'ticket' : 'tickets'}</span>
         </div>
         <div className="v2-stat">
-          <strong>{openAppeals}</strong>
-          <span>open appeals</span>
+          <strong>{formatCount(openAppeals)}</strong>
+          <span>open {openAppeals === 1 ? 'appeal' : 'appeals'}</span>
         </div>
       </div>
 
@@ -258,7 +259,7 @@ export default function Overview() {
 
       {selecting ? (
         <div className="v2-bulk-bar">
-          <span className="v2-field-hint">{picked.size} selected</span>
+          <span className="v2-field-hint">{formatCount(picked.size)} selected</span>
           <button
             type="button"
             className="v2-btn-ghost"
@@ -287,7 +288,6 @@ export default function Overview() {
                 key={card.id}
                 card={card}
                 guildId={guildId}
-                busy={togglingId === card.id}
                 onToggle={onToggle}
                 selecting={selecting}
                 picked={picked.has(card.id)}

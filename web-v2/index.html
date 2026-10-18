@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Browser chrome / status bar colour = the topbar background (--bg-main).
+         Dark is the default; the inline script below and Shell.jsx switch it
+         for the light theme. -->
+    <meta name="theme-color" content="#0b0d17" />
     <title>Sylo — Dashboard</title>
     <link
       rel="icon"
@@ -15,7 +19,10 @@
       // has to run before any module script.
       try {
         var t = localStorage.getItem('sylo:v2:theme');
-        if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        if (t === 'light') {
+          document.documentElement.setAttribute('data-theme', 'light');
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#f5f6fb');
+        }
       } catch (e) {}
     </script>
   </head>

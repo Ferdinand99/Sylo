@@ -5,6 +5,7 @@ import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
+import Switch from '../components/Switch.jsx';
 import Meta from '../components/Meta.jsx';
 
 // One command: on/off, plus optional limits to certain channels and roles.
@@ -37,8 +38,8 @@ function CommandRow({ command, channels, roles, guildId, onSaved }) {
   return (
     <div className={`v2-row v2-cmd-row ${command.enabled ? 'is-on' : 'is-off'}`}>
       <div className="v2-row-main">
-        <h3>{command.name}</h3>
-        <p>
+        <h3 className="v2-break">{command.name}</h3>
+        <p title={command.description || undefined}>
           <Meta
             items={[
               command.description,
@@ -96,12 +97,11 @@ function CommandRow({ command, channels, roles, guildId, onSaved }) {
           </button>
         )}
       </div>
-      <button
-        type="button"
-        className={`v2-toggle${command.enabled ? ' is-on' : ''}`}
-        aria-label={`${command.name}: ${command.enabled ? 'on, click to turn off' : 'off, click to turn on'}`}
+      <Switch
+        checked={command.enabled}
+        label={command.name}
         disabled={saving}
-        onClick={() =>
+        onChange={() =>
           save({
             enabled: !command.enabled,
             channels: command.allowedChannels,
@@ -115,15 +115,15 @@ function CommandRow({ command, channels, roles, guildId, onSaved }) {
 
 export default function Commands() {
   const { guildId } = useParams();
-  const { data, loading, error, setData } = useApiData(() => getCommands(guildId), [guildId]);
+  const { data, error, setData } = useApiData(() => getCommands(guildId), [guildId]);
   const [query, setQuery] = useState('');
 
-  if (loading && !data) return <p className="v2-state">Loading…</p>;
   if (error) return <LoadError error={error} what="the commands" />;
+  if (!data) return <p className="v2-state">Loading…</p>;
 
   const q = query.trim().toLowerCase();
   const shown = data.commands.filter(
-    (c) => !q || c.name.includes(q) || (c.description ?? '').toLowerCase().includes(q)
+    (c) => !q || c.name.toLowerCase().includes(q) || (c.description ?? '').toLowerCase().includes(q)
   );
   const onSaved = (saved) =>
     setData((d) => ({
@@ -155,19 +155,24 @@ export default function Commands() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-      <div className="v2-list v2-modules v2-cmd-list">
-        {shown.map((c) => (
-          <CommandRow
-            key={c.name}
-            command={c}
-            channels={data.channels}
-            roles={data.roles}
-            guildId={guildId}
-            onSaved={onSaved}
-          />
-        ))}
-      </div>
-      {!shown.length ? <p className="v2-state">No commands match "{query}".</p> : null}
+      {shown.length ? (
+        <div className="v2-list v2-modules v2-cmd-list">
+          {shown.map((c) => (
+            <CommandRow
+              key={c.name}
+              command={c}
+              channels={data.channels}
+              roles={data.roles}
+              guildId={guildId}
+              onSaved={onSaved}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="v2-state v2-break">
+          {q ? `No commands match "${query.trim()}".` : 'This server has no commands to manage.'}
+        </p>
+      )}
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import EmbedCard, { autoGrow, newKey } from './EmbedCard.jsx';
+import { initial } from '../util.js';
 
 // Shared single-embed editor — the V2 counterpart to V1's Alpine
 // `embedEditor` (src/web/public/alpine-components.js, `partials/embed-editor.ejs`),
@@ -100,7 +101,9 @@ export default function EmbedEditor({
   return (
     <div className="v2-msg-preview">
       <div className="v2-msg-head">
-        <div className="v2-msg-avatar">{botName.slice(0, 1)}</div>
+        <div className="v2-msg-avatar" aria-hidden="true">
+          {initial(botName)}
+        </div>
         <div className="v2-msg-head-text">
           <span className="v2-msg-botname">{botName}</span>
           <span className="v2-msg-botbadge">BOT</span>
@@ -111,6 +114,7 @@ export default function EmbedEditor({
       {content ? (
         <textarea
           className="v2-msg-content"
+          aria-label="Message text"
           rows={1}
           maxLength={2000}
           placeholder={placeholders.content || 'Write your message here!'}
@@ -142,7 +146,7 @@ export default function EmbedEditor({
       />
 
       {vars.length ? (
-        <div className="v2-embed-vars">
+        <div className="v2-embed-vars" role="group" aria-label="Insert a variable">
           Insert:{' '}
           {vars.map((v) => (
             <button type="button" key={v.token} onClick={() => insertVar(v.token)}>
