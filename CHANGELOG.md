@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.5.0](https://github.com/Ferdinand99/Sylo/compare/v4.4.0...v4.5.0) (2026-10-18)
+
+
+### Features
+
+* bring the V2 dashboard level with the classic one, and delete the account from the app ([#261](https://github.com/Ferdinand99/Sylo/issues/261)) ([d8fdf6c](https://github.com/Ferdinand99/Sylo/commit/d8fdf6c9de19a9af8e7bb09ab38c60e22f72f4bd))
+
 ## [4.4.0](https://github.com/Ferdinand99/Sylo/compare/v4.3.1...v4.4.0) (2026-10-18)
 
 
