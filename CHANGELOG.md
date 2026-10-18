@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.3.1](https://github.com/Ferdinand99/Sylo/compare/v4.3.0...v4.3.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* keep the dashboard signed in instead of re-running the login every 10 minutes ([#256](https://github.com/Ferdinand99/Sylo/issues/256)) ([fcd8a14](https://github.com/Ferdinand99/Sylo/commit/fcd8a149e61993e5e66ff1ccef005dd0bc88f26d))
+
 ## [4.3.0](https://github.com/Ferdinand99/Sylo/compare/v4.2.0...v4.3.0) (2026-10-17)
 
 
