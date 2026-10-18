@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState } from 'react';
 import { useCmd } from '../platformContext.jsx';
-import { getModuleConfig, saveModuleConfig, endGiveaway, rerollGiveaway, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
+import { endGiveaway, rerollGiveaway } from '../api.js';
 import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 function rel(ms) {
   const s = Math.round((ms - Date.now()) / 1000);
@@ -20,56 +22,23 @@ function rel(ms) {
 }
 
 export default function Giveaways() {
-  const { guildId } = useParams();
   const cmd = useCmd();
-  const { data, loading, error, setData } = useApiData(
-    () => getModuleConfig(guildId, 'giveaways'),
-    [guildId]
-  );
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [rerollCounts, setRerollCounts] = useState({});
+  const { guildId, data, setData, form, setForm, status, error, dirty, saving, save, reset } =
+    useModuleForm('giveaways');
 
-  useEffect(() => {
-    if (data) setForm(data.config);
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Giveaways settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const { config } = await saveModuleConfig(guildId, 'giveaways', form);
-      setForm(config);
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
+  if (status === 'error') return <LoadError error={error} what="Giveaways settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   async function onEnd(id) {
-    if (!confirm(`End giveaway #${id} now and draw the winners?`)) return;
+    const ok = await confirmDialog({
+      title: `End giveaway #${id} now?`,
+      body: 'The winners are drawn immediately and announced in the giveaway channel.',
+      confirmLabel: 'End & draw winners',
+      tone: 'default',
+    });
+    if (!ok) return;
     setBusyId(id);
     try {
       const { giveaways } = await endGiveaway(guildId, id);
@@ -82,7 +51,13 @@ export default function Giveaways() {
   }
 
   async function onReroll(id) {
-    if (!confirm(`Reroll giveaway #${id}?`)) return;
+    const ok = await confirmDialog({
+      title: `Reroll giveaway #${id}?`,
+      body: 'New winners are drawn from the entrants and announced.',
+      confirmLabel: 'Reroll',
+      tone: 'default',
+    });
+    if (!ok) return;
     setBusyId(id);
     try {
       const { giveaways } = await rerollGiveaway(guildId, id, rerollCounts[id] || 1);
@@ -106,7 +81,7 @@ export default function Giveaways() {
         intent.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="ping">Ping with the winner message</label>
           <select
@@ -129,13 +104,6 @@ export default function Giveaways() {
             />
             Also DM each winner
           </label>
-        </div>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
         </div>
       </form>
 
@@ -213,6 +181,7 @@ export default function Giveaways() {
           </div>
         </div>
       ) : null}
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

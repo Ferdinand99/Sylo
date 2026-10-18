@@ -8,6 +8,7 @@ the same data, and every setting saved in one is visible in the other.
 - [Trying it](#trying-it)
 - [What's different from the classic dashboard](#whats-different-from-the-classic-dashboard)
 - [Module coverage](#module-coverage)
+- [Saving and unsaved changes](#saving-and-unsaved-changes)
 - [Beta status](#beta-status)
 - [Switching back](#switching-back)
 - [For self-hosters](#for-self-hosters)
@@ -20,10 +21,17 @@ Click **Try the new dashboard** near the top of the classic dashboard's
 sidebar, or go straight to `/v2` on your instance. It's gated behind the same
 login as the rest of the dashboard — nothing extra to set up.
 
-There's currently no remembered "always open V2" preference — each session
-starts on the classic dashboard, and V2 is one click away. (A per-account
-preference is planned; the database side of it already exists but isn't wired
-up to anything yet.)
+To make V2 your default, turn on **Open the new dashboard by default** under
+**Dashboard** on V2's Account page. It's saved per account, so it follows you
+to every browser: from then on, opening the dashboard's home page (`/`, which
+is where signing in lands) takes you to `/v2`. It only applies when you're
+signed in — a dashboard running without login always opens the classic one —
+and only when the V2 build is present.
+
+**Back to classic dashboard** in V2's top bar still works with the switch on:
+it keeps you on the classic dashboard for the rest of that browser session.
+Opening `/v2` again (for example via **Try the new dashboard**) ends that, so
+the next visit to `/` goes back to V2.
 
 ## What's different from the classic dashboard
 
@@ -46,20 +54,26 @@ the module reference itself.
 
 ## Module coverage
 
-Not every module has its own V2 page yet. One that doesn't is marked
-**Classic** (with a tooltip explaining why) wherever it's linked from — on the
-Dashboard/Overview grid and in the sidebar — and clicking it opens that
-module's classic-dashboard config page instead. It's still fully
-configurable, just not on a V2-native page yet.
+Every module has its own V2 settings page, and so do the staff pages (tickets,
+ban appeals, the moderation hub with commands, automod and logging), embed
+messages, insights, the leaderboard, Health and the Bot Personalizer. The
+server tools are there too, under **Settings → Server data**: the audit log,
+config export (the same JSON file as the classic download) and member data
+(look up and forget a member; moderation cases and other safety records are
+kept, as in the classic dashboard). Everything you save in V2 is the same
+setting the classic dashboard shows.
 
-Modules with a real V2 page today: AFK, Welcome & leave, Birthdays,
-Verification, Free games, Counting, Auto-react. This list grows over time —
-the **Classic** tag is the accurate, live answer for any module not listed
-here.
+## Saving and unsaved changes
+
+A settings page shows a bar at the bottom as soon as something differs from
+what is saved: **Reset** puts the page back, **Save** (or Ctrl/Cmd+S) saves it.
+Leaving the page, switching server or closing the tab with unsaved changes asks
+first. Actions that can't be undone, like wiping all levels or restoring a
+database backup, ask for confirmation and some ask you to type a word or name.
 
 ## Beta status
 
-V2 is new and still filling in module coverage — expect rough edges. The
+V2 is new — expect rough edges. The
 "Beta" badge next to the Sylo logo in V2's top bar is a reminder, not a
 warning to avoid it: everything that has shipped has the same real
 functionality (and the same save behavior and side effects) as its classic
@@ -69,8 +83,10 @@ other issue.
 
 ## Switching back
 
-**Back to classic dashboard** sits in V2's top bar and returns you to `/` at
-any time — nothing about your settings depends on which dashboard you use.
+**Back to classic dashboard** sits in V2's top bar and returns you to the
+classic dashboard at any time (for the rest of the session, even if V2 is your
+default — see [Trying it](#trying-it)). Nothing about your settings depends on
+which dashboard you use.
 
 ## For self-hosters
 

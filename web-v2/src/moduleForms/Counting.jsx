@@ -1,70 +1,35 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import {
-  getModuleConfig,
-  saveModuleConfig,
-  setCountingCount,
-  resetCountingCount,
-  releaseCountingPenalty,
-  ApiError,
-} from '../api.js';
-import { useApiData } from '../useApiData.js';
+import { setCountingCount, resetCountingCount, releaseCountingPenalty } from '../api.js';
 import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 export default function Counting() {
-  const { guildId } = useParams();
-  const { data, loading, error, setData } = useApiData(() => getModuleConfig(guildId, 'counting'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { guildId, data, setData, form, setForm, status, error, dirty, saving, save, reset } =
+    useModuleForm('counting');
   const [countInput, setCountInput] = useState('');
+  const [countError, setCountError] = useState('');
   const [countBusy, setCountBusy] = useState(false);
   const [releasing, setReleasing] = useState(null);
 
   useEffect(() => {
-    if (data) {
-      setForm(data.config);
-      setCountInput(String(data.state.current));
-    }
+    if (data) setCountInput(String(data.state.current));
   }, [data]);
 
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Counting settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="Counting settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
 
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const { config } = await saveModuleConfig(guildId, 'counting', form);
-      setForm(config);
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function onSetCount() {
     const n = Number(countInput);
-    if (!Number.isInteger(n) || n < 0) return notify('Enter a whole number, 0 or higher.');
+    if (!Number.isInteger(n) || n < 0) {
+      setCountError('Enter a whole number, 0 or higher.');
+      return;
+    }
+    setCountError('');
     setCountBusy(true);
     try {
       const { state } = await setCountingCount(guildId, n);
@@ -77,7 +42,12 @@ export default function Counting() {
   }
 
   async function onResetCount() {
-    if (!confirm('Reset the count to 0?')) return;
+    const ok = await confirmDialog({
+      title: 'Reset the count to 0?',
+      body: `The current count (${data.state.current}) is cleared and the next number posted must be 1. The best streak is kept.`,
+      confirmLabel: 'Reset to 0',
+    });
+    if (!ok) return;
     setCountBusy(true);
     try {
       const { state } = await resetCountingCount(guildId);
@@ -112,7 +82,7 @@ export default function Counting() {
           : 'breaks the streak and it starts over from 1.'}
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="channelId">Counting channel</label>
           <select id="channelId" value={form.channelId} onChange={(e) => set({ channelId: e.target.value })}>
@@ -182,13 +152,6 @@ export default function Counting() {
             onChange={(e) => set({ penaltyMinutes: Number(e.target.value) })}
           />
         </div>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
 
       {data.penalties.length > 0 ? (
@@ -240,20 +203,36 @@ export default function Counting() {
             type="number"
             min={0}
             value={countInput}
-            onChange={(e) => setCountInput(e.target.value)}
+            aria-invalid={countError ? true : undefined}
+            aria-describedby={countError ? 'countInput-error' : undefined}
+            onChange={(e) => {
+              setCountInput(e.target.value);
+              if (countError) setCountError('');
+            }}
           />
-          <button type="button" className="v2-btn-primary" disabled={countBusy} onClick={onSetCount}>
+          <button type="button" className="v2-btn-ghost" disabled={countBusy} onClick={onSetCount}>
             Update
           </button>
-          <button type="button" className="v2-btn-ghost" disabled={countBusy} onClick={onResetCount}>
+          <button
+            type="button"
+            className="v2-btn-danger v2-danger-push"
+            disabled={countBusy}
+            onClick={onResetCount}
+          >
             Reset to 0
           </button>
         </div>
+        {countError ? (
+          <p id="countInput-error" className="v2-field-error">
+            {countError}
+          </p>
+        ) : null}
       </div>
       <p className="v2-field-hint">
         The next number posted in the channel must be one higher than this. The last-counter lock is cleared,
         so anyone may post it.
       </p>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

@@ -30,7 +30,9 @@ export default function ChipPicker({ items, value, onChange, kind = 'role', plac
             ) : (
               <span className="v2-chip-dot" style={{ background: item.color || 'var(--text-muted)' }} />
             )}
-            <span>{item.name}</span>
+            <span className="v2-chip-name" title={item.name}>
+              {item.name}
+            </span>
             <button
               type="button"
               className="v2-chip-x"
@@ -42,7 +44,12 @@ export default function ChipPicker({ items, value, onChange, kind = 'role', plac
           </span>
         ))}
       </div>
-      <select className="v2-chip-add" value="" onChange={add}>
+      <select
+        className="v2-chip-add"
+        value=""
+        onChange={add}
+        aria-label={placeholder || (kind === 'channel' ? 'Add a channel' : 'Add a role')}
+      >
         <option value="">{placeholder || defaultPlaceholder}</option>
         {available.map((opt) => (
           <option key={opt.id} value={opt.id}>

@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getLeaderboard, setLeaderboardPublic, setLeaderboardVanity, ApiError } from '../api.js';
+import { getLeaderboard, setLeaderboardPublic, setLeaderboardVanity } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import Switch from '../components/Switch.jsx';
+import Meta, { plural } from '../components/Meta.jsx';
+import { formatCount } from '../util.js';
 
 const PERIODS = [
   { key: 'all', label: 'All time' },
@@ -13,10 +17,7 @@ const PERIODS = [
 export default function Leaderboard() {
   const { guildId } = useParams();
   const [period, setPeriod] = useState('all');
-  const { data, loading, error, setData } = useApiData(
-    () => getLeaderboard(guildId, period),
-    [guildId, period]
-  );
+  const { data, error, setData } = useApiData(() => getLeaderboard(guildId, period), [guildId, period]);
   const [slugInput, setSlugInput] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -27,22 +28,8 @@ export default function Leaderboard() {
     if (data) setSlugInput(data.vanitySlug || '');
   }, [data]);
 
-  if (loading && !data) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load the leaderboard (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (error) return <LoadError error={error} what="the leaderboard" />;
+  if (!data) return <p className="v2-state">Loading…</p>;
 
   async function togglePublic() {
     if (saving) return;
@@ -50,6 +37,8 @@ export default function Leaderboard() {
     try {
       const { publicLeaderboard } = await setLeaderboardPublic(guildId, !data.publicLeaderboard);
       setData((d) => ({ ...d, publicLeaderboard }));
+    } catch (err) {
+      notify(err.message);
     } finally {
       setSaving(false);
     }
@@ -85,31 +74,36 @@ export default function Leaderboard() {
               <h3>Public leaderboard</h3>
               <p>Anyone with the link can view it, without signing in.</p>
             </div>
-            <button
-              type="button"
-              className={`v2-toggle${data.publicLeaderboard ? ' is-on' : ''}`}
-              aria-label={
-                data.publicLeaderboard ? 'Public — click to make private' : 'Private — click to make public'
-              }
-              onClick={togglePublic}
+            <Switch
+              checked={data.publicLeaderboard}
+              onChange={togglePublic}
+              label="Public leaderboard"
               disabled={saving}
             />
           </div>
           {data.publicLeaderboard ? (
-            <form className="v2-row" onSubmit={saveVanity}>
+            <form className="v2-row v2-row-stack" onSubmit={saveVanity}>
               <div className="v2-row-main">
                 <h3>Vanity URL</h3>
-                <p>sylobot.com/lb/{slugInput || '…'}</p>
+                <p className="v2-break is-wrap">sylobot.com/lb/{slugInput || '…'}</p>
               </div>
-              <input
-                className="v2-inline-input"
-                value={slugInput}
-                onChange={(e) => setSlugInput(e.target.value)}
-                placeholder="my-server"
-              />
-              <button type="submit" className="v2-btn-ghost" disabled={saving}>
-                Save
-              </button>
+              <div className="v2-row-actions v2-vanity-actions">
+                <input
+                  className="v2-inline-input"
+                  aria-label="Vanity URL slug"
+                  value={slugInput}
+                  onChange={(e) => setSlugInput(e.target.value)}
+                  placeholder="my-server"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  autoComplete="off"
+                  spellCheck={false}
+                  enterKeyHint="done"
+                />
+                <button type="submit" className="v2-btn-ghost" disabled={saving}>
+                  Save
+                </button>
+              </div>
             </form>
           ) : null}
         </div>
@@ -132,12 +126,18 @@ export default function Leaderboard() {
           data.rows.map((r) => (
             <div className="v2-row" key={r.rank}>
               <div className="v2-row-main">
-                <h3>
-                  #{r.rank} {r.name}
+                <h3 className="v2-break">
+                  <span className="v2-id">#{formatCount(r.rank)}</span>
+                  {r.name}
                 </h3>
                 <p>
-                  {r.level !== null ? `Level ${r.level} · ` : ''}
-                  {r.xp.toLocaleString()} XP · {r.messages.toLocaleString()} messages
+                  <Meta
+                    items={[
+                      r.level !== null && r.level !== undefined && `Level ${formatCount(r.level)}`,
+                      `${formatCount(r.xp)} XP`,
+                      plural(r.messages, 'message'),
+                    ]}
+                  />
                 </p>
               </div>
             </div>

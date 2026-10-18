@@ -1,55 +1,17 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import { useCmd } from '../platformContext.jsx';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import SendTestButton from '../components/SendTestButton.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 export default function FreeGames() {
-  const { guildId } = useParams();
   const cmd = useCmd();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'free-games'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('free-games');
 
-  useEffect(() => {
-    if (data) setForm(data.config);
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Free games settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="Free games settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const { config } = await saveModuleConfig(guildId, 'free-games', form);
-      setForm(config);
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <>
@@ -60,7 +22,7 @@ export default function FreeGames() {
         filtered out of announcements; <code>{cmd('/freegames dlc:true')}</code> shows free DLC on demand.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="channelId">Announcement channel</label>
           <select
@@ -91,18 +53,13 @@ export default function FreeGames() {
             ))}
           </select>
         </div>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
 
       <p className="v2-field-hint v2-section-gap">
         Sylo needs View Channel / Send Messages / Embed Links in that channel.
       </p>
+      <SendTestButton moduleId="free-games" disabled={dirty} />
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

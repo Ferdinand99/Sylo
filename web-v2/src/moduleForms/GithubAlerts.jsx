@@ -7,8 +7,10 @@ import {
   deleteGithubWatch,
   toggleGithubWatch,
   regenGithubSecret,
-  ApiError,
 } from '../api.js';
+import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 const BLANK = { repo: '', channelId: '', roleId: '', changelogPath: '', events: ['push', 'release'] };
 
@@ -115,16 +117,18 @@ function WebhookDetails({ watch, guildId, onRegenerated }) {
   const [busy, setBusy] = useState(false);
 
   async function regen() {
-    if (
-      !confirm(
-        "Generate a new secret? The old one (and the old value in GitHub's webhook settings) stops working immediately."
-      )
-    )
-      return;
+    const ok = await confirmDialog({
+      title: 'Generate a new webhook secret?',
+      body: "The old secret — and the value saved in GitHub's webhook settings — stops working immediately. You'll need to paste the new one into GitHub.",
+      confirmLabel: 'Generate new secret',
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const { watch: updated } = await regenGithubSecret(guildId, watch.id);
       onRegenerated(updated);
+    } catch (err) {
+      notify(err.message);
     } finally {
       setBusy(false);
     }
@@ -149,7 +153,7 @@ function WebhookDetails({ watch, guildId, onRegenerated }) {
         <label>Secret</label>
         <input type="text" readOnly value={watch.secret} onClick={(e) => e.target.select()} />
       </div>
-      <button type="button" className="v2-btn-ghost" onClick={regen} disabled={busy}>
+      <button type="button" className="v2-btn-danger" onClick={regen} disabled={busy}>
         Regenerate secret
       </button>
     </div>
@@ -159,7 +163,6 @@ function WebhookDetails({ watch, guildId, onRegenerated }) {
 export default function GithubAlerts() {
   const { guildId } = useParams();
   const [state, setState] = useState({ loading: true, data: null, error: null });
-  const [notice, setNotice] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [webhookOpenId, setWebhookOpenId] = useState(null);
   const [creating, setCreating] = useState(false);
@@ -175,33 +178,19 @@ export default function GithubAlerts() {
     load();
   }, [guildId]);
 
+  if (state.error) return <LoadError error={state.error} what="GitHub alerts settings" />;
   if (state.loading) return <p className="v2-state">Loading…</p>;
-  if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load GitHub alerts settings (${state.error.message}).`
-        )}
-      </p>
-    );
-  }
 
   const d = state.data;
 
   async function onCreate(body) {
     setSaving(true);
-    setNotice(null);
     try {
       await createGithubWatch(guildId, body);
       setCreating(false);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
@@ -209,25 +198,29 @@ export default function GithubAlerts() {
 
   async function onEdit(id, body) {
     setSaving(true);
-    setNotice(null);
     try {
       await updateGithubWatch(guildId, id, body);
       setEditingId(null);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     } finally {
       setSaving(false);
     }
   }
 
   async function onDelete(id) {
-    if (!confirm('Remove this repo watch? Its webhook URL will stop working.')) return;
+    const ok = await confirmDialog({
+      title: 'Remove this repo watch?',
+      body: 'Sylo stops posting its activity and the webhook URL stops working.',
+      confirmLabel: 'Remove watch',
+    });
+    if (!ok) return;
     try {
       await deleteGithubWatch(guildId, id);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     }
   }
 
@@ -236,7 +229,7 @@ export default function GithubAlerts() {
       await toggleGithubWatch(guildId, id);
       await load();
     } catch (err) {
-      setNotice(err.message);
+      notify(err.message);
     }
   }
 
@@ -253,8 +246,6 @@ export default function GithubAlerts() {
           a repo here.
         </p>
       ) : null}
-
-      {notice ? <p className="v2-note">{notice}</p> : null}
 
       <div className="v2-group">
         <h2 className="v2-group-title">Watched repos ({d.watches.length})</h2>
@@ -320,7 +311,11 @@ export default function GithubAlerts() {
                     <button type="button" className="v2-btn-ghost" onClick={() => onToggle(w.id)}>
                       {w.enabled ? 'Pause' : 'Resume'}
                     </button>
-                    <button type="button" className="v2-btn-ghost" onClick={() => onDelete(w.id)}>
+                    <button
+                      type="button"
+                      className="v2-btn-danger v2-danger-sep"
+                      onClick={() => onDelete(w.id)}
+                    >
                       Remove
                     </button>
                   </div>

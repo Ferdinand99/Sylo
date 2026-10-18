@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 const QUESTION_SLOTS = 5;
 
@@ -12,52 +10,22 @@ function padQuestions(questions) {
   return padded.slice(0, QUESTION_SLOTS);
 }
 
+const toForm = (config) => ({ ...config, questions: padQuestions(config.questions) });
+
 export default function Appeals() {
-  const { guildId } = useParams();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'appeals'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm(
+    'appeals',
+    {
+      toForm,
+    }
+  );
 
-  useEffect(() => {
-    if (data) setForm({ ...data.config, questions: padQuestions(data.config.questions) });
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Ban appeals settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="Ban appeals settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const setQuestion = (i, value) =>
     setForm((f) => ({ ...f, questions: f.questions.map((q, idx) => (idx === i ? value : q)) }));
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const { config } = await saveModuleConfig(guildId, 'appeals', form);
-      setForm({ ...config, questions: padQuestions(config.questions) });
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <>
@@ -78,7 +46,7 @@ export default function Appeals() {
         ) : null}
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label>
             Appeal form questions <span className="v2-field-hint">— 1 to 5; blank rows are dropped</span>
@@ -168,13 +136,6 @@ export default function Appeals() {
             with them and can also DM the decision.
           </p>
         </div>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
 
       <p className="v2-field-hint v2-section-gap">
@@ -182,6 +143,7 @@ export default function Appeals() {
         <strong>Create Invite</strong> to mint the rejoin link. The review channel post always includes the
         appeal link so you can share it manually if a member's DMs are closed.
       </p>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

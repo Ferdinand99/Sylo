@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -17,58 +15,28 @@ function toFormRow(c = {}) {
   };
 }
 
+const toForm = (config) => ({
+  refreshMinutes: config.refreshMinutes,
+  channels: config.channels.map(toFormRow),
+});
+const fromForm = (form) => ({
+  refreshMinutes: form.refreshMinutes,
+  channels: form.channels.map((c) => ({ channelId: c.channelId, type: c.type, template: c.template })),
+});
+
 export default function ServerStats() {
-  const { guildId } = useParams();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'server-stats'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('server-stats', {
+    toForm,
+    fromForm,
+  });
 
-  useEffect(() => {
-    if (data)
-      setForm({ refreshMinutes: data.config.refreshMinutes, channels: data.config.channels.map(toFormRow) });
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Server statistics settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="Server statistics settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const updateRow = (key, patch) =>
     setForm((f) => ({ ...f, channels: f.channels.map((c) => (c.key === key ? { ...c, ...patch } : c)) }));
   const addRow = () => setForm((f) => ({ ...f, channels: [...f.channels, toFormRow()] }));
   const removeRow = (key) => setForm((f) => ({ ...f, channels: f.channels.filter((c) => c.key !== key) }));
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const body = {
-        refreshMinutes: form.refreshMinutes,
-        channels: form.channels.map((c) => ({ channelId: c.channelId, type: c.type, template: c.template })),
-      };
-      const { config } = await saveModuleConfig(guildId, 'server-stats', body);
-      setForm({ refreshMinutes: config.refreshMinutes, channels: config.channels.map(toFormRow) });
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <>
@@ -79,7 +47,7 @@ export default function ServerStats() {
         each one.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save} data-savebar>
         {form.channels.length === 0 ? (
           <p className="v2-field-hint">No stat channels yet — add one below.</p>
         ) : null}
@@ -145,14 +113,8 @@ export default function ServerStats() {
           />
           <p className="v2-field-hint">5–60. Lower is more current but closer to Discord's rename limit.</p>
         </div>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

@@ -5,6 +5,7 @@ import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
+import { formatCount } from '../util.js';
 
 const STATUS_LABEL = { open: 'Open', accepted: 'Accepted', denied: 'Denied' };
 
@@ -23,15 +24,18 @@ function AppealCard({ appeal, onDecide }) {
 
   return (
     <div className="v2-rule-card">
-      <div className="v2-rule-head">
-        <div>
-          <h3 className="v2-appeal-user">{appeal.user}</h3>
-          <p className="v2-field-hint">
+      <div className="v2-rule-head v2-appeal-head">
+        <div className="v2-appeal-who">
+          <h3 className="v2-appeal-user v2-break">{appeal.user}</h3>
+          <p className="v2-field-hint v2-break">
             <Meta
               items={[
                 `submitted ${appeal.ago}`,
-                `original ban reason: ${appeal.banReason}`,
-                appeal.status !== 'open' && `${STATUS_LABEL[appeal.status]} by ${appeal.decidedBy}`,
+                appeal.banReason && appeal.banReason !== '—'
+                  ? `original ban reason: ${appeal.banReason}`
+                  : 'no ban reason recorded',
+                appeal.status !== 'open' &&
+                  `${STATUS_LABEL[appeal.status] ?? appeal.status} by ${appeal.decidedBy || 'a moderator'}`,
                 appeal.decidedAgo,
               ]}
             />
@@ -41,7 +45,7 @@ function AppealCard({ appeal, onDecide }) {
           {STATUS_LABEL[appeal.status] ?? appeal.status}
         </span>
       </div>
-      <dl className="v2-appeal-answers">
+      <dl className="v2-appeal-answers v2-break">
         {appeal.answers.map((qa, i) => (
           <div key={i}>
             <dt>{qa.q}</dt>
@@ -60,7 +64,7 @@ function AppealCard({ appeal, onDecide }) {
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
-          <div className="v2-field-row v2-section-gap-sm">
+          <div className="v2-field-row v2-wrap-row v2-section-gap-sm">
             <button type="button" className="v2-btn-primary" disabled={busy} onClick={() => decide('accept')}>
               Accept and unban
             </button>
@@ -70,7 +74,7 @@ function AppealCard({ appeal, onDecide }) {
           </div>
         </div>
       ) : appeal.decisionReason ? (
-        <p className="v2-field-hint">Note to the member: {appeal.decisionReason}</p>
+        <p className="v2-field-hint v2-break">Note to the member: {appeal.decisionReason}</p>
       ) : null}
     </div>
   );
@@ -78,10 +82,10 @@ function AppealCard({ appeal, onDecide }) {
 
 export default function AppealsReview() {
   const { guildId } = useParams();
-  const { data, loading, error, setData } = useApiData(() => getAppealsReview(guildId), [guildId]);
+  const { data, error, setData } = useApiData(() => getAppealsReview(guildId), [guildId]);
 
-  if (loading && !data) return <p className="v2-state">Loading…</p>;
   if (error) return <LoadError error={error} what="the appeals" />;
+  if (!data) return <p className="v2-state">Loading…</p>;
 
   async function onDecide(id, decision, reason) {
     try {
@@ -125,7 +129,7 @@ export default function AppealsReview() {
         </p>
       ) : null}
 
-      <h2 className="v2-group-title">Open ({open.length})</h2>
+      <h2 className="v2-group-title">Open ({formatCount(open.length)})</h2>
       {open.length ? (
         open.map((a) => <AppealCard key={a.id} appeal={a} onDecide={onDecide} />)
       ) : (

@@ -277,3 +277,15 @@ export const disconnectAccount = (platform) => postJson(`/api/v2/account/disconn
 export const deleteAccount = () => postJson('/api/v2/account/delete', { confirm: true });
 export const revokeDevice = (id) => postJson(`/api/v2/account/devices/${encodeURIComponent(id)}/revoke`, {});
 export const getInvites = () => apiFetch('/api/v2/invites').then((d) => d.invites);
+
+// "Send test message" for a module (posts to its channel from the saved config).
+export const sendModuleTest = (guildId, moduleId) =>
+  postJson(`${g(guildId)}/modules/${encodeURIComponent(moduleId)}/test`, {});
+
+// Server data: audit log, config export, member data (see src/web/routes/v2GuildData.js).
+export const getAuditLog = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/audit`);
+export const exportGuildConfig = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/export`);
+export const getMemberData = (guildId, user) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/member-data?user=${encodeURIComponent(user ?? '')}`);
+export const forgetMemberData = (guildId, userId, reason) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/member-data/forget`, { userId, reason, confirm: true });

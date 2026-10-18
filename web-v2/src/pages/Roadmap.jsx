@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getRoadmap, voteRoadmapPost, suggestRoadmapPost, ApiError } from '../api.js';
+import { getRoadmap, voteRoadmapPost, suggestRoadmapPost } from '../api.js';
+import LoadError from '../components/LoadError.jsx';
+import { formatCount } from '../util.js';
 
 const GROUPS = [
   { key: 'planned', label: 'Planned' },
@@ -26,8 +28,10 @@ function VoteButton({ post, onVote }) {
       className={`v2-roadmap-vote${post.voted ? ' is-voted' : ''}`}
       onClick={click}
       disabled={busy}
+      aria-pressed={Boolean(post.voted)}
+      aria-label={`Vote for ${post.title}, ${formatCount(post.votes)} ${post.votes === 1 ? 'vote' : 'votes'}`}
     >
-      <strong>{post.votes}</strong>
+      <strong>{formatCount(post.votes)}</strong>
       <span>vote{post.votes === 1 ? '' : 's'}</span>
     </button>
   );
@@ -49,21 +53,8 @@ export default function Roadmap() {
     load();
   }, []);
 
-  if (state.loading) return <p className="v2-state">Loading…</p>;
-  if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load the roadmap (${state.error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (state.error) return <LoadError error={state.error} what="the roadmap" />;
+  if (state.loading || !state.data) return <p className="v2-state">Loading…</p>;
 
   const d = state.data;
 
@@ -124,16 +115,16 @@ export default function Roadmap() {
           <h2 className="v2-group-title">
             <span className={`v2-status-pill ${key}`}>{label}</span>
           </h2>
-          {d.groups[key].length === 0 ? (
+          {!d.groups[key]?.length ? (
             <p className="v2-note">Nothing here yet.</p>
           ) : (
             <div className="v2-list">
               {d.groups[key].map((p) => (
-                <div className="v2-row" id={`post-${p.id}`} key={p.id}>
+                <div className="v2-row v2-roadmap-row" id={`post-${p.id}`} key={p.id}>
                   <div className="v2-row-main">
-                    <h3>{p.title}</h3>
+                    <h3 className="v2-break">{p.title}</h3>
                     <div
-                      className="v2-roadmap-desc"
+                      className="v2-roadmap-desc v2-break"
                       dangerouslySetInnerHTML={{ __html: p.descriptionHtml }}
                     />
                   </div>
@@ -178,16 +169,16 @@ export default function Roadmap() {
           </button>
         </form>
 
-        {d.mine.length ? (
+        {d.mine?.length ? (
           <>
             <h3 className="v2-section-gap">Your suggestions awaiting review</h3>
             <div className="v2-list">
               {d.mine.map((p) => (
                 <div className="v2-row" key={p.id}>
                   <div className="v2-row-main">
-                    <h3>{p.title}</h3>
+                    <h3 className="v2-break">{p.title}</h3>
                   </div>
-                  <span className="v2-field-hint">{p.ago}</span>
+                  <span className="v2-field-hint v2-row-time">{p.ago}</span>
                 </div>
               ))}
             </div>

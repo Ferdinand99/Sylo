@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 // Per-type ref field label/placeholder — mirrors V1's client-side HINTS map
 // (rss.ejs's inline script) exactly, same wording.
@@ -33,63 +31,31 @@ function toFormRow(f = {}) {
   };
 }
 
+const toForm = (config) => ({ feeds: config.feeds.length ? config.feeds.map(toFormRow) : [toFormRow()] });
+const fromForm = (form) => ({
+  feeds: form.feeds.map((row) => ({
+    id: row.id,
+    type: row.type,
+    ref: row.ref,
+    channelId: row.channelId,
+    roleId: row.roleId,
+    template: row.template,
+  })),
+});
+
 export default function RssAlerts() {
-  const { guildId } = useParams();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'rss'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('rss', {
+    toForm,
+    fromForm,
+  });
 
-  useEffect(() => {
-    if (data) setForm({ feeds: data.config.feeds.length ? data.config.feeds.map(toFormRow) : [toFormRow()] });
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load RSS alerts settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="RSS alerts settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const updateRow = (key, patch) =>
     setForm((f) => ({ ...f, feeds: f.feeds.map((row) => (row.key === key ? { ...row, ...patch } : row)) }));
   const addRow = () => setForm((f) => ({ ...f, feeds: [...f.feeds, toFormRow()] }));
   const removeRow = (key) => setForm((f) => ({ ...f, feeds: f.feeds.filter((row) => row.key !== key) }));
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const body = {
-        feeds: form.feeds.map((row) => ({
-          id: row.id,
-          type: row.type,
-          ref: row.ref,
-          channelId: row.channelId,
-          roleId: row.roleId,
-          template: row.template,
-        })),
-      };
-      const { config } = await saveModuleConfig(guildId, 'rss', body);
-      setForm({ feeds: config.feeds.length ? config.feeds.map(toFormRow) : [toFormRow()] });
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <>
@@ -102,7 +68,7 @@ export default function RssAlerts() {
         new ones after that are posted (up to 15 feeds).
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save} data-savebar>
         {form.feeds.map((row) => {
           const hint = HINTS[row.type] || HINTS.url;
           return (
@@ -185,14 +151,8 @@ export default function RssAlerts() {
         <button type="button" className="v2-btn-ghost" onClick={addRow}>
           + Add feed
         </button>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

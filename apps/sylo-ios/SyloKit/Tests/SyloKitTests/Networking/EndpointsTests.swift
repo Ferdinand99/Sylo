@@ -63,6 +63,13 @@ struct EndpointsTests {
         ]
         for endpoint in all { #expect(endpoint.requiresAuth, "\(endpoint.path)") }
         #expect(Endpoints.RevokeDevice(id: "x").method == .post)
+        let delete = Endpoints.DeleteAccount()
+        #expect(delete.path == "/api/v2/account/delete")
+        #expect(delete.method == .post)
+        #expect(delete.requiresAuth)
+        let deleteBody = try #require(delete.body)
+        let sent = try JSONDecoder().decode([String: Bool].self, from: JSONEncoder().encode(deleteBody))
+        #expect(sent == ["confirm": true])
         #expect(Endpoints.RevokeDevice(id: "x").body == nil)
     }
 }

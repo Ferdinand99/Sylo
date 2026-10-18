@@ -1,55 +1,17 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import { useCmd } from '../platformContext.jsx';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import SendTestButton from '../components/SendTestButton.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 export default function Birthdays() {
-  const { guildId } = useParams();
   const cmd = useCmd();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'birthdays'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('birthdays');
 
-  useEffect(() => {
-    if (data) setForm(data.config);
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Birthdays settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="Birthdays settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const { config } = await saveModuleConfig(guildId, 'birthdays', form);
-      setForm(config);
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <>
@@ -59,7 +21,7 @@ export default function Birthdays() {
         here. Placeholders: <code>{'{user}'}</code> <code>{'{age}'}</code> (blank unless a year was given).
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="channel">Announcement channel</label>
           <select id="channel" value={form.channel} onChange={(e) => set({ channel: e.target.value })}>
@@ -109,14 +71,9 @@ export default function Birthdays() {
           />
           Ping the birthday role in the announcement
         </label>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-        </div>
       </form>
+      <SendTestButton moduleId="birthdays" disabled={dirty} />
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

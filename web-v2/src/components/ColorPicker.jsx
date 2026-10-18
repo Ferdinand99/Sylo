@@ -68,8 +68,9 @@ export default function ColorPicker({ value, onChange, title }) {
         className="v2-colorpicker-swatch"
         style={{ background: value }}
         title={title || 'Embed colour'}
+        aria-label={`${title || 'Embed colour'}: ${value}`}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
           <circle cx="13.5" cy="6.5" r="0.6" fill="currentColor" />
           <circle cx="17.5" cy="10.5" r="0.6" fill="currentColor" />
           <circle cx="8.5" cy="7.5" r="0.6" fill="currentColor" />
@@ -87,6 +88,8 @@ export default function ColorPicker({ value, onChange, title }) {
               className="v2-colorpicker-dot"
               style={{ background: c }}
               title={c}
+              aria-label={`Use colour ${c}`}
+              aria-pressed={c.toLowerCase() === String(value).toLowerCase()}
               onClick={() => pick(c)}
             />
           ))}
@@ -103,6 +106,8 @@ export default function ColorPicker({ value, onChange, title }) {
                   className="v2-colorpicker-dot"
                   style={{ background: c }}
                   title={c}
+                  aria-label={`Use recent colour ${c}`}
+                  aria-pressed={c.toLowerCase() === String(value).toLowerCase()}
                   onClick={() => pick(c)}
                 />
               ))}
@@ -116,19 +121,26 @@ export default function ColorPicker({ value, onChange, title }) {
             className="v2-colorpicker-more"
             style={{ background: value }}
             title="More colours…"
+            aria-label="More colours…"
             onClick={() => nativeRef.current?.click()}
           />
           <input
             type="text"
             className="v2-colorpicker-hex"
+            aria-label="Hex colour code"
             value={hexDraft}
             maxLength={7}
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
             onChange={(e) => onHexInput(e.target.value)}
           />
           <input
             ref={nativeRef}
             type="color"
             className="v2-colorpicker-native"
+            aria-hidden="true"
             value={HEX_RE.test(value) ? value : '#5865f2'}
             onChange={(e) => pick(e.target.value, false)}
             tabIndex={-1}

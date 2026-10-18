@@ -12,6 +12,10 @@ public final class AccountModel {
     public var errorMessage: String?
     /// Why the last revoke did not go through (the device is back in the list).
     public var revokeError: String?
+    /// Whether the account deletion is on its way to the server.
+    public private(set) var isDeleting = false
+    /// Why deleting the account did not go through.
+    public var deleteError: String?
 
     private var revoking: Set<String> = []
     private let session: AppSession
@@ -73,6 +77,21 @@ public final class AccountModel {
                 restore(removed, at: index)
                 if error != .cancelled, error != .unauthorized { revokeError = error.userMessage }
             }
+        }
+    }
+
+    /// Deletes the Sylo account on this server. On success the app is signed out of it; on failure
+    /// ``deleteError`` says why and nothing changes.
+    public func deleteAccount() async {
+        guard !isDeleting else { return }
+        isDeleting = true
+        deleteError = nil
+        defer { isDeleting = false }
+        do {
+            try await session.deleteAccount()
+        } catch {
+            let error = NetworkError(error)
+            if error != .cancelled, error != .unauthorized { deleteError = error.userMessage }
         }
     }
 

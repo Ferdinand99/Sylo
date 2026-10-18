@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
-import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 // One channel picker per alert kind; empty means the main channel.
 function ChannelPick({ value, onChange, channels }) {
@@ -18,59 +16,26 @@ function ChannelPick({ value, onChange, channels }) {
   );
 }
 
+// The app list is edited as free text (one id per line); it travels as an array.
+const toForm = (config) => ({ ...config, appsText: config.apps.join('\n') });
+const fromForm = (form) => {
+  const { appsText, ...rest } = form;
+  return { ...rest, apps: appsText.split(/[\s,]+/).filter(Boolean) };
+};
+
 // Owner-only: the server refuses everyone else, so this page is only ever reached by the owner.
 export default function AppleConnect() {
-  const { guildId } = useParams();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'apple-connect'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [apps, setApps] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('apple-connect', {
+    toForm,
+    fromForm,
+  });
 
-  useEffect(() => {
-    if (data) {
-      setForm(data.config);
-      setApps(data.config.apps.join('\n'));
-    }
-  }, [data]);
-
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load App Store Connect settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="App Store Connect settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const setKind = (kind, patch) =>
     setForm((f) => ({ ...f, events: { ...f.events, [kind]: { ...f.events[kind], ...patch } } }));
   const ev = form.events;
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    try {
-      const body = { ...form, apps: apps.split(/[\s,]+/).filter(Boolean) };
-      const { config } = await saveModuleConfig(guildId, 'apple-connect', body);
-      setForm(config);
-      setApps(config.apps.join('\n'));
-      setSaved(true);
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <>
@@ -87,7 +52,7 @@ export default function AppleConnect() {
         </p>
       ) : null}
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-field">
           <label htmlFor="apple-channel">
             Main channel <span className="v2-field-hint">— used by every alert without its own</span>
@@ -129,7 +94,12 @@ export default function AppleConnect() {
             Apps{' '}
             <span className="v2-field-hint">— App Store Connect app ids, one per line; empty means all</span>
           </label>
-          <textarea id="apple-apps" rows={2} value={apps} onChange={(e) => setApps(e.target.value)} />
+          <textarea
+            id="apple-apps"
+            rows={2}
+            value={form.appsText}
+            onChange={(e) => setForm((f) => ({ ...f, appsText: e.target.value }))}
+          />
         </div>
 
         <p className="v2-field-hint">
@@ -243,12 +213,8 @@ export default function AppleConnect() {
             />
           </div>
         </div>
-
-        <button type="submit" className="v2-btn-primary" disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-        {saved ? <span className="v2-field-hint"> Saved.</span> : null}
       </form>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

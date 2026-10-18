@@ -5,8 +5,12 @@ import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 const POLL_MS = 6000;
+// Within this many px of the bottom counts as "reading the latest" — new
+// messages then scroll into view; further up, the reader keeps their place.
+const STICK_PX = 80;
 const isHttp = (u) => /^https?:\/\//i.test(u);
 
 // Append new messages, skipping any that are already shown (a poll and a reply can overlap).
@@ -30,16 +34,20 @@ function Bubble({ m }) {
 
 export default function TicketView() {
   const { guildId, ticketId } = useParams();
-  const { data, loading, error } = useApiData(() => getTicket(guildId, ticketId), [guildId, ticketId]);
+  const { data, error } = useApiData(() => getTicket(guildId, ticketId), [guildId, ticketId]);
   const [messages, setMessages] = useState([]);
   const [status, setStatus] = useState('open');
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [unseen, setUnseen] = useState(false);
   const chatRef = useRef(null);
   const lastId = useRef(0);
+  const atBottom = useRef(true);
 
   useEffect(() => {
     if (!data) return;
+    // A freshly opened ticket starts at its latest message.
+    atBottom.current = true;
     setMessages(data.messages);
     setStatus(data.ticket.status);
     lastId.current = data.lastId;
@@ -65,15 +73,37 @@ export default function TicketView() {
 
   useEffect(() => {
     const el = chatRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el || !messages.length) return;
+    if (atBottom.current) {
+      el.scrollTop = el.scrollHeight;
+      setUnseen(false);
+    } else {
+      setUnseen(true);
+    }
   }, [messages.length]);
 
-  if (loading && !data) return <p className="v2-state">Loading…</p>;
   if (error) return <LoadError error={error} what="this ticket" />;
+  if (!data) return <p className="v2-state">Loading…</p>;
   const { ticket } = data;
 
+  function onChatScroll() {
+    const el = chatRef.current;
+    if (!el) return;
+    atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_PX;
+    if (atBottom.current && unseen) setUnseen(false);
+  }
+
+  function jumpToLatest() {
+    const el = chatRef.current;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: reduce ? 'auto' : 'smooth' });
+    setUnseen(false);
+  }
+
+  const canSend = !busy && text.trim().length > 0;
+
   async function send() {
-    if (!text.trim()) return notify('Write a reply first.');
+    if (!text.trim()) return;
     setBusy(true);
     try {
       const r = await replyToTicket(guildId, ticketId, text);
@@ -81,6 +111,8 @@ export default function TicketView() {
       const fresh = await pollTicket(guildId, ticketId, lastId.current);
       if (fresh.messages.length) {
         lastId.current = fresh.messages[fresh.messages.length - 1].id;
+        // Your own reply always comes into view, wherever you had scrolled to.
+        atBottom.current = true;
         setMessages((list) => append(list, fresh.messages));
       }
       if (!r.delivered) {
@@ -94,7 +126,15 @@ export default function TicketView() {
   }
 
   async function close() {
-    if (!confirm(`Close ticket #${ticket.id}?`)) return;
+    const ok = await confirmDialog({
+      title: `Close ticket #${ticket.id}?`,
+      body: text.trim()
+        ? 'What you wrote is sent to the member as the final reply.'
+        : 'The member gets the default closing notice.',
+      confirmLabel: 'Close ticket',
+      tone: 'default',
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await closeTicket(guildId, ticketId, text);
@@ -113,7 +153,7 @@ export default function TicketView() {
       <p className="v2-field-hint">
         <Link to={`/guilds/${guildId}/tickets`}>Back to tickets</Link>
       </p>
-      <h1 className="v2-section-title">
+      <h1 className="v2-section-title v2-ticket-title">
         Ticket #{ticket.id} <span className="v2-ticket-user">{ticket.user}</span>
       </h1>
       <p className="v2-field-hint">
@@ -129,10 +169,17 @@ export default function TicketView() {
         />
       </p>
 
-      <div className="v2-chat" ref={chatRef} aria-live="polite">
-        {messages.map((m) => (
-          <Bubble key={m.id} m={m} />
-        ))}
+      <div className="v2-chat-wrap">
+        <div className="v2-chat" ref={chatRef} aria-live="polite" onScroll={onChatScroll}>
+          {messages.map((m) => (
+            <Bubble key={m.id} m={m} />
+          ))}
+        </div>
+        {unseen ? (
+          <button type="button" className="v2-chat-jump" onClick={jumpToLatest}>
+            New messages ↓
+          </button>
+        ) : null}
       </div>
 
       {status === 'open' ? (
@@ -145,18 +192,25 @@ export default function TicketView() {
             placeholder="Write a reply…"
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                if (canSend) send();
+              }
+            }}
+            aria-describedby="ticket-reply-hint"
           />
-          <div className="v2-field-row v2-section-gap-sm">
-            <button type="button" className="v2-btn-primary" disabled={busy} onClick={send}>
+          <div className="v2-field-row v2-wrap-row v2-section-gap-sm">
+            <button type="button" className="v2-btn-primary" disabled={!canSend} onClick={send}>
               Send reply
             </button>
             <button type="button" className="v2-btn-ghost" disabled={busy} onClick={close}>
               Close ticket
             </button>
           </div>
-          <p className="v2-field-hint">
-            Close ticket sends what you wrote as the final reply. With an empty box it sends the default
-            closing notice.
+          <p className="v2-field-hint" id="ticket-reply-hint">
+            Ctrl+Enter (⌘+Enter on a Mac) sends. Close ticket sends what you wrote as the final reply. With an
+            empty box it sends the default closing notice.
           </p>
         </div>
       ) : (

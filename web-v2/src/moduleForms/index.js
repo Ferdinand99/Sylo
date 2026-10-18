@@ -1,43 +1,44 @@
-// Registry of module ids with a real V2 settings form. Overview links a
-// module's row here when it has an entry, and to V1's own config page
-// (already given by the overview API as each card's `href`) otherwise —
-// every module is configurable from V2 today, just not all with a V2 page
-// yet. Add an entry here (and its two backend routes in v2Api.js) whenever
-// a new module gets built out.
-import Afk from './Afk.jsx';
-import Welcome from './Welcome.jsx';
-import Birthdays from './Birthdays.jsx';
-import Verification from './Verification.jsx';
-import FreeGames from './FreeGames.jsx';
-import Counting from './Counting.jsx';
-import AutoReact from './AutoReact.jsx';
-import Logging from './Logging.jsx';
-import Tickets from './Tickets.jsx';
-import Appeals from './Appeals.jsx';
-import Giveaways from './Giveaways.jsx';
-import Moderation from './Moderation.jsx';
-import Automod from './Automod.jsx';
-import Sticky from './Sticky.jsx';
-import ServerStats from './ServerStats.jsx';
-import Autoresponder from './Autoresponder.jsx';
-import InviteTracker from './InviteTracker.jsx';
-import TwitchAlerts from './TwitchAlerts.jsx';
-import KickAlerts from './KickAlerts.jsx';
-import RssAlerts from './RssAlerts.jsx';
-import GameStats from './GameStats.jsx';
-import Honeypot from './Honeypot.jsx';
-import YoutubeAlerts from './YoutubeAlerts.jsx';
-import Leveling from './Leveling.jsx';
-import ChannelCleanup from './ChannelCleanup.jsx';
-import GithubAlerts from './GithubAlerts.jsx';
-import TempVoice from './TempVoice.jsx';
-import Starboard from './Starboard.jsx';
-import Reminders from './Reminders.jsx';
-import Polls from './Polls.jsx';
-import WelcomeChannel from './WelcomeChannel.jsx';
-import Roles from './Roles.jsx';
-import CustomCommands from './CustomCommands.jsx';
-import AppleConnect from './AppleConnect.jsx';
+// Registry of module ids with a V2 settings form. Overview links a module's
+// row here when it has an entry, and to V1's own config page (each card's
+// `href` from the overview API) otherwise. Every module has one today; add an
+// entry here (and its backend routes in v2Api.js) for a new module. Each form
+// is its own file, loaded the first time its page opens.
+import { lazy } from 'react';
+
+const Afk = lazy(() => import('./Afk.jsx'));
+const Welcome = lazy(() => import('./Welcome.jsx'));
+const Birthdays = lazy(() => import('./Birthdays.jsx'));
+const Verification = lazy(() => import('./Verification.jsx'));
+const FreeGames = lazy(() => import('./FreeGames.jsx'));
+const Counting = lazy(() => import('./Counting.jsx'));
+const AutoReact = lazy(() => import('./AutoReact.jsx'));
+const Logging = lazy(() => import('./Logging.jsx'));
+const Tickets = lazy(() => import('./Tickets.jsx'));
+const Appeals = lazy(() => import('./Appeals.jsx'));
+const Giveaways = lazy(() => import('./Giveaways.jsx'));
+const Moderation = lazy(() => import('./Moderation.jsx'));
+const Automod = lazy(() => import('./Automod.jsx'));
+const Sticky = lazy(() => import('./Sticky.jsx'));
+const ServerStats = lazy(() => import('./ServerStats.jsx'));
+const Autoresponder = lazy(() => import('./Autoresponder.jsx'));
+const InviteTracker = lazy(() => import('./InviteTracker.jsx'));
+const TwitchAlerts = lazy(() => import('./TwitchAlerts.jsx'));
+const KickAlerts = lazy(() => import('./KickAlerts.jsx'));
+const RssAlerts = lazy(() => import('./RssAlerts.jsx'));
+const GameStats = lazy(() => import('./GameStats.jsx'));
+const Honeypot = lazy(() => import('./Honeypot.jsx'));
+const YoutubeAlerts = lazy(() => import('./YoutubeAlerts.jsx'));
+const Leveling = lazy(() => import('./Leveling.jsx'));
+const ChannelCleanup = lazy(() => import('./ChannelCleanup.jsx'));
+const GithubAlerts = lazy(() => import('./GithubAlerts.jsx'));
+const TempVoice = lazy(() => import('./TempVoice.jsx'));
+const Starboard = lazy(() => import('./Starboard.jsx'));
+const Reminders = lazy(() => import('./Reminders.jsx'));
+const Polls = lazy(() => import('./Polls.jsx'));
+const WelcomeChannel = lazy(() => import('./WelcomeChannel.jsx'));
+const Roles = lazy(() => import('./Roles.jsx'));
+const CustomCommands = lazy(() => import('./CustomCommands.jsx'));
+const AppleConnect = lazy(() => import('./AppleConnect.jsx'));
 
 export const MODULE_FORMS = {
   afk: Afk,
@@ -87,6 +88,8 @@ export const SPECIAL_V2_PATHS = {
   messages: (guildId) => `/guilds/${guildId}/messages`,
   general: (guildId) => `/guilds/${guildId}/settings`,
   insights: (guildId) => `/guilds/${guildId}/insights`,
+  // The Commands overview card — V2's page is the Moderation hub's Commands tab.
+  commands: (guildId) => `/guilds/${guildId}/moderation/commands`,
 };
 
 export function hasV2Page(card) {

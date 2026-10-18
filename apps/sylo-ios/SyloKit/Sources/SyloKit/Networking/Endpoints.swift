@@ -96,4 +96,16 @@ public enum Endpoints {
         public var path: String { "/api/v2/account/devices/\(id.encodedPathSegment)/revoke" }
         public var method: HTTPMethod { .post }
     }
+
+    /// `POST /api/v2/account/delete` with `{confirm: true}`: deletes the Sylo account on this
+    /// server — its sign-ins, sessions and every app token, this one included.
+    public struct DeleteAccount: APIEndpoint {
+        public typealias Response = OKResponse
+        public init() {}
+        public var path: String { "/api/v2/account/delete" }
+        public var method: HTTPMethod { .post }
+        public var body: (any Encodable & Sendable)? { Body() }
+
+        private struct Body: Encodable, Sendable { let confirm = true }
+    }
 }

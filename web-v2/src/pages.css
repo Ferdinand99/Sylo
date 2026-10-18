@@ -1,0 +1,265 @@
+/* Page-specific fixes for the staff and bot-wide pages. */
+
+/* Long unbreakable names (server/user/backup names, URLs) break where they
+   must instead of running past their box. */
+.v2-break {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* A row whose trailing buttons drop under the text once there isn't room
+   for both side by side, instead of squeezing the text to a sliver or
+   clipping the buttons on a phone. */
+.v2-row.v2-row-stack {
+  flex-wrap: wrap;
+}
+.v2-row.v2-row-stack > .v2-row-main {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.v2-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .v2-row.v2-row-stack > .v2-row-main {
+    flex-basis: 100%;
+  }
+}
+
+/* The "3m ago" (or count) at the end of a row never wraps or shrinks. */
+.v2-row-time {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* A plain .v2-field-row that may wrap at any width (buttons + inputs). */
+.v2-field-row.v2-wrap-row {
+  flex-wrap: wrap;
+}
+/* A destructive button pushed away from the neutral ones next to it. */
+.v2-btn-apart {
+  margin-left: auto;
+}
+/* Text input that takes the free space in a wrapping row. */
+.v2-grow-input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+/* Health — backup toolbar: create, then a file picker + import. Wraps (and
+   stacks on a phone) instead of forcing the page to scroll sideways. */
+.v2-backup-tools,
+.v2-backup-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.v2-backup-import {
+  flex: 1 1 22rem;
+}
+.v2-file-input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.v2-file-input::file-selector-button {
+  margin-right: 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface-2);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-file-input::file-selector-button:hover {
+    border-color: var(--accent);
+  }
+}
+@media (max-width: 560px) {
+  .v2-backup-tools,
+  .v2-backup-import {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .v2-backup-import {
+    flex-basis: auto;
+  }
+}
+
+/* Leaderboard — vanity slug input + Save stay together and take the row's
+   free width once they wrap under the label. */
+.v2-vanity-actions {
+  flex-wrap: nowrap;
+}
+@media (max-width: 600px) {
+  .v2-vanity-actions {
+    flex: 1 1 100%;
+  }
+  .v2-vanity-actions .v2-inline-input {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+  }
+}
+
+/* Tickets — the title never runs under the ticket's own meta, and a long
+   user name breaks instead of overflowing. */
+.v2-ticket-title {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.v2-chat-wrap {
+  position: relative;
+}
+.v2-chat-jump {
+  position: absolute;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  touch-action: manipulation;
+}
+.v2-chat-jump:active {
+  transform: translateX(-50%) scale(0.97);
+}
+
+/* Overview hero — a long server name wraps next to the icon. */
+.v2-hero-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Server picker — the name gets the space, the icon (or its letter) keeps
+   its size. */
+.v2-guild-card h3 {
+  min-width: 0;
+}
+.v2-guild-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex: none;
+}
+.v2-guild-card-ph {
+  display: grid;
+  place-items: center;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* Ban appeals — the status pill stays on the right and never wraps. */
+.v2-appeal-head {
+  align-items: flex-start;
+}
+.v2-appeal-who {
+  min-width: 0;
+}
+.v2-appeal-head .v2-status-pill {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* Roadmap — vote button / admin controls top-aligned with a multi-line post. */
+.v2-roadmap-row {
+  align-items: flex-start;
+}
+.v2-roadmap-row .v2-roadmap-vote {
+  flex: none;
+}
+.v2-roadmap-admin-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+@media (max-width: 600px) {
+  .v2-roadmap-admin-actions {
+    flex-direction: row;
+  }
+}
+
+/* Insights — chart cards fit a 320px phone (the base 300px minimum plus
+   page gutters is wider than that). */
+.v2-ins-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+}
+.v2-ins-chart {
+  min-width: 0;
+}
+.v2-ins-n {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Announcement banner — title + body share the free width; × stays put. */
+.v2-ann-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.v2-ann-text strong {
+  margin-right: 8px;
+}
+
+/* Audit log — the action key ("settings:server") reads as an identifier. */
+.v2-audit-action {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+/* Member data — the lookup box takes the free width, the button keeps its own;
+   on a phone the button drops under it. */
+.v2-member-data-input {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.v2-member-data-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  min-width: 0;
+}
+.v2-member-data-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex: none;
+}
+.v2-member-data-name {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.v2-member-data-head .v2-field-hint {
+  margin: 0;
+}
+
+/* RouteError.jsx — a page that failed to render, or a page file gone after a deploy. */
+.v2-route-error {
+  text-align: left;
+}
+.v2-route-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}

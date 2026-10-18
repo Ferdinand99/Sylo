@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { useParams } from 'react-router-dom';
 import { MODULE_FORMS } from '../moduleForms/index.js';
 import { usePlatformInfo } from '../usePlatformInfo.js';
@@ -25,7 +26,11 @@ export default function ModulePage() {
           <span className="v2-platform-note-tag">{platform === 'fluxer' ? 'Fluxer' : 'Discord'}</span> {note}
         </p>
       ) : null}
-      <Form />
+      {/* Keyed by server, so switching server starts the form from scratch
+          instead of briefly showing (and saving) the previous server's settings. */}
+      <Suspense fallback={<p className="v2-state">Loading…</p>}>
+        <Form key={guildId} />
+      </Suspense>
     </PlatformContext.Provider>
   );
 }

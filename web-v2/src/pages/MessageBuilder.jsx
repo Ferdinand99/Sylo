@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getComposedMessage, saveComposedMessage, ApiError } from '../api.js';
+import { getComposedMessage, saveComposedMessage } from '../api.js';
+import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { isDirty } from '../components/formEqual.js';
+import { useUnsavedChangesGuard, SKIP_UNSAVED_GUARD } from '../components/useUnsavedChangesGuard.js';
 import EmbedCard, { autoGrow, newKey } from '../components/EmbedCard.jsx';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
@@ -88,17 +93,22 @@ export default function MessageBuilder() {
   const [messageId, setMessageId] = useState(null);
   const [channels, setChannels] = useState([]);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState(null);
+  // What the server last had — dirty while name / channel / message differ.
+  const [savedSnapshot, setSavedSnapshot] = useState(null);
+  const dirty = form !== null && isDirty({ name, channelId, form }, savedSnapshot);
+  useUnsavedChangesGuard(dirty);
 
   useEffect(() => {
     let cancelled = false;
     getComposedMessage(guildId, id)
       .then((d) => {
         if (cancelled) return;
+        const loaded = specToForm(d.rec.spec);
         setName(d.rec.name);
         setChannelId(d.rec.channelId);
         setMessageId(d.rec.messageId);
-        setForm(specToForm(d.rec.spec));
+        setForm(loaded);
+        setSavedSnapshot({ name: d.rec.name, channelId: d.rec.channelId, form: loaded });
         setChannels(d.channels);
         setState({ loading: false, error: null });
       })
@@ -108,22 +118,8 @@ export default function MessageBuilder() {
     };
   }, [guildId, id]);
 
+  if (state.error) return <LoadError error={state.error} what="this embed message" />;
   if (state.loading || !form) return <p className="v2-state">Loading…</p>;
-
-  if (state.error) {
-    const notAuthed = state.error instanceof ApiError && state.error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load this embed message (${state.error.message}).`
-        )}
-      </p>
-    );
-  }
 
   const addEmbed = () => {
     if (form.embeds.length >= MAX_EMBEDS) return;
@@ -160,30 +156,46 @@ export default function MessageBuilder() {
 
   async function submit(action) {
     setBusy(true);
-    setNotice(null);
+    const sent = { name, form };
     try {
       const body = { name, channelId, action, spec: formToSpec(form) };
       const { rec, status, error } = await saveComposedMessage(guildId, id, body);
       if (error) {
-        setNotice({ kind: 'bad', text: error });
+        notify(error);
       } else {
-        setNotice({
-          kind: 'ok',
-          text: {
+        notify(
+          {
             saved: 'Draft saved.',
             sent: 'Published to the channel.',
             updated: 'Published message updated.',
           }[status],
-        });
+          'info'
+        );
         setChannelId(rec.channelId);
         setMessageId(rec.messageId);
-        if (isNew) navigate(`/guilds/${guildId}/messages/${rec.id}`, { replace: true });
+        setSavedSnapshot({ ...sent, channelId: rec.channelId });
+        if (isNew) {
+          navigate(`/guilds/${guildId}/messages/${rec.id}`, { replace: true, state: SKIP_UNSAVED_GUARD });
+        }
       }
     } catch (err) {
-      setNotice({ kind: 'bad', text: err.message });
+      notify(err.message);
     } finally {
       setBusy(false);
     }
+  }
+
+  async function onDiscard() {
+    if (dirty) {
+      const ok = await confirmDialog({
+        title: 'Discard your changes?',
+        body: 'Everything you changed since the last save is lost.',
+        confirmLabel: 'Discard changes',
+        cancelLabel: 'Keep editing',
+      });
+      if (!ok) return;
+    }
+    navigate(`/guilds/${guildId}/messages`, { state: SKIP_UNSAVED_GUARD });
   }
 
   return (
@@ -197,13 +209,12 @@ export default function MessageBuilder() {
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <div className="v2-field-row">
-          <button
-            type="button"
-            className="v2-btn-ghost"
-            onClick={() => navigate(`/guilds/${guildId}/messages`)}
-          >
-            Discard
+        <div className="v2-field-row v2-composer-actions">
+          <span className="v2-composer-status" aria-live="polite">
+            {dirty ? 'Unsaved changes' : ''}
+          </span>
+          <button type="button" className="v2-btn-ghost" onClick={onDiscard}>
+            {dirty ? 'Discard' : 'Back'}
           </button>
           <button type="button" className="v2-btn-ghost" disabled={busy} onClick={() => submit('save')}>
             Save draft
@@ -213,8 +224,6 @@ export default function MessageBuilder() {
           </button>
         </div>
       </div>
-
-      {notice ? <p className={notice.kind === 'ok' ? 'v2-note' : 'v2-row-warn'}>{notice.text}</p> : null}
 
       <div className="v2-field v2-section-gap">
         <label htmlFor="channelId">Channel</label>

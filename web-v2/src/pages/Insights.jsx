@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getInsights, refreshInsights, ApiError } from '../api.js';
+import { getInsights, refreshInsights } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+
+const num = (v) => (Number(v) || 0).toLocaleString('en');
+const signed = (v) => `${v >= 0 ? '+' : '−'}${num(Math.abs(v))}`;
 
 // Same hand-rolled SVG bar/line chart math as V1's insights.ejs, ported
 // 1:1 rather than pulling in a charting library for six small sparkline-
@@ -76,27 +80,13 @@ const RANGES = [
 export default function Insights() {
   const { guildId } = useParams();
   const [range, setRange] = useState('30');
-  const { data, loading, error, setData } = useApiData(() => getInsights(guildId, range), [guildId, range]);
+  const { data, error, setData } = useApiData(() => getInsights(guildId, range), [guildId, range]);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => setRange('30'), [guildId]);
 
-  if ((loading && !data) || !data) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Server insights (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (error) return <LoadError error={error} what="Server insights" />;
+  if (!data) return <p className="v2-state">Loading…</p>;
 
   async function onRefresh() {
     setRefreshing(true);
@@ -116,18 +106,20 @@ export default function Insights() {
   const topMsgMax = topChannels.length ? Math.max(...topChannels.map((c) => c.messages)) : 1;
   const topVoiceMax = topVoice.length ? Math.max(...topVoice.map((c) => c.minutes)) : 1;
   const perLabel = `per ${data.granularity}`;
-  const windowLabel = `last ${data.range} ${data.granularity}${data.range === 1 ? '' : 's'}`;
+  const windowLabel =
+    data.range === 1 ? `last ${data.granularity}` : `last ${num(data.range)} ${data.granularity}s`;
 
   return (
     <>
       <h1 className="v2-section-title">Server insights</h1>
 
-      <div className="v2-ins-range">
+      <div className="v2-ins-range" role="group" aria-label="Time range">
         {RANGES.map(([value, label]) => (
           <button
             key={value}
             type="button"
             className={`v2-pill${range === value ? ' is-on' : ''}`}
+            aria-pressed={range === value}
             onClick={() => setRange(value)}
           >
             {label}
@@ -149,30 +141,27 @@ export default function Insights() {
 
       <div className="v2-ins-tiles">
         <div className="v2-ins-tile">
-          <span className="v2-ins-n">{totals.messages.toLocaleString('en')}</span>
-          <span className="v2-field-hint">messages</span>
+          <span className="v2-ins-n">{num(totals.messages)}</span>
+          <span className="v2-field-hint">{totals.messages === 1 ? 'message' : 'messages'}</span>
         </div>
         <div className="v2-ins-tile">
-          <span className="v2-ins-n">
-            {totals.net >= 0 ? '+' : ''}
-            {totals.net}
-          </span>
+          <span className="v2-ins-n">{signed(totals.net)}</span>
           <span className="v2-field-hint">net members</span>
         </div>
         <div className="v2-ins-tile">
-          <span className="v2-ins-n v2-ins-ok">{totals.joins}</span>
-          <span className="v2-field-hint">joins</span>
+          <span className="v2-ins-n v2-ins-ok">{num(totals.joins)}</span>
+          <span className="v2-field-hint">{totals.joins === 1 ? 'join' : 'joins'}</span>
         </div>
         <div className="v2-ins-tile">
-          <span className="v2-ins-n v2-ins-bad">{totals.leaves}</span>
-          <span className="v2-field-hint">leaves</span>
+          <span className="v2-ins-n v2-ins-bad">{num(totals.leaves)}</span>
+          <span className="v2-field-hint">{totals.leaves === 1 ? 'leave' : 'leaves'}</span>
         </div>
         <div className="v2-ins-tile">
           <span className="v2-ins-n">{fmtDuration(totals.voiceMinutes)}</span>
           <span className="v2-field-hint">in voice</span>
         </div>
         <div className="v2-ins-tile">
-          <span className="v2-ins-n">{totals.voicePeak}</span>
+          <span className="v2-ins-n">{num(totals.voicePeak)}</span>
           <span className="v2-field-hint">peak in voice</span>
         </div>
       </div>
@@ -224,11 +213,7 @@ export default function Insights() {
 
         <section className="v2-ins-chart">
           <h3>
-            Member growth{' '}
-            <span className="v2-field-hint">
-              (cumulative, {g.end >= 0 ? '+' : ''}
-              {g.end} over range)
-            </span>
+            Member growth <span className="v2-field-hint">(cumulative, {signed(g.end)} over range)</span>
           </h3>
           <svg
             viewBox={`0 0 ${W} ${H}`}
@@ -275,14 +260,16 @@ export default function Insights() {
             <ul className="v2-ins-bars">
               {topChannels.map((c) => (
                 <li key={c.name}>
-                  <span className="v2-ins-bar-label">#{c.name}</span>
+                  <span className="v2-ins-bar-label" title={`#${c.name}`}>
+                    #{c.name}
+                  </span>
                   <span className="v2-ins-bar-track">
                     <span
                       className="v2-ins-bar-fill"
                       style={{ width: `${Math.max(3, (c.messages / topMsgMax) * 100)}%` }}
                     />
                   </span>
-                  <span className="v2-ins-bar-val">{c.messages.toLocaleString('en')}</span>
+                  <span className="v2-ins-bar-val">{num(c.messages)}</span>
                 </li>
               ))}
             </ul>
@@ -299,7 +286,9 @@ export default function Insights() {
             <ul className="v2-ins-bars">
               {topVoice.map((c) => (
                 <li key={c.name}>
-                  <span className="v2-ins-bar-label">{c.name}</span>
+                  <span className="v2-ins-bar-label" title={c.name}>
+                    {c.name}
+                  </span>
                   <span className="v2-ins-bar-track">
                     <span
                       className="v2-ins-bar-fill v2-ins-bar-fill-voice"

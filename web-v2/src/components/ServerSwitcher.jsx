@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import PlatformBadge from './PlatformBadge.jsx';
 import { getInvites } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { initial } from '../util.js';
 
 // Matches /guilds/:id or /guilds/:id/<subpath> — captures the subpath (or ''
 // for the guild root) so switching servers on e.g. Leaderboard lands back on
@@ -53,7 +54,7 @@ export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild })
         {current?.icon ? (
           <img src={current.icon} alt="" />
         ) : (
-          <span className="v2-switch-ph">{current ? current.name.charAt(0) : '?'}</span>
+          <span className="v2-switch-ph">{initial(current?.name)}</span>
         )}
         <span className="v2-switch-name">{current ? current.name : 'Select a server'}</span>
         <span className="v2-switch-caret" aria-hidden="true">
@@ -67,7 +68,7 @@ export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild })
               {g.icon ? (
                 <img src={g.icon} alt="" />
               ) : (
-                <span className="v2-switch-dot">{g.name.charAt(0)}</span>
+                <span className="v2-switch-dot">{initial(g.name)}</span>
               )}
               <span>{g.name}</span>
               {multiPlatform ? <PlatformBadge platform={g.platform} /> : null}

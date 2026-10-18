@@ -194,6 +194,9 @@ The usual per-IP rate limits apply. On top of them, per minute: 60 calls to
 - A token stops working, at once, when:
   - the app signs out (`DELETE /api/mobile/token`),
   - the device is revoked on the account page,
+  - the account is deleted (**Settings → Delete Account** in the app, or the
+    account page on the web, `POST /api/v2/account/delete` with
+    `{ "confirm": true }`): every token of the account goes with it,
   - a sign-in (Discord or Fluxer) is disconnected from the account: this revokes
     all of the account's app tokens, and the app has to sign in again,
   - it has not been used for 90 days,

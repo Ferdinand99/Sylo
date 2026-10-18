@@ -22,13 +22,15 @@ export default function Announcement() {
 
   return (
     <div className={`v2-announcement v2-ann-${announcement.severity}`}>
-      <strong>{announcement.title}</strong>
-      {announcement.body ? <span>{announcement.body}</span> : null}
+      <div className="v2-ann-text">
+        <strong>{announcement.title}</strong>
+        {announcement.body ? <span>{announcement.body}</span> : null}
+      </div>
       {announcement.severity !== 'critical' ? (
         <button
           type="button"
           className="v2-ann-dismiss"
-          aria-label="Dismiss"
+          aria-label="Dismiss announcement"
           onClick={() => {
             writeDismissedAnnouncement(announcement.createdAt);
             setDismissed(true);

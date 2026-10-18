@@ -1,10 +1,11 @@
 import { useContext, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { getModuleConfig, saveModuleConfig, saveAutomodImmunity, ApiError } from '../api.js';
-import { useApiData } from '../useApiData.js';
+import { saveAutomodImmunity } from '../api.js';
 import { PlatformContext } from '../platformContext.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
+import LoadError from '../components/LoadError.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import { useModuleForm } from '../components/useModuleForm.js';
 
 const MODE_LABELS = {
   off: 'Disabled',
@@ -37,39 +38,26 @@ function toFormConfig(config) {
 }
 
 export default function Automod() {
-  const { guildId } = useParams();
-  const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'automod'), [guildId]);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm(
+    'automod',
+    {
+      toForm: toFormConfig,
+      // The native-automod sync reports back how it went — surface that as a toast.
+      onSaved: (result) => {
+        if (result.nativeNote) notify(result.nativeNote, result.nativeWarned ? 'error' : 'info');
+      },
+    }
+  );
   const { capabilities } = useContext(PlatformContext);
-  const [nativeNote, setNativeNote] = useState(null);
   const [immune, setImmune] = useState([]);
   const [savingImmune, setSavingImmune] = useState(false);
 
   useEffect(() => {
-    if (data) {
-      setForm(toFormConfig(data.config));
-      setImmune(data.config.exemptRoles ?? []);
-    }
+    if (data) setImmune(data.config.exemptRoles ?? []);
   }, [data]);
 
-  if ((loading && !data) || !form) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Auto-moderation settings (${error.message}).`
-        )}
-      </p>
-    );
-  }
+  if (status === 'error') return <LoadError error={error} what="Auto-moderation settings" />;
+  if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const setRule = (key, patch) =>
     setForm((f) => ({ ...f, rules: { ...f.rules, [key]: { ...f.rules[key], ...patch } } }));
@@ -79,23 +67,6 @@ export default function Automod() {
     setNative({
       presets: checked ? [...form.native.presets, p] : form.native.presets.filter((x) => x !== p),
     });
-
-  async function onSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-    setNativeNote(null);
-    try {
-      const result = await saveModuleConfig(guildId, 'automod', form);
-      setForm(toFormConfig(result.config));
-      setSaved(true);
-      if (result.nativeNote) setNativeNote({ text: result.nativeNote, warned: result.nativeWarned });
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function onSaveImmunity() {
     setSavingImmune(true);
@@ -119,7 +90,7 @@ export default function Automod() {
         {data.modlogChannelId ? '' : ' (not set — see Settings)'}. Sylo never acts on other bots.
       </p>
 
-      <form onSubmit={onSave}>
+      <form onSubmit={save} data-savebar>
         <div className="v2-am-rules">
           {data.automodRules.map(([key, label, hint]) => (
             <div className="v2-am-rule" key={key}>
@@ -324,16 +295,6 @@ export default function Automod() {
             onChange={(exemptChannels) => setForm((f) => ({ ...f, exemptChannels }))}
           />
         </div>
-
-        <div className="v2-section-gap">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save automod'}
-          </button>
-          {saved ? <span className="v2-field-hint"> Saved.</span> : null}
-          {nativeNote ? (
-            <p className={nativeNote.warned ? 'v2-warn-text' : 'v2-field-hint'}>{nativeNote.text}</p>
-          ) : null}
-        </div>
       </form>
 
       <h2 className="v2-group-title v2-section-gap">Immunity roles</h2>
@@ -344,9 +305,10 @@ export default function Automod() {
       <div className="v2-field">
         <ChipPicker kind="role" items={data.roles} value={immune} onChange={setImmune} />
       </div>
-      <button type="button" className="v2-btn-primary" disabled={savingImmune} onClick={onSaveImmunity}>
+      <button type="button" className="v2-btn-ghost" disabled={savingImmune} onClick={onSaveImmunity}>
         {savingImmune ? 'Saving…' : 'Save immunity roles'}
       </button>
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );
 }

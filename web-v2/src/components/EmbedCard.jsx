@@ -28,6 +28,7 @@ export function AvatarPick({ value, onChange, title }) {
       type="button"
       className="v2-embed-avatar-pick"
       title={title}
+      aria-label={value ? `${title}: change or remove` : `${title}: add`}
       onClick={() => onChange(pickImage(value))}
     >
       {value ? <img src={value} alt="" /> : null}
@@ -77,21 +78,28 @@ export function EmbedToolbar({ toolbar }) {
   if (!toolbar) return null;
   return (
     <div className="v2-embed-toolbar">
-      <button type="button" title="Move up" disabled={toolbar.index === 0} onClick={() => toolbar.onMove(-1)}>
+      <button
+        type="button"
+        title="Move up"
+        aria-label="Move up"
+        disabled={toolbar.index === 0}
+        onClick={() => toolbar.onMove(-1)}
+      >
         <ToolIcon name="up" />
       </button>
       <button
         type="button"
         title="Move down"
+        aria-label="Move down"
         disabled={toolbar.index === toolbar.count - 1}
         onClick={() => toolbar.onMove(1)}
       >
         <ToolIcon name="down" />
       </button>
-      <button type="button" title="Duplicate" onClick={toolbar.onDuplicate}>
+      <button type="button" title="Duplicate" aria-label="Duplicate" onClick={toolbar.onDuplicate}>
         <ToolIcon name="copy" />
       </button>
-      <button type="button" title="Delete" onClick={toolbar.onRemove}>
+      <button type="button" title="Delete" aria-label="Delete" onClick={toolbar.onRemove}>
         <ToolIcon name="trash" />
       </button>
     </div>
@@ -144,6 +152,7 @@ export default function EmbedCard({
                 />
                 <input
                   className="v2-embed-input v2-embed-author"
+                  aria-label="Author name"
                   placeholder={placeholders.author || 'Author name'}
                   maxLength={256}
                   value={embed.authorName}
@@ -155,6 +164,7 @@ export default function EmbedCard({
 
             <input
               className="v2-embed-input v2-embed-title"
+              aria-label="Embed title"
               placeholder={placeholders.title || 'Title'}
               maxLength={256}
               value={embed.title}
@@ -164,6 +174,7 @@ export default function EmbedCard({
             {description ? (
               <textarea
                 className="v2-embed-input v2-embed-desc"
+                aria-label="Embed description"
                 placeholder={placeholders.description || 'Write your message here!'}
                 rows={1}
                 maxLength={4096}
@@ -190,12 +201,15 @@ export default function EmbedCard({
                         <button
                           type="button"
                           className="v2-embed-field-remove"
+                          aria-label="Remove field"
+                          title="Remove field"
                           onClick={() => removeField(f.key)}
                         >
                           ✕
                         </button>
                         <input
                           className="v2-embed-input v2-embed-field-name"
+                          aria-label="Field name"
                           placeholder="Field name"
                           maxLength={256}
                           value={f.name}
@@ -203,6 +217,7 @@ export default function EmbedCard({
                         />
                         <input
                           className="v2-embed-input v2-embed-field-value"
+                          aria-label="Field value"
                           placeholder="Field value"
                           maxLength={1024}
                           value={f.value}
@@ -223,6 +238,7 @@ export default function EmbedCard({
             <button
               type="button"
               className={`v2-embed-thumb-pick${embed.thumbnail ? ' has' : ''}`}
+              aria-label={embed.thumbnail ? 'Thumbnail: change or remove' : 'Add a thumbnail'}
               onClick={() => set({ thumbnail: pickImage(embed.thumbnail) })}
             >
               {embed.thumbnail ? <img src={embed.thumbnail} alt="" /> : <span>+ thumbnail</span>}
@@ -233,6 +249,7 @@ export default function EmbedCard({
         <button
           type="button"
           className={`v2-embed-image-pick${embed.image ? ' has' : ''}`}
+          aria-label={embed.image ? 'Image: change or remove' : 'Add an image'}
           onClick={() => set({ image: pickImage(embed.image) })}
         >
           {embed.image ? <img src={embed.image} alt="" /> : <span>+ Add an image</span>}
@@ -248,6 +265,7 @@ export default function EmbedCard({
           ) : null}
           <input
             className="v2-embed-input v2-embed-footer"
+            aria-label="Footer text"
             placeholder={placeholders.footer || 'Footer text'}
             maxLength={2048}
             value={footer}

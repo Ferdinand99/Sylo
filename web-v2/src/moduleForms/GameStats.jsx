@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { useCmd } from '../platformContext.jsx';
-import { getModuleConfig, ApiError } from '../api.js';
+import { getModuleConfig } from '../api.js';
+import LoadError from '../components/LoadError.jsx';
 import { useApiData } from '../useApiData.js';
 
 // Read-only — this module has nothing to configure beyond the shared
@@ -11,22 +12,8 @@ export default function GameStats() {
   const cmd = useCmd();
   const { data, loading, error } = useApiData(() => getModuleConfig(guildId, 'game-stats'), [guildId]);
 
+  if (error) return <LoadError error={error} what="Game stats" />;
   if (loading && !data) return <p className="v2-state">Loading…</p>;
-
-  if (error) {
-    const notAuthed = error instanceof ApiError && error.notAuthenticated;
-    return (
-      <p className="v2-state">
-        {notAuthed ? (
-          <>
-            Your session expired — <a href="/auth/login">log in again</a>.
-          </>
-        ) : (
-          `Couldn't load Game stats (${error.message}).`
-        )}
-      </p>
-    );
-  }
 
   return (
     <>
