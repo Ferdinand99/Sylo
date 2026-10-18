@@ -28,6 +28,7 @@ import { guardRoleGrants } from '../middleware/roleGrants.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
+import guildDataRouter from './v2GuildData.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { idList, MAX_REACTION_MESSAGES, MAX_REACTION_PAIRS } from '../lib/idList.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
@@ -110,6 +111,7 @@ import { normaliseHoneypotConfig, HONEYPOT_ACTIONS, ensureHoneypotMessages } fro
 import { recentHoneypotCatches } from '../../db/honeypotCatches.js';
 import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
+import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
@@ -377,6 +379,8 @@ router.use('/guilds/:guildId/tickets', ticketsRouter);
 router.use('/guilds/:guildId', requireGuildAdmin, loadGuildJson, guardRoleGrants);
 // Appeals review, command limits and the moderation hub (v2Staff.js).
 router.use('/guilds/:guildId', staffRouter);
+// Audit log, config export and member data (v2GuildData.js).
+router.use('/guilds/:guildId', guildDataRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
@@ -475,6 +479,21 @@ router.post(
       );
     }
     res.json({ enabled });
+  })
+);
+
+// "Send test message" — mirrors guilds.js's POST /m/:moduleId/test: posts one
+// representative message to the module's configured channel (from the SAVED
+// config). Owner-only modules are already refused by ownerOnlyModules
+// (server.js), before this router. Reminders has its own draft-based
+// /modules/reminders/test route further down, so it is passed through.
+router.post(
+  '/guilds/:guildId/modules/:moduleId/test',
+  asyncHandler(async (req, res, next) => {
+    const id = req.params.moduleId;
+    if (id === 'reminders') return next();
+    if (!TESTABLE.has(id)) return res.status(400).json({ error: 'This module has no test message.' });
+    res.json(await sendModuleTest(req.guild, id));
   })
 );
 

@@ -134,7 +134,7 @@ import {
 import { recordAudit, listAudit } from '../../db/audit.js';
 import { dailySeries, hourlySeries, topChannels, topVoiceChannels } from '../../db/insights.js';
 import { flushGuild as flushGuildInsights } from '../../modules/insights.js';
-import { forgetUser, describeUserData } from '../../db/purge.js';
+import { describeUserData } from '../../db/purge.js';
 import {
   guildChannelLocks,
   lockdownChannelLocks,
@@ -146,7 +146,7 @@ import { lockChannel, unlockChannel, lockPreflight } from '../../bot/lib/channel
 import { formatDuration } from '../../bot/lib/duration.js';
 import { renderWelcomeCard } from '../../bot/lib/welcomeCard.js';
 import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
-import { exportGuildConfig } from '../../db/exportConfig.js';
+import { exportGuildConfigFor, forgetMember, lookupProfile } from '../lib/guildData.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
 import { headerJson } from '../lib/httpJson.js';
@@ -344,20 +344,6 @@ router.post(
 
 // --- Member data (data-subject requests) ---------------------------------
 
-/** Fetch a Discord user's tag + avatar for display; falls back to the raw id. */
-async function lookupProfile(guild, userId) {
-  try {
-    const u = await clientOfGuild(guild).users.fetch(userId);
-    return { id: u.id, tag: u.tag, avatar: u.displayAvatarURL({ size: 64, extension: 'png' }) };
-  } catch {
-    return { id: userId, tag: null, avatar: null };
-  }
-}
-
-const MEMBER_DATA_UNAFFECTED =
-  'Messages already posted to channels, a completed giveaway’s winner list, and the server’s config-change log are not affected. ' +
-  'Moderation cases and other safety records (a temporary ban, honeypot catches, a counting penalty) are kept.';
-
 router.get(
   '/:guildId/member-data',
   asyncHandler(async (req, res) => {
@@ -393,38 +379,7 @@ router.post(
     if (!userId) return res.redirect(`${back}?msg=md-baduser`);
     if (req.body.confirm !== 'on') return res.redirect(`${back}?user=${userId}&msg=noconfirm`);
 
-    const r = await forgetUser(guild.id, userId);
-
-    const dm = new EmbedBuilder()
-      .setColor(0x58d68d)
-      .setTitle(`Your data in ${guild.name} was deleted`)
-      .setDescription(
-        'A server administrator deleted the data Sylo had stored about you in this server, at your request.'
-      )
-      .addFields(
-        { name: 'Leveling record', value: String(r.leveling), inline: true },
-        { name: 'Tickets', value: `${r.tickets} (${r.ticketMessages} msgs)`, inline: true },
-        { name: 'Ban appeals', value: String(r.appeals), inline: true },
-        { name: 'AFK status', value: String(r.afk), inline: true },
-        { name: 'Saved birthday', value: String(r.birthdays), inline: true },
-        { name: 'Giveaway entries', value: String(r.giveawayEntries), inline: true },
-        { name: 'Invite records', value: String(r.invites), inline: true },
-        { name: 'Not affected', value: MEMBER_DATA_UNAFFECTED }
-      )
-      .setTimestamp(Date.now());
-    if (reason) dm.addFields({ name: 'Note from staff', value: reason });
-
-    const dmDelivered = await clientOfGuild(req.guild)
-      .users.fetch(userId)
-      .then((u) => u.send({ embeds: [dm] }))
-      .then(() => true)
-      .catch(() => false);
-
-    await recordAudit(guild.id, {
-      actor: moderatorDisplayName(req),
-      action: 'privacy:member-data',
-      detail: `deleted data for ${userId}${reason ? ` — ${reason}` : ''}${dmDelivered ? '' : ' (DM failed)'}`,
-    });
+    const { dmDelivered } = await forgetMember(guild, userId, { reason, actor: moderatorDisplayName(req) });
 
     res.redirect(`${back}?user=${userId}&msg=${dmDelivered ? 'forgot' : 'forgot-nodm'}`);
   })
@@ -2915,7 +2870,7 @@ router.post(
 router.get(
   '/:guildId/export',
   asyncHandler(async (req, res) => {
-    const data = await exportGuildConfig(req.guild.id);
+    const data = await exportGuildConfigFor(req.guild.id, { owner: isOwner(req) });
     res.setHeader('Content-Disposition', `attachment; filename="sylo-${req.guild.id}-config.json"`);
     res.type('application/json').send(JSON.stringify(data, null, 2));
   })

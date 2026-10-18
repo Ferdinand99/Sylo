@@ -1,6 +1,7 @@
 import { useCmd } from '../platformContext.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 
 export default function Birthdays() {
@@ -71,6 +72,7 @@ export default function Birthdays() {
           Ping the birthday role in the announcement
         </label>
       </form>
+      <SendTestButton moduleId="birthdays" disabled={dirty} />
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );

@@ -49,10 +49,12 @@ the module reference itself.
 
 Every module has its own V2 settings page, and so do the staff pages (tickets,
 ban appeals, the moderation hub with commands, automod and logging), embed
-messages, insights, the leaderboard, Health and the Bot Personalizer. A few
-server tools still live only in the classic dashboard: the server audit log,
-config export, and member data (forget a member). Everything you save in V2 is
-the same setting the classic dashboard shows.
+messages, insights, the leaderboard, Health and the Bot Personalizer. The
+server tools are there too, under **Settings → Server data**: the audit log,
+config export (the same JSON file as the classic download) and member data
+(look up and forget a member; moderation cases and other safety records are
+kept, as in the classic dashboard). Everything you save in V2 is the same
+setting the classic dashboard shows.
 
 ## Saving and unsaved changes
 

@@ -1,6 +1,7 @@
 import { useCmd } from '../platformContext.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 
 export default function FreeGames() {
@@ -57,6 +58,7 @@ export default function FreeGames() {
       <p className="v2-field-hint v2-section-gap">
         Sylo needs View Channel / Send Messages / Embed Links in that channel.
       </p>
+      <SendTestButton moduleId="free-games" disabled={dirty} />
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );

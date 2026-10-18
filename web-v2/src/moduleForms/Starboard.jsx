@@ -1,6 +1,7 @@
 import ChipPicker from '../components/ChipPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 
 function newKey() {
@@ -255,6 +256,7 @@ export default function Starboard() {
           + Add board
         </button>
       </form>
+      <SendTestButton moduleId="starboard" disabled={dirty} />
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );

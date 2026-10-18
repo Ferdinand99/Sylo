@@ -1,5 +1,6 @@
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 
 function newKey() {
@@ -144,6 +145,7 @@ export default function TwitchAlerts() {
           + Add streamer
         </button>
       </form>
+      <SendTestButton moduleId="twitch-alerts" disabled={dirty} />
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );

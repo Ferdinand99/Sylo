@@ -316,3 +316,12 @@ textarea[aria-invalid='true'] {
 .v2-composer-status:empty {
   display: none;
 }
+
+/* ---------- Send test message (components/SendTestButton.jsx) ---------- */
+.v2-send-test {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}

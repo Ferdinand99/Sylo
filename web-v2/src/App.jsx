@@ -24,6 +24,8 @@ import AppealsReview from './pages/AppealsReview.jsx';
 import TicketsInbox from './pages/TicketsInbox.jsx';
 import TicketView from './pages/TicketView.jsx';
 import ModerationHub from './pages/ModerationHub.jsx';
+import AuditLog from './pages/AuditLog.jsx';
+import MemberData from './pages/MemberData.jsx';
 
 // Old addresses for pages that are now tabs on the Moderation page.
 function ToModerationTab({ tab }) {
@@ -41,6 +43,8 @@ const router = createBrowserRouter(
       <Route path="guilds/:guildId" element={<Overview />} />
       <Route path="guilds/:guildId/leaderboard" element={<Leaderboard />} />
       <Route path="guilds/:guildId/settings" element={<Settings />} />
+      <Route path="guilds/:guildId/audit" element={<AuditLog />} />
+      <Route path="guilds/:guildId/member-data" element={<MemberData />} />
       <Route path="guilds/:guildId/m/:moduleId" element={<ModulePage />} />
       <Route path="guilds/:guildId/messages" element={<Messages />} />
       <Route path="guilds/:guildId/messages/:id" element={<MessageBuilder />} />

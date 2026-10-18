@@ -219,3 +219,36 @@
 .v2-ann-text strong {
   margin-right: 8px;
 }
+
+/* Audit log — the action key ("settings:server") reads as an identifier. */
+.v2-audit-action {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+/* Member data — the lookup box takes the free width, the button keeps its own;
+   on a phone the button drops under it. */
+.v2-member-data-input {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.v2-member-data-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  min-width: 0;
+}
+.v2-member-data-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex: none;
+}
+.v2-member-data-name {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.v2-member-data-head .v2-field-hint {
+  margin: 0;
+}
