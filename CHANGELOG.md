@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.4.0](https://github.com/Ferdinand99/Sylo/compare/v4.3.1...v4.4.0) (2026-10-18)
+
+
+### Features
+
+* Health page and dev-log notifications for operators in the Sylo app ([#258](https://github.com/Ferdinand99/Sylo/issues/258)) ([389fa32](https://github.com/Ferdinand99/Sylo/commit/389fa32cace6a500ccc07c29002d3869e10eefca))
+
 ## [4.3.1](https://github.com/Ferdinand99/Sylo/compare/v4.3.0...v4.3.1) (2026-10-18)
 
 
