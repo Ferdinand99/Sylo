@@ -6,10 +6,12 @@ import { modulePlatformNote } from '../../platform/modulePlatformNotes.js';
 import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
 import { requireGuildAdmin, currentUser, actingUserId, isOwner } from '../middleware/auth.js';
-import { guardRoleGrants } from '../middleware/roleGrants.js';
+import { limitWhen, platformActionLimit } from '../middleware/rateLimit.js';
+import { checkLevelRewardGrants, checkModuleGrants, guardRoleGrants } from '../middleware/roleGrants.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { idList, MAX_REACTION_MESSAGES, MAX_REACTION_PAIRS } from '../lib/idList.js';
+import { shouldSaveBotMasters } from '../lib/botMasters.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { getModule, missingIntents } from '../../modules/registry.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
@@ -274,6 +276,22 @@ router.get(
 // Old bookmark → the renamed Settings panel.
 router.get('/:guildId/general', (req, res) => res.redirect(`/guilds/${req.guild.id}/settings`));
 
+// The roles the settings page offers as bot masters (not @everyone, not integration roles).
+const settingsRolePool = (guild) =>
+  [...guild.roles.cache.values()]
+    .filter((r) => r.id !== rawGuildId(guild) && !r.managed)
+    .sort((a, b) => b.position - a.position);
+
+/** The bot-master roles the settings page shows: Administrator roles are listed apart. */
+async function shownBotMasters(guild) {
+  const adminIds = new Set(
+    settingsRolePool(guild)
+      .filter((r) => r.permissions.has(PermissionFlagsBits.Administrator))
+      .map((r) => r.id)
+  );
+  return (await getBotMasterRoles(guild.id)).filter((id) => !adminIds.has(id));
+}
+
 router.get(
   '/:guildId/settings',
   asyncHandler(async (req, res) => {
@@ -282,12 +300,10 @@ router.get(
     const color = await guildEmbedColor(guild.id);
 
     const roleView = (r) => ({ id: r.id, name: r.name, color: r.hexColor === '#000000' ? null : r.hexColor });
-    const usable = [...guild.roles.cache.values()]
-      .filter((r) => r.id !== rawGuildId(guild) && !r.managed)
-      .sort((a, b) => b.position - a.position);
+    const usable = settingsRolePool(guild);
     const adminRoles = usable.filter((r) => r.permissions.has(PermissionFlagsBits.Administrator));
+    const stored = await shownBotMasters(guild);
     const adminIds = new Set(adminRoles.map((r) => r.id));
-    const stored = (await getBotMasterRoles(guild.id)).filter((id) => !adminIds.has(id));
     const storedSet = new Set(stored);
 
     res.render('guild', {
@@ -310,6 +326,14 @@ router.post(
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const back = `/guilds/${guild.id}/settings`;
+    // Before anything is saved: a bot master may not change who the bot masters are.
+    const botMasterRoles = [].concat(req.body.botMasterRoles ?? []);
+    const saveBotMasters = await shouldSaveBotMasters(
+      req,
+      guild,
+      botMasterRoles,
+      await shownBotMasters(guild)
+    );
 
     // Mod-log channel (empty = off).
     const channelId = String(req.body.modlogChannelId ?? '').trim();
@@ -326,7 +350,7 @@ router.post(
     }
 
     // Bot masters.
-    await setBotMasterRoles(guild.id, [].concat(req.body.botMasterRoles ?? []));
+    if (saveBotMasters) await setBotMasterRoles(guild.id, botMasterRoles);
 
     // Default embed colour.
     const hex = String(req.body.embedColor ?? '').replace('#', '');
@@ -981,6 +1005,7 @@ router.get(
 // Send a representative test message for a module to its configured channel.
 router.post(
   '/:guildId/m/:moduleId/test',
+  platformActionLimit,
   asyncHandler(async (req, res) => {
     const id = req.params.moduleId;
     const back = `/guilds/${req.guild.id}/m/${id}`;
@@ -1623,6 +1648,8 @@ router.post(
     if (!userId || !Number.isInteger(xp) || xp < 0 || xp > 1e12) {
       return res.redirect(`${back}?msg=lvl-bad`);
     }
+    // The reward roles the new level hands out are grants: refuse before anything changes.
+    await checkLevelRewardGrants(req.guild, userId, xp);
     await setXp(req.guild.id, userId, xp);
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -1632,7 +1659,8 @@ router.post(
 
     // Reconcile reward roles for the new level (adds/strips per config).
     const cfg = normaliseLevelingConfig((await getGuildModule(req.guild.id, 'leveling')).config);
-    const member = await req.guild.members.fetch(userId).catch(() => null);
+    const member =
+      req.guild.members.cache.get(userId) ?? (await req.guild.members.fetch(userId).catch(() => null));
     if (member) await syncRewards(member, levelFromXp(xp), cfg).catch(() => {});
 
     res.redirect(`${back}?msg=lvl-set`);
@@ -1695,6 +1723,7 @@ router.get(
 
 router.post(
   '/:guildId/m/reminders/r/:id',
+  limitWhen((req) => req.body.action === 'test', platformActionLimit),
   asyncHandler(async (req, res) => {
     const b = req.body;
     if (req.params.id !== 'new' && !isRemId(req.params.id)) {
@@ -2206,6 +2235,7 @@ router.get(
 
 router.post(
   '/:guildId/m/roles/rr',
+  platformActionLimit, // every save publishes
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const back = `/guilds/${guild.id}/m/roles`;
@@ -2310,6 +2340,12 @@ router.post(
       selMax: Number.parseInt(req.body.rr_selmax, 10) || 0,
       pairs,
     };
+    // The guard on the save below would refuse a role this person may not hand out, but only
+    // after the message was posted: check first, so a refused set never reaches the channel.
+    await checkModuleGrants('roles', cfg, {
+      ...cfg,
+      reactionMessages: existing ? list.map((x) => (String(x.id) === id ? rm : x)) : [...list, rm],
+    });
     // Re-publishing after a style change: drop the old message so the new one is
     // posted cleanly (components vs reactions differ enough that editing is messy).
     if (existing && existing.style && existing.style !== style && existing.messageId) {
@@ -2649,6 +2685,7 @@ const LOCKDOWN_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement, Ch
 // Lock every text channel (dashboard equivalent of /lockdown start).
 router.post(
   '/:guildId/moderation/lock-all',
+  platformActionLimit,
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const back = `/guilds/${guild.id}/moderation`;
@@ -2687,6 +2724,7 @@ router.post(
 // End the lockdown — restore every channel /lockdown locked.
 router.post(
   '/:guildId/moderation/unlock-all',
+  platformActionLimit,
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const back = `/guilds/${guild.id}/moderation`;

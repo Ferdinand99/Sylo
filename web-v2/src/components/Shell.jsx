@@ -7,11 +7,12 @@ import Announcement from './Announcement.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import AccountMenu from './AccountMenu.jsx';
 import Toasts from './Toasts.jsx';
 import useLabelLinks from './useLabelLinks.js';
 
 // --bg-main per theme (styles.css) — what the browser chrome should match.
-const THEME_COLOR = { dark: '#0b0d17', light: '#f5f6fb' };
+const THEME_COLOR = { dark: '#0b0b0d', light: '#f5f5f7' };
 
 // Top-level layout for every V2 page: topbar (brand, server switcher — kept
 // out of the sidebar per request, it's app-wide not tied to one guild page —
@@ -39,6 +40,9 @@ export default function Shell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // The drawer hands focus back here when it closes (Sidebar.jsx).
   const navToggleRef = useRef(null);
+  // The topbar is transparent at the top of the page and turns to glass
+  // once it scrolls (.v2-topbar.scrolled in styles.css).
+  const topbarRef = useRef(null);
   const [theme, setTheme] = useState(() => readTheme() ?? 'dark');
   const { pathname } = useLocation();
 
@@ -62,6 +66,26 @@ export default function Shell() {
       return next;
     });
   }
+
+  // One passive listener that only touches the DOM when the state flips —
+  // the same approach as sylobot.com's nav (site/app.js). It writes the
+  // class straight onto the element rather than through state, so scrolling
+  // never re-renders the shell (and every page under it).
+  useEffect(() => {
+    const el = topbarRef.current;
+    if (!el) return undefined;
+    let scrolled = false;
+    function sync() {
+      const next = window.scrollY > 8;
+      if (next !== scrolled) {
+        scrolled = next;
+        el.classList.toggle('scrolled', next);
+      }
+    }
+    sync();
+    window.addEventListener('scroll', sync, { passive: true });
+    return () => window.removeEventListener('scroll', sync);
+  }, []);
 
   useEffect(() => {
     getGuilds()
@@ -94,7 +118,7 @@ export default function Shell() {
 
   return (
     <div className="v2-shell">
-      <header className="v2-topbar">
+      <header ref={topbarRef} className="v2-topbar">
         <button
           ref={navToggleRef}
           type="button"
@@ -123,6 +147,7 @@ export default function Shell() {
           <span className="v2-classic-short">Classic</span>
         </a>
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
+        <AccountMenu />
       </header>
       <OverviewProvider guildId={lastGuildId}>
         <div className="v2-body">

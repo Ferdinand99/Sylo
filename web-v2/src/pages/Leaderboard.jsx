@@ -7,6 +7,7 @@ import LoadError from '../components/LoadError.jsx';
 import Switch from '../components/Switch.jsx';
 import Meta, { plural } from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
+import Reveal from '../components/Reveal.jsx';
 
 const PERIODS = [
   { key: 'all', label: 'All time' },
@@ -58,7 +59,7 @@ export default function Leaderboard() {
   }
 
   return (
-    <>
+    <Reveal>
       <h1 className="v2-section-title">Leaderboard</h1>
 
       {!data.levelingEnabled ? (
@@ -150,6 +151,6 @@ export default function Leaderboard() {
           </div>
         )}
       </div>
-    </>
+    </Reveal>
   );
 }

@@ -22,7 +22,9 @@ function gid(guildId) {
 
 let csrfTokenPromise = null;
 
-async function getCsrfToken() {
+/** The session's CSRF token, fetched once. `fresh: true` re-fetches it (a sign-in in another tab rotates it). */
+export async function getCsrfToken({ fresh = false } = {}) {
+  if (fresh) csrfTokenPromise = null;
   if (!csrfTokenPromise) {
     csrfTokenPromise = fetch('/api/v2/csrf', { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.json() : { token: null }))

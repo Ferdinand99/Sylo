@@ -24,13 +24,14 @@ import {
   sessionUserId,
   botInviteUrls,
 } from '../middleware/auth.js';
-import { guardRoleGrants } from '../middleware/roleGrants.js';
-import { rateLimit } from '../middleware/rateLimit.js';
+import { checkLevelRewardGrants, checkModuleGrants, guardRoleGrants } from '../middleware/roleGrants.js';
+import { limitWhen, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
 import guildDataRouter from './v2GuildData.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { idList, MAX_REACTION_MESSAGES, MAX_REACTION_PAIRS } from '../lib/idList.js';
+import { shouldSaveBotMasters } from '../lib/botMasters.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
 import { getDashboardVersion, setDashboardVersion, DASHBOARD_VERSIONS } from '../../db/userPrefs.js';
@@ -489,6 +490,8 @@ router.post(
 // /modules/reminders/test route further down, so it is passed through.
 router.post(
   '/guilds/:guildId/modules/:moduleId/test',
+  // Reminders passes through to its own route, which counts it.
+  limitWhen((req) => req.params.moduleId !== 'reminders', platformActionLimit),
   asyncHandler(async (req, res, next) => {
     const id = req.params.moduleId;
     if (id === 'reminders') return next();
@@ -1735,6 +1738,7 @@ router.get(
 
 router.post(
   '/guilds/:guildId/messages/:id',
+  limitWhen((req) => req.body.action === 'publish', platformActionLimit),
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const isNew = req.params.id === 'new';
@@ -1907,6 +1911,8 @@ router.post(
         .status(400)
         .json({ error: 'Enter a valid user id/mention and a non-negative whole XP value.' });
     }
+    // The reward roles the new level hands out are grants: refuse before anything changes.
+    await checkLevelRewardGrants(req.guild, userId, xp);
     await setXp(req.guild.id, userId, xp);
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -1915,7 +1921,8 @@ router.post(
     });
 
     const cfg = normaliseLevelingConfig((await getGuildModule(req.guild.id, 'leveling')).config);
-    const member = await req.guild.members.fetch(userId).catch(() => null);
+    const member =
+      req.guild.members.cache.get(userId) ?? (await req.guild.members.fetch(userId).catch(() => null));
     if (member) await syncRewards(member, levelFromXp(xp), cfg).catch(() => {});
 
     res.json({ ok: true });
@@ -2025,6 +2032,14 @@ router.post(
   '/guilds/:guildId/settings',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
+    // Before anything is saved: a bot master may not change who the bot masters are.
+    const botMasterRoleIds = [].concat(req.body.botMasterRoleIds ?? []);
+    const saveBotMasters = await shouldSaveBotMasters(
+      req,
+      guild,
+      botMasterRoleIds,
+      await getBotMasterRoles(guild.id)
+    );
 
     const channelId = String(req.body.modlogChannelId ?? '').trim();
     if (channelId === '') {
@@ -2035,7 +2050,7 @@ router.post(
       return res.status(400).json({ error: 'Unknown channel' });
     }
 
-    await setBotMasterRoles(guild.id, [].concat(req.body.botMasterRoleIds ?? []));
+    if (saveBotMasters) await setBotMasterRoles(guild.id, botMasterRoleIds);
 
     const hex = String(req.body.embedColor ?? '').replace('#', '');
     if (req.body.embedColorReset || hex === '') await setEmbedColor(guild.id, null);
@@ -2908,6 +2923,7 @@ router.post(
 // Before /reminders/:id, which would otherwise take "test" for an id.
 router.post(
   '/guilds/:guildId/modules/reminders/test',
+  platformActionLimit,
   asyncHandler(async (req, res) => {
     const r = parseReminderBody(req.body);
     if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
@@ -3122,6 +3138,7 @@ router.post(
 
 router.post(
   '/guilds/:guildId/modules/roles/rr',
+  platformActionLimit, // every save publishes
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const cfg = (await getGuildModule(guild.id, 'roles')).config;
@@ -3172,6 +3189,12 @@ router.post(
       selMax: Number.parseInt(req.body.selMax, 10) || 0,
       pairs,
     };
+    // The guard on the save below would refuse a role this person may not hand out, but only
+    // after the message was posted: check first, so a refused set never reaches the channel.
+    await checkModuleGrants('roles', cfg, {
+      ...cfg,
+      reactionMessages: existing ? list.map((x) => (String(x.id) === id ? rm : x)) : [...list, rm],
+    });
     // Re-publishing after a style change: drop the old message so the new one is
     // posted cleanly (components vs reactions differ enough that editing is messy).
     if (existing && existing.style && existing.style !== style && existing.messageId) {

@@ -44,5 +44,8 @@ multipliers, no-XP lists, and a public leaderboard.
 - Weekly / monthly XP is rolled up into `leveling_periods` (kept ~10 weeks /
   ~6 months, then pruned); the all-time totals in `leveling` are never reset by
   a period roll.
-- Member XP can be set or reset per server from the Leaderboard page.
+- Member XP can be set or reset per server from the Leaderboard page. Setting XP
+  is refused when the new level would hand out a reward role you could not give
+  yourself (one at or above your highest role, or one with moderator or admin
+  permissions without Manage Roles); lowering XP is always allowed.
 - `/forget` removes a member's leveling record (all-time and per-period).

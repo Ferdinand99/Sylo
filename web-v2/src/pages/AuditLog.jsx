@@ -3,6 +3,7 @@ import { getAuditLog } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
+import Reveal from '../components/Reveal.jsx';
 
 // The server's config-change history — the classic dashboard's Audit log page.
 export default function AuditLog() {
@@ -13,7 +14,7 @@ export default function AuditLog() {
   if (!data) return <p className="v2-state">Loading…</p>;
 
   return (
-    <>
+    <Reveal>
       <h1 className="v2-section-title">Audit log</h1>
       <p className="v2-field-hint">
         Configuration changes made from the dashboard. Keeps the most recent {formatCount(data.kept)} per
@@ -43,6 +44,6 @@ export default function AuditLog() {
       ) : (
         <p className="v2-state">Nothing recorded yet.</p>
       )}
-    </>
+    </Reveal>
   );
 }

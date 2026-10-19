@@ -1,6 +1,15 @@
-/* Shared form pieces (SaveBar, ConfirmDialog, Switch, Field) — see components/. */
+/* Shared form pieces (SaveBar, ConfirmDialog, Switch, ToggleSection, Field,
+   ChipPicker, ColorPicker, the embed editor chrome) — see components/.
+   Imported after styles.css, so equal-specificity rules here win: several
+   blocks below restyle classes whose base rules still live in styles.css
+   (.v2-toggle, .v2-chip*, .v2-colorpicker*, .v2-embed*, .v2-toggle-section*).
+   Same language as sylobot.com: hairlines, pills, calm motion on the shared
+   --dur-* / --ease-* tokens. This file carries its own reduced-motion block
+   (at the end) because its rules come after styles.css's. */
 
 /* ---------- ConfirmDialog (components/ConfirmDialog.jsx) ---------- */
+/* Exit is 150ms (ConfirmDialog.jsx CLOSE_MS waits for it before close()),
+   entry 200ms. Modal, so it scales from the centre. */
 .v2-dialog {
   padding: 0;
   border: none;
@@ -12,109 +21,142 @@
   opacity: 0;
   transform: scale(0.96);
   transition:
-    opacity 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
-    transform 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
 }
 .v2-dialog.is-open {
   opacity: 1;
   transform: none;
-  transition-duration: 200ms;
+  transition-duration: var(--dur-ui);
 }
+/* A calm dim that fades with the panel, plus a light blur to push the page
+   back. */
 .v2-dialog::backdrop {
-  background: rgba(5, 6, 14, 0.55);
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 150ms var(--ease-out);
+}
+.v2-dialog.is-open::backdrop {
+  opacity: 1;
+  transition-duration: var(--dur-ui);
+}
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .v2-dialog::backdrop {
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+}
+:root[data-theme='light'] .v2-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.32);
+}
+/* Reduced transparency: no blur, and a slightly deeper dim does the job of
+   pushing the page back instead. */
+@media (prefers-reduced-transparency: reduce) {
+  .v2-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.65);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  :root[data-theme='light'] .v2-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.42);
+  }
 }
 .v2-dialog-panel {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius, 12px);
-  padding: 20px;
-  box-shadow: var(--shadow-pop, 0 12px 32px rgb(0 0 0 / 0.35));
+  border-radius: var(--radius);
+  padding: 22px 22px 18px;
+  box-shadow: var(--shadow-pop);
 }
 .v2-dialog-title {
-  font-size: 1.02rem;
-  font-weight: 650;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
   margin: 0 0 8px;
-  line-height: 1.35;
 }
 .v2-dialog-body {
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: var(--fs-md);
   line-height: 1.5;
+  text-wrap: pretty;
   margin: 0 0 4px;
 }
 .v2-dialog-body p {
   margin: 0 0 8px;
 }
 .v2-dialog-type {
-  margin-top: 14px;
+  margin-top: 16px;
 }
 .v2-dialog-type label {
   display: block;
   font-size: 0.85rem;
+  font-weight: 500;
   color: var(--text-muted);
   margin-bottom: 6px;
 }
 .v2-dialog-type code {
   color: var(--text);
-  background: var(--bg-surface-2);
-  border-radius: 4px;
-  padding: 1px 5px;
   user-select: all;
 }
 .v2-dialog-type input {
   width: 100%;
   box-sizing: border-box;
   background: var(--bg-surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border: 1px solid var(--border-field);
+  border-radius: var(--radius-sm);
   color: var(--text);
   font: inherit;
-  font-size: 0.9rem;
-  padding: 8px 10px;
+  font-size: var(--fs-md);
+  padding: 9px 12px;
+  transition:
+    border-color var(--dur-ui) ease,
+    box-shadow var(--dur-ui) ease;
 }
 .v2-dialog-type input:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .v2-dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 20px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .v2-dialog,
-  .v2-dialog.is-open {
-    transform: none;
-    transition-property: opacity;
-  }
+  margin-top: 22px;
 }
 
 /* Solid red confirm button — the dialog's destructive action. Same box as
-   styles.css's shared button base; the outlined .v2-btn-danger stays for
-   in-page destructive triggers. */
+   styles.css's shared pill button base; --danger-fill (not --danger) so the
+   white label stays AA in the dark theme. */
 .v2-btn-danger-solid {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   min-height: 36px;
-  padding: 0 14px;
-  background: var(--danger, #ef4444);
-  border: 1px solid var(--danger, #ef4444);
-  border-radius: var(--radius-sm, 8px);
+  padding: 0 16px;
+  background: var(--danger-fill);
+  border: 1px solid var(--danger-fill);
+  border-radius: var(--radius-pill);
   color: #fff;
   font: inherit;
   font-size: 0.875rem;
   font-weight: 600;
+  letter-spacing: -0.005em;
   line-height: 1.2;
+  white-space: nowrap;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
   transition:
-    filter 150ms ease,
-    transform 160ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+    transform var(--dur-press) var(--ease-out),
+    background-color var(--dur-ui) ease,
+    border-color var(--dur-ui) ease;
 }
 @media (hover: hover) and (pointer: fine) {
   .v2-btn-danger-solid:hover:not(:disabled) {
-    filter: brightness(1.08);
+    background: color-mix(in srgb, var(--danger-fill) 88%, #000);
+    border-color: color-mix(in srgb, var(--danger-fill) 88%, #000);
   }
 }
 .v2-btn-danger-solid:active:not(:disabled) {
@@ -122,7 +164,7 @@
 }
 .v2-btn-danger-solid:disabled {
   opacity: 0.5;
-  cursor: default;
+  cursor: not-allowed;
 }
 
 /* ---------- SaveBar (components/SaveBar.jsx) ---------- */
@@ -139,9 +181,9 @@
   visibility: hidden;
   pointer-events: none;
   transition:
-    opacity 200ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
-    transform 200ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
-    visibility 0s linear 200ms;
+    opacity var(--dur-ui) var(--ease-out),
+    transform var(--dur-ui) var(--ease-out),
+    visibility 0s linear var(--dur-ui);
 }
 .v2-savebar.is-visible {
   opacity: 1;
@@ -150,34 +192,64 @@
   pointer-events: auto;
   transition-delay: 0s;
 }
+/* A floating glass pill: the page scrolls under it. Solid surface where
+   backdrop-filter is missing or transparency is reduced. */
 .v2-savebar-inner {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px 10px 16px;
+  padding: 7px 7px 7px 20px;
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius, 12px);
-  box-shadow: var(--shadow-pop, 0 12px 32px rgb(0 0 0 / 0.35));
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-pop);
+  transition: border-color var(--dur-ui) ease;
+}
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .v2-savebar-inner {
+    background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .v2-savebar-inner {
+    background: var(--bg-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 .v2-savebar[data-mode='dirty'] .v2-savebar-inner {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-strong));
 }
 .v2-savebar-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   flex: 1;
   min-width: 0;
-  font-size: 0.88rem;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+/* The site's pill dot: marks "unsaved" without another word. */
+.v2-savebar[data-mode='dirty'] .v2-savebar-text::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 .v2-savebar-check {
-  color: var(--success, #34d399);
+  color: var(--success);
 }
 .v2-savebar-actions {
   display: flex;
   gap: 8px;
   flex: none;
-  transition: opacity 150ms ease;
+  transition: opacity var(--dur-ui) ease;
 }
 .v2-savebar[data-mode='saved'] .v2-savebar-actions {
   opacity: 0;
@@ -191,16 +263,11 @@
   .v2-savebar-inner {
     border-radius: 0;
     border-width: 1px 0 0;
+    box-shadow: none;
     padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
   }
   .v2-savebar-actions button {
     min-height: 40px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .v2-savebar,
-  .v2-savebar.is-visible {
-    transform: none;
   }
 }
 /* While the bar is up, lift the toast stack (styles.css .v2-toasts, fixed
@@ -209,15 +276,88 @@ body:has(.v2-savebar.is-visible) .v2-toasts {
   bottom: calc(84px + env(safe-area-inset-bottom, 0px));
 }
 
-/* ---------- Switch (components/Switch.jsx) ---------- */
+/* ---------- Switch (.v2-toggle, components/Switch.jsx) ---------- */
+/* iOS proportions: 44×26 track, 22px white knob. Off is a neutral fill, on
+   is the accent. Also used as a read-only <span> (Overview's module rows)
+   and inside ToggleSection's header button. Supersedes styles.css's
+   .v2-toggle / ::after / .is-on rules (38×22, bordered). */
+.v2-toggle {
+  --toggle-off: color-mix(in srgb, var(--text) 16%, transparent);
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  width: 44px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--toggle-off);
+  transition:
+    background-color 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out);
+}
+/* Light: a white knob on a pale track on a white card all but disappears.
+   A deeper off fill plus a 1px inner rim (about 3:1 against the white
+   surface, WCAG 1.4.11) outlines the off track, and the knob gets a visible
+   hairline edge. The rim goes once the track turns accent. */
+:root[data-theme='light'] .v2-toggle {
+  --toggle-off: color-mix(in srgb, var(--text) 22%, transparent);
+}
+:root[data-theme='light'] .v2-toggle:not(.is-on) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 32%, transparent);
+}
+.v2-toggle::after {
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.04),
+    0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+:root[data-theme='light'] .v2-toggle::after {
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.14),
+    0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.v2-toggle.is-on {
+  background: var(--accent);
+  border-color: transparent;
+}
+.v2-toggle.is-on::after {
+  transform: translateX(18px);
+  background: #fff;
+}
+/* A 44px-tall hit area on touch; ::after is the knob, ::before is free. */
+@media (pointer: coarse) {
+  button.v2-toggle::before {
+    content: '';
+    position: absolute;
+    inset: -9px -4px;
+  }
+}
 .v2-switch-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* Windows high contrast drops background fills; keep the track visible. */
+@media (forced-colors: active) {
+  .v2-toggle {
+    border: 1px solid CanvasText;
+  }
+  .v2-toggle::after {
+    background: CanvasText;
+  }
+}
 
-/* ---------- ToggleSection header (components/ToggleSection.jsx) ---------- */
-/* The whole header row is the switch button. */
+/* ---------- ToggleSection (components/ToggleSection.jsx) ---------- */
+/* An iOS settings row: title (and the description under it) on the left,
+   the switch on the right. The whole header row is the switch button. */
 .v2-ts-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   /* Bleeds 8px past the row on both sides for a larger hover/tap area. */
   width: calc(100% + 16px);
   margin: -6px -8px;
@@ -225,43 +365,342 @@ body:has(.v2-savebar.is-visible) .v2-toasts {
   box-sizing: border-box;
   background: none;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--dur-ui) ease;
+}
+.v2-ts-head .v2-toggle-section-title {
+  flex: 1;
+  min-width: 0;
+}
+/* The knob comes first in the DOM (aria-hidden); visually it sits right. */
+.v2-ts-head .v2-toggle {
+  order: 2;
+  cursor: inherit;
 }
 .v2-ts-head:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-.v2-ts-head .v2-toggle {
-  cursor: inherit;
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .v2-ts-head:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 0;
 }
 @media (hover: hover) and (pointer: fine) {
-  .v2-ts-head:hover:not(:disabled) .v2-toggle {
-    border-color: var(--accent);
+  .v2-ts-head:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--text) 4%, transparent);
   }
 }
+/* Description: under the title, clear of the switch column. */
 .v2-toggle-section > .v2-field-hint {
-  margin-top: 6px;
+  margin-top: 4px;
+  padding-right: 60px;
+}
+.v2-toggle-section-body {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+  transition:
+    opacity var(--dur-ui) var(--ease-out),
+    transform var(--dur-ui) var(--ease-out);
+}
+/* The body mounts when the section is switched on (it is not a <details>,
+   and keeping it mounted while off would change behaviour), so it eases in
+   from @starting-style. Only when the user is on the header — pointer over
+   it or keyboard focus — so an already-on section doesn't animate on page
+   load. Switching off is instant. */
+@starting-style {
+  .v2-toggle-section:has(> .v2-ts-head:is(:hover, :focus-visible)) > .v2-toggle-section-body {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 
-/* ---------- Field (components/Field.jsx) — inline validation ---------- */
+/* ---------- Disclosure panels (<details>, e.g. .v2-am-params) ---------- */
+/* Automod's per-rule "Settings" and CustomCommands' advanced options. A
+   rotating chevron, and a smooth height where the browser can animate to
+   `auto` (same as the site's FAQ); an instant toggle everywhere else. */
+.v2-am-params > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  list-style: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--dur-ui) ease;
+}
+.v2-am-params > summary::-webkit-details-marker {
+  display: none;
+}
+.v2-am-params > summary::after {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+.v2-am-params[open] > summary::after {
+  margin-top: 3px;
+  transform: rotate(225deg);
+}
+.v2-am-params[open] > summary {
+  color: var(--text);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-am-params > summary:hover {
+    color: var(--text);
+  }
+}
+@media (pointer: coarse) {
+  .v2-am-params > summary {
+    min-height: 44px;
+  }
+}
+@supports (interpolate-size: allow-keywords) {
+  .v2-am-params {
+    interpolate-size: allow-keywords;
+  }
+  /* 4px of side/bottom room (cancelled by the negative margin) so the
+     inputs' 3px focus ring isn't clipped by overflow:hidden. */
+  .v2-am-params::details-content {
+    block-size: 0;
+    overflow: hidden;
+    padding: 0 4px 4px;
+    margin: 0 -4px -4px;
+    transition:
+      block-size 250ms var(--ease-out),
+      content-visibility 250ms var(--ease-out) allow-discrete;
+  }
+  .v2-am-params[open]::details-content {
+    block-size: auto;
+  }
+}
+
+/* ---------- Field (components/Field.jsx) — labels, hints, errors ---------- */
 .v2-field-error {
-  color: var(--danger, #f87171);
-  font-size: 0.8rem;
+  color: var(--danger);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.45;
+  text-wrap: pretty;
   margin: 6px 0 0;
 }
 .v2-field [aria-invalid='true'],
 input[aria-invalid='true'],
 select[aria-invalid='true'],
 textarea[aria-invalid='true'] {
-  border-color: var(--danger, #f87171);
+  border-color: var(--danger);
+}
+/* Out-specifies styles.css's accent focus ring, so an invalid field stays
+   red while it's being fixed. */
+input[aria-invalid='true']:focus-visible,
+select[aria-invalid='true']:focus-visible,
+textarea[aria-invalid='true']:focus-visible {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 25%, transparent);
+}
+
+/* ---------- ChipPicker (components/ChipPicker.jsx) ---------- */
+/* The chip well reads like an input (same fill, hairline, radius); chips
+   are hairline pills. Supersedes styles.css's .v2-chip-row / .v2-chip /
+   .v2-chip-x look. */
+.v2-chip-row {
+  min-height: 40px;
+  padding: 6px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-field);
+  border-radius: var(--radius-sm);
+}
+.v2-chip-row > .v2-field-hint {
+  margin: 0 0 0 6px;
+}
+.v2-chip {
+  gap: 6px;
+  min-height: 26px;
+  padding: 2px 8px 2px 9px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+.v2-chip-dot {
+  width: 8px;
+  height: 8px;
+}
+.v2-chip-hash {
+  font-weight: 600;
+}
+.v2-chip-x {
+  color: var(--text-muted);
+  transition: color var(--dur-ui) ease;
+}
+
+/* ---------- ColorPicker (components/ColorPicker.jsx) ---------- */
+/* Supersedes the swatch ring, panel radius/padding, label type, hex field
+   and adds a selected ring on the active preset. Dot hover/press scales
+   stay in styles.css (with their reduced-motion override there). */
+.v2-colorpicker-swatch {
+  box-shadow: 0 0 0 1px var(--border-strong);
+  transition: transform var(--dur-press) var(--ease-out);
+}
+.v2-colorpicker-swatch:active {
+  transform: scale(0.94);
+}
+.v2-colorpicker-panel {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow-pop);
+}
+.v2-colorpicker[open] .v2-colorpicker-panel {
+  animation-duration: 160ms;
+}
+.v2-colorpicker-label {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+.v2-colorpicker-dot[aria-pressed='true'] {
+  box-shadow:
+    0 0 0 2px var(--bg-surface),
+    0 0 0 3.5px var(--text);
+}
+.v2-colorpicker-footer {
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.v2-colorpicker-panel .v2-colorpicker-hex {
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  padding: 6px 10px;
+  transition:
+    border-color var(--dur-ui) ease,
+    box-shadow var(--dur-ui) ease;
+}
+
+/* ---------- Embed editor chrome (EmbedEditor.jsx / EmbedCard.jsx) ---------- */
+/* The Discord-like message itself keeps its look; only the editing chrome
+   around it (toolbar, pickers, add buttons, variable chips) follows the
+   hairline/pill language. */
+.v2-embed-toolbar {
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-pop);
+  transition: opacity var(--dur-ui) ease;
+}
+.v2-embed-toolbar button {
+  border-radius: var(--radius-pill);
+  transition:
+    background-color var(--dur-ui) ease,
+    color var(--dur-ui) ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-embed-toolbar button:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+  }
+}
+.v2-embed-toolbar button:active:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+/* Light theme: the embed body sits on the page grey, as Discord's light
+   embed does — --bg-surface-2 would vanish against the white card. */
+:root[data-theme='light'] .v2-embed-body {
+  background: var(--bg-main);
+}
+.v2-embed-avatar-pick,
+.v2-embed-thumb-pick,
+.v2-embed-image-pick {
+  border-color: var(--border-strong);
+  transition: border-color var(--dur-ui) ease;
+}
+.v2-embed-thumb-pick,
+.v2-embed-image-pick {
+  border-radius: var(--radius-sm);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-embed-avatar-pick:hover,
+  .v2-embed-thumb-pick:hover,
+  .v2-embed-image-pick:hover {
+    border-color: var(--text-muted);
+  }
+}
+.v2-embed-field-remove {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-pop);
+}
+.v2-embed-add {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  font-weight: 500;
+  transition:
+    border-color var(--dur-ui) ease,
+    color var(--dur-ui) ease,
+    background-color var(--dur-ui) ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-embed-add:hover:not(:disabled) {
+    border-color: var(--text-muted);
+    background: color-mix(in srgb, var(--text) 3%, transparent);
+  }
+}
+.v2-embed-add:active:not(:disabled) {
+  border-color: var(--text-muted);
+}
+.v2-embed-vars {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: var(--fs-sm);
+}
+.v2-embed-vars button {
+  min-height: 26px;
+  margin: 0;
+  padding: 2px 10px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text);
+  transition:
+    background-color var(--dur-ui) ease,
+    transform var(--dur-press) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-embed-vars button:hover {
+    background: var(--bg-surface-2);
+  }
+}
+.v2-embed-vars button:active {
+  transform: scale(0.97);
+}
+@media (pointer: coarse) {
+  .v2-embed-vars button {
+    min-height: 36px;
+    padding: 0 12px;
+  }
 }
 
 /* ---------- Destructive actions ---------- */
@@ -277,9 +716,9 @@ textarea[aria-invalid='true'] {
   gap: 12px;
   flex-wrap: wrap;
   margin-top: 28px;
-  padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--danger, #f87171) 35%, var(--border-subtle));
-  border-radius: var(--radius, 12px);
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border-subtle));
+  border-radius: var(--radius);
 }
 .v2-danger-zone-text {
   flex: 1;
@@ -288,12 +727,13 @@ textarea[aria-invalid='true'] {
 }
 .v2-danger-zone-text strong {
   display: block;
-  font-size: 0.9rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
   margin-bottom: 2px;
 }
 .v2-danger-zone-text span {
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: 0.8125rem;
 }
 /* A destructive button at the end of a vertical stack of row actions. */
 .v2-danger-sep {
@@ -310,9 +750,9 @@ textarea[aria-invalid='true'] {
   flex-wrap: wrap;
 }
 .v2-composer-status {
-  color: var(--warn, #fbbf24);
-  font-size: 0.82rem;
-  font-weight: 600;
+  color: var(--warn);
+  font-size: var(--fs-sm);
+  font-weight: 500;
 }
 .v2-composer-status:empty {
   display: none;
@@ -322,7 +762,46 @@ textarea[aria-invalid='true'] {
 .v2-send-test {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
   margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+.v2-send-test > .v2-field-hint {
+  margin: 0;
+}
+
+/* ---------- Reduced motion ---------- */
+/* Fewer and gentler, not zero: slides, scales and the knob travel go;
+   fades and colour changes stay. Last in the file so it overrides the
+   rules above (which already override styles.css's own block). */
+@media (prefers-reduced-motion: reduce) {
+  .v2-dialog,
+  .v2-dialog.is-open,
+  .v2-savebar,
+  .v2-savebar.is-visible {
+    transform: none;
+  }
+  .v2-dialog {
+    transition-property: opacity;
+  }
+  .v2-toggle::after,
+  .v2-am-params > summary::after {
+    transition: none;
+  }
+  .v2-btn-danger-solid:active:not(:disabled),
+  .v2-colorpicker-swatch:active,
+  .v2-embed-vars button:active {
+    transform: none;
+  }
+  .v2-toggle-section-body {
+    transform: none;
+    transition-property: opacity;
+  }
+  @supports (interpolate-size: allow-keywords) {
+    .v2-am-params::details-content {
+      transition: none;
+    }
+  }
 }

@@ -16,6 +16,8 @@ test
 unraid
 *.md
 !README.md
+# The V2 dashboard's Changelog page bundles it at build time.
+!CHANGELOG.md
 Dockerfile
 docker-compose.yml
 .dockerignore

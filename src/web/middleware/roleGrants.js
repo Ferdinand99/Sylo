@@ -17,8 +17,12 @@
 // bot makes on its own (no request) are not checked.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { config } from '../../config.js';
-import { setModuleConfigGuard } from '../../db/modules.js';
+import { getGuildModule, setModuleConfigGuard } from '../../db/modules.js';
+import { getMember } from '../../db/leveling.js';
+import { normaliseLevelingConfig, rewardRolesToAdd } from '../../modules/leveling.js';
+import { levelFromXp } from '../../modules/lib/levels.js';
 import { setComposedSpecGuard } from '../../db/composedMessages.js';
+import { guildKey } from '../../platform/platformOf.js';
 import { userIdForGuild } from './auth.js';
 
 const actors = new AsyncLocalStorage();
@@ -141,9 +145,33 @@ async function checkNewGrants(before, after) {
   }
 }
 
-setModuleConfigGuard(({ moduleId, prev, next }) =>
-  checkNewGrants(moduleGrants(moduleId, prev), moduleGrants(moduleId, next))
-);
+/**
+ * The module write guard's check, for a route that must refuse before it does anything else
+ * (publishing a role menu posts to the channel before the save reaches the guard).
+ */
+export function checkModuleGrants(moduleId, prev, next) {
+  return checkNewGrants(moduleGrants(moduleId, prev), moduleGrants(moduleId, next));
+}
+
+/**
+ * "Set XP" hands out the leveling reward roles up to the new level (syncRewards), so the
+ * roles it would newly give are checked like any other grant, before the XP is written.
+ * Only additions are checked, as for module saves: lowering XP takes away reward roles, which
+ * are roles the leveling setup already hands out, and taking away is not a grant. A member
+ * the bot cannot see is checked against the rewards they would earn on top of their current
+ * level, since the bot gives those once they are back.
+ */
+export async function checkLevelRewardGrants(guild, userId, xp) {
+  if (!actors.getStore()?.guild) return; // open mode / the bot's own writes
+  const cfg = normaliseLevelingConfig((await getGuildModule(guildKey(guild), 'leveling')).config);
+  const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+  const held = member
+    ? [...member.roles.cache.keys()]
+    : rewardRolesToAdd(cfg, levelFromXp((await getMember(guildKey(guild), userId)).xp), []);
+  await checkNewGrants(held, rewardRolesToAdd(cfg, levelFromXp(xp), held));
+}
+
+setModuleConfigGuard(({ moduleId, prev, next }) => checkModuleGrants(moduleId, prev, next));
 setComposedSpecGuard(({ prev, next }) => checkNewGrants(specGrants(prev), specGrants(next)));
 
 /**

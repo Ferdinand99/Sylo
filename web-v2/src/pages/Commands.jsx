@@ -169,7 +169,7 @@ export default function Commands() {
           ))}
         </div>
       ) : (
-        <p className="v2-state v2-break">
+        <p className="v2-state v2-break is-instant">
           {q ? `No commands match "${query.trim()}".` : 'This server has no commands to manage.'}
         </p>
       )}

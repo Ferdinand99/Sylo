@@ -86,3 +86,29 @@ export function rateLimit({
     return next();
   };
 }
+
+/**
+ * Who a platform action counts against: one server and one person — their account, or the
+ * client address without one (open mode).
+ */
+export function platformActionKey(req) {
+  const who = req.account?.id != null ? `account:${req.account.id}` : `client:${clientKey(req)}`;
+  return `platform|${req.params?.guildId ?? ''}|${who}`;
+}
+
+/**
+ * The stricter limit for dashboard actions that call the platform's API: test messages,
+ * publishing a message or role menu, locking or unlocking every channel. One shared count per
+ * server and person across all of them, and across the classic and the new dashboard, so a
+ * script cannot use Sylo to hammer Discord or Fluxer (and get the bot rate-limited there).
+ */
+export const platformActionLimit = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  message: 'Too many messages sent or published on this server — wait a minute and try again.',
+  keyFn: platformActionKey,
+});
+
+/** Apply `limiter` only to the requests `when` picks (e.g. a publish, not a draft save). */
+export const limitWhen = (when, limiter) => (req, res, next) =>
+  when(req) ? limiter(req, res, next) : next();

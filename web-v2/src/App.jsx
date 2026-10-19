@@ -27,6 +27,7 @@ const TicketsInbox = lazy(() => import('./pages/TicketsInbox.jsx'));
 const TicketView = lazy(() => import('./pages/TicketView.jsx'));
 const ModerationHub = lazy(() => import('./pages/ModerationHub.jsx'));
 const AuditLog = lazy(() => import('./pages/AuditLog.jsx'));
+const Changelog = lazy(() => import('./pages/Changelog.jsx'));
 const MemberData = lazy(() => import('./pages/MemberData.jsx'));
 
 // Old addresses for pages that are now tabs on the Moderation page.
@@ -65,6 +66,7 @@ const router = createBrowserRouter(
         <Route path="account" element={<Account />} />
         <Route path="settings" element={<Personalizer />} />
         <Route path="roadmap" element={<Roadmap />} />
+        <Route path="changelog" element={<Changelog />} />
         <Route path="roadmap/admin" element={<RoadmapAdmin />} />
         <Route path="health" element={<Health />} />
       </Route>

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
@@ -53,7 +54,7 @@ export default function Moderation() {
       <p className="v2-field-hint">
         Warning thresholds apply an action automatically once a member reaches a given warning count — the{' '}
         <strong>strictest</strong> matching rule wins. Warnings and bans themselves are managed on the{' '}
-        <a href={`/guilds/${guildId}/moderation`}>Moderation</a> page, not here.
+        <Link to={`/guilds/${guildId}/moderation`}>Moderation</Link> page, not here.
       </p>
 
       <form onSubmit={save} data-savebar>

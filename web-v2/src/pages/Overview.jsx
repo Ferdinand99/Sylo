@@ -8,6 +8,7 @@ import LoadError from '../components/LoadError.jsx';
 import Switch from '../components/Switch.jsx';
 import { plural } from '../components/Meta.jsx';
 import { formatCount, initial } from '../util.js';
+import Reveal from '../components/Reveal.jsx';
 
 // A module without a V2 page yet gets this tag next to its name, wherever
 // its title is shown — the click still works (falls back to `card.href`,
@@ -206,7 +207,7 @@ export default function Overview() {
   const enabledCount = toggleCards.filter((c) => c.enabled).length;
 
   return (
-    <>
+    <Reveal>
       <div className="v2-hero">
         {guild.icon ? (
           <img src={guild.icon} alt="" />
@@ -297,7 +298,9 @@ export default function Overview() {
           </div>
         </section>
       ))}
-      {query && !filteredGroups.length ? <p className="v2-state">No modules match "{query}".</p> : null}
-    </>
+      {query && !filteredGroups.length ? (
+        <p className="v2-state is-instant">No modules match "{query}".</p>
+      ) : null}
+    </Reveal>
   );
 }

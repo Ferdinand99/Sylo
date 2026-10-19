@@ -214,15 +214,35 @@ export const fetchMemberFromGuild = async (guild, userId) => guild.members.fetch
  * `fetchMember` replaces the uncached lookup (push notifications cache misses, src/lib/push.js).
  */
 export async function managesGuildLive(key, userId, { fetchMember = fetchMemberFromGuild } = {}) {
-  if (!userId) return false;
-  const guild = guildByKey(key);
-  if (!guild) return false;
-  if (guild.ownerId === userId) return true;
-  const member = guild.members.cache.get(userId) ?? (await fetchMember(guild, userId).catch(() => null));
-  if (!member) return false;
-  if (member.permissions?.has('ManageGuild') || member.permissions?.has('Administrator')) return true;
+  const live = await serverRightsLive(key, userId, fetchMember);
+  if (!live) return false;
+  if (live.right) return true;
   const roles = await getBotMasterRoles(key);
-  return roles.length > 0 && Boolean(member.roles?.cache.hasAny(...roles));
+  return roles.length > 0 && Boolean(live.member.roles?.cache.hasAny(...roles));
+}
+
+/**
+ * The live part of managesGuildLive without bot masters: is this person the guild's owner, or a
+ * member with Manage Server or Administrator? Returns null when they are not in the guild.
+ */
+async function serverRightsLive(key, userId, fetchMember) {
+  if (!userId) return null;
+  const guild = guildByKey(key);
+  if (!guild) return null;
+  if (guild.ownerId === userId) return { right: true, member: null };
+  const member = guild.members.cache.get(userId) ?? (await fetchMember(guild, userId).catch(() => null));
+  if (!member) return null;
+  const right = Boolean(member.permissions?.has('ManageGuild') || member.permissions?.has('Administrator'));
+  return { right, member };
+}
+
+/**
+ * Does this person own the guild or hold Manage Server (or Administrator) in it right now? The
+ * live check requireGuildAdmin relies on, minus the bot-master role: for what only real server
+ * managers may do, such as choosing the bot masters.
+ */
+export async function holdsManageServerLive(key, userId, { fetchMember = fetchMemberFromGuild } = {}) {
+  return Boolean((await serverRightsLive(key, userId, fetchMember))?.right);
 }
 
 /**

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
@@ -32,8 +33,8 @@ export default function Appeals() {
       <h1 className="v2-section-title">Ban appeals</h1>
       <p className="v2-field-hint">
         When a member is banned, Sylo DMs them a private link to an appeal form on this dashboard. Their
-        answers show up on the <a href={`/guilds/${guildId}/appeals`}>Appeals tab</a>. The decision (and, on
-        accept, a single-use rejoin invite) is always shown on that same link when they reopen it — Discord
+        answers show up on the <Link to={`/guilds/${guildId}/appeals`}>Appeals tab</Link>. The decision (and,
+        on accept, a single-use rejoin invite) is always shown on that same link when they reopen it — Discord
         won't let a bot DM someone it no longer shares a server with, so the page is the reliable channel.
         {!data.dashboardUrlSet ? (
           <>

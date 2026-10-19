@@ -4,6 +4,7 @@ import { getInsights, refreshInsights } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
+import Reveal from '../components/Reveal.jsx';
 
 const num = (v) => (Number(v) || 0).toLocaleString('en');
 const signed = (v) => `${v >= 0 ? '+' : '−'}${num(Math.abs(v))}`;
@@ -110,7 +111,7 @@ export default function Insights() {
     data.range === 1 ? `last ${data.granularity}` : `last ${num(data.range)} ${data.granularity}s`;
 
   return (
-    <>
+    <Reveal>
       <h1 className="v2-section-title">Server insights</h1>
 
       <div className="v2-ins-range" role="group" aria-label="Time range">
@@ -302,6 +303,6 @@ export default function Insights() {
           )}
         </section>
       </div>
-    </>
+    </Reveal>
   );
 }

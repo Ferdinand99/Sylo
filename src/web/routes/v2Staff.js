@@ -12,6 +12,7 @@ import { clientOfGuild, primaryClient, rawGuildId } from '../../platform/platfor
 import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
 import { currentUser, actingUserId } from '../middleware/auth.js';
+import { platformActionLimit } from '../middleware/rateLimit.js';
 import { config } from '../../config.js';
 import { ticketAccessState } from '../middleware/ticketAccess.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -431,6 +432,7 @@ staffRouter.post(
 
 staffRouter.post(
   '/moderation/lock-all',
+  platformActionLimit,
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const moderatorTag = moderatorDisplayName(req);
@@ -465,6 +467,7 @@ staffRouter.post(
 
 staffRouter.post(
   '/moderation/unlock-all',
+  platformActionLimit,
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const moderatorTag = moderatorDisplayName(req);

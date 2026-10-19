@@ -22,6 +22,7 @@ import Commands from './Commands.jsx';
 import Meta, { plural } from '../components/Meta.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { formatCount } from '../util.js';
+import Reveal from '../components/Reveal.jsx';
 
 const SUB_TABS = [
   ['cases', 'Cases'],
@@ -410,9 +411,11 @@ export default function ModerationHub() {
           </button>
         ))}
       </div>
-      <div className="v2-embedded">
+      {/* Outside the keyed tab content, so the entrance plays on the first
+          visit only — not again on a tab or server switch. */}
+      <Reveal className="v2-embedded">
         <Content key={guildId} />
-      </div>
+      </Reveal>
     </>
   );
 }

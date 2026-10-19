@@ -13,6 +13,7 @@ import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { plural } from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
+import Reveal from '../components/Reveal.jsx';
 
 function Sparkline({ history }) {
   if (!history || history.length < 2) return null;
@@ -59,6 +60,9 @@ export default function Health() {
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState(null);
+  // Only for showing the picked file's name next to the picker button; the
+  // import itself still reads the file from the input.
+  const [fileName, setFileName] = useState('');
   const fileInputRef = useRef(null);
 
   function load() {
@@ -186,7 +190,10 @@ export default function Health() {
       () => importBackup(file),
       (r) => `Imported ${r.name} — use Restore on that row to load it.`
     );
-    if (result && fileInputRef.current) fileInputRef.current.value = '';
+    if (result && fileInputRef.current) {
+      fileInputRef.current.value = '';
+      setFileName('');
+    }
   }
 
   async function onDevLogTest() {
@@ -204,7 +211,7 @@ export default function Health() {
   }
 
   return (
-    <>
+    <Reveal>
       <h1 className="v2-section-title">Health &amp; status</h1>
 
       {notice ? <p className="v2-note">{notice}</p> : null}
@@ -352,13 +359,23 @@ export default function Health() {
           <form onSubmit={onImportFile} className="v2-backup-import">
             <input
               ref={fileInputRef}
+              id="v2-backup-file"
               type="file"
               accept=".db,.sqlite,.sqlite3,.dump,application/octet-stream"
               className="v2-file-input"
               aria-label="Backup file to import"
+              onChange={(e) => setFileName(e.target.files?.[0]?.name ?? '')}
             />
-            <button type="submit" className="v2-btn-ghost" disabled={busy}>
-              Import backup file…
+            <label htmlFor="v2-backup-file" className="v2-btn-ghost v2-file-pick">
+              Choose backup file…
+            </label>
+            {fileName ? (
+              <span className="v2-file-name" title={fileName}>
+                {fileName}
+              </span>
+            ) : null}
+            <button type="submit" className="v2-btn-ghost" disabled={busy || !fileName}>
+              Import…
             </button>
           </form>
         </div>
@@ -404,6 +421,6 @@ export default function Health() {
           </div>
         )}
       </div>
-    </>
+    </Reveal>
   );
 }

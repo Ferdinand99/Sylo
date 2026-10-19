@@ -27,12 +27,6 @@ const ICONS = {
       <path d="M15 8h3M15 12h3M6 16h12" />
     </>
   ),
-  user: (
-    <>
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 21a8 8 0 0 1 16 0" />
-    </>
-  ),
   gear: (
     <>
       <circle cx="12" cy="12" r="3.2" />
@@ -141,7 +135,6 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
     { key: 'appeals', label: 'Appeals', icon: 'flag', path: '/appeals', guild: true, prefix: true },
     { key: 'personalizer', label: 'Bot Personalizer', icon: 'id', path: '/settings' },
     { key: 'settings', label: 'Settings', icon: 'gear', path: '/settings', guild: true },
-    { key: 'account', label: 'Account', icon: 'user', path: '/account' },
     { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', path: '/roadmap' },
     { key: 'health', label: 'Health', icon: 'pulse', path: '/health' },
   ].map((it) => ({ ...it, href: it.guild ? (guildBase ? `${guildBase}${it.path}` : null) : it.path }));
