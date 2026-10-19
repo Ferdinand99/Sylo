@@ -126,3 +126,28 @@ export function formatCount(value) {
   if (typeof value !== 'number') return value;
   return Number.isFinite(value) ? value.toLocaleString() : '—';
 }
+
+// The newest release this browser has opened the Changelog page for. The
+// account menu shows a "new" dot while the running release is newer.
+const CHANGELOG_SEEN_KEY = 'sylo:v2:changelogSeen';
+export const SYLO_VERSION = import.meta.env?.VITE_SYLO_VERSION ?? null;
+export const CHANGELOG_SEEN_EVENT = 'sylo:changelog-seen';
+
+export function hasUnseenChangelog() {
+  if (!SYLO_VERSION) return false;
+  try {
+    return localStorage.getItem(CHANGELOG_SEEN_KEY) !== SYLO_VERSION;
+  } catch {
+    return false;
+  }
+}
+
+export function markChangelogSeen() {
+  if (!SYLO_VERSION) return;
+  try {
+    localStorage.setItem(CHANGELOG_SEEN_KEY, SYLO_VERSION);
+  } catch {
+    // private mode: the dot just shows again next visit
+  }
+  window.dispatchEvent(new Event(CHANGELOG_SEEN_EVENT));
+}

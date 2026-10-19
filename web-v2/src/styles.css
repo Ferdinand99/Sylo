@@ -3060,3 +3060,26 @@ textarea:disabled {
     padding: 3px;
   }
 }
+.v2-acct-avatar {
+  position: relative;
+}
+/* A release this browser hasn't opened the Changelog page for yet. */
+.v2-acct-dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 2px var(--bg-main);
+}
+.v2-acct-new {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}

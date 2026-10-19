@@ -2,16 +2,22 @@
 // `npm run build:v2` (see package.json), which is `vite build --config
 // web-v2/vite.config.js`. `root`/`base` are set explicitly because that
 // command's cwd is the repo root, not this directory.
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
+// The running release, for the account menu's "what's new" dot (Changelog page).
+const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
 export default defineConfig({
   root: here,
   base: '/v2/',
   plugins: [react()],
+  define: {
+    'import.meta.env.VITE_SYLO_VERSION': JSON.stringify(version),
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

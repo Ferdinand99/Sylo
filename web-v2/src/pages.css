@@ -727,3 +727,112 @@
     transform: translateX(-50%);
   }
 }
+
+/* Changelog.jsx — "What's new", one quiet card per release. */
+.v2-cl-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+.v2-cl-release {
+  padding: 20px 22px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+.v2-cl-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+}
+.v2-cl-head h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.v2-cl-head h2 a {
+  color: inherit;
+}
+.v2-cl-current {
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.v2-cl-date {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.v2-cl-section h3 {
+  margin: 14px 0 6px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.v2-cl-section h3.is-breaking {
+  color: var(--danger);
+}
+.v2-cl-section ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+.v2-cl-section li {
+  position: relative;
+  padding-left: 16px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+.v2-cl-section li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.65em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.v2-cl-scope {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  vertical-align: 1px;
+}
+.v2-cl-ref {
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.v2-cl-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin-top: 20px;
+}
+@media (max-width: 560px) {
+  .v2-cl-release {
+    padding: 16px;
+  }
+  .v2-cl-date {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}

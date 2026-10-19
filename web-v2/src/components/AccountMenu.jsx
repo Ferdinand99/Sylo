@@ -3,11 +3,10 @@ import { Link } from 'react-router-dom';
 import { getAccount, getCsrfToken } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
-import { initial } from '../util.js';
+import { CHANGELOG_SEEN_EVENT, hasUnseenChangelog, initial } from '../util.js';
 
 const SUPPORT_URL = 'https://discord.gg/GAzR9k5hhS';
 const DOCS_URL = 'https://docs.sylobot.com';
-const CHANGELOG_URL = 'https://github.com/Ferdinand99/Sylo/releases';
 
 // The signed-in person's menu at the right of the top bar: who is signed in,
 // the account page, help links and Sign out. Same native <details> pattern
@@ -17,6 +16,13 @@ export default function AccountMenu() {
   const { data: account } = useApiData(() => getAccount(), []);
   const detailsRef = useRef(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [unseen, setUnseen] = useState(hasUnseenChangelog);
+
+  useEffect(() => {
+    const onSeen = () => setUnseen(hasUnseenChangelog());
+    window.addEventListener(CHANGELOG_SEEN_EVENT, onSeen);
+    return () => window.removeEventListener(CHANGELOG_SEEN_EVENT, onSeen);
+  }, []);
 
   function closeMenu() {
     if (detailsRef.current) detailsRef.current.open = false;
@@ -64,9 +70,10 @@ export default function AccountMenu() {
 
   return (
     <details className="v2-switch v2-acct" ref={detailsRef}>
-      <summary aria-label={`Account menu for ${name}`}>
+      <summary aria-label={`Account menu for ${name}${unseen ? ' — new release' : ''}`}>
         <span className="v2-acct-avatar" aria-hidden="true">
           {initial(name)}
+          {unseen ? <span className="v2-acct-dot" /> : null}
         </span>
         <span className="v2-switch-caret" aria-hidden="true">
           ▾
@@ -90,9 +97,10 @@ export default function AccountMenu() {
         <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" onClick={closeMenu}>
           <span>Docs</span>
         </a>
-        <a href={CHANGELOG_URL} target="_blank" rel="noopener noreferrer" onClick={closeMenu}>
-          <span>Changelog</span>
-        </a>
+        <Link to="/changelog" onClick={closeMenu}>
+          <span>What&apos;s new</span>
+          {unseen ? <span className="v2-acct-new">New</span> : null}
+        </Link>
         <a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer" onClick={closeMenu}>
           <span>Support server</span>
         </a>
