@@ -27,12 +27,6 @@ const ICONS = {
       <path d="M15 8h3M15 12h3M6 16h12" />
     </>
   ),
-  user: (
-    <>
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 21a8 8 0 0 1 16 0" />
-    </>
-  ),
   gear: (
     <>
       <circle cx="12" cy="12" r="3.2" />

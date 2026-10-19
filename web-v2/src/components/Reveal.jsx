@@ -18,6 +18,8 @@ const isEnter = (name) => typeof name === 'string' && name.startsWith('v2-enter'
 export default function Reveal({ className = '', children }) {
   const [done, setDone] = useState(false);
 
+  // Also on cancel: a block that unmounts mid-entrance fires no animationend,
+  // and without this check the entrance would replay for blocks mounted later.
   function onAnimationEnd(e) {
     if (done || !isEnter(e.animationName)) return;
     const running = e.currentTarget.getAnimations?.({ subtree: true }).some((a) => isEnter(a.animationName));
@@ -28,6 +30,7 @@ export default function Reveal({ className = '', children }) {
     <div
       className={`v2-enter${done ? ' is-done' : ''}${className ? ` ${className}` : ''}`}
       onAnimationEnd={onAnimationEnd}
+      onAnimationCancel={onAnimationEnd}
     >
       {children}
     </div>

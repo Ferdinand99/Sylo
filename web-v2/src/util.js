@@ -136,7 +136,14 @@ export const CHANGELOG_SEEN_EVENT = 'sylo:changelog-seen';
 export function hasUnseenChangelog() {
   if (!SYLO_VERSION) return false;
   try {
-    return localStorage.getItem(CHANGELOG_SEEN_KEY) !== SYLO_VERSION;
+    const seen = localStorage.getItem(CHANGELOG_SEEN_KEY);
+    // A first visit has nothing new to point at: remember this release and
+    // show the dot from the next one on.
+    if (seen === null) {
+      localStorage.setItem(CHANGELOG_SEEN_KEY, SYLO_VERSION);
+      return false;
+    }
+    return seen !== SYLO_VERSION;
   } catch {
     return false;
   }

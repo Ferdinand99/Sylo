@@ -374,7 +374,7 @@ export default function Health() {
                 {fileName}
               </span>
             ) : null}
-            <button type="submit" className="v2-btn-ghost" disabled={busy}>
+            <button type="submit" className="v2-btn-ghost" disabled={busy || !fileName}>
               Import…
             </button>
           </form>

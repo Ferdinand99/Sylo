@@ -38,7 +38,11 @@ export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild })
       if (detailsRef.current?.open && !detailsRef.current.contains(e.target)) closeMenu();
     }
     function onKeyDown(e) {
-      if (e.key === 'Escape') closeMenu();
+      if (e.key !== 'Escape' || !detailsRef.current?.open) return;
+      // Keep focus on the switcher button when it was inside the closing menu.
+      const hadFocus = detailsRef.current.contains(document.activeElement);
+      closeMenu();
+      if (hadFocus) detailsRef.current.querySelector('summary')?.focus();
     }
     document.addEventListener('click', onDocClick);
     document.addEventListener('keydown', onKeyDown);

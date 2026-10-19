@@ -814,11 +814,17 @@ a {
     padding-left: max(16px, env(safe-area-inset-left, 0px));
     padding-right: max(16px, env(safe-area-inset-right, 0px));
   }
-  .v2-switch {
+  /* Row two: the server switcher, with the account menu beside it (the
+     basis leaves just enough room for the menu button). */
+  .v2-switch:not(.v2-acct) {
     order: 1;
-    flex: 1 1 100%;
+    flex: 1 1 calc(100% - 72px);
   }
-  .v2-switch summary {
+  .v2-acct {
+    order: 2;
+    flex: none;
+  }
+  .v2-switch:not(.v2-acct) summary {
     max-width: none;
   }
   .v2-page {
@@ -3004,6 +3010,7 @@ textarea:disabled {
   font-size: var(--fs-sm);
   font-weight: 650;
   flex: none;
+  position: relative;
 }
 .v2-acct-avatar.is-large {
   width: 36px;
@@ -3014,7 +3021,9 @@ textarea:disabled {
   left: auto;
   right: 0;
   min-width: 240px;
-  max-height: none;
+  /* Room for every item below the sticky top bar, scrolling on short screens
+     (phone landscape) so Sign out is always reachable. */
+  max-height: calc(100dvh - var(--topbar-h) - env(safe-area-inset-top, 0px) - 16px);
   transform-origin: top right;
 }
 .v2-acct-head {
@@ -3060,9 +3069,6 @@ textarea:disabled {
     padding: 3px;
   }
 }
-.v2-acct-avatar {
-  position: relative;
-}
 /* A release this browser hasn't opened the Changelog page for yet. */
 .v2-acct-dot {
   position: absolute;
@@ -3082,4 +3088,17 @@ textarea:disabled {
   color: var(--text);
   font-size: var(--fs-xs);
   font-weight: 600;
+}
+/* Open mode (no login): a neutral menu button instead of an initial. */
+.v2-acct-avatar.is-generic {
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+}
+/* The smallest phones: drop the Beta pill so the first top-bar row (menu,
+   brand, Classic, theme) still fits on one line. */
+@media (max-width: 360px) {
+  .v2-beta-badge {
+    display: none;
+  }
 }

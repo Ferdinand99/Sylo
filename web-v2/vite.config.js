@@ -28,6 +28,8 @@ export default defineConfig({
     // session cookie during development.
     proxy: {
       '/api/v2': 'http://localhost:3000',
+      // The account menu's Sign out posts to /auth/logout.
+      '/auth': 'http://localhost:3000',
     },
   },
 });
