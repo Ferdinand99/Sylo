@@ -6,8 +6,8 @@ JSON API the new dashboard uses. This page covers what a self-hosted instance
 needs for the app to work, and how the app's sign-in works for anyone reading or
 reviewing it.
 
-> **In TestFlight.** The app ("Sylo – Server Manager") is in beta and not on the
-> App Store yet. The server side described here is part of Sylo; it does nothing
+> **In TestFlight.** The app ("Sylo – Server Manager") is in public beta and not
+> on the App Store yet. [Join the beta](https://testflight.apple.com/join/6FXxPjxu). The server side described here is part of Sylo; it does nothing
 > until an app signs in.
 
 - [What a self-hosted instance needs](#what-a-self-hosted-instance-needs)
