@@ -33,6 +33,7 @@ test('GET /api/mobile/info describes a server with login on, without a cookie or
   assert.deepEqual([...info.platforms].sort(), ['discord', 'fluxer']);
   assert.ok(info.features.includes('app-login'));
   assert.ok(info.features.includes('live-access'));
+  assert.ok(info.features.includes('changelog'), 'GET /api/v2/changelog');
   assert.ok(info.features.every((f) => typeof f === 'string'));
 });
 
@@ -85,4 +86,5 @@ test('GET /api/mobile/info answers in open mode and says login is unavailable', 
   assert.deepEqual(info.platforms, ['discord']);
   assert.equal(info.apiVersion, 1);
   assert.ok(!info.features.includes('push'), 'no app sign-in, so no push either');
+  assert.ok(info.features.includes('changelog'), 'the changelog does not need a sign-in in open mode');
 });

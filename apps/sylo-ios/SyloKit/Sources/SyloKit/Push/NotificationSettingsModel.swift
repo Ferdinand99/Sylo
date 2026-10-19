@@ -54,6 +54,10 @@ public final class NotificationSettingsModel {
     /// Whether ``isAvailable`` is known.
     public var hasLoadedAvailability: Bool { info != nil }
 
+    /// The signed-in server's `/api/mobile/info`: the session's, or the one ``loadAvailability()``
+    /// fetched when the session had none (signed in at launch). Settings reads its features too.
+    public var serverInfo: ServerInfo? { info }
+
     public func isMuted(_ server: ServerID) -> Bool { mutedServers.contains(server) }
 
     /// Whether a mute or unmute of this server is on its way to the server.

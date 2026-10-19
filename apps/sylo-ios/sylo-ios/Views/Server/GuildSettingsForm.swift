@@ -15,7 +15,7 @@ struct GuildSettingsForm: View {
                 form(page)
             } else if let message = model.errorMessage {
                 ContentUnavailableView {
-                    Label("Can't Load Settings", systemImage: "exclamationmark.triangle")
+                    Label("Couldn't Load Settings", systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(message)
                 } actions: {

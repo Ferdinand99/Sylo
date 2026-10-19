@@ -172,9 +172,10 @@ mobileAuthRouter.post('/confirm', async (req, res, next) => {
 
 export const mobileApiRouter = Router();
 
-// What this server's app API supports, so a newer app can tell what an older Sylo lacks. `push`
-// is added when this instance can send notifications (APNs keys, or a relay) to signed-in apps.
-const FEATURES = Object.freeze(['app-login', 'live-access']);
+// What this server's app API supports, so a newer app can tell what an older Sylo lacks
+// (`changelog`: GET /api/v2/changelog). `push` is added when this instance can send
+// notifications (APNs keys, or a relay) to signed-in apps.
+const FEATURES = Object.freeze(['app-login', 'live-access', 'changelog']);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode
 // server must still say it is a Sylo, just one the app cannot sign in to. Its own rate-limit bucket,

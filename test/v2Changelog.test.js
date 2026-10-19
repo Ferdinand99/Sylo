@@ -1,8 +1,15 @@
-// The V2 changelog page reads CHANGELOG.md (release-please's format) at build time.
+// The changelog parser (src/lib/changelog.js) reads CHANGELOG.md (release-please's format)
+// for the V2 page and the app.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseChangelog, parseInline } from '../web-v2/src/changelog.js';
+import {
+  changelogFeed,
+  parseChangelog,
+  parseInline,
+  sectionKind,
+  sectionLabel,
+} from '../src/lib/changelog.js';
 
 const sample = `# Changelog
 
@@ -79,4 +86,65 @@ test("the repo's own CHANGELOG.md parses into releases with items", () => {
   assert.ok(releases.length > 50);
   assert.match(releases[0].version, /^\d+\.\d+\.\d+$/);
   assert.ok(releases.every((r) => r.sections.every((s) => s.items.every((i) => i.text.length > 0))));
+});
+
+test("release-please's section titles map to a kind and the words the page and the app use", () => {
+  const cases = [
+    ['Features', 'features', 'New'],
+    ['Bug Fixes', 'fixes', 'Fixes'],
+    ['Performance Improvements', 'performance', 'Faster'],
+    ['⚠ BREAKING CHANGES', 'breaking', 'Breaking changes'],
+    ['BREAKING CHANGES', 'breaking', 'BREAKING CHANGES'],
+    ['Miscellaneous Chores', 'other', 'Miscellaneous Chores'],
+    ['Changes', 'other', 'Changes'],
+  ];
+  for (const [title, kind, label] of cases) {
+    assert.equal(sectionKind(title), kind, title);
+    assert.equal(sectionLabel(title), label, title);
+  }
+});
+
+test('the feed is the parsed releases in the API shape: labelled sections, no render segments', () => {
+  const [latest, old] = changelogFeed(sample);
+  assert.deepEqual(latest, {
+    version: '4.5.0',
+    date: '2026-10-18',
+    url: 'https://github.com/Ferdinand99/Sylo/compare/v4.4.0...v4.5.0',
+    sections: [
+      {
+        title: 'New',
+        kind: 'features',
+        items: [
+          {
+            scope: 'dashboard',
+            text: 'Bring the V2 dashboard level',
+            refs: [{ label: '#261', url: 'https://github.com/Ferdinand99/Sylo/issues/261' }],
+          },
+        ],
+      },
+      {
+        title: 'Fixes',
+        kind: 'fixes',
+        items: [
+          {
+            scope: null,
+            text: 'Keep the dashboard signed in',
+            refs: [{ label: '#256', url: 'https://github.com/Ferdinand99/Sylo/issues/256' }],
+          },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(
+    old.sections.map((s) => [s.title, s.kind]),
+    [['Breaking changes', 'breaking']]
+  );
+});
+
+test('the feed keeps the newest `limit` releases', () => {
+  assert.deepEqual(
+    changelogFeed(sample, { limit: 1 }).map((r) => r.version),
+    ['4.5.0']
+  );
+  assert.equal(changelogFeed(sample).length, 2, 'no limit: every release');
 });

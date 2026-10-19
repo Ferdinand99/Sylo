@@ -493,17 +493,18 @@
   letter-spacing: 0;
 }
 /* Messages-style thread, as in the iPhone ticket mock on sylobot.com:
-   staff (you) on the right in blue with white text, the member on the left
+   staff (you) on the right in Sylo violet with white text, the member on the left
    in a neutral grey, system notes as small centred captions. A run from one
    side sits close together, the side switching gets air, and the last
    bubble of a run gets the tail corner (where :has() is supported).
-   #3a5fd4 is the site's #4a6fe0 a step darker so white text clears AA
-   (5.6:1, and 4.9:1 for the 90% white meta line); the light-theme member
-   grey pairs with a darker meta colour for the same reason. */
+   #6a58e3 is the same violet as the app's StaffBubble colour and the site
+   mock, in both themes: white text clears AA (5.1:1, and 4.8:1 for the 95%
+   white meta line); the light-theme member grey pairs with a darker meta
+   colour for the same reason. */
 .v2-chat {
   --bubble-in: #262628;
   --bubble-in-meta: var(--text-muted);
-  --bubble-out: #3a5fd4;
+  --bubble-out: #6a58e3;
   gap: 2px;
   padding: 16px 14px;
   background: var(--bg-surface);
@@ -531,13 +532,13 @@
   font-size: var(--fs-xs);
   font-weight: 500;
 }
-/* The accent focus ring vanishes on the blue bubble; white reads on it. */
+/* The accent focus ring vanishes on the violet bubble; white reads on it. */
 .v2-bubble.is-staff:focus-visible,
 .v2-bubble.is-staff :focus-visible {
   outline-color: #fff;
 }
 .v2-bubble.is-staff .v2-bubble-meta {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
 }
 .v2-bubble-body {
   margin-top: 1px;

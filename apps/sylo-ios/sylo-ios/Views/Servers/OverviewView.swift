@@ -59,7 +59,7 @@ struct OverviewView: View {
             .refreshable { await model.load() }
         } else if let message = model.errorMessage {
             ContentUnavailableView {
-                Label("Can't Load Server", systemImage: "exclamationmark.triangle")
+                Label("Couldn't Load Server", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {

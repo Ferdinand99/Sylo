@@ -61,6 +61,16 @@ struct NotificationSettingsModelTests {
         #expect(calls(Endpoints.ServerInfo.self, in: clients).count == 1)
     }
 
+    @Test("the server's info it fetched is there for the rest of Settings, such as What's New")
+    func sharesServerInfo() async {
+        let info = ServerInfo(version: "4.6.0", features: [.appLogin, .liveAccess, .changelog])
+        let model = NotificationSettingsModel(session: makeSignedInSession(clients: Self.clients(info: info)))
+        #expect(model.serverInfo == nil)
+        await model.loadAvailability()
+        #expect(model.serverInfo == info)
+        #expect(model.serverInfo?.supports(.changelog) == true)
+    }
+
     @Test("signed out, there is nothing to check")
     func signedOutIsQuiet() async {
         let clients = Self.clients()

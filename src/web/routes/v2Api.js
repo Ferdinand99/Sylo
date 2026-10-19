@@ -27,6 +27,7 @@ import {
 import { checkLevelRewardGrants, checkModuleGrants, guardRoleGrants } from '../middleware/roleGrants.js';
 import { limitWhen, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { changelogHandler } from '../lib/changelogFeed.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
 import guildDataRouter from './v2GuildData.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
@@ -323,6 +324,10 @@ router.post(
     res.json({ ok: true });
   })
 );
+
+// Sylo's release notes for the Sylo app, parsed like the V2 "What's new" page. Not tied to a
+// server: anyone signed in (session or app token) may read it, like /account above.
+router.get('/changelog', changelogHandler());
 
 // The "add a server" links, one per platform Sylo runs on.
 router.get('/invites', (req, res) => {

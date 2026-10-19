@@ -58,7 +58,7 @@ public final class HealthModel {
         defer { isSendingTest = false }
         do {
             let result = try await session.send(Endpoints.SendDevLogTest())
-            testResult = result.ok ? .sent : .failed(result.error ?? "The test message could not be sent.")
+            testResult = result.ok ? .sent : .failed(result.error ?? "Couldn't send the test message. Check the dev-log channel, then try again.")
         } catch {
             testResult = .failed(NetworkError(error).userMessage)
         }
