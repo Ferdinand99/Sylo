@@ -7,6 +7,7 @@ import Field from '../components/Field.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
+import Reveal from '../components/Reveal.jsx';
 
 const toForm = (data) => ({
   modlogChannelId: data.modlogChannelId,
@@ -30,7 +31,14 @@ export default function Settings() {
   const [exporting, setExporting] = useState(false);
 
   if (status === 'error') return <LoadError error={error} what="settings" />;
-  if (status === 'loading') return <p className="v2-state">Loading…</p>;
+  // Same <Reveal> root as the ready return below, so React keeps it across a
+  // server switch (which shows Loading… again) and the entrance doesn't replay.
+  if (status === 'loading')
+    return (
+      <Reveal>
+        <p className="v2-state">Loading…</p>
+      </Reveal>
+    );
 
   // Saves the form as it stands plus the colour reset, then reads back the
   // default colour — so afterwards everything on the page is saved.
@@ -70,7 +78,7 @@ export default function Settings() {
   }
 
   return (
-    <>
+    <Reveal>
       <h1 className="v2-section-title">Settings</h1>
 
       <form onSubmit={save} data-savebar>
@@ -166,6 +174,6 @@ export default function Settings() {
         </div>
       </div>
       <SaveBar dirty={dirty} saving={saving || resettingColor} onSave={save} onReset={reset} />
-    </>
+    </Reveal>
   );
 }

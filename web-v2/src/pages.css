@@ -34,6 +34,7 @@
 .v2-row-time {
   flex: none;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* A plain .v2-field-row that may wrap at any width (buttons + inputs). */
@@ -50,8 +51,9 @@
   min-width: 0;
 }
 
-/* Health — backup toolbar: create, then a file picker + import. Wraps (and
-   stacks on a phone) instead of forcing the page to scroll sideways. */
+/* Health — backup toolbar: [Create backup now]  [Choose backup file…] name
+   [Import…]. Wraps (and stacks on a phone) instead of forcing the page to
+   scroll sideways. */
 .v2-backup-tools,
 .v2-backup-import {
   display: flex;
@@ -60,31 +62,45 @@
   gap: 10px;
   min-width: 0;
 }
+.v2-backup-tools {
+  column-gap: 16px;
+}
 .v2-backup-import {
+  position: relative;
   flex: 1 1 22rem;
 }
+/* The native picker's chrome ("Choose file / No file chosen", in the
+   browser's language) is hidden; the input stays in the tab order and in
+   the accessibility tree, and the pill <label> after it opens it. */
 .v2-file-input {
-  flex: 1 1 14rem;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.v2-file-input:focus-visible + .v2-file-pick {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.v2-file-name {
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 100%;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-muted);
-  font: inherit;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
 }
-.v2-file-input::file-selector-button {
-  margin-right: 10px;
-  padding: 6px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-surface-2);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-}
-@media (hover: hover) and (pointer: fine) {
-  .v2-file-input::file-selector-button:hover {
-    border-color: var(--accent);
-  }
+/* The note under the toolbar: clear of the buttons, not glued to them. */
+.v2-backup-tools + .v2-field-hint {
+  margin-top: 12px;
+  max-width: 68ch;
 }
 @media (max-width: 560px) {
   .v2-backup-tools,
@@ -94,6 +110,10 @@
   }
   .v2-backup-import {
     flex-basis: auto;
+  }
+  .v2-file-name {
+    max-width: none;
+    text-align: center;
   }
 }
 
@@ -127,17 +147,19 @@
   left: 50%;
   bottom: 30px;
   transform: translateX(-50%);
-  padding: 6px 14px;
-  border: 1px solid var(--accent);
-  border-radius: 999px;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
   background: var(--bg-surface);
   color: var(--text);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-pop);
   touch-action: manipulation;
+  transition: transform var(--dur-press) var(--ease-out);
 }
 .v2-chat-jump:active {
   transform: translateX(-50%) scale(0.97);
@@ -157,7 +179,7 @@
 .v2-guild-card-icon {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 9px;
   flex: none;
 }
 .v2-guild-card-ph {
@@ -165,8 +187,9 @@
   place-items: center;
   background: var(--bg-surface-2);
   border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
   font-size: 0.85rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /* Ban appeals — the status pill stays on the right and never wraps. */
@@ -198,18 +221,6 @@
   }
 }
 
-/* Insights — chart cards fit a 320px phone (the base 300px minimum plus
-   page gutters is wider than that). */
-.v2-ins-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
-}
-.v2-ins-chart {
-  min-width: 0;
-}
-.v2-ins-n {
-  font-variant-numeric: tabular-nums;
-}
-
 /* Announcement banner — title + body share the free width; × stays put. */
 .v2-ann-text {
   flex: 1 1 auto;
@@ -222,8 +233,9 @@
 
 /* Audit log — the action key ("settings:server") reads as an identifier. */
 .v2-audit-action {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.85rem;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  letter-spacing: 0;
 }
 
 /* Member data — the lookup box takes the free width, the button keeps its own;
@@ -247,19 +259,471 @@
 }
 .v2-member-data-name {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .v2-member-data-head .v2-field-hint {
   margin: 0;
 }
 
-/* RouteError.jsx — a page that failed to render, or a page file gone after a deploy. */
-.v2-route-error {
-  text-align: left;
+/* RouteError.jsx — a page that failed to render, or a page file gone after a
+   deploy. Centred like the other states, with the message as the one line
+   that reads at full strength and the details below it muted. */
+.v2-route-error > p {
+  margin: 0;
 }
-.v2-route-error-actions {
+.v2-route-error > p:first-child {
+  color: var(--text);
+  font-weight: 500;
+}
+.v2-route-error > .v2-field-hint {
+  margin-top: 6px;
+}
+.v2-route-error > .v2-route-error-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 20px;
+}
+
+/* ==========================================================================
+   Revamp (sylobot.com look) — page level. Loaded after styles.css and
+   forms.css, so the rules below win over the page-specific rules there at
+   equal specificity; shared components (cards, lists, rows, buttons, pills,
+   form controls) are left to those files.
+   ========================================================================== */
+
+/* ---------- Loading, empty and error states (.v2-state, LoadError, RouteError) ----------
+   Calm, centred and muted. The text fades in only after 150ms, so a fast
+   load never flashes "Loading…" for a frame; opacity only, so it is the
+   same with reduced motion. `.is-instant` is for a state that answers
+   typing (Overview's "No modules match"), which must not lag behind. */
+@keyframes v2-state-in {
+  from {
+    opacity: 0;
+  }
+}
+.v2-state {
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: 56px 16px;
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: pretty;
+  animation: v2-state-in var(--dur-ui) ease 150ms backwards;
+}
+.v2-state.is-instant {
+  animation: none;
+}
+
+/* ---------- First-load reveal (components/Reveal.jsx) ----------
+   A page's top-level blocks fade and rise 8px into place, 40ms apart (the
+   6th block onward share the last delay), once per visit. Reveal.jsx adds
+   `is-done` when the last one has finished, so blocks that mount later (a
+   tab, a filter, a refetch, a form remounted by a server switch) just
+   appear. `backwards` rather than `both`: it holds the start frame during
+   the stagger delay, and once finished the block is left with no transform
+   at all — a filled transform would keep a stacking context on every block,
+   trapping popovers (ChipPicker, ColorPicker) under the block after them.
+   Never applied to a .v2-state (Loading…) or to the SaveBar, which has its
+   own enter transition. */
+@keyframes v2-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes v2-enter-fade {
+  from {
+    opacity: 0;
+  }
+}
+/* Its own timing, a step quicker than the site's --dur-reveal / --stagger
+   (500ms / 60ms): this plays on every page visit, not once per site load. */
+.v2-enter {
+  --enter-dur: 400ms;
+  --enter-step: 40ms;
+}
+.v2-enter:not(.is-done) > :not(.v2-state):not(.v2-savebar) {
+  animation: v2-enter var(--enter-dur) var(--ease-out) backwards;
+  animation-delay: calc(var(--enter-i, 0) * var(--enter-step));
+}
+.v2-enter > :nth-child(2) {
+  --enter-i: 1;
+}
+.v2-enter > :nth-child(3) {
+  --enter-i: 2;
+}
+.v2-enter > :nth-child(4) {
+  --enter-i: 3;
+}
+.v2-enter > :nth-child(5) {
+  --enter-i: 4;
+}
+.v2-enter > :nth-child(n + 6) {
+  --enter-i: 5;
+}
+
+/* ---------- Shared page typography ---------- */
+/* Facts side by side (Meta.jsx) and small leading numbers line up. */
+.v2-meta-item {
+  font-variant-numeric: tabular-nums;
+}
+.v2-muted {
+  color: var(--text-muted);
+}
+
+/* ---------- Overview: server header + stat strip ---------- */
+.v2-hero {
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.v2-hero img,
+.v2-hero-ph {
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+}
+/* A hairline rim so a dark icon doesn't dissolve into the dark page. */
+.v2-hero img {
+  box-shadow: 0 0 0 1px var(--border-subtle);
+}
+.v2-hero-ph {
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+.v2-hero h1 {
+  margin: 0 0 4px;
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+/* Personalizer's bot header sits under its own page title. */
+.v2-hero h2 {
+  margin: 0 0 2px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+.v2-hero p {
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+  text-wrap: pretty;
+}
+
+.v2-stat-strip {
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 12px;
+  margin-bottom: 36px;
+}
+.v2-stat {
+  min-width: 0;
+  padding: 18px 20px;
+}
+.v2-stat strong {
+  font-size: 1.625rem;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+.v2-stat span {
+  margin-top: 4px;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Health ---------- */
+.v2-sparkline {
+  margin-top: 14px;
+  color: var(--accent);
+}
+.v2-stat .v2-sparkline + .v2-field-hint {
+  margin: 6px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Moderation hub: tab row + case rows ---------- */
+/* Quiet tabs over a hairline: inactive ones are just text, the active one
+   is a raised surface pill (as in the sidebar). */
+.v2-hub-tabs {
+  gap: 6px;
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.v2-hub-tabs .v2-tab {
+  border-color: transparent;
+  font-weight: 500;
+}
+.v2-hub-tabs .v2-tab.is-active {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.v2-case-action {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+  vertical-align: 0.1em;
+}
+
+/* ---------- Tickets: inbox + conversation ---------- */
+.v2-unread-dot {
+  background: var(--accent);
+  vertical-align: 0.1em;
+}
+.v2-ticket-row.is-unread h3 {
+  font-weight: 650;
+}
+.v2-ticket-user {
+  font-weight: 500;
+  letter-spacing: 0;
+}
+/* Messages-style thread, as in the iPhone ticket mock on sylobot.com:
+   staff (you) on the right in blue with white text, the member on the left
+   in a neutral grey, system notes as small centred captions. A run from one
+   side sits close together, the side switching gets air, and the last
+   bubble of a run gets the tail corner (where :has() is supported).
+   #3a5fd4 is the site's #4a6fe0 a step darker so white text clears AA
+   (5.6:1, and 4.9:1 for the 90% white meta line); the light-theme member
+   grey pairs with a darker meta colour for the same reason. */
+.v2-chat {
+  --bubble-in: #262628;
+  --bubble-in-meta: var(--text-muted);
+  --bubble-out: #3a5fd4;
+  gap: 2px;
+  padding: 16px 14px;
+  background: var(--bg-surface);
+}
+:root[data-theme='light'] .v2-chat {
+  --bubble-in: #e9e9eb;
+  --bubble-in-meta: #636366;
+}
+.v2-bubble {
+  max-width: min(78%, 34rem);
+  padding: 7px 12px 8px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--bubble-in);
+  color: var(--text);
+  line-height: 1.4;
+}
+.v2-bubble.is-staff {
+  border: 0;
+  background: var(--bubble-out);
+  color: #fff;
+}
+.v2-bubble-meta {
+  color: var(--bubble-in-meta);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+}
+/* The accent focus ring vanishes on the blue bubble; white reads on it. */
+.v2-bubble.is-staff:focus-visible,
+.v2-bubble.is-staff :focus-visible {
+  outline-color: #fff;
+}
+.v2-bubble.is-staff .v2-bubble-meta {
+  color: rgba(255, 255, 255, 0.9);
+}
+.v2-bubble-body {
+  margin-top: 1px;
+}
+.v2-bubble-att {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.v2-bubble.is-system {
+  max-width: 90%;
+  margin: 8px 0;
+  padding: 2px 8px;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+.v2-bubble.is-system .v2-bubble-meta {
+  color: var(--text-muted);
+}
+.v2-bubble.is-staff + .v2-bubble:not(.is-staff):not(.is-system),
+.v2-bubble:not(.is-staff) + .v2-bubble.is-staff {
+  margin-top: 8px;
+}
+.v2-bubble.is-staff:not(:has(+ .v2-bubble.is-staff)) {
+  border-bottom-right-radius: 6px;
+}
+.v2-bubble:not(.is-staff):not(.is-system):not(:has(+ .v2-bubble:not(.is-staff):not(.is-system))) {
+  border-bottom-left-radius: 6px;
+}
+
+/* ---------- Insights: neutral greys and one accent, static charts ---------- */
+.v2-ins-range {
+  margin: 4px 0 8px;
+}
+.v2-ins-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(130px, 100%), 1fr));
+  gap: 10px;
+  margin: 20px 0 16px;
+}
+.v2-ins-tile {
+  min-width: 0;
+  padding: 14px 16px;
+  gap: 4px;
+}
+.v2-ins-n {
+  font-size: 1.375rem;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+}
+/* The label under the number already says join / leave; the number stays neutral. */
+.v2-ins-n.v2-ins-ok,
+.v2-ins-n.v2-ins-bad {
+  color: var(--text);
+}
+/* Chart cards fit a 320px phone (a bare 300px minimum plus page gutters is
+   wider than that). */
+.v2-ins-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 12px;
+}
+.v2-ins-chart {
+  min-width: 0;
+  padding: 16px 18px;
+}
+.v2-ins-chart h3 {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.v2-ins-chart h3 .v2-field-hint {
+  font-weight: 400;
+}
+.v2-ins-bar-msg {
+  fill: var(--accent);
+}
+.v2-ins-bar-voice {
+  fill: var(--text-muted);
+}
+.v2-ins-line-grow,
+.v2-ins-line-join {
+  stroke: var(--accent);
+}
+.v2-ins-line-leave {
+  stroke: var(--text-muted);
+}
+.v2-ins-key.v2-ins-ok {
+  color: var(--accent);
+}
+.v2-ins-key.v2-ins-bad {
+  color: var(--text-muted);
+}
+.v2-ins-bar-label {
+  font-size: var(--fs-sm);
+}
+.v2-ins-bar-track {
+  height: 8px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.v2-ins-bar-fill-voice {
+  background: var(--text-muted);
+}
+.v2-ins-bar-val {
+  font-size: var(--fs-xs);
+}
+
+/* ---------- Message builder: the name field reads as the page title ---------- */
+.v2-mb-name {
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+
+/* ---------- Roadmap (+ admin): vote button ---------- */
+.v2-roadmap-vote {
+  min-width: 56px;
+  border-radius: var(--radius-sm);
+  transition:
+    border-color var(--dur-ui) ease,
+    color var(--dur-ui) ease,
+    transform var(--dur-press) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-roadmap-vote:hover:not(:disabled):not(.is-voted) {
+    border-color: var(--border-strong);
+  }
+}
+.v2-roadmap-vote:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.v2-roadmap-vote strong {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.v2-roadmap-vote span {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.v2-roadmap-vote.is-voted span {
+  color: inherit;
+}
+.v2-roadmap-desc code {
+  border-radius: 6px;
+  font-family: var(--mono);
+}
+
+/* ---------- Account ---------- */
+/* Later sections on the page are section headings, not a second page title. */
+.v2-account-section {
+  margin: 40px 0 8px;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.v2-account-list {
+  gap: 10px;
+}
+.v2-account-card {
+  padding: 18px 20px;
+  gap: 10px;
+}
+.v2-account-card h3 {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* Reduced motion: the page reveal keeps its fade and loses the rise; the
+   vote and "jump to latest" buttons lose their press scale (the jump button
+   keeps its centring translate). */
+@media (prefers-reduced-motion: reduce) {
+  .v2-enter:not(.is-done) > :not(.v2-state):not(.v2-savebar) {
+    animation-name: v2-enter-fade;
+  }
+  .v2-roadmap-vote:active:not(:disabled) {
+    transform: none;
+  }
+  .v2-chat-jump:active {
+    transform: translateX(-50%);
+  }
 }

@@ -3,7 +3,7 @@
  * A real <button role="switch"> (Space/Enter toggle it, screen readers hear
  * "Enable logging, switch, on"). `label` is required — it becomes the
  * accessible name; pass `labelledBy` instead when visible text already names it.
- * Looks like styles.css's .v2-toggle knob.
+ * Styled as the .v2-toggle iOS switch (base in styles.css, look in forms.css).
  */
 export default function Switch({
   checked,

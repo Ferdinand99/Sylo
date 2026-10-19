@@ -13,6 +13,7 @@ import LoadError from '../components/LoadError.jsx';
 import Switch from '../components/Switch.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { plural } from '../components/Meta.jsx';
+import Reveal from '../components/Reveal.jsx';
 
 // Which platforms this dashboard account is connected to: "Connect" for the ones that
 // are not (a full-page navigation — the platform's login lives on another site), and
@@ -105,7 +106,7 @@ export default function Account() {
   }
 
   return (
-    <>
+    <Reveal>
       <h1 className="v2-section-title">Account</h1>
       <p className="v2-muted">
         The platforms you sign in with. Connect a second one to manage your servers on both with the same
@@ -148,7 +149,7 @@ export default function Account() {
         ))}
       </div>
 
-      <h2 className="v2-section-title">Signed-in devices</h2>
+      <h2 className="v2-section-title v2-account-section">Signed-in devices</h2>
       <p className="v2-muted">
         Devices signed in to the Sylo app with this account. Revoke one you no longer use or don't recognise;
         it is signed out at once.
@@ -174,7 +175,7 @@ export default function Account() {
         <p className="v2-muted">No devices are signed in.</p>
       )}
 
-      <h2 className="v2-section-title">Dashboard</h2>
+      <h2 className="v2-section-title v2-account-section">Dashboard</h2>
       <div className="v2-group">
         <div className="v2-list">
           <div className="v2-row">
@@ -195,7 +196,7 @@ export default function Account() {
         </div>
       </div>
 
-      <h2 className="v2-section-title">Delete account</h2>
+      <h2 className="v2-section-title v2-account-section">Delete account</h2>
       <p className="v2-muted">
         Deletes your Sylo dashboard account: your sign-ins, every browser and Sylo app device signed in with
         it, and your dashboard preferences. Data Sylo keeps per server (levels, birthdays, tickets …) stays
@@ -204,6 +205,6 @@ export default function Account() {
       <button type="button" className="v2-btn-danger" disabled={busy === 'delete'} onClick={removeAccount}>
         Delete account
       </button>
-    </>
+    </Reveal>
   );
 }

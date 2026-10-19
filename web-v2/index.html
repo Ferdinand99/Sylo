@@ -6,11 +6,11 @@
     <!-- Browser chrome / status bar colour = the topbar background (--bg-main).
          Dark is the default; the inline script below and Shell.jsx switch it
          for the light theme. -->
-    <meta name="theme-color" content="#0b0d17" />
+    <meta name="theme-color" content="#0b0b0d" />
     <title>Sylo — Dashboard</title>
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%237c6cff'/%3E%3Ctext x='16' y='23' font-size='21' font-family='system-ui,sans-serif' font-weight='700' text-anchor='middle' fill='white'%3ES%3C/text%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%238b7dff'/%3E%3Ctext x='16' y='23' font-size='21' font-family='system-ui,sans-serif' font-weight='700' text-anchor='middle' fill='white'%3ES%3C/text%3E%3C/svg%3E"
     />
     <script>
       // Set data-theme before the stylesheet/React load, so a saved "light"
@@ -21,7 +21,7 @@
         var t = localStorage.getItem('sylo:v2:theme');
         if (t === 'light') {
           document.documentElement.setAttribute('data-theme', 'light');
-          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#f5f6fb');
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#f5f5f7');
         }
       } catch (e) {}
     </script>

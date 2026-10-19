@@ -1,69 +1,102 @@
-/* V2 dashboard — design tokens lifted from sylobot.com (site/styles.css),
-   not from V1's src/web/public/styles.css (which is blue/green, not this
-   palette). Byte-matched to the real marketing-site values, not approximated.
+/* V2 dashboard — design tokens mirror sylobot.com (site/styles.css): true
+   neutral greys, hairline borders, one violet accent for links, focus and
+   small highlights, Apple-style status colours. V2's own token names are
+   kept so every rule below picks the values up unchanged.
    Dark is the default (matches sylobot.com and docs.sylobot.com, both
    dark-only) — light is an explicit opt-in via the topbar toggle
    (components/Shell.jsx), not a prefers-color-scheme auto-switch, so the
    dashboard doesn't change look out from under someone who didn't ask.
-   --accent is the same in both themes. --accent-2 IS used as text (links,
-   info text, the focus ring), so light overrides it with a darker sky blue:
-   #38bdf8 on white is ~2.1:1, #0369a1 is ~5.9:1. Same reason --warn/
-   --danger/--success have a darker light-theme variant. */
+   Every text colour (--text, --text-muted, --accent, status colours) is
+   ≥4.5:1 on --bg-main, --bg-surface and --bg-surface-2 in both themes;
+   --text-faint is decorative only (separators, never readable text). The
+   light theme's accent and status colours are darker variants for that. */
 :root {
   color-scheme: dark;
   accent-color: var(--accent);
-  --bg-main: #0b0d17;
-  --bg-surface: #171b33;
-  --bg-surface-2: #111427;
-  --border-subtle: #262c4a;
-  --accent: #7c6cff;
-  --accent-2: #38bdf8;
-  --text: #e7e9f5;
-  --text-muted: #a6accd;
-  --warn: #fbbf24;
-  --danger: #f87171;
-  --success: #4ade80;
-  --radius: 12px;
-  --radius-sm: 8px;
-  --font:
-    'Schibsted Grotesk Variable', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    sans-serif;
+  --bg-main: #0b0b0d;
+  --bg-surface: #161618;
+  --bg-surface-2: #111113;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: #f5f5f7;
+  --text-muted: #a1a1a6;
+  /* Decorative only — fails AA as text. */
+  --text-faint: #6e6e73;
+  --accent: #8b7dff;
+  /* Links used a separate sky blue; now they use the accent. Kept as an
+     alias (resolves per theme) so existing var(--accent-2) uses still work. */
+  --accent-2: var(--accent);
+  --success: #30d158;
+  --warn: #ffd60a;
+  --danger: #ff453a;
+  /* Solid danger fill behind white text: #ff453a only reaches 3.4:1 with
+     white, so filled buttons use a deeper red (4.7:1). --danger stays the
+     text/border colour. */
+  --danger-fill: #e0281e;
+  /* Primary button hover: a touch more contrast with the page. */
+  --primary-hover: #ffffff;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --radius-pill: 999px;
+  --font: 'Inter Variable', -apple-system, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
   /* Type scale. Nothing goes below 0.68rem (~11px). */
   --fs-xs: 0.75rem;
   --fs-sm: 0.82rem;
-  --fs-md: 0.9rem;
-  --fs-lg: 1.05rem;
-  --fs-xl: 1.375rem;
+  --fs-md: 0.9375rem;
+  --fs-lg: 1.0625rem;
+  --fs-xl: 1.75rem;
   /* Motion. Strong ease-out for enter/exit and press feedback, ease-in-out
-     for things moving on screen, the iOS-like curve for the drawer. */
+     for things moving on screen, the iOS-like curve for the drawer.
+     Durations match the site: press feedback, small UI changes, one-time
+     reveals, and the gap between staggered items. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  /* Elevation for floating surfaces (menus, popovers, toasts). */
-  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.35);
-  --shadow-toast: 0 8px 24px rgb(0 0 0 / 0.35);
+  --dur-press: 120ms;
+  --dur-ui: 200ms;
+  --dur-reveal: 500ms;
+  --stagger: 60ms;
+  /* Elevation for floating surfaces (menus, popovers, toasts): a faint
+     light-catching top edge plus a soft, offset ambient shadow. */
+  --shadow-pop: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 20px 40px -20px rgba(0, 0, 0, 0.6);
+  --shadow-toast: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 16px 32px -16px rgba(0, 0, 0, 0.6);
   /* The topbar is sticky; the desktop sidebar sticks just below it. */
   --topbar-h: 64px;
   /* Rim around a colour-preset dot (ColorPicker.jsx) — needs to read against
      arbitrary swatch fills, not page background, so it's its own token
      rather than --border-subtle: a light rim on dark, a dark rim on light. */
   --swatch-border: rgba(255, 255, 255, 0.15);
+  /* Text-field / select hairline. Same as --border-subtle in dark; light
+     needs a firmer edge (#d2d2d7 is 1.5:1 on white) or the near-white field
+     fill vanishes into a white card. */
+  --border-field: var(--border-subtle);
+  /* Native select chevron, in --text-muted (an SVG background can't follow
+     currentColor, so each theme carries its own). */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a1a1a6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg-main: #f5f6fb;
+  --bg-main: #f5f5f7;
   --bg-surface: #ffffff;
-  --bg-surface-2: #eef0f8;
-  --border-subtle: #dde1f0;
+  --bg-surface-2: #fbfbfd;
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
   --swatch-border: rgba(0, 0, 0, 0.15);
-  --text: #171a2b;
-  --text-muted: #5b6080;
-  --accent-2: #0369a1;
-  --warn: #b45309;
-  --danger: #b91c1c;
-  --success: #15803d;
-  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.12);
-  --shadow-toast: 0 8px 24px rgb(0 0 0 / 0.1);
+  --border-field: #d2d2d7;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --text: #1d1d1f;
+  --text-muted: #6e6e73;
+  --text-faint: #86868b;
+  /* #6e5ce6 is 4.45:1 on #f5f5f7; one step darker clears AA everywhere. */
+  --accent: #6a58e3;
+  --success: #1e7f36;
+  --warn: #b25000;
+  --danger: #d70015;
+  --danger-fill: #d70015;
+  --primary-hover: #000000;
+  --shadow-pop: 0 1px 2px rgba(0, 0, 0, 0.04), 0 16px 32px -16px rgba(0, 0, 0, 0.18);
+  --shadow-toast: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 28px -14px rgba(0, 0, 0, 0.16);
 }
 
 * {
@@ -85,26 +118,64 @@ summary {
   touch-action: manipulation;
 }
 
+/* Inter with optical sizing (the opsz axis is loaded in main.jsx) and the
+   same stylistic sets as the site: cv11 = single-storey a, ss03 = rounder
+   punctuation. */
 body {
   margin: 0;
   background: var(--bg-main);
   color: var(--text);
   font-family: var(--font);
+  font-size: var(--fs-md);
   line-height: 1.5;
+  font-optical-sizing: auto;
+  font-feature-settings: 'cv11', 'ss03';
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* Headings tighten as they grow (negative tracking), body stays at 0.
+   Component classes set their own sizes; this is the shared default. */
+h1,
+h2,
+h3,
+h4 {
+  color: var(--text);
+  text-wrap: balance;
+}
+h3,
+h4 {
+  letter-spacing: -0.01em;
+}
+
+/* Zero specificity so scoped code styles (.v2-roadmap-desc code, …) win. */
+:where(code, kbd) {
+  font-family: var(--mono);
+  font-size: 0.875em;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  padding: 0.1em 0.35em;
+  border-radius: 6px;
 }
 
 a {
-  color: var(--accent-2);
+  color: var(--accent);
   text-decoration: none;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
-a:hover {
-  text-decoration: underline;
+/* Fine pointers only: a tap on a phone would leave the underline stuck. */
+@media (hover: hover) and (pointer: fine) {
+  a:hover {
+    text-decoration-line: underline;
+  }
 }
 
 /* Visible keyboard focus everywhere; mouse clicks do not show it. */
 :focus-visible {
-  outline: 2px solid var(--accent-2);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -143,8 +214,48 @@ a:hover {
   min-height: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
   padding: env(safe-area-inset-top, 0px) max(24px, env(safe-area-inset-right, 0px)) 0
     max(24px, env(safe-area-inset-left, 0px));
-  background: var(--bg-main);
+}
+/* Transparent at the top of the page; glass fades in once it scrolls
+   (Shell.jsx toggles .scrolled from one passive scroll listener, the same
+   as sylobot.com's nav). The glass is its own layer so only its opacity
+   animates — the blur itself never transitions. The topbar's z-index makes
+   it a stacking context, so z-index -1 stays behind its own children. */
+.v2-topbar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: rgba(11, 11, 13, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--border-subtle);
+  opacity: 0;
+  transition: opacity var(--dur-ui) var(--ease-out);
+}
+:root[data-theme='light'] .v2-topbar::before {
+  background: rgba(245, 245, 247, 0.72);
+}
+.v2-topbar.scrolled::before {
+  opacity: 1;
+}
+/* No backdrop-filter: near-solid, so text scrolling underneath can't show
+   through and fight the topbar's own text. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .v2-topbar::before {
+    background: rgba(11, 11, 13, 0.95);
+  }
+  :root[data-theme='light'] .v2-topbar::before {
+    background: rgba(245, 245, 247, 0.95);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .v2-topbar::before,
+  :root[data-theme='light'] .v2-topbar::before {
+    background: var(--bg-main);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 /* Hamburger — hidden on desktop, shown by the media query below. */
@@ -161,7 +272,7 @@ a:hover {
   border-radius: var(--radius-sm);
   cursor: pointer;
   padding: 0 6px;
-  transition: background-color 150ms ease;
+  transition: background-color var(--dur-press) ease;
 }
 .v2-nav-toggle span {
   display: block;
@@ -181,46 +292,72 @@ a:hover {
   }
 }
 
+/* Same treatment as the site's .brand: 650 weight, slightly tight. */
 .v2-brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-weight: 700;
+  min-height: 44px;
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  letter-spacing: -0.01em;
   color: var(--text);
 }
+.v2-brand:hover {
+  text-decoration: none;
+}
+/* Flat accent tile with the letter knocked out in the page colour (≥4.5:1
+   in both themes), the same 7px corner as the site's logo image. */
 .v2-brand-mark {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  flex: none;
+  border-radius: 7px;
+  background: var(--accent);
   display: grid;
   place-items: center;
-  font-size: 14px;
-  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  color: var(--bg-main);
 }
+/* The site's "Public beta" pill: hairline, small accent dot. */
 .v2-beta-badge {
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border-radius: 999px;
-  padding: 2px 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+.v2-beta-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .v2-classic-link {
-  font-size: 0.88rem;
+  font-size: 0.875rem;
+  font-weight: 500;
   color: var(--text-muted);
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 6px 14px;
   margin-left: auto;
   flex: none;
   white-space: nowrap;
   transition:
-    color 150ms ease,
-    border-color 150ms ease;
+    color var(--dur-ui) ease,
+    border-color var(--dur-ui) ease;
 }
 /* Shell.jsx renders both labels; only one shows at a time. */
 .v2-classic-short {
@@ -232,8 +369,12 @@ a:hover {
 @media (hover: hover) and (pointer: fine) {
   .v2-classic-link:hover {
     color: var(--text);
-    border-color: var(--accent);
+    border-color: var(--border-strong);
   }
+}
+.v2-classic-link:active {
+  color: var(--text);
+  border-color: var(--border-strong);
 }
 
 .v2-theme-toggle {
@@ -245,18 +386,18 @@ a:hover {
   flex: none;
   background: none;
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
   cursor: pointer;
   transition:
-    color 150ms ease,
-    border-color 150ms ease,
-    transform 160ms var(--ease-out);
+    color var(--dur-ui) ease,
+    border-color var(--dur-ui) ease,
+    transform var(--dur-press) var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
   .v2-theme-toggle:hover {
     color: var(--text);
-    border-color: var(--accent);
+    border-color: var(--border-strong);
   }
 }
 .v2-theme-toggle:active {
@@ -286,25 +427,27 @@ a:hover {
   gap: 8px;
   cursor: pointer;
   list-style: none;
-  padding: 6px 10px;
+  padding: 6px 12px 6px 7px;
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  font-size: 0.88rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.875rem;
+  font-weight: 500;
   max-width: 220px;
   min-width: 0;
   user-select: none;
   -webkit-user-select: none;
-  transition: border-color 150ms ease;
+  transition: border-color var(--dur-ui) ease;
 }
 .v2-switch summary::-webkit-details-marker {
   display: none;
 }
-.v2-switch[open] summary {
-  border-color: var(--accent);
+.v2-switch[open] summary,
+.v2-switch summary:active {
+  border-color: var(--border-strong);
 }
 @media (hover: hover) and (pointer: fine) {
   .v2-switch summary:hover {
-    border-color: var(--accent);
+    border-color: var(--border-strong);
   }
 }
 .v2-switch summary img,
@@ -317,21 +460,28 @@ a:hover {
 }
 .v2-switch-ph,
 .v2-switch-dot {
-  background: var(--bg-surface-2);
+  background: var(--bg-surface);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  color: var(--text-muted);
   display: grid;
   place-items: center;
   font-size: 0.7rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 .v2-switch-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Flips to point up while the menu is open — a hint at which way it went. */
 .v2-switch-caret {
   color: var(--text-muted);
   font-size: 0.7rem;
   flex: none;
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+.v2-switch[open] .v2-switch-caret {
+  transform: rotate(180deg);
 }
 .v2-switch-menu {
   position: absolute;
@@ -364,7 +514,7 @@ a:hover {
   }
 }
 .v2-switch[open] .v2-switch-menu {
-  animation: v2-pop-in 150ms var(--ease-out);
+  animation: v2-pop-in var(--dur-ui) var(--ease-out);
 }
 /* Server names are user-provided — wrap a long unbroken one rather than
    pushing the menu wider than the screen. */
@@ -380,28 +530,51 @@ a:hover {
   width: 100%;
   padding: 7px 8px;
   border: 0;
+  /* Concentric with the menu: its 14px radius minus its 6px padding. */
   border-radius: 8px;
   background: none;
   color: var(--text);
   font: inherit;
-  font-size: 0.86rem;
+  font-size: 0.875rem;
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--dur-press) ease;
 }
 .v2-switch-menu a:hover {
   text-decoration: none;
 }
-.v2-switch-menu a.active,
-.v2-switch-menu button.active,
+/* A tint of the text colour reads as "lifted" on both themes (a fixed
+   surface step went darker on dark and lighter on light). */
 .v2-switch-menu a:active,
 .v2-switch-menu button:active {
-  background: var(--bg-surface-2);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.v2-switch-menu a.active,
+.v2-switch-menu button.active {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  font-weight: 500;
 }
 @media (hover: hover) and (pointer: fine) {
   .v2-switch-menu a:hover,
   .v2-switch-menu button:hover {
-    background: var(--bg-surface-2);
+    background: color-mix(in srgb, var(--text) 6%, transparent);
   }
+}
+/* "Add new server" links sit under the server list, set apart by a hairline. */
+.v2-switch-menu .v2-switch-add {
+  color: var(--text-muted);
+}
+.v2-switch-menu > :not(.v2-switch-add) + .v2-switch-add {
+  margin-top: 6px;
+  position: relative;
+}
+.v2-switch-menu > :not(.v2-switch-add) + .v2-switch-add::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 8px;
+  right: 8px;
+  border-top: 1px solid var(--border-subtle);
 }
 @media (pointer: coarse) {
   .v2-switch-menu a,
@@ -431,19 +604,23 @@ a:hover {
   align-items: flex-start;
 }
 
+/* No box: the sidebar sits on the page background, split from the content
+   by one full-height hairline. It's as tall as the viewport under the
+   topbar so the line never stops halfway down. */
 .v2-sidebar {
   width: 190px;
   flex: none;
   padding: 24px 12px;
   position: sticky;
   top: var(--topbar-h);
-  max-height: calc(100vh - var(--topbar-h));
-  max-height: calc(100dvh - var(--topbar-h));
+  height: calc(100vh - var(--topbar-h));
+  height: calc(100dvh - var(--topbar-h));
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  border-right: 1px solid var(--border-subtle);
 }
 .v2-sidebar-modules {
   margin-top: 14px;
@@ -451,64 +628,73 @@ a:hover {
   border-top: 1px solid var(--border-subtle);
 }
 .v2-sidebar-group {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
+/* Quiet, but still readable text — muted colour, no extra opacity. Sentence
+   case as the data has it ('Core', 'Utilities'), not an all-caps eyebrow. */
 .v2-sidebar-group-title {
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: var(--fs-xs);
+  font-weight: 600;
   color: var(--text-muted);
-  opacity: 0.7;
-  padding: 4px 12px;
+  padding: 6px 12px 4px;
 }
 .v2-sidebar-sublink {
   display: block;
   padding: 6px 12px 6px 20px;
-  border-radius: 8px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
   font-weight: 500;
   transition:
-    color 150ms ease,
-    background-color 150ms ease;
+    color var(--dur-press) ease,
+    background-color var(--dur-press) ease;
 }
 .v2-sidebar-link {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
-  font-size: 0.88rem;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 500;
   transition:
-    color 150ms ease,
-    background-color 150ms ease;
+    color var(--dur-press) ease,
+    background-color var(--dur-press) ease;
 }
 .v2-sidebar-link:hover,
 .v2-sidebar-sublink:hover {
   text-decoration: none;
 }
+/* Hover is a faint text-colour tint; the active page is a solid surface
+   pill — the two never look alike. */
 @media (hover: hover) and (pointer: fine) {
-  .v2-sidebar-link:not(.is-disabled):hover,
-  .v2-sidebar-sublink:hover {
+  .v2-sidebar-link:not(.is-disabled, .is-active):hover,
+  .v2-sidebar-sublink:not(.is-active):hover {
     color: var(--text);
-    background: var(--bg-surface);
+    background: color-mix(in srgb, var(--text) 5%, transparent);
   }
 }
-.v2-sidebar-link:not(.is-disabled):active,
-.v2-sidebar-sublink:active {
-  background: var(--bg-surface);
+.v2-sidebar-link:not(.is-disabled, .is-active):active,
+.v2-sidebar-sublink:not(.is-active):active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
+/* The inset hairline keeps the pill visible in the light theme, where the
+   white surface is only a shade off the page. */
 .v2-sidebar-link.is-active,
 .v2-sidebar-sublink.is-active {
   color: var(--text);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: var(--bg-surface);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+.v2-sidebar-link.is-active .v2-sidebar-icon {
+  color: var(--accent);
 }
 /* Guild-scoped links while no server is picked yet (Sidebar.jsx): shown so
    the nav doesn't jump around, but they go nowhere until a server is chosen. */
 .v2-sidebar-link.is-disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 @media (pointer: coarse) {
@@ -563,6 +749,10 @@ a:hover {
   transition:
     opacity 280ms var(--ease-drawer),
     visibility 0s;
+}
+/* A lighter dim on the light theme — the same 50% black reads as a slab. */
+:root[data-theme='light'] .v2-scrim {
+  background: rgba(0, 0, 0, 0.28);
 }
 
 @media (max-width: 860px) {
@@ -638,37 +828,23 @@ a:hover {
   }
 }
 
+/* Sizes, gap and type for .v2-hero* and .v2-stat* live in pages.css. */
 .v2-hero {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 28px;
 }
 .v2-hero img {
   flex: none;
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
 }
 .v2-hero > div {
   min-width: 0;
 }
 .v2-hero-ph {
   flex: none;
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   display: grid;
   place-items: center;
-  font-size: 1.4rem;
-  font-weight: 700;
-}
-.v2-hero h1,
-.v2-hero h2 {
-  margin: 0 0 4px;
-  font-size: 1.5rem;
 }
 
 .v2-section-gap {
@@ -680,30 +856,23 @@ a:hover {
 .v2-hero p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.92rem;
 }
 
 .v2-stat-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 14px;
-  margin-bottom: 32px;
 }
 .v2-stat {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: 16px 18px;
 }
 .v2-stat strong {
   display: block;
-  font-size: 1.5rem;
   font-variant-numeric: tabular-nums;
 }
 .v2-stat span {
   display: block;
   color: var(--text-muted);
-  font-size: 0.85rem;
 }
 .v2-sparkline {
   display: block;
@@ -717,8 +886,10 @@ a:hover {
 /* Used as the page <h1> almost everywhere. */
 .v2-section-title {
   font-size: var(--fs-xl);
-  font-weight: 700;
-  line-height: 1.25;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
   margin: 0 0 14px;
   color: var(--text);
 }
@@ -738,32 +909,36 @@ a:hover {
   grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
   gap: 12px;
 }
+/* No hover lift — the border firms up instead (fine pointers only). */
 .v2-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 16px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  transition:
-    border-color 150ms ease,
-    transform 160ms var(--ease-out);
+  gap: 12px;
+  color: var(--text);
+  transition: border-color var(--dur-ui) ease;
+}
+.v2-card:hover {
+  text-decoration: none;
 }
 @media (hover: hover) and (pointer: fine) {
   .v2-card:hover {
-    border-color: var(--accent);
-    transform: translateY(-1px);
+    border-color: var(--border-strong);
   }
 }
 .v2-card:active {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
 }
 .v2-card h3 {
   margin: 0;
   min-width: 0;
-  font-size: 0.95rem;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 /* Module list — one bordered surface per group, thin dividers between rows
@@ -772,12 +947,13 @@ a:hover {
 .v2-search {
   display: block;
   width: 100%;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-field);
+  border-radius: var(--radius-sm);
   color: var(--text);
   padding: 10px 14px;
-  font-size: 0.92rem;
+  font: inherit;
+  font-size: var(--fs-md);
   margin-bottom: 28px;
 }
 .v2-search::placeholder {
@@ -815,12 +991,14 @@ a:hover {
 .v2-group {
   margin-bottom: 22px;
 }
+/* Section heading above a list group: sentence case, slightly tight. */
 .v2-group-title {
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  margin: 0 0 8px;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0 0 10px;
   padding: 0 4px;
 }
 
@@ -836,9 +1014,9 @@ a:hover {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 11px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border-subtle);
-  transition: background-color 120ms ease;
+  transition: background-color var(--dur-press) ease;
   color: inherit;
   text-decoration: none;
 }
@@ -848,13 +1026,15 @@ a:hover {
 .v2-row:hover {
   text-decoration: none;
 }
+/* A faint text-colour tint: lighter on dark, darker on light — a fixed
+   surface step went the wrong way on one of the two themes. */
 @media (hover: hover) and (pointer: fine) {
   .v2-row:hover {
-    background: var(--bg-surface-2);
+    background: color-mix(in srgb, var(--text) 3%, transparent);
   }
 }
 a.v2-row:active {
-  background: var(--bg-surface-2);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 .v2-row-main {
   min-width: 0;
@@ -878,8 +1058,9 @@ a.v2-row:active {
 }
 .v2-row-main h3 {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   font-weight: 600;
+  line-height: 1.35;
 }
 .v2-row-title-link {
   color: inherit;
@@ -894,7 +1075,7 @@ a.v2-row:active {
 .v2-row-main p {
   margin: 2px 0 0;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -913,32 +1094,49 @@ a.v2-row:active {
   text-overflow: clip;
   margin-top: 6px;
 }
-.v2-classic-tag {
-  display: inline-block;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+/* Phones: a description gets two lines before the ellipsis, so a module's
+   one-line summary isn't cut to a couple of words. Text that must be read
+   in full (.is-wrap, warnings) keeps wrapping freely. */
+@media (max-width: 600px) {
+  .v2-row-main p:not(.is-wrap, .v2-row-warn) {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+  }
+}
+/* Small inline tags in the site's pill style: hairline, sentence case.
+   (The content is already "Classic" / "Beta".) */
+.v2-classic-tag,
+.v2-beta-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0;
   color: var(--text-muted);
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  padding: 1px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  padding: 0 8px;
   vertical-align: middle;
+  white-space: nowrap;
 }
 /* Newly-added modules — registry.js's `beta` flag — get this wherever
-   they're listed, same shape as .v2-classic-tag but amber-tinted so the
+   they're listed: same pill as .v2-classic-tag plus an amber dot, so the
    two read as distinct signals at a glance. */
 .v2-beta-tag {
-  display: inline-block;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--warn);
-  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
-  border-radius: 999px;
-  padding: 1px 7px;
-  vertical-align: middle;
+  color: var(--text);
+}
+.v2-beta-tag::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--warn);
 }
 .v2-sidebar-classic-mark {
   opacity: 0.55;
@@ -959,7 +1157,7 @@ a.v2-row:active {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  padding: 16px 18px;
   margin-bottom: 14px;
 }
 .v2-rule-head {
@@ -1016,8 +1214,10 @@ a.v2-row:active {
   height: 36px;
   border-radius: 50%;
   flex: none;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #fff;
+  /* Same knockout as the topbar's brand mark (--bg-main on --accent is
+     ≥4.5:1 in both themes). */
+  background: var(--accent);
+  color: var(--bg-main);
   font-weight: 700;
   display: grid;
   place-items: center;
@@ -1037,7 +1237,7 @@ a.v2-row:active {
   font-weight: 700;
   letter-spacing: 0.03em;
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-main);
   border-radius: 4px;
   padding: 1px 5px;
 }
@@ -1159,6 +1359,7 @@ a.v2-row:active {
   height: 13px;
   filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6));
 }
+/* Border, radius, padding and shadow: forms.css. */
 .v2-colorpicker-panel {
   position: absolute;
   top: calc(100% + 6px);
@@ -1166,21 +1367,12 @@ a.v2-row:active {
   width: 220px;
   background: var(--bg-surface);
   max-width: calc(100vw - 32px);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
-  padding: 12px;
-  box-shadow: var(--shadow-pop);
   transform-origin: top left;
 }
 .v2-colorpicker[open] .v2-colorpicker-panel {
   animation: v2-pop-in 150ms var(--ease-out);
 }
 .v2-colorpicker-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
   margin: 8px 0 6px;
 }
 .v2-colorpicker-label:first-child {
@@ -1232,8 +1424,6 @@ a.v2-row:active {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
   border-top: 1px solid var(--border-subtle);
 }
 .v2-colorpicker-more {
@@ -1249,12 +1439,9 @@ a.v2-row:active {
   flex: 1;
   min-width: 0;
   background: var(--bg-surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border: 1px solid var(--border-field);
   color: var(--text);
   font: inherit;
-  font-size: 0.82rem;
-  padding: 5px 8px;
 }
 .v2-colorpicker-panel .v2-colorpicker-hex:focus {
   outline: none;
@@ -1611,24 +1798,16 @@ a.v2-row:active {
   cursor: not-allowed;
 }
 
-/* Animated toggle switch, accent color when on — replaces V1's pill button.
-   Used both as a read-only <span> (Overview's module rows) and a real
-   <button> (Leaderboard's public switch), hence the padding/font reset. */
+/* Toggle switch — replaces V1's pill button. Used both as a read-only
+   <span> (Overview's module rows) and a real <button> (Leaderboard's public
+   switch), hence the padding/font reset. Size, colours, knob and motion
+   live in forms.css (Switch). */
 .v2-toggle {
-  position: relative;
-  width: 38px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-subtle);
   flex: none;
   cursor: default;
   padding: 0;
   font: inherit;
   appearance: none;
-  transition:
-    background-color 160ms var(--ease-out),
-    border-color 160ms var(--ease-out);
 }
 button.v2-toggle {
   cursor: pointer;
@@ -1640,30 +1819,10 @@ button.v2-toggle:disabled {
 .v2-toggle::after {
   content: '';
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
   border-radius: 50%;
-  background: var(--text-muted);
-  transition:
-    transform 160ms var(--ease-out),
-    background-color 160ms var(--ease-out);
-}
-.v2-toggle.is-on {
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
-  border-color: var(--accent);
-}
-.v2-toggle.is-on::after {
-  transform: translateX(16px);
-  background: var(--accent);
 }
 
-.v2-state {
-  color: var(--text-muted);
-  padding: 40px 0;
-  text-align: center;
-}
+/* .v2-state's layout and type: pages.css. */
 .v2-state a {
   color: var(--accent-2);
 }
@@ -1686,26 +1845,29 @@ button.v2-toggle:disabled {
 .v2-tab {
   background: none;
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
   font: inherit;
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
+  font-weight: 500;
   padding: 5px 12px;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   transition:
-    color 150ms ease,
-    background-color 150ms ease,
-    border-color 150ms ease;
+    color var(--dur-press) ease,
+    background-color var(--dur-press) ease,
+    border-color var(--dur-press) ease;
 }
 @media (hover: hover) and (pointer: fine) {
-  .v2-tab:hover {
+  .v2-tab:not(.is-active):hover {
     color: var(--text);
+    border-color: var(--border-strong);
   }
 }
 .v2-tab:active {
   color: var(--text);
+  border-color: var(--border-strong);
 }
 @media (pointer: coarse) {
   .v2-tab {
@@ -1715,16 +1877,18 @@ button.v2-toggle:disabled {
     padding: 0 16px;
   }
 }
+/* --text on a soft accent tint — the accent is a highlight here, never the
+   text colour, so it stays readable in both themes. */
 .v2-tab.is-active {
   color: var(--text);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .v2-inline-input {
   background: var(--bg-surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border: 1px solid var(--border-field);
+  border-radius: var(--radius-sm);
   color: var(--text);
   padding: 7px 10px;
   font: inherit;
@@ -1746,7 +1910,9 @@ button.v2-toggle:disabled {
 }
 
 /* One base for every button variant: same height, padding and press
-   feedback, so a primary next to a ghost lines up. */
+   feedback, so a primary next to a ghost lines up. Pills, like the site's
+   .btn. Primary is the inverse of the page (white on dark, black on light)
+   — no accent fill, no glow; the accent is kept for links and focus. */
 .v2-btn-primary,
 .v2-btn-ghost,
 .v2-btn-danger {
@@ -1755,23 +1921,31 @@ button.v2-toggle:disabled {
   justify-content: center;
   gap: 6px;
   min-height: 36px;
-  padding: 0 14px;
+  /* A long label ("+ Add a message (the bot picks one at random)") wraps
+     inside its container instead of running off a phone screen; the
+     vertical padding only shows then (one line is held by min-height). */
+  max-width: 100%;
+  padding: 6px 16px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   font: inherit;
   font-size: 0.875rem;
   font-weight: 500;
+  letter-spacing: -0.005em;
   line-height: 1.2;
+  white-space: normal;
+  text-wrap: balance;
+  text-align: center;
   text-decoration: none;
   cursor: pointer;
   flex: none;
   user-select: none;
   -webkit-user-select: none;
   transition:
-    transform 160ms var(--ease-out),
-    background-color 150ms ease,
-    border-color 150ms ease,
-    filter 150ms ease;
+    transform var(--dur-press) var(--ease-out),
+    background-color var(--dur-ui) ease,
+    border-color var(--dur-ui) ease,
+    color var(--dur-ui) ease;
 }
 .v2-btn-primary:hover,
 .v2-btn-ghost:hover,
@@ -1783,44 +1957,49 @@ button.v2-toggle:disabled {
 .v2-btn-danger:active:not(:disabled) {
   transform: scale(0.97);
 }
+/* Disabled: a calm recessed pill with muted text rather than a faded copy
+   of the filled button (opacity over white or red read as a muddy grey). */
 .v2-btn-primary:disabled,
 .v2-btn-ghost:disabled,
 .v2-btn-danger:disabled {
-  opacity: 0.5;
+  background: var(--bg-surface-2);
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
   cursor: not-allowed;
 }
-.v2-btn-ghost {
-  background: none;
-  border-color: var(--border-subtle);
-  color: var(--text);
-}
-.v2-btn-danger {
-  background: none;
-  border-color: var(--danger);
-  color: var(--danger);
+.v2-btn-ghost:disabled {
+  background: transparent;
 }
 .v2-btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--text);
+  color: var(--bg-main);
+  font-weight: 600;
+}
+.v2-btn-ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+/* Solid, like a destructive iOS button. --danger-fill, not --danger: the
+   bright dark-theme red is too light behind white text. */
+.v2-btn-danger {
+  background: var(--danger-fill);
   color: #fff;
   font-weight: 600;
 }
 @media (hover: hover) and (pointer: fine) {
+  .v2-btn-primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+  }
   .v2-btn-ghost:hover:not(:disabled) {
-    border-color: var(--accent);
+    background: var(--bg-surface);
   }
   .v2-btn-danger:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--danger) 12%, transparent);
-  }
-  .v2-btn-primary:hover:not(:disabled) {
-    filter: brightness(1.08);
+    background: color-mix(in srgb, var(--danger-fill) 88%, #000);
   }
 }
 .v2-btn-ghost:active:not(:disabled) {
-  border-color: var(--accent);
-}
-.v2-btn-danger:active:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  background: var(--bg-surface);
 }
 /* A page title with an action button on the same line (e.g. "+ New…") —
    used where a page needs one, most don't. */
@@ -1872,9 +2051,9 @@ button.v2-toggle:disabled {
    fit the layout. */
 .v2-input-sm {
   width: 64px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-field);
+  border-radius: var(--radius-sm);
   color: var(--text);
   padding: 7px 8px;
   font: inherit;
@@ -1939,14 +2118,44 @@ button.v2-toggle:disabled {
     textarea
   ) {
   width: 100%;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-field);
+  border-radius: var(--radius-sm);
   color: var(--text);
   padding: 9px 12px;
   font: inherit;
-  font-size: 0.9rem;
+  font-size: var(--fs-md);
   resize: vertical;
+  transition:
+    border-color var(--dur-ui) ease,
+    box-shadow var(--dur-ui) ease;
+}
+:where(form, .v2-field) :where(input, textarea)::placeholder {
+  color: var(--text-muted);
+}
+/* Single-choice selects: a quiet chevron instead of the platform arrow, so
+   a select has the text fields' height, radius and fill. Multi-selects and
+   list boxes (size > 1) keep the native control. Must follow the rule
+   above, whose `background` shorthand would reset the image. */
+:where(form, .v2-field) :where(select:not([multiple], [size]:not([size='1']))) {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 36px;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 10px 6px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+/* High contrast: the system arrow, which follows the forced colours. */
+@media (forced-colors: active) {
+  :where(form, .v2-field) :where(select) {
+    -webkit-appearance: auto;
+    appearance: auto;
+    background-image: none;
+    padding-right: 12px;
+  }
 }
 /* Text-like fields swap the outline for an accent border + soft ring.
    Checkboxes, radios and colour inputs keep the global :focus-visible
@@ -1976,7 +2185,9 @@ textarea:disabled {
 }
 .v2-field-hint {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  text-wrap: pretty;
   margin: 4px 0 0;
 }
 /* ChipPicker.jsx — replaces a native <select multiple> (needs ctrl/cmd-
@@ -1988,29 +2199,18 @@ textarea:disabled {
   flex-direction: column;
   gap: 8px;
 }
+/* Well and chip look (fill, border, radius, padding, type): forms.css. */
 .v2-chip-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  min-height: 34px;
-  padding: 6px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
 }
 .v2-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
   max-width: 100%;
   min-width: 0;
-  padding: 3px 8px 3px 7px;
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 600;
   white-space: nowrap;
 }
 /* ChipPicker.jsx puts the full name in a title attribute. */
@@ -2020,14 +2220,11 @@ textarea:disabled {
   text-overflow: ellipsis;
 }
 .v2-chip-dot {
-  width: 10px;
-  height: 10px;
   border-radius: 50%;
   flex: none;
 }
 .v2-chip-hash {
   color: var(--text-muted);
-  font-weight: 700;
   flex: none;
   font-size: 0.8rem;
 }
@@ -2042,12 +2239,10 @@ textarea:disabled {
   background: none;
   border: 0;
   border-radius: 999px;
-  color: var(--text-muted);
   font-size: 0.95rem;
   line-height: 1;
   padding: 0;
   cursor: pointer;
-  transition: color 150ms ease;
 }
 .v2-chip-x:active {
   color: var(--danger);
@@ -2089,8 +2284,9 @@ textarea:disabled {
   gap: 12px;
 }
 .v2-toggle-section-title {
-  font-size: 0.92rem;
+  font-size: var(--fs-lg);
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .v2-toggle-section-body {
   margin-top: 14px;
@@ -2121,24 +2317,31 @@ textarea:disabled {
   align-items: center;
 }
 .v2-pill {
-  background: var(--bg-surface);
+  background: transparent;
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
   padding: 5px 12px;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   transition:
-    color 150ms ease,
-    background-color 150ms ease,
-    border-color 150ms ease;
+    color var(--dur-press) ease,
+    background-color var(--dur-press) ease,
+    border-color var(--dur-press) ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-pill:not(.is-on):hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
 }
 .v2-pill:active:not(.is-on) {
   color: var(--text);
-  border-color: var(--accent);
+  border-color: var(--border-strong);
 }
 @media (pointer: coarse) {
   .v2-pill {
@@ -2148,35 +2351,51 @@ textarea:disabled {
     padding: 0 16px;
   }
 }
+/* Selected = the inverse of the page, like the primary button (white on
+   dark, black on light). The old white-on-accent was 3.2:1. */
 .v2-pill.is-on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg-main);
 }
-/* Roadmap board status badges — static, not clickable filter chips. */
+/* Status badges (roadmap, on/off, appeals) — static, not clickable. The
+   site's pill: hairline border, a small dot carries the status colour, the
+   label stays --text so it's readable in both themes. Uppercase because
+   some labels arrive lowercase ("on", "planned"). */
 .v2-status-pill {
-  display: inline-block;
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 0.72rem;
+  --status-tone: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  padding: 2px 10px;
+  color: var(--text);
+  font-size: 0.6875rem;
   font-weight: 600;
+  line-height: 1.5;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.v2-status-pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--status-tone);
 }
 .v2-status-pill.planned {
-  background: color-mix(in srgb, var(--accent-2) 16%, transparent);
-  color: var(--accent-2);
+  --status-tone: var(--accent);
 }
 .v2-status-pill.started {
-  background: color-mix(in srgb, var(--warn) 16%, transparent);
-  color: var(--warn);
+  --status-tone: var(--warn);
 }
 .v2-status-pill.completed {
-  background: color-mix(in srgb, var(--success) 16%, transparent);
-  color: var(--success);
+  --status-tone: var(--success);
 }
 .v2-status-pill.pending {
-  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
   color: var(--text-muted);
 }
 .v2-roadmap-vote {
@@ -2235,7 +2454,7 @@ textarea:disabled {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: 10px 14px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2243,7 +2462,7 @@ textarea:disabled {
 }
 .v2-ins-n {
   font-size: 1.3rem;
-  font-weight: 800;
+  font-weight: 650;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
@@ -2262,11 +2481,12 @@ textarea:disabled {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  padding: 16px 18px;
 }
 .v2-ins-chart h3 {
   margin: 0 0 10px;
-  font-size: 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 .v2-ins-chart svg {
   display: block;
@@ -2377,8 +2597,9 @@ textarea:disabled {
    The stack is always mounted (it's the live region); it lets taps through
    wherever there's no toast. Each toast slides in from the right edge it
    lives on and leaves the same way (.is-leaving, set by Toasts.jsx for
-   200ms before it's removed). Transitions, not keyframes, so a toast that
-   is dismissed mid-entry reverses smoothly from where it is. */
+   EXIT_MS = 200ms = --dur-ui before it's removed). Transitions, not
+   keyframes, so a toast that is dismissed mid-entry reverses smoothly from
+   where it is. A small dot (accent, or red for errors) carries the kind. */
 .v2-toasts {
   position: fixed;
   right: calc(16px + env(safe-area-inset-right, 0px));
@@ -2391,22 +2612,37 @@ textarea:disabled {
   pointer-events: none;
 }
 .v2-toast {
+  --toast-tone: var(--accent);
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   padding: 12px 14px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-left: 3px solid var(--accent-2);
-  border-radius: 10px;
-  font-size: 0.9rem;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  line-height: 1.45;
   overflow-wrap: anywhere;
   box-shadow: var(--shadow-toast);
   pointer-events: auto;
+  /* Enter a touch slower than it leaves: 1.5 × --dur-ui in, --dur-ui out. */
   transition:
-    opacity 300ms var(--ease-out),
-    transform 300ms var(--ease-out);
+    opacity calc(var(--dur-ui) * 1.5) var(--ease-out),
+    transform calc(var(--dur-ui) * 1.5) var(--ease-out);
+}
+.v2-toast::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  /* Centred on the first line (1.45 line-height). */
+  margin-top: calc(0.725em - 4px);
+  border-radius: 50%;
+  background: var(--toast-tone);
+}
+.v2-toast > span {
+  flex: 1;
+  min-width: 0;
 }
 @starting-style {
   .v2-toast {
@@ -2418,10 +2654,11 @@ textarea:disabled {
   opacity: 0;
   transform: translateX(calc(100% + 16px));
   pointer-events: none;
-  transition-duration: 200ms;
+  transition-duration: var(--dur-ui);
 }
 .v2-toast.is-error {
-  border-left-color: var(--danger);
+  --toast-tone: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border-subtle));
 }
 .v2-toast button {
   position: relative;
@@ -2431,9 +2668,9 @@ textarea:disabled {
   padding: 0 2px;
   color: var(--text-muted);
   font-size: 1.1rem;
-  line-height: 1;
+  line-height: 1.15;
   cursor: pointer;
-  transition: color 150ms ease;
+  transition: color var(--dur-press) ease;
 }
 .v2-toast button:active {
   color: var(--text);
@@ -2444,36 +2681,44 @@ textarea:disabled {
   }
 }
 
-/* components/Announcement.jsx: bot-wide notice from Bot Personalizer. Full
-   tinted background per severity, same convention V1 uses (.banner.ok/.bad) —
-   not just a border accent, so the severity reads at a glance. */
+/* components/Announcement.jsx: bot-wide notice from Bot Personalizer. A
+   tinted surface per severity, same convention V1 uses (.banner.ok/.bad),
+   so the severity reads at a glance — plus a dot in the severity colour.
+   The text itself stays --text / --text-muted: the old severity-coloured
+   text dropped under 4.5:1 on its own tint in the light theme. */
 .v2-announcement {
+  --ann-tone: var(--accent);
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 15px;
+  padding: 12px 16px;
   margin-bottom: 16px;
-  border: 1px solid transparent;
-  border-radius: 10px;
+  background: color-mix(in srgb, var(--ann-tone) 8%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--ann-tone) 30%, transparent);
+  border-radius: var(--radius);
+  color: var(--text);
   font-size: 0.9rem;
 }
-.v2-announcement span {
-  opacity: 0.85;
+.v2-announcement::before {
+  content: '';
+  flex: none;
+  align-self: flex-start;
+  width: 8px;
+  height: 8px;
+  /* Centred on the first line (1.5 line-height). */
+  margin-top: calc(0.75em - 4px);
+  border-radius: 50%;
+  background: var(--ann-tone);
 }
-.v2-ann-info {
-  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
-  border-color: color-mix(in srgb, var(--accent-2) 28%, transparent);
-  color: var(--accent-2);
+/* --text, not --text-muted: muted fell to 4.4:1 on the light critical tint. */
+.v2-announcement span {
+  color: var(--text);
 }
 .v2-ann-warning {
-  background: color-mix(in srgb, var(--warn) 12%, transparent);
-  border-color: color-mix(in srgb, var(--warn) 28%, transparent);
-  color: var(--warn);
+  --ann-tone: var(--warn);
 }
 .v2-ann-critical {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-  border-color: color-mix(in srgb, var(--danger) 32%, transparent);
-  color: var(--danger);
+  --ann-tone: var(--danger);
 }
 .v2-ann-dismiss {
   position: relative;
@@ -2486,7 +2731,7 @@ textarea:disabled {
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
-  transition: color 150ms ease;
+  transition: color var(--dur-press) ease;
 }
 .v2-ann-dismiss:active {
   color: var(--text);
@@ -2572,44 +2817,27 @@ textarea:disabled {
   font-weight: 600;
   font-size: 0.7em;
 }
+/* Gap, padding, fills, radii and type of the thread: pages.css. */
 .v2-chat {
   display: flex;
   flex-direction: column;
-  gap: 10px;
   max-height: 55vh;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 14px;
   margin-bottom: 18px;
-  background: var(--bg-surface-2);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
 }
 .v2-bubble {
-  max-width: 78%;
-  padding: 8px 12px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
   align-self: flex-start;
 }
 .v2-bubble.is-staff {
   align-self: flex-end;
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
-  background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface));
 }
 .v2-bubble.is-system {
   align-self: center;
-  max-width: 90%;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-.v2-bubble-meta {
-  color: var(--text-muted);
-  font-size: 0.74rem;
 }
 .v2-bubble-body {
-  margin-top: 2px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -2624,11 +2852,11 @@ textarea:disabled {
 .v2-case-action {
   margin-left: 8px;
   padding: 1px 8px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
   font-size: 0.7rem;
-  font-weight: 600;
+  font-weight: 500;
 }
 .v2-case-reason {
   white-space: normal;
@@ -2642,7 +2870,6 @@ textarea:disabled {
 }
 .v2-hub-tabs {
   flex-wrap: wrap;
-  margin-bottom: 18px;
 }
 .v2-tab-off {
   color: var(--text-muted);
@@ -2650,25 +2877,39 @@ textarea:disabled {
 }
 
 /* Which platform a server is on, shown once an account spans more than one. */
+/* The site's pill: hairline, muted label, the platform's colour only on a
+   small dot (brand colours, decorative) — coloured label text failed AA on
+   the light theme. */
 .v2-platform {
+  --platform-tone: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   flex: none;
   margin-left: auto;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  border: 1px solid var(--border-subtle);
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0;
+  white-space: nowrap;
+  border: 1px solid var(--border-strong);
   color: var(--text-muted);
 }
+.v2-platform::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--platform-tone);
+}
 .v2-platform-fluxer {
-  color: #3fb7a8;
-  border-color: rgba(63, 183, 168, 0.4);
+  --platform-tone: #3fb7a8;
 }
 .v2-platform-discord {
-  color: #8b9bff;
-  border-color: rgba(139, 155, 255, 0.4);
+  --platform-tone: #5865f2;
 }
 .v2-account-list {
   display: flex;
@@ -2689,9 +2930,7 @@ textarea:disabled {
 }
 .v2-account-card h3 {
   margin: 0;
-  font-size: 0.8rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
   color: var(--text-muted);
 }
 .v2-account-card p {
@@ -2701,12 +2940,12 @@ textarea:disabled {
 .v2-platform-note-tag {
   display: inline-block;
   margin-right: 6px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--accent-2);
-  color: var(--bg-surface);
-  font-size: 0.72rem;
-  font-weight: 700;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  font-size: 0.7rem;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -2736,12 +2975,12 @@ textarea:disabled {
   .v2-btn-danger:active:not(:disabled),
   .v2-theme-toggle:active,
   .v2-colorpicker-dot:active,
-  .v2-colorpicker-dot:hover,
-  .v2-card:hover {
+  .v2-colorpicker-dot:hover {
     transform: none;
   }
-  .v2-toggle::after {
-    transition-property: background-color;
+  /* The caret's flip is motion; it just swaps direction instead. */
+  .v2-switch-caret {
+    transition: none;
   }
   .v2-switch[open] .v2-switch-menu,
   .v2-colorpicker[open] .v2-colorpicker-panel {

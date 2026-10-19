@@ -3,6 +3,7 @@ import { getTickets } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
+import Reveal from '../components/Reveal.jsx';
 
 function TicketRow({ ticket, guildId }) {
   const preview = `${ticket.previewKind === 'staff' ? 'You: ' : ''}${ticket.preview || '(no text)'}`;
@@ -34,7 +35,7 @@ export default function TicketsInbox() {
   if (!data) return <p className="v2-state">Loading…</p>;
 
   return (
-    <>
+    <Reveal>
       <h1 className="v2-section-title">Tickets</h1>
       <p className="v2-field-hint">
         Members open a ticket by sending the bot a DM. Replies you write here reach them as an anonymous
@@ -62,6 +63,6 @@ export default function TicketsInbox() {
           </div>
         </>
       ) : null}
-    </>
+    </Reveal>
   );
 }

@@ -4,6 +4,7 @@ import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
+import Reveal from '../components/Reveal.jsx';
 
 export default function Messages() {
   const { guildId } = useParams();
@@ -46,7 +47,7 @@ export default function Messages() {
   }
 
   return (
-    <>
+    <Reveal>
       <div className="v2-page-head">
         <h1 className="v2-section-title">Embed messages</h1>
         <Link className="v2-btn-primary" to={`/guilds/${guildId}/messages/new`}>
@@ -89,6 +90,6 @@ export default function Messages() {
           ))}
         </div>
       )}
-    </>
+    </Reveal>
   );
 }
