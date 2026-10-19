@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.6.0](https://github.com/Ferdinand99/Sylo/compare/v4.5.0...v4.6.0) (2026-10-19)
+
+
+### Features
+
+* give V2 the look and feel of sylobot.com, add an account menu and a What's new page, and close role-grant gaps ([#266](https://github.com/Ferdinand99/Sylo/issues/266)) ([e0964fc](https://github.com/Ferdinand99/Sylo/commit/e0964fc0a99d4758782d6ebd7f7909200e530e73))
+
 ## [4.5.0](https://github.com/Ferdinand99/Sylo/compare/v4.4.0...v4.5.0) (2026-10-18)
 
 
