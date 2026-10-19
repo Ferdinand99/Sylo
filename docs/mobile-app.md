@@ -175,6 +175,9 @@ redirect or an HTML page:
 
 The usual per-IP rate limits apply. On top of them, per minute: 60 calls to
 `/api/mobile/info`, 30 to the `/auth/mobile` pages and 20 code exchanges.
+Actions that post to the platform (test messages, publishing a message or role
+menu, locking or unlocking every channel) share a limit of 10 per minute per
+server and account, answered with `429` and an `{ "error" }`.
 
 ---
 

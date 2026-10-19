@@ -77,9 +77,13 @@ export async function getBotMasterRoles(guildId) {
     return [];
   }
 }
-export async function setBotMasterRoles(guildId, roleIds) {
+/** The bot-master role list as setBotMasterRoles would store it. */
+export function normaliseBotMasterRoles(guildId, roleIds) {
   const valid = (Array.isArray(roleIds) ? roleIds : []).filter((r) => /^\d{17,20}$/.test(r));
-  const clean = [...new Set(withoutEveryone(guildId, valid))].slice(0, 25);
+  return [...new Set(withoutEveryone(guildId, valid))].slice(0, 25);
+}
+export async function setBotMasterRoles(guildId, roleIds) {
+  const clean = normaliseBotMasterRoles(guildId, roleIds);
   await put(guildId, 'bot_master_roles', JSON.stringify(clean));
   return clean;
 }

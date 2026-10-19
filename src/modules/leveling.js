@@ -297,6 +297,24 @@ export async function syncRewards(member, level, config) {
   if (strip.length) await member.roles.remove(strip, 'Leveling reward removed (XP dropped)').catch(() => {});
 }
 
+/**
+ * The reward roles a member at `level` is given and does not hold yet (`held`: the role ids
+ * they hold). Stacking gives every earned reward; otherwise only the highest one. The
+ * dashboard's "Set XP" checks these before it changes anything (src/web/middleware/roleGrants.js).
+ * @param {{ rewards: Array<{ level: number, roleId: string }>, stackRewards: boolean }} config
+ * @param {number} level
+ * @param {Iterable<string>} held
+ * @returns {string[]}
+ */
+export function rewardRolesToAdd(config, level, held) {
+  const earned = (config.rewards || []).filter((r) => level >= r.level);
+  if (earned.length === 0) return [];
+  const has = new Set(held);
+  // Rewards are sorted ascending, so the last earned one is the highest.
+  const give = config.stackRewards ? earned.map((r) => r.roleId) : [earned[earned.length - 1].roleId];
+  return give.filter((id) => !has.has(id));
+}
+
 async function applyRewards(member, level, config) {
   const earned = config.rewards.filter((r) => level >= r.level);
   if (earned.length === 0) return;
@@ -310,17 +328,13 @@ async function applyRewards(member, level, config) {
     return role && role.editable;
   };
 
-  let toAdd;
   let toRemove = [];
-  if (config.stackRewards) {
-    toAdd = earned.map((r) => r.roleId);
-  } else {
-    const highest = earned[earned.length - 1].roleId; // rewards are sorted ascending
-    toAdd = [highest];
+  if (!config.stackRewards) {
+    const highest = earned[earned.length - 1].roleId;
     toRemove = earned.map((r) => r.roleId).filter((id) => id !== highest && member.roles.cache.has(id));
   }
 
-  toAdd = toAdd.filter((id) => manageable(id) && !member.roles.cache.has(id));
+  const toAdd = rewardRolesToAdd(config, level, member.roles.cache.keys()).filter(manageable);
   toRemove = toRemove.filter(manageable);
 
   if (toAdd.length) await member.roles.add(toAdd, 'Leveling reward');

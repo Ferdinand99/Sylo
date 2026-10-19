@@ -7,6 +7,7 @@ import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { requireGuildAdmin } from '../middleware/auth.js';
 import { guardRoleGrants } from '../middleware/roleGrants.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { limitWhen, platformActionLimit } from '../middleware/rateLimit.js';
 import { guildTextChannels } from '../lib/discord.js';
 import { timeAgo } from '../lib/format.js';
 import {
@@ -112,6 +113,7 @@ router.get(
 
 router.post(
   '/:id',
+  limitWhen((req) => req.body.action === 'publish', platformActionLimit),
   asyncHandler(async (req, res) => {
     const base = `/guilds/${req.guild.id}/messages`;
     if (req.params.id !== 'new' && !numericId(req.params.id)) return res.redirect(base);
