@@ -18,7 +18,7 @@ Add the hosted instance in one click, or self-host it with Docker or Unraid.
 [![License: MIT](https://img.shields.io/github/license/Ferdinand99/Sylo)](LICENSE)
 [![iOS app: join the TestFlight beta](https://img.shields.io/badge/iOS%20app-TestFlight%20beta-0D96F6?logo=apple&logoColor=white)](https://testflight.apple.com/join/6FXxPjxu)
 [![Website](https://img.shields.io/badge/website-sylobot.com-7C6CFF)](https://sylobot.com)
-[![Roadmap](https://img.shields.io/badge/roadmap-sylobot.com-8B5CF6)](https://roadmap.sylobot.com/roadmap)
+[![Roadmap](https://img.shields.io/badge/roadmap-app.sylobot.com-8B5CF6)](https://app.sylobot.com/roadmap)
 
 [Add to Discord](https://discord.com/oauth2/authorize?client_id=1374856793469227029) ·
 [Dashboard](https://app.sylobot.com) ·
@@ -312,7 +312,7 @@ are in [CONTRIBUTING.md](CONTRIBUTING.md).
 | [docs/dashboard-v2.md](docs/dashboard-v2.md) | The React dashboard (beta) |
 | [docs/postgres.md](docs/postgres.md) | Optional Postgres backend and moving an SQLite install over |
 | [CHANGELOG.md](CHANGELOG.md) | Every release |
-| [Roadmap](https://roadmap.sylobot.com/roadmap) | What's planned; suggest features and vote |
+| [Roadmap](https://app.sylobot.com/roadmap) | What's planned; suggest features and vote |
 | [sylobot.com](https://sylobot.com) | The project site |
 
 ## Privacy and security
