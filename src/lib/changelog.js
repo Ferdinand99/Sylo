@@ -1,7 +1,9 @@
-// Turns CHANGELOG.md (release-please's format) into plain data for the
-// Changelog page. Nothing here produces HTML: inline markdown becomes
-// segments ({ text }, { text, href }, { code }, { text, bold }) that React
-// renders as text, so a changelog line can never inject markup.
+// Turns CHANGELOG.md (release-please's format) into plain data, for the V2
+// "What's new" page (web-v2 imports this file) and the app's
+// GET /api/v2/changelog. Pure JS, no Node or browser APIs, so both can use it.
+// Nothing here produces HTML: inline markdown becomes segments ({ text },
+// { text, href }, { code }, { text, bold }) that React renders as text, so a
+// changelog line can never inject markup.
 
 const RELEASE = /^##\s+(?:\[([^\]]+)\]\(([^)]+)\)|(\S+))\s*(?:\((\d{4}-\d{2}-\d{2})\))?/;
 const SECTION = /^###\s+(.+?)\s*$/;
@@ -95,4 +97,39 @@ export function parseChangelog(md) {
   }
   for (const r of releases) r.sections = r.sections.filter((s) => s.items.length);
   return releases;
+}
+
+// release-please's section names: what kind of change each holds, and the
+// words the V2 page and the app show for it. Anything else keeps its title.
+const SECTIONS = {
+  Features: { kind: 'features', label: 'New' },
+  'Bug Fixes': { kind: 'fixes', label: 'Fixes' },
+  'Performance Improvements': { kind: 'performance', label: 'Faster' },
+  '⚠ BREAKING CHANGES': { kind: 'breaking', label: 'Breaking changes' },
+};
+
+/** @returns {'features'|'fixes'|'performance'|'breaking'|'other'} */
+export const sectionKind = (title) =>
+  SECTIONS[title]?.kind ?? (String(title).includes('BREAKING') ? 'breaking' : 'other');
+
+/** The heading to show for a section: "New", "Fixes", … or the title as written. */
+export const sectionLabel = (title) => SECTIONS[title]?.label ?? title;
+
+/**
+ * The changelog as GET /api/v2/changelog serves it: the newest `limit`
+ * releases (all of them without one), sections labelled, and each item's
+ * text as inline markdown instead of render segments.
+ */
+export function changelogFeed(md, { limit } = {}) {
+  const releases = parseChangelog(md);
+  return releases.slice(0, limit ?? releases.length).map((r) => ({
+    version: r.version,
+    date: r.date,
+    url: r.url,
+    sections: r.sections.map((s) => ({
+      title: sectionLabel(s.title),
+      kind: sectionKind(s.title),
+      items: s.items.map(({ scope, text, refs }) => ({ scope, text, refs })),
+    })),
+  }));
 }

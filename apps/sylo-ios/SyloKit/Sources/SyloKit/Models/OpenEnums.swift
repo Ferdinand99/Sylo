@@ -43,6 +43,8 @@ public struct ServerFeature: RawRepresentable, Hashable, Sendable, Codable {
     public static let liveAccess = ServerFeature(rawValue: "live-access")
     /// The server can send ticket notifications to the app (`/api/mobile/push`).
     public static let push = ServerFeature(rawValue: "push")
+    /// The server's release notes are in the app API (`/api/v2/changelog`).
+    public static let changelog = ServerFeature(rawValue: "changelog")
 
     public let rawValue: String
 

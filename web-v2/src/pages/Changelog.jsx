@@ -1,19 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import changelogMd from '../../../CHANGELOG.md?raw';
-import { parseChangelog } from '../changelog.js';
+import { parseChangelog, sectionKind, sectionLabel } from '../../../src/lib/changelog.js';
 import Reveal from '../components/Reveal.jsx';
 import { markChangelogSeen, SYLO_VERSION } from '../util.js';
 
 const RELEASES_URL = 'https://github.com/Ferdinand99/Sylo/releases';
 const PAGE = 8;
-
-// release-please's section names, in the words the page uses.
-const SECTION_TITLES = {
-  Features: 'New',
-  'Bug Fixes': 'Fixes',
-  'Performance Improvements': 'Faster',
-  '⚠ BREAKING CHANGES': 'Breaking changes',
-};
 
 const formatDate = (iso) =>
   iso
@@ -60,8 +52,9 @@ function Release({ release, isRunning }) {
       </header>
       {release.sections.map((section) => (
         <section className="v2-cl-section" key={section.title}>
-          <h3 className={section.title.includes('BREAKING') ? 'is-breaking' : undefined}>
-            {SECTION_TITLES[section.title] ?? section.title}
+          {/* The same words the app shows (src/lib/changelog.js). */}
+          <h3 className={sectionKind(section.title) === 'breaking' ? 'is-breaking' : undefined}>
+            {sectionLabel(section.title)}
           </h3>
           <ul>
             {section.items.map((item, i) => (

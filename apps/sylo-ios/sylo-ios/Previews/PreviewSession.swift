@@ -5,7 +5,7 @@ import SyloKit
 nonisolated enum PreviewData {
     static let info = ServerInfo(
         version: "4.1.0", loginProviders: [.discord, .fluxer], platforms: [.discord, .fluxer],
-        features: [.appLogin, .liveAccess, .push])
+        features: [.appLogin, .liveAccess, .push, .changelog])
 
     static let pushSettings = PushSettingsInfo(isEnabled: true, mutedServers: ["2"])
 
@@ -63,6 +63,27 @@ nonisolated enum PreviewData {
      ], "lastId": 4}
     """#)
 
+    static let changelog: ChangelogPage = decode(#"""
+    {"version": "4.1.0", "releases": [
+      {"version": "4.2.0", "date": null, "url": null, "sections": [
+        {"title": "New", "kind": "features", "items": [
+          {"scope": "app", "text": "Read **What's New** right in the app.", "refs": []}]}]},
+      {"version": "4.1.0", "date": "2026-10-19", "url": "https://github.com/Ferdinand99/Sylo/releases/tag/v4.1.0",
+       "sections": [
+        {"title": "Breaking changes", "kind": "breaking", "items": [
+          {"scope": null, "text": "Set `PUBLIC_URL` before you update.", "refs": []}]},
+        {"title": "New", "kind": "features", "items": [
+          {"scope": "dashboard", "text": "Give V2 the look of [sylobot.com](https://sylobot.com), see `docs/dashboard-v2.md`",
+           "refs": [{"label": "#266", "url": "https://github.com/Ferdinand99/Sylo/pull/266"}]}]},
+        {"title": "Fixes", "kind": "fixes", "items": [
+          {"scope": "tickets", "text": "Close role-grant gaps.",
+           "refs": [{"label": "#265", "url": "https://github.com/Ferdinand99/Sylo/pull/265"},
+                    {"label": "#262", "url": "https://github.com/Ferdinand99/Sylo/pull/262"}]}]}]},
+      {"version": "4.0.0", "date": "2026-10-12", "url": null, "sections": [
+        {"title": "", "kind": "documentation", "items": [{"text": "Document the Fluxer setup."}]}]}
+    ]}
+    """#)
+
     private static var nowMillis: Int { Int(Date().timeIntervalSince1970 * 1000) }
 
     private static func decode<T: Decodable>(_ json: String) -> T {
@@ -105,6 +126,7 @@ nonisolated struct PreviewClient: APIClient {
         case is Endpoints.Account: PreviewData.account
         case is Endpoints.RevokeDevice: OKResponse()
         case is Endpoints.PushSettings: PreviewData.pushSettings
+        case is Endpoints.Changelog: PreviewData.changelog
         case is Endpoints.RegisterPush: OKResponse()
         case let mute as Endpoints.MutePushForServer: PushMuteResult(mutedServers: mute.muted ? [mute.server] : [])
         default: EmptyResponse()

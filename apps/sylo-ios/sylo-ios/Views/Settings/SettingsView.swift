@@ -135,7 +135,9 @@ struct SettingsView: View {
     private var serverSection: some View {
         Section("Sylo server") {
             LabeledContent("Address", value: server.displayName)
-            if let version = session.serverInfo?.version {
+            // After a relaunch the session has no server info yet; the notification settings
+            // load it on open, so fall back to theirs.
+            if let version = session.serverInfo?.version ?? push.settings.serverInfo?.version {
                 LabeledContent("Version", value: version)
             }
             Link(destination: server.baseURL) {
@@ -168,9 +170,19 @@ struct SettingsView: View {
                     Text(verbatim: Self.appVersion)
                 }
             }
-            // The V2 dashboard's What's new page on this Sylo server, in the browser.
-            Link(destination: server.url(for: "v2/changelog")) {
-                Label("What's New", systemImage: "sparkles")
+            // In the app when this Sylo server sends its changelog (its info is fetched with the
+            // notification settings when the session has none); older servers open the V2
+            // dashboard's What's new page in the browser.
+            if push.settings.serverInfo?.supports(.changelog) == true {
+                NavigationLink {
+                    ChangelogView(session: session)
+                } label: {
+                    Label("What's New", systemImage: "sparkles")
+                }
+            } else {
+                Link(destination: server.url(for: "v2/changelog")) {
+                    Label("What's New", systemImage: "sparkles")
+                }
             }
             Link(destination: Self.privacyPolicy) {
                 Label("Privacy Policy", systemImage: "hand.raised")
