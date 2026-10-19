@@ -2987,3 +2987,76 @@ textarea:disabled {
     animation-name: v2-fade-in;
   }
 }
+
+/* AccountMenu.jsx — the signed-in person's menu at the right of the top bar.
+   Reuses the server switcher's <details> menu, opened to the left. */
+.v2-acct > summary {
+  padding: 3px 8px 3px 3px;
+}
+.v2-acct-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg-main);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  flex: none;
+}
+.v2-acct-avatar.is-large {
+  width: 36px;
+  height: 36px;
+  font-size: var(--fs-md);
+}
+.v2-acct .v2-acct-menu {
+  left: auto;
+  right: 0;
+  min-width: 240px;
+  max-height: none;
+  transform-origin: top right;
+}
+.v2-acct-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.v2-acct-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.v2-acct-who strong {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.v2-acct-who span {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.v2-acct-label {
+  margin: 8px 10px 2px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.v2-acct-sep {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: 6px 4px;
+}
+.v2-switch-menu .v2-acct-signout {
+  color: var(--danger);
+}
+@media (max-width: 400px) {
+  .v2-acct .v2-switch-caret {
+    display: none;
+  }
+  .v2-acct > summary {
+    padding: 3px;
+  }
+}

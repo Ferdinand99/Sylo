@@ -141,7 +141,6 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
     { key: 'appeals', label: 'Appeals', icon: 'flag', path: '/appeals', guild: true, prefix: true },
     { key: 'personalizer', label: 'Bot Personalizer', icon: 'id', path: '/settings' },
     { key: 'settings', label: 'Settings', icon: 'gear', path: '/settings', guild: true },
-    { key: 'account', label: 'Account', icon: 'user', path: '/account' },
     { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', path: '/roadmap' },
     { key: 'health', label: 'Health', icon: 'pulse', path: '/health' },
   ].map((it) => ({ ...it, href: it.guild ? (guildBase ? `${guildBase}${it.path}` : null) : it.path }));

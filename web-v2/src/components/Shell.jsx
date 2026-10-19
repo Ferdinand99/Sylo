@@ -7,6 +7,7 @@ import Announcement from './Announcement.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import AccountMenu from './AccountMenu.jsx';
 import Toasts from './Toasts.jsx';
 import useLabelLinks from './useLabelLinks.js';
 
@@ -146,6 +147,7 @@ export default function Shell() {
           <span className="v2-classic-short">Classic</span>
         </a>
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
+        <AccountMenu />
       </header>
       <OverviewProvider guildId={lastGuildId}>
         <div className="v2-body">

@@ -22,7 +22,7 @@ function gid(guildId) {
 
 let csrfTokenPromise = null;
 
-async function getCsrfToken() {
+export async function getCsrfToken() {
   if (!csrfTokenPromise) {
     csrfTokenPromise = fetch('/api/v2/csrf', { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.json() : { token: null }))

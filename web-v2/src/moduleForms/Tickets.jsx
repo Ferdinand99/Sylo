@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import ChipPicker from '../components/ChipPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -17,7 +18,7 @@ export default function Tickets() {
       <h1 className="v2-section-title">Tickets (modmail)</h1>
       <p className="v2-field-hint">
         Members open a ticket by sending the bot a direct message. Staff read and reply from the{' '}
-        <a href={`/guilds/${guildId}/tickets`}>Tickets</a> page — replies reach the member as an anonymous
+        <Link to={`/guilds/${guildId}/tickets`}>Tickets</Link> page — replies reach the member as an anonymous
         "Staff" DM.
       </p>
 

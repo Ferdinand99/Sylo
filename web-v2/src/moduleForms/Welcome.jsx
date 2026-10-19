@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import ToggleSection from '../components/ToggleSection.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
@@ -163,9 +164,9 @@ export default function Welcome() {
         <div className="v2-row-main">
           <h3>Verify new members with a captcha</h3>
         </div>
-        <a className="v2-row-arrow" href={`/guilds/${guildId}/m/verification`}>
+        <Link className="v2-row-arrow" to={`/guilds/${guildId}/m/verification`}>
           {data.verificationEnabled ? 'On — configure' : 'Set up'} →
-        </a>
+        </Link>
       </div>
       <SendTestButton moduleId="welcome" disabled={dirty} />
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
