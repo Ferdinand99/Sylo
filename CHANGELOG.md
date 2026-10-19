@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.7.0](https://github.com/Ferdinand99/Sylo/compare/v4.6.0...v4.7.0) (2026-10-19)
+
+
+### Features
+
+* show the changelog in the Sylo app and give the app Sylo violet across app, dashboard and site ([#269](https://github.com/Ferdinand99/Sylo/issues/269)) ([5af9415](https://github.com/Ferdinand99/Sylo/commit/5af94156f57ada50199ba23dc2ccccc974e9c3d0))
+
 ## [4.6.0](https://github.com/Ferdinand99/Sylo/compare/v4.5.0...v4.6.0) (2026-10-19)
 
 
