@@ -3,8 +3,9 @@ import SyloKit
 import UIKit
 
 /// One ticket as a conversation, like Messages: the member's messages on the left, staff replies
-/// on the right in the accent colour, system notes centred, a time above each burst of messages,
-/// and a reply field at the bottom. New messages arrive every few seconds while it is open.
+/// on the right in Sylo violet (the StaffBubble colour, the same as on the web), system notes
+/// centred, a time above each burst of messages, and a reply field at the bottom. New messages
+/// arrive every few seconds while it is open.
 struct TicketThreadView: View {
     let server: ServerID
     let route: TicketRoute
@@ -69,7 +70,7 @@ struct TicketThreadView: View {
                 .safeAreaInset(edge: .bottom) { composer }
         } else if let message = model.errorMessage {
             ContentUnavailableView {
-                Label("Can't Load Ticket", systemImage: "exclamationmark.triangle")
+                Label("Couldn't Load Ticket", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -206,7 +207,7 @@ private struct MessageBubble: View {
             VStack(alignment: .trailing, spacing: 2) {
                 HStack {
                     Spacer(minLength: 48)
-                    bubble(foreground: .white, background: AnyShapeStyle(.tint))
+                    bubble(foreground: .white, background: AnyShapeStyle(Color.staffBubble))
                 }
                 if !message.isDelivered {
                     Label("Not delivered as a DM", systemImage: "exclamationmark.circle")
@@ -223,7 +224,7 @@ private struct MessageBubble: View {
                 .padding(.vertical, 4)
         default:
             HStack {
-                bubble(foreground: .primary, background: AnyShapeStyle(Color(uiColor: .secondarySystemBackground)))
+                bubble(foreground: .primary, background: AnyShapeStyle(Color(uiColor: .systemGray5)))
                 Spacer(minLength: 48)
             }
         }
@@ -272,7 +273,7 @@ private struct OutgoingBubble: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(.tint, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .background(Color.staffBubble, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .opacity(isSending ? 0.6 : 1)
                     .contextMenu {
                         Button("Delete", systemImage: "trash", role: .destructive, action: discard)

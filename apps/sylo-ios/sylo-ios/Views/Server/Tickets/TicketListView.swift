@@ -70,14 +70,14 @@ struct TicketListView: View {
                 if list.open.isEmpty, list.closed.isEmpty {
                     ContentUnavailableView(
                         "No Tickets", systemImage: "bubble.left.and.bubble.right",
-                        description: Text("When the Tickets module is on, a member opens a ticket by sending Sylo a direct message. It shows here, and you can answer from the app."))
+                        description: Text("With the Tickets module on, members open a ticket by sending Sylo a direct message. New tickets show up here for you to answer."))
                         .allowsHitTesting(false)
                 }
             }
             .refreshable { await model.load() }
         } else if let message = model.errorMessage {
             ContentUnavailableView {
-                Label("Can't Load Tickets", systemImage: "exclamationmark.triangle")
+                Label("Couldn't Load Tickets", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {

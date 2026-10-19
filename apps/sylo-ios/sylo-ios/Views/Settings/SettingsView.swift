@@ -162,6 +162,16 @@ struct SettingsView: View {
 
     private var aboutSection: some View {
         Section("About") {
+            LabeledContent("App version") {
+                HStack(spacing: 8) {
+                    PublicBetaBadge()
+                    Text(verbatim: Self.appVersion)
+                }
+            }
+            // The V2 dashboard's What's new page on this Sylo server, in the browser.
+            Link(destination: server.url(for: "v2/changelog")) {
+                Label("What's New", systemImage: "sparkles")
+            }
             Link(destination: Self.privacyPolicy) {
                 Label("Privacy Policy", systemImage: "hand.raised")
             }
@@ -183,8 +193,37 @@ struct SettingsView: View {
             set: { if !$0 { account.deleteError = nil } })
     }
 
+    /// This build's version and build number, such as "1.0 (5)".
+    private static let appVersion: String = {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        guard let build = info?["CFBundleVersion"] as? String else { return version }
+        return "\(version) (\(build))"
+    }()
+
     private static let privacyPolicy = URL(string: "https://github.com/Ferdinand99/Sylo/blob/main/docs/privacy-policy.md")!
     private static let terms = URL(string: "https://github.com/Ferdinand99/Sylo/blob/main/docs/terms-of-service.md")!
+}
+
+/// "Public beta", as on sylobot.com: a hairline capsule with a small accent dot. The text stays
+/// secondary so it reads on every row background; the accent is only in the dot.
+private struct PublicBetaBadge: View {
+    @ScaledMetric(relativeTo: .caption) private var dot = 6.0
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(.tint)
+                .frame(width: dot, height: dot)
+            Text("Public beta")
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .overlay(Capsule().strokeBorder(.separator))
+        .accessibilityElement(children: .combine)
+    }
 }
 
 /// Ticket notifications: whether this Sylo server can send them, the permission, on or off, and a

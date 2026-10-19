@@ -163,7 +163,7 @@ private struct ServerSidebar: View {
         } else if !servers.hasLoaded {
             if let message = servers.errorMessage {
                 ContentUnavailableView {
-                    Label("Can't Load Servers", systemImage: "exclamationmark.triangle")
+                    Label("Couldn't Load Servers", systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(message)
                 } actions: {
