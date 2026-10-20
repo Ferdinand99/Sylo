@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.7.1](https://github.com/Ferdinand99/Sylo/compare/v4.7.0...v4.7.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* report recent errors on /health and treat Apple server errors as a warning ([#271](https://github.com/Ferdinand99/Sylo/issues/271)) ([4f04061](https://github.com/Ferdinand99/Sylo/commit/4f04061cff8609f3c5cedece44d9ff8a1d4879db))
+
 ## [4.7.0](https://github.com/Ferdinand99/Sylo/compare/v4.6.0...v4.7.0) (2026-10-19)
 
 
