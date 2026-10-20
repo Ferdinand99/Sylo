@@ -194,3 +194,24 @@ test('a timeout or network error is retried once, then reported', async () => {
   await assert.rejects(() => broken.get('/v1/apps'), /fetch failed/);
   assert.equal(calls, 2, 'one retry, not a loop');
 });
+
+test("an Apple server error (5xx) is retried once, since it is usually Apple's own hiccup", async () => {
+  const slept = [];
+  const { client, calls } = make([{ status: 500, body: {} }, { body: { data: [1] } }], {
+    sleep: async (ms) => slept.push(ms),
+  });
+  assert.deepEqual(await client.get('/v1/apps'), { data: [1] });
+  assert.equal(calls.length, 2);
+  assert.equal(slept.length, 1);
+});
+
+test('a second Apple server error is reported with its status', async () => {
+  const { client } = make(
+    [
+      { status: 503, body: {} },
+      { status: 500, body: {} },
+    ],
+    { sleep: async () => {} }
+  );
+  await assert.rejects(client.get('/v1/apps'), (err) => err.status === 500);
+});

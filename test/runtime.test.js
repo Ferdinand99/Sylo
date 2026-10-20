@@ -69,3 +69,17 @@ test('platformStatus() / totalGuildCount() / isAnyClientReady() cover every conn
     setClientFor('fluxer', null);
   }
 });
+
+test('recentErrorCount counts only the errors inside the window', async () => {
+  const { recentErrorCount } = await import('../src/runtime.js');
+  const now = 1_700_000_000_000;
+  const saved = runtime.errors;
+  runtime.errors = [
+    { message: 'new', scope: 'a', at: now - 60_000 },
+    { message: 'edge', scope: 'a', at: now - 3_600_000 },
+    { message: 'old', scope: 'b', at: now - 3_600_001 },
+  ];
+  assert.equal(recentErrorCount(3_600_000, now), 2);
+  assert.equal(recentErrorCount(30_000, now), 0);
+  runtime.errors = saved;
+});

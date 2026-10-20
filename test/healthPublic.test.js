@@ -28,3 +28,18 @@ test('a malformed URL is a 400, not a server error', async () => {
   assert.equal(res.status, 400);
   assert.equal(runtime.errors.length, before, 'nothing was logged as an error');
 });
+
+// An uptime monitor needs "errors right now", not "errors since the last restart": the ring
+// buffer only empties on a restart, so one old error would keep a monitor down for good.
+test('/health JSON says how many errors were logged in the last hour', async () => {
+  const { runtime } = await import('../src/runtime.js');
+  const saved = runtime.errors;
+  runtime.errors = [
+    { message: 'recent', scope: 'apple', at: Date.now() - 5 * 60_000 },
+    { message: 'stale', scope: 'rss', at: Date.now() - 2 * 3_600_000 },
+  ];
+  const body = await (await browser().get('/health', { headers: { accept: 'application/json' } })).json();
+  assert.equal(body.errorCount, 2);
+  assert.equal(body.errorsLastHour, 1);
+  runtime.errors = saved;
+});

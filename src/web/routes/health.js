@@ -18,6 +18,7 @@ import {
   totalGuildCount,
   platformStatus,
   errorScopeCounts,
+  recentErrorCount,
 } from '../../runtime.js';
 import { byMetric } from '../../lib/metrics.js';
 import { dashboardStats, moduleUsage } from '../../db/dashboardStats.js';
@@ -78,6 +79,8 @@ router.get(
         // Error messages can carry a server admin's URL or an internal address: operators only.
         ...(isOwner(req) ? { lastError: runtime.lastError } : {}),
         errorCount: runtime.errors.length,
+        // For uptime monitors: errors in the last hour (errorCount only resets on a restart).
+        errorsLastHour: recentErrorCount(60 * 60_000),
         errorsByScope: errorScopeCounts(),
         commands: byMetric('sylo_commands_total')
           .map((c) => ({ name: c.labels.command ?? 'unknown', count: c.value }))

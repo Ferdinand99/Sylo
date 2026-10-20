@@ -174,6 +174,11 @@ the rest of that page.
 can reach them — keep them on your LAN, or restrict them at the reverse proxy if
 the dashboard is public.
 
+For an uptime monitor, check `$.status` is `ok` and `$.errorsLastHour` is `0` in the
+`/health` JSON. `errorCount` counts every error since the last restart, so one old
+error would keep such a monitor down. App Store Connect server errors on Apple's side
+are retried once and logged as warnings, not errors.
+
 Point Prometheus at `<host>:<WEB_PORT>/metrics` and import
 `docs/grafana-dashboard.json` for a ready-made overview (gateway health, guild
 count, HTTP and command rates, DB size, module adoption).
