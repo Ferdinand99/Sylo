@@ -131,6 +131,11 @@ export function createAppStoreConnect({
       await sleep(NETWORK_RETRY_MS);
       return request(url, { retry: false, accept });
     }
+    // Apple's own server errors (5xx) are usually a passing hiccup on their side: one more try.
+    if (res.status >= 500 && retry) {
+      await sleep(NETWORK_RETRY_MS);
+      return request(url, { retry: false, accept });
+    }
     if (res.status === 429 && retry) {
       const wait = Math.min(Math.max(Number(res.headers.get('retry-after')) || 5, 1), 60);
       await sleep(wait * 1000);

@@ -428,3 +428,20 @@ test('runAppleTick: a pass that is still running is not started a second time', 
   await Promise.all([first, second]);
   assert.equal(started, 1, 'the second call returned at once');
 });
+
+test("fetchSnapshot: Apple's own server errors are a warning, not an error in the health log", async () => {
+  const { runtime } = await import('../src/runtime.js');
+  const { AppStoreConnectError } = await import('../src/lib/appStoreConnect.js');
+  const before = runtime.errors.length;
+  const client = fakeClient({
+    '/v1/apps': { data: [{ id: '10', attributes: { name: 'A' } }] },
+    '/v1/apps/10/appStoreVersions': { data: [] },
+    '/v1/builds': { data: [] },
+    '/v1/apps/10/customerReviews': () => {
+      throw new AppStoreConnectError('App Store Connect 500: An unexpected error occurred', 500);
+    },
+  });
+  const snap = await fetchSnapshot(client, { appIds: ['10'], want: { reviews: true } });
+  assert.equal(snap.apps[0].reviews, null, 'the reviews part is skipped');
+  assert.equal(runtime.errors.length, before, 'nothing added to the error history');
+});

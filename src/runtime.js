@@ -68,6 +68,18 @@ export function recordError(err, scope = null) {
 export const setLastError = recordError;
 
 /**
+ * How many recorded errors are newer than `windowMs`. The ring buffer itself only empties on a
+ * restart, so this is what "is something wrong right now" means for a health check.
+ * @param {number} windowMs
+ * @param {number} [now]
+ */
+export function recentErrorCount(windowMs, now = Date.now()) {
+  let n = 0;
+  for (const e of runtime.errors) if (now - e.at <= windowMs) n += 1;
+  return n;
+}
+
+/**
  * Count the errors currently in the ring buffer, grouped by scope.
  * @returns {Record<string, number>}
  */

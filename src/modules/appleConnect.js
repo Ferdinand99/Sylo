@@ -338,10 +338,19 @@ export async function fetchSnapshot(client, { appIds = [], maxApps = MAX_APPS, w
         feedback: want.feedback ? await optional(() => fetchFeedback(client, a.id), null) : [],
       });
     } catch (err) {
-      log.error('apple', `app ${a.id}: ${err.message}`);
+      logAppleFailure(`app ${a.id}: ${err.message}`, err);
     }
   }
   return { apps };
+}
+
+/**
+ * Log an App Store Connect failure. Apple's own server errors (5xx, already retried once) are
+ * an outage on their side, so they are a warning; anything else is ours to look at.
+ */
+function logAppleFailure(message, err) {
+  if (err?.status >= 500) log.warn('apple', message);
+  else log.error('apple', message);
 }
 
 /** Run an optional part; a failure is logged and leaves the fallback in place. */
@@ -349,7 +358,7 @@ async function optional(fn, fallback) {
   try {
     return await fn();
   } catch (err) {
-    log.error('apple', err.message);
+    logAppleFailure(err.message, err);
     return fallback;
   }
 }
@@ -656,7 +665,7 @@ async function pass(client, guilds, send) {
     try {
       await processGuild(key, cfg, snapshot, { send });
     } catch (err) {
-      log.error('apple', `${key}: ${err.message}`);
+      logAppleFailure(`${key}: ${err.message}`, err);
     }
   }
 }
