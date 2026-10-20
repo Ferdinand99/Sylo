@@ -185,7 +185,7 @@ import { recordAudit } from '../../db/audit.js';
 import { recordBotAudit, listBotAudit } from '../../db/botAudit.js';
 import { platformInfo } from '../../platform/modulePlatformNotes.js';
 import { normaliseAppleConfig } from '../../modules/appleConnect.js';
-import { runtime, uptimeSeconds, isAnyClientReady, totalGuildCount } from '../../runtime.js';
+import { runtime, uptimeSeconds, isAnyClientReady, totalGuildCount, platformStatus } from '../../runtime.js';
 import {
   getPresenceConfig,
   setPresenceConfig,
@@ -2311,10 +2311,18 @@ router.get(
 
     const dbInfo = await dbFileInfo();
     const ready = isAnyClientReady();
+    const platforms = platformStatus();
 
     res.json({
       ready,
-      botTag: client?.user?.tag ?? null,
+      // Every connected bot, as on the classic Health page ("Sylo#9455 · Sylo#4291").
+      botTag:
+        platforms
+          .map((p) => p.tag)
+          .filter(Boolean)
+          .join(' · ') || null,
+      // Per platform: { platform, ready, guilds, tag }, for the server split.
+      platforms,
       version,
       uptime: formatUptime(uptimeSeconds()),
       guildCount: totalGuildCount(),
