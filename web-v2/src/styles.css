@@ -309,18 +309,11 @@ a {
 /* Flat accent tile with the letter knocked out in the page colour (≥4.5:1
    in both themes), the same 7px corner as the site's logo image. */
 .v2-brand-mark {
+  /* The Sylo starling tile (public/favicon.svg). */
   width: 28px;
   height: 28px;
   flex: none;
-  border-radius: 7px;
-  background: var(--accent);
-  display: grid;
-  place-items: center;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0;
-  line-height: 1;
-  color: var(--bg-main);
+  display: block;
 }
 /* The site's "Public beta" pill: hairline, small accent dot. */
 .v2-beta-badge {

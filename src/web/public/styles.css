@@ -135,9 +135,7 @@ body {
   padding: 6px 8px 10px;
 }
 .sb-mark {
-  width: 26px; height: 26px; border-radius: 8px; flex: none;
-  display: grid; place-items: center; font-size: 15px; color: var(--on-accent);
-  background: linear-gradient(140deg, var(--accent), var(--accent-strong));
+  width: 26px; height: 26px; flex: none; display: block;
 }
 
 /* server switcher (sidebar) */
