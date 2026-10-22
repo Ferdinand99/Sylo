@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.8.0](https://github.com/Ferdinand99/Sylo/compare/v4.7.2...v4.8.0) (2026-10-22)
+
+
+### Features
+
+* **brand:** replace the robot logo with the Sylo starling ([#277](https://github.com/Ferdinand99/Sylo/issues/277)) ([5cb65d9](https://github.com/Ferdinand99/Sylo/commit/5cb65d9f366c0a941d86e28bddb86047cb031778))
+
 ## [4.7.2](https://github.com/Ferdinand99/Sylo/compare/v4.7.1...v4.7.2) (2026-10-22)
 
 
