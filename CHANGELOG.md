@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.8.1](https://github.com/Ferdinand99/Sylo/compare/v4.8.0...v4.8.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **brand:** use the full-size tile for the favicon and the Windows icon ([c8a4b5a](https://github.com/Ferdinand99/Sylo/commit/c8a4b5a470dc4d8339fd84fd7018d2a246b789b7))
+
 ## [4.8.0](https://github.com/Ferdinand99/Sylo/compare/v4.7.2...v4.8.0) (2026-10-22)
 
 
