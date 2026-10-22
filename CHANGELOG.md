@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.7.2](https://github.com/Ferdinand99/Sylo/compare/v4.7.1...v4.7.2) (2026-10-22)
+
+
+### Bug Fixes
+
+* **dashboard:** show every bot and the per-platform server split on V2 Health ([#273](https://github.com/Ferdinand99/Sylo/issues/273)) ([a2b192b](https://github.com/Ferdinand99/Sylo/commit/a2b192b5ca8126ac31e232355832d5e847a5b0f6))
+
 ## [4.7.1](https://github.com/Ferdinand99/Sylo/compare/v4.7.0...v4.7.1) (2026-10-20)
 
 
