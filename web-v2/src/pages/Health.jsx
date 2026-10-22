@@ -226,6 +226,16 @@ export default function Health() {
         <div className="v2-stat">
           <strong>{plural(d.guildCount, 'server')}</strong>
           <span>{formatCount(d.memberReach)} members reached</span>
+          {d.platforms?.length > 1 ? (
+            <span>
+              {d.platforms
+                .map(
+                  (p) =>
+                    `${p.platform.charAt(0).toUpperCase()}${p.platform.slice(1)} ${formatCount(p.guilds)}`
+                )
+                .join(' · ')}
+            </span>
+          ) : null}
         </div>
         <div className="v2-stat">
           <strong>{d.uptime}</strong>
