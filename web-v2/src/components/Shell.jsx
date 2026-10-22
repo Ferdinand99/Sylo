@@ -133,7 +133,7 @@ export default function Shell() {
           <span />
         </button>
         <Link className="v2-brand" to="/">
-          <span className="v2-brand-mark">S</span>
+          <img className="v2-brand-mark" src="/favicon.svg" alt="" width="28" height="28" />
           <span>Sylo</span>
           <span className="v2-beta-badge" title="V2 is in beta — the classic dashboard is still available">
             Beta

@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="unraid/sylo.jpg" alt="Sylo" width="512" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/sylo-logo-dark.svg" />
+  <img src="assets/brand/sylo-logo-light.svg" alt="Sylo" width="420" />
+</picture>
 
 # Sylo
 
