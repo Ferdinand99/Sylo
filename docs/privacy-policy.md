@@ -131,6 +131,15 @@ The Dashboard can run with or without login.
   ticket on a server whose tickets you may see, the notification (the server's
   name, the member's name and the first 180 characters of the message) is sent
   to Apple, which delivers it to your device.
+- **Error reports and visit counts (the hosted Sylo):** the Dashboard's pages
+  send errors that happen in your browser to Keen Kestrel, which the Operator
+  runs (section 3a). A report holds the error and where in the Dashboard's code
+  it happened, the page's address (which can contain a server or channel ID),
+  the Dashboard addresses and page elements used just before it, your browser
+  and operating system, and the Dashboard version. It holds no name, user ID,
+  IP address or cookie. Page views are counted the same way as on the Website
+  (section 3a). Self-hosted instances send none of this unless their operator
+  sets it up.
 
 ## 3a. Visits to the Website
 
@@ -171,6 +180,7 @@ for modmail transcripts (section 1).
 | Sylo app notifications (push or relay token, muted servers, notification text) | Telling staff about new ticket messages, which they turned on in the app |
 | Operational logs | Security, abuse prevention and debugging |
 | Website visit statistics (section 3a) | Knowing how the Website is found and used, without cookies and without keeping IP addresses |
+| Dashboard error reports and visit counts (section 3) | Finding and fixing faults in the Dashboard, and knowing which parts are used |
 | Game-stat cache | Serving `/stats` responses quickly without repeatedly querying the upstream provider |
 
 The Operator has weighed these interests against your rights: only identifiers
@@ -296,6 +306,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | One-time app sign-in code (hashed) | 60 seconds | Used, or expired and deleted automatically |
 | Notification relay registration (push token, hashed relay token, instance) | 90 days from the last use | Notifications turned off in the app; Apple reports the device gone; 90 days without use |
 | Website visit statistics (section 3a) | Page views 30 days; hourly and daily totals 400 days | Deleted automatically |
+| Dashboard error reports | 30 days; a grouped error's summary until 90 days after it last happened | Deleted automatically |
 | Operational logs | As long as operationally useful | Rotated or discarded by the Operator |
 
 **Backups.** The database is snapshotted automatically for recovery; the newest

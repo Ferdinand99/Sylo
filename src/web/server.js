@@ -34,6 +34,7 @@ import guildMessagesRouter from './routes/guildMessages.js';
 import githubWebhookRouter from './routes/githubWebhook.js';
 import v2ApiRouter from './routes/v2Api.js';
 import v2ClientRouter from './routes/v2Client.js';
+import telemetryRouter from './routes/telemetry.js';
 import roadmapRouter from './routes/roadmap.js';
 import accountRouter from './routes/account.js';
 
@@ -156,6 +157,8 @@ export function createApp() {
   app.use('/webhooks/github', githubWebhookRouter);
 
   app.use(express.static(join(here, 'public')));
+  // Error reports and visit counts for both dashboards; does nothing unless configured.
+  app.use('/telemetry.js', telemetryRouter);
   app.use(express.urlencoded({ extended: false, limit: '256kb' }));
   app.use(express.json({ limit: '256kb' }));
   // Express 5 leaves req.body undefined for a request without a body; handlers read fields.
