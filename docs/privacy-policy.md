@@ -201,6 +201,12 @@ a command or dashboard action occurred, which may include Discord IDs). These
 are used for debugging and abuse prevention and are kept only as long as
 operationally useful.
 
+On the hosted Sylo, every error the service logs is also sent as an error
+report to Keen Kestrel, which the Operator runs (section 3a): the error, where
+in Sylo's code it happened, the log message (which may include a Discord ID)
+and the Sylo version. Secrets such as tokens are removed first. Self-hosted
+instances send none of this unless their operator sets it up.
+
 ## 6. Third parties
 
 - **Discord** — the Bot and Dashboard operate on Discord's platform; your use is
@@ -306,7 +312,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | One-time app sign-in code (hashed) | 60 seconds | Used, or expired and deleted automatically |
 | Notification relay registration (push token, hashed relay token, instance) | 90 days from the last use | Notifications turned off in the app; Apple reports the device gone; 90 days without use |
 | Website visit statistics (section 3a) | Page views 30 days; hourly and daily totals 400 days | Deleted automatically |
-| Dashboard error reports | 30 days; a grouped error's summary until 90 days after it last happened | Deleted automatically |
+| Dashboard and bot error reports | 30 days; a grouped error's summary until 90 days after it last happened | Deleted automatically |
 | Operational logs | As long as operationally useful | Rotated or discarded by the Operator |
 
 **Backups.** The database is snapshotted automatically for recovery; the newest

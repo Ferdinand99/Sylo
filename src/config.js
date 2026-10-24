@@ -170,11 +170,13 @@ if (devLogChannelId && !/^\d{17,20}$/.test(devLogChannelId)) {
 const turnstileSiteKey = optionalOrNull('TURNSTILE_SITE_KEY');
 const turnstileSecretKey = optionalOrNull('TURNSTILE_SECRET_KEY');
 
-// Error reports and visit counts from the dashboard's pages, for the hosted Sylo. Off unless
-// DASHBOARD_ERROR_DSN is set; see src/web/lib/telemetry.js.
+// Error reports from the bot and the dashboard's pages, and the dashboard's visit counts, for
+// the hosted Sylo. Each is off unless its DSN is set; see src/lib/errorReports.js and
+// src/web/lib/telemetry.js.
+const botErrorDsn = optionalOrNull('BOT_ERROR_DSN');
 const dashboardErrorDsn = optionalOrNull('DASHBOARD_ERROR_DSN');
 const dashboardVisitStats = optionalBool('DASHBOARD_VISIT_STATS', false);
-const dashboardErrorEnvironment = optionalOrNull('DASHBOARD_ERROR_ENVIRONMENT') ?? 'production';
+const errorEnvironment = optionalOrNull('ERROR_ENVIRONMENT') ?? 'production';
 const itadApiKey = optionalOrNull('ITAD_API_KEY');
 const twitchClientId = optionalOrNull('TWITCH_CLIENT_ID');
 const twitchClientSecret = optionalOrNull('TWITCH_CLIENT_SECRET');
@@ -308,11 +310,13 @@ export const config = Object.freeze({
   turnstileSecretKey,
   turnstileEnabled: Boolean(turnstileSiteKey && turnstileSecretKey),
 
-  // Dashboard error reports (any Sentry-compatible DSN, e.g. Keen Kestrel) and, with
-  // DASHBOARD_VISIT_STATS, cookieless visit counts through Keen Kestrel's k.js. Off when unset.
+  // Error reports (any Sentry-compatible DSN, e.g. Keen Kestrel) from the bot and the
+  // dashboard and, with DASHBOARD_VISIT_STATS, the dashboard's cookieless visit counts through
+  // Keen Kestrel's k.js. Off when unset.
+  botErrorDsn,
   dashboardErrorDsn,
   dashboardVisitStats,
-  dashboardErrorEnvironment,
+  errorEnvironment,
 
   // IsThereAnyDeal API key — broadens the Free games module beyond Epic. Free
   // key from isthereanydeal.com/apps. When unset, Free games is Epic-only.

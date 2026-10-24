@@ -13,6 +13,7 @@ import { startWeb } from './web/server.js';
 import { addDevLogSink } from './lib/devLog.js';
 import { addDevLogEntry } from './db/devLogEntries.js';
 import { notifyDevLogEvent } from './lib/push.js';
+import { flushErrorReports, startErrorReports } from './lib/errorReports.js';
 
 /** Set once the HTTP server is listening; used by the shutdown path. */
 let httpServer = null;
@@ -29,7 +30,8 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
   log.error('sylo', 'Uncaught exception — exiting for a clean restart', err);
   closeDb();
-  process.exit(1);
+  // Give its error report (if BOT_ERROR_DSN is set) up to 2 s to leave first.
+  flushErrorReports(2000).finally(() => process.exit(1));
 });
 
 let shuttingDown = false;
@@ -58,6 +60,8 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 
 async function main() {
+  // First, so a failing start is reported too (a no-op unless BOT_ERROR_DSN is set).
+  await startErrorReports();
   // Sylo's own errors and warnings: stored for the app's Health page, and pushed to operators'
   // devices at the level each chose (src/lib/devLog.js). Neither sink logs through log.js.
   addDevLogSink((event) => addDevLogEntry(event));

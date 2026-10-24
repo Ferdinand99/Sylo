@@ -8,8 +8,9 @@
 
 /**
  * A DSN's parts, or null when `raw` isn't one: `https://<public key>@<host>[/path]/<project id>`.
+ * `envelope` is where its error reports go.
  * @param {string | null | undefined} raw
- * @returns {{ dsn: string, key: string, origin: string } | null}
+ * @returns {{ dsn: string, key: string, origin: string, envelope: string } | null}
  */
 export function parseDsn(raw) {
   if (!raw) return null;
@@ -20,11 +21,18 @@ export function parseDsn(raw) {
     return null;
   }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-  const project = url.pathname.split('/').filter(Boolean).pop();
+  const parts = url.pathname.split('/').filter(Boolean);
+  const project = parts.pop();
   if (!/^[0-9a-f]{16,64}$/i.test(url.username) || url.password || !/^\d+$/.test(project ?? '')) {
     return null;
   }
-  return { dsn: raw, key: url.username, origin: url.origin };
+  const prefix = parts.length ? `/${parts.join('/')}` : '';
+  return {
+    dsn: raw,
+    key: url.username,
+    origin: url.origin,
+    envelope: `${url.origin}${prefix}/api/${project}/envelope/`,
+  };
 }
 
 /**

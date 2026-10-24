@@ -11,7 +11,7 @@ const { version } = createRequire(import.meta.url)('../../../package.json');
 const settings = telemetrySettings({
   dsn: config.dashboardErrorDsn,
   visitStats: config.dashboardVisitStats,
-  environment: config.dashboardErrorEnvironment,
+  environment: config.errorEnvironment,
   release: `sylo@${version}`,
 });
 if (config.dashboardErrorDsn && !settings) {
