@@ -1,17 +1,19 @@
 # Privacy Policy — Sylo
 
 **Effective date:** 2 September 2026
-**Last updated:** 17 October 2026
+**Last updated:** 24 October 2026
 
 This Privacy Policy explains what data the **Sylo** Discord application and its
-test instance **Sylo - Test** (the "Bot"), and the Sylo web dashboard (the
-"Dashboard"), collect and how it is used. The instances covered by this policy
+test instance **Sylo - Test** (the "Bot"), the Sylo web dashboard (the
+"Dashboard") and the website **sylobot.com** (the "Website") collect and how it
+is used. The instances covered by this policy
 are operated by **Ferdinand99** (<https://github.com/Ferdinand99>) (the
 "Operator"), who is the data controller for them. Sylo is open-source (MIT);
 self-hosted instances are run by their own operators — see section 10.
 
 The Operator does **not** sell your data, does **not** show advertising, and does
-**not** use third-party analytics or tracking.
+**not** use third-party analytics or tracking. The Website counts visits without
+cookies on a statistics service the Operator runs (section 3a).
 
 ## 1. Message content
 
@@ -130,6 +132,27 @@ The Dashboard can run with or without login.
   name, the member's name and the first 180 characters of the message) is sent
   to Apple, which delivers it to your device.
 
+## 3a. Visits to the Website
+
+The Website counts visits with **Keen Kestrel**, an open-source statistics
+service the Operator runs on its own server (`kestrel.hedgerow.tools`); no third
+party receives this data. It sets no cookies and stores nothing on your device.
+For each page view it keeps:
+
+- the page (host and path; the query string is dropped except `utm_*` campaign
+  tags);
+- the referring site's domain, if any;
+- the browser, operating system and device type (names only, read from the user
+  agent, which itself is not kept) and a screen-size range;
+- the time;
+- a visitor ID: a hash of a random daily value, your IP address and your user
+  agent. The daily value is kept only in memory and replaced every day, so the
+  ID cannot be turned back into an address and the same browser gets an
+  unrelated ID the next day.
+
+IP addresses and user agents are not stored. If your browser sends
+**Global Privacy Control**, nothing is recorded.
+
 ## 4. Legal basis for processing
 
 Where the Operator processes personal data of people in the EEA or the UK, it
@@ -147,6 +170,7 @@ for modmail transcripts (section 1).
 | Sylo app sign-in (device name, sign-in times, hashed token) | Keeping you signed in on a device you chose to sign in on, and letting you see and revoke those devices |
 | Sylo app notifications (push or relay token, muted servers, notification text) | Telling staff about new ticket messages, which they turned on in the app |
 | Operational logs | Security, abuse prevention and debugging |
+| Website visit statistics (section 3a) | Knowing how the Website is found and used, without cookies and without keeping IP addresses |
 | Game-stat cache | Serving `/stats` responses quickly without repeatedly querying the upstream provider |
 
 The Operator has weighed these interests against your rights: only identifiers
@@ -271,6 +295,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | Sylo app sign-in (device record, hashed token) | 90 days from the last use | Sign out in the app; revoke on the account page; a sign-in disconnected from the account; 90 days without use |
 | One-time app sign-in code (hashed) | 60 seconds | Used, or expired and deleted automatically |
 | Notification relay registration (push token, hashed relay token, instance) | 90 days from the last use | Notifications turned off in the app; Apple reports the device gone; 90 days without use |
+| Website visit statistics (section 3a) | Page views 30 days; hourly and daily totals 400 days | Deleted automatically |
 | Operational logs | As long as operationally useful | Rotated or discarded by the Operator |
 
 **Backups.** The database is snapshotted automatically for recovery; the newest
