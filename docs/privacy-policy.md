@@ -5,8 +5,8 @@
 
 This Privacy Policy explains what data the **Sylo** Discord application and its
 test instance **Sylo - Test** (the "Bot"), the Sylo web dashboard (the
-"Dashboard") and the website **sylobot.com** (the "Website") collect and how it
-is used. The instances covered by this policy
+"Dashboard") and the websites **sylobot.com** and **docs.sylobot.com** (the
+"Website") collect and how it is used. The instances covered by this policy
 are operated by **Ferdinand99** (<https://github.com/Ferdinand99>) (the
 "Operator"), who is the data controller for them. Sylo is open-source (MIT);
 self-hosted instances are run by their own operators — see section 10.
