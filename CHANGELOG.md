@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.9.0](https://github.com/Ferdinand99/Sylo/compare/v4.8.1...v4.9.0) (2026-10-24)
+
+
+### Features
+
+* **dashboard:** optional error reports and visit counts ([#281](https://github.com/Ferdinand99/Sylo/issues/281)) ([253f1ea](https://github.com/Ferdinand99/Sylo/commit/253f1ea74c3533761756394e326d32559bb6faae))
+* optional error reports from the bot ([#283](https://github.com/Ferdinand99/Sylo/issues/283)) ([1889a5e](https://github.com/Ferdinand99/Sylo/commit/1889a5e5751881b7aa179ef955c0a325cfe5e551))
+
 ## [4.8.1](https://github.com/Ferdinand99/Sylo/compare/v4.8.0...v4.8.1) (2026-10-22)
 
 
