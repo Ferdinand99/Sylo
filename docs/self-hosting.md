@@ -91,7 +91,8 @@ At least one platform must be configured.
 | `TURNSTILE_SECRET_KEY`    | —                               | Cloudflare Turnstile secret key (pair with the site key) |
 | `DASHBOARD_ERROR_DSN`     | —                               | Optional: send the dashboard's browser errors (V1 and V2) to your own Sentry or [Keen Kestrel](https://github.com/Ferdinand99/Keen-Kestrel), with this DSN. Unset (default): nothing is sent anywhere. If you set it, your privacy policy should say so |
 | `DASHBOARD_VISIT_STATS`   | `false`                         | With a Keen Kestrel `DASHBOARD_ERROR_DSN`: also count dashboard page views with its `k.js` (no cookies, no stored IP addresses) |
-| `DASHBOARD_ERROR_ENVIRONMENT` | `production`                | The environment name on those error reports |
+| `BOT_ERROR_DSN`           | —                               | Optional: send the bot's errors (everything it logs as an error) to your own Sentry or Keen Kestrel. Unset (default): nothing is sent |
+| `ERROR_ENVIRONMENT`       | `production`                    | The environment name on the bot's and the dashboard's error reports |
 | `ITAD_API_KEY`            | —                               | IsThereAnyDeal key — adds non-Epic stores to the Free games module |
 | `INTENT_GUILD_MEMBERS`    | `true`                          | Request the Server Members privileged intent |
 | `INTENT_MESSAGE_CONTENT`  | `true`                          | Request the Message Content privileged intent |

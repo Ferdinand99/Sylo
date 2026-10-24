@@ -10,10 +10,11 @@ test('parseDsn takes a DSN and refuses anything else', () => {
     dsn: DSN,
     key: 'f04dcbeafd74f7a73da598f91d152c1f',
     origin: 'https://kestrel.example.com',
+    envelope: 'https://kestrel.example.com/api/2/envelope/',
   });
   assert.equal(
-    parseDsn('https://f04dcbeafd74f7a73da598f91d152c1f@sentry.example.com/sub/42')?.origin,
-    'https://sentry.example.com'
+    parseDsn('https://f04dcbeafd74f7a73da598f91d152c1f@sentry.example.com/sub/42')?.envelope,
+    'https://sentry.example.com/sub/api/42/envelope/'
   );
   for (const bad of [
     null,

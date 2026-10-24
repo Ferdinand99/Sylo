@@ -11,8 +11,10 @@
 // Usage: log.info('scope', 'message', extraStringOrObject, anErrorMaybe)
 // An Error anywhere in the extra args is unwrapped (its message is appended, and
 // its stack is shown at debug level / carried in JSON). `log.error(...)` also
-// records the event in the /health error history via runtime.recordError.
+// records the event in the /health error history via runtime.recordError, and
+// sends it as an error report when BOT_ERROR_DSN is set (lib/errorReports.js).
 import { recordError } from '../runtime.js';
+import { reportError } from './errorReports.js';
 import { inc } from './metrics.js';
 import { notifyDevLog } from './devLog.js';
 
@@ -75,6 +77,7 @@ function emit(level, scope, msg, args) {
   if (level === 'error') {
     try {
       recordError(err || new Error(message), String(scope));
+      reportError(err || new Error(message), String(scope));
       inc('sylo_errors_total', { scope: String(scope) });
     } catch {
       // runtime module not ready / unavailable — never let logging throw.
