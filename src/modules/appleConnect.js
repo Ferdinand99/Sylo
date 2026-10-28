@@ -16,7 +16,7 @@ import { EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { anySeen, clearScope, markSeen, seen, seenValue } from '../db/postedKeys.js';
-import { createAppStoreConnect } from '../lib/appStoreConnect.js';
+import { createAppStoreConnect, isAppleSideFailure } from '../lib/appStoreConnect.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
 
@@ -345,11 +345,12 @@ export async function fetchSnapshot(client, { appIds = [], maxApps = MAX_APPS, w
 }
 
 /**
- * Log an App Store Connect failure. Apple's own server errors (5xx, already retried once) are
- * an outage on their side, so they are a warning; anything else is ours to look at.
+ * Log an App Store Connect failure. Apple's own side (a 5xx, a timeout or a dropped connection,
+ * all already retried once) is an outage over there, so it is a warning; anything else is ours
+ * to look at.
  */
 function logAppleFailure(message, err) {
-  if (err?.status >= 500) log.warn('apple', message);
+  if (isAppleSideFailure(err)) log.warn('apple', message);
   else log.error('apple', message);
 }
 
@@ -676,10 +677,10 @@ async function tick() {
 }
 
 const timer = setInterval(() => {
-  tick().catch((err) => log.error('apple', 'tick failed:', err.message));
+  tick().catch((err) => logAppleFailure(`tick failed: ${err.message}`, err));
 }, POLL_MS);
 timer.unref();
 setTimeout(
-  () => tick().catch((err) => log.error('apple', 'first tick failed:', err.message)),
+  () => tick().catch((err) => logAppleFailure(`first tick failed: ${err.message}`, err)),
   60_000
 ).unref();

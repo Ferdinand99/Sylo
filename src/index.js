@@ -14,15 +14,14 @@ import { addDevLogSink } from './lib/devLog.js';
 import { addDevLogEntry } from './db/devLogEntries.js';
 import { notifyDevLogEvent } from './lib/push.js';
 import { flushErrorReports, startErrorReports } from './lib/errorReports.js';
+import { logUnhandledRejection } from './lib/discordErrors.js';
 
 /** Set once the HTTP server is listening; used by the shutdown path. */
 let httpServer = null;
 
 // A rejected promise leaves the process in a recoverable state — log it and
 // keep serving. (log.error also records it in the /health error history.)
-process.on('unhandledRejection', (reason) => {
-  log.error('sylo', 'Unhandled promise rejection', reason);
-});
+process.on('unhandledRejection', logUnhandledRejection);
 
 // An uncaught exception may have left the process in an undefined state. Per
 // Node's guidance, do not resume: record it, flush the DB, and exit so the

@@ -6,6 +6,7 @@ import {
   MessageFlags,
   ChannelType,
 } from 'discord.js';
+import { replyWithoutGuild } from '../lib/moderation.js';
 import { getGuildSettings, setModlogChannel } from '../../db/guildSettings.js';
 
 export const data = new SlashCommandBuilder()
@@ -30,6 +31,7 @@ export const data = new SlashCommandBuilder()
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
+  if (await replyWithoutGuild(interaction)) return;
   const sub = interaction.options.getSubcommand();
   const guildId = interaction.guild.id;
 

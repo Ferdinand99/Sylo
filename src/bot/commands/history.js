@@ -7,7 +7,7 @@ import {
   EmbedBuilder,
 } from 'discord.js';
 import { listUserCases } from '../../db/modCases.js';
-import { INFO_COLOR } from '../lib/moderation.js';
+import { INFO_COLOR, replyWithoutGuild } from '../lib/moderation.js';
 
 const PAGE = 8;
 
@@ -37,6 +37,7 @@ export const data = new SlashCommandBuilder()
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
+  if (await replyWithoutGuild(interaction)) return;
   const user = interaction.options.getUser('user', true);
   const asked = interaction.options.getInteger('page') ?? 1;
   const { rows, total } = await listUserCases(interaction.guild.id, user.id, {
