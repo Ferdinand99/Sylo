@@ -1,8 +1,6 @@
-// Registry of module ids with a V2 settings form. Overview links a module's
-// row here when it has an entry, and to V1's own config page (each card's
-// `href` from the overview API) otherwise. Every module has one today; add an
-// entry here (and its backend routes in v2Api.js) for a new module. Each form
-// is its own file, loaded the first time its page opens.
+// Registry of module ids with a settings form. Every module has one; add an entry here (and
+// its backend routes in v2Api.js) for a new module. Each form is its own file, loaded the
+// first time its page opens.
 import { lazy } from 'react';
 
 const Afk = lazy(() => import('./Afk.jsx'));

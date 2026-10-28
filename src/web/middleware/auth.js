@@ -412,7 +412,7 @@ function beginOAuth(req, res, provider, { connect }) {
   req.session.oauthPlatform = provider.platform;
   req.session.connect = connect ? provider.platform : undefined;
   // Connecting is started from the account page, so that is where it should end.
-  if (connect) req.session.returnTo = '/v2/account?connected=1';
+  if (connect) req.session.returnTo = '/v2/account';
   res.redirect(provider.authorizeUrl(redirectUri(req, provider), state));
 }
 
@@ -473,9 +473,7 @@ export function mountAuth(app) {
   // What the few server-rendered pages (login, mobile sign-in, errors) use. No database work:
   // the dashboard reads its own data through /api/v2.
   app.use((req, res, next) => {
-    res.locals.authEnabled = config.authEnabled;
     res.locals.syloVersion = BUILD.version;
-    res.locals.user = currentUser(req);
     next();
   });
 

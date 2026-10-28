@@ -56,3 +56,34 @@ test('no V2 build: / still goes to /v2, which answers a plain-text 503 that says
     built = true;
   }
 });
+
+test('starting the web server without a V2 build logs one warning that says how to build it', async () => {
+  const { startWeb } = await import('../src/web/server.js');
+  const { log } = await import('../src/lib/log.js');
+  const warned = [];
+  const original = log.warn;
+  log.warn = (scope, msg) => warned.push([scope, msg]);
+  built = false;
+  let server;
+  try {
+    server = await startWeb(0);
+  } finally {
+    built = true;
+    log.warn = original;
+  }
+  server.close();
+  const mentions = warned.filter(([, msg]) => /npm run build:v2/.test(msg));
+  assert.equal(mentions.length, 1);
+  assert.equal(mentions[0][0], 'web');
+
+  // With the build present there is no such warning.
+  warned.length = 0;
+  log.warn = (scope, msg) => warned.push([scope, msg]);
+  try {
+    const again = await startWeb(0);
+    again.close();
+  } finally {
+    log.warn = original;
+  }
+  assert.equal(warned.filter(([, msg]) => /build:v2/.test(msg)).length, 0);
+});

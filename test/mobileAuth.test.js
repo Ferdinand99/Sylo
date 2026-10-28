@@ -110,7 +110,7 @@ test('owner-only modules: the operator token gets in, an admin token does not', 
 });
 
 test('a token only works on the API, not on the HTML dashboard', async () => {
-  const res = await call(`/guilds/${D_GUILD}/m/afk`, ownerToken, { headers: { accept: 'text/html' } });
+  const res = await call(`/v2/guilds/${D_GUILD}/m/afk`, ownerToken, { headers: { accept: 'text/html' } });
   assert.equal(res.status, 302, 'treated as not signed in');
   assert.match(res.headers.get('location'), /\/auth\//);
 });

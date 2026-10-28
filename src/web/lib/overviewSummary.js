@@ -82,11 +82,11 @@ function channelName(guild, id) {
 /**
  * Build the whole overview view-model for a guild.
  * @param {import('discord.js').Guild} guild
- * @param {{ owner?: boolean, v2?: boolean }} [viewer]  a non-owner never sees an owner-only module's
- *   card; `v2` makes every card's `href` an address in the new dashboard (/v2/...) instead of the
- *   classic page, for the new dashboard and the Sylo app (the classic overview keeps classic links).
+ * @param {{ owner?: boolean }} [viewer]  a non-owner never sees an owner-only module's card.
+ *   Every card's `href` is an address in the dashboard (/v2/...), for the web dashboard and the
+ *   Sylo app.
  */
-export async function buildOverview(guild, { owner = true, v2 = false } = {}) {
+export async function buildOverview(guild, { owner = true } = {}) {
   const settings = await getGuildSettings(guild.id);
   const state = new Map((await getGuildModules(guild.id)).map((m) => [m.id, m]));
 
@@ -101,9 +101,7 @@ export async function buildOverview(guild, { owner = true, v2 = false } = {}) {
               .filter((id) => owner || !getModule(id)?.ownerOnly)
               .map((id) => buildCard(id, guild, settings, state))
           )
-        )
-          .filter(Boolean)
-          .map((card) => (v2 ? { ...card, href: v2CardHref(card.id, guild.id) } : card)),
+        ).filter(Boolean),
       }))
     ),
   };
@@ -180,12 +178,7 @@ async function buildCard(id, guild, settings, state) {
     beta: Boolean(def.beta),
     missingIntents: missing,
     status: missing.length ? 'blocked' : enabled ? 'on' : 'off',
-    href:
-      id === 'insights'
-        ? `/guilds/${guild.id}/insights`
-        : id === 'moderation'
-          ? `/guilds/${guild.id}/m/moderation`
-          : `/guilds/${guild.id}/m/${id}`,
+    href: v2CardHref(id, guild.id),
     lines: await moduleLines(id, guild, row?.config ?? {}),
   };
 }
@@ -477,7 +470,7 @@ function generalCard(guild, settings) {
     enabled: null,
     missingIntents: [],
     status: 'link',
-    href: `/guilds/${guild.id}/settings`,
+    href: v2CardHref('general', guild.id),
     lines: [modlog ? on('Mod-log channel', `#${modlog}`) : off('Mod-log channel', 'not set')],
   };
 }
@@ -499,7 +492,7 @@ async function commandsCard(guild) {
     enabled: null,
     missingIntents: [],
     status: 'link',
-    href: `/guilds/${guild.id}/commands`,
+    href: v2CardHref('commands', guild.id),
     lines: [
       on('Available', String(total)),
       disabled ? off('Disabled here', String(disabled)) : neutral('Disabled here', '0'),
@@ -520,7 +513,7 @@ async function messagesCard(guild) {
     enabled: null,
     missingIntents: [],
     status: 'link',
-    href: `/guilds/${guild.id}/messages`,
+    href: v2CardHref('messages', guild.id),
     lines: [n ? on('Saved embeds', String(n)) : neutral('Saved embeds', 'none')],
   };
 }

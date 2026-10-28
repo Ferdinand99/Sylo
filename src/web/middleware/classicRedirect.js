@@ -2,9 +2,11 @@
 //
 // The classic dashboard is gone (Sylo 5.0), but links in Discord messages, bookmarks and docs still
 // point at its addresses (/guilds/<key>/tickets/5, /account, /health ...), so a browser visit to one
-// of them is sent to the same page under /v2 with a 301. Only plain browser page visits are
-// redirected: never a POST, a JSON/API caller, a monitor reading /health, or a download. Those get
-// the 404 an unknown address gets.
+// of them is sent to the same page under /v2 with a 301. Every GET and HEAD is redirected, whatever
+// its Accept header says (curl -L, link unfurlers and crawlers follow these links too). Never a
+// POST (it gets the 404 an unknown address gets), and not the downloads and fragments that have no
+// page of their own (they are not in the table). The one exception is /health: monitors and the
+// Docker healthcheck read its JSON, so only a request that asks for text/html by name moves.
 
 // A server's key in a URL: a Discord id, or `fluxer:<id>` (the colon may arrive as %3A).
 const KEY = '((?:fluxer:)?\\d{17,20})';
@@ -19,13 +21,16 @@ const MODULE_ITEM = '(?:r|s|w|hub|rr|sb|cmd)';
  * The mapping table: old path -> path in the dashboard (under /v2).
  * Each entry matches a whole path, case-insensitively, with or without a trailing slash.
  * `to` receives the regex match (key = match[1] for server pages) and returns the new path.
- * @type {Array<{ from: string, pattern: RegExp, to: (m: RegExpExecArray) => string, query?: string[] }>}
+ * `browserOnly` rows move only for a request that names text/html (see isBrowserPageVisit).
+ * @type {Array<{ from: string, pattern: RegExp, to: (m: RegExpExecArray) => string, query?: string[], browserOnly?: boolean }>}
  */
 export const CLASSIC_REDIRECTS = [
+  // The server list: the dashboard's home picks the server.
+  { from: '/guilds', to: () => '' },
   // Pages that are not tied to a server.
   { from: '/account', to: () => '/account' },
   { from: '/settings', to: () => '/settings' },
-  { from: '/health', to: () => '/health' },
+  { from: '/health', to: () => '/health', browserOnly: true },
   { from: '/stats', to: () => '/stats' },
   { from: '/commands', to: () => '/commands' },
   { from: '/roadmap', to: () => '/roadmap' },
@@ -72,19 +77,19 @@ function patternFor(from) {
 }
 
 /**
- * The dashboard address for an old page address, or null when the page has no counterpart (a
- * form post target, an unknown address).
+ * The table row and dashboard address for an old page address, or null when the page has no
+ * counterpart (a form post target, an unknown address).
  * @param {string} rawPath the request path as received (may carry %3A for the colon of a Fluxer key)
  * @param {Record<string, unknown>} [query]
  */
-export function v2PathFor(rawPath, query = {}) {
+function resolve(rawPath, query = {}) {
   let path;
   try {
     path = decodeURIComponent(rawPath);
   } catch {
     return null;
   }
-  for (const { pattern, to, query: keep = [] } of CLASSIC_REDIRECTS) {
+  for (const { pattern, to, query: keep = [], browserOnly = false } of CLASSIC_REDIRECTS) {
     const m = pattern.exec(path);
     if (!m) continue;
     // Keys and module ids are canonical in lower case; the dashboard's routes are case-sensitive.
@@ -94,9 +99,14 @@ export function v2PathFor(rawPath, query = {}) {
       if (typeof query[name] === 'string' && query[name]) params.set(name, query[name]);
     }
     const qs = params.toString();
-    return qs ? `${target}?${qs}` : target;
+    return { target: qs ? `${target}?${qs}` : target, browserOnly };
   }
   return null;
+}
+
+/** The dashboard address for an old page address, or null (see resolve). */
+export function v2PathFor(rawPath, query = {}) {
+  return resolve(rawPath, query)?.target ?? null;
 }
 
 /**
@@ -116,8 +126,9 @@ export function isBrowserPageVisit(req) {
 
 /** @type {import('express').RequestHandler} */
 export function classicRedirect(req, res, next) {
-  if (!isBrowserPageVisit(req)) return next();
-  const target = v2PathFor(req.path, req.query);
-  if (!target) return next();
-  return res.redirect(301, target);
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const hit = resolve(req.path, req.query);
+  if (!hit) return next();
+  if (hit.browserOnly && !isBrowserPageVisit(req)) return next();
+  return res.redirect(301, hit.target);
 }

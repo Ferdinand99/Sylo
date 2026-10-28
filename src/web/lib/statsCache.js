@@ -1,5 +1,5 @@
-// The cached game-stats lookups as the operators' "Cached stats" view shows them. Shared by the
-// classic /stats page and the new dashboard's /api/v2/stats. Read-only: never triggers a live API call.
+// The cached game-stats lookups as the operators' "Cached stats" view shows them
+// (/api/v2/stats). Read-only: never triggers a live API call.
 import { config } from '../../config.js';
 import { listCached } from '../../db/cache.js';
 import { timeAgo } from './format.js';

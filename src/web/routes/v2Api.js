@@ -348,19 +348,13 @@ router.get('/csrf', (req, res) => {
   res.json({ token: req.session?.csrf ?? null });
 });
 
-// Mirrors the loadGuild + requireGuildAdmin pair guilds.js uses for every
-// /:guildId route (guilds.js:221-231) — can't import loadGuild directly,
-// it's a private, unexported function in that file, so this is the same
-// three lines reimplemented for JSON instead of the `guild-missing` view.
+// Looks the server up for every /guilds/:guildId route and answers a JSON 404 when the bot
+// does not have it.
 function loadGuildJson(req, res, next) {
   req.guild = getGuild(req);
   if (!req.guild) return res.status(404).json({ error: 'Unknown or unavailable server' });
   next();
 }
-// Note: requireGuildAdmin's failure paths render V1's HTML error/login
-// pages, not JSON (it's shared, unmodified V1 code) — the web-v2 fetch
-// wrapper checks response.ok/content-type before parsing JSON and falls
-// back to a plain "log in" / "no access" state rather than crashing on it.
 // Tickets go before the admin guard: members with a configured staff role may use
 // them without being server admins (ticketsRouter does its own access check).
 router.use('/guilds/:guildId/tickets', ticketsRouter);
@@ -386,7 +380,7 @@ router.get(
     // — reused wholesale rather than re-deriving the same grouping here.
     const [{ guild, openTickets, openAppeals }, { groups }] = await Promise.all([
       baseContext(req.guild, 'overview'),
-      buildOverview(req.guild, { owner: isOwner(req), v2: true }),
+      buildOverview(req.guild, { owner: isOwner(req) }),
     ]);
     res.json({ guild, openTickets, openAppeals, groups });
   })

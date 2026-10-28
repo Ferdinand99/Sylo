@@ -26,10 +26,9 @@ const v2Csrf = async (b) => (await (await b.get('/api/v2/csrf')).json()).token;
 
 // --- connecting a platform ----------------------------------------------------------
 
-test('the account page asks you to sign in first', async () => {
-  const res = await browser().get('/account');
-  assert.equal(res.status, 302);
-  assert.equal(res.headers.get('location'), '/auth/login');
+test('the account API asks you to sign in first', async () => {
+  const res = await browser().get('/api/v2/account');
+  assert.equal(res.status, 401);
 });
 
 test('connecting from the account page returns to it', async () => {
@@ -38,7 +37,7 @@ test('connecting from the account page returns to it', async () => {
   await signIn(b, 'discord');
   const done = await signIn(b, 'fluxer', { connect: true });
   assert.equal(done.status, 302);
-  assert.equal(done.headers.get('location'), '/v2/account?connected=1');
+  assert.equal(done.headers.get('location'), '/v2/account');
   const { body } = await v2Json(b, '/api/v2/account');
   const by = Object.fromEntries(body.platforms.map((p) => [p.platform, p]));
   assert.equal(by.fluxer.connected, true);
@@ -85,6 +84,26 @@ test('POST /api/v2/account/disconnect/:platform unlinks with the CSRF header, an
   });
   assert.equal(last.status, 409);
   assert.ok(await findIdentity('discord', profiles.discord.id));
+});
+
+test('a POST whose only CSRF proof is a _csrf body field is refused', async () => {
+  setProfiles();
+  const b = browser();
+  await signIn(b, 'discord');
+  await signIn(b, 'fluxer', { connect: true });
+  const token = await v2Csrf(b);
+  for (const [type, body] of [
+    ['application/x-www-form-urlencoded', new URLSearchParams({ _csrf: token }).toString()],
+    ['application/json', JSON.stringify({ _csrf: token })],
+  ]) {
+    const res = await b.get('/api/v2/account/disconnect/fluxer', {
+      method: 'POST',
+      headers: { 'content-type': type },
+      body,
+    });
+    assert.equal(res.status, 403, type);
+  }
+  assert.ok(await findIdentity('fluxer', profiles.fluxer.id), 'nothing was disconnected');
 });
 
 test('the V2 guild list carries each server platform', async () => {

@@ -1,10 +1,13 @@
 // Old dashboard addresses open the matching page in the dashboard (/v2) with a permanent redirect,
-// for browser page visits only. Everything else gets the 404 an unknown address gets.
+// for every GET and HEAD whatever its Accept header says (curl -L, link unfurlers, bots). A POST
+// gets the 404 an unknown address gets. /health is the one exception: monitors read its JSON, so
+// only a request that names text/html moves.
 import { D_GUILD, F_GUILD, browser, setProfiles, signIn, startOAuthApp } from './helpers/oauthApp.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { v2Build } from '../src/web/routes/v2Client.js';
+import { MODULES } from '../src/modules/registry.js';
 import { CLASSIC_REDIRECTS, v2PathFor } from '../src/web/middleware/classicRedirect.js';
 
 await startOAuthApp();
@@ -20,6 +23,8 @@ const FLUXER = `fluxer:${F_GUILD}`;
 
 // [classic address, address in the new dashboard]
 const TABLE = [
+  ['/guilds', '/v2'],
+  ['/guilds/', '/v2'],
   ['/account', '/v2/account'],
   ['/settings', '/v2/settings'],
   ['/health', '/v2/health'],
@@ -106,9 +111,26 @@ test('every target in the mapping table is a real route of the new dashboard', (
     );
   for (const [, to] of TABLE) {
     const path = to.replace(/^\/v2/, '');
+    if (path === '') continue; // /v2 itself: the dashboard home
     assert.ok(matches(path), `${to} is a route in App.jsx`);
   }
   assert.equal(v2PathFor('/guilds/not-a-key'), null);
+});
+
+test('the moderation tabs and module pages the table points at exist in the dashboard', () => {
+  const hub = readFileSync(new URL('../web-v2/src/pages/ModerationHub.jsx', import.meta.url), 'utf8');
+  const tabs = [...hub.matchAll(/^\s*\['(\w+)', '[^']+', (?:null|'[\w-]+')\],?$/gm)].map((m) => m[1]);
+  assert.ok(
+    tabs.includes('infractions') && tabs.includes('commands'),
+    `found the TABS in ModerationHub: ${tabs}`
+  );
+  const ids = new Set(MODULES.map((m) => m.id));
+  for (const [, to] of TABLE) {
+    const tab = /\/moderation\/(\w+)$/.exec(to)?.[1];
+    if (tab) assert.ok(tabs.includes(tab), `${to}: no such moderation tab`);
+    const module = /\/m\/([\w-]+)$/.exec(to)?.[1];
+    if (module) assert.ok(ids.has(module), `${to}: no such module`);
+  }
 });
 
 test('member data keeps ?user=, and drops the classic page flash messages', async () => {
@@ -135,23 +157,36 @@ test('addresses with no page of their own are not redirected', async () => {
   }
 });
 
-test('only browser GET page visits move: not POST, JSON, catch-all or app requests (they get a 404)', async () => {
+test('every GET and HEAD moves, whatever the Accept header says; a POST gets a 404', async () => {
   setProfiles();
   const b = browser();
   await signIn(b, 'discord');
   const path = `/guilds/${D_GUILD}/settings`;
-  assert.ok(toV2(await b.get(path, { headers: html })));
-  const notFound = async (init) => {
-    const res = await b.get(path, init);
-    assert.equal(res.status, 404, JSON.stringify(init.headers));
-  };
+  const target = `/v2/guilds/${D_GUILD}/settings`;
+  const headers = [
+    html,
+    { accept: 'application/json' },
+    { accept: 'application/json, text/html;q=0.5' },
+    { accept: '*/*' },
+    { ...html, authorization: 'Bearer not-a-token' },
+    {},
+  ];
+  for (const h of headers) {
+    for (const method of ['GET', 'HEAD']) {
+      const res = await b.get(path, { method, headers: h });
+      assert.equal(res.status, 301, `${method} ${JSON.stringify(h)}`);
+      assert.equal(location(res), target);
+    }
+  }
   const { token } = await (await b.get('/api/v2/csrf')).json();
-  await notFound({ method: 'POST', headers: { ...html, 'x-csrf-token': token }, body: '' });
-  await notFound({ headers: { accept: 'application/json' } });
-  await notFound({ headers: { accept: 'application/json, text/html;q=0.5' } });
-  await notFound({ headers: { accept: '*/*' } });
-  await notFound({ headers: { ...html, authorization: 'Bearer not-a-token' } });
-  await notFound({ headers: {} });
+  const post = await b.get(path, { method: 'POST', headers: { ...html, 'x-csrf-token': token }, body: '' });
+  assert.equal(post.status, 404);
+});
+
+test('a signed-out curl -L of the public /roadmap link reaches the dashboard board', async () => {
+  const res = await browser().get('/roadmap', { headers: { accept: '*/*' } });
+  assert.equal(res.status, 301);
+  assert.equal(location(res), '/v2/roadmap');
 });
 
 test('/health: the JSON for monitors is unchanged, the HTML page moves', async () => {
@@ -169,11 +204,12 @@ test('/health: the JSON for monitors is unchanged, the HTML page moves', async (
   assert.equal(location(page), '/v2/health');
 });
 
-test('?classic=1 does nothing any more: the redirects stay on', async () => {
+test('?classic=1 does nothing any more: it goes to /v2 and the redirects stay on', async () => {
   setProfiles();
   const b = browser();
   await signIn(b, 'discord');
-  await b.get('/?classic=1', { headers: html });
+  const home = await b.get('/?classic=1', { headers: html });
+  assert.equal(location(home), '/v2');
   assert.ok(toV2(await b.get(`/guilds/${D_GUILD}/settings`, { headers: html })));
 });
 
@@ -187,13 +223,20 @@ test('the redirects do not depend on the dashboard being built', async () => {
   }
 });
 
-test('a browser behind HTTP basic auth still gets the new dashboard; only a bearer token is an app', async () => {
+test('a browser behind HTTP basic auth, or a client with an Authorization header, still moves', async () => {
   const b = browser();
   const path = `/guilds/${D_GUILD}/settings`;
   const basic = { ...html, authorization: `Basic ${Buffer.from('user:pass').toString('base64')}` };
   assert.ok(toV2(await b.get(path, { headers: basic })), 'basic auth is a person');
   for (const scheme of ['Bearer', 'bearer', 'BEARER']) {
     const res = await b.get(path, { headers: { ...html, authorization: `${scheme} not-a-token` } });
-    assert.ok(!toV2(res), scheme);
+    assert.ok(toV2(res), scheme);
   }
+});
+
+test('/health keeps answering JSON to a bearer-token or catch-all caller', async () => {
+  const b = browser();
+  const res = await b.get('/health', { headers: { accept: '*/*', authorization: 'Bearer not-a-token' } });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /application[/]json/);
 });

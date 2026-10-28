@@ -46,19 +46,12 @@ test('buildOverview returns health + grouped cards covering every module', async
   assert.ok(automod.lines.some((l) => l.label === 'Active filters'));
 });
 
-test('card links are classic pages by default and new-dashboard pages with { v2: true }', async () => {
-  const hrefs = async (opts) =>
-    Object.fromEntries(
-      (await buildOverview(stubGuild(G), opts)).groups.flatMap((g) => g.cards.map((c) => [c.id, c.href]))
-    );
-  const classic = await hrefs();
-  assert.equal(classic.general, `/guilds/${G}/settings`);
-  assert.equal(classic.welcome, `/guilds/${G}/m/welcome`);
-  assert.equal(classic.insights, `/guilds/${G}/insights`);
-
-  const v2 = await hrefs({ v2: true });
+test('every card links to its page in the dashboard (/v2)', async () => {
+  const hrefs = Object.fromEntries(
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards.map((c) => [c.id, c.href]))
+  );
   assert.deepEqual(
-    [v2.general, v2.commands, v2.messages, v2.insights, v2.welcome, v2.moderation],
+    [hrefs.general, hrefs.commands, hrefs.messages, hrefs.insights, hrefs.welcome, hrefs.moderation],
     [
       `/v2/guilds/${G}/settings`,
       `/v2/guilds/${G}/moderation/commands`,
@@ -68,4 +61,5 @@ test('card links are classic pages by default and new-dashboard pages with { v2:
       `/v2/guilds/${G}/m/moderation`,
     ]
   );
+  for (const [id, href] of Object.entries(hrefs)) assert.ok(href.startsWith(`/v2/guilds/${G}/`), id);
 });

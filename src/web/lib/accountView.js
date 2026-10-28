@@ -1,5 +1,4 @@
-// The account page's view-model, shared by the classic page (routes/account.js) and the
-// V2 API (routes/v2Api.js).
+// The account page's view-model, served by the V2 API (routes/v2Api.js).
 import { identityFor } from './accountAuth.js';
 import { providers } from './oauthProviders.js';
 import { listApiTokens } from '../../db/apiTokens.js';

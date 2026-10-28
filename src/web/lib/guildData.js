@@ -1,7 +1,5 @@
-// Server-data tools shared by the classic dashboard (routes/guilds.js) and the new one
-// (routes/v2GuildData.js): the config export, the member-data lookup and the "forget a
-// member" erasure with its confirmation DM. One copy, so both dashboards delete, tell the
-// member and log exactly the same thing.
+// Server-data tools for the dashboard (routes/v2GuildData.js): the config export, the
+// member-data lookup and the "forget a member" erasure with its confirmation DM.
 import { EmbedBuilder } from 'discord.js';
 import { clientOfGuild } from '../../platform/platformOf.js';
 import { getModule } from '../../modules/registry.js';

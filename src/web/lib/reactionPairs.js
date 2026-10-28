@@ -1,5 +1,5 @@
-// Turns the role rows of a reaction-role form into the stored pairs, with the same checks and
-// wording for the classic builder and the new dashboard's.
+// Turns the role rows of a reaction-role form into the stored pairs, with the checks and
+// error wording the dashboard shows.
 import { MAX_REACTION_PAIRS } from './idList.js';
 import { parseEmoji } from '../../modules/roles.js';
 

@@ -17,7 +17,7 @@ test.before(async () => {
 });
 test.after(() => web.close());
 
-const get = (path, headers) => fetch(web.base + path, { redirect: 'manual', headers });
+const get = (path) => fetch(web.base + path, { redirect: 'manual' });
 
 test('public.css, theme.js and the font are served from the same origin', async () => {
   const css = await get('/public.css');
@@ -74,7 +74,7 @@ test('the error page from the server error handler is plain in open mode too', a
 
 test('/roadmap/posts.json is untouched and /roadmap moved for good', async () => {
   assert.equal((await get('/roadmap/posts.json')).status, 200);
-  const moved = await get('/roadmap', { accept: 'text/html' });
+  const moved = await get('/roadmap');
   assert.equal(moved.status, 301);
   assert.equal(moved.headers.get('location'), '/v2/roadmap');
 });

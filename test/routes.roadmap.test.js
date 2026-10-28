@@ -16,18 +16,17 @@ test('GET /roadmap/posts.json is public and starts empty', async () => {
   assert.deepEqual(await res.json(), []);
 });
 
-test('a browser visit to /roadmap is a permanent redirect to the dashboard board; others get a 404', async () => {
-  const res = await get('/roadmap', { accept: 'text/html' });
+test('GET /roadmap is a permanent redirect to the dashboard board, whatever the Accept header says', async () => {
+  const res = await get('/roadmap');
   assert.equal(res.status, 301);
   assert.equal(res.headers.get('location'), '/v2/roadmap');
-  const admin = await get('/roadmap/admin', { accept: 'text/html' });
+  const admin = await get('/roadmap/admin');
   assert.equal(admin.status, 301);
   assert.equal(admin.headers.get('location'), '/v2/roadmap/admin');
-  assert.equal((await get('/roadmap', { accept: 'application/json' })).status, 404);
+  assert.equal((await get('/roadmap', { accept: 'application/json' })).status, 301);
 });
 
 test('the classic roadmap vote, suggest and admin routes are gone', async () => {
-  assert.equal((await get('/roadmap/admin')).status, 404);
   assert.equal(
     (await post(app.base, '/roadmap/suggest', { title: 'Idea', description: 'desc' })).status,
     404
