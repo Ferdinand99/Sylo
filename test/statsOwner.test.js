@@ -3,8 +3,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { D_GUILD, browser, setProfiles, signIn, startOAuthApp } from './helpers/oauthApp.js';
+import { v2Build } from '../src/web/routes/v2Client.js';
 
 await startOAuthApp();
+
+// These tests are about the classic dashboard's own pages and access rules: keep the old addresses
+// from moving to /v2 (classicRedirect.test.js covers the redirects), whether or not web-v2 is built.
+v2Build.exists = () => false;
 
 test('/stats is for operators only', async () => {
   setProfiles();

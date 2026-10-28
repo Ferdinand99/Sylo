@@ -13,6 +13,7 @@ import { log } from '../lib/log.js';
 import { mountAuth, requireAuth, requireOwner } from './middleware/auth.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { csrf } from './middleware/csrf.js';
+import { classicRedirect } from './middleware/classicRedirect.js';
 import { platformCommands } from './middleware/platformCommands.js';
 import { ownerOnlyModules } from './middleware/ownerOnlyModules.js';
 import { mobileApiRouter, mobileAuthRouter } from './routes/mobile.js';
@@ -183,6 +184,11 @@ export function createApp() {
   if (config.apnsEnabled) {
     app.use('/api/push-relay/v1', createPushRelayRouter({ apns: defaultApnsClient() }));
   }
+
+  // Old dashboard addresses (/account, /health, /guilds/<key>/tickets/5 ...) open the matching page
+  // in the new dashboard. Ahead of the public /health route: only a browser visit (Accept: text/html)
+  // moves, the JSON for monitors stays. Skipped for anyone who chose the classic dashboard.
+  app.use(classicRedirect);
 
   // Public routes: healthcheck, metrics, the shareable leaderboard, and member
   // verification.
