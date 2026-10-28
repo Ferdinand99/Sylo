@@ -34,7 +34,10 @@ test('removing a starboard also forgets the posts it made, and leaves the other 
   await upsertStarboardEntry(entry('222'));
 
   const { api } = await adminApi();
-  const res = await api('/modules/starboard/config', { boards: [board({ id: '222' })] });
+  const res = await api('/modules/starboard/config', {
+    boards: [board({ id: '222' })],
+    removedBoardIds: ['111'],
+  });
   assert.equal(res.status, 200);
 
   assert.equal(await getStarboardEntry(D_GUILD, '111', 'msg-111'), null);

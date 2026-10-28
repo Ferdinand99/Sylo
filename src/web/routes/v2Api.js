@@ -1358,13 +1358,19 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/starboard/config',
   asyncHandler(async (req, res) => {
+    // Never guess from absence: a save with no board list must not read as "remove every board".
+    if (!Array.isArray(req.body.boards)) return res.status(400).json({ error: 'boards must be a list' });
     const config = normaliseStarboard({ boards: withRowIds(req.body.boards) });
     const prev = normaliseStarboard((await getGuildModule(req.guild.id, 'starboard')).config);
     await setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
-    // A removed board takes the record of its starboard posts with it, like the classic delete.
+    // A board the person removed takes the record of its starboard posts with it, like the classic
+    // delete — but only when the form names it in `removedBoardIds`, and never for a board that is
+    // still in the saved list. A board that merely went missing from the list (a stale tab) keeps
+    // its records.
     const kept = new Set(config.boards.map((b) => b.id));
-    for (const board of prev.boards) {
-      if (!kept.has(board.id)) await deleteBoardEntries(req.guild.id, board.id);
+    const removed = Array.isArray(req.body.removedBoardIds) ? req.body.removedBoardIds : [];
+    for (const id of new Set(removed.filter((x) => typeof x === 'string' && x !== ''))) {
+      if (!kept.has(id)) await deleteBoardEntries(req.guild.id, id);
     }
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
