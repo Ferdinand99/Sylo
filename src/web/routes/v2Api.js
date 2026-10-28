@@ -34,6 +34,7 @@ import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { idList, MAX_REACTION_MESSAGES } from '../lib/idList.js';
 import { buildReactionPairs } from '../lib/reactionPairs.js';
 import { guildCustomEmojis } from '../lib/guildEmojis.js';
+import { withRowIds } from '../lib/rowIds.js';
 import { shouldSaveBotMasters } from '../lib/botMasters.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
@@ -135,6 +136,7 @@ import {
 } from '../../modules/youtubeAlerts.js';
 import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TPL, FEED_TYPES } from '../../modules/rss.js';
 import { clearScope } from '../../db/postedKeys.js';
+import { deleteBoardEntries } from '../../db/starboard.js';
 import { dailySeries, hourlySeries, topChannels, topVoiceChannels } from '../../db/insights.js';
 import { flushGuild as flushGuildInsights } from '../../modules/insights.js';
 import { recentLookups } from '../../db/cache.js';
@@ -1310,7 +1312,7 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/temp-voice/config',
   asyncHandler(async (req, res) => {
-    const config = normaliseTempVoiceConfig({ hubs: req.body.hubs });
+    const config = normaliseTempVoiceConfig({ hubs: withRowIds(req.body.hubs) });
     await setGuildModule(req.guild.id, 'temp-voice', { enabled: true, config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -1355,9 +1357,14 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/starboard/config',
   asyncHandler(async (req, res) => {
-    const config = normaliseStarboard({ boards: req.body.boards });
+    const config = normaliseStarboard({ boards: withRowIds(req.body.boards) });
     const prev = normaliseStarboard((await getGuildModule(req.guild.id, 'starboard')).config);
     await setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
+    // A removed board takes the record of its starboard posts with it, like the classic delete.
+    const kept = new Set(config.boards.map((b) => b.id));
+    for (const board of prev.boards) {
+      if (!kept.has(board.id)) await deleteBoardEntries(req.guild.id, board.id);
+    }
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:starboard',
