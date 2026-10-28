@@ -167,7 +167,12 @@ export const importBackup = (file) =>
     body: file,
   });
 
-export const getRoadmap = () => apiFetch('/api/v2/roadmap');
+// Read without signing in: the public pages (command list, roadmap) use these, so a visitor
+// without a session never calls an endpoint that answers 401. The roadmap view carries the
+// signed-in person's own votes when there is a session.
+export const getPublicSession = () => apiFetch('/api/v2/public/session');
+export const getPublicCommands = () => apiFetch('/api/v2/public/commands');
+export const getRoadmap = () => apiFetch('/api/v2/public/roadmap');
 export const voteRoadmapPost = (id) => postJson(`/api/v2/roadmap/${id}/vote`, {});
 export const suggestRoadmapPost = (title, description) =>
   postJson('/api/v2/roadmap/suggest', { title, description });

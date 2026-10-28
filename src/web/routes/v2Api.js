@@ -40,19 +40,18 @@ import {
   ROADMAP_STATUSES,
   listPublicPosts,
   listPendingPosts,
-  listUserPending,
   createPost as createRoadmapPost,
   setPostStatus as setRoadmapPostStatus,
   updatePost as updateRoadmapPost,
   deletePost as deleteRoadmapPost,
   toggleVote as toggleRoadmapVote,
   getPost as getRoadmapPost,
-  groupPublicPosts,
   cleanTitle as cleanRoadmapTitle,
   cleanDescription as cleanRoadmapDescription,
 } from '../../db/roadmap.js';
 import { mdToHtml } from '../lib/markdown.js';
-import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } from './roadmap.js';
+import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } from '../lib/roadmapLimits.js';
+import { roadmapView } from '../lib/roadmapView.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '../../modules/leveling.js';
 import { levelFromXp } from '../../modules/lib/levels.js';
@@ -2470,32 +2469,20 @@ router.post(
 
 // --- Roadmap (mirrors src/web/routes/roadmap.js's V1 pages in full — bot-
 // wide, not per-guild, same as Health/Personalizer above. The vote/suggest
-// rate limiters are the *same* instances V1 uses (imported from roadmap.js,
+// rate limiters are the *same* instances V1 uses (src/web/lib/roadmapLimits.js,
 // not re-created here) so a user can't double their effective limit by
-// switching between the V1 and V2 UI.)
+// switching between the V1 and V2 UI. The public read-only list is
+// GET /api/v2/public/roadmap (v2Public.js); this one returns the same view.)
 
 function withRoadmapHtml(p) {
   return { ...p, descriptionHtml: mdToHtml(p.description) };
-}
-function roadmapGroupsWithHtml(posts) {
-  const groups = groupPublicPosts(posts);
-  for (const list of Object.values(groups)) {
-    for (const p of list) p.descriptionHtml = mdToHtml(p.description);
-  }
-  return groups;
 }
 
 router.get(
   '/roadmap',
   asyncHandler(async (req, res) => {
     const userId = sessionUserId(req);
-    const posts = await listPublicPosts(userId);
-    const mine = userId ? await listUserPending(userId) : [];
-    res.json({
-      groups: roadmapGroupsWithHtml(posts),
-      mine: mine.map((p) => ({ ...withRoadmapHtml(p), ago: timeAgo(p.createdAt) })),
-      isOwner: userId ? isOwner(req) : false,
-    });
+    res.json(await roadmapView({ userId, owner: userId ? isOwner(req) : false }));
   })
 );
 

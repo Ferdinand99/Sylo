@@ -17,6 +17,7 @@ const Personalizer = lazy(() => import('./pages/Personalizer.jsx'));
 const Account = lazy(() => import('./pages/Account.jsx'));
 const Health = lazy(() => import('./pages/Health.jsx'));
 const Stats = lazy(() => import('./pages/Stats.jsx'));
+const CommandList = lazy(() => import('./pages/CommandList.jsx'));
 const Roadmap = lazy(() => import('./pages/Roadmap.jsx'));
 const RoadmapAdmin = lazy(() => import('./pages/RoadmapAdmin.jsx'));
 const ModulePage = lazy(() => import('./pages/ModulePage.jsx'));
@@ -66,6 +67,7 @@ const router = createBrowserRouter(
         <Route path="guilds/:guildId/moderation/:tab?" element={<ModerationHub />} />
         <Route path="account" element={<Account />} />
         <Route path="settings" element={<Personalizer />} />
+        <Route path="commands" element={<CommandList />} />
         <Route path="roadmap" element={<Roadmap />} />
         <Route path="changelog" element={<Changelog />} />
         <Route path="roadmap/admin" element={<RoadmapAdmin />} />

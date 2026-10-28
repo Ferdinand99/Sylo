@@ -49,6 +49,12 @@ const ICONS = {
     </>
   ),
   flag: <path d="M5 21V4M5 4h12l-2 4 2 4H5" />,
+  terminal: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="m7 10 3 2-3 2M13 15h4" />
+    </>
+  ),
 };
 
 function Icon({ name }) {
@@ -136,6 +142,7 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
     { key: 'appeals', label: 'Appeals', icon: 'flag', path: '/appeals', guild: true, prefix: true },
     { key: 'personalizer', label: 'Bot Personalizer', icon: 'id', path: '/settings' },
     { key: 'settings', label: 'Settings', icon: 'gear', path: '/settings', guild: true },
+    { key: 'command-list', label: 'Command list', icon: 'terminal', path: '/commands' },
     { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', path: '/roadmap' },
     { key: 'health', label: 'Health', icon: 'pulse', path: '/health' },
     { key: 'stats', label: 'Stats', icon: 'chart', path: '/stats' },

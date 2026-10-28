@@ -3095,3 +3095,54 @@ textarea:disabled {
     display: none;
   }
 }
+
+/* Public pages (command list, roadmap) without a session: PublicShell.jsx. */
+.v2-public-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+}
+.v2-public-nav a {
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.v2-public-nav a:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+.v2-public-nav a.active {
+  color: var(--text);
+  background: var(--bg-surface);
+}
+.v2-public-page {
+  margin: 0 auto;
+}
+.v2-login-prompt a {
+  font-weight: 600;
+}
+
+/* Command list: one row per command, its options underneath. */
+.v2-cmdref-list {
+  margin-top: 16px;
+}
+.v2-cmdref .v2-row-main {
+  flex: 1;
+}
+.v2-cmdref-opts {
+  margin: 10px 0 0;
+  display: grid;
+  gap: 6px;
+}
+.v2-cmdref-opts dt {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.v2-cmdref-opts dd {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
