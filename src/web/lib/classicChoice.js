@@ -33,7 +33,10 @@ export function endClassicChoice(req, res) {
  */
 export function isBrowserPageVisit(req) {
   if (req.method !== 'GET') return false;
-  if (req.get('HX-Request') || req.get('Authorization')) return false;
+  if (req.get('HX-Request')) return false;
+  // An app or script sends a bearer token; a browser behind HTTP basic auth (a proxy's
+  // auth_basic) sends `Authorization: Basic` on every page visit and is still a person.
+  if (/^bearer\b/i.test(req.get('Authorization') ?? '')) return false;
   if (!/text\/html/i.test(req.get('Accept') ?? '')) return false;
   return req.accepts(['html', 'json']) === 'html';
 }

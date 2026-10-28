@@ -168,3 +168,14 @@ test('without a V2 build nothing is redirected', async () => {
     built = true;
   }
 });
+
+test('a browser behind HTTP basic auth still gets the new dashboard; only a bearer token is an app', async () => {
+  const b = browser();
+  const path = `/guilds/${D_GUILD}/settings`;
+  const basic = { ...html, authorization: `Basic ${Buffer.from('user:pass').toString('base64')}` };
+  assert.ok(toV2(await b.get(path, { headers: basic })), 'basic auth is a person');
+  for (const scheme of ['Bearer', 'bearer', 'BEARER']) {
+    const res = await b.get(path, { headers: { ...html, authorization: `${scheme} not-a-token` } });
+    assert.ok(!toV2(res), scheme);
+  }
+});
