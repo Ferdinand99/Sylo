@@ -1,13 +1,13 @@
-<%- include('partials/header', { title: 'Sylo — Sign in', noRetireBanner: true }) %>
+<%- include('partials/auth-head', { title: 'Sylo — Sign in' }) %>
 
-<section class="card" style="max-width: 28rem; margin: 3rem auto; text-align: center;">
-  <h2>Sign in to Sylo</h2>
+<section class="card auth-card">
+  <h1 class="auth-title">Sign in to Sylo</h1>
   <p class="muted">Choose the account you manage your servers with. You can connect the other one afterwards.</p>
-  <p style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1.25rem;">
+  <div class="auth-actions">
     <% providers.forEach(function (p) { %>
       <a class="btn" href="<%= p.href %>" hx-boost="false">Log in with <%= p.label %></a>
     <% }); %>
-  </p>
+  </div>
 </section>
 
-<%- include('partials/footer') %>
+<%- include('partials/auth-foot') %>
