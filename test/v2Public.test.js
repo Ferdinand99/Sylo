@@ -253,3 +253,37 @@ test('the public API is rate limited like the classic public pages', async () =>
   const res = await browser().get('/api/v2/public/commands', { headers: json });
   assert.equal(res.headers.get('x-ratelimit-limit'), '60');
 });
+
+test('the public roadmap is private and revalidated, the session answer is never stored', async () => {
+  const roadmap = await browser().get('/api/v2/public/roadmap', { headers: json });
+  assert.equal(roadmap.headers.get('cache-control'), 'private, no-cache');
+  const session = await browser().get('/api/v2/public/session', { headers: json });
+  assert.equal(session.headers.get('cache-control'), 'no-store');
+});
+
+test("a signed-in person's own pending suggestion is in `mine` for them, nobody else", async () => {
+  const MINE = '333333333300000001';
+  const mineTitle = 'My own pending idea';
+  await createPost({ title: mineTitle, description: 'only for me', userId: MINE });
+
+  setProfiles({ discordId: MINE });
+  const owner = browser();
+  await signIn(owner, 'discord');
+  const own = await (await owner.get('/api/v2/public/roadmap', { headers: json })).json();
+  assert.deepEqual(
+    own.mine.map((p) => p.title),
+    [mineTitle]
+  );
+
+  setProfiles({ discordId: '333333333300000002' });
+  const second = browser();
+  await signIn(second, 'discord');
+  for (const [who, b] of [
+    ['a second signed-in person', second],
+    ['a visitor', browser()],
+  ]) {
+    const text = await (await b.get('/api/v2/public/roadmap', { headers: json })).text();
+    assert.deepEqual(JSON.parse(text).mine, [], who);
+    assert.ok(!text.includes(mineTitle), `${who} does not see a pending suggestion`);
+  }
+});
