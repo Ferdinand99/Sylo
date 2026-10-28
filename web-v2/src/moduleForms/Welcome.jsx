@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { welcomeCardPreviewUrl } from '../api.js';
 import ToggleSection from '../components/ToggleSection.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
@@ -86,7 +87,7 @@ export default function Welcome() {
           </div>
           <img
             className="v2-card-preview"
-            src={`/guilds/${guildId}/m/welcome/card-preview?v=${Date.now()}`}
+            src={welcomeCardPreviewUrl(guildId)}
             alt="Welcome image preview"
             loading="lazy"
           />

@@ -1,7 +1,7 @@
-<%- include('partials/header', { title: 'Sylo — Sign in to the app' }) %>
+<%- include('partials/auth-head', { title: 'Sylo — Sign in to the app' }) %>
 
-<section class="card" style="max-width: 28rem; margin: 3rem auto; text-align: center;">
-  <h2>Sign in to the Sylo app?</h2>
+<section class="card auth-card">
+  <h1 class="auth-title">Sign in to the Sylo app?</h1>
   <p>
     The Sylo app on your device will be signed in as <strong><%= name %></strong>
     (<%= platforms.join(' and ') %>) and can manage the same servers you manage here.
@@ -10,12 +10,11 @@
     Only continue if you started this from the Sylo app yourself. You can sign the device out
     again at any time from your account page.
   </p>
-  <form method="POST" action="/auth/mobile/confirm" hx-boost="false"
-        style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1.25rem;">
+  <form method="POST" action="/auth/mobile/confirm" hx-boost="false" class="auth-actions">
     <input type="hidden" name="nonce" value="<%= nonce %>" />
     <button type="submit" class="btn">Allow</button>
     <a class="btn btn-ghost" href="<%= cancelUrl %>" hx-boost="false">Cancel</a>
   </form>
 </section>
 
-<%- include('partials/footer') %>
+<%- include('partials/auth-foot') %>

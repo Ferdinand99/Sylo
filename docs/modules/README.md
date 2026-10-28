@@ -1,7 +1,7 @@
 # Modules
 
 Every Sylo feature is a **module** — toggled and configured per server from the
-dashboard (`/guilds/<id>/m/<module>`), like MEE6 or Dyno plugins. Modules are
+dashboard (`/v2/guilds/<id>/m/<module>`), like MEE6 or Dyno plugins. Modules are
 **off by default** unless noted; enable them on the module's page.
 
 Each page below lists what the module does, the Discord permissions and gateway

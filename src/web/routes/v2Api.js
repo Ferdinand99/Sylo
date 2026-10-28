@@ -31,7 +31,11 @@ import { changelogHandler } from '../lib/changelogFeed.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
 import guildDataRouter from './v2GuildData.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
-import { idList, MAX_REACTION_MESSAGES, MAX_REACTION_PAIRS } from '../lib/idList.js';
+import { idList, MAX_REACTION_MESSAGES } from '../lib/idList.js';
+import { buildReactionPairs } from '../lib/reactionPairs.js';
+import { guildCustomEmojis } from '../lib/guildEmojis.js';
+import { canPostInChannel } from '../lib/modlogChannel.js';
+import { withRowIds } from '../lib/rowIds.js';
 import { shouldSaveBotMasters } from '../lib/botMasters.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
@@ -40,19 +44,18 @@ import {
   ROADMAP_STATUSES,
   listPublicPosts,
   listPendingPosts,
-  listUserPending,
   createPost as createRoadmapPost,
   setPostStatus as setRoadmapPostStatus,
   updatePost as updateRoadmapPost,
   deletePost as deleteRoadmapPost,
   toggleVote as toggleRoadmapVote,
   getPost as getRoadmapPost,
-  groupPublicPosts,
   cleanTitle as cleanRoadmapTitle,
   cleanDescription as cleanRoadmapDescription,
 } from '../../db/roadmap.js';
 import { mdToHtml } from '../lib/markdown.js';
-import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } from './roadmap.js';
+import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } from '../lib/roadmapLimits.js';
+import { roadmapView } from '../lib/roadmapView.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '../../modules/leveling.js';
 import { levelFromXp } from '../../modules/lib/levels.js';
@@ -79,7 +82,7 @@ import {
   createWelcomeChannel,
 } from '../../modules/welcomeChannel.js';
 import { normalisePollsConfig, POLL_PLACEHOLDERS, RESULTS_PLACEHOLDERS } from '../../modules/polls.js';
-import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
+import { publishReactionMessage } from '../../modules/roles.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
 import { normaliseStickyConfig } from '../../modules/sticky.js';
 import {
@@ -134,6 +137,7 @@ import {
 } from '../../modules/youtubeAlerts.js';
 import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TPL, FEED_TYPES } from '../../modules/rss.js';
 import { clearScope } from '../../db/postedKeys.js';
+import { deleteBoardEntries } from '../../db/starboard.js';
 import { dailySeries, hourlySeries, topChannels, topVoiceChannels } from '../../db/insights.js';
 import { flushGuild as flushGuildInsights } from '../../modules/insights.js';
 import { recentLookups } from '../../db/cache.js';
@@ -199,6 +203,8 @@ import {
 import { applyPresence } from '../../bot/lib/presence.js';
 import { config } from '../../config.js';
 import { dashboardStats, moduleUsage } from '../../db/dashboardStats.js';
+import { statsCacheRows } from '../lib/statsCache.js';
+import { sendWelcomeCardPreview } from '../lib/welcomeCardPreview.js';
 import {
   listBackups,
   runBackup,
@@ -207,6 +213,8 @@ import {
   importBuffer,
   restoreFromBackup,
   resolveBackup,
+  openBackup,
+  isBackupName,
   inspectDbFile,
 } from '../../db/backup.js';
 import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
@@ -392,6 +400,9 @@ router.use('/guilds/:guildId', guildDataRouter);
 // what the platform cannot do) and the per-module notes (what behaves differently there).
 router.get('/guilds/:guildId/platform', (req, res) => res.json(platformInfo(req.guild)));
 
+// Custom emojis for the reaction-role emoji picker (the classic dashboard's /guilds/:id/emojis).
+router.get('/guilds/:guildId/emojis', (req, res) => res.json({ custom: guildCustomEmojis(req.guild) }));
+
 router.get(
   '/guilds/:guildId/overview',
   asyncHandler(async (req, res) => {
@@ -401,7 +412,7 @@ router.get(
     // — reused wholesale rather than re-deriving the same grouping here.
     const [{ guild, openTickets, openAppeals }, { groups }] = await Promise.all([
       baseContext(req.guild, 'overview'),
-      buildOverview(req.guild, { owner: isOwner(req) }),
+      buildOverview(req.guild, { owner: isOwner(req), v2: true }),
     ]);
     res.json({ guild, openTickets, openAppeals, groups });
   })
@@ -634,6 +645,12 @@ router.post(
     });
     res.json({ config: { ...config, autoroles: newRoles } });
   })
+);
+
+// A PNG of the welcome image with a sample member and the saved background (same as classic).
+router.get(
+  '/guilds/:guildId/modules/welcome/card-preview',
+  asyncHandler((req, res) => sendWelcomeCardPreview(req.guild, res))
 );
 
 router.get(
@@ -1296,7 +1313,7 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/temp-voice/config',
   asyncHandler(async (req, res) => {
-    const config = normaliseTempVoiceConfig({ hubs: req.body.hubs });
+    const config = normaliseTempVoiceConfig({ hubs: withRowIds(req.body.hubs) });
     await setGuildModule(req.guild.id, 'temp-voice', { enabled: true, config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -1341,9 +1358,20 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/starboard/config',
   asyncHandler(async (req, res) => {
-    const config = normaliseStarboard({ boards: req.body.boards });
+    // Never guess from absence: a save with no board list must not read as "remove every board".
+    if (!Array.isArray(req.body.boards)) return res.status(400).json({ error: 'boards must be a list' });
+    const config = normaliseStarboard({ boards: withRowIds(req.body.boards) });
     const prev = normaliseStarboard((await getGuildModule(req.guild.id, 'starboard')).config);
     await setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
+    // A board the person removed takes the record of its starboard posts with it, like the classic
+    // delete — but only when the form names it in `removedBoardIds`, and never for a board that is
+    // still in the saved list. A board that merely went missing from the list (a stale tab) keeps
+    // its records.
+    const kept = new Set(config.boards.map((b) => b.id));
+    const removed = Array.isArray(req.body.removedBoardIds) ? req.body.removedBoardIds : [];
+    for (const id of new Set(removed.filter((x) => typeof x === 'string' && x !== ''))) {
+      if (!kept.has(id)) await deleteBoardEntries(req.guild.id, id);
+    }
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:starboard',
@@ -1492,8 +1520,9 @@ router.post(
 router.get(
   '/guilds/:guildId/modules/game-stats/config',
   asyncHandler(async (req, res) => {
-    // The cache holds every server's lookups: only operators see them.
+    // The cache holds every server's lookups: only operators see them (and the full view).
     res.json({
+      operator: isOwner(req),
       recent: (isOwner(req) ? await recentLookups(15) : []).map((r) => ({
         game: r.game,
         title: r.title,
@@ -2047,9 +2076,17 @@ router.post(
     );
 
     const channelId = String(req.body.modlogChannelId ?? '').trim();
+    const storedModlog = (await getGuildSettings(guild.id))?.modlog_channel_id ?? '';
     if (channelId === '') {
       await setModlogChannel(guild.id, null);
+    } else if (channelId === storedModlog) {
+      // Unchanged: leave it as it is, so the other settings still save when the bot lost access to it.
     } else if (guildTextChannels(guild).some((c) => c.id === channelId)) {
+      if (!canPostInChannel(guild, channelId)) {
+        return res
+          .status(400)
+          .json({ error: 'Sylo needs View Channel, Send Messages and Embed Links in that channel.' });
+      }
       await setModlogChannel(guild.id, channelId);
     } else {
       return res.status(400).json({ error: 'Unknown channel' });
@@ -2291,9 +2328,8 @@ router.post(
 // --- Health (mirrors health.js's owner-only HTML page in full — status,
 // stats, module adoption, error log, dev-log test, and backups
 // create/download/import/delete/restore. The one thing NOT duplicated here
-// is the actual backup-file byte-stream download — that's a GET with no
-// JSON body, so the page just links straight to V1's existing
-// /health/backups/:name route, same cookie session, same requireOwner gate.)
+// is the backup-file download, which streams bytes instead of JSON and is
+// GET /health/backups/:name below.)
 
 router.get(
   '/health',
@@ -2358,6 +2394,15 @@ router.get(
   })
 );
 
+// The game-stats lookup cache, as the classic /stats page lists it: operators only, newest 50.
+router.get(
+  '/stats',
+  requireOwner,
+  asyncHandler(async (req, res) => {
+    res.json({ rows: await statsCacheRows(50), ttlMinutes: config.cacheTtlMinutes });
+  })
+);
+
 // Sylo's own errors and warnings, stored (src/db/devLogEntries.js): the app's Health page.
 router.get(
   '/dev-log',
@@ -2384,6 +2429,17 @@ router.post('/health/dev-log-error-test', requireOwner, backupLimit, (req, res) 
     'Manually triggered from the V2 dashboard — if you see this in the dev-log channel, the real error pipeline works end to end.'
   );
   res.json({ ok: true });
+});
+
+// Download a snapshot (the same strict name check and attachment headers as classic /health/backups/:name).
+router.get('/health/backups/:name', requireOwner, backupLimit, (req, res) => {
+  if (!isBackupName(req.params.name)) return res.status(400).json({ error: 'invalid backup name' });
+  const stream = openBackup(req.params.name);
+  if (!stream) return res.status(404).json({ error: 'no such backup' });
+  res.setHeader('Content-Disposition', `attachment; filename="${req.params.name}"`);
+  res.type('application/octet-stream');
+  stream.on('error', () => res.destroy());
+  stream.pipe(res);
 });
 
 router.post(
@@ -2440,32 +2496,20 @@ router.post(
 
 // --- Roadmap (mirrors src/web/routes/roadmap.js's V1 pages in full — bot-
 // wide, not per-guild, same as Health/Personalizer above. The vote/suggest
-// rate limiters are the *same* instances V1 uses (imported from roadmap.js,
+// rate limiters are the *same* instances V1 uses (src/web/lib/roadmapLimits.js,
 // not re-created here) so a user can't double their effective limit by
-// switching between the V1 and V2 UI.)
+// switching between the V1 and V2 UI. The public read-only list is
+// GET /api/v2/public/roadmap (v2Public.js); this one returns the same view.)
 
 function withRoadmapHtml(p) {
   return { ...p, descriptionHtml: mdToHtml(p.description) };
-}
-function roadmapGroupsWithHtml(posts) {
-  const groups = groupPublicPosts(posts);
-  for (const list of Object.values(groups)) {
-    for (const p of list) p.descriptionHtml = mdToHtml(p.description);
-  }
-  return groups;
 }
 
 router.get(
   '/roadmap',
   asyncHandler(async (req, res) => {
     const userId = sessionUserId(req);
-    const posts = await listPublicPosts(userId);
-    const mine = userId ? await listUserPending(userId) : [];
-    res.json({
-      groups: roadmapGroupsWithHtml(posts),
-      mine: mine.map((p) => ({ ...withRoadmapHtml(p), ago: timeAgo(p.createdAt) })),
-      isOwner: userId ? isOwner(req) : false,
-    });
+    res.json(await roadmapView({ userId, owner: userId ? isOwner(req) : false }));
   })
 );
 
@@ -3161,25 +3205,12 @@ router.post(
     if (!channelId) return res.status(400).json({ error: 'Pick a channel.' });
 
     const style = ['buttons', 'select'].includes(req.body.style) ? req.body.style : 'reaction';
-    const rawPairs = Array.isArray(req.body.pairs) ? req.body.pairs : [];
-    const pairs = [];
-    for (const row of rawPairs.slice(0, MAX_REACTION_PAIRS)) {
-      const rid = row?.roleId;
-      if (!/^\d{17,20}$/.test(rid ?? '')) continue;
-      const parsed = parseEmoji(row?.emoji ?? '', guild);
-      // The reaction style needs a usable emoji; button / select styles don't.
-      if (style === 'reaction' && !parsed) continue;
-      pairs.push({
-        ...(parsed || { key: '', display: '', react: '' }),
-        roleId: rid,
-        label: String(row?.label ?? '').slice(0, 80),
-        btnStyle: ['primary', 'secondary', 'success', 'danger'].includes(row?.btnStyle)
-          ? row.btnStyle
-          : 'secondary',
-      });
-    }
-    if (pairs.length === 0)
-      return res.status(400).json({ error: 'Add at least one role with a usable emoji.' });
+    const { pairs, errors } = buildReactionPairs(
+      Array.isArray(req.body.pairs) ? req.body.pairs.map((row) => row ?? {}) : [],
+      style,
+      guild
+    );
+    if (errors.length) return res.status(400).json({ error: errors.join(' ') });
 
     const id = /^\d+$/.test(req.body.id ?? '') ? req.body.id : String(Date.now());
     const existing = list.find((x) => String(x.id) === id);

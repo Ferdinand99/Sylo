@@ -49,8 +49,11 @@ const CHECKS_ANTIABUSE = [
   ['removeBotReactions', '…and clear reactions members add to bot messages'],
 ];
 
-const toForm = (config) => ({ boards: config.boards.map(toFormRow) });
+// `removedBoardIds`: the saved boards the person removed in this session. The server deletes a
+// board's post records only for ids named here, never because a board is missing from the list.
+const toForm = (config) => ({ boards: config.boards.map(toFormRow), removedBoardIds: [] });
 const fromForm = (form) => ({
+  removedBoardIds: form.removedBoardIds,
   boards: form.boards.map((b) => {
     const copy = { ...b, emojis: b.emojiText };
     delete copy.key;
@@ -79,9 +82,17 @@ export default function Starboard() {
   if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const updateBoard = (key, patch) =>
-    setForm((f) => ({ boards: f.boards.map((b) => (b.key === key ? { ...b, ...patch } : b)) }));
-  const addBoard = () => setForm((f) => ({ boards: [...f.boards, toFormRow()] }));
-  const removeBoard = (key) => setForm((f) => ({ boards: f.boards.filter((b) => b.key !== key) }));
+    setForm((f) => ({ ...f, boards: f.boards.map((b) => (b.key === key ? { ...b, ...patch } : b)) }));
+  const addBoard = () => setForm((f) => ({ ...f, boards: [...f.boards, toFormRow()] }));
+  const removeBoard = (key) =>
+    setForm((f) => {
+      const gone = f.boards.find((b) => b.key === key);
+      return {
+        ...f,
+        boards: f.boards.filter((b) => b.key !== key),
+        removedBoardIds: gone?.id ? [...f.removedBoardIds, gone.id] : f.removedBoardIds,
+      };
+    });
 
   return (
     <>

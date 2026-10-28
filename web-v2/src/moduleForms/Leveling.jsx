@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch } from '../api.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
@@ -109,7 +110,9 @@ export default function Leveling() {
       <p className="v2-field-hint">
         Members earn 15–25 XP per message (once per cooldown), plus optional voice XP, on a MEE6-style curve —
         scaled by the XP rate and any role/channel multipliers below. The public web leaderboard toggle is on
-        the Leaderboard page.
+        the Leaderboard page. Turn the <code>/rank</code> and <code>/leaderboard</code> commands off, or limit
+        them to certain channels or roles, on the <Link to={`/guilds/${guildId}/commands`}>Commands</Link>{' '}
+        page.
       </p>
 
       <form onSubmit={save} data-savebar>

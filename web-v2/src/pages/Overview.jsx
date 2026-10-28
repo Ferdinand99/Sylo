@@ -223,8 +223,8 @@ export default function Overview() {
       </div>
 
       <p className="v2-note">
-        <strong>V2 is in beta.</strong> Every module has its own page here now. If something looks off, the{' '}
-        <a href="/">classic dashboard</a> is still available and edits the same settings.
+        Every module has its own page here. If something looks off, the{' '}
+        <a href="/?classic=1">classic dashboard</a> (removed in Sylo 5.0) edits the same settings.
       </p>
 
       <div className="v2-stat-strip">

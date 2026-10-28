@@ -5,7 +5,7 @@ forks — to a channel. Unlike every other alert module, this one is
 **push-based**: GitHub sends the event to Sylo the moment it happens, instead
 of Sylo polling on a timer.
 
-**Dashboard:** `/guilds/<id>/m/github`.
+**Dashboard:** `/v2/guilds/<id>/m/github`.
 
 ## Needs
 

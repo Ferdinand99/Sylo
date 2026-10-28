@@ -63,6 +63,23 @@ function safeReturnTo(path) {
   return path;
 }
 
+/**
+ * The `next` of `/auth/login?next=/v2/roadmap`: where to go after signing in, for a link that
+ * starts the login from a page which is open without one (the new dashboard's public pages).
+ * Same rule as `returnTo`: an internal path only. Anything else gives `null` and the usual
+ * destination stands.
+ * @returns {string | null}
+ */
+export function internalNext(next) {
+  if (typeof next !== 'string' || next.length > 512 || next === '/') return null;
+  return safeReturnTo(next) === next ? next : null;
+}
+
+function rememberNext(req) {
+  const next = internalNext(req.query.next);
+  if (next) req.session.returnTo = next;
+}
+
 // An identity's guild list is a snapshot from login, kept current by the bot's own events
 // (src/bot/lib/adminSnapshot.js) but not checked against the platform. Past this age, access
 // to a server is checked live through the bot instead of trusting the list.
@@ -524,6 +541,7 @@ export function mountAuth(app) {
   // The chooser, shown when more than one login is offered.
   router.get('/login', pageLimit, (req, res) => {
     if (!config.authEnabled || req.account) return res.redirect('/');
+    rememberNext(req);
     const offered = enabledProviders();
     if (offered.length === 1) return res.redirect(`/auth/${offered[0].platform}/login`);
     res.render('login', {
@@ -539,6 +557,7 @@ export function mountAuth(app) {
   for (const provider of Object.values(providers)) {
     router.get(`/${provider.platform}/login`, oauthLimit, (req, res) => {
       if (!config.authEnabled) return res.redirect('/');
+      rememberNext(req);
       beginOAuth(req, res, provider, { connect: false });
     });
 

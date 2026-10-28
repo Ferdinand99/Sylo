@@ -4,7 +4,7 @@ Post a message when a followed feed publishes a new item. Handles a raw
 **RSS 2.0** or **Atom** URL, and also resolves a **Reddit**, **Mastodon** or
 **Bluesky** handle to that platform's own feed.
 
-**Dashboard:** `/guilds/<id>/m/rss`.
+**Dashboard:** `/v2/guilds/<id>/m/rss`.
 
 ## Needs
 

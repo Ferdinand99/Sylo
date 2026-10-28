@@ -3,7 +3,7 @@
 Run prize giveaways with an **Enter** button. Winners are drawn automatically at
 the end time.
 
-**Dashboard:** `/guilds/<id>/m/giveaways`.
+**Dashboard:** `/v2/guilds/<id>/m/giveaways`.
 
 ## Needs
 

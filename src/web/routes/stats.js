@@ -2,8 +2,7 @@
 // Read-only view over the cache table; it never triggers a live API call.
 import { Router } from 'express';
 import { config } from '../../config.js';
-import { listCached } from '../../db/cache.js';
-import { timeAgo } from '../lib/format.js';
+import { statsCacheRows } from '../lib/statsCache.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 
 const router = Router();
@@ -11,22 +10,7 @@ const router = Router();
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const rows = (await listCached(50)).map((row) => {
-      const ageMs = Date.now() - row.created_at;
-      return {
-        game: row.game,
-        title: row.title,
-        username: row.username,
-        platform: row.platform,
-        ago: timeAgo(row.created_at),
-        fresh: ageMs <= config.cacheTtlMs,
-        kd: row.payload?.kd ?? '—',
-        winRate: row.payload?.winRate ?? '—',
-        timePlayed: row.payload?.timePlayed ?? '—',
-      };
-    });
-
-    res.render('stats', { rows, ttlMinutes: config.cacheTtlMinutes });
+    res.render('stats', { rows: await statsCacheRows(50), ttlMinutes: config.cacheTtlMinutes });
   })
 );
 

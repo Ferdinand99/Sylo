@@ -1,4 +1,4 @@
-<%- include('partials/header', { title: `Sylo — ${typeof title !== 'undefined' ? title : 'Error'}` }) %>
+<%- include('partials/header', { title: `Sylo — ${typeof title !== 'undefined' ? title : 'Error'}`, noRetireBanner: true }) %>
 
 <section class="card">
   <h2><%= typeof heading !== 'undefined' ? heading : 'Something went wrong' %></h2>

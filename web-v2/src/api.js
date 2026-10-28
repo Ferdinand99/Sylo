@@ -95,6 +95,9 @@ export const getPlatformInfo = (guildId) => apiFetch(`/api/v2/guilds/${gid(guild
 // module (see v2Api.js's "Per-module config" section) behind them.
 export const getModuleConfig = (guildId, moduleId) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/${moduleId}/config`);
+// The welcome image preview is a PNG, used as an <img src>. `v` busts the browser's 60 s cache.
+export const welcomeCardPreviewUrl = (guildId, v = Date.now()) =>
+  `/api/v2/guilds/${gid(guildId)}/modules/welcome/card-preview?v=${v}`;
 export const saveModuleConfig = (guildId, moduleId, body) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/${moduleId}/config`, body);
 export const setCountingCount = (guildId, current) =>
@@ -147,6 +150,9 @@ export const savePersonalizerAnnouncement = (body) => postJson('/api/v2/personal
 export const clearPersonalizerAnnouncement = () => postJson('/api/v2/personalizer/announcement/clear', {});
 
 export const getHealth = () => apiFetch('/api/v2/health');
+export const getStats = () => apiFetch('/api/v2/stats');
+// A snapshot download is a plain link (the browser saves the file), not a fetch.
+export const backupDownloadUrl = (name) => `/api/v2/health/backups/${encodeURIComponent(name)}`;
 export const sendDevLogTest = () => postJson('/api/v2/health/dev-log-test', {});
 export const sendDevLogErrorTest = () => postJson('/api/v2/health/dev-log-error-test', {});
 export const createBackup = () => postJson('/api/v2/health/backups', {});
@@ -161,7 +167,12 @@ export const importBackup = (file) =>
     body: file,
   });
 
-export const getRoadmap = () => apiFetch('/api/v2/roadmap');
+// Read without signing in: the public pages (command list, roadmap) use these, so a visitor
+// without a session never calls an endpoint that answers 401. The roadmap view carries the
+// signed-in person's own votes when there is a session.
+export const getPublicSession = () => apiFetch('/api/v2/public/session');
+export const getPublicCommands = () => apiFetch('/api/v2/public/commands');
+export const getRoadmap = () => apiFetch('/api/v2/public/roadmap');
 export const voteRoadmapPost = (id) => postJson(`/api/v2/roadmap/${id}/vote`, {});
 export const suggestRoadmapPost = (title, description) =>
   postJson('/api/v2/roadmap/suggest', { title, description });
@@ -223,6 +234,7 @@ export const unpublishWelcomeChannel = (guildId) =>
 export const createWelcomeReadOnlyChannel = (guildId) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/welcome-channel/create-channel`, {});
 
+export const getGuildEmojis = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/emojis`);
 export const getRoles = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/roles/list`);
 export const saveAutoroles = (guildId, autoroles) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/roles/autoroles`, { autoroles });

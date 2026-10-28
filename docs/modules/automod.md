@@ -4,7 +4,7 @@ Scans new and edited messages and acts on the first rule that matches.
 Administrators, the server owner, bot-master roles, and members with an
 **immunity role** are always skipped. Sylo never acts on other bots.
 
-**Dashboard:** `/guilds/<id>/moderation` → **Automod** tab.
+**Dashboard:** `/v2/guilds/<id>/moderation` → **Automod** tab.
 
 ## Needs
 

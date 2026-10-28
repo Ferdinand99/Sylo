@@ -6,7 +6,7 @@ Two features in one module:
 - **Reaction roles** — a posted message members use to self-assign roles, via
   buttons or a select menu (Sylo uses interactions, not raw reactions).
 
-**Dashboard:** `/guilds/<id>/m/roles`.
+**Dashboard:** `/v2/guilds/<id>/m/roles`.
 
 ## Needs
 

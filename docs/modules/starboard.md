@@ -3,7 +3,7 @@
 Re-posts messages that get enough of a chosen reaction into a highlights channel.
 Supports multiple independent boards.
 
-**Dashboard:** `/guilds/<id>/m/starboard`.
+**Dashboard:** `/v2/guilds/<id>/m/starboard`.
 
 ## Needs
 

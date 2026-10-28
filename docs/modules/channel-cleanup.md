@@ -3,7 +3,7 @@
 Auto-delete old messages from a channel, on a weekly schedule you pick. Deletes
 only messages older than a configured age — not a full wipe.
 
-**Dashboard:** `/guilds/<id>/m/channel-cleanup`.
+**Dashboard:** `/v2/guilds/<id>/m/channel-cleanup`.
 
 ## Needs
 

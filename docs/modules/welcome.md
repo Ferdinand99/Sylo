@@ -3,7 +3,7 @@
 Greet new members in a channel and/or by DM, announce departures, and optionally
 attach a generated **welcome image**.
 
-**Dashboard:** `/guilds/<id>/m/welcome`.
+**Dashboard:** `/v2/guilds/<id>/m/welcome`.
 
 ## Needs
 

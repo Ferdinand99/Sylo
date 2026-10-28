@@ -1,0 +1,21 @@
+<%# The head of the sign-in pages (login, the app's confirm page): a page of their own, without
+    the classic dashboard's sidebar, scripts or retirement banner. They are the way into the
+    new dashboard, so they only need the stylesheet, the theme and the favicon. %>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title><%= typeof title !== 'undefined' ? title : 'Sylo' %></title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
+  <script>(function(){try{var t=localStorage.getItem('sylo:theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}})();</script>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/telemetry.js" async></script>
+</head>
+<body>
+  <main class="auth-wrap">
+    <div class="auth-brand">
+      <img src="/favicon.svg" alt="" width="36" height="36" />
+      <span>Sylo</span>
+    </div>

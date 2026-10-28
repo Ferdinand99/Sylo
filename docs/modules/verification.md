@@ -3,7 +3,7 @@
 Gate new members behind a **Verify** button (or a Cloudflare Turnstile captcha)
 before they get a role.
 
-**Dashboard:** `/guilds/<id>/m/verification`.
+**Dashboard:** `/v2/guilds/<id>/m/verification`.
 
 ## Needs
 

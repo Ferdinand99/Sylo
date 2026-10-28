@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { getRoadmap, voteRoadmapPost, suggestRoadmapPost } from '../api.js';
 import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
+import { loginHref } from '../publicRoutes.js';
 
 const GROUPS = [
   { key: 'planned', label: 'Planned' },
@@ -10,7 +11,7 @@ const GROUPS = [
   { key: 'completed', label: 'Recently shipped' },
 ];
 
-function VoteButton({ post, onVote }) {
+function VoteButton({ post, onVote, canVote }) {
   const [busy, setBusy] = useState(false);
 
   async function click() {
@@ -27,7 +28,8 @@ function VoteButton({ post, onVote }) {
       type="button"
       className={`v2-roadmap-vote${post.voted ? ' is-voted' : ''}`}
       onClick={click}
-      disabled={busy}
+      disabled={busy || !canVote}
+      title={canVote ? undefined : 'Log in to vote'}
       aria-pressed={Boolean(post.voted)}
       aria-label={`Vote for ${post.title}, ${formatCount(post.votes)} ${post.votes === 1 ? 'vote' : 'votes'}`}
     >
@@ -107,6 +109,17 @@ export default function Roadmap() {
       <p className="v2-note">
         What's planned, in progress, and shipped. Vote on what matters to you, or suggest something new.
       </p>
+      {!d.signedIn ? (
+        <p className="v2-note v2-login-prompt">
+          {d.open ? (
+            'Voting and suggesting need a login, and this Sylo has none set up.'
+          ) : (
+            <>
+              <a href={loginHref()}>Log in</a> to vote or suggest a feature.
+            </>
+          )}
+        </p>
+      ) : null}
 
       {notice ? <p className="v2-note">{notice}</p> : null}
 
@@ -128,7 +141,7 @@ export default function Roadmap() {
                       dangerouslySetInnerHTML={{ __html: p.descriptionHtml }}
                     />
                   </div>
-                  <VoteButton post={p} onVote={onVote} />
+                  <VoteButton post={p} onVote={onVote} canVote={d.signedIn} />
                 </div>
               ))}
             </div>
@@ -136,55 +149,57 @@ export default function Roadmap() {
         </div>
       ))}
 
-      <div className="v2-group">
-        <h2 className="v2-group-title">Suggest a feature</h2>
-        <form onSubmit={onSuggest}>
-          <div className="v2-field">
-            <label htmlFor="rm-title">Title</label>
-            <input
-              id="rm-title"
-              type="text"
-              maxLength={100}
-              required
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            />
-          </div>
-          <div className="v2-field">
-            <label htmlFor="rm-desc">Description</label>
-            <textarea
-              id="rm-desc"
-              rows={5}
-              maxLength={2000}
-              required
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            />
-            <p className="v2-field-hint">
-              Markdown: **bold**, _italic_, `code`, [links](url), and - bullet lists.
-            </p>
-          </div>
-          <button type="submit" className="v2-btn-primary" disabled={submitting}>
-            {submitting ? 'Submitting…' : 'Submit for review'}
-          </button>
-        </form>
-
-        {d.mine?.length ? (
-          <>
-            <h3 className="v2-section-gap">Your suggestions awaiting review</h3>
-            <div className="v2-list">
-              {d.mine.map((p) => (
-                <div className="v2-row" key={p.id}>
-                  <div className="v2-row-main">
-                    <h3 className="v2-break">{p.title}</h3>
-                  </div>
-                  <span className="v2-field-hint v2-row-time">{p.ago}</span>
-                </div>
-              ))}
+      {d.signedIn ? (
+        <div className="v2-group">
+          <h2 className="v2-group-title">Suggest a feature</h2>
+          <form onSubmit={onSuggest}>
+            <div className="v2-field">
+              <label htmlFor="rm-title">Title</label>
+              <input
+                id="rm-title"
+                type="text"
+                maxLength={100}
+                required
+                value={form.title}
+                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              />
             </div>
-          </>
-        ) : null}
-      </div>
+            <div className="v2-field">
+              <label htmlFor="rm-desc">Description</label>
+              <textarea
+                id="rm-desc"
+                rows={5}
+                maxLength={2000}
+                required
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              />
+              <p className="v2-field-hint">
+                Markdown: **bold**, _italic_, `code`, [links](url), and - bullet lists.
+              </p>
+            </div>
+            <button type="submit" className="v2-btn-primary" disabled={submitting}>
+              {submitting ? 'Submitting…' : 'Submit for review'}
+            </button>
+          </form>
+
+          {d.mine?.length ? (
+            <>
+              <h3 className="v2-section-gap">Your suggestions awaiting review</h3>
+              <div className="v2-list">
+                {d.mine.map((p) => (
+                  <div className="v2-row" key={p.id}>
+                    <div className="v2-row-main">
+                      <h3 className="v2-break">{p.title}</h3>
+                    </div>
+                    <span className="v2-field-hint v2-row-time">{p.ago}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
 }

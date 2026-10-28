@@ -3,27 +3,88 @@
 // server.js, so this never serves to a logged-out visitor. Static assets
 // first, then an index.html fallback for client-side routes (standard SPA
 // hosting — the SPA's own router decides what /v2/guilds/123 etc. render).
+//
+// The exception is `v2PublicClientRouter`, mounted before requireAuth: the built files
+// (the bundle holds no data) and the SPA shell for the two public pages, /v2/commands and
+// /v2/roadmap. Everything else under /v2 still needs a login.
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Router, static as expressStatic } from 'express';
+import { endClassicChoice } from '../lib/classicChoice.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const distDir = join(here, '..', '..', '..', 'web-v2', 'dist');
 const indexHtml = join(distDir, 'index.html');
 
-/** Whether the SPA is built. An object so tests can stub `exists`; V1's home (dashboard.js)
- * only sends people here by default when it is. */
-export const v2Build = { exists: () => existsSync(indexHtml) };
+/** Whether the SPA is built. An object so tests can stub `exists` and `indexHtml`; V1's home
+ * (dashboard.js) sends people here only when it is. */
+export const v2Build = { exists: () => existsSync(indexHtml), indexHtml };
+
+/** The pages a visitor may open without signing in (paths below /v2). Keep in step with
+ * PUBLIC_PATHS in web-v2/src/publicRoutes.js. */
+export const PUBLIC_PAGES = ['/commands', '/roadmap'];
+
+// Opening the dashboard (a page, not one of its files) ends a "Back to classic dashboard" choice
+// made earlier in the session, so the next visit to / and to the old addresses goes to V2 again.
+function endClassicChoiceOnPage(req, res) {
+  if (req.method === 'GET' && !/\.\w+$/.test(req.path)) endClassicChoice(req, res);
+}
+
+function sendIndex(res) {
+  if (!v2Build.exists()) {
+    return res
+      .status(503)
+      .type('text/plain')
+      .send('V2 dashboard not built yet — run `npm run build:v2` first.');
+  }
+  res.sendFile(v2Build.indexHtml);
+}
+
+// --- before requireAuth -------------------------------------------------------------------
+
+export const v2PublicClientRouter = Router();
+
+/**
+ * Is this request for index.html itself, however it is spelled? `req.path` is the raw path, but the
+ * static handler decodes it first (`/index%2Ehtml`) and resolves it (`//index.html`,
+ * `/a/../index.html`, another case on a case-insensitive disk), so compare what it would open.
+ */
+export function asksForIndexFile(rawPath) {
+  let path;
+  try {
+    path = decodeURIComponent(rawPath);
+  } catch {
+    return false; // The static handler refuses a malformed path itself.
+  }
+  const name = posix
+    .normalize(path.replaceAll('\\', '/'))
+    .replace(/^\/+/, '')
+    .replace(/[. ]+$/, '')
+    .toLowerCase();
+  return name === 'index.html';
+}
+
+// The built files. Not index.html itself: that is served only for the pages above (and, behind the
+// login, for the rest).
+const builtFiles = expressStatic(distDir, { index: false, redirect: false });
+v2PublicClientRouter.use((req, res, next) =>
+  asksForIndexFile(req.path) ? next() : builtFiles(req, res, next)
+);
+
+// A signed-out visitor who logs in from one of these comes back to it through the SPA's "Log in"
+// link (/auth/login?next=/v2/roadmap); an anonymous visit writes nothing to a session.
+v2PublicClientRouter.get(PUBLIC_PAGES, (req, res) => {
+  endClassicChoiceOnPage(req, res);
+  sendIndex(res);
+});
+
+// --- behind requireAuth -------------------------------------------------------------------
 
 const router = Router();
 
-// Opening the dashboard (a page, not one of its files) ends a "Back to classic dashboard"
-// choice made earlier in the session, so the next visit to / follows the saved preference again.
 router.use((req, res, next) => {
-  if (req.method === 'GET' && req.session?.preferClassic && !/\.\w+$/.test(req.path)) {
-    delete req.session.preferClassic;
-  }
+  endClassicChoiceOnPage(req, res);
   next();
 });
 
@@ -35,13 +96,7 @@ router.use(expressStatic(distDir));
 // named wildcard like "*splat"), which broke this the first time around.
 router.use((req, res) => {
   if (req.method !== 'GET') return res.status(404).end();
-  if (!v2Build.exists()) {
-    return res
-      .status(503)
-      .type('text/plain')
-      .send('V2 dashboard not built yet — run `npm run build:v2` first.');
-  }
-  res.sendFile(indexHtml);
+  sendIndex(res);
 });
 
 export default router;

@@ -9,7 +9,7 @@ Player stat lookups via `/stats`. Pick a game from the `game` dropdown:
   Hiscores. `platform` optionally selects an Ironman account type
   (`ironman` / `hardcore` / `ultimate`, OSRS only).
 
-**Dashboard:** `/guilds/<id>/m/game-stats` (just the on/off toggle — no settings).
+**Dashboard:** `/v2/guilds/<id>/m/game-stats` (just the on/off toggle — no settings).
 
 ## Needs
 

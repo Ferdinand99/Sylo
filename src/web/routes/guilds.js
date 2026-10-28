@@ -10,7 +10,10 @@ import { limitWhen, platformActionLimit } from '../middleware/rateLimit.js';
 import { checkLevelRewardGrants, checkModuleGrants, guardRoleGrants } from '../middleware/roleGrants.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
-import { idList, MAX_REACTION_MESSAGES, MAX_REACTION_PAIRS } from '../lib/idList.js';
+import { idList, MAX_REACTION_MESSAGES } from '../lib/idList.js';
+import { buildReactionPairs } from '../lib/reactionPairs.js';
+import { guildCustomEmojis } from '../lib/guildEmojis.js';
+import { canPostInChannel } from '../lib/modlogChannel.js';
 import { shouldSaveBotMasters } from '../lib/botMasters.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { getModule, missingIntents } from '../../modules/registry.js';
@@ -49,7 +52,7 @@ import {
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { normaliseHoneypotConfig, HONEYPOT_ACTIONS, ensureHoneypotMessages } from '../../modules/honeypot.js';
 import { recentHoneypotCatches } from '../../db/honeypotCatches.js';
-import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
+import { publishReactionMessage } from '../../modules/roles.js';
 import {
   activeGiveaways,
   endedGiveaways,
@@ -146,7 +149,7 @@ import {
 import { guildTempBans, clearTempBan } from '../../db/tempBans.js';
 import { lockChannel, unlockChannel, lockPreflight } from '../../bot/lib/channelLock.js';
 import { formatDuration } from '../../bot/lib/duration.js';
-import { renderWelcomeCard } from '../../bot/lib/welcomeCard.js';
+import { sendWelcomeCardPreview } from '../lib/welcomeCardPreview.js';
 import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
 import { exportGuildConfigFor, forgetMember, lookupProfile } from '../lib/guildData.js';
 import { buildOverview } from '../lib/overviewSummary.js';
@@ -252,12 +255,7 @@ router.get('/:guildId', (req, res) => res.redirect(`/guilds/${req.params.guildId
 
 // Custom emojis for the reaction-role emoji picker.
 router.get('/:guildId/emojis', (req, res) => {
-  const custom = [...req.guild.emojis.cache.values()].map((e) => ({
-    name: e.name,
-    display: e.toString(),
-    url: e.imageURL({ size: 32 }),
-  }));
-  res.json({ custom });
+  res.json({ custom: guildCustomEmojis(req.guild) });
 });
 
 // --- Panels ----------------------------------------------------------------
@@ -340,10 +338,7 @@ router.post(
     if (channelId === '') {
       await setModlogChannel(guild.id, null);
     } else if (guildTextChannels(guild).some((c) => c.id === channelId)) {
-      const channel = guild.channels.cache.get(channelId);
-      if (!channel?.permissionsFor(guild.members.me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) {
-        return res.redirect(`${back}?msg=perms`);
-      }
+      if (!canPostInChannel(guild, channelId)) return res.redirect(`${back}?msg=perms`);
       await setModlogChannel(guild.id, channelId);
     } else {
       return res.redirect(`${back}?msg=badchannel`);
@@ -722,18 +717,7 @@ router.post(
 // ?v= cache-buster the view appends.
 router.get(
   '/:guildId/m/welcome/card-preview',
-  asyncHandler(async (req, res) => {
-    const cfg = (await getGuildModule(req.guild.id, 'welcome')).config || {};
-    const png = await renderWelcomeCard({
-      name: 'New Member',
-      avatarUrl: primaryClient()?.user?.displayAvatarURL({ extension: 'png', size: 256 }),
-      memberCount: req.guild.memberCount || 0,
-      accent: await guildEmbedColor(req.guild.id),
-      backgroundUrl: cfg.cardBackground || undefined,
-    });
-    if (!png) return res.status(204).end(); // canvas unavailable on this host
-    res.set('Cache-Control', 'private, max-age=60').type('png').send(png);
-  })
+  asyncHandler((req, res) => sendWelcomeCardPreview(req.guild, res))
 );
 
 // Welcome Channel: create a read-only #welcome channel.
@@ -2264,37 +2248,13 @@ router.post(
     if (!existing && list.length >= MAX_REACTION_MESSAGES) {
       errors.push(`This server already has the maximum of ${MAX_REACTION_MESSAGES} reaction-role messages.`);
     }
-    if (roleIds.length > MAX_REACTION_PAIRS)
-      errors.push(`Use at most ${MAX_REACTION_PAIRS} roles per message.`);
-
-    const pairs = [];
-    let hadRowError = false;
-    roleIds.forEach((rid, i) => {
-      // A fully blank trailing row (the default empty one, or one added and
-      // never filled in) is ignored, not an error.
-      if (!rid && !emojis[i] && !labels[i]) return;
-      if (!/^\d{17,20}$/.test(rid ?? '')) {
-        errors.push(`Row ${i + 1}: select a role.`);
-        hadRowError = true;
-        return;
-      }
-      const parsed = parseEmoji(emojis[i] ?? '', guild);
-      // The reaction style needs a usable emoji; button / select styles don't.
-      if (style === 'reaction' && !parsed) {
-        errors.push(`Row ${i + 1}: enter a valid emoji (required for the Reactions style).`);
-        hadRowError = true;
-        return;
-      }
-      pairs.push({
-        ...(parsed || { key: '', display: '', react: '' }),
-        roleId: rid,
-        label: String(labels[i] ?? '').slice(0, 80),
-        btnStyle: ['primary', 'secondary', 'success', 'danger'].includes(btnStyles[i])
-          ? btnStyles[i]
-          : 'secondary',
-      });
-    });
-    if (pairs.length === 0 && !hadRowError) errors.push('Add at least one role.');
+    const built = buildReactionPairs(
+      roleIds.map((roleId, i) => ({ roleId, emoji: emojis[i], label: labels[i], btnStyle: btnStyles[i] })),
+      style,
+      guild
+    );
+    const pairs = built.pairs;
+    errors.push(...built.errors);
 
     if (errors.length) {
       // Re-render with exactly what was submitted (not the saved config) and

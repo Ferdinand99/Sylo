@@ -53,6 +53,11 @@ import { log } from '../lib/log.js';
 const NAME_RE = /^sylo-[A-Za-z0-9._-]+\.(db|dump)$/;
 const SQLITE_MAGIC = 'SQLite format 3\0';
 
+/** Whether `name` has the shape of a snapshot file name (says nothing about it existing). */
+export function isBackupName(name) {
+  return typeof name === 'string' && NAME_RE.test(name);
+}
+
 /** Absolute backups directory, created on first use. */
 export function backupDir() {
   const dir = config.backupDir ? resolve(process.cwd(), config.backupDir) : join(dirname(DB_PATH), 'backups');

@@ -239,11 +239,6 @@ body {
   text-decoration: none;
 }
 .sb-tryv2-top .sb-ico { width: 16px; height: 16px; flex: none; color: var(--accent); }
-.sb-tryv2-beta {
-  margin-left: auto; font-size: 9.5px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase;
-  color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent);
-  border-radius: 999px; padding: 2px 7px; flex: none;
-}
 
 .sb-foot { border-top: 1px solid var(--border); margin-top: 6px; padding: 10px 6px 2px; }
 .sb-theme {
@@ -329,6 +324,7 @@ a:hover { color: var(--accent-strong); text-decoration: underline; text-underlin
 .banner.ok { background: rgba(88, 214, 141, 0.12); border-color: rgba(88, 214, 141, 0.25); color: var(--ok); }
 .banner.bad { background: rgba(242, 85, 90, 0.12); border-color: rgba(242, 85, 90, 0.28); color: var(--bad); }
 .banner.info { background: rgba(229, 181, 103, 0.12); border-color: rgba(229, 181, 103, 0.28); color: var(--warn); }
+.classic-retiring a { color: inherit; font-weight: 600; text-decoration: underline; }
 
 .sa-announcement { display: flex; align-items: center; gap: 10px; }
 .sa-announcement strong { flex-shrink: 0; }
@@ -1187,4 +1183,40 @@ label.checkline input { width: auto; }
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* Sign-in pages (login, the app's confirm page): standalone, no dashboard sidebar. */
+.auth-wrap {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 32px 16px;
+}
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+.auth-card {
+  width: 100%;
+  max-width: 28rem;
+  text-align: center;
+}
+.auth-title {
+  font-size: 1.15rem;
+  margin: 0 0 8px;
+}
+.auth-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+}
+.auth-foot {
+  text-align: center;
 }

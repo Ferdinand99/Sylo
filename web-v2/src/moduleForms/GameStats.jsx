@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useCmd } from '../platformContext.jsx';
 import { getModuleConfig } from '../api.js';
 import LoadError from '../components/LoadError.jsx';
@@ -54,7 +54,15 @@ export default function GameStats() {
           ))}
         </div>
       )}
-      <p className="v2-field-hint">The lookup cache is shared across every server this bot is in.</p>
+      <p className="v2-field-hint">
+        The lookup cache is shared across every server this bot is in.
+        {data.operator ? (
+          <>
+            {' '}
+            <Link to="/stats">Full cache view →</Link>
+          </>
+        ) : null}
+      </p>
     </>
   );
 }

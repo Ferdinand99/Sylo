@@ -13,6 +13,7 @@ import { log } from '../lib/log.js';
 import { mountAuth, requireAuth, requireOwner } from './middleware/auth.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { csrf } from './middleware/csrf.js';
+import { classicRedirect } from './middleware/classicRedirect.js';
 import { platformCommands } from './middleware/platformCommands.js';
 import { ownerOnlyModules } from './middleware/ownerOnlyModules.js';
 import { mobileApiRouter, mobileAuthRouter } from './routes/mobile.js';
@@ -33,7 +34,8 @@ import guildTicketsRouter from './routes/guildTickets.js';
 import guildMessagesRouter from './routes/guildMessages.js';
 import githubWebhookRouter from './routes/githubWebhook.js';
 import v2ApiRouter from './routes/v2Api.js';
-import v2ClientRouter from './routes/v2Client.js';
+import v2ClientRouter, { v2PublicClientRouter } from './routes/v2Client.js';
+import v2PublicRouter from './routes/v2Public.js';
 import telemetryRouter from './routes/telemetry.js';
 import roadmapRouter from './routes/roadmap.js';
 import accountRouter from './routes/account.js';
@@ -183,6 +185,11 @@ export function createApp() {
     app.use('/api/push-relay/v1', createPushRelayRouter({ apns: defaultApnsClient() }));
   }
 
+  // Old dashboard addresses (/account, /health, /guilds/<key>/tickets/5 ...) open the matching page
+  // in the new dashboard. Ahead of the public /health route: only a browser visit (Accept: text/html)
+  // moves, the JSON for monitors stays. Skipped for anyone who chose the classic dashboard.
+  app.use(classicRedirect);
+
   // Public routes: healthcheck, metrics, the shareable leaderboard, and member
   // verification.
   app.use('/health', healthRouter);
@@ -192,6 +199,9 @@ export function createApp() {
   app.use('/verify', rateLimit({ windowMs: 60_000, max: 20 }), verifyRouter);
   app.use('/appeal', rateLimit({ windowMs: 60_000, max: 15 }), appealRouter);
   app.use('/roadmap', rateLimit({ windowMs: 60_000, max: 60 }), roadmapRouter);
+  // The new dashboard's public data (command list, roadmap): read-only, limited like the classic
+  // public pages. Only /api/v2/public is public; the rest of /api/v2 is mounted after requireAuth.
+  app.use('/api/v2/public', rateLimit({ windowMs: 60_000, max: 60 }), v2PublicRouter);
 
   // Per-path ceiling on the authenticated dashboard — generous for normal
   // clicking, but stops a stuck script or a compromised session from hammering
@@ -200,6 +210,9 @@ export function createApp() {
   // signed-in sessions — requireAuth's own redirect is cheap, but it was the
   // only thing standing between an arbitrary flood and the rest of the stack.
   app.use(rateLimit({ windowMs: 60_000, max: 300 }));
+  // The new dashboard's built files and its two public pages (/v2/commands, /v2/roadmap), which
+  // work without a session. Every other /v2 path is mounted after requireAuth, below.
+  app.use('/v2', v2PublicClientRouter);
   // Everything below requires a signed-in user when auth is enabled.
   app.use(requireAuth);
   app.use('/', dashboardRouter);

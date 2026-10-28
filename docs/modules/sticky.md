@@ -3,7 +3,7 @@
 Keeps a message glued to the bottom of a channel: when someone else posts, Sylo
 deletes its old copy and re-posts the sticky.
 
-**Dashboard:** `/guilds/<id>/m/sticky`.
+**Dashboard:** `/v2/guilds/<id>/m/sticky`.
 
 ## Needs
 

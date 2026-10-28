@@ -3,7 +3,7 @@
 Records which invite each new member used and who created it, and ranks inviters
 on a leaderboard.
 
-**Dashboard:** `/guilds/<id>/m/invite-tracker`.
+**Dashboard:** `/v2/guilds/<id>/m/invite-tracker`.
 
 ## Needs
 

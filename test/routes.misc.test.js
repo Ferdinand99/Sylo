@@ -2,10 +2,13 @@ import { startWebApp, post } from './helpers/webApp.js';
 import { GID } from './helpers/fakeGuild.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { v2Build } from '../src/web/routes/v2Client.js';
 
 let app;
 test.before(async () => {
   app = await startWebApp();
+  // The classic pages are under test here: keep their old addresses from moving to /v2.
+  v2Build.exists = () => false;
 });
 test.after(() => app.close());
 

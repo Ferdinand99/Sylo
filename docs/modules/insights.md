@@ -3,7 +3,7 @@
 Charts of server activity over time — messages, joins, leaves and voice-channel
 usage — per hour or per day, plus the busiest text and voice channels.
 
-**Dashboard:** `/guilds/<id>/insights` (also linked from the sidebar and the
+**Dashboard:** `/v2/guilds/<id>/insights` (also linked from the sidebar and the
 overview grid).
 
 ## Needs

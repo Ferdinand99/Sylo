@@ -388,7 +388,7 @@ export async function announceNewAppeal(guild, appeal) {
       })),
       {
         name: 'Review',
-        value: `${config.dashboardUrl ? config.dashboardUrl.replace(/\/$/, '') : ''}/guilds/${guildKey(guild)}/appeals`,
+        value: `${config.dashboardUrl ? config.dashboardUrl.replace(/\/$/, '') : ''}/v2/guilds/${guildKey(guild)}/appeals`,
       }
     )
     .setTimestamp(Date.now());

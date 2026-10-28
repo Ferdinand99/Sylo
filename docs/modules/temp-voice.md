@@ -4,7 +4,7 @@ Join-to-create voice hubs: a member joins a **hub** channel and Sylo spawns a
 personal voice channel (and optional text channel) they own and control with
 `/voice-*` commands. Empty channels are cleaned up.
 
-**Dashboard:** `/guilds/<id>/m/temp-voice`.
+**Dashboard:** `/v2/guilds/<id>/m/temp-voice`.
 
 ## Needs
 

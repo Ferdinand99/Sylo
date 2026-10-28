@@ -1,25 +1,26 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom';
-import { getGuilds } from '../api.js';
-import { readLastGuildId, writeLastGuildId, readTheme, writeTheme } from '../util.js';
+import { getGuilds, getPublicSession } from '../api.js';
+import { readLastGuildId, writeLastGuildId } from '../util.js';
+import { isPublicPath } from '../publicRoutes.js';
 import { OverviewProvider } from '../OverviewContext.jsx';
 import Announcement from './Announcement.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import AccountMenu from './AccountMenu.jsx';
+import PublicShell from './PublicShell.jsx';
 import Toasts from './Toasts.jsx';
 import useLabelLinks from './useLabelLinks.js';
-
-// --bg-main per theme (styles.css) — what the browser chrome should match.
-const THEME_COLOR = { dark: '#0b0b0d', light: '#f5f5f7' };
+import useTheme from './useTheme.js';
+import useTopbarScrolled from './useTopbarScrolled.js';
 
 // Top-level layout for every V2 page: topbar (brand, server switcher — kept
 // out of the sidebar per request, it's app-wide not tied to one guild page —
 // and the link back to V1) plus the persistent left sidebar (Sidebar.jsx).
 // Fetches the guild list once and hands it down via Outlet context so
 // GuildPicker doesn't need its own separate fetch of the same list.
-export default function Shell() {
+function SignedInShell() {
   useLabelLinks();
   const [state, setState] = useState({ loading: true, guilds: [], error: null });
   const { guildId } = useParams();
@@ -40,52 +41,10 @@ export default function Shell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // The drawer hands focus back here when it closes (Sidebar.jsx).
   const navToggleRef = useRef(null);
-  // The topbar is transparent at the top of the page and turns to glass
-  // once it scrolls (.v2-topbar.scrolled in styles.css).
   const topbarRef = useRef(null);
-  const [theme, setTheme] = useState(() => readTheme() ?? 'dark');
+  const [theme, toggleTheme] = useTheme();
+  useTopbarScrolled(topbarRef);
   const { pathname } = useLocation();
-
-  // index.html's inline script already set data-theme before first paint for
-  // a saved "light" choice (avoids a flash of dark-then-light) — this just
-  // keeps it in sync as the user toggles, and handles switching back to dark.
-  // Also keeps the browser chrome / status bar colour (theme-color meta in
-  // index.html) matched to the topbar background of the active theme.
-  useEffect(() => {
-    if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
-    else document.documentElement.removeAttribute('data-theme');
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', theme === 'light' ? THEME_COLOR.light : THEME_COLOR.dark);
-  }, [theme]);
-
-  function toggleTheme() {
-    setTheme((t) => {
-      const next = t === 'light' ? 'dark' : 'light';
-      writeTheme(next);
-      return next;
-    });
-  }
-
-  // One passive listener that only touches the DOM when the state flips —
-  // the same approach as sylobot.com's nav (site/app.js). It writes the
-  // class straight onto the element rather than through state, so scrolling
-  // never re-renders the shell (and every page under it).
-  useEffect(() => {
-    const el = topbarRef.current;
-    if (!el) return undefined;
-    let scrolled = false;
-    function sync() {
-      const next = window.scrollY > 8;
-      if (next !== scrolled) {
-        scrolled = next;
-        el.classList.toggle('scrolled', next);
-      }
-    }
-    sync();
-    window.addEventListener('scroll', sync, { passive: true });
-    return () => window.removeEventListener('scroll', sync);
-  }, []);
 
   useEffect(() => {
     getGuilds()
@@ -135,9 +94,6 @@ export default function Shell() {
         <Link className="v2-brand" to="/">
           <img className="v2-brand-mark" src="/favicon.svg" alt="" width="28" height="28" />
           <span>Sylo</span>
-          <span className="v2-beta-badge" title="V2 is in beta — the classic dashboard is still available">
-            Beta
-          </span>
         </Link>
         <ServerSwitcher guilds={guilds} activeGuildId={lastGuildId} onSelectGuild={selectGuild} />
         {/* Two labels, one shown at a time — styles.css swaps to the short
@@ -168,4 +124,24 @@ export default function Shell() {
       <Toasts />
     </div>
   );
+}
+
+// The signed-in layout above for everyone, except on the two public pages (command list,
+// roadmap), which also work without a session. Those ask the server once whether this visitor
+// has one (a public endpoint, so no 401): the full dashboard for a signed-in person or open mode,
+// the public layout otherwise. A page opened any other way is behind the login, so the visitor
+// has a session and nothing needs asking.
+export default function Shell() {
+  const { pathname } = useLocation();
+  const [viewer, setViewer] = useState(() => (isPublicPath(pathname) ? undefined : { signedIn: true }));
+
+  useEffect(() => {
+    if (viewer !== undefined) return;
+    getPublicSession()
+      .then(setViewer)
+      .catch(() => setViewer({ signedIn: false, open: false }));
+  }, [viewer]);
+
+  if (viewer === undefined) return <p className="v2-state">Loading…</p>;
+  return viewer.signedIn || viewer.open ? <SignedInShell /> : <PublicShell />;
 }

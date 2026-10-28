@@ -2,7 +2,7 @@
 
 Automatically reply when a message matches a trigger phrase.
 
-**Dashboard:** `/guilds/<id>/m/autoresponder`.
+**Dashboard:** `/v2/guilds/<id>/m/autoresponder`.
 
 ## Needs
 

@@ -4,7 +4,7 @@ Build one rich, pinned message for a dedicated read-only `#welcome` channel — 
 static "start here" board, separate from the per-join [Welcome & leave](welcome.md)
 messages.
 
-**Dashboard:** `/guilds/<id>/m/welcome-channel`.
+**Dashboard:** `/v2/guilds/<id>/m/welcome-channel`.
 
 ## Needs
 
