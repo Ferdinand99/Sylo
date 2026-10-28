@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.10.0](https://github.com/Ferdinand99/Sylo/compare/v4.9.1...v4.10.0) (2026-10-28)
+
+
+### Features
+
+* the new dashboard is the default (classic retires in 5.0) ([#289](https://github.com/Ferdinand99/Sylo/issues/289)) ([e071f90](https://github.com/Ferdinand99/Sylo/commit/e071f90730e38ab9d9c11cd6e90a98ed2a5d015f))
+
 ## [4.9.1](https://github.com/Ferdinand99/Sylo/compare/v4.9.0...v4.9.1) (2026-10-28)
 
 
