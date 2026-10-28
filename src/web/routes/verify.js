@@ -7,6 +7,7 @@ import { config } from '../../config.js';
 import { isModuleEnabled, getGuildModule } from '../../db/modules.js';
 import { log } from '../../lib/log.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { TURNSTILE_SOURCES } from '../lib/securityHeaders.js';
 import { verifyVerifyToken, normaliseVerificationConfig, grantVerified } from '../../modules/verification.js';
 
 const router = Router();
@@ -32,6 +33,8 @@ router.get(
     if (!(await isModuleEnabled(guildId, 'verification'))) {
       return fail(res, 'Verification is no longer active in that server.');
     }
+    // The Turnstile widget (script, iframe, its own requests) is allowed on this page only.
+    res.locals.extendCsp(TURNSTILE_SOURCES);
     res.render('verify', {
       state: 'challenge',
       message: null,

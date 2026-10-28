@@ -28,6 +28,7 @@ import v2ApiRouter from './routes/v2Api.js';
 import v2ClientRouter, { v2Build, v2PublicClientRouter } from './routes/v2Client.js';
 import v2PublicRouter from './routes/v2Public.js';
 import telemetryRouter from './routes/telemetry.js';
+import { securityHeaders } from './lib/securityHeaders.js';
 import roadmapRouter from './routes/roadmap.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -129,15 +130,11 @@ export function createApp() {
 
   // First in the chain: per-request debug log + the HTTP request counter.
   app.use(requestLog);
-  // No page may be framed by another site (clickjacking), the browser must not guess content
-  // types, and other sites get only the origin as referrer.
-  app.use((req, res, next) => {
-    res.set('X-Frame-Options', 'DENY');
-    res.set('Content-Security-Policy', "frame-ancestors 'none'");
-    res.set('X-Content-Type-Options', 'nosniff');
-    res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-    next();
-  });
+  // No page may be framed by another site (clickjacking), only the dashboard's own scripts and
+  // styles run (Content-Security-Policy), https is remembered (HSTS, under an https
+  // DASHBOARD_URL), the browser must not guess content types, and other sites get only the
+  // origin as referrer. See lib/securityHeaders.js.
+  app.use(securityHeaders(config));
   app.use(refuseMalformedPaths);
   app.use(refuseRemoteHostsInOpenMode);
 

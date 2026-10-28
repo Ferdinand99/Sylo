@@ -177,6 +177,9 @@ const turnstileSecretKey = optionalOrNull('TURNSTILE_SECRET_KEY');
 const botErrorDsn = optionalOrNull('BOT_ERROR_DSN');
 const dashboardErrorDsn = optionalOrNull('DASHBOARD_ERROR_DSN');
 const dashboardVisitStats = optionalBool('DASHBOARD_VISIT_STATS', false);
+// CSP_REPORT_ONLY=1: the dashboard's Content-Security-Policy is reported, not enforced (a self-hoster's
+// way back if a custom setup trips it). See src/web/lib/securityHeaders.js.
+const cspReportOnly = optionalBool('CSP_REPORT_ONLY', false);
 const errorEnvironment = optionalOrNull('ERROR_ENVIRONMENT') ?? 'production';
 const itadApiKey = optionalOrNull('ITAD_API_KEY');
 const twitchClientId = optionalOrNull('TWITCH_CLIENT_ID');
@@ -320,6 +323,7 @@ export const config = Object.freeze({
   dashboardErrorDsn,
   dashboardVisitStats,
   errorEnvironment,
+  cspReportOnly,
 
   // IsThereAnyDeal API key — broadens the Free games module beyond Epic. Free
   // key from isthereanydeal.com/apps. When unset, Free games is Epic-only.

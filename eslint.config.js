@@ -96,6 +96,12 @@ export default [
     },
   },
 
+  // V2's own theme.js is a plain script (loaded from <head>), not a module.
+  {
+    files: ['web-v2/public/**/*.js'],
+    languageOptions: { sourceType: 'script' },
+  },
+
   // V2 unit tests (Vitest, `globals: true` in web-v2/vitest.config.js).
   {
     files: ['web-v2/**/__tests__/**/*.{js,jsx}'],

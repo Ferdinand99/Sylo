@@ -40,11 +40,13 @@ test('open mode answers on local names and addresses', async () => {
 });
 
 // No page may be framed by another site (clickjacking); the browser is also told not to guess
-// content types or send full URLs to other sites.
+// content types or send full URLs to other sites. The rest of the policy: securityHeaders.test.js.
+// A real route: Express's own 404 handler sets a Content-Security-Policy of its own.
 test('every page forbids framing', async () => {
   const res = await fetch(`${base}/health`);
   assert.equal(res.headers.get('x-frame-options'), 'DENY');
   assert.match(res.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/);
+  assert.match(res.headers.get('content-security-policy') ?? '', /default-src 'self'/);
   assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
 });
 

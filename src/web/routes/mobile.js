@@ -93,10 +93,11 @@ const authEnabled = (_req, res, next) => (config.authEnabled ? next() : res.stat
 
 export const mobileAuthRouter = Router();
 // These pages hand out sign-ins: never inside someone else's frame (clickjacking on "Allow").
-// First, so every answer carries it, a rate-limited one too.
+// First, so every answer carries it, a rate-limited one too. (The Content-Security-Policy, with
+// frame-ancestors 'none', is the app-wide one from lib/securityHeaders.js: setting a narrower one
+// here would replace it.)
 mobileAuthRouter.use((_req, res, next) => {
   res.set('X-Frame-Options', 'DENY');
-  res.set('Content-Security-Policy', "frame-ancestors 'none'");
   next();
 });
 mobileAuthRouter.use(authEnabled, rateLimit({ windowMs: 60_000, max: 30 }));
