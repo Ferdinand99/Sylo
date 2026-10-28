@@ -34,6 +34,7 @@ import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { idList, MAX_REACTION_MESSAGES } from '../lib/idList.js';
 import { buildReactionPairs } from '../lib/reactionPairs.js';
 import { guildCustomEmojis } from '../lib/guildEmojis.js';
+import { canPostInChannel } from '../lib/modlogChannel.js';
 import { withRowIds } from '../lib/rowIds.js';
 import { shouldSaveBotMasters } from '../lib/botMasters.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
@@ -2072,6 +2073,11 @@ router.post(
     if (channelId === '') {
       await setModlogChannel(guild.id, null);
     } else if (guildTextChannels(guild).some((c) => c.id === channelId)) {
+      if (!canPostInChannel(guild, channelId)) {
+        return res
+          .status(400)
+          .json({ error: 'Sylo needs View Channel, Send Messages and Embed Links in that channel.' });
+      }
       await setModlogChannel(guild.id, channelId);
     } else {
       return res.status(400).json({ error: 'Unknown channel' });

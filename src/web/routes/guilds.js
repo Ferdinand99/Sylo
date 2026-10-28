@@ -13,6 +13,7 @@ import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { idList, MAX_REACTION_MESSAGES } from '../lib/idList.js';
 import { buildReactionPairs } from '../lib/reactionPairs.js';
 import { guildCustomEmojis } from '../lib/guildEmojis.js';
+import { canPostInChannel } from '../lib/modlogChannel.js';
 import { shouldSaveBotMasters } from '../lib/botMasters.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { getModule, missingIntents } from '../../modules/registry.js';
@@ -337,10 +338,7 @@ router.post(
     if (channelId === '') {
       await setModlogChannel(guild.id, null);
     } else if (guildTextChannels(guild).some((c) => c.id === channelId)) {
-      const channel = guild.channels.cache.get(channelId);
-      if (!channel?.permissionsFor(guild.members.me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) {
-        return res.redirect(`${back}?msg=perms`);
-      }
+      if (!canPostInChannel(guild, channelId)) return res.redirect(`${back}?msg=perms`);
       await setModlogChannel(guild.id, channelId);
     } else {
       return res.redirect(`${back}?msg=badchannel`);
