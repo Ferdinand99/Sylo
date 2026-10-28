@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { getRoadmap, voteRoadmapPost, suggestRoadmapPost } from '../api.js';
 import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
+import { loginHref } from '../publicRoutes.js';
 
 const GROUPS = [
   { key: 'planned', label: 'Planned' },
@@ -114,7 +115,7 @@ export default function Roadmap() {
             'Voting and suggesting need a login, and this Sylo has none set up.'
           ) : (
             <>
-              <a href="/auth/login">Log in</a> to vote or suggest a feature.
+              <a href={loginHref()}>Log in</a> to vote or suggest a feature.
             </>
           )}
         </p>

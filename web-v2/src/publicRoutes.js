@@ -7,3 +7,9 @@ export const PUBLIC_PATHS = ['/commands', '/roadmap'];
 export function isPublicPath(pathname) {
   return PUBLIC_PATHS.includes(String(pathname).toLowerCase().replace(/\/+$/, ''));
 }
+
+/** The login link for a signed-out visitor: after signing in they come back to the page they are
+ * on (`next` is an address on this site, /v2/roadmap). */
+export function loginHref() {
+  return `/auth/login?next=${encodeURIComponent(window.location.pathname)}`;
+}

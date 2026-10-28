@@ -1,16 +1,18 @@
 import { Suspense, useRef } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import ThemeToggle from './ThemeToggle.jsx';
 import Toasts from './Toasts.jsx';
 import useLabelLinks from './useLabelLinks.js';
 import useTheme from './useTheme.js';
 import useTopbarScrolled from './useTopbarScrolled.js';
+import { loginHref } from '../publicRoutes.js';
 
 // The layout for the public pages (command list, roadmap) when nobody is signed in: the topbar
 // with the brand, those two pages, the theme and a log-in link — no server switcher, account
 // menu or sidebar, because all of those need a session. It never calls an endpoint behind the
 // login, so a signed-out visitor does not get a string of 401s.
 export default function PublicShell() {
+  useLocation(); // re-render on navigation, so the log-in link below names the page now open
   useLabelLinks();
   const topbarRef = useRef(null);
   const [theme, toggleTheme] = useTheme();
@@ -28,7 +30,7 @@ export default function PublicShell() {
           <NavLink to="/commands">Commands</NavLink>
           <NavLink to="/roadmap">Roadmap</NavLink>
         </nav>
-        <a className="v2-classic-link v2-public-login" href="/auth/login">
+        <a className="v2-classic-link v2-public-login" href={loginHref()}>
           Log in
         </a>
         <ThemeToggle theme={theme} onToggle={toggleTheme} />

@@ -1,6 +1,6 @@
 // The new dashboard's public pages (command list, roadmap): they work without a session and show
 // only what the classic public pages show, while the rest of /v2 and /api/v2 stays behind the login.
-import { browser, signIn, setProfiles, startOAuthApp } from './helpers/oauthApp.js';
+import { browser, signIn, setProfiles, startOAuthApp, stateOf } from './helpers/oauthApp.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { SlashCommandBuilder } from 'discord.js';
 import { runtime } from '../src/runtime.js';
 import { v2Build } from '../src/web/routes/v2Client.js';
+import { internalNext } from '../src/web/middleware/auth.js';
 
 await startOAuthApp();
 const { createPost, setPostStatus, toggleVote, listPendingPosts } = await import('../src/db/roadmap.js');
@@ -84,13 +85,93 @@ test('a missing built file is not a public page', async () => {
   assert.ok(loginRedirect(res));
 });
 
-test('logging in from a public page returns to it', async () => {
+test('index.html is never served without a login, however it is spelled', async () => {
+  for (const path of [
+    '/v2/index.html',
+    '/v2/index%2Ehtml',
+    '/v2/index%2ehtml',
+    '/v2/%69ndex.html',
+    '/v2/INDEX.HTML',
+    '/v2//index.html',
+    '/v2/./index.html',
+    '/v2/assets/../index.html',
+    '/v2/assets/%2e%2e/index.html',
+    '/v2/index.html/',
+    '/v2/index.html.',
+  ]) {
+    const res = await browser().get(path, { headers: { accept: 'text/html' } });
+    assert.ok(loginRedirect(res), `${path} -> ${res.status}`);
+  }
+});
+
+test('an anonymous visit to a public page remembers no return address', async () => {
+  for (const path of ['/v2/commands', '/v2/roadmap']) {
+    const res = await browser().get(path, { headers: { accept: 'text/html' } });
+    assert.equal(res.status, 200, path);
+    // The CSRF middleware still gives every visitor a session cookie holding the CSRF token; the
+    // page itself adds nothing to it.
+    const sid = res.headers.getSetCookie().find((c) => c.startsWith('sylo.sid='));
+    const stored = sid ? JSON.parse(Buffer.from(sid.split(';')[0].slice('sylo.sid='.length), 'base64')) : {};
+    assert.deepEqual(Object.keys(stored), ['csrf'], path);
+  }
+});
+
+test("a public page's log-in link carries the page, and the login returns to it", async () => {
   setProfiles();
   const b = browser();
-  await b.get('/v2/roadmap', { headers: { accept: 'text/html' } });
+  const start = await b.get('/auth/login?next=%2Fv2%2Froadmap');
+  // Two logins are offered, so the chooser is shown; the choice is already remembered.
+  assert.equal(start.status, 200);
   const done = await signIn(b, 'discord');
   assert.equal(done.status, 302);
   assert.equal(done.headers.get('location'), '/v2/roadmap');
+});
+
+test('next also works straight on a provider login', async () => {
+  setProfiles();
+  const b = browser();
+  const start = await b.get('/auth/discord/login?next=/v2/commands');
+  assert.equal(start.status, 302);
+  const done = await b.get(`/auth/discord/callback?code=abc&state=${stateOf(start)}`);
+  assert.equal(done.headers.get('location'), '/v2/commands');
+});
+
+test('only an internal path is accepted as next', () => {
+  for (const ok of ['/v2/roadmap', '/v2/commands', '/guilds/1/overview?x=1'])
+    assert.equal(internalNext(ok), ok);
+  for (const bad of [
+    'https://evil.example/x',
+    '//evil.example/x',
+    '/\\evil.example/x',
+    'evil.example',
+    'javascript:alert(1)',
+    '',
+    '/',
+    `/${'a'.repeat(600)}`,
+    undefined,
+    ['/v2/roadmap'],
+    { a: 1 },
+  ]) {
+    assert.equal(internalNext(bad), null, JSON.stringify(bad));
+  }
+});
+
+test('an outside next is ignored: the login still ends at the usual place', async () => {
+  for (const next of ['https://evil.example/x', '//evil.example/x']) {
+    setProfiles();
+    const b = browser();
+    await b.get(`/auth/login?next=${encodeURIComponent(next)}`);
+    const done = await signIn(b, 'discord');
+    assert.equal(done.headers.get('location'), '/', next);
+  }
+});
+
+test('next does not override where a protected page sent the visitor from', async () => {
+  setProfiles();
+  const b = browser();
+  await b.get('/v2/account', { headers: { accept: 'text/html' } }); // bounced to the login, remembered
+  const done = await signIn(b, 'discord');
+  assert.equal(done.headers.get('location'), '/v2/account');
 });
 
 test('/api/v2/public/session tells a visitor from a signed-in person', async () => {

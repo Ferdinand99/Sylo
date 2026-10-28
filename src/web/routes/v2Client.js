@@ -8,10 +8,9 @@
 // (the bundle holds no data) and the SPA shell for the two public pages, /v2/commands and
 // /v2/roadmap. Everything else under /v2 still needs a login.
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Router, static as expressStatic } from 'express';
-import { config } from '../../config.js';
 import { endClassicChoice } from '../lib/classicChoice.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -46,19 +45,37 @@ function sendIndex(res) {
 
 export const v2PublicClientRouter = Router();
 
+/**
+ * Is this request for index.html itself, however it is spelled? `req.path` is the raw path, but the
+ * static handler decodes it first (`/index%2Ehtml`) and resolves it (`//index.html`,
+ * `/a/../index.html`, another case on a case-insensitive disk), so compare what it would open.
+ */
+export function asksForIndexFile(rawPath) {
+  let path;
+  try {
+    path = decodeURIComponent(rawPath);
+  } catch {
+    return false; // The static handler refuses a malformed path itself.
+  }
+  const name = posix
+    .normalize(path.replaceAll('\\', '/'))
+    .replace(/^\/+/, '')
+    .replace(/[. ]+$/, '')
+    .toLowerCase();
+  return name === 'index.html';
+}
+
 // The built files. Not index.html itself: that is served only for the pages above (and, behind the
 // login, for the rest).
 const builtFiles = expressStatic(distDir, { index: false, redirect: false });
 v2PublicClientRouter.use((req, res, next) =>
-  req.path === '/index.html' ? next() : builtFiles(req, res, next)
+  asksForIndexFile(req.path) ? next() : builtFiles(req, res, next)
 );
 
+// A signed-out visitor who logs in from one of these comes back to it through the SPA's "Log in"
+// link (/auth/login?next=/v2/roadmap); an anonymous visit writes nothing to a session.
 v2PublicClientRouter.get(PUBLIC_PAGES, (req, res) => {
   endClassicChoiceOnPage(req, res);
-  // Signed out and logging in from the page: come back to it afterwards.
-  if (config.authEnabled && !req.account && req.session) {
-    req.session.returnTo = `/v2${req.path.toLowerCase().replace(/\/+$/, '')}`;
-  }
   sendIndex(res);
 });
 
