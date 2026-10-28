@@ -239,11 +239,6 @@ body {
   text-decoration: none;
 }
 .sb-tryv2-top .sb-ico { width: 16px; height: 16px; flex: none; color: var(--accent); }
-.sb-tryv2-beta {
-  margin-left: auto; font-size: 9.5px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase;
-  color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent);
-  border-radius: 999px; padding: 2px 7px; flex: none;
-}
 
 .sb-foot { border-top: 1px solid var(--border); margin-top: 6px; padding: 10px 6px 2px; }
 .sb-theme {

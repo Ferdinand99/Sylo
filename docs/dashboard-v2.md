@@ -26,9 +26,11 @@ matching page in V2. It's gated behind the same login as the rest of the
 dashboard — nothing extra to set up. Without a V2 build (see
 [For self-hosters](#for-self-hosters)) the classic dashboard answers instead.
 
-**Back to classic dashboard** in V2's top bar keeps you on the classic
-dashboard for the rest of that browser session. Opening `/v2` again (the
-banner on every classic page links to it) ends that. The old "Open the new
+**Back to classic dashboard** in V2's top bar opens `/?classic=1`, which keeps
+you on the classic dashboard until you open `/v2` again (the banner on the
+classic dashboard's pages links to it). Only the home page honours
+`?classic=1`; the choice lives in the session cookie when the dashboard has a
+login, and in a small cookie of its own when it runs without one. The old "Open the new
 dashboard by default" switch on the Account page is gone; a saved choice from
 it is ignored.
 
@@ -55,12 +57,17 @@ the module reference itself.
 
 Every module has its own V2 settings page, and so do the staff pages (tickets,
 ban appeals, the moderation hub with commands, automod and logging), embed
-messages, insights, the leaderboard, Health and the Bot Personalizer. The
+messages, insights, the leaderboard, Health, Stats and the Bot Personalizer. The
 server tools are there too, under **Settings → Server data**: the audit log,
 config export (the same JSON file as the classic download) and member data
 (look up and forget a member; moderation cases and other safety records are
 kept, as in the classic dashboard). Everything you save in V2 is the same
 setting the classic dashboard shows.
+
+Two pages are public, with no login: the command list (`/v2/commands`) and the
+roadmap (`/v2/roadmap`). They show what the classic public pages show; voting
+and suggesting a feature still need a login, and the log-in link on them brings
+you back to the page.
 
 ## Saving and unsaved changes
 
@@ -80,7 +87,7 @@ not in V2? Report it same as any other issue.
 ## Switching back
 
 **Back to classic dashboard** sits in V2's top bar and returns you to the
-classic dashboard (`/?classic=1`) for the rest of the session. It goes away
+classic dashboard (`/?classic=1`) until you open `/v2` again. It goes away
 with the classic dashboard in Sylo 5.0. Nothing about your settings depends on
 which dashboard you use.
 

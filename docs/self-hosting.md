@@ -394,8 +394,9 @@ database back together with the code.
 - **The new dashboard is the default** for everyone, open mode included. `/` opens `/v2`, and old
   dashboard addresses (`/guilds/<id>/…`, `/account`, `/settings`, `/health` in a browser, `/stats`,
   `/commands`) open the matching page there. Bookmarks and links Sylo posted in Discord keep working.
-- **The classic dashboard is retiring.** It is still reachable at `/?classic=1` (opening `/v2` switches
-  back) and is removed in Sylo 5.0.
+- **The classic dashboard is retiring.** Opening `/?classic=1` (the home page, not another address)
+  keeps a browser on it until `/v2` is opened again; with a login the choice is kept in the session
+  cookie, without one in a small cookie of its own. It is removed in Sylo 5.0.
 - **The command list and the roadmap are public** at `/v2/commands` and `/v2/roadmap`; voting and
   suggesting still need a login.
 - **Monitoring is unchanged:** `GET /health` still answers JSON to monitors and the container health check.
