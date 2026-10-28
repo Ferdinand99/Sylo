@@ -4,6 +4,7 @@
 import { allGuilds, allClientsReady, guildKey } from '../platform/platformOf.js';
 import { getGuildModule } from '../db/modules.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 /** [type, label] — {count} in the template is replaced with this number. */
 export const STAT_TYPES = [
@@ -106,9 +107,12 @@ async function tick() {
   }
 }
 
-setInterval(() => {
-  tick().catch((err) => log.error('server-stats', 'tick failed:', err.message));
-}, BASE_TICK_MS).unref();
-
 // First pass a minute after boot.
-setTimeout(() => tick().catch(() => {}), 60_000).unref();
+every(
+  'server-stats',
+  BASE_TICK_MS,
+  () => {
+    tick().catch((err) => log.error('server-stats', 'tick failed:', err.message));
+  },
+  { firstDelayMs: 60_000 }
+);

@@ -19,6 +19,7 @@ import { fluxerReactionAdd } from '../platform/fluxerEvents.js';
 import { createVoiceTracker } from '../platform/voiceStates.js';
 import { handleReactionAdd } from '../platform/reactionBridge.js';
 import { purgeExpiredComponentActions } from '../db/componentReactions.js';
+import { every } from '../modules/schedule.js';
 
 /**
  * The `instance` client option: which Fluxer instance to talk to. Hosted Fluxer
@@ -117,9 +118,8 @@ export async function startFluxerBot(opts = {}) {
     throw err;
   }
   // Expired reaction-menu rows (a /help reply lives 15 minutes) are not read after that.
-  setInterval(
-    () => purgeExpiredComponentActions().catch((err) => log.error('fluxer', 'component purge failed:', err)),
-    60 * 60 * 1000
-  ).unref();
+  every('core', 60 * 60 * 1000, () =>
+    purgeExpiredComponentActions().catch((err) => log.error('fluxer', 'component purge failed:', err))
+  );
   return client;
 }

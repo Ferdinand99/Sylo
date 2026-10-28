@@ -6,6 +6,7 @@ import { PermissionFlagsBits } from 'discord.js';
 import { isModuleEnabled } from '../db/modules.js';
 import { dueCandidates, markCleanupRan, deleteCleanupSchedule } from '../db/channelCleanup.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 const MODULE_ID = 'channel-cleanup';
 const TICK_MS = 5 * 60_000;
@@ -144,7 +145,6 @@ async function tick() {
   }
 }
 
-const timer = setInterval(() => {
+every('channel-cleanup', TICK_MS, () => {
   tick().catch((err) => log.error('module:channel-cleanup', 'tick failed:', err.message));
-}, TICK_MS);
-timer.unref();
+});

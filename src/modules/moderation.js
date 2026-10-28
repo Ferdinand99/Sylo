@@ -16,6 +16,7 @@ import { notifyTarget, MOD_COLOR, INFO_COLOR } from '../bot/lib/moderation.js';
 import { formatDuration } from '../bot/lib/duration.js';
 import { sendPreBanAppealDm } from './appeals.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 export const THRESHOLD_ACTIONS = ['timeout', 'kick', 'ban'];
 const MAX_TIMEOUT_MS = 28 * 86_400_000;
@@ -172,7 +173,7 @@ export async function settleTempBan(row) {
   await postModLog(guild, embed);
 }
 
-const tempBanTimer = setInterval(async () => {
+every('moderation', TEMP_BAN_TICK_MS, async () => {
   if (!allClientsReady()) return;
   for (const row of await dueTempBans(Date.now())) {
     const key = `${row.guild_id}:${row.user_id}`;
@@ -182,5 +183,4 @@ const tempBanTimer = setInterval(async () => {
       .catch((err) => log.error('module:moderation', 'temp-unban failed:', err.message))
       .finally(() => settlingTempBans.delete(key));
   }
-}, TEMP_BAN_TICK_MS);
-tempBanTimer.unref();
+});

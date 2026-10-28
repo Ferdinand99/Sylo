@@ -24,6 +24,7 @@ import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
 import { getGuildModule } from '../db/modules.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 import {
   addTempChannel,
   removeTempChannel,
@@ -406,11 +407,12 @@ export async function sweepTempChannels() {
   }
 }
 
-setInterval(
+every(
+  'temp-voice',
+  SWEEP_MS,
   () => sweepTempChannels().catch((e) => log.error('temp-voice', 'sweep:', e.message)),
-  SWEEP_MS
-).unref();
-setTimeout(() => sweepTempChannels().catch(() => {}), 30_000).unref();
+  { firstDelayMs: 30_000 }
+);
 
 // --- command helpers (used by bot/commands/voice-*.js) ---------------
 

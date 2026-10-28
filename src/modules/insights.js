@@ -13,6 +13,7 @@ import { on } from './dispatch.js';
 import { accrueDaily, accrueHourly, pruneInsights, utcDay, utcHour } from '../db/insights.js';
 import { getTempChannel } from '../db/tempVoice.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 // A "join to create" spawn is deleted within minutes, so its channel id is
 // meaningless on the dashboard later. Capture its name now (the row still
@@ -258,10 +259,7 @@ export async function flushGuild(guildId) {
 // Exposed for tests.
 export const _internals = { buf, flushAll, flushSlot, slot, settleVoice };
 
-const timer = setInterval(
-  () => flushAll().catch((e) => log.error('insights', `flushAll: ${e.message}`)),
-  FLUSH_MS
-);
-timer.unref();
-// A first flush shortly after boot so the page isn't empty for the first cycle.
-setTimeout(() => flushAll().catch(() => {}), 90_000).unref();
+// The first flush comes shortly after boot so the page isn't empty for the first cycle.
+every('insights', FLUSH_MS, () => flushAll().catch((e) => log.error('insights', `flushAll: ${e.message}`)), {
+  firstDelayMs: 90_000,
+});

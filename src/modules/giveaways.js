@@ -20,6 +20,7 @@ import {
   giveawayEntrantIds,
 } from '../db/giveaways.js';
 import { log } from '../lib/log.js';
+import { every, after } from './schedule.js';
 
 export const MIN_MS = 60_000; // 1 minute
 export const MAX_MS = 60 * 86_400_000; // 60 days
@@ -153,7 +154,7 @@ export async function endGiveaway(id, opts = {}) {
 
   const pending = pendingCountRefresh.get(id);
   if (pending) {
-    clearTimeout(pending);
+    pending.cancel();
     pendingCountRefresh.delete(id);
   }
 
@@ -196,13 +197,12 @@ export async function endGiveaway(id, opts = {}) {
 /** Queue a trailing footer refresh; a burst of clicks yields one edit / 5s. */
 function scheduleCountRefresh(message, id) {
   if (pendingCountRefresh.has(id)) return;
-  const t = setTimeout(async () => {
+  const t = after('giveaways', COUNT_REFRESH_MS, async () => {
     pendingCountRefresh.delete(id);
     const g = await getGiveaway(id);
     if (!g || g.ended) return;
     message.edit(buildGiveawayPayload(g, { entryCount: await giveawayEntryCount(id) })).catch(() => {});
-  }, COUNT_REFRESH_MS);
-  t.unref?.();
+  });
   pendingCountRefresh.set(id, t);
 }
 
@@ -260,7 +260,6 @@ async function tick() {
     }
   }
 }
-const timer = setInterval(() => {
+every('giveaways', TICK_MS, () => {
   tick().catch((err) => log.error('giveaways', 'tick failed:', err.message));
-}, TICK_MS);
-timer.unref();
+});

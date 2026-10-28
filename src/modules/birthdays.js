@@ -9,6 +9,7 @@ import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { getAppSetting, setAppSetting } from '../db/appSettings.js';
 import { birthdaysOnDay, guildBirthdays } from '../db/birthdays.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 const DEFAULT_MESSAGE = '🎂 Happy birthday {user}! 🎉';
 const LAST_RUN_KEY = 'birthdays:lastRun';
@@ -139,10 +140,11 @@ export { guildBirthdays };
 // Check hourly; the app-setting guard means only the first check after midnight
 // does any work, and a mid-day restart doesn't re-post.
 const TICK_MS = 60 * 60 * 1000;
-const timer = setInterval(() => {
-  if (allClientsReady()) runBirthdaySweep().catch(() => {});
-}, TICK_MS);
-timer.unref();
-setTimeout(() => {
-  if (allClientsReady()) runBirthdaySweep().catch(() => {});
-}, 15_000).unref();
+every(
+  'birthdays',
+  TICK_MS,
+  () => {
+    if (allClientsReady()) runBirthdaySweep().catch(() => {});
+  },
+  { firstDelayMs: 15_000 }
+);

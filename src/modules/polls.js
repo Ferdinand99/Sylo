@@ -15,6 +15,7 @@ import { on } from './dispatch.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { getPoll, duePolls, deletePoll } from '../db/polls.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 // Regional-indicator A … T — one per option, up to 20.
 export const LETTERS = Array.from({ length: 20 }, (_, i) => String.fromCodePoint(0x1f1e6 + i));
@@ -298,7 +299,7 @@ on('polls', 'reactionAdd', async ({ reaction, user }, rawConfig, _guildId) => {
 // --- expiry loop -------------------------------------------------------
 
 const TICK_MS = 15_000;
-const timer = setInterval(async () => {
+every('polls', TICK_MS, async () => {
   if (!allClientsReady()) return;
   for (const poll of await duePolls(Date.now())) {
     if ((await isModuleEnabled(poll.guild_id, 'polls')) && Boolean(guildByKey(poll.guild_id))) {
@@ -307,5 +308,4 @@ const timer = setInterval(async () => {
       await deletePoll(poll.message_id); // module off or bot gone — just clear it
     }
   }
-}, TICK_MS);
-timer.unref();
+});

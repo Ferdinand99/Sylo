@@ -19,6 +19,7 @@ import { parseFeed } from '../bot/lib/feed.js';
 import { safeFetch } from '../lib/safeFetch.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 const COLOR = 0xee802f;
 const POLL_MS = 5 * 60_000;
@@ -259,8 +260,11 @@ async function tick() {
   await pruneScopePrefixOlderThan('rss:', KEEP_MS);
 }
 
-const timer = setInterval(() => {
-  tick().catch((err) => log.error('rss', 'tick failed:', err.message));
-}, POLL_MS);
-timer.unref();
-setTimeout(() => tick().catch(() => {}), 45_000).unref();
+every(
+  'rss',
+  POLL_MS,
+  () => {
+    tick().catch((err) => log.error('rss', 'tick failed:', err.message));
+  },
+  { firstDelayMs: 45_000 }
+);

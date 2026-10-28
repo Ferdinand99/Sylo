@@ -33,6 +33,7 @@ import { notifyTarget } from '../bot/lib/moderation.js';
 import { addCase } from '../db/modCases.js';
 import { applyWarnThresholds } from './moderation.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 export const AUTOMOD_ACTIONS = ['delete', 'warn', 'timeout'];
 
@@ -161,14 +162,14 @@ function bumpFlood(key, now, windowMs) {
 }
 
 // Sweep stale entries so the map cannot grow unbounded.
-setInterval(() => {
+every('automod', 60_000, () => {
   const cutoff = Date.now() - 60_000;
   for (const [k, arr] of recent) {
     const kept = arr.filter((t) => t > cutoff);
     if (kept.length) recent.set(k, kept);
     else recent.delete(k);
   }
-}, 60_000).unref();
+});
 
 // --- detection -----------------------------------------------------------
 

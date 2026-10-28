@@ -19,6 +19,7 @@ import { anySeen, clearScope, markSeen, seen, seenValue } from '../db/postedKeys
 import { createAppStoreConnect, isAppleSideFailure } from '../lib/appStoreConnect.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 export const MODULE_ID = 'apple-connect';
 
@@ -676,11 +677,9 @@ async function tick() {
   await runAppleTick();
 }
 
-const timer = setInterval(() => {
-  tick().catch((err) => logAppleFailure(`tick failed: ${err.message}`, err));
-}, POLL_MS);
-timer.unref();
-setTimeout(
-  () => tick().catch((err) => logAppleFailure(`first tick failed: ${err.message}`, err)),
-  60_000
-).unref();
+every(
+  'apple-connect',
+  POLL_MS,
+  () => tick().catch((err) => logAppleFailure(`tick failed: ${err.message}`, err)),
+  { firstDelayMs: 60_000 }
+);

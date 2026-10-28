@@ -16,6 +16,7 @@ import { postToChannel } from './lib/send.js';
 import { settleEndedPost } from './lib/liveAlerts.js';
 import { normaliseOnEnd } from '../lib/liveValue.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 const HELIX = 'https://api.twitch.tv/helix';
 const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
@@ -210,8 +211,11 @@ async function tick() {
   }
 }
 
-const timer = setInterval(() => {
-  tick().catch((err) => log.error('twitch-alerts', 'tick failed:', err.message));
-}, POLL_MS);
-timer.unref();
-setTimeout(() => tick().catch(() => {}), 25_000).unref();
+every(
+  'twitch-alerts',
+  POLL_MS,
+  () => {
+    tick().catch((err) => log.error('twitch-alerts', 'tick failed:', err.message));
+  },
+  { firstDelayMs: 25_000 }
+);

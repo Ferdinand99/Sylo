@@ -14,6 +14,7 @@ import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { addXp, prunePeriods } from '../db/leveling.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
+import { every, after } from './schedule.js';
 
 export const ANNOUNCE_MODES = ['channel', 'reply', 'dm', 'off'];
 export const XP_RATES = [0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3];
@@ -86,10 +87,10 @@ export function resolveMultiplier(config, { roleIds = [], channelId } = {}) {
 
 // Fast-path cooldown gate so spam doesn't hit the DB. key -> last-award ts.
 const cooldowns = new Map();
-setInterval(() => {
+every('leveling', 600_000, () => {
   const cutoff = Date.now() - 3_600_000;
   for (const [k, ts] of cooldowns) if (ts < cutoff) cooldowns.delete(k);
-}, 600_000).unref();
+});
 
 function fillMessage(template, member, level) {
   return String(template || DEFAULT_MESSAGE)
@@ -268,17 +269,16 @@ async function settleAllVoice(now = Date.now()) {
   await prunePeriods();
 }
 
-const voiceTimer = setInterval(() => {
+every('leveling', VOICE_SETTLE_MS, () => {
   settleAllVoice().catch((err) => log.error('module:leveling', 'voice tick failed:', err.message));
-}, VOICE_SETTLE_MS);
-voiceTimer.unref();
+});
 // Seed sessions for members already in voice shortly after boot, so a restart
 // doesn't cost everyone connected a full settle interval of accrual.
-setTimeout(() => {
+after('leveling', 25_000, () => {
   discoverVoiceSessions(Date.now()).catch((err) =>
     log.error('module:leveling', 'initial voice session discovery failed:', err.message)
   );
-}, 25_000).unref();
+});
 
 export const _internals = { voiceSessions, settleAllVoice, settleVoiceSession, discoverVoiceSessions };
 

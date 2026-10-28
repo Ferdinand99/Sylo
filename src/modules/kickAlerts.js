@@ -16,6 +16,7 @@ import { postToChannel } from './lib/send.js';
 import { settleEndedPost } from './lib/liveAlerts.js';
 import { encodeLiveValue, decodeLiveValue, normaliseOnEnd } from '../lib/liveValue.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 const API = 'https://api.kick.com/public/v1';
 const TOKEN_URL = 'https://id.kick.com/oauth/token';
@@ -206,8 +207,11 @@ async function tick() {
   }
 }
 
-const timer = setInterval(() => {
-  tick().catch((err) => log.error('kick-alerts', 'tick failed:', err.message));
-}, POLL_MS);
-timer.unref();
-setTimeout(() => tick().catch(() => {}), 30_000).unref();
+every(
+  'kick-alerts',
+  POLL_MS,
+  () => {
+    tick().catch((err) => log.error('kick-alerts', 'tick failed:', err.message));
+  },
+  { firstDelayMs: 30_000 }
+);

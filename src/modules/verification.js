@@ -28,6 +28,7 @@ import { getGuildModule, setGuildModule, isModuleEnabled } from '../db/modules.j
 import { isPlatformGuildId } from '../lib/platformId.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 export const VERIFY_MODES = ['button', 'captcha'];
 const TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -233,7 +234,7 @@ export async function sweepVerificationKicks(now = Date.now()) {
 }
 
 const KICK_TICK_MS = 60_000;
-setInterval(() => {
+every('verification', KICK_TICK_MS, () => {
   if (!allClientsReady()) return;
   sweepVerificationKicks().catch((err) => log.error('verification', 'kick sweep failed:', err.message));
-}, KICK_TICK_MS).unref();
+});

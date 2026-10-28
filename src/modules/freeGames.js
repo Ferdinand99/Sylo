@@ -10,6 +10,7 @@ import { getGuildModule } from '../db/modules.js';
 import { wasPosted, markPosted, pruneFreeGames } from '../db/freeGames.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 const EPIC_URL =
   'https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions?locale=en-US&country=US&allowCountries=US';
@@ -231,8 +232,11 @@ async function tick() {
   }
 }
 
-setInterval(() => {
-  tick().catch((err) => log.error('free-games', 'tick failed:', err.message));
-}, POLL_MS).unref();
-
-setTimeout(() => tick().catch(() => {}), 90_000).unref();
+every(
+  'free-games',
+  POLL_MS,
+  () => {
+    tick().catch((err) => log.error('free-games', 'tick failed:', err.message));
+  },
+  { firstDelayMs: 90_000 }
+);

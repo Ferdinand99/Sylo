@@ -9,6 +9,7 @@ import { startBackupSchedule } from './db/backup.js';
 import { startRetentionSchedule } from './db/retention.js';
 import { startBot } from './bot/index.js';
 import { startFluxerBot } from './bot/fluxerBot.js';
+import { startSchedules, stopSchedules } from './modules/schedule.js';
 import { startWeb } from './web/server.js';
 import { addDevLogSink } from './lib/devLog.js';
 import { addDevLogEntry } from './db/devLogEntries.js';
@@ -41,6 +42,10 @@ async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info('sylo', `${signal} received — shutting down`);
+
+  // Module timers first: no new tick starts, and a running one gets up to 3 s to finish before
+  // the HTTP server and the clients close under it.
+  await stopSchedules();
 
   const drained = Promise.allSettled([
     httpServer ? new Promise((resolve) => httpServer.close(resolve)) : Promise.resolve(),
@@ -80,6 +85,7 @@ async function main() {
   // Every configured platform starts in parallel; one that is not configured is never loaded.
   await Promise.all([config.discordEnabled && startBot(), config.fluxerEnabled && startFluxerBot()]);
   httpServer = await startWeb(config.webPort);
+  startSchedules();
   startBackupSchedule();
   startRetentionSchedule();
   log.info('sylo', 'Up and running');

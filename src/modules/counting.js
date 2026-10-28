@@ -9,6 +9,7 @@
 import { allClientsReady, guildByKey, guildKey } from '../platform/platformOf.js';
 import { on } from './dispatch.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 import { getCounting, advanceCount, resetCount } from '../db/counting.js';
 import {
   addCountingPenalty,
@@ -167,10 +168,9 @@ export async function releaseCountingPenalty(guild, userId) {
   return true;
 }
 
-const penaltyTimer = setInterval(async () => {
+every('counting', PENALTY_TICK_MS, async () => {
   if (!allClientsReady()) return;
   for (const row of await dueCountingPenalties(Date.now())) {
     restoreBench(row).catch((err) => log.error('module:counting', 'bench restore failed:', err.message));
   }
-}, PENALTY_TICK_MS);
-penaltyTimer.unref();
+});

@@ -25,6 +25,7 @@ import { settleEndedPost } from './lib/liveAlerts.js';
 import { normaliseOnEnd } from '../lib/liveValue.js';
 import { parseFeed as parseGenericFeed, grab, decodeEntities } from '../bot/lib/feed.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 const FEED = 'https://www.youtube.com/feeds/videos.xml?channel_id=';
 const COLOR = 0xff0000;
@@ -332,8 +333,11 @@ export async function runAlert(guildId, alert) {
   }
 }
 
-const timer = setInterval(() => {
-  tick().catch((err) => log.error('youtube-alerts', 'tick failed:', err.message));
-}, POLL_MS);
-timer.unref();
-setTimeout(() => tick().catch(() => {}), 40_000).unref();
+every(
+  'youtube-alerts',
+  POLL_MS,
+  () => {
+    tick().catch((err) => log.error('youtube-alerts', 'tick failed:', err.message));
+  },
+  { firstDelayMs: 40_000 }
+);

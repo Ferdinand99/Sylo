@@ -14,6 +14,7 @@ import {
 import { buildPayload } from './messageCreator.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 export const SCHEDULE_PRESETS = [
   ['1', 'Every minute'],
@@ -91,7 +92,6 @@ async function tick() {
   }
 }
 
-const timer = setInterval(() => {
+every('reminders', TICK_MS, () => {
   tick().catch((err) => log.error('module:reminders', 'tick failed:', err.message));
-}, TICK_MS);
-timer.unref();
+});
