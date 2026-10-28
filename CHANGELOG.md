@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.9.1](https://github.com/Ferdinand99/Sylo/compare/v4.9.0...v4.9.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* stop bot error noise from missing guilds, stale interactions and Apple timeouts ([#287](https://github.com/Ferdinand99/Sylo/issues/287)) ([463eb1c](https://github.com/Ferdinand99/Sylo/commit/463eb1c347b6a84491274a8bde5f6fa298e02770))
+
 ## [4.9.0](https://github.com/Ferdinand99/Sylo/compare/v4.8.1...v4.9.0) (2026-10-24)
 
 
