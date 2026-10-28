@@ -96,12 +96,6 @@ function SignedInShell() {
           <span>Sylo</span>
         </Link>
         <ServerSwitcher guilds={guilds} activeGuildId={lastGuildId} onSelectGuild={selectGuild} />
-        {/* Two labels, one shown at a time — styles.css swaps to the short
-            one on narrow screens so the topbar keeps to one row. */}
-        <a className="v2-classic-link" href="/?classic=1" aria-label="Back to classic dashboard">
-          <span className="v2-classic-full">Back to classic dashboard</span>
-          <span className="v2-classic-short">Classic</span>
-        </a>
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
         <AccountMenu />
       </header>

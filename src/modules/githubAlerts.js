@@ -10,7 +10,7 @@ import { log } from '../lib/log.js';
 
 // The event types a watch can subscribe to. `key` must match GitHub's
 // `X-GitHub-Event` header value exactly. Shown as checkboxes in the dashboard
-// (src/web/views/guild/modules/github.ejs) and used to filter inbound events.
+// (the GitHub module form) and used to filter inbound events.
 export const GITHUB_EVENT_TYPES = [
   { key: 'push', label: 'Commits pushed' },
   { key: 'release', label: 'Release published' },

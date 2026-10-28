@@ -39,7 +39,6 @@ import { withRowIds } from '../lib/rowIds.js';
 import { shouldSaveBotMasters } from '../lib/botMasters.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
-import { getDashboardVersion, setDashboardVersion, DASHBOARD_VERSIONS } from '../../db/userPrefs.js';
 import {
   ROADMAP_STATUSES,
   listPublicPosts,
@@ -342,37 +341,12 @@ router.get('/invites', (req, res) => {
   res.json({ invites: botInviteUrls() });
 });
 
-// The SPA is served as static files (no EJS), so it has no <meta
-// name="csrf-token"> to read the way V1's pages do — this hands it the same
-// per-session token the shared `csrf` middleware already put on
+// The SPA is served as static files (no EJS), so it has no <meta name="csrf-token"> to read —
+// this hands it the per-session token the shared `csrf` middleware already put on
 // req.session.csrf, for the x-csrf-token header on state-changing calls.
 router.get('/csrf', (req, res) => {
   res.json({ token: req.session?.csrf ?? null });
 });
-
-// Open mode has no signed-in user, so the dashboard-version preference is one shared record.
-const prefsUserId = (req) => sessionUserId(req) ?? 'local-admin';
-
-router.get(
-  '/prefs',
-  asyncHandler(async (req, res) => {
-    res.json({ dashboardVersion: await getDashboardVersion(prefsUserId(req)) });
-  })
-);
-
-router.post(
-  '/prefs',
-  asyncHandler(async (req, res) => {
-    const requested = req.body?.dashboardVersion;
-    if (!DASHBOARD_VERSIONS.includes(requested)) {
-      return res
-        .status(400)
-        .json({ error: `dashboardVersion must be one of ${DASHBOARD_VERSIONS.join(', ')}` });
-    }
-    const dashboardVersion = await setDashboardVersion(prefsUserId(req), requested);
-    res.json({ dashboardVersion });
-  })
-);
 
 // Mirrors the loadGuild + requireGuildAdmin pair guilds.js uses for every
 // /:guildId route (guilds.js:221-231) — can't import loadGuild directly,

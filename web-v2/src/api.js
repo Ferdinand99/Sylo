@@ -126,9 +126,6 @@ export const getInsights = (guildId, range) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/insights?range=${range}`);
 export const refreshInsights = (guildId) => postJson(`/api/v2/guilds/${gid(guildId)}/insights/refresh`, {});
 
-export const getPrefs = () => apiFetch('/api/v2/prefs');
-export const setDashboardVersion = (dashboardVersion) => postJson('/api/v2/prefs', { dashboardVersion });
-
 export const getLeaderboard = (guildId, period) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/leaderboard?period=${period}`);
 export const setLeaderboardPublic = (guildId, publicLeaderboard) =>

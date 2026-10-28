@@ -1,4 +1,4 @@
-// GET /telemetry.js: the script both dashboards (V1's header partial, V2's index.html) load
+// GET /telemetry.js: the script the dashboard (web-v2/index.html) and the public pages load
 // for error reports and visit counts. Public, so the login page reports too; it carries only
 // what any page sends anyway (the DSN's public key). See lib/telemetry.js.
 import { createRequire } from 'node:module';

@@ -315,7 +315,8 @@ a {
   flex: none;
   display: block;
 }
-.v2-classic-link {
+/* A pill-shaped link in the top bar (the public pages' "Log in"). */
+.v2-pill-link {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-muted);
@@ -329,22 +330,27 @@ a {
     color var(--dur-ui) ease,
     border-color var(--dur-ui) ease;
 }
-/* Shell.jsx renders both labels; only one shows at a time. */
-.v2-classic-short {
-  display: none;
-}
-.v2-classic-link:hover {
+.v2-pill-link:hover {
   text-decoration: none;
 }
 @media (hover: hover) and (pointer: fine) {
-  .v2-classic-link:hover {
+  .v2-pill-link:hover {
     color: var(--text);
     border-color: var(--border-strong);
   }
 }
-.v2-classic-link:active {
+.v2-pill-link:active {
   color: var(--text);
   border-color: var(--border-strong);
+}
+
+/* Pushes the theme toggle and the account menu to the right edge of the top bar. In the public
+   top bar the "Log in" link does that instead (below). */
+.v2-topbar .v2-theme-toggle {
+  margin-left: auto;
+}
+.v2-pill-link + .v2-theme-toggle {
+  margin-left: 0;
 }
 
 .v2-theme-toggle {
@@ -764,21 +770,8 @@ a {
   }
 }
 
-/* "Back to classic dashboard" → "Classic" once the topbar gets tight. */
-@media (max-width: 700px) {
-  .v2-classic-full {
-    display: none;
-  }
-  .v2-classic-short {
-    display: inline;
-  }
-  .v2-classic-link {
-    padding: 6px 12px;
-  }
-}
-
 /* Phones: the server switcher drops to its own full-width row so the first
-   row (menu, brand, Classic, theme) never squeezes; page gutters go to 16px. */
+   row (menu, brand, theme) never squeezes; page gutters go to 16px. */
 @media (max-width: 560px) {
   .v2-topbar {
     padding-left: max(16px, env(safe-area-inset-left, 0px));
@@ -1082,9 +1075,7 @@ a.v2-row:active {
     white-space: normal;
   }
 }
-/* Small inline tags in the site's pill style: hairline, sentence case.
-   (The content is already "Classic" / "Beta".) */
-.v2-classic-tag,
+/* Small inline tags in the site's pill style: hairline, sentence case. */
 .v2-beta-tag {
   display: inline-flex;
   align-items: center;
@@ -1101,8 +1092,7 @@ a.v2-row:active {
   white-space: nowrap;
 }
 /* Newly-added modules — registry.js's `beta` flag — get this wherever
-   they're listed: same pill as .v2-classic-tag plus an amber dot, so the
-   two read as distinct signals at a glance. */
+   they're listed: the pill plus an amber dot. */
 .v2-beta-tag {
   color: var(--text);
 }
@@ -1113,9 +1103,6 @@ a.v2-row:active {
   flex: none;
   border-radius: 50%;
   background: var(--warn);
-}
-.v2-sidebar-classic-mark {
-  opacity: 0.55;
 }
 .v2-sidebar-beta-mark {
   color: var(--warn);

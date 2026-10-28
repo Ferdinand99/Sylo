@@ -1,4 +1,4 @@
-// Serves the built V2 dashboard SPA (web-v2/, built via `npm run build:v2`
+// Serves the built dashboard SPA (web-v2/, built via `npm run build:v2`
 // into web-v2/dist/). Mounted at /v2, after the app-wide requireAuth in
 // server.js, so this never serves to a logged-out visitor. Static assets
 // first, then an index.html fallback for client-side routes (standard SPA
@@ -11,25 +11,17 @@ import { existsSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Router, static as expressStatic } from 'express';
-import { endClassicChoice } from '../lib/classicChoice.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const distDir = join(here, '..', '..', '..', 'web-v2', 'dist');
 const indexHtml = join(distDir, 'index.html');
 
-/** Whether the SPA is built. An object so tests can stub `exists` and `indexHtml`; V1's home
- * (dashboard.js) sends people here only when it is. */
+/** Whether the SPA is built. An object so tests can stub `exists` and `indexHtml`. */
 export const v2Build = { exists: () => existsSync(indexHtml), indexHtml };
 
 /** The pages a visitor may open without signing in (paths below /v2). Keep in step with
  * PUBLIC_PATHS in web-v2/src/publicRoutes.js. */
 export const PUBLIC_PAGES = ['/commands', '/roadmap'];
-
-// Opening the dashboard (a page, not one of its files) ends a "Back to classic dashboard" choice
-// made earlier in the session, so the next visit to / and to the old addresses goes to V2 again.
-function endClassicChoiceOnPage(req, res) {
-  if (req.method === 'GET' && !/\.\w+$/.test(req.path)) endClassicChoice(req, res);
-}
 
 function sendIndex(res) {
   if (!v2Build.exists()) {
@@ -74,19 +66,11 @@ v2PublicClientRouter.use((req, res, next) =>
 
 // A signed-out visitor who logs in from one of these comes back to it through the SPA's "Log in"
 // link (/auth/login?next=/v2/roadmap); an anonymous visit writes nothing to a session.
-v2PublicClientRouter.get(PUBLIC_PAGES, (req, res) => {
-  endClassicChoiceOnPage(req, res);
-  sendIndex(res);
-});
+v2PublicClientRouter.get(PUBLIC_PAGES, (req, res) => sendIndex(res));
 
 // --- behind requireAuth -------------------------------------------------------------------
 
 const router = Router();
-
-router.use((req, res, next) => {
-  endClassicChoiceOnPage(req, res);
-  next();
-});
 
 router.use(expressStatic(distDir));
 

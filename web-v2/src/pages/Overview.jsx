@@ -2,24 +2,13 @@ import { useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { setModuleEnabled, setModulesEnabledBulk } from '../api.js';
 import { useOverview } from '../OverviewContext.jsx';
-import { hasV2Page, v2Href } from '../moduleForms/index.js';
+import { v2Href } from '../moduleForms/index.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import Switch from '../components/Switch.jsx';
 import { plural } from '../components/Meta.jsx';
 import { formatCount, initial } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
-
-// A module without a V2 page yet gets this tag next to its name, wherever
-// its title is shown — the click still works (falls back to `card.href`,
-// V1's own config page for it), just not as a V2-native page yet.
-function ClassicTag() {
-  return (
-    <span className="v2-classic-tag" title="Opens the classic V1 dashboard — no V2 page yet">
-      Classic
-    </span>
-  );
-}
 
 // A newly-added module gets this next to its name until it's had enough
 // real-world use to drop registry.js's `beta` flag.
@@ -31,26 +20,14 @@ function BetaTag() {
   );
 }
 
-// The module's name links to its V2 settings page if one's been built,
-// otherwise to V1's own config page for it — `card.href`, which the
-// overview API already provides (src/web/lib/overviewSummary.js). Every
-// module is configurable today either way; not every one has a V2 page yet.
+// The module's name links to its settings page.
 function ModuleTitle({ card, guildId }) {
-  if (hasV2Page(card)) {
-    return (
-      <Link className="v2-row-title-link" to={v2Href(card, guildId)}>
-        <h3>
-          {card.name} {card.beta ? <BetaTag /> : null}
-        </h3>
-      </Link>
-    );
-  }
   return (
-    <a className="v2-row-title-link" href={card.href}>
+    <Link className="v2-row-title-link" to={v2Href(card, guildId)}>
       <h3>
-        {card.name} <ClassicTag /> {card.beta ? <BetaTag /> : null}
+        {card.name} {card.beta ? <BetaTag /> : null}
       </h3>
-    </a>
+    </Link>
   );
 }
 
@@ -60,7 +37,7 @@ function ModuleRow({ card, guildId, onToggle, selecting, picked, onPick }) {
       <>
         <div className="v2-row-main">
           <h3>
-            {card.name} {hasV2Page(card) ? null : <ClassicTag />} {card.beta ? <BetaTag /> : null}
+            {card.name} {card.beta ? <BetaTag /> : null}
           </h3>
           <p title={card.description}>{card.description}</p>
         </div>
@@ -69,14 +46,10 @@ function ModuleRow({ card, guildId, onToggle, selecting, picked, onPick }) {
         </span>
       </>
     );
-    return hasV2Page(card) ? (
+    return (
       <Link className="v2-row" to={v2Href(card, guildId)}>
         {rowContent}
       </Link>
-    ) : (
-      <a className="v2-row" href={card.href}>
-        {rowContent}
-      </a>
     );
   }
 
@@ -222,10 +195,7 @@ export default function Overview() {
         </div>
       </div>
 
-      <p className="v2-note">
-        Every module has its own page here. If something looks off, the{' '}
-        <a href="/?classic=1">classic dashboard</a> (removed in Sylo 5.0) edits the same settings.
-      </p>
+      <p className="v2-note">Every module has its own page here.</p>
 
       <div className="v2-stat-strip">
         <div className="v2-stat">

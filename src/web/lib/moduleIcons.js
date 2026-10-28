@@ -1,8 +1,7 @@
-// Single source of truth for which inline SVG symbol (`#i-<name>` in
-// partials/header.ejs) represents each module. Used by both the left sidebar
-// (sidebarNav.js) and the overview plugin grid (overviewSummary.js) so the two
-// never drift. Keys are module ids plus the three synthetic overview cards
-// ('general', 'commands', 'messages').
+// Single source of truth for which icon name (Lucide-style, like "shield") represents each
+// module on the overview cards (overviewSummary.js). The Sylo app maps each name to an SF Symbol
+// (ModuleSymbol.swift; test/moduleIcons.test.js keeps the two in step). Keys are module ids plus
+// the three synthetic overview cards ('general', 'commands', 'messages').
 export const MODULE_ICONS = {
   moderation: 'shield',
   logging: 'file-text',

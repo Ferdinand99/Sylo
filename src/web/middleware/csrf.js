@@ -7,8 +7,7 @@
 //     same-site Origin. Requests with neither header (curl, scripts) are allowed;
 //     they are not a cross-site browser vector.
 //  2. When auth is enabled, a per-session random token that must come back in the
-//     `x-csrf-token` header or a `_csrf` body field. It is exposed to templates
-//     as `res.locals.csrfToken` (a <meta> tag, echoed by htmx-setup.js / app.js).
+//     `x-csrf-token` header. The dashboard reads it from GET /api/v2/csrf.
 //
 // Exempt: safe methods, and the /auth, /verify and /appeal flows, which are
 // unauthenticated and already gated by their own signed tokens. Also exempt: an
@@ -62,7 +61,7 @@ function sameToken(sent, expected) {
  * middleware runs (the /auth router, for logout).
  */
 export function hasValidCsrfToken(req) {
-  const sent = req.get('x-csrf-token') || (req.body && req.body._csrf);
+  const sent = req.get('x-csrf-token');
   return Boolean(sent && req.session?.csrf && sameToken(sent, req.session.csrf) && sameOrigin(req));
 }
 
@@ -79,11 +78,10 @@ export function csrf(req, res, next) {
   if (!req.session) return next();
 
   if (!req.session.csrf) req.session.csrf = randomBytes(24).toString('hex');
-  res.locals.csrfToken = req.session.csrf;
 
   if (!stateChanging) return next();
 
-  const sent = req.get('x-csrf-token') || (req.body && req.body._csrf);
+  const sent = req.get('x-csrf-token');
   if (sent && sameToken(sent, req.session.csrf)) return next();
 
   refuse(req, res, 'CSRF check failed — reload the page and try again.');

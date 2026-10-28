@@ -98,32 +98,3 @@ test('V2: the server owner can change the bot-master roles', async () => {
   assert.equal((await v2({ botMasterRoleIds: [FRIEND, BOT_MASTER] })).status, 200);
   assert.deepEqual(await getBotMasterRoles(D_GUILD), [FRIEND, BOT_MASTER]);
 });
-
-test('V1: a bot master cannot add a bot-master role', async () => {
-  const { v1 } = await signedIn();
-  const res = await v1([
-    ['botMasterRoles', BOT_MASTER],
-    ['botMasterRoles', FRIEND],
-  ]);
-  assert.equal(res.status, 403);
-  assert.match(await res.text(), REFUSAL);
-  assert.deepEqual(await getBotMasterRoles(D_GUILD), [BOT_MASTER]);
-});
-
-test('V1: a bot master can save the page with the roles unchanged', async () => {
-  const { v1 } = await signedIn();
-  const res = await v1([
-    ['botMasterRoles', BOT_MASTER],
-    ['embedColor', '#445566'],
-  ]);
-  assert.equal(res.status, 302);
-  assert.match(res.headers.get('location'), /msg=saved$/);
-  assert.equal(await guildEmbedColor(D_GUILD), 0x445566);
-});
-
-test('V1: someone with Manage Server can change the bot-master roles', async () => {
-  const { v1 } = await signedIn({ manager: true });
-  const res = await v1([['botMasterRoles', FRIEND]]);
-  assert.equal(res.status, 302);
-  assert.deepEqual(await getBotMasterRoles(D_GUILD), [FRIEND]);
-});

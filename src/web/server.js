@@ -7,14 +7,12 @@ import { isIP } from 'node:net';
 import { isLocalName, isPrivateAddress } from '../lib/safeFetch.js';
 import { LimitError } from '../lib/limits.js';
 import { RoleGrantError } from './middleware/roleGrants.js';
-import { headerJson } from './lib/httpJson.js';
 import { config } from '../config.js';
 import { log } from '../lib/log.js';
-import { mountAuth, requireAuth, requireOwner } from './middleware/auth.js';
+import { mountAuth, requireAuth } from './middleware/auth.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { csrf } from './middleware/csrf.js';
 import { classicRedirect } from './middleware/classicRedirect.js';
-import { platformCommands } from './middleware/platformCommands.js';
 import { ownerOnlyModules } from './middleware/ownerOnlyModules.js';
 import { mobileApiRouter, mobileAuthRouter } from './routes/mobile.js';
 import { createPushRelayRouter } from './routes/pushRelay.js';
@@ -25,20 +23,12 @@ import metricsRouter from './routes/metrics.js';
 import leaderboardRouter, { vanityRouter } from './routes/leaderboard.js';
 import verifyRouter from './routes/verify.js';
 import appealRouter from './routes/appeal.js';
-import dashboardRouter from './routes/dashboard.js';
-import statsRouter from './routes/stats.js';
-import commandsRouter from './routes/commands.js';
-import settingsRouter from './routes/settings.js';
-import guildsRouter from './routes/guilds.js';
-import guildTicketsRouter from './routes/guildTickets.js';
-import guildMessagesRouter from './routes/guildMessages.js';
 import githubWebhookRouter from './routes/githubWebhook.js';
 import v2ApiRouter from './routes/v2Api.js';
-import v2ClientRouter, { v2PublicClientRouter } from './routes/v2Client.js';
+import v2ClientRouter, { v2Build, v2PublicClientRouter } from './routes/v2Client.js';
 import v2PublicRouter from './routes/v2Public.js';
 import telemetryRouter from './routes/telemetry.js';
 import roadmapRouter from './routes/roadmap.js';
-import accountRouter from './routes/account.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -159,7 +149,7 @@ export function createApp() {
   app.use('/webhooks/github', githubWebhookRouter);
 
   app.use(express.static(join(here, 'public')));
-  // Error reports and visit counts for both dashboards; does nothing unless configured.
+  // Error reports and visit counts for the dashboard and the public pages; does nothing unless configured.
   app.use('/telemetry.js', telemetryRouter);
   app.use(express.urlencoded({ extended: false, limit: '256kb' }));
   app.use(express.json({ limit: '256kb' }));
@@ -186,8 +176,8 @@ export function createApp() {
   }
 
   // Old dashboard addresses (/account, /health, /guilds/<key>/tickets/5 ...) open the matching page
-  // in the new dashboard. Ahead of the public /health route: only a browser visit (Accept: text/html)
-  // moves, the JSON for monitors stays. Skipped for anyone who chose the classic dashboard.
+  // in the dashboard (/v2) with a permanent redirect. Ahead of the public /health route: only a
+  // browser visit (Accept: text/html) moves, the JSON for monitors stays.
   app.use(classicRedirect);
 
   // Public routes: healthcheck, metrics, the shareable leaderboard, and member
@@ -199,8 +189,8 @@ export function createApp() {
   app.use('/verify', rateLimit({ windowMs: 60_000, max: 20 }), verifyRouter);
   app.use('/appeal', rateLimit({ windowMs: 60_000, max: 15 }), appealRouter);
   app.use('/roadmap', rateLimit({ windowMs: 60_000, max: 60 }), roadmapRouter);
-  // The new dashboard's public data (command list, roadmap): read-only, limited like the classic
-  // public pages. Only /api/v2/public is public; the rest of /api/v2 is mounted after requireAuth.
+  // The dashboard's public data (command list, roadmap): read-only, limited like the other public
+  // pages. Only /api/v2/public is public; the rest of /api/v2 is mounted after requireAuth.
   app.use('/api/v2/public', rateLimit({ windowMs: 60_000, max: 60 }), v2PublicRouter);
 
   // Per-path ceiling on the authenticated dashboard — generous for normal
@@ -215,24 +205,7 @@ export function createApp() {
   app.use('/v2', v2PublicClientRouter);
   // Everything below requires a signed-in user when auth is enabled.
   app.use(requireAuth);
-  app.use('/', dashboardRouter);
-  // One lookup cache for the whole instance (any server's lookups): operators only.
-  app.use('/stats', requireOwner, statsRouter);
-  app.use('/commands', commandsRouter);
-  app.use('/account', accountRouter);
-  // Bot-wide identity (name/avatar/banner) and presence — owner only, not any
-  // signed-in guild admin (see requireOwner).
-  app.use('/settings', requireOwner, settingsRouter);
-  // Tickets are mounted first: they have their own (staff-role aware) access
-  // check, so they must not fall through to the admin-only /guilds router.
-  app.use('/guilds/:guildId', ownerOnlyModules);
-  app.use('/guilds/:guildId', platformCommands);
-  app.use('/guilds/:guildId/tickets', guildTicketsRouter);
-  app.use('/guilds/:guildId/messages', guildMessagesRouter);
-  app.use('/guilds', guildsRouter);
-  // V2 dashboard (opt-in, side-by-side with the routes above — see
-  // internal/dashboard-v2-plan.md). Purely additive: neither router touches
-  // or reorders anything mounted before it.
+  app.get('/', (req, res) => res.redirect('/v2'));
   app.use('/api/v2/guilds/:guildId', ownerOnlyModules);
   app.use('/api/v2', v2ApiRouter);
   app.use('/v2', v2ClientRouter);
@@ -243,18 +216,12 @@ export function createApp() {
   app.use((err, req, res, _next) => {
     // The person's own doing, not a server error: a per-server ceiling (src/lib/limits.js) or a
     // role they may not hand out (src/web/middleware/roleGrants.js). The reason reaches them as
-    // JSON, an htmx toast, or an error page.
+    // JSON or an error page.
     if (err instanceof LimitError || err instanceof RoleGrantError) {
       const status = err.status;
       const heading = err instanceof LimitError ? 'Limit reached' : 'Role not allowed';
       if (req.originalUrl.startsWith('/api/') || !req.accepts('html')) {
         return res.status(status).json({ error: err.message });
-      }
-      if (req.get('HX-Request')) {
-        return res
-          .status(status)
-          .set('HX-Trigger', headerJson({ toast: { msg: err.message, kind: 'bad' } }))
-          .end();
       }
       return res.status(status).render('error', { title: heading, heading, message: err.message });
     }
@@ -272,6 +239,9 @@ export function createApp() {
  */
 export function startWeb(port) {
   const app = createApp();
+  if (!v2Build.exists()) {
+    log.warn('web', 'The dashboard is not built, so /v2 answers 503: run npm run build:v2.');
+  }
   return new Promise((resolve) => {
     const server = app.listen(port, () => {
       log.info('web', `Dashboard listening on http://localhost:${port}`);

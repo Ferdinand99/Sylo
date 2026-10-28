@@ -92,10 +92,6 @@ export const SPECIAL_V2_PATHS = {
   commands: (guildId) => `/guilds/${guildId}/moderation/commands`,
 };
 
-export function hasV2Page(card) {
-  return Boolean(MODULE_FORMS[card.id]) || Boolean(SPECIAL_V2_PATHS[card.id]);
-}
-
 export function v2Href(card, guildId) {
   return SPECIAL_V2_PATHS[card.id] ? SPECIAL_V2_PATHS[card.id](guildId) : `/guilds/${guildId}/m/${card.id}`;
 }

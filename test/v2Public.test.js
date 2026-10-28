@@ -277,7 +277,7 @@ test("a signed-in person's public roadmap also carries their own votes", async (
 
 test('/roadmap moves to the new board and the roadmap feed stays public', async () => {
   const b = browser();
-  const moved = await b.get('/roadmap');
+  const moved = await b.get('/roadmap', { headers: { accept: 'text/html' } });
   assert.equal(moved.status, 301);
   assert.equal(moved.headers.get('location'), '/v2/roadmap');
   assert.equal((await b.get('/roadmap/posts.json')).status, 200);

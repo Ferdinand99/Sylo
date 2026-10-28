@@ -70,12 +70,12 @@ export default [
     },
   },
 
-  // Browser-side progressive-enhancement scripts.
+  // Browser-side scripts of the public pages (theme.js).
   {
     files: ['src/web/public/**/*.js'],
     languageOptions: {
       sourceType: 'script',
-      globals: { ...globals.browser, Alpine: 'readonly', htmx: 'readonly' },
+      globals: globals.browser,
     },
     rules: {
       'n/no-unsupported-features/node-builtins': 'off',

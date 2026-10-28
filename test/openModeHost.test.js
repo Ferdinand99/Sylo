@@ -42,7 +42,7 @@ test('open mode answers on local names and addresses', async () => {
 // No page may be framed by another site (clickjacking); the browser is also told not to guess
 // content types or send full URLs to other sites.
 test('every page forbids framing', async () => {
-  const res = await fetch(`${base}/commands`);
+  const res = await fetch(`${base}/health`);
   assert.equal(res.headers.get('x-frame-options'), 'DENY');
   assert.match(res.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/);
   assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
