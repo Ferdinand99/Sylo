@@ -29,10 +29,3 @@ test('POST /api/v2/prefs stores the choice for the local admin', async () => {
   assert.deepEqual(await set.json(), { dashboardVersion: 'v2' });
   assert.deepEqual(await (await json('/api/v2/prefs')).json(), { dashboardVersion: 'v2' });
 });
-
-// Open mode has no session to remember "Back to classic dashboard", so the home page never
-// redirects there, whatever the shared preference says (signed-in rules: routes.v2home.test.js).
-test('open mode: GET / ignores the v2 preference', async () => {
-  const res = await json('/', { headers: { accept: 'text/html' } });
-  assert.notEqual(res.headers.get('location'), '/v2');
-});

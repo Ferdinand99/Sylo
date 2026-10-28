@@ -12,13 +12,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Router, static as expressStatic } from 'express';
 import { config } from '../../config.js';
+import { endClassicChoice } from '../lib/classicChoice.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const distDir = join(here, '..', '..', '..', 'web-v2', 'dist');
 const indexHtml = join(distDir, 'index.html');
 
 /** Whether the SPA is built. An object so tests can stub `exists` and `indexHtml`; V1's home
- * (dashboard.js) only sends people here by default when it is. */
+ * (dashboard.js) sends people here only when it is. */
 export const v2Build = { exists: () => existsSync(indexHtml), indexHtml };
 
 /** The pages a visitor may open without signing in (paths below /v2). Keep in step with
@@ -26,11 +27,9 @@ export const v2Build = { exists: () => existsSync(indexHtml), indexHtml };
 export const PUBLIC_PAGES = ['/commands', '/roadmap'];
 
 // Opening the dashboard (a page, not one of its files) ends a "Back to classic dashboard" choice
-// made earlier in the session, so the next visit to / follows the saved preference again.
-function endClassicChoice(req) {
-  if (req.method === 'GET' && req.session?.preferClassic && !/\.\w+$/.test(req.path)) {
-    delete req.session.preferClassic;
-  }
+// made earlier in the session, so the next visit to / and to the old addresses goes to V2 again.
+function endClassicChoiceOnPage(req, res) {
+  if (req.method === 'GET' && !/\.\w+$/.test(req.path)) endClassicChoice(req, res);
 }
 
 function sendIndex(res) {
@@ -55,7 +54,7 @@ v2PublicClientRouter.use((req, res, next) =>
 );
 
 v2PublicClientRouter.get(PUBLIC_PAGES, (req, res) => {
-  endClassicChoice(req);
+  endClassicChoiceOnPage(req, res);
   // Signed out and logging in from the page: come back to it afterwards.
   if (config.authEnabled && !req.account && req.session) {
     req.session.returnTo = `/v2${req.path.toLowerCase().replace(/\/+$/, '')}`;
@@ -68,7 +67,7 @@ v2PublicClientRouter.get(PUBLIC_PAGES, (req, res) => {
 const router = Router();
 
 router.use((req, res, next) => {
-  endClassicChoice(req);
+  endClassicChoiceOnPage(req, res);
   next();
 });
 

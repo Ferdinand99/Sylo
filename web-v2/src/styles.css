@@ -315,29 +315,6 @@ a {
   flex: none;
   display: block;
 }
-/* The site's "Public beta" pill: hairline, small accent dot. */
-.v2-beta-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-pill);
-  color: var(--text);
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  letter-spacing: 0;
-  line-height: 1.3;
-}
-.v2-beta-badge::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
 .v2-classic-link {
   font-size: 0.875rem;
   font-weight: 500;
@@ -3088,14 +3065,6 @@ textarea:disabled {
   color: var(--text-muted);
   border: 1px solid var(--border-strong);
 }
-/* The smallest phones: drop the Beta pill so the first top-bar row (menu,
-   brand, Classic, theme) still fits on one line. */
-@media (max-width: 360px) {
-  .v2-beta-badge {
-    display: none;
-  }
-}
-
 /* Public pages (command list, roadmap) without a session: PublicShell.jsx. */
 .v2-public-nav {
   display: flex;

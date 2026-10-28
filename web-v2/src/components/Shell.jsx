@@ -94,9 +94,6 @@ function SignedInShell() {
         <Link className="v2-brand" to="/">
           <img className="v2-brand-mark" src="/favicon.svg" alt="" width="28" height="28" />
           <span>Sylo</span>
-          <span className="v2-beta-badge" title="V2 is in beta — the classic dashboard is still available">
-            Beta
-          </span>
         </Link>
         <ServerSwitcher guilds={guilds} activeGuildId={lastGuildId} onSelectGuild={selectGuild} />
         {/* Two labels, one shown at a time — styles.css swaps to the short
