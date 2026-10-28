@@ -111,14 +111,14 @@ export async function buildOverview(guild, { owner = true, v2 = false } = {}) {
 
 // Where each card lives in the new dashboard (web-v2's SPECIAL_V2_PATHS); every other module is
 // /v2/guilds/<key>/m/<id>. Keep in step with web-v2/src/moduleForms/index.js.
-const V2_CARD_PAGES = {
+export const V2_CARD_PAGES = {
   general: 'settings',
   commands: 'moderation/commands',
   messages: 'messages',
   insights: 'insights',
 };
 
-function v2CardHref(id, guildId) {
+export function v2CardHref(id, guildId) {
   return `/v2/guilds/${guildId}/${V2_CARD_PAGES[id] ?? `m/${id}`}`;
 }
 
