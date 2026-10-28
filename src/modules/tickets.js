@@ -183,7 +183,7 @@ export async function ingestUserDM(guild, user, payload) {
   });
 
   const link = config.dashboardUrl
-    ? `\n<${config.dashboardUrl}/guilds/${guildKey(guild)}/tickets/${ticket.id}>`
+    ? `\n<${config.dashboardUrl}/v2/guilds/${guildKey(guild)}/tickets/${ticket.id}>`
     : '';
   if (isNew) {
     await user

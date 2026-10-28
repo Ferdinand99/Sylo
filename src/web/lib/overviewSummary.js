@@ -82,9 +82,11 @@ function channelName(guild, id) {
 /**
  * Build the whole overview view-model for a guild.
  * @param {import('discord.js').Guild} guild
- * @param {{ owner?: boolean }} [viewer]  a non-owner never sees an owner-only module's card
+ * @param {{ owner?: boolean, v2?: boolean }} [viewer]  a non-owner never sees an owner-only module's
+ *   card; `v2` makes every card's `href` an address in the new dashboard (/v2/...) instead of the
+ *   classic page, for the new dashboard and the Sylo app (the classic overview keeps classic links).
  */
-export async function buildOverview(guild, { owner = true } = {}) {
+export async function buildOverview(guild, { owner = true, v2 = false } = {}) {
   const settings = await getGuildSettings(guild.id);
   const state = new Map((await getGuildModules(guild.id)).map((m) => [m.id, m]));
 
@@ -99,10 +101,25 @@ export async function buildOverview(guild, { owner = true } = {}) {
               .filter((id) => owner || !getModule(id)?.ownerOnly)
               .map((id) => buildCard(id, guild, settings, state))
           )
-        ).filter(Boolean),
+        )
+          .filter(Boolean)
+          .map((card) => (v2 ? { ...card, href: v2CardHref(card.id, guild.id) } : card)),
       }))
     ),
   };
+}
+
+// Where each card lives in the new dashboard (web-v2's SPECIAL_V2_PATHS); every other module is
+// /v2/guilds/<key>/m/<id>. Keep in step with web-v2/src/moduleForms/index.js.
+const V2_CARD_PAGES = {
+  general: 'settings',
+  commands: 'moderation/commands',
+  messages: 'messages',
+  insights: 'insights',
+};
+
+function v2CardHref(id, guildId) {
+  return `/v2/guilds/${guildId}/${V2_CARD_PAGES[id] ?? `m/${id}`}`;
 }
 
 async function buildHealth(guild, settings, state, owner = true) {

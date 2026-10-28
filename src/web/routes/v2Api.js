@@ -412,7 +412,7 @@ router.get(
     // — reused wholesale rather than re-deriving the same grouping here.
     const [{ guild, openTickets, openAppeals }, { groups }] = await Promise.all([
       baseContext(req.guild, 'overview'),
-      buildOverview(req.guild, { owner: isOwner(req) }),
+      buildOverview(req.guild, { owner: isOwner(req), v2: true }),
     ]);
     res.json({ guild, openTickets, openAppeals, groups });
   })
