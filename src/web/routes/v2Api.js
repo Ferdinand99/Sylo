@@ -199,6 +199,7 @@ import {
 import { applyPresence } from '../../bot/lib/presence.js';
 import { config } from '../../config.js';
 import { dashboardStats, moduleUsage } from '../../db/dashboardStats.js';
+import { statsCacheRows } from '../lib/statsCache.js';
 import { sendWelcomeCardPreview } from '../lib/welcomeCardPreview.js';
 import {
   listBackups,
@@ -1501,8 +1502,9 @@ router.post(
 router.get(
   '/guilds/:guildId/modules/game-stats/config',
   asyncHandler(async (req, res) => {
-    // The cache holds every server's lookups: only operators see them.
+    // The cache holds every server's lookups: only operators see them (and the full view).
     res.json({
+      operator: isOwner(req),
       recent: (isOwner(req) ? await recentLookups(15) : []).map((r) => ({
         game: r.game,
         title: r.title,
@@ -2363,6 +2365,15 @@ router.get(
         .map((b) => ({ name: b.name, size: formatBytes(b.size), ago: timeAgo(b.mtime) })),
       devLogConfigured: Boolean(config.devLogChannelId),
     });
+  })
+);
+
+// The game-stats lookup cache, as the classic /stats page lists it: operators only, newest 50.
+router.get(
+  '/stats',
+  requireOwner,
+  asyncHandler(async (req, res) => {
+    res.json({ rows: await statsCacheRows(50), ttlMinutes: config.cacheTtlMinutes });
   })
 );
 

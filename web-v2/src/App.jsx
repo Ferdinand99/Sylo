@@ -16,6 +16,7 @@ const Settings = lazy(() => import('./pages/Settings.jsx'));
 const Personalizer = lazy(() => import('./pages/Personalizer.jsx'));
 const Account = lazy(() => import('./pages/Account.jsx'));
 const Health = lazy(() => import('./pages/Health.jsx'));
+const Stats = lazy(() => import('./pages/Stats.jsx'));
 const Roadmap = lazy(() => import('./pages/Roadmap.jsx'));
 const RoadmapAdmin = lazy(() => import('./pages/RoadmapAdmin.jsx'));
 const ModulePage = lazy(() => import('./pages/ModulePage.jsx'));
@@ -69,6 +70,7 @@ const router = createBrowserRouter(
         <Route path="changelog" element={<Changelog />} />
         <Route path="roadmap/admin" element={<RoadmapAdmin />} />
         <Route path="health" element={<Health />} />
+        <Route path="stats" element={<Stats />} />
       </Route>
     </Route>
   ),

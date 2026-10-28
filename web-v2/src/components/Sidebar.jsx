@@ -34,6 +34,7 @@ const ICONS = {
     </>
   ),
   pulse: <path d="M3 12h4l3 8 4-16 3 8h4" />,
+  chart: <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />,
   megaphone: (
     <>
       <path d="m3 11 18-5v12L3 14v-3z" />
@@ -137,6 +138,7 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
     { key: 'settings', label: 'Settings', icon: 'gear', path: '/settings', guild: true },
     { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', path: '/roadmap' },
     { key: 'health', label: 'Health', icon: 'pulse', path: '/health' },
+    { key: 'stats', label: 'Stats', icon: 'chart', path: '/stats' },
   ].map((it) => ({ ...it, href: it.guild ? (guildBase ? `${guildBase}${it.path}` : null) : it.path }));
 
   // Only modules actually turned on for this server, grouped the same way

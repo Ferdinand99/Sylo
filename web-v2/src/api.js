@@ -150,6 +150,7 @@ export const savePersonalizerAnnouncement = (body) => postJson('/api/v2/personal
 export const clearPersonalizerAnnouncement = () => postJson('/api/v2/personalizer/announcement/clear', {});
 
 export const getHealth = () => apiFetch('/api/v2/health');
+export const getStats = () => apiFetch('/api/v2/stats');
 // A snapshot download is a plain link (the browser saves the file), not a fetch.
 export const backupDownloadUrl = (name) => `/api/v2/health/backups/${encodeURIComponent(name)}`;
 export const sendDevLogTest = () => postJson('/api/v2/health/dev-log-test', {});
