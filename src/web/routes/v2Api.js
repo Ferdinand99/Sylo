@@ -2076,8 +2076,11 @@ router.post(
     );
 
     const channelId = String(req.body.modlogChannelId ?? '').trim();
+    const storedModlog = (await getGuildSettings(guild.id))?.modlog_channel_id ?? '';
     if (channelId === '') {
       await setModlogChannel(guild.id, null);
+    } else if (channelId === storedModlog) {
+      // Unchanged: leave it as it is, so the other settings still save when the bot lost access to it.
     } else if (guildTextChannels(guild).some((c) => c.id === channelId)) {
       if (!canPostInChannel(guild, channelId)) {
         return res
