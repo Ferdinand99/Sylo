@@ -48,6 +48,8 @@ import { lockChannel, unlockChannel, lockPreflight } from '../../bot/lib/channel
 import { formatDuration } from '../../bot/lib/duration.js';
 
 const BAN_DISPLAY_LIMIT = 200;
+// The channels a lockdown covers: the same list as /lockdown and the classic dashboard's lock-all.
+const LOCKDOWN_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildForum];
 const WEB_MODERATOR = 'web';
 
 const webModeratorId = (req, guildKeyArg) => actingUserId(req, guildKeyArg, WEB_MODERATOR);
@@ -438,7 +440,7 @@ staffRouter.post(
     const moderatorTag = moderatorDisplayName(req);
     let locked = 0;
     for (const channel of guild.channels.cache.values()) {
-      if (channel.type !== ChannelType.GuildText) continue;
+      if (!LOCKDOWN_TYPES.includes(channel.type)) continue;
       if ((await isChannelLocked(guild.id, channel.id)) || lockPreflight(channel)) continue;
       try {
         await lockChannel(channel, { moderatorTag, lockdown: true });
