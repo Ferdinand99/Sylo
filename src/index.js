@@ -66,6 +66,17 @@ async function main() {
   addDevLogSink((event) => addDevLogEntry(event));
   addDevLogSink((event) => notifyDevLogEvent(event));
   log.info('sylo', `Starting in ${config.nodeEnv} mode`);
+  if (config.sessionSecretSource === 'generated-ephemeral') {
+    log.warn(
+      'sylo',
+      'Session secret could not be saved, so it is lost at restart: logins and verify/appeal links stop working then. Set SESSION_SECRET or make the data folder writable.'
+    );
+  } else {
+    log.info(
+      'sylo',
+      `Session secret from ${config.sessionSecretSource === 'env' ? 'SESSION_SECRET' : 'the data folder'}`
+    );
+  }
   // Every configured platform starts in parallel; one that is not configured is never loaded.
   await Promise.all([config.discordEnabled && startBot(), config.fluxerEnabled && startFluxerBot()]);
   httpServer = await startWeb(config.webPort);

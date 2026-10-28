@@ -245,6 +245,23 @@ export default function Health() {
         </div>
       </div>
 
+      {d.sessionSecret === 'generated-ephemeral' ? (
+        <div className="v2-group">
+          <h2 className="v2-group-title">Session secret</h2>
+          <div className="v2-list">
+            <div className="v2-row v2-row-stack">
+              <div className="v2-row-main">
+                <p className="v2-row-warn">
+                  Sylo could not save a session secret in its data folder, so this one is lost at the next
+                  restart. Everyone is logged out then, and verification and appeal links already sent stop
+                  working. Set SESSION_SECRET, or make the data folder writable.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="v2-group">
         <h2 className="v2-group-title">Dev-log channel</h2>
         <div className="v2-list">

@@ -2358,6 +2358,8 @@ router.get(
         .slice(0, 25)
         .map((b) => ({ name: b.name, size: formatBytes(b.size), ago: timeAgo(b.mtime) })),
       devLogConfigured: Boolean(config.devLogChannelId),
+      // 'env' | 'file' | 'generated-ephemeral' (the last one: sessions and signed links die on restart).
+      sessionSecret: config.sessionSecretSource,
     });
   })
 );

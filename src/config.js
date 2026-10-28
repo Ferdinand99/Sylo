@@ -1,7 +1,8 @@
 // Loads and validates environment configuration for Sylo.
 // All secrets and tunables come from environment variables (see .env.example).
 import 'dotenv/config';
-import { randomBytes } from 'node:crypto';
+import { dirname, resolve } from 'node:path';
+import { resolveSessionSecret } from './lib/sessionSecret.js';
 import { normalisePrivateKey } from './lib/appStoreConnect.js';
 
 /**
@@ -229,18 +230,19 @@ if (pushRelayUrl && !/^https?:\/\/[^\s/]+[^\s]*$/i.test(pushRelayUrl)) {
 }
 const kickClientSecret = optionalOrNull('KICK_CLIENT_SECRET');
 // Signs session cookies and short-lived tokens (e.g. verification links), so it
-// must always exist. When unset we generate one; that only matters for
-// persistence when the dashboard login is enabled.
-let sessionSecret = optionalOrNull('SESSION_SECRET');
-if (!sessionSecret) {
-  sessionSecret = randomBytes(32).toString('hex');
-  if (discordClientSecret || fluxerClientSecret) {
-    console.warn(
-      '[config] SESSION_SECRET is not set — generated a random one. ' +
-        'Dashboard sessions will not survive a restart until you pin SESSION_SECRET.'
-    );
-  }
-}
+// must always exist. SESSION_SECRET wins; otherwise a generated secret is kept in
+// <data folder>/session-secret so sessions and signed links survive a restart.
+// The data folder is the SQLite DATABASE_PATH folder (it also holds the backups),
+// whether or not Postgres is used. Test runs never write a file (they would drop
+// it into the repo's data/ folder).
+const underTestRunner = process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT);
+const { secret: sessionSecret, source: sessionSecretSource } = resolveSessionSecret({
+  envValue: optionalOrNull('SESSION_SECRET'),
+  dataDir: underTestRunner
+    ? null
+    : dirname(resolve(process.cwd(), optional('DATABASE_PATH', './data/sylo.db'))),
+  warn: (message) => console.warn(`[config] ${message}`),
+});
 
 // Platforms. Each one is optional, but at least one must be configured: a
 // Discord-only install sets DISCORD_TOKEN, a Fluxer-only one FLUXER_TOKEN, and
@@ -300,6 +302,7 @@ export const config = Object.freeze({
   discordClientSecret,
   fluxerClientSecret,
   sessionSecret,
+  sessionSecretSource,
   ownerIds,
   fluxerOwnerIds,
   devLogChannelId,
