@@ -188,10 +188,14 @@
     <main>
       <%# The classic dashboard is on its way out (retired in Sylo 5.0): say so, and link to the new one.
           /v2 also ends a "Back to classic dashboard" choice (routes/v2Client.js). %>
+      <%# Only on dashboard pages (a signed-in person, or open mode): not on the sign-in, error and
+          public pages, which pass `noRetireBanner`. %>
+      <% if (typeof user !== 'undefined' && user && !(typeof noRetireBanner !== 'undefined' && noRetireBanner)) { %>
       <div class="banner info classic-retiring" role="note">
         The classic dashboard will be removed in Sylo 5.0.
         <a href="/v2" hx-boost="false">Switch to the new dashboard.</a>
       </div>
+      <% } %>
       <% var ann = typeof announcement !== 'undefined' ? announcement : null; %>
       <% if (ann) { %>
         <div
