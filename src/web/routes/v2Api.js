@@ -31,7 +31,9 @@ import { changelogHandler } from '../lib/changelogFeed.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
 import guildDataRouter from './v2GuildData.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
-import { idList, MAX_REACTION_MESSAGES, MAX_REACTION_PAIRS } from '../lib/idList.js';
+import { idList, MAX_REACTION_MESSAGES } from '../lib/idList.js';
+import { buildReactionPairs } from '../lib/reactionPairs.js';
+import { guildCustomEmojis } from '../lib/guildEmojis.js';
 import { shouldSaveBotMasters } from '../lib/botMasters.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
@@ -78,7 +80,7 @@ import {
   createWelcomeChannel,
 } from '../../modules/welcomeChannel.js';
 import { normalisePollsConfig, POLL_PLACEHOLDERS, RESULTS_PLACEHOLDERS } from '../../modules/polls.js';
-import { parseEmoji, publishReactionMessage } from '../../modules/roles.js';
+import { publishReactionMessage } from '../../modules/roles.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
 import { normaliseStickyConfig } from '../../modules/sticky.js';
 import {
@@ -394,6 +396,9 @@ router.use('/guilds/:guildId', guildDataRouter);
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
 router.get('/guilds/:guildId/platform', (req, res) => res.json(platformInfo(req.guild)));
+
+// Custom emojis for the reaction-role emoji picker (the classic dashboard's /guilds/:id/emojis).
+router.get('/guilds/:guildId/emojis', (req, res) => res.json({ custom: guildCustomEmojis(req.guild) }));
 
 router.get(
   '/guilds/:guildId/overview',
@@ -3178,25 +3183,12 @@ router.post(
     if (!channelId) return res.status(400).json({ error: 'Pick a channel.' });
 
     const style = ['buttons', 'select'].includes(req.body.style) ? req.body.style : 'reaction';
-    const rawPairs = Array.isArray(req.body.pairs) ? req.body.pairs : [];
-    const pairs = [];
-    for (const row of rawPairs.slice(0, MAX_REACTION_PAIRS)) {
-      const rid = row?.roleId;
-      if (!/^\d{17,20}$/.test(rid ?? '')) continue;
-      const parsed = parseEmoji(row?.emoji ?? '', guild);
-      // The reaction style needs a usable emoji; button / select styles don't.
-      if (style === 'reaction' && !parsed) continue;
-      pairs.push({
-        ...(parsed || { key: '', display: '', react: '' }),
-        roleId: rid,
-        label: String(row?.label ?? '').slice(0, 80),
-        btnStyle: ['primary', 'secondary', 'success', 'danger'].includes(row?.btnStyle)
-          ? row.btnStyle
-          : 'secondary',
-      });
-    }
-    if (pairs.length === 0)
-      return res.status(400).json({ error: 'Add at least one role with a usable emoji.' });
+    const { pairs, errors } = buildReactionPairs(
+      Array.isArray(req.body.pairs) ? req.body.pairs.map((row) => row ?? {}) : [],
+      style,
+      guild
+    );
+    if (errors.length) return res.status(400).json({ error: errors.join(' ') });
 
     const id = /^\d+$/.test(req.body.id ?? '') ? req.body.id : String(Date.now());
     const existing = list.find((x) => String(x.id) === id);

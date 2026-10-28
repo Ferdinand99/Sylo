@@ -7,6 +7,7 @@ import { useFormState } from '../components/useModuleForm.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
+import EmojiPicker from '../components/EmojiPicker.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
 import { notify } from '../notify.js';
 
@@ -187,6 +188,7 @@ function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }
               onChange={(e) => updateRow(row.key, { emoji: e.target.value })}
               style={{ maxWidth: '110px' }}
             />
+            <EmojiPicker onPick={(emoji) => updateRow(row.key, { emoji })} />
             {style !== 'reaction' ? (
               <input
                 type="text"

@@ -234,6 +234,7 @@ export const unpublishWelcomeChannel = (guildId) =>
 export const createWelcomeReadOnlyChannel = (guildId) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/welcome-channel/create-channel`, {});
 
+export const getGuildEmojis = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/emojis`);
 export const getRoles = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/roles/list`);
 export const saveAutoroles = (guildId, autoroles) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/roles/autoroles`, { autoroles });
