@@ -329,6 +329,7 @@ a:hover { color: var(--accent-strong); text-decoration: underline; text-underlin
 .banner.ok { background: rgba(88, 214, 141, 0.12); border-color: rgba(88, 214, 141, 0.25); color: var(--ok); }
 .banner.bad { background: rgba(242, 85, 90, 0.12); border-color: rgba(242, 85, 90, 0.28); color: var(--bad); }
 .banner.info { background: rgba(229, 181, 103, 0.12); border-color: rgba(229, 181, 103, 0.28); color: var(--warn); }
+.classic-retiring a { color: inherit; font-weight: 600; text-decoration: underline; }
 
 .sa-announcement { display: flex; align-items: center; gap: 10px; }
 .sa-announcement strong { flex-shrink: 0; }

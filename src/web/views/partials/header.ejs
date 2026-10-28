@@ -135,7 +135,6 @@
       <a class="sb-tryv2-top" href="/v2" hx-boost="false">
         <svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sparkle"/></svg>
         <span>Try the new dashboard</span>
-        <span class="sb-tryv2-beta">Beta</span>
       </a>
     <% } %>
 
@@ -187,6 +186,12 @@
       <span class="brand">Sylo</span>
     </header>
     <main>
+      <%# The classic dashboard is on its way out (retired in Sylo 5.0): say so, and link to the new one.
+          /v2 also ends a "Back to classic dashboard" choice (routes/v2Client.js). %>
+      <div class="banner info classic-retiring" role="note">
+        The classic dashboard will be removed in Sylo 5.0.
+        <a href="/v2" hx-boost="false">Switch to the new dashboard.</a>
+      </div>
       <% var ann = typeof announcement !== 'undefined' ? announcement : null; %>
       <% if (ann) { %>
         <div
