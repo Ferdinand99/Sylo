@@ -95,6 +95,9 @@ export const getPlatformInfo = (guildId) => apiFetch(`/api/v2/guilds/${gid(guild
 // module (see v2Api.js's "Per-module config" section) behind them.
 export const getModuleConfig = (guildId, moduleId) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/${moduleId}/config`);
+// The welcome image preview is a PNG, used as an <img src>. `v` busts the browser's 60 s cache.
+export const welcomeCardPreviewUrl = (guildId, v = Date.now()) =>
+  `/api/v2/guilds/${gid(guildId)}/modules/welcome/card-preview?v=${v}`;
 export const saveModuleConfig = (guildId, moduleId, body) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/${moduleId}/config`, body);
 export const setCountingCount = (guildId, current) =>
@@ -147,6 +150,8 @@ export const savePersonalizerAnnouncement = (body) => postJson('/api/v2/personal
 export const clearPersonalizerAnnouncement = () => postJson('/api/v2/personalizer/announcement/clear', {});
 
 export const getHealth = () => apiFetch('/api/v2/health');
+// A snapshot download is a plain link (the browser saves the file), not a fetch.
+export const backupDownloadUrl = (name) => `/api/v2/health/backups/${encodeURIComponent(name)}`;
 export const sendDevLogTest = () => postJson('/api/v2/health/dev-log-test', {});
 export const sendDevLogErrorTest = () => postJson('/api/v2/health/dev-log-error-test', {});
 export const createBackup = () => postJson('/api/v2/health/backups', {});

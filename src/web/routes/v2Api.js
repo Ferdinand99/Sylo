@@ -199,6 +199,7 @@ import {
 import { applyPresence } from '../../bot/lib/presence.js';
 import { config } from '../../config.js';
 import { dashboardStats, moduleUsage } from '../../db/dashboardStats.js';
+import { sendWelcomeCardPreview } from '../lib/welcomeCardPreview.js';
 import {
   listBackups,
   runBackup,
@@ -207,6 +208,8 @@ import {
   importBuffer,
   restoreFromBackup,
   resolveBackup,
+  openBackup,
+  isBackupName,
   inspectDbFile,
 } from '../../db/backup.js';
 import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
@@ -634,6 +637,12 @@ router.post(
     });
     res.json({ config: { ...config, autoroles: newRoles } });
   })
+);
+
+// A PNG of the welcome image with a sample member and the saved background (same as classic).
+router.get(
+  '/guilds/:guildId/modules/welcome/card-preview',
+  asyncHandler((req, res) => sendWelcomeCardPreview(req.guild, res))
 );
 
 router.get(
@@ -2291,9 +2300,8 @@ router.post(
 // --- Health (mirrors health.js's owner-only HTML page in full — status,
 // stats, module adoption, error log, dev-log test, and backups
 // create/download/import/delete/restore. The one thing NOT duplicated here
-// is the actual backup-file byte-stream download — that's a GET with no
-// JSON body, so the page just links straight to V1's existing
-// /health/backups/:name route, same cookie session, same requireOwner gate.)
+// is the backup-file download, which streams bytes instead of JSON and is
+// GET /health/backups/:name below.)
 
 router.get(
   '/health',
@@ -2384,6 +2392,17 @@ router.post('/health/dev-log-error-test', requireOwner, backupLimit, (req, res) 
     'Manually triggered from the V2 dashboard — if you see this in the dev-log channel, the real error pipeline works end to end.'
   );
   res.json({ ok: true });
+});
+
+// Download a snapshot (the same strict name check and attachment headers as classic /health/backups/:name).
+router.get('/health/backups/:name', requireOwner, backupLimit, (req, res) => {
+  if (!isBackupName(req.params.name)) return res.status(400).json({ error: 'invalid backup name' });
+  const stream = openBackup(req.params.name);
+  if (!stream) return res.status(404).json({ error: 'no such backup' });
+  res.setHeader('Content-Disposition', `attachment; filename="${req.params.name}"`);
+  res.type('application/octet-stream');
+  stream.on('error', () => res.destroy());
+  stream.pipe(res);
 });
 
 router.post(

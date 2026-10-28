@@ -7,6 +7,7 @@ import {
   deleteBackup,
   restoreBackup,
   importBackup,
+  backupDownloadUrl,
   ApiError,
 } from '../api.js';
 import LoadError from '../components/LoadError.jsx';
@@ -402,7 +403,7 @@ export default function Health() {
               <div className="v2-row v2-row-stack" key={b.name}>
                 <div className="v2-row-main">
                   <h3 className="v2-break">
-                    <a href={`/health/backups/${encodeURIComponent(b.name)}`}>{b.name}</a>
+                    <a href={backupDownloadUrl(b.name)}>{b.name}</a>
                   </h3>
                   <p>
                     {b.size} · {b.ago}

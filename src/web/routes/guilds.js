@@ -146,7 +146,7 @@ import {
 import { guildTempBans, clearTempBan } from '../../db/tempBans.js';
 import { lockChannel, unlockChannel, lockPreflight } from '../../bot/lib/channelLock.js';
 import { formatDuration } from '../../bot/lib/duration.js';
-import { renderWelcomeCard } from '../../bot/lib/welcomeCard.js';
+import { sendWelcomeCardPreview } from '../lib/welcomeCardPreview.js';
 import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
 import { exportGuildConfigFor, forgetMember, lookupProfile } from '../lib/guildData.js';
 import { buildOverview } from '../lib/overviewSummary.js';
@@ -722,18 +722,7 @@ router.post(
 // ?v= cache-buster the view appends.
 router.get(
   '/:guildId/m/welcome/card-preview',
-  asyncHandler(async (req, res) => {
-    const cfg = (await getGuildModule(req.guild.id, 'welcome')).config || {};
-    const png = await renderWelcomeCard({
-      name: 'New Member',
-      avatarUrl: primaryClient()?.user?.displayAvatarURL({ extension: 'png', size: 256 }),
-      memberCount: req.guild.memberCount || 0,
-      accent: await guildEmbedColor(req.guild.id),
-      backgroundUrl: cfg.cardBackground || undefined,
-    });
-    if (!png) return res.status(204).end(); // canvas unavailable on this host
-    res.set('Cache-Control', 'private, max-age=60').type('png').send(png);
-  })
+  asyncHandler((req, res) => sendWelcomeCardPreview(req.guild, res))
 );
 
 // Welcome Channel: create a read-only #welcome channel.
