@@ -3,7 +3,7 @@
 Members run `/afk` to mark themselves away. Sylo replies to anyone who mentions
 them, and clears the status when they next speak.
 
-**Dashboard:** `/guilds/<id>/m/afk`.
+**Dashboard:** `/v2/guilds/<id>/m/afk`.
 
 ## Needs
 

@@ -94,7 +94,7 @@ flowchart LR
   end
 
   subgraph clients["Clients"]
-    V1["Classic dashboard<br/>EJS + htmx"]
+    V1["Classic dashboard<br/>EJS + htmx (retiring in 5.0)"]
     V2["Dashboard V2<br/>React"]
     IOS["Sylo iOS app"]
   end
@@ -249,14 +249,13 @@ endpoints, tokens and permissions: [docs/mobile-app.md](docs/mobile-app.md).
 
 ## Dashboard
 
-- **Classic dashboard.** Server-rendered EJS with a small htmx + Alpine layer,
-  vendored, with no CDN. It has a sidebar server switcher, a plugin grid, a
-  settings page per module and builders for embeds, reaction roles, custom
-  commands and the welcome channel. Saves swap in place with a toast, and every
-  page still works without JavaScript.
-- **[Dashboard V2](docs/dashboard-v2.md) (beta).** A React single-page app at
-  `/v2`, opt-in, using the same login and the same data. Module coverage is
-  still growing.
+- **[Dashboard](docs/dashboard-v2.md).** A React single-page app at `/v2`, the
+  default since 4.10. It covers every module, the builders for embeds, reaction
+  roles, custom commands and the welcome channel, tickets, moderation, appeals,
+  insights and the operator pages. The command list and the roadmap are public.
+- **Classic dashboard (retiring).** The older server-rendered EJS + htmx
+  dashboard is still reachable at `/?classic=1` until Sylo 5.0, when it is
+  removed. Old dashboard links open the matching page in the new dashboard.
 - **Public pages.** Shareable leaderboards (`/leaderboard/:id`, `/lb/:slug`),
   member verification (`/verify`) and ban appeals (`/appeal`). These pages use
   no JavaScript framework.

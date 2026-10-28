@@ -4,7 +4,7 @@ Post a text or embed message to a channel — once at a set time, or on a repeat
 interval. (The dashboard calls this "Reminders"; the older id is
 `scheduled-messages`.)
 
-**Dashboard:** `/guilds/<id>/m/reminders`.
+**Dashboard:** `/v2/guilds/<id>/m/reminders`.
 
 ## Needs
 

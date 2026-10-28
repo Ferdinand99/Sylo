@@ -3,7 +3,7 @@
 Members create reaction polls with `/poll`. Polls close automatically on a timer
 or a vote cap, and Sylo posts the results.
 
-**Dashboard:** `/guilds/<id>/m/polls`.
+**Dashboard:** `/v2/guilds/<id>/m/polls`.
 
 ## Needs
 

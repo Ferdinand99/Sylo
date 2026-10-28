@@ -192,8 +192,8 @@ server and account, answered with `429` and an `{ "error" }`.
 - **Only a SHA-256 hash is stored**, with the account it belongs to, the device
   name, when it was created and last used, and its expiry. A copy of the
   database cannot be used to act as anyone.
-- **Signed-in devices.** The account page (`/account` in the classic dashboard,
-  **Account** in the new dashboard) lists each device with its name and last
+- **Signed-in devices.** The account page (**Account** in the dashboard,
+  `/v2/account`) lists each device with its name and last
   use, and a **Revoke** button.
 - A token stops working, at once, when:
   - the app signs out (`DELETE /api/mobile/token`),

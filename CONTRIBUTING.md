@@ -65,9 +65,12 @@ so write them for a human reader.
    `dispatch.js`, or start a `setInterval` for scheduled work (unref it).
 2. Add it to `MODULES` in `src/modules/registry.js` and import it in
    `src/modules/index.js`.
-3. If it stores per-guild config: add `src/web/views/guild/modules/<id>.ejs`,
-   list the id in `CONFIG_VIEWS` in `src/web/routes/guilds.js`, and handle its
-   config POST there.
+3. If it stores per-guild config: add the form `web-v2/src/moduleForms/<Name>.jsx`
+   (registered in `moduleForms/index.js`) and a `GET`/`POST
+   /guilds/:guildId/modules/<id>/config` pair in `src/web/routes/v2Api.js` that
+   uses the module's `normalise…Config`. Until Sylo 5.0 removes the classic
+   dashboard, also add `src/web/views/guild/modules/<id>.ejs`, list the id in
+   `CONFIG_VIEWS` in `src/web/routes/guilds.js` and handle its config POST there.
 4. Icon: add an entry to `MODULE_ICONS` in `src/web/lib/moduleIcons.js` and the
    matching `#i-<name>` SVG symbol in `src/web/views/partials/header.ejs`; add
    the module to a category in `src/web/lib/sidebarNav.js` and a card line in

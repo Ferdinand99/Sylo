@@ -4,7 +4,7 @@ When Sylo bans a member (via `/ban` or a warning auto-action), it DMs them a lin
 to an appeal form. Staff read submissions and accept or deny them from the
 dashboard.
 
-**Dashboard:** `/guilds/<id>/appeals`.
+**Dashboard:** `/v2/guilds/<id>/appeals`.
 
 ## Needs
 

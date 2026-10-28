@@ -13,7 +13,7 @@ Because the API key belongs to one account, **only the Sylo owner** (the account
 hidden from everyone else and refused on the server for server admins, moderators
 and members alike.
 
-**Dashboard:** `/guilds/<id>/m/apple-connect` (owner only).
+**Dashboard:** `/v2/guilds/<id>/m/apple-connect` (owner only).
 
 ## Needs
 

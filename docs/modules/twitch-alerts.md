@@ -2,7 +2,7 @@
 
 Announce in a channel when a Twitch streamer goes live.
 
-**Dashboard:** `/guilds/<id>/m/twitch-alerts`.
+**Dashboard:** `/v2/guilds/<id>/m/twitch-alerts`.
 
 ## Needs
 

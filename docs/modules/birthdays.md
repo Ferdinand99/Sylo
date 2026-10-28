@@ -3,7 +3,7 @@
 Members save their birthday with `/birthday`; once a day Sylo posts a greeting in
 a configured channel and can grant a **birthday role** for the day.
 
-**Dashboard:** `/guilds/<id>/m/birthdays`.
+**Dashboard:** `/v2/guilds/<id>/m/birthdays`.
 
 ## Needs
 

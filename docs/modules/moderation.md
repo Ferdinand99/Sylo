@@ -5,7 +5,7 @@ escalation, a moderation log, and channel-lock tools. **On by default.** The
 moderation slash commands work even with the module off — the module adds the
 warning thresholds and the audit embed.
 
-**Dashboard:** `/guilds/<id>/moderation` (Moderator page — Automod, Auto-actions,
+**Dashboard:** `/v2/guilds/<id>/moderation` (Moderator page — Automod, Auto-actions,
 Admin, Infractions, Audit logging, Commands tabs).
 
 ## Needs

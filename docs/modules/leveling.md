@@ -3,7 +3,7 @@
 XP and levels from chat activity, with role rewards, per-channel/role
 multipliers, no-XP lists, and a public leaderboard.
 
-**Dashboard:** `/guilds/<id>/m/leveling`.
+**Dashboard:** `/v2/guilds/<id>/m/leveling`.
 
 ## Needs
 

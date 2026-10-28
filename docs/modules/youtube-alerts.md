@@ -2,7 +2,7 @@
 
 Announce a YouTube channel's new uploads, and when it goes live.
 
-**Dashboard:** `/guilds/<id>/m/youtube-alerts`.
+**Dashboard:** `/v2/guilds/<id>/m/youtube-alerts`.
 
 ## Needs
 

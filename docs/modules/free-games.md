@@ -4,7 +4,7 @@ Announces games (and DLC) that become free to claim on the **Epic Games Store**,
 in a channel of your choice. With an optional API key it also covers other
 stores.
 
-**Dashboard:** `/guilds/<id>/m/free-games`.
+**Dashboard:** `/v2/guilds/<id>/m/free-games`.
 
 ## Needs
 
