@@ -96,5 +96,23 @@ export default [
     },
   },
 
+  // V2 unit tests (Vitest, `globals: true` in web-v2/vitest.config.js).
+  {
+    files: ['web-v2/**/__tests__/**/*.{js,jsx}'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        vi: 'readonly',
+        beforeAll: 'readonly',
+        beforeEach: 'readonly',
+        afterAll: 'readonly',
+        afterEach: 'readonly',
+      },
+    },
+  },
+
   prettier,
 ];

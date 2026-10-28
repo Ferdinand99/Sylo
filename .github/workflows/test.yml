@@ -28,6 +28,10 @@ jobs:
         run: npm run lint
       - name: Prettier
         run: npm run format:check
+      # The V2 dashboard is only built by the Docker image otherwise; a JSX or
+      # import error must fail here, on the pull request, not at publish time.
+      - name: Build the V2 dashboard
+        run: npm run build:v2
       - name: npm audit (production deps)
         run: npm audit --omit=dev --audit-level=high
 
@@ -83,6 +87,9 @@ jobs:
         run: npm test
         env:
           DATABASE_URL: ${{ matrix.driver == 'postgres' && 'postgres://sylo:sylo@localhost:5432/sylo_test' || '' }}
+
+      - name: V2 dashboard unit tests
+        run: npm run test:v2
 
       - name: Syntax check every source file
         run: find src scripts test -name '*.js' -print0 | xargs -0 -n1 node --check
