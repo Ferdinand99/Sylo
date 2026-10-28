@@ -13,6 +13,7 @@ import {
   ComponentType,
 } from 'discord.js';
 import { config } from '../../config.js';
+import { respondSafely } from '../../lib/discordErrors.js';
 
 const COLOR = 0x5b7cfa;
 const OVERVIEW_DESCRIPTION =
@@ -174,18 +175,25 @@ export async function execute(interaction) {
     time: COLLECTOR_TIMEOUT_MS,
   });
 
-  collector.on('collect', async (i) => {
-    if (i.user.id !== interaction.user.id) {
-      return i.reply({
-        content: "This isn't your help menu — run `/help` yourself.",
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-    const value = i.values[0];
-    const embed =
-      value === 'overview' ? buildOverviewEmbed(cats) : buildCategoryEmbed(cats.find((c) => c.key === value));
-    await i.update({ embeds: [embed], components: buildComponents(cats, value) });
-  });
+  // An async listener has nobody to catch its rejection, so the whole body is guarded: a
+  // click that arrives after the token expired (10062) is dropped, a real bug is logged.
+  collector.on('collect', (i) =>
+    respondSafely('bot', '/help menu', async () => {
+      if (i.user.id !== interaction.user.id) {
+        await i.reply({
+          content: "This isn't your help menu — run `/help` yourself.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      const value = i.values[0];
+      const embed =
+        value === 'overview'
+          ? buildOverviewEmbed(cats)
+          : buildCategoryEmbed(cats.find((c) => c.key === value));
+      await i.update({ embeds: [embed], components: buildComponents(cats, value) });
+    })
+  );
 
   collector.on('end', () => {
     interaction.editReply({ components: buildComponents(cats, 'overview', true) }).catch(() => {});

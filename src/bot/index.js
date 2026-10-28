@@ -10,6 +10,7 @@ import { loadCommands } from './loadCommands.js';
 import { registerCommands } from './registerCommands.js';
 import { resolveShardOptions } from './lib/shards.js';
 import { log } from '../lib/log.js';
+import { isStaleInteractionError } from '../lib/discordErrors.js';
 
 /** Build the gateway intent list from config. */
 function buildIntents() {
@@ -30,6 +31,21 @@ function buildIntents() {
 const eventsDir = join(dirname(fileURLToPath(import.meta.url)), 'events');
 
 /**
+ * Wrap an event handler so a rejection is logged here, with the event's name, instead of
+ * surfacing as an anonymous unhandled rejection. A stale interaction (10062 / 40060) is dropped.
+ */
+export function guardedListener(eventName, execute) {
+  return async (...args) => {
+    try {
+      await execute(...args);
+    } catch (err) {
+      if (isStaleInteractionError(err)) return;
+      log.error('bot', `Event "${eventName}" handler failed:`, err);
+    }
+  };
+}
+
+/**
  * Wire up every event module in ./events onto the client. A module either
  * exports { name, execute[, once] } for a single listener, or a
  * register(client) function that attaches its own listeners.
@@ -46,8 +62,9 @@ async function loadEvents(client) {
       log.warn('bot', `Skipping event ${file}: missing "name"/"execute" or "register" export`);
       continue;
     }
-    if (mod.once) client.once(mod.name, (...args) => mod.execute(...args));
-    else client.on(mod.name, (...args) => mod.execute(...args));
+    const listener = guardedListener(mod.name, mod.execute);
+    if (mod.once) client.once(mod.name, listener);
+    else client.on(mod.name, listener);
   }
 }
 

@@ -1,12 +1,27 @@
 // Shared helpers for the moderation commands: hierarchy/permission checks,
 // notifying the target by DM, and building consistent result embeds.
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, MessageFlags } from 'discord.js';
 
 export const MOD_COLOR = 0xb4472b;
 export const INFO_COLOR = 0x4aa3df;
 
 /** Reason shown when a moderator doesn't supply one. */
 export const NO_REASON = 'No reason provided';
+
+/** Shown by the guild-only moderation commands when the bot has no guild to work in. */
+export const NO_GUILD_MESSAGE = "I'm not a member of this server, so I can't run this command here.";
+
+/**
+ * Reply with the friendly "not a member" message and return true when `interaction.guild` is
+ * missing (the app is user-installed, or has commands in the server without being added to
+ * it). The guild-only commands call this first, before touching `interaction.guild`.
+ * @returns {Promise<boolean>} true when the command must stop
+ */
+export async function replyWithoutGuild(interaction) {
+  if (interaction.guild) return false;
+  await interaction.reply({ content: `⚠️ ${NO_GUILD_MESSAGE}`, flags: MessageFlags.Ephemeral });
+  return true;
+}
 
 /**
  * Verify the moderator and the bot can act on `target`. Returns a user-facing
@@ -20,10 +35,10 @@ export const NO_REASON = 'No reason provided';
  */
 export function checkActable({ interaction, target, action, botActs = true }) {
   const { guild, member: moderator } = interaction;
-  const me = guild.members.me;
+  const me = guild?.members.me;
 
-  // No bot member on this guild (e.g. the app is user-installed but not added
-  // to the server) — nothing we can act on.
+  // No guild object, or no bot member on it (e.g. the app is user-installed, or only has
+  // commands in the server, without being added to it) — nothing we can act on.
   if (!me) return `I'm not a member of this server, so I can't ${action} anyone here.`;
   if (!moderator) return `I couldn't read your roles — try again in a moment.`;
 

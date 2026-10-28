@@ -445,3 +445,62 @@ test("fetchSnapshot: Apple's own server errors are a warning, not an error in th
   assert.equal(snap.apps[0].reviews, null, 'the reviews part is skipped');
   assert.equal(runtime.errors.length, before, 'nothing added to the error history');
 });
+
+test("isAppleSideFailure: 5xx, timeouts and dropped connections are Apple's side; 4xx and our own errors are not", async () => {
+  const { isAppleSideFailure, AppStoreConnectError } = await import('../src/lib/appStoreConnect.js');
+
+  assert.equal(isAppleSideFailure(new AppStoreConnectError('App Store Connect 503', 503)), true);
+  assert.equal(
+    isAppleSideFailure(new DOMException('The operation was aborted due to timeout', 'TimeoutError')),
+    true
+  );
+  assert.equal(isAppleSideFailure(new DOMException('This operation was aborted', 'AbortError')), true);
+  assert.equal(isAppleSideFailure(Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })), true);
+  const fetchFailed = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } });
+  assert.equal(isAppleSideFailure(fetchFailed), true);
+  assert.equal(isAppleSideFailure(new TypeError('fetch failed')), true);
+
+  assert.equal(isAppleSideFailure(new AppStoreConnectError('App Store Connect 401', 401)), false);
+  assert.equal(isAppleSideFailure(new AppStoreConnectError('Refusing to send the API token')), false);
+  assert.equal(
+    isAppleSideFailure(new TypeError("Cannot read properties of undefined (reading 'data')")),
+    false
+  );
+  assert.equal(isAppleSideFailure(new SyntaxError('Unexpected token < in JSON')), false);
+  assert.equal(
+    isAppleSideFailure(Object.assign(new Error('bad key'), { code: 'ERR_OSSL_UNSUPPORTED' })),
+    false
+  );
+  assert.equal(isAppleSideFailure(null), false);
+});
+
+test('fetchSnapshot: a timeout (after the one retry) is a warning; a TypeError in our code is an error', async () => {
+  const { runtime } = await import('../src/runtime.js');
+  const part = (fail) =>
+    fakeClient({
+      '/v1/apps': { data: [{ id: '10', attributes: { name: 'A' } }] },
+      '/v1/apps/10/appStoreVersions': { data: [] },
+      '/v1/builds': { data: [] },
+      '/v1/apps/10/customerReviews': () => {
+        throw fail;
+      },
+    });
+  const orig = console.error;
+  console.error = () => {};
+  try {
+    const before = runtime.errors.length;
+    await fetchSnapshot(part(new DOMException('The operation was aborted due to timeout', 'TimeoutError')), {
+      appIds: ['10'],
+      want: { reviews: true },
+    });
+    assert.equal(runtime.errors.length, before, 'a timeout adds nothing to the error history');
+
+    await fetchSnapshot(part(new TypeError('x.data is not iterable')), {
+      appIds: ['10'],
+      want: { reviews: true },
+    });
+    assert.equal(runtime.errors.length, before + 1, 'a TypeError in our own code is still an error');
+  } finally {
+    console.error = orig;
+  }
+});

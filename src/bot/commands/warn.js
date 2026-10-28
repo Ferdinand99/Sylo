@@ -6,7 +6,14 @@ import {
   MessageFlags,
   EmbedBuilder,
 } from 'discord.js';
-import { MOD_COLOR, INFO_COLOR, checkActable, notifyTarget, resultEmbed } from '../lib/moderation.js';
+import {
+  MOD_COLOR,
+  INFO_COLOR,
+  checkActable,
+  notifyTarget,
+  replyWithoutGuild,
+  resultEmbed,
+} from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
 import { addWarning, listWarnings, getWarning, removeWarning, clearWarnings } from '../../db/modCases.js';
 import { applyWarnThresholds } from '../../modules/moderation.js';
@@ -48,6 +55,7 @@ export const data = new SlashCommandBuilder()
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
+  if (await replyWithoutGuild(interaction)) return;
   const sub = interaction.options.getSubcommand();
   const guildId = interaction.guild.id;
 

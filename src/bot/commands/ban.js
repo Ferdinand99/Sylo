@@ -67,7 +67,7 @@ export async function execute(interaction) {
     await interaction.reply({ content: "⚠️ You can't ban yourself.", flags: MessageFlags.Ephemeral });
     return;
   }
-  if (!guild.members.me) {
+  if (!guild?.members.me) {
     await interaction.reply({
       content: "⚠️ I'm not a member of this server, so I can't ban anyone here.",
       flags: MessageFlags.Ephemeral,

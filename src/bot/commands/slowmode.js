@@ -7,7 +7,7 @@ import {
   ChannelType,
   EmbedBuilder,
 } from 'discord.js';
-import { MOD_COLOR } from '../lib/moderation.js';
+import { MOD_COLOR, replyWithoutGuild } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
 import { formatDuration } from '../lib/duration.js';
 
@@ -40,6 +40,7 @@ export const data = new SlashCommandBuilder()
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
+  if (await replyWithoutGuild(interaction)) return;
   const seconds = interaction.options.getInteger('seconds', true);
   const channel = interaction.options.getChannel('channel') ?? interaction.channel;
 

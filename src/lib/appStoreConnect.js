@@ -21,6 +21,39 @@ export class AppStoreConnectError extends Error {
   }
 }
 
+// Socket-level failures that mean "the connection to Apple broke", not "we did it wrong".
+const NETWORK_ERROR_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EPIPE',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
+
+/**
+ * True when a failed App Store Connect call is Apple's side (or the network to it): a 5xx, a
+ * timeout, or a dropped connection. The request is already retried once before the caller
+ * sees such an error. A 4xx, a bad key or an unexpected response is ours, and is not matched
+ * (a TypeError counts only as fetch's own "fetch failed").
+ * @param {any} err
+ */
+export function isAppleSideFailure(err) {
+  if (!err) return false;
+  if (err.status >= 500) return true;
+  if (err.name === 'TimeoutError' || err.name === 'AbortError') return true;
+  const code = err.code ?? err.cause?.code;
+  if (NETWORK_ERROR_CODES.has(code)) return true;
+  return err instanceof TypeError && err.message === 'fetch failed';
+}
+
 /**
  * The .p8 key as a PEM string. Accepts the PEM itself, a single-line PEM with literal "\n"
  * (how it survives an environment variable), or base64 of the PEM. Null when it is not a key.

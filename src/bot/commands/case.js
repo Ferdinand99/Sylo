@@ -6,7 +6,7 @@ import {
   MessageFlags,
   EmbedBuilder,
 } from 'discord.js';
-import { MOD_COLOR, INFO_COLOR } from '../lib/moderation.js';
+import { MOD_COLOR, INFO_COLOR, replyWithoutGuild } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
 import { getCase, editCaseReason, setCaseActive, addCase } from '../../db/modCases.js';
 import { ACTION_LABELS, moderatorMention } from './history.js';
@@ -70,6 +70,7 @@ function caseEmbed(c, title = `Case #${c.case_number}`) {
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
+  if (await replyWithoutGuild(interaction)) return;
   const sub = interaction.options.getSubcommand();
   const guildId = interaction.guild.id;
 
