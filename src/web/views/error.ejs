@@ -1,9 +1,11 @@
-<%- include('partials/header', { title: `Sylo — ${typeof title !== 'undefined' ? title : 'Error'}`, noRetireBanner: true }) %>
+<%- include('partials/auth-head', { title: `Sylo — ${typeof title !== 'undefined' ? title : 'Error'}` }) %>
 
-<section class="card">
-  <h2><%= typeof heading !== 'undefined' ? heading : 'Something went wrong' %></h2>
+<section class="card auth-card">
+  <h1 class="auth-title"><%= typeof heading !== 'undefined' ? heading : 'Something went wrong' %></h1>
   <p class="muted"><%= typeof message !== 'undefined' ? message : 'Please try again.' %></p>
-  <p><a href="/">&larr; Back to the dashboard</a></p>
+  <div class="auth-actions">
+    <a class="btn btn-ghost" href="/v2/">&larr; Back to the dashboard</a>
+  </div>
 </section>
 
-<%- include('partials/footer') %>
+<%- include('partials/auth-foot') %>

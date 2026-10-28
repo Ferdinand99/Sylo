@@ -1,0 +1,446 @@
+/* The public pages that are not part of the dashboard app: sign-in, the app's confirm page, the
+   error page, verify, ban appeal and the leaderboard. Same look as the new dashboard (/v2): the
+   tokens below are copied from web-v2/src/styles.css, with its dark default and an explicit light
+   theme (data-theme="light", set by /theme.js). Only the classes these pages use live here. */
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(/fonts/inter-latin-wght-normal.woff2) format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  color-scheme: dark;
+  accent-color: var(--accent);
+  --bg-main: #0b0b0d;
+  --bg-surface: #161618;
+  --bg-surface-2: #111113;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-field: var(--border-subtle);
+  --text: #f5f5f7;
+  --text-muted: #a1a1a6;
+  --accent: #8b7dff;
+  --success: #30d158;
+  --warn: #ffd60a;
+  --danger: #ff453a;
+  --primary-hover: #ffffff;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --radius-pill: 999px;
+  --font: 'Inter Variable', -apple-system, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.82rem;
+  --fs-md: 0.9375rem;
+  --fs-lg: 1.0625rem;
+  --fs-xl: 1.75rem;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dur-press: 120ms;
+  --dur-ui: 200ms;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-main: #f5f5f7;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #fbfbfd;
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --border-field: #d2d2d7;
+  --text: #1d1d1f;
+  --text-muted: #6e6e73;
+  --accent: #6a58e3;
+  --success: #1e7f36;
+  --warn: #b25000;
+  --danger: #d70015;
+  --primary-hover: #000000;
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg-main);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  font-optical-sizing: auto;
+  font-feature-settings: 'cv11', 'ss03';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+h1,
+h2 {
+  color: var(--text);
+  text-wrap: balance;
+}
+a {
+  color: var(--accent);
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+a:hover {
+  text-decoration: underline;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* iOS zooms into fields under 16px and never zooms back out. */
+@media (pointer: coarse) {
+  input,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+.muted {
+  color: var(--text-muted);
+}
+.small {
+  font-size: var(--fs-sm);
+}
+.warn-text {
+  color: var(--warn);
+}
+.u-mt-3 {
+  margin-top: 12px;
+}
+.u-mt-4 {
+  margin-top: 16px;
+}
+
+/* A page of its own: the brand, then the content, then a footer line. */
+.pub-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.pub-brand img {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.card h2 {
+  margin: 0 0 8px;
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.page-title {
+  margin: 0 0 4px;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--text);
+  color: var(--bg-main);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    background-color var(--dur-ui) ease;
+}
+.btn:hover {
+  background: var(--primary-hover);
+  color: var(--bg-main);
+  text-decoration: none;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text);
+  font-weight: 500;
+}
+.btn-ghost:hover {
+  background: var(--bg-surface);
+  color: var(--text);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stack label {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 10px 12px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-field);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+}
+textarea:hover {
+  border-color: var(--border-strong);
+}
+textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* Verify and appeal: one centred card. */
+.verify-wrap {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 40px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.verify-form {
+  align-items: center;
+}
+
+/* Sign-in pages (login, the app's confirm page) and the error page. */
+.auth-wrap {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 32px 16px;
+}
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.auth-card {
+  width: 100%;
+  max-width: 28rem;
+  text-align: center;
+}
+.auth-title {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.auth-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+}
+.auth-foot,
+.lb-foot {
+  text-align: center;
+}
+
+/* Public leaderboard. */
+.lb-wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 16px 32px;
+}
+.lb-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 18px 0;
+}
+.lb-guild-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+}
+.lb-periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 16px;
+}
+.lb-periods a {
+  padding: 4px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+.lb-periods a:hover {
+  text-decoration: none;
+  border-color: var(--border-strong);
+}
+.lb-periods a.on {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.lb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lb-row {
+  display: grid;
+  grid-template-columns: 44px 40px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+.lb-row.lb-top {
+  border-color: var(--border-strong);
+}
+.lb-rank {
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+.lb-top .lb-rank {
+  color: var(--accent);
+}
+.lb-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+.lb-avatar-blank {
+  display: inline-block;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+}
+.lb-main {
+  min-width: 0;
+}
+.lb-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+/* The level progress bar is a <meter> (value set from the server): no inline style needed. */
+.lb-bar {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin-top: 5px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--border-subtle);
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.lb-bar::-webkit-meter-bar {
+  height: 6px;
+  border: 0;
+  background: var(--border-subtle);
+}
+.lb-bar::-webkit-meter-optimum-value,
+.lb-bar::-webkit-meter-suboptimum-value,
+.lb-bar::-webkit-meter-even-less-good-value {
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+}
+.lb-bar::-moz-meter-bar {
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+}
+.lb-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+}
+.lb-level {
+  white-space: nowrap;
+  font-weight: 650;
+}
+.lb-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  font-size: var(--fs-sm);
+}
+.lb-pager-off {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+.lb-foot {
+  margin-top: 22px;
+}
+@media (max-width: 520px) {
+  .lb-row {
+    grid-template-columns: 32px 34px 1fr;
+  }
+  .lb-stats {
+    grid-column: 2 / -1;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn {
+    transition: none;
+  }
+  .btn:active {
+    transform: none;
+  }
+}

@@ -31,10 +31,8 @@ test('an unauthenticated visitor is sent to the chooser when both logins are off
   const page = await (await browser().get('/auth/login')).text();
   assert.match(page, /Log in with Discord/);
   assert.match(page, /Log in with Fluxer/);
-  // The buttons leave for another site; a boosted (fetch-based) navigation would die on CORS
-  // with "Network error", so each must opt out of htmx boosting.
   for (const platform of ['discord', 'fluxer']) {
-    assert.match(page, new RegExp(`<a[^>]*href="/auth/${platform}/login"[^>]*hx-boost="false"`));
+    assert.match(page, new RegExp(`<a[^>]*href="/auth/${platform}/login"`));
   }
 });
 

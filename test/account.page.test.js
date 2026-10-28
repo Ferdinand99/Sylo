@@ -43,7 +43,7 @@ test('the account page offers to connect the platform you have not linked, and t
   assert.doesNotMatch(page, /href="\/auth\/connect\/discord"/);
   const home = await (await b.get('/guilds')).text().catch(() => '');
   void home;
-  const sidebar = await (await b.get('/roadmap')).text();
+  const sidebar = await (await b.get('/commands')).text();
   assert.match(sidebar, /<a[^>]*href="\/account"/);
 });
 
@@ -95,7 +95,7 @@ test('the server switcher tags each server with its platform once the account sp
   const solo = browser();
   await signIn(solo, 'discord');
   assert.doesNotMatch(
-    await (await solo.get('/roadmap')).text(),
+    await (await solo.get('/commands')).text(),
     /srv-badge/,
     'a single platform needs no badges'
   );
@@ -103,7 +103,7 @@ test('the server switcher tags each server with its platform once the account sp
   const both = browser();
   await signIn(both, 'discord');
   await signIn(both, 'fluxer', { connect: true });
-  const html = await (await both.get('/roadmap')).text();
+  const html = await (await both.get('/commands')).text();
   assert.match(html, /srv-badge srv-badge-fluxer[^>]*>Fluxer</);
   assert.match(html, /srv-badge srv-badge-discord[^>]*>Discord</);
 });
@@ -174,7 +174,7 @@ test('the switcher offers to add a server on each platform, and V2 gets the same
   setProfiles();
   const b = browser();
   await signIn(b, 'discord');
-  const html = await (await b.get('/roadmap')).text();
+  const html = await (await b.get('/commands')).text();
   assert.match(
     html,
     /href="https:\/\/discord\.com\/oauth2\/authorize\?[^"]*client_id=123456789012345678[^"]*"[^>]*>[\s\S]*?Add a server on Discord/

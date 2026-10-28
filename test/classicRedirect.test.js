@@ -109,7 +109,6 @@ test('downloads, previews and the transcript are not pages: no redirect', async 
     `/guilds/${D_GUILD}/m/welcome/card-preview`,
     `/guilds/${D_GUILD}/emojis`,
     '/health/backups/sylo-manual-x.db',
-    '/roadmap',
     '/leaderboard/anything',
     '/auth/login',
     // Not a server key.
