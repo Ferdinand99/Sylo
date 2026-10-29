@@ -160,6 +160,3 @@ DerivedData/
 .build/
 .build-*/
 .swiftpm/
-
-# Local agent workspaces (plans run with subagent-driven development)
-.superpowers/
