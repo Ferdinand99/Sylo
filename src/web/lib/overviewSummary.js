@@ -19,6 +19,7 @@ import { activeGiveaways } from '../../db/giveaways.js';
 import { upcomingEvents } from '../../db/events.js';
 import { openSuggestionCount, suggestionCount } from '../../db/suggestions.js';
 import { nextTempRoleExpiry, tempRoleCount } from '../../db/tempRoles.js';
+import { quoteCount } from '../../db/quotes.js';
 import { recentLookups } from '../../db/cache.js';
 import { dailySeries } from '../../db/insights.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
@@ -51,6 +52,7 @@ const LAYOUT = [
       'counting',
       'leveling',
       'starboard',
+      'quote-board',
       'sticky',
       'birthdays',
     ],
@@ -278,6 +280,13 @@ async function moduleLines(id, guild, cfg) {
     case 'sticky': {
       const n = Array.isArray(cfg.stickies) ? cfg.stickies.length : 0;
       return [n ? on('Active sticky messages', String(n)) : off('Active sticky messages', 'none')];
+    }
+    case 'quote-board': {
+      const saved = await quoteCount(guild.id);
+      return [
+        saved ? on('Saved quotes', String(saved)) : neutral('Saved quotes', '0'),
+        cfg.publicPage === true ? on('Public page', 'on') : off('Public page', 'off'),
+      ];
     }
     case 'auto-threads': {
       const rules = Array.isArray(cfg.rules) ? cfg.rules.length : 0;

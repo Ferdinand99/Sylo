@@ -35,6 +35,31 @@ const members = [
   voiceMinutes,
 }));
 
+const quotes = (extra) => ({
+  guild: { name: 'Hedgerow HQ', icon: dot(250) },
+  total: 3,
+  page: 1,
+  pages: 1,
+  quotes: [
+    {
+      number: 3,
+      author: 'Mira',
+      text: 'I did not say that.\nWell, maybe I did.',
+      attachments: 0,
+      date: '2030-01-02',
+    },
+    {
+      number: 2,
+      author: 'a-very-long-member-name-that-should-wrap',
+      text: 'x'.repeat(400),
+      attachments: 2,
+      date: '2029-12-24',
+    },
+    { number: 1, author: 'Odd', text: '', attachments: 1, date: '2029-11-30' },
+  ],
+  ...extra,
+});
+
 const appeal = (extra) => ({
   state: 'form',
   guildId: '900000000000000201',
@@ -126,6 +151,8 @@ export const SAMPLES = {
     data: appeal({ state: 'decided', verdict: 'denied', decisionReason: 'Repeated spam.', reappealDays: 14 }),
   },
   leaderboard: { file: 'leaderboard.ejs', data: board({}) },
+  quotes: { file: 'quotes.ejs', data: quotes({}) },
+  'quotes-empty': { file: 'quotes.ejs', data: quotes({ quotes: [], total: 0 }) },
   'leaderboard-empty': { file: 'leaderboard.ejs', data: board({ members: [], total: 0, pages: 1 }) },
 };
 

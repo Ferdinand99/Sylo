@@ -28,3 +28,28 @@ export async function loadCommands() {
 
   return commands;
 }
+
+/**
+ * The message / user menu commands ("Save quote"): a command module lists them in an optional
+ * `contextMenus` export of `{ data: ContextMenuCommandBuilder, execute }`. They are kept apart
+ * from the slash commands (they have no options, no help entry and no chat form), but are
+ * registered with them.
+ * @returns {Promise<Collection<string, { data: import('discord.js').ContextMenuCommandBuilder, execute: Function }>>}
+ */
+export async function loadContextMenus() {
+  const menus = new Collection();
+  const files = readdirSync(commandsDir).filter((f) => f.endsWith('.js') && !f.startsWith('_'));
+
+  for (const file of files) {
+    const mod = await import(pathToFileURL(join(commandsDir, file)).href);
+    for (const menu of mod.contextMenus ?? []) {
+      if (!menu?.data?.name || typeof menu.execute !== 'function') {
+        log.warn('bot', `Skipping a menu command in ${file}: missing "data" or "execute"`);
+        continue;
+      }
+      menus.set(menu.data.name, { data: menu.data, execute: menu.execute });
+    }
+  }
+
+  return menus;
+}

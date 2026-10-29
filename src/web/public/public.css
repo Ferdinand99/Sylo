@@ -423,6 +423,36 @@ textarea:focus {
 .lb-foot {
   margin-top: 22px;
 }
+
+/* The public quote page (/quotes/<server>): a list of quotes, text first. */
+.q-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.q-item {
+  padding: 14px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+.q-text {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--accent);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.q-meta {
+  margin: 10px 0 0;
+  font-size: var(--fs-sm);
+}
+.q-author {
+  font-weight: 600;
+}
 @media (max-width: 520px) {
   .lb-row {
     grid-template-columns: 32px 34px 1fr;

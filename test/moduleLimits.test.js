@@ -27,6 +27,11 @@ import {
   normaliseReason as normaliseTempReason,
   normaliseTempRolesConfig,
 } from '../src/modules/tempRoles.js';
+import {
+  normaliseQuoteBoardConfig,
+  normaliseQuoteQuery,
+  normaliseQuoteText,
+} from '../src/modules/quoteBoard.js';
 import { normaliseHoneypotConfig } from '../src/modules/honeypot.js';
 import { normaliseInviteTrackerConfig } from '../src/modules/inviteTracker.js';
 import { normaliseKickConfig } from '../src/modules/kickAlerts.js';
@@ -185,6 +190,16 @@ const cases = {
     normalise: (raw) => ({ reason: normaliseTempReason(raw.reason), ...normaliseTempRolesConfig(raw) }),
     base: {},
     value: { staffRoles: (n) => items(n, roleId) },
+  },
+  'quote-board': {
+    // a quote's text, a search query, and the settings' two role lists
+    normalise: (raw) => ({
+      text: normaliseQuoteText(raw.text),
+      query: normaliseQuoteQuery(raw.query),
+      ...normaliseQuoteBoardConfig(raw),
+    }),
+    base: {},
+    value: { saveRoles: (n) => items(n, roleId), staffRoles: (n) => items(n, roleId) },
   },
   honeypot: {
     normalise: normaliseHoneypotConfig,

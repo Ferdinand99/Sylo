@@ -16,6 +16,22 @@ function stubGuild(id) {
   };
 }
 
+test('the Quote board card counts the saved quotes and shows the public page switch', async () => {
+  const { insertQuote } = await import('../src/db/quotes.js');
+  const find = async () =>
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards).find((c) => c.id === 'quote-board');
+  const empty = await find();
+  assert.ok(empty, 'a card for the Quote board module');
+  assert.equal(empty.lines.find((l) => l.label === 'Saved quotes').value, '0');
+  assert.equal(empty.lines.find((l) => l.label === 'Public page').value, 'off');
+
+  await setGuildModule(G, 'quote-board', { enabled: true, config: { publicPage: true } });
+  await insertQuote({ guildId: G, channelId: '1', messageId: 'm1', authorId: 'a', messageAt: 1, body: 'x' });
+  const card = await find();
+  assert.equal(card.lines.find((l) => l.label === 'Saved quotes').value, '1');
+  assert.equal(card.lines.find((l) => l.label === 'Public page').value, 'on');
+});
+
 test('buildOverview returns health + grouped cards covering every module', async () => {
   await setGuildModule(G, 'automod', { enabled: true, config: { rules: { invites: { enabled: true } } } });
 

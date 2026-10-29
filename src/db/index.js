@@ -1065,6 +1065,36 @@ export const MIGRATIONS = [
       CREATE INDEX idx_guild_temp_roles_user ON guild_temp_roles (user_id);
     `);
   },
+
+  // Quote board (src/db/quotes.js, which bootstraps the same tables on Postgres): a row per saved
+  // quote, numbered per server from a counter that only goes up.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_quotes (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id      TEXT NOT NULL,
+        number        INTEGER NOT NULL,
+        channel_id    TEXT NOT NULL,
+        message_id    TEXT NOT NULL,
+        author_id     TEXT NOT NULL,
+        author_name   TEXT NOT NULL DEFAULT '',
+        body          TEXT NOT NULL DEFAULT '',
+        attachments   INTEGER NOT NULL DEFAULT 0,
+        message_at    INTEGER NOT NULL,
+        saved_by      TEXT,
+        saved_at      INTEGER NOT NULL,
+        public_source INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE UNIQUE INDEX idx_guild_quotes_number ON guild_quotes (guild_id, number);
+      CREATE UNIQUE INDEX idx_guild_quotes_message ON guild_quotes (guild_id, message_id);
+      CREATE INDEX idx_guild_quotes_author ON guild_quotes (guild_id, author_id);
+      CREATE INDEX idx_guild_quotes_saver ON guild_quotes (guild_id, saved_by);
+      CREATE TABLE guild_quote_counters (
+        guild_id    TEXT PRIMARY KEY,
+        last_number INTEGER NOT NULL
+      );
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

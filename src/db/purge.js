@@ -55,6 +55,7 @@ import './verificationKicks.js';
 import './events.js';
 import './suggestions.js';
 import './tempRoles.js';
+import './quotes.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -97,6 +98,8 @@ export const GUILD_TABLES = [
   'guild_events',
   'guild_suggestions',
   'guild_temp_roles',
+  'guild_quotes',
+  'guild_quote_counters',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -165,6 +168,10 @@ const userStmts = {
   // Their roles stay on the platform; only the record that Sylo would take them back is dropped.
   tempRoles: prepare('DELETE FROM guild_temp_roles WHERE guild_id = ? AND user_id = ?'),
   tempRoleAdder: prepare('UPDATE guild_temp_roles SET added_by = NULL WHERE guild_id = ? AND added_by = ?'),
+  // A quote is the author's words, so it goes with them (the number stays used: the counter is not
+  // touched). A quote someone else wrote stays on the board; only the saver's name comes off it.
+  quotesAuthored: prepare('DELETE FROM guild_quotes WHERE guild_id = ? AND author_id = ?'),
+  quotesSaved: prepare('UPDATE guild_quotes SET saved_by = NULL WHERE guild_id = ? AND saved_by = ?'),
   inviteCounts: prepare('DELETE FROM invite_counts WHERE guild_id = ? AND user_id = ?'),
   inviteJoins: prepare('DELETE FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
   inviteJoinsAsInviter: prepare(
@@ -183,7 +190,7 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, invites: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, invites: number }}
  */
 export async function forgetUser(guildId, userId) {
   const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
@@ -203,6 +210,8 @@ export async function forgetUser(guildId, userId) {
   const suggestionDecisions = (await userStmts.suggestionDecider.run(guildId, userId)).changes;
   const tempRoles = (await userStmts.tempRoles.run(guildId, userId)).changes;
   const tempRoleAdders = (await userStmts.tempRoleAdder.run(guildId, userId)).changes;
+  const quotes = (await userStmts.quotesAuthored.run(guildId, userId)).changes;
+  const quotesSaved = (await userStmts.quotesSaved.run(guildId, userId)).changes;
   const invites =
     (await userStmts.inviteCounts.run(guildId, userId)).changes +
     (await userStmts.inviteJoins.run(guildId, userId)).changes +
@@ -223,6 +232,8 @@ export async function forgetUser(guildId, userId) {
     suggestionDecisions,
     tempRoles,
     tempRoleAdders,
+    quotes,
+    quotesSaved,
     invites,
   };
 }
@@ -380,6 +391,22 @@ const USER_DATA_SOURCES = [
     countSql: 'SELECT COUNT(*) AS n FROM guild_temp_roles WHERE guild_id = ? AND added_by = ?',
     rowsSql:
       'SELECT user_id, role_id, expires_at, reason FROM guild_temp_roles WHERE guild_id = ? AND added_by = ? ORDER BY expires_at',
+  },
+  {
+    key: 'quotes',
+    label: 'Quotes of their messages on the quote board (/forget deletes them)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM guild_quotes WHERE guild_id = ? AND author_id = ?',
+    rowsSql:
+      'SELECT number, channel_id, message_id, author_name, body, attachments, message_at, saved_by, saved_at FROM guild_quotes WHERE guild_id = ? AND author_id = ? ORDER BY number',
+  },
+  {
+    key: 'quotesSaved',
+    label: 'Quotes they saved from other members (/forget drops their name from them)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM guild_quotes WHERE guild_id = ? AND saved_by = ?',
+    rowsSql:
+      'SELECT number, channel_id, message_id, saved_at FROM guild_quotes WHERE guild_id = ? AND saved_by = ? ORDER BY number',
   },
   {
     key: 'inviteCounts',

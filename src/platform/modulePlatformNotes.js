@@ -23,6 +23,8 @@ const FLUXER_NOTES = {
     `Fluxer has no buttons or threads yet: members vote by reacting to the suggestion (👍 or 👎; reacting again takes the vote back) and no discussion thread is opened. Members and staff use chat commands, for example ${prefix}suggest text:"Add a movie night" and ${prefix}suggestion approve id:12 reason:"Starting next week". The dashboard works as on Discord.`,
   'temp-roles': ({ prefix }) =>
     `Fluxer has no slash commands: staff use chat commands, for example ${prefix}temprole add @member @role 7d reason:"Trial period" and ${prefix}temprole list. Roles still expire on their own. The dashboard works as on Discord.`,
+  'quote-board': ({ prefix }) =>
+    `Fluxer has no message menu and no slash commands, so there is no "Save quote" menu: members save a quote with a chat command, for example ${prefix}quote save https://web.fluxer.app/channels/<server>/<channel>/<message> or by replying to the message with ${prefix}quote save. The other commands are ${prefix}quote random, ${prefix}quote search, ${prefix}quote user and ${prefix}quote show. The dashboard and the public page work as on Discord.`,
   'auto-threads': () =>
     'Fluxer has no threads yet, so this module does nothing on a Fluxer server: posts stay as they are. The settings can be saved here and start working on a Discord server. Fluxer lists threads for 2026; Sylo will support them then.',
   roles: () =>

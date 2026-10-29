@@ -361,6 +361,17 @@ export const MODULES = [
     beta: true,
   },
   {
+    id: 'quote-board',
+    name: 'Quote board',
+    description:
+      'Save memorable messages with the "Save quote" menu or /quote save, show them with /quote random, search and user, and optionally list them on a public page.',
+    icon: '💬',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
     id: 'game-stats',
     name: 'Game stats',
     description:

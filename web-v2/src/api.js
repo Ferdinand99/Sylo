@@ -126,6 +126,10 @@ export const decideSuggestion = (guildId, number, action, reason) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/decision`, { action, reason });
 export const deleteSuggestion = (guildId, number) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/delete`, {});
+export const getQuotes = (guildId, { q = '' } = {}) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/quote-board/list?q=${encodeURIComponent(q)}`);
+export const deleteQuote = (guildId, number) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/quote-board/${number}/delete`, {});
 export const getTempRoles = (guildId, { q = '', roleId = '' } = {}) =>
   apiFetch(
     `/api/v2/guilds/${gid(guildId)}/modules/temp-roles/list?q=${encodeURIComponent(q)}&roleId=${encodeURIComponent(roleId)}`

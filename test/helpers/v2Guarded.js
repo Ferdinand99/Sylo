@@ -59,6 +59,8 @@ export const SERVER_WRITES = (g) => [
   ],
   [`/guilds/${g}/modules/temp-roles/add`, { userId: SNOWFLAKE, roleId: SNOWFLAKE, duration: '1d' }],
   [`/guilds/${g}/modules/temp-roles/remove`, { userId: SNOWFLAKE, roleId: SNOWFLAKE }],
+  [`/guilds/${g}/modules/quote-board/config`, { publicPage: true, staffRoles: [SNOWFLAKE] }],
+  [`/guilds/${g}/modules/quote-board/1/delete`, {}],
   [
     `/guilds/${g}/modules/auto-threads/config`,
     { rules: [{ channelId: SNOWFLAKE, nameTemplate: '{words}' }] },
@@ -91,6 +93,8 @@ export const SERVER_READS = (g) => [
   `/guilds/${g}/modules/temp-roles/config`,
   `/guilds/${g}/modules/temp-roles/list?q=a`,
   `/guilds/${g}/modules/temp-roles/members?q=a`,
+  `/guilds/${g}/modules/quote-board/config`,
+  `/guilds/${g}/modules/quote-board/list?q=a`,
   `/guilds/${g}/modules/auto-threads/config`,
 ];
 

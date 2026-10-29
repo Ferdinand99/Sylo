@@ -32,7 +32,9 @@ export async function syncGuildCustomCommands(guild) {
   const { enabled, config: cfg } = await getGuildModule(guildKey(guild), 'custom-commands');
 
   const builtins = config.discordGuildIds.includes(guildKey(guild))
-    ? [...(guild.client.commands?.values() ?? [])].map((c) => c.data.toJSON())
+    ? [...(guild.client.commands?.values() ?? []), ...(guild.client.contextMenus?.values() ?? [])].map((c) =>
+        c.data.toJSON()
+      )
     : [];
   const builtinNames = new Set(builtins.map((c) => c.name));
 

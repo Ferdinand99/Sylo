@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title><%= guild.name %> — Quotes</title>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/public.css" />
+</head>
+<body>
+  <main class="lb-wrap">
+    <div class="pub-brand"><img src="/favicon.svg" alt="" width="28" height="28" /><span>Sylo</span></div>
+    <header class="lb-head">
+      <% if (guild.icon) { %><img class="lb-guild-icon" src="<%= guild.icon %>" alt="" /><% } %>
+      <div>
+        <h1 class="page-title"><%= guild.name %></h1>
+        <p class="muted">Quote board · <%= total %> quote<%= total === 1 ? '' : 's' %></p>
+      </div>
+    </header>
+
+    <% if (quotes.length === 0) { %>
+      <div class="card"><p class="muted">No quotes have been saved yet.</p></div>
+    <% } else { %>
+      <ol class="q-list">
+        <% quotes.forEach(function (q) { %>
+          <li class="q-item">
+            <blockquote class="q-text"><%= q.text || '(no text)' %></blockquote>
+            <p class="q-meta">
+              <span class="q-author"><%= q.author %></span>
+              <span class="muted small">· <%= q.date %> · #<%= q.number %><% if (q.attachments > 0) { %> · 📎 <%= q.attachments %> attachment<%= q.attachments === 1 ? '' : 's' %><% } %></span>
+            </p>
+          </li>
+        <% }) %>
+      </ol>
+
+      <% if (pages > 1) { %>
+        <nav class="lb-pager">
+          <% if (page > 1) { %><a href="?page=<%= page - 1 %>">&larr; Newer</a><% } else { %><span class="lb-pager-off">&larr; Newer</span><% } %>
+          <span class="muted">Page <%= page %> of <%= pages %></span>
+          <% if (page < pages) { %><a href="?page=<%= page + 1 %>">Older &rarr;</a><% } else { %><span class="lb-pager-off">Older &rarr;</span><% } %>
+        </nav>
+      <% } %>
+    <% } %>
+
+    <p class="lb-foot muted small">Powered by Sylo</p>
+  </main>
+</body>
+</html>

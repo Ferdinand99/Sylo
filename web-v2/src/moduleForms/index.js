@@ -17,6 +17,7 @@ const Giveaways = lazy(() => import('./Giveaways.jsx'));
 const Events = lazy(() => import('./Events.jsx'));
 const Suggestions = lazy(() => import('./Suggestions.jsx'));
 const TempRoles = lazy(() => import('./TempRoles.jsx'));
+const QuoteBoard = lazy(() => import('./QuoteBoard.jsx'));
 const AutoThreads = lazy(() => import('./AutoThreads.jsx'));
 const Moderation = lazy(() => import('./Moderation.jsx'));
 const Automod = lazy(() => import('./Automod.jsx'));
@@ -80,6 +81,7 @@ export const MODULE_FORMS = {
   events: Events,
   suggestions: Suggestions,
   'temp-roles': TempRoles,
+  'quote-board': QuoteBoard,
   'auto-threads': AutoThreads,
 };
 

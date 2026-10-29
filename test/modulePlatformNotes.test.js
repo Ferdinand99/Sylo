@@ -21,6 +21,7 @@ test('Fluxer notes exist only for real modules, and say something', () => {
     'events',
     'suggestions',
     'temp-roles',
+    'quote-board',
     'auto-threads',
     'custom-commands',
   ]) {

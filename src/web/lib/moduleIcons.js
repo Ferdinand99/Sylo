@@ -33,6 +33,7 @@ export const MODULE_ICONS = {
   suggestions: 'lightbulb',
   'temp-roles': 'hourglass',
   'auto-threads': 'threads',
+  'quote-board': 'quote',
   'game-stats': 'target',
   'twitch-alerts': 'twitch',
   'youtube-alerts': 'youtube',
