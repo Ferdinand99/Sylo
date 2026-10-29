@@ -1,6 +1,7 @@
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 const MODE_LABELS = { always: 'React to every message', random: 'React at a random chance' };
 const ROLE_ACTION_LABELS = { add: 'Give them the role', remove: 'Take the role away' };
@@ -48,6 +49,7 @@ const fromForm = (form) => ({
 });
 
 export default function AutoReact() {
+  const limits = useModuleLimits('auto-react');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('auto-react', {
     toForm,
     fromForm,
@@ -77,8 +79,8 @@ export default function AutoReact() {
           <input
             id="cooldownSeconds"
             type="number"
-            min={0}
-            max={300}
+            min={limitOf(limits, 'cooldownSeconds').min}
+            max={limitOf(limits, 'cooldownSeconds').max}
             value={form.cooldownSeconds}
             onChange={(e) => set({ cooldownSeconds: Number(e.target.value) })}
           />
@@ -200,8 +202,8 @@ export default function AutoReact() {
                 </select>
                 <input
                   type="number"
-                  min={1}
-                  max={100}
+                  min={limitOf(limits, 'rules[].chance').min}
+                  max={limitOf(limits, 'rules[].chance').max}
                   value={r.chance}
                   onChange={(e) => updateRule(r.key, { chance: Number(e.target.value) })}
                 />
@@ -240,7 +242,12 @@ export default function AutoReact() {
             </div>
           </div>
         ))}
-        <button type="button" className="v2-btn-ghost" onClick={addRule}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addRule}
+          disabled={form.rules.length >= (limitOf(limits, 'rules').maxItems ?? Infinity)}
+        >
           + Add rule
         </button>
       </form>

@@ -20,18 +20,28 @@ const LOG_COLOR = 0x5b7cfa;
 export const AUTO_REACT_MODES = ['always', 'random'];
 export const AUTO_REACT_ROLE_ACTIONS = ['add', 'remove'];
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  cooldownSeconds: { min: 0, max: 300 },
+  rules: { maxItems: 25 },
+  'rules[].targetUsers': { maxItems: 25 },
+  'rules[].targetRoles': { maxItems: 25 },
+  'rules[].emojis': { maxItems: 10 },
+  'rules[].chance': { min: 1, max: 100 },
+};
+
 const clampInt = (v, min, max, dflt) => {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : dflt;
 };
 const id = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
-const idList = (v) =>
-  [...new Set((Array.isArray(v) ? v : [v]).filter((x) => /^\d{17,20}$/.test(x)))].slice(0, 25);
+const idList = (v, max) =>
+  [...new Set((Array.isArray(v) ? v : [v]).filter((x) => /^\d{17,20}$/.test(x)))].slice(0, max);
 
 // Same emoji-key convention as starboard.js: a custom emoji is stored as just
 // its numeric id (extracted from pasted `<a:name:id>` markup), a unicode
 // emoji is kept as-is.
-function emojiList(v) {
+function emojiList(v, max) {
   return [
     ...new Set(
       (Array.isArray(v) ? v : String(v ?? '').split(/[\s,]+/))
@@ -42,22 +52,22 @@ function emojiList(v) {
         })
         .filter(Boolean)
     ),
-  ].slice(0, 10);
+  ].slice(0, max);
 }
 
 export function normaliseAutoReact(raw = {}) {
   return {
-    cooldownSeconds: clampInt(raw.cooldownSeconds, 0, 300, 5),
+    cooldownSeconds: clampInt(raw.cooldownSeconds, LIMITS.cooldownSeconds.min, LIMITS.cooldownSeconds.max, 5),
     logChannelId: id(raw.logChannelId),
     rules: (Array.isArray(raw.rules) ? raw.rules : [])
-      .slice(0, 25)
+      .slice(0, LIMITS.rules.maxItems)
       .map((r, i) => ({
         id: r.id ? String(r.id) : String(i),
-        targetUsers: idList(r.targetUsers),
-        targetRoles: idList(r.targetRoles),
-        emojis: emojiList(r.emojis),
+        targetUsers: idList(r.targetUsers, LIMITS['rules[].targetUsers'].maxItems),
+        targetRoles: idList(r.targetRoles, LIMITS['rules[].targetRoles'].maxItems),
+        emojis: emojiList(r.emojis, LIMITS['rules[].emojis'].maxItems),
         mode: AUTO_REACT_MODES.includes(r.mode) ? r.mode : 'always',
-        chance: clampInt(r.chance, 1, 100, 50),
+        chance: clampInt(r.chance, LIMITS['rules[].chance'].min, LIMITS['rules[].chance'].max, 50),
         roleId: id(r.roleId),
         roleAction: AUTO_REACT_ROLE_ACTIONS.includes(r.roleAction) ? r.roleAction : 'add',
         channelId: id(r.channelId),

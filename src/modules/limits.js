@@ -9,12 +9,22 @@
 // `_embed` is a pseudo-module: the limits of one embed spec (normaliseEmbedSpec), shared by every
 // module that stores an embed.
 import { EMBED_LIMITS } from './welcomeChannel.js';
+import { LIMITS as appeals } from './appeals.js';
+import { LIMITS as appleConnect } from './appleConnect.js';
+import { LIMITS as autoReact } from './autoReact.js';
+import { LIMITS as automod } from './automod.js';
+import { LIMITS as autoresponder } from './autoresponder.js';
 import { LIMITS as polls } from './polls.js';
 import { LIMITS as sticky } from './sticky.js';
 import { LIMITS as welcome } from './welcome.js';
 
 export const MODULE_LIMITS = Object.freeze({
   _embed: EMBED_LIMITS,
+  appeals,
+  'apple-connect': appleConnect,
+  'auto-react': autoReact,
+  automod,
+  autoresponder,
   polls,
   sticky,
   welcome,

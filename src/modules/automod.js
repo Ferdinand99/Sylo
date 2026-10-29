@@ -61,19 +61,35 @@ const URL_RE = /\bhttps?:\/\/[^\s/$.?#][^\s]*/gi;
 
 // --- config normalisation ------------------------------------------------
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  timeoutMinutes: { min: 1, max: 40320 },
+  'rules.links.allowed': { maxItems: 200 },
+  'rules.words.list': { maxItems: 200 },
+  'rules.spam.max': { min: 2, max: 30 },
+  'rules.spam.seconds': { min: 1, max: 60 },
+  'rules.mentions.max': { min: 1, max: 50 },
+  'rules.caps.minLength': { min: 4, max: 200 },
+  'rules.caps.percent': { min: 50, max: 100 },
+  'rules.emojis.max': { min: 1, max: 50 },
+  'rules.spoilers.max': { min: 1, max: 30 },
+};
+/** Clamp `v` into the min/max of the LIMITS entry at `path`. */
+const limited = (v, path, dflt) => clampInt(v, LIMITS[path].min, LIMITS[path].max, dflt);
+
 const clampInt = (v, min, max, dflt) => {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : dflt;
 };
 const idList = (v) => [...new Set((Array.isArray(v) ? v : [v]).filter((x) => /^\d{17,20}$/.test(x)))];
-const termList = (v) =>
+const termList = (v, max) =>
   [
     ...new Set(
       (Array.isArray(v) ? v : String(v ?? '').split(/[\n,]/))
         .map((s) => String(s).trim().toLowerCase())
         .filter(Boolean)
     ),
-  ].slice(0, 200);
+  ].slice(0, max);
 const action = (v) => (AUTOMOD_ACTIONS.includes(v) ? v : 'delete');
 
 /** [key, label] for the checks that have a native Discord AutoMod equivalent. */
@@ -100,7 +116,7 @@ export function normaliseAutomodConfig(raw = {}) {
   const r = raw.rules || {};
   return {
     deleteMessage: raw.deleteMessage !== false,
-    timeoutMinutes: clampInt(raw.timeoutMinutes, 1, 40320, 10),
+    timeoutMinutes: limited(raw.timeoutMinutes, 'timeoutMinutes', 10),
     exemptChannels: idList(raw.exemptChannels),
     exemptRoles: idList(raw.exemptRoles),
     native: normaliseNative(raw.native),
@@ -109,39 +125,41 @@ export function normaliseAutomodConfig(raw = {}) {
       links: {
         enabled: Boolean(r.links?.enabled),
         action: action(r.links?.action),
-        allowed: termList(r.links?.allowed).map((d) => d.replace(/^www\./, '')),
+        allowed: termList(r.links?.allowed, LIMITS['rules.links.allowed'].maxItems).map((d) =>
+          d.replace(/^www\./, '')
+        ),
       },
       spam: {
         enabled: Boolean(r.spam?.enabled),
         action: action(r.spam?.action),
-        max: clampInt(r.spam?.max, 2, 30, 5),
-        seconds: clampInt(r.spam?.seconds, 1, 60, 5),
+        max: limited(r.spam?.max, 'rules.spam.max', 5),
+        seconds: limited(r.spam?.seconds, 'rules.spam.seconds', 5),
       },
       mentions: {
         enabled: Boolean(r.mentions?.enabled),
         action: action(r.mentions?.action),
-        max: clampInt(r.mentions?.max, 1, 50, 5),
+        max: limited(r.mentions?.max, 'rules.mentions.max', 5),
       },
       caps: {
         enabled: Boolean(r.caps?.enabled),
         action: action(r.caps?.action),
-        minLength: clampInt(r.caps?.minLength, 4, 200, 10),
-        percent: clampInt(r.caps?.percent, 50, 100, 70),
+        minLength: limited(r.caps?.minLength, 'rules.caps.minLength', 10),
+        percent: limited(r.caps?.percent, 'rules.caps.percent', 70),
       },
       words: {
         enabled: Boolean(r.words?.enabled),
         action: action(r.words?.action),
-        list: termList(r.words?.list),
+        list: termList(r.words?.list, LIMITS['rules.words.list'].maxItems),
       },
       emojis: {
         enabled: Boolean(r.emojis?.enabled),
         action: action(r.emojis?.action),
-        max: clampInt(r.emojis?.max, 1, 50, 8),
+        max: limited(r.emojis?.max, 'rules.emojis.max', 8),
       },
       spoilers: {
         enabled: Boolean(r.spoilers?.enabled),
         action: action(r.spoilers?.action),
-        max: clampInt(r.spoilers?.max, 1, 30, 4),
+        max: limited(r.spoilers?.max, 'rules.spoilers.max', 4),
       },
       zalgo: { enabled: Boolean(r.zalgo?.enabled), action: action(r.zalgo?.action) },
       repeat: { enabled: Boolean(r.repeat?.enabled), action: action(r.repeat?.action) },

@@ -6,6 +6,7 @@ import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 const MODE_LABELS = {
   off: 'Disabled',
@@ -38,6 +39,7 @@ function toFormConfig(config) {
 }
 
 export default function Automod() {
+  const limits = useModuleLimits('automod');
   const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm(
     'automod',
     {
@@ -129,16 +131,16 @@ export default function Automod() {
                       <span className="v2-field-hint">Max</span>
                       <input
                         type="number"
-                        min={2}
-                        max={30}
+                        min={limitOf(limits, 'rules.spam.max').min}
+                        max={limitOf(limits, 'rules.spam.max').max}
                         value={form.rules.spam.max}
                         onChange={(e) => setRule('spam', { max: Number(e.target.value) })}
                       />
                       <span className="v2-field-hint">messages per</span>
                       <input
                         type="number"
-                        min={1}
-                        max={60}
+                        min={limitOf(limits, 'rules.spam.seconds').min}
+                        max={limitOf(limits, 'rules.spam.seconds').max}
                         value={form.rules.spam.seconds}
                         onChange={(e) => setRule('spam', { seconds: Number(e.target.value) })}
                       />
@@ -150,8 +152,8 @@ export default function Automod() {
                       <span className="v2-field-hint">Max mentions</span>
                       <input
                         type="number"
-                        min={1}
-                        max={50}
+                        min={limitOf(limits, 'rules.mentions.max').min}
+                        max={limitOf(limits, 'rules.mentions.max').max}
                         value={form.rules.mentions.max}
                         onChange={(e) => setRule('mentions', { max: Number(e.target.value) })}
                       />
@@ -162,16 +164,16 @@ export default function Automod() {
                       <span className="v2-field-hint">At least</span>
                       <input
                         type="number"
-                        min={4}
-                        max={200}
+                        min={limitOf(limits, 'rules.caps.minLength').min}
+                        max={limitOf(limits, 'rules.caps.minLength').max}
                         value={form.rules.caps.minLength}
                         onChange={(e) => setRule('caps', { minLength: Number(e.target.value) })}
                       />
                       <span className="v2-field-hint">letters,</span>
                       <input
                         type="number"
-                        min={50}
-                        max={100}
+                        min={limitOf(limits, 'rules.caps.percent').min}
+                        max={limitOf(limits, 'rules.caps.percent').max}
                         value={form.rules.caps.percent}
                         onChange={(e) => setRule('caps', { percent: Number(e.target.value) })}
                       />
@@ -183,8 +185,8 @@ export default function Automod() {
                       <span className="v2-field-hint">Max emojis</span>
                       <input
                         type="number"
-                        min={1}
-                        max={50}
+                        min={limitOf(limits, 'rules.emojis.max').min}
+                        max={limitOf(limits, 'rules.emojis.max').max}
                         value={form.rules.emojis.max}
                         onChange={(e) => setRule('emojis', { max: Number(e.target.value) })}
                       />
@@ -195,8 +197,8 @@ export default function Automod() {
                       <span className="v2-field-hint">Max spoiler tags</span>
                       <input
                         type="number"
-                        min={1}
-                        max={30}
+                        min={limitOf(limits, 'rules.spoilers.max').min}
+                        max={limitOf(limits, 'rules.spoilers.max').max}
                         value={form.rules.spoilers.max}
                         onChange={(e) => setRule('spoilers', { max: Number(e.target.value) })}
                       />
@@ -277,8 +279,8 @@ export default function Automod() {
           <input
             id="timeoutMinutes"
             type="number"
-            min={1}
-            max={40320}
+            min={limitOf(limits, 'timeoutMinutes').min}
+            max={limitOf(limits, 'timeoutMinutes').max}
             value={form.timeoutMinutes}
             onChange={(e) => setForm((f) => ({ ...f, timeoutMinutes: Number(e.target.value) }))}
           />

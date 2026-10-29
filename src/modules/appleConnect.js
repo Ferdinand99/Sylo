@@ -23,8 +23,14 @@ import { every } from './schedule.js';
 
 export const MODULE_ID = 'apple-connect';
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  apps: { maxItems: 20 },
+  'events.reviews.maxStars': { min: 1, max: 5 },
+  'events.expiry.days': { min: 1, max: 365 },
+};
+
 const POLL_MS = 5 * 60_000;
-const MAX_APPS = 20;
 const SCOPE_VERSIONS = 'apple:versions';
 const SCOPE_BUILDS = 'apple:builds';
 const SCOPE_BETA = 'apple:betareview';
@@ -48,6 +54,9 @@ function kindConfig(v, enabledDefault) {
   return { enabled: flag(o.enabled, enabledDefault), channelId: isId(o.channelId) ? o.channelId : '' };
 }
 
+const MAX_STARS = LIMITS['events.reviews.maxStars'];
+const EXPIRY_DAYS = LIMITS['events.expiry.days'];
+
 export function normaliseAppleConfig(raw = {}) {
   const e = raw.events ?? {};
   return {
@@ -57,14 +66,20 @@ export function normaliseAppleConfig(raw = {}) {
       ...new Set(
         (Array.isArray(raw.apps) ? raw.apps : []).map((a) => String(a ?? '').trim()).filter(isAppId)
       ),
-    ].slice(0, MAX_APPS),
+    ].slice(0, LIMITS.apps.maxItems),
     events: {
       versionState: kindConfig(e.versionState, true),
       build: kindConfig(e.build, true),
       betaReview: kindConfig(e.betaReview, true),
-      reviews: { ...kindConfig(e.reviews, true), maxStars: clampInt(e.reviews?.maxStars, 1, 5, 5) },
+      reviews: {
+        ...kindConfig(e.reviews, true),
+        maxStars: clampInt(e.reviews?.maxStars, MAX_STARS.min, MAX_STARS.max, 5),
+      },
       feedback: kindConfig(e.feedback, true),
-      expiry: { ...kindConfig(e.expiry, true), days: clampInt(e.expiry?.days, 1, 365, 30) },
+      expiry: {
+        ...kindConfig(e.expiry, true),
+        days: clampInt(e.expiry?.days, EXPIRY_DAYS.min, EXPIRY_DAYS.max, 30),
+      },
       sales: kindConfig(e.sales, false),
     },
   };
@@ -293,7 +308,7 @@ export function expiryPayload({ kind, name, type = '', daysLeft, roleId = '' }) 
  * @param {{ appIds?: string[], maxApps?: number, want?: { reviews?: boolean, feedback?: boolean, betaReview?: boolean } }} [opts]
  *   appIds empty = every app; `want` switches on the optional parts (each one only costs calls when asked for)
  */
-export async function fetchSnapshot(client, { appIds = [], maxApps = MAX_APPS, want = {} } = {}) {
+export async function fetchSnapshot(client, { appIds = [], maxApps = LIMITS.apps.maxItems, want = {} } = {}) {
   const all = (await client.getAll('/v1/apps', { limit: 200 })).data;
   const wanted = appIds.length ? all.filter((a) => appIds.includes(a.id)) : all;
   const apps = [];

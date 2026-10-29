@@ -17,11 +17,6 @@ const LITERAL = /\b(maxLength|max|min)\s*=\s*(?:\{\s*[0-9.]+\s*\}|"[0-9.]+"|'[0-
 
 const PENDING = 'pending 8b: not converted to useModuleLimits yet';
 const ALLOWED = {
-  'Appeals.jsx': PENDING,
-  'AppleConnect.jsx': PENDING,
-  'Automod.jsx': PENDING,
-  'AutoReact.jsx': PENDING,
-  'Autoresponder.jsx': PENDING,
   'ChannelCleanup.jsx': PENDING,
   'Counting.jsx': PENDING,
   'CustomCommands.jsx': PENDING,

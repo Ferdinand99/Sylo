@@ -1,6 +1,7 @@
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 // One channel picker per alert kind; empty means the main channel.
 function ChannelPick({ value, onChange, channels }) {
@@ -25,6 +26,7 @@ const fromForm = (form) => {
 
 // Owner-only: the server refuses everyone else, so this page is only ever reached by the owner.
 export default function AppleConnect() {
+  const limits = useModuleLimits('apple-connect');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('apple-connect', {
     toForm,
     fromForm,
@@ -176,8 +178,8 @@ export default function AppleConnect() {
               New customer reviews — only up to
               <input
                 type="number"
-                min={1}
-                max={5}
+                min={limitOf(limits, 'events.reviews.maxStars').min}
+                max={limitOf(limits, 'events.reviews.maxStars').max}
                 value={ev.reviews.maxStars}
                 onChange={(e) => setKind('reviews', { maxStars: Number(e.target.value) })}
               />
@@ -199,8 +201,8 @@ export default function AppleConnect() {
               Certificates and profiles expiring — from
               <input
                 type="number"
-                min={1}
-                max={365}
+                min={limitOf(limits, 'events.expiry.days').min}
+                max={limitOf(limits, 'events.expiry.days').max}
                 value={ev.expiry.days}
                 onChange={(e) => setKind('expiry', { days: Number(e.target.value) })}
               />

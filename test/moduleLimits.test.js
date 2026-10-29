@@ -8,6 +8,11 @@ import { EMBED_LIMITS, normaliseEmbedSpec } from '../src/modules/welcomeChannel.
 import { normaliseWelcomeConfig } from '../src/modules/welcome.js';
 import { normaliseStickyConfig } from '../src/modules/sticky.js';
 import { normalisePollsConfig } from '../src/modules/polls.js';
+import { normaliseAppealsConfig } from '../src/modules/appeals.js';
+import { normaliseAppleConfig } from '../src/modules/appleConnect.js';
+import { normaliseAutoReact } from '../src/modules/autoReact.js';
+import { normaliseAutomodConfig } from '../src/modules/automod.js';
+import { normaliseAutoresponder } from '../src/modules/autoresponder.js';
 
 const CHANNEL = '123456789012345678';
 const roleId = (i) => String(100000000000000000n + BigInt(i));
@@ -29,6 +34,7 @@ function readPath(obj, path) {
 }
 
 const text = (n) => 'a'.repeat(n);
+const items = (n, make) => Array.from({ length: n }, (_, i) => make(i));
 
 // Per module: the normaliser, a valid request body to start from, and per limited path how to build a
 // value of size n (text/list) or a number. `url` marks a text that must look like a https URL.
@@ -49,6 +55,47 @@ const cases = {
     normalise: normalisePollsConfig,
     base: { pollMessage: {}, resultsMessage: {} },
     value: { voteRoles: (n) => Array.from({ length: n }, (_, i) => roleId(i)) },
+  },
+  appeals: {
+    normalise: normaliseAppealsConfig,
+    base: { questions: ['q'] },
+    value: {
+      questions: (n) => items(n, () => 'q'),
+      'questions[]': text,
+      appealServerInvite: (n) => `https://discord.gg/${text(n - 19)}`,
+    },
+  },
+  'apple-connect': {
+    normalise: normaliseAppleConfig,
+    base: { events: { reviews: {}, expiry: {} } },
+    value: { apps: (n) => items(n, (i) => String(i + 1)) },
+  },
+  'auto-react': {
+    normalise: normaliseAutoReact,
+    base: { rules: [{ targetUsers: [roleId(1)], emojis: ['x'] }] },
+    value: {
+      rules: (n) => items(n, () => ({ targetUsers: [roleId(1)], emojis: ['x'] })),
+      'rules[].targetUsers': (n) => items(n, roleId),
+      'rules[].targetRoles': (n) => items(n, roleId),
+      'rules[].emojis': (n) => items(n, (i) => `e${i}`),
+    },
+  },
+  automod: {
+    normalise: normaliseAutomodConfig,
+    base: { rules: { links: {}, spam: {}, mentions: {}, caps: {}, words: {}, emojis: {}, spoilers: {} } },
+    value: {
+      'rules.links.allowed': (n) => items(n, (i) => `d${i}.com`),
+      'rules.words.list': (n) => items(n, (i) => `w${i}`),
+    },
+  },
+  autoresponder: {
+    normalise: normaliseAutoresponder,
+    base: { responders: [{ trigger: 't', response: 'r' }] },
+    value: {
+      responders: (n) => items(n, () => ({ trigger: 't', response: 'r' })),
+      'responders[].trigger': text,
+      'responders[].response': text,
+    },
   },
   _embed: {
     normalise: (raw) => ({ spec: normaliseEmbedSpec(raw.spec) }),

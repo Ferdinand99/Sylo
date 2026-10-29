@@ -47,6 +47,15 @@ export const DEFAULT_QUESTIONS = [
   'What will you do differently if your appeal is accepted?',
 ];
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  questions: { maxItems: 5 },
+  'questions[]': { maxLength: 200 },
+  cooldownDays: { min: 0, max: 90 },
+  appealMessage: { maxLength: 1000 },
+  appealServerInvite: { maxLength: 100 },
+};
+
 const clampInt = (v, min, max, dflt) => {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : dflt;
@@ -54,7 +63,9 @@ const clampInt = (v, min, max, dflt) => {
 const id = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
 const inviteUrl = (v) => {
   const s = String(v ?? '').trim();
-  return /^https:\/\/(discord\.gg|discord(?:app)?\.com\/invite)\/[\w-]+$/i.test(s) ? s : '';
+  return /^https:\/\/(discord\.gg|discord(?:app)?\.com\/invite)\/[\w-]+$/i.test(s)
+    ? s.slice(0, LIMITS.appealServerInvite.maxLength)
+    : '';
 };
 
 /** @param {object} raw */
@@ -63,16 +74,16 @@ export function normaliseAppealsConfig(raw = {}) {
     .map((q) =>
       String(q ?? '')
         .trim()
-        .slice(0, 200)
+        .slice(0, LIMITS['questions[]'].maxLength)
     )
     .filter(Boolean)
-    .slice(0, 5);
+    .slice(0, LIMITS.questions.maxItems);
   return {
     questions: questions.length ? questions : [...DEFAULT_QUESTIONS],
     autoUnbanOnAccept: raw.autoUnbanOnAccept !== false,
     reviewChannelId: id(raw.reviewChannelId),
-    cooldownDays: clampInt(raw.cooldownDays, 0, 90, 7),
-    appealMessage: String(raw.appealMessage ?? '').slice(0, 1000),
+    cooldownDays: clampInt(raw.cooldownDays, LIMITS.cooldownDays.min, LIMITS.cooldownDays.max, 7),
+    appealMessage: String(raw.appealMessage ?? '').slice(0, LIMITS.appealMessage.maxLength),
     appealServerInvite: inviteUrl(raw.appealServerInvite),
   };
 }
