@@ -46,6 +46,13 @@ const grabPage = (re, html) => grab(re, html, PAGE_MAX_SCAN);
 
 export const DEFAULT_VIDEO_MESSAGE = '📺 **{name}** posted a new video: **{title}**\n{url}';
 export const DEFAULT_LIVE_MESSAGE = '🔴 **{name}** is live on YouTube: **{title}**\n{url}';
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  alerts: { maxItems: 50 },
+  'alerts[].name': { maxLength: 100 },
+  'alerts[].videoMessage': { maxLength: 1500 },
+  'alerts[].liveMessage': { maxLength: 1500 },
+};
 const UC_RE = /^UC[\w-]{20,}$/;
 const isId = (v) => /^\d{17,20}$/.test(v ?? '');
 
@@ -56,14 +63,14 @@ export function normaliseYoutubeConfig(raw = {}) {
       .map((a, i) => ({
         id: a.id ? String(a.id) : String(i),
         ytChannelId: UC_RE.test(a.ytChannelId ?? '') ? a.ytChannelId : '',
-        name: String(a.name ?? '').slice(0, 100),
+        name: String(a.name ?? '').slice(0, LIMITS['alerts[].name'].maxLength),
         discordChannelId: isId(a.discordChannelId) ? a.discordChannelId : '',
         roleId: isId(a.roleId) ? a.roleId : '',
         onVideo: a.onVideo !== false,
         onLive: Boolean(a.onLive),
         onEnd: normaliseOnEnd(a.onEnd),
-        videoMessage: String(a.videoMessage ?? '').slice(0, 1500),
-        liveMessage: String(a.liveMessage ?? '').slice(0, 1500),
+        videoMessage: String(a.videoMessage ?? '').slice(0, LIMITS['alerts[].videoMessage'].maxLength),
+        liveMessage: String(a.liveMessage ?? '').slice(0, LIMITS['alerts[].liveMessage'].maxLength),
       }))
       .filter((a) => {
         if (!a.ytChannelId || !a.discordChannelId) return false;
@@ -79,7 +86,7 @@ export function normaliseYoutubeConfig(raw = {}) {
 
 /** @returns {Promise<{ channelId: string, name: string } | null>} */
 /** Alerts per server; a save also looks up at most this many channels on youtube.com. */
-export const MAX_YOUTUBE_ALERTS = 50;
+export const MAX_YOUTUBE_ALERTS = LIMITS.alerts.maxItems;
 
 export async function resolveYtChannel(input) {
   const raw = String(input ?? '').trim();
@@ -142,7 +149,7 @@ export async function resolveYtChannel(input) {
       grabPage(/"channelMetadataRenderer":\{"title":"([^"]+)"/, html) ||
       grabPage(/<meta property="og:title" content="([^"]+)">/, html) ||
       '';
-    return { channelId, name: decodeEntities(name).slice(0, 100) };
+    return { channelId, name: decodeEntities(name).slice(0, LIMITS['alerts[].name'].maxLength) };
   } catch (err) {
     log.warn('youtube-alerts', `resolve ${path}: ${err.message}`);
     return null;

@@ -1,8 +1,10 @@
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 export default function Verification() {
+  const limits = useModuleLimits('verification');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('verification');
 
   if (status === 'error') return <LoadError error={error} what="Verification settings" />;
@@ -82,7 +84,7 @@ export default function Verification() {
           <input
             id="title"
             type="text"
-            maxLength={200}
+            maxLength={limitOf(limits, 'title').maxLength}
             value={form.title}
             onChange={(e) => set({ title: e.target.value })}
           />
@@ -93,7 +95,7 @@ export default function Verification() {
           <textarea
             id="message"
             rows={2}
-            maxLength={1500}
+            maxLength={limitOf(limits, 'message').maxLength}
             value={form.message}
             onChange={(e) => set({ message: e.target.value })}
           />
@@ -104,7 +106,7 @@ export default function Verification() {
           <input
             id="successMessage"
             type="text"
-            maxLength={1000}
+            maxLength={limitOf(limits, 'successMessage').maxLength}
             value={form.successMessage}
             onChange={(e) => set({ successMessage: e.target.value })}
           />
@@ -133,8 +135,8 @@ export default function Verification() {
           <input
             id="kickAfterMinutes"
             type="number"
-            min={0}
-            max={10080}
+            min={limitOf(limits, 'kickAfterMinutes').min}
+            max={limitOf(limits, 'kickAfterMinutes').max}
             value={form.kickAfterMinutes}
             onChange={(e) => set({ kickAfterMinutes: Number(e.target.value) })}
           />

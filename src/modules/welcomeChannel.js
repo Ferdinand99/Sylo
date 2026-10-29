@@ -107,6 +107,12 @@ export const EMBED_LIMITS = {
   'fields[].value': { maxLength: 1024 },
 };
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  'spec.content': { maxLength: 2000 },
+  'spec.embeds': { maxItems: 10 },
+};
+
 /** Sanitise one embed spec object (shared by Welcome Channel and Reaction roles). */
 export function normaliseEmbedSpec(e = {}) {
   return {
@@ -134,11 +140,13 @@ export function normaliseEmbedSpec(e = {}) {
 
 export function normaliseWelcomeChannelConfig(raw = {}) {
   const spec = raw.spec && typeof raw.spec === 'object' ? raw.spec : {};
-  const embeds = (Array.isArray(spec.embeds) ? spec.embeds : []).slice(0, 10).map(normaliseEmbedSpec);
+  const embeds = (Array.isArray(spec.embeds) ? spec.embeds : [])
+    .slice(0, LIMITS['spec.embeds'].maxItems)
+    .map(normaliseEmbedSpec);
   return {
     channelId: id(raw.channelId),
     messageId: id(raw.messageId),
-    spec: { content: String(spec.content ?? '').slice(0, 2000), embeds },
+    spec: { content: String(spec.content ?? '').slice(0, LIMITS['spec.content'].maxLength), embeds },
   };
 }
 

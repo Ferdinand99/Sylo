@@ -2,6 +2,7 @@ import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -49,6 +50,7 @@ const fromForm = (form) => ({
 });
 
 export default function YoutubeAlerts() {
+  const limits = useModuleLimits('youtube-alerts');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('youtube-alerts', {
     toForm,
     fromForm,
@@ -139,7 +141,7 @@ export default function YoutubeAlerts() {
               <label>New-video message</label>
               <textarea
                 rows={2}
-                maxLength={1500}
+                maxLength={limitOf(limits, 'alerts[].videoMessage').maxLength}
                 placeholder={data.defaultVideoMessage}
                 value={a.videoMessage}
                 onChange={(e) => updateRow(a.key, { videoMessage: e.target.value })}
@@ -149,7 +151,7 @@ export default function YoutubeAlerts() {
               <label>Went-live message</label>
               <textarea
                 rows={2}
-                maxLength={1500}
+                maxLength={limitOf(limits, 'alerts[].liveMessage').maxLength}
                 placeholder={data.defaultLiveMessage}
                 value={a.liveMessage}
                 onChange={(e) => updateRow(a.key, { liveMessage: e.target.value })}
@@ -167,7 +169,12 @@ export default function YoutubeAlerts() {
             </div>
           </div>
         ))}
-        <button type="button" className="v2-btn-ghost" onClick={addRow}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addRow}
+          disabled={form.alerts.length >= (limitOf(limits, 'alerts').maxItems ?? Infinity)}
+        >
           + Add channel
         </button>
       </form>

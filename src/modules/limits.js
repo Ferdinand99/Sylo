@@ -23,6 +23,11 @@ import { LIMITS as leveling } from './leveling.js';
 import { LIMITS as moderation } from './moderation.js';
 import { LIMITS as serverStats } from './serverStats.js';
 import { LIMITS as tickets } from './tickets.js';
+import { LIMITS as twitchAlerts } from './twitchAlerts.js';
+import { LIMITS as verification } from './verification.js';
+import { LIMITS as welcomeChannel } from './welcomeChannel.js';
+import { LIMITS as youtubeAlerts } from './youtubeAlerts.js';
+import { LIMITS as rss } from './rss.js';
 import { LIMITS as polls } from './polls.js';
 import { LIMITS as sticky } from './sticky.js';
 import { LIMITS as welcome } from './welcome.js';
@@ -43,6 +48,11 @@ export const MODULE_LIMITS = Object.freeze({
   moderation,
   'server-stats': serverStats,
   tickets,
+  'twitch-alerts': twitchAlerts,
+  verification,
+  'welcome-channel': welcomeChannel,
+  'youtube-alerts': youtubeAlerts,
+  rss,
   polls,
   sticky,
   welcome,

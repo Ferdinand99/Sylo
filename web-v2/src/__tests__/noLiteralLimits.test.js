@@ -21,13 +21,8 @@ const ALLOWED = {
   'CustomCommands.jsx': PENDING,
   'Reminders.jsx': PENDING,
   'Roles.jsx': PENDING,
-  'RssAlerts.jsx': PENDING,
   'Starboard.jsx': PENDING,
   'TempVoice.jsx': PENDING,
-  'TwitchAlerts.jsx': PENDING,
-  'Verification.jsx': PENDING,
-  'WelcomeChannel.jsx': PENDING,
-  'YoutubeAlerts.jsx': PENDING,
 };
 
 // Shared components that carry field limits for several forms; never allowed to hard-code them.

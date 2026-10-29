@@ -22,6 +22,11 @@ import { normaliseLevelingConfig, validXp } from '../src/modules/leveling.js';
 import { normaliseModerationConfig } from '../src/modules/moderation.js';
 import { normaliseServerStats } from '../src/modules/serverStats.js';
 import { normaliseTicketsConfig } from '../src/modules/tickets.js';
+import { normaliseTwitchConfig } from '../src/modules/twitchAlerts.js';
+import { normaliseYoutubeConfig } from '../src/modules/youtubeAlerts.js';
+import { normaliseRssConfig } from '../src/modules/rss.js';
+import { normaliseVerificationConfig } from '../src/modules/verification.js';
+import { normaliseWelcomeChannelConfig } from '../src/modules/welcomeChannel.js';
 
 const CHANNEL = '123456789012345678';
 const roleId = (i) => String(100000000000000000n + BigInt(i));
@@ -186,6 +191,39 @@ const cases = {
   tickets: {
     normalise: normaliseTicketsConfig,
     base: {},
+  },
+  'twitch-alerts': {
+    normalise: normaliseTwitchConfig,
+    base: { alerts: [{ login: 'ninja', channelId: CHANNEL }] },
+    value: { alerts: (n) => items(n, (i) => ({ login: `l${i}x`, channelId: CHANNEL })) },
+    // a login past the limit is not a Twitch username: the alert is dropped
+    over: { 'alerts[].login': { check: (out) => out.alerts.length === 0 } },
+  },
+  'youtube-alerts': {
+    normalise: normaliseYoutubeConfig,
+    base: { alerts: [{ ytChannelId: `UC${'a'.repeat(22)}`, discordChannelId: CHANNEL }] },
+    value: {
+      alerts: (n) =>
+        items(n, (i) => ({ ytChannelId: `UC${String(i).padStart(22, '0')}`, discordChannelId: CHANNEL })),
+    },
+  },
+  rss: {
+    normalise: normaliseRssConfig,
+    base: { feeds: [{ type: 'url', url: 'https://a.com/feed', channelId: CHANNEL }] },
+    value: {
+      feeds: (n) => items(n, (i) => ({ type: 'url', url: `https://a.com/${i}`, channelId: CHANNEL })),
+      'feeds[].ref': (n) => `https://a.com/${text(n - 14)}`,
+      'feeds[].url': (n) => `https://a.com/${text(n - 14)}`,
+    },
+  },
+  verification: {
+    normalise: normaliseVerificationConfig,
+    base: {},
+  },
+  'welcome-channel': {
+    normalise: normaliseWelcomeChannelConfig,
+    base: { spec: { content: 'x', embeds: [{}] } },
+    value: { 'spec.embeds': (n) => items(n, () => ({})) },
   },
   _embed: {
     normalise: (raw) => ({ spec: normaliseEmbedSpec(raw.spec) }),

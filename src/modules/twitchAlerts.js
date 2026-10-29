@@ -27,7 +27,13 @@ export const DEFAULT_MESSAGE = '🔴 **{name}** is live on Twitch!';
 // Plain-text mode has its own default: no markdown, and it carries the link
 // since there is no embed to hold it.
 export const DEFAULT_PLAIN_MESSAGE = '🔴 {name} is live on Twitch! {title} — {url}';
-const LOGIN_RE = /^[a-zA-Z0-9_]{3,25}$/;
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  alerts: { maxItems: 50 },
+  'alerts[].login': { maxLength: 25 },
+  'alerts[].message': { maxLength: 1500 },
+};
+const LOGIN_RE = new RegExp(`^[a-zA-Z0-9_]{3,${LIMITS['alerts[].login'].maxLength}}$`);
 const isId = (v) => /^\d{17,20}$/.test(v ?? '');
 
 export function normaliseTwitchConfig(raw = {}) {
@@ -42,7 +48,7 @@ export function normaliseTwitchConfig(raw = {}) {
           .replace(/^(?:https?:\/\/)?(?:www\.)?twitch\.tv\//, ''),
         channelId: isId(a.channelId) ? a.channelId : '',
         roleId: isId(a.roleId) ? a.roleId : '',
-        message: String(a.message ?? '').slice(0, 1500),
+        message: String(a.message ?? '').slice(0, LIMITS['alerts[].message'].maxLength),
         plainText: Boolean(a.plainText),
         onEnd: normaliseOnEnd(a.onEnd),
       }))
@@ -51,7 +57,7 @@ export function normaliseTwitchConfig(raw = {}) {
         seen.add(a.login + a.channelId);
         return true;
       })
-      .slice(0, 50),
+      .slice(0, LIMITS.alerts.maxItems),
   };
 }
 

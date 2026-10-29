@@ -45,6 +45,14 @@ const DEFAULTS = {
   kickAfterMinutes: 0,
 };
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  title: { maxLength: 200 },
+  message: { maxLength: 1500 },
+  successMessage: { maxLength: 1000 },
+  kickAfterMinutes: { min: 0, max: 10080 },
+};
+
 const clampInt = (v, min, max, dflt) => {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : dflt;
@@ -57,12 +65,18 @@ export function normaliseVerificationConfig(raw = {}) {
     verifiedRoleId: id(raw.verifiedRoleId),
     channelId: id(raw.channelId),
     messageId: id(raw.messageId),
-    title: String(raw.title ?? DEFAULTS.title).slice(0, 200) || DEFAULTS.title,
-    message: String(raw.message ?? DEFAULTS.message).slice(0, 1500) || DEFAULTS.message,
+    title: String(raw.title ?? DEFAULTS.title).slice(0, LIMITS.title.maxLength) || DEFAULTS.title,
+    message: String(raw.message ?? DEFAULTS.message).slice(0, LIMITS.message.maxLength) || DEFAULTS.message,
     successMessage:
-      String(raw.successMessage ?? DEFAULTS.successMessage).slice(0, 1000) || DEFAULTS.successMessage,
+      String(raw.successMessage ?? DEFAULTS.successMessage).slice(0, LIMITS.successMessage.maxLength) ||
+      DEFAULTS.successMessage,
     logChannelId: id(raw.logChannelId),
-    kickAfterMinutes: clampInt(raw.kickAfterMinutes, 0, 10080, 0),
+    kickAfterMinutes: clampInt(
+      raw.kickAfterMinutes,
+      LIMITS.kickAfterMinutes.min,
+      LIMITS.kickAfterMinutes.max,
+      0
+    ),
   };
 }
 
