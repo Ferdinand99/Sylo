@@ -92,6 +92,34 @@ test(
       assert.equal((await db.recentPublicQuotes(H)).length, 0);
     });
 
+    await t.test('visibleIn keeps private-source quotes out of other channels', async () => {
+      await db.clearGuildQuotes(H);
+      const put = (messageId, channelId, publicSource, body, authorId = 'a') =>
+        db.insertQuote({ guildId: H, channelId, messageId, authorId, body, messageAt: 1, publicSource });
+      await put('v1', 'open', true, 'public one');
+      await put('v2', 'staff', false, 'staff secret');
+      await put('v3', 'staff', false, 'staff other', 'b');
+      const bodies = (rows) => rows.map((r) => r.body);
+      assert.deepEqual(bodies(await db.searchQuotes(H, 'secret', 5, { visibleIn: 'open' })), []);
+      assert.deepEqual(bodies(await db.searchQuotes(H, 'secret', 5, { visibleIn: 'staff' })), [
+        'staff secret',
+      ]);
+      assert.deepEqual(bodies(await db.quotesByAuthor(H, 'a', 10, { visibleIn: 'open' })), ['public one']);
+      assert.deepEqual(bodies(await db.quotesByAuthor(H, 'a', 10, { visibleIn: 'staff' })), [
+        'staff secret',
+        'public one',
+      ]);
+      assert.equal(await db.quoteCountOf(H, 'a', { visibleIn: 'open' }), 1);
+      assert.equal((await db.randomQuote(H, { pick: 0.99, visibleIn: 'open' })).body, 'public one');
+      assert.equal((await db.randomQuote(H, { pick: 0, visibleIn: 'staff' })).body, 'public one');
+      assert.equal((await db.randomQuote(H, { pick: 0.99, visibleIn: 'staff' })).body, 'staff other');
+      assert.equal(await db.randomQuote(H, { pick: 0.5, authorId: 'b', visibleIn: 'open' }), null);
+      assert.equal(
+        (await db.randomQuote(H, { pick: 0.5, authorId: 'b', visibleIn: 'staff' })).body,
+        'staff other'
+      );
+    });
+
     await t.test('forgetUser, describeUserData and purgeGuild cover the author and the saver', async () => {
       await db.clearGuildQuotes(G);
       await db.clearGuildQuotes(H);

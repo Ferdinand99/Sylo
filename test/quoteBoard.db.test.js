@@ -322,3 +322,59 @@ test('purgeGuild removes the quotes and the counter of a server, and only that s
     'a server that left and came back starts at #1'
   );
 });
+
+test('visibleIn limits random, search, a member list and counts to public sources and that channel', async () => {
+  const V = '900000000000000708';
+  const put = (messageId, channelId, publicSource, body, authorId = 'a') =>
+    insertQuote({
+      guildId: V,
+      channelId,
+      messageId,
+      authorId,
+      authorName: 'Name',
+      body,
+      messageAt: 1,
+      publicSource,
+    });
+  await put('1', 'open', true, 'public one');
+  await put('2', 'staff', false, 'staff secret');
+  await put('3', 'mods', false, 'mods secret');
+  await put('4', 'staff', false, 'staff other', 'b');
+
+  const bodies = (rows) => rows.map((r) => r.body);
+  assert.deepEqual(bodies(await searchQuotes(V, 'secret', 5, { visibleIn: 'open' })), []);
+  assert.deepEqual(bodies(await searchQuotes(V, 'secret', 5, { visibleIn: 'staff' })), ['staff secret']);
+  assert.deepEqual(bodies(await searchQuotes(V, 'secret', 5, { visibleIn: 'mods' })), ['mods secret']);
+  assert.deepEqual(
+    bodies(await searchQuotes(V, 'secret')).sort(),
+    ['mods secret', 'staff secret'],
+    'unfiltered for the dashboard'
+  );
+  assert.deepEqual(bodies(await searchQuotes(V, 'Name', 5, { visibleIn: 'staff' })), [
+    'staff other',
+    'staff secret',
+    'public one',
+  ]);
+
+  assert.deepEqual(bodies(await quotesByAuthor(V, 'a', 10, { visibleIn: 'open' })), ['public one']);
+  assert.deepEqual(bodies(await quotesByAuthor(V, 'a', 10, { visibleIn: 'staff' })), [
+    'staff secret',
+    'public one',
+  ]);
+  assert.equal((await quotesByAuthor(V, 'a')).length, 3);
+  assert.equal(await quoteCountOf(V, 'a'), 3);
+  assert.equal(await quoteCountOf(V, 'a', { visibleIn: 'open' }), 1);
+  assert.equal(await quoteCountOf(V, 'a', { visibleIn: 'staff' }), 2);
+
+  const seen = new Set();
+  for (const pick of [0, 0.3, 0.6, 0.99]) seen.add((await randomQuote(V, { pick, visibleIn: 'open' })).body);
+  assert.deepEqual([...seen], ['public one']);
+  const staff = new Set();
+  for (const pick of [0, 0.3, 0.6, 0.99])
+    staff.add((await randomQuote(V, { pick, visibleIn: 'staff' })).body);
+  assert.deepEqual([...staff].sort(), ['public one', 'staff other', 'staff secret']);
+  assert.equal(await randomQuote(V, { pick: 0.5, authorId: 'b', visibleIn: 'open' }), null);
+  assert.equal((await randomQuote(V, { pick: 0.5, authorId: 'b', visibleIn: 'staff' })).body, 'staff other');
+  assert.equal((await randomQuote(V, { pick: 0.99, authorId: 'a', visibleIn: 'mods' })).body, 'mods secret');
+  assert.equal((await randomQuote(V, { pick: 0.99 })) !== null, true, 'no filter: any quote');
+});

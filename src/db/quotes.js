@@ -58,6 +58,28 @@ const s = {
   count: prepare('SELECT COUNT(*) AS n FROM guild_quotes WHERE guild_id = ?'),
   countAuthor: prepare('SELECT COUNT(*) AS n FROM guild_quotes WHERE guild_id = ? AND author_id = ?'),
   countPublic: prepare('SELECT COUNT(*) AS n FROM guild_quotes WHERE guild_id = ? AND public_source = 1'),
+  // The same lookups limited to what a channel may show: quotes from public sources and quotes
+  // saved from that very channel (ids come last: visibleIn).
+  countVisible: prepare(
+    'SELECT COUNT(*) AS n FROM guild_quotes WHERE guild_id = ? AND (public_source = 1 OR channel_id = ?)'
+  ),
+  countAuthorVisible: prepare(
+    'SELECT COUNT(*) AS n FROM guild_quotes WHERE guild_id = ? AND author_id = ? AND (public_source = 1 OR channel_id = ?)'
+  ),
+  atOffsetVisible: prepare(
+    'SELECT * FROM guild_quotes WHERE guild_id = ? AND (public_source = 1 OR channel_id = ?) ORDER BY number LIMIT 1 OFFSET ?'
+  ),
+  atOffsetAuthorVisible: prepare(
+    'SELECT * FROM guild_quotes WHERE guild_id = ? AND author_id = ? AND (public_source = 1 OR channel_id = ?) ORDER BY number LIMIT 1 OFFSET ?'
+  ),
+  byAuthorVisible: prepare(
+    'SELECT * FROM guild_quotes WHERE guild_id = ? AND author_id = ? AND (public_source = 1 OR channel_id = ?) ORDER BY number DESC LIMIT ?'
+  ),
+  searchVisible: prepare(
+    `SELECT * FROM guild_quotes WHERE guild_id = ? AND (public_source = 1 OR channel_id = ?)
+       AND (LOWER(body) LIKE ? ESCAPE '!' OR LOWER(author_name) LIKE ? ESCAPE '!')
+     ORDER BY number DESC LIMIT ?`
+  ),
   atOffset: prepare('SELECT * FROM guild_quotes WHERE guild_id = ? ORDER BY number LIMIT 1 OFFSET ?'),
   atOffsetAuthor: prepare(
     'SELECT * FROM guild_quotes WHERE guild_id = ? AND author_id = ? ORDER BY number LIMIT 1 OFFSET ?'
@@ -134,26 +156,49 @@ export const getQuoteByNumber = async (guildId, number) => hydrate(await s.byNum
 export const getQuoteByMessage = async (guildId, messageId) =>
   hydrate(await s.byMessage.get(guildId, messageId));
 export const quoteCount = async (guildId) => Number((await s.count.get(guildId))?.n) || 0;
-export const quoteCountOf = async (guildId, authorId) =>
-  Number((await s.countAuthor.get(guildId, authorId))?.n) || 0;
+export const quoteCountOf = async (guildId, authorId, { visibleIn = null } = {}) =>
+  Number(
+    (visibleIn == null
+      ? await s.countAuthor.get(guildId, authorId)
+      : await s.countAuthorVisible.get(guildId, authorId, visibleIn)
+    )?.n
+  ) || 0;
 export const publicQuoteCount = async (guildId) => Number((await s.countPublic.get(guildId))?.n) || 0;
 
 /**
  * One quote of the server picked by `pick` (a number in [0, 1), Math.random by default), or null
- * when there is none. With `authorId`, only that member's.
+ * when there is none. With `authorId`, only that member's. With `visibleIn` (a channel id), only
+ * quotes that channel may show: those from public sources and those saved from that channel.
  */
-export async function randomQuote(guildId, { authorId = null, pick = Math.random() } = {}) {
-  const n = authorId ? await quoteCountOf(guildId, authorId) : await quoteCount(guildId);
+export async function randomQuote(guildId, { authorId = null, pick = Math.random(), visibleIn = null } = {}) {
+  const here = visibleIn != null;
+  const n = authorId
+    ? await quoteCountOf(guildId, authorId, { visibleIn })
+    : here
+      ? Number((await s.countVisible.get(guildId, visibleIn))?.n) || 0
+      : await quoteCount(guildId);
   if (!n) return null;
   const offset = Math.min(n - 1, Math.max(0, Math.floor(pick * n)));
-  return hydrate(
-    authorId ? await s.atOffsetAuthor.get(guildId, authorId, offset) : await s.atOffset.get(guildId, offset)
-  );
+  let row;
+  if (authorId) {
+    row = here
+      ? await s.atOffsetAuthorVisible.get(guildId, authorId, visibleIn, offset)
+      : await s.atOffsetAuthor.get(guildId, authorId, offset);
+  } else {
+    row = here
+      ? await s.atOffsetVisible.get(guildId, visibleIn, offset)
+      : await s.atOffset.get(guildId, offset);
+  }
+  return hydrate(row);
 }
 
-/** A member's quotes, newest first. */
-export async function quotesByAuthor(guildId, authorId, limit = 10) {
-  return (await s.byAuthor.all(guildId, authorId, limit)).map(hydrate);
+/** A member's quotes, newest first (`visibleIn`: see randomQuote). */
+export async function quotesByAuthor(guildId, authorId, limit = 10, { visibleIn = null } = {}) {
+  const rows =
+    visibleIn == null
+      ? await s.byAuthor.all(guildId, authorId, limit)
+      : await s.byAuthorVisible.all(guildId, authorId, visibleIn, limit);
+  return rows.map(hydrate);
 }
 
 /** The newest quotes, `offset` rows in. */
@@ -166,10 +211,14 @@ export async function recentPublicQuotes(guildId, { limit = 50, offset = 0 } = {
   return (await s.recentPublic.all(guildId, limit, offset)).map(hydrate);
 }
 
-/** Quotes whose text or author name contains `text`, newest first. */
-export async function searchQuotes(guildId, text, limit = 5) {
+/** Quotes whose text or author name contains `text`, newest first (`visibleIn`: see randomQuote). */
+export async function searchQuotes(guildId, text, limit = 5, { visibleIn = null } = {}) {
   const pattern = likePattern(text);
-  return (await s.search.all(guildId, pattern, pattern, limit)).map(hydrate);
+  const rows =
+    visibleIn == null
+      ? await s.search.all(guildId, pattern, pattern, limit)
+      : await s.searchVisible.all(guildId, visibleIn, pattern, pattern, limit);
+  return rows.map(hydrate);
 }
 
 export const deleteQuote = async (id) => s.del.run(id);

@@ -58,6 +58,27 @@ roles**. Staff always may.
 Showing is open to everyone in the server. Quotes are shown with the name they were
 saved under.
 
+### Quotes from private channels stay in their channel
+
+When a quote is saved, Sylo notes whether **@everyone could read** the channel it came
+from (and that it is not age-restricted). A quote from a **public source** may be shown
+in any channel. A quote from a **private source** (a staff or mod channel, a hidden
+channel) is only ever shown **in the channel it was saved from**:
+
+- `/quote random`, `/quote search` and `/quote user` leave private-source quotes out
+  of the answer in every other channel, including the totals. A member who only has
+  private quotes looks like a member with none there.
+- `/quote show <number>` of a private-source quote in another channel is answered
+  **privately** (only the person who asked sees it), and only if that person can **still
+  view the source channel today**. Anyone else gets a plain "not available here".
+- Saving a private message with `/quote save <link>` from another channel answers only
+  the person who saved it, not the channel.
+- In the source channel itself, all of this works normally and in public.
+
+The dashboard is not limited: staff with Manage Server see and can remove every quote,
+and it marks the private ones "not on the public page". On Fluxer a "private" reply is
+deleted after about 15 seconds.
+
 ## Removing
 
 - A member can remove a quote they **wrote** (they are the author) or **saved**,
@@ -115,7 +136,7 @@ no vanity address for this page.
 - A quote is a **copy** of a message. Deleting or editing the original message does
   not change the quote; staff remove it with `/quote remove` or the dashboard. Tell
   your members that a quote can outlive the message, and that `/forget` removes it.
-- Anyone who may save quotes can save a message from any channel they can see, and `/quote` shows quotes in any channel. Sylo checks that the person saving can see the channel, but not who is reading the quote later; keep that in mind for private channels. (Quotes from channels hidden from @everyone are never put on the public page.)
+- Anyone who may save quotes can save a message from any channel they can see. Sylo checks that the person saving can see the channel. Quotes from private channels stay out of other channels and off the public page (see above), but a member who can see the channel can always copy a message by hand, and staff see everything on the dashboard.
 - The public page publishes the display name and text of quotes to anyone with the
   link, so only turn it on if your members are fine with that.
 

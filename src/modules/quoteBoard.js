@@ -204,7 +204,7 @@ export async function saveQuote({ guild, message, savedBy }) {
 }
 
 /** Can this member see the channel? A check that cannot be made counts as no. */
-function canView(channel, member) {
+export function canView(channel, member) {
   try {
     return Boolean(member && channel.permissionsFor?.(member)?.has?.('ViewChannel'));
   } catch {
@@ -229,6 +229,12 @@ export async function fetchQuotable({ guild, member, channelId, messageId }) {
     return fail('Sylo could not read that message. Is the link right, and can Sylo see the channel?');
   return { ok: true, message };
 }
+
+/**
+ * May a quote be posted into this channel? Quotes from a public source may go anywhere; any other
+ * only into the channel it was saved from (a quote of a staff channel must not turn up in a public one).
+ */
+export const quoteFitsChannel = (row, channelId) => row.public_source === 1 || row.channel_id === channelId;
 
 /** Delete a quote. Its number stays used. */
 export const removeQuote = async (row) => deleteQuote(row.id);

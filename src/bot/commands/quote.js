@@ -29,7 +29,9 @@ import {
   fetchQuotable,
   normaliseQuoteBoardConfig,
   normaliseQuoteQuery,
+  canView,
   parseMessageLink,
+  quoteFitsChannel,
   quoteLine,
   removeQuote,
   saveQuote,
@@ -115,10 +117,21 @@ async function settings(interaction) {
   return mod.enabled ? normaliseQuoteBoardConfig(mod.config) : null;
 }
 
-/** Reply with the result of a save: public for a new quote, private when it was already there. */
+/**
+ * Reply with the result of a save: public for a new quote, private when it was already there or
+ * when it comes from a channel that this one may not show.
+ */
 function replySaved(interaction, result) {
   const key = guildKey(interaction.guild);
   const embed = buildQuoteEmbed(result.quote, key);
+  if (!quoteFitsChannel(result.quote, interaction.channelId)) {
+    return interaction.reply({
+      content: `${result.existing ? 'That message is already' : 'Saved as'} quote **#${result.quote.number}**. It comes from a private channel, so only you see it here.`,
+      embeds: [embed],
+      flags: MessageFlags.Ephemeral,
+      allowedMentions: { parse: [] },
+    });
+  }
   if (result.existing) {
     return interaction.reply({
       content: `That message is already quote **#${result.quote.number}**.`,
@@ -197,13 +210,16 @@ async function save(interaction) {
 
 async function random(interaction) {
   const user = interaction.options.getUser('member');
-  const row = await randomQuote(guildKey(interaction.guild), { authorId: user?.id ?? null });
+  const row = await randomQuote(guildKey(interaction.guild), {
+    authorId: user?.id ?? null,
+    visibleIn: interaction.channelId,
+  });
   if (!row) {
     return eph(
       interaction,
       user
-        ? 'There are no quotes from that member yet.'
-        : 'There are no quotes yet. Save one with /quote save.'
+        ? 'There are no quotes from that member to show here yet.'
+        : 'There are no quotes to show here yet. Save one with /quote save.'
     );
   }
   return interaction.reply({
@@ -229,7 +245,9 @@ const listEmbed = (title, rows, footer) => {
 async function search(interaction) {
   const query = normaliseQuoteQuery(interaction.options.getString('text', true));
   if (!query) return eph(interaction, 'Write what to look for.');
-  const rows = await searchQuotes(guildKey(interaction.guild), query, SEARCH_SHOWN);
+  const rows = await searchQuotes(guildKey(interaction.guild), query, SEARCH_SHOWN, {
+    visibleIn: interaction.channelId,
+  });
   if (!rows.length) return eph(interaction, 'No quote matches that.');
   return interaction.reply({
     embeds: [listEmbed(`Quotes matching "${query.slice(0, 60)}"`, rows, 'Open one with /quote show')],
@@ -240,9 +258,9 @@ async function search(interaction) {
 async function user(interaction) {
   const who = interaction.options.getUser('member', true);
   const key = guildKey(interaction.guild);
-  const rows = await quotesByAuthor(key, who.id, USER_SHOWN);
-  if (!rows.length) return eph(interaction, 'There are no quotes from that member yet.');
-  const total = await quoteCountOf(key, who.id);
+  const rows = await quotesByAuthor(key, who.id, USER_SHOWN, { visibleIn: interaction.channelId });
+  if (!rows.length) return eph(interaction, 'There are no quotes from that member to show here yet.');
+  const total = await quoteCountOf(key, who.id, { visibleIn: interaction.channelId });
   return interaction.reply({
     embeds: [
       listEmbed(
@@ -259,6 +277,21 @@ async function show(interaction) {
   const key = guildKey(interaction.guild);
   const row = await getQuoteByNumber(key, interaction.options.getInteger('number', true));
   if (!row) return eph(interaction, 'There is no quote with that number.');
+  if (!quoteFitsChannel(row, interaction.channelId)) {
+    // From a private channel and asked for somewhere else: only for someone who can still see that channel.
+    const source =
+      interaction.guild.channels?.cache?.get?.(row.channel_id) ??
+      (await interaction.guild.channels?.fetch?.(row.channel_id).catch(() => null));
+    if (!canView(source, interaction.member)) {
+      return eph(interaction, 'That quote is not available here.');
+    }
+    return interaction.reply({
+      content: 'That quote comes from a private channel, so only you see it here.',
+      embeds: [buildQuoteEmbed(row, key)],
+      flags: MessageFlags.Ephemeral,
+      allowedMentions: { parse: [] },
+    });
+  }
   return interaction.reply({ embeds: [buildQuoteEmbed(row, key)], allowedMentions: { parse: [] } });
 }
 

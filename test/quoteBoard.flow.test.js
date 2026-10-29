@@ -109,14 +109,14 @@ const memberOf = (id, { roles = [], perms = [], canSee = [CH.open, CH.nsfw] } = 
 });
 
 /** A slash command or menu interaction that records its replies. */
-function interact(w, { who = USER.alice, member, sub, options = {}, target, ref } = {}) {
+function interact(w, { who = USER.alice, member, sub, options = {}, target, ref, channelId = CH.open } = {}) {
   const m = member ?? memberOf(who);
   const replies = [];
   const opt = (name) => options[name];
   const i = {
     guild: w.guild,
     guildId: w.rawId,
-    channelId: CH.open,
+    channelId,
     user: { id: who },
     member: m,
     memberPermissions: m.permissions,
@@ -409,7 +409,7 @@ test('/quote random with nothing saved says so', async () => {
   const w = world();
   await enable(w);
   const [r] = await run(w, { sub: 'random' });
-  assert.match(r.content, /no quotes yet/);
+  assert.match(r.content, /no quotes to show here yet/);
 });
 
 test('/quote search shows the top 5, newest first, matches text and author, and takes wildcards literally', async () => {
@@ -649,4 +649,168 @@ test('a menu command that throws is answered with the generic error, not a crash
   await setGuildModule(w.rawId, 'quote-board', { enabled: true, config: {} });
   await onInteraction(i); // targetMessage is missing: the save throws
   assert.match(i.replies.at(-1).content, /Something went wrong/);
+});
+
+// --- quotes from private channels stay out of other channels ----------------------------------------------------------
+
+const insider = (id) => memberOf(id, { canSee: [CH.open, CH.nsfw, CH.hidden] });
+
+/** A server with one quote from the hidden channel (#1, by Dana) and one from the open channel (#2, by Dana). */
+async function privateWorld() {
+  const w = world();
+  await enable(w);
+  await menu(w, {
+    channelId: CH.hidden,
+    member: insider(USER.mod),
+    who: USER.mod,
+    target: w.message({
+      channelId: CH.hidden,
+      authorId: USER.carol,
+      name: 'Dana',
+      content: 'secret staff plan',
+    }),
+  });
+  await menu(w, {
+    target: w.message({ authorId: USER.carol, name: 'Dana', content: 'public joke' }),
+  });
+  assert.equal((await getQuoteByNumber(w.rawId, 1)).public_source, 0);
+  assert.equal((await getQuoteByNumber(w.rawId, 2)).public_source, 1);
+  return w;
+}
+const text = (replies) => JSON.stringify(replies);
+
+test('a quote from a private channel never shows up in another channel through random, search or user', async () => {
+  const w = await privateWorld();
+  for (let i = 0; i < 20; i += 1) {
+    const [r] = await run(w, { sub: 'random' });
+    assert.doesNotMatch(text(r), /secret staff plan/);
+    assert.equal(footer(r), 'Quote #2');
+  }
+  const [mine] = await run(w, { sub: 'random', options: { member: USER.carol } });
+  assert.equal(footer(mine), 'Quote #2');
+
+  const [found] = await run(w, { sub: 'search', options: { text: 'secret' } });
+  assert.match(found.content, /No quote matches/);
+  assert.doesNotMatch(text(found), /staff plan/);
+  const [both] = await run(w, { sub: 'search', options: { text: 'Dana' } });
+  assert.doesNotMatch(text(both), /staff plan/);
+  assert.match(both.embeds[0].data.description, /#2/);
+
+  const [list] = await run(w, { sub: 'user', options: { member: USER.carol } });
+  assert.doesNotMatch(text(list), /staff plan/);
+  assert.equal(list.embeds[0].data.description.split('\n').length, 1);
+  assert.equal(list.embeds[0].data.footer, undefined, 'the total counts only what may be shown here');
+
+  // a member with only private quotes looks like a member with none
+  const only = world();
+  await enable(only);
+  await menu(only, {
+    channelId: CH.hidden,
+    member: insider(USER.mod),
+    who: USER.mod,
+    target: only.message({ channelId: CH.hidden, authorId: USER.bob, content: 'hidden only' }),
+  });
+  assert.match((await run(only, { sub: 'random' }))[0].content, /no quotes to show here yet/);
+  assert.match(
+    (await run(only, { sub: 'user', options: { member: USER.bob } }))[0].content,
+    /no quotes from that member/
+  );
+  assert.match(
+    (await run(only, { sub: 'random', options: { member: USER.bob } }))[0].content,
+    /no quotes from that member/
+  );
+});
+
+test('/quote show of a private quote elsewhere is private, and only for someone who can still see its channel', async () => {
+  const w = await privateWorld();
+  const [seen] = await run(w, {
+    sub: 'show',
+    who: USER.mod,
+    member: insider(USER.mod),
+    options: { number: 1 },
+  });
+  assert.equal(flagsEphemeral(seen), true, 'only the caller sees it');
+  assert.match(seen.content, /private channel/);
+  assert.match(embedText(seen), /secret staff plan/);
+
+  const [denied] = await run(w, { sub: 'show', options: { number: 1 } });
+  assert.equal(flagsEphemeral(denied), true);
+  assert.match(denied.content, /not available here/);
+  assert.equal(denied.embeds, undefined);
+  assert.doesNotMatch(text(denied), /secret staff plan/);
+
+  // someone who lost access since is treated like anyone else
+  const [lost] = await run(w, {
+    sub: 'show',
+    who: USER.mod,
+    member: memberOf(USER.mod),
+    options: { number: 1 },
+  });
+  assert.match(lost.content, /not available here/);
+
+  // a quote that does not exist and one that is private look different only by the wording, never by content
+  const [none] = await run(w, { sub: 'show', options: { number: 77 } });
+  assert.match(none.content, /no quote with that number/);
+
+  // the public quote is shown to all, in public
+  const [open] = await run(w, { sub: 'show', options: { number: 2 } });
+  assert.equal(flagsEphemeral(open), false);
+  assert.match(embedText(open), /public joke/);
+});
+
+test('a private quote shows normally, in public, in its own channel', async () => {
+  const w = await privateWorld();
+  const here = { channelId: CH.hidden, member: insider(USER.bob), who: USER.bob };
+  const [shown] = await run(w, { sub: 'show', options: { number: 1 }, ...here });
+  assert.equal(flagsEphemeral(shown), false);
+  assert.match(embedText(shown), /secret staff plan/);
+
+  const picks = new Set();
+  for (let i = 0; i < 30; i += 1) picks.add(footer((await run(w, { sub: 'random', ...here }))[0]));
+  assert.deepEqual([...picks].sort(), ['Quote #1', 'Quote #2']);
+
+  const [found] = await run(w, { sub: 'search', options: { text: 'secret' }, ...here });
+  assert.match(found.embeds[0].data.description, /#1\*\*/);
+  const [list] = await run(w, { sub: 'user', options: { member: USER.carol }, ...here });
+  assert.equal(list.embeds[0].data.description.split('\n').length, 2);
+  const [byMember] = await run(w, { sub: 'random', options: { member: USER.carol }, ...here });
+  assert.ok(footer(byMember));
+});
+
+test('another private channel does not see it either (only its own source and public ones)', async () => {
+  const w = await privateWorld();
+  const [r] = await run(w, { sub: 'search', options: { text: 'secret' }, channelId: CH.nsfw });
+  assert.match(r.content, /No quote matches/);
+});
+
+test('saving a private message by link from another channel answers only the caller', async () => {
+  const w = world();
+  await enable(w);
+  const secret = w.message({ channelId: CH.hidden, content: 'staff only joke' });
+  const [r] = await run(w, {
+    sub: 'save',
+    who: USER.mod,
+    member: insider(USER.mod),
+    options: { message: link(w, secret) },
+  });
+  assert.equal(flagsEphemeral(r), true, 'not announced to the public channel');
+  assert.match(r.content, /Saved as quote \*\*#1\*\*.*private channel/);
+  // saving it again says the same, privately
+  const [again] = await run(w, {
+    sub: 'save',
+    who: USER.mod,
+    member: insider(USER.mod),
+    options: { message: link(w, secret) },
+  });
+  assert.equal(flagsEphemeral(again), true);
+  assert.match(again.content, /already quote \*\*#1\*\*/);
+  // and in its own channel it is announced as usual
+  const [home] = await run(w, {
+    sub: 'save',
+    channelId: CH.hidden,
+    who: USER.mod,
+    member: insider(USER.mod),
+    options: { message: link(w, w.message({ channelId: CH.hidden, content: 'another one' })) },
+  });
+  assert.equal(flagsEphemeral(home), false);
 });
