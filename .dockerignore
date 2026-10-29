@@ -29,8 +29,6 @@ apps
 *.pem
 *.key
 .fider-seed
-.claude
-.superpowers
 internal
 site
 docker-compose.test.yml
