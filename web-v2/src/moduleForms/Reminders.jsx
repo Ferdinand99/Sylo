@@ -10,6 +10,7 @@ import {
 } from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 
@@ -50,6 +51,7 @@ function ReminderForm({
   onCancel,
   saving,
 }) {
+  const limits = useModuleLimits('reminders');
   const embed0 = initial.spec?.embeds?.[0] || null;
   const [name, setName] = useState(initial.name);
   const [channelId, setChannelId] = useState(initial.channelId);
@@ -121,7 +123,7 @@ function ReminderForm({
         </label>
         <input
           type="text"
-          maxLength={100}
+          maxLength={limitOf(limits, 'name').maxLength}
           placeholder="my new reminder"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -162,7 +164,7 @@ function ReminderForm({
         {msgType === 'text' ? (
           <textarea
             rows={3}
-            maxLength={2000}
+            maxLength={limitOf(limits, 'content').maxLength}
             placeholder="Hey, I'm a reminder!"
             value={content}
             onChange={(e) => setContent(e.target.value)}
@@ -172,6 +174,7 @@ function ReminderForm({
             spec={embedSpec}
             onChange={setEmbedSpec}
             content
+            limits={{ content: limitOf(limits, 'content') }}
             placeholders={{ content: 'Optional message above the embed…', title: 'Title' }}
           />
         )}

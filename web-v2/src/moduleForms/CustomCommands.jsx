@@ -7,6 +7,7 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { PlatformContext } from '../platformContext.jsx';
 
 const ACTION_TYPES = [
@@ -33,6 +34,7 @@ function blankAction(type) {
 }
 
 function ActionBlock({ action, index, count, roles, channels, onChange, onMove, onRemove }) {
+  const limits = useModuleLimits('custom-commands');
   const set = (patch) => onChange({ ...action, ...patch });
   const updateMessage = (key, patch) =>
     set({ messages: action.messages.map((m) => (m.key === key ? { ...m, ...patch } : m)) });
@@ -126,6 +128,7 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
               </div>
               <textarea
                 rows={2}
+                maxLength={limitOf(limits, 'commands[].actions[].messages[].content').maxLength}
                 placeholder="Write your message here… (leave blank for embed-only)"
                 value={m.content}
                 onChange={(e) => updateMessage(m.key, { content: e.target.value })}
@@ -149,7 +152,15 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
               ) : null}
             </div>
           ))}
-          <button type="button" className="v2-btn-ghost" onClick={addMessage}>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            onClick={addMessage}
+            disabled={
+              action.messages.length >=
+              (limitOf(limits, 'commands[].actions[].messages').maxItems ?? Infinity)
+            }
+          >
             + Add a message (the bot picks one at random)
           </button>
         </>
@@ -159,6 +170,7 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
 }
 
 function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel, saving }) {
+  const limits = useModuleLimits('custom-commands');
   const { platform, commandPrefix } = useContext(PlatformContext);
   const [name, setName] = useState(initial.name || '');
   const [description, setDescription] = useState(initial.description || '');
@@ -238,8 +250,8 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
           <span className="v2-field-hint">{commandPrefix}</span>
           <input
             type="text"
-            maxLength={32}
-            pattern="[a-z0-9_-]{1,32}"
+            maxLength={limitOf(limits, 'commands[].name').maxLength}
+            pattern={`[a-z0-9_-]{1,${limitOf(limits, 'commands[].name').maxLength ?? ''}}`}
             placeholder="my-command"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -265,7 +277,7 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
         </label>
         <input
           type="text"
-          maxLength={100}
+          maxLength={limitOf(limits, 'commands[].description').maxLength}
           placeholder="What this command does"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -311,7 +323,12 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
             </button>
           </div>
         ) : (
-          <button type="button" className="v2-btn-ghost" onClick={() => setPicking(true)}>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            onClick={() => setPicking(true)}
+            disabled={actions.length >= (limitOf(limits, 'commands[].actions').maxItems ?? Infinity)}
+          >
             + Add another action
           </button>
         )}
@@ -337,8 +354,8 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
           <label>Per-user cooldown (seconds)</label>
           <input
             type="number"
-            min={0}
-            max={86400}
+            min={limitOf(limits, 'commands[].cooldownSeconds').min}
+            max={limitOf(limits, 'commands[].cooldownSeconds').max}
             style={{ maxWidth: '120px' }}
             value={cooldownSeconds}
             onChange={(e) => setCooldownSeconds(Number(e.target.value))}

@@ -2,6 +2,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -68,6 +69,7 @@ const fromForm = (form) => ({
 });
 
 export default function TempVoice() {
+  const limits = useModuleLimits('temp-voice');
   const {
     data: d,
     form,
@@ -145,7 +147,7 @@ export default function TempVoice() {
               <label>Temporary channel name</label>
               <input
                 type="text"
-                maxLength={95}
+                maxLength={limitOf(limits, 'hubs[].nameTemplate').maxLength}
                 placeholder={DEFAULT_NAME}
                 value={h.nameTemplate}
                 onChange={(e) => updateHub(h.key, { nameTemplate: e.target.value })}
@@ -162,8 +164,8 @@ export default function TempVoice() {
                 </label>
                 <input
                   type="number"
-                  min={0}
-                  max={99}
+                  min={limitOf(limits, 'hubs[].userLimit').min}
+                  max={limitOf(limits, 'hubs[].userLimit').max}
                   style={{ maxWidth: '100px' }}
                   value={h.userLimit}
                   onChange={(e) => updateHub(h.key, { userLimit: Number(e.target.value) })}
@@ -175,8 +177,8 @@ export default function TempVoice() {
                 </label>
                 <input
                   type="number"
-                  min={0}
-                  max={384}
+                  min={limitOf(limits, 'hubs[].bitrate').min}
+                  max={limitOf(limits, 'hubs[].bitrate').max}
                   step={8}
                   style={{ maxWidth: '100px' }}
                   value={h.bitrate}
@@ -320,7 +322,12 @@ export default function TempVoice() {
             </div>
           </div>
         ))}
-        <button type="button" className="v2-btn-ghost" onClick={addHub}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addHub}
+          disabled={form.hubs.length >= (limitOf(limits, 'hubs').maxItems ?? Infinity)}
+        >
           + Add hub
         </button>
       </form>

@@ -2,6 +2,7 @@
 // no case below fails the "every limit is covered" test, so a new LIMITS entry cannot go untested.
 import './helpers/tmpDb.js';
 import test from 'node:test';
+import { readdirSync, readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { MODULE_LIMITS } from '../src/modules/limits.js';
 import { EMBED_LIMITS, normaliseEmbedSpec } from '../src/modules/welcomeChannel.js';
@@ -27,6 +28,16 @@ import { normaliseYoutubeConfig } from '../src/modules/youtubeAlerts.js';
 import { normaliseRssConfig } from '../src/modules/rss.js';
 import { normaliseVerificationConfig } from '../src/modules/verification.js';
 import { normaliseWelcomeChannelConfig } from '../src/modules/welcomeChannel.js';
+import { normaliseReminderConfig } from '../src/modules/scheduledMessages.js';
+import { normaliseCleanupSchedule } from '../src/modules/channelCleanup.js';
+import { normaliseGithubWatch } from '../src/modules/githubAlerts.js';
+import { normaliseCustomCommands } from '../src/modules/customCommands.js';
+import { normaliseAutoroles, normaliseReactionMessage, reactionMessagesFull } from '../src/modules/roles.js';
+import { buildReactionPairs } from '../src/web/lib/reactionPairs.js';
+import { normaliseStarboard } from '../src/modules/starboard.js';
+import { normaliseTempVoiceConfig } from '../src/modules/tempVoice.js';
+import { normaliseBirthdaysConfig } from '../src/modules/birthdays.js';
+import { normaliseAfkConfig } from '../src/modules/afk.js';
 
 const CHANNEL = '123456789012345678';
 const roleId = (i) => String(100000000000000000n + BigInt(i));
@@ -53,7 +64,8 @@ const items = (n, make) => Array.from({ length: n }, (_, i) => make(i));
 // Per module: the normaliser, a valid request body to start from, and per limited path how to build a
 // value of size n (text/list) or a number. Where a value past a limit is dropped or replaced by a
 // default instead of being cut or clamped, `under` (one below a min) or `over` (one past a max, a
-// length or a count) say what to expect: `{ input?, check(out) }`.
+// length or a count) say what to expect: `{ input?, check?(out) }`. `read` maps a path to where its
+// value lands in the output when that differs.
 const cases = {
   welcome: {
     normalise: normaliseWelcomeConfig,
@@ -225,6 +237,91 @@ const cases = {
     base: { spec: { content: 'x', embeds: [{}] } },
     value: { 'spec.embeds': (n) => items(n, () => ({})) },
   },
+  reminders: {
+    normalise: normaliseReminderConfig,
+    base: { channelId: CHANNEL, content: 'x', name: 'n' },
+    read: { content: 'spec.content' },
+    // an interval below 1 minute (or unreadable) is replaced by the default, so test a negative one
+    under: { intervalMinutes: { input: -5 } },
+    value: { name: text, content: text },
+  },
+  'channel-cleanup': {
+    normalise: normaliseCleanupSchedule,
+    base: { channelId: CHANNEL, timeHhmm: '03:00' },
+    under: { maxAgeHours: { input: -5 } },
+  },
+  github: {
+    normalise: normaliseGithubWatch,
+    base: { repo: 'a/b', channelId: CHANNEL, events: ['push'] },
+    // a changelog path past the limit is refused
+    over: { changelogPath: { check: (out) => out.changelogOk === false } },
+  },
+  'custom-commands': {
+    normalise: normaliseCustomCommands,
+    base: {
+      commands: [{ name: 'hello', actions: [{ type: 'reply', messages: [{ content: 'hi' }] }] }],
+    },
+    value: {
+      commands: (n) =>
+        items(n, (i) => ({ name: `c${i}`, actions: [{ type: 'reply', messages: [{ content: 'hi' }] }] })),
+      'commands[].actions': (n) => items(n, () => ({ type: 'reply', messages: [{ content: 'hi' }] })),
+      'commands[].actions[].messages': (n) => items(n, () => ({ content: 'hi' })),
+      'commands[].allowedRoles': (n) => items(n, roleId),
+      'commands[].allowedChannels': (n) => items(n, roleId),
+    },
+    // a name past the limit is not a valid command name: the command is dropped
+    over: { 'commands[].name': { check: (out) => out.commands.length === 0 } },
+  },
+  roles: {
+    normalise: (raw) => ({
+      autoroles: normaliseAutoroles(raw.autoroles),
+      full: reactionMessagesFull(raw.reactionMessages.length),
+      reactionMessages: raw.reactionMessages.map((rm) => {
+        const { pairs, errors } = buildReactionPairs(rm.pairs, 'buttons', null);
+        return { ...normaliseReactionMessage(rm), pairs, pairErrors: errors };
+      }),
+    }),
+    base: { autoroles: [], reactionMessages: [{ pairs: [{ roleId: roleId(1) }] }] },
+    value: {
+      autoroles: (n) => items(n, roleId),
+      reactionMessages: (n) => items(n, () => ({ pairs: [{ roleId: roleId(1) }] })),
+      'reactionMessages[].pairs': (n) => items(n, () => ({ roleId: roleId(1) })),
+    },
+    // a server holding 50 messages cannot add one more; more pairs than the limit is an error
+    over: {
+      reactionMessages: { input: items(50, () => ({ pairs: [] })), check: (out) => out.full === true },
+      'reactionMessages[].pairs': { check: (out) => out.reactionMessages[0].pairErrors.length > 0 },
+    },
+  },
+  starboard: {
+    normalise: normaliseStarboard,
+    base: { boards: [{ channelId: CHANNEL }] },
+    value: {
+      boards: (n) => items(n, () => ({ channelId: CHANNEL })),
+      'boards[].emojis': (n) => items(n, (i) => `e${i}`),
+      'boards[].roleList': (n) => items(n, roleId),
+      'boards[].channelList': (n) => items(n, roleId),
+    },
+  },
+  'temp-voice': {
+    normalise: normaliseTempVoiceConfig,
+    base: { hubs: [{ hubChannelId: CHANNEL }] },
+    value: {
+      hubs: (n) => items(n, () => ({ hubChannelId: CHANNEL })),
+      'hubs[].roleList': (n) => items(n, roleId),
+      'hubs[].ignoredRoles': (n) => items(n, roleId),
+      'hubs[].moderatorRoles': (n) => items(n, roleId),
+    },
+  },
+  birthdays: {
+    normalise: normaliseBirthdaysConfig,
+    base: {},
+  },
+  afk: {
+    normalise: normaliseAfkConfig,
+    base: {},
+    value: { ignoreChannels: (n) => items(n, roleId) },
+  },
   _embed: {
     normalise: (raw) => ({ spec: normaliseEmbedSpec(raw.spec) }),
     base: { spec: { fields: [{ name: 'n', value: 'v' }] } },
@@ -259,9 +356,11 @@ for (const [moduleId, c] of Object.entries(cases)) {
         const n = limit[kind];
         const build = make ?? (kind === 'maxItems' ? null : kind === 'maxLength' ? text : (v) => v);
         assert.ok(build, `${moduleId}.${path}: add a value builder to this test`);
+        // where the value shows up in the normalised output (same path unless `read` says otherwise)
+        const outPath = c.read?.[path] ?? prefix + path;
         const run = (value) => {
           const out = c.normalise(withValue(c.base, prefix + path, value));
-          return size(readPath(out, prefix + path));
+          return size(readPath(out, outPath));
         };
         const special = (kind === 'min' ? c.under : c.over)?.[path];
         const outside = kind === 'min' ? n - 1 : n + 1;
@@ -269,7 +368,11 @@ for (const [moduleId, c] of Object.entries(cases)) {
         if (special) {
           const input = special.input ?? build(outside);
           const out = c.normalise(withValue(c.base, prefix + path, input));
-          assert.ok(special.check(out), `${path}: a value past the limit is dropped or replaced as stated`);
+          if (special.check) {
+            assert.ok(special.check(out), `${path}: a value past the limit is dropped or replaced as stated`);
+          } else {
+            assert.equal(size(readPath(out, outPath)), n, 'past the limit: raised or lowered to it');
+          }
         } else if (kind === 'min') {
           assert.equal(run(build(outside)), n, 'below the minimum: clamped up');
         } else {
@@ -279,6 +382,11 @@ for (const [moduleId, c] of Object.entries(cases)) {
     }
   }
 }
+
+test('a server may hold 49 reaction-role messages and add another, but not a 51st', () => {
+  assert.equal(reactionMessagesFull(49), false);
+  assert.equal(reactionMessagesFull(50), true);
+});
 
 test('embed fields keep their own text limits', () => {
   const f = EMBED_LIMITS;
@@ -297,6 +405,25 @@ test('embed fields keep their own text limits', () => {
   assert.equal(out.footerText.length, f.footerText.maxLength);
   assert.equal(out.fields[0].name.length, f['fields[].name'].maxLength);
   assert.equal(out.fields[0].value.length, f['fields[].value'].maxLength);
+});
+
+test('every module in MODULE_LIMITS has a case in this file', () => {
+  for (const moduleId of Object.keys(MODULE_LIMITS)) {
+    assert.ok(cases[moduleId], `${moduleId}: add a case so its limits are tested`);
+  }
+});
+
+test('every useModuleLimits() id in a form is a key of MODULE_LIMITS', () => {
+  const dir = new URL('../web-v2/src/moduleForms/', import.meta.url);
+  let seen = 0;
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.jsx'))) {
+    const src = readFileSync(new URL(file, dir), 'utf8');
+    for (const [, id] of src.matchAll(/useModuleLimits\('([^']+)'\)/g)) {
+      seen++;
+      assert.ok(MODULE_LIMITS[id], `${file}: useModuleLimits('${id}') has no limits on the server`);
+    }
+  }
+  assert.ok(seen >= 30, 'found the forms that read limits');
 });
 
 test('MODULE_LIMITS holds no limit that is not a number', () => {

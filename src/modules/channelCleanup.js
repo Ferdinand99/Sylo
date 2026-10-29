@@ -9,6 +9,34 @@ import { log } from '../lib/log.js';
 import { every } from './schedule.js';
 
 const MODULE_ID = 'channel-cleanup';
+
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  maxAgeHours: { min: 1, max: 24 * 90 }, // up to 90 days
+};
+export const CLEANUP_MAX_AGE_HOURS = LIMITS.maxAgeHours.max;
+
+/**
+ * Coerce a cleanup schedule as the dashboard sends it into the shape the database stores.
+ * `timeOk` says whether `timeHhmm` looks like HH:MM (the caller refuses the save when not).
+ */
+export function normaliseCleanupSchedule(body = {}) {
+  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
+  const days = (Array.isArray(body.days) ? body.days : []).map(Number).filter((n) => n >= 0 && n <= 6);
+  const maxAgeHours = Math.min(
+    LIMITS.maxAgeHours.max,
+    Math.max(LIMITS.maxAgeHours.min, Math.floor(Number(body.maxAgeHours)) || 24)
+  );
+  const timeOk = /^\d{2}:\d{2}$/.test(body.timeHhmm ?? '');
+  return {
+    channelId,
+    days,
+    maxAgeHours,
+    timeHhmm: body.timeHhmm,
+    skipPinned: Boolean(body.skipPinned),
+    timeOk,
+  };
+}
 const TICK_MS = 5 * 60_000;
 const TICK_MINUTES = TICK_MS / 60_000;
 const DUE_WINDOW_MINUTES = TICK_MINUTES * 2; // margin so an occasional slow tick can't skip a run

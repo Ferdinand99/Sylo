@@ -15,14 +15,12 @@ const FORMS = here('../moduleForms/');
 // maxLength={256}  max="30"  min={0.1}  (a number written straight into the attribute)
 const LITERAL = /\b(maxLength|max|min)\s*=\s*(?:\{\s*[0-9.]+\s*\}|"[0-9.]+"|'[0-9.]+')/g;
 
-const PENDING = 'pending 8b: not converted to useModuleLimits yet';
 const ALLOWED = {
-  'ChannelCleanup.jsx': PENDING,
-  'CustomCommands.jsx': PENDING,
-  'Reminders.jsx': PENDING,
-  'Roles.jsx': PENDING,
-  'Starboard.jsx': PENDING,
-  'TempVoice.jsx': PENDING,
+  // Min/max picks of a dropdown set, 0..25: Discord's own cap of 25 options in a select menu. The
+  // server stores whatever number is sent and clamps it to the real option count when it publishes
+  // (modules/roles.js), so there is no setting limit to share. Every text and list limit of the
+  // form is read from the server.
+  'Roles.jsx': 'UI-only: Discord select menu holds at most 25 options (picks are clamped at publish)',
 };
 
 // Shared components that carry field limits for several forms; never allowed to hard-code them.

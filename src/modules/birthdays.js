@@ -11,6 +11,11 @@ import { birthdaysOnDay, guildBirthdays } from '../db/birthdays.js';
 import { log } from '../lib/log.js';
 import { every } from './schedule.js';
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  message: { maxLength: 1000 },
+};
+
 const DEFAULT_MESSAGE = '🎂 Happy birthday {user}! 🎉';
 const LAST_RUN_KEY = 'birthdays:lastRun';
 
@@ -20,7 +25,7 @@ export function normaliseBirthdaysConfig(raw = {}) {
     message:
       String(raw.message ?? '')
         .trim()
-        .slice(0, 1000) || DEFAULT_MESSAGE,
+        .slice(0, LIMITS.message.maxLength) || DEFAULT_MESSAGE,
     roleId: /^\d{17,20}$/.test(raw.roleId ?? '') ? raw.roleId : '',
     pingRole: Boolean(raw.pingRole),
   };

@@ -9,51 +9,69 @@
 // `_embed` is a pseudo-module: the limits of one embed spec (normaliseEmbedSpec), shared by every
 // module that stores an embed.
 import { EMBED_LIMITS } from './welcomeChannel.js';
+import { LIMITS as afk } from './afk.js';
 import { LIMITS as appeals } from './appeals.js';
 import { LIMITS as appleConnect } from './appleConnect.js';
 import { LIMITS as autoReact } from './autoReact.js';
 import { LIMITS as automod } from './automod.js';
 import { LIMITS as autoresponder } from './autoresponder.js';
+import { LIMITS as birthdays } from './birthdays.js';
+import { LIMITS as channelCleanup } from './channelCleanup.js';
 import { LIMITS as counting } from './counting.js';
+import { LIMITS as customCommands } from './customCommands.js';
 import { LIMITS as giveaways } from './giveaways.js';
+import { LIMITS as githubAlerts } from './githubAlerts.js';
 import { LIMITS as honeypot } from './honeypot.js';
 import { LIMITS as inviteTracker } from './inviteTracker.js';
 import { LIMITS as kickAlerts } from './kickAlerts.js';
 import { LIMITS as leveling } from './leveling.js';
 import { LIMITS as moderation } from './moderation.js';
+import { LIMITS as polls } from './polls.js';
+import { LIMITS as scheduledMessages } from './scheduledMessages.js';
+import { LIMITS as roles } from './roles.js';
+import { LIMITS as rss } from './rss.js';
 import { LIMITS as serverStats } from './serverStats.js';
+import { LIMITS as starboard } from './starboard.js';
+import { LIMITS as sticky } from './sticky.js';
+import { LIMITS as tempVoice } from './tempVoice.js';
 import { LIMITS as tickets } from './tickets.js';
 import { LIMITS as twitchAlerts } from './twitchAlerts.js';
 import { LIMITS as verification } from './verification.js';
+import { LIMITS as welcome } from './welcome.js';
 import { LIMITS as welcomeChannel } from './welcomeChannel.js';
 import { LIMITS as youtubeAlerts } from './youtubeAlerts.js';
-import { LIMITS as rss } from './rss.js';
-import { LIMITS as polls } from './polls.js';
-import { LIMITS as sticky } from './sticky.js';
-import { LIMITS as welcome } from './welcome.js';
 
 export const MODULE_LIMITS = Object.freeze({
   _embed: EMBED_LIMITS,
+  afk,
   appeals,
   'apple-connect': appleConnect,
   'auto-react': autoReact,
   automod,
   autoresponder,
+  birthdays,
+  'channel-cleanup': channelCleanup,
   counting,
+  'custom-commands': customCommands,
   giveaways,
+  github: githubAlerts,
   honeypot,
   'invite-tracker': inviteTracker,
   'kick-alerts': kickAlerts,
   leveling,
   moderation,
+  polls,
+  reminders: scheduledMessages,
+  roles,
+  rss,
   'server-stats': serverStats,
+  starboard,
+  sticky,
+  'temp-voice': tempVoice,
   tickets,
   'twitch-alerts': twitchAlerts,
   verification,
+  welcome,
   'welcome-channel': welcomeChannel,
   'youtube-alerts': youtubeAlerts,
-  rss,
-  polls,
-  sticky,
-  welcome,
 });

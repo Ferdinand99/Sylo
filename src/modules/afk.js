@@ -6,6 +6,21 @@ import { mentionedUserIds } from '../platform/mentions.js';
 import { on } from './dispatch.js';
 import { after } from './schedule.js';
 import { getAfk, setAfk, clearAfk } from '../db/afk.js';
+import { idList } from '../web/lib/idList.js';
+
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  ignoreChannels: { maxItems: 100 },
+};
+
+/** Coerce a submitted AFK config into the canonical shape. */
+export function normaliseAfkConfig(raw = {}) {
+  return {
+    setNickname: Boolean(raw.setNickname),
+    mentionReply: Boolean(raw.mentionReply),
+    ignoreChannels: idList(raw.ignoreChannels, LIMITS.ignoreChannels.maxItems),
+  };
+}
 
 export { getAfk, setAfk, clearAfk };
 

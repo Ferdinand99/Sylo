@@ -32,7 +32,6 @@ import { changelogHandler } from '../lib/changelogFeed.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
 import guildDataRouter from './v2GuildData.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
-import { idList, MAX_REACTION_MESSAGES } from '../lib/idList.js';
 import { buildReactionPairs } from '../lib/reactionPairs.js';
 import { guildCustomEmojis } from '../lib/guildEmojis.js';
 import { canPostInChannel } from '../lib/modlogChannel.js';
@@ -71,6 +70,7 @@ import {
   WEEKDAYS,
   MIN_INTERVAL_MINUTES,
   MAX_INTERVAL_MINUTES,
+  normaliseReminderConfig,
 } from '../../modules/scheduledMessages.js';
 import {
   listScheduled,
@@ -81,7 +81,6 @@ import {
   setScheduledEnabled,
 } from '../../db/scheduledMessages.js';
 import {
-  normaliseEmbedSpec,
   normaliseWelcomeChannelConfig,
   WC_PRESETS,
   publishWelcome,
@@ -89,8 +88,14 @@ import {
   createWelcomeChannel,
 } from '../../modules/welcomeChannel.js';
 import { normalisePollsConfig, POLL_PLACEHOLDERS, RESULTS_PLACEHOLDERS } from '../../modules/polls.js';
-import { publishReactionMessage } from '../../modules/roles.js';
-import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
+import {
+  publishReactionMessage,
+  normaliseReactionMessage,
+  normaliseAutoroles,
+  reactionMessagesFull,
+  LIMITS as ROLES_LIMITS,
+} from '../../modules/roles.js';
+import { normaliseCustomCommands, CC_PLACEHOLDERS, NAME_RE } from '../../modules/customCommands.js';
 import { normaliseStickyConfig } from '../../modules/sticky.js';
 import {
   listCleanupSchedules,
@@ -109,8 +114,9 @@ import {
   setGithubWatchEnabled,
   regenerateGithubWatchSecret,
 } from '../../db/githubWatches.js';
-import { GITHUB_EVENT_TYPES, sanitiseGithubEvents } from '../../modules/githubAlerts.js';
+import { GITHUB_EVENT_TYPES, normaliseGithubWatch } from '../../modules/githubAlerts.js';
 import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
+import { normaliseCleanupSchedule, CLEANUP_MAX_AGE_HOURS } from '../../modules/channelCleanup.js';
 import { boardsToRescan, normaliseStarboard, scheduleRescan } from '../../modules/starboard.js';
 import {
   normaliseAutomodConfig,
@@ -128,6 +134,7 @@ import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { WELCOME_PLACEHOLDERS, normaliseWelcomeConfig } from '../../modules/welcome.js';
 import { MODULE_LIMITS } from '../../modules/limits.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
+import { normaliseAfkConfig } from '../../modules/afk.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
 import {
   normaliseThresholds,
@@ -527,11 +534,7 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/afk/config',
   asyncHandler(async (req, res) => {
-    const config = {
-      setNickname: Boolean(req.body.setNickname),
-      mentionReply: Boolean(req.body.mentionReply),
-      ignoreChannels: idList(req.body.ignoreChannels, 100),
-    };
+    const config = normaliseAfkConfig(req.body);
     await setGuildModule(req.guild.id, 'afk', { config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -596,7 +599,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     const config = normaliseWelcomeConfig(req.body);
-    const newRoles = config.autoroleEnabled ? idList(req.body.autoroles) : [];
+    const newRoles = config.autoroleEnabled ? normaliseAutoroles(req.body.autoroles) : [];
     const rolesMod = await getGuildModule(guild.id, 'roles');
     await setGuildModule(guild.id, 'roles', {
       enabled: rolesMod.enabled || newRoles.length > 0,
@@ -2580,8 +2583,6 @@ router.post(
 // — schedules live in their own table, not guild_modules.config, so this
 // isn't the usual getModuleConfig/saveModuleConfig shape.) -----------------
 
-const CLEANUP_MAX_AGE_HOURS = 24 * 90; // 90 days
-
 function shapeCleanupSchedule(rec) {
   return {
     id: rec.id,
@@ -2609,28 +2610,10 @@ router.get(
   })
 );
 
-function parseCleanupBody(body) {
-  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
-  const days = (Array.isArray(body.days) ? body.days : []).map(Number).filter((n) => n >= 0 && n <= 6);
-  const maxAgeHours = Math.min(
-    CLEANUP_MAX_AGE_HOURS,
-    Math.max(1, Math.floor(Number(body.maxAgeHours)) || 24)
-  );
-  const timeOk = /^\d{2}:\d{2}$/.test(body.timeHhmm ?? '');
-  return {
-    channelId,
-    days,
-    maxAgeHours,
-    timeHhmm: body.timeHhmm,
-    skipPinned: Boolean(body.skipPinned),
-    timeOk,
-  };
-}
-
 router.post(
   '/guilds/:guildId/modules/channel-cleanup/schedules',
   asyncHandler(async (req, res) => {
-    const s = parseCleanupBody(req.body);
+    const s = normaliseCleanupSchedule(req.body);
     if (!s.channelId) return res.status(400).json({ error: 'Pick a channel.' });
     if (!s.timeOk) return res.status(400).json({ error: 'Pick a valid time.' });
     const id = await createCleanupSchedule(req.guild.id, s);
@@ -2649,7 +2632,7 @@ router.post(
     const id = Number(req.params.id);
     const existing = Number.isInteger(id) ? await getCleanupSchedule(req.guild.id, id) : null;
     if (!existing) return res.status(404).json({ error: 'No such schedule' });
-    const s = parseCleanupBody(req.body);
+    const s = normaliseCleanupSchedule(req.body);
     if (!s.channelId) return res.status(400).json({ error: 'Pick a channel.' });
     if (!s.timeOk) return res.status(400).json({ error: 'Pick a valid time.' });
     await updateCleanupSchedule(req.guild.id, id, s);
@@ -2684,28 +2667,6 @@ router.post(
 // --- GitHub alerts (mirrors guilds.js's "GitHub repo watch builder" section
 // — same repo/changelog-path/webhook-token shape, own table.) --------------
 
-const REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
-
-/** Accepts "owner/repo" or a pasted github.com URL; returns the normalised "owner/repo" or null. */
-function parseRepoInput(raw) {
-  const v = String(raw ?? '')
-    .trim()
-    .replace(/^https?:\/\/(www\.)?github\.com\//i, '')
-    .replace(/\.git$/i, '')
-    .replace(/\/+$/, '');
-  return REPO_RE.test(v) ? v : null;
-}
-
-/** A relative repo file path for the changelog watcher — blank is valid (off). */
-function parseChangelogPath(raw) {
-  const v = String(raw ?? '')
-    .trim()
-    .replace(/^\/+/, '');
-  if (!v) return { ok: true, value: '' };
-  if (v.length > 300 || v.includes('..') || /[\0\r\n]/.test(v)) return { ok: false, value: '' };
-  return { ok: true, value: v };
-}
-
 function githubWebhookUrl(token) {
   return config.dashboardUrl ? `${config.dashboardUrl.replace(/\/+$/, '')}/webhooks/github/${token}` : null;
 }
@@ -2738,15 +2699,6 @@ router.get(
   })
 );
 
-function parseGithubBody(body) {
-  const repo = parseRepoInput(body.repo);
-  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
-  const roleId = /^\d{17,20}$/.test(body.roleId ?? '') ? body.roleId : '';
-  const changelog = parseChangelogPath(body.changelogPath);
-  const events = sanitiseGithubEvents(body.events);
-  return { repo, channelId, roleId, changelogPath: changelog.value, changelogOk: changelog.ok, events };
-}
-
 function githubBodyError(s) {
   if (!s.repo) return 'Enter a repo as owner/repo (or paste its github.com URL).';
   if (!s.channelId) return 'Pick a channel.';
@@ -2760,7 +2712,7 @@ function githubBodyError(s) {
 router.post(
   '/guilds/:guildId/modules/github/watches',
   asyncHandler(async (req, res) => {
-    const s = parseGithubBody(req.body);
+    const s = normaliseGithubWatch(req.body);
     const err = githubBodyError(s);
     if (err) return res.status(400).json({ error: err });
     const id = await createGithubWatch(req.guild.id, s);
@@ -2779,7 +2731,7 @@ router.post(
     const id = Number(req.params.id);
     const existing = Number.isInteger(id) ? await getGithubWatch(req.guild.id, id) : null;
     if (!existing) return res.status(404).json({ error: 'No such watch' });
-    const s = parseGithubBody(req.body);
+    const s = normaliseGithubWatch(req.body);
     const err = githubBodyError(s);
     if (err) return res.status(400).json({ error: err });
     await updateGithubWatch(req.guild.id, id, s);
@@ -2851,44 +2803,6 @@ function shapeReminder(rec) {
   };
 }
 
-function toMs(v) {
-  const t = new Date(String(v ?? '')).getTime();
-  return Number.isFinite(t) ? t : null;
-}
-
-function parseReminderBody(body) {
-  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
-  let embed = null;
-  let content = body.content;
-  // Embed mode's "text above the embed" lives on the EmbedEditor's own spec
-  // (content:true), not the plain-text textarea used in text mode.
-  if (body.msgType === 'embed' && body.embedSpec && typeof body.embedSpec === 'object') {
-    embed = normaliseEmbedSpec(body.embedSpec);
-    content = body.embedSpec.content;
-  }
-  const spec = { content: String(content ?? '').slice(0, 2000), embeds: embed ? [embed] : [] };
-  const mode = body.mode === 'single' ? 'single' : 'multiple';
-  const intervalMinutes = Math.min(
-    MAX_INTERVAL_MINUTES,
-    Math.max(MIN_INTERVAL_MINUTES, Math.floor(Number(body.intervalMinutes)) || 60)
-  );
-  const days = (Array.isArray(body.days) ? body.days : []).map(Number).filter((n) => n >= 0 && n <= 6);
-  return {
-    name:
-      String(body.name ?? '')
-        .trim()
-        .slice(0, 100) || 'Untitled reminder',
-    channelId,
-    spec,
-    mode,
-    intervalMinutes,
-    days: days.length ? days : [0, 1, 2, 3, 4, 5, 6],
-    startAt: body.enableStart ? toMs(body.startAt) : null,
-    endAt: body.enableEnd ? toMs(body.endAt) : null,
-    runAt: mode === 'single' ? toMs(body.runAt) : null,
-  };
-}
-
 router.get(
   '/guilds/:guildId/modules/reminders/list',
   asyncHandler(async (req, res) => {
@@ -2908,7 +2822,7 @@ router.post(
   // Not /modules/reminders: that path is the module's on/off switch (POST /modules/:moduleId).
   '/guilds/:guildId/modules/reminders/new',
   asyncHandler(async (req, res) => {
-    const r = parseReminderBody(req.body);
+    const r = normaliseReminderConfig(req.body);
     if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
     if (!r.spec.content.trim() && !r.spec.embeds.length) {
       return res.status(400).json({ error: 'Add a message or an embed.' });
@@ -2930,7 +2844,7 @@ router.post(
   '/guilds/:guildId/modules/reminders/test',
   platformActionLimit,
   asyncHandler(async (req, res) => {
-    const r = parseReminderBody(req.body);
+    const r = normaliseReminderConfig(req.body);
     if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
     if (!r.spec.content.trim() && !r.spec.embeds.length) {
       return res.status(400).json({ error: 'Add a message or an embed.' });
@@ -2950,7 +2864,7 @@ router.post(
     const id = Number(req.params.id);
     const existing = Number.isInteger(id) ? await getScheduled(req.guild.id, id) : null;
     if (!existing) return res.status(404).json({ error: 'No such reminder' });
-    const r = parseReminderBody(req.body);
+    const r = normaliseReminderConfig(req.body);
     if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
     if (!r.spec.content.trim() && !r.spec.embeds.length) {
       return res.status(400).json({ error: 'Add a message or an embed.' });
@@ -3130,7 +3044,7 @@ router.post(
   '/guilds/:guildId/modules/roles/autoroles',
   asyncHandler(async (req, res) => {
     const { config: cfg } = await getGuildModule(req.guild.id, 'roles');
-    const autoroles = idList(Array.isArray(req.body.autoroles) ? req.body.autoroles : []);
+    const autoroles = normaliseAutoroles(Array.isArray(req.body.autoroles) ? req.body.autoroles : []);
     await setGuildModule(req.guild.id, 'roles', { config: { ...cfg, autoroles } });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -3162,9 +3076,9 @@ router.post(
 
     const id = /^\d+$/.test(req.body.id ?? '') ? req.body.id : String(Date.now());
     const existing = list.find((x) => String(x.id) === id);
-    if (!existing && list.length >= MAX_REACTION_MESSAGES) {
+    if (!existing && reactionMessagesFull(list.length)) {
       return res.status(400).json({
-        error: `This server already has the maximum of ${MAX_REACTION_MESSAGES} reaction-role messages.`,
+        error: `This server already has the maximum of ${ROLES_LIMITS.reactionMessages.maxItems} reaction-role messages.`,
       });
     }
     const rm = {
@@ -3172,13 +3086,7 @@ router.post(
       channelId,
       messageId: existing?.messageId || '',
       style,
-      message: String(req.body.message ?? '').slice(0, 2000),
-      embed: normaliseEmbedSpec(req.body.embed || {}),
-      exclusive: Boolean(req.body.exclusive),
-      mode: req.body.mode === 'reverse' ? 'reverse' : 'default',
-      placeholder: String(req.body.placeholder ?? '').slice(0, 150),
-      selMin: Number.parseInt(req.body.selMin, 10) || 0,
-      selMax: Number.parseInt(req.body.selMax, 10) || 0,
+      ...normaliseReactionMessage(req.body),
       pairs,
     };
     // The guard on the save below would refuse a role this person may not hand out, but only
@@ -3265,7 +3173,7 @@ router.post(
     const name = String(req.body.name ?? '')
       .trim()
       .toLowerCase();
-    if (!/^[a-z0-9_-]{1,32}$/.test(name)) {
+    if (!NAME_RE.test(name)) {
       return res.status(400).json({ error: 'Invalid name — lowercase letters, numbers, - and _ only.' });
     }
     if (primaryClient()?.commands?.has(name)) {

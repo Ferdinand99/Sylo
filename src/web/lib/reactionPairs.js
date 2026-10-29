@@ -1,7 +1,9 @@
 // Turns the role rows of a reaction-role form into the stored pairs, with the checks and
 // error wording the dashboard shows.
-import { MAX_REACTION_PAIRS } from './idList.js';
-import { parseEmoji } from '../../modules/roles.js';
+import { parseEmoji, LIMITS } from '../../modules/roles.js';
+
+const MAX_PAIRS = LIMITS['reactionMessages[].pairs'].maxItems;
+const MAX_LABEL = LIMITS['reactionMessages[].pairs[].label'].maxLength;
 
 const BUTTON_STYLES = ['primary', 'secondary', 'success', 'danger'];
 
@@ -13,7 +15,7 @@ const BUTTON_STYLES = ['primary', 'secondary', 'success', 'danger'];
  */
 export function buildReactionPairs(rows, style, guild) {
   const errors = [];
-  if (rows.length > MAX_REACTION_PAIRS) errors.push(`Use at most ${MAX_REACTION_PAIRS} roles per message.`);
+  if (rows.length > MAX_PAIRS) errors.push(`Use at most ${MAX_PAIRS} roles per message.`);
 
   const pairs = [];
   let hadRowError = false;
@@ -37,7 +39,7 @@ export function buildReactionPairs(rows, style, guild) {
     pairs.push({
       ...(parsed || { key: '', display: '', react: '' }),
       roleId: rid,
-      label: String(row.label ?? '').slice(0, 80),
+      label: String(row.label ?? '').slice(0, MAX_LABEL),
       btnStyle: BUTTON_STYLES.includes(row.btnStyle) ? row.btnStyle : 'secondary',
     });
   });
