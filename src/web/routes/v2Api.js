@@ -133,7 +133,7 @@ import { recentHoneypotCatches } from '../../db/honeypotCatches.js';
 import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
-import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
+import { reservedCommandNames, syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 import { WELCOME_PLACEHOLDERS, normaliseWelcomeConfig } from '../../modules/welcome.js';
 import { MODULE_LIMITS } from '../../modules/limits.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
@@ -3191,8 +3191,10 @@ router.get(
   asyncHandler(async (req, res) => {
     const { config } = await getGuildModule(req.guild.id, 'custom-commands');
     const { commands } = normaliseCustomCommands(config);
+    // A command made before a built-in of the same name existed is skipped at sync: flag it.
+    const reserved = reservedCommandNames(clientOfGuild(req.guild));
     res.json({
-      commands,
+      commands: commands.map((c) => ({ ...c, reserved: reserved.has(c.name) })),
       channels: guildTextChannels(req.guild),
       roles: assignableRoles(req.guild),
       placeholders: CC_PLACEHOLDERS,

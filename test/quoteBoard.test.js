@@ -3,9 +3,11 @@
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { ChannelType } from 'discord.js';
 import {
   LIMITS,
   buildQuoteEmbed,
+  canView,
   canManageQuotes,
   canRemoveQuote,
   canSaveQuotes,
@@ -281,4 +283,70 @@ test('a channel is a public source only when @everyone can view it and it is not
     }),
     false
   );
+});
+
+// A thread has no permissions or age restriction of its own: discord.js answers permissionsFor
+// with the parent channel's, and nsfw is not set on a thread.
+function threadWorld() {
+  const everyone = { id: 'e' };
+  const guild = { roles: { everyone } };
+  const parent = (sees, nsfw = false) => ({
+    nsfw,
+    permissionsFor: (who) => ({
+      has: (p) =>
+        who === everyone ? sees && p === 'ViewChannel' : Boolean(who.manager) && p === 'ManageThreads',
+    }),
+  });
+  const thread = (type, par, memberIds = []) => ({
+    type,
+    isThread: () => true,
+    parent: par,
+    // discord.js: a thread answers with its parent's permissions and has no nsfw flag
+    permissionsFor: (who) => par.permissionsFor(who),
+    members: {
+      cache: new Map(),
+      fetch: async (id) => {
+        if (!memberIds.includes(id)) throw new Error('Unknown Thread Member');
+        return { id };
+      },
+    },
+  });
+  return { guild, everyone, parent, thread };
+}
+
+test('a thread follows its parent: public thread of a public channel is public, a private thread never is', () => {
+  const { guild, parent, thread } = threadWorld();
+  assert.equal(isPublicSource(guild, thread(ChannelType.PublicThread, parent(true))), true);
+  assert.equal(isPublicSource(guild, thread(ChannelType.AnnouncementThread, parent(true))), true);
+  assert.equal(isPublicSource(guild, thread(ChannelType.PrivateThread, parent(true))), false);
+  assert.equal(isPublicSource(guild, thread(ChannelType.PublicThread, parent(false))), false);
+  assert.equal(
+    isPublicSource(guild, thread(ChannelType.PublicThread, parent(true, true))),
+    false,
+    'a thread under an age-restricted channel'
+  );
+  assert.equal(isPublicSource(guild, thread(ChannelType.PublicThread, null)), false, 'parent unknown');
+});
+
+test('canView: a private thread needs membership or Manage Threads, not only the parent channel', async () => {
+  const { parent, thread } = threadWorld();
+  const outsider = { id: '1' };
+  const inside = { id: '2' };
+  const moderator = { id: '3', manager: true };
+  const parentOpen = { ...parent(false), permissionsFor: () => ({ has: (p) => p === 'ViewChannel' }) };
+  const priv = thread(ChannelType.PrivateThread, parentOpen, ['2']);
+  assert.equal(await canView(priv, outsider), false);
+  assert.equal(await canView(priv, inside), true);
+  assert.equal(await canView(priv, null), false);
+  const modParent = {
+    permissionsFor: (who) => ({ has: (p) => p === 'ViewChannel' || (who.manager && p === 'ManageThreads') }),
+  };
+  assert.equal(await canView(thread(ChannelType.PrivateThread, modParent, []), moderator), true);
+  assert.equal(await canView(thread(ChannelType.PrivateThread, modParent, []), outsider), false);
+  // a public thread is as visible as its parent
+  assert.equal(await canView(thread(ChannelType.PublicThread, parentOpen, []), outsider), true);
+  // a thread whose members cannot be fetched counts as no
+  const broken = thread(ChannelType.PrivateThread, parentOpen);
+  broken.members = undefined;
+  assert.equal(await canView(broken, outsider), false);
 });

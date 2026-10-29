@@ -282,7 +282,7 @@ async function show(interaction) {
     const source =
       interaction.guild.channels?.cache?.get?.(row.channel_id) ??
       (await interaction.guild.channels?.fetch?.(row.channel_id).catch(() => null));
-    if (!canView(source, interaction.member)) {
+    if (!(await canView(source, interaction.member))) {
       return eph(interaction, 'That quote is not available here.');
     }
     return interaction.reply({

@@ -421,6 +421,12 @@ described above.
   hub and announces new videos within seconds. YouTube must be able to reach
   `<DASHBOARD_URL>/webhooks/youtube/<channel id>`, so the reverse proxy has to forward it and keep the
   `Host` header. Otherwise Sylo polls every few minutes, as before. Nothing to configure either way.
+- **Five command names are now built in: `suggest`, `suggestion`, `quote`, `event` and
+  `temprole`.** A built-in command always wins over a custom command of the same name. If a server
+  made a custom command with one of these names in 4.10, Sylo no longer registers it after the
+  upgrade, logs a warning (one per server and command), and the Custom commands page marks it
+  "Rename needed". Rename the command there and it works again. This is checked against the commands
+  Sylo actually has, so it also covers any built-in added later.
 - **No database steps.** Migrations run on start as always, with the usual pre-migration snapshot.
 
 ### Upgrading to 4.10

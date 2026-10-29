@@ -7,7 +7,7 @@
 // latest quotes (src/web/routes/quotes.js).
 //
 // config shape: { publicPage, saveMode: 'everyone' | 'roles', saveRoles, staffRoles }
-import { EmbedBuilder } from 'discord.js';
+import { ChannelType, EmbedBuilder } from 'discord.js';
 import { guildKey } from '../platform/platformOf.js';
 import { fluxerEndpoints } from '../platform/instance.js';
 import { splitPlatformGuildId } from '../lib/platformId.js';
@@ -141,12 +141,23 @@ async function withLock(key, fn) {
   }
 }
 
-/** Could @everyone read this channel (and is it not age-restricted)? Unknown counts as no. */
+const isThread = (channel) => channel?.isThread?.() === true;
+
+/**
+ * Could @everyone read this channel (and is it not age-restricted)? Unknown counts as no.
+ * A thread has no permissions or age restriction of its own: it follows its parent channel, and
+ * a private thread is never public (only its members and moderators can read it).
+ */
 export function isPublicSource(guild, channel) {
   try {
-    if (channel?.nsfw) return false;
+    let source = channel;
+    if (isThread(channel)) {
+      if (channel.type === ChannelType.PrivateThread) return false;
+      source = channel.parent;
+    }
+    if (source?.nsfw) return false;
     const everyone = guild?.roles?.everyone;
-    return Boolean(everyone && channel?.permissionsFor?.(everyone)?.has?.('ViewChannel'));
+    return Boolean(everyone && source?.permissionsFor?.(everyone)?.has?.('ViewChannel'));
   } catch {
     return false;
   }
@@ -203,10 +214,18 @@ export async function saveQuote({ guild, message, savedBy }) {
   });
 }
 
-/** Can this member see the channel? A check that cannot be made counts as no. */
-export function canView(channel, member) {
+/**
+ * Can this member see the channel? A check that cannot be made counts as no. In a thread
+ * `permissionsFor` answers for the parent channel, so a private thread also needs the member to
+ * be in it (or to hold Manage Threads on the parent).
+ */
+export async function canView(channel, member) {
   try {
-    return Boolean(member && channel.permissionsFor?.(member)?.has?.('ViewChannel'));
+    if (!member || !channel?.permissionsFor?.(member)?.has?.('ViewChannel')) return false;
+    if (!isThread(channel) || channel.type !== ChannelType.PrivateThread) return true;
+    if (channel.parent?.permissionsFor?.(member)?.has?.('ManageThreads')) return true;
+    if (channel.members?.cache?.has?.(member.id)) return true;
+    return Boolean(await channel.members?.fetch?.(member.id).catch(() => null));
   } catch {
     return false;
   }
@@ -223,7 +242,8 @@ export async function fetchQuotable({ guild, member, channelId, messageId }) {
   if (!channel?.isTextBased?.() || !channel.messages?.fetch) {
     return fail('Sylo cannot find that channel.');
   }
-  if (!canView(channel, member)) return fail('You cannot see that channel, so you cannot quote from it.');
+  if (!(await canView(channel, member)))
+    return fail('You cannot see that channel, so you cannot quote from it.');
   const message = await channel.messages.fetch(messageId).catch(() => null);
   if (!message)
     return fail('Sylo could not read that message. Is the link right, and can Sylo see the channel?');

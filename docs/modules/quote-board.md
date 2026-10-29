@@ -75,6 +75,12 @@ channel) is only ever shown **in the channel it was saved from**:
   the person who saved it, not the channel.
 - In the source channel itself, all of this works normally and in public.
 
+**Threads** follow their parent channel: a thread of a public channel is a public
+source, a thread of an age-restricted channel is not, and a **private thread** is
+never public (it is only ever shown in that thread). To save a message from a private
+thread with `/quote save <link>`, you have to be a member of the thread (or have
+Manage Threads in its channel).
+
 The dashboard is not limited: staff with Manage Server see and can remove every quote,
 and it marks the private ones "not on the public page". On Fluxer a "private" reply is
 deleted after about 15 seconds.

@@ -26,17 +26,49 @@ function toSlashJSON(cmd) {
   };
 }
 
+/**
+ * The names a custom command may not take: every registered built-in (slash command and context
+ * menu), read from the client so a new built-in is covered without touching a list.
+ * @returns {Set<string>}
+ */
+export function reservedCommandNames(client) {
+  return new Set([...(client?.commands?.keys() ?? []), ...(client?.contextMenus?.keys() ?? [])]);
+}
+
+/** Custom commands in a config whose name is now a built-in (made before that built-in existed). */
+export function collidingCommands(client, cfg) {
+  const reserved = reservedCommandNames(client);
+  return (cfg?.commands ?? []).filter((c) => reserved.has(c.name));
+}
+
+const warned = new Set(); // `${guild}:${name}`, so a sync logs each collision once
+
 /** Push the desired application-command set for one guild. */
 export async function syncGuildCustomCommands(guild) {
-  if (!guild || !guildSupports(guild, 'slashCommands')) return;
-  const { enabled, config: cfg } = await getGuildModule(guildKey(guild), 'custom-commands');
+  if (!guild) return;
+  const key = guildKey(guild);
+  const { enabled, config: cfg } = await getGuildModule(key, 'custom-commands');
 
-  const builtins = config.discordGuildIds.includes(guildKey(guild))
+  // A built-in wins over a custom command of the same name (the interaction goes to the
+  // built-in), so a custom command made before that built-in existed is skipped, not registered.
+  const colliding = enabled ? collidingCommands(guild.client, cfg) : [];
+  for (const c of colliding) {
+    if (warned.has(`${key}:${c.name}`)) continue;
+    warned.add(`${key}:${c.name}`);
+    log.warn(
+      'custom-commands',
+      `guild ${key}: custom command /${c.name} is the name of a built-in command, so it is skipped. Rename it on the dashboard.`
+    );
+  }
+
+  if (!guildSupports(guild, 'slashCommands')) return;
+
+  const builtins = config.discordGuildIds.includes(key)
     ? [...(guild.client.commands?.values() ?? []), ...(guild.client.contextMenus?.values() ?? [])].map((c) =>
         c.data.toJSON()
       )
     : [];
-  const builtinNames = new Set(builtins.map((c) => c.name));
+  const builtinNames = reservedCommandNames(guild.client);
 
   const customs = enabled
     ? (cfg.commands ?? []).filter((c) => !builtinNames.has(c.name)).map(toSlashJSON)
@@ -45,7 +77,7 @@ export async function syncGuildCustomCommands(guild) {
   try {
     await guild.commands.set([...builtins, ...customs]);
   } catch (err) {
-    log.error('custom-commands', `slash sync failed for guild ${guildKey(guild)}:`, err.message);
+    log.error('custom-commands', `slash sync failed for guild ${key}:`, err.message);
   }
 }
 

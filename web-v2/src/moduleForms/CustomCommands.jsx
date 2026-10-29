@@ -450,6 +450,12 @@ export default function CustomCommands() {
                     {c.allowedRoles.length || c.allowedChannels.length ? ' · restricted' : ''}
                     {c.cooldownSeconds ? ` · ${c.cooldownSeconds}s cooldown` : ''}
                   </p>
+                  {c.reserved ? (
+                    <p className="v2-note">
+                      Rename needed: /{c.name} is now a built-in command, so this command is switched off
+                      until you give it another name.
+                    </p>
+                  ) : null}
                   {editingId === c.id ? (
                     <CommandForm
                       initial={c}
