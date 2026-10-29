@@ -5,7 +5,7 @@ import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 
-// The server's config-change history — the classic dashboard's Audit log page.
+// The server's config-change history.
 export default function AuditLog() {
   const { guildId } = useParams();
   const { data, error } = useApiData(() => getAuditLog(guildId), [guildId]);

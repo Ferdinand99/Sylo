@@ -10,9 +10,11 @@ Conventions used (still current):
 - Branch per workstream → PR into `main`; `npm test` + `npm run lint` +
   `docker compose up -d --build` green before a PR is ready; one commit per chunk
   with a Conventional-Commit summary (release-please derives the version).
-- New module ⇒ `registry.js` + `modules/index.js` + config view + `CONFIG_VIEWS`
-  + `MODULE_ICONS` + `#i-<name>` sprite + `sidebarNav.js` + `overviewSummary.js`
-  + `docs/modules/`.
+- New module ⇒ the checklist in [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-module):
+  module file (`on()`, `every()`/`after()`, `LIMITS` + `normalise…Config`) +
+  `registry.js` + `modules/index.js` + V2 form and `/api/v2` config pair +
+  `MODULE_ICONS` + `ModuleSymbol.swift` + `overviewSummary.js` + `docs/modules/`
+  + tests.
 - New guild-scoped table ⇒ `GUILD_TABLES` (a test enforces it); add to
   `forgetUser` / `describeUserData` if it holds per-user data.
 
@@ -48,7 +50,7 @@ went 27 → 30 (Kick = 28th, RSS = 29th, insights = 30th).
 ### 1 — Dashboard UX polish → 3.6.0 (`feat/dashboard-ux`)
 
 Four independent pieces, shipped together, all as planned: module search/filter
-(Alpine, on the overview grid and the sidebar), a light theme + header toggle
+(client-side, on the overview grid and the sidebar), a light theme + header toggle
 (`:root[data-theme]` + `prefers-color-scheme`, remembered in `localStorage`, read
 in the no-flash `<head>` script), a per-module **Send test** button
 (`POST /:guildId/m/:moduleId/test`), and bulk enable/disable on the overview
@@ -202,7 +204,7 @@ Second game after Battlefield. One `feat` minor.
 - New `src/adapters/games/runescape.js` — OSRS **and** RS3, off Jagex's official
   Hiscores `index_lite.json` (no key). Same `{skills[], activities[]}` shape for
   both; `-1` means unranked. Combat level isn't in the feed, so it's computed
-  (classic OSRS formula / post-EoC RS3 formula).
+  (original OSRS formula / post-EoC RS3 formula).
 - Reuses the **`platform` slot for the account type** — `main` / `ironman` /
   `hardcore` / `ultimate` (OSRS only) — so `runStatsLookup`, the cache key and
   the registry are untouched. Wise Old Man / RuneMetrics skipped: the Hiscores
@@ -1651,7 +1653,10 @@ grant (`internal/discord-server-plan.md`'s guild-wide table), which is all
 
 ---
 
-## Next — YouTube alerts: WebSub push instead of polling (planned, not started)
+## YouTube alerts: WebSub push instead of polling (built in 5.0)
+
+This section is the original plan. It shipped in Sylo 5.0: with a public https `DASHBOARD_URL`,
+Sylo subscribes to the hub and announces pushed videos; otherwise it keeps polling.
 
 **Origin:** issue #178 ("YouTube alerts stopped working"). The actual bug
 turned out to be unrelated to polling — a scraping helper (`grab()`, shared

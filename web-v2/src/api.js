@@ -1,6 +1,5 @@
-// Thin fetch wrapper for /api/v2/*. Same-origin, so the existing cookie-
-// session from V1's Discord login is sent automatically — no separate V2
-// auth. The access checks answer /api/ requests with JSON (401 when signed
+// Thin fetch wrapper for /api/v2/*. Same-origin, so the cookie session from the
+// Discord/Fluxer login is sent automatically — no separate API auth. The access checks answer /api/ requests with JSON (401 when signed
 // out); a redirect or non-JSON answer is still handled, for safety.
 export class ApiError extends Error {
   constructor(message, { status, notAuthenticated = false } = {}) {
@@ -250,7 +249,7 @@ export const saveCustomCommand = (guildId, body) =>
 export const deleteCustomCommand = (guildId, id) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/custom-commands/cmd/${id}/delete`, {});
 
-// Staff pages that used to exist only in V1 (see src/web/routes/v2Staff.js).
+// Staff pages: tickets, appeals, moderation (see src/web/routes/v2Staff.js).
 const g = (guildId) => `/api/v2/guilds/${gid(guildId)}`;
 export const getTickets = (guildId) => apiFetch(`${g(guildId)}/tickets`);
 export const getTicket = (guildId, id) => apiFetch(`${g(guildId)}/tickets/${id}`);

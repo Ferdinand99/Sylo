@@ -3,8 +3,7 @@ import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
-// Per-type ref field label/placeholder — mirrors V1's client-side HINTS map
-// (rss.ejs's inline script) exactly, same wording.
+// Per-type ref field label/placeholder.
 const HINTS = {
   url: ['Feed URL', 'https://example.com/feed.xml'],
   reddit: ['Subreddit or user', 'r/programming or u/spez'],

@@ -571,9 +571,8 @@ a {
   margin: 0;
 }
 
-/* Body layout: persistent sidebar (every page, not just guild ones — matches
-   V1 always showing its top nav regardless of whether a server is picked)
-   plus the content column. */
+/* Body layout: persistent sidebar (every page, not just guild ones, whether or
+   not a server is picked) plus the content column. */
 .v2-body {
   flex: 1;
   display: flex;
@@ -1132,7 +1131,7 @@ a.v2-row:active {
 }
 
 /* Embed message builder (MessageBuilder.jsx) — a compact image-picker button
-   (a prompt() for the URL, same as V1's, rather than a full upload UI) and a
+   (a prompt() for the URL, rather than a full upload UI) and a
    name field styled to read as a page title, not a form field. */
 .v2-mb-name {
   background: none;
@@ -1761,7 +1760,7 @@ a.v2-row:active {
   cursor: not-allowed;
 }
 
-/* Toggle switch — replaces V1's pill button. Used both as a read-only
+/* Toggle switch — a pill switch. Used both as a read-only
    <span> (Overview's module rows) and a real <button> (Leaderboard's public
    switch), hence the padding/font reset. Size, colours, knob and motion
    live in forms.css (Switch). */
@@ -2155,8 +2154,7 @@ textarea:disabled {
 }
 /* ChipPicker.jsx — replaces a native <select multiple> (needs ctrl/cmd-
    click to pick more than one, not discoverable) with removable chips
-   plus a single-select "add" dropdown. Ports V1's .role-picker/.role-chip
-   (styles.css) to V2's tokens. */
+   plus a single-select "add" dropdown. */
 .v2-chip-picker {
   display: flex;
   flex-direction: column;
@@ -2269,8 +2267,7 @@ textarea:disabled {
   display: block;
 }
 
-/* Insights.jsx — ports V1's hand-rolled SVG bar/line charts (ins-* in
-   V1's styles.css) onto V2's tokens rather than pulling in a charting
+/* Insights.jsx — hand-rolled SVG bar/line charts (ins-*) on V2's tokens rather than pulling in a charting
    library for six small sparkline-style charts. */
 .v2-ins-range {
   display: flex;
@@ -2645,8 +2642,7 @@ textarea:disabled {
 }
 
 /* components/Announcement.jsx: bot-wide notice from Bot Personalizer. A
-   tinted surface per severity, same convention V1 uses (.banner.ok/.bad),
-   so the severity reads at a glance — plus a dot in the severity colour.
+   tinted surface per severity, so the severity reads at a glance — plus a dot in the severity colour.
    The text itself stays --text / --text-muted: the old severity-coloured
    text dropped under 4.5:1 on its own tint in the light theme. */
 .v2-announcement {

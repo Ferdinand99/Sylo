@@ -139,7 +139,7 @@ To require a login on Fluxer:
    `https://sylo.example.com/auth/fluxer/callback`, or
    `http://localhost:3000/auth/fluxer/callback` locally. It has to match
    `DASHBOARD_URL` exactly, including `https` behind a reverse proxy.
-3. Set a long random `SESSION_SECRET`.
+3. `SESSION_SECRET` is optional: Sylo keeps its own in `<data>/session-secret` unless you set one.
 4. Put your own Fluxer user id in `FLUXER_OWNER_IDS`. Without it nobody can open
    `/health`.
 
@@ -246,7 +246,7 @@ Two things to know about modules that reach outside Fluxer:
 
 Discord servers keep their plain numeric id everywhere (database rows, dashboard
 URLs, API). Fluxer servers are written `fluxer:<id>`, for example
-`/guilds/fluxer:1554951170231894016/overview`. You only meet this in dashboard
+`/v2/guilds/fluxer:1554951170231894016`. You only meet this in dashboard
 addresses, the API and the database. It is what keeps a Discord and a Fluxer server
 with the same number apart.
 

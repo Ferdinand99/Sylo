@@ -3,7 +3,7 @@ import { getPublicCommands } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import LoadError from '../components/LoadError.jsx';
 
-// The reference of Sylo's slash commands, the same list the classic /commands page shows. Public:
+// The reference of Sylo's slash commands. Public:
 // it works without signing in and reads only /api/v2/public/commands. (Turning commands off for a
 // server is the per-server Commands tab on the Moderation page, not this.)
 export default function CommandList() {

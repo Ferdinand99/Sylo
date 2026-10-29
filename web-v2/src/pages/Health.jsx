@@ -77,8 +77,7 @@ export default function Health() {
   }, []);
 
   // After a restore is triggered, the process exits and restarts — poll
-  // /api/v2/health until it answers again, then reload. Mirrors V1's
-  // restoring.ejs, which does the same thing against GET /health.
+  // /api/v2/health until it answers again, then reload.
   useEffect(() => {
     if (!restoring) return undefined;
     const id = setInterval(() => {

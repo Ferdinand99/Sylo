@@ -47,7 +47,7 @@ const embedIsEmpty = (e) =>
 /**
  * Coerce stored/submitted config into the canonical shape. `prev` is the
  * currently-stored config, consulted only for each row's bot-managed
- * lastMessageId — callers on both the V1 and V2 dashboard routes already
+ * lastMessageId — callers (the dashboard's save route) already
  * have it at hand, so it's a plain param rather than a DB read in here.
  */
 export function normaliseStickyConfig(raw = {}, prev = {}) {

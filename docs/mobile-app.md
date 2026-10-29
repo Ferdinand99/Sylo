@@ -2,7 +2,7 @@
 
 A native iOS app (SwiftUI, source in `apps/sylo-ios`) that signs in to a Sylo
 instance, the hosted one or your own, and manages your servers through the same
-JSON API the new dashboard uses. This page covers what a self-hosted instance
+JSON API the dashboard uses. This page covers what a self-hosted instance
 needs for the app to work, and how the app's sign-in works for anyone reading or
 reviewing it.
 

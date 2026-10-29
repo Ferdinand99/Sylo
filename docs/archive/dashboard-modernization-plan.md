@@ -1,3 +1,5 @@
+Archived: describes the classic dashboard removed in 5.0.
+
 # Dashboard modernization plan
 
 Status: **Phase 0 done** · Owner: Ferdinand99 · Created 2026-09-01 (Sylo 3.0.0)

@@ -1,7 +1,7 @@
 // Owner-only modules (registry `ownerOnly`, e.g. App Store Connect): a request that targets one
 // is refused unless the signed-in account is a Sylo operator (OWNER_IDS / FLUXER_OWNER_IDS). It
 // matches any /m/<id>[/...] or /modules/<id>[/...] path, so a settings page, a config save, a
-// toggle or a test message are all covered, in the classic and the V2 dashboard. A bulk toggle
+// toggle or a test message are all covered. A bulk toggle
 // is filtered inside its handler. Hiding the module in menus is cosmetic; this is the check.
 //
 // Express matches routes case-insensitively and decodes %xx in route params, but `req.path` is

@@ -1,8 +1,6 @@
-// JSON API for the V2 dashboard SPA (web-v2/). Mounted at /api/v2, entirely
+// JSON API for the dashboard SPA (web-v2/). Mounted at /api/v2, entirely
 // after the app-wide requireAuth (src/web/server.js), so every route here
-// already has a signed-in req.session.user — same cookie-session V1 uses,
-// nothing new. Read-only reuse of V1's data-layer functions (baseContext,
-// getGuild, requireGuildAdmin) — none of them are modified by this file.
+// already has a signed-in req.session.user from the cookie session.
 import { accountDevices, accountPlatforms } from '../lib/accountView.js';
 import { revokeApiToken } from '../../db/apiTokens.js';
 import { deleteAccount, unlinkIdentity } from '../../db/accounts.js';
@@ -246,9 +244,9 @@ import { sendDevLogTest } from '../../lib/devLog.js';
 const require = createRequire(import.meta.url);
 const { version } = require('../../../package.json');
 
-// Same budget as V1's /health equivalent (src/web/routes/health.js) — a
-// stuck script shouldn't be able to fill the disk or thrash restarts. Keyed
-// by mount path + IP, so this is an independent bucket from V1's, not shared.
+// Same budget as the /health routes (src/web/routes/health.js) — a stuck script
+// shouldn't be able to fill the disk or thrash restarts. Keyed by mount path + IP, so this is
+// an independent bucket from /health's, not shared.
 const backupLimit = rateLimit({
   windowMs: 60_000,
   max: 12,
@@ -257,8 +255,7 @@ const backupLimit = rateLimit({
 
 const router = Router();
 
-// Mirrors guilds.js's private moderatorDisplayName() — used for audit-log
-// "actor" strings, same convention V1 uses.
+// The name written into audit-log "actor" strings.
 function moderatorDisplayName(req) {
   return currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`;
 }
@@ -272,8 +269,8 @@ function parseUserId(raw) {
   return m ? m[1] || m[2] : null;
 }
 
-// Same list V1's server switcher and "Choose a server" picker use
-// (src/web/middleware/auth.js:129) — the SPA's own guild picker.
+// The servers the signed-in person can manage — the server switcher and the "Choose a server"
+// picker (see src/web/middleware/auth.js).
 router.get(
   '/guilds',
   asyncHandler(async (req, res) => {
@@ -392,14 +389,13 @@ router.use('/guilds/:guildId', guildDataRouter);
 // what the platform cannot do) and the per-module notes (what behaves differently there).
 router.get('/guilds/:guildId/platform', (req, res) => res.json(platformInfo(req.guild)));
 
-// Custom emojis for the reaction-role emoji picker (the classic dashboard's /guilds/:id/emojis).
+// Custom emojis for the reaction-role emoji picker (custom emojis of the server).
 router.get('/guilds/:guildId/emojis', (req, res) => res.json({ custom: guildCustomEmojis(req.guild) }));
 
 router.get(
   '/guilds/:guildId/overview',
   asyncHandler(async (req, res) => {
-    // baseContext for the guild/ticket/appeal summary; buildOverview (the
-    // same view-model V1's own "Combined Overview" page uses, see
+    // baseContext for the guild/ticket/appeal summary; buildOverview (see
     // src/web/lib/overviewSummary.js) for the category-grouped module cards
     // — reused wholesale rather than re-deriving the same grouping here.
     const [{ guild, openTickets, openAppeals }, { groups }] = await Promise.all([
@@ -454,10 +450,8 @@ router.post(
   })
 );
 
-// Toggle a module on/off — mirrors guilds.js:2671-2721 (minus the htmx
-// branch, this is a plain JSON API). Same per-module side effects on
-// enable/disable as V1: re-sync custom commands, prime the invite-tracker
-// cache, push/tear down automod's native Discord AutoMod rules.
+// Toggle a module on/off. Per-module side effects on enable/disable: re-sync custom commands,
+// prime the invite-tracker cache, push/tear down automod's native Discord AutoMod rules.
 router.post(
   '/guilds/:guildId/modules/:moduleId',
   asyncHandler(async (req, res) => {
@@ -509,13 +503,9 @@ router.post(
 );
 
 // --- Per-module config ------------------------------------------------------
-// One GET+POST pair per module, added as each gets a real V2 form (see
-// web-v2/src/moduleForms/) — mirrors guilds.js's shared `/m/:moduleId/config`
-// route (guilds.js:1014 on), which handles all 32 modules in one big
-// if/else keyed on form-encoded field names. There's no way to generalise
-// that across modules (every module's config shape and field names are
-// different), so each gets its own small pair here instead, same as
-// Leaderboard/Settings/Personalizer/Health already do.
+// One GET+POST pair per module with a form (see web-v2/src/moduleForms/). There's no way to
+// generalise that across modules (every module's config shape and field names are different),
+// so each gets its own small pair here, as the Leaderboard/Settings/Personalizer/Health pages do.
 
 router.get(
   '/guilds/:guildId/modules/afk/config',
@@ -616,7 +606,7 @@ router.post(
   })
 );
 
-// A PNG of the welcome image with a sample member and the saved background (same as classic).
+// A PNG of the welcome image with a sample member and the saved background .
 router.get(
   '/guilds/:guildId/modules/welcome/card-preview',
   asyncHandler((req, res) => sendWelcomeCardPreview(req.guild, res))
@@ -716,8 +706,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     // messageId and triggerCount are bot-managed — never trust whatever the
-    // client echoes back, re-derive both server-side by channelId, same as
-    // the V1 form branch.
+    // client echoes back, re-derive both server-side by channelId.
     const prev = (await getGuildModule(guild.id, 'honeypot')).config;
     const prevMsgByChannel = new Map((prev.messages ?? []).map((m) => [m.channelId, m]));
     const prevChanByChannel = new Map((prev.channels ?? []).map((c) => [c.channelId, c]));
@@ -891,7 +880,7 @@ router.post(
   '/guilds/:guildId/modules/auto-react/config',
   asyncHandler(async (req, res) => {
     // The form sends a raw "target users" string per rule (IDs/@mentions,
-    // space/comma separated), same as V1's rx_users field — split it into
+    // space/comma separated) — split it into
     // ids here rather than pushing that parsing into the React form.
     const rules = Array.isArray(req.body.rules) ? req.body.rules : [];
     const config = normaliseAutoReact({
@@ -971,8 +960,7 @@ router.get(
 );
 
 // Immunity roles: members with one of these are never touched by auto-moderation
-// or the warning auto-actions. Patches only automod's exemptRoles, like V1's
-// Moderator -> Admin tab.
+// or the warning auto-actions. Patches only automod's exemptRoles.
 router.post(
   '/guilds/:guildId/modules/automod/immunity',
   asyncHandler(async (req, res) => {
@@ -994,8 +982,8 @@ router.post(
 router.post(
   '/guilds/:guildId/modules/automod/config',
   asyncHandler(async (req, res) => {
-    // Immunity (exempt) roles are managed on the Admin tab, not this form —
-    // keep whatever is already stored, same as V1's guilds.js.
+    // Immunity (exempt) roles are saved through their own route (/automod/immunity), not this
+    // form — keep whatever is already stored.
     const prev = (await getGuildModule(req.guild.id, 'automod')).config;
     const config = normaliseAutomodConfig({
       deleteMessage: true,
@@ -1044,8 +1032,8 @@ router.post(
   '/guilds/:guildId/modules/sticky/config',
   asyncHandler(async (req, res) => {
     // lastMessageId is bot-managed (the currently-posted sticky message per
-    // channel) — carried over from the previous config by channelId, same
-    // as V1's guilds.js, rather than letting the form touch it.
+    // channel) — carried over from the previous config by channelId, rather than letting the
+    // form touch it.
     const prev = (await getGuildModule(req.guild.id, 'sticky')).config;
     const config = normaliseStickyConfig({ stickies: req.body.stickies }, prev);
     await setGuildModule(req.guild.id, 'sticky', { config });
@@ -1104,8 +1092,8 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/autoresponder/config',
   asyncHandler(async (req, res) => {
-    // embedColor isn't exposed on this form — same as V1, which never sends
-    // it either, so normaliseAutoresponder's default applies on every save.
+    // embedColor isn't exposed on this form, so normaliseAutoresponder's default applies on
+    // every save.
     const config = normaliseAutoresponder({
       cooldownSeconds: req.body.cooldownSeconds,
       ignoreChannels: req.body.ignoreChannels,
@@ -1319,8 +1307,8 @@ router.post(
     const config = normaliseStarboard({ boards: withRowIds(req.body.boards) });
     const prev = normaliseStarboard((await getGuildModule(req.guild.id, 'starboard')).config);
     await setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
-    // A board the person removed takes the record of its starboard posts with it, like the classic
-    // delete — but only when the form names it in `removedBoardIds`, and never for a board that is
+    // A board the person removed takes the record of its starboard posts with it,
+    // but only when the form names it in `removedBoardIds`, and never for a board that is
     // still in the saved list. A board that merely went missing from the list (a stale tab) keeps
     // its records.
     const kept = new Set(config.boards.map((b) => b.id));
@@ -1334,7 +1322,7 @@ router.post(
       detail: 'settings saved',
     });
     // Catch up on messages that already clear a just-lowered bar (or a new board's) —
-    // queued in the background, one rescan per server at a time, same as V1's save route.
+    // queued in the background, one rescan per server at a time.
     for (const board of boardsToRescan(prev.boards, config.boards)) scheduleRescan(req.guild, board);
     res.json({
       config: { boards: config.boards.map((b) => ({ ...b, emojiText: boardEmojiText(b, req.guild) })) },
@@ -1385,9 +1373,9 @@ router.get(
 );
 
 // A channel is given as a raw @handle/URL the client never resolves itself
-// (mirrors guilds.js's V1 branch) — resolveYtChannel does a live network
+// — resolveYtChannel does a live network
 // fetch, so this route can be slow; the previously-resolved ytChannelId/name
-// are carried forward (same UC_RE re-check V1 does) when the input field is
+// are carried forward (same UC_RE re-check) when the input field is
 // left blank on an already-resolved row, so re-saving other rows doesn't
 // force a re-resolve of ones that didn't change.
 router.post(
@@ -1474,8 +1462,8 @@ router.post(
 );
 
 // No POST route — this module has nothing to configure beyond the
-// enable/disable toggle every module already gets. Read-only, matching
-// V1's game-stats.ejs (command docs + the shared lookup cache).
+// enable/disable toggle every module already gets. Read-only (command docs + the shared lookup
+// cache).
 router.get(
   '/guilds/:guildId/modules/game-stats/config',
   asyncHandler(async (req, res) => {
@@ -2304,7 +2292,7 @@ router.get(
 
     res.json({
       ready,
-      // Every connected bot, as on the classic Health page ("Sylo#9455 · Sylo#4291").
+      // Every connected bot, as on the Health page ("Sylo#9455 · Sylo#4291").
       botTag:
         platforms
           .map((p) => p.tag)
@@ -2349,7 +2337,7 @@ router.get(
   })
 );
 
-// The game-stats lookup cache, as the classic /stats page lists it: operators only, newest 50.
+// The game-stats lookup cache, as the Stats page lists it: operators only, newest 50.
 router.get(
   '/stats',
   requireOwner,
@@ -2386,7 +2374,7 @@ router.post('/health/dev-log-error-test', requireOwner, backupLimit, (req, res) 
   res.json({ ok: true });
 });
 
-// Download a snapshot (the same strict name check and attachment headers as classic /health/backups/:name).
+// Download a snapshot (the same strict name check and attachment headers as /health/backups/:name).
 router.get('/health/backups/:name', requireOwner, backupLimit, (req, res) => {
   if (!isBackupName(req.params.name)) return res.status(400).json({ error: 'invalid backup name' });
   const stream = openBackup(req.params.name);
@@ -2429,7 +2417,7 @@ router.post(
 );
 
 // Restores, then exits the process so the container/process manager restarts
-// Sylo on the restored data — same as V1. Responds first so the request
+// Sylo on the restored data. Responds first so the request
 // doesn't hang while the process is going down.
 router.post(
   '/health/backups/:name/restore',
@@ -2449,11 +2437,8 @@ router.post(
   })
 );
 
-// --- Roadmap (mirrors src/web/routes/roadmap.js's V1 pages in full — bot-
-// wide, not per-guild, same as Health/Personalizer above. The vote/suggest
-// rate limiters are the *same* instances V1 uses (src/web/lib/roadmapLimits.js,
-// not re-created here) so a user can't double their effective limit by
-// switching between the V1 and V2 UI. The public read-only list is
+// --- Roadmap (bot-wide, not per-guild, same as Health/Personalizer above). The vote/suggest
+// rate limiters live in src/web/lib/roadmapLimits.js. The public read-only list is
 // GET /api/v2/public/roadmap (v2Public.js); this one returns the same view.)
 
 function withRoadmapHtml(p) {

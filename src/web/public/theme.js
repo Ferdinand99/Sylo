@@ -1,7 +1,7 @@
 // Sets the colour theme of the public pages before first paint. Loaded from <head> as a plain
 // (blocking) script, so a saved light choice does not flash dark first. The dashboard (/v2) keeps
 // the choice in localStorage['sylo:v2:theme'] ('light' or 'dark'; dark is the default look). If that
-// is empty, the old classic dashboard's 'sylo:theme' is used once and copied over; the old key is
+// is empty, the key 'sylo:theme' from before 5.0 is used once and copied over; the old key is
 // left alone.
 (function () {
   var root = document.documentElement;

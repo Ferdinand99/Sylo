@@ -3,15 +3,12 @@ import EmbedCard, { autoGrow, newKey } from './EmbedCard.jsx';
 import { initial } from '../util.js';
 import { limitOf } from './useModuleLimits.js';
 
-// Shared single-embed editor — the V2 counterpart to V1's Alpine
-// `embedEditor` (src/web/public/alpine-components.js, `partials/embed-editor.ejs`),
-// now built on the same Discord-message-preview card as the Embed messages
-// builder (components/EmbedCard.jsx) instead of a second, plainer look.
-// Same data model and feature flags (content/author/description/fields/thumb/
-// footerIcon/footerKey/defaultColor/vars/placeholders) V1's editor exposed.
+// Shared single-embed editor, built on the same Discord-message-preview card as the Embed
+// messages builder (components/EmbedCard.jsx).
+// Data model and feature flags: content/author/description/fields/thumb/
+// footerIcon/footerKey/defaultColor/vars/placeholders.
 //
-// Owns its own working state, seeded once from the `spec` prop (like V1's
-// `s = cfg.spec` — a starting value, not a controlled prop kept in sync on
+// Owns its own working state, seeded once from the `spec` prop (a starting value, not a controlled prop kept in sync on
 // every keystroke) — `onChange` is called with the fully server-ready
 // serialized object on every edit, the same shape normaliseXxx() functions
 // already expect, so the parent form just stores whatever comes back.
@@ -81,7 +78,7 @@ export default function EmbedEditor({
 }) {
   const opts = { content, author, description, fields, thumb, footerIcon, footerKey, timestamp };
   const [e, setE] = useState(() => initialState(spec, { footerKey, defaultColor }));
-  // Mirrors V1's Alpine `_last` — inserted tokens go into whichever field the
+  // Inserted tokens go into whichever field the
   // user last focused (title/author/description/footer/content), not a
   // fixed spot, since every consumer (polls, welcome-channel, …) customises
   // a different mix of those fields.

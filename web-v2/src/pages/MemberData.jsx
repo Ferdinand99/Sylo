@@ -9,8 +9,8 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 
-// Look up what Sylo stores about one member in this server and delete it on request — the
-// classic dashboard's Member data page. Moderation cases and other safety records are kept.
+// Look up what Sylo stores about one member in this server and delete it on request.
+// Moderation cases and other safety records are kept.
 export default function MemberData() {
   const { guildId } = useParams();
   const [params, setParams] = useSearchParams();

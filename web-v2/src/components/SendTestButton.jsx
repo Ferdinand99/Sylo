@@ -7,8 +7,7 @@ import { useOverview } from '../OverviewContext.jsx';
 /**
  * "Send test message" for a module that posts to one configured channel (the
  * server's TESTABLE set in src/bot/lib/moduleTest.js). The server sends from
- * the SAVED config, so pass `disabled` while the form has unsaved edits. Like
- * V1, it only shows while the module is on (read from the shared overview).
+ * the SAVED config, so pass `disabled` while the form has unsaved edits. It only shows while the module is on (read from the shared overview).
  */
 export default function SendTestButton({ moduleId, disabled = false }) {
   const { guildId } = useParams();

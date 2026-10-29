@@ -122,10 +122,8 @@ if (shardCountRaw !== 'auto') {
   }
 }
 
-// Hosted-only, opt-in Postgres driver (see docs/roadmap.md — "Postgres
-// migration line"). Unset (the default) — and every self-hosted deployment —
-// keeps today's SQLite path untouched. Currently READ-ONLY: nothing in
-// src/db/ consults it yet; that lands in a follow-up PR.
+// Opt-in Postgres driver (docs/postgres.md). Unset (the default) keeps the SQLite path. When
+// set, every data-access file in src/db/ runs on Postgres, and CI tests both drivers.
 const databaseUrl = optionalOrNull('DATABASE_URL');
 if (databaseUrl && !/^postgres(ql)?:\/\//i.test(databaseUrl)) {
   console.error('[config] DATABASE_URL must start with postgres:// or postgresql://.');

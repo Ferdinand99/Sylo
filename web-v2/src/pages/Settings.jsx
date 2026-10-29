@@ -55,7 +55,7 @@ export default function Settings() {
     }
   }
 
-  // Same file as the classic dashboard's "Export configuration" download.
+  // The "Export configuration" download.
   async function onExport() {
     setExporting(true);
     try {

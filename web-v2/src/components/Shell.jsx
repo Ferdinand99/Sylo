@@ -17,7 +17,7 @@ import useTopbarScrolled from './useTopbarScrolled.js';
 
 // Top-level layout for every V2 page: topbar (brand, server switcher — kept
 // out of the sidebar per request, it's app-wide not tied to one guild page —
-// and the link back to V1) plus the persistent left sidebar (Sidebar.jsx).
+// and the account menu) plus the persistent left sidebar (Sidebar.jsx).
 // Fetches the guild list once and hands it down via Outlet context so
 // GuildPicker doesn't need its own separate fetch of the same list.
 function SignedInShell() {

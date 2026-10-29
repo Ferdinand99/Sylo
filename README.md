@@ -94,8 +94,7 @@ flowchart LR
   end
 
   subgraph clients["Clients"]
-    V1["Classic dashboard<br/>EJS + htmx (retiring in 5.0)"]
-    V2["Dashboard V2<br/>React"]
+    V2["Dashboard<br/>React"]
     IOS["Sylo iOS app"]
   end
 
@@ -117,8 +116,7 @@ flowchart LR
   MOD -->|polls| FEEDS
   GH -->|webhooks| WEB
 
-  V1 -->|"Discord / Fluxer OAuth"| WEB
-  V2 -->|"/api/v2"| WEB
+  V2 -->|"Discord / Fluxer OAuth<br/>/api/v2"| WEB
   IOS -->|"PKCE sign-in<br/>/api/v2 · /api/mobile"| WEB
 
   MOD -->|tickets| PUSH
@@ -211,7 +209,7 @@ The dashboard is then on `http://<host>:3000` (`WEB_PORT`).
 | `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` | Running on Discord (Developer Portal → Bot / General Information) |
 | `FLUXER_TOKEN`, `FLUXER_CLIENT_ID` | Running on Fluxer, instead of or next to Discord ([docs/fluxer.md](docs/fluxer.md)) |
 | `DISCORD_CLIENT_SECRET` | "Log in with Discord" on the dashboard. Without a client secret the dashboard runs **open** |
-| `SESSION_SECRET` | Keeping logins across restarts (any long random string) |
+| `SESSION_SECRET` | Optional. Sylo makes one and keeps it in `<data>/session-secret`, so logins survive restarts; set this only to use your own long random string |
 | `DASHBOARD_URL` | The public URL behind a reverse proxy; also used for captcha and appeal links |
 | `OWNER_IDS` | Your Discord user id(s); limits `/health` and the bot-wide pages to you |
 
@@ -238,7 +236,7 @@ in [docs/grafana-dashboard.json](docs/grafana-dashboard.json). See
 
 **Sylo – Server Manager** is a native SwiftUI app (source in
 [`apps/sylo-ios`](apps/sylo-ios)) that signs in to the hosted Sylo or your own
-instance and manages your servers through the same API as the new dashboard,
+instance and manages your servers through the same API as the dashboard,
 with push notifications for new tickets. It is in public beta on TestFlight and
 not on the App Store yet: [join the beta](https://testflight.apple.com/join/6FXxPjxu).
 
@@ -250,15 +248,12 @@ endpoints, tokens and permissions: [docs/mobile-app.md](docs/mobile-app.md).
 ## Dashboard
 
 - **[Dashboard](docs/dashboard-v2.md).** A React single-page app at `/v2`, the
-  default since 4.10. It covers every module, the builders for embeds, reaction
+  only dashboard since 5.0. Old dashboard links open the matching page in it. It covers every module, the builders for embeds, reaction
   roles, custom commands and the welcome channel, tickets, moderation, appeals,
   insights and the operator pages. The command list and the roadmap are public.
-- **Classic dashboard (retiring).** The older server-rendered EJS + htmx
-  dashboard is still reachable at `/?classic=1` until Sylo 5.0, when it is
-  removed. Old dashboard links open the matching page in the new dashboard.
 - **Public pages.** Shareable leaderboards (`/leaderboard/:id`, `/lb/:slug`),
-  member verification (`/verify`) and ban appeals (`/appeal`). These pages use
-  no JavaScript framework.
+  member verification (`/verify`) and ban appeals (`/appeal`). These pages are
+  server-rendered and use no JavaScript framework.
 
 ## Development
 

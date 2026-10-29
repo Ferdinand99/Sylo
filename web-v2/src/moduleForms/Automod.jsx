@@ -14,7 +14,7 @@ const MODE_LABELS = {
   warn: 'Delete + Warn',
   timeout: 'Delete + Timeout',
 };
-// Rules with an extra "Settings" panel — same set as V1's automod.ejs.
+// Rules with an extra "Settings" panel .
 const WITH_PARAMS = new Set(['links', 'spam', 'mentions', 'caps', 'words', 'emojis', 'spoilers']);
 const PRESET_LABELS = { profanity: 'Profanity', sexual: 'Sexual content', slurs: 'Slurs' };
 

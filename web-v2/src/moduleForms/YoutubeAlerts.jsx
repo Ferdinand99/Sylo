@@ -17,8 +17,7 @@ function notifyOf(a) {
 // The channel field is a raw @handle/URL the server resolves on save
 // (resolveYtChannel — a live network fetch), not something picked from a
 // list — `input` starts pre-filled from the already-resolved name/id so
-// re-saving without touching this field doesn't force a re-resolve
-// (mirrors src/web/views/guild/modules/youtube-alerts.ejs exactly).
+// re-saving without touching this field doesn't force a re-resolve.
 function toFormRow(a = {}) {
   return {
     key: newKey(),
