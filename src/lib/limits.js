@@ -7,6 +7,8 @@ export const LIMITS = Object.freeze({
   cleanupSchedules: 25,
   githubWatches: 25,
   composedMessages: 200,
+  events: 50,
+  eventParticipants: 500,
 });
 
 export class LimitError extends Error {

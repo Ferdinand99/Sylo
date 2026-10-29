@@ -977,6 +977,42 @@ export const MIGRATIONS = [
       CREATE INDEX idx_youtube_websub_lease ON youtube_websub (lease_expires_at);
     `);
   },
+
+  // Events (src/db/events.js, which bootstraps the same tables on Postgres): a row per event and a
+  // row per member who signed up.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_events (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id         TEXT NOT NULL,
+        channel_id       TEXT NOT NULL,
+        message_id       TEXT,
+        title            TEXT NOT NULL,
+        description      TEXT NOT NULL DEFAULT '',
+        location         TEXT NOT NULL DEFAULT '',
+        image_url        TEXT NOT NULL DEFAULT '',
+        start_at         INTEGER NOT NULL,
+        end_at           INTEGER,
+        time_zone        TEXT NOT NULL DEFAULT 'UTC',
+        capacity         INTEGER,
+        role_id          TEXT,
+        reminder_minutes INTEGER NOT NULL DEFAULT 0,
+        reminder_sent    INTEGER NOT NULL DEFAULT 0,
+        host_id          TEXT NOT NULL,
+        state            TEXT NOT NULL DEFAULT 'scheduled',
+        created_at       INTEGER NOT NULL
+      );
+      CREATE INDEX idx_guild_events_guild ON guild_events (guild_id, state, start_at);
+      CREATE TABLE guild_event_participants (
+        event_id   INTEGER NOT NULL,
+        user_id    TEXT NOT NULL,
+        status     TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (event_id, user_id)
+      );
+      CREATE INDEX idx_guild_event_participants_user ON guild_event_participants (user_id);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

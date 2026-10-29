@@ -52,6 +52,7 @@ import './channelCleanup.js';
 import './honeypotCatches.js';
 import './componentReactions.js';
 import './verificationKicks.js';
+import './events.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -91,6 +92,7 @@ export const GUILD_TABLES = [
   'honeypot_catches',
   'component_reactions',
   'verification_kicks',
+  'guild_events',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -100,11 +102,15 @@ const ticketMsgStmt = prepare(
 const giveawayEntryStmt = prepare(
   'DELETE FROM giveaway_entries WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)'
 );
+const eventParticipantStmt = prepare(
+  'DELETE FROM guild_event_participants WHERE event_id IN (SELECT id FROM guild_events WHERE guild_id = ?)'
+);
 
 /** Remove all of a guild's stored data. */
 export async function purgeGuild(guildId) {
   await ticketMsgStmt.run(guildId); // before `tickets`, which the subquery reads
   await giveawayEntryStmt.run(guildId); // before `giveaways`, which the subquery reads
+  await eventParticipantStmt.run(guildId); // before `guild_events`, which the subquery reads
   for (const stmt of simpleStmts) await stmt.run(guildId);
 }
 
@@ -130,6 +136,11 @@ const userStmts = {
     WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)
       AND user_id = ?
   `),
+  eventParticipants: prepare(`
+    DELETE FROM guild_event_participants
+    WHERE event_id IN (SELECT id FROM guild_events WHERE guild_id = ?)
+      AND user_id = ?
+  `),
   inviteCounts: prepare('DELETE FROM invite_counts WHERE guild_id = ? AND user_id = ?'),
   inviteJoins: prepare('DELETE FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
   inviteJoinsAsInviter: prepare(
@@ -148,7 +159,7 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, invites: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, invites: number }}
  */
 export async function forgetUser(guildId, userId) {
   const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
@@ -162,6 +173,7 @@ export async function forgetUser(guildId, userId) {
   const afk = (await userStmts.afk.run(guildId, userId)).changes;
   const birthdays = (await userStmts.birthdays.run(guildId, userId)).changes;
   const giveawayEntries = (await userStmts.giveawayEntries.run(guildId, userId)).changes;
+  const eventSignups = (await userStmts.eventParticipants.run(guildId, userId)).changes;
   const invites =
     (await userStmts.inviteCounts.run(guildId, userId)).changes +
     (await userStmts.inviteJoins.run(guildId, userId)).changes +
@@ -176,6 +188,7 @@ export async function forgetUser(guildId, userId) {
     afk,
     birthdays,
     giveawayEntries,
+    eventSignups,
     invites,
   };
 }
@@ -285,6 +298,15 @@ const USER_DATA_SOURCES = [
       'SELECT COUNT(*) AS n FROM giveaway_entries WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)',
     rowsSql:
       'SELECT * FROM giveaway_entries WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?) ORDER BY entered_at',
+  },
+  {
+    key: 'eventSignups',
+    label: 'Event sign-ups (Join / Maybe)',
+    order: 'ug',
+    countSql:
+      'SELECT COUNT(*) AS n FROM guild_event_participants WHERE user_id = ? AND event_id IN (SELECT id FROM guild_events WHERE guild_id = ?)',
+    rowsSql:
+      'SELECT * FROM guild_event_participants WHERE user_id = ? AND event_id IN (SELECT id FROM guild_events WHERE guild_id = ?) ORDER BY updated_at',
   },
   {
     key: 'inviteCounts',

@@ -29,6 +29,7 @@ export const MODULE_ICONS = {
   'free-games': 'gamepad',
   reminders: 'bell',
   giveaways: 'gift',
+  events: 'calendar',
   'game-stats': 'target',
   'twitch-alerts': 'twitch',
   'youtube-alerts': 'youtube',

@@ -35,6 +35,7 @@ platform gaps (native AutoMod rules, threads, moving members between voice).
 | [Sticky messages](sticky.md) | Keep a message pinned to the bottom of a channel | off | — |
 | [Polls](polls.md) | Reaction polls that auto-close on a timer or vote cap | off | — |
 | [Giveaways](giveaways.md) | Prize giveaways with an Enter button; auto-drawn winners | off | — |
+| [Events](events.md) | Events with Join / Maybe / Leave sign-ups, a participant role and reminders (beta) | off | — |
 | [AFK](afk.md) | Members mark themselves away; Sylo replies to mentions | off | — |
 | [Temporary voice channels](temp-voice.md) | Join-to-create voice hubs controlled with `/voice-*` | off | — |
 | [Server statistics](server-stats.md) | Voice channels named with live member/role/boost counts | off | Server Members |

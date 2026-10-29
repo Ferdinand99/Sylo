@@ -19,6 +19,7 @@ import { LIMITS as birthdays } from './birthdays.js';
 import { LIMITS as channelCleanup } from './channelCleanup.js';
 import { LIMITS as counting } from './counting.js';
 import { LIMITS as customCommands } from './customCommands.js';
+import { LIMITS as events } from './events.js';
 import { LIMITS as giveaways } from './giveaways.js';
 import { LIMITS as githubAlerts } from './githubAlerts.js';
 import { LIMITS as honeypot } from './honeypot.js';
@@ -53,6 +54,7 @@ export const MODULE_LIMITS = Object.freeze({
   'channel-cleanup': channelCleanup,
   counting,
   'custom-commands': customCommands,
+  events,
   giveaways,
   github: githubAlerts,
   honeypot,

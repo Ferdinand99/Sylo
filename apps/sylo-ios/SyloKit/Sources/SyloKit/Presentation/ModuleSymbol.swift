@@ -40,6 +40,7 @@ public enum ModuleSymbol {
         "gamepad": "gamecontroller",
         "bell": "bell",
         "gift": "gift",
+        "calendar": "calendar",
         "twitch": "play.tv",
         "youtube": "play.rectangle",
         "kick": "play.circle",

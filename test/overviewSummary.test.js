@@ -63,3 +63,24 @@ test('every card links to its page in the dashboard (/v2)', async () => {
   );
   for (const [id, href] of Object.entries(hrefs)) assert.ok(href.startsWith(`/v2/guilds/${G}/`), id);
 });
+
+test('the Events card counts upcoming events and names the next one', async () => {
+  const { createEvent } = await import('../src/db/events.js');
+  const find = async () =>
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards).find((c) => c.id === 'events');
+  const empty = await find();
+  assert.ok(empty, 'a card for the Events module');
+  assert.equal(empty.lines.find((l) => l.label === 'Upcoming events').value, '0');
+  assert.equal(empty.lines.find((l) => l.label === 'Next').value, 'none');
+
+  await createEvent({
+    guildId: G,
+    channelId: '111',
+    title: 'Game night',
+    startAt: Date.UTC(2030, 0, 2, 18, 30),
+    hostId: 'h',
+  });
+  const card = await find();
+  assert.equal(card.lines.find((l) => l.label === 'Upcoming events').value, '1');
+  assert.match(card.lines.find((l) => l.label === 'Next').value, /Game night · 2030-01-02 18:30 UTC/);
+});

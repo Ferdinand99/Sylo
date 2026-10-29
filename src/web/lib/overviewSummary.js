@@ -16,6 +16,7 @@ import { countOpenAppeals } from '../../db/appeals.js';
 import { inviterCount } from '../../db/inviteTracker.js';
 import { guildPollCount } from '../../db/polls.js';
 import { activeGiveaways } from '../../db/giveaways.js';
+import { upcomingEvents } from '../../db/events.js';
 import { recentLookups } from '../../db/cache.js';
 import { dailySeries } from '../../db/insights.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
@@ -52,6 +53,7 @@ const LAYOUT = [
       'invite-tracker',
       'polls',
       'giveaways',
+      'events',
       'autoresponder',
       'auto-react',
       'afk',
@@ -341,6 +343,19 @@ async function moduleLines(id, guild, cfg) {
       return [
         active.length ? on('Active giveaways', String(active.length)) : neutral('Active giveaways', '0'),
         neutral('Winner ping', ping),
+      ];
+    }
+    case 'events': {
+      const upcoming = await upcomingEvents(guild.id);
+      const next = upcoming[0];
+      return [
+        upcoming.length ? on('Upcoming events', String(upcoming.length)) : neutral('Upcoming events', '0'),
+        next
+          ? neutral(
+              'Next',
+              `${next.title.slice(0, 40)} · ${new Date(next.start_at).toISOString().slice(0, 16).replace('T', ' ')} UTC`
+            )
+          : neutral('Next', 'none'),
       ];
     }
     case 'polls': {

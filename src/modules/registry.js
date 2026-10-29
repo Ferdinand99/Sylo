@@ -318,6 +318,17 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'events',
+    name: 'Events',
+    description:
+      'Schedule events with Join / Maybe / Leave sign-ups, a participant role and a reminder before the start.',
+    icon: '📅',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
     id: 'game-stats',
     name: 'Game stats',
     description:

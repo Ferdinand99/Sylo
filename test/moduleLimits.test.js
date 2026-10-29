@@ -16,6 +16,7 @@ import { normaliseAutomodConfig } from '../src/modules/automod.js';
 import { normaliseAutoresponder } from '../src/modules/autoresponder.js';
 import { normaliseCountingConfig, validCount } from '../src/modules/counting.js';
 import { clampWinners } from '../src/modules/giveaways.js';
+import { normaliseEventFields, normaliseEventsConfig } from '../src/modules/events.js';
 import { normaliseHoneypotConfig } from '../src/modules/honeypot.js';
 import { normaliseInviteTrackerConfig } from '../src/modules/inviteTracker.js';
 import { normaliseKickConfig } from '../src/modules/kickAlerts.js';
@@ -138,6 +139,18 @@ const cases = {
   giveaways: {
     normalise: (raw) => ({ winners: clampWinners(raw.winners) }),
     base: { winners: 1 },
+  },
+  events: {
+    // the per-event fields and the settings' staff role list; 0 capacity means "no limit"
+    normalise: (raw) => ({ ...normaliseEventFields(raw), staffRoles: normaliseEventsConfig(raw).staffRoles }),
+    base: {},
+    value: {
+      imageUrl: (n) => `https://${text(n - 8)}`,
+      staffRoles: (n) => items(n, roleId),
+    },
+    // a capacity below 1 is "no limit"; an image past the limit is dropped (a cut link points nowhere)
+    under: { capacity: { check: (out) => out.capacity === null } },
+    over: { imageUrl: { check: (out) => out.imageUrl === '' } },
   },
   honeypot: {
     normalise: normaliseHoneypotConfig,

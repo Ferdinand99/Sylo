@@ -46,6 +46,10 @@ export const SERVER_WRITES = (g) => [
     `/guilds/${g}/modules/roles/rr`,
     { channelId: SNOWFLAKE, style: 'buttons', pairs: [{ roleId: SNOWFLAKE }] },
   ],
+  [`/guilds/${g}/modules/events/config`, { channel: SNOWFLAKE, staffRoles: [SNOWFLAKE] }],
+  [`/guilds/${g}/modules/events/events`, { title: 'x', start: '2999-01-01 10:00', channelId: SNOWFLAKE }],
+  [`/guilds/${g}/modules/events/events/1`, { title: 'x', start: '2999-01-01 10:00' }],
+  [`/guilds/${g}/modules/events/events/1/cancel`, {}],
   [`/guilds/${g}/leaderboard/public`, { publicLeaderboard: true }],
   [`/guilds/${g}/leaderboard/vanity`, { slug: 'not-yours' }],
   [`/guilds/${g}/insights/refresh`, {}],
@@ -68,6 +72,7 @@ export const SERVER_READS = (g) => [
   `/guilds/${g}/insights?range=7`,
   `/guilds/${g}/modules/welcome/config`,
   `/guilds/${g}/modules/github/watches`,
+  `/guilds/${g}/modules/events/config`,
 ];
 
 export const BOT_WRITES = [

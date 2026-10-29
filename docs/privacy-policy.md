@@ -72,6 +72,7 @@ the public-leaderboard vanity slug.
 - **AFK** — a member's away status, away message and previous nickname.
 - **Birthdays** — the day and month (and optionally year) a member registers.
 - **Giveaways** — the host, the entrants, and the drawn winners.
+- **Events** — the host and, for each event, who pressed Join or Maybe.
 - **Polls** — the poll creator. Votes are Discord reactions and are not stored;
   the row is deleted when the poll ends.
 - **Temporary voice channels** — the owner of a spawned channel and its
@@ -245,8 +246,8 @@ No other third parties receive your data.
 - **`/forget`** — any member can run `/forget confirm:True` in a server to delete
   the data Sylo keys to their Discord account **in that server**: leveling XP
   (including period rows), ticket history (the whole conversation, staff replies
-  included), ban appeals, invite records, AFK status, birthday and giveaway
-  entries. It does **not** remove messages already posted to channels, a
+  included), ban appeals, invite records, AFK status, birthday, giveaway
+  entries and event sign-ups. It does **not** remove messages already posted to channels, a
   completed giveaway's winner list, or the display name recorded in that server's
   config audit log. **Safety records are kept**: moderation cases (warnings,
   notes, timeouts, kicks, bans), an active temporary ban, honeypot catches and a
@@ -301,6 +302,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | AFK status | Until the member returns or is erased | Member sends a message; `/forget`; Bot removed |
 | Birthdays | Until removed | Member or admin removes it; `/forget`; Bot removed |
 | Giveaway entries | Until the giveaway ends, then until erased | `/forget` (entries only — a finished giveaway's winner list is kept); Bot removed |
+| Event sign-ups (Join / Maybe) | Until the member leaves the event or is erased | The member presses Leave; `/forget`; Bot removed (the host and title of a finished event are server records and stay until the Bot is removed) |
 | Poll creator record | Until the poll ends | Poll ends (row deleted automatically) |
 | Temporary voice channel owner + ban list | Until the channel empties | Channel empties (row deleted automatically); Bot removed |
 | Modmail ticket transcripts | Until erased, or the server's "delete closed tickets after N days" limit (off by default) | `/forget`; admin-assisted erasure; Bot removed; a closed ticket ageing past the server's limit |

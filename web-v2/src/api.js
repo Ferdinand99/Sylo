@@ -112,6 +112,12 @@ export const endGiveaway = (guildId, id) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/giveaways/${id}/end`, {});
 export const rerollGiveaway = (guildId, id, count) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/giveaways/${id}/reroll`, { count });
+export const createEvent = (guildId, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/events/events`, body);
+export const updateEvent = (guildId, id, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/events/events/${id}`, body);
+export const cancelEvent = (guildId, id) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/events/events/${id}/cancel`, {});
 export const setInviteBonus = (guildId, userId, bonus) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/invite-tracker/bonus`, { userId, bonus });
 
