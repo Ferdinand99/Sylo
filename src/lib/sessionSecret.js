@@ -8,11 +8,49 @@
 // the logger. The secret itself is never printed.
 import { randomBytes } from 'node:crypto';
 import { chmodSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 
 export const SESSION_SECRET_FILE = 'session-secret';
 // 32 random bytes as hex (64 chars). A file shorter than 32 chars is treated as damaged and replaced.
 const MIN_SECRET_LENGTH = 32;
+
+/**
+ * Is `dir` on a mounted volume (inside a mount point other than the root file system), according
+ * to the text of /proc/self/mountinfo? In a container the root is the image's layer: a data folder
+ * that is not on a mount of its own is lost when the container is replaced. Returns null when it
+ * cannot be told (no mountinfo, not Linux), so the caller stays quiet then.
+ * @param {string} dir
+ * @param {string | null | undefined} mountinfo  contents of /proc/self/mountinfo
+ * @returns {boolean | null}
+ */
+export function isOnMountedVolume(dir, mountinfo) {
+  if (!dir || !mountinfo) return null;
+  const target = posix.resolve(dir); // mountinfo is Linux's, so its paths are POSIX
+  const points = [];
+  for (const line of String(mountinfo).split('\n')) {
+    // "36 35 98:0 /root /mnt rw,noatime master:1 - ext3 /dev/root rw": the 5th field is the mount point
+    const field = line.split(' ')[4];
+    if (field) points.push(field.replace(/\\([0-7]{3})/g, (_, o) => String.fromCharCode(parseInt(o, 8))));
+  }
+  if (!points.length) return null;
+  const inside = points.filter(
+    (p) => p !== '/' && (target === p || target.startsWith(p.endsWith('/') ? p : `${p}/`))
+  );
+  return inside.length > 0;
+}
+
+/**
+ * The warning to log at start-up when the session secret sits in the data folder of a Postgres
+ * install whose data folder is not a mounted volume: the file would go with the container, and
+ * every login and signed link with it. Null when nothing is wrong or it cannot be told.
+ * @param {{ source: string, databaseUrl?: string | null, dataDir: string, mountinfo?: string | null }} o
+ * @returns {string | null}
+ */
+export function dataFolderWarning({ source, databaseUrl, dataDir, mountinfo }) {
+  if (source !== 'file' || !databaseUrl) return null;
+  if (isOnMountedVolume(dataDir, mountinfo) !== false) return null;
+  return `The data folder (${dataDir}) is not a mounted volume, so the session secret in it is lost when the container is replaced: everyone is logged out and signed verify/appeal links stop working. Mount a volume on it, or set SESSION_SECRET.`;
+}
 
 /**
  * @param {{ envValue?: string | null, dataDir?: string | null, warn?: (message: string) => void }} options

@@ -15,11 +15,16 @@ import { normaliseQuoteBoardConfig, publicText } from '../../modules/quoteBoard.
 
 export const PAGE_SIZE = 50;
 
-function notFound(res, message) {
+// One answer for every reason there is no page (a malformed id, a server Sylo is not in, a module
+// that is off, a page that is not switched on), so the response does not tell which server ids
+// Sylo is in.
+const NOT_FOUND = 'There is no public quote page at this address.';
+
+function notFound(res) {
   return res.status(404).render('error', {
     title: 'Quotes unavailable',
     heading: 'No quotes here',
-    message,
+    message: NOT_FOUND,
   });
 }
 
@@ -29,13 +34,13 @@ const router = Router();
 router.get('/:guildId', async (req, res, next) => {
   try {
     const { guildId } = req.params;
-    if (!isPlatformGuildId(guildId)) return notFound(res, 'Unknown server.');
+    if (!isPlatformGuildId(guildId)) return notFound(res);
     const guild = guildByKey(guildId);
-    if (!guild) return notFound(res, 'Sylo is not in that server.');
+    if (!guild) return notFound(res);
 
     const mod = await getGuildModule(guildId, 'quote-board');
     if (!mod.enabled || normaliseQuoteBoardConfig(mod.config).publicPage !== true) {
-      return notFound(res, 'This server has not turned on a public quote page.');
+      return notFound(res);
     }
 
     const total = await publicQuoteCount(guildId);

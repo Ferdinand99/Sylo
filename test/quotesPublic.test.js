@@ -38,19 +38,21 @@ const make = (over = {}) => {
     ...over,
   });
 };
+// One answer for every reason there is no page, so it does not tell which servers Sylo is in.
+const NO_PAGE = /There is no public quote page at this address/;
 const turnOn = (config = { publicPage: true }, enabled = true) =>
   setGuildModule(GID, 'quote-board', { enabled, config });
 
 test('the page does not exist for an unknown server, a bad id, or a server that is not connected', async () => {
   const bad = await get('/quotes/not-a-server');
   assert.equal(bad.status, 404);
-  assert.match(await bad.text(), /Unknown server/);
+  assert.match(await bad.text(), NO_PAGE);
   const unknown = await get('/quotes/100000000000000999');
   assert.equal(unknown.status, 404);
-  assert.match(await unknown.text(), /Sylo is not in that server/);
+  assert.match(await unknown.text(), NO_PAGE);
   const fluxer = await get(`/quotes/${encodeURIComponent('fluxer:900000000000000010')}`);
   assert.equal(fluxer.status, 404);
-  assert.match(await fluxer.text(), /Sylo is not in that server/);
+  assert.match(await fluxer.text(), NO_PAGE);
 });
 
 test('off by default: a server that never touched the module answers 404', async () => {
@@ -58,8 +60,20 @@ test('off by default: a server that never touched the module answers 404', async
   const res = await get();
   assert.equal(res.status, 404);
   const html = await res.text();
-  assert.match(html, /has not turned on a public quote page/);
+  assert.match(html, NO_PAGE);
   assert.doesNotMatch(html, /Quote number 1/);
+});
+
+test('every reason for no page gives the same answer, byte for byte', async () => {
+  const bodies = [];
+  bodies.push(await (await get('/quotes/not-a-server')).text());
+  bodies.push(await (await get('/quotes/100000000000000999')).text()); // a server Sylo is not in
+  await turnOn({ publicPage: false }); // a server it is in, page off
+  bodies.push(await (await get()).text());
+  await turnOn({ publicPage: true }, false); // module disabled
+  bodies.push(await (await get()).text());
+  assert.equal(new Set(bodies).size, 1);
+  await turnOn();
 });
 
 test('the module on but the public page off is still 404, and so is a page switched on in a disabled module', async () => {

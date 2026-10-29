@@ -79,6 +79,17 @@ import '../src/db/channelCleanup.js';
 import '../src/db/githubWatches.js';
 import '../src/db/cache.js';
 import '../src/db/appSettings.js';
+import '../src/db/accounts.js';
+import '../src/db/apiTokens.js';
+import '../src/db/botAudit.js';
+import '../src/db/componentReactions.js';
+import '../src/db/devLogEntries.js';
+import '../src/db/honeypotCatches.js';
+import '../src/db/pushRelay.js';
+import '../src/db/roadmap.js';
+import '../src/db/userPrefs.js';
+import '../src/db/verificationKicks.js';
+import '../src/db/youtubeWebsub.js';
 
 const FORCE = process.argv.includes('--force');
 const DRY_RUN = process.argv.includes('--dry-run');

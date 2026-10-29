@@ -115,7 +115,7 @@ Both privileged intents default **on**. Several modules need them:
 | Intent | Env var | Modules that need it |
 |---|---|---|
 | Server Members | `INTENT_GUILD_MEMBERS` | logging, roles, verification, welcome, leveling, server-stats, invite-tracker |
-| Message Content | `INTENT_MESSAGE_CONTENT` | logging, autoresponder, counting, automod, starboard |
+| Message Content | `INTENT_MESSAGE_CONTENT` | logging, autoresponder, counting, automod, starboard; the Quote board's `/quote save <message link>` (its "Save quote" menu works without) |
 
 Enable them on the Discord Developer Portal (**Bot → Privileged Gateway
 Intents**). If you don't want those modules, set the env var to `false` and Sylo
@@ -408,6 +408,11 @@ described above.
   `<data>/session-secret` on first start (next to the database, for example `data/session-secret`)
   and keeps using it, so logins survive restarts. Back it up with the data folder; if it is lost,
   everyone just has to log in again. A `SESSION_SECRET` in the environment still wins over the file.
+  **The `data/` folder must be a volume** (a Docker volume or bind mount, for example
+  `./data:/app/data`), also when you use Postgres: if it lives only inside the container, the secret
+  is lost whenever the container is replaced and everyone is logged out. On Linux, Sylo logs a
+  warning at start-up when it can see that a Postgres install keeps the secret in a folder that is not
+  a mounted volume; setting `SESSION_SECRET` is the other way out.
 - **A strict Content-Security-Policy and HSTS are on.** The dashboard now sends an enforcing
   `Content-Security-Policy` (scripts, styles and connections from Sylo itself, plus the error-reporting
   host and Cloudflare Turnstile where you configured them), and `Strict-Transport-Security` when
@@ -421,6 +426,8 @@ described above.
   hub and announces new videos within seconds. YouTube must be able to reach
   `<DASHBOARD_URL>/webhooks/youtube/<channel id>`, so the reverse proxy has to forward it and keep the
   `Host` header. Otherwise Sylo polls every few minutes, as before. Nothing to configure either way.
+  Sylo only accepts the hub's verification request for a subscription it asked for itself in the last
+  10 minutes, and never keeps a lease longer than the 5 days it asked for.
 - **Five command names are now built in: `suggest`, `suggestion`, `quote`, `event` and
   `temprole`.** A built-in command always wins over a custom command of the same name. If a server
   made a custom command with one of these names in 4.10, Sylo no longer registers it after the

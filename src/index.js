@@ -1,6 +1,9 @@
 // Sylo entrypoint — boots the database, the chat bot(s) (Discord and/or Fluxer),
 // and the web dashboard in a single process.
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { config } from './config.js';
+import { dataFolderWarning } from './lib/sessionSecret.js';
 import { log } from './lib/log.js';
 import { runtime } from './runtime.js';
 // Importing db/index.js opens the SQLite connection and runs migrations.
@@ -16,6 +19,25 @@ import { addDevLogEntry } from './db/devLogEntries.js';
 import { notifyDevLogEvent } from './lib/push.js';
 import { flushErrorReports, startErrorReports } from './lib/errorReports.js';
 import { logUnhandledRejection } from './lib/discordErrors.js';
+
+/** Postgres install with the session secret in a data folder that is not a mounted volume (Linux only). */
+function warnIfDataFolderIsNotAVolume() {
+  let mountinfo = null;
+  if (process.platform === 'linux') {
+    try {
+      mountinfo = readFileSync('/proc/self/mountinfo', 'utf8');
+    } catch {
+      // cannot tell: stay quiet
+    }
+  }
+  const warning = dataFolderWarning({
+    source: config.sessionSecretSource,
+    databaseUrl: config.databaseUrl,
+    dataDir: dirname(resolve(process.cwd(), config.databasePath)),
+    mountinfo,
+  });
+  if (warning) log.warn('sylo', warning);
+}
 
 /** Set once the HTTP server is listening; used by the shutdown path. */
 let httpServer = null;
@@ -82,6 +104,7 @@ async function main() {
       `Session secret from ${config.sessionSecretSource === 'env' ? 'SESSION_SECRET' : 'the data folder'}`
     );
   }
+  warnIfDataFolderIsNotAVolume();
   // Every configured platform starts in parallel; one that is not configured is never loaded.
   await Promise.all([config.discordEnabled && startBot(), config.fluxerEnabled && startFluxerBot()]);
   httpServer = await startWeb(config.webPort);

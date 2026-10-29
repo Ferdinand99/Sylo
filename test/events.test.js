@@ -279,6 +279,12 @@ test('buildEventPayload: an open event shows the time, the host and the three bu
   assert.deepEqual(p.allowedMentions, { parse: [] });
 });
 
+test('buildEventPayload: an event whose host used /forget has no host line', () => {
+  const e = buildEventPayload(row({ host_id: null }), { joined: [] }).embeds[0].toJSON();
+  assert.doesNotMatch(e.description, /Host/);
+  assert.doesNotMatch(e.description, /null/);
+});
+
 test('buildEventPayload: ended and cancelled events lose their buttons; a long list is cut but counted', () => {
   assert.deepEqual(buildEventPayload(row({ state: 'ended' })).components, []);
   assert.match(buildEventPayload(row({ state: 'ended' })).embeds[0].toJSON().title, /\(ended\)/);

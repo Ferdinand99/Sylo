@@ -208,6 +208,29 @@ test('forgetUser removes a member sign-ups in that server only; describeUserData
   assert.equal((await describeUserData(G, 'victim')).items.find((i) => i.key === 'eventSignups').count, 0);
 });
 
+test('forgetUser takes a former host off their events (the events stay); describeUserData and /mydata list them', async () => {
+  await clearGuildEvents(G);
+  await clearGuildEvents(H);
+  const mine = await createEvent(ev({ hostId: 'victim', title: 'Mine' }));
+  const theirs = await createEvent(ev({ hostId: 'bystander' }));
+  const elsewhere = await createEvent(ev({ guildId: H, hostId: 'victim' }));
+
+  const item = (await describeUserData(G, 'victim')).items.find((i) => i.key === 'eventsHosted');
+  assert.equal(item.count, 1);
+  assert.equal(item.kept, false);
+  const exported = await exportUserData(G, 'victim');
+  assert.equal(exported.data.eventsHosted.length, 1);
+  assert.equal(exported.data.eventsHosted[0].title, 'Mine');
+
+  const result = await forgetUser(G, 'victim');
+  assert.equal(result.eventsHosted, 1);
+  assert.equal((await getEvent(mine.id)).host_id, null);
+  assert.equal((await getEvent(mine.id)).title, 'Mine', 'the event stays');
+  assert.equal((await getEvent(theirs.id)).host_id, 'bystander');
+  assert.equal((await getEvent(elsewhere.id)).host_id, 'victim', 'another server is untouched');
+  assert.equal((await describeUserData(G, 'victim')).items.find((i) => i.key === 'eventsHosted').count, 0);
+});
+
 test('purgeGuild removes the events and their sign-ups; the table is on the guild list', async () => {
   assert.ok(GUILD_TABLES.includes('guild_events'));
   const a = await createEvent(ev());

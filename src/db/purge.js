@@ -97,6 +97,7 @@ export const GUILD_TABLES = [
   'verification_kicks',
   'guild_events',
   'guild_suggestions',
+  'guild_suggestion_counters',
   'guild_temp_roles',
   'guild_quotes',
   'guild_quote_counters',
@@ -165,6 +166,8 @@ const userStmts = {
   suggestionDecider: prepare(
     'UPDATE guild_suggestions SET decided_by = NULL WHERE guild_id = ? AND decided_by = ?'
   ),
+  // The event stays (it may still be upcoming); only the host's id comes off it.
+  eventHost: prepare('UPDATE guild_events SET host_id = NULL WHERE guild_id = ? AND host_id = ?'),
   // Their roles stay on the platform; only the record that Sylo would take them back is dropped.
   tempRoles: prepare('DELETE FROM guild_temp_roles WHERE guild_id = ? AND user_id = ?'),
   tempRoleAdder: prepare('UPDATE guild_temp_roles SET added_by = NULL WHERE guild_id = ? AND added_by = ?'),
@@ -190,7 +193,7 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, invites: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, invites: number }}
  */
 export async function forgetUser(guildId, userId) {
   const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
@@ -205,6 +208,7 @@ export async function forgetUser(guildId, userId) {
   const birthdays = (await userStmts.birthdays.run(guildId, userId)).changes;
   const giveawayEntries = (await userStmts.giveawayEntries.run(guildId, userId)).changes;
   const eventSignups = (await userStmts.eventParticipants.run(guildId, userId)).changes;
+  const eventsHosted = (await userStmts.eventHost.run(guildId, userId)).changes;
   const suggestionVotes = (await userStmts.suggestionVotes.run(guildId, userId)).changes;
   const suggestions = (await userStmts.suggestionAuthor.run(guildId, userId)).changes;
   const suggestionDecisions = (await userStmts.suggestionDecider.run(guildId, userId)).changes;
@@ -227,6 +231,7 @@ export async function forgetUser(guildId, userId) {
     birthdays,
     giveawayEntries,
     eventSignups,
+    eventsHosted,
     suggestionVotes,
     suggestions,
     suggestionDecisions,
@@ -352,6 +357,14 @@ const USER_DATA_SOURCES = [
       'SELECT COUNT(*) AS n FROM guild_event_participants WHERE user_id = ? AND event_id IN (SELECT id FROM guild_events WHERE guild_id = ?)',
     rowsSql:
       'SELECT * FROM guild_event_participants WHERE user_id = ? AND event_id IN (SELECT id FROM guild_events WHERE guild_id = ?) ORDER BY updated_at',
+  },
+  {
+    key: 'eventsHosted',
+    label: 'Events they hosted (/forget keeps the event, drops you as the host)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM guild_events WHERE guild_id = ? AND host_id = ?',
+    rowsSql:
+      'SELECT id, title, description, location, start_at, end_at, state, created_at FROM guild_events WHERE guild_id = ? AND host_id = ? ORDER BY start_at',
   },
   {
     key: 'suggestionVotes',

@@ -42,6 +42,21 @@ test(
       assert.equal((await db.getSuggestionByNumber(G, 2)).id, b.id);
     });
 
+    await t.test(
+      'a number is never reused: the counter only goes up and leaves with the server',
+      async () => {
+        const g = `${G}-counter`;
+        const a = await make({ guildId: g });
+        const b = await make({ guildId: g });
+        assert.deepEqual([a.number, b.number], [1, 2]);
+        await db.deleteSuggestion(b.id);
+        assert.equal((await make({ guildId: g })).number, 3);
+        await db.clearGuildSuggestions(g);
+        assert.equal((await make({ guildId: g })).number, 1);
+        await db.clearGuildSuggestions(g);
+      }
+    );
+
     await t.test('votes: the upsert changes the vote without a second row; tallies are numbers', async () => {
       const { id } = await make();
       await db.setSuggestionVote(id, 'u1', 1);

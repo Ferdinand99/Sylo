@@ -5,7 +5,8 @@
 //   start_at  epoch ms (UTC); the creator's IANA zone is kept only to show the time as they set it
 //   end_at    epoch ms or NULL; with no end the event counts as over END_GRACE_MS after the start
 //   status    'join' | 'maybe' (leaving deletes the row)
-import { prepare, registerPostgresBootstrap } from './driver.js';
+//   host_id   NULL after the host used /forget: the event stays, the person does not
+import { prepare, registerPostgresBootstrap, registerPostgresMigration } from './driver.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS guild_events (
@@ -24,7 +25,7 @@ registerPostgresBootstrap(`
     role_id          TEXT,
     reminder_minutes INTEGER NOT NULL DEFAULT 0,
     reminder_sent    INTEGER NOT NULL DEFAULT 0,
-    host_id          TEXT NOT NULL,
+    host_id          TEXT,
     state            TEXT NOT NULL DEFAULT 'scheduled',
     created_at       BIGINT NOT NULL
   );
@@ -38,6 +39,9 @@ registerPostgresBootstrap(`
   );
   CREATE INDEX IF NOT EXISTS idx_guild_event_participants_user ON guild_event_participants (user_id);
 `);
+
+// Mirrors SQLite migration 58: a host can be taken off an event (/forget), so host_id may be NULL.
+registerPostgresMigration(58, 'ALTER TABLE guild_events ALTER COLUMN host_id DROP NOT NULL;');
 
 /** An event with no end time is treated as over this long after it starts. */
 export const END_GRACE_MS = 2 * 3_600_000;

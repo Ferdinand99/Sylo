@@ -305,7 +305,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | AFK status | Until the member returns or is erased | Member sends a message; `/forget`; Bot removed |
 | Birthdays | Until removed | Member or admin removes it; `/forget`; Bot removed |
 | Giveaway entries | Until the giveaway ends, then until erased | `/forget` (entries only — a finished giveaway's winner list is kept); Bot removed |
-| Event sign-ups (Join / Maybe) | Until the member leaves the event or is erased | The member presses Leave; `/forget`; Bot removed (the host and title of a finished event are server records and stay until the Bot is removed) |
+| Event sign-ups (Join / Maybe) | Until the member leaves the event or is erased | The member presses Leave; `/forget`; Bot removed (`/forget` also removes you as the host of events you made; the title of a finished event is a server record and stays until the Bot is removed) |
 | Suggestions and votes | The suggestion until staff delete it; a vote until the member takes it back | `/forget` (votes are deleted; your suggestions stay without your id; staff decisions lose the staff id); staff delete a suggestion on the dashboard; Bot removed |
 | Temporary role records | Until the role's end time, or until staff remove it | The record is deleted when the role is taken back; `/forget` (the record is deleted, the role itself stays); Bot removed |
 | Quote board quotes | Until a member or staff remove the quote, or the server removes the module's data | `/quote remove` (author, the member who saved it, or staff); `/forget` (quotes you wrote are deleted; quotes you only saved lose your id); staff remove a quote on the dashboard; Bot removed |

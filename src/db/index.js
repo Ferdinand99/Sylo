@@ -1095,6 +1095,64 @@ export const MIGRATIONS = [
       );
     `);
   },
+
+  // Events: host_id may be NULL, so /forget can take a former host off the events they made.
+  // SQLite cannot drop a NOT NULL, so the table is rebuilt (src/db/events.js mirrors this on
+  // Postgres with an ALTER).
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_events_new (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id         TEXT NOT NULL,
+        channel_id       TEXT NOT NULL,
+        message_id       TEXT,
+        title            TEXT NOT NULL,
+        description      TEXT NOT NULL DEFAULT '',
+        location         TEXT NOT NULL DEFAULT '',
+        image_url        TEXT NOT NULL DEFAULT '',
+        start_at         INTEGER NOT NULL,
+        end_at           INTEGER,
+        time_zone        TEXT NOT NULL DEFAULT 'UTC',
+        capacity         INTEGER,
+        role_id          TEXT,
+        reminder_minutes INTEGER NOT NULL DEFAULT 0,
+        reminder_sent    INTEGER NOT NULL DEFAULT 0,
+        host_id          TEXT,
+        state            TEXT NOT NULL DEFAULT 'scheduled',
+        created_at       INTEGER NOT NULL
+      );
+      INSERT INTO guild_events_new
+        (id, guild_id, channel_id, message_id, title, description, location, image_url, start_at, end_at,
+         time_zone, capacity, role_id, reminder_minutes, reminder_sent, host_id, state, created_at)
+      SELECT id, guild_id, channel_id, message_id, title, description, location, image_url, start_at, end_at,
+         time_zone, capacity, role_id, reminder_minutes, reminder_sent, host_id, state, created_at
+      FROM guild_events;
+      UPDATE sqlite_sequence SET seq = (SELECT seq FROM sqlite_sequence WHERE name = 'guild_events')
+        WHERE name = 'guild_events_new';
+      DROP TABLE guild_events;
+      ALTER TABLE guild_events_new RENAME TO guild_events;
+      CREATE INDEX idx_guild_events_guild ON guild_events (guild_id, state, start_at);
+    `);
+  },
+
+  // Suggestions: a counter per server that only goes up (like guild_quote_counters), so deleting the
+  // newest suggestion does not hand its number out again. Seeded from the numbers already in use.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_suggestion_counters (
+        guild_id    TEXT PRIMARY KEY,
+        last_number INTEGER NOT NULL
+      );
+      INSERT INTO guild_suggestion_counters (guild_id, last_number)
+        SELECT guild_id, MAX(number) FROM guild_suggestions GROUP BY guild_id;
+    `);
+  },
+
+  // WebSub: when Sylo last asked the hub to subscribe. A verification request is only answered
+  // for a subscribe Sylo itself sent a few minutes ago (src/modules/youtubeWebsub.js).
+  (database) => {
+    database.exec('ALTER TABLE youtube_websub ADD COLUMN subscribe_requested_at INTEGER;');
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

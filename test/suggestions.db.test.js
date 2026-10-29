@@ -58,6 +58,21 @@ test('numbers count up per server, starting at 1, and a row round-trips', async 
   assert.equal((await make({ anonymous: false })).number, 3);
 });
 
+test('a number is never reused: deleting the newest suggestion does not hand its number to the next', async () => {
+  const g = '900000000000000439';
+  const a = await make({ guildId: g });
+  const b = await make({ guildId: g });
+  assert.deepEqual([a.number, b.number], [1, 2]);
+  await deleteSuggestion(b.id);
+  assert.equal((await make({ guildId: g })).number, 3);
+  await deleteSuggestion(a.id);
+  assert.equal((await make({ guildId: g })).number, 4);
+  // leaving the server erases the counter with the rest of its data
+  await purgeGuild(g);
+  assert.equal((await make({ guildId: g })).number, 1);
+  assert.ok(GUILD_TABLES.includes('guild_suggestion_counters'));
+});
+
 test('votes: one row per member, changing it keeps one row, removing deletes it', async () => {
   const { id } = await make({ guildId: '900000000000000430' });
   await setSuggestionVote(id, 'u1', 1);

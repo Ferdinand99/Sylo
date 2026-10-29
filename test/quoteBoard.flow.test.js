@@ -242,6 +242,20 @@ test('a message with no text and no attachments is skipped; attachments only are
   assert.equal((await getQuoteByNumber(w.rawId, 1)).attachments, 2);
 });
 
+test('/quote save by link explains an empty message (no Message Content intent) and points to the menu', async () => {
+  const w = world();
+  await enable(w);
+  const blank = w.message({ content: '' });
+  const [r] = await run(w, { sub: 'save', options: { message: link(w, blank) } });
+  assert.match(r.content, /Message Content intent/);
+  assert.match(r.content, /Save quote/);
+  assert.equal(flagsEphemeral(r), true);
+  // a message with only files is still saved by link
+  const files = w.message({ content: '', attachments: 1 });
+  const [ok] = await run(w, { sub: 'save', options: { message: link(w, files) } });
+  assert.match(ok.content, /Saved as quote/);
+});
+
 test('the text is cut to 2000 characters and the display name to 100', async () => {
   const w = world();
   await enable(w);

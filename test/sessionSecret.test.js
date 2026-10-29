@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, statSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resolveSessionSecret, SESSION_SECRET_FILE } from '../src/lib/sessionSecret.js';
+import {
+  dataFolderWarning,
+  isOnMountedVolume,
+  resolveSessionSecret,
+  SESSION_SECRET_FILE,
+} from '../src/lib/sessionSecret.js';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'sylo-secret-'));
 
@@ -90,4 +95,41 @@ test('without a data folder the secret is ephemeral and differs per call', () =>
   const b = resolveSessionSecret({ dataDir: null });
   assert.equal(a.source, 'generated-ephemeral');
   assert.notEqual(a.secret, b.secret);
+});
+
+const MOUNTINFO = [
+  '22 1 0:21 / / rw,relatime - overlay overlay rw,lowerdir=/x',
+  '30 22 0:25 / /proc rw,nosuid - proc proc rw',
+  '41 22 8:1 /sylo /app/data rw,relatime - ext4 /dev/sda1 rw',
+  '42 22 8:1 /my\\040vol /srv/my\\040data rw,relatime - ext4 /dev/sda1 rw',
+].join('\n');
+
+test('isOnMountedVolume: inside a mount point other than the root counts, the image layer does not', () => {
+  assert.equal(isOnMountedVolume('/app/data', MOUNTINFO), true);
+  assert.equal(isOnMountedVolume('/app/data/sub', MOUNTINFO), true);
+  assert.equal(isOnMountedVolume('/app/database', MOUNTINFO), false, 'only a whole path segment matches');
+  assert.equal(isOnMountedVolume('/app/other', MOUNTINFO), false);
+  assert.equal(isOnMountedVolume('/srv/my data', MOUNTINFO), true, 'octal escapes in the mount point');
+  assert.equal(isOnMountedVolume('/app/data', null), null, 'no mountinfo: cannot tell');
+  assert.equal(isOnMountedVolume('/app/data', ''), null);
+});
+
+test('dataFolderWarning: only for a Postgres install with the secret in a data folder that is not a volume', () => {
+  const base = {
+    source: 'file',
+    databaseUrl: 'postgres://u@h/db',
+    dataDir: '/app/other',
+    mountinfo: MOUNTINFO,
+  };
+  assert.match(dataFolderWarning(base), /not a mounted volume/);
+  assert.match(dataFolderWarning(base), /\/app\/other/);
+  assert.equal(dataFolderWarning({ ...base, dataDir: '/app/data' }), null, 'it is a volume');
+  assert.equal(
+    dataFolderWarning({ ...base, databaseUrl: null }),
+    null,
+    'SQLite: the database is in the folder too'
+  );
+  assert.equal(dataFolderWarning({ ...base, source: 'env' }), null);
+  assert.equal(dataFolderWarning({ ...base, source: 'generated-ephemeral' }), null, 'has its own warning');
+  assert.equal(dataFolderWarning({ ...base, mountinfo: null }), null, 'cannot tell');
 });

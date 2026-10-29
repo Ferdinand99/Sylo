@@ -3,7 +3,9 @@
 Members post ideas, everyone votes with **👍** and **👎**, and staff approve, deny,
 or mark them as implemented or "considering" with an optional reason. Every
 suggestion gets the server's own number (#1, #2, ...) and its own discussion
-thread (Discord only).
+thread (Discord only). A number is **never used again**: the server keeps a counter
+that only goes up, so deleting the newest suggestion does not hand its number to the
+next one.
 
 **Dashboard:** `/v2/guilds/<id>/m/suggestions` - settings, a list you can filter by
 status and sort by newest or most votes, and the staff actions.

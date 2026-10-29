@@ -66,8 +66,9 @@ member sees their own local time, and also spells it out in the creator's zone.
 - Editing an event on the dashboard updates the posted message. The channel and the
   participant role cannot be changed after creation; cancel and post a new event for
   that.
-- `/forget` removes a member's sign-ups. A finished event's title and host are a
-  server record and are only cleared when Sylo leaves the server. Taking away the
+- `/forget` removes a member's sign-ups and takes them off as the **host** of the
+  events they made (the event stays, without a host line). A finished event's title is
+  a server record and is only cleared when Sylo leaves the server. Taking away the
   participant role is done when the event ends, from the sign-up list, so a member
   erased before then keeps the role until staff remove it.
 

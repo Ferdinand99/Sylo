@@ -22,6 +22,7 @@ import {
   wantWebsub,
   unwantWebsub,
   setWebsubLease,
+  setWebsubRequested,
   touchWebsubNotified,
   deleteWebsub,
   websubDueBefore,
@@ -41,9 +42,10 @@ const DAY_MS = 24 * HOUR_MS;
 const LEASE_SECONDS = 5 * 24 * 60 * 60;
 /** Renew when less than this is left of the lease. */
 export const RENEW_BEFORE_MS = DAY_MS;
-/** A lease from a verification request is clamped into this range (see verifyIntent). */
+/** A lease from a verification request is at least this and at most LEASE_SECONDS (see verifyIntent). */
 const MIN_LEASE_SECONDS = 3600;
-const MAX_LEASE_SECONDS = 14 * 24 * 60 * 60;
+/** The hub verifies a subscribe within moments; a verification later than this after our request is refused. */
+export const VERIFY_WINDOW_MS = 10 * 60 * 1000;
 /** A push for a video older than this is an edit of an old video, not a new upload; the poll decides. */
 export const MAX_PUSH_AGE_MS = 2 * DAY_MS;
 const BOOT_DELAY_MS = 20_000;
@@ -157,8 +159,13 @@ export async function subscribe(channelId) {
   try {
     const secret = (await getWebsub(channelId))?.secret ?? randomBytes(32).toString('hex');
     await wantWebsub(channelId, secret);
-    return await hubRequest('subscribe', channelId, secret);
+    // Recorded before the request: the hub may call back before the POST has returned.
+    await setWebsubRequested(channelId, Date.now());
+    const accepted = await hubRequest('subscribe', channelId, secret);
+    if (!accepted) await setWebsubRequested(channelId, null);
+    return accepted;
   } catch (err) {
+    await setWebsubRequested(channelId, null).catch(() => {});
     log.warn('youtube-alerts', `WebSub subscribe ${channelId}: ${err.message}`);
     return false;
   }
@@ -240,13 +247,17 @@ export async function syncSubscriptions(now = Date.now()) {
 /**
  * Answer the hub's verification request. The challenge to echo, or null (answer 404) unless the
  * mode is subscribe/unsubscribe, the topic is exactly this channel's, and we have a matching
- * pending or known subscription: a wanted row for subscribe, an unwanted one for unsubscribe.
- * A verified subscribe stores the lease; a verified unsubscribe deletes the row.
+ * pending subscription: for subscribe, a request Sylo itself sent (and recorded with its time)
+ * less than VERIFY_WINDOW_MS ago, and not yet verified; for unsubscribe, an unwanted row.
+ * A verified subscribe stores the lease, never longer than the lease Sylo asked for, and settles
+ * the request, so an unsolicited or repeated GET cannot extend a lease. A verified unsubscribe
+ * deletes the row.
  * @param {string} channelId
  * @param {Record<string, unknown>} query  the request's query string
+ * @param {number} [now]
  * @returns {Promise<string|null>}
  */
-export async function verifyIntent(channelId, query = {}) {
+export async function verifyIntent(channelId, query = {}, now = Date.now()) {
   if (!CHANNEL_RE.test(channelId)) return null;
   const mode = query['hub.mode'];
   const topic = query['hub.topic'];
@@ -259,12 +270,14 @@ export async function verifyIntent(channelId, query = {}) {
   if (!row) return null;
   if (mode === 'subscribe') {
     if (!row.wanted) return null;
+    // Only a request we sent: anyone can send a GET, and it must not be able to move a lease.
+    const sentAt = row.subscribe_requested_at;
+    if (sentAt == null || now < sentAt || now - sentAt > VERIFY_WINDOW_MS) return null;
     const asked = Number.parseInt(String(query['hub.lease_seconds'] ?? ''), 10);
     const seconds = Number.isFinite(asked) && asked > 0 ? asked : LEASE_SECONDS;
-    // Anyone can send this request, so the lease is kept to a sane range: a huge value would
-    // stop renewals, a tiny one only causes extra ones.
-    const lease = Math.min(Math.max(seconds, MIN_LEASE_SECONDS), MAX_LEASE_SECONDS);
-    await setWebsubLease(channelId, Date.now() + lease * 1000);
+    // The hub may grant less than we asked for, never more.
+    const lease = Math.min(Math.max(seconds, MIN_LEASE_SECONDS), LEASE_SECONDS);
+    await setWebsubLease(channelId, now + lease * 1000);
   } else {
     if (row.wanted) return null;
     await deleteWebsub(channelId);

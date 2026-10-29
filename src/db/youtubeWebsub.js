@@ -7,7 +7,9 @@
 //                     hub's verification (the row is deleted when it arrives)
 //   lease_expires_at  epoch ms the hub agreed to push until; NULL = not verified yet
 //   last_notified_at  epoch ms of the last signed push
-import { prepare, registerPostgresBootstrap } from './driver.js';
+//   subscribe_requested_at  epoch ms Sylo last asked the hub to subscribe and has not been verified
+//                     for yet; NULL = no request pending, so no verification is accepted
+import { prepare, registerPostgresBootstrap, registerPostgresMigration } from './driver.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS youtube_websub (
@@ -15,10 +17,17 @@ registerPostgresBootstrap(`
     secret           TEXT NOT NULL,
     wanted           INTEGER NOT NULL DEFAULT 1,
     lease_expires_at BIGINT,
-    last_notified_at BIGINT
+    last_notified_at BIGINT,
+    subscribe_requested_at BIGINT
   );
   CREATE INDEX IF NOT EXISTS idx_youtube_websub_lease ON youtube_websub (lease_expires_at);
 `);
+
+// Mirrors SQLite migration 60.
+registerPostgresMigration(
+  60,
+  'ALTER TABLE youtube_websub ADD COLUMN IF NOT EXISTS subscribe_requested_at BIGINT;'
+);
 
 const s = {
   get: prepare('SELECT * FROM youtube_websub WHERE channel_id = ?'),
@@ -28,7 +37,11 @@ const s = {
     ON CONFLICT (channel_id) DO UPDATE SET wanted = 1
   `),
   unwant: prepare('UPDATE youtube_websub SET wanted = 0 WHERE channel_id = ?'),
-  lease: prepare('UPDATE youtube_websub SET lease_expires_at = ? WHERE channel_id = ?'),
+  // A verified subscribe settles the request: it cannot be used for a second verification.
+  lease: prepare(
+    'UPDATE youtube_websub SET lease_expires_at = ?, subscribe_requested_at = NULL WHERE channel_id = ?'
+  ),
+  requested: prepare('UPDATE youtube_websub SET subscribe_requested_at = ? WHERE channel_id = ?'),
   notified: prepare('UPDATE youtube_websub SET last_notified_at = ? WHERE channel_id = ?'),
   del: prepare('DELETE FROM youtube_websub WHERE channel_id = ?'),
   due: prepare(`
@@ -46,6 +59,7 @@ const norm = (r) =>
     wanted: Number(r.wanted),
     lease_expires_at: r.lease_expires_at == null ? null : Number(r.lease_expires_at),
     last_notified_at: r.last_notified_at == null ? null : Number(r.last_notified_at),
+    subscribe_requested_at: r.subscribe_requested_at == null ? null : Number(r.subscribe_requested_at),
   };
 
 /** @returns {Promise<WebsubRow|null>} */
@@ -72,6 +86,11 @@ export async function unwantWebsub(channelId) {
 
 export async function setWebsubLease(channelId, leaseExpiresAt) {
   await s.lease.run(leaseExpiresAt, channelId);
+}
+
+/** Note that Sylo is asking the hub to subscribe now (`at` = epoch ms), or clear it with null. */
+export async function setWebsubRequested(channelId, at) {
+  await s.requested.run(at, channelId);
 }
 
 export async function touchWebsubNotified(channelId, now = Date.now()) {

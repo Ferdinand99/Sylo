@@ -123,6 +123,20 @@ test(
       assert.equal(await db.holdsEventRoleElsewhere(G, '700', 'u1', a.id), false);
     });
 
+    await t.test('forgetUser takes a former host off their events (host_id is nullable)', async () => {
+      await db.clearGuildEvents(G);
+      const mine = await make({ hostId: 'victim-host' });
+      const theirs = await make({ hostId: 'someone-else' });
+      assert.equal(
+        (await purge.describeUserData(G, 'victim-host')).items.find((i) => i.key === 'eventsHosted').count,
+        1
+      );
+      assert.equal((await purge.forgetUser(G, 'victim-host')).eventsHosted, 1);
+      assert.equal((await db.getEvent(mine.id)).host_id, null);
+      assert.equal((await db.getEvent(theirs.id)).host_id, 'someone-else');
+      await db.clearGuildEvents(G);
+    });
+
     await t.test('forgetUser, describeUserData and purgeGuild cover the sign-ups', async () => {
       await db.clearGuildEvents(G);
       await db.clearGuildEvents(H);

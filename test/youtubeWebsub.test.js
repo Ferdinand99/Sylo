@@ -12,6 +12,7 @@ import { runAlert } from '../src/modules/youtubeAlerts.js';
 import {
   HUB,
   RENEW_BEFORE_MS,
+  VERIFY_WINDOW_MS,
   callbackUrl,
   handleNotification,
   renewDue,
@@ -20,6 +21,7 @@ import {
   topicUrl,
   _setDashboardUrlForTests,
   unsubscribe,
+  verifyIntent,
   verifySignature,
   websubEnabled,
 } from '../src/modules/youtubeWebsub.js';
@@ -180,6 +182,69 @@ test('verification GET: the challenge is echoed only for a known topic and mode'
     const lease = (await getWebsub(channelId)).lease_expires_at;
     assert.ok(lease >= before + 432000 * 1000 - 5 && lease <= Date.now() + 432000 * 1000);
   });
+});
+
+test('a verification GET cannot extend a lease Sylo did not ask for: only a recent request of ours counts, once', async () => {
+  await withWebsub(async ({ channelId }) => {
+    const query = (extra = {}) => ({
+      'hub.mode': 'subscribe',
+      'hub.topic': topicUrl(channelId),
+      'hub.challenge': 'abc',
+      ...extra,
+    });
+    // A wanted row that Sylo never asked the hub about (no pending request): refused.
+    await wantWebsub(channelId, 'secret');
+    assert.equal(await verifyIntent(channelId, query()), null);
+    assert.equal((await getWebsub(channelId)).lease_expires_at, null);
+
+    // After our own request it is accepted, but not later than 10 minutes after it.
+    await subscribe(channelId);
+    const sentAt = (await getWebsub(channelId)).subscribe_requested_at;
+    assert.ok(sentAt > 0);
+    assert.equal(await verifyIntent(channelId, query(), sentAt + VERIFY_WINDOW_MS + 1), null, 'too late');
+    assert.equal(await verifyIntent(channelId, query(), sentAt - 1), null, 'before the request');
+    assert.equal((await getWebsub(channelId)).lease_expires_at, null);
+
+    // The hub asks for more than we did: the lease stays at what Sylo asked for (5 days).
+    const asked = await verifyIntent(
+      channelId,
+      query({ 'hub.lease_seconds': String(14 * 24 * 3600) }),
+      sentAt + 1000
+    );
+    assert.equal(asked, 'abc');
+    const row = await getWebsub(channelId);
+    assert.equal(row.lease_expires_at, sentAt + 1000 + 5 * 24 * 3600 * 1000);
+    assert.equal(row.subscribe_requested_at, null, 'the request is settled');
+
+    // The same GET again (or an attacker's) cannot move the lease any further.
+    assert.equal(
+      await verifyIntent(channelId, query({ 'hub.lease_seconds': '432000' }), sentAt + 2000),
+      null
+    );
+    assert.equal((await getWebsub(channelId)).lease_expires_at, row.lease_expires_at);
+
+    // A renewal is a new request of ours, and is accepted again.
+    await subscribe(channelId);
+    assert.equal(await verifyIntent(channelId, query()), 'abc');
+  });
+});
+
+test('a refused subscribe leaves no pending request', async () => {
+  await withWebsub(
+    async ({ channelId }) => {
+      assert.equal(await subscribe(channelId), false);
+      assert.equal((await getWebsub(channelId)).subscribe_requested_at, null);
+      assert.equal(
+        await verifyIntent(channelId, {
+          'hub.mode': 'subscribe',
+          'hub.topic': topicUrl(channelId),
+          'hub.challenge': 'x',
+        }),
+        null
+      );
+    },
+    { internet: { hubStatus: 500 } }
+  );
 });
 
 test('an unsubscribe is verified only after we asked for it, and then the row goes', async () => {

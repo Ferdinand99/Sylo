@@ -5,7 +5,7 @@
 //   author_id  NULL after the author used /forget: the text stays, the person does not
 //   anonymous  1 when the post was made without showing the author
 //   vote       1 (up) or -1 (down); taking a vote back deletes the row
-import { prepare, registerPostgresBootstrap } from './driver.js';
+import { prepare, registerPostgresBootstrap, registerPostgresMigration } from './driver.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS guild_suggestions (
@@ -34,7 +34,19 @@ registerPostgresBootstrap(`
     PRIMARY KEY (suggestion_id, user_id)
   );
   CREATE INDEX IF NOT EXISTS idx_guild_suggestion_votes_user ON guild_suggestion_votes (user_id);
+  CREATE TABLE IF NOT EXISTS guild_suggestion_counters (
+    guild_id    TEXT PRIMARY KEY,
+    last_number INTEGER NOT NULL
+  );
 `);
+
+// Mirrors SQLite migration 59: start each server's counter at the highest number already used.
+registerPostgresMigration(
+  59,
+  `INSERT INTO guild_suggestion_counters (guild_id, last_number)
+     SELECT guild_id, MAX(number) FROM guild_suggestions GROUP BY guild_id
+     ON CONFLICT (guild_id) DO NOTHING;`
+);
 
 export const STATUSES = ['open', 'considering', 'approved', 'denied', 'implemented'];
 
@@ -47,11 +59,16 @@ const s = {
   create: prepare(
     `
     INSERT INTO guild_suggestions (guild_id, number, channel_id, author_id, anonymous, title, body, created_at)
-    VALUES (@guildId, (SELECT COALESCE(MAX(number), 0) + 1 FROM guild_suggestions WHERE guild_id = @guildId),
-      @channelId, @authorId, @anonymous, @title, @body, @createdAt)
+    VALUES (@guildId, @number, @channelId, @authorId, @anonymous, @title, @body, @createdAt)
   `,
     { returningId: true }
   ),
+  bump: prepare(`
+    INSERT INTO guild_suggestion_counters (guild_id, last_number) VALUES (?, 1)
+    ON CONFLICT (guild_id) DO UPDATE SET last_number = guild_suggestion_counters.last_number + 1
+  `),
+  counter: prepare('SELECT last_number FROM guild_suggestion_counters WHERE guild_id = ?'),
+  delCounter: prepare('DELETE FROM guild_suggestion_counters WHERE guild_id = ?'),
   numberOf: prepare('SELECT number FROM guild_suggestions WHERE id = ?'),
   setMessage: prepare('UPDATE guild_suggestions SET channel_id = ?, message_id = ? WHERE id = ?'),
   get: prepare(`SELECT s.*, ${VOTES} FROM guild_suggestions s WHERE s.id = ?`),
@@ -127,6 +144,16 @@ const hydrate = (row) => {
 };
 
 /**
+ * Take the server's next suggestion number. It comes from a counter that only goes up, so a number
+ * is never handed out twice, not even after the suggestion that had it was deleted. Callers hold
+ * the server's lock (modules/suggestions.js), so the bump and the read cannot interleave.
+ */
+async function takeSuggestionNumber(guildId) {
+  await s.bump.run(guildId);
+  return Number((await s.counter.get(guildId)).last_number);
+}
+
+/**
  * Store a new suggestion with the server's next number.
  * @param {{ guildId: string, channelId: string, authorId: string, anonymous?: boolean, title?: string,
  *   body: string, createdAt?: number }} e
@@ -135,6 +162,7 @@ const hydrate = (row) => {
 export async function createSuggestion(e) {
   const info = await s.create.run({
     guildId: e.guildId,
+    number: await takeSuggestionNumber(e.guildId),
     channelId: e.channelId,
     authorId: e.authorId,
     anonymous: e.anonymous ? 1 : 0,
@@ -207,4 +235,5 @@ export async function voteTally(id) {
 export async function clearGuildSuggestions(guildId) {
   await s.delGuildVotes.run(guildId);
   await s.delGuild.run(guildId);
+  await s.delCounter.run(guildId);
 }

@@ -18,6 +18,7 @@ test(
       unwantWebsub,
       setWebsubLease,
       touchWebsubNotified,
+      setWebsubRequested,
       deleteWebsub,
       websubDueBefore,
     } = await import('../src/db/youtubeWebsub.js');
@@ -47,6 +48,17 @@ test(
       assert.equal(row.secret, 'secret-1');
       assert.equal(row.lease_expires_at, 1_800_000_000_000); // BIGINT comes back as a number
       assert.equal(typeof row.lease_expires_at, 'number');
+    });
+
+    await t.test('the pending subscribe request is a number and a verified lease settles it', async () => {
+      await wantWebsub(A, 'secret-1');
+      assert.equal((await getWebsub(A)).subscribe_requested_at, null);
+      await setWebsubRequested(A, 1_800_000_000_456);
+      const row = await getWebsub(A);
+      assert.equal(row.subscribe_requested_at, 1_800_000_000_456);
+      assert.equal(typeof row.subscribe_requested_at, 'number');
+      await setWebsubLease(A, 1_800_000_999_000);
+      assert.equal((await getWebsub(A)).subscribe_requested_at, null);
     });
 
     await t.test('touch, unwant and delete', async () => {

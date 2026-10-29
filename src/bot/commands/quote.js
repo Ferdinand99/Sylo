@@ -19,7 +19,7 @@ import {
   randomQuote,
   searchQuotes,
 } from '../../db/quotes.js';
-import { guildKey } from '../../platform/platformOf.js';
+import { guildKey, platformOfGuild } from '../../platform/platformOf.js';
 import { splitPlatformGuildId } from '../../lib/platformId.js';
 import {
   LIMITS,
@@ -29,6 +29,7 @@ import {
   fetchQuotable,
   normaliseQuoteBoardConfig,
   normaliseQuoteQuery,
+  normaliseQuoteText,
   canView,
   parseMessageLink,
   quoteFitsChannel,
@@ -36,6 +37,11 @@ import {
   removeQuote,
   saveQuote,
 } from '../../modules/quoteBoard.js';
+
+const NO_TEXT_BY_LINK =
+  'That message has no text or attachments Sylo can read, so there is nothing to save. If it does have text, ' +
+  "this bot may not have the Message Content intent (then Sylo cannot read other people's messages by link). " +
+  'Right-click or long-press the message and use Apps > Save quote instead.';
 
 const SEARCH_SHOWN = 5;
 const USER_SHOWN = 10;
@@ -199,6 +205,15 @@ async function save(interaction) {
     messageId: target.messageId,
   });
   if (!found.ok) return eph(interaction, found.error);
+  if (
+    platformOfGuild(interaction.guild) === 'discord' &&
+    !normaliseQuoteText(found.message.content) &&
+    !found.message.attachments?.size
+  ) {
+    // Without the Message Content intent Discord sends the text of a fetched message empty, unless
+    // it mentions the bot. The "Save quote" menu is not affected: Discord sends that message in full.
+    return eph(interaction, NO_TEXT_BY_LINK);
+  }
   const result = await saveQuote({
     guild: interaction.guild,
     message: found.message,

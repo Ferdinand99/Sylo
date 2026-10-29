@@ -11,8 +11,14 @@ saved quote with a search and a Remove button on each row.
 
 ## Needs
 
-- No special permission or privileged intent. Sylo has to be able to **read the
-  channel** of a message to save it (View Channel and Read Message History).
+- No special permission. Sylo has to be able to **read the channel** of a message to
+  save it (View Channel and Read Message History).
+- The **Message Content** intent (`INTENT_MESSAGE_CONTENT`, on by default; see
+  [privileged intents](../self-hosting.md#privileged-intents)) is needed only for
+  `/quote save <message link>` on Discord: without it Discord sends Sylo a fetched
+  message with its text empty, and Sylo answers that there is nothing to save and
+  points to the menu. The **Save quote** menu does not need it, because Discord sends
+  the chosen message in full. The module is therefore not marked as needing the intent.
 - **Discord:** the "Save quote" entry appears under *Apps* in the right-click menu
   of a message once Sylo has registered its commands (a few minutes after an update;
   Discord can take up to an hour for new global commands).
@@ -122,7 +128,15 @@ What it shows and what it never shows:
   styles).
 
 Switch the setting off and the address answers "not found" again at once. There is
-no vanity address for this page.
+no vanity address for this page. A server Sylo is not in, a server without the module,
+and a page that is switched off all get the **same** plain "not found" answer, so the
+page does not reveal which servers Sylo is in.
+
+**Public or not is decided once, when the quote is saved.** A quote saved from a
+channel that was public then stays on the public page if the channel is made private
+later (and a quote saved from a private channel stays off it if the channel is opened
+up). To take a quote off the page, remove it on the dashboard or with `/quote remove`.
+Check the channel's permissions before you switch the public page on.
 
 ## Limits
 

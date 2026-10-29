@@ -220,7 +220,7 @@ export function buildEventPayload(ev, { joined = [], maybe = [] } = {}) {
   if (ev.end_at) lines.push(`🏁 **Ends:** <t:${Math.floor(ev.end_at / 1000)}:F>`);
   lines.push(`🌍 **Set in:** ${formatInZone(ev.start_at, ev.time_zone)} (${ev.time_zone})`);
   if (ev.location) lines.push(`📍 **Where:** ${ev.location}`);
-  lines.push(`👤 **Host:** <@${ev.host_id}>`);
+  if (ev.host_id) lines.push(`👤 **Host:** <@${ev.host_id}>`); // gone after the host used /forget
   if (ev.role_id) lines.push(`🎭 **Role:** <@&${ev.role_id}> while you are signed up`);
 
   const icon = open ? '📅' : ev.state === 'cancelled' ? '❌' : '🏁';
