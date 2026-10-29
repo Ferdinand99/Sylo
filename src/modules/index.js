@@ -23,6 +23,7 @@ import './inviteTracker.js';
 import './polls.js';
 import './twitchAlerts.js';
 import './youtubeAlerts.js';
+import './youtubeWebsub.js';
 import './kickAlerts.js';
 import './rss.js';
 import './appleConnect.js';

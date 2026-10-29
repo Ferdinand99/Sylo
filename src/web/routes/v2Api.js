@@ -154,6 +154,7 @@ import {
   DEFAULT_VIDEO_MESSAGE as YT_DEFAULT_VIDEO_MSG,
   DEFAULT_LIVE_MESSAGE as YT_DEFAULT_LIVE_MSG,
 } from '../../modules/youtubeAlerts.js';
+import { syncSubscriptions as syncYoutubeWebsub } from '../../modules/youtubeWebsub.js';
 import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TPL, FEED_TYPES } from '../../modules/rss.js';
 import { clearScope } from '../../db/postedKeys.js';
 import { deleteBoardEntries } from '../../db/starboard.js';
@@ -1427,6 +1428,9 @@ router.post(
       action: 'module:youtube-alerts',
       detail: 'settings saved',
     });
+    // A channel added here is subscribed at the hub, one removed is unsubscribed (a no-op without
+    // WebSub). Not awaited: the hub's requests must not slow the save.
+    syncYoutubeWebsub().catch((err) => log.warn('youtube-alerts', `WebSub sync after save: ${err.message}`));
     res.json({ config });
   })
 );

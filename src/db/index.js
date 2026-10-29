@@ -962,6 +962,22 @@ export const MIGRATIONS = [
       ALTER TABLE api_tokens ADD COLUMN push_dev_log TEXT NOT NULL DEFAULT 'errors';
     `);
   },
+
+  // YouTube WebSub subscriptions (src/db/youtubeWebsub.js, which bootstraps the same table on
+  // Postgres). One row per YouTube channel, not per guild: the hub pushes once per channel and
+  // Sylo fans it out to every guild that watches it.
+  (database) => {
+    database.exec(`
+      CREATE TABLE youtube_websub (
+        channel_id       TEXT PRIMARY KEY,
+        secret           TEXT NOT NULL,
+        wanted           INTEGER NOT NULL DEFAULT 1,
+        lease_expires_at INTEGER,
+        last_notified_at INTEGER
+      );
+      CREATE INDEX idx_youtube_websub_lease ON youtube_websub (lease_expires_at);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

@@ -3,8 +3,8 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
-import { isIP } from 'node:net';
-import { isLocalName, isPrivateAddress } from '../lib/safeFetch.js';
+import { isPrivateAddress } from '../lib/safeFetch.js';
+import { isLocalHostname } from '../lib/localHost.js';
 import { LimitError } from '../lib/limits.js';
 import { RoleGrantError } from './middleware/roleGrants.js';
 import { config } from '../config.js';
@@ -24,6 +24,8 @@ import leaderboardRouter, { vanityRouter } from './routes/leaderboard.js';
 import verifyRouter from './routes/verify.js';
 import appealRouter from './routes/appeal.js';
 import githubWebhookRouter from './routes/githubWebhook.js';
+import youtubeWebhookRouter from './routes/youtubeWebhook.js';
+import { websubEnabled } from '../modules/youtubeWebsub.js';
 import v2ApiRouter from './routes/v2Api.js';
 import v2ClientRouter, { v2Build, v2PublicClientRouter } from './routes/v2Client.js';
 import v2PublicRouter from './routes/v2Public.js';
@@ -61,8 +63,7 @@ function isLocalHost(hostHeader) {
     .toLowerCase();
   const host = raw.startsWith('[') ? raw.slice(1, raw.indexOf(']')) : raw.replace(/:\d+$/, '');
   if (!host) return false;
-  if (isIP(host)) return true; // an address typed by hand, as on a LAN
-  if (isLocalName(host)) return true;
+  if (isLocalHostname(host)) return true; // an address typed by hand, as on a LAN, or a local name
   try {
     return Boolean(config.dashboardUrl) && new URL(config.dashboardUrl).hostname.toLowerCase() === host;
   } catch {
@@ -144,6 +145,11 @@ export function createApp() {
   // design (GitHub can't carry a dashboard session) — signature verification
   // inside the route is what stands in for auth here.
   app.use('/webhooks/github', githubWebhookRouter);
+  // YouTube's WebSub hub calls back here (verification GET, Atom POST signed per subscription).
+  // Same reasoning as above, and only with a public https DASHBOARD_URL: without one no hub could
+  // reach it and nothing is ever subscribed. It stays behind the open-mode host refusal: the hub
+  // calls the DASHBOARD_URL host, which that refusal lets through.
+  if (websubEnabled()) app.use('/webhooks/youtube', youtubeWebhookRouter);
 
   app.use(express.static(join(here, 'public')));
   // Error reports and visit counts for the dashboard and the public pages; does nothing unless configured.
