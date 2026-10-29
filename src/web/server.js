@@ -99,6 +99,18 @@ function refuseMalformedPaths(req, res, next) {
   next();
 }
 
+/**
+ * Where a request went, for logs: the mount path and route pattern ("/webhooks/github/:token"),
+ * never the path the client sent. Mount segments that are not plain words (ids) are masked.
+ */
+export function routeLabel(req) {
+  const mount = String(req.baseUrl ?? '')
+    .split('/')
+    .map((seg) => (seg === '' || /^[a-z][a-z0-9_-]{0,30}$/i.test(seg) ? seg : ':id'))
+    .join('/');
+  return `${mount}${req.route?.path ?? '(unmatched)'}`;
+}
+
 /** Build (but do not start) the Express app. Exposed for testing. */
 export function createApp() {
   const app = express();
@@ -155,6 +167,12 @@ export function createApp() {
   app.use(express.static(join(here, 'public')));
   // Error reports and visit counts for the dashboard and the public pages; does nothing unless configured.
   app.use('/telemetry.js', telemetryRouter);
+  // Per-client ceiling on everything below. It runs ahead of the body parsers: a request whose
+  // body fails to parse (too large, broken JSON) is answered by the parser's own error, so a
+  // limiter behind them would never count it. Generous for normal clicking, but stops a stuck
+  // script, a flood of junk requests or a compromised session from hammering config saves,
+  // backups or "send as bot". Unauthenticated traffic is capped too, not just signed-in sessions.
+  app.use(rateLimit({ windowMs: 60_000, max: 300 }));
   app.use(express.urlencoded({ extended: false, limit: '256kb' }));
   app.use(express.json({ limit: '256kb' }));
   // Express 5 leaves req.body undefined for a request without a body; handlers read fields.
@@ -198,13 +216,6 @@ export function createApp() {
   // pages. Only /api/v2/public is public; the rest of /api/v2 is mounted after requireAuth.
   app.use('/api/v2/public', rateLimit({ windowMs: 60_000, max: 60 }), v2PublicRouter);
 
-  // Per-path ceiling on the authenticated dashboard — generous for normal
-  // clicking, but stops a stuck script or a compromised session from hammering
-  // config saves, backups, or "send as bot". Ahead of requireAuth so
-  // unauthenticated traffic hitting these routes is capped too, not just
-  // signed-in sessions — requireAuth's own redirect is cheap, but it was the
-  // only thing standing between an arbitrary flood and the rest of the stack.
-  app.use(rateLimit({ windowMs: 60_000, max: 300 }));
   // The new dashboard's built files and its two public pages (/v2/commands, /v2/roadmap), which
   // work without a session. Every other /v2 path is mounted after requireAuth, below.
   app.use('/v2', v2PublicClientRouter);
@@ -230,7 +241,18 @@ export function createApp() {
       }
       return res.status(status).render('error', { title: heading, heading, message: err.message });
     }
-    log.error('web', `${req.method} ${req.path}`, err);
+    // A request the client got wrong, not a server fault: a body over the cap (413) or one that
+    // does not parse (400), from the body parsers. Anyone can send these, so they must not reach
+    // log.error (dev-log channel, operators' phones, /health): answer and move on.
+    const status = err?.status ?? err?.statusCode;
+    if (err?.expose === true && Number.isInteger(status) && status >= 400 && status < 500) {
+      log.debug('web', `${req.method} ${routeLabel(req)} ${status} ${err.type ?? ''}`.trim());
+      if (res.headersSent) return res.end();
+      return res.status(status).json({ error: status === 413 ? 'Payload too large' : 'Bad request' });
+    }
+    // The route pattern, never the raw path: the path is the caller's to choose (a unique message
+    // per request) and in a webhook URL it holds a secret token.
+    log.error('web', `${req.method} ${routeLabel(req)}`, err);
     res.status(500).json({ error: 'Internal server error' });
   });
 
