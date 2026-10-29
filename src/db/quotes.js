@@ -80,6 +80,9 @@ const s = {
        AND (LOWER(body) LIKE ? ESCAPE '!' OR LOWER(author_name) LIKE ? ESCAPE '!')
      ORDER BY number DESC LIMIT ?`
   ),
+  publicChannels: prepare(
+    'SELECT channel_id, COUNT(*) AS n FROM guild_quotes WHERE guild_id = ? AND public_source = 1 GROUP BY channel_id'
+  ),
   atOffset: prepare('SELECT * FROM guild_quotes WHERE guild_id = ? ORDER BY number LIMIT 1 OFFSET ?'),
   atOffsetAuthor: prepare(
     'SELECT * FROM guild_quotes WHERE guild_id = ? AND author_id = ? ORDER BY number LIMIT 1 OFFSET ?'
@@ -204,6 +207,11 @@ export async function quotesByAuthor(guildId, authorId, limit = 10, { visibleIn 
 /** The newest quotes, `offset` rows in. */
 export async function recentQuotes(guildId, { limit = 50, offset = 0 } = {}) {
   return (await s.recent.all(guildId, limit, offset)).map(hydrate);
+}
+
+/** The channels the public quotes were saved from, with how many each has: [{ channelId, count }]. */
+export async function publicQuoteChannels(guildId) {
+  return (await s.publicChannels.all(guildId)).map((r) => ({ channelId: r.channel_id, count: Number(r.n) }));
 }
 
 /** The newest quotes the public page may show (saved from channels everyone can read). */

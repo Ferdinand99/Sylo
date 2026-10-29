@@ -163,6 +163,45 @@ export function isPublicSource(guild, channel) {
   }
 }
 
+// How long a channel's "is it still public?" answer is reused by the public page. Short enough
+// that a channel made private drops off the page within minutes, long enough that the page, which
+// anyone can request, does not recompute permissions on every hit. No background job: the check
+// runs when the page is rendered.
+export const PUBLIC_RECHECK_MS = 2 * 60_000;
+const MAX_RECHECKED = 5000;
+const rechecked = new Map(); // "guild|channel" -> { at, hide }
+
+/** Tests only. */
+export function _clearPublicRecheck() {
+  rechecked.clear();
+}
+
+/**
+ * Which of these channels (that quotes were saved from while public) are no longer public?
+ * A channel made private, or age-restricted, since the quote was saved is hidden from the public
+ * page. A channel Sylo cannot find (deleted, or an archived thread that is not cached) keeps the
+ * verdict it was saved with: absent is not the same as private.
+ * @param {any} guild
+ * @param {string} guildKeyValue
+ * @param {string[]} channelIds
+ * @returns {Set<string>} the channel ids to hide
+ */
+export function nowPrivateChannels(guild, guildKeyValue, channelIds, now = Date.now()) {
+  const hidden = new Set();
+  for (const channelId of channelIds) {
+    const key = `${guildKeyValue}|${channelId}`;
+    let entry = rechecked.get(key);
+    if (!entry || now - entry.at >= PUBLIC_RECHECK_MS) {
+      const channel = guild?.channels?.cache?.get?.(channelId);
+      entry = { at: now, hide: channel ? !isPublicSource(guild, channel) : false };
+      if (rechecked.size >= MAX_RECHECKED) rechecked.clear();
+      rechecked.set(key, entry);
+    }
+    if (entry.hide) hidden.add(channelId);
+  }
+  return hidden;
+}
+
 const displayNameOf = (message) =>
   cut(
     String(

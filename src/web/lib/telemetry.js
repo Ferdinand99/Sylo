@@ -70,6 +70,28 @@ export function telemetryScript(settings) {
     if (onload) s.onload = onload;
     document.head.appendChild(s);
   }
+  // A page's address can carry a credential in its query or fragment (the OAuth error page has
+  // ?code= and ?state=, verify and appeal links have ?t=). Reports keep the path only.
+  function scrubUrl(u) {
+    if (typeof u !== 'string' || !u) return u;
+    try {
+      var x = new URL(u, window.location.href);
+      return x.origin + x.pathname;
+    } catch (e) {
+      return u.split(/[?#]/)[0];
+    }
+  }
+  function scrubCrumb(b) {
+    if (!b) return b;
+    var d = b.data;
+    if (d) {
+      ['url', 'from', 'to'].forEach(function (k) {
+        if (typeof d[k] === 'string') d[k] = scrubUrl(d[k]);
+      });
+    }
+    if (typeof b.message === 'string') b.message = b.message.replace(/([?&][^=\\s&#]+=)[^&\\s#]*/g, '$1***');
+    return b;
+  }
   load('/vendor/sentry.min.js', {}, function () {
     if (!window.Sentry) return;
     window.Sentry.init({
@@ -77,6 +99,22 @@ export function telemetryScript(settings) {
       release: c.release,
       environment: c.environment,
       sendDefaultPii: false,
+      denyUrls: [/^chrome-extension:/i, /^moz-extension:/i, /^safari-(web-)?extension:/i],
+      beforeBreadcrumb: scrubCrumb,
+      beforeSend: function (event) {
+        if (event.request) {
+          if (event.request.url) event.request.url = scrubUrl(event.request.url);
+          delete event.request.query_string;
+          if (event.request.headers) {
+            delete event.request.headers.Referer;
+            delete event.request.headers.referer;
+            delete event.request.headers.Cookie;
+          }
+        }
+        var crumbs = event.breadcrumbs;
+        if (crumbs) (Array.isArray(crumbs) ? crumbs : crumbs.values || []).forEach(scrubCrumb);
+        return event;
+      },
       initialScope: {
         tags: { component: 'dashboard', dashboard: 'v2' }
       }

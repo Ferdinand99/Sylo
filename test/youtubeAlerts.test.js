@@ -79,14 +79,11 @@ test('resolveYtChannel: an HTTP error logs a warning with the status', async () 
 });
 
 test('resolveYtChannel: a 200 with no recognisable channel id logs a warning', async () => {
-  await withMockedFetch(
-    { ok: true, text: async () => '<html>no channel id here</html>' },
-    async (warnings) => {
-      assert.equal(await resolveYtChannel('@somechannel'), null);
-      assert.equal(warnings.length, 1);
-      assert.match(warnings[0].join(' '), /no channel id found/);
-    }
-  );
+  await withMockedFetch(new Response('<html>no channel id here</html>'), async (warnings) => {
+    assert.equal(await resolveYtChannel('@somechannel'), null);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0].join(' '), /no channel id found/);
+  });
 });
 
 test('checkLive: an HTTP error logs a warning and reports not live', async () => {
@@ -98,7 +95,7 @@ test('checkLive: an HTTP error logs a warning and reports not live', async () =>
 });
 
 test('checkLive: legitimately not live is silent (no warning) — the common case', async () => {
-  await withMockedFetch({ ok: true, text: async () => '<html>not live</html>' }, async (warnings) => {
+  await withMockedFetch(new Response('<html>not live</html>'), async (warnings) => {
     assert.deepEqual(await checkLive(UC), { live: false });
     assert.equal(warnings.length, 0);
   });
@@ -113,7 +110,7 @@ const PAST_OLD_CAP = 'x'.repeat(350_000); // > the old 300 KB grab() default
 
 test('resolveYtChannel: a channel id past the old 300 KB scan cap is still found', async () => {
   const html = `<html>${PAST_OLD_CAP}<script>"channelId":"${UC}"</script></html>`;
-  await withMockedFetch({ ok: true, text: async () => html }, async (warnings) => {
+  await withMockedFetch(new Response(html), async (warnings) => {
     assert.deepEqual(await resolveYtChannel('@somechannel'), { channelId: UC, name: '' });
     assert.equal(warnings.length, 0);
   });
@@ -121,7 +118,7 @@ test('resolveYtChannel: a channel id past the old 300 KB scan cap is still found
 
 test('checkLive: a videoId past the old 300 KB scan cap is still found', async () => {
   const html = `<html>"isLive":true${PAST_OLD_CAP}<script>"videoId":"abcdefghijk"</script></html>`;
-  await withMockedFetch({ ok: true, text: async () => html }, async (warnings) => {
+  await withMockedFetch(new Response(html), async (warnings) => {
     assert.deepEqual(await checkLive(UC), { live: true, videoId: 'abcdefghijk', title: 'Live now' });
     assert.equal(warnings.length, 0);
   });

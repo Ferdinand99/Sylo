@@ -3,7 +3,7 @@
 // weekday filter. Not event-driven: a polling loop (started on import) checks
 // for due reminders.
 import { allClientsReady, guildByKey } from '../platform/platformOf.js';
-import { isModuleEnabled } from '../db/modules.js';
+import { getGuildModule } from '../db/modules.js';
 import {
   dueScheduled,
   advanceReminder,
@@ -100,10 +100,20 @@ const TICK_MS = 20_000;
 
 const MODULE_ID = 'reminders';
 
-function payloadFor(reminder) {
+/**
+ * Does this server let its reminders ping? Off unless the server owner or someone with Manage
+ * Server turned it on (Reminders page): a bot master may use the whole dashboard, but must not
+ * be able to make Sylo ping @everyone, @here or any role with Sylo's own rights.
+ */
+export function remindersMayPing(moduleConfig) {
+  return moduleConfig?.allowPings === true;
+}
+
+/** The message a reminder posts. Without pings allowed, mentions in the text are shown but silent. */
+export function reminderPayload(reminder, allowPings = false) {
   const { payload, empty } = buildPayload(reminder.spec || { content: reminder.content ?? '' });
   if (empty) return null;
-  payload.allowedMentions = { parse: ['roles', 'everyone'] };
+  payload.allowedMentions = allowPings ? { parse: ['roles', 'everyone'] } : { parse: [] };
   return payload;
 }
 
@@ -112,13 +122,15 @@ async function tick() {
   const now = Date.now();
 
   for (const r of await dueScheduled(now)) {
-    const enabled = await isModuleEnabled(r.guild_id, MODULE_ID);
+    const mod = await getGuildModule(r.guild_id, MODULE_ID);
+    const enabled = mod.enabled;
+    const allowPings = remindersMayPing(mod.config);
     const inGuild = Boolean(guildByKey(r.guild_id));
 
     if (r.mode === 'single') {
       await markSingleFired(r.id, now); // claim it first so a crash can't double-fire
       if (enabled && inGuild) {
-        const payload = payloadFor(r);
+        const payload = reminderPayload(r, allowPings);
         if (payload) await sendToChannel(r.guild_id, r.channel_id, payload);
       }
       continue;
@@ -139,7 +151,7 @@ async function tick() {
     if (r.start_at && now < r.start_at) continue;
     if (!r.dayList.includes(new Date(now).getDay())) continue; // not a chosen weekday
 
-    const payload = payloadFor(r);
+    const payload = reminderPayload(r, allowPings);
     if (payload) await sendToChannel(r.guild_id, r.channel_id, payload);
   }
 }

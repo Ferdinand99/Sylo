@@ -86,3 +86,27 @@ test('log.warn and log.error reach the dev log', async () => {
   ]);
   _clearDevLogSinks();
 });
+
+test('redactSecrets hides URL passwords, query tokens, bearer and Sylo tokens, Authorization values', async () => {
+  const { redactSecrets } = await import('../src/lib/log.js');
+  assert.equal(redactSecrets('db postgres://u:hunter2@host/db failed'), 'db postgres://u:***@host/db failed');
+  assert.equal(
+    redactSecrets('GET https://x.example/feed?token=abc123&page=2 failed'),
+    'GET https://x.example/feed?token=***&page=2 failed'
+  );
+  assert.equal(
+    redactSecrets('https://x/cb?code=SECRET&state=ST and https://y/?a=1&key=K2#frag'),
+    'https://x/cb?code=***&state=ST and https://y/?a=1&key=***#frag'
+  );
+  assert.equal(redactSecrets('401 for Bearer abcdefgh12345678'), '401 for Bearer ***');
+  assert.equal(
+    redactSecrets('headers: Authorization: Bearer abcdefgh12345678, x'),
+    'headers: Authorization: Bearer ***, x'
+  );
+  assert.equal(redactSecrets('authorization=Basic dXNlcjpwYXNz'), 'authorization=Basic ***');
+  assert.equal(redactSecrets('{"x-api-key":"k-1234"}'), '{"x-api-key":"***"}');
+  assert.equal(redactSecrets('token sylo_AbCdEfGhIjKlMnOpQrStUv rejected'), 'token sylo_*** rejected');
+  // Plain text and lookalikes are left alone.
+  assert.equal(redactSecrets('error code=5 at step t=3'), 'error code=5 at step t=3');
+  assert.equal(redactSecrets('Bearer of bad news'), 'Bearer of bad news');
+});

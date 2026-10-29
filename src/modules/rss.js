@@ -184,6 +184,15 @@ export function fillTemplate(tpl, { title, link, author, feed }) {
     .replaceAll('{feed}', feed ?? '');
 }
 
+/** A feed's host for log lines: its URL can carry a token in the path or query. */
+function hostOf(url) {
+  try {
+    return new URL(url).host;
+  } catch {
+    return '(invalid url)';
+  }
+}
+
 export function buildPayload(feed, entry) {
   const source = sourceLabel(feed);
   const link = /^https?:\/\//i.test(entry.link) ? entry.link : '';
@@ -258,7 +267,7 @@ async function tick() {
       try {
         await runFeed(guildKey(guild), feed);
       } catch (err) {
-        log.error('rss', `${feed.url}: ${err.message}`);
+        log.error('rss', `${hostOf(feed.url)}: ${err.message}`);
       }
     }
   }

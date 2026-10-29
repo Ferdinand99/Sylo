@@ -25,6 +25,7 @@ import { settleEndedPost } from './lib/liveAlerts.js';
 import { normaliseOnEnd } from '../lib/liveValue.js';
 import { parseFeed as parseGenericFeed, grab, decodeEntities } from '../bot/lib/feed.js';
 import { log } from '../lib/log.js';
+import { readTextCapped } from '../lib/safeFetch.js';
 import { every } from './schedule.js';
 
 const FEED = 'https://www.youtube.com/feeds/videos.xml?channel_id=';
@@ -43,6 +44,10 @@ const UA = 'Mozilla/5.0 (compatible; Sylo-Discord-Bot/1.0; +https://github.com/F
 // how YouTube serves these pages can't turn a scan into unbounded work.
 const PAGE_MAX_SCAN = 3_000_000;
 const grabPage = (re, html) => grab(re, html, PAGE_MAX_SCAN);
+
+// YouTube pages and feeds are read up to this many bytes: a page that size is already far past
+// what the ids and titles are taken from, and an unbounded body must not be read into memory.
+const MAX_PAGE_BYTES = 3 * 1024 * 1024;
 
 export const DEFAULT_VIDEO_MESSAGE = '📺 **{name}** posted a new video: **{title}**\n{url}';
 export const DEFAULT_LIVE_MESSAGE = '🔴 **{name}** is live on YouTube: **{title}**\n{url}';
@@ -133,7 +138,7 @@ export async function resolveYtChannel(input) {
       log.warn('youtube-alerts', `resolve ${path}: HTTP ${res.status}`);
       return null;
     }
-    const html = await res.text();
+    const html = await readTextCapped(res, MAX_PAGE_BYTES);
     const channelId =
       grabPage(/"channelId":"(UC[\w-]{20,})"/, html) ||
       grabPage(/<meta itemprop="(?:identifier|channelId)" content="(UC[\w-]{20,})">/, html) ||
@@ -186,7 +191,7 @@ async function fetchFeed(ytChannelId) {
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`YT feed ${res.status}`);
-  return parseFeed(await res.text());
+  return parseFeed(await readTextCapped(res, MAX_PAGE_BYTES));
 }
 
 // --- live check ------------------------------------------------------
@@ -206,7 +211,7 @@ export async function checkLive(ytChannelId) {
       log.warn('youtube-alerts', `live check ${ytChannelId}: HTTP ${res.status}`);
       return { live: false };
     }
-    const html = await res.text();
+    const html = await readTextCapped(res, MAX_PAGE_BYTES);
     const isLive = /"isLive":true/.test(html) || /"isLiveNow":true/.test(html);
     if (!isLive) return { live: false };
     const videoId =

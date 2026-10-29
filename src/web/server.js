@@ -26,7 +26,7 @@ import verifyRouter from './routes/verify.js';
 import appealRouter from './routes/appeal.js';
 import githubWebhookRouter from './routes/githubWebhook.js';
 import youtubeWebhookRouter from './routes/youtubeWebhook.js';
-import { websubEnabled } from '../modules/youtubeWebsub.js';
+import { websubBase, websubEnabled } from '../modules/youtubeWebsub.js';
 import v2ApiRouter from './routes/v2Api.js';
 import v2ClientRouter, { v2Build, v2PublicClientRouter } from './routes/v2Client.js';
 import v2PublicRouter from './routes/v2Public.js';
@@ -51,6 +51,27 @@ export function trustProxySetting({ dashboardUrl, trustProxy }) {
   }
   if (!dashboardUrl) return false;
   return (addr, i) => i === 0 && isPrivateAddress(addr);
+}
+
+/**
+ * A warning for the default proxy trust, or null. With DASHBOARD_URL set and no TRUST_PROXY, any
+ * client whose connection comes from a private address may choose its own address with
+ * X-Forwarded-For. That is right behind a reverse proxy on this machine or network, but when the
+ * port is published straight from Docker with no proxy, every outside client arrives from the
+ * Docker bridge gateway (a private address) and so can pick its own rate-limit bucket. Said at
+ * startup for a public https DASHBOARD_URL, where a proxy is expected and so is the exposure.
+ * @param {{ dashboardUrl?: string | null, trustProxy?: string | null }} settings
+ * @returns {string | null}
+ */
+export function defaultProxyTrustWarning({ dashboardUrl, trustProxy }) {
+  if (trustProxy != null || !dashboardUrl || websubBase(dashboardUrl) === null) return null;
+  return (
+    'TRUST_PROXY is not set, so X-Forwarded-For is believed from any peer on a private address ' +
+    '(this machine, the local network, the Docker bridge). If Sylo is reachable without a reverse ' +
+    'proxy in front (for example a published Docker port), a client can choose its own address ' +
+    'and slip past the per-client rate limits. Set TRUST_PROXY to your proxy address or a hop ' +
+    'count; see "Behind a reverse proxy" in docs/self-hosting.md.'
+  );
 }
 
 // Hosts open mode answers on (see refuseRemoteHostsInOpenMode).
@@ -266,6 +287,8 @@ export function createApp() {
  */
 export function startWeb(port) {
   const app = createApp();
+  const proxyWarning = defaultProxyTrustWarning(config);
+  if (proxyWarning) log.warn('web', proxyWarning);
   if (!v2Build.exists()) {
     log.warn('web', 'The dashboard is not built, so /v2 answers 503: run npm run build:v2.');
   }

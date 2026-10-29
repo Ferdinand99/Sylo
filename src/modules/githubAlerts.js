@@ -7,6 +7,7 @@
 // unit-test; the route owns all the I/O (DB lookup, posting to Discord).
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { log } from '../lib/log.js';
+import { readTextCapped } from '../lib/safeFetch.js';
 
 // The event types a watch can subscribe to. `key` must match GitHub's
 // `X-GitHub-Event` header value exactly. Shown as checkboxes in the dashboard
@@ -268,6 +269,9 @@ export function extractLatestChangelogBlock(text) {
   return joined || null;
 }
 
+// A changelog is read from a repo an admin chose: never more than this many bytes of it.
+const MAX_CHANGELOG_BYTES = 2 * 1024 * 1024;
+
 /**
  * Fetch `path` from a public repo at `ref` and extract its latest changelog
  * entry. Never throws — returns null (and logs why) on a private repo, a
@@ -288,7 +292,7 @@ export async function fetchChangelogBlock(repo, path, ref) {
       );
       return null;
     }
-    const block = extractLatestChangelogBlock(await res.text());
+    const block = extractLatestChangelogBlock(await readTextCapped(res, MAX_CHANGELOG_BYTES));
     if (!block) log.warn('module:github', `changelog fetch ${repo}/${path}: no "## " heading found`);
     return block;
   } catch (err) {

@@ -7,6 +7,7 @@ import {
   deleteReminder,
   toggleReminder,
   testReminder,
+  setReminderPings,
 } from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
@@ -353,6 +354,15 @@ export default function Reminders() {
     }
   }
 
+  async function onPings(allowPings) {
+    try {
+      await setReminderPings(guildId, allowPings);
+      await load();
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
   async function onDelete(id) {
     const ok = await confirmDialog({
       title: 'Delete this reminder?',
@@ -393,6 +403,24 @@ export default function Reminders() {
       <p className="v2-field-hint">
         Post a text or embed message to a channel — once, or on a repeating schedule.
       </p>
+
+      <div className="v2-group">
+        <h2 className="v2-group-title">Pings</h2>
+        <div className="v2-field-row">
+          <label className="v2-check">
+            <input
+              type="checkbox"
+              checked={d.allowPings === true}
+              onChange={(e) => onPings(e.target.checked)}
+            />
+            Let reminders ping @everyone, @here and roles
+          </label>
+        </div>
+        <p className="v2-field-hint">
+          Off by default: mentions in a reminder are shown but nobody is notified. Only the server owner or
+          someone with Manage Server can change this.
+        </p>
+      </div>
 
       <div className="v2-group">
         <h2 className="v2-group-title">Your reminders ({d.reminders.length})</h2>

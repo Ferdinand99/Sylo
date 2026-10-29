@@ -72,7 +72,7 @@ function fakeInternet({ hubStatus = 202, feed = () => '', delayMs = 0 } = {}) {
       return { ok: hubStatus < 400, status: hubStatus };
     }
     if (u.startsWith('https://www.youtube.com/feeds/videos.xml')) {
-      return { ok: true, status: 200, text: async () => feed(u) };
+      return new Response(feed(u));
     }
     return realFetch(url, init);
   };

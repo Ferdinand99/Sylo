@@ -9,6 +9,7 @@
 // to act as anyone.
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { prepare, registerPostgresBootstrap, registerPostgresMigration } from './driver.js';
+import { log } from '../lib/log.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS api_tokens (
@@ -306,8 +307,12 @@ export async function apiTokenPush(id) {
  * the server address the app should open a notification on.
  */
 export async function setApiTokenPush(id, { deviceToken = null, relayToken = null, environment, origin }) {
-  if (deviceToken) await s.takeDevice.run(deviceToken, id);
-  if (relayToken) await s.takeRelay.run(relayToken, id);
+  // A device or relay token is the only proof of the device, so registering one that another app
+  // token holds moves it (a device signing in again does exactly that). Leave a trace of it.
+  const moved =
+    (deviceToken ? (await s.takeDevice.run(deviceToken, id)).changes : 0) +
+    (relayToken ? (await s.takeRelay.run(relayToken, id)).changes : 0);
+  if (moved > 0) log.info('push', 'a push registration moved from another app token to token ' + id);
   await s.setPush.run({ id, deviceToken, relayToken, environment, origin });
 }
 

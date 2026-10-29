@@ -181,19 +181,33 @@ const userStmts = {
     "UPDATE invite_joins SET inviter_id = NULL, source = 'unknown', counted = 0 WHERE guild_id = ? AND inviter_id = ?"
   ),
   invitePersonal: prepare('DELETE FROM invite_personal WHERE guild_id = ? AND user_id = ?'),
+  // The poll or giveaway stays (it may still be running); only the maker's id comes off it. The
+  // columns are NOT NULL, so an empty string stands for "nobody".
+  pollsCreated: prepare("UPDATE polls SET created_by = '' WHERE guild_id = ? AND created_by = ?"),
+  giveawaysHosted: prepare("UPDATE giveaways SET host_id = '' WHERE guild_id = ? AND host_id = ?"),
+  // A temporary voice channel they own keeps existing; it just has no owner now (the next member
+  // to be in it takes over, as when an owner leaves).
+  tempVoiceOwned: prepare("UPDATE temp_voice_channels SET owner_id = '' WHERE guild_id = ? AND owner_id = ?"),
+  verificationKicks: prepare('DELETE FROM verification_kicks WHERE guild_id = ? AND user_id = ?'),
+  // Staff side: who closed someone's ticket or decided someone's appeal. The ticket and the
+  // appeal stay with their owner; only the staff member's id comes off.
+  ticketsClosed: prepare('UPDATE tickets SET closed_by = NULL WHERE guild_id = ? AND closed_by = ?'),
+  appealsDecided: prepare('UPDATE appeals SET decided_by = NULL WHERE guild_id = ? AND decided_by = ?'),
 };
 
 /**
  * Erase a single member's data within one guild. Covers the tables that key on
- * a Discord user id; a completed giveaway's host/winner list and the config
- * audit log (which records a display name, not an id) are guild records and are
- * only removed by {@link purgeGuild}.
+ * a Discord user id. A completed giveaway's winner list and the config audit log (which
+ * records a display name, not an id) are guild records, only removed by {@link purgeGuild};
+ * so is `infractions.moderator_id`, the staff side of a moderation case (the cases are kept).
+ * test/purge.test.js lists every column that holds a user id and fails for a new one that
+ * is neither handled here nor kept on purpose.
  *
  * Safety records are kept: moderation cases (warnings, kicks, bans, notes), temp bans,
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, invites: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
  */
 export async function forgetUser(guildId, userId) {
   const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
@@ -221,6 +235,12 @@ export async function forgetUser(guildId, userId) {
     (await userStmts.inviteJoins.run(guildId, userId)).changes +
     (await userStmts.inviteJoinsAsInviter.run(guildId, userId)).changes +
     (await userStmts.invitePersonal.run(guildId, userId)).changes;
+  const pollsCreated = (await userStmts.pollsCreated.run(guildId, userId)).changes;
+  const giveawaysHosted = (await userStmts.giveawaysHosted.run(guildId, userId)).changes;
+  const tempVoiceOwned = (await userStmts.tempVoiceOwned.run(guildId, userId)).changes;
+  const verificationKicks = (await userStmts.verificationKicks.run(guildId, userId)).changes;
+  const ticketsClosed = (await userStmts.ticketsClosed.run(guildId, userId)).changes;
+  const appealsDecided = (await userStmts.appealsDecided.run(guildId, userId)).changes;
   return {
     keptCases,
     leveling,
@@ -240,6 +260,12 @@ export async function forgetUser(guildId, userId) {
     quotes,
     quotesSaved,
     invites,
+    pollsCreated,
+    giveawaysHosted,
+    tempVoiceOwned,
+    verificationKicks,
+    ticketsClosed,
+    appealsDecided,
   };
 }
 
@@ -262,6 +288,16 @@ const USER_DATA_SOURCES = [
     // Not moderator_id: who took the action is the moderator's data, not the member's.
     rowsSql:
       'SELECT guild_id, case_number, user_id, action, reason, detail, active, created_at FROM infractions WHERE guild_id = ? AND user_id = ? ORDER BY case_number',
+  },
+  {
+    key: 'moderatorCases',
+    label: 'Moderation actions they took as staff (kept by /forget)',
+    order: 'gu',
+    kept: true,
+    countSql: 'SELECT COUNT(*) AS n FROM infractions WHERE guild_id = ? AND moderator_id = ?',
+    // What was done and when, not to whom: the members they acted on are other people.
+    rowsSql:
+      'SELECT case_number, action, created_at FROM infractions WHERE guild_id = ? AND moderator_id = ? ORDER BY case_number',
   },
   {
     key: 'tempBans',
@@ -389,6 +425,52 @@ const USER_DATA_SOURCES = [
     countSql: 'SELECT COUNT(*) AS n FROM guild_suggestions WHERE guild_id = ? AND decided_by = ?',
     rowsSql:
       'SELECT number, status, reason, decided_at FROM guild_suggestions WHERE guild_id = ? AND decided_by = ? ORDER BY number',
+  },
+  {
+    key: 'pollsCreated',
+    label: 'Polls they created (/forget keeps the poll, drops you as the creator)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM polls WHERE guild_id = ? AND created_by = ?',
+    rowsSql:
+      'SELECT message_id, channel_id, question, options, ends_at, created_at FROM polls WHERE guild_id = ? AND created_by = ? ORDER BY created_at',
+  },
+  {
+    key: 'giveawaysHosted',
+    label: 'Giveaways they hosted (/forget keeps the giveaway, drops you as the host)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM giveaways WHERE guild_id = ? AND host_id = ?',
+    rowsSql:
+      'SELECT id, channel_id, prize, winners, ends_at, ended, created_at FROM giveaways WHERE guild_id = ? AND host_id = ? ORDER BY created_at',
+  },
+  {
+    key: 'tempVoiceOwned',
+    label: 'Temporary voice channels they own (/forget leaves the channel without an owner)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM temp_voice_channels WHERE guild_id = ? AND owner_id = ?',
+    rowsSql:
+      'SELECT channel_id, hub_id, name, created_at FROM temp_voice_channels WHERE guild_id = ? AND owner_id = ? ORDER BY created_at',
+  },
+  {
+    key: 'verificationKicks',
+    label: 'Pending "kick if not verified" deadline',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM verification_kicks WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM verification_kicks WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'ticketsClosed',
+    label: 'Modmail tickets they closed as staff (/forget drops the name)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM tickets WHERE guild_id = ? AND closed_by = ?',
+    rowsSql: 'SELECT id, status, closed_at FROM tickets WHERE guild_id = ? AND closed_by = ? ORDER BY id',
+  },
+  {
+    key: 'appealsDecided',
+    label: 'Ban appeals they decided as staff (/forget drops the name)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM appeals WHERE guild_id = ? AND decided_by = ?',
+    rowsSql:
+      'SELECT id, status, decision_reason, decided_at FROM appeals WHERE guild_id = ? AND decided_by = ? ORDER BY id',
   },
   {
     key: 'tempRoles',

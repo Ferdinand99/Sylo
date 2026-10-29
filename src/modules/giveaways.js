@@ -81,7 +81,7 @@ export function buildGiveawayPayload(g, { entryCount = 0 } = {}) {
         `Ends: <t:${endTs}:R>  ·  <t:${endTs}:f>`,
         `Winners: **${g.winners}**`,
         g.required_role_id ? `Requires: <@&${g.required_role_id}>` : null,
-        `Hosted by: <@${g.host_id}>`,
+        `Hosted by: ${g.host_id ? `<@${g.host_id}>` : 'a former member'}`,
       ]
         .filter(Boolean)
         .join('\n')
@@ -98,7 +98,7 @@ export function buildGiveawayPayload(g, { entryCount = 0 } = {}) {
             : 'No valid entries — no winner drawn.',
           '',
           `Ended: <t:${endTs}:R>`,
-          `Hosted by: <@${g.host_id}>`,
+          `Hosted by: ${g.host_id ? `<@${g.host_id}>` : 'a former member'}`,
         ].join('\n')
       );
     embed.setFooter({ text: `${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} · giveaway ended` });

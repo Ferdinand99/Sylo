@@ -9,6 +9,7 @@ import {
   createApiToken,
   findApiToken,
   touchApiToken,
+  setApiTokenPush,
   setApiTokenPushMuted,
   listApiTokens,
   revokeApiToken,
@@ -182,4 +183,27 @@ test('device names lose control and format characters, and are cut by whole char
   const name = (await listApiTokens(a)).find((t) => t.id === long.id).deviceName;
   assert.equal([...name].length, 100);
   assert.ok(!/[\uD800-\uDBFF]$/.test(name), 'no half surrogate pair at the end');
+});
+
+test('setApiTokenPush: a device token held by another app token moves, and the move is logged', async () => {
+  const a = await createApiToken(account(), { deviceName: 'old', ttlMs: DAY });
+  const b = await createApiToken(account(), { deviceName: 'new', ttlMs: DAY });
+  const device = 'ab'.repeat(32);
+  const push = { deviceToken: device, environment: 'production', origin: 'https://sylo.example.com' };
+  const lines = [];
+  const orig = console.log;
+  console.log = (...args) => lines.push(args.join(' '));
+  try {
+    await setApiTokenPush(a.id, push);
+    assert.equal(lines.length, 0, 'a first registration is not a move');
+    await setApiTokenPush(b.id, push);
+  } finally {
+    console.log = orig;
+  }
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /push registration moved from another app token/);
+  assert.ok(!lines[0].includes(device), 'the device token is not logged');
+  const held = (id) => prepare('SELECT push_token FROM api_tokens WHERE id = ?').get(id);
+  assert.equal((await held(a.id)).push_token, null);
+  assert.equal((await held(b.id)).push_token, device);
 });

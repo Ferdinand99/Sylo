@@ -18,12 +18,18 @@ import {
   isOwner,
   manageableGuilds,
   managesGuildLive,
+  holdsManageServerLive,
   userIdForGuild,
   currentUser,
   sessionUserId,
   botInviteUrls,
 } from '../middleware/auth.js';
-import { checkLevelRewardGrants, checkModuleGrants, guardRoleGrants } from '../middleware/roleGrants.js';
+import {
+  checkLevelRewardGrants,
+  checkModuleGrants,
+  guardRoleGrants,
+  RoleGrantError,
+} from '../middleware/roleGrants.js';
 import { limitWhen, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { changelogHandler } from '../lib/changelogFeed.js';
@@ -73,6 +79,7 @@ import {
   MIN_INTERVAL_MINUTES,
   MAX_INTERVAL_MINUTES,
   normaliseReminderConfig,
+  remindersMayPing,
 } from '../../modules/scheduledMessages.js';
 import {
   listScheduled,
@@ -2842,6 +2849,7 @@ router.get(
     const rows = await listScheduled(req.guild.id);
     res.json({
       reminders: rows.map(shapeReminder),
+      allowPings: remindersMayPing((await getGuildModule(req.guild.id, 'reminders')).config),
       channels: guildTextChannels(req.guild),
       schedulePresets: SCHEDULE_PRESETS,
       weekdays: WEEKDAYS,
@@ -2869,6 +2877,31 @@ router.post(
       detail: `created "${r.name}"`,
     });
     res.json({ reminder: shapeReminder(await getScheduled(req.guild.id, id)) });
+  })
+);
+
+// Whether reminders may ping @everyone, @here and roles. Only the owner or someone with Manage
+// Server (checked live) may change it: a bot master may not, as they could otherwise make Sylo
+// ping with rights they do not have. Before /reminders/:id, which would take "settings" for an id.
+router.post(
+  '/guilds/:guildId/modules/reminders/settings',
+  asyncHandler(async (req, res) => {
+    const allowPings = req.body.allowPings === true;
+    const current = await getGuildModule(req.guild.id, 'reminders');
+    if (
+      allowPings !== remindersMayPing(current.config) &&
+      config.authEnabled &&
+      !(await holdsManageServerLive(req.guild.id, userIdForGuild(req, req.guild.id)))
+    ) {
+      throw new RoleGrantError('Only the server owner or someone with Manage Server can change this.');
+    }
+    await setGuildModule(req.guild.id, 'reminders', { config: { ...current.config, allowPings } });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:reminders',
+      detail: allowPings ? 'allowed reminders to ping' : 'stopped reminders pinging',
+    });
+    res.json({ allowPings });
   })
 );
 

@@ -40,7 +40,7 @@ test('runAlert (onVideo): a failed send leaves the video unseen so it retries ne
   const videoId = 'failvideo01';
   await markVideoSeen(GUILD_ID, YT_CHANNEL, 'seed-so-hasSeenAny-is-true');
   const realFetch = globalThis.fetch;
-  globalThis.fetch = async () => ({ ok: true, text: async () => VIDEO_FEED_XML(videoId) });
+  globalThis.fetch = async () => new Response(VIDEO_FEED_XML(videoId));
   setClient(false);
 
   try {
@@ -56,7 +56,7 @@ test('runAlert (onVideo): a successful send marks the video seen', async () => {
   const videoId = 'okvideo0001';
   await markVideoSeen(GUILD_ID, YT_CHANNEL, 'seed-so-hasSeenAny-is-true-2');
   const realFetch = globalThis.fetch;
-  globalThis.fetch = async () => ({ ok: true, text: async () => VIDEO_FEED_XML(videoId) });
+  globalThis.fetch = async () => new Response(VIDEO_FEED_XML(videoId));
   setClient(true);
 
   try {
@@ -72,7 +72,7 @@ test('runAlert (onLive): a failed post leaves the stream unrecorded so it retrie
   const ytChannel = YT_CHANNEL + '-live-fail';
   const videoId = 'livefail001';
   const realFetch = globalThis.fetch;
-  globalThis.fetch = async () => ({ ok: true, text: async () => LIVE_HTML(videoId) });
+  globalThis.fetch = async () => new Response(LIVE_HTML(videoId));
   setClient(false);
 
   try {
@@ -89,7 +89,7 @@ test('runAlert (onLive): a successful post records the stream as known', async (
   const ytChannel = YT_CHANNEL + '-live-ok';
   const videoId = 'liveok00001';
   const realFetch = globalThis.fetch;
-  globalThis.fetch = async () => ({ ok: true, text: async () => LIVE_HTML(videoId) });
+  globalThis.fetch = async () => new Response(LIVE_HTML(videoId));
   setClient(true);
 
   try {

@@ -4,12 +4,14 @@
 // (no inline script or style).
 import { startWebApp } from './helpers/webApp.js';
 import { plainProblems } from './helpers/publicViews.js';
-import { GID } from './helpers/fakeGuild.js';
+import { CH, GID } from './helpers/fakeGuild.js';
+import { PermissionsBitField } from 'discord.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setGuildModule } from '../src/db/modules.js';
 import { clearGuildQuotes, insertQuote } from '../src/db/quotes.js';
 import { PAGE_SIZE } from '../src/web/routes/quotes.js';
+import { PUBLIC_RECHECK_MS, _clearPublicRecheck, nowPrivateChannels } from '../src/modules/quoteBoard.js';
 
 let app;
 test.before(async () => {
@@ -221,6 +223,57 @@ test('paging: 50 per page, newest first, links between pages, and odd page numbe
   }
   assert.match(await (await get(`/quotes/${GID}?page=999`)).text(), /Page 2 of 2/);
   assert.match(await (await get(`/quotes/${GID}?page=abc`)).text(), /Page 1 of 2/);
+});
+
+test('a quote whose channel has become private since it was saved is hidden, and not counted', async () => {
+  await turnOn();
+  const channel = app.guild.channels.cache.get(CH.general);
+  const open = channel.permissionsFor;
+  const everyone = app.guild.roles.everyone;
+  const closed = (role) => (role === everyone ? new PermissionsBitField(0n) : open(role));
+  try {
+    _clearPublicRecheck();
+    const count = (html) => Number(html.match(/· ([0-9]+) quotes?/)[1]);
+    const before = count(await (await get()).text());
+    await make({ body: 'Said in general, while it was public', channelId: CH.general });
+    const shown = await (await get()).text();
+    assert.match(shown, /Said in general, while it was public/);
+    assert.equal(count(shown), before + 1);
+
+    // The channel is made private. The verdict is reused briefly, then re-checked.
+    channel.permissionsFor = closed;
+    assert.match(await (await get()).text(), /Said in general/, 'the earlier answer is reused for a while');
+    _clearPublicRecheck();
+    const hiddenHtml = await (await get()).text();
+    assert.doesNotMatch(hiddenHtml, /Said in general/);
+    assert.equal(count(hiddenHtml), before);
+
+    // And back: shown again once the answer is re-checked.
+    channel.permissionsFor = open;
+    _clearPublicRecheck();
+    assert.match(await (await get()).text(), /Said in general/);
+  } finally {
+    channel.permissionsFor = open;
+    _clearPublicRecheck();
+  }
+});
+
+test('the re-check is cached for PUBLIC_RECHECK_MS, treats age-restricted as hidden, and keeps unknown channels', () => {
+  _clearPublicRecheck();
+  const everyone = {};
+  const view = { has: () => true };
+  const chan = (over = {}) => ({ nsfw: false, permissionsFor: () => view, ...over });
+  const cache = new Map([
+    ['a', chan()],
+    ['b', chan({ nsfw: true })],
+  ]);
+  const guild = { roles: { everyone }, channels: { cache } };
+  const t0 = 1_000_000;
+  assert.deepEqual([...nowPrivateChannels(guild, 'g', ['a', 'b', 'gone'], t0)], ['b']);
+  cache.get('a').nsfw = true;
+  assert.deepEqual([...nowPrivateChannels(guild, 'g', ['a'], t0 + PUBLIC_RECHECK_MS - 1)], [], 'cached');
+  assert.deepEqual([...nowPrivateChannels(guild, 'g', ['a'], t0 + PUBLIC_RECHECK_MS)], ['a'], 're-checked');
+  _clearPublicRecheck();
 });
 
 test('an empty board says so', async () => {

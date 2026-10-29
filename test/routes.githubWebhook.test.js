@@ -151,7 +151,10 @@ test("github webhook: an event not in the watch's list is verified but silently 
 function withMockedChangelogFetch(rawFileResponse, fn) {
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url, ...rest) => {
-    if (String(url).startsWith('https://raw.githubusercontent.com/')) return rawFileResponse;
+    // A fresh real Response per call (a body can be read once), built from the stub's text.
+    if (String(url).startsWith('https://raw.githubusercontent.com/')) {
+      return new Response(await rawFileResponse.text(), { status: rawFileResponse.ok ? 200 : 404 });
+    }
     return realFetch(url, ...rest);
   };
   return fn().finally(() => {

@@ -247,6 +247,8 @@ export const deleteReminder = (guildId, id) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/reminders/${id}/delete`, {});
 export const toggleReminder = (guildId, id) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/reminders/${id}/toggle`, {});
+export const setReminderPings = (guildId, allowPings) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/reminders/settings`, { allowPings });
 export const testReminder = (guildId, body) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/reminders/test`, body);
 

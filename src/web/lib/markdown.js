@@ -34,7 +34,9 @@ function renderInline(raw) {
 
   text = text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (whole, label, url) => {
     const href = safeHref(url);
-    return href ? `<a href="${href}" target="_blank" rel="noopener">${label}</a>` : whole;
+    // * and _ in the address become entities, so the emphasis passes below do not put tags inside href.
+    const attr = href && href.replace(/\*/g, '&#42;').replace(/_/g, '&#95;');
+    return href ? `<a href="${attr}" target="_blank" rel="noopener">${label}</a>` : whole;
   });
   text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   text = text.replace(/(?<![*\w])_([^_]+)_(?!\w)/g, '<em>$1</em>');

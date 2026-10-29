@@ -25,14 +25,31 @@ const asJson =
   /^(1|true|yes|on)$/i.test(process.env.LOG_JSON || '') ||
   String(process.env.LOG_FORMAT || '').toLowerCase() === 'json';
 
+// Query parameters that carry a credential (a feed URL with ?token=, an OAuth callback with ?code=).
+const SECRET_PARAM =
+  /([?&](?:token|access_token|refresh_token|key|api_key|apikey|secret|code|t|sig|signature|auth|password)=)[^&\s#"']+/gi;
+
 /**
- * Hide the password in any `scheme://user:password@host` in a log text: a failed pg_dump puts
- * DATABASE_URL in its error, and log lines reach the console, /health and the dev-log channel.
+ * Hide credentials in a log text: the password in any `scheme://user:password@host` (a failed
+ * pg_dump puts DATABASE_URL in its error), `Authorization`-like header values, bearer and Sylo
+ * tokens, and secrets in a URL's query string. Log lines reach the console, /health, the dev-log
+ * channel and the error reports.
  */
 export function redactSecrets(text) {
   // Anchored on the literal "://": a scheme pattern in front made the match polynomial on long
   // runs of letters (CodeQL js/polynomial-redos).
-  return String(text).replace(/:\/\/([^\s:/@]*):[^\s@/]+@/g, '://$1:***@');
+  return (
+    String(text)
+      .replace(/:\/\/([^\s:/@]*):[^\s@/]+@/g, '://$1:***@')
+      .replace(SECRET_PARAM, '$1***')
+      // "Authorization: Basic abc", "authorization=abc", "x-api-key: abc" (the scheme word is kept).
+      .replace(
+        /\b(authorization|proxy-authorization|x-api-key|x-auth-token)(["']?\s*[:=]\s*["']?)(?:(Bearer|Basic|Token)\s+)?[^\s,;"']+/gi,
+        (_m, name, sep, scheme) => `${name}${sep}${scheme ? `${scheme} ` : ''}***`
+      )
+      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer ***')
+      .replace(/\bsylo_[A-Za-z0-9_-]{16,}/g, 'sylo_***')
+  );
 }
 
 /** Split trailing args into a text tail, an Error, and a plain-object meta bag. */

@@ -231,6 +231,33 @@ address is ignored, so a client that reaches Sylo's port directly cannot choose
 its own IP. For another setup, set `TRUST_PROXY`: `false`, a hop count, or the
 proxy's addresses or subnets (comma-separated, as Express takes them).
 
+### Set `TRUST_PROXY` explicitly
+
+The default (one hop, from a private or loopback peer) is a convenience, and it
+has a limit you should know about. A "private peer" includes the Docker bridge.
+If you publish Sylo's port straight from Docker (`-p 3000:3000`) with no reverse
+proxy in front, every outside client reaches Sylo from the bridge gateway (an
+`172.x` address), which counts as a trusted proxy. Any client can then send its
+own `X-Forwarded-For` header and pick the address Sylo rate limits it under, so
+the per-client limits on sign-in, OAuth, the mobile app token exchange and the
+push relay can be walked around. Nothing else about authentication changes: a
+session or app token is still needed for the dashboard.
+
+Sylo logs a warning at startup when it runs with this default and a public
+`https` `DASHBOARD_URL`. To close the gap, do one of these:
+
+- Set `TRUST_PROXY` to your proxy's address or subnet, for example
+  `TRUST_PROXY=172.18.0.5` or `TRUST_PROXY=loopback`, so only that peer is
+  believed. A hop count (`TRUST_PROXY=1`) is also explicit, but it trusts whatever
+  connects, so it only fits when Sylo is reachable through the proxy alone.
+- Publish the port on the loopback address only when the proxy runs on the same
+  host: `ports: ["127.0.0.1:3000:3000"]` in `docker-compose.yml`.
+- With no proxy at all, set `TRUST_PROXY=false`. Sylo then uses the connection's
+  own address and ignores `X-Forwarded-For`.
+
+The shipped default is not changed, because installs with a reverse proxy in a
+neighbouring container rely on it.
+
 Without a login (open mode), the dashboard only answers on local names and
 addresses (`localhost`, an IP address, a name without dots, `.local`, `.lan`,
 `.home.arpa`, `.internal`) and on the host in `DASHBOARD_URL`. That blocks other

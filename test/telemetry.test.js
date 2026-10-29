@@ -49,6 +49,10 @@ test('with a DSN the script reports errors, and counts visits only when asked', 
   assert.match(errorsOnly, /"release":"sylo@4\.8\.1"/);
   assert.match(errorsOnly, /component: 'dashboard'/);
   assert.match(errorsOnly, /sendDefaultPii: false/);
+  // The page address (query and fragment carry OAuth codes and link tokens) is scrubbed.
+  assert.match(errorsOnly, /beforeSend: function \(event\)/);
+  assert.match(errorsOnly, /beforeBreadcrumb: scrubCrumb/);
+  assert.match(errorsOnly, /denyUrls:/);
   assert.match(errorsOnly, /"visits":null/);
 
   const withVisits = telemetrySettings({ ...base, visitStats: true });
@@ -76,4 +80,44 @@ test('/telemetry.js is served before sign-in and is off by default', async () =>
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type'), /javascript/);
   assert.match(await res.text(), /off on this instance/);
+});
+
+test('the generated script scrubs query strings and fragments from reports and breadcrumbs', async () => {
+  const { runInNewContext } = await import('node:vm');
+  const script = telemetryScript(
+    telemetrySettings({ dsn: DSN, visitStats: false, environment: 'production', release: 'sylo@1' })
+  );
+  let init;
+  const window = {
+    location: { href: 'https://sylo.example.com/auth/error?code=SECRET&state=ST' },
+    Sentry: { init: (options) => (init = options) },
+  };
+  const document = {
+    head: { appendChild: (el) => el.onload?.() },
+    createElement: () => ({ setAttribute() {} }),
+  };
+  runInNewContext(script, { window, document, URL });
+
+  assert.equal(typeof init.beforeSend, 'function', 'the SDK is started with a beforeSend');
+  const event = init.beforeSend({
+    request: {
+      url: 'https://sylo.example.com/auth/error?code=SECRET&state=ST#frag',
+      query_string: 'code=SECRET',
+      headers: { Referer: 'https://x/?token=T', Cookie: 'sid=1', 'User-Agent': 'ua' },
+    },
+    breadcrumbs: [
+      { category: 'navigation', data: { from: '/a?code=1', to: '/b?t=2#x' } },
+      { category: 'fetch', data: { url: 'https://sylo.example.com/api/v2/x?token=T' } },
+    ],
+  });
+  assert.equal(event.request.url, 'https://sylo.example.com/auth/error');
+  assert.equal(event.request.query_string, undefined);
+  assert.deepEqual(event.request.headers, { 'User-Agent': 'ua' });
+  assert.equal(event.breadcrumbs[0].data.from, 'https://sylo.example.com/a');
+  assert.equal(event.breadcrumbs[0].data.to, 'https://sylo.example.com/b');
+  assert.equal(event.breadcrumbs[1].data.url, 'https://sylo.example.com/api/v2/x');
+  // The breadcrumb hook scrubs as events are recorded, and the Sentry v8 shape ({ values }) too.
+  assert.equal(init.beforeBreadcrumb({ data: { url: '/p?code=1' } }).data.url, 'https://sylo.example.com/p');
+  const v8 = init.beforeSend({ breadcrumbs: { values: [{ data: { url: '/q?t=1' } }] } });
+  assert.equal(v8.breadcrumbs.values[0].data.url, 'https://sylo.example.com/q');
 });

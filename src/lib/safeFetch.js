@@ -157,6 +157,17 @@ export async function safeFetch(
   }
 }
 
+/**
+ * Read a response body as text, refusing more than `maxBytes` (after decompression): for the
+ * fetches of a fixed, trusted host (GitHub raw files, YouTube pages) that need no address check
+ * but must not read an unbounded body into memory. Throws a SafeFetchError past the cap.
+ * @param {Response} res
+ * @param {number} maxBytes
+ */
+export async function readTextCapped(res, maxBytes) {
+  return (await readCapped(res, maxBytes)).toString('utf8');
+}
+
 async function readCapped(res, maxBytes) {
   const declared = Number(res.headers.get('content-length'));
   if (declared > maxBytes) {
