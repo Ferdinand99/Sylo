@@ -36,6 +36,7 @@ platform gaps (native AutoMod rules, threads, moving members between voice).
 | [Polls](polls.md) | Reaction polls that auto-close on a timer or vote cap | off | — |
 | [Giveaways](giveaways.md) | Prize giveaways with an Enter button; auto-drawn winners | off | — |
 | [Events](events.md) | Events with Join / Maybe / Leave sign-ups, a participant role and reminders (beta) | off | — |
+| [Temporary roles](temp-roles.md) | Give a role for a set time with `/temprole`; Sylo takes it back and logs it (beta) | off | — |
 | [Suggestions](suggestions.md) | Member suggestions with 👍 / 👎 voting, staff decisions and a log channel (beta) | off | — |
 | [AFK](afk.md) | Members mark themselves away; Sylo replies to mentions | off | — |
 | [Temporary voice channels](temp-voice.md) | Join-to-create voice hubs controlled with `/voice-*` | off | — |

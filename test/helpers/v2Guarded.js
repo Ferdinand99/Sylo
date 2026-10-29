@@ -53,6 +53,12 @@ export const SERVER_WRITES = (g) => [
   [`/guilds/${g}/modules/suggestions/config`, { channel: SNOWFLAKE, staffRoles: [SNOWFLAKE] }],
   [`/guilds/${g}/modules/suggestions/1/decision`, { action: 'approve', reason: 'x' }],
   [`/guilds/${g}/modules/suggestions/1/delete`, {}],
+  [
+    `/guilds/${g}/modules/temp-roles/config`,
+    { staffRoles: [SNOWFLAKE], dmMember: true, defaultDuration: '3d' },
+  ],
+  [`/guilds/${g}/modules/temp-roles/add`, { userId: SNOWFLAKE, roleId: SNOWFLAKE, duration: '1d' }],
+  [`/guilds/${g}/modules/temp-roles/remove`, { userId: SNOWFLAKE, roleId: SNOWFLAKE }],
   [`/guilds/${g}/leaderboard/public`, { publicLeaderboard: true }],
   [`/guilds/${g}/leaderboard/vanity`, { slug: 'not-yours' }],
   [`/guilds/${g}/insights/refresh`, {}],
@@ -78,6 +84,9 @@ export const SERVER_READS = (g) => [
   `/guilds/${g}/modules/events/config`,
   `/guilds/${g}/modules/suggestions/config`,
   `/guilds/${g}/modules/suggestions/list?status=open&sort=top`,
+  `/guilds/${g}/modules/temp-roles/config`,
+  `/guilds/${g}/modules/temp-roles/list?q=a`,
+  `/guilds/${g}/modules/temp-roles/members?q=a`,
 ];
 
 export const BOT_WRITES = [

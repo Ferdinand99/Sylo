@@ -50,7 +50,8 @@ export async function execute(interaction) {
       { name: 'Saved birthday', value: String(r.birthdays), inline: true },
       { name: 'Giveaway entries', value: String(r.giveawayEntries), inline: true },
       { name: 'Suggestion votes', value: String(r.suggestionVotes), inline: true },
-      { name: 'Suggestions (made anonymous)', value: String(r.suggestions), inline: true }
+      { name: 'Suggestions (made anonymous)', value: String(r.suggestions), inline: true },
+      { name: 'Temporary role records', value: String(r.tempRoles), inline: true }
     );
   if (r.keptCases > 0) {
     embed.addFields({

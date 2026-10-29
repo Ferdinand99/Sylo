@@ -1046,6 +1046,25 @@ export const MIGRATIONS = [
       CREATE INDEX idx_guild_suggestion_votes_user ON guild_suggestion_votes (user_id);
     `);
   },
+
+  // Temporary roles (src/db/tempRoles.js, which bootstraps the same table on Postgres): a row per
+  // member and role that Sylo has to take back once expires_at has passed.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_temp_roles (
+        guild_id    TEXT NOT NULL,
+        user_id     TEXT NOT NULL,
+        role_id     TEXT NOT NULL,
+        expires_at  INTEGER NOT NULL,
+        added_by    TEXT,
+        reason      TEXT NOT NULL DEFAULT '',
+        created_at  INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id, role_id)
+      );
+      CREATE INDEX idx_guild_temp_roles_expires ON guild_temp_roles (expires_at);
+      CREATE INDEX idx_guild_temp_roles_user ON guild_temp_roles (user_id);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

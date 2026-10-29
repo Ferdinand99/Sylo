@@ -22,6 +22,10 @@ import {
   normaliseSuggestionFields,
   normaliseSuggestionsConfig,
 } from '../src/modules/suggestions.js';
+import {
+  normaliseReason as normaliseTempReason,
+  normaliseTempRolesConfig,
+} from '../src/modules/tempRoles.js';
 import { normaliseHoneypotConfig } from '../src/modules/honeypot.js';
 import { normaliseInviteTrackerConfig } from '../src/modules/inviteTracker.js';
 import { normaliseKickConfig } from '../src/modules/kickAlerts.js';
@@ -164,6 +168,12 @@ const cases = {
       reason: normaliseReason(raw.reason),
       ...normaliseSuggestionsConfig(raw),
     }),
+    base: {},
+    value: { staffRoles: (n) => items(n, roleId) },
+  },
+  'temp-roles': {
+    // the staff reason, and the settings' role list
+    normalise: (raw) => ({ reason: normaliseTempReason(raw.reason), ...normaliseTempRolesConfig(raw) }),
     base: {},
     value: { staffRoles: (n) => items(n, roleId) },
   },

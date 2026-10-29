@@ -340,6 +340,17 @@ export const MODULES = [
     beta: true,
   },
   {
+    id: 'temp-roles',
+    name: 'Temporary roles',
+    description:
+      'Give a member a role for a set time with /temprole add; Sylo takes it back automatically and notes it in the mod log.',
+    icon: '⏳',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
     id: 'game-stats',
     name: 'Game stats',
     description:

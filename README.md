@@ -46,7 +46,7 @@ Add the hosted instance in one click, or self-host it with Docker or Unraid.
 
 ## What Sylo does
 
-Sylo bundles 37 per-server **modules**. Each one is switched on and configured
+Sylo bundles 38 per-server **modules**. Each one is switched on and configured
 from the dashboard. The bot, the dashboard and every module run in **one Node
 process and one container**, and in-process sharding keeps it that way past
 Discord's 2,500-server gateway limit.
@@ -54,7 +54,7 @@ Discord's 2,500-server gateway limit.
 | Area | Modules |
 |---|---|
 | **Moderation & safety** | [Moderation](docs/modules/moderation.md) (case log, warnings, auto-actions) · [Auto-moderation](docs/modules/automod.md) (can sync to Discord's native AutoMod) · [Server logging](docs/modules/logging.md) · [Verification](docs/modules/verification.md) (button or Turnstile captcha) · [Ban appeals](docs/modules/appeals.md) · [Tickets / modmail](docs/modules/tickets.md) · [Channel cleanup](docs/modules/channel-cleanup.md) · Honeypot (beta) |
-| **Welcome & roles** | [Welcome & leave](docs/modules/welcome.md) · [Welcome channel](docs/modules/welcome-channel.md) · [Reaction roles & autoroles](docs/modules/roles.md) (emoji, buttons or dropdown) · [Birthdays](docs/modules/birthdays.md) |
+| **Welcome & roles** | [Welcome & leave](docs/modules/welcome.md) · [Welcome channel](docs/modules/welcome-channel.md) · [Reaction roles & autoroles](docs/modules/roles.md) (emoji, buttons or dropdown) · [Temporary roles](docs/modules/temp-roles.md) (beta) · [Birthdays](docs/modules/birthdays.md) |
 | **Engagement** | [Leveling](docs/modules/leveling.md) (image rank cards, public leaderboard) · [Invite tracker](docs/modules/invite-tracker.md) · [Starboard](docs/modules/starboard.md) · [Polls](docs/modules/polls.md) · [Giveaways](docs/modules/giveaways.md) · [Events](docs/modules/events.md) (beta) · [Suggestions](docs/modules/suggestions.md) (beta) · [Counting](docs/modules/counting.md) · [Game stats](docs/modules/game-stats.md) (Battlefield, OSRS, RS3) |
 | **Automation** | [Custom commands](docs/modules/custom-commands.md) · [Autoresponder](docs/modules/autoresponder.md) · [Auto-react](docs/modules/auto-react.md) · [Reminders](docs/modules/reminders.md) · [Sticky messages](docs/modules/sticky.md) · [AFK](docs/modules/afk.md) · [Temporary voice channels](docs/modules/temp-voice.md) |
 | **Alerts** | [Twitch](docs/modules/twitch-alerts.md) · [YouTube](docs/modules/youtube-alerts.md) · [Kick](docs/modules/kick-alerts.md) · [RSS / Atom](docs/modules/rss.md) (also Reddit, Mastodon, Bluesky) · [GitHub](docs/modules/github.md) · [Free games](docs/modules/free-games.md) · [App Store Connect](docs/modules/apple-connect.md) (owner only) |

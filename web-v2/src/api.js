@@ -126,6 +126,16 @@ export const decideSuggestion = (guildId, number, action, reason) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/decision`, { action, reason });
 export const deleteSuggestion = (guildId, number) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/delete`, {});
+export const getTempRoles = (guildId, { q = '', roleId = '' } = {}) =>
+  apiFetch(
+    `/api/v2/guilds/${gid(guildId)}/modules/temp-roles/list?q=${encodeURIComponent(q)}&roleId=${encodeURIComponent(roleId)}`
+  );
+export const searchTempRoleMembers = (guildId, q) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/temp-roles/members?q=${encodeURIComponent(q)}`);
+export const addTempRole = (guildId, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/temp-roles/add`, body);
+export const removeTempRole = (guildId, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/temp-roles/remove`, body);
 export const setInviteBonus = (guildId, userId, bonus) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/invite-tracker/bonus`, { userId, bonus });
 

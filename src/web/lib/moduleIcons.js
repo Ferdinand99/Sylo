@@ -31,6 +31,7 @@ export const MODULE_ICONS = {
   giveaways: 'gift',
   events: 'calendar',
   suggestions: 'lightbulb',
+  'temp-roles': 'hourglass',
   'game-stats': 'target',
   'twitch-alerts': 'twitch',
   'youtube-alerts': 'youtube',

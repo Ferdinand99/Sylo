@@ -62,6 +62,7 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
       { name: 'Event sign-ups', value: String(r.eventSignups), inline: true },
       { name: 'Suggestion votes', value: String(r.suggestionVotes), inline: true },
       { name: 'Suggestions (made anonymous)', value: String(r.suggestions), inline: true },
+      { name: 'Temporary role records', value: String(r.tempRoles), inline: true },
       { name: 'Invite records', value: String(r.invites), inline: true },
       { name: 'Not affected', value: MEMBER_DATA_UNAFFECTED }
     )

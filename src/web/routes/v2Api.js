@@ -31,6 +31,7 @@ import { ticketsRouter, staffRouter } from './v2Staff.js';
 import guildDataRouter from './v2GuildData.js';
 import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
+import tempRolesRouter from './v2TempRoles.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { buildReactionPairs } from '../lib/reactionPairs.js';
 import { guildCustomEmojis } from '../lib/guildEmojis.js';
@@ -390,6 +391,8 @@ router.use('/guilds/:guildId', guildDataRouter);
 router.use('/guilds/:guildId', eventsRouter);
 // Suggestions: settings, list, decide, delete (v2Suggestions.js).
 router.use('/guilds/:guildId', suggestionsRouter);
+// Temporary roles: settings, list, member search, add, remove (v2TempRoles.js).
+router.use('/guilds/:guildId', tempRolesRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).

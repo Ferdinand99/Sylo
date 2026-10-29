@@ -74,6 +74,7 @@ the public-leaderboard vanity slug.
 - **Giveaways** — the host, the entrants, and the drawn winners.
 - **Events** — the host and, for each event, who pressed Join or Maybe.
 - **Suggestions** — the text of each suggestion, who wrote it (unless they erase it), the staff member who decided it, and each member's 👍 / 👎 vote.
+- **Temporary roles** — which member holds which temporary role, when it ends, the reason, and the staff member who set it.
 - **Polls** — the poll creator. Votes are Discord reactions and are not stored;
   the row is deleted when the poll ends.
 - **Temporary voice channels** — the owner of a spawned channel and its
@@ -248,7 +249,7 @@ No other third parties receive your data.
   the data Sylo keys to their Discord account **in that server**: leveling XP
   (including period rows), ticket history (the whole conversation, staff replies
   included), ban appeals, invite records, AFK status, birthday, giveaway
-  entries, event sign-ups and suggestion votes (a suggestion you wrote stays on the server's board, without your name). It does **not** remove messages already posted to channels, a
+  entries, event sign-ups, suggestion votes and temporary-role records (a suggestion you wrote stays on the server's board, without your name; a temporary role you hold stays on you, but Sylo no longer takes it back). It does **not** remove messages already posted to channels, a
   completed giveaway's winner list, or the display name recorded in that server's
   config audit log. **Safety records are kept**: moderation cases (warnings,
   notes, timeouts, kicks, bans), an active temporary ban, honeypot catches and a
@@ -305,6 +306,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | Giveaway entries | Until the giveaway ends, then until erased | `/forget` (entries only — a finished giveaway's winner list is kept); Bot removed |
 | Event sign-ups (Join / Maybe) | Until the member leaves the event or is erased | The member presses Leave; `/forget`; Bot removed (the host and title of a finished event are server records and stay until the Bot is removed) |
 | Suggestions and votes | The suggestion until staff delete it; a vote until the member takes it back | `/forget` (votes are deleted; your suggestions stay without your id; staff decisions lose the staff id); staff delete a suggestion on the dashboard; Bot removed |
+| Temporary role records | Until the role's end time, or until staff remove it | The record is deleted when the role is taken back; `/forget` (the record is deleted, the role itself stays); Bot removed |
 | Poll creator record | Until the poll ends | Poll ends (row deleted automatically) |
 | Temporary voice channel owner + ban list | Until the channel empties | Channel empties (row deleted automatically); Bot removed |
 | Modmail ticket transcripts | Until erased, or the server's "delete closed tickets after N days" limit (off by default) | `/forget`; admin-assisted erasure; Bot removed; a closed ticket ageing past the server's limit |

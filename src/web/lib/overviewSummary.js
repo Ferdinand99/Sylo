@@ -18,6 +18,7 @@ import { guildPollCount } from '../../db/polls.js';
 import { activeGiveaways } from '../../db/giveaways.js';
 import { upcomingEvents } from '../../db/events.js';
 import { openSuggestionCount, suggestionCount } from '../../db/suggestions.js';
+import { nextTempRoleExpiry, tempRoleCount } from '../../db/tempRoles.js';
 import { recentLookups } from '../../db/cache.js';
 import { dailySeries } from '../../db/insights.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
@@ -42,7 +43,17 @@ const LAYOUT = [
   { title: 'Moderation & filtering', ids: ['automod', 'honeypot', 'verification', 'appeals', 'logging'] },
   {
     title: 'Engagement',
-    ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'starboard', 'sticky', 'birthdays'],
+    ids: [
+      'welcome',
+      'welcome-channel',
+      'roles',
+      'temp-roles',
+      'counting',
+      'leveling',
+      'starboard',
+      'sticky',
+      'birthdays',
+    ],
   },
   {
     title: 'Utilities',
@@ -358,6 +369,16 @@ async function moduleLines(id, guild, cfg) {
               `${next.title.slice(0, 40)} · ${new Date(next.start_at).toISOString().slice(0, 16).replace('T', ' ')} UTC`
             )
           : neutral('Next', 'none'),
+      ];
+    }
+    case 'temp-roles': {
+      const active = await tempRoleCount(guild.id);
+      const next = await nextTempRoleExpiry(guild.id);
+      return [
+        active ? on('Active temporary roles', String(active)) : neutral('Active temporary roles', '0'),
+        next
+          ? neutral('Next expiry', new Date(next).toISOString().slice(0, 16).replace('T', ' ') + ' UTC')
+          : neutral('Next expiry', 'none'),
       ];
     }
     case 'suggestions': {

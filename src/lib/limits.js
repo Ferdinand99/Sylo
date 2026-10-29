@@ -11,6 +11,7 @@ export const LIMITS = Object.freeze({
   eventParticipants: 500,
   suggestions: 5000,
   openSuggestionsPerMember: 10,
+  tempRoles: 2000,
 });
 
 export class LimitError extends Error {

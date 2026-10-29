@@ -20,6 +20,7 @@ test('Fluxer notes exist only for real modules, and say something', () => {
     'giveaways',
     'events',
     'suggestions',
+    'temp-roles',
     'custom-commands',
   ]) {
     assert.ok(modulePlatformNote('fluxer', id), id);

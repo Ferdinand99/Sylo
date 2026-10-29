@@ -70,6 +70,10 @@ test('createEvent in the module stops at the upcoming-events limit', async () =>
   await assert.rejects(post({ guild, hostId: 'h', channelId: CH, input }), LimitError);
 });
 
+test('temporary roles: 2000 active per server', () => {
+  assert.equal(LIMITS.tempRoles, 2000);
+});
+
 test('suggestions: 5000 stored per server, 10 open per member', () => {
   assert.equal(LIMITS.suggestions, 5000);
   assert.equal(LIMITS.openSuggestionsPerMember, 10);
