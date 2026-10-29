@@ -59,6 +59,10 @@ export const SERVER_WRITES = (g) => [
   ],
   [`/guilds/${g}/modules/temp-roles/add`, { userId: SNOWFLAKE, roleId: SNOWFLAKE, duration: '1d' }],
   [`/guilds/${g}/modules/temp-roles/remove`, { userId: SNOWFLAKE, roleId: SNOWFLAKE }],
+  [
+    `/guilds/${g}/modules/auto-threads/config`,
+    { rules: [{ channelId: SNOWFLAKE, nameTemplate: '{words}' }] },
+  ],
   [`/guilds/${g}/leaderboard/public`, { publicLeaderboard: true }],
   [`/guilds/${g}/leaderboard/vanity`, { slug: 'not-yours' }],
   [`/guilds/${g}/insights/refresh`, {}],
@@ -87,6 +91,7 @@ export const SERVER_READS = (g) => [
   `/guilds/${g}/modules/temp-roles/config`,
   `/guilds/${g}/modules/temp-roles/list?q=a`,
   `/guilds/${g}/modules/temp-roles/members?q=a`,
+  `/guilds/${g}/modules/auto-threads/config`,
 ];
 
 export const BOT_WRITES = [

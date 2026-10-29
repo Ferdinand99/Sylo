@@ -351,6 +351,16 @@ export const MODULES = [
     beta: true,
   },
   {
+    id: 'auto-threads',
+    name: 'Auto threads',
+    description: 'Open a thread for every new post in chosen channels, named from a template. Discord only.',
+    icon: '🧵',
+    requiredIntents: ['MessageContent'],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
     id: 'game-stats',
     name: 'Game stats',
     description:

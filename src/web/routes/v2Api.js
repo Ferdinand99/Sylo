@@ -98,6 +98,7 @@ import {
 } from '../../modules/roles.js';
 import { normaliseCustomCommands, CC_PLACEHOLDERS, NAME_RE } from '../../modules/customCommands.js';
 import { normaliseStickyConfig } from '../../modules/sticky.js';
+import { normaliseAutoThreadsConfig } from '../../modules/autoThreads.js';
 import {
   listCleanupSchedules,
   getCleanupSchedule,
@@ -1049,6 +1050,37 @@ router.post(
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:sticky',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/auto-threads/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'auto-threads');
+    res.json({
+      config: normaliseAutoThreadsConfig(cfg),
+      // Text and announcement channels only: a forum already makes a thread for every post.
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/auto-threads/config',
+  asyncHandler(async (req, res) => {
+    const allowed = new Set(guildTextChannels(req.guild).map((c) => c.id));
+    const config = normaliseAutoThreadsConfig({ rules: req.body?.rules });
+    // A rule for a channel that is not a text or announcement channel of this server (a forum, a
+    // voice channel, one that was deleted) could never work: leave it out.
+    config.rules = config.rules.filter((r) => allowed.has(r.channelId));
+    await setGuildModule(req.guild.id, 'auto-threads', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:auto-threads',
       detail: 'settings saved',
     });
     res.json({ config });

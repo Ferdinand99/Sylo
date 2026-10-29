@@ -13,6 +13,7 @@ import { LIMITS as afk } from './afk.js';
 import { LIMITS as appeals } from './appeals.js';
 import { LIMITS as appleConnect } from './appleConnect.js';
 import { LIMITS as autoReact } from './autoReact.js';
+import { LIMITS as autoThreads } from './autoThreads.js';
 import { LIMITS as automod } from './automod.js';
 import { LIMITS as autoresponder } from './autoresponder.js';
 import { LIMITS as birthdays } from './birthdays.js';
@@ -50,6 +51,7 @@ export const MODULE_LIMITS = Object.freeze({
   appeals,
   'apple-connect': appleConnect,
   'auto-react': autoReact,
+  'auto-threads': autoThreads,
   automod,
   autoresponder,
   birthdays,

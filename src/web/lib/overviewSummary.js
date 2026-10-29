@@ -69,6 +69,7 @@ const LAYOUT = [
       'suggestions',
       'autoresponder',
       'auto-react',
+      'auto-threads',
       'afk',
       'server-stats',
       'insights',
@@ -277,6 +278,14 @@ async function moduleLines(id, guild, cfg) {
     case 'sticky': {
       const n = Array.isArray(cfg.stickies) ? cfg.stickies.length : 0;
       return [n ? on('Active sticky messages', String(n)) : off('Active sticky messages', 'none')];
+    }
+    case 'auto-threads': {
+      const rules = Array.isArray(cfg.rules) ? cfg.rules.length : 0;
+      return [
+        rules
+          ? on('Channels with auto threads', String(new Set(cfg.rules.map((r) => r?.channelId)).size))
+          : off('Channels with auto threads', 'none'),
+      ];
     }
     case 'counting': {
       const ch = channelName(guild, cfg.channelId);

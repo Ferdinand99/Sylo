@@ -17,6 +17,7 @@ const Giveaways = lazy(() => import('./Giveaways.jsx'));
 const Events = lazy(() => import('./Events.jsx'));
 const Suggestions = lazy(() => import('./Suggestions.jsx'));
 const TempRoles = lazy(() => import('./TempRoles.jsx'));
+const AutoThreads = lazy(() => import('./AutoThreads.jsx'));
 const Moderation = lazy(() => import('./Moderation.jsx'));
 const Automod = lazy(() => import('./Automod.jsx'));
 const Sticky = lazy(() => import('./Sticky.jsx'));
@@ -79,6 +80,7 @@ export const MODULE_FORMS = {
   events: Events,
   suggestions: Suggestions,
   'temp-roles': TempRoles,
+  'auto-threads': AutoThreads,
 };
 
 // Overview/Sidebar cards with a real V2 page that isn't the standard

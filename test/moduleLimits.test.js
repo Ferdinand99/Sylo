@@ -12,6 +12,7 @@ import { normalisePollsConfig } from '../src/modules/polls.js';
 import { normaliseAppealsConfig } from '../src/modules/appeals.js';
 import { normaliseAppleConfig } from '../src/modules/appleConnect.js';
 import { normaliseAutoReact } from '../src/modules/autoReact.js';
+import { normaliseAutoThreadsConfig } from '../src/modules/autoThreads.js';
 import { normaliseAutomodConfig } from '../src/modules/automod.js';
 import { normaliseAutoresponder } from '../src/modules/autoresponder.js';
 import { normaliseCountingConfig, validCount } from '../src/modules/counting.js';
@@ -116,6 +117,14 @@ const cases = {
       'rules[].targetUsers': (n) => items(n, roleId),
       'rules[].targetRoles': (n) => items(n, roleId),
       'rules[].emojis': (n) => items(n, (i) => `e${i}`),
+    },
+  },
+  'auto-threads': {
+    normalise: normaliseAutoThreadsConfig,
+    base: { rules: [{ channelId: CHANNEL }] },
+    value: {
+      rules: (n) => items(n, () => ({ channelId: CHANNEL })),
+      'rules[].staffRoleIds': (n) => items(n, roleId),
     },
   },
   automod: {

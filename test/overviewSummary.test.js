@@ -34,6 +34,7 @@ test('buildOverview returns health + grouped cards covering every module', async
     'counting',
     'leveling',
     'sticky',
+    'auto-threads',
     'tickets',
     'custom-commands',
     'reminders',
@@ -116,4 +117,21 @@ test('the Temporary roles card counts active roles and shows the next expiry', a
   const card = await find();
   assert.equal(card.lines.find((l) => l.label === 'Active temporary roles').value, '2');
   assert.equal(card.lines.find((l) => l.label === 'Next expiry').value, '2030-01-02 18:30 UTC');
+});
+
+test('the Auto threads card counts the channels that have a rule', async () => {
+  const find = async () =>
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards).find((c) => c.id === 'auto-threads');
+  const empty = await find();
+  assert.ok(empty, 'a card for the Auto threads module');
+  assert.equal(empty.lines.find((l) => l.label === 'Channels with auto threads').value, 'none');
+
+  const a = '100000000000000101';
+  const b = '100000000000000102';
+  await setGuildModule(G, 'auto-threads', {
+    enabled: true,
+    config: { rules: [{ channelId: a }, { channelId: a }, { channelId: b }] },
+  });
+  const card = await find();
+  assert.equal(card.lines.find((l) => l.label === 'Channels with auto threads').value, '2');
 });

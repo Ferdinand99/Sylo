@@ -43,6 +43,7 @@ public enum ModuleSymbol {
         "calendar": "calendar",
         "lightbulb": "lightbulb",
         "hourglass": "hourglass",
+        "threads": "bubble.left.and.bubble.right",
         "twitch": "play.tv",
         "youtube": "play.rectangle",
         "kick": "play.circle",
