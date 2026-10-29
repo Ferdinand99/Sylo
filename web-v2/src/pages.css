@@ -493,18 +493,20 @@
   letter-spacing: 0;
 }
 /* Messages-style thread, as in the iPhone ticket mock on sylobot.com:
-   staff (you) on the right in Sylo violet with white text, the member on the left
+   staff (you) on the right in Sylo cyan, the member on the left
    in a neutral grey, system notes as small centred captions. A run from one
    side sits close together, the side switching gets air, and the last
    bubble of a run gets the tail corner (where :has() is supported).
-   #6a58e3 is the same violet as the app's StaffBubble colour and the site
-   mock, in both themes: white text clears AA (5.1:1, and 4.8:1 for the 95%
-   white meta line); the light-theme member grey pairs with a darker meta
-   colour for the same reason. */
+   The bubble uses the brand cyan with near-black text on dark (10:1) and the
+   deeper cyan step with white text on light (6:1); the meta line is a touch
+   softer than the text but still above 4.5:1 on both. The light-theme member
+   grey pairs with a darker meta colour for the same reason. */
 .v2-chat {
   --bubble-in: #262628;
   --bubble-in-meta: var(--text-muted);
-  --bubble-out: #6a58e3;
+  --bubble-out: #38c8f0;
+  --bubble-out-text: #0b0b0d;
+  --bubble-out-meta: rgba(11, 11, 13, 0.8);
   gap: 2px;
   padding: 16px 14px;
   background: var(--bg-surface);
@@ -512,6 +514,9 @@
 :root[data-theme='light'] .v2-chat {
   --bubble-in: #e9e9eb;
   --bubble-in-meta: #636366;
+  --bubble-out: #076787;
+  --bubble-out-text: #fff;
+  --bubble-out-meta: rgba(255, 255, 255, 0.95);
 }
 .v2-bubble {
   max-width: min(78%, 34rem);
@@ -525,20 +530,20 @@
 .v2-bubble.is-staff {
   border: 0;
   background: var(--bubble-out);
-  color: #fff;
+  color: var(--bubble-out-text);
 }
 .v2-bubble-meta {
   color: var(--bubble-in-meta);
   font-size: var(--fs-xs);
   font-weight: 500;
 }
-/* The accent focus ring vanishes on the violet bubble; white reads on it. */
+/* The accent focus ring vanishes on the cyan bubble; the bubble text colour reads on it. */
 .v2-bubble.is-staff:focus-visible,
 .v2-bubble.is-staff :focus-visible {
-  outline-color: #fff;
+  outline-color: var(--bubble-out-text);
 }
 .v2-bubble.is-staff .v2-bubble-meta {
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--bubble-out-meta);
 }
 .v2-bubble-body {
   margin-top: 1px;

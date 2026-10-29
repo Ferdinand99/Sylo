@@ -1,5 +1,5 @@
 /* V2 dashboard — design tokens mirror sylobot.com (site/styles.css): true
-   neutral greys, hairline borders, one violet accent for links, focus and
+   neutral greys, hairline borders, one cyan accent (the logo's #38c8f0) for links, focus and
    small highlights, Apple-style status colours. V2's own token names are
    kept so every rule below picks the values up unchanged.
    Dark is the default (matches sylobot.com and docs.sylobot.com, both
@@ -22,7 +22,7 @@
   --text-muted: #a1a1a6;
   /* Decorative only — fails AA as text. */
   --text-faint: #6e6e73;
-  --accent: #8b7dff;
+  --accent: #38c8f0;
   /* Links used a separate sky blue; now they use the accent. Kept as an
      alias (resolves per theme) so existing var(--accent-2) uses still work. */
   --accent-2: var(--accent);
@@ -88,8 +88,9 @@
   --text: #1d1d1f;
   --text-muted: #6e6e73;
   --text-faint: #86868b;
-  /* #6e5ce6 is 4.45:1 on #f5f5f7; one step darker clears AA everywhere. */
-  --accent: #6a58e3;
+  /* The logo cyan is too light on white; this step is 5.9:1 on #f5f5f7 and
+     still 5:1 as text on a 16% accent tint, so it clears AA everywhere. */
+  --accent: #076787;
   --success: #1e7f36;
   --warn: #b25000;
   --danger: #d70015;

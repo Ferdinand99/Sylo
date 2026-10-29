@@ -24,7 +24,7 @@ test('public.css, theme.js and the font are served from the same origin', async 
   assert.equal(css.status, 200);
   assert.match(css.headers.get('content-type'), /text\/css/);
   const text = await css.text();
-  assert.match(text, /--accent: #8b7dff/);
+  assert.match(text, /--accent: #38c8f0/);
   assert.match(text, /url\(\/fonts\/inter-latin-wght-normal\.woff2\)/);
   assert.doesNotMatch(text, /https?:\/\//, 'no external origin (no Google Fonts)');
 
