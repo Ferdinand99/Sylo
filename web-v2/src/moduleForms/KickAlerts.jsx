@@ -1,6 +1,7 @@
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -31,6 +32,7 @@ const fromForm = (form) => ({
 });
 
 export default function KickAlerts() {
+  const limits = useModuleLimits('kick-alerts');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('kick-alerts', {
     toForm,
     fromForm,
@@ -75,7 +77,7 @@ export default function KickAlerts() {
                 <label>Kick username</label>
                 <input
                   type="text"
-                  maxLength={25}
+                  maxLength={limitOf(limits, 'alerts[].slug').maxLength}
                   placeholder="xqc"
                   value={a.slug}
                   onChange={(e) => updateRow(a.key, { slug: e.target.value })}
@@ -111,7 +113,7 @@ export default function KickAlerts() {
               <label>Message</label>
               <textarea
                 rows={2}
-                maxLength={1500}
+                maxLength={limitOf(limits, 'alerts[].message').maxLength}
                 placeholder={data.defaultMessage}
                 value={a.message}
                 onChange={(e) => updateRow(a.key, { message: e.target.value })}
@@ -140,7 +142,12 @@ export default function KickAlerts() {
             </div>
           </div>
         ))}
-        <button type="button" className="v2-btn-ghost" onClick={addRow}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addRow}
+          disabled={form.alerts.length >= (limitOf(limits, 'alerts').maxItems ?? Infinity)}
+        >
           + Add streamer
         </button>
       </form>

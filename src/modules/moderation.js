@@ -17,18 +17,41 @@ import { formatDuration } from '../bot/lib/duration.js';
 import { sendPreBanAppealDm } from './appeals.js';
 import { log } from '../lib/log.js';
 import { every } from './schedule.js';
+import { clampRetentionDays } from './lib/retentionDays.js';
+
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  'warnThresholds[].count': { min: 1, max: 100 },
+  'warnThresholds[].durationMinutes': { min: 1 },
+  infractionRetentionDays: { min: 0, max: 3650 },
+};
 
 export const THRESHOLD_ACTIONS = ['timeout', 'kick', 'ban'];
 const MAX_TIMEOUT_MS = 28 * 86_400_000;
 
+const COUNT = LIMITS['warnThresholds[].count'];
+const DURATION = LIMITS['warnThresholds[].durationMinutes'];
+
+/** Coerce a submitted moderation config into the canonical shape. */
+export function normaliseModerationConfig(raw = {}) {
+  return {
+    dmOnPunish: raw.dmOnPunish !== false,
+    warnThresholds: normaliseThresholds(raw.warnThresholds),
+    infractionRetentionDays: clampRetentionDays(
+      raw.infractionRetentionDays,
+      LIMITS.infractionRetentionDays.max
+    ),
+  };
+}
+
 /** Normalise a stored threshold list: drop invalid rows, sort by count. */
 export function normaliseThresholds(list) {
   return (Array.isArray(list) ? list : [])
-    .filter((r) => Number.isFinite(Number(r.count)) && Number(r.count) >= 1)
+    .filter((r) => Number.isFinite(Number(r.count)) && Number(r.count) >= COUNT.min)
     .map((r) => ({
-      count: Math.max(1, Math.min(100, Math.floor(Number(r.count)))),
+      count: Math.max(COUNT.min, Math.min(COUNT.max, Math.floor(Number(r.count)))),
       action: THRESHOLD_ACTIONS.includes(r.action) ? r.action : 'timeout',
-      durationMinutes: Math.max(1, Math.floor(Number(r.durationMinutes) || 60)),
+      durationMinutes: Math.max(DURATION.min, Math.floor(Number(r.durationMinutes) || 60)),
     }))
     .sort((a, b) => a.count - b.count);
 }

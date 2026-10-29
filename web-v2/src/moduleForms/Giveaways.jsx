@@ -5,6 +5,7 @@ import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 function rel(ms) {
@@ -25,6 +26,7 @@ export default function Giveaways() {
   const cmd = useCmd();
   const [busyId, setBusyId] = useState(null);
   const [rerollCounts, setRerollCounts] = useState({});
+  const limits = useModuleLimits('giveaways');
   const { guildId, data, setData, form, setForm, status, error, dirty, saving, save, reset } =
     useModuleForm('giveaways');
 
@@ -162,8 +164,8 @@ export default function Giveaways() {
                   <input
                     type="number"
                     className="v2-input-sm"
-                    min={1}
-                    max={20}
+                    min={limitOf(limits, 'winners').min}
+                    max={limitOf(limits, 'winners').max}
                     value={rerollCounts[g.id] ?? 1}
                     onChange={(e) => setRerollCounts((c) => ({ ...c, [g.id]: Number(e.target.value) }))}
                   />

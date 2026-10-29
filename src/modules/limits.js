@@ -14,6 +14,15 @@ import { LIMITS as appleConnect } from './appleConnect.js';
 import { LIMITS as autoReact } from './autoReact.js';
 import { LIMITS as automod } from './automod.js';
 import { LIMITS as autoresponder } from './autoresponder.js';
+import { LIMITS as counting } from './counting.js';
+import { LIMITS as giveaways } from './giveaways.js';
+import { LIMITS as honeypot } from './honeypot.js';
+import { LIMITS as inviteTracker } from './inviteTracker.js';
+import { LIMITS as kickAlerts } from './kickAlerts.js';
+import { LIMITS as leveling } from './leveling.js';
+import { LIMITS as moderation } from './moderation.js';
+import { LIMITS as serverStats } from './serverStats.js';
+import { LIMITS as tickets } from './tickets.js';
 import { LIMITS as polls } from './polls.js';
 import { LIMITS as sticky } from './sticky.js';
 import { LIMITS as welcome } from './welcome.js';
@@ -25,6 +34,15 @@ export const MODULE_LIMITS = Object.freeze({
   'auto-react': autoReact,
   automod,
   autoresponder,
+  counting,
+  giveaways,
+  honeypot,
+  'invite-tracker': inviteTracker,
+  'kick-alerts': kickAlerts,
+  leveling,
+  moderation,
+  'server-stats': serverStats,
+  tickets,
   polls,
   sticky,
   welcome,

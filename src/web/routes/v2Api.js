@@ -57,7 +57,14 @@ import { mdToHtml } from '../lib/markdown.js';
 import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } from '../lib/roadmapLimits.js';
 import { roadmapView } from '../lib/roadmapView.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
-import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '../../modules/leveling.js';
+import {
+  normaliseLevelingConfig,
+  validXp,
+  ANNOUNCE_MODES,
+  XP_RATES,
+  syncRewards,
+} from '../../modules/leveling.js';
+import { normaliseTicketsConfig } from '../../modules/tickets.js';
 import { levelFromXp } from '../../modules/lib/levels.js';
 import {
   SCHEDULE_PRESETS,
@@ -122,7 +129,11 @@ import { WELCOME_PLACEHOLDERS, normaliseWelcomeConfig } from '../../modules/welc
 import { MODULE_LIMITS } from '../../modules/limits.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
-import { normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
+import {
+  normaliseThresholds,
+  normaliseModerationConfig,
+  THRESHOLD_ACTIONS,
+} from '../../modules/moderation.js';
 import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
 import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
 import { normaliseInviteTrackerConfig } from '../../modules/inviteTracker.js';
@@ -142,7 +153,7 @@ import { deleteBoardEntries } from '../../db/starboard.js';
 import { dailySeries, hourlySeries, topChannels, topVoiceChannels } from '../../db/insights.js';
 import { flushGuild as flushGuildInsights } from '../../modules/insights.js';
 import { recentLookups } from '../../db/cache.js';
-import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
+import { normaliseGiveawaysConfig, endGiveaway, clampWinners } from '../../modules/giveaways.js';
 import {
   listComposed,
   getComposed,
@@ -159,7 +170,7 @@ import {
 } from '../../db/giveaways.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { listCountingPenalties } from '../../db/countingPenalties.js';
-import { releaseCountingPenalty } from '../../modules/counting.js';
+import { releaseCountingPenalty, normaliseCountingConfig, validCount } from '../../modules/counting.js';
 import { normaliseAutoReact, AUTO_REACT_MODES, AUTO_REACT_ROLE_ACTIONS } from '../../modules/autoReact.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import {
@@ -251,13 +262,6 @@ function parseUserId(raw) {
     .trim()
     .match(/^<@!?(\d{17,20})>$|^(\d{17,20})$/);
   return m ? m[1] || m[2] : null;
-}
-
-// Mirrors guilds.js's private clampDays() — a "delete after N days" field
-// where 0 (or junk) means keep forever.
-function clampDays(raw) {
-  const n = Math.floor(Number(raw));
-  return Number.isFinite(n) && n > 0 ? Math.min(n, 3650) : 0;
 }
 
 // Same list V1's server switcher and "Choose a server" picker use
@@ -808,16 +812,7 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/counting/config',
   asyncHandler(async (req, res) => {
-    const penaltyMinutes = Math.round(Number(req.body.penaltyMinutes));
-    const config = {
-      channelId: /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '',
-      allowSameUser: Boolean(req.body.allowSameUser),
-      resetOnFail: Boolean(req.body.resetOnFail),
-      react: Boolean(req.body.react),
-      penaltyRoleId: /^\d{17,20}$/.test(req.body.penaltyRoleId ?? '') ? req.body.penaltyRoleId : '',
-      penaltyMinutes:
-        Number.isFinite(penaltyMinutes) && penaltyMinutes > 0 ? Math.min(penaltyMinutes, 10080) : 15,
-    };
+    const config = normaliseCountingConfig(req.body);
     await setGuildModule(req.guild.id, 'counting', { config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -840,8 +835,8 @@ router.post(
       });
       return res.json({ state: await getCounting(req.guild.id) });
     }
-    const n = Number(req.body.current);
-    if (!Number.isInteger(n) || n < 0 || n > 1e12) {
+    const n = validCount(req.body.current);
+    if (n === null) {
       return res.status(400).json({ error: 'Invalid count' });
     }
     await setCount(req.guild.id, n);
@@ -940,11 +935,7 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/moderation/config',
   asyncHandler(async (req, res) => {
-    const config = {
-      dmOnPunish: req.body.dmOnPunish !== false,
-      warnThresholds: normaliseThresholds(req.body.warnThresholds),
-      infractionRetentionDays: clampDays(req.body.infractionRetentionDays),
-    };
+    const config = normaliseModerationConfig(req.body);
     await setGuildModule(req.guild.id, 'moderation', { config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -1549,14 +1540,8 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/tickets/config',
   asyncHandler(async (req, res) => {
-    const config = {
-      greeting: String(req.body.greeting ?? '').slice(0, 1500),
-      closeMessage: String(req.body.closeMessage ?? '').slice(0, 1500),
-      notifyChannel: /^\d{17,20}$/.test(req.body.notifyChannel ?? '') ? req.body.notifyChannel : '',
-      staffRoles: withoutEveryone(req.guild.id, idList(req.body.staffRoles)),
-      transcriptRetentionDays: clampDays(req.body.transcriptRetentionDays),
-      showMessageInAlert: Boolean(req.body.showMessageInAlert),
-    };
+    const config = normaliseTicketsConfig(req.body);
+    config.staffRoles = withoutEveryone(req.guild.id, config.staffRoles);
     await setGuildModule(req.guild.id, 'tickets', { config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -1668,7 +1653,7 @@ router.post(
     const id = Number(req.params.id);
     const g = await getGiveawayInGuild(id, req.guild.id);
     if (!g || !g.ended) return res.status(400).json({ error: 'Not an ended giveaway' });
-    const count = Math.max(1, Math.min(Number(req.body.count) || 1, 20));
+    const count = clampWinners(req.body.count);
     await endGiveaway(id, { rerollCount: count });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -1900,8 +1885,8 @@ router.post(
       return res.json({ ok: true });
     }
     const userId = parseUserId(req.body.userId);
-    const xp = Number(req.body.xp);
-    if (!userId || !Number.isInteger(xp) || xp < 0 || xp > 1e12) {
+    const xp = validXp(req.body.xp);
+    if (!userId || xp === null) {
       return res
         .status(400)
         .json({ error: 'Enter a valid user id/mention and a non-negative whole XP value.' });

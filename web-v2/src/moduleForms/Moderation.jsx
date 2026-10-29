@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 const ACTION_LABELS = { timeout: 'Timeout', kick: 'Kick', ban: 'Ban' };
 
@@ -34,6 +35,7 @@ const fromForm = (form) => ({
 });
 
 export default function Moderation() {
+  const limits = useModuleLimits('moderation');
   const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm(
     'moderation',
     { toForm, fromForm }
@@ -86,8 +88,8 @@ export default function Moderation() {
                 <label>At warning #</label>
                 <input
                   type="number"
-                  min={1}
-                  max={100}
+                  min={limitOf(limits, 'warnThresholds[].count').min}
+                  max={limitOf(limits, 'warnThresholds[].count').max}
                   value={r.count}
                   onChange={(e) => updateRule(r.key, { count: Number(e.target.value) })}
                 />
@@ -107,7 +109,7 @@ export default function Moderation() {
                   <label>Timeout (min)</label>
                   <input
                     type="number"
-                    min={1}
+                    min={limitOf(limits, 'warnThresholds[].durationMinutes').min}
                     value={r.durationMinutes}
                     onChange={(e) => updateRule(r.key, { durationMinutes: Number(e.target.value) })}
                   />
@@ -127,8 +129,8 @@ export default function Moderation() {
           <input
             id="infractionRetentionDays"
             type="number"
-            min={0}
-            max={3650}
+            min={limitOf(limits, 'infractionRetentionDays').min}
+            max={limitOf(limits, 'infractionRetentionDays').max}
             value={form.infractionRetentionDays}
             onChange={(e) => set({ infractionRetentionDays: Number(e.target.value) })}
           />

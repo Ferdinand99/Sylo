@@ -4,9 +4,11 @@ import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 export default function Counting() {
+  const limits = useModuleLimits('counting');
   const { guildId, data, setData, form, setForm, status, error, dirty, saving, save, reset } =
     useModuleForm('counting');
   const [countInput, setCountInput] = useState('');
@@ -146,8 +148,8 @@ export default function Counting() {
           <input
             id="penaltyMinutes"
             type="number"
-            min={1}
-            max={10080}
+            min={limitOf(limits, 'penaltyMinutes').min}
+            max={limitOf(limits, 'penaltyMinutes').max}
             value={form.penaltyMinutes}
             onChange={(e) => set({ penaltyMinutes: Number(e.target.value) })}
           />
@@ -201,7 +203,8 @@ export default function Counting() {
           <input
             id="countInput"
             type="number"
-            min={0}
+            min={limitOf(limits, 'count').min}
+            max={limitOf(limits, 'count').max}
             value={countInput}
             aria-invalid={countError ? true : undefined}
             aria-describedby={countError ? 'countInput-error' : undefined}

@@ -18,6 +18,37 @@ import {
   getCountingPenalty,
 } from '../db/countingPenalties.js';
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  penaltyMinutes: { min: 1, max: 10080 },
+  // the running count an admin can set by hand (POST …/counting/count)
+  count: { min: 0, max: 1e12 },
+};
+
+/** The count to store, or null when it is not a whole number inside the limits. */
+export function validCount(v) {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= LIMITS.count.min && n <= LIMITS.count.max ? n : null;
+}
+
+const idOrEmpty = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
+
+/** Coerce a submitted counting config into the canonical shape. */
+export function normaliseCountingConfig(raw = {}) {
+  const penaltyMinutes = Math.round(Number(raw.penaltyMinutes));
+  return {
+    channelId: idOrEmpty(raw.channelId),
+    allowSameUser: Boolean(raw.allowSameUser),
+    resetOnFail: Boolean(raw.resetOnFail),
+    react: Boolean(raw.react),
+    penaltyRoleId: idOrEmpty(raw.penaltyRoleId),
+    penaltyMinutes:
+      Number.isFinite(penaltyMinutes) && penaltyMinutes >= LIMITS.penaltyMinutes.min
+        ? Math.min(penaltyMinutes, LIMITS.penaltyMinutes.max)
+        : 15,
+  };
+}
+
 const OK = '✅';
 const BAD = '❌';
 const NUMBER_RE = /^\s*(\d{1,15})\s*$/;

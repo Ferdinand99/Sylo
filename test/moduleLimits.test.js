@@ -13,6 +13,15 @@ import { normaliseAppleConfig } from '../src/modules/appleConnect.js';
 import { normaliseAutoReact } from '../src/modules/autoReact.js';
 import { normaliseAutomodConfig } from '../src/modules/automod.js';
 import { normaliseAutoresponder } from '../src/modules/autoresponder.js';
+import { normaliseCountingConfig, validCount } from '../src/modules/counting.js';
+import { clampWinners } from '../src/modules/giveaways.js';
+import { normaliseHoneypotConfig } from '../src/modules/honeypot.js';
+import { normaliseInviteTrackerConfig } from '../src/modules/inviteTracker.js';
+import { normaliseKickConfig } from '../src/modules/kickAlerts.js';
+import { normaliseLevelingConfig, validXp } from '../src/modules/leveling.js';
+import { normaliseModerationConfig } from '../src/modules/moderation.js';
+import { normaliseServerStats } from '../src/modules/serverStats.js';
+import { normaliseTicketsConfig } from '../src/modules/tickets.js';
 
 const CHANNEL = '123456789012345678';
 const roleId = (i) => String(100000000000000000n + BigInt(i));
@@ -37,7 +46,9 @@ const text = (n) => 'a'.repeat(n);
 const items = (n, make) => Array.from({ length: n }, (_, i) => make(i));
 
 // Per module: the normaliser, a valid request body to start from, and per limited path how to build a
-// value of size n (text/list) or a number. `url` marks a text that must look like a https URL.
+// value of size n (text/list) or a number. Where a value past a limit is dropped or replaced by a
+// default instead of being cut or clamped, `under` (one below a min) or `over` (one past a max, a
+// length or a count) say what to expect: `{ input?, check(out) }`.
 const cases = {
   welcome: {
     normalise: normaliseWelcomeConfig,
@@ -97,6 +108,85 @@ const cases = {
       'responders[].response': text,
     },
   },
+  counting: {
+    normalise: (raw) => ({ ...normaliseCountingConfig(raw), count: validCount(raw.count) }),
+    base: { count: 0 },
+    // a penalty below 1 minute falls back to the 15 minute default
+    under: {
+      penaltyMinutes: { check: (out) => out.penaltyMinutes === 15 },
+      count: { check: (out) => out.count === null },
+    },
+    over: { count: { check: (out) => out.count === null } },
+  },
+  giveaways: {
+    normalise: (raw) => ({ winners: clampWinners(raw.winners) }),
+    base: { winners: 1 },
+  },
+  honeypot: {
+    normalise: normaliseHoneypotConfig,
+    base: { channels: [{ channelId: CHANNEL }], messages: [{ channelId: CHANNEL }] },
+    value: {
+      channels: (n) => items(n, (i) => ({ channelId: roleId(i) })),
+      messages: (n) => items(n, (i) => ({ channelId: roleId(i) })),
+      'messages[].bait': text,
+    },
+  },
+  'invite-tracker': {
+    normalise: normaliseInviteTrackerConfig,
+    base: {},
+  },
+  'kick-alerts': {
+    normalise: normaliseKickConfig,
+    base: { alerts: [{ slug: 'xqc', channelId: CHANNEL }] },
+    value: { alerts: (n) => items(n, (i) => ({ slug: `s${i}x`, channelId: CHANNEL })) },
+    // a slug past the limit is not a Kick username: the alert is dropped
+    over: { 'alerts[].slug': { check: (out) => out.alerts.length === 0 } },
+  },
+  leveling: {
+    normalise: (raw) => ({ ...normaliseLevelingConfig(raw), xp: validXp(raw.xp) }),
+    base: {
+      multipliers: [{ type: 'role', id: roleId(1), factor: 1 }],
+      rewards: [{ level: 5, roleId: roleId(1) }],
+      xp: 0,
+    },
+    value: {
+      multipliers: (n) => items(n, () => ({ type: 'role', id: roleId(1), factor: 1 })),
+      rewards: (n) => items(n, () => ({ level: 5, roleId: roleId(1) })),
+    },
+    // a reward level outside 1..1000 is dropped, an XP value outside the limits is refused
+    under: {
+      'rewards[].level': { check: (out) => out.rewards.length === 0 },
+      xp: { check: (out) => out.xp === null },
+    },
+    over: {
+      'rewards[].level': { check: (out) => out.rewards.length === 0 },
+      xp: { check: (out) => out.xp === null },
+    },
+  },
+  moderation: {
+    normalise: normaliseModerationConfig,
+    base: { warnThresholds: [{ count: 1, action: 'timeout' }] },
+    // a threshold below warning 1 is dropped; a duration below 1 minute is raised to 1
+    under: {
+      'warnThresholds[].count': { check: (out) => out.warnThresholds.length === 0 },
+      'warnThresholds[].durationMinutes': {
+        input: -5,
+        check: (out) => out.warnThresholds[0].durationMinutes === 1,
+      },
+    },
+  },
+  'server-stats': {
+    normalise: normaliseServerStats,
+    base: { channels: [{ channelId: CHANNEL, type: 'members', template: '{count}' }] },
+    value: {
+      channels: (n) => items(n, () => ({ channelId: CHANNEL, type: 'members', template: '{count}' })),
+      'channels[].template': (n) => `{count}${text(n - 7)}`,
+    },
+  },
+  tickets: {
+    normalise: normaliseTicketsConfig,
+    base: {},
+  },
   _embed: {
     normalise: (raw) => ({ spec: normaliseEmbedSpec(raw.spec) }),
     base: { spec: { fields: [{ name: 'n', value: 'v' }] } },
@@ -135,12 +225,17 @@ for (const [moduleId, c] of Object.entries(cases)) {
           const out = c.normalise(withValue(c.base, prefix + path, value));
           return size(readPath(out, prefix + path));
         };
-        if (kind === 'min') {
-          assert.equal(run(build(n)), n, 'at the minimum: kept');
-          assert.equal(run(build(n - 1)), n, 'below the minimum: clamped up');
+        const special = (kind === 'min' ? c.under : c.over)?.[path];
+        const outside = kind === 'min' ? n - 1 : n + 1;
+        assert.equal(run(build(n)), n, kind === 'min' ? 'at the minimum: kept' : 'at the limit: kept');
+        if (special) {
+          const input = special.input ?? build(outside);
+          const out = c.normalise(withValue(c.base, prefix + path, input));
+          assert.ok(special.check(out), `${path}: a value past the limit is dropped or replaced as stated`);
+        } else if (kind === 'min') {
+          assert.equal(run(build(outside)), n, 'below the minimum: clamped up');
         } else {
-          assert.equal(run(build(n)), n, 'at the limit: kept');
-          assert.equal(run(build(n + 1)), n, 'one past the limit: cut or clamped down');
+          assert.equal(run(build(outside)), n, 'one past the limit: cut or clamped down');
         }
       });
     }
@@ -170,7 +265,7 @@ test('MODULE_LIMITS holds no limit that is not a number', () => {
   for (const [moduleId, limits] of Object.entries(MODULE_LIMITS)) {
     for (const [path, limit] of Object.entries(limits)) {
       for (const [k, v] of Object.entries(limit)) {
-        assert.ok(Number.isInteger(v) && v >= 0, `${moduleId}.${path}.${k} is a whole number`);
+        assert.ok(Number.isFinite(v) && v >= 0, `${moduleId}.${path}.${k} is a non-negative number`);
       }
     }
   }

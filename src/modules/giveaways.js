@@ -24,7 +24,16 @@ import { every, after } from './schedule.js';
 
 export const MIN_MS = 60_000; // 1 minute
 export const MAX_MS = 60 * 86_400_000; // 60 days
-export const MAX_WINNERS = 20;
+
+/** Setting limits, served to the dashboard (modules/limits.js). `winners` also bounds a reroll. */
+export const LIMITS = {
+  winners: { min: 1, max: 20 },
+};
+export const MAX_WINNERS = LIMITS.winners.max;
+
+/** Winners to draw: a whole number inside the limits, 1 for anything unreadable. */
+export const clampWinners = (v) =>
+  Math.max(LIMITS.winners.min, Math.min(Math.floor(Number(v)) || LIMITS.winners.min, LIMITS.winners.max));
 const ACCENT = 0xf0b232;
 
 // Coalesced "N entries" footer refreshes — at most one message edit per
@@ -143,7 +152,7 @@ export async function endGiveaway(id, opts = {}) {
     eligible.push(uid);
   }
 
-  const count = opts.rerollCount ? Math.max(1, Math.min(opts.rerollCount, MAX_WINNERS)) : g.winners;
+  const count = opts.rerollCount ? clampWinners(opts.rerollCount) : g.winners;
   const winners = pickWinners(eligible, count);
 
   if (opts.rerollCount) await setGiveawayWinners(id, winners);
