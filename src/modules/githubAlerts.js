@@ -20,11 +20,13 @@ const REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
 
 /** Accepts "owner/repo" or a pasted github.com URL; returns the normalised "owner/repo" or null. */
 export function parseRepoInput(raw) {
-  const v = String(raw ?? '')
+  // Capped, and trailing slashes trimmed without a regex (`/\/+$/` backtracks on long slash runs).
+  let v = String(raw ?? '')
     .trim()
+    .slice(0, 300)
     .replace(/^https?:\/\/(www\.)?github\.com\//i, '')
-    .replace(/\.git$/i, '')
-    .replace(/\/+$/, '');
+    .replace(/\.git$/i, '');
+  while (v.endsWith('/')) v = v.slice(0, -1);
   return REPO_RE.test(v) ? v : null;
 }
 
