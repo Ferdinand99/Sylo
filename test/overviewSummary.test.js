@@ -84,3 +84,20 @@ test('the Events card counts upcoming events and names the next one', async () =
   assert.equal(card.lines.find((l) => l.label === 'Upcoming events').value, '1');
   assert.match(card.lines.find((l) => l.label === 'Next').value, /Game night · 2030-01-02 18:30 UTC/);
 });
+
+test('the Suggestions card counts open and stored suggestions', async () => {
+  const { createSuggestion, decideSuggestion } = await import('../src/db/suggestions.js');
+  const find = async () =>
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards).find((c) => c.id === 'suggestions');
+  const empty = await find();
+  assert.ok(empty, 'a card for the Suggestions module');
+  assert.equal(empty.lines.find((l) => l.label === 'Open suggestions').value, '0');
+  assert.equal(empty.lines.find((l) => l.label === 'Stored').value, '0');
+
+  const a = await createSuggestion({ guildId: G, channelId: '111', authorId: 'u1', body: 'one' });
+  await createSuggestion({ guildId: G, channelId: '111', authorId: 'u2', body: 'two' });
+  await decideSuggestion(a.id, { status: 'approved' });
+  const card = await find();
+  assert.equal(card.lines.find((l) => l.label === 'Open suggestions').value, '1');
+  assert.equal(card.lines.find((l) => l.label === 'Stored').value, '2');
+});

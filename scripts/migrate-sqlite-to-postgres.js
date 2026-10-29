@@ -67,6 +67,7 @@ import '../src/db/inviteTracker.js';
 import '../src/db/polls.js';
 import '../src/db/giveaways.js';
 import '../src/db/events.js';
+import '../src/db/suggestions.js';
 import '../src/db/leaderboardVanity.js';
 import '../src/db/tempBans.js';
 import '../src/db/channelLocks.js';

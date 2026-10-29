@@ -9,6 +9,8 @@ export const LIMITS = Object.freeze({
   composedMessages: 200,
   events: 50,
   eventParticipants: 500,
+  suggestions: 5000,
+  openSuggestionsPerMember: 10,
 });
 
 export class LimitError extends Error {

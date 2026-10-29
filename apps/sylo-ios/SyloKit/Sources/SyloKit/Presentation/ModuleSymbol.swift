@@ -41,6 +41,7 @@ public enum ModuleSymbol {
         "bell": "bell",
         "gift": "gift",
         "calendar": "calendar",
+        "lightbulb": "lightbulb",
         "twitch": "play.tv",
         "youtube": "play.rectangle",
         "kick": "play.circle",

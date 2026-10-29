@@ -1013,6 +1013,39 @@ export const MIGRATIONS = [
       CREATE INDEX idx_guild_event_participants_user ON guild_event_participants (user_id);
     `);
   },
+
+  // Suggestions (src/db/suggestions.js, which bootstraps the same tables on Postgres): a row per
+  // suggestion, numbered per server, and a row per vote.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_suggestions (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id    TEXT NOT NULL,
+        number      INTEGER NOT NULL,
+        channel_id  TEXT NOT NULL,
+        message_id  TEXT,
+        author_id   TEXT,
+        anonymous   INTEGER NOT NULL DEFAULT 0,
+        title       TEXT NOT NULL DEFAULT '',
+        body        TEXT NOT NULL,
+        status      TEXT NOT NULL DEFAULT 'open',
+        reason      TEXT NOT NULL DEFAULT '',
+        decided_by  TEXT,
+        decided_at  INTEGER,
+        created_at  INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_guild_suggestions_number ON guild_suggestions (guild_id, number);
+      CREATE INDEX idx_guild_suggestions_author ON guild_suggestions (guild_id, author_id);
+      CREATE TABLE guild_suggestion_votes (
+        suggestion_id INTEGER NOT NULL,
+        user_id       TEXT NOT NULL,
+        vote          INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL,
+        PRIMARY KEY (suggestion_id, user_id)
+      );
+      CREATE INDEX idx_guild_suggestion_votes_user ON guild_suggestion_votes (user_id);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

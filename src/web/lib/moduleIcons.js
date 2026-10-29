@@ -30,6 +30,7 @@ export const MODULE_ICONS = {
   reminders: 'bell',
   giveaways: 'gift',
   events: 'calendar',
+  suggestions: 'lightbulb',
   'game-stats': 'target',
   'twitch-alerts': 'twitch',
   'youtube-alerts': 'youtube',

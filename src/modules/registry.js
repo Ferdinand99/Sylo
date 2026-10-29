@@ -329,6 +329,17 @@ export const MODULES = [
     beta: true,
   },
   {
+    id: 'suggestions',
+    name: 'Suggestions',
+    description:
+      'Members post ideas with /suggest; others vote 👍 / 👎, staff approve or deny with a reason, and decided ideas can move to a log channel.',
+    icon: '💡',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
     id: 'game-stats',
     name: 'Game stats',
     description:

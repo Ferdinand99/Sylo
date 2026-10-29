@@ -53,6 +53,7 @@ import './honeypotCatches.js';
 import './componentReactions.js';
 import './verificationKicks.js';
 import './events.js';
+import './suggestions.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -93,6 +94,7 @@ export const GUILD_TABLES = [
   'component_reactions',
   'verification_kicks',
   'guild_events',
+  'guild_suggestions',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -106,11 +108,16 @@ const eventParticipantStmt = prepare(
   'DELETE FROM guild_event_participants WHERE event_id IN (SELECT id FROM guild_events WHERE guild_id = ?)'
 );
 
+const suggestionVoteStmt = prepare(
+  'DELETE FROM guild_suggestion_votes WHERE suggestion_id IN (SELECT id FROM guild_suggestions WHERE guild_id = ?)'
+);
+
 /** Remove all of a guild's stored data. */
 export async function purgeGuild(guildId) {
   await ticketMsgStmt.run(guildId); // before `tickets`, which the subquery reads
   await giveawayEntryStmt.run(guildId); // before `giveaways`, which the subquery reads
   await eventParticipantStmt.run(guildId); // before `guild_events`, which the subquery reads
+  await suggestionVoteStmt.run(guildId); // before `guild_suggestions`, which the subquery reads
   for (const stmt of simpleStmts) await stmt.run(guildId);
 }
 
@@ -141,6 +148,18 @@ const userStmts = {
     WHERE event_id IN (SELECT id FROM guild_events WHERE guild_id = ?)
       AND user_id = ?
   `),
+  suggestionVotes: prepare(`
+    DELETE FROM guild_suggestion_votes
+    WHERE suggestion_id IN (SELECT id FROM guild_suggestions WHERE guild_id = ?)
+      AND user_id = ?
+  `),
+  // The suggestion text stays so the server keeps its board; only the person is taken off it.
+  suggestionAuthor: prepare(
+    'UPDATE guild_suggestions SET author_id = NULL WHERE guild_id = ? AND author_id = ?'
+  ),
+  suggestionDecider: prepare(
+    'UPDATE guild_suggestions SET decided_by = NULL WHERE guild_id = ? AND decided_by = ?'
+  ),
   inviteCounts: prepare('DELETE FROM invite_counts WHERE guild_id = ? AND user_id = ?'),
   inviteJoins: prepare('DELETE FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
   inviteJoinsAsInviter: prepare(
@@ -159,7 +178,7 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, invites: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, invites: number }}
  */
 export async function forgetUser(guildId, userId) {
   const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
@@ -174,6 +193,9 @@ export async function forgetUser(guildId, userId) {
   const birthdays = (await userStmts.birthdays.run(guildId, userId)).changes;
   const giveawayEntries = (await userStmts.giveawayEntries.run(guildId, userId)).changes;
   const eventSignups = (await userStmts.eventParticipants.run(guildId, userId)).changes;
+  const suggestionVotes = (await userStmts.suggestionVotes.run(guildId, userId)).changes;
+  const suggestions = (await userStmts.suggestionAuthor.run(guildId, userId)).changes;
+  const suggestionDecisions = (await userStmts.suggestionDecider.run(guildId, userId)).changes;
   const invites =
     (await userStmts.inviteCounts.run(guildId, userId)).changes +
     (await userStmts.inviteJoins.run(guildId, userId)).changes +
@@ -189,6 +211,9 @@ export async function forgetUser(guildId, userId) {
     birthdays,
     giveawayEntries,
     eventSignups,
+    suggestionVotes,
+    suggestions,
+    suggestionDecisions,
     invites,
   };
 }
@@ -307,6 +332,30 @@ const USER_DATA_SOURCES = [
       'SELECT COUNT(*) AS n FROM guild_event_participants WHERE user_id = ? AND event_id IN (SELECT id FROM guild_events WHERE guild_id = ?)',
     rowsSql:
       'SELECT * FROM guild_event_participants WHERE user_id = ? AND event_id IN (SELECT id FROM guild_events WHERE guild_id = ?) ORDER BY updated_at',
+  },
+  {
+    key: 'suggestionVotes',
+    label: 'Suggestion votes (up / down)',
+    order: 'ug',
+    countSql:
+      'SELECT COUNT(*) AS n FROM guild_suggestion_votes WHERE user_id = ? AND suggestion_id IN (SELECT id FROM guild_suggestions WHERE guild_id = ?)',
+    rowsSql:
+      'SELECT * FROM guild_suggestion_votes WHERE user_id = ? AND suggestion_id IN (SELECT id FROM guild_suggestions WHERE guild_id = ?) ORDER BY updated_at',
+  },
+  {
+    key: 'suggestions',
+    label: 'Suggestions they wrote (/forget keeps the text, drops you as the author)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM guild_suggestions WHERE guild_id = ? AND author_id = ?',
+    rowsSql: 'SELECT * FROM guild_suggestions WHERE guild_id = ? AND author_id = ? ORDER BY number',
+  },
+  {
+    key: 'suggestionDecisions',
+    label: 'Suggestions they decided as staff (/forget drops the name)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM guild_suggestions WHERE guild_id = ? AND decided_by = ?',
+    rowsSql:
+      'SELECT number, status, reason, decided_at FROM guild_suggestions WHERE guild_id = ? AND decided_by = ? ORDER BY number',
   },
   {
     key: 'inviteCounts',

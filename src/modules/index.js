@@ -30,6 +30,7 @@ import './appleConnect.js';
 import './insights.js';
 import './giveaways.js';
 import './events.js';
+import './suggestions.js';
 import './messageCreator.js'; // registers the role-button / role-select component handlers
 import './moderation.js'; // no gateway handlers, but runs the temporary-ban expiry loop
 import './birthdays.js'; // no gateway handlers, but runs the daily birthday sweep

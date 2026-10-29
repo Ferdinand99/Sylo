@@ -17,6 +17,11 @@ import { normaliseAutoresponder } from '../src/modules/autoresponder.js';
 import { normaliseCountingConfig, validCount } from '../src/modules/counting.js';
 import { clampWinners } from '../src/modules/giveaways.js';
 import { normaliseEventFields, normaliseEventsConfig } from '../src/modules/events.js';
+import {
+  normaliseReason,
+  normaliseSuggestionFields,
+  normaliseSuggestionsConfig,
+} from '../src/modules/suggestions.js';
 import { normaliseHoneypotConfig } from '../src/modules/honeypot.js';
 import { normaliseInviteTrackerConfig } from '../src/modules/inviteTracker.js';
 import { normaliseKickConfig } from '../src/modules/kickAlerts.js';
@@ -151,6 +156,16 @@ const cases = {
     // a capacity below 1 is "no limit"; an image past the limit is dropped (a cut link points nowhere)
     under: { capacity: { check: (out) => out.capacity === null } },
     over: { imageUrl: { check: (out) => out.imageUrl === '' } },
+  },
+  suggestions: {
+    // the suggestion's own text fields, the staff reason, and the settings' cooldown and role list
+    normalise: (raw) => ({
+      ...normaliseSuggestionFields(raw),
+      reason: normaliseReason(raw.reason),
+      ...normaliseSuggestionsConfig(raw),
+    }),
+    base: {},
+    value: { staffRoles: (n) => items(n, roleId) },
   },
   honeypot: {
     normalise: normaliseHoneypotConfig,

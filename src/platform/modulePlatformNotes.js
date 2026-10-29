@@ -19,6 +19,8 @@ const FLUXER_NOTES = {
     'Fluxer has no buttons yet: members enter a giveaway by reacting to its message instead of pressing a button.',
   events: ({ prefix }) =>
     `Fluxer has no buttons yet: members sign up by reacting to the event post (✅ Join, ❔ Maybe, ❌ Leave). Staff run the commands from chat, for example ${prefix}event create title:"Game night" start:"2026-11-05 19:00". The post also spells out the start time in the creator's time zone. The dashboard works as on Discord.`,
+  suggestions: ({ prefix }) =>
+    `Fluxer has no buttons or threads yet: members vote by reacting to the suggestion (👍 or 👎; reacting again takes the vote back) and no discussion thread is opened. Members and staff use chat commands, for example ${prefix}suggest text:"Add a movie night" and ${prefix}suggestion approve id:12 reason:"Starting next week". The dashboard works as on Discord.`,
   roles: () =>
     'Role menus show their buttons and dropdown options as reactions, with a short legend in the message. Members react to get or drop a role.',
   tickets: () =>

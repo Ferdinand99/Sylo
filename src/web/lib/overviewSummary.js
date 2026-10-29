@@ -17,6 +17,7 @@ import { inviterCount } from '../../db/inviteTracker.js';
 import { guildPollCount } from '../../db/polls.js';
 import { activeGiveaways } from '../../db/giveaways.js';
 import { upcomingEvents } from '../../db/events.js';
+import { openSuggestionCount, suggestionCount } from '../../db/suggestions.js';
 import { recentLookups } from '../../db/cache.js';
 import { dailySeries } from '../../db/insights.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
@@ -54,6 +55,7 @@ const LAYOUT = [
       'polls',
       'giveaways',
       'events',
+      'suggestions',
       'autoresponder',
       'auto-react',
       'afk',
@@ -356,6 +358,15 @@ async function moduleLines(id, guild, cfg) {
               `${next.title.slice(0, 40)} · ${new Date(next.start_at).toISOString().slice(0, 16).replace('T', ' ')} UTC`
             )
           : neutral('Next', 'none'),
+      ];
+    }
+    case 'suggestions': {
+      const open = await openSuggestionCount(guild.id);
+      const total = await suggestionCount(guild.id);
+      return [
+        open ? on('Open suggestions', String(open)) : neutral('Open suggestions', '0'),
+        neutral('Stored', String(total)),
+        cfg.channel ? on('Channel', 'set') : off('Channel', 'not set'),
       ];
     }
     case 'polls': {

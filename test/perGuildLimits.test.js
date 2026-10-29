@@ -69,3 +69,8 @@ test('createEvent in the module stops at the upcoming-events limit', async () =>
     await createEvent({ guildId: G, channelId: CH, title: 'x', startAt: input.startAt, hostId: 'h' });
   await assert.rejects(post({ guild, hostId: 'h', channelId: CH, input }), LimitError);
 });
+
+test('suggestions: 5000 stored per server, 10 open per member', () => {
+  assert.equal(LIMITS.suggestions, 5000);
+  assert.equal(LIMITS.openSuggestionsPerMember, 10);
+});

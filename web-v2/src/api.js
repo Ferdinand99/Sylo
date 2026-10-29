@@ -118,6 +118,14 @@ export const updateEvent = (guildId, id, body) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/events/events/${id}`, body);
 export const cancelEvent = (guildId, id) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/events/events/${id}/cancel`, {});
+export const getSuggestions = (guildId, { status = 'all', sort = 'new' } = {}) =>
+  apiFetch(
+    `/api/v2/guilds/${gid(guildId)}/modules/suggestions/list?status=${encodeURIComponent(status)}&sort=${encodeURIComponent(sort)}`
+  );
+export const decideSuggestion = (guildId, number, action, reason) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/decision`, { action, reason });
+export const deleteSuggestion = (guildId, number) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/delete`, {});
 export const setInviteBonus = (guildId, userId, bonus) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/invite-tracker/bonus`, { userId, bonus });
 

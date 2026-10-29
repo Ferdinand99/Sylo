@@ -26,7 +26,7 @@ note.
 
 ## What the dashboard shows
 
-- **Sidebar shows only what's turned on.** Instead of listing all 36 modules
+- **Sidebar shows only what's turned on.** Instead of listing all 37 modules
   with an on/off dot, the sidebar lists just the modules enabled for whichever
   server you're looking at, grouped the same way the Dashboard/Overview page
   groups them. Turn a module on from Overview and it appears in the sidebar

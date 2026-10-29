@@ -34,6 +34,7 @@ import { LIMITS as rss } from './rss.js';
 import { LIMITS as serverStats } from './serverStats.js';
 import { LIMITS as starboard } from './starboard.js';
 import { LIMITS as sticky } from './sticky.js';
+import { LIMITS as suggestions } from './suggestions.js';
 import { LIMITS as tempVoice } from './tempVoice.js';
 import { LIMITS as tickets } from './tickets.js';
 import { LIMITS as twitchAlerts } from './twitchAlerts.js';
@@ -69,6 +70,7 @@ export const MODULE_LIMITS = Object.freeze({
   'server-stats': serverStats,
   starboard,
   sticky,
+  suggestions,
   'temp-voice': tempVoice,
   tickets,
   'twitch-alerts': twitchAlerts,

@@ -49,6 +49,9 @@ const render = {
   birthdays: (r) =>
     `${r[0].day} ${MONTHS[r[0].month - 1] ?? `month ${r[0].month}`}${r[0].year ? ` ${r[0].year}` : ''}`,
   giveawayEntries: (r) => plural(r.length, 'entry', 'entries'),
+  suggestionVotes: (r) => plural(r.length, 'vote'),
+  suggestions: (r) => plural(r.length, 'suggestion'),
+  suggestionDecisions: (r) => plural(r.length, 'decision'),
   inviteCounts: (r) => `${r[0].regular} regular · ${r[0].bonus} bonus · ${r[0].leaves} left`,
   inviteJoins: (r) => (r[0].inviter_id ? `invited by <@${r[0].inviter_id}>` : `joined via ${r[0].source}`),
   invitedOthers: (r) => plural(r.length, 'member'),

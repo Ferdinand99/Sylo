@@ -69,7 +69,10 @@ export const GROUPS = [
       'voice-clean',
     ],
   },
-  { name: 'Engagement', commands: ['giveaway', 'event', 'poll', 'poll-end', 'freegames'] },
+  {
+    name: 'Engagement',
+    commands: ['giveaway', 'event', 'suggest', 'suggestion', 'poll', 'poll-end', 'freegames'],
+  },
   { name: 'Privacy', commands: ['mydata', 'forget'] },
 ];
 

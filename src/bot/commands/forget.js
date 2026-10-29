@@ -48,7 +48,9 @@ export async function execute(interaction) {
       { name: 'Invite records', value: String(r.invites), inline: true },
       { name: 'AFK status', value: String(r.afk), inline: true },
       { name: 'Saved birthday', value: String(r.birthdays), inline: true },
-      { name: 'Giveaway entries', value: String(r.giveawayEntries), inline: true }
+      { name: 'Giveaway entries', value: String(r.giveawayEntries), inline: true },
+      { name: 'Suggestion votes', value: String(r.suggestionVotes), inline: true },
+      { name: 'Suggestions (made anonymous)', value: String(r.suggestions), inline: true }
     );
   if (r.keptCases > 0) {
     embed.addFields({

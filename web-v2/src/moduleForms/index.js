@@ -15,6 +15,7 @@ const Tickets = lazy(() => import('./Tickets.jsx'));
 const Appeals = lazy(() => import('./Appeals.jsx'));
 const Giveaways = lazy(() => import('./Giveaways.jsx'));
 const Events = lazy(() => import('./Events.jsx'));
+const Suggestions = lazy(() => import('./Suggestions.jsx'));
 const Moderation = lazy(() => import('./Moderation.jsx'));
 const Automod = lazy(() => import('./Automod.jsx'));
 const Sticky = lazy(() => import('./Sticky.jsx'));
@@ -75,6 +76,7 @@ export const MODULE_FORMS = {
   appeals: Appeals,
   giveaways: Giveaways,
   events: Events,
+  suggestions: Suggestions,
 };
 
 // Overview/Sidebar cards with a real V2 page that isn't the standard
