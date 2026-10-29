@@ -2849,7 +2849,7 @@ router.get(
     const rows = await listScheduled(req.guild.id);
     res.json({
       reminders: rows.map(shapeReminder),
-      allowPings: remindersMayPing((await getGuildModule(req.guild.id, 'reminders')).config),
+      allowPings: remindersMayPing((await getGuildModule(req.guild.id, 'reminders')).config, rows.length),
       channels: guildTextChannels(req.guild),
       schedulePresets: SCHEDULE_PRESETS,
       weekdays: WEEKDAYS,
@@ -2870,6 +2870,12 @@ router.post(
     }
     if (r.mode === 'single' && !r.runAt)
       return res.status(400).json({ error: 'Pick a date and time to send at.' });
+    // A server's first reminder after the pings setting existed: record "off" now, so a missing
+    // choice (which means "on" for a server that already had reminders) cannot turn it on.
+    const mod = await getGuildModule(req.guild.id, 'reminders');
+    if (typeof mod.config?.allowPings !== 'boolean' && (await listScheduled(req.guild.id)).length === 0) {
+      await setGuildModule(req.guild.id, 'reminders', { config: { ...mod.config, allowPings: false } });
+    }
     const id = await createReminder(req.guild.id, r);
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -2888,8 +2894,9 @@ router.post(
   asyncHandler(async (req, res) => {
     const allowPings = req.body.allowPings === true;
     const current = await getGuildModule(req.guild.id, 'reminders');
+    const now = remindersMayPing(current.config, (await listScheduled(req.guild.id)).length);
     if (
-      allowPings !== remindersMayPing(current.config) &&
+      allowPings !== now &&
       config.authEnabled &&
       !(await holdsManageServerLive(req.guild.id, userIdForGuild(req, req.guild.id)))
     ) {

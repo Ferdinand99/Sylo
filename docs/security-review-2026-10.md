@@ -62,9 +62,10 @@ vulnerabilities.
   answers 413 over its cap as the YouTube one already did. A test sends 60 malformed and oversized requests and checks
   that no error-level event, dev-log event or error-history entry is produced and that the token never appears in a
   log line.
-- **L-1.** Reminders now post with `allowedMentions: { parse: [] }`: `@everyone`, `@here` and role mentions in the text
-  are shown but notify nobody. A new Reminders setting, "Let reminders ping @everyone, @here and roles", turns the old
-  behaviour back on. Only the server owner or someone with Manage Server (checked live) can change it; a bot master is
+- **L-1.** Reminders post with `allowedMentions: { parse: [] }` unless a new Reminders setting, "Let reminders ping
+  @everyone, @here and roles", is on: then `@everyone`, `@here` and role mentions in the text notify, as before. The
+  setting is on for a server that already had reminders when it upgraded, so nothing changes for it, and off for new
+  servers. Only the server owner or someone with Manage Server (checked live) can change it; a bot master is
   refused with a 403.
 - **L-2.** When the public quote page is drawn, each channel its quotes came from is checked again for public
   visibility (not readable by `@everyone`, age-restricted, or a private thread hides it). The answer is cached for two
@@ -137,8 +138,9 @@ vulnerabilities.
 
 ## Notes for operators
 
-- **Reminders no longer ping by default.** A reminder that contains `@everyone`, `@here` or a role mention shows the
-  text but notifies nobody. Someone with Manage Server turns pings back on in the Reminders module settings.
+- **Reminders and pings.** A server that already had reminders keeps pinging as before. For new servers a reminder
+  that contains `@everyone`, `@here` or a role mention shows the text but notifies nobody until someone with Manage
+  Server turns pings on in the Reminders module settings.
 - **Rate limit.** The 300 requests a minute per client limit now also counts the public pages (health, leaderboard, quotes,
   verify, appeal, roadmap) because it runs before the body parsers. Normal use is far below it.
 - **Behind a reverse proxy**, set `TRUST_PROXY` to the proxy's address. See "Behind a reverse proxy" in

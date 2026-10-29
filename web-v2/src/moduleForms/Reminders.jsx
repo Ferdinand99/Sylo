@@ -417,8 +417,8 @@ export default function Reminders() {
           </label>
         </div>
         <p className="v2-field-hint">
-          Off by default: mentions in a reminder are shown but nobody is notified. Only the server owner or
-          someone with Manage Server can change this.
+          When off, mentions in a reminder are shown but nobody is notified. It is off for new servers. Only
+          the server owner or someone with Manage Server can change this.
         </p>
       </div>
 

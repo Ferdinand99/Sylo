@@ -101,12 +101,19 @@ const TICK_MS = 20_000;
 const MODULE_ID = 'reminders';
 
 /**
- * Does this server let its reminders ping? Off unless the server owner or someone with Manage
- * Server turned it on (Reminders page): a bot master may use the whole dashboard, but must not
- * be able to make Sylo ping @everyone, @here or any role with Sylo's own rights.
+ * Does this server let its reminders ping? Once the server owner or someone with Manage Server
+ * has chosen (Reminders page), that choice stands: a bot master may use the whole dashboard, but
+ * must not be able to make Sylo ping @everyone, @here or any role with Sylo's own rights.
+ *
+ * A config that never recorded a choice predates the setting. If that server already has
+ * reminders they keep pinging as they did, so the setting is on; a server without reminders gets
+ * it off (the first reminder it creates writes the choice, see rememberPingChoice).
+ * @param {object} [moduleConfig] the 'reminders' module config
+ * @param {number} reminderCount how many reminders the server has
  */
-export function remindersMayPing(moduleConfig) {
-  return moduleConfig?.allowPings === true;
+export function remindersMayPing(moduleConfig, reminderCount = 0) {
+  const chosen = moduleConfig?.allowPings;
+  return typeof chosen === 'boolean' ? chosen : reminderCount > 0;
 }
 
 /** The message a reminder posts. Without pings allowed, mentions in the text are shown but silent. */
@@ -124,7 +131,8 @@ async function tick() {
   for (const r of await dueScheduled(now)) {
     const mod = await getGuildModule(r.guild_id, MODULE_ID);
     const enabled = mod.enabled;
-    const allowPings = remindersMayPing(mod.config);
+    // A due reminder exists, so a config without a recorded choice (one from before the setting) pings.
+    const allowPings = remindersMayPing(mod.config, 1);
     const inGuild = Boolean(guildByKey(r.guild_id));
 
     if (r.mode === 'single') {

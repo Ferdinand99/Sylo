@@ -427,6 +427,7 @@ described above.
 - **The classic dashboard is gone.** The React dashboard (V2) is the only one. The `/?classic=1`
   switch, the "Back to classic dashboard" link and the old server-rendered pages no longer exist.
   The public pages (login, verify, appeal, leaderboard, quotes) look like the dashboard now.
+- **Reminders keep their pings.** A server that already has reminders keeps pinging `@everyone`, `@here` and roles as before; new servers start with pings off and the owner or Manage Server can change it on the Reminders page.
 - **Old bookmarks and Discord links still work.** Old addresses such as `/guilds/<id>/…`,
   `/account`, `/settings`, `/stats` and `/commands` redirect to the matching page in the dashboard.
 - **From source, run `npm run build:v2`** after `npm install`. The Docker image already contains the
