@@ -4,10 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ban appeal — Sylo</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/public.css" />
 </head>
 <body>
   <main class="verify-wrap">
+    <div class="pub-brand"><img src="/favicon.svg" alt="" width="28" height="28" /><span>Sylo</span></div>
     <div class="card">
       <% if (state === 'form') { %>
         <h1 class="page-title">Appeal your ban<% if (guildName) { %> — <%= guildName %><% } %></h1>
@@ -21,7 +23,7 @@
             <label class="small"><%= q %></label>
             <textarea name="a" rows="3" maxlength="2000" <%= i === 0 ? 'required' : '' %>></textarea>
           <% }) %>
-          <div class="u-mt-3"><button type="submit">Submit appeal</button></div>
+          <div class="u-mt-3"><button type="submit" class="btn">Submit appeal</button></div>
         </form>
         <% if (serverInvite) { %>
           <p class="muted small u-mt-3">📩 Want the decision by DM too? Join <a href="<%= serverInvite %>"><%= serverInvite %></a> so Sylo shares a server with you.</p>

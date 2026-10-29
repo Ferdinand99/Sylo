@@ -19,6 +19,7 @@ import { parseFeed } from '../bot/lib/feed.js';
 import { safeFetch } from '../lib/safeFetch.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 const COLOR = 0xee802f;
 const POLL_MS = 5 * 60_000;
@@ -26,7 +27,13 @@ const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 const UA = 'Mozilla/5.0 (compatible; Sylo-Discord-Bot/1.0; +https://github.com/Ferdinand99/Sylo)';
 const ACCEPT = 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5';
 
-const MAX_FEEDS_PER_GUILD = 15;
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  feeds: { maxItems: 15 },
+  'feeds[].ref': { maxLength: 500 },
+  'feeds[].url': { maxLength: 500 },
+  'feeds[].template': { maxLength: 1000 },
+};
 const MAX_FETCHES_PER_TICK = 80; // global budget across all guilds
 const MAX_POSTS_PER_FEED_PER_TICK = 3; // cap a burst; the rest are still marked seen
 
@@ -144,16 +151,16 @@ export function normaliseRssConfig(raw = {}) {
         // Back-compat: pre-3.14 feeds stored only `url`, no `type`/`ref`.
         const ref = String(f.ref ?? (type === 'url' ? f.url : '') ?? '')
           .trim()
-          .slice(0, 500);
+          .slice(0, LIMITS['feeds[].ref'].maxLength);
         const { url } = parseFeedRef(type, ref);
         return {
           id: /^[0-9a-f]{8}$/.test(f.id ?? '') ? f.id : newFeedId(),
           type,
           ref,
-          url: url.slice(0, 500),
+          url: url.slice(0, LIMITS['feeds[].url'].maxLength),
           channelId: isId(f.channelId) ? f.channelId : '',
           roleId: isId(f.roleId) ? f.roleId : '',
-          template: String(f.template ?? '').slice(0, 1000),
+          template: String(f.template ?? '').slice(0, LIMITS['feeds[].template'].maxLength),
         };
       })
       .filter((f) => {
@@ -163,7 +170,7 @@ export function normaliseRssConfig(raw = {}) {
         seenKeys.add(k);
         return true;
       })
-      .slice(0, MAX_FEEDS_PER_GUILD),
+      .slice(0, LIMITS.feeds.maxItems),
   };
 }
 
@@ -259,8 +266,11 @@ async function tick() {
   await pruneScopePrefixOlderThan('rss:', KEEP_MS);
 }
 
-const timer = setInterval(() => {
-  tick().catch((err) => log.error('rss', 'tick failed:', err.message));
-}, POLL_MS);
-timer.unref();
-setTimeout(() => tick().catch(() => {}), 45_000).unref();
+every(
+  'rss',
+  POLL_MS,
+  () => {
+    tick().catch((err) => log.error('rss', 'tick failed:', err.message));
+  },
+  { firstDelayMs: 45_000 }
+);

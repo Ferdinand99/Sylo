@@ -4,6 +4,7 @@
 import { allGuilds, allClientsReady, guildKey } from '../platform/platformOf.js';
 import { getGuildModule } from '../db/modules.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 /** [type, label] — {count} in the template is replaced with this number. */
 export const STAT_TYPES = [
@@ -20,8 +21,14 @@ const NEEDS_MEMBERS = new Set(['humans', 'bots']);
 
 // Discord rate-limits channel renames to ~2 per 10 minutes per channel, so a
 // sustained refresh faster than every 5 minutes just builds a 429 backlog.
-export const REFRESH_MIN_MINUTES = 5;
-export const REFRESH_MAX_MINUTES = 60;
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  refreshMinutes: { min: 5, max: 60 },
+  channels: { maxItems: 10 },
+  'channels[].template': { maxLength: 80 },
+};
+export const REFRESH_MIN_MINUTES = LIMITS.refreshMinutes.min;
+export const REFRESH_MAX_MINUTES = LIMITS.refreshMinutes.max;
 export const REFRESH_DEFAULT_MINUTES = 10;
 const BASE_TICK_MS = 60 * 1000; // check which guilds are due once a minute
 
@@ -42,10 +49,10 @@ export function normaliseServerStats(raw = {}) {
       .map((c) => ({
         channelId: /^\d{17,20}$/.test(c.channelId ?? '') ? c.channelId : '',
         type: VALID.has(c.type) ? c.type : 'members',
-        template: String(c.template ?? '').slice(0, 80) || '{count}',
+        template: String(c.template ?? '').slice(0, LIMITS['channels[].template'].maxLength) || '{count}',
       }))
       .filter((c) => c.channelId && c.template.includes('{count}'))
-      .slice(0, 10),
+      .slice(0, LIMITS.channels.maxItems),
   };
 }
 
@@ -106,9 +113,12 @@ async function tick() {
   }
 }
 
-setInterval(() => {
-  tick().catch((err) => log.error('server-stats', 'tick failed:', err.message));
-}, BASE_TICK_MS).unref();
-
 // First pass a minute after boot.
-setTimeout(() => tick().catch(() => {}), 60_000).unref();
+every(
+  'server-stats',
+  BASE_TICK_MS,
+  () => {
+    tick().catch((err) => log.error('server-stats', 'tick failed:', err.message));
+  },
+  { firstDelayMs: 60_000 }
+);

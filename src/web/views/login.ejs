@@ -5,7 +5,7 @@
   <p class="muted">Choose the account you manage your servers with. You can connect the other one afterwards.</p>
   <div class="auth-actions">
     <% providers.forEach(function (p) { %>
-      <a class="btn" href="<%= p.href %>" hx-boost="false">Log in with <%= p.label %></a>
+      <a class="btn" href="<%= p.href %>">Log in with <%= p.label %></a>
     <% }); %>
   </div>
 </section>

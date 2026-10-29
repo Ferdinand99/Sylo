@@ -1,5 +1,5 @@
 // A web session's admin rights come from the guild list saved at sign-in. The dashboard only
-// refreshes that list on GET / and /guilds pages, so V2 requests and form posts must not trust
+// refreshes that list on GET / and /guilds pages, so V2 requests must not trust
 // it for long: once it is older than the refresh window, rights are checked live through the
 // bot, like app tokens are. Someone who lost Manage Server is then refused within minutes,
 // instead of keeping access for the whole 7-day session.
@@ -60,13 +60,13 @@ test('a stale snapshot still works for someone who still has Manage Server', asy
   assert.equal((await tickets(b)).status, 200);
 });
 
-// The "Not an admin" page is rendered with the shared header. It used to build the sidebar
-// from the server in the URL before the access check, so anyone signed in could read any
-// server's name and which modules it runs.
-test('the 403 page for a server you do not manage does not show that server', async () => {
+// The refusal for a server you do not manage must not reveal that server: the classic "Not an
+// admin" page once built its sidebar from the server in the URL before the access check, so anyone
+// signed in could read any server's name and which modules it runs.
+test('the 403 for a server you do not manage does not show that server', async () => {
   const { OTHER_D_GUILD } = await import('./helpers/oauthApp.js');
   const { b } = await person();
-  const res = await b.get(`/guilds/${OTHER_D_GUILD}/overview`);
+  const res = await b.get(`/api/v2/guilds/${OTHER_D_GUILD}/overview`);
   assert.equal(res.status, 403);
   assert.doesNotMatch(await res.text(), /D-other/);
 });

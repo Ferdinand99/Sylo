@@ -3,6 +3,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 const ACTION_LABELS = { kick: 'Kick', timeout: 'Timeout', ban: 'Ban' };
 
@@ -56,6 +57,7 @@ const fromForm = (form) => ({
 
 export default function Honeypot() {
   const messageLink = useMessageLink();
+  const limits = useModuleLimits('honeypot');
   const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm(
     'honeypot',
     { toForm, fromForm }
@@ -132,8 +134,8 @@ export default function Honeypot() {
                 <label>Timeout (min)</label>
                 <input
                   type="number"
-                  min={1}
-                  max={40320}
+                  min={limitOf(limits, 'channels[].timeoutMinutes').min}
+                  max={limitOf(limits, 'channels[].timeoutMinutes').max}
                   value={c.timeoutMinutes}
                   onChange={(e) => updateChannelRow(c.key, { timeoutMinutes: Number(e.target.value) })}
                 />
@@ -149,7 +151,12 @@ export default function Honeypot() {
             </label>
           </div>
         ))}
-        <button type="button" className="v2-btn-ghost" onClick={addChannelRow}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addChannelRow}
+          disabled={form.channels.length >= (limitOf(limits, 'channels').maxItems ?? Infinity)}
+        >
           + Add channel honeypot
         </button>
 
@@ -202,8 +209,8 @@ export default function Honeypot() {
                 <label>Timeout (min)</label>
                 <input
                   type="number"
-                  min={1}
-                  max={40320}
+                  min={limitOf(limits, 'messages[].timeoutMinutes').min}
+                  max={limitOf(limits, 'messages[].timeoutMinutes').max}
                   value={m.timeoutMinutes}
                   onChange={(e) => updateMessageRow(m.key, { timeoutMinutes: Number(e.target.value) })}
                 />
@@ -215,7 +222,7 @@ export default function Honeypot() {
               </label>
               <textarea
                 rows={2}
-                maxLength={500}
+                maxLength={limitOf(limits, 'messages[].bait').maxLength}
                 placeholder="Click here to verify your account."
                 value={m.bait}
                 onChange={(e) => updateMessageRow(m.key, { bait: e.target.value })}
@@ -235,7 +242,12 @@ export default function Honeypot() {
             ) : null}
           </div>
         ))}
-        <button type="button" className="v2-btn-ghost" onClick={addMessageRow}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addMessageRow}
+          disabled={form.messages.length >= (limitOf(limits, 'messages').maxItems ?? Infinity)}
+        >
           + Add message honeypot
         </button>
 

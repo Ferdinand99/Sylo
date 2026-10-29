@@ -6,6 +6,7 @@ import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 function newKey() {
@@ -35,6 +36,7 @@ const fromForm = (form) => {
 };
 
 export default function Leveling() {
+  const limits = useModuleLimits('leveling');
   const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm(
     'leveling',
     {
@@ -150,7 +152,7 @@ export default function Leveling() {
             </label>
             <textarea
               rows={2}
-              maxLength={2000}
+              maxLength={limitOf(limits, 'announceMessage').maxLength}
               placeholder="GG {player}, you just advanced to level {level}!"
               value={form.announceMessage}
               onChange={(e) => set({ announceMessage: e.target.value })}
@@ -160,8 +162,8 @@ export default function Leveling() {
             <label>XP cooldown (seconds)</label>
             <input
               type="number"
-              min={0}
-              max={3600}
+              min={limitOf(limits, 'cooldownSeconds').min}
+              max={limitOf(limits, 'cooldownSeconds').max}
               value={form.cooldownSeconds}
               onChange={(e) => set({ cooldownSeconds: Number(e.target.value) })}
             />
@@ -195,8 +197,8 @@ export default function Leveling() {
             <div className="v2-field-row" key={r.key}>
               <input
                 type="number"
-                min={1}
-                max={1000}
+                min={limitOf(limits, 'rewards[].level').min}
+                max={limitOf(limits, 'rewards[].level').max}
                 style={{ maxWidth: '90px' }}
                 value={r.level}
                 onChange={(e) => updateReward(r.key, { level: Number(e.target.value) })}
@@ -214,7 +216,12 @@ export default function Leveling() {
               </button>
             </div>
           ))}
-          <button type="button" className="v2-btn-ghost" onClick={addReward}>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            onClick={addReward}
+            disabled={form.rewards.length >= (limitOf(limits, 'rewards').maxItems ?? Infinity)}
+          >
             + Add role reward
           </button>
 
@@ -265,8 +272,8 @@ export default function Leveling() {
             </label>
             <input
               type="number"
-              min={1}
-              max={60}
+              min={limitOf(limits, 'voiceXpPerMin').min}
+              max={limitOf(limits, 'voiceXpPerMin').max}
               value={form.voiceXpPerMin}
               onChange={(e) => set({ voiceXpPerMin: Number(e.target.value) })}
             />
@@ -316,8 +323,8 @@ export default function Leveling() {
               </select>
               <input
                 type="number"
-                min={0.1}
-                max={5}
+                min={limitOf(limits, 'multipliers[].factor').min}
+                max={limitOf(limits, 'multipliers[].factor').max}
                 step={0.05}
                 style={{ maxWidth: '100px' }}
                 value={m.factor}
@@ -328,7 +335,12 @@ export default function Leveling() {
               </button>
             </div>
           ))}
-          <button type="button" className="v2-btn-ghost" onClick={addMultiplier}>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            onClick={addMultiplier}
+            disabled={form.multipliers.length >= (limitOf(limits, 'multipliers').maxItems ?? Infinity)}
+          >
             + Add multiplier
           </button>
         </div>
@@ -429,7 +441,8 @@ export default function Leveling() {
           />
           <input
             type="number"
-            min={0}
+            min={limitOf(limits, 'xp').min}
+            max={limitOf(limits, 'xp').max}
             placeholder="xp"
             style={{ maxWidth: '120px' }}
             value={xpValue}

@@ -1,6 +1,5 @@
-// The welcome image preview served to both dashboards: a PNG of the welcome card with a sample
-// member and the saved background. Shared by the classic route and the /api/v2 one so the two
-// cannot drift apart.
+// The welcome image preview served to the dashboard: a PNG of the welcome card with a sample
+// member and the saved background.
 import { primaryClient } from '../../platform/platformOf.js';
 import { getGuildModule } from '../../db/modules.js';
 import { guildEmbedColor } from '../../db/guildSettings.js';

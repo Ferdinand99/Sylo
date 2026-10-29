@@ -31,7 +31,8 @@ const OVERVIEW_DESCRIPTION =
 export const GROUPS = [
   { name: 'General', commands: ['help', 'about', 'version', 'ping', 'stats'] },
   { name: 'Leveling', commands: ['rank', 'leaderboard'] },
-  { name: 'Community', commands: ['afk', 'birthday'] },
+  { name: 'Community', commands: ['afk', 'birthday', 'quote'] },
+  { name: 'Roles', commands: ['temprole'] },
   {
     name: 'Moderation',
     commands: [
@@ -69,7 +70,10 @@ export const GROUPS = [
       'voice-clean',
     ],
   },
-  { name: 'Engagement', commands: ['giveaway', 'poll', 'poll-end', 'freegames'] },
+  {
+    name: 'Engagement',
+    commands: ['giveaway', 'event', 'suggest', 'suggestion', 'poll', 'poll-end', 'freegames'],
+  },
   { name: 'Privacy', commands: ['mydata', 'forget'] },
 ];
 

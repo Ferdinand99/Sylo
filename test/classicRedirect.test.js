@@ -1,11 +1,14 @@
-// Old dashboard addresses open the matching page in the new dashboard (/v2), for browser page
-// visits only, and not for anyone who chose the classic dashboard (/?classic=1).
+// Old dashboard addresses open the matching page in the dashboard (/v2) with a permanent redirect,
+// for every GET and HEAD whatever its Accept header says (curl -L, link unfurlers, bots). A POST
+// gets the 404 an unknown address gets. /health is the one exception: monitors read its JSON, so
+// only a request that names text/html moves.
 import { D_GUILD, F_GUILD, browser, setProfiles, signIn, startOAuthApp } from './helpers/oauthApp.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { v2Build } from '../src/web/routes/v2Client.js';
-import { v2PathFor } from '../src/web/middleware/classicRedirect.js';
+import { MODULES } from '../src/modules/registry.js';
+import { CLASSIC_REDIRECTS, v2PathFor } from '../src/web/middleware/classicRedirect.js';
 
 await startOAuthApp();
 
@@ -14,30 +17,42 @@ v2Build.exists = () => built;
 
 const html = { accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8' };
 const location = (res) => res.headers.get('location');
-const toV2 = (res) => res.status === 302 && location(res)?.startsWith('/v2');
+const toV2 = (res) => res.status === 301 && location(res)?.startsWith('/v2');
 
 const FLUXER = `fluxer:${F_GUILD}`;
 
 // [classic address, address in the new dashboard]
 const TABLE = [
+  ['/guilds', '/v2'],
+  ['/guilds/', '/v2'],
   ['/account', '/v2/account'],
   ['/settings', '/v2/settings'],
   ['/health', '/v2/health'],
   ['/stats', '/v2/stats'],
   ['/commands', '/v2/commands'],
+  ['/roadmap', '/v2/roadmap'],
+  ['/roadmap/admin', '/v2/roadmap/admin'],
+  // A backup download is a link on the Health page.
+  ['/health/backups/sylo-manual-2026-10-29.db', '/v2/health'],
   [`/guilds/${D_GUILD}`, `/v2/guilds/${D_GUILD}`],
   [`/guilds/${D_GUILD}/overview`, `/v2/guilds/${D_GUILD}`],
   [`/guilds/${D_GUILD}/settings`, `/v2/guilds/${D_GUILD}/settings`],
   [`/guilds/${D_GUILD}/general`, `/v2/guilds/${D_GUILD}/settings`],
+  // The configuration export is a button on the settings page.
+  [`/guilds/${D_GUILD}/export`, `/v2/guilds/${D_GUILD}/settings`],
   [`/guilds/${D_GUILD}/member-data`, `/v2/guilds/${D_GUILD}/member-data`],
   [`/guilds/${D_GUILD}/commands`, `/v2/guilds/${D_GUILD}/moderation/commands`],
   [`/guilds/${D_GUILD}/moderation`, `/v2/guilds/${D_GUILD}/moderation`],
+  // Unbanning is on the Infractions tab.
+  [`/guilds/${D_GUILD}/unban`, `/v2/guilds/${D_GUILD}/moderation/infractions`],
   [`/guilds/${D_GUILD}/appeals`, `/v2/guilds/${D_GUILD}/appeals`],
   [`/guilds/${D_GUILD}/leaderboard`, `/v2/guilds/${D_GUILD}/leaderboard`],
   [`/guilds/${D_GUILD}/insights`, `/v2/guilds/${D_GUILD}/insights`],
   [`/guilds/${D_GUILD}/audit`, `/v2/guilds/${D_GUILD}/audit`],
   [`/guilds/${D_GUILD}/tickets`, `/v2/guilds/${D_GUILD}/tickets`],
   [`/guilds/${D_GUILD}/tickets/42`, `/v2/guilds/${D_GUILD}/tickets/42`],
+  // The transcript download is a button on the ticket's page.
+  [`/guilds/${D_GUILD}/tickets/42/transcript`, `/v2/guilds/${D_GUILD}/tickets/42`],
   [`/guilds/${D_GUILD}/messages`, `/v2/guilds/${D_GUILD}/messages`],
   [`/guilds/${D_GUILD}/messages/new`, `/v2/guilds/${D_GUILD}/messages/new`],
   [`/guilds/${D_GUILD}/messages/7`, `/v2/guilds/${D_GUILD}/messages/7`],
@@ -63,8 +78,17 @@ test('each classic page address opens the matching page in the new dashboard', a
   const b = browser();
   for (const [from, to] of TABLE) {
     const res = await b.get(from, { headers: html });
-    assert.equal(res.status, 302, from);
+    assert.equal(res.status, 301, from);
     assert.equal(location(res), to, from);
+  }
+});
+
+test('the table above covers every row of CLASSIC_REDIRECTS', () => {
+  for (const { from, pattern } of CLASSIC_REDIRECTS) {
+    assert.ok(
+      TABLE.some(([path]) => pattern.test(decodeURIComponent(path))),
+      `no test row for ${from}`
+    );
   }
 });
 
@@ -87,9 +111,26 @@ test('every target in the mapping table is a real route of the new dashboard', (
     );
   for (const [, to] of TABLE) {
     const path = to.replace(/^\/v2/, '');
+    if (path === '') continue; // /v2 itself: the dashboard home
     assert.ok(matches(path), `${to} is a route in App.jsx`);
   }
   assert.equal(v2PathFor('/guilds/not-a-key'), null);
+});
+
+test('the moderation tabs and module pages the table points at exist in the dashboard', () => {
+  const hub = readFileSync(new URL('../web-v2/src/pages/ModerationHub.jsx', import.meta.url), 'utf8');
+  const tabs = [...hub.matchAll(/^\s*\['(\w+)', '[^']+', (?:null|'[\w-]+')\],?$/gm)].map((m) => m[1]);
+  assert.ok(
+    tabs.includes('infractions') && tabs.includes('commands'),
+    `found the TABS in ModerationHub: ${tabs}`
+  );
+  const ids = new Set(MODULES.map((m) => m.id));
+  for (const [, to] of TABLE) {
+    const tab = /\/moderation\/(\w+)$/.exec(to)?.[1];
+    if (tab) assert.ok(tabs.includes(tab), `${to}: no such moderation tab`);
+    const module = /\/m\/([\w-]+)$/.exec(to)?.[1];
+    if (module) assert.ok(ids.has(module), `${to}: no such module`);
+  }
 });
 
 test('member data keeps ?user=, and drops the classic page flash messages', async () => {
@@ -100,16 +141,13 @@ test('member data keeps ?user=, and drops the classic page flash messages', asyn
   assert.equal(location(res), `/v2/guilds/${D_GUILD}/member-data?user=123456789012345678`);
 });
 
-test('downloads, previews and the transcript are not pages: no redirect', async () => {
+test('addresses with no page of their own are not redirected', async () => {
   const b = browser();
   for (const path of [
-    `/guilds/${D_GUILD}/export`,
-    `/guilds/${D_GUILD}/tickets/5/transcript`,
     `/guilds/${D_GUILD}/tickets/5/messages.json`,
     `/guilds/${D_GUILD}/m/welcome/card-preview`,
     `/guilds/${D_GUILD}/emojis`,
-    '/health/backups/sylo-manual-x.db',
-    '/roadmap',
+    '/health/backups/../x',
     '/leaderboard/anything',
     '/auth/login',
     // Not a server key.
@@ -119,17 +157,36 @@ test('downloads, previews and the transcript are not pages: no redirect', async 
   }
 });
 
-test('only browser GET page visits move: not POST, htmx, JSON, catch-all or app requests', async () => {
+test('every GET and HEAD moves, whatever the Accept header says; a POST gets a 404', async () => {
+  setProfiles();
   const b = browser();
+  await signIn(b, 'discord');
   const path = `/guilds/${D_GUILD}/settings`;
-  assert.ok(toV2(await b.get(path, { headers: html })));
-  assert.ok(!toV2(await b.get(path, { method: 'POST', headers: html, body: '' })));
-  assert.ok(!toV2(await b.get(path, { headers: { ...html, 'HX-Request': 'true' } })));
-  assert.ok(!toV2(await b.get(path, { headers: { accept: 'application/json' } })));
-  assert.ok(!toV2(await b.get(path, { headers: { accept: 'application/json, text/html;q=0.5' } })));
-  assert.ok(!toV2(await b.get(path, { headers: { accept: '*/*' } })));
-  assert.ok(!toV2(await b.get(path, { headers: { ...html, authorization: 'Bearer not-a-token' } })));
-  assert.ok(!toV2(await b.get(path)));
+  const target = `/v2/guilds/${D_GUILD}/settings`;
+  const headers = [
+    html,
+    { accept: 'application/json' },
+    { accept: 'application/json, text/html;q=0.5' },
+    { accept: '*/*' },
+    { ...html, authorization: 'Bearer not-a-token' },
+    {},
+  ];
+  for (const h of headers) {
+    for (const method of ['GET', 'HEAD']) {
+      const res = await b.get(path, { method, headers: h });
+      assert.equal(res.status, 301, `${method} ${JSON.stringify(h)}`);
+      assert.equal(location(res), target);
+    }
+  }
+  const { token } = await (await b.get('/api/v2/csrf')).json();
+  const post = await b.get(path, { method: 'POST', headers: { ...html, 'x-csrf-token': token }, body: '' });
+  assert.equal(post.status, 404);
+});
+
+test('a signed-out curl -L of the public /roadmap link reaches the dashboard board', async () => {
+  const res = await browser().get('/roadmap', { headers: { accept: '*/*' } });
+  assert.equal(res.status, 301);
+  assert.equal(location(res), '/v2/roadmap');
 });
 
 test('/health: the JSON for monitors is unchanged, the HTML page moves', async () => {
@@ -147,35 +204,39 @@ test('/health: the JSON for monitors is unchanged, the HTML page moves', async (
   assert.equal(location(page), '/v2/health');
 });
 
-test('?classic=1 stops the redirects until the new dashboard is opened again', async () => {
+test('?classic=1 does nothing any more: it goes to /v2 and the redirects stay on', async () => {
   setProfiles();
   const b = browser();
   await signIn(b, 'discord');
-  assert.ok(!toV2(await b.get('/?classic=1', { headers: html })));
-  for (const [from] of TABLE.slice(0, 12)) {
-    assert.ok(!toV2(await b.get(from, { headers: html })), `${from} stays classic`);
-  }
-  await b.get('/v2/guilds', { headers: html });
+  const home = await b.get('/?classic=1', { headers: html });
+  assert.equal(location(home), '/v2');
   assert.ok(toV2(await b.get(`/guilds/${D_GUILD}/settings`, { headers: html })));
 });
 
-test('without a V2 build nothing is redirected', async () => {
+test('the redirects do not depend on the dashboard being built', async () => {
   built = false;
   try {
-    assert.ok(!toV2(await browser().get(`/guilds/${D_GUILD}/settings`, { headers: html })));
-    assert.ok(!toV2(await browser().get('/health', { headers: html })));
+    assert.ok(toV2(await browser().get(`/guilds/${D_GUILD}/settings`, { headers: html })));
+    assert.ok(toV2(await browser().get('/health', { headers: html })));
   } finally {
     built = true;
   }
 });
 
-test('a browser behind HTTP basic auth still gets the new dashboard; only a bearer token is an app', async () => {
+test('a browser behind HTTP basic auth, or a client with an Authorization header, still moves', async () => {
   const b = browser();
   const path = `/guilds/${D_GUILD}/settings`;
   const basic = { ...html, authorization: `Basic ${Buffer.from('user:pass').toString('base64')}` };
   assert.ok(toV2(await b.get(path, { headers: basic })), 'basic auth is a person');
   for (const scheme of ['Bearer', 'bearer', 'BEARER']) {
     const res = await b.get(path, { headers: { ...html, authorization: `${scheme} not-a-token` } });
-    assert.ok(!toV2(res), scheme);
+    assert.ok(toV2(res), scheme);
   }
+});
+
+test('/health keeps answering JSON to a bearer-token or catch-all caller', async () => {
+  const b = browser();
+  const res = await b.get('/health', { headers: { accept: '*/*', authorization: 'Bearer not-a-token' } });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /application[/]json/);
 });

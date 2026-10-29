@@ -1,9 +1,9 @@
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
-// Per-type ref field label/placeholder — mirrors V1's client-side HINTS map
-// (rss.ejs's inline script) exactly, same wording.
+// Per-type ref field label/placeholder.
 const HINTS = {
   url: ['Feed URL', 'https://example.com/feed.xml'],
   reddit: ['Subreddit or user', 'r/programming or u/spez'],
@@ -44,6 +44,7 @@ const fromForm = (form) => ({
 });
 
 export default function RssAlerts() {
+  const limits = useModuleLimits('rss');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('rss', {
     toForm,
     fromForm,
@@ -95,7 +96,7 @@ export default function RssAlerts() {
                   <label>{hint[0]}</label>
                   <input
                     type="text"
-                    maxLength={500}
+                    maxLength={limitOf(limits, 'feeds[].ref').maxLength}
                     placeholder={hint[1]}
                     value={row.ref}
                     onChange={(e) => updateRow(row.key, { ref: e.target.value })}
@@ -139,7 +140,7 @@ export default function RssAlerts() {
                 </label>
                 <textarea
                   rows={2}
-                  maxLength={1000}
+                  maxLength={limitOf(limits, 'feeds[].template').maxLength}
                   placeholder={data.defaultTemplate}
                   value={row.template}
                   onChange={(e) => updateRow(row.key, { template: e.target.value })}
@@ -148,7 +149,12 @@ export default function RssAlerts() {
             </div>
           );
         })}
-        <button type="button" className="v2-btn-ghost" onClick={addRow}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addRow}
+          disabled={form.feeds.length >= (limitOf(limits, 'feeds').maxItems ?? Infinity)}
+        >
           + Add feed
         </button>
       </form>

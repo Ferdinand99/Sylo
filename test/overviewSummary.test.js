@@ -16,6 +16,22 @@ function stubGuild(id) {
   };
 }
 
+test('the Quote board card counts the saved quotes and shows the public page switch', async () => {
+  const { insertQuote } = await import('../src/db/quotes.js');
+  const find = async () =>
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards).find((c) => c.id === 'quote-board');
+  const empty = await find();
+  assert.ok(empty, 'a card for the Quote board module');
+  assert.equal(empty.lines.find((l) => l.label === 'Saved quotes').value, '0');
+  assert.equal(empty.lines.find((l) => l.label === 'Public page').value, 'off');
+
+  await setGuildModule(G, 'quote-board', { enabled: true, config: { publicPage: true } });
+  await insertQuote({ guildId: G, channelId: '1', messageId: 'm1', authorId: 'a', messageAt: 1, body: 'x' });
+  const card = await find();
+  assert.equal(card.lines.find((l) => l.label === 'Saved quotes').value, '1');
+  assert.equal(card.lines.find((l) => l.label === 'Public page').value, 'on');
+});
+
 test('buildOverview returns health + grouped cards covering every module', async () => {
   await setGuildModule(G, 'automod', { enabled: true, config: { rules: { invites: { enabled: true } } } });
 
@@ -34,6 +50,7 @@ test('buildOverview returns health + grouped cards covering every module', async
     'counting',
     'leveling',
     'sticky',
+    'auto-threads',
     'tickets',
     'custom-commands',
     'reminders',
@@ -46,19 +63,12 @@ test('buildOverview returns health + grouped cards covering every module', async
   assert.ok(automod.lines.some((l) => l.label === 'Active filters'));
 });
 
-test('card links are classic pages by default and new-dashboard pages with { v2: true }', async () => {
-  const hrefs = async (opts) =>
-    Object.fromEntries(
-      (await buildOverview(stubGuild(G), opts)).groups.flatMap((g) => g.cards.map((c) => [c.id, c.href]))
-    );
-  const classic = await hrefs();
-  assert.equal(classic.general, `/guilds/${G}/settings`);
-  assert.equal(classic.welcome, `/guilds/${G}/m/welcome`);
-  assert.equal(classic.insights, `/guilds/${G}/insights`);
-
-  const v2 = await hrefs({ v2: true });
+test('every card links to its page in the dashboard (/v2)', async () => {
+  const hrefs = Object.fromEntries(
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards.map((c) => [c.id, c.href]))
+  );
   assert.deepEqual(
-    [v2.general, v2.commands, v2.messages, v2.insights, v2.welcome, v2.moderation],
+    [hrefs.general, hrefs.commands, hrefs.messages, hrefs.insights, hrefs.welcome, hrefs.moderation],
     [
       `/v2/guilds/${G}/settings`,
       `/v2/guilds/${G}/moderation/commands`,
@@ -68,4 +78,76 @@ test('card links are classic pages by default and new-dashboard pages with { v2:
       `/v2/guilds/${G}/m/moderation`,
     ]
   );
+  for (const [id, href] of Object.entries(hrefs)) assert.ok(href.startsWith(`/v2/guilds/${G}/`), id);
+});
+
+test('the Events card counts upcoming events and names the next one', async () => {
+  const { createEvent } = await import('../src/db/events.js');
+  const find = async () =>
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards).find((c) => c.id === 'events');
+  const empty = await find();
+  assert.ok(empty, 'a card for the Events module');
+  assert.equal(empty.lines.find((l) => l.label === 'Upcoming events').value, '0');
+  assert.equal(empty.lines.find((l) => l.label === 'Next').value, 'none');
+
+  await createEvent({
+    guildId: G,
+    channelId: '111',
+    title: 'Game night',
+    startAt: Date.UTC(2030, 0, 2, 18, 30),
+    hostId: 'h',
+  });
+  const card = await find();
+  assert.equal(card.lines.find((l) => l.label === 'Upcoming events').value, '1');
+  assert.match(card.lines.find((l) => l.label === 'Next').value, /Game night · 2030-01-02 18:30 UTC/);
+});
+
+test('the Suggestions card counts open and stored suggestions', async () => {
+  const { createSuggestion, decideSuggestion } = await import('../src/db/suggestions.js');
+  const find = async () =>
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards).find((c) => c.id === 'suggestions');
+  const empty = await find();
+  assert.ok(empty, 'a card for the Suggestions module');
+  assert.equal(empty.lines.find((l) => l.label === 'Open suggestions').value, '0');
+  assert.equal(empty.lines.find((l) => l.label === 'Stored').value, '0');
+
+  const a = await createSuggestion({ guildId: G, channelId: '111', authorId: 'u1', body: 'one' });
+  await createSuggestion({ guildId: G, channelId: '111', authorId: 'u2', body: 'two' });
+  await decideSuggestion(a.id, { status: 'approved' });
+  const card = await find();
+  assert.equal(card.lines.find((l) => l.label === 'Open suggestions').value, '1');
+  assert.equal(card.lines.find((l) => l.label === 'Stored').value, '2');
+});
+
+test('the Temporary roles card counts active roles and shows the next expiry', async () => {
+  const { putTempRole } = await import('../src/db/tempRoles.js');
+  const find = async () =>
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards).find((c) => c.id === 'temp-roles');
+  const empty = await find();
+  assert.ok(empty, 'a card for the Temporary roles module');
+  assert.equal(empty.lines.find((l) => l.label === 'Active temporary roles').value, '0');
+  assert.equal(empty.lines.find((l) => l.label === 'Next expiry').value, 'none');
+
+  await putTempRole({ guildId: G, userId: 'u1', roleId: 'r1', expiresAt: Date.UTC(2030, 0, 2, 18, 30) });
+  await putTempRole({ guildId: G, userId: 'u2', roleId: 'r1', expiresAt: Date.UTC(2031, 5, 5, 5, 5) });
+  const card = await find();
+  assert.equal(card.lines.find((l) => l.label === 'Active temporary roles').value, '2');
+  assert.equal(card.lines.find((l) => l.label === 'Next expiry').value, '2030-01-02 18:30 UTC');
+});
+
+test('the Auto threads card counts the channels that have a rule', async () => {
+  const find = async () =>
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards).find((c) => c.id === 'auto-threads');
+  const empty = await find();
+  assert.ok(empty, 'a card for the Auto threads module');
+  assert.equal(empty.lines.find((l) => l.label === 'Channels with auto threads').value, 'none');
+
+  const a = '100000000000000101';
+  const b = '100000000000000102';
+  await setGuildModule(G, 'auto-threads', {
+    enabled: true,
+    config: { rules: [{ channelId: a }, { channelId: a }, { channelId: b }] },
+  });
+  const card = await find();
+  assert.equal(card.lines.find((l) => l.label === 'Channels with auto threads').value, '2');
 });

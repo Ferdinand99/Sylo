@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 const QUESTION_SLOTS = 5;
 
@@ -14,6 +15,7 @@ function padQuestions(questions) {
 const toForm = (config) => ({ ...config, questions: padQuestions(config.questions) });
 
 export default function Appeals() {
+  const limits = useModuleLimits('appeals');
   const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm(
     'appeals',
     {
@@ -56,7 +58,7 @@ export default function Appeals() {
             <input
               key={i}
               type="text"
-              maxLength={200}
+              maxLength={limitOf(limits, 'questions[]').maxLength}
               placeholder={`Question ${i + 1}${i === 0 ? ' (required)' : ' (optional)'}`}
               value={q}
               onChange={(e) => setQuestion(i, e.target.value)}
@@ -99,8 +101,8 @@ export default function Appeals() {
           <input
             id="cooldownDays"
             type="number"
-            min={0}
-            max={90}
+            min={limitOf(limits, 'cooldownDays').min}
+            max={limitOf(limits, 'cooldownDays').max}
             value={form.cooldownDays}
             onChange={(e) => set({ cooldownDays: Number(e.target.value) })}
           />
@@ -113,7 +115,7 @@ export default function Appeals() {
           <textarea
             id="appealMessage"
             rows={2}
-            maxLength={1000}
+            maxLength={limitOf(limits, 'appealMessage').maxLength}
             placeholder="e.g. Appeals are reviewed within 48 hours."
             value={form.appealMessage}
             onChange={(e) => set({ appealMessage: e.target.value })}
@@ -127,7 +129,7 @@ export default function Appeals() {
           <input
             id="appealServerInvite"
             type="text"
-            maxLength={100}
+            maxLength={limitOf(limits, 'appealServerInvite').maxLength}
             placeholder="https://discord.gg/…"
             value={form.appealServerInvite}
             onChange={(e) => set({ appealServerInvite: e.target.value })}

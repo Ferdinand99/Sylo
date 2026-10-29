@@ -9,6 +9,7 @@ import {
 } from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 function dayLabel(days, weekdays) {
@@ -26,6 +27,8 @@ function ageLabel(hours) {
 }
 
 function ScheduleForm({ initial, channels, weekdays, maxAgeHoursCap, onSave, onCancel, saving }) {
+  const limits = useModuleLimits('channel-cleanup');
+  const ageLimit = limitOf(limits, 'maxAgeHours');
   const [channelId, setChannelId] = useState(initial.channelId);
   const [days, setDays] = useState(new Set(initial.days));
   const [timeHhmm, setTimeHhmm] = useState(initial.timeHhmm);
@@ -90,8 +93,8 @@ function ScheduleForm({ initial, channels, weekdays, maxAgeHoursCap, onSave, onC
         </label>
         <input
           type="number"
-          min={1}
-          max={maxAgeHoursCap}
+          min={ageLimit.min}
+          max={ageLimit.max ?? maxAgeHoursCap}
           value={maxAgeHours}
           onChange={(e) => setMaxAgeHours(Number(e.target.value))}
           required

@@ -3,8 +3,10 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 export default function Tickets() {
+  const limits = useModuleLimits('tickets');
   const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } =
     useModuleForm('tickets');
 
@@ -31,7 +33,7 @@ export default function Tickets() {
           <textarea
             id="greeting"
             rows={2}
-            maxLength={1500}
+            maxLength={limitOf(limits, 'greeting').maxLength}
             placeholder="Thanks for contacting the staff of {server}…"
             value={form.greeting}
             onChange={(e) => set({ greeting: e.target.value })}
@@ -43,7 +45,7 @@ export default function Tickets() {
           <textarea
             id="closeMessage"
             rows={2}
-            maxLength={1500}
+            maxLength={limitOf(limits, 'closeMessage').maxLength}
             placeholder="This ticket has been closed…"
             value={form.closeMessage}
             onChange={(e) => set({ closeMessage: e.target.value })}
@@ -104,8 +106,8 @@ export default function Tickets() {
           <input
             id="transcriptRetentionDays"
             type="number"
-            min={0}
-            max={3650}
+            min={limitOf(limits, 'transcriptRetentionDays').min}
+            max={limitOf(limits, 'transcriptRetentionDays').max}
             value={form.transcriptRetentionDays}
             onChange={(e) => set({ transcriptRetentionDays: Number(e.target.value) })}
           />

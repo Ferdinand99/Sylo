@@ -5,10 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><%= guild.name %> — Leaderboard</title>
   <% if (typeof canonical !== 'undefined' && canonical) { %><link rel="canonical" href="<%= canonical %>" /><% } %>
-  <link rel="stylesheet" href="/styles.css" />
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/public.css" />
 </head>
 <body>
   <main class="lb-wrap">
+    <div class="pub-brand"><img src="/favicon.svg" alt="" width="28" height="28" /><span>Sylo</span></div>
     <header class="lb-head">
       <% if (guild.icon) { %><img class="lb-guild-icon" src="<%= guild.icon %>" alt="" /><% } %>
       <div>
@@ -36,7 +38,7 @@
             <% if (m.avatar) { %><img class="lb-avatar" src="<%= m.avatar %>" alt="" /><% } else { %><span class="lb-avatar lb-avatar-blank"></span><% } %>
             <div class="lb-main">
               <div class="lb-name<%= m.left ? ' muted' : '' %>"><%= m.name %></div>
-              <% if (m.level !== null) { %><div class="lb-bar"><span style="width:<%= m.pct %>%"></span></div><% } %>
+              <% if (m.level !== null) { %><meter class="lb-bar" min="0" max="100" value="<%= m.pct %>" aria-label="Progress to the next level"><%= m.pct %>%</meter><% } %>
             </div>
             <div class="lb-stats">
               <% if (m.level !== null) { %><span class="lb-level">Level <%= m.level %></span><% } %>

@@ -9,8 +9,7 @@ import Reveal from '../components/Reveal.jsx';
 const num = (v) => (Number(v) || 0).toLocaleString('en');
 const signed = (v) => `${v >= 0 ? '+' : '−'}${num(Math.abs(v))}`;
 
-// Same hand-rolled SVG bar/line chart math as V1's insights.ejs, ported
-// 1:1 rather than pulling in a charting library for six small sparkline-
+// Hand-rolled SVG bar/line chart math, rather than pulling in a charting library for six small sparkline-
 // style charts.
 const W = 600;
 const H = 120;

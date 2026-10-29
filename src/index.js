@@ -1,6 +1,9 @@
 // Sylo entrypoint — boots the database, the chat bot(s) (Discord and/or Fluxer),
 // and the web dashboard in a single process.
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { config } from './config.js';
+import { dataFolderWarning } from './lib/sessionSecret.js';
 import { log } from './lib/log.js';
 import { runtime } from './runtime.js';
 // Importing db/index.js opens the SQLite connection and runs migrations.
@@ -9,12 +12,32 @@ import { startBackupSchedule } from './db/backup.js';
 import { startRetentionSchedule } from './db/retention.js';
 import { startBot } from './bot/index.js';
 import { startFluxerBot } from './bot/fluxerBot.js';
+import { startSchedules, stopSchedules } from './modules/schedule.js';
 import { startWeb } from './web/server.js';
 import { addDevLogSink } from './lib/devLog.js';
 import { addDevLogEntry } from './db/devLogEntries.js';
 import { notifyDevLogEvent } from './lib/push.js';
 import { flushErrorReports, startErrorReports } from './lib/errorReports.js';
 import { logUnhandledRejection } from './lib/discordErrors.js';
+
+/** Postgres install with the session secret in a data folder that is not a mounted volume (Linux only). */
+function warnIfDataFolderIsNotAVolume() {
+  let mountinfo = null;
+  if (process.platform === 'linux') {
+    try {
+      mountinfo = readFileSync('/proc/self/mountinfo', 'utf8');
+    } catch {
+      // cannot tell: stay quiet
+    }
+  }
+  const warning = dataFolderWarning({
+    source: config.sessionSecretSource,
+    databaseUrl: config.databaseUrl,
+    dataDir: dirname(resolve(process.cwd(), config.databasePath)),
+    mountinfo,
+  });
+  if (warning) log.warn('sylo', warning);
+}
 
 /** Set once the HTTP server is listening; used by the shutdown path. */
 let httpServer = null;
@@ -42,6 +65,10 @@ async function shutdown(signal) {
   shuttingDown = true;
   log.info('sylo', `${signal} received — shutting down`);
 
+  // Module timers first: no new tick starts, and a running one gets up to 3 s to finish before
+  // the HTTP server and the clients close under it.
+  await stopSchedules();
+
   const drained = Promise.allSettled([
     httpServer ? new Promise((resolve) => httpServer.close(resolve)) : Promise.resolve(),
     ...Object.values(runtime.clients).map((client) => client?.destroy?.() ?? Promise.resolve()),
@@ -66,9 +93,22 @@ async function main() {
   addDevLogSink((event) => addDevLogEntry(event));
   addDevLogSink((event) => notifyDevLogEvent(event));
   log.info('sylo', `Starting in ${config.nodeEnv} mode`);
+  if (config.sessionSecretSource === 'generated-ephemeral') {
+    log.warn(
+      'sylo',
+      'Session secret could not be saved, so it is lost at restart: logins and verify/appeal links stop working then. Set SESSION_SECRET or make the data folder writable.'
+    );
+  } else {
+    log.info(
+      'sylo',
+      `Session secret from ${config.sessionSecretSource === 'env' ? 'SESSION_SECRET' : 'the data folder'}`
+    );
+  }
+  warnIfDataFolderIsNotAVolume();
   // Every configured platform starts in parallel; one that is not configured is never loaded.
   await Promise.all([config.discordEnabled && startBot(), config.fluxerEnabled && startFluxerBot()]);
   httpServer = await startWeb(config.webPort);
+  startSchedules();
   startBackupSchedule();
   startRetentionSchedule();
   log.info('sylo', 'Up and running');

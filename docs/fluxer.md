@@ -139,7 +139,7 @@ To require a login on Fluxer:
    `https://sylo.example.com/auth/fluxer/callback`, or
    `http://localhost:3000/auth/fluxer/callback` locally. It has to match
    `DASHBOARD_URL` exactly, including `https` behind a reverse proxy.
-3. Set a long random `SESSION_SECRET`.
+3. `SESSION_SECRET` is optional: Sylo keeps its own in `<data>/session-secret` unless you set one.
 4. Put your own Fluxer user id in `FLUXER_OWNER_IDS`. Without it nobody can open
    `/health`.
 
@@ -220,10 +220,11 @@ does not register anything with Fluxer for these.
 | On Discord                          | On Fluxer                                                                                                                                                                                                                                    |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Slash commands                      | Chat commands with a prefix or a mention (above).                                                                                                                                                                                            |
-| Buttons and select menus            | Shown as **reactions**, with a short legend in the message such as "React with ✅ to verify". Panels posted by modules (verification, giveaways, reaction roles) stay active; the reactions on a command's own reply expire after 15 minutes. |
+| Buttons and select menus            | Shown as **reactions**, with a short legend in the message such as "React with ✅ to verify". Panels posted by modules (verification, giveaways, events, suggestions, reaction roles) stay active; the reactions on a command's own reply expire after 15 minutes. |
 | Private (ephemeral) replies         | Sent as a normal message that Sylo deletes after about 15 seconds, together with the command message.                                                                                                                                        |
 | Native AutoMod rules                | Not available. Sylo's own automod scanner does the enforcement on Fluxer (word lists, invites, mentions, spam and so on). It also recognises Fluxer invite links.                                                                            |
-| Threads and auto-threads            | Not available yet. Lock and lockdown skip the thread permissions.                                                                                                                                                                            |
+| Message menu **Save quote**         | Not available. The **Quote board** module saves a quote with `!quote save <message link>`, or `!quote save` as a reply to the message. |
+| Threads and auto-threads            | Not available yet. The **Auto threads** module does nothing on Fluxer. Lock and lockdown skip the thread permissions.                                                                                                                                                                            |
 | Moving members between voice        | Not usable from a bot. **Temporary voice channels** are still created, but the member gets a DM with a link to join, and a channel nobody joins within two minutes is removed.                                                              |
 | Timestamps such as `<t:...:R>`      | Rendered in message text, but not in embed footers, titles or field names. Sylo shows a fixed UTC time (for example "Ends 12 Oct 2026, 19:55 UTC") there instead.                                                                            |
 | `discord.gg` invite links           | The instance's own invite links (for hosted Fluxer `fluxer.gg/<code>`), in `!invites`, ban appeal rejoin links and the invite tracker.                                                                                                      |
@@ -246,7 +247,7 @@ Two things to know about modules that reach outside Fluxer:
 
 Discord servers keep their plain numeric id everywhere (database rows, dashboard
 URLs, API). Fluxer servers are written `fluxer:<id>`, for example
-`/guilds/fluxer:1554951170231894016/overview`. You only meet this in dashboard
+`/v2/guilds/fluxer:1554951170231894016`. You only meet this in dashboard
 addresses, the API and the database. It is what keeps a Discord and a Fluxer server
 with the same number apart.
 

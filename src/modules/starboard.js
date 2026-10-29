@@ -20,6 +20,18 @@ import {
   deleteStarboardEntry,
 } from '../db/starboard.js';
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  boards: { maxItems: 10 },
+  'boards[].name': { maxLength: 60 },
+  'boards[].emojis': { maxItems: 10 },
+  'boards[].threshold': { min: 1, max: 100 },
+  'boards[].minAgeMinutes': { min: 0, max: 525_600 },
+  'boards[].maxAgeMinutes': { min: 0, max: 525_600 },
+  'boards[].roleList': { maxItems: 25 },
+  'boards[].channelList': { maxItems: 25 },
+};
+
 const STAR_COLOR = 0xf5c518;
 const POST_COOLDOWN_MS = 60_000;
 
@@ -28,10 +40,10 @@ const clampInt = (v, min, max, dflt) => {
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : dflt;
 };
 const id = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
-const idList = (v) =>
-  [...new Set((Array.isArray(v) ? v : [v]).filter((x) => /^\d{17,20}$/.test(x)))].slice(0, 25);
+const idList = (v, max) =>
+  [...new Set((Array.isArray(v) ? v : [v]).filter((x) => /^\d{17,20}$/.test(x)))].slice(0, max);
 
-function emojiList(v) {
+function emojiList(v, max) {
   return [
     ...new Set(
       (Array.isArray(v) ? v : String(v ?? '').split(/[\s,]+/))
@@ -42,17 +54,17 @@ function emojiList(v) {
         })
         .filter(Boolean)
     ),
-  ].slice(0, 10);
+  ].slice(0, max);
 }
 
 export function normaliseStarboard(raw = {}) {
   return {
-    boards: (Array.isArray(raw.boards) ? raw.boards : []).slice(0, 10).map((b, i) => ({
+    boards: (Array.isArray(raw.boards) ? raw.boards : []).slice(0, LIMITS.boards.maxItems).map((b, i) => ({
       id: b.id ? String(b.id) : String(i),
-      name: String(b.name ?? 'Starboard').slice(0, 60) || 'Starboard',
+      name: String(b.name ?? 'Starboard').slice(0, LIMITS['boards[].name'].maxLength) || 'Starboard',
       channelId: id(b.channelId),
-      emojis: emojiList(b.emojis),
-      threshold: clampInt(b.threshold, 1, 100, 3),
+      emojis: emojiList(b.emojis, LIMITS['boards[].emojis'].maxItems),
+      threshold: clampInt(b.threshold, LIMITS['boards[].threshold'].min, LIMITS['boards[].threshold'].max, 3),
       multiPerUser: Boolean(b.multiPerUser),
       autoReact: b.autoReact !== false,
       autoReactFirstOnly: Boolean(b.autoReactFirstOnly),
@@ -63,12 +75,22 @@ export function normaliseStarboard(raw = {}) {
       removeSelfStarReactions: Boolean(b.removeSelfStarReactions),
       ignoreBotMessages: b.ignoreBotMessages !== false,
       removeBotReactions: Boolean(b.removeBotReactions),
-      minAgeMinutes: clampInt(b.minAgeMinutes, 0, 525600, 0),
-      maxAgeMinutes: clampInt(b.maxAgeMinutes, 0, 525600, 0),
+      minAgeMinutes: clampInt(
+        b.minAgeMinutes,
+        LIMITS['boards[].minAgeMinutes'].min,
+        LIMITS['boards[].minAgeMinutes'].max,
+        0
+      ),
+      maxAgeMinutes: clampInt(
+        b.maxAgeMinutes,
+        LIMITS['boards[].maxAgeMinutes'].min,
+        LIMITS['boards[].maxAgeMinutes'].max,
+        0
+      ),
       roleMode: b.roleMode === 'deny' ? 'deny' : 'allow',
-      roleList: idList(b.roleList),
+      roleList: idList(b.roleList, LIMITS['boards[].roleList'].maxItems),
       channelMode: b.channelMode === 'deny' ? 'deny' : 'allow',
-      channelList: idList(b.channelList),
+      channelList: idList(b.channelList, LIMITS['boards[].channelList'].maxItems),
     })),
   };
 }

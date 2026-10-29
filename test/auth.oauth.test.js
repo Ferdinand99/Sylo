@@ -31,10 +31,8 @@ test('an unauthenticated visitor is sent to the chooser when both logins are off
   const page = await (await browser().get('/auth/login')).text();
   assert.match(page, /Log in with Discord/);
   assert.match(page, /Log in with Fluxer/);
-  // The buttons leave for another site; a boosted (fetch-based) navigation would die on CORS
-  // with "Network error", so each must opt out of htmx boosting.
   for (const platform of ['discord', 'fluxer']) {
-    assert.match(page, new RegExp(`<a[^>]*href="/auth/${platform}/login"[^>]*hx-boost="false"`));
+    assert.match(page, new RegExp(`<a[^>]*href="/auth/${platform}/login"`));
   }
 });
 
@@ -141,22 +139,22 @@ test('logging out ends the session on the server', async () => {
   assert.notEqual(res.status, 200, 'a copied pre-logout cookie no longer works');
 });
 
-test('/health is for operators only, and each platform has its own operator list', async () => {
+test('the health page API is for operators only, and each platform has its own operator list', async () => {
   profiles.discord = { id: '111111111111111111', username: 'ferdi', guilds: [] };
   const operator = browser();
   await signIn(operator, 'discord');
-  assert.equal((await operator.get('/health', { headers: { accept: 'text/html' } })).status, 200);
+  assert.equal((await operator.get('/api/v2/health')).status, 200);
 
   profiles.discord = { id: uid('3333333333'), username: 'nobody', guilds: [] };
   const other = browser();
   await signIn(other, 'discord');
-  assert.equal((await other.get('/health', { headers: { accept: 'text/html' } })).status, 403);
+  assert.equal((await other.get('/api/v2/health')).status, 403);
 
   // A Discord id that equals a Fluxer owner id is not an owner on Discord.
   profiles.discord = { id: '555555555555555555', username: 'lookalike', guilds: [] };
   const lookalike = browser();
   await signIn(lookalike, 'discord');
-  assert.equal((await lookalike.get('/health', { headers: { accept: 'text/html' } })).status, 403);
+  assert.equal((await lookalike.get('/api/v2/health')).status, 403);
 });
 
 test('an expired or garbage session cookie is treated as signed out', async () => {

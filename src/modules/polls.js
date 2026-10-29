@@ -15,6 +15,7 @@ import { on } from './dispatch.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { getPoll, duePolls, deletePoll } from '../db/polls.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 // Regional-indicator A … T — one per option, up to 20.
 export const LETTERS = Array.from({ length: 20 }, (_, i) => String.fromCodePoint(0x1f1e6 + i));
@@ -25,21 +26,32 @@ const isId = (v) => /^\d{17,20}$/.test(v ?? '');
 const hex = (v) => (/^#?[0-9a-f]{6}$/i.test(v ?? '') ? `#${String(v).replace('#', '')}` : '');
 const httpUrl = (v) => (/^https?:\/\/\S+$/i.test(v ?? '') ? String(v) : '');
 
+/** Setting limits, served to the dashboard (modules/limits.js). Both messages share the same ones. */
+export const LIMITS = {
+  voteRoles: { maxItems: 25 },
+  'pollMessage.content': { maxLength: 1500 },
+  'pollMessage.title': { maxLength: 200 },
+  'pollMessage.footer': { maxLength: 300 },
+  'resultsMessage.content': { maxLength: 1500 },
+  'resultsMessage.title': { maxLength: 200 },
+  'resultsMessage.footer': { maxLength: 300 },
+};
+
 export const POLL_PLACEHOLDERS = ['{question}', '{choices}', '{ends}', '{mode}'];
 export const RESULTS_PLACEHOLDERS = ['{question}', '{results}', '{total}', '{winner}', '{mode}'];
 
-function normMsg(m = {}, legacyColor) {
+function normMsg(m = {}, legacyColor, key) {
   return {
-    content: String(m.content ?? '').slice(0, 1500),
+    content: String(m.content ?? '').slice(0, LIMITS[`${key}.content`].maxLength),
     title: String(m.title ?? '')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, 200),
+      .slice(0, LIMITS[`${key}.title`].maxLength),
     color: hex(m.color) || hex(legacyColor) || DEFAULT_COLOR,
     footer: String(m.footer ?? '')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, 300),
+      .slice(0, LIMITS[`${key}.footer`].maxLength),
     image: httpUrl(m.image),
   };
 }
@@ -47,9 +59,12 @@ function normMsg(m = {}, legacyColor) {
 export function normalisePollsConfig(raw = {}) {
   return {
     voteRoleMode: raw.voteRoleMode === 'deny' ? 'deny' : 'allow',
-    voteRoles: [...new Set((Array.isArray(raw.voteRoles) ? raw.voteRoles : []).filter(isId))].slice(0, 25),
-    pollMessage: normMsg(raw.pollMessage, raw.color),
-    resultsMessage: normMsg(raw.resultsMessage, raw.color),
+    voteRoles: [...new Set((Array.isArray(raw.voteRoles) ? raw.voteRoles : []).filter(isId))].slice(
+      0,
+      LIMITS.voteRoles.maxItems
+    ),
+    pollMessage: normMsg(raw.pollMessage, raw.color, 'pollMessage'),
+    resultsMessage: normMsg(raw.resultsMessage, raw.color, 'resultsMessage'),
   };
 }
 
@@ -298,7 +313,7 @@ on('polls', 'reactionAdd', async ({ reaction, user }, rawConfig, _guildId) => {
 // --- expiry loop -------------------------------------------------------
 
 const TICK_MS = 15_000;
-const timer = setInterval(async () => {
+every('polls', TICK_MS, async () => {
   if (!allClientsReady()) return;
   for (const poll of await duePolls(Date.now())) {
     if ((await isModuleEnabled(poll.guild_id, 'polls')) && Boolean(guildByKey(poll.guild_id))) {
@@ -307,5 +322,4 @@ const timer = setInterval(async () => {
       await deletePoll(poll.message_id); // module off or bot gone — just clear it
     }
   }
-}, TICK_MS);
-timer.unref();
+});

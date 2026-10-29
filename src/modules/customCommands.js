@@ -22,7 +22,20 @@ import { normaliseEmbedSpec } from './welcomeChannel.js';
 
 export const CC_PLACEHOLDERS = ['{user}', '{username}', '{server}', '{channel}', '{args}'];
 export const CC_ACTION_TYPES = ['reply', 'send', 'add-role', 'remove-role'];
-const NAME_RE = /^[a-z0-9_-]{1,32}$/;
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  commands: { maxItems: 200 },
+  'commands[].name': { maxLength: 32 },
+  'commands[].description': { maxLength: 100 },
+  'commands[].actions': { maxItems: 10 },
+  'commands[].actions[].messages': { maxItems: 10 },
+  'commands[].actions[].messages[].content': { maxLength: 2000 },
+  'commands[].allowedRoles': { maxItems: 25 },
+  'commands[].allowedChannels': { maxItems: 25 },
+  'commands[].cooldownSeconds': { min: 0, max: 86_400 },
+};
+/** A command name: lowercase letters, digits, - and _. */
+export const NAME_RE = new RegExp(`^[a-z0-9_-]{1,${LIMITS['commands[].name'].maxLength}}$`);
 const isId = (v) => /^\d{17,20}$/.test(v ?? '');
 
 // --- normalisation ----------------------------------------------------------
@@ -39,7 +52,10 @@ const embedIsEmpty = (e) =>
 
 /** One message block: text and/or an embed. Returns { content, embed|null }. */
 function normMessage(m = {}) {
-  const content = String(m.content ?? '').slice(0, 2000);
+  const content = String(m.content ?? '').slice(
+    0,
+    LIMITS['commands[].actions[].messages[].content'].maxLength
+  );
   const embed = m.embed && typeof m.embed === 'object' ? normaliseEmbedSpec(m.embed) : null;
   return { content, embed: embedIsEmpty(embed) ? null : embed };
 }
@@ -55,7 +71,10 @@ function normAction(a = {}) {
 
   const raw =
     Array.isArray(a.messages) && a.messages.length ? a.messages : [{ content: a.content, embed: a.embed }];
-  let messages = raw.map(normMessage).filter(messageHasContent).slice(0, 10);
+  let messages = raw
+    .map(normMessage)
+    .filter(messageHasContent)
+    .slice(0, LIMITS['commands[].actions[].messages'].maxItems);
   if (!messages.length) messages = [{ content: '', embed: null }];
 
   const out = { type, messages };
@@ -96,16 +115,19 @@ export function normaliseCustomCommands(raw = {}) {
         description: String(c.description ?? '')
           .replace(/\s+/g, ' ')
           .trim()
-          .slice(0, 100),
-        actions: actionsIn.map(normAction).slice(0, 10),
+          .slice(0, LIMITS['commands[].description'].maxLength),
+        actions: actionsIn.map(normAction).slice(0, LIMITS['commands[].actions'].maxItems),
         allowedRoles: [...new Set((Array.isArray(c.allowedRoles) ? c.allowedRoles : []).filter(isId))].slice(
           0,
-          25
+          LIMITS['commands[].allowedRoles'].maxItems
         ),
         allowedChannels: [
           ...new Set((Array.isArray(c.allowedChannels) ? c.allowedChannels : []).filter(isId)),
-        ].slice(0, 25),
-        cooldownSeconds: Math.max(0, Math.min(86_400, Math.floor(Number(c.cooldownSeconds) || 0))),
+        ].slice(0, LIMITS['commands[].allowedChannels'].maxItems),
+        cooldownSeconds: Math.max(
+          LIMITS['commands[].cooldownSeconds'].min,
+          Math.min(LIMITS['commands[].cooldownSeconds'].max, Math.floor(Number(c.cooldownSeconds) || 0))
+        ),
       };
     })
     .filter((c) => {
@@ -114,7 +136,7 @@ export function normaliseCustomCommands(raw = {}) {
       seen.add(c.name);
       return true;
     })
-    .slice(0, 200);
+    .slice(0, LIMITS.commands.maxItems);
   return { commands };
 }
 

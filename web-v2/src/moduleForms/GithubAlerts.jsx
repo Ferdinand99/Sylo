@@ -11,10 +11,12 @@ import {
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 const BLANK = { repo: '', channelId: '', roleId: '', changelogPath: '', events: ['push', 'release'] };
 
 function WatchForm({ initial, channels, roles, eventTypes, onSave, onCancel, saving }) {
+  const limits = useModuleLimits('github');
   const [repo, setRepo] = useState(initial.repo);
   const [channelId, setChannelId] = useState(initial.channelId);
   const [roleId, setRoleId] = useState(initial.roleId);
@@ -91,6 +93,7 @@ function WatchForm({ initial, channels, roles, eventTypes, onSave, onCancel, sav
         </label>
         <input
           type="text"
+          maxLength={limitOf(limits, 'changelogPath').maxLength}
           placeholder="CHANGELOG.md"
           value={changelogPath}
           onChange={(e) => setChangelogPath(e.target.value)}

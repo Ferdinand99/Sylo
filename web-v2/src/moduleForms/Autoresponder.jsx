@@ -2,6 +2,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 const MATCH_LABELS = {
   contains: 'contains',
@@ -45,6 +46,7 @@ const fromForm = (form) => ({
 });
 
 export default function Autoresponder() {
+  const limits = useModuleLimits('autoresponder');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('autoresponder', {
     toForm,
     fromForm,
@@ -78,8 +80,8 @@ export default function Autoresponder() {
           <input
             id="cooldownSeconds"
             type="number"
-            min={0}
-            max={300}
+            min={limitOf(limits, 'cooldownSeconds').min}
+            max={limitOf(limits, 'cooldownSeconds').max}
             value={form.cooldownSeconds}
             onChange={(e) => set({ cooldownSeconds: Number(e.target.value) })}
           />
@@ -100,6 +102,7 @@ export default function Autoresponder() {
                 <label>Trigger</label>
                 <input
                   type="text"
+                  maxLength={limitOf(limits, 'responders[].trigger').maxLength}
                   placeholder="trigger phrase"
                   value={r.trigger}
                   onChange={(e) => updateRow(r.key, { trigger: e.target.value })}
@@ -121,7 +124,7 @@ export default function Autoresponder() {
               <label>Reply</label>
               <textarea
                 rows={2}
-                maxLength={2000}
+                maxLength={limitOf(limits, 'responders[].response').maxLength}
                 placeholder="Reply…"
                 value={r.response}
                 onChange={(e) => updateRow(r.key, { response: e.target.value })}
@@ -148,7 +151,12 @@ export default function Autoresponder() {
             </div>
           </div>
         ))}
-        <button type="button" className="v2-btn-ghost" onClick={addRow}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addRow}
+          disabled={form.responders.length >= (limitOf(limits, 'responders').maxItems ?? Infinity)}
+        >
           + Add responder
         </button>
 

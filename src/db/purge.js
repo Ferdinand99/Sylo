@@ -52,6 +52,10 @@ import './channelCleanup.js';
 import './honeypotCatches.js';
 import './componentReactions.js';
 import './verificationKicks.js';
+import './events.js';
+import './suggestions.js';
+import './tempRoles.js';
+import './quotes.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -91,6 +95,12 @@ export const GUILD_TABLES = [
   'honeypot_catches',
   'component_reactions',
   'verification_kicks',
+  'guild_events',
+  'guild_suggestions',
+  'guild_suggestion_counters',
+  'guild_temp_roles',
+  'guild_quotes',
+  'guild_quote_counters',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -100,11 +110,20 @@ const ticketMsgStmt = prepare(
 const giveawayEntryStmt = prepare(
   'DELETE FROM giveaway_entries WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)'
 );
+const eventParticipantStmt = prepare(
+  'DELETE FROM guild_event_participants WHERE event_id IN (SELECT id FROM guild_events WHERE guild_id = ?)'
+);
+
+const suggestionVoteStmt = prepare(
+  'DELETE FROM guild_suggestion_votes WHERE suggestion_id IN (SELECT id FROM guild_suggestions WHERE guild_id = ?)'
+);
 
 /** Remove all of a guild's stored data. */
 export async function purgeGuild(guildId) {
   await ticketMsgStmt.run(guildId); // before `tickets`, which the subquery reads
   await giveawayEntryStmt.run(guildId); // before `giveaways`, which the subquery reads
+  await eventParticipantStmt.run(guildId); // before `guild_events`, which the subquery reads
+  await suggestionVoteStmt.run(guildId); // before `guild_suggestions`, which the subquery reads
   for (const stmt of simpleStmts) await stmt.run(guildId);
 }
 
@@ -130,6 +149,32 @@ const userStmts = {
     WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)
       AND user_id = ?
   `),
+  eventParticipants: prepare(`
+    DELETE FROM guild_event_participants
+    WHERE event_id IN (SELECT id FROM guild_events WHERE guild_id = ?)
+      AND user_id = ?
+  `),
+  suggestionVotes: prepare(`
+    DELETE FROM guild_suggestion_votes
+    WHERE suggestion_id IN (SELECT id FROM guild_suggestions WHERE guild_id = ?)
+      AND user_id = ?
+  `),
+  // The suggestion text stays so the server keeps its board; only the person is taken off it.
+  suggestionAuthor: prepare(
+    'UPDATE guild_suggestions SET author_id = NULL WHERE guild_id = ? AND author_id = ?'
+  ),
+  suggestionDecider: prepare(
+    'UPDATE guild_suggestions SET decided_by = NULL WHERE guild_id = ? AND decided_by = ?'
+  ),
+  // The event stays (it may still be upcoming); only the host's id comes off it.
+  eventHost: prepare('UPDATE guild_events SET host_id = NULL WHERE guild_id = ? AND host_id = ?'),
+  // Their roles stay on the platform; only the record that Sylo would take them back is dropped.
+  tempRoles: prepare('DELETE FROM guild_temp_roles WHERE guild_id = ? AND user_id = ?'),
+  tempRoleAdder: prepare('UPDATE guild_temp_roles SET added_by = NULL WHERE guild_id = ? AND added_by = ?'),
+  // A quote is the author's words, so it goes with them (the number stays used: the counter is not
+  // touched). A quote someone else wrote stays on the board; only the saver's name comes off it.
+  quotesAuthored: prepare('DELETE FROM guild_quotes WHERE guild_id = ? AND author_id = ?'),
+  quotesSaved: prepare('UPDATE guild_quotes SET saved_by = NULL WHERE guild_id = ? AND saved_by = ?'),
   inviteCounts: prepare('DELETE FROM invite_counts WHERE guild_id = ? AND user_id = ?'),
   inviteJoins: prepare('DELETE FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
   inviteJoinsAsInviter: prepare(
@@ -148,7 +193,7 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, invites: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, invites: number }}
  */
 export async function forgetUser(guildId, userId) {
   const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
@@ -162,6 +207,15 @@ export async function forgetUser(guildId, userId) {
   const afk = (await userStmts.afk.run(guildId, userId)).changes;
   const birthdays = (await userStmts.birthdays.run(guildId, userId)).changes;
   const giveawayEntries = (await userStmts.giveawayEntries.run(guildId, userId)).changes;
+  const eventSignups = (await userStmts.eventParticipants.run(guildId, userId)).changes;
+  const eventsHosted = (await userStmts.eventHost.run(guildId, userId)).changes;
+  const suggestionVotes = (await userStmts.suggestionVotes.run(guildId, userId)).changes;
+  const suggestions = (await userStmts.suggestionAuthor.run(guildId, userId)).changes;
+  const suggestionDecisions = (await userStmts.suggestionDecider.run(guildId, userId)).changes;
+  const tempRoles = (await userStmts.tempRoles.run(guildId, userId)).changes;
+  const tempRoleAdders = (await userStmts.tempRoleAdder.run(guildId, userId)).changes;
+  const quotes = (await userStmts.quotesAuthored.run(guildId, userId)).changes;
+  const quotesSaved = (await userStmts.quotesSaved.run(guildId, userId)).changes;
   const invites =
     (await userStmts.inviteCounts.run(guildId, userId)).changes +
     (await userStmts.inviteJoins.run(guildId, userId)).changes +
@@ -176,6 +230,15 @@ export async function forgetUser(guildId, userId) {
     afk,
     birthdays,
     giveawayEntries,
+    eventSignups,
+    eventsHosted,
+    suggestionVotes,
+    suggestions,
+    suggestionDecisions,
+    tempRoles,
+    tempRoleAdders,
+    quotes,
+    quotesSaved,
     invites,
   };
 }
@@ -285,6 +348,78 @@ const USER_DATA_SOURCES = [
       'SELECT COUNT(*) AS n FROM giveaway_entries WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)',
     rowsSql:
       'SELECT * FROM giveaway_entries WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?) ORDER BY entered_at',
+  },
+  {
+    key: 'eventSignups',
+    label: 'Event sign-ups (Join / Maybe)',
+    order: 'ug',
+    countSql:
+      'SELECT COUNT(*) AS n FROM guild_event_participants WHERE user_id = ? AND event_id IN (SELECT id FROM guild_events WHERE guild_id = ?)',
+    rowsSql:
+      'SELECT * FROM guild_event_participants WHERE user_id = ? AND event_id IN (SELECT id FROM guild_events WHERE guild_id = ?) ORDER BY updated_at',
+  },
+  {
+    key: 'eventsHosted',
+    label: 'Events they hosted (/forget keeps the event, drops you as the host)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM guild_events WHERE guild_id = ? AND host_id = ?',
+    rowsSql:
+      'SELECT id, title, description, location, start_at, end_at, state, created_at FROM guild_events WHERE guild_id = ? AND host_id = ? ORDER BY start_at',
+  },
+  {
+    key: 'suggestionVotes',
+    label: 'Suggestion votes (up / down)',
+    order: 'ug',
+    countSql:
+      'SELECT COUNT(*) AS n FROM guild_suggestion_votes WHERE user_id = ? AND suggestion_id IN (SELECT id FROM guild_suggestions WHERE guild_id = ?)',
+    rowsSql:
+      'SELECT * FROM guild_suggestion_votes WHERE user_id = ? AND suggestion_id IN (SELECT id FROM guild_suggestions WHERE guild_id = ?) ORDER BY updated_at',
+  },
+  {
+    key: 'suggestions',
+    label: 'Suggestions they wrote (/forget keeps the text, drops you as the author)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM guild_suggestions WHERE guild_id = ? AND author_id = ?',
+    rowsSql: 'SELECT * FROM guild_suggestions WHERE guild_id = ? AND author_id = ? ORDER BY number',
+  },
+  {
+    key: 'suggestionDecisions',
+    label: 'Suggestions they decided as staff (/forget drops the name)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM guild_suggestions WHERE guild_id = ? AND decided_by = ?',
+    rowsSql:
+      'SELECT number, status, reason, decided_at FROM guild_suggestions WHERE guild_id = ? AND decided_by = ? ORDER BY number',
+  },
+  {
+    key: 'tempRoles',
+    label: 'Temporary roles waiting to be taken back (/forget drops the record, the role stays)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM guild_temp_roles WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM guild_temp_roles WHERE guild_id = ? AND user_id = ? ORDER BY expires_at',
+  },
+  {
+    key: 'tempRoleAdders',
+    label: 'Temporary roles they set as staff (/forget drops the name)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM guild_temp_roles WHERE guild_id = ? AND added_by = ?',
+    rowsSql:
+      'SELECT user_id, role_id, expires_at, reason FROM guild_temp_roles WHERE guild_id = ? AND added_by = ? ORDER BY expires_at',
+  },
+  {
+    key: 'quotes',
+    label: 'Quotes of their messages on the quote board (/forget deletes them)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM guild_quotes WHERE guild_id = ? AND author_id = ?',
+    rowsSql:
+      'SELECT number, channel_id, message_id, author_name, body, attachments, message_at, saved_by, saved_at FROM guild_quotes WHERE guild_id = ? AND author_id = ? ORDER BY number',
+  },
+  {
+    key: 'quotesSaved',
+    label: 'Quotes they saved from other members (/forget drops their name from them)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM guild_quotes WHERE guild_id = ? AND saved_by = ?',
+    rowsSql:
+      'SELECT number, channel_id, message_id, saved_at FROM guild_quotes WHERE guild_id = ? AND saved_by = ? ORDER BY number',
   },
   {
     key: 'inviteCounts',

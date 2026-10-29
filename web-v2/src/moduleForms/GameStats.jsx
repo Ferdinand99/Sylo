@@ -5,8 +5,7 @@ import LoadError from '../components/LoadError.jsx';
 import { useApiData } from '../useApiData.js';
 
 // Read-only — this module has nothing to configure beyond the shared
-// enable/disable toggle every module already has from Overview. Matches
-// V1's game-stats.ejs, which has no save form either.
+// enable/disable toggle every module already has from Overview. No save form.
 export default function GameStats() {
   const { guildId } = useParams();
   const cmd = useCmd();

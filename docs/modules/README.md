@@ -16,6 +16,7 @@ platform gaps (native AutoMod rules, threads, moving members between voice).
 |---|---|---|---|
 | [Moderation](moderation.md) | Warnings, warning auto-actions, mod-log, ban/lock tools | **on** | — |
 | [Auto-moderation](automod.md) | Filter invites, links, spam, caps, banned words | off | Message Content |
+| [Honeypot](honeypot.md) | Trap channels and messages that kick, time out or ban whoever posts or reacts there (beta) | off | — |
 | [Server logging](logging.md) | Send member/message/role/channel events to log channels | off | Server Members + Message Content |
 | [Verification](verification.md) | Gate new members behind a button or captcha | off | Server Members |
 | [Ban appeals](appeals.md) | DM banned members an appeal form; staff decide from the dashboard | off | — |
@@ -30,11 +31,16 @@ platform gaps (native AutoMod rules, threads, moving members between voice).
 | [Starboard](starboard.md) | Re-post well-reacted messages into a highlights channel | off | Message Content |
 | [Autoresponder](autoresponder.md) | Auto-reply when a message matches a trigger | off | Message Content |
 | [Auto-react](auto-react.md) | Auto-react to messages from chosen users/roles, optionally change a role too | off | — |
+| [Auto threads](auto-threads.md) | Open a thread for every new post in chosen channels, named from a template (beta, Discord only) | off | Message Content |
 | [Custom commands](custom-commands.md) | Build `/slash` commands from an action list | off | — |
 | [Reminders](reminders.md) | Post a message to a channel once or on a schedule | off | — |
 | [Sticky messages](sticky.md) | Keep a message pinned to the bottom of a channel | off | — |
 | [Polls](polls.md) | Reaction polls that auto-close on a timer or vote cap | off | — |
 | [Giveaways](giveaways.md) | Prize giveaways with an Enter button; auto-drawn winners | off | — |
+| [Events](events.md) | Events with Join / Maybe / Leave sign-ups, a participant role and reminders (beta) | off | — |
+| [Temporary roles](temp-roles.md) | Give a role for a set time with `/temprole`; Sylo takes it back and logs it (beta) | off | — |
+| [Suggestions](suggestions.md) | Member suggestions with 👍 / 👎 voting, staff decisions and a log channel (beta) | off | — |
+| [Quote board](quote-board.md) | Save memorable messages (message menu or `/quote save`), show them with `/quote`, optional public page (beta) | off | — |
 | [AFK](afk.md) | Members mark themselves away; Sylo replies to mentions | off | — |
 | [Temporary voice channels](temp-voice.md) | Join-to-create voice hubs controlled with `/voice-*` | off | — |
 | [Server statistics](server-stats.md) | Voice channels named with live member/role/boost counts | off | Server Members |

@@ -1,7 +1,5 @@
-// Server-data tools shared by the classic dashboard (routes/guilds.js) and the new one
-// (routes/v2GuildData.js): the config export, the member-data lookup and the "forget a
-// member" erasure with its confirmation DM. One copy, so both dashboards delete, tell the
-// member and log exactly the same thing.
+// Server-data tools for the dashboard (routes/v2GuildData.js): the config export, the
+// member-data lookup and the "forget a member" erasure with its confirmation DM.
 import { EmbedBuilder } from 'discord.js';
 import { clientOfGuild } from '../../platform/platformOf.js';
 import { getModule } from '../../modules/registry.js';
@@ -61,6 +59,13 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
       { name: 'AFK status', value: String(r.afk), inline: true },
       { name: 'Saved birthday', value: String(r.birthdays), inline: true },
       { name: 'Giveaway entries', value: String(r.giveawayEntries), inline: true },
+      { name: 'Event sign-ups', value: String(r.eventSignups), inline: true },
+      { name: 'Events hosted (host name removed)', value: String(r.eventsHosted), inline: true },
+      { name: 'Suggestion votes', value: String(r.suggestionVotes), inline: true },
+      { name: 'Suggestions (made anonymous)', value: String(r.suggestions), inline: true },
+      { name: 'Temporary role records', value: String(r.tempRoles), inline: true },
+      { name: 'Quotes of their messages', value: String(r.quotes), inline: true },
+      { name: 'Saved-by name removed from quotes', value: String(r.quotesSaved), inline: true },
       { name: 'Invite records', value: String(r.invites), inline: true },
       { name: 'Not affected', value: MEMBER_DATA_UNAFFECTED }
     )

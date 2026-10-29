@@ -318,6 +318,60 @@ export const MODULES = [
     configurable: true,
   },
   {
+    id: 'events',
+    name: 'Events',
+    description:
+      'Schedule events with Join / Maybe / Leave sign-ups, a participant role and a reminder before the start.',
+    icon: '📅',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
+    id: 'suggestions',
+    name: 'Suggestions',
+    description:
+      'Members post ideas with /suggest; others vote 👍 / 👎, staff approve or deny with a reason, and decided ideas can move to a log channel.',
+    icon: '💡',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
+    id: 'temp-roles',
+    name: 'Temporary roles',
+    description:
+      'Give a member a role for a set time with /temprole add; Sylo takes it back automatically and notes it in the mod log.',
+    icon: '⏳',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
+    id: 'auto-threads',
+    name: 'Auto threads',
+    description: 'Open a thread for every new post in chosen channels, named from a template. Discord only.',
+    icon: '🧵',
+    requiredIntents: ['MessageContent'],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
+    id: 'quote-board',
+    name: 'Quote board',
+    description:
+      'Save memorable messages with the "Save quote" menu or /quote save, show them with /quote random, search and user, and optionally list them on a public page.',
+    icon: '💬',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
     id: 'game-stats',
     name: 'Game stats',
     description:

@@ -18,20 +18,18 @@ async function signedIn() {
   return { b, csrf, id: profiles.discord.id };
 }
 
-test('the account page deletes the account after a confirmation', async () => {
+test('the V2 API deletes the account after a confirmation, and the cookie stops working', async () => {
   const { b, csrf, id } = await signedIn();
   const post = (body) =>
-    b.get('/account/delete', {
+    b.get('/api/v2/account/delete', {
       method: 'POST',
-      headers: { 'x-csrf-token': csrf, 'content-type': 'application/x-www-form-urlencoded' },
-      body,
+      headers: { 'x-csrf-token': csrf, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
     });
-  const unconfirmed = await post('');
-  assert.equal(unconfirmed.status, 302);
-  assert.ok(await findIdentity('discord', id), 'nothing happens without the checkbox');
+  assert.equal((await post({})).status, 400, 'needs confirm: true');
+  assert.ok(await findIdentity('discord', id), 'nothing happens without the confirmation');
 
-  const res = await post('confirm=on');
-  assert.equal(res.status, 302);
+  assert.equal((await post({ confirm: true })).status, 200);
   assert.equal(await findIdentity('discord', id), null);
   assert.notEqual((await b.get('/api/v2/guilds')).status, 200, 'the old cookie is signed out');
 });

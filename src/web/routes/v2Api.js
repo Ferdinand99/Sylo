@@ -1,8 +1,6 @@
-// JSON API for the V2 dashboard SPA (web-v2/). Mounted at /api/v2, entirely
+// JSON API for the dashboard SPA (web-v2/). Mounted at /api/v2, entirely
 // after the app-wide requireAuth (src/web/server.js), so every route here
-// already has a signed-in req.session.user — same cookie-session V1 uses,
-// nothing new. Read-only reuse of V1's data-layer functions (baseContext,
-// getGuild, requireGuildAdmin) — none of them are modified by this file.
+// already has a signed-in req.session.user from the cookie session.
 import { accountDevices, accountPlatforms } from '../lib/accountView.js';
 import { revokeApiToken } from '../../db/apiTokens.js';
 import { deleteAccount, unlinkIdentity } from '../../db/accounts.js';
@@ -10,6 +8,7 @@ import { listDevLogEntries } from '../../db/devLogEntries.js';
 import { openTicketCount, unreadTicketCount } from '../../db/tickets.js';
 import { allGuilds, clientOfGuild, primaryClient } from '../../platform/platformOf.js';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { Router, raw } from 'express';
 import { PermissionFlagsBits } from 'discord.js';
 import {
@@ -30,8 +29,11 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { changelogHandler } from '../lib/changelogFeed.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
 import guildDataRouter from './v2GuildData.js';
+import eventsRouter from './v2Events.js';
+import suggestionsRouter from './v2Suggestions.js';
+import tempRolesRouter from './v2TempRoles.js';
+import quotesRouter from './v2Quotes.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
-import { idList, MAX_REACTION_MESSAGES } from '../lib/idList.js';
 import { buildReactionPairs } from '../lib/reactionPairs.js';
 import { guildCustomEmojis } from '../lib/guildEmojis.js';
 import { canPostInChannel } from '../lib/modlogChannel.js';
@@ -39,7 +41,6 @@ import { withRowIds } from '../lib/rowIds.js';
 import { shouldSaveBotMasters } from '../lib/botMasters.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
-import { getDashboardVersion, setDashboardVersion, DASHBOARD_VERSIONS } from '../../db/userPrefs.js';
 import {
   ROADMAP_STATUSES,
   listPublicPosts,
@@ -57,13 +58,21 @@ import { mdToHtml } from '../lib/markdown.js';
 import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } from '../lib/roadmapLimits.js';
 import { roadmapView } from '../lib/roadmapView.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
-import { normaliseLevelingConfig, ANNOUNCE_MODES, XP_RATES, syncRewards } from '../../modules/leveling.js';
+import {
+  normaliseLevelingConfig,
+  validXp,
+  ANNOUNCE_MODES,
+  XP_RATES,
+  syncRewards,
+} from '../../modules/leveling.js';
+import { normaliseTicketsConfig } from '../../modules/tickets.js';
 import { levelFromXp } from '../../modules/lib/levels.js';
 import {
   SCHEDULE_PRESETS,
   WEEKDAYS,
   MIN_INTERVAL_MINUTES,
   MAX_INTERVAL_MINUTES,
+  normaliseReminderConfig,
 } from '../../modules/scheduledMessages.js';
 import {
   listScheduled,
@@ -74,7 +83,6 @@ import {
   setScheduledEnabled,
 } from '../../db/scheduledMessages.js';
 import {
-  normaliseEmbedSpec,
   normaliseWelcomeChannelConfig,
   WC_PRESETS,
   publishWelcome,
@@ -82,9 +90,16 @@ import {
   createWelcomeChannel,
 } from '../../modules/welcomeChannel.js';
 import { normalisePollsConfig, POLL_PLACEHOLDERS, RESULTS_PLACEHOLDERS } from '../../modules/polls.js';
-import { publishReactionMessage } from '../../modules/roles.js';
-import { normaliseCustomCommands, CC_PLACEHOLDERS } from '../../modules/customCommands.js';
+import {
+  publishReactionMessage,
+  normaliseReactionMessage,
+  normaliseAutoroles,
+  reactionMessagesFull,
+  LIMITS as ROLES_LIMITS,
+} from '../../modules/roles.js';
+import { normaliseCustomCommands, CC_PLACEHOLDERS, NAME_RE } from '../../modules/customCommands.js';
 import { normaliseStickyConfig } from '../../modules/sticky.js';
+import { normaliseAutoThreadsConfig } from '../../modules/autoThreads.js';
 import {
   listCleanupSchedules,
   getCleanupSchedule,
@@ -102,8 +117,9 @@ import {
   setGithubWatchEnabled,
   regenerateGithubWatchSecret,
 } from '../../db/githubWatches.js';
-import { GITHUB_EVENT_TYPES, sanitiseGithubEvents } from '../../modules/githubAlerts.js';
+import { GITHUB_EVENT_TYPES, normaliseGithubWatch } from '../../modules/githubAlerts.js';
 import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
+import { normaliseCleanupSchedule, CLEANUP_MAX_AGE_HOURS } from '../../modules/channelCleanup.js';
 import { boardsToRescan, normaliseStarboard, scheduleRescan } from '../../modules/starboard.js';
 import {
   normaliseAutomodConfig,
@@ -117,11 +133,17 @@ import { recentHoneypotCatches } from '../../db/honeypotCatches.js';
 import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
-import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
-import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
+import { reservedCommandNames, syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
+import { WELCOME_PLACEHOLDERS, normaliseWelcomeConfig } from '../../modules/welcome.js';
+import { MODULE_LIMITS } from '../../modules/limits.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
+import { normaliseAfkConfig } from '../../modules/afk.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
-import { normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
+import {
+  normaliseThresholds,
+  normaliseModerationConfig,
+  THRESHOLD_ACTIONS,
+} from '../../modules/moderation.js';
 import { normaliseServerStats, STAT_TYPES } from '../../modules/serverStats.js';
 import { normaliseAutoresponder, AR_MATCH_MODES, AR_PLACEHOLDERS } from '../../modules/autoresponder.js';
 import { normaliseInviteTrackerConfig } from '../../modules/inviteTracker.js';
@@ -135,13 +157,14 @@ import {
   DEFAULT_VIDEO_MESSAGE as YT_DEFAULT_VIDEO_MSG,
   DEFAULT_LIVE_MESSAGE as YT_DEFAULT_LIVE_MSG,
 } from '../../modules/youtubeAlerts.js';
+import { syncSubscriptions as syncYoutubeWebsub } from '../../modules/youtubeWebsub.js';
 import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TPL, FEED_TYPES } from '../../modules/rss.js';
 import { clearScope } from '../../db/postedKeys.js';
 import { deleteBoardEntries } from '../../db/starboard.js';
 import { dailySeries, hourlySeries, topChannels, topVoiceChannels } from '../../db/insights.js';
 import { flushGuild as flushGuildInsights } from '../../modules/insights.js';
 import { recentLookups } from '../../db/cache.js';
-import { normaliseGiveawaysConfig, endGiveaway } from '../../modules/giveaways.js';
+import { normaliseGiveawaysConfig, endGiveaway, clampWinners } from '../../modules/giveaways.js';
 import {
   listComposed,
   getComposed,
@@ -158,7 +181,7 @@ import {
 } from '../../db/giveaways.js';
 import { getCounting, setCount, resetCount } from '../../db/counting.js';
 import { listCountingPenalties } from '../../db/countingPenalties.js';
-import { releaseCountingPenalty } from '../../modules/counting.js';
+import { releaseCountingPenalty, normaliseCountingConfig, validCount } from '../../modules/counting.js';
 import { normaliseAutoReact, AUTO_REACT_MODES, AUTO_REACT_ROLE_ACTIONS } from '../../modules/autoReact.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import {
@@ -226,9 +249,9 @@ import { sendDevLogTest } from '../../lib/devLog.js';
 const require = createRequire(import.meta.url);
 const { version } = require('../../../package.json');
 
-// Same budget as V1's /health equivalent (src/web/routes/health.js) — a
-// stuck script shouldn't be able to fill the disk or thrash restarts. Keyed
-// by mount path + IP, so this is an independent bucket from V1's, not shared.
+// Same budget as the /health routes (src/web/routes/health.js) — a stuck script
+// shouldn't be able to fill the disk or thrash restarts. Keyed by mount path + IP, so this is
+// an independent bucket from /health's, not shared.
 const backupLimit = rateLimit({
   windowMs: 60_000,
   max: 12,
@@ -237,8 +260,7 @@ const backupLimit = rateLimit({
 
 const router = Router();
 
-// Mirrors guilds.js's private moderatorDisplayName() — used for audit-log
-// "actor" strings, same convention V1 uses.
+// The name written into audit-log "actor" strings.
 function moderatorDisplayName(req) {
   return currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`;
 }
@@ -252,15 +274,8 @@ function parseUserId(raw) {
   return m ? m[1] || m[2] : null;
 }
 
-// Mirrors guilds.js's private clampDays() — a "delete after N days" field
-// where 0 (or junk) means keep forever.
-function clampDays(raw) {
-  const n = Math.floor(Number(raw));
-  return Number.isFinite(n) && n > 0 ? Math.min(n, 3650) : 0;
-}
-
-// Same list V1's server switcher and "Choose a server" picker use
-// (src/web/middleware/auth.js:129) — the SPA's own guild picker.
+// The servers the signed-in person can manage — the server switcher and the "Choose a server"
+// picker (see src/web/middleware/auth.js).
 router.get(
   '/guilds',
   asyncHandler(async (req, res) => {
@@ -342,51 +357,30 @@ router.get('/invites', (req, res) => {
   res.json({ invites: botInviteUrls() });
 });
 
-// The SPA is served as static files (no EJS), so it has no <meta
-// name="csrf-token"> to read the way V1's pages do — this hands it the same
-// per-session token the shared `csrf` middleware already put on
+// The SPA is served as static files (no EJS), so it has no <meta name="csrf-token"> to read —
+// this hands it the per-session token the shared `csrf` middleware already put on
 // req.session.csrf, for the x-csrf-token header on state-changing calls.
 router.get('/csrf', (req, res) => {
   res.json({ token: req.session?.csrf ?? null });
 });
 
-// Open mode has no signed-in user, so the dashboard-version preference is one shared record.
-const prefsUserId = (req) => sessionUserId(req) ?? 'local-admin';
+// The setting limits of every module (max lengths, ranges, item counts), so the forms do not
+// carry their own copies. Static for the life of the process: the body and its ETag are built
+// once, and the browser may reuse it for a few minutes. Express answers 304 on a matching ETag.
+const LIMITS_BODY = JSON.stringify(MODULE_LIMITS);
+const LIMITS_ETAG = `"${createHash('sha256').update(LIMITS_BODY).digest('base64url').slice(0, 22)}"`;
+router.get('/modules/limits', (req, res) => {
+  res.set({ ETag: LIMITS_ETAG, 'Cache-Control': 'private, max-age=300' });
+  res.type('json').send(LIMITS_BODY);
+});
 
-router.get(
-  '/prefs',
-  asyncHandler(async (req, res) => {
-    res.json({ dashboardVersion: await getDashboardVersion(prefsUserId(req)) });
-  })
-);
-
-router.post(
-  '/prefs',
-  asyncHandler(async (req, res) => {
-    const requested = req.body?.dashboardVersion;
-    if (!DASHBOARD_VERSIONS.includes(requested)) {
-      return res
-        .status(400)
-        .json({ error: `dashboardVersion must be one of ${DASHBOARD_VERSIONS.join(', ')}` });
-    }
-    const dashboardVersion = await setDashboardVersion(prefsUserId(req), requested);
-    res.json({ dashboardVersion });
-  })
-);
-
-// Mirrors the loadGuild + requireGuildAdmin pair guilds.js uses for every
-// /:guildId route (guilds.js:221-231) — can't import loadGuild directly,
-// it's a private, unexported function in that file, so this is the same
-// three lines reimplemented for JSON instead of the `guild-missing` view.
+// Looks the server up for every /guilds/:guildId route and answers a JSON 404 when the bot
+// does not have it.
 function loadGuildJson(req, res, next) {
   req.guild = getGuild(req);
   if (!req.guild) return res.status(404).json({ error: 'Unknown or unavailable server' });
   next();
 }
-// Note: requireGuildAdmin's failure paths render V1's HTML error/login
-// pages, not JSON (it's shared, unmodified V1 code) — the web-v2 fetch
-// wrapper checks response.ok/content-type before parsing JSON and falls
-// back to a plain "log in" / "no access" state rather than crashing on it.
 // Tickets go before the admin guard: members with a configured staff role may use
 // them without being server admins (ticketsRouter does its own access check).
 router.use('/guilds/:guildId/tickets', ticketsRouter);
@@ -395,24 +389,31 @@ router.use('/guilds/:guildId', requireGuildAdmin, loadGuildJson, guardRoleGrants
 router.use('/guilds/:guildId', staffRouter);
 // Audit log, config export and member data (v2GuildData.js).
 router.use('/guilds/:guildId', guildDataRouter);
+// Events: settings, create, edit, cancel (v2Events.js).
+router.use('/guilds/:guildId', eventsRouter);
+// Suggestions: settings, list, decide, delete (v2Suggestions.js).
+router.use('/guilds/:guildId', suggestionsRouter);
+// Temporary roles: settings, list, member search, add, remove (v2TempRoles.js).
+router.use('/guilds/:guildId', tempRolesRouter);
+// Quote board: settings, searchable list, remove (v2Quotes.js).
+router.use('/guilds/:guildId', quotesRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
 router.get('/guilds/:guildId/platform', (req, res) => res.json(platformInfo(req.guild)));
 
-// Custom emojis for the reaction-role emoji picker (the classic dashboard's /guilds/:id/emojis).
+// Custom emojis for the reaction-role emoji picker (custom emojis of the server).
 router.get('/guilds/:guildId/emojis', (req, res) => res.json({ custom: guildCustomEmojis(req.guild) }));
 
 router.get(
   '/guilds/:guildId/overview',
   asyncHandler(async (req, res) => {
-    // baseContext for the guild/ticket/appeal summary; buildOverview (the
-    // same view-model V1's own "Combined Overview" page uses, see
+    // baseContext for the guild/ticket/appeal summary; buildOverview (see
     // src/web/lib/overviewSummary.js) for the category-grouped module cards
     // — reused wholesale rather than re-deriving the same grouping here.
     const [{ guild, openTickets, openAppeals }, { groups }] = await Promise.all([
       baseContext(req.guild, 'overview'),
-      buildOverview(req.guild, { owner: isOwner(req), v2: true }),
+      buildOverview(req.guild, { owner: isOwner(req) }),
     ]);
     res.json({ guild, openTickets, openAppeals, groups });
   })
@@ -462,10 +463,8 @@ router.post(
   })
 );
 
-// Toggle a module on/off — mirrors guilds.js:2671-2721 (minus the htmx
-// branch, this is a plain JSON API). Same per-module side effects on
-// enable/disable as V1: re-sync custom commands, prime the invite-tracker
-// cache, push/tear down automod's native Discord AutoMod rules.
+// Toggle a module on/off. Per-module side effects on enable/disable: re-sync custom commands,
+// prime the invite-tracker cache, push/tear down automod's native Discord AutoMod rules.
 router.post(
   '/guilds/:guildId/modules/:moduleId',
   asyncHandler(async (req, res) => {
@@ -517,13 +516,9 @@ router.post(
 );
 
 // --- Per-module config ------------------------------------------------------
-// One GET+POST pair per module, added as each gets a real V2 form (see
-// web-v2/src/moduleForms/) — mirrors guilds.js's shared `/m/:moduleId/config`
-// route (guilds.js:1014 on), which handles all 32 modules in one big
-// if/else keyed on form-encoded field names. There's no way to generalise
-// that across modules (every module's config shape and field names are
-// different), so each gets its own small pair here instead, same as
-// Leaderboard/Settings/Personalizer/Health already do.
+// One GET+POST pair per module with a form (see web-v2/src/moduleForms/). There's no way to
+// generalise that across modules (every module's config shape and field names are different),
+// so each gets its own small pair here, as the Leaderboard/Settings/Personalizer/Health pages do.
 
 router.get(
   '/guilds/:guildId/modules/afk/config',
@@ -543,11 +538,7 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/afk/config',
   asyncHandler(async (req, res) => {
-    const config = {
-      setNickname: Boolean(req.body.setNickname),
-      mentionReply: Boolean(req.body.mentionReply),
-      ignoreChannels: idList(req.body.ignoreChannels, 100),
-    };
+    const config = normaliseAfkConfig(req.body);
     await setGuildModule(req.guild.id, 'afk', { config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -611,27 +602,8 @@ router.post(
   '/guilds/:guildId/modules/welcome/config',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    const chan = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
-    const joinOn = Boolean(req.body.joinEnabled);
-    const dmOn = Boolean(req.body.dmEnabled);
-    const leaveOn = Boolean(req.body.leaveEnabled);
-    const cardBg = String(req.body.cardBackground ?? '').trim();
-    const config = {
-      joinEnabled: joinOn,
-      joinChannel: joinOn ? chan(req.body.joinChannel) : '',
-      joinMessage: joinOn ? String(req.body.joinMessage ?? '').slice(0, 1500) : '',
-      leaveEnabled: leaveOn,
-      leaveChannel: leaveOn ? chan(req.body.leaveChannel) : '',
-      leaveMessage: leaveOn ? String(req.body.leaveMessage ?? '').slice(0, 1500) : '',
-      dmEnabled: dmOn,
-      dmMessage: dmOn ? String(req.body.dmMessage ?? '').slice(0, 1500) : '',
-      useEmbed: Boolean(req.body.useEmbed),
-      card: Boolean(req.body.card),
-      cardBackground: /^https:\/\/\S+$/i.test(cardBg) ? cardBg.slice(0, 500) : '',
-    };
-    const autoOn = Boolean(req.body.autoroleEnabled);
-    config.autoroleEnabled = autoOn;
-    const newRoles = autoOn ? idList(req.body.autoroles) : [];
+    const config = normaliseWelcomeConfig(req.body);
+    const newRoles = config.autoroleEnabled ? normaliseAutoroles(req.body.autoroles) : [];
     const rolesMod = await getGuildModule(guild.id, 'roles');
     await setGuildModule(guild.id, 'roles', {
       enabled: rolesMod.enabled || newRoles.length > 0,
@@ -647,7 +619,7 @@ router.post(
   })
 );
 
-// A PNG of the welcome image with a sample member and the saved background (same as classic).
+// A PNG of the welcome image with a sample member and the saved background .
 router.get(
   '/guilds/:guildId/modules/welcome/card-preview',
   asyncHandler((req, res) => sendWelcomeCardPreview(req.guild, res))
@@ -747,8 +719,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const guild = req.guild;
     // messageId and triggerCount are bot-managed — never trust whatever the
-    // client echoes back, re-derive both server-side by channelId, same as
-    // the V1 form branch.
+    // client echoes back, re-derive both server-side by channelId.
     const prev = (await getGuildModule(guild.id, 'honeypot')).config;
     const prevMsgByChannel = new Map((prev.messages ?? []).map((m) => [m.channelId, m]));
     const prevChanByChannel = new Map((prev.channels ?? []).map((c) => [c.channelId, c]));
@@ -847,16 +818,7 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/counting/config',
   asyncHandler(async (req, res) => {
-    const penaltyMinutes = Math.round(Number(req.body.penaltyMinutes));
-    const config = {
-      channelId: /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '',
-      allowSameUser: Boolean(req.body.allowSameUser),
-      resetOnFail: Boolean(req.body.resetOnFail),
-      react: Boolean(req.body.react),
-      penaltyRoleId: /^\d{17,20}$/.test(req.body.penaltyRoleId ?? '') ? req.body.penaltyRoleId : '',
-      penaltyMinutes:
-        Number.isFinite(penaltyMinutes) && penaltyMinutes > 0 ? Math.min(penaltyMinutes, 10080) : 15,
-    };
+    const config = normaliseCountingConfig(req.body);
     await setGuildModule(req.guild.id, 'counting', { config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -879,8 +841,8 @@ router.post(
       });
       return res.json({ state: await getCounting(req.guild.id) });
     }
-    const n = Number(req.body.current);
-    if (!Number.isInteger(n) || n < 0 || n > 1e12) {
+    const n = validCount(req.body.current);
+    if (n === null) {
       return res.status(400).json({ error: 'Invalid count' });
     }
     await setCount(req.guild.id, n);
@@ -931,7 +893,7 @@ router.post(
   '/guilds/:guildId/modules/auto-react/config',
   asyncHandler(async (req, res) => {
     // The form sends a raw "target users" string per rule (IDs/@mentions,
-    // space/comma separated), same as V1's rx_users field — split it into
+    // space/comma separated) — split it into
     // ids here rather than pushing that parsing into the React form.
     const rules = Array.isArray(req.body.rules) ? req.body.rules : [];
     const config = normaliseAutoReact({
@@ -979,11 +941,7 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/moderation/config',
   asyncHandler(async (req, res) => {
-    const config = {
-      dmOnPunish: req.body.dmOnPunish !== false,
-      warnThresholds: normaliseThresholds(req.body.warnThresholds),
-      infractionRetentionDays: clampDays(req.body.infractionRetentionDays),
-    };
+    const config = normaliseModerationConfig(req.body);
     await setGuildModule(req.guild.id, 'moderation', { config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -1015,8 +973,7 @@ router.get(
 );
 
 // Immunity roles: members with one of these are never touched by auto-moderation
-// or the warning auto-actions. Patches only automod's exemptRoles, like V1's
-// Moderator -> Admin tab.
+// or the warning auto-actions. Patches only automod's exemptRoles.
 router.post(
   '/guilds/:guildId/modules/automod/immunity',
   asyncHandler(async (req, res) => {
@@ -1038,8 +995,8 @@ router.post(
 router.post(
   '/guilds/:guildId/modules/automod/config',
   asyncHandler(async (req, res) => {
-    // Immunity (exempt) roles are managed on the Admin tab, not this form —
-    // keep whatever is already stored, same as V1's guilds.js.
+    // Immunity (exempt) roles are saved through their own route (/automod/immunity), not this
+    // form — keep whatever is already stored.
     const prev = (await getGuildModule(req.guild.id, 'automod')).config;
     const config = normaliseAutomodConfig({
       deleteMessage: true,
@@ -1088,14 +1045,45 @@ router.post(
   '/guilds/:guildId/modules/sticky/config',
   asyncHandler(async (req, res) => {
     // lastMessageId is bot-managed (the currently-posted sticky message per
-    // channel) — carried over from the previous config by channelId, same
-    // as V1's guilds.js, rather than letting the form touch it.
+    // channel) — carried over from the previous config by channelId, rather than letting the
+    // form touch it.
     const prev = (await getGuildModule(req.guild.id, 'sticky')).config;
     const config = normaliseStickyConfig({ stickies: req.body.stickies }, prev);
     await setGuildModule(req.guild.id, 'sticky', { config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:sticky',
+      detail: 'settings saved',
+    });
+    res.json({ config });
+  })
+);
+
+router.get(
+  '/guilds/:guildId/modules/auto-threads/config',
+  asyncHandler(async (req, res) => {
+    const { config: cfg } = await getGuildModule(req.guild.id, 'auto-threads');
+    res.json({
+      config: normaliseAutoThreadsConfig(cfg),
+      // Text and announcement channels only: a forum already makes a thread for every post.
+      channels: guildTextChannels(req.guild),
+      roles: assignableRoles(req.guild),
+    });
+  })
+);
+
+router.post(
+  '/guilds/:guildId/modules/auto-threads/config',
+  asyncHandler(async (req, res) => {
+    const allowed = new Set(guildTextChannels(req.guild).map((c) => c.id));
+    const config = normaliseAutoThreadsConfig({ rules: req.body?.rules });
+    // A rule for a channel that is not a text or announcement channel of this server (a forum, a
+    // voice channel, one that was deleted) could never work: leave it out.
+    config.rules = config.rules.filter((r) => allowed.has(r.channelId));
+    await setGuildModule(req.guild.id, 'auto-threads', { config });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:auto-threads',
       detail: 'settings saved',
     });
     res.json({ config });
@@ -1148,8 +1136,8 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/autoresponder/config',
   asyncHandler(async (req, res) => {
-    // embedColor isn't exposed on this form — same as V1, which never sends
-    // it either, so normaliseAutoresponder's default applies on every save.
+    // embedColor isn't exposed on this form, so normaliseAutoresponder's default applies on
+    // every save.
     const config = normaliseAutoresponder({
       cooldownSeconds: req.body.cooldownSeconds,
       ignoreChannels: req.body.ignoreChannels,
@@ -1363,8 +1351,8 @@ router.post(
     const config = normaliseStarboard({ boards: withRowIds(req.body.boards) });
     const prev = normaliseStarboard((await getGuildModule(req.guild.id, 'starboard')).config);
     await setGuildModule(req.guild.id, 'starboard', { enabled: true, config });
-    // A board the person removed takes the record of its starboard posts with it, like the classic
-    // delete — but only when the form names it in `removedBoardIds`, and never for a board that is
+    // A board the person removed takes the record of its starboard posts with it,
+    // but only when the form names it in `removedBoardIds`, and never for a board that is
     // still in the saved list. A board that merely went missing from the list (a stale tab) keeps
     // its records.
     const kept = new Set(config.boards.map((b) => b.id));
@@ -1378,7 +1366,7 @@ router.post(
       detail: 'settings saved',
     });
     // Catch up on messages that already clear a just-lowered bar (or a new board's) —
-    // queued in the background, one rescan per server at a time, same as V1's save route.
+    // queued in the background, one rescan per server at a time.
     for (const board of boardsToRescan(prev.boards, config.boards)) scheduleRescan(req.guild, board);
     res.json({
       config: { boards: config.boards.map((b) => ({ ...b, emojiText: boardEmojiText(b, req.guild) })) },
@@ -1429,9 +1417,9 @@ router.get(
 );
 
 // A channel is given as a raw @handle/URL the client never resolves itself
-// (mirrors guilds.js's V1 branch) — resolveYtChannel does a live network
+// — resolveYtChannel does a live network
 // fetch, so this route can be slow; the previously-resolved ytChannelId/name
-// are carried forward (same UC_RE re-check V1 does) when the input field is
+// are carried forward (same UC_RE re-check) when the input field is
 // left blank on an already-resolved row, so re-saving other rows doesn't
 // force a re-resolve of ones that didn't change.
 router.post(
@@ -1472,6 +1460,9 @@ router.post(
       action: 'module:youtube-alerts',
       detail: 'settings saved',
     });
+    // A channel added here is subscribed at the hub, one removed is unsubscribed (a no-op without
+    // WebSub). Not awaited: the hub's requests must not slow the save.
+    syncYoutubeWebsub().catch((err) => log.warn('youtube-alerts', `WebSub sync after save: ${err.message}`));
     res.json({ config });
   })
 );
@@ -1515,8 +1506,8 @@ router.post(
 );
 
 // No POST route — this module has nothing to configure beyond the
-// enable/disable toggle every module already gets. Read-only, matching
-// V1's game-stats.ejs (command docs + the shared lookup cache).
+// enable/disable toggle every module already gets. Read-only (command docs + the shared lookup
+// cache).
 router.get(
   '/guilds/:guildId/modules/game-stats/config',
   asyncHandler(async (req, res) => {
@@ -1588,14 +1579,8 @@ router.get(
 router.post(
   '/guilds/:guildId/modules/tickets/config',
   asyncHandler(async (req, res) => {
-    const config = {
-      greeting: String(req.body.greeting ?? '').slice(0, 1500),
-      closeMessage: String(req.body.closeMessage ?? '').slice(0, 1500),
-      notifyChannel: /^\d{17,20}$/.test(req.body.notifyChannel ?? '') ? req.body.notifyChannel : '',
-      staffRoles: withoutEveryone(req.guild.id, idList(req.body.staffRoles)),
-      transcriptRetentionDays: clampDays(req.body.transcriptRetentionDays),
-      showMessageInAlert: Boolean(req.body.showMessageInAlert),
-    };
+    const config = normaliseTicketsConfig(req.body);
+    config.staffRoles = withoutEveryone(req.guild.id, config.staffRoles);
     await setGuildModule(req.guild.id, 'tickets', { config });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -1707,7 +1692,7 @@ router.post(
     const id = Number(req.params.id);
     const g = await getGiveawayInGuild(id, req.guild.id);
     if (!g || !g.ended) return res.status(400).json({ error: 'Not an ended giveaway' });
-    const count = Math.max(1, Math.min(Number(req.body.count) || 1, 20));
+    const count = clampWinners(req.body.count);
     await endGiveaway(id, { rerollCount: count });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -1939,8 +1924,8 @@ router.post(
       return res.json({ ok: true });
     }
     const userId = parseUserId(req.body.userId);
-    const xp = Number(req.body.xp);
-    if (!userId || !Number.isInteger(xp) || xp < 0 || xp > 1e12) {
+    const xp = validXp(req.body.xp);
+    if (!userId || xp === null) {
       return res
         .status(400)
         .json({ error: 'Enter a valid user id/mention and a non-negative whole XP value.' });
@@ -2351,7 +2336,7 @@ router.get(
 
     res.json({
       ready,
-      // Every connected bot, as on the classic Health page ("Sylo#9455 · Sylo#4291").
+      // Every connected bot, as on the Health page ("Sylo#9455 · Sylo#4291").
       botTag:
         platforms
           .map((p) => p.tag)
@@ -2390,11 +2375,13 @@ router.get(
         .slice(0, 25)
         .map((b) => ({ name: b.name, size: formatBytes(b.size), ago: timeAgo(b.mtime) })),
       devLogConfigured: Boolean(config.devLogChannelId),
+      // 'env' | 'file' | 'generated-ephemeral' (the last one: sessions and signed links die on restart).
+      sessionSecret: config.sessionSecretSource,
     });
   })
 );
 
-// The game-stats lookup cache, as the classic /stats page lists it: operators only, newest 50.
+// The game-stats lookup cache, as the Stats page lists it: operators only, newest 50.
 router.get(
   '/stats',
   requireOwner,
@@ -2431,7 +2418,7 @@ router.post('/health/dev-log-error-test', requireOwner, backupLimit, (req, res) 
   res.json({ ok: true });
 });
 
-// Download a snapshot (the same strict name check and attachment headers as classic /health/backups/:name).
+// Download a snapshot (the same strict name check and attachment headers as /health/backups/:name).
 router.get('/health/backups/:name', requireOwner, backupLimit, (req, res) => {
   if (!isBackupName(req.params.name)) return res.status(400).json({ error: 'invalid backup name' });
   const stream = openBackup(req.params.name);
@@ -2474,7 +2461,7 @@ router.post(
 );
 
 // Restores, then exits the process so the container/process manager restarts
-// Sylo on the restored data — same as V1. Responds first so the request
+// Sylo on the restored data. Responds first so the request
 // doesn't hang while the process is going down.
 router.post(
   '/health/backups/:name/restore',
@@ -2494,11 +2481,8 @@ router.post(
   })
 );
 
-// --- Roadmap (mirrors src/web/routes/roadmap.js's V1 pages in full — bot-
-// wide, not per-guild, same as Health/Personalizer above. The vote/suggest
-// rate limiters are the *same* instances V1 uses (src/web/lib/roadmapLimits.js,
-// not re-created here) so a user can't double their effective limit by
-// switching between the V1 and V2 UI. The public read-only list is
+// --- Roadmap (bot-wide, not per-guild, same as Health/Personalizer above). The vote/suggest
+// rate limiters live in src/web/lib/roadmapLimits.js. The public read-only list is
 // GET /api/v2/public/roadmap (v2Public.js); this one returns the same view.)
 
 function withRoadmapHtml(p) {
@@ -2632,8 +2616,6 @@ router.post(
 // — schedules live in their own table, not guild_modules.config, so this
 // isn't the usual getModuleConfig/saveModuleConfig shape.) -----------------
 
-const CLEANUP_MAX_AGE_HOURS = 24 * 90; // 90 days
-
 function shapeCleanupSchedule(rec) {
   return {
     id: rec.id,
@@ -2661,28 +2643,10 @@ router.get(
   })
 );
 
-function parseCleanupBody(body) {
-  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
-  const days = (Array.isArray(body.days) ? body.days : []).map(Number).filter((n) => n >= 0 && n <= 6);
-  const maxAgeHours = Math.min(
-    CLEANUP_MAX_AGE_HOURS,
-    Math.max(1, Math.floor(Number(body.maxAgeHours)) || 24)
-  );
-  const timeOk = /^\d{2}:\d{2}$/.test(body.timeHhmm ?? '');
-  return {
-    channelId,
-    days,
-    maxAgeHours,
-    timeHhmm: body.timeHhmm,
-    skipPinned: Boolean(body.skipPinned),
-    timeOk,
-  };
-}
-
 router.post(
   '/guilds/:guildId/modules/channel-cleanup/schedules',
   asyncHandler(async (req, res) => {
-    const s = parseCleanupBody(req.body);
+    const s = normaliseCleanupSchedule(req.body);
     if (!s.channelId) return res.status(400).json({ error: 'Pick a channel.' });
     if (!s.timeOk) return res.status(400).json({ error: 'Pick a valid time.' });
     const id = await createCleanupSchedule(req.guild.id, s);
@@ -2701,7 +2665,7 @@ router.post(
     const id = Number(req.params.id);
     const existing = Number.isInteger(id) ? await getCleanupSchedule(req.guild.id, id) : null;
     if (!existing) return res.status(404).json({ error: 'No such schedule' });
-    const s = parseCleanupBody(req.body);
+    const s = normaliseCleanupSchedule(req.body);
     if (!s.channelId) return res.status(400).json({ error: 'Pick a channel.' });
     if (!s.timeOk) return res.status(400).json({ error: 'Pick a valid time.' });
     await updateCleanupSchedule(req.guild.id, id, s);
@@ -2736,28 +2700,6 @@ router.post(
 // --- GitHub alerts (mirrors guilds.js's "GitHub repo watch builder" section
 // — same repo/changelog-path/webhook-token shape, own table.) --------------
 
-const REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
-
-/** Accepts "owner/repo" or a pasted github.com URL; returns the normalised "owner/repo" or null. */
-function parseRepoInput(raw) {
-  const v = String(raw ?? '')
-    .trim()
-    .replace(/^https?:\/\/(www\.)?github\.com\//i, '')
-    .replace(/\.git$/i, '')
-    .replace(/\/+$/, '');
-  return REPO_RE.test(v) ? v : null;
-}
-
-/** A relative repo file path for the changelog watcher — blank is valid (off). */
-function parseChangelogPath(raw) {
-  const v = String(raw ?? '')
-    .trim()
-    .replace(/^\/+/, '');
-  if (!v) return { ok: true, value: '' };
-  if (v.length > 300 || v.includes('..') || /[\0\r\n]/.test(v)) return { ok: false, value: '' };
-  return { ok: true, value: v };
-}
-
 function githubWebhookUrl(token) {
   return config.dashboardUrl ? `${config.dashboardUrl.replace(/\/+$/, '')}/webhooks/github/${token}` : null;
 }
@@ -2790,15 +2732,6 @@ router.get(
   })
 );
 
-function parseGithubBody(body) {
-  const repo = parseRepoInput(body.repo);
-  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
-  const roleId = /^\d{17,20}$/.test(body.roleId ?? '') ? body.roleId : '';
-  const changelog = parseChangelogPath(body.changelogPath);
-  const events = sanitiseGithubEvents(body.events);
-  return { repo, channelId, roleId, changelogPath: changelog.value, changelogOk: changelog.ok, events };
-}
-
 function githubBodyError(s) {
   if (!s.repo) return 'Enter a repo as owner/repo (or paste its github.com URL).';
   if (!s.channelId) return 'Pick a channel.';
@@ -2812,7 +2745,7 @@ function githubBodyError(s) {
 router.post(
   '/guilds/:guildId/modules/github/watches',
   asyncHandler(async (req, res) => {
-    const s = parseGithubBody(req.body);
+    const s = normaliseGithubWatch(req.body);
     const err = githubBodyError(s);
     if (err) return res.status(400).json({ error: err });
     const id = await createGithubWatch(req.guild.id, s);
@@ -2831,7 +2764,7 @@ router.post(
     const id = Number(req.params.id);
     const existing = Number.isInteger(id) ? await getGithubWatch(req.guild.id, id) : null;
     if (!existing) return res.status(404).json({ error: 'No such watch' });
-    const s = parseGithubBody(req.body);
+    const s = normaliseGithubWatch(req.body);
     const err = githubBodyError(s);
     if (err) return res.status(400).json({ error: err });
     await updateGithubWatch(req.guild.id, id, s);
@@ -2903,44 +2836,6 @@ function shapeReminder(rec) {
   };
 }
 
-function toMs(v) {
-  const t = new Date(String(v ?? '')).getTime();
-  return Number.isFinite(t) ? t : null;
-}
-
-function parseReminderBody(body) {
-  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
-  let embed = null;
-  let content = body.content;
-  // Embed mode's "text above the embed" lives on the EmbedEditor's own spec
-  // (content:true), not the plain-text textarea used in text mode.
-  if (body.msgType === 'embed' && body.embedSpec && typeof body.embedSpec === 'object') {
-    embed = normaliseEmbedSpec(body.embedSpec);
-    content = body.embedSpec.content;
-  }
-  const spec = { content: String(content ?? '').slice(0, 2000), embeds: embed ? [embed] : [] };
-  const mode = body.mode === 'single' ? 'single' : 'multiple';
-  const intervalMinutes = Math.min(
-    MAX_INTERVAL_MINUTES,
-    Math.max(MIN_INTERVAL_MINUTES, Math.floor(Number(body.intervalMinutes)) || 60)
-  );
-  const days = (Array.isArray(body.days) ? body.days : []).map(Number).filter((n) => n >= 0 && n <= 6);
-  return {
-    name:
-      String(body.name ?? '')
-        .trim()
-        .slice(0, 100) || 'Untitled reminder',
-    channelId,
-    spec,
-    mode,
-    intervalMinutes,
-    days: days.length ? days : [0, 1, 2, 3, 4, 5, 6],
-    startAt: body.enableStart ? toMs(body.startAt) : null,
-    endAt: body.enableEnd ? toMs(body.endAt) : null,
-    runAt: mode === 'single' ? toMs(body.runAt) : null,
-  };
-}
-
 router.get(
   '/guilds/:guildId/modules/reminders/list',
   asyncHandler(async (req, res) => {
@@ -2960,7 +2855,7 @@ router.post(
   // Not /modules/reminders: that path is the module's on/off switch (POST /modules/:moduleId).
   '/guilds/:guildId/modules/reminders/new',
   asyncHandler(async (req, res) => {
-    const r = parseReminderBody(req.body);
+    const r = normaliseReminderConfig(req.body);
     if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
     if (!r.spec.content.trim() && !r.spec.embeds.length) {
       return res.status(400).json({ error: 'Add a message or an embed.' });
@@ -2982,7 +2877,7 @@ router.post(
   '/guilds/:guildId/modules/reminders/test',
   platformActionLimit,
   asyncHandler(async (req, res) => {
-    const r = parseReminderBody(req.body);
+    const r = normaliseReminderConfig(req.body);
     if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
     if (!r.spec.content.trim() && !r.spec.embeds.length) {
       return res.status(400).json({ error: 'Add a message or an embed.' });
@@ -3002,7 +2897,7 @@ router.post(
     const id = Number(req.params.id);
     const existing = Number.isInteger(id) ? await getScheduled(req.guild.id, id) : null;
     if (!existing) return res.status(404).json({ error: 'No such reminder' });
-    const r = parseReminderBody(req.body);
+    const r = normaliseReminderConfig(req.body);
     if (!r.channelId) return res.status(400).json({ error: 'Pick a channel.' });
     if (!r.spec.content.trim() && !r.spec.embeds.length) {
       return res.status(400).json({ error: 'Add a message or an embed.' });
@@ -3182,7 +3077,7 @@ router.post(
   '/guilds/:guildId/modules/roles/autoroles',
   asyncHandler(async (req, res) => {
     const { config: cfg } = await getGuildModule(req.guild.id, 'roles');
-    const autoroles = idList(Array.isArray(req.body.autoroles) ? req.body.autoroles : []);
+    const autoroles = normaliseAutoroles(Array.isArray(req.body.autoroles) ? req.body.autoroles : []);
     await setGuildModule(req.guild.id, 'roles', { config: { ...cfg, autoroles } });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -3214,9 +3109,9 @@ router.post(
 
     const id = /^\d+$/.test(req.body.id ?? '') ? req.body.id : String(Date.now());
     const existing = list.find((x) => String(x.id) === id);
-    if (!existing && list.length >= MAX_REACTION_MESSAGES) {
+    if (!existing && reactionMessagesFull(list.length)) {
       return res.status(400).json({
-        error: `This server already has the maximum of ${MAX_REACTION_MESSAGES} reaction-role messages.`,
+        error: `This server already has the maximum of ${ROLES_LIMITS.reactionMessages.maxItems} reaction-role messages.`,
       });
     }
     const rm = {
@@ -3224,13 +3119,7 @@ router.post(
       channelId,
       messageId: existing?.messageId || '',
       style,
-      message: String(req.body.message ?? '').slice(0, 2000),
-      embed: normaliseEmbedSpec(req.body.embed || {}),
-      exclusive: Boolean(req.body.exclusive),
-      mode: req.body.mode === 'reverse' ? 'reverse' : 'default',
-      placeholder: String(req.body.placeholder ?? '').slice(0, 150),
-      selMin: Number.parseInt(req.body.selMin, 10) || 0,
-      selMax: Number.parseInt(req.body.selMax, 10) || 0,
+      ...normaliseReactionMessage(req.body),
       pairs,
     };
     // The guard on the save below would refuse a role this person may not hand out, but only
@@ -3302,8 +3191,10 @@ router.get(
   asyncHandler(async (req, res) => {
     const { config } = await getGuildModule(req.guild.id, 'custom-commands');
     const { commands } = normaliseCustomCommands(config);
+    // A command made before a built-in of the same name existed is skipped at sync: flag it.
+    const reserved = reservedCommandNames(clientOfGuild(req.guild));
     res.json({
-      commands,
+      commands: commands.map((c) => ({ ...c, reserved: reserved.has(c.name) })),
       channels: guildTextChannels(req.guild),
       roles: assignableRoles(req.guild),
       placeholders: CC_PLACEHOLDERS,
@@ -3317,7 +3208,7 @@ router.post(
     const name = String(req.body.name ?? '')
       .trim()
       .toLowerCase();
-    if (!/^[a-z0-9_-]{1,32}$/.test(name)) {
+    if (!NAME_RE.test(name)) {
       return res.status(400).json({ error: 'Invalid name — lowercase letters, numbers, - and _ only.' });
     }
     if (primaryClient()?.commands?.has(name)) {

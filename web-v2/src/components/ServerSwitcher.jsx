@@ -27,8 +27,7 @@ export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild })
   // Clicking a Link navigates but doesn't unmount this component (it's part
   // of the persistent Shell), so the native <details> would otherwise stay
   // open across the navigation — close it explicitly. Same for a click
-  // outside or Escape, matching V1's equivalent (header.ejs's srv-switch,
-  // Alpine's @click.outside / @keydown.escape).
+  // outside or Escape.
   function closeMenu() {
     if (detailsRef.current) detailsRef.current.open = false;
   }

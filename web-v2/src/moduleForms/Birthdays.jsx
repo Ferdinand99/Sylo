@@ -3,9 +3,11 @@ import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 export default function Birthdays() {
   const cmd = useCmd();
+  const limits = useModuleLimits('birthdays');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('birthdays');
 
   if (status === 'error') return <LoadError error={error} what="Birthdays settings" />;
@@ -39,6 +41,7 @@ export default function Birthdays() {
           <textarea
             id="message"
             rows={2}
+            maxLength={limitOf(limits, 'message').maxLength}
             placeholder="🎂 Happy birthday {user}! 🎉"
             value={form.message}
             onChange={(e) => set({ message: e.target.value })}

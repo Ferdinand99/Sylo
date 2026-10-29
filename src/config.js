@@ -1,7 +1,8 @@
 // Loads and validates environment configuration for Sylo.
 // All secrets and tunables come from environment variables (see .env.example).
 import 'dotenv/config';
-import { randomBytes } from 'node:crypto';
+import { dirname, resolve } from 'node:path';
+import { resolveSessionSecret } from './lib/sessionSecret.js';
 import { normalisePrivateKey } from './lib/appStoreConnect.js';
 
 /**
@@ -121,10 +122,8 @@ if (shardCountRaw !== 'auto') {
   }
 }
 
-// Hosted-only, opt-in Postgres driver (see docs/roadmap.md — "Postgres
-// migration line"). Unset (the default) — and every self-hosted deployment —
-// keeps today's SQLite path untouched. Currently READ-ONLY: nothing in
-// src/db/ consults it yet; that lands in a follow-up PR.
+// Opt-in Postgres driver (docs/postgres.md). Unset (the default) keeps the SQLite path. When
+// set, every data-access file in src/db/ runs on Postgres, and CI tests both drivers.
 const databaseUrl = optionalOrNull('DATABASE_URL');
 if (databaseUrl && !/^postgres(ql)?:\/\//i.test(databaseUrl)) {
   console.error('[config] DATABASE_URL must start with postgres:// or postgresql://.');
@@ -176,6 +175,9 @@ const turnstileSecretKey = optionalOrNull('TURNSTILE_SECRET_KEY');
 const botErrorDsn = optionalOrNull('BOT_ERROR_DSN');
 const dashboardErrorDsn = optionalOrNull('DASHBOARD_ERROR_DSN');
 const dashboardVisitStats = optionalBool('DASHBOARD_VISIT_STATS', false);
+// CSP_REPORT_ONLY=1: the dashboard's Content-Security-Policy is reported, not enforced (a self-hoster's
+// way back if a custom setup trips it). See src/web/lib/securityHeaders.js.
+const cspReportOnly = optionalBool('CSP_REPORT_ONLY', false);
 const errorEnvironment = optionalOrNull('ERROR_ENVIRONMENT') ?? 'production';
 const itadApiKey = optionalOrNull('ITAD_API_KEY');
 const twitchClientId = optionalOrNull('TWITCH_CLIENT_ID');
@@ -229,18 +231,19 @@ if (pushRelayUrl && !/^https?:\/\/[^\s/]+[^\s]*$/i.test(pushRelayUrl)) {
 }
 const kickClientSecret = optionalOrNull('KICK_CLIENT_SECRET');
 // Signs session cookies and short-lived tokens (e.g. verification links), so it
-// must always exist. When unset we generate one; that only matters for
-// persistence when the dashboard login is enabled.
-let sessionSecret = optionalOrNull('SESSION_SECRET');
-if (!sessionSecret) {
-  sessionSecret = randomBytes(32).toString('hex');
-  if (discordClientSecret || fluxerClientSecret) {
-    console.warn(
-      '[config] SESSION_SECRET is not set — generated a random one. ' +
-        'Dashboard sessions will not survive a restart until you pin SESSION_SECRET.'
-    );
-  }
-}
+// must always exist. SESSION_SECRET wins; otherwise a generated secret is kept in
+// <data folder>/session-secret so sessions and signed links survive a restart.
+// The data folder is the SQLite DATABASE_PATH folder (it also holds the backups),
+// whether or not Postgres is used. Test runs never write a file (they would drop
+// it into the repo's data/ folder).
+const underTestRunner = process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT);
+const { secret: sessionSecret, source: sessionSecretSource } = resolveSessionSecret({
+  envValue: optionalOrNull('SESSION_SECRET'),
+  dataDir: underTestRunner
+    ? null
+    : dirname(resolve(process.cwd(), optional('DATABASE_PATH', './data/sylo.db'))),
+  warn: (message) => console.warn(`[config] ${message}`),
+});
 
 // Platforms. Each one is optional, but at least one must be configured: a
 // Discord-only install sets DISCORD_TOKEN, a Fluxer-only one FLUXER_TOKEN, and
@@ -300,6 +303,7 @@ export const config = Object.freeze({
   discordClientSecret,
   fluxerClientSecret,
   sessionSecret,
+  sessionSecretSource,
   ownerIds,
   fluxerOwnerIds,
   devLogChannelId,
@@ -317,6 +321,7 @@ export const config = Object.freeze({
   dashboardErrorDsn,
   dashboardVisitStats,
   errorEnvironment,
+  cspReportOnly,
 
   // IsThereAnyDeal API key — broadens the Free games module beyond Epic. Free
   // key from isthereanydeal.com/apps. When unset, Free games is Epic-only.

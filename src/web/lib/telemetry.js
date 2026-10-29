@@ -1,5 +1,5 @@
-// Error reports and visit counts from the dashboard's pages (V1 and V2), for the hosted Sylo.
-// Both dashboards load /telemetry.js (routes/telemetry.js), which is built here: with
+// Error reports and visit counts from the dashboard's pages, for the hosted Sylo.
+// The dashboard loads /telemetry.js (routes/telemetry.js), which is built here: with
 // DASHBOARD_ERROR_DSN set it loads the vendored Sentry browser SDK (public/vendor/sentry.min.js)
 // and sends uncaught errors to that DSN (Keen Kestrel or Sentry); with DASHBOARD_VISIT_STATS
 // too, it loads Keen Kestrel's k.js, which counts page views without cookies. Without the DSN
@@ -78,7 +78,7 @@ export function telemetryScript(settings) {
       environment: c.environment,
       sendDefaultPii: false,
       initialScope: {
-        tags: { component: 'dashboard', dashboard: location.pathname.indexOf('/v2') === 0 ? 'v2' : 'v1' }
+        tags: { component: 'dashboard', dashboard: 'v2' }
       }
     });
   });

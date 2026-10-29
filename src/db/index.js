@@ -752,10 +752,9 @@ export const MIGRATIONS = [
     database.exec('ALTER TABLE github_watches ADD COLUMN changelog_path TEXT;');
   },
 
-  // Per-account dashboard-version preference (V1 vs the new V2 SPA) — see
-  // src/db/userPrefs.js. Keyed on the Discord user id, not per guild: the
-  // choice follows the account everywhere, same as it would on any other
-  // per-user setting.
+  // Per-account dashboard-version preference. No longer used (the classic dashboard was removed in
+  // 5.0), but the table stays: migrations only go forward. See src/db/userPrefs.js. Keyed on the
+  // Discord user id, not per guild.
   (database) => {
     database.exec(`
       CREATE TABLE user_prefs (
@@ -961,6 +960,198 @@ export const MIGRATIONS = [
       CREATE INDEX idx_dev_log_entries_created ON dev_log_entries (created_at DESC);
       ALTER TABLE api_tokens ADD COLUMN push_dev_log TEXT NOT NULL DEFAULT 'errors';
     `);
+  },
+
+  // YouTube WebSub subscriptions (src/db/youtubeWebsub.js, which bootstraps the same table on
+  // Postgres). One row per YouTube channel, not per guild: the hub pushes once per channel and
+  // Sylo fans it out to every guild that watches it.
+  (database) => {
+    database.exec(`
+      CREATE TABLE youtube_websub (
+        channel_id       TEXT PRIMARY KEY,
+        secret           TEXT NOT NULL,
+        wanted           INTEGER NOT NULL DEFAULT 1,
+        lease_expires_at INTEGER,
+        last_notified_at INTEGER
+      );
+      CREATE INDEX idx_youtube_websub_lease ON youtube_websub (lease_expires_at);
+    `);
+  },
+
+  // Events (src/db/events.js, which bootstraps the same tables on Postgres): a row per event and a
+  // row per member who signed up.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_events (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id         TEXT NOT NULL,
+        channel_id       TEXT NOT NULL,
+        message_id       TEXT,
+        title            TEXT NOT NULL,
+        description      TEXT NOT NULL DEFAULT '',
+        location         TEXT NOT NULL DEFAULT '',
+        image_url        TEXT NOT NULL DEFAULT '',
+        start_at         INTEGER NOT NULL,
+        end_at           INTEGER,
+        time_zone        TEXT NOT NULL DEFAULT 'UTC',
+        capacity         INTEGER,
+        role_id          TEXT,
+        reminder_minutes INTEGER NOT NULL DEFAULT 0,
+        reminder_sent    INTEGER NOT NULL DEFAULT 0,
+        host_id          TEXT NOT NULL,
+        state            TEXT NOT NULL DEFAULT 'scheduled',
+        created_at       INTEGER NOT NULL
+      );
+      CREATE INDEX idx_guild_events_guild ON guild_events (guild_id, state, start_at);
+      CREATE TABLE guild_event_participants (
+        event_id   INTEGER NOT NULL,
+        user_id    TEXT NOT NULL,
+        status     TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (event_id, user_id)
+      );
+      CREATE INDEX idx_guild_event_participants_user ON guild_event_participants (user_id);
+    `);
+  },
+
+  // Suggestions (src/db/suggestions.js, which bootstraps the same tables on Postgres): a row per
+  // suggestion, numbered per server, and a row per vote.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_suggestions (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id    TEXT NOT NULL,
+        number      INTEGER NOT NULL,
+        channel_id  TEXT NOT NULL,
+        message_id  TEXT,
+        author_id   TEXT,
+        anonymous   INTEGER NOT NULL DEFAULT 0,
+        title       TEXT NOT NULL DEFAULT '',
+        body        TEXT NOT NULL,
+        status      TEXT NOT NULL DEFAULT 'open',
+        reason      TEXT NOT NULL DEFAULT '',
+        decided_by  TEXT,
+        decided_at  INTEGER,
+        created_at  INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_guild_suggestions_number ON guild_suggestions (guild_id, number);
+      CREATE INDEX idx_guild_suggestions_author ON guild_suggestions (guild_id, author_id);
+      CREATE TABLE guild_suggestion_votes (
+        suggestion_id INTEGER NOT NULL,
+        user_id       TEXT NOT NULL,
+        vote          INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL,
+        PRIMARY KEY (suggestion_id, user_id)
+      );
+      CREATE INDEX idx_guild_suggestion_votes_user ON guild_suggestion_votes (user_id);
+    `);
+  },
+
+  // Temporary roles (src/db/tempRoles.js, which bootstraps the same table on Postgres): a row per
+  // member and role that Sylo has to take back once expires_at has passed.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_temp_roles (
+        guild_id    TEXT NOT NULL,
+        user_id     TEXT NOT NULL,
+        role_id     TEXT NOT NULL,
+        expires_at  INTEGER NOT NULL,
+        added_by    TEXT,
+        reason      TEXT NOT NULL DEFAULT '',
+        created_at  INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id, role_id)
+      );
+      CREATE INDEX idx_guild_temp_roles_expires ON guild_temp_roles (expires_at);
+      CREATE INDEX idx_guild_temp_roles_user ON guild_temp_roles (user_id);
+    `);
+  },
+
+  // Quote board (src/db/quotes.js, which bootstraps the same tables on Postgres): a row per saved
+  // quote, numbered per server from a counter that only goes up.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_quotes (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id      TEXT NOT NULL,
+        number        INTEGER NOT NULL,
+        channel_id    TEXT NOT NULL,
+        message_id    TEXT NOT NULL,
+        author_id     TEXT NOT NULL,
+        author_name   TEXT NOT NULL DEFAULT '',
+        body          TEXT NOT NULL DEFAULT '',
+        attachments   INTEGER NOT NULL DEFAULT 0,
+        message_at    INTEGER NOT NULL,
+        saved_by      TEXT,
+        saved_at      INTEGER NOT NULL,
+        public_source INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE UNIQUE INDEX idx_guild_quotes_number ON guild_quotes (guild_id, number);
+      CREATE UNIQUE INDEX idx_guild_quotes_message ON guild_quotes (guild_id, message_id);
+      CREATE INDEX idx_guild_quotes_author ON guild_quotes (guild_id, author_id);
+      CREATE INDEX idx_guild_quotes_saver ON guild_quotes (guild_id, saved_by);
+      CREATE TABLE guild_quote_counters (
+        guild_id    TEXT PRIMARY KEY,
+        last_number INTEGER NOT NULL
+      );
+    `);
+  },
+
+  // Events: host_id may be NULL, so /forget can take a former host off the events they made.
+  // SQLite cannot drop a NOT NULL, so the table is rebuilt (src/db/events.js mirrors this on
+  // Postgres with an ALTER).
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_events_new (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id         TEXT NOT NULL,
+        channel_id       TEXT NOT NULL,
+        message_id       TEXT,
+        title            TEXT NOT NULL,
+        description      TEXT NOT NULL DEFAULT '',
+        location         TEXT NOT NULL DEFAULT '',
+        image_url        TEXT NOT NULL DEFAULT '',
+        start_at         INTEGER NOT NULL,
+        end_at           INTEGER,
+        time_zone        TEXT NOT NULL DEFAULT 'UTC',
+        capacity         INTEGER,
+        role_id          TEXT,
+        reminder_minutes INTEGER NOT NULL DEFAULT 0,
+        reminder_sent    INTEGER NOT NULL DEFAULT 0,
+        host_id          TEXT,
+        state            TEXT NOT NULL DEFAULT 'scheduled',
+        created_at       INTEGER NOT NULL
+      );
+      INSERT INTO guild_events_new
+        (id, guild_id, channel_id, message_id, title, description, location, image_url, start_at, end_at,
+         time_zone, capacity, role_id, reminder_minutes, reminder_sent, host_id, state, created_at)
+      SELECT id, guild_id, channel_id, message_id, title, description, location, image_url, start_at, end_at,
+         time_zone, capacity, role_id, reminder_minutes, reminder_sent, host_id, state, created_at
+      FROM guild_events;
+      UPDATE sqlite_sequence SET seq = (SELECT seq FROM sqlite_sequence WHERE name = 'guild_events')
+        WHERE name = 'guild_events_new';
+      DROP TABLE guild_events;
+      ALTER TABLE guild_events_new RENAME TO guild_events;
+      CREATE INDEX idx_guild_events_guild ON guild_events (guild_id, state, start_at);
+    `);
+  },
+
+  // Suggestions: a counter per server that only goes up (like guild_quote_counters), so deleting the
+  // newest suggestion does not hand its number out again. Seeded from the numbers already in use.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_suggestion_counters (
+        guild_id    TEXT PRIMARY KEY,
+        last_number INTEGER NOT NULL
+      );
+      INSERT INTO guild_suggestion_counters (guild_id, last_number)
+        SELECT guild_id, MAX(number) FROM guild_suggestions GROUP BY guild_id;
+    `);
+  },
+
+  // WebSub: when Sylo last asked the hub to subscribe. A verification request is only answered
+  // for a subscribe Sylo itself sent a few minutes ago (src/modules/youtubeWebsub.js).
+  (database) => {
+    database.exec('ALTER TABLE youtube_websub ADD COLUMN subscribe_requested_at INTEGER;');
   },
 ];
 

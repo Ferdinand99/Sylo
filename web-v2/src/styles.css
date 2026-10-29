@@ -1,5 +1,5 @@
 /* V2 dashboard — design tokens mirror sylobot.com (site/styles.css): true
-   neutral greys, hairline borders, one violet accent for links, focus and
+   neutral greys, hairline borders, one cyan accent (the logo's #38c8f0) for links, focus and
    small highlights, Apple-style status colours. V2's own token names are
    kept so every rule below picks the values up unchanged.
    Dark is the default (matches sylobot.com and docs.sylobot.com, both
@@ -22,7 +22,7 @@
   --text-muted: #a1a1a6;
   /* Decorative only — fails AA as text. */
   --text-faint: #6e6e73;
-  --accent: #8b7dff;
+  --accent: #38c8f0;
   /* Links used a separate sky blue; now they use the accent. Kept as an
      alias (resolves per theme) so existing var(--accent-2) uses still work. */
   --accent-2: var(--accent);
@@ -88,8 +88,9 @@
   --text: #1d1d1f;
   --text-muted: #6e6e73;
   --text-faint: #86868b;
-  /* #6e5ce6 is 4.45:1 on #f5f5f7; one step darker clears AA everywhere. */
-  --accent: #6a58e3;
+  /* The logo cyan is too light on white; this step is 5.9:1 on #f5f5f7 and
+     still 5:1 as text on a 16% accent tint, so it clears AA everywhere. */
+  --accent: #076787;
   --success: #1e7f36;
   --warn: #b25000;
   --danger: #d70015;
@@ -315,7 +316,8 @@ a {
   flex: none;
   display: block;
 }
-.v2-classic-link {
+/* A pill-shaped link in the top bar (the public pages' "Log in"). */
+.v2-pill-link {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-muted);
@@ -329,22 +331,27 @@ a {
     color var(--dur-ui) ease,
     border-color var(--dur-ui) ease;
 }
-/* Shell.jsx renders both labels; only one shows at a time. */
-.v2-classic-short {
-  display: none;
-}
-.v2-classic-link:hover {
+.v2-pill-link:hover {
   text-decoration: none;
 }
 @media (hover: hover) and (pointer: fine) {
-  .v2-classic-link:hover {
+  .v2-pill-link:hover {
     color: var(--text);
     border-color: var(--border-strong);
   }
 }
-.v2-classic-link:active {
+.v2-pill-link:active {
   color: var(--text);
   border-color: var(--border-strong);
+}
+
+/* Pushes the theme toggle and the account menu to the right edge of the top bar. In the public
+   top bar the "Log in" link does that instead (below). */
+.v2-topbar .v2-theme-toggle {
+  margin-left: auto;
+}
+.v2-pill-link + .v2-theme-toggle {
+  margin-left: 0;
 }
 
 .v2-theme-toggle {
@@ -565,9 +572,8 @@ a {
   margin: 0;
 }
 
-/* Body layout: persistent sidebar (every page, not just guild ones — matches
-   V1 always showing its top nav regardless of whether a server is picked)
-   plus the content column. */
+/* Body layout: persistent sidebar (every page, not just guild ones, whether or
+   not a server is picked) plus the content column. */
 .v2-body {
   flex: 1;
   display: flex;
@@ -764,21 +770,8 @@ a {
   }
 }
 
-/* "Back to classic dashboard" → "Classic" once the topbar gets tight. */
-@media (max-width: 700px) {
-  .v2-classic-full {
-    display: none;
-  }
-  .v2-classic-short {
-    display: inline;
-  }
-  .v2-classic-link {
-    padding: 6px 12px;
-  }
-}
-
 /* Phones: the server switcher drops to its own full-width row so the first
-   row (menu, brand, Classic, theme) never squeezes; page gutters go to 16px. */
+   row (menu, brand, theme) never squeezes; page gutters go to 16px. */
 @media (max-width: 560px) {
   .v2-topbar {
     padding-left: max(16px, env(safe-area-inset-left, 0px));
@@ -1082,9 +1075,7 @@ a.v2-row:active {
     white-space: normal;
   }
 }
-/* Small inline tags in the site's pill style: hairline, sentence case.
-   (The content is already "Classic" / "Beta".) */
-.v2-classic-tag,
+/* Small inline tags in the site's pill style: hairline, sentence case. */
 .v2-beta-tag {
   display: inline-flex;
   align-items: center;
@@ -1101,8 +1092,7 @@ a.v2-row:active {
   white-space: nowrap;
 }
 /* Newly-added modules — registry.js's `beta` flag — get this wherever
-   they're listed: same pill as .v2-classic-tag plus an amber dot, so the
-   two read as distinct signals at a glance. */
+   they're listed: the pill plus an amber dot. */
 .v2-beta-tag {
   color: var(--text);
 }
@@ -1113,9 +1103,6 @@ a.v2-row:active {
   flex: none;
   border-radius: 50%;
   background: var(--warn);
-}
-.v2-sidebar-classic-mark {
-  opacity: 0.55;
 }
 .v2-sidebar-beta-mark {
   color: var(--warn);
@@ -1145,7 +1132,7 @@ a.v2-row:active {
 }
 
 /* Embed message builder (MessageBuilder.jsx) — a compact image-picker button
-   (a prompt() for the URL, same as V1's, rather than a full upload UI) and a
+   (a prompt() for the URL, rather than a full upload UI) and a
    name field styled to read as a page title, not a form field. */
 .v2-mb-name {
   background: none;
@@ -1774,7 +1761,7 @@ a.v2-row:active {
   cursor: not-allowed;
 }
 
-/* Toggle switch — replaces V1's pill button. Used both as a read-only
+/* Toggle switch — a pill switch. Used both as a read-only
    <span> (Overview's module rows) and a real <button> (Leaderboard's public
    switch), hence the padding/font reset. Size, colours, knob and motion
    live in forms.css (Switch). */
@@ -2168,8 +2155,7 @@ textarea:disabled {
 }
 /* ChipPicker.jsx — replaces a native <select multiple> (needs ctrl/cmd-
    click to pick more than one, not discoverable) with removable chips
-   plus a single-select "add" dropdown. Ports V1's .role-picker/.role-chip
-   (styles.css) to V2's tokens. */
+   plus a single-select "add" dropdown. */
 .v2-chip-picker {
   display: flex;
   flex-direction: column;
@@ -2282,8 +2268,7 @@ textarea:disabled {
   display: block;
 }
 
-/* Insights.jsx — ports V1's hand-rolled SVG bar/line charts (ins-* in
-   V1's styles.css) onto V2's tokens rather than pulling in a charting
+/* Insights.jsx — hand-rolled SVG bar/line charts (ins-*) on V2's tokens rather than pulling in a charting
    library for six small sparkline-style charts. */
 .v2-ins-range {
   display: flex;
@@ -2658,8 +2643,7 @@ textarea:disabled {
 }
 
 /* components/Announcement.jsx: bot-wide notice from Bot Personalizer. A
-   tinted surface per severity, same convention V1 uses (.banner.ok/.bad),
-   so the severity reads at a glance — plus a dot in the severity colour.
+   tinted surface per severity, so the severity reads at a glance — plus a dot in the severity colour.
    The text itself stays --text / --text-muted: the old severity-coloured
    text dropped under 4.5:1 on its own tint in the light theme. */
 .v2-announcement {

@@ -10,7 +10,38 @@ import { log } from '../lib/log.js';
 
 // The event types a watch can subscribe to. `key` must match GitHub's
 // `X-GitHub-Event` header value exactly. Shown as checkboxes in the dashboard
-// (src/web/views/guild/modules/github.ejs) and used to filter inbound events.
+// (the GitHub module form) and used to filter inbound events.
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  changelogPath: { maxLength: 300 },
+};
+
+const REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
+
+/** Accepts "owner/repo" or a pasted github.com URL; returns the normalised "owner/repo" or null. */
+export function parseRepoInput(raw) {
+  // Capped, and trailing slashes trimmed without a regex (`/\/+$/` backtracks on long slash runs).
+  let v = String(raw ?? '')
+    .trim()
+    .slice(0, 300)
+    .replace(/^https?:\/\/(www\.)?github\.com\//i, '')
+    .replace(/\.git$/i, '');
+  while (v.endsWith('/')) v = v.slice(0, -1);
+  return REPO_RE.test(v) ? v : null;
+}
+
+/** A relative repo file path for the changelog watcher — blank is valid (off). */
+export function parseChangelogPath(raw) {
+  const v = String(raw ?? '')
+    .trim()
+    .replace(/^\/+/, '');
+  if (!v) return { ok: true, value: '' };
+  if (v.length > LIMITS.changelogPath.maxLength || v.includes('..') || /[\0\r\n]/.test(v)) {
+    return { ok: false, value: '' };
+  }
+  return { ok: true, value: v };
+}
+
 export const GITHUB_EVENT_TYPES = [
   { key: 'push', label: 'Commits pushed' },
   { key: 'release', label: 'Release published' },
@@ -38,6 +69,19 @@ const COLOR = 0x24292f; // GitHub's own near-black
  * @param {{ embeds: object[] }} message
  * @param {string | null | undefined} roleId
  */
+/**
+ * Coerce a GitHub watch as the dashboard sends it. `repo` is null and `changelogOk` false when
+ * the repo or the changelog path is not acceptable (the caller refuses the save).
+ */
+export function normaliseGithubWatch(body = {}) {
+  const repo = parseRepoInput(body.repo);
+  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
+  const roleId = /^\d{17,20}$/.test(body.roleId ?? '') ? body.roleId : '';
+  const changelog = parseChangelogPath(body.changelogPath);
+  const events = sanitiseGithubEvents(body.events);
+  return { repo, channelId, roleId, changelogPath: changelog.value, changelogOk: changelog.ok, events };
+}
+
 export function applyRolePing(message, roleId) {
   if (!roleId) return message;
   return { ...message, content: `<@&${roleId}>`, allowedMentions: { roles: [roleId] } };

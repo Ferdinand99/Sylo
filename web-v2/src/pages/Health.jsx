@@ -77,8 +77,7 @@ export default function Health() {
   }, []);
 
   // After a restore is triggered, the process exits and restarts — poll
-  // /api/v2/health until it answers again, then reload. Mirrors V1's
-  // restoring.ejs, which does the same thing against GET /health.
+  // /api/v2/health until it answers again, then reload.
   useEffect(() => {
     if (!restoring) return undefined;
     const id = setInterval(() => {
@@ -244,6 +243,23 @@ export default function Health() {
           <Sparkline history={d.pingHistory} />
         </div>
       </div>
+
+      {d.sessionSecret === 'generated-ephemeral' ? (
+        <div className="v2-group">
+          <h2 className="v2-group-title">Session secret</h2>
+          <div className="v2-list">
+            <div className="v2-row v2-row-stack">
+              <div className="v2-row-main">
+                <p className="v2-row-warn">
+                  Sylo could not save a session secret in its data folder, so this one is lost at the next
+                  restart. Everyone is logged out then, and verification and appeal links already sent stop
+                  working. Set SESSION_SECRET, or make the data folder writable.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="v2-group">
         <h2 className="v2-group-title">Dev-log channel</h2>

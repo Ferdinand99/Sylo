@@ -31,6 +31,40 @@ import { registerComponent } from '../bot/lib/components.js';
 import { getGuildModule } from '../db/modules.js';
 import { buildEmbed, sendComposed, editComposed } from './messageCreator.js';
 import { log } from '../lib/log.js';
+import { idList } from '../web/lib/idList.js';
+import { normaliseEmbedSpec } from './welcomeChannel.js';
+
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  autoroles: { maxItems: 100 },
+  reactionMessages: { maxItems: 50 },
+  'reactionMessages[].message': { maxLength: 2000 },
+  'reactionMessages[].placeholder': { maxLength: 150 },
+  'reactionMessages[].pairs': { maxItems: 25 },
+  'reactionMessages[].pairs[].label': { maxLength: 80 },
+};
+
+/** Whether a server already holds as many reaction-role messages as it may. */
+export const reactionMessagesFull = (count) => count >= LIMITS.reactionMessages.maxItems;
+
+/** The autoroles list: platform role ids, de-duplicated and capped. */
+export const normaliseAutoroles = (list) => idList(list, LIMITS.autoroles.maxItems);
+
+/**
+ * The parts of a reaction-role message that come straight from the form (the channel, style and
+ * role rows are checked by the route, which also knows the guild).
+ */
+export function normaliseReactionMessage(raw = {}) {
+  return {
+    message: String(raw.message ?? '').slice(0, LIMITS['reactionMessages[].message'].maxLength),
+    embed: normaliseEmbedSpec(raw.embed || {}),
+    exclusive: Boolean(raw.exclusive),
+    mode: raw.mode === 'reverse' ? 'reverse' : 'default',
+    placeholder: String(raw.placeholder ?? '').slice(0, LIMITS['reactionMessages[].placeholder'].maxLength),
+    selMin: Number.parseInt(raw.selMin, 10) || 0,
+    selMax: Number.parseInt(raw.selMax, 10) || 0,
+  };
+}
 
 const BTN_STYLE = {
   primary: ButtonStyle.Primary,

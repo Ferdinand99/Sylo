@@ -14,17 +14,9 @@ import { Router } from 'express';
 import cookieSession from 'cookie-session';
 import { config } from '../../config.js';
 import { splitPlatformGuildId } from '../../lib/platformId.js';
-import {
-  allGuildKeys,
-  guildByKey,
-  guildKey,
-  platformOfGuild,
-  primaryClient,
-} from '../../platform/platformOf.js';
+import { allGuildKeys, guildByKey, guildKey, platformOfGuild } from '../../platform/platformOf.js';
 import { BUILD } from '../../bot/lib/buildInfo.js';
-import { buildSidebar } from '../lib/sidebarNav.js';
 import { getBotMasterRoles } from '../../db/guildSettings.js';
-import { getAnnouncement } from '../../db/appSettings.js';
 import {
   IdentityLinkedError,
   PlatformAlreadyLinkedError,
@@ -179,21 +171,7 @@ function loginPath() {
   return enabled.length === 1 ? `/auth/${enabled[0].platform}/login` : '/auth/login';
 }
 
-/**
- * Send the browser somewhere that may be cross-origin (a platform's authorize page). An
- * hx-boost navigation fetches with `fetch()`, which silently fails on a cross-origin
- * redirect (the authorize page sends no CORS headers) — so a boosted request gets an
- * `HX-Redirect` response instead, which htmx turns into a real top-level
- * `window.location` navigation rather than an AJAX swap.
- */
-function redirectTo(req, res, path) {
-  if (req.get('HX-Request')) {
-    res.set('HX-Redirect', path).status(204).end();
-  } else {
-    res.redirect(path);
-  }
-}
-const redirectToLogin = (req, res) => redirectTo(req, res, loginPath());
+const redirectToLogin = (req, res) => res.redirect(loginPath());
 
 // An app request (Authorization: Bearer) cannot follow a login redirect or read an HTML error
 // page, so it gets the same answers as JSON; so does any /api/ request (the new dashboard).
@@ -434,7 +412,7 @@ function beginOAuth(req, res, provider, { connect }) {
   req.session.oauthPlatform = provider.platform;
   req.session.connect = connect ? provider.platform : undefined;
   // Connecting is started from the account page, so that is where it should end.
-  if (connect) req.session.returnTo = '/account?msg=connected';
+  if (connect) req.session.returnTo = '/v2/account';
   res.redirect(provider.authorizeUrl(redirectUri(req, provider), state));
 }
 
@@ -458,7 +436,7 @@ async function completeOAuth(req, provider, identity) {
 }
 
 /**
- * Wire session handling, res.locals for templates, and the /auth/* routes.
+ * Wire session handling, res.locals for the few server-rendered pages, and the /auth/* routes.
  * @param {import('express').Express} app
  */
 export function mountAuth(app) {
@@ -492,37 +470,10 @@ export function mountAuth(app) {
   // Rate-limited because the view setup below runs ahead of every other limiter in the chain.
   app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 
-  // Expose auth state to every view. Express 5 forwards a rejected promise
-  // from an async middleware to the error handler automatically, so this
-  // doesn't need an asyncHandler wrapper the way route handlers do.
-  app.use(async (req, res, next) => {
-    res.locals.authEnabled = config.authEnabled;
+  // What the few server-rendered pages (login, mobile sign-in, errors) use. No database work:
+  // the dashboard reads its own data through /api/v2.
+  app.use((req, res, next) => {
     res.locals.syloVersion = BUILD.version;
-    res.locals.botInvites = botInviteUrls();
-    // The bot's own avatar, used as the dashboard favicon (null until ready).
-    res.locals.botAvatarUrl = primaryClient()?.user?.displayAvatarURL({ extension: 'png', size: 64 }) ?? null;
-    res.locals.user = currentUser(req);
-    res.locals.isOperator = isOwner(req); // bot-wide pages (/stats, /health) are operators only
-    const mg = res.locals.user ? manageableGuilds(req) : [];
-    res.locals.manageableGuilds = mg;
-
-    let urlGuildId =
-      (decodeURIComponent(req.path).match(/^\/guilds\/((?:fluxer:)?\d{17,20})/) || [])[1] || null;
-    // Only a server this person may manage is shown (sidebar, header): this runs before the
-    // access check, and the "Not an admin" page renders the same header.
-    if (urlGuildId && config.authEnabled && !mg.some((g) => g.id === urlGuildId)) {
-      const botMaster = await isBotMaster(urlGuildId, userIdForGuild(req, urlGuildId)).catch(() => false);
-      if (!botMaster) urlGuildId = null;
-    }
-    res.locals.currentGuildId = urlGuildId;
-
-    // A server is always "in view": URL guild, else the remembered one, else the
-    // first manageable one. Keeps the sidebar stable across bot-wide pages.
-    const remembered = req.session?.lastGuild;
-    res.locals.activeGuildId =
-      urlGuildId || (mg.some((g) => g.id === remembered) ? remembered : null) || mg[0]?.id || null;
-    res.locals.sidebar = await buildSidebar(req, res.locals.activeGuildId);
-    res.locals.announcement = res.locals.user ? await getAnnouncement() : null;
     next();
   });
 

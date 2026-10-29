@@ -2,6 +2,7 @@ import EmbedEditor from '../components/EmbedEditor.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -30,6 +31,7 @@ const fromForm = (form) => ({
 });
 
 export default function Sticky() {
+  const limits = useModuleLimits('sticky');
   const { data, form, setForm, status, error, dirty, saving, save, reset, formKey } = useModuleForm(
     'sticky',
     {
@@ -43,6 +45,9 @@ export default function Sticky() {
 
   const updateRow = (key, patch) =>
     setForm((f) => ({ ...f, stickies: f.stickies.map((s) => (s.key === key ? { ...s, ...patch } : s)) }));
+  const content = limitOf(limits, 'stickies[].content');
+  const cooldown = limitOf(limits, 'stickies[].cooldownSeconds');
+  const full = form.stickies.length >= (limitOf(limits, 'stickies').maxItems ?? Infinity);
   const addRow = () => setForm((f) => ({ ...f, stickies: [...f.stickies, toFormRow()] }));
   const removeRow = (key) => setForm((f) => ({ ...f, stickies: f.stickies.filter((s) => s.key !== key) }));
 
@@ -83,7 +88,7 @@ export default function Sticky() {
               <label>Message</label>
               <textarea
                 rows={3}
-                maxLength={2000}
+                maxLength={content.maxLength}
                 placeholder="Message to keep at the bottom… (optional if using an embed)"
                 value={s.content}
                 onChange={(e) => updateRow(s.key, { content: e.target.value })}
@@ -137,15 +142,15 @@ export default function Sticky() {
               </label>
               <input
                 type="number"
-                min={0}
-                max={3600}
+                min={cooldown.min}
+                max={cooldown.max}
                 value={s.cooldownSeconds}
                 onChange={(e) => updateRow(s.key, { cooldownSeconds: Number(e.target.value) })}
               />
             </div>
           </div>
         ))}
-        <button type="button" className="v2-btn-ghost" onClick={addRow}>
+        <button type="button" className="v2-btn-ghost" onClick={addRow} disabled={full}>
           + Add channel
         </button>
       </form>

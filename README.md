@@ -46,7 +46,7 @@ Add the hosted instance in one click, or self-host it with Docker or Unraid.
 
 ## What Sylo does
 
-Sylo bundles 35 per-server **modules**. Each one is switched on and configured
+Sylo bundles 40 per-server **modules**. Each one is switched on and configured
 from the dashboard. The bot, the dashboard and every module run in **one Node
 process and one container**, and in-process sharding keeps it that way past
 Discord's 2,500-server gateway limit.
@@ -54,9 +54,9 @@ Discord's 2,500-server gateway limit.
 | Area | Modules |
 |---|---|
 | **Moderation & safety** | [Moderation](docs/modules/moderation.md) (case log, warnings, auto-actions) · [Auto-moderation](docs/modules/automod.md) (can sync to Discord's native AutoMod) · [Server logging](docs/modules/logging.md) · [Verification](docs/modules/verification.md) (button or Turnstile captcha) · [Ban appeals](docs/modules/appeals.md) · [Tickets / modmail](docs/modules/tickets.md) · [Channel cleanup](docs/modules/channel-cleanup.md) · Honeypot (beta) |
-| **Welcome & roles** | [Welcome & leave](docs/modules/welcome.md) · [Welcome channel](docs/modules/welcome-channel.md) · [Reaction roles & autoroles](docs/modules/roles.md) (emoji, buttons or dropdown) · [Birthdays](docs/modules/birthdays.md) |
-| **Engagement** | [Leveling](docs/modules/leveling.md) (image rank cards, public leaderboard) · [Invite tracker](docs/modules/invite-tracker.md) · [Starboard](docs/modules/starboard.md) · [Polls](docs/modules/polls.md) · [Giveaways](docs/modules/giveaways.md) · [Counting](docs/modules/counting.md) · [Game stats](docs/modules/game-stats.md) (Battlefield, OSRS, RS3) |
-| **Automation** | [Custom commands](docs/modules/custom-commands.md) · [Autoresponder](docs/modules/autoresponder.md) · [Auto-react](docs/modules/auto-react.md) · [Reminders](docs/modules/reminders.md) · [Sticky messages](docs/modules/sticky.md) · [AFK](docs/modules/afk.md) · [Temporary voice channels](docs/modules/temp-voice.md) |
+| **Welcome & roles** | [Welcome & leave](docs/modules/welcome.md) · [Welcome channel](docs/modules/welcome-channel.md) · [Reaction roles & autoroles](docs/modules/roles.md) (emoji, buttons or dropdown) · [Temporary roles](docs/modules/temp-roles.md) (beta) · [Birthdays](docs/modules/birthdays.md) |
+| **Engagement** | [Leveling](docs/modules/leveling.md) (image rank cards, public leaderboard) · [Invite tracker](docs/modules/invite-tracker.md) · [Starboard](docs/modules/starboard.md) · [Quote board](docs/modules/quote-board.md) (beta, optional public page) · [Polls](docs/modules/polls.md) · [Giveaways](docs/modules/giveaways.md) · [Events](docs/modules/events.md) (beta) · [Suggestions](docs/modules/suggestions.md) (beta) · [Counting](docs/modules/counting.md) · [Game stats](docs/modules/game-stats.md) (Battlefield, OSRS, RS3) |
+| **Automation** | [Custom commands](docs/modules/custom-commands.md) · [Autoresponder](docs/modules/autoresponder.md) · [Auto-react](docs/modules/auto-react.md) · [Auto threads](docs/modules/auto-threads.md) (beta, Discord only) · [Reminders](docs/modules/reminders.md) · [Sticky messages](docs/modules/sticky.md) · [AFK](docs/modules/afk.md) · [Temporary voice channels](docs/modules/temp-voice.md) |
 | **Alerts** | [Twitch](docs/modules/twitch-alerts.md) · [YouTube](docs/modules/youtube-alerts.md) · [Kick](docs/modules/kick-alerts.md) · [RSS / Atom](docs/modules/rss.md) (also Reddit, Mastodon, Bluesky) · [GitHub](docs/modules/github.md) · [Free games](docs/modules/free-games.md) · [App Store Connect](docs/modules/apple-connect.md) (owner only) |
 | **Insights** | [Server statistics](docs/modules/server-stats.md) (live counter channels) · [Server insights](docs/modules/insights.md) (activity charts, aggregate counts only) |
 
@@ -94,8 +94,7 @@ flowchart LR
   end
 
   subgraph clients["Clients"]
-    V1["Classic dashboard<br/>EJS + htmx (retiring in 5.0)"]
-    V2["Dashboard V2<br/>React"]
+    V2["Dashboard<br/>React"]
     IOS["Sylo iOS app"]
   end
 
@@ -117,8 +116,7 @@ flowchart LR
   MOD -->|polls| FEEDS
   GH -->|webhooks| WEB
 
-  V1 -->|"Discord / Fluxer OAuth"| WEB
-  V2 -->|"/api/v2"| WEB
+  V2 -->|"Discord / Fluxer OAuth<br/>/api/v2"| WEB
   IOS -->|"PKCE sign-in<br/>/api/v2 · /api/mobile"| WEB
 
   MOD -->|tickets| PUSH
@@ -211,7 +209,7 @@ The dashboard is then on `http://<host>:3000` (`WEB_PORT`).
 | `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` | Running on Discord (Developer Portal → Bot / General Information) |
 | `FLUXER_TOKEN`, `FLUXER_CLIENT_ID` | Running on Fluxer, instead of or next to Discord ([docs/fluxer.md](docs/fluxer.md)) |
 | `DISCORD_CLIENT_SECRET` | "Log in with Discord" on the dashboard. Without a client secret the dashboard runs **open** |
-| `SESSION_SECRET` | Keeping logins across restarts (any long random string) |
+| `SESSION_SECRET` | Optional. Sylo makes one and keeps it in `<data>/session-secret`, so logins survive restarts; set this only to use your own long random string |
 | `DASHBOARD_URL` | The public URL behind a reverse proxy; also used for captcha and appeal links |
 | `OWNER_IDS` | Your Discord user id(s); limits `/health` and the bot-wide pages to you |
 
@@ -238,7 +236,7 @@ in [docs/grafana-dashboard.json](docs/grafana-dashboard.json). See
 
 **Sylo – Server Manager** is a native SwiftUI app (source in
 [`apps/sylo-ios`](apps/sylo-ios)) that signs in to the hosted Sylo or your own
-instance and manages your servers through the same API as the new dashboard,
+instance and manages your servers through the same API as the dashboard,
 with push notifications for new tickets. It is in public beta on TestFlight and
 not on the App Store yet: [join the beta](https://testflight.apple.com/join/6FXxPjxu).
 
@@ -250,15 +248,12 @@ endpoints, tokens and permissions: [docs/mobile-app.md](docs/mobile-app.md).
 ## Dashboard
 
 - **[Dashboard](docs/dashboard-v2.md).** A React single-page app at `/v2`, the
-  default since 4.10. It covers every module, the builders for embeds, reaction
+  only dashboard since 5.0. Old dashboard links open the matching page in it. It covers every module, the builders for embeds, reaction
   roles, custom commands and the welcome channel, tickets, moderation, appeals,
   insights and the operator pages. The command list and the roadmap are public.
-- **Classic dashboard (retiring).** The older server-rendered EJS + htmx
-  dashboard is still reachable at `/?classic=1` until Sylo 5.0, when it is
-  removed. Old dashboard links open the matching page in the new dashboard.
 - **Public pages.** Shareable leaderboards (`/leaderboard/:id`, `/lb/:slug`),
-  member verification (`/verify`) and ban appeals (`/appeal`). These pages use
-  no JavaScript framework.
+  member verification (`/verify`) and ban appeals (`/appeal`). These pages are
+  server-rendered and use no JavaScript framework.
 
 ## Development
 

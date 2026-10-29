@@ -93,38 +93,60 @@ export const WC_PRESETS = [
   { id: 'links-banner', label: 'Links banner', kind: 'banner', make: () => ({ kind: 'banner', image: '' }) },
 ];
 
+/**
+ * Field limits of one embed spec, shared by every module that stores an embed (served to the
+ * dashboard under the pseudo-module key `_embed`, see modules/limits.js).
+ */
+export const EMBED_LIMITS = {
+  title: { maxLength: 256 },
+  description: { maxLength: 4096 },
+  authorName: { maxLength: 256 },
+  footerText: { maxLength: 2048 },
+  fields: { maxItems: 25 },
+  'fields[].name': { maxLength: 256 },
+  'fields[].value': { maxLength: 1024 },
+};
+
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  'spec.content': { maxLength: 2000 },
+  'spec.embeds': { maxItems: 10 },
+};
+
 /** Sanitise one embed spec object (shared by Welcome Channel and Reaction roles). */
 export function normaliseEmbedSpec(e = {}) {
   return {
     kind: e.kind === 'banner' ? 'banner' : 'embed',
-    title: String(e.title ?? '').slice(0, 256),
-    description: String(e.description ?? '').slice(0, 4096),
+    title: String(e.title ?? '').slice(0, EMBED_LIMITS.title.maxLength),
+    description: String(e.description ?? '').slice(0, EMBED_LIMITS.description.maxLength),
     color: hex(e.color),
     image: url(e.image),
     thumbnail: url(e.thumbnail),
-    authorName: String(e.authorName ?? '').slice(0, 256),
+    authorName: String(e.authorName ?? '').slice(0, EMBED_LIMITS.authorName.maxLength),
     authorIcon: url(e.authorIcon),
-    footerText: String(e.footerText ?? '').slice(0, 2048),
+    footerText: String(e.footerText ?? '').slice(0, EMBED_LIMITS.footerText.maxLength),
     footerIcon: url(e.footerIcon),
     timestamp: Boolean(e.timestamp),
     fields: (Array.isArray(e.fields) ? e.fields : [])
       .map((f) => ({
-        name: String(f.name ?? '').slice(0, 256),
-        value: String(f.value ?? '').slice(0, 1024),
+        name: String(f.name ?? '').slice(0, EMBED_LIMITS['fields[].name'].maxLength),
+        value: String(f.value ?? '').slice(0, EMBED_LIMITS['fields[].value'].maxLength),
         inline: Boolean(f.inline),
       }))
       .filter((f) => f.name && f.value)
-      .slice(0, 25),
+      .slice(0, EMBED_LIMITS.fields.maxItems),
   };
 }
 
 export function normaliseWelcomeChannelConfig(raw = {}) {
   const spec = raw.spec && typeof raw.spec === 'object' ? raw.spec : {};
-  const embeds = (Array.isArray(spec.embeds) ? spec.embeds : []).slice(0, 10).map(normaliseEmbedSpec);
+  const embeds = (Array.isArray(spec.embeds) ? spec.embeds : [])
+    .slice(0, LIMITS['spec.embeds'].maxItems)
+    .map(normaliseEmbedSpec);
   return {
     channelId: id(raw.channelId),
     messageId: id(raw.messageId),
-    spec: { content: String(spec.content ?? '').slice(0, 2000), embeds },
+    spec: { content: String(spec.content ?? '').slice(0, LIMITS['spec.content'].maxLength), embeds },
   };
 }
 

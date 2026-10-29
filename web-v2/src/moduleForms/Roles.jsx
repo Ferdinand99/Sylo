@@ -10,6 +10,7 @@ import EmbedEditor from '../components/EmbedEditor.jsx';
 import EmojiPicker from '../components/EmojiPicker.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
 import { notify } from '../notify.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 const BTN_STYLES = ['secondary', 'primary', 'success', 'danger'];
 const STYLES = [
@@ -29,6 +30,7 @@ function rowsMeta(style) {
 }
 
 function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }) {
+  const limits = useModuleLimits('roles');
   const [style, setStyle] = useState(initial.style || 'reaction');
   const [channelId, setChannelId] = useState(initial.channelId || '');
   const [message, setMessage] = useState(initial.message || '');
@@ -50,6 +52,8 @@ function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }
   });
 
   const meta = rowsMeta(style);
+  // Discord's own cap per style, never above what the server accepts.
+  meta.max = Math.min(meta.max, limitOf(limits, 'reactionMessages[].pairs').maxItems ?? Infinity);
 
   function updateRow(key, patch) {
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -118,6 +122,7 @@ function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }
         </label>
         <textarea
           rows={2}
+          maxLength={limitOf(limits, 'reactionMessages[].message').maxLength}
           placeholder="Pick your roles below!"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -139,7 +144,7 @@ function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }
             <label>Dropdown placeholder</label>
             <input
               type="text"
-              maxLength={150}
+              maxLength={limitOf(limits, 'reactionMessages[].placeholder').maxLength}
               placeholder="Pick your roles"
               value={placeholder}
               onChange={(e) => setPlaceholder(e.target.value)}
@@ -193,7 +198,7 @@ function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }
               <input
                 type="text"
                 placeholder="Button label (optional)"
-                maxLength={80}
+                maxLength={limitOf(limits, 'reactionMessages[].pairs[].label').maxLength}
                 value={row.label}
                 onChange={(e) => updateRow(row.key, { label: e.target.value })}
               />

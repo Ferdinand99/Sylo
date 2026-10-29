@@ -16,6 +16,10 @@ import { countOpenAppeals } from '../../db/appeals.js';
 import { inviterCount } from '../../db/inviteTracker.js';
 import { guildPollCount } from '../../db/polls.js';
 import { activeGiveaways } from '../../db/giveaways.js';
+import { upcomingEvents } from '../../db/events.js';
+import { openSuggestionCount, suggestionCount } from '../../db/suggestions.js';
+import { nextTempRoleExpiry, tempRoleCount } from '../../db/tempRoles.js';
+import { quoteCount } from '../../db/quotes.js';
 import { recentLookups } from '../../db/cache.js';
 import { dailySeries } from '../../db/insights.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
@@ -40,7 +44,18 @@ const LAYOUT = [
   { title: 'Moderation & filtering', ids: ['automod', 'honeypot', 'verification', 'appeals', 'logging'] },
   {
     title: 'Engagement',
-    ids: ['welcome', 'welcome-channel', 'roles', 'counting', 'leveling', 'starboard', 'sticky', 'birthdays'],
+    ids: [
+      'welcome',
+      'welcome-channel',
+      'roles',
+      'temp-roles',
+      'counting',
+      'leveling',
+      'starboard',
+      'quote-board',
+      'sticky',
+      'birthdays',
+    ],
   },
   {
     title: 'Utilities',
@@ -52,8 +67,11 @@ const LAYOUT = [
       'invite-tracker',
       'polls',
       'giveaways',
+      'events',
+      'suggestions',
       'autoresponder',
       'auto-react',
+      'auto-threads',
       'afk',
       'server-stats',
       'insights',
@@ -82,11 +100,11 @@ function channelName(guild, id) {
 /**
  * Build the whole overview view-model for a guild.
  * @param {import('discord.js').Guild} guild
- * @param {{ owner?: boolean, v2?: boolean }} [viewer]  a non-owner never sees an owner-only module's
- *   card; `v2` makes every card's `href` an address in the new dashboard (/v2/...) instead of the
- *   classic page, for the new dashboard and the Sylo app (the classic overview keeps classic links).
+ * @param {{ owner?: boolean }} [viewer]  a non-owner never sees an owner-only module's card.
+ *   Every card's `href` is an address in the dashboard (/v2/...), for the web dashboard and the
+ *   Sylo app.
  */
-export async function buildOverview(guild, { owner = true, v2 = false } = {}) {
+export async function buildOverview(guild, { owner = true } = {}) {
   const settings = await getGuildSettings(guild.id);
   const state = new Map((await getGuildModules(guild.id)).map((m) => [m.id, m]));
 
@@ -101,9 +119,7 @@ export async function buildOverview(guild, { owner = true, v2 = false } = {}) {
               .filter((id) => owner || !getModule(id)?.ownerOnly)
               .map((id) => buildCard(id, guild, settings, state))
           )
-        )
-          .filter(Boolean)
-          .map((card) => (v2 ? { ...card, href: v2CardHref(card.id, guild.id) } : card)),
+        ).filter(Boolean),
       }))
     ),
   };
@@ -180,12 +196,7 @@ async function buildCard(id, guild, settings, state) {
     beta: Boolean(def.beta),
     missingIntents: missing,
     status: missing.length ? 'blocked' : enabled ? 'on' : 'off',
-    href:
-      id === 'insights'
-        ? `/guilds/${guild.id}/insights`
-        : id === 'moderation'
-          ? `/guilds/${guild.id}/m/moderation`
-          : `/guilds/${guild.id}/m/${id}`,
+    href: v2CardHref(id, guild.id),
     lines: await moduleLines(id, guild, row?.config ?? {}),
   };
 }
@@ -270,6 +281,21 @@ async function moduleLines(id, guild, cfg) {
       const n = Array.isArray(cfg.stickies) ? cfg.stickies.length : 0;
       return [n ? on('Active sticky messages', String(n)) : off('Active sticky messages', 'none')];
     }
+    case 'quote-board': {
+      const saved = await quoteCount(guild.id);
+      return [
+        saved ? on('Saved quotes', String(saved)) : neutral('Saved quotes', '0'),
+        cfg.publicPage === true ? on('Public page', 'on') : off('Public page', 'off'),
+      ];
+    }
+    case 'auto-threads': {
+      const rules = Array.isArray(cfg.rules) ? cfg.rules.length : 0;
+      return [
+        rules
+          ? on('Channels with auto threads', String(new Set(cfg.rules.map((r) => r?.channelId)).size))
+          : off('Channels with auto threads', 'none'),
+      ];
+    }
     case 'counting': {
       const ch = channelName(guild, cfg.channelId);
       const st = await getCounting(guild.id);
@@ -348,6 +374,38 @@ async function moduleLines(id, guild, cfg) {
       return [
         active.length ? on('Active giveaways', String(active.length)) : neutral('Active giveaways', '0'),
         neutral('Winner ping', ping),
+      ];
+    }
+    case 'events': {
+      const upcoming = await upcomingEvents(guild.id);
+      const next = upcoming[0];
+      return [
+        upcoming.length ? on('Upcoming events', String(upcoming.length)) : neutral('Upcoming events', '0'),
+        next
+          ? neutral(
+              'Next',
+              `${next.title.slice(0, 40)} · ${new Date(next.start_at).toISOString().slice(0, 16).replace('T', ' ')} UTC`
+            )
+          : neutral('Next', 'none'),
+      ];
+    }
+    case 'temp-roles': {
+      const active = await tempRoleCount(guild.id);
+      const next = await nextTempRoleExpiry(guild.id);
+      return [
+        active ? on('Active temporary roles', String(active)) : neutral('Active temporary roles', '0'),
+        next
+          ? neutral('Next expiry', new Date(next).toISOString().slice(0, 16).replace('T', ' ') + ' UTC')
+          : neutral('Next expiry', 'none'),
+      ];
+    }
+    case 'suggestions': {
+      const open = await openSuggestionCount(guild.id);
+      const total = await suggestionCount(guild.id);
+      return [
+        open ? on('Open suggestions', String(open)) : neutral('Open suggestions', '0'),
+        neutral('Stored', String(total)),
+        cfg.channel ? on('Channel', 'set') : off('Channel', 'not set'),
       ];
     }
     case 'polls': {
@@ -477,7 +535,7 @@ function generalCard(guild, settings) {
     enabled: null,
     missingIntents: [],
     status: 'link',
-    href: `/guilds/${guild.id}/settings`,
+    href: v2CardHref('general', guild.id),
     lines: [modlog ? on('Mod-log channel', `#${modlog}`) : off('Mod-log channel', 'not set')],
   };
 }
@@ -499,7 +557,7 @@ async function commandsCard(guild) {
     enabled: null,
     missingIntents: [],
     status: 'link',
-    href: `/guilds/${guild.id}/commands`,
+    href: v2CardHref('commands', guild.id),
     lines: [
       on('Available', String(total)),
       disabled ? off('Disabled here', String(disabled)) : neutral('Disabled here', '0'),
@@ -520,7 +578,7 @@ async function messagesCard(guild) {
     enabled: null,
     missingIntents: [],
     status: 'link',
-    href: `/guilds/${guild.id}/messages`,
+    href: v2CardHref('messages', guild.id),
     lines: [n ? on('Saved embeds', String(n)) : neutral('Saved embeds', 'none')],
   };
 }

@@ -5,12 +5,14 @@ import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 export default function InviteTracker() {
   const cmd = useCmd();
   const [bonusUser, setBonusUser] = useState('');
   const [bonusValue, setBonusValue] = useState(0);
   const [bonusBusy, setBonusBusy] = useState(false);
+  const limits = useModuleLimits('invite-tracker');
   const { guildId, data, setData, form, setForm, status, error, dirty, saving, save, reset } =
     useModuleForm('invite-tracker');
 
@@ -77,8 +79,8 @@ export default function InviteTracker() {
           <input
             id="graceHours"
             type="number"
-            min={0}
-            max={168}
+            min={limitOf(limits, 'graceHours').min}
+            max={limitOf(limits, 'graceHours').max}
             value={form.graceHours}
             onChange={(e) => set({ graceHours: Number(e.target.value) })}
           />

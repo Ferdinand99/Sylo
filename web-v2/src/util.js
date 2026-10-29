@@ -44,8 +44,7 @@ export function writeTheme(theme) {
   }
 }
 
-// Same key V1's header partial uses — dismissing an announcement in one
-// dashboard dismisses it in the other too, since it's the same browser.
+// Where a dismissed announcement is remembered in this browser.
 const DISMISSED_ANNOUNCEMENT_KEY = 'sylo:dismissedAnnouncement';
 
 export function readDismissedAnnouncement() {

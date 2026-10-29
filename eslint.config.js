@@ -70,12 +70,12 @@ export default [
     },
   },
 
-  // Browser-side progressive-enhancement scripts.
+  // Browser-side scripts of the public pages (theme.js).
   {
     files: ['src/web/public/**/*.js'],
     languageOptions: {
       sourceType: 'script',
-      globals: { ...globals.browser, Alpine: 'readonly', htmx: 'readonly' },
+      globals: globals.browser,
     },
     rules: {
       'n/no-unsupported-features/node-builtins': 'off',
@@ -93,6 +93,30 @@ export default [
     rules: {
       'n/no-unsupported-features/node-builtins': 'off',
       'n/no-missing-import': 'off',
+    },
+  },
+
+  // V2's own theme.js is a plain script (loaded from <head>), not a module.
+  {
+    files: ['web-v2/public/**/*.js'],
+    languageOptions: { sourceType: 'script' },
+  },
+
+  // V2 unit tests (Vitest, `globals: true` in web-v2/vitest.config.js).
+  {
+    files: ['web-v2/**/__tests__/**/*.{js,jsx}'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        vi: 'readonly',
+        beforeAll: 'readonly',
+        beforeEach: 'readonly',
+        afterAll: 'readonly',
+        afterEach: 'readonly',
+      },
     },
   },
 

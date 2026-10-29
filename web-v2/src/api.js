@@ -1,6 +1,5 @@
-// Thin fetch wrapper for /api/v2/*. Same-origin, so the existing cookie-
-// session from V1's Discord login is sent automatically — no separate V2
-// auth. The access checks answer /api/ requests with JSON (401 when signed
+// Thin fetch wrapper for /api/v2/*. Same-origin, so the cookie session from the
+// Discord/Fluxer login is sent automatically — no separate API auth. The access checks answer /api/ requests with JSON (401 when signed
 // out); a redirect or non-JSON answer is still handled, for safety.
 export class ApiError extends Error {
   constructor(message, { status, notAuthenticated = false } = {}) {
@@ -90,6 +89,9 @@ export const setModulesEnabledBulk = (guildId, ids, enabled) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/bulk`, { ids, enabled });
 export const getPlatformInfo = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/platform`);
 
+// The setting limits of every module (see components/useModuleLimits.js).
+export const getModuleLimits = () => apiFetch('/api/v2/modules/limits');
+
 // Generic per-module config load/save — every module's V2 form (web-v2/src/
 // moduleForms/) uses these same two calls, one dedicated backend route per
 // module (see v2Api.js's "Per-module config" section) behind them.
@@ -110,6 +112,34 @@ export const endGiveaway = (guildId, id) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/giveaways/${id}/end`, {});
 export const rerollGiveaway = (guildId, id, count) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/giveaways/${id}/reroll`, { count });
+export const createEvent = (guildId, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/events/events`, body);
+export const updateEvent = (guildId, id, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/events/events/${id}`, body);
+export const cancelEvent = (guildId, id) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/events/events/${id}/cancel`, {});
+export const getSuggestions = (guildId, { status = 'all', sort = 'new' } = {}) =>
+  apiFetch(
+    `/api/v2/guilds/${gid(guildId)}/modules/suggestions/list?status=${encodeURIComponent(status)}&sort=${encodeURIComponent(sort)}`
+  );
+export const decideSuggestion = (guildId, number, action, reason) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/decision`, { action, reason });
+export const deleteSuggestion = (guildId, number) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/delete`, {});
+export const getQuotes = (guildId, { q = '' } = {}) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/quote-board/list?q=${encodeURIComponent(q)}`);
+export const deleteQuote = (guildId, number) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/quote-board/${number}/delete`, {});
+export const getTempRoles = (guildId, { q = '', roleId = '' } = {}) =>
+  apiFetch(
+    `/api/v2/guilds/${gid(guildId)}/modules/temp-roles/list?q=${encodeURIComponent(q)}&roleId=${encodeURIComponent(roleId)}`
+  );
+export const searchTempRoleMembers = (guildId, q) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/temp-roles/members?q=${encodeURIComponent(q)}`);
+export const addTempRole = (guildId, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/temp-roles/add`, body);
+export const removeTempRole = (guildId, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/temp-roles/remove`, body);
 export const setInviteBonus = (guildId, userId, bonus) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/invite-tracker/bonus`, { userId, bonus });
 
@@ -125,9 +155,6 @@ export const deleteComposedMessage = (guildId, id) =>
 export const getInsights = (guildId, range) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/insights?range=${range}`);
 export const refreshInsights = (guildId) => postJson(`/api/v2/guilds/${gid(guildId)}/insights/refresh`, {});
-
-export const getPrefs = () => apiFetch('/api/v2/prefs');
-export const setDashboardVersion = (dashboardVersion) => postJson('/api/v2/prefs', { dashboardVersion });
 
 export const getLeaderboard = (guildId, period) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/leaderboard?period=${period}`);
@@ -250,7 +277,7 @@ export const saveCustomCommand = (guildId, body) =>
 export const deleteCustomCommand = (guildId, id) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/custom-commands/cmd/${id}/delete`, {});
 
-// Staff pages that used to exist only in V1 (see src/web/routes/v2Staff.js).
+// Staff pages: tickets, appeals, moderation (see src/web/routes/v2Staff.js).
 const g = (guildId) => `/api/v2/guilds/${gid(guildId)}`;
 export const getTickets = (guildId) => apiFetch(`${g(guildId)}/tickets`);
 export const getTicket = (guildId, id) => apiFetch(`${g(guildId)}/tickets/${id}`);

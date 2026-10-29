@@ -1,5 +1,5 @@
-// What the roadmap shows a visitor, shared by the classic board (routes/roadmap.js) and the new
-// dashboard's API (routes/v2Api.js, routes/v2Public.js) so the two cannot drift. Posts are
+// What the roadmap shows a visitor, for the dashboard's API (routes/v2Api.js, routes/v2Public.js)
+// and the public JSON feed (routes/roadmap.js). Posts are
 // whitelisted field by field: the database row also holds who created a post, and that must
 // never reach a page or a JSON answer.
 import { config } from '../../config.js';

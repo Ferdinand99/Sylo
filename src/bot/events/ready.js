@@ -5,6 +5,7 @@ import { primeAllInviteCaches } from '../../modules/inviteTracker.js';
 import { applyPresence } from '../lib/presence.js';
 import { log } from '../../lib/log.js';
 import { recordGatewayPing } from '../../runtime.js';
+import { every } from '../../modules/schedule.js';
 
 export const name = Events.ClientReady;
 export const once = true;
@@ -16,11 +17,11 @@ export function execute(client) {
   // Presence is configured from the dashboard; re-apply periodically so
   // {servers} / {members} placeholders stay current as the bot joins/leaves.
   applyPresence(client);
-  setInterval(() => applyPresence(client), 10 * 60 * 1000).unref();
+  every('core', 10 * 60 * 1000, () => applyPresence(client));
 
   // Sample the gateway heartbeat once a minute for the /health ping sparkline.
   recordGatewayPing(client.ws.ping);
-  setInterval(() => recordGatewayPing(client.ws.ping), 60 * 1000).unref();
+  every('core', 60 * 1000, () => recordGatewayPing(client.ws.ping));
 
   // Register slash custom commands for guilds that use them (runs after the
   // built-in command registration in startBot()).

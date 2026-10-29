@@ -1,8 +1,7 @@
 import { useId } from 'react';
 
-// A feature toggle whose settings only show once it's on — the same
-// pattern V1's "mee-row"/"mee-body" convention uses across most module
-// pages (welcome.ejs, birthdays.ejs, …), reused here rather than
+// A feature toggle whose settings only show once it's on — used
+// across most module pages (welcome, birthdays, …), shared here rather than
 // reinvented per module. The whole header row (knob + title) is one
 // role="switch" button, so the title is a click target too and screen
 // readers hear "<title>, switch, on/off".

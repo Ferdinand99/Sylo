@@ -3,6 +3,7 @@ import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -63,6 +64,7 @@ const fromForm = (form) => ({
 });
 
 export default function Starboard() {
+  const limits = useModuleLimits('starboard');
   const {
     data: d,
     form,
@@ -119,7 +121,7 @@ export default function Starboard() {
                 </label>
                 <input
                   type="text"
-                  maxLength={60}
+                  maxLength={limitOf(limits, 'boards[].name').maxLength}
                   placeholder="Starboard"
                   value={b.name}
                   onChange={(e) => updateBoard(b.key, { name: e.target.value })}
@@ -159,8 +161,8 @@ export default function Starboard() {
                 <label>Reactions needed</label>
                 <input
                   type="number"
-                  min={1}
-                  max={100}
+                  min={limitOf(limits, 'boards[].threshold').min}
+                  max={limitOf(limits, 'boards[].threshold').max}
                   style={{ maxWidth: '100px' }}
                   value={b.threshold}
                   onChange={(e) => updateBoard(b.key, { threshold: Number(e.target.value) })}
@@ -210,7 +212,8 @@ export default function Starboard() {
                 <label>Ignore messages younger than (minutes)</label>
                 <input
                   type="number"
-                  min={0}
+                  min={limitOf(limits, 'boards[].minAgeMinutes').min}
+                  max={limitOf(limits, 'boards[].minAgeMinutes').max}
                   style={{ maxWidth: '100px' }}
                   value={b.minAgeMinutes}
                   onChange={(e) => updateBoard(b.key, { minAgeMinutes: Number(e.target.value) })}
@@ -222,7 +225,8 @@ export default function Starboard() {
                 </label>
                 <input
                   type="number"
-                  min={0}
+                  min={limitOf(limits, 'boards[].maxAgeMinutes').min}
+                  max={limitOf(limits, 'boards[].maxAgeMinutes').max}
                   style={{ maxWidth: '100px' }}
                   value={b.maxAgeMinutes}
                   onChange={(e) => updateBoard(b.key, { maxAgeMinutes: Number(e.target.value) })}

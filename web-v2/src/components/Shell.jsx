@@ -17,7 +17,7 @@ import useTopbarScrolled from './useTopbarScrolled.js';
 
 // Top-level layout for every V2 page: topbar (brand, server switcher — kept
 // out of the sidebar per request, it's app-wide not tied to one guild page —
-// and the link back to V1) plus the persistent left sidebar (Sidebar.jsx).
+// and the account menu) plus the persistent left sidebar (Sidebar.jsx).
 // Fetches the guild list once and hands it down via Outlet context so
 // GuildPicker doesn't need its own separate fetch of the same list.
 function SignedInShell() {
@@ -96,12 +96,6 @@ function SignedInShell() {
           <span>Sylo</span>
         </Link>
         <ServerSwitcher guilds={guilds} activeGuildId={lastGuildId} onSelectGuild={selectGuild} />
-        {/* Two labels, one shown at a time — styles.css swaps to the short
-            one on narrow screens so the topbar keeps to one row. */}
-        <a className="v2-classic-link" href="/?classic=1" aria-label="Back to classic dashboard">
-          <span className="v2-classic-full">Back to classic dashboard</span>
-          <span className="v2-classic-short">Classic</span>
-        </a>
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
         <AccountMenu />
       </header>

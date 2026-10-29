@@ -14,6 +14,8 @@ import {
 import { buildPayload } from './messageCreator.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
+import { normaliseEmbedSpec } from './welcomeChannel.js';
 
 export const SCHEDULE_PRESETS = [
   ['1', 'Every minute'],
@@ -41,8 +43,59 @@ export const WEEKDAYS = [
   [6, 'Sat'],
 ];
 
-export const MIN_INTERVAL_MINUTES = 1;
-export const MAX_INTERVAL_MINUTES = 40320; // 4 weeks
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  name: { maxLength: 100 },
+  content: { maxLength: 2000 },
+  intervalMinutes: { min: 1, max: 40320 }, // up to 4 weeks
+};
+export const MIN_INTERVAL_MINUTES = LIMITS.intervalMinutes.min;
+export const MAX_INTERVAL_MINUTES = LIMITS.intervalMinutes.max;
+
+function toMs(v) {
+  const t = new Date(String(v ?? '')).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * Coerce a reminder as the dashboard sends it (create, edit and test) into the shape the database
+ * stores. Not a settings object: reminders are rows of their own table.
+ */
+export function normaliseReminderConfig(body = {}) {
+  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
+  let embed = null;
+  let content = body.content;
+  // Embed mode's "text above the embed" lives on the EmbedEditor's own spec
+  // (content:true), not the plain-text textarea used in text mode.
+  if (body.msgType === 'embed' && body.embedSpec && typeof body.embedSpec === 'object') {
+    embed = normaliseEmbedSpec(body.embedSpec);
+    content = body.embedSpec.content;
+  }
+  const spec = {
+    content: String(content ?? '').slice(0, LIMITS.content.maxLength),
+    embeds: embed ? [embed] : [],
+  };
+  const mode = body.mode === 'single' ? 'single' : 'multiple';
+  const intervalMinutes = Math.min(
+    MAX_INTERVAL_MINUTES,
+    Math.max(MIN_INTERVAL_MINUTES, Math.floor(Number(body.intervalMinutes)) || 60)
+  );
+  const days = (Array.isArray(body.days) ? body.days : []).map(Number).filter((n) => n >= 0 && n <= 6);
+  return {
+    name:
+      String(body.name ?? '')
+        .trim()
+        .slice(0, LIMITS.name.maxLength) || 'Untitled reminder',
+    channelId,
+    spec,
+    mode,
+    intervalMinutes,
+    days: days.length ? days : [0, 1, 2, 3, 4, 5, 6],
+    startAt: body.enableStart ? toMs(body.startAt) : null,
+    endAt: body.enableEnd ? toMs(body.endAt) : null,
+    runAt: mode === 'single' ? toMs(body.runAt) : null,
+  };
+}
 const TICK_MS = 20_000;
 
 const MODULE_ID = 'reminders';
@@ -91,7 +144,6 @@ async function tick() {
   }
 }
 
-const timer = setInterval(() => {
+every('reminders', TICK_MS, () => {
   tick().catch((err) => log.error('module:reminders', 'tick failed:', err.message));
-}, TICK_MS);
-timer.unref();
+});

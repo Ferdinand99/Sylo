@@ -1,6 +1,7 @@
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -25,6 +26,7 @@ const fromForm = (form) => ({
 });
 
 export default function ServerStats() {
+  const limits = useModuleLimits('server-stats');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('server-stats', {
     toForm,
     fromForm,
@@ -90,6 +92,7 @@ export default function ServerStats() {
               </label>
               <input
                 type="text"
+                maxLength={limitOf(limits, 'channels[].template').maxLength}
                 placeholder="Members: {count}"
                 value={c.template}
                 onChange={(e) => updateRow(c.key, { template: e.target.value })}
@@ -97,7 +100,12 @@ export default function ServerStats() {
             </div>
           </div>
         ))}
-        <button type="button" className="v2-btn-ghost" onClick={addRow}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addRow}
+          disabled={form.channels.length >= (limitOf(limits, 'channels').maxItems ?? Infinity)}
+        >
           + Add stat channel
         </button>
 
@@ -106,8 +114,8 @@ export default function ServerStats() {
           <input
             id="refreshMinutes"
             type="number"
-            min={5}
-            max={60}
+            min={limitOf(limits, 'refreshMinutes').min}
+            max={limitOf(limits, 'refreshMinutes').max}
             value={form.refreshMinutes}
             onChange={(e) => setForm((f) => ({ ...f, refreshMinutes: Number(e.target.value) }))}
           />

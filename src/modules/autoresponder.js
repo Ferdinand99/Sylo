@@ -19,6 +19,14 @@ import { sweepMap } from '../lib/sweepMap.js';
 export const AR_MATCH_MODES = ['contains', 'exact', 'startswith', 'wholeword'];
 export const AR_PLACEHOLDERS = ['{user}', '{username}', '{server}', '{channel}'];
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  cooldownSeconds: { min: 0, max: 300 },
+  responders: { maxItems: 100 },
+  'responders[].trigger': { maxLength: 200 },
+  'responders[].response': { maxLength: 2000 },
+};
+
 const clampInt = (v, min, max, dflt) => {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : dflt;
@@ -28,22 +36,22 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export function normaliseAutoresponder(raw = {}) {
   return {
-    cooldownSeconds: clampInt(raw.cooldownSeconds, 0, 300, 2),
+    cooldownSeconds: clampInt(raw.cooldownSeconds, LIMITS.cooldownSeconds.min, LIMITS.cooldownSeconds.max, 2),
     ignoreChannels: idList(raw.ignoreChannels),
     ignoreRoles: idList(raw.ignoreRoles),
     responders: (Array.isArray(raw.responders) ? raw.responders : [])
       .map((r) => ({
         trigger: String(r.trigger ?? '')
           .trim()
-          .slice(0, 200),
+          .slice(0, LIMITS['responders[].trigger'].maxLength),
         match: AR_MATCH_MODES.includes(r.match) ? r.match : 'contains',
-        response: String(r.response ?? '').slice(0, 2000),
+        response: String(r.response ?? '').slice(0, LIMITS['responders[].response'].maxLength),
         embed: Boolean(r.embed),
         embedColor: /^#?[0-9a-fA-F]{6}$/.test(r.embedColor ?? '') ? r.embedColor.replace('#', '') : '5b7cfa',
         deleteTrigger: Boolean(r.deleteTrigger),
       }))
       .filter((r) => r.trigger !== '' && r.response.trim() !== '')
-      .slice(0, 100),
+      .slice(0, LIMITS.responders.maxItems),
   };
 }
 

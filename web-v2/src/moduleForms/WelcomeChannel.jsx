@@ -13,9 +13,9 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { isDirty } from '../components/formEqual.js';
 import { useUnsavedChangesGuard } from '../components/useUnsavedChangesGuard.js';
 import EmbedCard, { EmbedToolbar, pickImage, newKey } from '../components/EmbedCard.jsx';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
-const MAX_ITEMS = 10;
 
 function normItem(e = {}) {
   return {
@@ -70,6 +70,7 @@ function formToSpec(form) {
 // A "banner" element is just a big image + caption — everything else in
 // normaliseEmbedSpec (title/author/fields/footer/…) stays blank for it.
 function BannerCard({ item, onChange, toolbar }) {
+  const embedLimits = useModuleLimits('_embed');
   return (
     <div className="v2-embed-preview">
       <EmbedToolbar toolbar={toolbar} />
@@ -85,7 +86,7 @@ function BannerCard({ item, onChange, toolbar }) {
         <input
           className="v2-embed-input"
           placeholder="Caption (optional)"
-          maxLength={4096}
+          maxLength={limitOf(embedLimits, 'description').maxLength}
           value={item.description}
           onChange={(e) => onChange({ ...item, description: e.target.value })}
         />
@@ -96,6 +97,7 @@ function BannerCard({ item, onChange, toolbar }) {
 
 export default function WelcomeChannel() {
   const { guildId } = useParams();
+  const limits = useModuleLimits('welcome-channel');
   const [state, setState] = useState({ loading: true, data: null, error: null });
   const [form, setForm] = useState(null);
   const [channelId, setChannelId] = useState('');
@@ -129,7 +131,8 @@ export default function WelcomeChannel() {
   if (state.loading || !form) return <p className="v2-state">Loading…</p>;
 
   const d = state.data;
-  const full = form.items.length >= MAX_ITEMS;
+  const maxItems = limitOf(limits, 'spec.embeds').maxItems ?? Infinity;
+  const full = form.items.length >= maxItems;
 
   const addPreset = (id) => {
     if (full) return;
@@ -142,7 +145,7 @@ export default function WelcomeChannel() {
   const removeItem = (i) => setForm((f) => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
   const duplicateItem = (i) =>
     setForm((f) => {
-      if (f.items.length >= MAX_ITEMS) return f;
+      if (f.items.length >= maxItems) return f;
       const copy = normItem({ ...f.items[i], fields: f.items[i].fields.map((field) => ({ ...field })) });
       const items = [...f.items];
       items.splice(i + 1, 0, copy);
@@ -259,6 +262,7 @@ export default function WelcomeChannel() {
         </label>
         <textarea
           rows={2}
+          maxLength={limitOf(limits, 'spec.content').maxLength}
           placeholder="Welcome to {server}!"
           value={form.content}
           onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
