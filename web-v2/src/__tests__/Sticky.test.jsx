@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Sticky from '../moduleForms/Sticky.jsx';
+import { resetModuleLimits } from '../components/useModuleLimits.js';
 import { renderAtGuild } from './routerHarness.jsx';
 
 vi.mock('../api.js', () => ({
@@ -8,11 +9,22 @@ vi.mock('../api.js', () => ({
   ApiError: class ApiError extends Error {},
   getModuleConfig: vi.fn(),
   saveModuleConfig: vi.fn(),
+  getModuleLimits: vi.fn(),
 }));
-const { getModuleConfig, saveModuleConfig } = await import('../api.js');
+const { getModuleConfig, saveModuleConfig, getModuleLimits } = await import('../api.js');
 
 const GUILD = '123456789012345678';
 const CHANNEL = '555555555555555555';
+
+// What GET /api/v2/modules/limits answers for the sticky module (src/modules/sticky.js, LIMITS).
+const limits = {
+  sticky: {
+    stickies: { maxItems: 50 },
+    'stickies[].content': { maxLength: 2000 },
+    'stickies[].cooldownSeconds': { min: 0, max: 3600 },
+  },
+  _embed: {},
+};
 
 const config = {
   stickies: [
@@ -28,6 +40,8 @@ const config = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  resetModuleLimits();
+  getModuleLimits.mockResolvedValue(limits);
   getModuleConfig.mockResolvedValue({ config, channels: [{ id: CHANNEL, name: 'general' }] });
 });
 
@@ -38,7 +52,7 @@ describe('Sticky form', () => {
     expect(await screen.findByRole('heading', { name: 'Sticky messages' })).toBeTruthy();
     const message = screen.getByPlaceholderText(/Message to keep at the bottom/);
     expect(message.value).toBe('Read the rules');
-    expect(message.maxLength).toBe(2000);
+    await waitFor(() => expect(message.maxLength).toBe(2000));
     expect(screen.getByRole('option', { name: '#general' }).selected).toBe(true);
     expect(getModuleConfig).toHaveBeenCalledWith(GUILD, 'sticky');
   });
@@ -78,7 +92,7 @@ describe('Sticky form', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ Add channel' }));
     const messages = screen.getAllByPlaceholderText(/Message to keep at the bottom/);
     expect(messages).toHaveLength(2);
-    expect(messages[1].maxLength).toBe(2000);
+    await waitFor(() => expect(messages[1].maxLength).toBe(2000));
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(saveModuleConfig).toHaveBeenCalledTimes(1));
@@ -92,5 +106,33 @@ describe('Sticky form', () => {
       repostOnBots: false,
       cooldownSeconds: 0,
     });
+  });
+});
+
+describe('Sticky form limits', () => {
+  it('takes the cooldown range from the server limits', async () => {
+    renderAtGuild(<Sticky />, GUILD);
+    const cooldown = await screen.findByRole('spinbutton');
+    await waitFor(() => expect(cooldown.max).toBe('3600'));
+    expect(cooldown.min).toBe('0');
+  });
+
+  it('stops adding channels at the row limit', async () => {
+    getModuleLimits.mockResolvedValue({
+      ...limits,
+      sticky: { ...limits.sticky, stickies: { maxItems: 1 } },
+    });
+    renderAtGuild(<Sticky />, GUILD);
+    await screen.findByPlaceholderText(/Message to keep at the bottom/);
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ Add channel' }).disabled).toBe(true));
+  });
+
+  it('still renders and edits when the limits cannot be loaded', async () => {
+    getModuleLimits.mockRejectedValue(new Error('offline'));
+    renderAtGuild(<Sticky />, GUILD);
+    const message = await screen.findByPlaceholderText(/Message to keep at the bottom/);
+    expect(message.value).toBe('Read the rules');
+    expect(message.hasAttribute('maxlength')).toBe(false);
+    expect(screen.getByRole('button', { name: '+ Add channel' }).disabled).toBe(false);
   });
 });

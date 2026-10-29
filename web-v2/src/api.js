@@ -90,6 +90,9 @@ export const setModulesEnabledBulk = (guildId, ids, enabled) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/bulk`, { ids, enabled });
 export const getPlatformInfo = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/platform`);
 
+// The setting limits of every module (see components/useModuleLimits.js).
+export const getModuleLimits = () => apiFetch('/api/v2/modules/limits');
+
 // Generic per-module config load/save — every module's V2 form (web-v2/src/
 // moduleForms/) uses these same two calls, one dedicated backend route per
 // module (see v2Api.js's "Per-module config" section) behind them.

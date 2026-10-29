@@ -4,6 +4,7 @@ import EmbedEditor from '../components/EmbedEditor.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { useModuleLimits } from '../components/useModuleLimits.js';
 
 // Poll/results messages only expose content, title, colour, footer and image
 // (src/modules/polls.js's normMsg) — the description is always Sylo's own
@@ -53,6 +54,14 @@ function ResultsBodyPreview() {
   );
 }
 
+// The embed editor's content, title and footer limits for one of the two messages. Its footer
+// field is the "footer" key here (not footerText), so the limit is handed over under footerText.
+const embedLimits = (limits, key) => ({
+  content: limits[`${key}.content`],
+  title: limits[`${key}.title`],
+  footerText: limits[`${key}.footer`],
+});
+
 const pick = (config) => ({
   voteRoleMode: config.voteRoleMode,
   voteRoles: config.voteRoles,
@@ -62,6 +71,7 @@ const pick = (config) => ({
 
 export default function Polls() {
   const cmd = useCmd();
+  const limits = useModuleLimits('polls');
   const {
     data: d,
     form,
@@ -120,6 +130,7 @@ export default function Polls() {
             spec={form.pollMessage}
             onChange={(pollMessage) => setForm((f) => ({ ...f, pollMessage }))}
             {...EMBED_OPTS}
+            limits={embedLimits(limits, 'pollMessage')}
             fixedBody={<PollBodyPreview />}
             placeholders={{ title: '📊 {question}', footer: '{ends} · {mode}' }}
             vars={toVars(d.pollPlaceholders)}
@@ -134,6 +145,7 @@ export default function Polls() {
             spec={form.resultsMessage}
             onChange={(resultsMessage) => setForm((f) => ({ ...f, resultsMessage }))}
             {...EMBED_OPTS}
+            limits={embedLimits(limits, 'resultsMessage')}
             fixedBody={<ResultsBodyPreview />}
             placeholders={{
               title: '📊 Results — {question}',

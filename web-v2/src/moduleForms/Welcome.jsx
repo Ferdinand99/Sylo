@@ -6,10 +6,12 @@ import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 export default function Welcome() {
   const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } =
     useModuleForm('welcome');
+  const limits = useModuleLimits('welcome');
 
   if (status === 'error') return <LoadError error={error} what="Welcome settings" />;
   if (status === 'loading') return <p className="v2-state">Loading…</p>;
@@ -52,6 +54,7 @@ export default function Welcome() {
             <textarea
               id="joinMessage"
               rows={3}
+              maxLength={limitOf(limits, 'joinMessage').maxLength}
               placeholder="Welcome {user} to {server}!"
               value={form.joinMessage}
               onChange={(e) => set({ joinMessage: e.target.value })}
@@ -80,6 +83,7 @@ export default function Welcome() {
             <input
               id="cardBackground"
               type="url"
+              maxLength={limitOf(limits, 'cardBackground').maxLength}
               placeholder="https://…/banner.png"
               value={form.cardBackground}
               onChange={(e) => set({ cardBackground: e.target.value })}
@@ -104,6 +108,7 @@ export default function Welcome() {
             <textarea
               id="dmMessage"
               rows={3}
+              maxLength={limitOf(limits, 'dmMessage').maxLength}
               placeholder="Hi {user.name}, welcome to {server}!"
               value={form.dmMessage}
               onChange={(e) => set({ dmMessage: e.target.value })}
@@ -136,6 +141,7 @@ export default function Welcome() {
             <textarea
               id="leaveMessage"
               rows={3}
+              maxLength={limitOf(limits, 'leaveMessage').maxLength}
               placeholder="{user.tag} left the server."
               value={form.leaveMessage}
               onChange={(e) => set({ leaveMessage: e.target.value })}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import EmbedCard, { autoGrow, newKey } from './EmbedCard.jsx';
 import { initial } from '../util.js';
+import { limitOf } from './useModuleLimits.js';
 
 // Shared single-embed editor — the V2 counterpart to V1's Alpine
 // `embedEditor` (src/web/public/alpine-components.js, `partials/embed-editor.ejs`),
@@ -76,6 +77,7 @@ export default function EmbedEditor({
   vars = [],
   placeholders = {},
   botName = 'Sylo',
+  limits = null,
 }) {
   const opts = { content, author, description, fields, thumb, footerIcon, footerKey, timestamp };
   const [e, setE] = useState(() => initialState(spec, { footerKey, defaultColor }));
@@ -116,7 +118,7 @@ export default function EmbedEditor({
           className="v2-msg-content"
           aria-label="Message text"
           rows={1}
-          maxLength={2000}
+          maxLength={limitOf(limits, 'content').maxLength}
           placeholder={placeholders.content || 'Write your message here!'}
           value={e.content}
           onChange={(ev) => {
@@ -143,6 +145,7 @@ export default function EmbedEditor({
         fixedBody={fixedBody}
         placeholders={placeholders}
         onFieldFocus={setLastFocused}
+        limits={limits}
       />
 
       {vars.length ? (

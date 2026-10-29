@@ -16,9 +16,22 @@ import { setGuildModule, getGuildModule } from '../db/modules.js';
 import { buildEmbed } from './messageCreator.js';
 import { normaliseEmbedSpec } from './welcomeChannel.js';
 
+/**
+ * Setting limits, served to the dashboard (modules/limits.js). `stickies` is one per channel; the
+ * cap keeps a crafted save from storing thousands.
+ */
+export const LIMITS = {
+  stickies: { maxItems: 50 },
+  'stickies[].content': { maxLength: 2000 },
+  'stickies[].cooldownSeconds': { min: 0, max: 3600 },
+};
+const MAX_STICKIES = LIMITS.stickies.maxItems;
+const MAX_CONTENT = LIMITS['stickies[].content'].maxLength;
+const MIN_COOLDOWN_SETTING_S = LIMITS['stickies[].cooldownSeconds'].min;
+const MAX_COOLDOWN_S = LIMITS['stickies[].cooldownSeconds'].max;
+
 const DEFAULT_COOLDOWN_MS = 4000;
 const MIN_COOLDOWN_S = 3;
-const MAX_COOLDOWN_S = 3600;
 const isId = (v) => /^\d{17,20}$/.test(v ?? '');
 
 const embedIsEmpty = (e) =>
@@ -37,8 +50,6 @@ const embedIsEmpty = (e) =>
  * lastMessageId — callers on both the V1 and V2 dashboard routes already
  * have it at hand, so it's a plain param rather than a DB read in here.
  */
-const MAX_STICKIES = 50; // one per channel; a cap keeps a crafted save from storing thousands
-
 export function normaliseStickyConfig(raw = {}, prev = {}) {
   const prevById = new Map((Array.isArray(prev.stickies) ? prev.stickies : []).map((s) => [s.channelId, s]));
   const stickies = (Array.isArray(raw.stickies) ? raw.stickies : [])
@@ -46,11 +57,14 @@ export function normaliseStickyConfig(raw = {}, prev = {}) {
       const embed = s.embed && typeof s.embed === 'object' ? normaliseEmbedSpec(s.embed) : null;
       return {
         channelId: s.channelId,
-        content: String(s.content ?? '').slice(0, 2000),
+        content: String(s.content ?? '').slice(0, MAX_CONTENT),
         embed: embedIsEmpty(embed) ? null : embed,
         lastMessageId: prevById.get(s.channelId)?.lastMessageId ?? null,
         repostOnBots: Boolean(s.repostOnBots),
-        cooldownSeconds: Math.max(0, Math.min(MAX_COOLDOWN_S, Math.floor(Number(s.cooldownSeconds)) || 0)),
+        cooldownSeconds: Math.max(
+          MIN_COOLDOWN_SETTING_S,
+          Math.min(MAX_COOLDOWN_S, Math.floor(Number(s.cooldownSeconds)) || 0)
+        ),
       };
     })
     .filter((s) => isId(s.channelId) && (s.content.trim() !== '' || s.embed))

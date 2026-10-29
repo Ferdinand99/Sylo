@@ -10,6 +10,7 @@ import { listDevLogEntries } from '../../db/devLogEntries.js';
 import { openTicketCount, unreadTicketCount } from '../../db/tickets.js';
 import { allGuilds, clientOfGuild, primaryClient } from '../../platform/platformOf.js';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { Router, raw } from 'express';
 import { PermissionFlagsBits } from 'discord.js';
 import {
@@ -117,7 +118,8 @@ import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
 import { syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
-import { WELCOME_PLACEHOLDERS } from '../../modules/welcome.js';
+import { WELCOME_PLACEHOLDERS, normaliseWelcomeConfig } from '../../modules/welcome.js';
+import { MODULE_LIMITS } from '../../modules/limits.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
 import { normaliseThresholds, THRESHOLD_ACTIONS } from '../../modules/moderation.js';
@@ -346,6 +348,16 @@ router.get('/invites', (req, res) => {
 // req.session.csrf, for the x-csrf-token header on state-changing calls.
 router.get('/csrf', (req, res) => {
   res.json({ token: req.session?.csrf ?? null });
+});
+
+// The setting limits of every module (max lengths, ranges, item counts), so the forms do not
+// carry their own copies. Static for the life of the process: the body and its ETag are built
+// once, and the browser may reuse it for a few minutes. Express answers 304 on a matching ETag.
+const LIMITS_BODY = JSON.stringify(MODULE_LIMITS);
+const LIMITS_ETAG = `"${createHash('sha256').update(LIMITS_BODY).digest('base64url').slice(0, 22)}"`;
+router.get('/modules/limits', (req, res) => {
+  res.set({ ETag: LIMITS_ETAG, 'Cache-Control': 'private, max-age=300' });
+  res.type('json').send(LIMITS_BODY);
 });
 
 // Looks the server up for every /guilds/:guildId route and answers a JSON 404 when the bot
@@ -579,27 +591,8 @@ router.post(
   '/guilds/:guildId/modules/welcome/config',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    const chan = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
-    const joinOn = Boolean(req.body.joinEnabled);
-    const dmOn = Boolean(req.body.dmEnabled);
-    const leaveOn = Boolean(req.body.leaveEnabled);
-    const cardBg = String(req.body.cardBackground ?? '').trim();
-    const config = {
-      joinEnabled: joinOn,
-      joinChannel: joinOn ? chan(req.body.joinChannel) : '',
-      joinMessage: joinOn ? String(req.body.joinMessage ?? '').slice(0, 1500) : '',
-      leaveEnabled: leaveOn,
-      leaveChannel: leaveOn ? chan(req.body.leaveChannel) : '',
-      leaveMessage: leaveOn ? String(req.body.leaveMessage ?? '').slice(0, 1500) : '',
-      dmEnabled: dmOn,
-      dmMessage: dmOn ? String(req.body.dmMessage ?? '').slice(0, 1500) : '',
-      useEmbed: Boolean(req.body.useEmbed),
-      card: Boolean(req.body.card),
-      cardBackground: /^https:\/\/\S+$/i.test(cardBg) ? cardBg.slice(0, 500) : '',
-    };
-    const autoOn = Boolean(req.body.autoroleEnabled);
-    config.autoroleEnabled = autoOn;
-    const newRoles = autoOn ? idList(req.body.autoroles) : [];
+    const config = normaliseWelcomeConfig(req.body);
+    const newRoles = config.autoroleEnabled ? idList(req.body.autoroles) : [];
     const rolesMod = await getGuildModule(guild.id, 'roles');
     await setGuildModule(guild.id, 'roles', {
       enabled: rolesMod.enabled || newRoles.length > 0,

@@ -5,6 +5,7 @@
 // click-into-the-preview editing UX via components/EmbedEditor.jsx, instead
 // of a second, visually different embed editor.
 import ColorPicker from './ColorPicker.jsx';
+import { limitOf, useModuleLimits } from './useModuleLimits.js';
 
 const URL_RE = /^https?:\/\/\S+$/i;
 
@@ -120,7 +121,13 @@ export default function EmbedCard({
   placeholders = {},
   toolbar = null,
   onFieldFocus = null,
+  limits = null,
 }) {
+  // Field limits come from the server's `_embed` entry. A module whose embed is narrower (polls)
+  // passes its own for the paths it changes (title, footerText, …) in `limits`.
+  const embedLimits = useModuleLimits('_embed');
+  const lim = (path) => limits?.[path] ?? limitOf(embedLimits, path);
+  const fieldsFull = embed.fields.length >= (lim('fields').maxItems ?? Infinity);
   const set = (patch) => onChange({ ...embed, ...patch });
   const setField = (key, patch) =>
     onChange({ ...embed, fields: embed.fields.map((f) => (f.key === key ? { ...f, ...patch } : f)) });
@@ -154,7 +161,7 @@ export default function EmbedCard({
                   className="v2-embed-input v2-embed-author"
                   aria-label="Author name"
                   placeholder={placeholders.author || 'Author name'}
-                  maxLength={256}
+                  maxLength={lim('authorName').maxLength}
                   value={embed.authorName}
                   onChange={(e) => set({ authorName: e.target.value })}
                   onFocus={() => onFieldFocus?.('authorName')}
@@ -166,7 +173,7 @@ export default function EmbedCard({
               className="v2-embed-input v2-embed-title"
               aria-label="Embed title"
               placeholder={placeholders.title || 'Title'}
-              maxLength={256}
+              maxLength={lim('title').maxLength}
               value={embed.title}
               onChange={(e) => set({ title: e.target.value })}
               onFocus={() => onFieldFocus?.('title')}
@@ -177,7 +184,7 @@ export default function EmbedCard({
                 aria-label="Embed description"
                 placeholder={placeholders.description || 'Write your message here!'}
                 rows={1}
-                maxLength={4096}
+                maxLength={lim('description').maxLength}
                 value={embed.description}
                 onChange={(e) => {
                   autoGrow(e);
@@ -211,7 +218,7 @@ export default function EmbedCard({
                           className="v2-embed-input v2-embed-field-name"
                           aria-label="Field name"
                           placeholder="Field name"
-                          maxLength={256}
+                          maxLength={lim('fields[].name').maxLength}
                           value={f.name}
                           onChange={(e) => setField(f.key, { name: e.target.value })}
                         />
@@ -219,7 +226,7 @@ export default function EmbedCard({
                           className="v2-embed-input v2-embed-field-value"
                           aria-label="Field value"
                           placeholder="Field value"
-                          maxLength={1024}
+                          maxLength={lim('fields[].value').maxLength}
                           value={f.value}
                           onChange={(e) => setField(f.key, { value: e.target.value })}
                         />
@@ -227,7 +234,7 @@ export default function EmbedCard({
                     ))}
                   </div>
                 ) : null}
-                <button type="button" className="v2-embed-addfield" onClick={addField}>
+                <button type="button" className="v2-embed-addfield" onClick={addField} disabled={fieldsFull}>
                   + Add field
                 </button>
               </>
@@ -267,7 +274,7 @@ export default function EmbedCard({
             className="v2-embed-input v2-embed-footer"
             aria-label="Footer text"
             placeholder={placeholders.footer || 'Footer text'}
-            maxLength={2048}
+            maxLength={lim('footerText').maxLength}
             value={footer}
             onChange={(e) => setFooter(e.target.value)}
             onFocus={() => onFieldFocus?.(footerKey)}

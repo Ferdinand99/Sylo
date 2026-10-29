@@ -19,6 +19,42 @@ export const WELCOME_PLACEHOLDERS = [
   '{memberCount}',
 ];
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  joinMessage: { maxLength: 1500 },
+  leaveMessage: { maxLength: 1500 },
+  dmMessage: { maxLength: 1500 },
+  cardBackground: { maxLength: 500 },
+};
+
+const chan = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
+
+/**
+ * Coerce a submitted welcome config into the canonical shape. Each message and channel is only
+ * kept while its switch is on. `autoroleEnabled` is the switch only; the roles themselves live in
+ * the roles module and are written by the route next to this config.
+ */
+export function normaliseWelcomeConfig(raw = {}) {
+  const joinOn = Boolean(raw.joinEnabled);
+  const dmOn = Boolean(raw.dmEnabled);
+  const leaveOn = Boolean(raw.leaveEnabled);
+  const cardBg = String(raw.cardBackground ?? '').trim();
+  return {
+    joinEnabled: joinOn,
+    joinChannel: joinOn ? chan(raw.joinChannel) : '',
+    joinMessage: joinOn ? String(raw.joinMessage ?? '').slice(0, LIMITS.joinMessage.maxLength) : '',
+    leaveEnabled: leaveOn,
+    leaveChannel: leaveOn ? chan(raw.leaveChannel) : '',
+    leaveMessage: leaveOn ? String(raw.leaveMessage ?? '').slice(0, LIMITS.leaveMessage.maxLength) : '',
+    dmEnabled: dmOn,
+    dmMessage: dmOn ? String(raw.dmMessage ?? '').slice(0, LIMITS.dmMessage.maxLength) : '',
+    useEmbed: Boolean(raw.useEmbed),
+    card: Boolean(raw.card),
+    cardBackground: /^https:\/\/\S+$/i.test(cardBg) ? cardBg.slice(0, LIMITS.cardBackground.maxLength) : '',
+    autoroleEnabled: Boolean(raw.autoroleEnabled),
+  };
+}
+
 function fill(template, member) {
   if (!template) return '';
   return template
