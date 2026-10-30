@@ -22,42 +22,70 @@ public enum PushRelay {
 // or revoking the device ends them at once.
 extension Endpoints {
     /// `POST /api/mobile/push`: turns ticket notifications on for this sign-in, with this device's
-    /// APNs token (a server with its own APNs key) or the relay's token for it (a server that
-    /// sends through the relay, which then never sees the device token). 400 `invalid_push_token`
-    /// when the token is refused, `relay_token_required` / `device_token_required` for the wrong
-    /// kind; 503 `push_unavailable` when the server can't send notifications.
+    /// APNs token (a server with its own APNs key), the relay's token for it (a server that sends
+    /// through the relay, which then never sees the device token) or a Postal Pigeon handle (a
+    /// server that announces `push-pigeon`; the app registered at Pigeon itself and the server
+    /// only ever gets the handle). 400 `invalid_push_token` when the token or handle is refused,
+    /// `relay_token_required` / `device_token_required` for the wrong kind, `pigeon_handle_required`
+    /// from a server that only sends through Pigeon; 503 `push_unavailable` when the server can't
+    /// send notifications.
     public struct RegisterPush: APIEndpoint {
         public typealias Response = OKResponse
         /// The device token in lowercase hex (``PushToken/hex(_:)``), when sent directly.
         public let deviceToken: String?
         /// The relay's token for this device, when the server sends through the relay.
         public let relayToken: String?
+        /// The Pigeon handle (`hrh_…`), when the server sends through Pigeon.
+        public let pigeonHandle: String?
         public let environment: PushEnvironment
 
         public init(deviceToken: String, environment: PushEnvironment) {
             self.deviceToken = deviceToken
             self.relayToken = nil
+            self.pigeonHandle = nil
             self.environment = environment
         }
 
         public init(relayToken: String, environment: PushEnvironment) {
             self.deviceToken = nil
             self.relayToken = relayToken
+            self.pigeonHandle = nil
+            self.environment = environment
+        }
+
+        public init(pigeonHandle: String, environment: PushEnvironment) {
+            self.deviceToken = nil
+            self.relayToken = nil
+            self.pigeonHandle = pigeonHandle
             self.environment = environment
         }
 
         public var path: String { "/api/mobile/push" }
         public var method: HTTPMethod { .post }
         public var body: (any Encodable & Sendable)? {
-            Body(deviceToken: deviceToken, relayToken: relayToken, environment: environment)
+            Body(deviceToken: deviceToken, relayToken: relayToken, pigeonHandle: pigeonHandle, environment: environment)
         }
 
         /// Only the token given is sent (nil fields are left out).
         private struct Body: Encodable, Sendable {
             let deviceToken: String?
             let relayToken: String?
+            let pigeonHandle: String?
             let environment: PushEnvironment
         }
+    }
+
+    /// `GET /api/mobile/push/events/:ref`: the text of a notification that came through Pigeon,
+    /// which carries none. Only for the app token the notification was made for; 404 for anything
+    /// else (unknown, expired, someone else's, or a ticket this account may no longer see).
+    public struct PushEvent: APIEndpoint {
+        public typealias Response = PushEventContent
+        /// The reference from the push (`hr.r`).
+        public let ref: String
+
+        public init(ref: String) { self.ref = ref }
+
+        public var path: String { "/api/mobile/push/events/\(ref.encodedPathSegment)" }
     }
 
     /// `POST <relay>/api/push-relay/v1/register`: registers this device with the notification

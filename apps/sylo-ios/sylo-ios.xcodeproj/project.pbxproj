@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0A00456F30950175006F7A4E /* SyloNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0A00456830950175006F7A4E /* SyloNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		0A00E7573083B8350011006B /* SyloKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0A00E7563083B8350011006B /* SyloKit */; };
+		0A00E7593083B8350011006B /* SyloKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0A00E75A3083B8350011006B /* SyloKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -74,6 +75,7 @@
 		0A00456530950175006F7A4E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				0A00E7593083B8350011006B /* SyloKit in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -139,6 +141,9 @@
 				0A00456930950175006F7A4E /* SyloNotificationService */,
 			);
 			name = SyloNotificationService;
+			packageProductDependencies = (
+				0A00E75A3083B8350011006B /* SyloKit */,
+			);
 			productName = SyloNotificationService;
 			productReference = 0A00456830950175006F7A4E /* SyloNotificationService.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -167,6 +172,7 @@
 			knownRegions = (
 				en,
 				Base,
+				nb,
 			);
 			mainGroup = 000000000000000000000001;
 			minimizedProjectReferenceProxies = 1;
@@ -448,6 +454,7 @@
 		0A00457130950175006F7A4E /* Debug configuration for PBXNativeTarget "SyloNotificationService" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = SyloNotificationService/SyloNotificationService.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -483,6 +490,7 @@
 		0A00457230950175006F7A4E /* Release configuration for PBXNativeTarget "SyloNotificationService" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = SyloNotificationService/SyloNotificationService.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -554,6 +562,10 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		0A00E7563083B8350011006B /* SyloKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SyloKit;
+		};
+		0A00E75A3083B8350011006B /* SyloKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SyloKit;
 		};

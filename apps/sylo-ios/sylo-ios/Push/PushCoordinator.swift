@@ -41,11 +41,18 @@ final class PushCoordinator: NSObject {
     @ObservationIgnored private var sentToken: String?
     @ObservationIgnored private var isSending = false
 
-    init(session: AppSession, authorization: Authorization = .notDetermined) {
+    /// - Parameter pigeon: The Postal Pigeon handles for servers that send through it; nil (previews)
+    ///   leaves that way out.
+    init(session: AppSession, authorization: Authorization = .notDetermined, pigeon: PushHandleManager? = nil) {
         self.session = session
         self.authorization = authorization
-        self.settings = NotificationSettingsModel(session: session)
+        self.settings = NotificationSettingsModel(session: session, pigeon: pigeon)
         super.init()
+    }
+
+    /// The coordinator the app runs with: notifications through Pigeon where the server sends that way.
+    static func live(session: AppSession) -> PushCoordinator {
+        PushCoordinator(session: session, pigeon: PushHandleManager.live(environment: environment))
     }
 
     // MARK: - Permission and device token
@@ -86,9 +93,17 @@ final class PushCoordinator: NSObject {
         await sendToken()
     }
 
-    /// Registers the device token for the signed-in server (directly, or through the official
-    /// relay: see ``NotificationSettingsModel/register(deviceToken:environment:)``), once per
-    /// sign-in and token, unless notifications were turned off in the app for that server.
+    /// The person signed in, out or to another server: a Pigeon handle for a server they are no
+    /// longer signed in to is taken down, and a server they just signed in to is set up again.
+    func sessionChanged() async {
+        sentToken = nil
+        await settings.reconcileHandles()
+        await sendToken()
+    }
+
+    /// Registers the device token for the signed-in server (through Pigeon, directly, or through
+    /// the official relay: see ``NotificationSettingsModel/register(deviceToken:environment:)``),
+    /// once per sign-in and token, unless notifications were turned off in the app for that server.
     func sendToken() async {
         guard let deviceToken, !isSending, case .signedIn(let server) = session.phase,
             !isTurnedOff(on: server)
@@ -156,7 +171,7 @@ final class PushCoordinator: NSObject {
     }
 
     /// Debug builds get development tokens from APNs; TestFlight and the App Store production ones.
-    private static var environment: PushEnvironment {
+    static var environment: PushEnvironment {
         #if DEBUG
         return .development
         #else

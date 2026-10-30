@@ -8,10 +8,17 @@ import Security
 /// mistaken for being signed out.
 public struct KeychainTokenStore: TokenStore {
     private let service: String
+    private let accessGroup: String?
 
-    /// - Parameter service: The Keychain service for all of the app's tokens (the app's bundle id).
-    public init(service: String) {
+    /// - Parameters:
+    ///   - service: The Keychain service for all of the app's tokens (the app's bundle id).
+    ///   - accessGroup: The Keychain access group of the items, with the team prefix resolved. Nil
+    ///     (the default) is the process's default group: the first entry of its
+    ///     `keychain-access-groups` entitlement, which is the same one for the app and its
+    ///     notification extension, so both see the same items.
+    public init(service: String, accessGroup: String? = nil) {
         self.service = service
+        self.accessGroup = accessGroup
     }
 
     public func token(for origin: String) throws -> StoredToken? {
@@ -61,13 +68,15 @@ public struct KeychainTokenStore: TokenStore {
     }
 
     /// The attributes that identify the item for `origin`.
-    private func itemQuery(for origin: String) -> [String: Any] {
-        [
+    func itemQuery(for origin: String) -> [String: Any] {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: origin,
             kSecAttrSynchronizable as String: false,
         ]
+        if let accessGroup { query[kSecAttrAccessGroup as String] = accessGroup }
+        return query
     }
 }
 #endif
