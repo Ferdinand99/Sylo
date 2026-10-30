@@ -137,9 +137,12 @@ public actor PushHandleManager {
             live = nil
         }
 
+        // Handles dealt with below are not orphans, whatever the listing above said.
+        var handled: Set<String> = []
         for entry in registry.entries() {
             if entry.server != server {
                 try? registry.remove(server: entry.server)
+                handled.insert(entry.relayHandleId)
                 if entry.relayDeviceId == registration.deviceId {
                     await revokeAtRelay(entry.relayHandleId, registration: registration)
                 }
@@ -147,11 +150,12 @@ public actor PushHandleManager {
                 || (live.map { !$0.contains(entry.relayHandleId) } ?? false)
             {
                 try? registry.remove(server: entry.server)
+                handled.insert(entry.relayHandleId)
             }
         }
 
         if let live {
-            let known = Set(registry.entries().map(\.relayHandleId))
+            let known = Set(registry.entries().map(\.relayHandleId)).union(handled)
             for handleId in live.subtracting(known) {
                 await revokeAtRelay(handleId, registration: registration)
             }
