@@ -20,7 +20,7 @@
 // replies is one notification per device per 30 seconds, and a device gets at most 60 an hour
 // (6 an hour, 3 at once, through Pigeon: its own limit, which this instance keeps to). Through
 // Pigeon the notifications for one ticket also replace each other on the phone (collapse).
-import { createHash, randomBytes } from 'node:crypto';
+import { createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { config } from '../config.js';
 import { BUILD } from '../bot/lib/buildInfo.js';
 import { log } from './log.js';
@@ -202,16 +202,20 @@ function allowHandleSend(handle) {
   return true;
 }
 
-/** A send to a handle Pigeon never accepted: one a minute across all devices, 3 an hour per token. */
-function allowUnprovenSend(tokenId) {
+/** May a handle Pigeon never accepted be sent to now: one a minute across all devices, 3 an hour per token. */
+function mayAttemptUnprovenSend(tokenId) {
   const t = now();
   if (t - lastUnprovenSend < UNPROVEN_GAP_MS) return false;
   const recent = (unprovenSends.get(tokenId) ?? []).filter((at) => t - at < HOUR_MS);
   unprovenSends.set(tokenId, recent);
-  if (recent.length >= UNPROVEN_PER_TOKEN_HOUR) return false;
-  recent.push(t);
+  return recent.length < UNPROVEN_PER_TOKEN_HOUR;
+}
+
+/** Count a send to an unproven handle (after the handle's own budget agreed to it). */
+function noteUnprovenSend(tokenId) {
+  const t = now();
+  unprovenSends.get(tokenId)?.push(t);
   lastUnprovenSend = t;
-  return true;
 }
 
 // --- registration -----------------------------------------------------------------------------
@@ -287,9 +291,26 @@ export async function unregisterDevice(tokenId) {
   if (previous?.pigeonHandle) await deletePushEventsOf(tokenId);
 }
 
-/** What Pigeon asks of `collapse`: at most 32 of A-Za-z0-9_-. One value per ticket (or the dev log). */
-export const collapseKey = (threadId) =>
-  createHash('sha256').update(String(threadId)).digest('base64url').slice(0, 32);
+let collapseSecret = null;
+
+/**
+ * What Pigeon asks of `collapse`: at most 32 of A-Za-z0-9_-. Notifications of one ticket (or of
+ * the dev log) on one device share a value, so they replace each other on the phone. Pigeon sees
+ * this value, so it is a keyed hash (HMAC-SHA256, the key derived from SESSION_SECRET for this
+ * purpose alone) of the app token and the thread: without the secret nobody can tell which
+ * server or ticket it stands for, and two devices of one person get different values.
+ * @param {string} tokenId  the recipient's app token
+ * @param {string} threadId  `${guildId}:${ticketId}`, or 'devlog'
+ */
+export function collapseKey(tokenId, threadId) {
+  collapseSecret ??= Buffer.from(
+    hkdfSync('sha256', String(config.sessionSecret), 'sylo', 'pigeon-collapse', 32)
+  );
+  return createHmac('sha256', collapseSecret)
+    .update(`${tokenId}\0${threadId}`)
+    .digest('base64url')
+    .slice(0, 32);
+}
 
 /** What the app is told about a notification when it asks for the text: no server address. */
 function pigeonContent(notification) {
@@ -312,7 +333,7 @@ function pigeonContent(notification) {
 async function deliverViaPigeon(recipient, notification) {
   const handle = recipient.pigeonHandle;
   const proven = recipient.pigeonProvenAt != null;
-  if (!proven && !allowUnprovenSend(recipient.id)) {
+  if (!proven && !mayAttemptUnprovenSend(recipient.id)) {
     inc('sylo_push_pigeon_total', { result: 'throttled' });
     return 'limited';
   }
@@ -320,9 +341,13 @@ async function deliverViaPigeon(recipient, notification) {
     inc('sylo_push_pigeon_total', { result: 'limited' });
     return 'limited';
   }
+  if (!proven) noteUnprovenSend(recipient.id);
   const ref = randomBytes(16).toString('base64url');
   await createPushEvent({ ref, tokenId: recipient.id, payload: pigeonContent(notification), now: now() });
-  const result = await pigeon().send(handle, { ref, collapse: collapseKey(notification.threadId) });
+  const result = await pigeon().send(handle, {
+    ref,
+    collapse: collapseKey(recipient.id, notification.threadId),
+  });
   inc('sylo_push_pigeon_total', { result: result.status });
   if (result.status === 'accepted' || result.status === 'duplicate') {
     if (!proven) await markApiTokenPigeonProven(recipient.id, handle, now());
@@ -336,9 +361,11 @@ async function deliverViaPigeon(recipient, notification) {
   // 'limited' is not tried again: the notification is dropped and the app lists tickets when opened.
   if (result.status === 'limited') return 'limited';
   // Unavailable, or a kind Pigeon does not take for this app: once a minute, with no identifiers.
+  // Debug only: this also runs for the dev-log notifications, and anything above debug would
+  // become a new dev-log entry, and so another notification.
   if (now() - lastUnavailableLog >= UNAVAILABLE_LOG_MS) {
     lastUnavailableLog = now();
-    log.warn('push', `Postal Pigeon did not take a notification (${result.reason ?? result.status}).`);
+    log.debug('push', `Postal Pigeon did not take a notification (${result.reason ?? result.status}).`);
   }
   return 'unavailable';
 }

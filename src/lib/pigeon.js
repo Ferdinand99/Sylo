@@ -15,6 +15,11 @@
 //   else: a timeout, a 5xx, a refusal, a registration that did not work).
 //
 // A handle and the credential are secrets: neither is logged or put in an error message.
+//
+// Logging: while sending, everything is logged at debug level only. A send also happens for the
+// dev-log notifications (src/lib/push.js notifyDevLogEvent), which are a dev-log sink, and a
+// warning or error from there would become a new dev-log entry and so another notification.
+// Only ensureRegistered(), which runs at start-up outside the sink, logs warnings and errors.
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, randomUUID } from 'node:crypto';
 import { log } from './log.js';
 import { solvePowInWorker } from './pigeonPow.js';
@@ -26,6 +31,7 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const REPLY_CAP = 64 * 1024;
 const SOLVE_LIMIT_MS = 4 * 60_000;
 const REGISTER_BACKOFF_MS = 60_000;
+const REJECTED_BACKOFF_MS = 10 * 60_000;
 const SUSPENDED_FOR_MS = 60 * 60_000;
 // Pigeon asks for 20 to 32 bits; anything harder is not an honest request.
 const MAX_DIFFICULTY = 32;
@@ -161,20 +167,23 @@ export function createPigeonClient({
     return { status: res.status, json, retryAfter: Number.isFinite(retryAfter) ? retryAfter : null };
   }
 
-  function suspend() {
+  /** Log at `level` when `loud` (start-up), otherwise at debug. */
+  const report = (loud, level, message) => (loud ? log[level] : log.debug)('pigeon', message);
+
+  function suspend(loud) {
     if (now() >= suspendedUntil) {
-      log.error('pigeon', 'Postal Pigeon has suspended this server; no push notifications for an hour.');
+      report(loud, 'error', 'Postal Pigeon has suspended this server; no push notifications for an hour.');
     }
     suspendedUntil = now() + SUSPENDED_FOR_MS;
   }
 
-  async function storedCredential(base) {
+  async function storedCredential(base, loud) {
     try {
       const [sealed, forUrl] = await Promise.all([store.get(SETTING_CREDENTIAL), store.get(SETTING_URL)]);
       if (!sealed || forUrl !== base) return null;
       const credential = open(secret, sealed);
       if (!credential)
-        log.warn('pigeon', 'The stored Pigeon credential cannot be opened; registering again.');
+        report(loud, 'warn', 'The stored Pigeon credential cannot be opened; registering again.');
       return credential;
     } catch {
       return null;
@@ -225,8 +234,8 @@ export function createPigeonClient({
   }
 
   /** The credential for `base`: the stored one (unless it is `stale`), else a new registration. */
-  async function credential(base, stale = null) {
-    const stored = await storedCredential(base);
+  async function credential(base, stale = null, loud = false) {
+    const stored = await storedCredential(base, loud);
     if (stored && stored !== stale) return stored;
     if (now() < backoffUntil) throw new PigeonFailure('transient', 'registration_backoff');
     // One registration at a time; whoever arrives meanwhile waits for it and uses its result.
@@ -237,10 +246,12 @@ export function createPigeonClient({
           return value;
         },
         (err) => {
-          if (err.kind === 'suspended') suspend();
+          if (err.kind === 'suspended') suspend(loud);
           else {
-            backoffUntil = now() + REGISTER_BACKOFF_MS;
-            log.warn('pigeon', `Registering with Postal Pigeon failed (${err.code ?? 'error'}).`);
+            // A refusal (rather than trouble that may pass) is not worth solving a new proof of
+            // work for every minute.
+            backoffUntil = now() + (err.kind === 'rejected' ? REJECTED_BACKOFF_MS : REGISTER_BACKOFF_MS);
+            report(loud, 'warn', `Registering with Postal Pigeon failed (${err.code ?? 'error'}).`);
           }
           throw err;
         }
@@ -276,7 +287,7 @@ export function createPigeonClient({
       const base = url();
       if (!base || now() < suspendedUntil) return false;
       try {
-        await credential(base);
+        await credential(base, null, true);
         return true;
       } catch {
         return false;
@@ -308,7 +319,7 @@ export function createPigeonClient({
         return { status, ...(retryAfter !== undefined ? { retryAfter } : {}) };
       } catch (err) {
         if (!(err instanceof PigeonFailure)) return { status: 'unavailable', reason: 'error' };
-        if (err.kind === 'suspended') suspend();
+        if (err.kind === 'suspended') suspend(false);
         return {
           status: 'unavailable',
           reason: err.code,

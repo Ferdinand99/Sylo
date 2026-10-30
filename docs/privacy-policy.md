@@ -239,8 +239,10 @@ instances send none of this unless their operator sets it up.
   Pigeon your device's push token and receives a handle for it. Pigeon sees the
   device's push token, the handle, which instance asked it to send, when, and the
   network address of each request while it is handled. It sees **no notification
-  text**: the instance only gives it the handle and a random reference. Pigeon
-  passes the push to Apple. Pigeon is run by the Hedgerow project
+  text**: the instance only gives it the handle, a random reference and an opaque
+  key (a keyed hash of the device and the ticket, which Pigeon cannot trace back
+  to a server or a ticket) that makes notifications for one ticket replace each
+  other on your phone. Pigeon passes the push to Apple. Pigeon is run by the Hedgerow project
   ([Postal Pigeon](https://github.com/Ferdinand99/Postal-Pigeon)); it keeps the
   device's push token sealed and forgets it when the app removes the device, when
   Apple reports it gone, or after 90 days without use.

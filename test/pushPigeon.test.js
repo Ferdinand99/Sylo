@@ -4,6 +4,7 @@
 // limits that keep this instance within Pigeon's.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash, createHmac, hkdfSync } from 'node:crypto';
 import express from 'express';
 import { D_GUILD, startOAuthApp, uid } from './helpers/oauthApp.js';
 
@@ -159,8 +160,8 @@ test('the text waits behind the reference, for that device only, and has no serv
   assert.equal(await findPushEvent(refOf(a), a.tokenId, clock + 2 * HOUR), null, 'expires after 2 hours');
 });
 
-test('the same ticket collapses to the same key, another ticket does not, the dev log has its own', async () => {
-  await staffDevice({ proven: true });
+test('the same ticket on one device collapses to the same key, another ticket or device does not', async () => {
+  const one = await staffDevice({ proven: true });
   await notify(10);
   clock += MINUTE;
   await notify(10, { isNew: false });
@@ -168,10 +169,45 @@ test('the same ticket collapses to the same key, another ticket does not, the de
   const [first, again, other] = asked.map((c) => c.collapse);
   assert.equal(first, again);
   assert.notEqual(first, other);
-  assert.equal(first, collapseKey(`${D_GUILD}:10`));
-  for (const key of [first, other, collapseKey('devlog')]) assert.match(key, /^[A-Za-z0-9_-]{1,32}$/);
-  assert.notEqual(collapseKey('devlog'), first);
-  assert.equal(first.includes(D_GUILD), false, 'derived by a hash, not spelled out');
+  assert.equal(first, collapseKey(one.tokenId, `${D_GUILD}:10`));
+  for (const key of [first, other, collapseKey(one.tokenId, 'devlog')]) {
+    assert.match(key, /^[A-Za-z0-9_-]{32}$/);
+  }
+  assert.notEqual(collapseKey(one.tokenId, 'devlog'), first);
+});
+
+test('the collapse key is keyed: it needs SESSION_SECRET to compute, and differs per device', async () => {
+  const one = await staffDevice({ proven: true });
+  const two = await staffDevice({ proven: true });
+  await notify(12);
+  const keyOf = (who) => asked.find((c) => c.handle === who.handle).collapse;
+  assert.notEqual(keyOf(one), keyOf(two), 'two devices of one server never share a value');
+
+  const thread = `${D_GUILD}:12`;
+  // What anyone who knows the server and ticket (public ids) could work out without the secret.
+  const unkeyed = [
+    createHash('sha256').update(thread).digest('base64url').slice(0, 32),
+    createHash('sha256').update(`${one.tokenId}:${thread}`).digest('base64url').slice(0, 32),
+    createHash('sha256').update(`${one.tokenId}\0${thread}`).digest('base64url').slice(0, 32),
+    createHmac('sha256', '').update(`${one.tokenId}\0${thread}`).digest('base64url').slice(0, 32),
+    // The session secret itself as the key, without the derivation for this purpose.
+    createHmac('sha256', process.env.SESSION_SECRET)
+      .update(`${one.tokenId}\0${thread}`)
+      .digest('base64url')
+      .slice(0, 32),
+  ];
+  assert.ok(!unkeyed.includes(keyOf(one)), 'not an unkeyed hash of what is public');
+
+  // With the secret and the derivation it is exactly this, and another secret gives another key.
+  const derive = (secret) => Buffer.from(hkdfSync('sha256', secret, 'sylo', 'pigeon-collapse', 32));
+  const expected = (secret) =>
+    createHmac('sha256', derive(secret)).update(`${one.tokenId}\0${thread}`).digest('base64url').slice(0, 32);
+  assert.equal(keyOf(one), expected(process.env.SESSION_SECRET));
+  assert.notEqual(keyOf(one), expected('another-secret'));
+
+  // Nothing readable about the thread is in what Pigeon gets.
+  const wire = JSON.stringify(asked);
+  for (const secret of [D_GUILD, ':12', 'devlog']) assert.ok(!wire.includes(secret), secret);
 });
 
 test('three recipients on one instance: direct, Pigeon and nothing for a handle without Pigeon', async () => {
@@ -408,7 +444,9 @@ test('the dev log goes to operators only, through Pigeon, with no server address
   assert.deepEqual(result.recipients, [operator.tokenId]);
   assert.equal(asked.length, 1);
   assert.equal(asked[0].handle, operator.handle);
-  assert.equal(asked[0].collapse, collapseKey('devlog'));
+  assert.equal(asked[0].collapse, collapseKey(operator.tokenId, 'devlog'));
+  assert.match(asked[0].collapse, /^[A-Za-z0-9_-]{32}$/);
+  assert.ok(!JSON.stringify(asked[0]).includes('devlog'), 'not even that it is the dev log');
   assert.ok(!JSON.stringify(asked[0]).includes('connection lost'));
   const content = await findPushEvent(asked[0].ref, operator.tokenId, clock);
   assert.equal(content.kind, 'devlog');

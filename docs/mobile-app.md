@@ -269,18 +269,25 @@ so nobody loses notifications when an instance turns Pigeon on.
   its device with Pigeon and gives your instance only a handle (`hrh_…`), so your
   instance never sees the device's push token. A notification then carries **no
   text**: your instance asks Pigeon to push to the handle, with a random
-  reference, and Pigeon and Apple deliver a generic notification. The app's
+  reference and a collapse key (below), and Pigeon and Apple deliver a generic
+  notification. That is all your instance gives Pigeon about a notification. The app's
   notification extension asks your instance for the text with that reference
   (`GET /api/mobile/push/events/:ref`), so the server name, the member's name and
   the message never go through Pigeon or Apple. The app only uses the official
   Pigeon; an instance that names another gets no notifications from it. Your
-  instance registers itself with Pigeon the first time it sends (a small proof of
-  work, about a second, then a credential kept in its settings), and only makes
-  outgoing HTTPS requests.
+  instance registers itself with Pigeon when it starts, or else the first time it
+  sends (a small proof of work, about a second, then a credential kept in its
+  settings, sealed with a key derived from `SESSION_SECRET`), and only makes
+  outgoing HTTPS requests. While it sends, it logs problems with Pigeon at debug
+  level only, because the dev-log notifications go through Pigeon too.
   - Pigeon allows a device 6 notifications an hour, 3 at once. Your instance keeps
     to the same budget; a notification beyond it is dropped (the app lists the
     tickets when it is opened). Notifications for one ticket replace each other
-    on the phone.
+    on the phone: the collapse key that does this is an HMAC-SHA256 of the
+    sign-in and the ticket (or the dev log), with a key derived from
+    `SESSION_SECRET` for this purpose alone. Pigeon sees an opaque value that
+    cannot be traced to a server or a ticket without that secret, and that is
+    different for each device.
   - A device Pigeon has not yet accepted a push for is sent to slowly (one a
     minute across all such devices, 3 an hour for one), so a made-up handle
     cannot use up the instance's allowance for unknown handles at Pigeon.

@@ -215,6 +215,22 @@ test('a failed registration waits a minute before the next one', async () => {
   assert.equal((await t.client.send(HANDLE, { ref: 'c' })).status, 'accepted');
 });
 
+test('a refusal is not tried again every minute, only after ten', async () => {
+  const t = setup({
+    routes: {
+      'GET /v1/challenge': challengeRoute(),
+      'POST /v1/instances': [() => json(400, { error: 'invalid_request' }), registerRoute()],
+      'POST /v1/push': accepted,
+    },
+  });
+  assert.equal((await t.client.send(HANDLE, { ref: 'a' })).reason, 'invalid_request');
+  t.advance(5 * 60_000);
+  assert.equal((await t.client.send(HANDLE, { ref: 'b' })).reason, 'registration_backoff');
+  assert.equal(t.count('GET /v1/challenge'), 1);
+  t.advance(5 * 60_000 + 1000);
+  assert.equal((await t.client.send(HANDLE, { ref: 'c' })).status, 'accepted');
+});
+
 test('a challenge that asks for too much work is refused', async () => {
   const t = setup({
     routes: { 'GET /v1/challenge': challengeRoute(33), 'POST /v1/instances': registerRoute() },
