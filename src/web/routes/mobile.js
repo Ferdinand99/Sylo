@@ -14,7 +14,8 @@
 // Sylo, whether it can sign in there and what this version's app API supports.
 //
 // Signed in, the app turns on push notifications for tickets with /api/mobile/push
-// (internal/push-notifications-plan.md, src/lib/push.js).
+// (internal/push-notifications-plan.md, src/lib/push.js). With Postal Pigeon the notification
+// has no text: the app asks GET /api/mobile/push/events/:ref for it.
 //
 // Open mode (no OAuth configured) has no accounts to hand tokens to: every route here but
 // /api/mobile/info is a 404.
@@ -35,10 +36,12 @@ import {
   DEV_LOG_LEVELS,
   setApiTokenDevLog,
 } from '../../db/apiTokens.js';
+import { findPushEvent } from '../../db/pushEvents.js';
 import { isPlatformGuildId } from '../../lib/platformId.js';
 import {
   PushError,
   canPush,
+  pigeonUrl,
   pushMode,
   pushRelayUrl,
   registerDevice,
@@ -175,7 +178,8 @@ export const mobileApiRouter = Router();
 
 // What this server's app API supports, so a newer app can tell what an older Sylo lacks
 // (`changelog`: GET /api/v2/changelog). `push` is added when this instance can send
-// notifications (APNs keys, or a relay) to signed-in apps.
+// notifications the older way (APNs keys, or a relay) to signed-in apps, `push-pigeon` when it
+// can through Postal Pigeon. An app that knows Pigeon uses it when it is the official one.
 const FEATURES = Object.freeze(['app-login', 'live-access', 'changelog']);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode
@@ -192,10 +196,15 @@ mobileApiRouter.get(
       login: config.authEnabled,
       loginProviders: config.authEnabled ? enabledProviders().map((p) => p.platform) : [],
       platforms: [config.discordEnabled && 'discord', config.fluxerEnabled && 'fluxer'].filter(Boolean),
-      features: config.authEnabled && canPush() ? [...FEATURES, 'push'] : FEATURES,
+      features:
+        config.authEnabled && canPush()
+          ? [...FEATURES, ...(pushMode() ? ['push'] : []), ...(pigeonUrl() ? ['push-pigeon'] : [])]
+          : FEATURES,
       // In relay mode the app registers its device token at this relay itself and gives this
       // server only the relay token (src/lib/push.js).
       ...(config.authEnabled && pushRelayUrl() ? { pushRelay: pushRelayUrl() } : {}),
+      // With Pigeon the app registers at it itself and gives this server only a handle.
+      ...(config.authEnabled && pigeonUrl() ? { pigeon: pigeonUrl() } : {}),
     });
   }
 );
@@ -253,6 +262,8 @@ mobileApiRouter.delete('/token', async (req, res, next) => {
 
 const DEVICE_TOKEN = /^[0-9a-f]{64,200}$/i; // APNs device tokens are hex (32 bytes today)
 const RELAY_TOKEN = /^[A-Za-z0-9_-]{43}$/; // 32 random bytes, base64url, from the relay
+const PIGEON_HANDLE = /^hrh_[A-Za-z0-9_-]{16,128}$/; // a Postal Pigeon handle
+const PUSH_REF = /^[A-Za-z0-9_-]{22}$/; // 16 random bytes, base64url (src/lib/push.js)
 const PUSH_ENVIRONMENTS = new Set(['development', 'production']);
 const pushLimit = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `mobile-push|${clientKey(req)}` });
 
@@ -274,13 +285,30 @@ function serverOrigin(req) {
 
 mobileApiRouter.post('/push', pushLimit, appTokenOnly, async (req, res, next) => {
   try {
-    const { deviceToken, relayToken, environment } = req.body ?? {};
+    const { deviceToken, relayToken, pigeonHandle, environment } = req.body ?? {};
     const mode = pushMode();
     const origin = serverOrigin(req);
-    if (!mode || !origin) return res.status(503).json({ error: 'push_unavailable' });
+    if ((!mode && !pigeonUrl()) || !origin) return res.status(503).json({ error: 'push_unavailable' });
     const bad = (error) => res.status(400).json({ error });
-    // Relay mode: the app registered at the relay itself; a device token is never taken here.
-    if (mode === 'relay') {
+    if (pigeonHandle !== undefined) {
+      // The app registered at Pigeon itself and gives only the handle. Without Pigeon here, say
+      // what this server does take, as for the other two.
+      if (!pigeonUrl()) return bad(mode === 'relay' ? 'relay_token_required' : 'device_token_required');
+      if (
+        deviceToken !== undefined ||
+        relayToken !== undefined ||
+        typeof pigeonHandle !== 'string' ||
+        !PIGEON_HANDLE.test(pigeonHandle) ||
+        !PUSH_ENVIRONMENTS.has(environment)
+      ) {
+        return bad('invalid_push_token');
+      }
+      await registerDevice(req.apiTokenId, { pigeonHandle, environment, origin });
+    } else if (!mode) {
+      // Only Pigeon here: an app that does not know it cannot be notified.
+      return bad('pigeon_handle_required');
+    } else if (mode === 'relay') {
+      // Relay mode: the app registered at the relay itself; a device token is never taken here.
       if (deviceToken !== undefined) return bad('relay_token_required');
       if (
         typeof relayToken !== 'string' ||
@@ -304,6 +332,42 @@ mobileApiRouter.post('/push', pushLimit, appTokenOnly, async (req, res, next) =>
     res.json({ ok: true });
   } catch (err) {
     if (err instanceof PushError) return res.status(503).json({ error: err.code });
+    next(err);
+  }
+});
+
+// The text of a notification that came through Pigeon, which carries none. Only for the app token
+// the notification was made for, and only while that account may still see the ticket. An unknown,
+// expired, foreign or no longer permitted reference all get the same 404, so one cannot be probed.
+const eventsLimit = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyFn: (req) => `mobile-push-events|${req.apiTokenId ?? clientKey(req)}`,
+});
+const noStore = (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+};
+
+mobileApiRouter.get('/push/events/:ref', noStore, eventsLimit, appTokenOnly, async (req, res, next) => {
+  try {
+    const notFound = () => res.status(404).json({ error: 'not_found' });
+    if (!PUSH_REF.test(req.params.ref)) return notFound();
+    const event = await findPushEvent(req.params.ref, req.apiTokenId);
+    if (!event) return notFound();
+    const kind = event.data?.kind;
+    if (kind === 'ticket') {
+      const key = event.data.guildId;
+      if (!isPlatformGuildId(key) || !(await accountMaySeeTickets(req.account, key, { live: true }))) {
+        return notFound();
+      }
+    } else if (kind === 'devlog') {
+      if (!isOperator(req.account)) return notFound();
+    } else {
+      return notFound();
+    }
+    res.json(event);
+  } catch (err) {
     next(err);
   }
 });

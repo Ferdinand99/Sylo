@@ -4,6 +4,7 @@ import 'dotenv/config';
 import { dirname, resolve } from 'node:path';
 import { resolveSessionSecret } from './lib/sessionSecret.js';
 import { normalisePrivateKey } from './lib/appStoreConnect.js';
+import { checkPigeonUrl } from './lib/pigeonUrl.js';
 
 /**
  * Read a required string env var, or exit with a clear message.
@@ -229,6 +230,17 @@ if (pushRelayUrl && !/^https?:\/\/[^\s/]+[^\s]*$/i.test(pushRelayUrl)) {
   console.error('[config] PUSH_RELAY_URL must be an http(s) URL; push through the relay is off.');
   pushRelayUrl = null;
 }
+// Postal Pigeon, the Hedgerow push relay (https://pigeon.hedgerow.tools): with PIGEON_URL set, an
+// app that supports it gets notifications with no text in them, through Pigeon. Unset or empty
+// = off. The relay and APNs settings above stay for older app builds.
+let pigeonUrl = null;
+if (optionalOrNull('PIGEON_URL')) {
+  try {
+    pigeonUrl = checkPigeonUrl(process.env.PIGEON_URL);
+  } catch (err) {
+    console.error(`[config] PIGEON_URL is not usable (${err.message}); push through Pigeon is off.`);
+  }
+}
 const kickClientSecret = optionalOrNull('KICK_CLIENT_SECRET');
 // Signs session cookies and short-lived tokens (e.g. verification links), so it
 // must always exist. SESSION_SECRET wins; otherwise a generated secret is kept in
@@ -353,6 +365,8 @@ export const config = Object.freeze({
   apnsTopic,
   apnsEnabled: Boolean(apnsKeyId && apnsTeamId && apnsPrivateKey),
   pushRelayUrl,
+  // Postal Pigeon (see above); null = off.
+  pigeonUrl,
   // URLs that server admins type in (RSS feeds, the welcome card background) are fetched by
   // the server, so private, loopback and link-local addresses are refused (src/lib/safeFetch.js).
   // A self-hosted instance that wants feeds from its own network can allow them.

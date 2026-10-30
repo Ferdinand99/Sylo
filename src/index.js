@@ -16,7 +16,7 @@ import { startSchedules, stopSchedules } from './modules/schedule.js';
 import { startWeb } from './web/server.js';
 import { addDevLogSink } from './lib/devLog.js';
 import { addDevLogEntry } from './db/devLogEntries.js';
-import { notifyDevLogEvent } from './lib/push.js';
+import { notifyDevLogEvent, warmUpPigeon } from './lib/push.js';
 import { flushErrorReports, startErrorReports } from './lib/errorReports.js';
 import { logUnhandledRejection } from './lib/discordErrors.js';
 
@@ -111,6 +111,9 @@ async function main() {
   startSchedules();
   startBackupSchedule();
   startRetentionSchedule();
+  // Register with Postal Pigeon now (if PIGEON_URL is set and this instance has not yet), so the
+  // log shows whether it works. In the background: it never holds up the start.
+  void warmUpPigeon();
   log.info('sylo', 'Up and running');
 }
 

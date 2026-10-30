@@ -1,6 +1,12 @@
 // Push notifications to the Sylo app for tickets (internal/push-notifications-plan.md).
 //
-// An instance can push in one of two ways:
+// An instance can push in three ways, chosen per device by what its app token's row holds:
+// - Postal Pigeon (PIGEON_URL): the app registered with Pigeon, the Hedgerow push relay, and gave
+//   this instance a handle. Nothing readable goes to Pigeon or Apple: the push carries a random
+//   reference, and the app fetches the text from GET /api/mobile/push/events/:ref (the content is
+//   kept in push_events, src/db/pushEvents.js, for two hours). This is what an app that
+//   announces `push-pigeon` in /api/mobile/info uses;
+// The two older ways stay for app builds that do not know Pigeon:
 // - direct: it holds the app's APNs key (APNS_*, the hosted Sylo); the app gives it its device
 //   token and the instance talks to Apple itself;
 // - relay: the app registers its device token with the hosted relay itself (PUSH_RELAY_URL,
@@ -11,15 +17,29 @@
 //
 // A member's message in a ticket (tickets.js) notifies every device whose account may see that
 // server's tickets (accountMaySeeTickets, cached for 2 minutes) and has not muted it. A burst of
-// replies is one notification per device per 30 seconds, and a device gets at most 60 an hour.
+// replies is one notification per device per 30 seconds, and a device gets at most 60 an hour
+// (6 an hour, 3 at once, through Pigeon: its own limit, which this instance keeps to). Through
+// Pigeon the notifications for one ticket also replace each other on the phone (collapse).
+import { createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { config } from '../config.js';
+import { BUILD } from '../bot/lib/buildInfo.js';
 import { log } from './log.js';
+import { inc } from './metrics.js';
 import { buildApnsPayload, createApnsClient, NOTIFICATION_LIMITS } from './apns.js';
+import { createPigeonClient } from './pigeon.js';
+import { getAppSetting, setAppSetting } from '../db/appSettings.js';
+import {
+  createPushEvent,
+  deletePushEvent,
+  deletePushEventsOf,
+  purgeExpiredPushEvents,
+} from '../db/pushEvents.js';
 import { guildKey } from '../platform/platformOf.js';
 import { identitiesOf } from '../db/accounts.js';
 import {
   apiTokenPush,
   clearApiTokenPush,
+  markApiTokenPigeonProven,
   onApiTokensDeleted,
   pushRecipientTokens,
   setApiTokenPush,
@@ -35,6 +55,15 @@ const ACCESS_CONCURRENCY = 5;
 const COALESCE_MS = 30_000;
 const SENDS_PER_HOUR = 60; // per device, as the relay allows
 const HOUR_MS = 60 * 60_000;
+// Pigeon allows a handle 6 alerts an hour, in bursts of up to 3. Sylo keeps to the same budget so
+// that it is the one to drop a notification, not Pigeon (which would count it against us).
+const PIGEON_BURST = 3;
+const PIGEON_PER_HOUR = 6;
+// A handle Pigeon has never accepted is either a fresh install or junk, and Pigeon counts every
+// handle it does not know against the whole instance (20 an hour). So these go slowly.
+const UNPROVEN_GAP_MS = 60_000; // across all devices
+const UNPROVEN_PER_TOKEN_HOUR = 3;
+const UNAVAILABLE_LOG_MS = 60_000;
 
 let sharedApns = null;
 
@@ -53,6 +82,8 @@ export function defaultApnsClient() {
 // `apns` undefined means "from config"; tests set every field through configurePush().
 const settings = {
   relayUrl: config.pushRelayUrl,
+  pigeonUrl: config.pigeonUrl,
+  pigeon: undefined, // a Pigeon client, instead of the real one (tests)
   apns: undefined,
   fetchImpl: null,
   deliver: null,
@@ -60,8 +91,8 @@ const settings = {
 };
 
 /**
- * Tests only: swap the relay URL, the APNs client (null = none), fetch, the clock, or what
- * delivers one notification to one device.
+ * Tests only: swap the relay URL, the Pigeon URL or client, the APNs client (null = none), fetch,
+ * the clock, or what delivers one notification to one device.
  */
 export function configurePush(overrides) {
   Object.assign(settings, overrides);
@@ -70,13 +101,45 @@ export function configurePush(overrides) {
 const apns = () => (settings.apns !== undefined ? settings.apns : defaultApnsClient());
 const now = () => settings.now();
 
-/** @returns {'direct' | 'relay' | null} how this instance sends, or null when it cannot */
+let sharedPigeon = null;
+
+/** The Postal Pigeon client: the real one, which keeps its credential in the app settings. */
+function pigeon() {
+  if (settings.pigeon) return settings.pigeon;
+  sharedPigeon ??= createPigeonClient({
+    url: () => settings.pigeonUrl,
+    store: { get: getAppSetting, set: setAppSetting },
+    secret: config.sessionSecret,
+    version: BUILD.version,
+    fetchImpl: (...args) => (settings.fetchImpl ?? fetch)(...args),
+    now: () => settings.now(),
+  });
+  return sharedPigeon;
+}
+
+/** Postal Pigeon's address when this instance pushes through it, otherwise null. */
+export const pigeonUrl = () => settings.pigeonUrl || null;
+
+/**
+ * Register with Pigeon now, if this instance has not yet, instead of when the first push is sent
+ * (so the start-up log shows it). Does nothing without PIGEON_URL. Never throws.
+ */
+export async function warmUpPigeon() {
+  if (pigeonUrl()) await pigeon().ensureRegistered();
+}
+
+/**
+ * How this instance sends to the older app builds, which do not know Pigeon: directly to Apple
+ * (it holds the app's key), through a relay, or not at all (null).
+ * @returns {'direct' | 'relay' | null}
+ */
 export function pushMode() {
   if (apns()) return 'direct';
   return settings.relayUrl ? 'relay' : null;
 }
 
-export const canPush = () => pushMode() !== null;
+/** Can this instance push at all: the older ways, or Pigeon. */
+export const canPush = () => pushMode() !== null || pigeonUrl() !== null;
 
 /** The relay the app registers its device token at, in relay mode; otherwise null. */
 export const pushRelayUrl = () => (pushMode() === 'relay' ? settings.relayUrl : null);
@@ -87,10 +150,18 @@ const accessCache = new Map(); // `${accountId}|${guildKey}` -> { ok, at }
 const memberMisses = new Map(); // `${guildKey}|${userId}` -> at
 const lastNotified = new Map(); // `${tokenId}|${guildKey}:${ticketId}` -> at
 const deviceSends = new Map(); // device token -> send times in the last hour
+const handleBuckets = new Map(); // Pigeon handle -> { tokens, at }: its budget of alerts
+const unprovenSends = new Map(); // app token id -> send times in the last hour (unproven handles)
+let lastUnprovenSend = 0;
+let lastUnavailableLog = 0;
 
 /** Tests only: forget every cached check, coalescing window and send count. */
 export function resetPushState() {
-  for (const map of [accessCache, memberMisses, lastNotified, deviceSends]) map.clear();
+  for (const map of [accessCache, memberMisses, lastNotified, deviceSends, handleBuckets, unprovenSends]) {
+    map.clear();
+  }
+  lastUnprovenSend = 0;
+  lastUnavailableLog = 0;
 }
 
 setInterval(() => {
@@ -99,6 +170,14 @@ setInterval(() => {
   for (const [k, at] of memberMisses) if (t - at >= MEMBER_MISS_TTL_MS) memberMisses.delete(k);
   for (const [k, at] of lastNotified) if (t - at >= COALESCE_MS) lastNotified.delete(k);
   for (const [k, times] of deviceSends) if (!times.some((at) => t - at < HOUR_MS)) deviceSends.delete(k);
+  for (const [k, times] of unprovenSends) if (!times.some((at) => t - at < HOUR_MS)) unprovenSends.delete(k);
+  // A budget that has filled up again is the same as none.
+  for (const [k, b] of handleBuckets) {
+    if (b.tokens + ((t - b.at) * PIGEON_PER_HOUR) / HOUR_MS >= PIGEON_BURST) handleBuckets.delete(k);
+  }
+  purgeExpiredPushEvents(t).catch((err) =>
+    log.debug('push', `purging notification content failed: ${err.message}`)
+  );
 }, 5 * 60_000).unref();
 
 /** Count a send to a device, unless it already had 60 in the last hour. */
@@ -109,6 +188,34 @@ function allowDeviceSend(deviceToken) {
   if (recent.length >= SENDS_PER_HOUR) return false;
   recent.push(t);
   return true;
+}
+
+/** Take one of a Pigeon handle's alerts (6 an hour, up to 3 at once); false when it has none left. */
+function allowHandleSend(handle) {
+  const t = now();
+  const bucket = handleBuckets.get(handle) ?? { tokens: PIGEON_BURST, at: t };
+  bucket.tokens = Math.min(PIGEON_BURST, bucket.tokens + ((t - bucket.at) * PIGEON_PER_HOUR) / HOUR_MS);
+  bucket.at = t;
+  handleBuckets.set(handle, bucket);
+  if (bucket.tokens < 1) return false;
+  bucket.tokens -= 1;
+  return true;
+}
+
+/** May a handle Pigeon never accepted be sent to now: one a minute across all devices, 3 an hour per token. */
+function mayAttemptUnprovenSend(tokenId) {
+  const t = now();
+  if (t - lastUnprovenSend < UNPROVEN_GAP_MS) return false;
+  const recent = (unprovenSends.get(tokenId) ?? []).filter((at) => t - at < HOUR_MS);
+  unprovenSends.set(tokenId, recent);
+  return recent.length < UNPROVEN_PER_TOKEN_HOUR;
+}
+
+/** Count a send to an unproven handle (after the handle's own budget agreed to it). */
+function noteUnprovenSend(tokenId) {
+  const t = now();
+  unprovenSends.get(tokenId)?.push(t);
+  lastUnprovenSend = t;
 }
 
 // --- registration -----------------------------------------------------------------------------
@@ -150,35 +257,129 @@ onApiTokensDeleted((relayTokens) => {
 });
 
 /**
- * Turn push on for an app token, replacing what it had: a device token in direct mode, the relay
- * token the app registered at the relay in relay mode (the caller checks which one it got).
+ * Turn push on for an app token, replacing what it had: the Pigeon handle the app got from
+ * Postal Pigeon, a device token in direct mode, or the relay token the app registered at the
+ * relay in relay mode (the caller checks which one it got).
  * @param {string} tokenId
- * @param {{ deviceToken?: string, relayToken?: string, environment: 'development' | 'production',
- *   origin: string }} device  `origin`: this server's address, the `server` of a notification
+ * @param {{ deviceToken?: string, relayToken?: string, pigeonHandle?: string,
+ *   environment: 'development' | 'production', origin: string }} device  `origin`: this
+ *   server's address, the `server` of a notification
  * @throws {PushError}
  */
-export async function registerDevice(tokenId, { deviceToken, relayToken, environment, origin }) {
+export async function registerDevice(
+  tokenId,
+  { deviceToken, relayToken, pigeonHandle, environment, origin }
+) {
   const mode = pushMode();
-  if (!mode) throw new PushError('push_unavailable');
+  if (pigeonHandle ? !pigeonUrl() : !mode) throw new PushError('push_unavailable');
   const previous = await apiTokenPush(tokenId);
-  if (mode === 'direct') await setApiTokenPush(tokenId, { deviceToken, environment, origin });
+  if (pigeonHandle) await setApiTokenPush(tokenId, { pigeonHandle, environment, origin });
+  else if (mode === 'direct') await setApiTokenPush(tokenId, { deviceToken, environment, origin });
   else await setApiTokenPush(tokenId, { relayToken, environment, origin });
   if (previous?.relayToken && previous.relayToken !== relayToken) void unregisterAtRelay(previous.relayToken);
+  if (previous?.pigeonHandle && previous.pigeonHandle !== pigeonHandle) await deletePushEventsOf(tokenId);
 }
 
-/** Turn push off for an app token (and unregister it at the relay, best effort, not awaited). */
+/**
+ * Turn push off for an app token (and unregister it at the relay, best effort, not awaited). A
+ * Pigeon handle is revoked by the app itself, at Pigeon.
+ */
 export async function unregisterDevice(tokenId) {
   const previous = await apiTokenPush(tokenId);
   await clearApiTokenPush(tokenId);
   if (previous?.relayToken) void unregisterAtRelay(previous.relayToken);
+  if (previous?.pigeonHandle) await deletePushEventsOf(tokenId);
+}
+
+let collapseSecret = null;
+
+/**
+ * What Pigeon asks of `collapse`: at most 32 of A-Za-z0-9_-. Notifications of one ticket (or of
+ * the dev log) on one device share a value, so they replace each other on the phone. Pigeon sees
+ * this value, so it is a keyed hash (HMAC-SHA256, the key derived from SESSION_SECRET for this
+ * purpose alone) of the app token and the thread: without the secret nobody can tell which
+ * server or ticket it stands for, and two devices of one person get different values.
+ * @param {string} tokenId  the recipient's app token
+ * @param {string} threadId  `${guildId}:${ticketId}`, or 'devlog'
+ */
+export function collapseKey(tokenId, threadId) {
+  collapseSecret ??= Buffer.from(
+    hkdfSync('sha256', String(config.sessionSecret), 'sylo', 'pigeon-collapse', 32)
+  );
+  return createHmac('sha256', collapseSecret)
+    .update(`${tokenId}\0${threadId}`)
+    .digest('base64url')
+    .slice(0, 32);
+}
+
+/** What the app is told about a notification when it asks for the text: no server address. */
+function pigeonContent(notification) {
+  const data = { ...notification.data };
+  delete data.server;
+  return {
+    title: notification.title,
+    ...(notification.subtitle ? { subtitle: notification.subtitle } : {}),
+    body: notification.body,
+    threadId: notification.threadId,
+    kind: data.kind,
+    data,
+  };
+}
+
+/**
+ * Send one notification to a device through Postal Pigeon. Pigeon and Apple only ever get the
+ * handle, a random reference and a collapse key; the text stays here, behind the reference.
+ */
+async function deliverViaPigeon(recipient, notification) {
+  const handle = recipient.pigeonHandle;
+  const proven = recipient.pigeonProvenAt != null;
+  if (!proven && !mayAttemptUnprovenSend(recipient.id)) {
+    inc('sylo_push_pigeon_total', { result: 'throttled' });
+    return 'limited';
+  }
+  if (!allowHandleSend(handle)) {
+    inc('sylo_push_pigeon_total', { result: 'limited' });
+    return 'limited';
+  }
+  if (!proven) noteUnprovenSend(recipient.id);
+  const ref = randomBytes(16).toString('base64url');
+  await createPushEvent({ ref, tokenId: recipient.id, payload: pigeonContent(notification), now: now() });
+  const result = await pigeon().send(handle, {
+    ref,
+    collapse: collapseKey(recipient.id, notification.threadId),
+  });
+  inc('sylo_push_pigeon_total', { result: result.status });
+  if (result.status === 'accepted' || result.status === 'duplicate') {
+    if (!proven) await markApiTokenPigeonProven(recipient.id, handle, now());
+    return 'ok';
+  }
+  await deletePushEvent(ref); // nothing was sent, so nobody will ask for it
+  if (result.status === 'gone') {
+    await clearApiTokenPush(recipient.id, { pigeonHandle: handle });
+    return 'gone';
+  }
+  // 'limited' is not tried again: the notification is dropped and the app lists tickets when opened.
+  if (result.status === 'limited') return 'limited';
+  // Unavailable, or a kind Pigeon does not take for this app: once a minute, with no identifiers.
+  // Debug only: this also runs for the dev-log notifications, and anything above debug would
+  // become a new dev-log entry, and so another notification.
+  if (now() - lastUnavailableLog >= UNAVAILABLE_LOG_MS) {
+    lastUnavailableLog = now();
+    log.debug('push', `Postal Pigeon did not take a notification (${result.reason ?? result.status}).`);
+  }
+  return 'unavailable';
 }
 
 /**
  * Send one notification to one device.
- * @returns {Promise<'ok' | 'gone' | 'limited' | 'skipped'>} `gone`: its push setup was cleared
+ * @returns {Promise<'ok' | 'gone' | 'limited' | 'unavailable' | 'skipped'>} `gone`: its push setup
+ * was cleared; `unavailable`: Pigeon could not be reached or refused (logged)
  * @throws when Apple or the relay failed otherwise
  */
 async function deliver(recipient, notification) {
+  // A device that gave a Pigeon handle gets its notifications through Pigeon, whatever else this
+  // instance can do.
+  if (recipient.pigeonHandle && pigeonUrl()) return deliverViaPigeon(recipient, notification);
   const mode = pushMode();
   // Each device is registered for the way the instance sent when it signed up; after a switch
   // it is skipped until the app registers again (it does on every launch).
