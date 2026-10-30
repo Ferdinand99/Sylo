@@ -130,11 +130,14 @@ The Dashboard can run with or without login.
   and lets you revoke them.
 - **Sylo app notifications:** if you turn on notifications in the app, the
   device's record also holds its Apple push token (or, on a self-hosted
-  instance, a relay token that stands for it), whether it is a development or
-  production build, and the servers you muted. When a member writes in a
-  ticket on a server whose tickets you may see, the notification (the server's
-  name, the member's name and the first 180 characters of the message) is sent
-  to Apple, which delivers it to your device.
+  instance, a relay token that stands for it; or, with Postal Pigeon, a handle
+  that stands for it), whether it is a development or production build, and
+  the servers you muted. When a member writes in a ticket on a server whose
+  tickets you may see, the notification (the server's name, the member's name
+  and the first 180 characters of the message) is sent to Apple, which delivers
+  it to your device. With Postal Pigeon the notification sent to Apple has no
+  text in it: the text stays on the instance for up to two hours, and the app
+  fetches it from there when the notification arrives.
 - **Error reports and visit counts (the hosted Sylo):** the Dashboard's pages
   send errors that happen in your browser to Keen Kestrel, which the Operator
   runs (section 3a). A report holds the error and where in the Dashboard's code
@@ -181,7 +184,7 @@ for modmail transcripts (section 1).
 | Modmail ticket transcripts | Handling, and being able to review, the contact/support requests a member starts |
 | Dashboard login (Discord or Fluxer OAuth2 identity, the servers you administer, session records) | Authenticating server administrators; taken only when you choose "Log in with Discord" or "Log in with Fluxer" |
 | Sylo app sign-in (device name, sign-in times, hashed token) | Keeping you signed in on a device you chose to sign in on, and letting you see and revoke those devices |
-| Sylo app notifications (push or relay token, muted servers, notification text) | Telling staff about new ticket messages, which they turned on in the app |
+| Sylo app notifications (push token, relay token or Pigeon handle, muted servers, notification text) | Telling staff about new ticket messages, which they turned on in the app |
 | Operational logs | Security, abuse prevention and debugging |
 | Website visit statistics (section 3a) | Knowing how the Website is found and used, without cookies and without keeping IP addresses |
 | Dashboard error reports and visit counts (section 3) | Finding and fixing faults in the Dashboard, and knowing which parts are used |
@@ -227,9 +230,22 @@ instances send none of this unless their operator sets it up.
   destination (a WebDAV server and/or a Discord webhook), which the Operator
   controls.
 - **Apple Push Notification service** — if you turn on notifications in the Sylo
-  app, each notification's text (server name, member name, message preview) and
-  your device's push token are sent to Apple to deliver it, under
-  [Apple's Privacy Policy](https://www.apple.com/legal/privacy/).
+  app, your device's push token is sent to Apple to deliver them, under
+  [Apple's Privacy Policy](https://www.apple.com/legal/privacy/). Through the
+  older relay and direct ways the notification's text (server name, member name,
+  message preview) goes to Apple too; through Postal Pigeon it does not.
+- **Postal Pigeon (Hedgerow's push relay)** — if the instance uses Postal Pigeon
+  (`PIGEON_URL`) and you turn on notifications in the Sylo app, the app gives
+  Pigeon your device's push token and receives a handle for it. Pigeon sees the
+  device's push token, the handle, which instance asked it to send, when, and the
+  network address of each request while it is handled. It sees **no notification
+  text**: the instance only gives it the handle, a random reference and an opaque
+  key (a keyed hash of the device and the ticket, which Pigeon cannot trace back
+  to a server or a ticket) that makes notifications for one ticket replace each
+  other on your phone. Pigeon passes the push to Apple. Pigeon is run by the Hedgerow project
+  ([Postal Pigeon](https://github.com/Ferdinand99/Postal-Pigeon)); it keeps the
+  device's push token sealed and forgets it when the app removes the device, when
+  Apple reports it gone, or after 90 days without use.
 - **The hosted Sylo as a notification relay** — a self-hosted instance cannot
   talk to Apple for the Sylo app itself, so it sends each notification through
   the hosted Sylo (`app.sylobot.com`), which passes it on to Apple and keeps no
@@ -281,10 +297,11 @@ No other third parties receive your data.
   of the account's app sign-ins. A sign-in not used for 90 days expires and is
   deleted automatically. One-time sign-in codes are deleted when used; an unused
   one stops working after 60 seconds and is deleted automatically.
-- **Notification settings** (push or relay token, muted servers) are part of the
-  app sign-in and go with it; turning notifications off in the app removes the
-  token at once, and signing out or revoking the device removes it with the
-  sign-in. Relay registrations at the hosted Sylo are removed when the app turns
+- **Notification settings** (push token, relay token or Pigeon handle, muted
+  servers) are part of the app sign-in and go with it; turning notifications off
+  in the app removes the token at once, and signing out or revoking the device
+  removes it with the sign-in. The text kept for Postal Pigeon notifications is
+  deleted after two hours, and with the sign-in. Relay registrations at the hosted Sylo are removed when the app turns
   notifications off, when Apple reports the device gone, or after 90 days
   without use (after a sign-out the instance no longer has the relay token, so
   that registration can't be used and simply expires).
@@ -318,6 +335,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | Dashboard session (session record + browser cookie) | 7 days | Logout or expiry (expired records are removed automatically) |
 | Sylo app sign-in (device record, hashed token) | 90 days from the last use | Sign out in the app; revoke on the account page; a sign-in disconnected from the account; 90 days without use |
 | One-time app sign-in code (hashed) | 60 seconds | Used, or expired and deleted automatically |
+| Text of a notification sent through Postal Pigeon | 2 hours | Expires and is deleted automatically; signing out or turning notifications off |
 | Notification relay registration (push token, hashed relay token, instance) | 90 days from the last use | Notifications turned off in the app; Apple reports the device gone; 90 days without use |
 | Website visit statistics (section 3a) | Page views 30 days; hourly and daily totals 400 days | Deleted automatically |
 | Dashboard and bot error reports | 30 days; a grouped error's summary until 90 days after it last happened | Deleted automatically |
