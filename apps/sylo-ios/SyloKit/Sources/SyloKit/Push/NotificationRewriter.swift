@@ -65,7 +65,7 @@ public struct NotificationRewriter: Sendable {
     private let makeClient: @Sendable (ServerURL, String) -> any APIClient
 
     public init(registry: PushRegistry, tokens: any TokenStore, limit: Duration = .seconds(10)) {
-        self.init(registry: registry, tokens: tokens, limit: limit, makeClient: Self.liveClient(limit: limit))
+        self.init(registry: registry, tokens: tokens, limit: limit, makeClient: Self.liveClient())
     }
 
     init(
@@ -78,16 +78,27 @@ public struct NotificationRewriter: Sendable {
         self.makeClient = makeClient
     }
 
-    /// The client for one fetch: nothing is cached (`no-store` on the request, no cache at all in the
-    /// session), and the request gives up after `limit`.
-    private static func liveClient(limit: Duration) -> @Sendable (ServerURL, String) -> any APIClient {
-        let seconds = TimeInterval(limit.components.seconds) + TimeInterval(limit.components.attoseconds) / 1e18
+    /// The answer is a few hundred bytes of text; anything over this is not one.
+    static let maxResponseBytes = 64 * 1024
+
+    /// The one session every fetch of this process uses (the extension process can live across
+    /// several notifications, so a session per fetch would pile up). Nothing is cached (`no-store`
+    /// on the request, no cache at all in the session), no cookies, and a request gives up after 10 s.
+    private static let fetchSession: URLSession = {
+        let configuration = URLSessionAPIClient.defaultConfiguration()
+        configuration.timeoutIntervalForRequest = 10
+        configuration.timeoutIntervalForResource = 10
+        configuration.httpAdditionalHeaders = ["Cache-Control": "no-store"]
+        return URLSession(configuration: configuration)
+    }()
+
+    /// The client for one fetch: one try (no retries, the extension has one chance), an answer of
+    /// at most ``maxResponseBytes``, redirects refused.
+    private static func liveClient() -> @Sendable (ServerURL, String) -> any APIClient {
         return { server, token in
-            let configuration = URLSessionAPIClient.defaultConfiguration()
-            configuration.timeoutIntervalForRequest = seconds
-            configuration.timeoutIntervalForResource = seconds
-            configuration.httpAdditionalHeaders = ["Cache-Control": "no-store"]
-            return URLSessionAPIClient(server: server, session: URLSession(configuration: configuration), token: { token })
+            URLSessionAPIClient(
+                server: server, session: fetchSession, retryDelays: [], maxResponseBytes: maxResponseBytes,
+                token: { token })
         }
     }
 
@@ -148,7 +159,8 @@ public struct NotificationRewriter: Sendable {
     static func plainText(_ text: String, limit: Int, keepNewlines: Bool) -> String {
         var out = String.UnicodeScalarView()
         let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
-        for scalar in normalized.unicodeScalars {
+        // Only the start is looked at: a title of ten thousand combining marks is still one character.
+        for scalar in normalized.unicodeScalars.prefix(limit * 8) {
             if scalar == "\n" || scalar == "\r" {
                 out.append(keepNewlines ? "\n" : " ")
             } else if scalar == "\t" {

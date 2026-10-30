@@ -25,21 +25,26 @@ public final class URLSessionAPIClient: APIClient {
     private let ownsSession: Bool
     private let decoder: JSONDecoder
     private let retryDelays: [Duration]
+    private let maxResponseBytes: Int?
 
     /// - Parameters:
     ///   - session: nil for the default session (``defaultConfiguration()``, redirects refused).
+    ///   - retryDelays: how long to wait before each retry of a `GET` (nil: 0.5 s, then 1 s); empty for none.
+    ///   - maxResponseBytes: refuse an answer longer than this (nil: no limit). The body is read
+    ///     as it arrives and dropped at the limit, so a huge answer never sits in memory.
     ///   - token: the current app token, asked for once per call; nil when signed out.
     public convenience init(
         server: ServerURL, session: URLSession? = nil, decoder: JSONDecoder = JSONDecoder(),
+        retryDelays: [Duration]? = nil, maxResponseBytes: Int? = nil,
         token: @escaping @Sendable () async -> String?
     ) {
-        self.init(server: server, session: session, decoder: decoder,
-                  retryDelays: Self.defaultRetryDelays, token: token)
+        self.init(server: server, session: session, decoder: decoder, retryDelays: retryDelays ?? Self.defaultRetryDelays,
+                  maxResponseBytes: maxResponseBytes, token: token)
     }
 
     init(
         server: ServerURL, session: URLSession?, decoder: JSONDecoder, retryDelays: [Duration],
-        token: @escaping @Sendable () async -> String?
+        maxResponseBytes: Int?, token: @escaping @Sendable () async -> String?
     ) {
         self.server = server
         self.session = session ?? URLSession(
@@ -47,6 +52,7 @@ public final class URLSessionAPIClient: APIClient {
         self.ownsSession = session == nil
         self.decoder = decoder
         self.retryDelays = retryDelays
+        self.maxResponseBytes = maxResponseBytes
         self.token = token
     }
 
@@ -117,7 +123,11 @@ public final class URLSessionAPIClient: APIClient {
             (data, response) = try await session.data(for: request)
             #else
             // Per task too, so a session passed in by the app never follows a redirect either.
-            (data, response) = try await session.data(for: request, delegate: RefuseRedirects())
+            if let limit = maxResponseBytes {
+                (data, response) = try await load(request, limit: limit)
+            } else {
+                (data, response) = try await session.data(for: request, delegate: RefuseRedirects())
+            }
             #endif
         } catch {
             throw NetworkError(error)
@@ -136,6 +146,21 @@ public final class URLSessionAPIClient: APIClient {
             throw NetworkError(error)
         }
     }
+
+    #if !canImport(FoundationNetworking)
+    /// The answer, read as it arrives and given up on at `limit` bytes (a declared length over it
+    /// is refused before any byte is read).
+    private func load(_ request: URLRequest, limit: Int) async throws -> (Data, URLResponse) {
+        let (bytes, response) = try await session.bytes(for: request, delegate: RefuseRedirects())
+        guard response.expectedContentLength <= Int64(limit) else { throw NetworkError.notASyloServer }
+        var data = Data()
+        for try await byte in bytes {
+            data.append(byte)
+            guard data.count <= limit else { throw NetworkError.notASyloServer }
+        }
+        return (data, response)
+    }
+    #endif
 
     private static func header(_ name: String, in response: HTTPURLResponse) -> String? {
         for (key, value) in response.allHeaderFields {

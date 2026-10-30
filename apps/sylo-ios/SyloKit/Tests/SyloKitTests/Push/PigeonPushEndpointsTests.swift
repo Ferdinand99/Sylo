@@ -161,5 +161,18 @@ struct KeychainAccessGroupTests {
         #expect(query[kSecAttrSynchronizable as String] as? Bool == false)
         #expect(SyloAppStorage.appGroup == "group.net.opland.sylo")
     }
+
+    @Test("The manage key's group is the app's second group, found from the default one")
+    func pigeonGroup() {
+        #expect(
+            SyloAppStorage.pigeonKeychainGroup(fromDefaultGroup: "76M3G78HV8.net.opland.sylo")
+                == "76M3G78HV8.net.opland.sylo.pigeon")
+        // Anything that isn't the default group of this app gives none, so nothing is guessed.
+        #expect(SyloAppStorage.pigeonKeychainGroup(fromDefaultGroup: "net.opland.sylo") == nil)
+        #expect(SyloAppStorage.pigeonKeychainGroup(fromDefaultGroup: ".net.opland.sylo") == nil)
+        #expect(SyloAppStorage.pigeonKeychainGroup(fromDefaultGroup: "76M3G78HV8.net.opland.sylo.pigeon") == nil)
+        #expect(SyloAppStorage.pigeonKeychainGroup(fromDefaultGroup: "76M3G78HV8.other.app") == nil)
+        #expect(SyloAppStorage.pigeonKeychainGroup(fromDefaultGroup: "") == nil)
+    }
 }
 #endif
