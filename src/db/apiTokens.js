@@ -25,7 +25,9 @@ registerPostgresBootstrap(`
     push_env         TEXT,
     push_origin      TEXT,
     push_muted       TEXT NOT NULL DEFAULT '[]',
-    push_dev_log     TEXT NOT NULL DEFAULT 'errors'
+    push_dev_log     TEXT NOT NULL DEFAULT 'errors',
+    push_pigeon_handle    TEXT,
+    push_pigeon_proven_at BIGINT
   );
   CREATE INDEX IF NOT EXISTS idx_api_tokens_account ON api_tokens (account_id);
   CREATE INDEX IF NOT EXISTS idx_api_tokens_expires ON api_tokens (expires_at);
@@ -49,6 +51,13 @@ registerPostgresMigration(
 registerPostgresMigration(
   52,
   `ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS push_dev_log TEXT NOT NULL DEFAULT 'errors';`
+);
+// The Postal Pigeon handle of a device and when Pigeon first accepted a push to it; mirrors
+// SQLite migration 61. (The push_events table is bootstrapped in src/db/pushEvents.js.)
+registerPostgresMigration(
+  61,
+  `ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS push_pigeon_handle TEXT;
+   ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS push_pigeon_proven_at BIGINT;`
 );
 
 const TOKEN_PREFIX = 'sylo_';
@@ -96,34 +105,52 @@ const s = {
   ),
   purgeCodes: prepare('DELETE FROM mobile_codes WHERE expires_at <= ?'),
   tokenById: prepare('SELECT * FROM api_tokens WHERE id = ?'),
+  // The device's handle keeps its "proven" mark while it stays the same handle.
   setPush: prepare(`
     UPDATE api_tokens SET push_token = @deviceToken, push_relay_token = @relayToken,
-      push_env = @environment, push_origin = @origin
+      push_env = @environment, push_origin = @origin,
+      push_pigeon_proven_at = CASE WHEN push_pigeon_handle = @pigeonHandle THEN push_pigeon_proven_at ELSE NULL END,
+      push_pigeon_handle = @pigeonHandle
     WHERE id = @id
   `),
   // One device, one row: a device token signed in again (a new app token) must not get every
   // notification twice.
   takeDevice: prepare(`
-    UPDATE api_tokens SET push_token = NULL, push_relay_token = NULL, push_env = NULL, push_origin = NULL
+    UPDATE api_tokens SET push_token = NULL, push_relay_token = NULL, push_env = NULL, push_origin = NULL,
+      push_pigeon_handle = NULL, push_pigeon_proven_at = NULL
     WHERE push_token = ? AND id <> ?
   `),
   takeRelay: prepare(`
-    UPDATE api_tokens SET push_token = NULL, push_relay_token = NULL, push_env = NULL, push_origin = NULL
+    UPDATE api_tokens SET push_token = NULL, push_relay_token = NULL, push_env = NULL, push_origin = NULL,
+      push_pigeon_handle = NULL, push_pigeon_proven_at = NULL
     WHERE push_relay_token = ? AND id <> ?
   `),
+  takePigeon: prepare(`
+    UPDATE api_tokens SET push_token = NULL, push_relay_token = NULL, push_env = NULL, push_origin = NULL,
+      push_pigeon_handle = NULL, push_pigeon_proven_at = NULL
+    WHERE push_pigeon_handle = ? AND id <> ?
+  `),
   clearPush: prepare(`
-    UPDATE api_tokens SET push_token = NULL, push_relay_token = NULL, push_env = NULL, push_origin = NULL
+    UPDATE api_tokens SET push_token = NULL, push_relay_token = NULL, push_env = NULL, push_origin = NULL,
+      push_pigeon_handle = NULL, push_pigeon_proven_at = NULL
     WHERE id = ?
   `),
   clearPushIf: prepare(`
-    UPDATE api_tokens SET push_token = NULL, push_relay_token = NULL, push_env = NULL, push_origin = NULL
+    UPDATE api_tokens SET push_token = NULL, push_relay_token = NULL, push_env = NULL, push_origin = NULL,
+      push_pigeon_handle = NULL, push_pigeon_proven_at = NULL
     WHERE id = @id AND COALESCE(push_token, '') = @deviceToken AND COALESCE(push_relay_token, '') = @relayToken
+      AND COALESCE(push_pigeon_handle, '') = @pigeonHandle
+  `),
+  proveHandle: prepare(`
+    UPDATE api_tokens SET push_pigeon_proven_at = @at
+    WHERE id = @id AND push_pigeon_handle = @pigeonHandle AND push_pigeon_proven_at IS NULL
   `),
   setDevLog: prepare('UPDATE api_tokens SET push_dev_log = ? WHERE id = ?'),
   setMuted: prepare('UPDATE api_tokens SET push_muted = ? WHERE id = ?'),
   pushTokens: prepare(`
     SELECT * FROM api_tokens
-    WHERE expires_at > ? AND (push_token IS NOT NULL OR push_relay_token IS NOT NULL)
+    WHERE expires_at > ?
+      AND (push_token IS NOT NULL OR push_relay_token IS NOT NULL OR push_pigeon_handle IS NOT NULL)
   `),
 };
 
@@ -277,9 +304,12 @@ function mutedOf(row) {
 }
 
 const pushFromRow = (r) => ({
-  enabled: Boolean(r.push_token || r.push_relay_token),
+  enabled: Boolean(r.push_token || r.push_relay_token || r.push_pigeon_handle),
   deviceToken: r.push_token ?? null,
   relayToken: r.push_relay_token ?? null,
+  pigeonHandle: r.push_pigeon_handle ?? null,
+  // When Pigeon first accepted a push to this handle; null until it has (the handle is unproven).
+  pigeonProvenAt: r.push_pigeon_proven_at == null ? null : Number(r.push_pigeon_proven_at),
   environment: r.push_env ?? null,
   origin: r.push_origin ?? null,
   mutedServers: mutedOf(r),
@@ -303,25 +333,39 @@ export async function apiTokenPush(id) {
 
 /**
  * Turn push on for a token, replacing what it had: a device token (the instance talks to Apple
- * itself) or a relay token (it sends through the hosted relay), plus the APNs environment and
- * the server address the app should open a notification on.
+ * itself), a relay token (it sends through the hosted relay) or a Postal Pigeon handle (it asks
+ * Pigeon to), plus the APNs environment and the server address the app should open a
+ * notification on.
  */
-export async function setApiTokenPush(id, { deviceToken = null, relayToken = null, environment, origin }) {
-  // A device or relay token is the only proof of the device, so registering one that another app
-  // token holds moves it (a device signing in again does exactly that). Leave a trace of it.
+export async function setApiTokenPush(
+  id,
+  { deviceToken = null, relayToken = null, pigeonHandle = null, environment, origin }
+) {
+  // A device token, relay token or handle is the only proof of the device, so registering one
+  // that another app token holds moves it (a device signing in again does exactly that). Leave a
+  // trace of it.
   const moved =
     (deviceToken ? (await s.takeDevice.run(deviceToken, id)).changes : 0) +
-    (relayToken ? (await s.takeRelay.run(relayToken, id)).changes : 0);
+    (relayToken ? (await s.takeRelay.run(relayToken, id)).changes : 0) +
+    (pigeonHandle ? (await s.takePigeon.run(pigeonHandle, id)).changes : 0);
   if (moved > 0) log.info('push', 'a push registration moved from another app token to token ' + id);
-  await s.setPush.run({ id, deviceToken, relayToken, environment, origin });
+  await s.setPush.run({ id, deviceToken, relayToken, pigeonHandle, environment, origin });
+}
+
+/**
+ * Note that Pigeon accepted a push to this handle: from then on it is "proven" and no longer
+ * throttled as an unknown one. Does nothing if the token has moved to another handle meanwhile.
+ */
+export async function markApiTokenPigeonProven(id, pigeonHandle, at = Date.now()) {
+  await s.proveHandle.run({ id, pigeonHandle, at });
 }
 
 /**
  * Turn push off for a token. Its muted servers stay, for when it is turned on again. With
- * `expected`, only while the token still has that device or relay token: Apple saying an old
- * one is gone must not undo a registration made since.
+ * `expected`, only while the token still has that device token, relay token or handle: Apple or
+ * Pigeon saying an old one is gone must not undo a registration made since.
  * @param {string} id
- * @param {{ deviceToken?: string | null, relayToken?: string | null }} [expected]
+ * @param {{ deviceToken?: string | null, relayToken?: string | null, pigeonHandle?: string | null }} [expected]
  */
 export async function clearApiTokenPush(id, expected) {
   if (expected) {
@@ -329,6 +373,7 @@ export async function clearApiTokenPush(id, expected) {
       id,
       deviceToken: expected.deviceToken ?? '',
       relayToken: expected.relayToken ?? '',
+      pigeonHandle: expected.pigeonHandle ?? '',
     });
   } else {
     await s.clearPush.run(id);

@@ -1153,6 +1153,26 @@ export const MIGRATIONS = [
   (database) => {
     database.exec('ALTER TABLE youtube_websub ADD COLUMN subscribe_requested_at INTEGER;');
   },
+
+  // Push through Postal Pigeon (src/lib/pigeon.js): the device's handle on its app token's row,
+  // when Pigeon first accepted a push to it, and the content behind each notification's
+  // reference (src/db/pushEvents.js). Postgres: registerPostgresMigration(61, ...) in
+  // src/db/apiTokens.js and the bootstrap in src/db/pushEvents.js.
+  (database) => {
+    database.exec(`
+      ALTER TABLE api_tokens ADD COLUMN push_pigeon_handle TEXT;
+      ALTER TABLE api_tokens ADD COLUMN push_pigeon_proven_at INTEGER;
+      CREATE TABLE push_events (
+        ref        TEXT PRIMARY KEY,
+        token_id   TEXT NOT NULL REFERENCES api_tokens (id) ON DELETE CASCADE,
+        payload    TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_push_events_token ON push_events (token_id);
+      CREATE INDEX idx_push_events_expires ON push_events (expires_at);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */
