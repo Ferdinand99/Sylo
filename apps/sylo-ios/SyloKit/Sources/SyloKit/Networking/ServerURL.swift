@@ -9,6 +9,8 @@ import Foundation
 public struct ServerURL: Hashable, Sendable, CustomStringConvertible {
     /// The hosted Sylo.
     public static let hosted = ServerURL(trusted: "https", host: "app.sylobot.com", port: nil, path: "")
+    /// The Hedgerow notification service (Postal Pigeon), the only one the app registers with.
+    public static let pigeon = ServerURL(trusted: "https", host: "pigeon.hedgerow.tools", port: nil, path: "")
 
     /// The normalised address, without a trailing slash.
     public let baseURL: URL

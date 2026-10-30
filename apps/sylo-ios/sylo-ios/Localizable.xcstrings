@@ -1,0 +1,42 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "HR_PUSH_BODY" : {
+      "comment" : "The text of a notification before the app has fetched what it says, or when it could not. Named by loc-key in Postal Pigeon's push, and looked up in the app's own strings.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something needs your attention"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noe trenger oppmerksomheten din"
+          }
+        }
+      }
+    },
+    "HR_PUSH_TITLE" : {
+      "comment" : "The title of a notification before the app has fetched what it says, or when it could not. Named by loc-key in Postal Pigeon's push, and looked up in the app's own strings.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sylo"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sylo"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

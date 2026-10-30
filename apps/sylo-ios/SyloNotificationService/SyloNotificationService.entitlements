@@ -8,6 +8,7 @@
 	</array>
 	<key>keychain-access-groups</key>
 	<array>
+		<!-- Keep this first and the only entry: the group of the app tokens. Not the Pigeon group, so the extension can never read the manage key. -->
 		<string>$(AppIdentifierPrefix)net.opland.sylo</string>
 	</array>
 </dict>

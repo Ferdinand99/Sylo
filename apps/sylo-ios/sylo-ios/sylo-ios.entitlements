@@ -4,5 +4,16 @@
 <dict>
 	<key>aps-environment</key>
 	<string>development</string>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.net.opland.sylo</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<!-- Keep this first: it is the default group, where the app tokens live. The extension reads them from the same group. Moving it signs everyone out. -->
+		<string>$(AppIdentifierPrefix)net.opland.sylo</string>
+		<!-- App only (not in the extension's entitlements): the Pigeon manage key. -->
+		<string>$(AppIdentifierPrefix)net.opland.sylo.pigeon</string>
+	</array>
 </dict>
 </plist>
