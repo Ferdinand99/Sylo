@@ -1,5 +1,5 @@
 /* The public pages that are not part of the dashboard app: sign-in, the app's confirm page, the
-   error page, verify, ban appeal and the leaderboard. Same look as the new dashboard (/v2): the
+   error page, verify, ban appeal, the leaderboard, the quote page and the event page. Same look as the new dashboard (/v2): the
    tokens below are copied from web-v2/src/styles.css, with its dark default and an explicit light
    theme (data-theme="light", set by /theme.js). Only the classes these pages use live here. */
 @font-face {
@@ -452,6 +452,69 @@ textarea:focus {
 }
 .q-author {
   font-weight: 600;
+}
+
+/* The public event page (/events/<token>): one card, the facts as a list. */
+.ev-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ev-status {
+  margin: 0;
+}
+.ev-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.ev-upcoming {
+  color: var(--success);
+}
+.ev-cancelled {
+  color: var(--danger);
+}
+.ev-ended {
+  color: var(--text-muted);
+}
+.ev-image {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  object-fit: cover;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.ev-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px 20px;
+  margin: 0;
+}
+.ev-facts dt {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ev-facts dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+}
+.ev-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ev-description {
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
 }
 @media (max-width: 520px) {
   .lb-row {

@@ -67,7 +67,8 @@ saved under.
 ### Quotes from private channels stay in their channel
 
 When a quote is saved, Sylo notes whether **@everyone could read** the channel it came
-from (and that it is not age-restricted). A quote from a **public source** may be shown
+from (and that it is not age-restricted; on Fluxer that includes the channel's category and the
+server, see [On Fluxer](#on-fluxer)). A quote from a **public source** may be shown
 in any channel. A quote from a **private source** (a staff or mod channel, a hidden
 channel) is only ever shown **in the channel it was saved from**:
 
@@ -172,7 +173,20 @@ The other commands work the same way: `!quote random`, `!quote search <text>`,
 `!quote user @member`, `!quote show <number>`, `!quote remove <number>`. Replies that
 should be private are deleted after about 15 seconds. Quotes show a link that opens
 the Fluxer web app. The dashboard and the public page work exactly as on Discord.
-Not verified against a live Fluxer server.
+Whether a channel is a **public source** is worked out from the @everyone role's
+permissions and the channel's overwrites, the same way as on Discord (tested against
+the real Fluxer SDK classes, not yet against a live Fluxer server). Before Sylo could
+do this on Fluxer, every quote saved there was noted as coming from a private source
+(shown only in its own channel and kept off the public page). Those older quotes keep
+that note, because it is decided when a quote is saved; only quotes saved from now on
+are marked public where their channel is.
+
+On Fluxer a channel can be age-restricted by its own setting, by its category or by the
+server (its own setting beats its category's, which beats the server's). Sylo applies the
+same rule, so a quote from a channel that Fluxer treats as age-restricted is never marked
+public, even when the channel itself is not marked. It fails closed: a category Sylo does
+not know, a flag it cannot read or a missing server flag count as age-restricted. To bring an old quote to the public page,
+remove it and save it again.
 
 ## Gaps
 

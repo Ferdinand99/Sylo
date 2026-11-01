@@ -3,6 +3,7 @@
 // mock.timers is experimental until Node 23.1 but works on the Node 22 this project requires.
 /* eslint-disable n/no-unsupported-features/node-builtins */
 import './helpers/tmpDb.js';
+import './helpers/dashboardUrl.js';
 import test, { mock, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { runtime } from '../src/runtime.js';
@@ -20,7 +21,16 @@ import {
 import { LIMITS as CEILINGS } from '../src/lib/limits.js';
 import { execute } from '../src/bot/commands/event.js';
 import { localToUtc, utcToLocalInput } from '../src/modules/lib/eventTime.js';
-import { cancelEvent, createEvent, parseEventInput, tick, updateEvent } from '../src/modules/events.js';
+import {
+  cancelEvent,
+  createEvent,
+  parseEventInput,
+  refreshEventMessage,
+  refreshEventPosts,
+  refreshPagePosts,
+  tick,
+  updateEvent,
+} from '../src/modules/events.js';
 
 // Every test gets its own server, so the events of one never show up in another.
 let GID = '';
@@ -49,9 +59,14 @@ function world({ dmClosed = [] } = {}) {
       return message;
     },
   };
+  // The @everyone role and a channel it can see: the public event page needs a public channel.
+  const everyone = { id: GID };
   const channel = {
     id: CH,
     isTextBased: () => true,
+    nsfw: false,
+    permissionsFor: (target) => ({ has: (p) => target === everyone && p === 'ViewChannel' && channel.open }),
+    open: true,
     send: async (p) => {
       out.sent.push(p);
       return message;
@@ -94,7 +109,7 @@ function world({ dmClosed = [] } = {}) {
     ownerId: HOST,
     name: 'Test Guild',
     channels: { cache: new Map([[CH, channel]]), fetch: async (id) => (id === CH ? channel : null) },
-    roles: { cache: new Map([[ROLE, role]]) },
+    roles: { cache: new Map([[ROLE, role]]), everyone },
     members: {
       me: {
         id: 'bot',
@@ -686,4 +701,373 @@ test('two events that hand out the same role: leaving one keeps the role while g
   assert.equal(w.member(U[0]).roles.cache.has(ROLE), true, 'still going to b');
   await press('leave', b, U[0]);
   assert.equal(w.member(U[0]).roles.cache.has(ROLE), false);
+});
+
+// --- the public event page link ---------------------------------------------------------------
+
+const linkOf = (payload) =>
+  payload.components
+    .flatMap((row) => row.toJSON?.().components ?? row.components ?? [])
+    .find((c) => c.url !== undefined);
+
+async function postEvent(over = {}) {
+  const input = parseEventInput({ title: 'Open day', start: utcText(inHours(2)), ...over }).value;
+  const r = await createEvent({ guild: w.guild, hostId: HOST, channelId: CH, input });
+  assert.equal(r.ok, true);
+  return r.id;
+}
+
+test('a new post links to the public page when the setting is on and the channel is public', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  const id = await postEvent();
+  const ev = await getEvent(id);
+  assert.match(ev.public_token, /^[0-9a-f]{32}$/);
+  const buttons = w.sent[0].components[0].toJSON().components;
+  assert.equal(buttons.length, 4, 'Join, Maybe, Leave and the link');
+  const link = linkOf(w.sent[0]);
+  assert.equal(link.url, `https://sylo.example.test/events/${ev.public_token}`);
+  assert.equal(link.label, 'Event page');
+});
+
+test('no link while the setting is off, the module is off, or the setting is not a real true', async () => {
+  fresh();
+  for (const config of [{}, { publicPages: false }, { publicPages: 'true' }]) {
+    await enable(config);
+    w.sent.length = 0;
+    await postEvent();
+    assert.equal(linkOf(w.sent[0]), undefined, JSON.stringify(config));
+    assert.equal(w.sent[0].components[0].toJSON().components.length, 3);
+  }
+  await setGuildModule(GID, 'events', { enabled: false, config: { publicPages: true } });
+  w.sent.length = 0;
+  await postEvent();
+  assert.equal(linkOf(w.sent[0]), undefined, 'module off');
+});
+
+test('no link for an event in a channel everyone cannot read, even with the setting on', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  w.channel.open = false;
+  await postEvent();
+  assert.equal(linkOf(w.sent[0]), undefined);
+  assert.equal(w.sent[0].components[0].toJSON().components.length, 3);
+
+  fresh();
+  await enable({ publicPages: true });
+  w.channel.nsfw = true;
+  await postEvent();
+  assert.equal(linkOf(w.sent[0]), undefined, 'age-restricted');
+
+  fresh();
+  await enable({ publicPages: true });
+  w.channel.permissionsFor = () => {
+    throw new Error('boom');
+  };
+  await postEvent();
+  assert.equal(linkOf(w.sent[0]), undefined, 'an error in the check fails closed');
+});
+
+test('closing an event keeps the link, and a channel made private drops it at the next edit', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  const id = await postEvent();
+  const token = (await getEvent(id)).public_token;
+  const url = `https://sylo.example.test/events/${token}`;
+
+  w.edits.length = 0;
+  await refreshEventMessage(id);
+  assert.equal(linkOf(w.edits.at(-1)).url, url, 'an ordinary refresh');
+
+  w.channel.open = false;
+  await refreshEventMessage(id);
+  assert.equal(linkOf(w.edits.at(-1)), undefined, 'the channel is private now');
+  w.channel.open = true;
+
+  await cancelEvent(id, GID);
+  const cancelled = w.edits.at(-1);
+  assert.match(cancelled.embeds[0].toJSON().title, /\(cancelled\)/);
+  assert.equal(linkOf(cancelled).url, url, 'a cancelled event keeps its page');
+  assert.equal(cancelled.components.length, 1);
+  assert.equal(cancelled.components[0].toJSON().components.length, 1, 'only the link');
+});
+
+test('an event that ends keeps the link on its last post', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  const id = await postEvent();
+  const token = (await getEvent(id)).public_token;
+  w.edits.length = 0;
+  await tick(Date.now() + 5 * HOUR);
+  assert.equal((await getEvent(id)).state, 'ended');
+  assert.match(w.edits.at(-1).embeds[0].toJSON().title, /\(ended\)/);
+  assert.equal(linkOf(w.edits.at(-1)).url, `https://sylo.example.test/events/${token}`);
+});
+
+test('turning the setting on or off updates the posts of every event, finished ones too', async () => {
+  fresh();
+  await enable({});
+  const a = await newEvent();
+  const b = await newEvent({ title: 'Second' });
+  const done = await newEvent({ title: 'Done' });
+  await cancelEvent(done, GID);
+  const over = await newEvent({ title: 'Over', startAt: Date.now() + HOUR });
+  await tick(Date.now() + 5 * HOUR);
+  assert.equal((await getEvent(over)).state, 'ended');
+  w.edits.length = 0;
+
+  await enable({ publicPages: true });
+  await refreshEventPosts(GID);
+  assert.equal(w.edits.length, 4, 'the upcoming, the cancelled and the ended: their pages all stay');
+  for (const edit of w.edits)
+    assert.match(linkOf(edit).url, /^https:\/\/sylo\.example\.test\/events\/[0-9a-f]{32}$/);
+  const tokens = await Promise.all([a, b, done, over].map(async (id) => (await getEvent(id)).public_token));
+  assert.deepEqual(w.edits.map((e) => linkOf(e).url.split('/').pop()).sort(), tokens.sort());
+
+  w.edits.length = 0;
+  await enable({ publicPages: false });
+  await refreshEventPosts(GID);
+  assert.equal(w.edits.length, 4);
+  for (const edit of w.edits) assert.equal(linkOf(edit), undefined, 'the dead link is taken off');
+});
+
+test('switching the Events module refreshes the posts only where the pages setting is on', async () => {
+  fresh();
+  await setGuildModule(GID, 'events', { enabled: false, config: { publicPages: true } });
+  const id = await newEvent();
+  w.edits.length = 0;
+  await refreshPagePosts(GID);
+  assert.equal(w.edits.length, 1, 'module off: the link comes off the post');
+  assert.equal(linkOf(w.edits[0]), undefined);
+
+  await setGuildModule(GID, 'events', { enabled: true, config: { publicPages: true } });
+  w.edits.length = 0;
+  await refreshPagePosts(GID);
+  assert.equal(linkOf(w.edits[0]).url.split('/').pop(), (await getEvent(id)).public_token);
+
+  await setGuildModule(GID, 'events', { enabled: true, config: {} });
+  w.edits.length = 0;
+  await refreshPagePosts(GID);
+  assert.equal(w.edits.length, 0, 'no pages, no link to add or remove');
+});
+
+// --- a refused link button must never cost the event ---------------------------------------------
+
+const hasButtonLink = (p) => p.components?.some((r) => (r.toJSON?.().components ?? []).some((c) => c.url));
+
+// The shape of a discord.js DiscordAPIError: the HTTP status, the Discord code and the raw body.
+class ApiError extends Error {
+  constructor(message, { status, code, errors } = {}) {
+    super(message);
+    this.name = 'DiscordAPIError[50035]';
+    this.status = status;
+    this.code = code;
+    this.rawError = { message, code, errors };
+  }
+}
+const buttonRefusal = () =>
+  new ApiError(
+    'Invalid Form Body\ncomponents[0].components[3].url[BUTTON_COMPONENT_INVALID_URL]: Not a well formed URL.',
+    {
+      status: 400,
+      code: 50035,
+      errors: {
+        components: {
+          0: { components: { 3: { url: { _errors: [{ code: 'BUTTON_COMPONENT_INVALID_URL' }] } } } },
+        },
+      },
+    }
+  );
+const timeout = () => Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+
+// Everything that is not Discord refusing the button. None of them may send the post again or
+// strip the link.
+const notTheButton = {
+  'a 400 about the embeds': () =>
+    new ApiError('Invalid Form Body', {
+      status: 400,
+      code: 50035,
+      errors: { embeds: { 0: { _errors: [] } } },
+    }),
+  'a 400 with another code': () =>
+    new ApiError('Missing Permissions', { status: 400, code: 50013, errors: {} }),
+  'a 400 with no error path': () => new ApiError('Invalid Form Body', { status: 400, code: 50035 }),
+  'a 403 Missing Access': () => new ApiError('Missing Access', { status: 403, code: 50001 }),
+  'a 429 rate limit': () => new ApiError('You are being rate limited.', { status: 429, code: 0 }),
+  'a 500': () => new ApiError('Internal Server Error', { status: 500, code: 0 }),
+  'a 503': () => new ApiError('Service Unavailable', { status: 503, code: 0 }),
+  'a timeout': timeout,
+  'a plain error': () => new Error('Missing Access'),
+  'an error with a components message but no status': () => new Error('Invalid Form Body components[0]'),
+};
+
+test('if Discord refuses the new post because of the link button, it is posted again without it', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  let tries = 0;
+  w.channel.send = async (p) => {
+    tries += 1;
+    if (hasButtonLink(p)) throw buttonRefusal();
+    w.sent.push(p);
+    return w.message;
+  };
+  const id = await postEvent();
+  assert.equal(tries, 2, 'once with the link, once without');
+  assert.equal(w.sent.length, 1, 'one post');
+  assert.equal(linkOf(w.sent[0]), undefined);
+  assert.equal(w.sent[0].components[0].toJSON().components.length, 3, 'Join, Maybe and Leave');
+  const row = await getEvent(id);
+  assert.ok(row, 'the event was not deleted');
+  assert.equal(row.message_id, MSG);
+});
+
+for (const [name, make] of Object.entries(notTheButton)) {
+  test(`a new post that fails with ${name} is not sent again, and no event is left behind`, async () => {
+    fresh();
+    await enable({ publicPages: true });
+    let tries = 0;
+    w.channel.send = async () => {
+      tries += 1;
+      throw make();
+    };
+    const before = (await upcomingEvents(GID)).length;
+    const input = parseEventInput({ title: 'x', start: utcText(inHours(2)) }).value;
+    const r = await createEvent({ guild: w.guild, hostId: HOST, channelId: CH, input });
+    assert.equal(tries, 1, 'a post that may have gone through is never repeated');
+    assert.equal(r.ok, false);
+    assert.equal((await upcomingEvents(GID)).length, before);
+    assert.equal(w.sent.length, 0);
+  });
+}
+
+test('the event is removed only when the post is refused without the link as well', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  let tries = 0;
+  w.channel.send = async () => {
+    tries += 1;
+    throw buttonRefusal(); // refused even without a link: nothing more to try
+  };
+  const before = (await upcomingEvents(GID)).length;
+  const input = parseEventInput({ title: 'x', start: utcText(inHours(2)) }).value;
+  const r = await createEvent({ guild: w.guild, hostId: HOST, channelId: CH, input });
+  assert.equal(r.ok, false);
+  assert.equal(tries, 2, 'once with the link, once without');
+  assert.equal((await upcomingEvents(GID)).length, before);
+
+  // with no link in the first place there is just the one try
+  await enable({});
+  tries = 0;
+  await createEvent({ guild: w.guild, hostId: HOST, channelId: CH, input });
+  assert.equal(tries, 1);
+});
+
+test('if Discord refuses an edit because of the link button, the post is edited again without it', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  const id = await postEvent();
+  w.edits.length = 0;
+  const edit = w.message.edit;
+  let tries = 0;
+  w.message.edit = async (p) => {
+    tries += 1;
+    if (hasButtonLink(p)) throw buttonRefusal();
+    return edit(p);
+  };
+  assert.equal(await refreshEventMessage(id), true);
+  assert.equal(tries, 2);
+  assert.equal(w.edits.length, 1);
+  assert.equal(linkOf(w.edits[0]), undefined);
+  assert.match(w.edits[0].embeds[0].toJSON().title, /Open day/);
+  assert.ok(await getEvent(id), 'and the event is untouched');
+});
+
+for (const [name, make] of Object.entries(notTheButton)) {
+  test(`an edit that fails with ${name} is not repeated, and the link is not taken off`, async () => {
+    fresh();
+    await enable({ publicPages: true });
+    const id = await postEvent();
+    w.edits.length = 0;
+    const edit = w.message.edit;
+    let tries = 0;
+    w.message.edit = async (p) => {
+      tries += 1;
+      if (tries === 1) throw make();
+      return edit(p);
+    };
+    assert.equal(await refreshEventMessage(id), true);
+    assert.equal(tries, 1, 'one try, no second edit without the link');
+    assert.equal(w.edits.length, 0, 'the post is as it was, with its link');
+    // the next ordinary edit puts everything right, link included
+    assert.equal(await refreshEventMessage(id), true);
+    assert.ok(linkOf(w.edits.at(-1)), 'the link is still there');
+  });
+}
+
+// --- one refresh pass per server ---------------------------------------------------------------
+
+test('a second switch while a pass is running makes it go round once more, not start a second pass', async () => {
+  fresh();
+  await enable({});
+  await newEvent();
+  await newEvent({ title: 'Second' });
+  w.edits.length = 0;
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const edit = w.message.edit;
+  let inFlight = 0;
+  let mostAtOnce = 0;
+  w.message.edit = async (p) => {
+    inFlight += 1;
+    mostAtOnce = Math.max(mostAtOnce, inFlight);
+    await gate;
+    inFlight -= 1;
+    return edit(p);
+  };
+
+  await enable({ publicPages: true });
+  const first = refreshEventPosts(GID);
+  await settle();
+  // on, off, on within the pass: nothing new starts
+  const second = refreshEventPosts(GID);
+  await enable({ publicPages: false });
+  const third = refreshEventPosts(GID);
+  await settle();
+  assert.equal(mostAtOnce, 1, 'one edit at a time, so one pass');
+  release();
+  await Promise.all([first, second, third]);
+
+  assert.equal(w.edits.length, 4, 'two posts, and one more round: two passes in all, not three');
+  // the last round saw the setting as it was by then: off
+  assert.equal(linkOf(w.edits.at(-1)), undefined);
+  assert.equal(linkOf(w.edits.at(-2)), undefined);
+
+  // and a later switch starts a fresh pass
+  w.edits.length = 0;
+  w.message.edit = edit;
+  await enable({ publicPages: true });
+  await refreshEventPosts(GID);
+  assert.equal(w.edits.length, 2);
+});
+
+test('a pass that hits a failing post goes on, and does not block the next one', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  await newEvent();
+  await newEvent({ title: 'Second' });
+  const edit = w.message.edit;
+  let n = 0;
+  w.message.edit = async (p) => {
+    n += 1;
+    if (n === 1) throw new Error('boom');
+    return edit(p);
+  };
+  w.edits.length = 0;
+  await refreshEventPosts(GID);
+  assert.equal(w.edits.length, 1, 'the second post was still done');
+  w.edits.length = 0;
+  await refreshEventPosts(GID);
+  assert.equal(w.edits.length, 2, 'and a new pass can start');
 });

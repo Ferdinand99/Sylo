@@ -122,7 +122,7 @@ test('a database from before this change gets the columns and the table, and kee
   const { MIGRATIONS } = await import('../src/db/index.js');
   const old = new Database(':memory:');
   old.pragma('foreign_keys = ON');
-  for (const migration of MIGRATIONS.slice(0, -1)) migration(old);
+  for (const migration of MIGRATIONS.slice(0, 60)) migration(old);
   old
     .prepare(
       `INSERT INTO api_tokens (id, account_id, token_hash, device_name, created_at, last_used_at, expires_at, push_token, push_env, push_origin)
@@ -131,7 +131,7 @@ test('a database from before this change gets the columns and the table, and kee
     .run();
   assert.equal(old.prepare("SELECT 1 FROM sqlite_master WHERE name = 'push_events'").get(), undefined);
 
-  MIGRATIONS.at(-1)(old);
+  MIGRATIONS[60](old);
 
   const row = old.prepare('SELECT * FROM api_tokens WHERE id = ?').get('t1');
   assert.equal(row.push_token, 'device');

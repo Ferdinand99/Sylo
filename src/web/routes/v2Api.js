@@ -251,6 +251,7 @@ import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
 import { MODULES, getModule } from '../../modules/registry.js';
 import { timeAgo, formatUptime, formatBytes } from '../lib/format.js';
 import { log } from '../../lib/log.js';
+import { refreshPagePosts } from '../../modules/events.js';
 import { sendDevLogTest } from '../../lib/devLog.js';
 
 const require = createRequire(import.meta.url);
@@ -443,6 +444,11 @@ router.post(
     const enabled = Boolean(req.body.enabled);
     for (const id of ids) {
       await setGuildModule(req.guild.id, id, { enabled });
+      if (id === 'events') {
+        refreshPagePosts(req.guild.id).catch((err) =>
+          log.warn('events', 'could not update the event posts after a bulk toggle:', err.message)
+        );
+      }
       if (id === 'custom-commands') {
         syncGuildCustomCommands(req.guild).catch((err) =>
           log.error('custom-commands', 'sync after bulk toggle failed:', err.message)
@@ -484,6 +490,12 @@ router.post(
       action: `module:${mod.id}`,
       detail: enabled ? 'enabled' : 'disabled',
     });
+    if (mod.id === 'events') {
+      // With the public pages on, the posts carry a link that only works while the module is on.
+      refreshPagePosts(req.guild.id).catch((err) =>
+        log.warn('events', 'could not update the event posts after a toggle:', err.message)
+      );
+    }
     if (mod.id === 'custom-commands') {
       syncGuildCustomCommands(req.guild).catch((err) =>
         log.error('custom-commands', 'sync after toggle failed:', err.message)

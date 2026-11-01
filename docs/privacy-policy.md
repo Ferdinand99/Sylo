@@ -72,7 +72,7 @@ the public-leaderboard vanity slug.
 - **AFK** — a member's away status, away message and previous nickname.
 - **Birthdays** — the day and month (and optionally year) a member registers.
 - **Giveaways** — the host, the entrants, and the drawn winners.
-- **Events** — the host and, for each event, who pressed Join or Maybe.
+- **Events** — the host and, for each event, who pressed Join or Maybe. A server can switch on a public page for each event that shows its title, time, place, description, image, capacity and how many pressed Join or Maybe, to anyone with the link, but no names, no host and no ids. Only events in channels everyone can read have one. The address of each event's page is a random code stored with the event. A visitor's browser contacts only Sylo: Sylo fetches the server icon and the event image from Discord's image servers itself and keeps a copy in memory only, for about ten minutes (a sweep removes expired copies every minute), and the page carries no visit-count script when it is not found.
 - **Suggestions** — the text of each suggestion, who wrote it (unless they erase it), the staff member who decided it, and each member's 👍 / 👎 vote.
 - **Temporary roles** — which member holds which temporary role, when it ends, the reason, and the staff member who set it.
 - **Quote board** — the text of each saved message (up to 2000 characters), its author's id and display name as they were when it was saved, the channel and message ids, the message date, how many attachments it had (the files are not kept), and who saved it. A server can switch on a public page that shows the text, display name and date of the quotes saved from channels everyone can read, without ids.

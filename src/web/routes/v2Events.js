@@ -18,9 +18,12 @@ import {
   createEvent,
   normaliseEventsConfig,
   parseEventInput,
+  refreshEventPosts,
   updateEvent,
 } from '../../modules/events.js';
 import { utcToLocalInput } from '../../modules/lib/eventTime.js';
+import { channelIsPublic, eventPagePath, eventPagesOn } from '../../modules/lib/eventPage.js';
+import { log } from '../../lib/log.js';
 
 /** How many finished or cancelled events the page lists. */
 const PAST_SHOWN = 15;
@@ -33,6 +36,9 @@ const fail = (res, message, status = 400) => res.status(status).json({ error: me
 async function eventsView(guild) {
   const channels = guildTextChannels(guild);
   const rows = [...(await upcomingEvents(guild.id)), ...(await pastEvents(guild.id, PAST_SHOWN))];
+  // The page exists only while the setting is on and the event's channel is public: the path is
+  // given for those, and `pageHidden` says that the setting is on but the channel is not public.
+  const pagesOn = eventPagesOn(await getGuildModule(guild.id, 'events'));
   return Promise.all(
     rows.map(async (ev) => ({
       id: ev.id,
@@ -54,6 +60,8 @@ async function eventsView(guild) {
       state: ev.state,
       joined: await eventStatusCount(ev.id, 'join'),
       maybe: await eventStatusCount(ev.id, 'maybe'),
+      pagePath: pagesOn && channelIsPublic(guild, ev.channel_id) ? eventPagePath(ev.public_token) : null,
+      pageHidden: pagesOn && !channelIsPublic(guild, ev.channel_id),
     }))
   );
 }
@@ -75,10 +83,26 @@ router.get(
 router.post(
   '/modules/events/config',
   asyncHandler(async (req, res) => {
+    const prev = await settingsOf(req.guild.id);
     const config = normaliseEventsConfig(req.body);
     await setGuildModule(req.guild.id, 'events', { config });
-    await recordAudit(req.guild.id, { actor: actor(req), action: 'module:events', detail: 'settings saved' });
-    res.json({ config });
+    const pagesChanged = prev.publicPages !== config.publicPages;
+    await recordAudit(req.guild.id, {
+      actor: actor(req),
+      action: 'module:events',
+      detail: pagesChanged
+        ? `settings saved (public event pages ${config.publicPages ? 'on' : 'off'})`
+        : 'settings saved',
+    });
+    // The posts of the events gain or lose their page link. In the background: it is one edit per
+    // event and the answer to the form does not wait for them.
+    if (pagesChanged) {
+      refreshEventPosts(req.guild.id).catch((err) =>
+        log.warn('events', 'could not update the event posts:', err.message)
+      );
+    }
+    // The list on the page shows each event's link, which this setting changes: send it again.
+    res.json({ config, events: await eventsView(req.guild) });
   })
 );
 

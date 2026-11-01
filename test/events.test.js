@@ -90,6 +90,7 @@ test('normaliseEventsConfig: defaults, a reminder inside the limits, ids and a v
     staffRoles: [],
     dmReminders: false,
     timeZone: '',
+    publicPages: false,
   });
   const c = normaliseEventsConfig({
     channel: '100000000000000001',
@@ -106,6 +107,14 @@ test('normaliseEventsConfig: defaults, a reminder inside the limits, ids and a v
   assert.equal(normaliseEventsConfig({ reminderMinutes: 0 }).reminderMinutes, 0);
   assert.equal(normaliseEventsConfig({ timeZone: 'Mars/Base' }).timeZone, '');
   assert.equal(normaliseEventsConfig({ channel: 'abc' }).channel, '');
+});
+
+test('normaliseEventsConfig: public event pages are off unless the setting is a real true', () => {
+  assert.equal(normaliseEventsConfig().publicPages, false);
+  assert.equal(normaliseEventsConfig({ publicPages: true }).publicPages, true);
+  for (const not of [false, 'true', 1, 'on', null, undefined, {}, []]) {
+    assert.equal(normaliseEventsConfig({ publicPages: not }).publicPages, false, String(not));
+  }
 });
 
 test('clampReminder: 0 or unreadable is off, anything else lands inside 5..1440', () => {
@@ -297,6 +306,49 @@ test('buildEventPayload: ended and cancelled events lose their buttons; a long l
   assert.equal(e.fields[0].name, '✅ Going (40)');
   assert.match(e.fields[0].value, /\+15 more$/);
   assert.ok(e.fields[0].value.length <= 1024);
+});
+
+const PAGE = 'https://sylo.example.test/events/0123456789abcdef0123456789abcdef';
+
+test('buildEventPayload: with a page address the post gets an Event page link button', () => {
+  const p = buildEventPayload(row(), { joined: [] }, { pageUrl: PAGE });
+  const comps = p.components.map((r) => r.toJSON().components);
+  assert.equal(comps.length, 1, 'one row: the three buttons and the link');
+  assert.deepEqual(
+    comps[0].map((c) => c.custom_id ?? c.url),
+    ['evt:join:7', 'evt:maybe:7', 'evt:leave:7', PAGE]
+  );
+  const link = comps[0][3];
+  assert.equal(link.style, 5, 'a link button');
+  assert.equal(link.label, 'Event page');
+  assert.equal(link.custom_id, undefined);
+});
+
+test('buildEventPayload: an ended or cancelled event keeps the link when it has a page', () => {
+  for (const state of ['ended', 'cancelled']) {
+    const p = buildEventPayload(row({ state }), { joined: [] }, { pageUrl: PAGE });
+    const comps = p.components.map((r) => r.toJSON().components);
+    assert.deepEqual(
+      comps.map((c) => c.map((b) => b.url)),
+      [[PAGE]],
+      state
+    );
+  }
+});
+
+test('buildEventPayload: without a page address there is no link, and the post is as before', () => {
+  for (const opts of [undefined, {}, { pageUrl: null }, { pageUrl: '' }]) {
+    const p = buildEventPayload(row(), { joined: [] }, opts);
+    const comps = p.components[0].toJSON().components;
+    assert.equal(comps.length, 3);
+    assert.ok(comps.every((c) => c.url === undefined));
+  }
+  assert.deepEqual(buildEventPayload(row({ state: 'ended' }), {}, {}).components, []);
+});
+
+test('buildEventPayload: the page address is never put in the embed text', () => {
+  const p = buildEventPayload(row(), { joined: [] }, { pageUrl: PAGE });
+  assert.ok(!JSON.stringify(p.embeds[0].toJSON()).includes('/events/'));
 });
 
 test('buildEventPayload: an image is shown in the embed', () => {
