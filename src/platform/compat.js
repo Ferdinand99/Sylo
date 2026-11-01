@@ -98,6 +98,7 @@ export function withGuildId(client, value) {
  */
 export function installFluxerCompat(sdk, { Collection, voice } = {}) {
   const {
+    CategoryChannel,
     Channel,
     ChannelManager,
     EmbedBuilder,
@@ -252,6 +253,39 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
       return this.guildId ? (this.client.guilds.get(this.guildId) ?? null) : null;
     })
   );
+  // A category's age restriction. Fluxer decides a channel's effective age restriction as: the
+  // channel's own override, else its category's override, else the server's flag. The SDK's
+  // category class has an empty body and drops `nsfw_override`, so a channel under an age-restricted
+  // category could not be told from any other. Keep it on the category, as `nsfwOverride` (null =
+  // inherits), both when the channel is made and when it is updated. A payload without the field
+  // leaves it undefined, which the public-channel test reads as "cannot tell" (modules/quoteBoard.js).
+  const keepCategoryOverride = (channel, data) => {
+    if (channel instanceof CategoryChannel && data && 'nsfw_override' in data) {
+      channel.nsfwOverride = data.nsfw_override ?? null;
+    }
+    return channel;
+  };
+  for (const name of ['from', 'fromOrCreate']) {
+    if (typeof Channel[name] !== 'function') continue;
+    wrap(
+      Channel,
+      name,
+      (native) =>
+        function (client, data) {
+          return keepCategoryOverride(native.call(this, client, data), data);
+        }
+    );
+  }
+  wrap(
+    CategoryChannel.prototype,
+    'applyEditPatch',
+    (native) =>
+      function (data) {
+        native.call(this, data);
+        keepCategoryOverride(this, data);
+      }
+  );
+
   // What a role may do in a channel, as discord.js works it out for `permissionsFor(role)`: the
   // role's own permissions, then the @everyone overwrite of the channel, then the role's own.
   // (The SDK only computes this for a member, through member.permissionsIn.) Administrator is

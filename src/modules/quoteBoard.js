@@ -8,7 +8,7 @@
 //
 // config shape: { publicPage, saveMode: 'everyone' | 'roles', saveRoles, staffRoles }
 import { ChannelType, EmbedBuilder } from 'discord.js';
-import { guildKey } from '../platform/platformOf.js';
+import { guildKey, platformOfGuild } from '../platform/platformOf.js';
 import { fluxerEndpoints } from '../platform/instance.js';
 import { splitPlatformGuildId } from '../lib/platformId.js';
 import { deleteQuote, getQuoteByMessage, getQuoteByNumber, insertQuote, quoteCount } from '../db/quotes.js';
@@ -143,8 +143,38 @@ async function withLock(key, fn) {
 
 const isThread = (channel) => channel?.isThread?.() === true;
 
+/** Is a Fluxer flag exactly true or false? Anything else (missing, odd) is a flag that cannot be read. */
+const isFlag = (value) => value === true || value === false;
+
 /**
- * Could @everyone read this channel (and is it not age-restricted)? Unknown counts as no.
+ * Is a Fluxer channel age-restricted? Fluxer decides this for a channel as: its own override,
+ * else its category's override, else the server's flag (the channel's plain `nsfw` field is only
+ * its own stored mark, so it is not enough). The category's override comes from the compat layer
+ * (platform/compat.js keeps it, the SDK drops it).
+ *
+ * It fails closed: the channel's own flag, a category that is not known, a flag that is not a clear
+ * true or false, and a server flag that is missing all count as age-restricted.
+ * @param {any} guild
+ * @param {any} channel
+ */
+export function fluxerAgeRestricted(guild, channel) {
+  if (!channel || channel.nsfw === true) return true;
+  const own = channel.nsfwOverride;
+  if (isFlag(own)) return own;
+  if (own !== null) return true; // the field is missing: cannot tell
+  if (channel.parentId) {
+    const category = (guild?.channels?.cache ?? guild?.channels)?.get?.(channel.parentId);
+    if (!category) return true;
+    const inherited = category.nsfwOverride;
+    if (isFlag(inherited)) return inherited;
+    if (inherited !== null) return true;
+  }
+  return guild?.nsfw !== false;
+}
+
+/**
+ * Could @everyone read this channel (and is it not age-restricted)? Unknown counts as no. On Fluxer
+ * age restriction includes the category's and the server's (fluxerAgeRestricted).
  * A thread has no permissions or age restriction of its own: it follows its parent channel, and
  * a private thread is never public (only its members and moderators can read it).
  */
@@ -156,6 +186,9 @@ export function isPublicSource(guild, channel) {
       source = channel.parent;
     }
     if (source?.nsfw) return false;
+    // On Fluxer the channel's own flag is not the whole answer: it can inherit from its category
+    // or the server. Discord's flag already is the effective one, so Discord is unchanged.
+    if (platformOfGuild(guild) === 'fluxer' && fluxerAgeRestricted(guild, source)) return false;
     const everyone = guild?.roles?.everyone;
     return Boolean(everyone && source?.permissionsFor?.(everyone)?.has?.('ViewChannel'));
   } catch {

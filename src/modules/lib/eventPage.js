@@ -46,6 +46,21 @@ export function eventPageUrl(token, base = config.dashboardUrl) {
   return `${root}${eventPagePath(token)}`;
 }
 
+/**
+ * Did Discord refuse a message because of a link button in it? That is a validation refusal
+ * (HTTP 400, code 50035, "Invalid Form Body") whose error path points at the components. The
+ * discord.js error carries the status, the code and the raw body (`rawError.errors`, keyed by the
+ * field that was wrong). Nothing else says the button was the problem: a timeout, a 429, a 5xx or
+ * a refusal about anything else may have left a message behind or may pass at the next try, so
+ * none of them is a reason to send the message again.
+ * @param {any} err
+ */
+export function refusedLinkButton(err) {
+  if (err?.status !== 400 || Number(err.code) !== 50035) return false;
+  const errors = err.rawError?.errors;
+  return Boolean(errors) && typeof errors === 'object' && Object.hasOwn(errors, 'components');
+}
+
 /** Is the Events module on with the public pages switched on? `mod` is a getGuildModule() answer. */
 export const eventPagesOn = (mod) => mod?.enabled === true && mod.config?.publicPages === true;
 
@@ -85,13 +100,12 @@ export function eventStatus(ev, now = Date.now()) {
   return endAt <= now ? 'ended' : 'upcoming';
 }
 
-// The hosts the page loads an event's image from. An admin may write any https link as the image
-// of an event, and the posted embed shows it (Discord's own proxy fetches it). The public page is
-// different: the visitor's browser would fetch it, so whoever wrote the link would learn the
-// address, browser and time of every visitor. The page's Content-Security-Policy allows any https
-// image (the dashboard previews admins' images), which is no reason to trust one, so the page
-// shows an image only from these hosts, Discord's own image servers, where the image of an event
-// uploaded to Discord lives. Anything else is left out.
+// The hosts Sylo fetches an event's image (and a Discord server's icon) from for the public page. An
+// admin may write any https link as the image of an event, and the posted embed shows it (Discord's
+// own proxy fetches it). The page is different: Sylo itself makes the request (modules/lib/
+// eventImage.js), so it must not be made to call whatever host an admin typed. Only these hosts,
+// Discord's own image servers, where the image of an event uploaded to Discord lives, are fetched.
+// Anything else is left out of the page. The visitor's browser never contacts them.
 const IMAGE_HOSTS = new Set(['cdn.discordapp.com', 'media.discordapp.net']);
 
 /**

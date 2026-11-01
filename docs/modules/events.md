@@ -101,15 +101,26 @@ Where the link is:
   has to carry a full address that Discord accepts as a link. With no address, plain
   `http`, a local name (`localhost`, `.local`, `.lan`) or an IP address, the posts have
   no link at all. The dashboard still shows the page link either way.
-- A link button can never cost you an event. If Discord refuses a new post because of
-  the button, Sylo posts it again without the button, and the event is kept. Only if the
-  post is refused without the button as well (for example Sylo may not post in that
-  channel) is the event not created. An edit that Discord refuses because of the button
-  is also repeated without it.
+- A link button does not cost you an event. If Discord refuses a new post because of the
+  button (a validation error, HTTP 400 with code 50035, whose error path points at the
+  components), Sylo posts it again without the button and the event is kept. An edit
+  that Discord refuses for the same reason is edited again without it. **Any other
+  error is not repeated**: a timeout, a rate limit (429), a server error (5xx) or a
+  refusal about something else (for example Sylo may not post in that channel) may
+  have left a post behind or may pass at the next try, and a second post would be a
+  duplicate. A new post that fails that way is reported as before and the event is not
+  created; a failed edit leaves the post as it was, link included, until its next edit.
+  If Discord ever words the button refusal differently from what Sylo expects, the
+  result is that logged error and no link, never a second post.
 - When you switch the setting on or off, or switch the Events module on or off while the
   setting is on, Sylo edits the posts of the server's events to add or remove the link:
   the upcoming ones and the finished and cancelled ones alike (their pages stay), up to
-  the 200 newest events. This runs in the background, one edit after the other.
+  the 200 newest events. This runs in the background, one edit after the other, and
+  only one such pass runs per server at a time: if you switch again while it is
+  running, it goes round once more at the end instead of a second pass starting. If Sylo
+  restarts in the middle of a pass, the rest of it is lost, and the posts it had not
+  reached keep their old link state until you switch the setting again or the post is
+  next edited.
 
 ### What the page shows
 
@@ -136,7 +147,8 @@ Where the link is:
 ### Only public channels
 
 An event has a page only if its channel is one **@everyone can see** (and is not
-age-restricted). Sylo uses the same test as the [quote board](quote-board.md): the
+age-restricted, including through its category or the server on Fluxer). Sylo uses
+the same test as the [quote board](quote-board.md): the
 @everyone role must be able to view the channel, a thread follows its parent channel,
 and a private thread never counts. An event posted in a staff or other private channel
 **never** has a page, even with the setting on, and has no link in its post.
@@ -161,6 +173,14 @@ against the channel as it is at that moment:
   role's permissions, then the @everyone overwrite, then the role's own; Administrator
   is everything). Where it still cannot tell, there is no page. This is tested against
   the real Fluxer SDK classes, not yet against a live Fluxer server.
+- On **Fluxer** a channel can be age-restricted by its own setting, by its **category**
+  or by the **server**, in that order of say (a channel's own setting beats its
+  category's, which beats the server's). Sylo applies the same rule, so an event in a
+  channel that Fluxer treats as age-restricted never has a page, even when the
+  channel itself is not marked. It fails closed: a category Sylo does not know, an
+  age-restriction flag it cannot read, or a missing server flag all count as
+  age-restricted. Discord is unchanged: Discord's own channel flag is already the
+  effective one.
 
 ### When there is no page
 
@@ -206,8 +226,10 @@ What Sylo fetches, and how:
 - If the fetch fails, for example because the Discord link has expired (Discord's links
   carry a signature and run out after a while), the page simply has no image.
 - Fetched images are kept in memory for a short time (10 minutes, and a failure for 1
-  minute) so a busy page does not make Sylo fetch the same file again. The memory is
-  bounded: at most 64 images and 16 MB.
+  minute) so a busy page does not make Sylo fetch the same file again. A sweep that runs
+  every minute, and every use, removes an entry once its time is up, so nothing stays
+  in memory more than about a minute past it, even if the page is switched off or the
+  server removed in the meantime. The memory is bounded: at most 64 images and 16 MB.
 - The server's icon is taken from Discord. A Fluxer server's icon is not on Discord's
   servers, so a Fluxer page shows no icon.
 

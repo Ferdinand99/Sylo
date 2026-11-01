@@ -39,7 +39,7 @@ import { log } from '../lib/log.js';
 import { idList } from '../web/lib/idList.js';
 import { every, after } from './schedule.js';
 import { canonicalTimeZone, formatInZone, localToUtc } from './lib/eventTime.js';
-import { channelIsPublic, eventPageUrl, eventPagesOn } from './lib/eventPage.js';
+import { channelIsPublic, eventPageUrl, eventPagesOn, refusedLinkButton } from './lib/eventPage.js';
 
 /** Setting limits, served to the dashboard (modules/limits.js). */
 export const LIMITS = {
@@ -309,9 +309,10 @@ export async function refreshEventMessage(id) {
     await msg.edit(buildEventPayload(ev, joinedAndMaybe, { pageUrl }));
   } catch (err) {
     log.warn('events', `edit #${id} failed:`, err.message);
-    // The link button is the one part that is new in the post. If Discord refused the edit, try
-    // once more without it, so a button it does not like never leaves a post out of date.
-    if (pageUrl) {
+    // If Discord refused the edit because of the link button, and only then, edit once more
+    // without it, so a button it does not like never leaves a post out of date. Any other error
+    // (a timeout, a rate limit, a server error) is not repeated and the link stays as it was.
+    if (pageUrl && refusedLinkButton(err)) {
       await msg
         .edit(buildEventPayload(ev, joinedAndMaybe, { pageUrl: null }))
         .catch((err2) => log.warn('events', `edit #${id} without the page link failed:`, err2.message));
@@ -322,6 +323,8 @@ export async function refreshEventMessage(id) {
 
 /** How many posts one server's switch of the pages setting edits, newest event first. */
 const POSTS_REFRESHED = 200;
+/** The servers whose posts are being refreshed right now, each with a flag for "once more". */
+const passes = new Map();
 
 /**
  * Edit the post of the server's events, one after the other: after the public pages setting (or the
@@ -329,10 +332,28 @@ const POSTS_REFRESHED = 200;
  * too, since their page stays and their post keeps its link; the newest POSTS_REFRESHED are done.
  */
 export async function refreshEventPosts(guildId) {
-  for (const ev of await postedEvents(guildId, POSTS_REFRESHED)) {
-    await refreshEventMessage(ev.id).catch((err) =>
-      log.warn('events', `refresh of #${ev.id} failed:`, err.message)
-    );
+  // One pass per server at a time. A switch that comes while a pass is running does not start a
+  // second one: it marks the running pass to go round once more when it ends, which reads the
+  // setting as it is by then. A restart in the middle loses the rest of a pass; the posts it had
+  // not reached keep their old link state until the setting is switched or the post is edited.
+  const running = passes.get(guildId);
+  if (running) {
+    running.again = true;
+    return;
+  }
+  const pass = { again: false };
+  passes.set(guildId, pass);
+  try {
+    do {
+      pass.again = false;
+      for (const ev of await postedEvents(guildId, POSTS_REFRESHED)) {
+        await refreshEventMessage(ev.id).catch((err) =>
+          log.warn('events', `refresh of #${ev.id} failed:`, err.message)
+        );
+      }
+    } while (pass.again);
+  } finally {
+    passes.delete(guildId);
   }
 }
 
@@ -440,9 +461,10 @@ export async function createEvent({ guild, hostId, channelId, roleId = null, inp
     try {
       message = await channel.send(buildEventPayload(ev, {}, { pageUrl }));
     } catch (err) {
-      // The link button must never cost anyone the event: if Discord refused the post with it,
-      // post again without it, and only give up if that is refused too.
-      if (!pageUrl) throw err;
+      // The link button must never cost anyone the event: if Discord refused the post because of
+      // it, post again without it, and only give up if that is refused too. Any other error is
+      // not repeated: a timeout may have left a post behind, and a second one would be a duplicate.
+      if (!pageUrl || !refusedLinkButton(err)) throw err;
       log.warn('events', `post with the page link refused in ${channelId}, posting without it:`, err.message);
       message = await channel.send(buildEventPayload(ev, {}, { pageUrl: null }));
     }

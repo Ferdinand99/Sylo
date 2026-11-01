@@ -25,9 +25,13 @@ let app;
 test.before(async () => {
   app = await startWebApp();
   app.guild.iconURL = () => ICON_LINK;
+  // The events live under a server key of their own, so that other test files that share the
+  // Postgres database (and use the fake server's own id) never see them.
+  app.client.guilds.cache.set(SG, app.guild);
 });
 test.after(() => app.close());
 
+const SG = '900000000000000124';
 const HOST = '900000000000000555';
 const MEMBERS = ['900000000000000561', '900000000000000562', '900000000000000563'];
 const HOUR = 3_600_000;
@@ -62,11 +66,11 @@ test.before(() => {
 test.after(() => _setImageFetcher(null));
 
 const turnOn = (config = { publicPages: true }, enabled = true) =>
-  setGuildModule(GID, 'events', { enabled, config });
+  setGuildModule(SG, 'events', { enabled, config });
 
 async function make(over = {}) {
   const { id } = await createEvent({
-    guildId: GID,
+    guildId: SG,
     channelId: CH.general,
     title: 'Game night',
     description: 'Bring snacks',
@@ -101,7 +105,7 @@ test.before(async () => {
 // --- no page ----------------------------------------------------------------------------------
 
 test('off by default: a server that never touched the setting answers 404', async () => {
-  await setGuildModule(GID, 'events', { enabled: true, config: {} });
+  await setGuildModule(SG, 'events', { enabled: true, config: {} });
   const res = await get(ev.public_token);
   assert.equal(res.status, 404);
   const html = await res.text();
@@ -636,7 +640,7 @@ test('/forget by the host leaves the page as it was, without a host to show', as
   const mine = await make({ title: 'Mine', hostId: MEMBERS[0] });
   await setEventParticipant(mine.id, MEMBERS[0], 'join');
   assert.match(await page(mine), /<dt>Going<\/dt>\s*<dd>1 of 10<\/dd>/);
-  await forgetUser(GID, MEMBERS[0]);
+  await forgetUser(SG, MEMBERS[0]);
   const html = await page(mine);
   assert.match(html, /Mine/);
   assert.match(html, /<dt>Going<\/dt>\s*<dd>0 of 10<\/dd>/, 'their sign-up is gone from the count');
@@ -646,7 +650,7 @@ test('/forget by the host leaves the page as it was, without a host to show', as
 test('when Sylo leaves the server, the events and their pages are gone', async () => {
   const doomed = await make({ title: 'Doomed' });
   assert.equal((await get(doomed.public_token)).status, 200);
-  await clearGuildEvents(GID);
+  await clearGuildEvents(SG);
   const res = await get(doomed.public_token);
   assert.equal(res.status, 404);
   assert.match(await res.text(), NO_PAGE);

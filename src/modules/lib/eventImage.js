@@ -16,13 +16,17 @@
 // Answers are kept in memory for a short while so a page that is opened often does not make Sylo
 // fetch the same image every time. The memory is bounded: at most MAX_ENTRIES entries and
 // MAX_TOTAL_BYTES of image data, oldest out first; a failure is remembered for a shorter time.
+// An entry that has passed its time is also removed, not just ignored: a sweep runs every
+// SWEEP_MS (and on every use), so nothing stays in memory more than about a minute past its time.
 import { safeFetch } from '../../lib/safeFetch.js';
+import { every } from '../schedule.js';
 import { trustedImageUrl } from './eventPage.js';
 
 export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 export const IMAGE_TIMEOUT_MS = 5000;
 export const OK_TTL_MS = 10 * 60_000;
 export const FAILED_TTL_MS = 60_000;
+export const SWEEP_MS = 60_000;
 export const MAX_ENTRIES = 64;
 export const MAX_TOTAL_BYTES = 16 * 1024 * 1024;
 
@@ -72,7 +76,20 @@ export function _clearImageCache() {
 /** Tests only: how much is held. */
 export const _imageCacheSize = () => ({ entries: cache.size, bytes: cachedBytes });
 
+const expired = (entry, now) => now - entry.at >= (entry.body ? OK_TTL_MS : FAILED_TTL_MS);
+
+/** Drop every entry whose time is up, so its bytes leave the memory. */
+export function sweepImageCache(now = Date.now()) {
+  for (const [key, entry] of cache) {
+    if (!expired(entry, now)) continue;
+    cachedBytes -= entry.body?.length ?? 0;
+    cache.delete(key);
+  }
+}
+every('events', SWEEP_MS, () => sweepImageCache());
+
 function remember(url, entry) {
+  sweepImageCache();
   const old = cache.get(url);
   if (old) {
     cachedBytes -= old.body?.length ?? 0;
@@ -119,10 +136,9 @@ async function download(url) {
 export async function loadImage(link) {
   const url = trustedImageUrl(link);
   if (!url) return null;
+  sweepImageCache();
   const hit = cache.get(url);
-  if (hit && Date.now() - hit.at < (hit.body ? OK_TTL_MS : FAILED_TTL_MS)) {
-    return hit.body ? { type: hit.type, body: hit.body } : null;
-  }
+  if (hit) return hit.body ? { type: hit.type, body: hit.body } : null;
   if (inflight.has(url)) return inflight.get(url);
   const pending = download(url)
     .then((image) => {

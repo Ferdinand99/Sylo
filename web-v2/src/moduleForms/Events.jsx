@@ -371,7 +371,8 @@ export default function Events() {
             the time in the visitor&apos;s own time zone, the description, the place, the image, the capacity
             and how many are going or maybe: no names, no host and no roles. Pages exist only for events in
             channels that everyone can see, and an event in a private channel never has one. The link is added
-            to the event&apos;s post, and saving this updates the posts of upcoming events.
+            to the event&apos;s post, and saving this updates the posts of the server&apos;s events, finished
+            ones too.
           </p>
         </div>
 

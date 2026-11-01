@@ -855,16 +855,65 @@ test('switching the Events module refreshes the posts only where the pages setti
 
 const hasButtonLink = (p) => p.components?.some((r) => (r.toJSON?.().components ?? []).some((c) => c.url));
 
+// The shape of a discord.js DiscordAPIError: the HTTP status, the Discord code and the raw body.
+class ApiError extends Error {
+  constructor(message, { status, code, errors } = {}) {
+    super(message);
+    this.name = 'DiscordAPIError[50035]';
+    this.status = status;
+    this.code = code;
+    this.rawError = { message, code, errors };
+  }
+}
+const buttonRefusal = () =>
+  new ApiError(
+    'Invalid Form Body\ncomponents[0].components[3].url[BUTTON_COMPONENT_INVALID_URL]: Not a well formed URL.',
+    {
+      status: 400,
+      code: 50035,
+      errors: {
+        components: {
+          0: { components: { 3: { url: { _errors: [{ code: 'BUTTON_COMPONENT_INVALID_URL' }] } } } },
+        },
+      },
+    }
+  );
+const timeout = () => Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+
+// Everything that is not Discord refusing the button. None of them may send the post again or
+// strip the link.
+const notTheButton = {
+  'a 400 about the embeds': () =>
+    new ApiError('Invalid Form Body', {
+      status: 400,
+      code: 50035,
+      errors: { embeds: { 0: { _errors: [] } } },
+    }),
+  'a 400 with another code': () =>
+    new ApiError('Missing Permissions', { status: 400, code: 50013, errors: {} }),
+  'a 400 with no error path': () => new ApiError('Invalid Form Body', { status: 400, code: 50035 }),
+  'a 403 Missing Access': () => new ApiError('Missing Access', { status: 403, code: 50001 }),
+  'a 429 rate limit': () => new ApiError('You are being rate limited.', { status: 429, code: 0 }),
+  'a 500': () => new ApiError('Internal Server Error', { status: 500, code: 0 }),
+  'a 503': () => new ApiError('Service Unavailable', { status: 503, code: 0 }),
+  'a timeout': timeout,
+  'a plain error': () => new Error('Missing Access'),
+  'an error with a components message but no status': () => new Error('Invalid Form Body components[0]'),
+};
+
 test('if Discord refuses the new post because of the link button, it is posted again without it', async () => {
   fresh();
   await enable({ publicPages: true });
+  let tries = 0;
   w.channel.send = async (p) => {
-    if (hasButtonLink(p)) throw new Error('Invalid Form Body: components: Not a well formed URL.');
+    tries += 1;
+    if (hasButtonLink(p)) throw buttonRefusal();
     w.sent.push(p);
     return w.message;
   };
   const id = await postEvent();
-  assert.equal(w.sent.length, 1, 'posted once, without the link');
+  assert.equal(tries, 2, 'once with the link, once without');
+  assert.equal(w.sent.length, 1, 'one post');
   assert.equal(linkOf(w.sent[0]), undefined);
   assert.equal(w.sent[0].components[0].toJSON().components.length, 3, 'Join, Maybe and Leave');
   const row = await getEvent(id);
@@ -872,13 +921,32 @@ test('if Discord refuses the new post because of the link button, it is posted a
   assert.equal(row.message_id, MSG);
 });
 
+for (const [name, make] of Object.entries(notTheButton)) {
+  test(`a new post that fails with ${name} is not sent again, and no event is left behind`, async () => {
+    fresh();
+    await enable({ publicPages: true });
+    let tries = 0;
+    w.channel.send = async () => {
+      tries += 1;
+      throw make();
+    };
+    const before = (await upcomingEvents(GID)).length;
+    const input = parseEventInput({ title: 'x', start: utcText(inHours(2)) }).value;
+    const r = await createEvent({ guild: w.guild, hostId: HOST, channelId: CH, input });
+    assert.equal(tries, 1, 'a post that may have gone through is never repeated');
+    assert.equal(r.ok, false);
+    assert.equal((await upcomingEvents(GID)).length, before);
+    assert.equal(w.sent.length, 0);
+  });
+}
+
 test('the event is removed only when the post is refused without the link as well', async () => {
   fresh();
   await enable({ publicPages: true });
   let tries = 0;
   w.channel.send = async () => {
     tries += 1;
-    throw new Error('Missing Access');
+    throw buttonRefusal(); // refused even without a link: nothing more to try
   };
   const before = (await upcomingEvents(GID)).length;
   const input = parseEventInput({ title: 'x', start: utcText(inHours(2)) }).value;
@@ -900,13 +968,106 @@ test('if Discord refuses an edit because of the link button, the post is edited 
   const id = await postEvent();
   w.edits.length = 0;
   const edit = w.message.edit;
+  let tries = 0;
   w.message.edit = async (p) => {
-    if (hasButtonLink(p)) throw new Error('Invalid Form Body: components: Not a well formed URL.');
+    tries += 1;
+    if (hasButtonLink(p)) throw buttonRefusal();
     return edit(p);
   };
   assert.equal(await refreshEventMessage(id), true);
+  assert.equal(tries, 2);
   assert.equal(w.edits.length, 1);
   assert.equal(linkOf(w.edits[0]), undefined);
   assert.match(w.edits[0].embeds[0].toJSON().title, /Open day/);
   assert.ok(await getEvent(id), 'and the event is untouched');
+});
+
+for (const [name, make] of Object.entries(notTheButton)) {
+  test(`an edit that fails with ${name} is not repeated, and the link is not taken off`, async () => {
+    fresh();
+    await enable({ publicPages: true });
+    const id = await postEvent();
+    w.edits.length = 0;
+    const edit = w.message.edit;
+    let tries = 0;
+    w.message.edit = async (p) => {
+      tries += 1;
+      if (tries === 1) throw make();
+      return edit(p);
+    };
+    assert.equal(await refreshEventMessage(id), true);
+    assert.equal(tries, 1, 'one try, no second edit without the link');
+    assert.equal(w.edits.length, 0, 'the post is as it was, with its link');
+    // the next ordinary edit puts everything right, link included
+    assert.equal(await refreshEventMessage(id), true);
+    assert.ok(linkOf(w.edits.at(-1)), 'the link is still there');
+  });
+}
+
+// --- one refresh pass per server ---------------------------------------------------------------
+
+test('a second switch while a pass is running makes it go round once more, not start a second pass', async () => {
+  fresh();
+  await enable({});
+  await newEvent();
+  await newEvent({ title: 'Second' });
+  w.edits.length = 0;
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const edit = w.message.edit;
+  let inFlight = 0;
+  let mostAtOnce = 0;
+  w.message.edit = async (p) => {
+    inFlight += 1;
+    mostAtOnce = Math.max(mostAtOnce, inFlight);
+    await gate;
+    inFlight -= 1;
+    return edit(p);
+  };
+
+  await enable({ publicPages: true });
+  const first = refreshEventPosts(GID);
+  await settle();
+  // on, off, on within the pass: nothing new starts
+  const second = refreshEventPosts(GID);
+  await enable({ publicPages: false });
+  const third = refreshEventPosts(GID);
+  await settle();
+  assert.equal(mostAtOnce, 1, 'one edit at a time, so one pass');
+  release();
+  await Promise.all([first, second, third]);
+
+  assert.equal(w.edits.length, 4, 'two posts, and one more round: two passes in all, not three');
+  // the last round saw the setting as it was by then: off
+  assert.equal(linkOf(w.edits.at(-1)), undefined);
+  assert.equal(linkOf(w.edits.at(-2)), undefined);
+
+  // and a later switch starts a fresh pass
+  w.edits.length = 0;
+  w.message.edit = edit;
+  await enable({ publicPages: true });
+  await refreshEventPosts(GID);
+  assert.equal(w.edits.length, 2);
+});
+
+test('a pass that hits a failing post goes on, and does not block the next one', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  await newEvent();
+  await newEvent({ title: 'Second' });
+  const edit = w.message.edit;
+  let n = 0;
+  w.message.edit = async (p) => {
+    n += 1;
+    if (n === 1) throw new Error('boom');
+    return edit(p);
+  };
+  w.edits.length = 0;
+  await refreshEventPosts(GID);
+  assert.equal(w.edits.length, 1, 'the second post was still done');
+  w.edits.length = 0;
+  await refreshEventPosts(GID);
+  assert.equal(w.edits.length, 2, 'and a new pass can start');
 });

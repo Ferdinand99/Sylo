@@ -14,6 +14,7 @@ import {
   _setImageFetcher,
   loadImage,
   sniffImageType,
+  sweepImageCache,
 } from '../src/modules/lib/eventImage.js';
 
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('x')]);
@@ -177,4 +178,39 @@ test('the memory is bounded: by the number of entries, and by the bytes', async 
   const before = calls.length;
   await loadImage(url(19));
   assert.equal(calls.length, before);
+});
+
+test('an entry whose time is up leaves the memory at the next sweep, with no new fetch needed', async () => {
+  let now = 5_000_000;
+  mock.method(Date, 'now', () => now);
+  fetcher();
+  await loadImage(url(1));
+  fetcher(async () => reply(PNG, 'image/png', 404));
+  await loadImage(url(2));
+  assert.equal(_imageCacheSize().entries, 2);
+  assert.ok(_imageCacheSize().bytes > 0);
+
+  now += FAILED_TTL_MS;
+  sweepImageCache();
+  assert.equal(_imageCacheSize().entries, 1, 'the failure is gone first');
+  assert.ok(_imageCacheSize().bytes > 0, 'the image is still within its time');
+
+  now += OK_TTL_MS - FAILED_TTL_MS - 1;
+  sweepImageCache();
+  assert.equal(_imageCacheSize().entries, 1, 'one millisecond short');
+  now += 1;
+  sweepImageCache();
+  assert.deepEqual(_imageCacheSize(), { entries: 0, bytes: 0 }, 'nothing kept past its time');
+});
+
+test('any use sweeps too, so an idle instance does not keep a stale copy for long', async () => {
+  let now = 9_000_000;
+  mock.method(Date, 'now', () => now);
+  fetcher();
+  await loadImage(url(1));
+  now += OK_TTL_MS + 1;
+  fetcher(async () => reply(PNG, 'image/png', 404));
+  await loadImage(url(2)); // a different link: the old copy goes out on the way
+  assert.equal(_imageCacheSize().bytes, 0);
+  assert.equal(_imageCacheSize().entries, 1);
 });

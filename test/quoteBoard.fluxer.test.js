@@ -66,6 +66,9 @@ function fluxerWorld() {
   const channel = {
     id: CHANNEL,
     isTextBased: () => true,
+    // a Fluxer text channel: its own mark and its override (null = inherits)
+    nsfw: false,
+    nsfwOverride: null,
     permissionsFor: (who) => ({ has: () => who?.id === ASKER || who === everyone }),
     messages: { fetch: async (id) => stored.get(id) ?? Promise.reject(new Error('Unknown Message')) },
     send: async () => ({}),
@@ -75,6 +78,7 @@ function fluxerWorld() {
   const guild = {
     id: RAW,
     name: 'Fluxer Guild',
+    nsfw: false,
     roles: { everyone },
     channels: { cache: new Map([[CHANNEL, channel]]), fetch: async () => channel },
     members: { cache: new Map(), fetch: async () => null },
@@ -139,6 +143,16 @@ test('!quote save <link> saves under the platform-prefixed server key and shows 
     said(w.replies).includes(`https://web.fluxer.app/channels/${RAW}/${CHANNEL}/${w.quoted.id}`),
     'the jump link opens the Fluxer web app'
   );
+});
+
+test('a quote from a Fluxer channel that inherits age restriction from the server is not a public source', async () => {
+  const w = fluxerWorld();
+  w.guild.nsfw = true;
+  await setGuildModule(KEY, 'quote-board', { enabled: true, config: {} });
+  await run(w.command(`!quote save https://web.fluxer.app/channels/${RAW}/${CHANNEL}/${w.quoted.id}`));
+  const row = await getQuoteByNumber(KEY, 1);
+  assert.equal(row.body, 'said on Fluxer', 'it is saved');
+  assert.equal(row.public_source, 0, 'but kept off the public page and out of other channels');
 });
 
 test('!quote save as a reply saves the message that was replied to', async () => {
