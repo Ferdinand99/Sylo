@@ -19,10 +19,12 @@ import {
   setEventParticipant,
 } from '../src/db/events.js';
 import { forgetUser } from '../src/db/purge.js';
+import { _clearImageCache, _setImageFetcher } from '../src/modules/lib/eventImage.js';
 
 let app;
 test.before(async () => {
   app = await startWebApp();
+  app.guild.iconURL = () => ICON_LINK;
 });
 test.after(() => app.close());
 
@@ -30,6 +32,35 @@ const HOST = '900000000000000555';
 const MEMBERS = ['900000000000000561', '900000000000000562', '900000000000000563'];
 const HOUR = 3_600_000;
 const NO_PAGE = /There is no public event page at this address/;
+const ICON_LINK = `https://cdn.discordapp.com/icons/${GID}/a1b2c3.png?size=128`;
+const ATTACHMENT = `https://cdn.discordapp.com/attachments/${CH.general}/100000000000000042/poster.png`;
+const PNG = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.from('png'),
+]);
+
+// The images are fetched by Sylo, not by the visitor's browser. Here the fetch is answered by the
+// test: every call is recorded, and a test can change the answer.
+const calls = [];
+let override = null;
+const setAnswer = (fn) => {
+  override = fn;
+};
+const okPng = async () => ({
+  status: 200,
+  ok: true,
+  headers: new Headers({ 'content-type': 'image/png' }),
+  body: PNG,
+});
+test.before(() => {
+  _setImageFetcher(async (url, options) => {
+    calls.push({ url, options });
+    return (override ?? okPng)(url, options);
+  });
+  _clearImageCache();
+});
+test.after(() => _setImageFetcher(null));
+
 const turnOn = (config = { publicPages: true }, enabled = true) =>
   setGuildModule(GID, 'events', { enabled, config });
 
@@ -54,8 +85,11 @@ async function make(over = {}) {
 // 30 requests come from the next client address (the web server trusts X-Forwarded-For from this
 // machine here, see helpers/trustLoopbackProxy.js); the limit's own test uses one of its own.
 let sent = 0;
-const get = (token, client = `10.20.${Math.floor(sent++ / 30)}.1`) =>
+const clientNow = () => `10.20.${Math.floor(sent++ / 30)}.1`;
+const get = (token, client = clientNow()) =>
   fetch(`${app.base}/events/${token}`, { headers: { 'x-forwarded-for': client } });
+const getAsset = (token, name, client = clientNow()) =>
+  fetch(`${app.base}/events/${token}/${name}`, { headers: { 'x-forwarded-for': client } });
 const page = async (ev) => (await get(ev.public_token)).text();
 
 let ev;
@@ -267,16 +301,47 @@ test('hostile text is escaped, never run as markup', async () => {
 
 // --- images -----------------------------------------------------------------------------------
 
-test('an image is shown only from a host the page already trusts', async () => {
-  const shown = [
-    'https://cdn.discordapp.com/attachments/1/2/poster.png',
-    'https://media.discordapp.net/attachments/1/2/poster.png?width=400',
-  ];
-  for (const imageUrl of shown) {
-    const html = await page(await make({ imageUrl }));
-    assert.match(html, /<img class="ev-image" src="https:\/\/[^"]+poster\.png/, imageUrl);
-    assert.match(html, /referrerpolicy="no-referrer"/);
+const asset = async (event, name) => getAsset(event.public_token, name);
+const fetched = (url) => calls.filter((c) => c.url.startsWith(url.split('?')[0]));
+
+test('the page holds no third-party address and no id: the icon and the image are served by Sylo', async () => {
+  const withImage = await make({ imageUrl: ATTACHMENT });
+  const html = await page(withImage);
+  assert.ok(html.includes(`src="/events/${withImage.public_token}/icon"`), 'the icon through Sylo');
+  assert.ok(html.includes(`src="/events/${withImage.public_token}/image"`), 'the image through Sylo');
+  assert.doesNotMatch(html, /https?:\/\//, 'no address of anyone else');
+  assert.doesNotMatch(html, /discordapp/);
+  assert.doesNotMatch(html, /\b\d{17,20}\b/, 'none of the ids in the image links');
+  assert.ok(!html.includes(GID) && !html.includes(CH.general) && !html.includes('100000000000000042'));
+
+  const icon = await asset(withImage, 'icon');
+  assert.equal(icon.status, 200);
+  assert.equal(icon.headers.get('content-type'), 'image/png');
+  assert.equal(icon.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(icon.headers.get('cache-control'), /private/);
+  assert.deepEqual(Buffer.from(await icon.arrayBuffer()), PNG);
+  const image = await asset(withImage, 'image');
+  assert.equal(image.status, 200);
+  assert.deepEqual(Buffer.from(await image.arrayBuffer()), PNG);
+});
+
+test('Sylo fetches only from Discord, over https, with no redirect, a size cap and a timeout', async () => {
+  const withImage = await make({ imageUrl: ATTACHMENT });
+  _clearImageCache();
+  calls.length = 0;
+  await asset(withImage, 'image');
+  await asset(withImage, 'icon');
+  assert.deepEqual(calls.map((c) => c.url).sort(), [ATTACHMENT, ICON_LINK].sort());
+  for (const { url, options } of calls) {
+    assert.match(url, /^https:\/\/(cdn\.discordapp\.com|media\.discordapp\.net)\//);
+    assert.equal(options.maxRedirects, 0, 'a redirect is a failure');
+    assert.equal(options.allowPrivate, false, 'never lifted by ALLOW_PRIVATE_URLS');
+    assert.ok(options.maxBytes > 0 && options.maxBytes <= 2 * 1024 * 1024);
+    assert.ok(options.timeoutMs > 0 && options.timeoutMs <= 10_000);
   }
+});
+
+test('a link to anywhere else is never fetched, and leaves the image out', async () => {
   const hidden = [
     'https://evil.example/pixel.png',
     'https://tracker.example/p.gif?visitor=1',
@@ -291,11 +356,153 @@ test('an image is shown only from a host the page already trusts', async () => {
     '//cdn.discordapp.com/a.png',
   ];
   for (const imageUrl of hidden) {
-    const html = await page(await make({ imageUrl }));
+    calls.length = 0;
+    const withImage = await make({ imageUrl });
+    const html = await page(withImage);
     assert.doesNotMatch(html, /<img class="ev-image"/, imageUrl);
-    assert.ok(!html.includes('evil.example'), imageUrl);
-    assert.ok(!html.includes('tracker.example'), imageUrl);
+    assert.ok(!html.includes('evil.example') && !html.includes('tracker.example'), imageUrl);
+    assert.equal((await asset(withImage, 'image')).status, 404, imageUrl);
+    assert.equal(fetched(imageUrl).length, 0, `${imageUrl} is not fetched`);
+    assert.ok(
+      calls.every((c) => /^https:\/\/cdn\.discordapp\.com\/icons\//.test(c.url)),
+      'only the icon'
+    );
   }
+});
+
+test('when the fetch fails the page has no image, and the image address is not found', async () => {
+  const body = (type, bytes) => ({
+    status: 200,
+    ok: true,
+    headers: new Headers({ 'content-type': type }),
+    body: bytes,
+  });
+  const cases = {
+    'not-found': async () => ({ status: 404, ok: false, headers: new Headers(), body: Buffer.from('gone') }),
+    'a redirect': async () => ({
+      status: 302,
+      ok: false,
+      headers: new Headers({ location: 'https://evil.example/' }),
+      body: Buffer.alloc(0),
+    }),
+    'a thrown error': async () => {
+      throw new Error('Too many redirects');
+    },
+    'a timeout': async () => {
+      throw new Error('This operation was aborted');
+    },
+    'too large': async () => {
+      throw new Error('Response too large (3000000 bytes)');
+    },
+    'an SVG': async () =>
+      body(
+        'image/svg+xml',
+        Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')
+      ),
+    'an SVG called a PNG': async () =>
+      body('image/png', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')),
+    'a page of HTML': async () => body('text/html', Buffer.from('<html>login</html>')),
+    'an empty body': async () => body('image/png', Buffer.alloc(0)),
+    'an unlisted image type': async () => body('image/bmp', Buffer.from('BM123456789')),
+  };
+  const missing = await (await get('0'.repeat(32))).text();
+  for (const [name, answer] of Object.entries(cases)) {
+    setAnswer(answer);
+    _clearImageCache();
+    const withImage = await make({
+      imageUrl: `https://cdn.discordapp.com/attachments/1/2/${name.replaceAll(' ', '-')}.png`,
+    });
+    const html = await page(withImage);
+    assert.doesNotMatch(html, /<img class="ev-image"/, name);
+    assert.match(html, /Game night/, `${name}: the rest of the page is still there`);
+    assert.ok(!html.includes('/icon'), `${name}: nor the icon`);
+    const res = await asset(withImage, 'image');
+    assert.equal(res.status, 404, name);
+    assert.equal(await res.text(), missing, `${name}: the same not-found page`);
+  }
+  setAnswer(null);
+  _clearImageCache();
+});
+
+test('what is served is the type the bytes show, from the types on the list only', async () => {
+  const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+  const GIF = Buffer.from('GIF89a......');
+  const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.from([1, 2, 3, 4]), Buffer.from('WEBPVP8 ')]);
+  for (const [bytes, served] of [
+    [JPEG, 'image/jpeg'],
+    [GIF, 'image/gif'],
+    [WEBP, 'image/webp'],
+    [PNG, 'image/png'],
+  ]) {
+    setAnswer(async () => ({
+      status: 200,
+      ok: true,
+      headers: new Headers({ 'content-type': 'image/png' }),
+      body: bytes,
+    }));
+    _clearImageCache();
+    const withImage = await make({ imageUrl: ATTACHMENT });
+    const res = await asset(withImage, 'image');
+    assert.equal(res.status, 200, served);
+    assert.equal(res.headers.get('content-type'), served, 'the type of the bytes, not the claimed one');
+    assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  }
+  setAnswer(null);
+  _clearImageCache();
+});
+
+test('the image addresses follow the rules of the page and answer with the same not-found', async () => {
+  const withImage = await make({ imageUrl: ATTACHMENT });
+  const missing = await (await get('0'.repeat(32))).text();
+  const refused = [];
+  const seen = async (res) => {
+    assert.equal(res.status, 404);
+    refused.push(await res.text());
+  };
+  _clearImageCache();
+  calls.length = 0;
+
+  await seen(await getAsset('0'.repeat(32), 'image')); // no such token
+  await seen(await getAsset('not-a-token', 'icon'));
+  await seen(await getAsset(withImage.public_token, 'other')); // not an asset
+  await seen(await getAsset(String(withImage.id), 'image')); // the event number
+  await turnOn({ publicPages: false });
+  await seen(await getAsset(withImage.public_token, 'image')); // page off
+  await turnOn({ publicPages: true }, false);
+  await seen(await getAsset(withImage.public_token, 'icon')); // module off
+  await turnOn();
+  await withChannel(closedTo, async () => {
+    await seen(await getAsset(withImage.public_token, 'image')); // private channel
+    await seen(await getAsset(withImage.public_token, 'icon'));
+  });
+  const stranger = await make({ guildId: '100000000000000999', imageUrl: ATTACHMENT });
+  await seen(await getAsset(stranger.public_token, 'image')); // a server Sylo is not in
+
+  assert.ok(
+    refused.every((body) => body === missing),
+    'every refusal is the same page'
+  );
+  assert.equal(calls.length, 0, 'nothing is fetched for a request that is refused');
+  assert.equal((await getAsset(withImage.public_token, 'image')).status, 200, 'and back to normal');
+});
+
+test('an image that was fetched is kept for a while, not fetched again for every visitor', async () => {
+  const withImage = await make({ imageUrl: `${ATTACHMENT}?ex=1` });
+  _clearImageCache();
+  calls.length = 0;
+  for (let i = 0; i < 4; i += 1) {
+    await page(withImage);
+    await asset(withImage, 'image');
+  }
+  assert.equal(fetched(`${ATTACHMENT}?ex=1`).length, 1);
+});
+
+test('the not-found page has no visit-count script, so the address stays out of the stats', async () => {
+  const res = await get('0'.repeat(32));
+  const html = await res.text();
+  assert.doesNotMatch(html, /telemetry|kestrel|k\.js/i);
+  assert.equal([...html.matchAll(/<script/g)].length, 1, 'only the theme script');
+  assert.match(html, /<meta name="robots" content="noindex"/);
 });
 
 // --- what the browser is told -----------------------------------------------------------------

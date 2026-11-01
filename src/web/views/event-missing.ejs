@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Sylo — Event unavailable</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/public.css" />
+</head>
+<body>
+  <%# A page of its own, with no visit-count script: the address that led here holds the event's
+      token, and the stats service must not get it. %>
+  <main class="auth-wrap">
+    <div class="auth-brand">
+      <img src="/favicon.svg" alt="" width="36" height="36" />
+      <span>Sylo</span>
+    </div>
+    <section class="card auth-card">
+      <h1 class="auth-title">No event here</h1>
+      <p class="muted"><%= message %></p>
+    </section>
+  </main>
+</body>
+</html>

@@ -172,6 +172,10 @@ export const SAMPLES = {
   leaderboard: { file: 'leaderboard.ejs', data: board({}) },
   quotes: { file: 'quotes.ejs', data: quotes({}) },
   'quotes-empty': { file: 'quotes.ejs', data: quotes({ quotes: [], total: 0 }) },
+  'event-missing': {
+    file: 'event-missing.ejs',
+    data: { message: 'There is no public event page at this address.' },
+  },
   event: { file: 'event.ejs', data: eventPage() },
   'event-cancelled': {
     file: 'event.ejs',
@@ -184,7 +188,7 @@ export const SAMPLES = {
       location: '',
       end: null,
       capacity: null,
-      image: 'https://cdn.discordapp.com/attachments/1/2/poster.png',
+      image: '/events/0123456789abcdef0123456789abcdef/image',
     }),
   },
   'leaderboard-empty': { file: 'leaderboard.ejs', data: board({ members: [], total: 0, pages: 1 }) },
