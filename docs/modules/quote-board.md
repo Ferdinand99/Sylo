@@ -172,7 +172,14 @@ The other commands work the same way: `!quote random`, `!quote search <text>`,
 `!quote user @member`, `!quote show <number>`, `!quote remove <number>`. Replies that
 should be private are deleted after about 15 seconds. Quotes show a link that opens
 the Fluxer web app. The dashboard and the public page work exactly as on Discord.
-Not verified against a live Fluxer server.
+Whether a channel is a **public source** is worked out from the @everyone role's
+permissions and the channel's overwrites, the same way as on Discord (tested against
+the real Fluxer SDK classes, not yet against a live Fluxer server). Before Sylo could
+do this on Fluxer, every quote saved there was noted as coming from a private source
+(shown only in its own channel and kept off the public page). Those older quotes keep
+that note, because it is decided when a quote is saved; only quotes saved from now on
+are marked public where their channel is. To bring an old quote to the public page,
+remove it and save it again.
 
 ## Gaps
 
