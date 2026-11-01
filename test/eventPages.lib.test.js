@@ -10,6 +10,7 @@ import {
   eventPagePath,
   eventPageUrl,
   eventStatus,
+  publicLinkBase,
   trustedImageUrl,
 } from '../src/modules/lib/eventPage.js';
 import { END_GRACE_MS } from '../src/db/events.js';
@@ -148,4 +149,35 @@ test('channelIsPublic: a thread follows its parent, and a private thread is neve
   assert.equal(channelIsPublic(guildWith({ t: thread(ChannelType.PublicThread, open) }), 't'), true);
   assert.equal(channelIsPublic(guildWith({ t: thread(ChannelType.PublicThread, closed) }), 't'), false);
   assert.equal(channelIsPublic(guildWith({ t: thread(ChannelType.PrivateThread, open) }), 't'), false);
+});
+
+test('publicLinkBase: only a public https address, never http, a local name or an IP address', () => {
+  assert.equal(publicLinkBase('https://app.example.com'), 'https://app.example.com');
+  assert.equal(publicLinkBase('https://app.example.com/sylo/'), 'https://app.example.com/sylo');
+  assert.equal(publicLinkBase('https://app.example.com:8443'), 'https://app.example.com:8443');
+  for (const refused of [
+    null,
+    undefined,
+    '',
+    'not a url',
+    'http://app.example.com',
+    'https://localhost',
+    'https://localhost:3000',
+    'https://sylo',
+    'https://sylo.local',
+    'https://sylo.lan',
+    'https://nas.home.arpa',
+    'https://192.168.1.20',
+    'https://10.0.0.5:3000',
+    'https://127.0.0.1',
+    'https://8.8.8.8',
+    'https://[::1]',
+    'https://[2001:db8::1]',
+    'https://user:pass@app.example.com',
+    'ftp://app.example.com',
+    'sylo://app.example.com',
+  ]) {
+    assert.equal(publicLinkBase(refused), null, String(refused));
+    assert.equal(eventPageUrl('a'.repeat(32), refused), null, `no link for ${refused}`);
+  }
 });

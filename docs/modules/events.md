@@ -97,11 +97,19 @@ Where the link is:
   (`🔗 [Event page](...)`), below the line that explains the reactions.
 - **Dashboard:** every event in the list has a *Public page* link.
 - The link in the post needs `DASHBOARD_URL` to be set (see
-  [self-hosting](../self-hosting.md)), because the post has to carry a full address.
-  Without it the dashboard still shows the link, and the posts have none.
-- When you switch the setting on or off, Sylo edits the posts of the upcoming events
-  to add or remove the link. Posts of finished events are updated the next time they
-  are edited.
+  [self-hosting](../self-hosting.md)) to a **public https address**, because the post
+  has to carry a full address that Discord accepts as a link. With no address, plain
+  `http`, a local name (`localhost`, `.local`, `.lan`) or an IP address, the posts have
+  no link at all. The dashboard still shows the page link either way.
+- A link button can never cost you an event. If Discord refuses a new post because of
+  the button, Sylo posts it again without the button, and the event is kept. Only if the
+  post is refused without the button as well (for example Sylo may not post in that
+  channel) is the event not created. An edit that Discord refuses because of the button
+  is also repeated without it.
+- When you switch the setting on or off, or switch the Events module on or off while the
+  setting is on, Sylo edits the posts of the server's events to add or remove the link:
+  the upcoming ones and the finished and cancelled ones alike (their pages stay), up to
+  the 200 newest events. This runs in the background, one edit after the other.
 
 ### What the page shows
 
@@ -120,6 +128,8 @@ Where the link is:
   A mention, channel, custom emoji or message link written in the title, description
   or place is replaced by "@member", "@role", "#channel", ":name:" or "[message
   link]", and any long number in the text is replaced by "…".
+- No ids in the images either: the page holds no Discord address (see
+  [The image](#the-image)).
 - No outward links. Everything you write in an event is public, so do not put
   something private in the description of an event that has a page.
 
@@ -145,9 +155,12 @@ against the channel as it is at that moment:
   longer known to Sylo, a missing @everyone role and permissions that cannot be read.
   The check only reads what Sylo already has in memory, so a visitor cannot make
   Sylo call Discord.
-- On **Fluxer** the test uses the same channel-permission lookup as the quote board.
-  It has not been verified against a live Fluxer server, and wherever Sylo gets no
-  answer from it, the event has no page.
+- On **Fluxer** the test works the same way. The SDK can only work out what a
+  *member* may do in a channel, so Sylo works out what the @everyone role may do from
+  the role's permissions and the channel's overwrites, the way discord.js does (the
+  role's permissions, then the @everyone overwrite, then the role's own; Administrator
+  is everything). Where it still cannot tell, there is no page. This is tested against
+  the real Fluxer SDK classes, not yet against a live Fluxer server.
 
 ### When there is no page
 
@@ -168,17 +181,40 @@ policy: no inline script or style, and everything the page shows is escaped.
 
 ### The image
 
-The page shows the event's image only if it is hosted by **Discord's own image
-servers** (`cdn.discordapp.com` or `media.discordapp.net`), for example a picture you
-uploaded to Discord and linked. An image from any other site is left out of the
-page, though it still shows in the post. The reason is that a visitor's browser would
-load it, and whoever owns that site would learn the address and browser of everyone
-who opens the page. (The dashboard's security policy already lets pages load images
-from any https site, so this check is made by the page itself.) Discord's links carry a
-signature and expire after some time, so an old event's image may stop showing.
+A visitor's browser never contacts anyone but Sylo. The server's icon and the
+event's image are fetched by **Sylo** and served from the page's own address
+(`/events/<code>/icon` and `/events/<code>/image`), so the page holds only those two
+paths: no Discord address, and none of the ids that Discord image links contain (a
+server id in an icon, a channel id in an attachment, a user id in an avatar).
+
+What Sylo fetches, and how:
+
+- Only **https** links on Discord's image servers (`cdn.discordapp.com` and
+  `media.discordapp.net`), with no port and no credentials. An image on any other site
+  is left out of the page, though it still shows in the post. Sylo never fetches
+  an address that a visitor sends; the links come from the event and the server.
+- Through Sylo's safe fetch: a name that resolves to a private address is refused, **no
+  redirect is followed**, at most **2 MB** is read, and it gives up after 5 seconds.
+- Only PNG, JPEG, GIF and WebP, checked both by the content type and by the first bytes
+  of the file. **SVG is refused**, and the type served is the one the bytes show, with
+  `X-Content-Type-Options: nosniff`.
+- The image addresses use the same rules as the page: the module and setting must be on,
+  the channel must be public, and every refusal is the same not-found page. They
+  share the page's rate limit of 40 requests a minute.
+- A browser may keep an image for up to a minute (`Cache-Control: private, max-age=60`);
+  the page itself is never cached.
+- If the fetch fails, for example because the Discord link has expired (Discord's links
+  carry a signature and run out after a while), the page simply has no image.
+- Fetched images are kept in memory for a short time (10 minutes, and a failure for 1
+  minute) so a busy page does not make Sylo fetch the same file again. The memory is
+  bounded: at most 64 images and 16 MB.
+- The server's icon is taken from Discord. A Fluxer server's icon is not on Discord's
+  servers, so a Fluxer page shows no icon.
 
 ### Privacy and `/forget`
 
+- A visitor's browser calls only Sylo. Sylo itself fetches the server icon and the event
+  image from Discord, which sees Sylo's request and not the visitor's.
 - The page shows only counts of sign-ups, never members. `/forget` removes a member's
   sign-ups, so the counts drop by one, and takes them off as host. The page never showed
   either, and the event, its page and its code stay as they were.
@@ -202,5 +238,6 @@ Fluxer has no buttons or slash commands yet:
   states the start in the creator's time zone.
 - With *Public event pages* on, the link to an event's page is written into the post
   text, since there are no buttons. Whether a Fluxer channel counts as public is
-  decided as described under [Only public channels](#only-public-channels).
+  decided as described under [Only public channels](#only-public-channels). The link
+  needs a public https `DASHBOARD_URL`, as on Discord.
 - The dashboard works exactly as on Discord.

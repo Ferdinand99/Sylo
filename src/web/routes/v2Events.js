@@ -18,7 +18,7 @@ import {
   createEvent,
   normaliseEventsConfig,
   parseEventInput,
-  refreshUpcomingEventMessages,
+  refreshEventPosts,
   updateEvent,
 } from '../../modules/events.js';
 import { utcToLocalInput } from '../../modules/lib/eventTime.js';
@@ -94,14 +94,15 @@ router.post(
         ? `settings saved (public event pages ${config.publicPages ? 'on' : 'off'})`
         : 'settings saved',
     });
-    // The posts of the upcoming events gain or lose their page link. In the background: it is one
-    // edit per event and the answer to the form does not wait for them.
+    // The posts of the events gain or lose their page link. In the background: it is one edit per
+    // event and the answer to the form does not wait for them.
     if (pagesChanged) {
-      refreshUpcomingEventMessages(req.guild.id).catch((err) =>
+      refreshEventPosts(req.guild.id).catch((err) =>
         log.warn('events', 'could not update the event posts:', err.message)
       );
     }
-    res.json({ config });
+    // The list on the page shows each event's link, which this setting changes: send it again.
+    res.json({ config, events: await eventsView(req.guild) });
   })
 );
 

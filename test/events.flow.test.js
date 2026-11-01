@@ -26,7 +26,8 @@ import {
   createEvent,
   parseEventInput,
   refreshEventMessage,
-  refreshUpcomingEventMessages,
+  refreshEventPosts,
+  refreshPagePosts,
   tick,
   updateEvent,
 } from '../src/modules/events.js';
@@ -803,26 +804,109 @@ test('an event that ends keeps the link on its last post', async () => {
   assert.equal(linkOf(w.edits.at(-1)).url, `https://sylo.example.test/events/${token}`);
 });
 
-test('turning the setting on or off updates the posts of the upcoming events', async () => {
+test('turning the setting on or off updates the posts of every event, finished ones too', async () => {
   fresh();
   await enable({});
   const a = await newEvent();
   const b = await newEvent({ title: 'Second' });
   const done = await newEvent({ title: 'Done' });
   await cancelEvent(done, GID);
+  const over = await newEvent({ title: 'Over', startAt: Date.now() + HOUR });
+  await tick(Date.now() + 5 * HOUR);
+  assert.equal((await getEvent(over)).state, 'ended');
   w.edits.length = 0;
 
   await enable({ publicPages: true });
-  await refreshUpcomingEventMessages(GID);
-  assert.equal(w.edits.length, 2, 'the two upcoming events, not the cancelled one');
+  await refreshEventPosts(GID);
+  assert.equal(w.edits.length, 4, 'the upcoming, the cancelled and the ended: their pages all stay');
   for (const edit of w.edits)
     assert.match(linkOf(edit).url, /^https:\/\/sylo\.example\.test\/events\/[0-9a-f]{32}$/);
-  const tokens = [(await getEvent(a)).public_token, (await getEvent(b)).public_token];
+  const tokens = await Promise.all([a, b, done, over].map(async (id) => (await getEvent(id)).public_token));
   assert.deepEqual(w.edits.map((e) => linkOf(e).url.split('/').pop()).sort(), tokens.sort());
 
   w.edits.length = 0;
   await enable({ publicPages: false });
-  await refreshUpcomingEventMessages(GID);
-  assert.equal(w.edits.length, 2);
-  for (const edit of w.edits) assert.equal(linkOf(edit), undefined);
+  await refreshEventPosts(GID);
+  assert.equal(w.edits.length, 4);
+  for (const edit of w.edits) assert.equal(linkOf(edit), undefined, 'the dead link is taken off');
+});
+
+test('switching the Events module refreshes the posts only where the pages setting is on', async () => {
+  fresh();
+  await setGuildModule(GID, 'events', { enabled: false, config: { publicPages: true } });
+  const id = await newEvent();
+  w.edits.length = 0;
+  await refreshPagePosts(GID);
+  assert.equal(w.edits.length, 1, 'module off: the link comes off the post');
+  assert.equal(linkOf(w.edits[0]), undefined);
+
+  await setGuildModule(GID, 'events', { enabled: true, config: { publicPages: true } });
+  w.edits.length = 0;
+  await refreshPagePosts(GID);
+  assert.equal(linkOf(w.edits[0]).url.split('/').pop(), (await getEvent(id)).public_token);
+
+  await setGuildModule(GID, 'events', { enabled: true, config: {} });
+  w.edits.length = 0;
+  await refreshPagePosts(GID);
+  assert.equal(w.edits.length, 0, 'no pages, no link to add or remove');
+});
+
+// --- a refused link button must never cost the event ---------------------------------------------
+
+const hasButtonLink = (p) => p.components?.some((r) => (r.toJSON?.().components ?? []).some((c) => c.url));
+
+test('if Discord refuses the new post because of the link button, it is posted again without it', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  w.channel.send = async (p) => {
+    if (hasButtonLink(p)) throw new Error('Invalid Form Body: components: Not a well formed URL.');
+    w.sent.push(p);
+    return w.message;
+  };
+  const id = await postEvent();
+  assert.equal(w.sent.length, 1, 'posted once, without the link');
+  assert.equal(linkOf(w.sent[0]), undefined);
+  assert.equal(w.sent[0].components[0].toJSON().components.length, 3, 'Join, Maybe and Leave');
+  const row = await getEvent(id);
+  assert.ok(row, 'the event was not deleted');
+  assert.equal(row.message_id, MSG);
+});
+
+test('the event is removed only when the post is refused without the link as well', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  let tries = 0;
+  w.channel.send = async () => {
+    tries += 1;
+    throw new Error('Missing Access');
+  };
+  const before = (await upcomingEvents(GID)).length;
+  const input = parseEventInput({ title: 'x', start: utcText(inHours(2)) }).value;
+  const r = await createEvent({ guild: w.guild, hostId: HOST, channelId: CH, input });
+  assert.equal(r.ok, false);
+  assert.equal(tries, 2, 'once with the link, once without');
+  assert.equal((await upcomingEvents(GID)).length, before);
+
+  // with no link in the first place there is just the one try
+  await enable({});
+  tries = 0;
+  await createEvent({ guild: w.guild, hostId: HOST, channelId: CH, input });
+  assert.equal(tries, 1);
+});
+
+test('if Discord refuses an edit because of the link button, the post is edited again without it', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  const id = await postEvent();
+  w.edits.length = 0;
+  const edit = w.message.edit;
+  w.message.edit = async (p) => {
+    if (hasButtonLink(p)) throw new Error('Invalid Form Body: components: Not a well formed URL.');
+    return edit(p);
+  };
+  assert.equal(await refreshEventMessage(id), true);
+  assert.equal(w.edits.length, 1);
+  assert.equal(linkOf(w.edits[0]), undefined);
+  assert.match(w.edits[0].embeds[0].toJSON().title, /Open day/);
+  assert.ok(await getEvent(id), 'and the event is untouched');
 });

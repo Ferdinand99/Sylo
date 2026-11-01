@@ -27,12 +27,12 @@ import {
   getEvent,
   getEventParticipant,
   holdsEventRoleElsewhere,
+  postedEvents,
   removeEventParticipant,
   scheduledEventCount,
   setEventMessage,
   setEventParticipant,
   updateEventRow,
-  upcomingEvents,
 } from '../db/events.js';
 import { LIMITS as CEILINGS, checkLimit } from '../lib/limits.js';
 import { log } from '../lib/log.js';
@@ -281,8 +281,8 @@ async function people(id) {
 
 /**
  * The link to an event's public page for its post, or null: the setting is off, the channel is
- * not public (checked now, not when the event was made), or there is no dashboard address to
- * make a link from.
+ * not public (checked now, not when the event was made), or there is no public https dashboard
+ * address to make a link from (modules/lib/eventPage.js, publicLinkBase).
  */
 async function pageLinkFor(guild, ev) {
   if (!eventPagesOn(await getGuildModule(ev.guild_id, 'events'))) return null;
@@ -303,23 +303,43 @@ export async function refreshEventMessage(id) {
   if (!channel?.isTextBased?.()) return false;
   const msg = await channel.messages.fetch(ev.message_id).catch(() => null);
   if (!msg) return false;
-  await msg
-    .edit(buildEventPayload(ev, await people(id), { pageUrl: await pageLinkFor(guild, ev) }))
-    .catch((err) => log.warn('events', `edit #${id} failed:`, err.message));
+  const joinedAndMaybe = await people(id);
+  const pageUrl = await pageLinkFor(guild, ev);
+  try {
+    await msg.edit(buildEventPayload(ev, joinedAndMaybe, { pageUrl }));
+  } catch (err) {
+    log.warn('events', `edit #${id} failed:`, err.message);
+    // The link button is the one part that is new in the post. If Discord refused the edit, try
+    // once more without it, so a button it does not like never leaves a post out of date.
+    if (pageUrl) {
+      await msg
+        .edit(buildEventPayload(ev, joinedAndMaybe, { pageUrl: null }))
+        .catch((err2) => log.warn('events', `edit #${id} without the page link failed:`, err2.message));
+    }
+  }
   return true;
 }
 
+/** How many posts one server's switch of the pages setting edits, newest event first. */
+const POSTS_REFRESHED = 200;
+
 /**
- * Edit the post of every upcoming event of a server, one after the other: after the public pages
- * setting changes, so the posts gain or lose their link. Closed events are left alone; theirs
- * is corrected the next time they are edited.
+ * Edit the post of the server's events, one after the other: after the public pages setting (or the
+ * module) is switched, so the posts gain or lose their link. Finished and cancelled events count
+ * too, since their page stays and their post keeps its link; the newest POSTS_REFRESHED are done.
  */
-export async function refreshUpcomingEventMessages(guildId) {
-  for (const ev of await upcomingEvents(guildId)) {
+export async function refreshEventPosts(guildId) {
+  for (const ev of await postedEvents(guildId, POSTS_REFRESHED)) {
     await refreshEventMessage(ev.id).catch((err) =>
       log.warn('events', `refresh of #${ev.id} failed:`, err.message)
     );
   }
+}
+
+/** The same, after the Events module is switched on or off: only where the pages setting is on. */
+export async function refreshPagePosts(guildId) {
+  const mod = await getGuildModule(guildId, 'events');
+  if (mod.config?.publicPages === true) await refreshEventPosts(guildId);
 }
 
 /** Queue a trailing refresh: a burst of clicks yields one edit. */
@@ -415,7 +435,17 @@ export async function createEvent({ guild, hostId, channelId, roleId = null, inp
   });
   try {
     const ev = await getEvent(id);
-    const message = await channel.send(buildEventPayload(ev, {}, { pageUrl: await pageLinkFor(guild, ev) }));
+    const pageUrl = await pageLinkFor(guild, ev);
+    let message;
+    try {
+      message = await channel.send(buildEventPayload(ev, {}, { pageUrl }));
+    } catch (err) {
+      // The link button must never cost anyone the event: if Discord refused the post with it,
+      // post again without it, and only give up if that is refused too.
+      if (!pageUrl) throw err;
+      log.warn('events', `post with the page link refused in ${channelId}, posting without it:`, err.message);
+      message = await channel.send(buildEventPayload(ev, {}, { pageUrl: null }));
+    }
     await setEventMessage(id, message.id);
   } catch (err) {
     await deleteEvent(id);

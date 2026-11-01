@@ -331,3 +331,55 @@ test('saving the setting updates the posts of the upcoming events in the backgro
     await setGuildModule(GID, 'events', { enabled: true, config: {} });
   }
 });
+
+test('saving the setting answers with the list again, so the page links are current', async () => {
+  const { id } = await createEvent({
+    guildId: GID,
+    channelId: CH.general,
+    title: 'Relisted',
+    startAt: Date.now() + 8 * 86_400_000,
+    hostId: 'h',
+  });
+  const token = (await getEvent(id)).public_token;
+  await setGuildModule(GID, 'events', { enabled: true, config: {} });
+  const on = await json(await api.post('/modules/events/config', { publicPages: true }));
+  assert.equal(on.config.publicPages, true);
+  assert.equal(on.events.find((e) => e.id === id).pagePath, `/events/${token}`);
+  const off = await json(await api.post('/modules/events/config', { publicPages: false }));
+  assert.equal(off.events.find((e) => e.id === id).pagePath, null);
+  await settle();
+});
+
+test('switching the Events module on or off updates the posts where the pages setting is on', async () => {
+  const { id } = await createEvent({
+    guildId: GID,
+    channelId: CH.general,
+    title: 'Toggled',
+    startAt: Date.now() + 9 * 86_400_000,
+    hostId: 'h',
+  });
+  await setEventMessage(id, 'msg-toggled');
+  const edits = [];
+  const channel = app.guild.channels.cache.get(CH.general);
+  const fetchOf = channel.messages.fetch;
+  channel.messages.fetch = async (messageId) =>
+    messageId === 'msg-toggled' ? { id: messageId, edit: async (p) => edits.push(p) } : null;
+  try {
+    await setGuildModule(GID, 'events', { enabled: true, config: { publicPages: true } });
+    assert.equal((await api.post('/modules/events', { enabled: false })).status, 200);
+    await settle();
+    assert.equal(edits.length, 1, 'switched off: the link comes off the post');
+    assert.equal((await api.post('/modules/events', { enabled: true })).status, 200);
+    await settle();
+    assert.equal(edits.length, 2, 'switched on: it is refreshed again');
+
+    edits.length = 0;
+    await setGuildModule(GID, 'events', { enabled: true, config: {} });
+    await api.post('/modules/events', { enabled: false });
+    await settle();
+    assert.equal(edits.length, 0, 'no pages setting: nothing to add or take off');
+  } finally {
+    channel.messages.fetch = fetchOf;
+    await setGuildModule(GID, 'events', { enabled: true, config: {} });
+  }
+});

@@ -87,6 +87,9 @@ const s = {
   get: prepare('SELECT * FROM guild_events WHERE id = ?'),
   getInGuild: prepare('SELECT * FROM guild_events WHERE id = ? AND guild_id = ?'),
   getByToken: prepare('SELECT * FROM guild_events WHERE public_token = ?'),
+  posted: prepare(
+    'SELECT * FROM guild_events WHERE guild_id = ? AND message_id IS NOT NULL ORDER BY start_at DESC LIMIT ?'
+  ),
   upcoming: prepare(
     "SELECT * FROM guild_events WHERE guild_id = ? AND state = 'scheduled' ORDER BY start_at ASC"
   ),
@@ -192,6 +195,8 @@ export const getEventInGuild = async (id, guildId) => hydrate(await s.getInGuild
 export const getEventByToken = async (token) =>
   typeof token === 'string' && /^[0-9a-f]{32}$/.test(token) ? hydrate(await s.getByToken.get(token)) : null;
 export const upcomingEvents = async (guildId) => (await s.upcoming.all(guildId)).map(hydrate);
+/** The events of a server that have a post, newest start first: upcoming, cancelled and ended alike. */
+export const postedEvents = async (guildId, limit = 200) => (await s.posted.all(guildId, limit)).map(hydrate);
 export const pastEvents = async (guildId, limit = 10) => (await s.past.all(guildId, limit)).map(hydrate);
 export const scheduledEventCount = async (guildId) => Number((await s.countScheduled.get(guildId))?.n) || 0;
 export const dueEndEvents = async (now) => (await s.dueEnd.all(now)).map(hydrate);

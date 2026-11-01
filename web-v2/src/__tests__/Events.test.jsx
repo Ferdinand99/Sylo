@@ -202,6 +202,25 @@ describe('Events public pages', () => {
     );
   });
 
+  it('shows the links at once after saving the switch, and drops them when it is turned off', async () => {
+    const path = '/events/0123456789abcdef0123456789abcdef';
+    saveModuleConfig
+      .mockImplementationOnce(async (_guild, _id, body) => ({
+        config: body,
+        events: [event({ pagePath: path })],
+      }))
+      .mockImplementationOnce(async (_guild, _id, body) => ({ config: body, events: [event()] }));
+    renderAtGuild(<Events />, GUILD);
+    fireEvent.click(await screen.findByLabelText('Public event pages'));
+    fireEvent.click(screen.getAllByRole('button', { name: /Save/ })[0]);
+    const link = await screen.findByRole('link', { name: 'Public page' });
+    expect(link.getAttribute('href')).toBe(`${window.location.origin}${path}`);
+
+    fireEvent.click(screen.getByLabelText('Public event pages'));
+    fireEvent.click(screen.getAllByRole('button', { name: /Save/ })[0]);
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Public page' })).toBeNull());
+  });
+
   it('says what the page shows and what it never shows', async () => {
     renderAtGuild(<Events />, GUILD);
     await screen.findByLabelText('Public event pages');
@@ -237,7 +256,7 @@ describe('Events public pages', () => {
   it('explains why an event in a private channel has no page', async () => {
     load([event({ pageHidden: true })]);
     renderAtGuild(<Events />, GUILD);
-    expect(await screen.findByText(/No public page: #general is not a public channel/)).toBeTruthy();
+    expect(await screen.findByText(/No public page: Sylo does not see #general as a channel/)).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Public page' })).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useCmd } from '../platformContext.jsx';
 import { cancelEvent, createEvent, updateEvent } from '../api.js';
 import { notify } from '../notify.js';
@@ -258,7 +258,11 @@ function PageLink({ ev }) {
     );
   }
   if (ev.pageHidden) {
-    return <p className="v2-field-hint">No public page: #{ev.channel} is not a public channel.</p>;
+    return (
+      <p className="v2-field-hint">
+        No public page: Sylo does not see #{ev.channel} as a channel that everyone can view.
+      </p>
+    );
   }
   return null;
 }
@@ -266,8 +270,17 @@ function PageLink({ ev }) {
 export default function Events() {
   const cmd = useCmd();
   const limits = useModuleLimits('events');
-  const { guildId, data, setData, form, set, status, error, dirty, saving, save, reset } =
-    useModuleForm('events');
+  // Saving the settings can change which events have a page, so the answer carries the list again.
+  const setDataRef = useRef(null);
+  const { guildId, data, setData, form, set, status, error, dirty, saving, save, reset } = useModuleForm(
+    'events',
+    {
+      onSaved: (result) => {
+        if (result?.events) setDataRef.current?.((d) => ({ ...d, events: result.events }));
+      },
+    }
+  );
+  setDataRef.current = setData;
   const [editingId, setEditingId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);

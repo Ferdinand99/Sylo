@@ -7,6 +7,7 @@
 //   - the event's channel is one @everyone can see (channelIsPublic, which fails closed).
 import { config } from '../../config.js';
 import { END_GRACE_MS } from '../../db/events.js';
+import { isLocalHostname } from '../../lib/localHost.js';
 import { isPublicSource } from '../quoteBoard.js';
 
 /** A page address is 32 lower-case hex characters: 128 random bits (db/events.js, newEventToken). */
@@ -16,14 +17,33 @@ export const EVENT_TOKEN_RE = /^[0-9a-f]{32}$/;
 export const eventPagePath = (token) => `/events/${token}`;
 
 /**
- * The full link to an event's page, or null: there is no dashboard address to build it from
- * (DASHBOARD_URL is not set), or the token is not one.
+ * The dashboard address as a base for links in a post, or null unless it is a public https
+ * address. Discord refuses a link button to an address it cannot use (http, a local name or an IP
+ * address), and a post it refuses must not cost anyone their event, so there is then no link at all.
+ * @param {string | null | undefined} base
+ */
+export function publicLinkBase(base) {
+  try {
+    const url = new URL(String(base ?? ''));
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    if (isLocalHostname(url.hostname.replace(/^\[|\]$/g, ''))) return null;
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The full link to an event's page, or null: there is no public https dashboard address to build
+ * it from (DASHBOARD_URL is not set, or is plain http, a local name or an IP address), or the
+ * token is not one.
  * @param {string} token
  * @param {string | null | undefined} [base]  the dashboard address, by default the configured one
  */
 export function eventPageUrl(token, base = config.dashboardUrl) {
-  if (!base || !EVENT_TOKEN_RE.test(token ?? '')) return null;
-  return `${String(base).replace(/\/+$/, '')}${eventPagePath(token)}`;
+  const root = publicLinkBase(base);
+  if (!root || !EVENT_TOKEN_RE.test(token ?? '')) return null;
+  return `${root}${eventPagePath(token)}`;
 }
 
 /** Is the Events module on with the public pages switched on? `mod` is a getGuildModule() answer. */
