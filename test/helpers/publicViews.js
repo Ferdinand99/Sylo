@@ -60,6 +60,25 @@ const quotes = (extra) => ({
   ...extra,
 });
 
+const eventPage = (extra = {}) => ({
+  guild: { name: 'Hedgerow HQ', icon: dot(250) },
+  event: {
+    title: 'Game night',
+    description: 'Bring snacks.\nBoard games from 19:00.',
+    location: 'Voice 1',
+    image: null,
+    status: 'upcoming',
+    statusLabel: 'Upcoming',
+    start: { iso: '2030-01-05T18:00:00.000Z', text: '2030-01-05 18:00 UTC' },
+    end: { iso: '2030-01-05T21:00:00.000Z', text: '2030-01-05 21:00 UTC' },
+    going: 3,
+    maybe: 1,
+    capacity: 10,
+    full: false,
+    ...extra,
+  },
+});
+
 const appeal = (extra) => ({
   state: 'form',
   guildId: '900000000000000201',
@@ -153,6 +172,21 @@ export const SAMPLES = {
   leaderboard: { file: 'leaderboard.ejs', data: board({}) },
   quotes: { file: 'quotes.ejs', data: quotes({}) },
   'quotes-empty': { file: 'quotes.ejs', data: quotes({ quotes: [], total: 0 }) },
+  event: { file: 'event.ejs', data: eventPage() },
+  'event-cancelled': {
+    file: 'event.ejs',
+    data: eventPage({ status: 'cancelled', statusLabel: 'Cancelled', full: true }),
+  },
+  'event-bare': {
+    file: 'event.ejs',
+    data: eventPage({
+      description: '',
+      location: '',
+      end: null,
+      capacity: null,
+      image: 'https://cdn.discordapp.com/attachments/1/2/poster.png',
+    }),
+  },
   'leaderboard-empty': { file: 'leaderboard.ejs', data: board({ members: [], total: 0, pages: 1 }) },
 };
 
