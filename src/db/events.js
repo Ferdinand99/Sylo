@@ -6,6 +6,11 @@
 //   end_at    epoch ms or NULL; with no end the event counts as over END_GRACE_MS after the start
 //   status    'join' | 'maybe' (leaving deletes the row)
 //   host_id   NULL after the host used /forget: the event stays, the person does not
+//   public_token  the address of the event's public page (/events/<token>): 128 random bits as 32 hex
+//             characters, made when the event is created. The event number runs in sequence and must
+//             never be an address. Only a NULL on a row from before the column existed, and the
+//             migration that added the column gave those one.
+import { randomBytes } from 'node:crypto';
 import { prepare, registerPostgresBootstrap, registerPostgresMigration } from './driver.js';
 
 registerPostgresBootstrap(`
@@ -27,9 +32,14 @@ registerPostgresBootstrap(`
     reminder_sent    INTEGER NOT NULL DEFAULT 0,
     host_id          TEXT,
     state            TEXT NOT NULL DEFAULT 'scheduled',
-    created_at       BIGINT NOT NULL
+    created_at       BIGINT NOT NULL,
+    public_token     TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_guild_events_guild ON guild_events (guild_id, state, start_at);
+  -- A database from before the column has the table already: add the column here, so the unique
+  -- index below finds it (the backfill of old rows is migration 62, further down).
+  ALTER TABLE guild_events ADD COLUMN IF NOT EXISTS public_token TEXT;
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_guild_events_token ON guild_events (public_token);
   CREATE TABLE IF NOT EXISTS guild_event_participants (
     event_id   INTEGER NOT NULL,
     user_id    TEXT NOT NULL,
@@ -43,6 +53,23 @@ registerPostgresBootstrap(`
 // Mirrors SQLite migration 58: a host can be taken off an event (/forget), so host_id may be NULL.
 registerPostgresMigration(58, 'ALTER TABLE guild_events ALTER COLUMN host_id DROP NOT NULL;');
 
+/**
+ * Mirrors SQLite migration 62: every event from before the public page gets its own token. The
+ * column and its index come from the bootstrap above. A random UUID from the server's own strong
+ * random source (gen_random_uuid, built in since Postgres 13) without its dashes is 32 hex
+ * characters, 122 of them random: as good as the 128 bits of a token made in code. Only rows
+ * without a token are touched, so it can run twice.
+ */
+export const EVENT_TOKEN_BACKFILL_SQL = `
+  UPDATE guild_events
+  SET public_token = replace(gen_random_uuid()::text, '-', '')
+  WHERE public_token IS NULL;
+`;
+registerPostgresMigration(62, EVENT_TOKEN_BACKFILL_SQL);
+
+/** A new public page token: 128 random bits as 32 lower-case hex characters. */
+export const newEventToken = () => randomBytes(16).toString('hex');
+
 /** An event with no end time is treated as over this long after it starts. */
 export const END_GRACE_MS = 2 * 3_600_000;
 
@@ -50,15 +77,16 @@ const s = {
   create: prepare(
     `
     INSERT INTO guild_events (guild_id, channel_id, title, description, location, image_url, start_at, end_at,
-      time_zone, capacity, role_id, reminder_minutes, reminder_sent, host_id, created_at)
+      time_zone, capacity, role_id, reminder_minutes, reminder_sent, host_id, created_at, public_token)
     VALUES (@guildId, @channelId, @title, @description, @location, @imageUrl, @startAt, @endAt,
-      @timeZone, @capacity, @roleId, @reminderMinutes, @reminderSent, @hostId, @createdAt)
+      @timeZone, @capacity, @roleId, @reminderMinutes, @reminderSent, @hostId, @createdAt, @publicToken)
   `,
     { returningId: true }
   ),
   setMessage: prepare('UPDATE guild_events SET message_id = ? WHERE id = ?'),
   get: prepare('SELECT * FROM guild_events WHERE id = ?'),
   getInGuild: prepare('SELECT * FROM guild_events WHERE id = ? AND guild_id = ?'),
+  getByToken: prepare('SELECT * FROM guild_events WHERE public_token = ?'),
   upcoming: prepare(
     "SELECT * FROM guild_events WHERE guild_id = ? AND state = 'scheduled' ORDER BY start_at ASC"
   ),
@@ -149,6 +177,7 @@ export async function createEvent(e) {
     reminderSent: e.reminderSent ? 1 : 0,
     hostId: e.hostId,
     createdAt: e.createdAt ?? Date.now(),
+    publicToken: newEventToken(),
   });
   return { id: Number(info.lastInsertRowid) };
 }
@@ -156,6 +185,12 @@ export async function createEvent(e) {
 export const setEventMessage = async (id, messageId) => s.setMessage.run(messageId, id);
 export const getEvent = async (id) => hydrate(await s.get.get(id));
 export const getEventInGuild = async (id, guildId) => hydrate(await s.getInGuild.get(id, guildId));
+/**
+ * The event behind a public page address. Only an exact 32-character lower-case hex token can
+ * match (anything else is not looked up at all), so neither an event number nor a pattern finds one.
+ */
+export const getEventByToken = async (token) =>
+  typeof token === 'string' && /^[0-9a-f]{32}$/.test(token) ? hydrate(await s.getByToken.get(token)) : null;
 export const upcomingEvents = async (guildId) => (await s.upcoming.all(guildId)).map(hydrate);
 export const pastEvents = async (guildId, limit = 10) => (await s.past.all(guildId, limit)).map(hydrate);
 export const scheduledEventCount = async (guildId) => Number((await s.countScheduled.get(guildId))?.n) || 0;

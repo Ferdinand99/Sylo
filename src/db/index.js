@@ -1,6 +1,7 @@
 // SQLite connection and schema migrations.
 // The database is a single file (config.databasePath) so it can live on a
 // mounted Docker volume and survive container restarts/updates.
+import { randomBytes } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import Database from 'better-sqlite3';
@@ -1172,6 +1173,20 @@ export const MIGRATIONS = [
       CREATE INDEX idx_push_events_token ON push_events (token_id);
       CREATE INDEX idx_push_events_expires ON push_events (expires_at);
     `);
+  },
+
+  // Public event pages: every event gets a random token for its address (/events/<token>); the
+  // event number runs in sequence and must not be one. 128 random bits as 32 hex characters, the
+  // same as src/db/events.js makes for a new event. The events that exist already get one here.
+  // Postgres: the column and its unique index are in the bootstrap in src/db/events.js, and
+  // registerPostgresMigration(62, ...) there fills in the old rows.
+  (database) => {
+    database.exec('ALTER TABLE guild_events ADD COLUMN public_token TEXT;');
+    const setToken = database.prepare('UPDATE guild_events SET public_token = ? WHERE id = ?');
+    for (const { id } of database.prepare('SELECT id FROM guild_events').all()) {
+      setToken.run(randomBytes(16).toString('hex'), id);
+    }
+    database.exec('CREATE UNIQUE INDEX idx_guild_events_token ON guild_events (public_token);');
   },
 ];
 
