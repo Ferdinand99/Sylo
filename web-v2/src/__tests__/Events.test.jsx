@@ -14,7 +14,8 @@ vi.mock('../api.js', () => ({
   cancelEvent: vi.fn(),
 }));
 vi.mock('../components/ConfirmDialog.jsx', () => ({ confirmDialog: vi.fn().mockResolvedValue(true) }));
-const { getModuleConfig, getModuleLimits, createEvent, updateEvent, cancelEvent } = await import('../api.js');
+const { getModuleConfig, saveModuleConfig, getModuleLimits, createEvent, updateEvent, cancelEvent } =
+  await import('../api.js');
 const { confirmDialog } = await import('../components/ConfirmDialog.jsx');
 
 const GUILD = '123456789012345678';
@@ -54,12 +55,21 @@ const event = (over = {}) => ({
   state: 'scheduled',
   joined: 3,
   maybe: 1,
+  pagePath: null,
+  pageHidden: false,
   ...over,
 });
 
 const load = (events) =>
   getModuleConfig.mockResolvedValue({
-    config: { channel: '', reminderMinutes: 60, staffRoles: [], dmReminders: false, timeZone: '' },
+    config: {
+      channel: '',
+      reminderMinutes: 60,
+      staffRoles: [],
+      dmReminders: false,
+      timeZone: '',
+      publicPages: false,
+    },
     channels: [{ id: CHANNEL, name: 'general' }],
     roles: [{ id: ROLE, name: 'Going' }],
     events,
@@ -172,5 +182,62 @@ describe('Events form', () => {
     await waitFor(() => expect(cancelEvent).toHaveBeenCalledWith(GUILD, 7));
     expect(confirmDialog).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(/cancelled · ✅ 3/)).toBeTruthy();
+  });
+});
+
+describe('Events public pages', () => {
+  it('has a Public event pages switch, off by default, that is saved with the other settings', async () => {
+    saveModuleConfig.mockImplementation(async (_guild, _id, body) => ({ config: body }));
+    renderAtGuild(<Events />, GUILD);
+    const box = await screen.findByLabelText('Public event pages');
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    fireEvent.click(screen.getAllByRole('button', { name: /Save/ })[0]);
+    await waitFor(() =>
+      expect(saveModuleConfig).toHaveBeenCalledWith(
+        GUILD,
+        'events',
+        expect.objectContaining({ publicPages: true })
+      )
+    );
+  });
+
+  it('says what the page shows and what it never shows', async () => {
+    renderAtGuild(<Events />, GUILD);
+    await screen.findByLabelText('Public event pages');
+    expect(screen.getByText(/no names, no host and no roles/i)).toBeTruthy();
+    expect(screen.getByText(/only for events in channels that everyone can see/i)).toBeTruthy();
+  });
+
+  it('links each event to its page, and gives no link while pages are off', async () => {
+    load([
+      event({ pagePath: '/events/0123456789abcdef0123456789abcdef' }),
+      event({
+        id: 6,
+        title: 'Old one',
+        state: 'ended',
+        pagePath: '/events/fedcba9876543210fedcba9876543210',
+      }),
+    ]);
+    renderAtGuild(<Events />, GUILD);
+    const links = await screen.findAllByRole('link', { name: 'Public page' });
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      `${window.location.origin}/events/0123456789abcdef0123456789abcdef`,
+      `${window.location.origin}/events/fedcba9876543210fedcba9876543210`,
+    ]);
+  });
+
+  it('shows no link when the event has no page', async () => {
+    renderAtGuild(<Events />, GUILD);
+    await screen.findByText(/#7 · Game night/);
+    expect(screen.queryByRole('link', { name: 'Public page' })).toBeNull();
+    expect(screen.queryByText(/not public/i)).toBeNull();
+  });
+
+  it('explains why an event in a private channel has no page', async () => {
+    load([event({ pageHidden: true })]);
+    renderAtGuild(<Events />, GUILD);
+    expect(await screen.findByText(/No public page: #general is not a public channel/)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Public page' })).toBeNull();
   });
 });

@@ -3,6 +3,7 @@
 // mock.timers is experimental until Node 23.1 but works on the Node 22 this project requires.
 /* eslint-disable n/no-unsupported-features/node-builtins */
 import './helpers/tmpDb.js';
+import './helpers/dashboardUrl.js';
 import test, { mock, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { runtime } from '../src/runtime.js';
@@ -20,7 +21,15 @@ import {
 import { LIMITS as CEILINGS } from '../src/lib/limits.js';
 import { execute } from '../src/bot/commands/event.js';
 import { localToUtc, utcToLocalInput } from '../src/modules/lib/eventTime.js';
-import { cancelEvent, createEvent, parseEventInput, tick, updateEvent } from '../src/modules/events.js';
+import {
+  cancelEvent,
+  createEvent,
+  parseEventInput,
+  refreshEventMessage,
+  refreshUpcomingEventMessages,
+  tick,
+  updateEvent,
+} from '../src/modules/events.js';
 
 // Every test gets its own server, so the events of one never show up in another.
 let GID = '';
@@ -49,9 +58,14 @@ function world({ dmClosed = [] } = {}) {
       return message;
     },
   };
+  // The @everyone role and a channel it can see: the public event page needs a public channel.
+  const everyone = { id: GID };
   const channel = {
     id: CH,
     isTextBased: () => true,
+    nsfw: false,
+    permissionsFor: (target) => ({ has: (p) => target === everyone && p === 'ViewChannel' && channel.open }),
+    open: true,
     send: async (p) => {
       out.sent.push(p);
       return message;
@@ -94,7 +108,7 @@ function world({ dmClosed = [] } = {}) {
     ownerId: HOST,
     name: 'Test Guild',
     channels: { cache: new Map([[CH, channel]]), fetch: async (id) => (id === CH ? channel : null) },
-    roles: { cache: new Map([[ROLE, role]]) },
+    roles: { cache: new Map([[ROLE, role]]), everyone },
     members: {
       me: {
         id: 'bot',
@@ -686,4 +700,129 @@ test('two events that hand out the same role: leaving one keeps the role while g
   assert.equal(w.member(U[0]).roles.cache.has(ROLE), true, 'still going to b');
   await press('leave', b, U[0]);
   assert.equal(w.member(U[0]).roles.cache.has(ROLE), false);
+});
+
+// --- the public event page link ---------------------------------------------------------------
+
+const linkOf = (payload) =>
+  payload.components
+    .flatMap((row) => row.toJSON?.().components ?? row.components ?? [])
+    .find((c) => c.url !== undefined);
+
+async function postEvent(over = {}) {
+  const input = parseEventInput({ title: 'Open day', start: utcText(inHours(2)), ...over }).value;
+  const r = await createEvent({ guild: w.guild, hostId: HOST, channelId: CH, input });
+  assert.equal(r.ok, true);
+  return r.id;
+}
+
+test('a new post links to the public page when the setting is on and the channel is public', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  const id = await postEvent();
+  const ev = await getEvent(id);
+  assert.match(ev.public_token, /^[0-9a-f]{32}$/);
+  const buttons = w.sent[0].components[0].toJSON().components;
+  assert.equal(buttons.length, 4, 'Join, Maybe, Leave and the link');
+  const link = linkOf(w.sent[0]);
+  assert.equal(link.url, `https://sylo.example.test/events/${ev.public_token}`);
+  assert.equal(link.label, 'Event page');
+});
+
+test('no link while the setting is off, the module is off, or the setting is not a real true', async () => {
+  fresh();
+  for (const config of [{}, { publicPages: false }, { publicPages: 'true' }]) {
+    await enable(config);
+    w.sent.length = 0;
+    await postEvent();
+    assert.equal(linkOf(w.sent[0]), undefined, JSON.stringify(config));
+    assert.equal(w.sent[0].components[0].toJSON().components.length, 3);
+  }
+  await setGuildModule(GID, 'events', { enabled: false, config: { publicPages: true } });
+  w.sent.length = 0;
+  await postEvent();
+  assert.equal(linkOf(w.sent[0]), undefined, 'module off');
+});
+
+test('no link for an event in a channel everyone cannot read, even with the setting on', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  w.channel.open = false;
+  await postEvent();
+  assert.equal(linkOf(w.sent[0]), undefined);
+  assert.equal(w.sent[0].components[0].toJSON().components.length, 3);
+
+  fresh();
+  await enable({ publicPages: true });
+  w.channel.nsfw = true;
+  await postEvent();
+  assert.equal(linkOf(w.sent[0]), undefined, 'age-restricted');
+
+  fresh();
+  await enable({ publicPages: true });
+  w.channel.permissionsFor = () => {
+    throw new Error('boom');
+  };
+  await postEvent();
+  assert.equal(linkOf(w.sent[0]), undefined, 'an error in the check fails closed');
+});
+
+test('closing an event keeps the link, and a channel made private drops it at the next edit', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  const id = await postEvent();
+  const token = (await getEvent(id)).public_token;
+  const url = `https://sylo.example.test/events/${token}`;
+
+  w.edits.length = 0;
+  await refreshEventMessage(id);
+  assert.equal(linkOf(w.edits.at(-1)).url, url, 'an ordinary refresh');
+
+  w.channel.open = false;
+  await refreshEventMessage(id);
+  assert.equal(linkOf(w.edits.at(-1)), undefined, 'the channel is private now');
+  w.channel.open = true;
+
+  await cancelEvent(id, GID);
+  const cancelled = w.edits.at(-1);
+  assert.match(cancelled.embeds[0].toJSON().title, /\(cancelled\)/);
+  assert.equal(linkOf(cancelled).url, url, 'a cancelled event keeps its page');
+  assert.equal(cancelled.components.length, 1);
+  assert.equal(cancelled.components[0].toJSON().components.length, 1, 'only the link');
+});
+
+test('an event that ends keeps the link on its last post', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  const id = await postEvent();
+  const token = (await getEvent(id)).public_token;
+  w.edits.length = 0;
+  await tick(Date.now() + 5 * HOUR);
+  assert.equal((await getEvent(id)).state, 'ended');
+  assert.match(w.edits.at(-1).embeds[0].toJSON().title, /\(ended\)/);
+  assert.equal(linkOf(w.edits.at(-1)).url, `https://sylo.example.test/events/${token}`);
+});
+
+test('turning the setting on or off updates the posts of the upcoming events', async () => {
+  fresh();
+  await enable({});
+  const a = await newEvent();
+  const b = await newEvent({ title: 'Second' });
+  const done = await newEvent({ title: 'Done' });
+  await cancelEvent(done, GID);
+  w.edits.length = 0;
+
+  await enable({ publicPages: true });
+  await refreshUpcomingEventMessages(GID);
+  assert.equal(w.edits.length, 2, 'the two upcoming events, not the cancelled one');
+  for (const edit of w.edits)
+    assert.match(linkOf(edit).url, /^https:\/\/sylo\.example\.test\/events\/[0-9a-f]{32}$/);
+  const tokens = [(await getEvent(a)).public_token, (await getEvent(b)).public_token];
+  assert.deepEqual(w.edits.map((e) => linkOf(e).url.split('/').pop()).sort(), tokens.sort());
+
+  w.edits.length = 0;
+  await enable({ publicPages: false });
+  await refreshUpcomingEventMessages(GID);
+  assert.equal(w.edits.length, 2);
+  for (const edit of w.edits) assert.equal(linkOf(edit), undefined);
 });

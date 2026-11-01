@@ -248,6 +248,21 @@ function EventForm({ initial, editing, channels, roles, saving, onSave, onCancel
 
 const when = (ev) => `${ev.start.replace('T', ' ')} ${ev.timeZone}`;
 
+// The link to an event's public page, or why there is none while the setting is on.
+function PageLink({ ev }) {
+  if (ev.pagePath) {
+    return (
+      <p className="v2-field-hint">
+        <a href={`${window.location.origin}${ev.pagePath}`}>Public page</a>
+      </p>
+    );
+  }
+  if (ev.pageHidden) {
+    return <p className="v2-field-hint">No public page: #{ev.channel} is not a public channel.</p>;
+  }
+  return null;
+}
+
 export default function Events() {
   const cmd = useCmd();
   const limits = useModuleLimits('events');
@@ -330,6 +345,24 @@ export default function Events() {
         </div>
 
         <div className="v2-field">
+          <label className="v2-check">
+            <input
+              type="checkbox"
+              checked={form.publicPages}
+              onChange={(e) => set({ publicPages: e.target.checked })}
+            />
+            Public event pages
+          </label>
+          <p className="v2-field-hint">
+            Every event gets a page that anyone with the link can open without signing in. It shows the title,
+            the time in the visitor&apos;s own time zone, the description, the place, the image, the capacity
+            and how many are going or maybe: no names, no host and no roles. Pages exist only for events in
+            channels that everyone can see, and an event in a private channel never has one. The link is added
+            to the event&apos;s post, and saving this updates the posts of upcoming events.
+          </p>
+        </div>
+
+        <div className="v2-field">
           <label htmlFor="timeZone">
             Time zone for commands <span className="v2-field-hint">— blank = UTC</span>
           </label>
@@ -366,6 +399,7 @@ export default function Events() {
                   {when(ev)} · #{ev.channel} · ✅ {ev.joined}
                   {ev.capacity ? `/${ev.capacity}` : ''} · ❔ {ev.maybe}
                 </p>
+                <PageLink ev={ev} />
                 {editingId === ev.id ? (
                   <EventForm
                     editing
@@ -442,6 +476,7 @@ export default function Events() {
                     {when(ev)} · {ev.state === 'cancelled' ? 'cancelled' : 'ended'} · ✅ {ev.joined} · ❔{' '}
                     {ev.maybe}
                   </p>
+                  <PageLink ev={ev} />
                 </div>
               </div>
             ))}

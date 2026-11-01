@@ -4,7 +4,11 @@
 // is over. Everything that has to survive a restart lives in the database; one slow `every()` tick
 // finds the reminders and endings that are due, so a restart simply picks them up again.
 //
-// config shape: { channel, reminderMinutes, staffRoles, dmReminders, timeZone }
+// config shape: { channel, reminderMinutes, staffRoles, dmReminders, timeZone, publicPages }
+//
+// With `publicPages` on, every event also has a public page (src/web/routes/events.js) and its post
+// carries an "Event page" link. The page and the link exist only for an event in a channel
+// @everyone can see (modules/lib/eventPage.js).
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { allClientsReady, clientOfGuild, guildByKey, guildKey } from '../platform/platformOf.js';
 import { registerComponent } from '../bot/lib/components.js';
@@ -28,12 +32,14 @@ import {
   setEventMessage,
   setEventParticipant,
   updateEventRow,
+  upcomingEvents,
 } from '../db/events.js';
 import { LIMITS as CEILINGS, checkLimit } from '../lib/limits.js';
 import { log } from '../lib/log.js';
 import { idList } from '../web/lib/idList.js';
 import { every, after } from './schedule.js';
 import { canonicalTimeZone, formatInZone, localToUtc } from './lib/eventTime.js';
+import { channelIsPublic, eventPageUrl, eventPagesOn } from './lib/eventPage.js';
 
 /** Setting limits, served to the dashboard (modules/limits.js). */
 export const LIMITS = {
@@ -70,7 +76,11 @@ export function clampReminder(v) {
   return Math.max(LIMITS.reminderMinutes.min, Math.min(n, LIMITS.reminderMinutes.max));
 }
 
-/** Server-wide settings. `timeZone` is the zone slash commands read times in (empty = UTC). */
+/**
+ * Server-wide settings. `timeZone` is the zone slash commands read times in (empty = UTC).
+ * `publicPages`: every event gets a public page, for events in public channels. Off unless a real
+ * `true`, so a missing or odd value never publishes anything.
+ */
 export function normaliseEventsConfig(raw = {}) {
   return {
     channel: /^\d{17,20}$/.test(raw.channel ?? '') ? raw.channel : '',
@@ -79,6 +89,7 @@ export function normaliseEventsConfig(raw = {}) {
     staffRoles: idList(raw.staffRoles, LIMITS.staffRoles.maxItems),
     dmReminders: Boolean(raw.dmReminders),
     timeZone: canonicalTimeZone(raw.timeZone) ?? '',
+    publicPages: raw.publicPages === true,
   };
 }
 
@@ -210,8 +221,11 @@ const mentions = (ids, shown = LIST_SHOWN) =>
  * The message for an event in its current state.
  * @param {object} ev  a stored event (db/events.js)
  * @param {{ joined?: string[], maybe?: string[] }} [people]  everyone signed up, in sign-up order
+ * @param {{ pageUrl?: string | null }} [opts]  the event's public page: it gets an "Event page" link
+ *   button (on Fluxer, which has no buttons, the link goes into the post text instead, see
+ *   platform/components.js)
  */
-export function buildEventPayload(ev, { joined = [], maybe = [] } = {}) {
+export function buildEventPayload(ev, { joined = [], maybe = [] } = {}, { pageUrl = null } = {}) {
   const start = Math.floor(ev.start_at / 1000);
   const open = ev.state === 'scheduled';
   const lines = [];
@@ -238,24 +252,22 @@ export function buildEventPayload(ev, { joined = [], maybe = [] } = {}) {
   if (ev.image_url) embed.setImage(ev.image_url);
 
   const payload = { embeds: [embed], components: [], allowedMentions: { parse: [] } };
+  const buttons = [];
   if (open) {
-    payload.components = [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`evt:join:${ev.id}`)
-          .setStyle(ButtonStyle.Success)
-          .setLabel('✅ Join'),
-        new ButtonBuilder()
-          .setCustomId(`evt:maybe:${ev.id}`)
-          .setStyle(ButtonStyle.Secondary)
-          .setLabel('❔ Maybe'),
-        new ButtonBuilder()
-          .setCustomId(`evt:leave:${ev.id}`)
-          .setStyle(ButtonStyle.Danger)
-          .setLabel('❌ Leave')
-      ),
-    ];
+    buttons.push(
+      new ButtonBuilder().setCustomId(`evt:join:${ev.id}`).setStyle(ButtonStyle.Success).setLabel('✅ Join'),
+      new ButtonBuilder()
+        .setCustomId(`evt:maybe:${ev.id}`)
+        .setStyle(ButtonStyle.Secondary)
+        .setLabel('❔ Maybe'),
+      new ButtonBuilder().setCustomId(`evt:leave:${ev.id}`).setStyle(ButtonStyle.Danger).setLabel('❌ Leave')
+    );
   }
+  // An ended or cancelled event keeps its page, so it keeps the link too.
+  if (pageUrl) {
+    buttons.push(new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(pageUrl).setLabel('Event page'));
+  }
+  if (buttons.length) payload.components = [new ActionRowBuilder().addComponents(...buttons)];
   return payload;
 }
 
@@ -265,6 +277,17 @@ async function channelOf(guild, channelId) {
 
 async function people(id) {
   return { joined: await eventParticipantIds(id, 'join'), maybe: await eventParticipantIds(id, 'maybe') };
+}
+
+/**
+ * The link to an event's public page for its post, or null: the setting is off, the channel is
+ * not public (checked now, not when the event was made), or there is no dashboard address to
+ * make a link from.
+ */
+async function pageLinkFor(guild, ev) {
+  if (!eventPagesOn(await getGuildModule(ev.guild_id, 'events'))) return null;
+  if (!channelIsPublic(guild, ev.channel_id)) return null;
+  return eventPageUrl(ev.public_token);
 }
 
 const pendingRefresh = new Map();
@@ -281,9 +304,22 @@ export async function refreshEventMessage(id) {
   const msg = await channel.messages.fetch(ev.message_id).catch(() => null);
   if (!msg) return false;
   await msg
-    .edit(buildEventPayload(ev, await people(id)))
+    .edit(buildEventPayload(ev, await people(id), { pageUrl: await pageLinkFor(guild, ev) }))
     .catch((err) => log.warn('events', `edit #${id} failed:`, err.message));
   return true;
+}
+
+/**
+ * Edit the post of every upcoming event of a server, one after the other: after the public pages
+ * setting changes, so the posts gain or lose their link. Closed events are left alone; theirs
+ * is corrected the next time they are edited.
+ */
+export async function refreshUpcomingEventMessages(guildId) {
+  for (const ev of await upcomingEvents(guildId)) {
+    await refreshEventMessage(ev.id).catch((err) =>
+      log.warn('events', `refresh of #${ev.id} failed:`, err.message)
+    );
+  }
 }
 
 /** Queue a trailing refresh: a burst of clicks yields one edit. */
@@ -379,7 +415,7 @@ export async function createEvent({ guild, hostId, channelId, roleId = null, inp
   });
   try {
     const ev = await getEvent(id);
-    const message = await channel.send(buildEventPayload(ev));
+    const message = await channel.send(buildEventPayload(ev, {}, { pageUrl: await pageLinkFor(guild, ev) }));
     await setEventMessage(id, message.id);
   } catch (err) {
     await deleteEvent(id);
