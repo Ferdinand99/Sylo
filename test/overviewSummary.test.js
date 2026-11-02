@@ -100,10 +100,10 @@ test('the Events card counts upcoming events and names the next one', async () =
   const card = await find();
   assert.equal(card.lines.find((l) => l.label === 'Upcoming events').value, '1');
   assert.match(card.lines.find((l) => l.label === 'Next').value, /Game night · 2030-01-02 18:30 UTC/);
-  assert.equal(card.lines.find((l) => l.label === 'Public pages').value, 'off');
+  assert.equal(card.lines.find((l) => l.label === 'Event pages').value, 'off');
 
   await setGuildModule(G, 'events', { enabled: true, config: { publicPages: true } });
-  assert.equal((await find()).lines.find((l) => l.label === 'Public pages').value, 'on');
+  assert.equal((await find()).lines.find((l) => l.label === 'Event pages').value, 'on');
 });
 
 test('the Suggestions card counts open and stored suggestions', async () => {

@@ -173,6 +173,32 @@ export function fluxerAgeRestricted(guild, channel) {
 }
 
 /**
+ * Is this channel (for a thread: its parent) age-restricted? On Discord the channel's own flag is
+ * already the effective one. On Fluxer it can inherit from the category or the server, so the flag
+ * is not the whole answer (fluxerAgeRestricted).
+ */
+function ageRestrictedSource(guild, source) {
+  return Boolean(source?.nsfw) || (platformOfGuild(guild) === 'fluxer' && fluxerAgeRestricted(guild, source));
+}
+
+/**
+ * Is this channel age-restricted, by the rule the public pages use? A thread follows its parent.
+ * What cannot be read counts as age-restricted: a thread whose parent is not known, an error. For
+ * the pages that a signed-in member may open (modules/lib/eventPage.js): Sylo cannot tell whether a
+ * member has confirmed their age with the platform, so an age-restricted channel is shown to nobody.
+ * @param {any} guild
+ * @param {any} channel
+ */
+export function isAgeRestricted(guild, channel) {
+  try {
+    const source = isThread(channel) ? channel.parent : channel;
+    return source ? ageRestrictedSource(guild, source) : true;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Could @everyone read this channel (and is it not age-restricted)? Unknown counts as no. On Fluxer
  * age restriction includes the category's and the server's (fluxerAgeRestricted).
  * A thread has no permissions or age restriction of its own: it follows its parent channel, and
@@ -185,10 +211,7 @@ export function isPublicSource(guild, channel) {
       if (channel.type === ChannelType.PrivateThread) return false;
       source = channel.parent;
     }
-    if (source?.nsfw) return false;
-    // On Fluxer the channel's own flag is not the whole answer: it can inherit from its category
-    // or the server. Discord's flag already is the effective one, so Discord is unchanged.
-    if (platformOfGuild(guild) === 'fluxer' && fluxerAgeRestricted(guild, source)) return false;
+    if (ageRestrictedSource(guild, source)) return false;
     const everyone = guild?.roles?.everyone;
     return Boolean(everyone && source?.permissionsFor?.(everyone)?.has?.('ViewChannel'));
   } catch {

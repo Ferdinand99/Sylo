@@ -301,6 +301,38 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
     }
     return new PermissionsBitField(bits);
   };
+  // What a member may do in a channel, as discord.js works it out: the permissions of @everyone and
+  // of the member's roles, then the channel's @everyone overwrite, then the overwrites of the
+  // member's roles (every deny and every allow together), then the member's own overwrite.
+  // The SDK's member.permissionsIn applies an overwrite only for a role id in the member's own role
+  // list, and that list does not hold @everyone (its id is the server's id). So a channel closed to
+  // @everyone by an overwrite, with no role to open it again, would still be open to every member:
+  // the page of an event that only some may see would open for anyone in the server. Owner and
+  // Administrator are every permission, as in the SDK (member.permissions gives every bit for both).
+  const memberPermissionsIn = (channel, member) => {
+    try {
+      const base = member.permissions;
+      if (base.isAdmin) return base;
+      const overwrites = channel.permissionOverwrites?.toJSON?.() ?? [];
+      const roleIds = new Set([...member.roles.roleIds].filter((id) => id !== channel.guildId));
+      const change = (bits, matching) => {
+        let allow = 0n;
+        let deny = 0n;
+        for (const o of overwrites.filter(matching)) {
+          allow |= BigInt(o.allow || '0');
+          deny |= BigInt(o.deny || '0');
+        }
+        return (bits & ~deny) | allow;
+      };
+      let bits = base.bitfield;
+      bits = change(bits, (o) => o.type === OverwriteType.Role && o.id === channel.guildId);
+      bits = change(bits, (o) => o.type === OverwriteType.Role && roleIds.has(o.id));
+      bits = change(bits, (o) => o.type === OverwriteType.Member && o.id === member.id);
+      return new PermissionsBitField(bits);
+    } catch {
+      return null; // cannot tell: "no permission"
+    }
+  };
   define(
     GuildChannel.prototype,
     'permissionsFor',
@@ -310,7 +342,8 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
       // and answers null, which callers read as "no permission".
       const member =
         typeof target?.permissionsIn === 'function' ? target : this.guild?.members.get(idOf(target));
-      if (member) return member.permissionsIn(this);
+      if (member)
+        return member instanceof GuildMember ? memberPermissionsIn(this, member) : member.permissionsIn(this);
       const role = target instanceof Role ? target : this.guild?.roles?.get?.(idOf(target));
       return role ? rolePermissionsIn(this, role) : null;
     })
@@ -327,7 +360,10 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
   // silently never act.
   const botPermsIn = (channel) => {
     const me = channel?.guild?.members.me;
-    return me && channel ? me.permissionsIn(channel) : null;
+    if (!me || !channel) return null;
+    // A real member goes through the same calculation as permissionsFor, so an @everyone overwrite
+    // that denies something counts here too (the SDK's own permissionsIn ignores it).
+    return me instanceof GuildMember ? memberPermissionsIn(channel, me) : me.permissionsIn(channel);
   };
   define(
     GuildChannel.prototype,

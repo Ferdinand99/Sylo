@@ -1,19 +1,25 @@
-// The rules behind the public page of an event (src/web/routes/events.js, and the link in the post
-// in src/modules/events.js). Kept here, apart from both, so the post and the page decide the same.
+// The rules behind the page of an event (src/web/routes/events.js, and the link in the post in
+// src/modules/events.js). Kept here, apart from both, so the post and the page decide the same.
 //
 // A page exists for an event only while all of these hold, and the page route checks every one of
 // them on every request:
-//   - the Events module is on and its "Public event pages" setting is a real `true`;
-//   - the event's channel is one @everyone can see (channelIsPublic, which fails closed).
+//   - the Events module is on and its "Event pages" setting (stored as publicPages) is a real `true`;
+//   - the event's channel has an audience (channelAudience): @everyone can see it ("public": anyone
+//     with the link may open the page), or it is a channel only some members see ("private": only a
+//     signed-in member who can see that channel, on the platform it was posted on, may open the page,
+//     see viewerMaySee). A channel that is age-restricted, or that Sylo cannot see, has no page.
+import { ChannelType } from 'discord.js';
 import { config } from '../../config.js';
 import { END_GRACE_MS } from '../../db/events.js';
 import { isLocalHostname } from '../../lib/localHost.js';
-import { isPublicSource } from '../quoteBoard.js';
+import { splitPlatformGuildId } from '../../lib/platformId.js';
+import { guildKey, platformOfGuild } from '../../platform/platformOf.js';
+import { canView, isAgeRestricted, isPublicSource } from '../quoteBoard.js';
 
 /** A page address is 32 lower-case hex characters: 128 random bits (db/events.js, newEventToken). */
 export const EVENT_TOKEN_RE = /^[0-9a-f]{32}$/;
 
-/** The path of an event's public page. */
+/** The path of an event's page. */
 export const eventPagePath = (token) => `/events/${token}`;
 
 /**
@@ -61,26 +67,195 @@ export function refusedLinkButton(err) {
   return Boolean(errors) && typeof errors === 'object' && Object.hasOwn(errors, 'components');
 }
 
-/** Is the Events module on with the public pages switched on? `mod` is a getGuildModule() answer. */
+/**
+ * Is the Events module on with the event pages switched on? `mod` is a getGuildModule() answer. The
+ * setting is stored as `publicPages` (the key it always had) and shown as "Event pages": it switches
+ * on the pages of events in public channels and of events in private channels alike.
+ */
 export const eventPagesOn = (mod) => mod?.enabled === true && mod.config?.publicPages === true;
 
+/** The platform a guild key belongs to: a bare id is Discord, "fluxer:<id>" is Fluxer. */
+export const platformOfKey = (key) => splitPlatformGuildId(key)?.platform ?? 'discord';
+
 /**
- * Can @everyone see this event's channel, right now? It asks the same question the quote board asks
- * when it saves a quote (isPublicSource: the @everyone role can view the channel, the channel is
- * not age-restricted, a thread follows its parent and a private thread never counts), but of the
- * channel as it is at this moment, not as it was when the event was made.
+ * Who can open the page of an event posted in this channel, right now:
+ *  - 'public': @everyone can see the channel. It asks the same question the quote board asks when it
+ *    saves a quote (isPublicSource: the @everyone role can view the channel, the channel is not
+ *    age-restricted, a thread follows its parent and a private thread never counts), of the channel
+ *    as it is at this moment, not as it was when the event was made. No sign-in is needed.
+ *  - 'private': the channel is one only some members see. Only a signed-in member who can see it
+ *    may open the page (viewerMaySee decides, per visitor).
+ *  - 'none': there is no page for anyone. A channel Sylo does not have in its cache (deleted, an
+ *    archived thread, a platform that cannot say), a private thread, and an age-restricted channel
+ *    (Sylo cannot tell whether a member has confirmed their age with the platform, so the public
+ *    rule against age-restricted channels holds for members too).
  *
- * It fails closed: a channel Sylo does not have in its cache (deleted, an archived thread, a
- * platform that cannot say), a missing @everyone role, permissions that cannot be read or an error
- * all answer "not public". The page route calls this on every request, and it only reads the
+ * It fails closed: anything that cannot be read, and any error, answer 'none'. It only reads the
  * cache, so a visitor cannot make Sylo call the platform.
  * @param {any} guild
  * @param {string} channelId
+ * @returns {'public' | 'private' | 'none'}
  */
-export function channelIsPublic(guild, channelId) {
+export function channelAudience(guild, channelId) {
   try {
     const channel = channelId ? guild?.channels?.cache?.get?.(channelId) : null;
-    return channel ? isPublicSource(guild, channel) === true : false;
+    if (!channel) return 'none';
+    if (isPublicSource(guild, channel) === true) return 'public';
+    if (channel.isThread?.() === true && channel.type === ChannelType.PrivateThread) return 'none';
+    return isAgeRestricted(guild, channel) ? 'none' : 'private';
+  } catch {
+    return 'none';
+  }
+}
+
+/** Can @everyone see this event's channel, right now? (channelAudience is 'public') */
+export const channelIsPublic = (guild, channelId) => channelAudience(guild, channelId) === 'public';
+
+/** How long a lookup of a member at the platform may take before the answer is no. */
+export const MEMBER_LOOKUP_MS = 4000;
+/**
+ * How long a yes or no that cost a call to the platform is reused for the same person, server and
+ * channel. A page view is three requests (the page, the icon, the image) and a person can reload,
+ * so without this every one of them would be a platform call. It is short on purpose: access that
+ * is taken away is gone from the page within this time, and nothing but the yes or no is kept.
+ */
+export const VIEWER_CACHE_MS = 3000;
+
+const defaultMembersIntent = () => config.intentGuildMembers !== false;
+let membersIntent = defaultMembersIntent;
+/** Tests only: replace the answer to "does the bot hold the server-members intent?". */
+export function _setMembersIntent(fn) {
+  membersIntent = fn ?? defaultMembersIntent;
+}
+
+const defaultLoginOffered = (platform) =>
+  platform === 'fluxer' ? config.fluxerAuthEnabled : config.discordAuthEnabled;
+let loginOffered = defaultLoginOffered;
+/** Tests only: replace the answer to "does the dashboard offer a login for this platform?". */
+export function _setLoginOffered(fn) {
+  loginOffered = fn ?? defaultLoginOffered;
+}
+
+/**
+ * Who can open the page of an event, right now: channelAudience, except that a page for a private
+ * channel counts as no page where the dashboard has no login for the event's platform (open mode, or
+ * a platform without a login), since nobody could sign in to open it. The link in the post and the
+ * dashboard list use this, so they offer a page only where one can open.
+ * @param {any} guild
+ * @param {{ channel_id: string, guild_id: string }} ev
+ * @returns {'public' | 'private' | 'none'}
+ */
+export function eventAudience(guild, ev) {
+  const audience = channelAudience(guild, ev.channel_id);
+  return audience === 'private' && !loginOffered(platformOfKey(ev.guild_id)) ? 'none' : audience;
+}
+
+let cacheMs = VIEWER_CACHE_MS;
+let clock = Date.now;
+const MAX_VERDICTS = 2000;
+/** @type {Map<string, { ok: boolean, at: number }>} */
+const verdicts = new Map();
+/** @type {Map<string, Promise<boolean>>} */
+const inflight = new Map();
+/** Tests only: change how long a verdict is reused (0 = never) and what time it is; empties both maps. */
+export function _setViewerCache({ ttlMs, now } = {}) {
+  cacheMs = ttlMs ?? VIEWER_CACHE_MS;
+  clock = now ?? Date.now;
+  verdicts.clear();
+  inflight.clear();
+}
+
+function rememberVerdict(key, ok) {
+  if (cacheMs <= 0) return;
+  const t = clock();
+  if (verdicts.size >= MAX_VERDICTS) {
+    for (const [k, v] of verdicts) if (t - v.at >= cacheMs) verdicts.delete(k);
+    if (verdicts.size >= MAX_VERDICTS) verdicts.clear();
+  }
+  verdicts.set(key, { ok, at: t });
+}
+
+/**
+ * The member's data as the platform has it now, and whether that cost a call. On Fluxer the member
+ * is always fetched fresh (`force`): the gateway cache cannot be trusted there, because a member
+ * removed or demoted while the bot's session was down (and could not resume) stays in it until the
+ * next update for that member. On Discord with the server-members intent the cache is kept current
+ * (a cleared cache comes with each new guild snapshot), so a member it holds is used as it is and a
+ * member it does not hold is fetched. On Discord without that intent the cache is not kept current,
+ * so the member is always fetched fresh. A failure or a slow answer rejects, and the caller reads
+ * that as "no".
+ */
+function liveMember(guild, userId) {
+  const members = guild.members;
+  let asked = true;
+  const lookup = (async () => {
+    if (platformOfGuild(guild) === 'fluxer') return members.fetch({ user: userId, force: true });
+    if (membersIntent()) {
+      const cached = members.cache?.get?.(userId);
+      if (cached) {
+        asked = false;
+        return cached;
+      }
+      return members.fetch(userId);
+    }
+    return members.fetch({ user: userId, force: true });
+  })();
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('member lookup timed out')), MEMBER_LOOKUP_MS);
+  });
+  return Promise.race([lookup, timeout])
+    .then((member) => ({ member, asked }))
+    .finally(() => clearTimeout(timer));
+}
+
+/** The check itself: `ok`, and `asked` when it cost a call to the platform. Never throws. */
+async function check(guild, channelId, userId) {
+  let asked = true;
+  try {
+    const channel = guild.channels.cache.get(channelId);
+    const found = await liveMember(guild, userId);
+    asked = found.asked;
+    const { member } = found;
+    if (!member || String(member.id ?? member.user?.id) !== userId) return { ok: false, asked };
+    return { ok: (await canView(channel, member)) === true, asked };
+  } catch {
+    return { ok: false, asked };
+  }
+}
+
+/**
+ * May this person open the page of an event in this channel? They must be a member of the server on
+ * the guild's own platform, and the platform's permission rules must let them see the channel (a
+ * thread follows its parent), by the platform's data of that moment. The channel rules are read on
+ * every call. The only thing remembered is a plain yes or no for the same person, server and
+ * channel, for VIEWER_CACHE_MS and only when it cost a call to the platform, so a person who loses a
+ * role or leaves the server is refused within a few seconds, and repeated views cannot hammer the API.
+ *
+ * It fails closed. Everything that is not a clear yes is a no: a member that cannot be found or read,
+ * a member object that is not that person, a channel Sylo does not have, a private thread, an
+ * age-restricted channel, permissions that cannot be read, a slow answer, an error.
+ * @param {any} guild
+ * @param {string} channelId
+ * @param {string | null | undefined} userId  the person's id on the guild's platform
+ */
+export async function viewerMaySee(guild, channelId, userId) {
+  try {
+    if (!guild || !channelId || !userId || typeof userId !== 'string') return false;
+    if (channelAudience(guild, channelId) === 'none') return false;
+    const key = `${guildKey(guild)}|${channelId}|${userId}`;
+    const hit = verdicts.get(key);
+    if (hit && clock() - hit.at < cacheMs) return hit.ok;
+    const running = inflight.get(key);
+    if (running) return await running;
+    const run = check(guild, channelId, userId)
+      .then(({ ok, asked }) => {
+        if (asked) rememberVerdict(key, ok);
+        return ok;
+      })
+      .finally(() => inflight.delete(key));
+    inflight.set(key, run);
+    return await run;
   } catch {
     return false;
   }

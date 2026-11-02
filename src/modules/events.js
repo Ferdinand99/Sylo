@@ -6,9 +6,11 @@
 //
 // config shape: { channel, reminderMinutes, staffRoles, dmReminders, timeZone, publicPages }
 //
-// With `publicPages` on, every event also has a public page (src/web/routes/events.js) and its post
-// carries an "Event page" link. The page and the link exist only for an event in a channel
-// @everyone can see (modules/lib/eventPage.js).
+// With `publicPages` on (shown as "Event pages"), every event also has a page
+// (src/web/routes/events.js) and its post carries an "Event page" link. An event in a channel
+// @everyone can see has a public page. An event in a private channel has a page that only signed-in
+// members who can see that channel can open. An event in an age-restricted channel, or in one Sylo
+// cannot see, has none (modules/lib/eventPage.js).
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { allClientsReady, clientOfGuild, guildByKey, guildKey } from '../platform/platformOf.js';
 import { registerComponent } from '../bot/lib/components.js';
@@ -39,7 +41,7 @@ import { log } from '../lib/log.js';
 import { idList } from '../web/lib/idList.js';
 import { every, after } from './schedule.js';
 import { canonicalTimeZone, formatInZone, localToUtc } from './lib/eventTime.js';
-import { channelIsPublic, eventPageUrl, eventPagesOn, refusedLinkButton } from './lib/eventPage.js';
+import { eventAudience, eventPageUrl, eventPagesOn, refusedLinkButton } from './lib/eventPage.js';
 
 /** Setting limits, served to the dashboard (modules/limits.js). */
 export const LIMITS = {
@@ -78,8 +80,9 @@ export function clampReminder(v) {
 
 /**
  * Server-wide settings. `timeZone` is the zone slash commands read times in (empty = UTC).
- * `publicPages`: every event gets a public page, for events in public channels. Off unless a real
- * `true`, so a missing or odd value never publishes anything.
+ * `publicPages` ("Event pages" in the dashboard): every event gets a page, open to anyone for a
+ * public channel and to signed-in members who can see the channel for a private one. Off unless a
+ * real `true`, so a missing or odd value never publishes anything.
  */
 export function normaliseEventsConfig(raw = {}) {
   return {
@@ -221,7 +224,7 @@ const mentions = (ids, shown = LIST_SHOWN) =>
  * The message for an event in its current state.
  * @param {object} ev  a stored event (db/events.js)
  * @param {{ joined?: string[], maybe?: string[] }} [people]  everyone signed up, in sign-up order
- * @param {{ pageUrl?: string | null }} [opts]  the event's public page: it gets an "Event page" link
+ * @param {{ pageUrl?: string | null }} [opts]  the event's page: it gets an "Event page" link
  *   button (on Fluxer, which has no buttons, the link goes into the post text instead, see
  *   platform/components.js)
  */
@@ -280,13 +283,15 @@ async function people(id) {
 }
 
 /**
- * The link to an event's public page for its post, or null: the setting is off, the channel is
- * not public (checked now, not when the event was made), or there is no public https dashboard
- * address to make a link from (modules/lib/eventPage.js, publicLinkBase).
+ * The link to an event's page for its post, or null: the setting is off, the channel has no page
+ * (age-restricted or not known; checked now, not when the event was made), or there is no public
+ * https dashboard address to make a link from (modules/lib/eventPage.js, publicLinkBase). A post in
+ * a private channel carries the link and says no more than a post in a public one: the link is no
+ * secret, since the page checks every visitor.
  */
 async function pageLinkFor(guild, ev) {
   if (!eventPagesOn(await getGuildModule(ev.guild_id, 'events'))) return null;
-  if (!channelIsPublic(guild, ev.channel_id)) return null;
+  if (eventAudience(guild, ev) === 'none') return null;
   return eventPageUrl(ev.public_token);
 }
 
@@ -327,7 +332,7 @@ const POSTS_REFRESHED = 200;
 const passes = new Map();
 
 /**
- * Edit the post of the server's events, one after the other: after the public pages setting (or the
+ * Edit the post of the server's events, one after the other: after the event pages setting (or the
  * module) is switched, so the posts gain or lose their link. Finished and cancelled events count
  * too, since their page stays and their post keeps its link; the newest POSTS_REFRESHED are done.
  */

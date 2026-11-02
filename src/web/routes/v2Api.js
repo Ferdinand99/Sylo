@@ -491,7 +491,7 @@ router.post(
       detail: enabled ? 'enabled' : 'disabled',
     });
     if (mod.id === 'events') {
-      // With the public pages on, the posts carry a link that only works while the module is on.
+      // With the event pages on, the posts carry a link that only works while the module is on.
       refreshPagePosts(req.guild.id).catch((err) =>
         log.warn('events', 'could not update the event posts after a toggle:', err.message)
       );

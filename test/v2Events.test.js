@@ -11,6 +11,7 @@ import { getGuildModule, setGuildModule } from '../src/db/modules.js';
 import { createEvent, getEvent, setEventMessage, upcomingEvents } from '../src/db/events.js';
 import { LIMITS } from '../src/lib/limits.js';
 import { localToUtc } from '../src/modules/lib/eventTime.js';
+import { _setLoginOffered } from '../src/modules/lib/eventPage.js';
 
 let app;
 let api;
@@ -234,14 +235,12 @@ test('the public pages setting is stored only as a real true, and the audit row 
     true,
     'the form reads it back'
   );
-  const turnedOn = (await auditRows(GID, 'module:events')).find((a) =>
-    /public event pages on/.test(a.detail)
-  );
+  const turnedOn = (await auditRows(GID, 'module:events')).find((a) => /event pages on/.test(a.detail));
   assert.ok(turnedOn, 'the audit row names the change');
 
   await api.post('/modules/events/config', { publicPages: 'true' });
   assert.equal((await getGuildModule(GID, 'events')).config.publicPages, false);
-  assert.ok((await auditRows(GID, 'module:events')).some((a) => /public event pages off/.test(a.detail)));
+  assert.ok((await auditRows(GID, 'module:events')).some((a) => /event pages off/.test(a.detail)));
   await api.post('/modules/events/config', {});
 });
 
@@ -265,19 +264,47 @@ test('each event in the list carries the path of its page while pages are on and
   await setGuildModule(GID, 'events', { enabled: true, config: { publicPages: true } });
   e = await find();
   assert.equal(e.pagePath, `/events/${token}`);
+  assert.equal(e.pageAudience, 'public');
   assert.equal(e.pageHidden, false);
 
-  // a channel @everyone cannot read: no path, and the form is told why
+  // a channel @everyone cannot read: the page needs a sign-in, and the list says so
   const channel = app.guild.channels.cache.get(CH.general);
   const open = channel.permissionsFor;
   const everyone = app.guild.roles.everyone;
   try {
     channel.permissionsFor = (role) => (role === everyone ? new PermissionsBitField(0n) : open(role));
+    // no login for the platform: nobody could sign in, so no link and the list says why
+    e = await find();
+    assert.equal(e.pagePath, null);
+    assert.equal(e.pageAudience, null);
+    assert.equal(e.pageHidden, true);
+
+    _setLoginOffered(() => true);
+    e = await find();
+    assert.equal(e.pagePath, `/events/${token}`, 'a private channel has a page too');
+    assert.equal(e.pageAudience, 'private');
+    assert.equal(e.pageHidden, false);
+
+    // an age-restricted channel has no page for anyone, and the form is told why
+    channel.nsfw = true;
+    e = await find();
+    assert.equal(e.pagePath, null);
+    assert.equal(e.pageAudience, null);
+    assert.equal(e.pageHidden, true);
+  } finally {
+    _setLoginOffered(null);
+    channel.nsfw = false;
+    channel.permissionsFor = open;
+  }
+  // a channel Sylo cannot see has none either
+  const known = app.guild.channels.cache;
+  known.delete(CH.general);
+  try {
     e = await find();
     assert.equal(e.pagePath, null);
     assert.equal(e.pageHidden, true);
   } finally {
-    channel.permissionsFor = open;
+    known.set(CH.general, channel);
   }
   await setGuildModule(GID, 'events', { enabled: true, config: {} });
 });
