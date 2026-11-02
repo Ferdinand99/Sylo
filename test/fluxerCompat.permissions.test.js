@@ -267,3 +267,100 @@ test('Discord is unchanged: its channel flag is the effective one, and the Fluxe
   channel.nsfw = true;
   assert.equal(isPublicSource(guild, channel), false, 'the plain flag still hides it');
 });
+
+// --- channel.permissionsFor(member), on the real SDK classes -----------------------------------------
+//
+// The SDK's own member.permissionsIn applies an overwrite only for a role id in the member's role
+// list, and that list does not hold @everyone, so an overwrite that closes a channel to @everyone
+// never reached a member. permissionsFor(member) works it out the way discord.js does.
+
+const MEMBER = '900000000000000750';
+/** A real GuildMember of the world's server, holding the given roles (never @everyone). */
+function memberOf(w, roleIds, id = MEMBER) {
+  w.guild.client.getOrCreateUser = (user) => user;
+  return new sdk.GuildMember(
+    w.guild.client,
+    {
+      user: { id, username: 'someone', discriminator: '0', global_name: null, avatar: null },
+      roles: roleIds,
+      joined_at: new Date(0).toISOString(),
+    },
+    w.guild
+  );
+}
+const canView = (w, member) => w.channel.permissionsFor(member).has('ViewChannel');
+
+test('a member of a channel closed to @everyone cannot view it, though the SDK alone says they can', () => {
+  const w = world({ overwrites: [overwrite(GID, { deny: F.ViewChannel })] });
+  const member = memberOf(w, []);
+  assert.equal(
+    member.permissionsIn(w.channel).has('ViewChannel'),
+    true,
+    'the SDK ignores the @everyone overwrite'
+  );
+  assert.ok(w.channel.permissionsFor(member) instanceof sdk.PermissionsBitField);
+  assert.equal(canView(w, member), false, 'the compat layer applies it');
+  assert.equal(w.channel.permissionsFor(MEMBER) ?? null, null, 'a member that is not cached is unknown');
+  w.guild.members.set(MEMBER, member);
+  assert.equal(w.channel.permissionsFor(MEMBER).has('ViewChannel'), false, 'by id, from the cache');
+});
+
+test('a role can open a channel again, and the role overwrites come after the @everyone one', () => {
+  const w = world({
+    overwrites: [overwrite(MOD, { allow: F.ViewChannel }), overwrite(GID, { deny: F.ViewChannel })], // in either order
+  });
+  assert.equal(canView(w, memberOf(w, [MOD])), true);
+  assert.equal(canView(w, memberOf(w, [])), false);
+  assert.equal(canView(w, memberOf(w, [ADMIN])), true, 'Administrator');
+});
+
+test('a role overwrite can also close a channel, and the roles of a member are taken together', () => {
+  const w = world({ overwrites: [overwrite(MOD, { deny: F.ViewChannel })] });
+  assert.equal(canView(w, memberOf(w, [])), true, 'open to everyone');
+  assert.equal(canView(w, memberOf(w, [MOD])), false, 'closed by a role');
+  const THIRD = '900000000000000503';
+  const both = world({
+    overwrites: [overwrite(MOD, { deny: F.ViewChannel }), overwrite(THIRD, { allow: F.ViewChannel })],
+  });
+  both.guild.roles.set(THIRD, new sdk.Role(both.guild.client, roleData(THIRD, 0n, 1), GID));
+  assert.equal(canView(both, memberOf(both, [MOD, THIRD])), true, 'an allow of any role beats a deny');
+  assert.equal(canView(both, memberOf(both, [MOD])), false);
+});
+
+test('the overwrite of the member themselves comes last', () => {
+  const memberOverwrite = (allow, deny) => ({
+    id: MEMBER,
+    type: sdk.OverwriteType.Member,
+    allow: String(allow),
+    deny: String(deny),
+  });
+  const opened = world({
+    overwrites: [overwrite(GID, { deny: F.ViewChannel }), memberOverwrite(F.ViewChannel, 0n)],
+  });
+  assert.equal(canView(opened, memberOf(opened, [])), true, 'opened for them');
+  assert.equal(canView(opened, memberOf(opened, [], '900000000000000751')), false, 'not for another');
+  const closed = world({
+    overwrites: [overwrite(MOD, { allow: F.ViewChannel }), memberOverwrite(0n, F.ViewChannel)],
+  });
+  assert.equal(canView(closed, memberOf(closed, [MOD])), false, 'closed for them');
+});
+
+test('the owner and an Administrator can do everything, and a member list that holds @everyone changes nothing', () => {
+  const w = world({ overwrites: [overwrite(GID, { deny: F.ViewChannel })] });
+  w.guild.ownerId = MEMBER;
+  assert.equal(canView(w, memberOf(w, [])), true, 'the owner');
+  w.guild.ownerId = '900000000000000999';
+  assert.equal(canView(w, memberOf(w, [ADMIN])), true);
+  assert.equal(canView(w, memberOf(w, [GID])), false, 'a list with @everyone in it gives the same answer');
+});
+
+test('permissionsFor(member) fails closed when the member cannot be read', () => {
+  const w = world({ overwrites: [overwrite(GID, { deny: F.ViewChannel })] });
+  const broken = memberOf(w, []);
+  Object.defineProperty(broken, 'permissions', {
+    get() {
+      throw new Error('boom');
+    },
+  });
+  assert.equal(w.channel.permissionsFor(broken), null);
+});

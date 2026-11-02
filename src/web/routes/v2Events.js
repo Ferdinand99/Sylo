@@ -22,7 +22,7 @@ import {
   updateEvent,
 } from '../../modules/events.js';
 import { utcToLocalInput } from '../../modules/lib/eventTime.js';
-import { channelIsPublic, eventPagePath, eventPagesOn } from '../../modules/lib/eventPage.js';
+import { channelAudience, eventPagePath, eventPagesOn } from '../../modules/lib/eventPage.js';
 import { log } from '../../lib/log.js';
 
 /** How many finished or cancelled events the page lists. */
@@ -36,9 +36,14 @@ const fail = (res, message, status = 400) => res.status(status).json({ error: me
 async function eventsView(guild) {
   const channels = guildTextChannels(guild);
   const rows = [...(await upcomingEvents(guild.id)), ...(await pastEvents(guild.id, PAST_SHOWN))];
-  // The page exists only while the setting is on and the event's channel is public: the path is
-  // given for those, and `pageHidden` says that the setting is on but the channel is not public.
+  // The page exists only while the setting is on and the event's channel has an audience: the path
+  // is given for those, with `pageAudience` ('public': anyone with the link; 'private': signed-in
+  // members who can see the channel). `pageHidden` says that the setting is on but the channel has
+  // no page: it is age-restricted, or Sylo cannot see it.
   const pagesOn = eventPagesOn(await getGuildModule(guild.id, 'events'));
+  const audienceOf = new Map(
+    rows.map((ev) => [ev.id, pagesOn ? channelAudience(guild, ev.channel_id) : 'none'])
+  );
   return Promise.all(
     rows.map(async (ev) => ({
       id: ev.id,
@@ -60,8 +65,9 @@ async function eventsView(guild) {
       state: ev.state,
       joined: await eventStatusCount(ev.id, 'join'),
       maybe: await eventStatusCount(ev.id, 'maybe'),
-      pagePath: pagesOn && channelIsPublic(guild, ev.channel_id) ? eventPagePath(ev.public_token) : null,
-      pageHidden: pagesOn && !channelIsPublic(guild, ev.channel_id),
+      pagePath: audienceOf.get(ev.id) === 'none' ? null : eventPagePath(ev.public_token),
+      pageAudience: audienceOf.get(ev.id) === 'none' ? null : audienceOf.get(ev.id),
+      pageHidden: pagesOn && audienceOf.get(ev.id) === 'none',
     }))
   );
 }
@@ -91,7 +97,7 @@ router.post(
       actor: actor(req),
       action: 'module:events',
       detail: pagesChanged
-        ? `settings saved (public event pages ${config.publicPages ? 'on' : 'off'})`
+        ? `settings saved (event pages ${config.publicPages ? 'on' : 'off'})`
         : 'settings saved',
     });
     // The posts of the events gain or lose their page link. In the background: it is one edit per

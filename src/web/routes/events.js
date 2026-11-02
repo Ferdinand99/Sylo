@@ -1,6 +1,6 @@
-// Public (no-auth) page of one event, at /events/<token>. Off by default: the server switches it on
-// with "Public event pages" in the Events settings. Mounted before requireAuth in server.js, with the
-// same kind of rate limit as the quote page and the leaderboard.
+// The page of one event, at /events/<token>. Off by default: the server switches it on with
+// "Event pages" in the Events settings (stored as publicPages). Mounted before requireAuth in
+// server.js, with the same kind of rate limit as the quote page and the leaderboard.
 //
 // The address is a random 128-bit token stored on the event (db/events.js). The event number runs in
 // sequence and is never an address.
@@ -17,27 +17,98 @@
 //
 // There is a page, and an image, only while all of this is true, checked on every request and never
 // remembered:
-//   - the Events module is on and "Public event pages" is on;
-//   - the event's channel is one @everyone can see. If Sylo cannot tell (the channel is not in its
-//     cache, the permissions cannot be read), there is no page: it fails closed. A channel made
-//     private later takes the page down on the next request.
-// Every reason there is no page answers with the same 404 page, so the response does not tell
-// which addresses exist, which servers Sylo is in, or why. The image addresses answer the same way.
+//   - the Events module is on and "Event pages" is on;
+//   - the event's channel has an audience (modules/lib/eventPage.js, channelAudience):
+//       public   @everyone can see the channel: anyone with the link may open the page;
+//       private  only some members see it: the visitor must be signed in with the platform the event
+//                was posted on (Discord or Fluxer, the dashboard's own login), be a member of that
+//                server and be able to see that channel, by the bot's live data of that moment;
+//       none     an age-restricted channel, a private thread, or one Sylo cannot see: no page for
+//                anyone, signed in or not.
+//     If Sylo cannot tell, there is no page: it fails closed. A channel made private later moves
+//     the page to sign-in on the next request, and a person who loses access loses the page on the
+//     next request.
+//
+// What a visitor is told, so that the response never shows which addresses are events, in which
+// servers, or why:
+//   - the page, while it is allowed;
+//   - otherwise, a visitor who is not signed in gets one neutral sign-in page (401), whatever the
+//     reason: a private event, an unknown address, a channel that is age-restricted, the setting
+//     off. It holds no title, server, image or event data, and no link-preview tags. The platform
+//     it offers is the event's own; for an address that is not an event, a platform picked from the
+//     address with a secret key, so that the choice is no sign of whether an event exists;
+//   - otherwise (signed in, or no sign-in is possible), the same 404 page for every reason: no
+//     access, a wrong address, a setting that is off, an age-restricted channel, an event posted on
+//     the other platform than the one the person signed in with.
+// The sign-in link returns to /events/<token> by the dashboard's own login, which accepts only a
+// path on this site (middleware/auth.js, internalNext).
+import { createHmac } from 'node:crypto';
 import { Router } from 'express';
-import { guildByKey } from '../../platform/platformOf.js';
+import { config } from '../../config.js';
+import { guildByKey, platformOfGuild } from '../../platform/platformOf.js';
 import { getGuildModule } from '../../db/modules.js';
 import { eventStatusCount, getEventByToken } from '../../db/events.js';
 import { publicText } from '../../modules/quoteBoard.js';
-import { EVENT_TOKEN_RE, channelIsPublic, eventPagesOn, eventStatus } from '../../modules/lib/eventPage.js';
+import {
+  EVENT_TOKEN_RE,
+  channelAudience,
+  eventPagesOn,
+  eventStatus,
+  platformOfKey,
+  viewerMaySee,
+} from '../../modules/lib/eventPage.js';
 import { loadImage } from '../../modules/lib/eventImage.js';
+import { identityFor } from '../lib/accountAuth.js';
+import { enabledProviders } from '../lib/oauthProviders.js';
 
-const NOT_FOUND = 'There is no public event page at this address.';
+const NOT_FOUND = 'There is no event page at this address.';
+
+/**
+ * Headers for everything the sign-in rule can change: the page, its images, the sign-in page and
+ * the not-found page. The same address answers differently for different people, so nothing may be
+ * kept by a browser or a proxy, nothing is indexed, and the address does not travel as a referrer.
+ */
+function privateHeaders(res) {
+  res.set({
+    'Cache-Control': 'private, no-store',
+    'X-Robots-Tag': 'noindex, nofollow, noarchive',
+    'Referrer-Policy': 'no-referrer',
+  });
+  res.vary('Cookie');
+}
 
 // A page of its own, not the dashboard's error page: that one loads the visit-count script, which
 // would send the address, token included, to the stats service.
 function notFound(res) {
-  res.set('Cache-Control', 'no-store');
+  privateHeaders(res);
   return res.status(404).render('event-missing', { message: NOT_FOUND });
+}
+
+/**
+ * The neutral sign-in page. It says nothing about the event, and it carries no title, server, image
+ * or preview tag. The link goes through the dashboard's login and comes back to the page; the token
+ * in it has passed EVENT_TOKEN_RE, so it is 32 hex characters and the path is always on this site.
+ */
+function signInPage(res, provider, token) {
+  privateHeaders(res);
+  return res.status(401).render('event-signin', {
+    label: provider.label,
+    href: `/auth/${provider.platform}/login?next=/events/${token}`,
+  });
+}
+
+/**
+ * Which login to offer for an address. For an event, the platform it was posted on, if that login
+ * is offered. For an address that is no event, one of the offered logins picked by a keyed hash of
+ * the address: the same address always gets the same one, and nobody without the key can tell it
+ * from an event's own platform.
+ */
+function signInProvider(ev, token) {
+  const offered = enabledProviders();
+  if (ev) return offered.find((p) => p.platform === platformOfKey(ev.guild_id)) ?? null;
+  if (!offered.length) return null;
+  const pick = createHmac('sha256', config.sessionSecret).update(`event-signin|${token}`).digest()[0];
+  return offered[pick % offered.length];
 }
 
 const LABELS = { upcoming: 'Upcoming', cancelled: 'Cancelled', ended: 'Ended' };
@@ -55,29 +126,54 @@ function iconLink(guild) {
   }
 }
 
+const NONE = { type: 'none' };
+
 /**
- * The event and server behind a token while the page is allowed to exist, or null. Every request
- * of this router starts here, so the page and its images have one set of rules.
+ * What this request may have: `{ type: 'page', ev, guild, audience }` while the page is allowed for
+ * this visitor, `{ type: 'signin', provider }` for the neutral sign-in page, or `{ type: 'none' }`
+ * for the not-found page. Every request of this router starts here, so the page and its images
+ * have one set of rules, and no answer is kept from one request to the next.
  */
-async function openEvent(token) {
-  if (!EVENT_TOKEN_RE.test(token)) return null;
+async function openEvent(req) {
+  const { token } = req.params;
+  if (!EVENT_TOKEN_RE.test(token)) return NONE;
   const ev = await getEventByToken(token);
-  if (!ev) return null;
-  const guild = guildByKey(ev.guild_id);
-  if (!guild) return null;
-  if (!eventPagesOn(await getGuildModule(ev.guild_id, 'events'))) return null;
-  if (!channelIsPublic(guild, ev.channel_id)) return null;
-  return { ev, guild };
+  const guild = ev ? guildByKey(ev.guild_id) : null;
+  let audience = 'none';
+  if (ev && guild && eventPagesOn(await getGuildModule(ev.guild_id, 'events'))) {
+    audience = channelAudience(guild, ev.channel_id);
+  }
+  if (audience === 'public') return { type: 'page', ev, guild, audience };
+
+  // Everything else needs a signed-in visitor. With no login (open mode) there is nobody to ask.
+  if (!config.authEnabled) return NONE;
+  const provider = signInProvider(ev, token);
+  if (!provider) return NONE;
+  // Only the browser's own session counts, never an app token.
+  if (!req.account || req.viaToken) return { type: 'signin', provider };
+  // Signed in: only the identity on the platform the event was posted on counts, so a Discord id
+  // is never looked up in a Fluxer server. A person with none there is refused like anyone else.
+  const identity = identityFor(req.account, provider.platform);
+  if (!identity) return NONE;
+
+  if (audience !== 'private' || platformOfGuild(guild) !== provider.platform) return NONE;
+  if (!(await viewerMaySee(guild, ev.channel_id, identity.platformUserId))) return NONE;
+  return { type: 'page', ev, guild, audience };
+}
+
+/** Answer a request that has no page: the sign-in page or the not-found page. */
+function refuse(res, open, token) {
+  return open.type === 'signin' ? signInPage(res, open.provider, token) : notFound(res);
 }
 
 const router = Router();
 
 router.get('/:token', async (req, res, next) => {
   try {
-    const open = await openEvent(req.params.token);
-    if (!open) return notFound(res);
-    const { ev, guild } = open;
+    const open = await openEvent(req);
     const { token } = req.params;
+    if (open.type !== 'page') return refuse(res, open, token);
+    const { ev, guild } = open;
 
     const [going, maybe, icon, image] = await Promise.all([
       eventStatusCount(ev.id, 'join'),
@@ -87,8 +183,10 @@ router.get('/:token', async (req, res, next) => {
     ]);
     const status = eventStatus(ev);
     // The posted time changes as people edit; the page must not be served from a cache after the
-    // event was cancelled, the setting was switched off or the channel was closed.
-    res.set('Cache-Control', 'no-store');
+    // event was cancelled, the setting was switched off or the channel was closed. A page that only
+    // some visitors may open is also private to the browser that got it.
+    if (open.audience === 'private') privateHeaders(res);
+    else res.set('Cache-Control', 'no-store');
     res.render('event', {
       guild: { name: guild.name, icon: icon ? `/events/${token}/icon` : null },
       event: {
@@ -111,13 +209,15 @@ router.get('/:token', async (req, res, next) => {
   }
 });
 
-// The two images of a page, served from Sylo. Same checks as the page, same not-found.
+// The two images of a page, served from Sylo. Same checks as the page, same answers. The bytes are
+// read from Sylo's own image cache (modules/lib/eventImage.js) only after the checks passed, so a
+// person without access never gets them, and an image of a private event is not kept by a browser.
 router.get('/:token/:asset', async (req, res, next) => {
   try {
-    const { asset } = req.params;
+    const { token, asset } = req.params;
     if (asset !== 'icon' && asset !== 'image') return notFound(res);
-    const open = await openEvent(req.params.token);
-    if (!open) return notFound(res);
+    const open = await openEvent(req);
+    if (open.type !== 'page') return refuse(res, open, token);
     const image = await loadImage(asset === 'icon' ? iconLink(open.guild) : open.ev.image_url);
     if (!image) return notFound(res);
     res.set({
@@ -125,9 +225,14 @@ router.get('/:token/:asset', async (req, res, next) => {
       'Content-Length': String(image.body.length),
       'X-Content-Type-Options': 'nosniff',
       'Cross-Origin-Resource-Policy': 'same-origin',
-      // Short and private: a page that goes away must not live on in a browser for long.
-      'Cache-Control': 'private, max-age=60',
+      // Short and private: a page that goes away must not live on in a browser for long. An image
+      // of a page that only some may open is not kept at all.
+      'Cache-Control': open.audience === 'private' ? 'private, no-store' : 'private, max-age=60',
     });
+    if (open.audience === 'private') {
+      res.set({ 'X-Robots-Tag': 'noindex, nofollow, noarchive', 'Referrer-Policy': 'no-referrer' });
+      res.vary('Cookie');
+    }
     res.end(image.body);
   } catch (err) {
     next(err);

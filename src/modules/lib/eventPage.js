@@ -1,19 +1,25 @@
-// The rules behind the public page of an event (src/web/routes/events.js, and the link in the post
-// in src/modules/events.js). Kept here, apart from both, so the post and the page decide the same.
+// The rules behind the page of an event (src/web/routes/events.js, and the link in the post in
+// src/modules/events.js). Kept here, apart from both, so the post and the page decide the same.
 //
 // A page exists for an event only while all of these hold, and the page route checks every one of
 // them on every request:
-//   - the Events module is on and its "Public event pages" setting is a real `true`;
-//   - the event's channel is one @everyone can see (channelIsPublic, which fails closed).
+//   - the Events module is on and its "Event pages" setting (stored as publicPages) is a real `true`;
+//   - the event's channel has an audience (channelAudience): @everyone can see it ("public": anyone
+//     with the link may open the page), or it is a channel only some members see ("private": only a
+//     signed-in member who can see that channel, on the platform it was posted on, may open the page,
+//     see viewerMaySee). A channel that is age-restricted, or that Sylo cannot see, has no page.
+import { ChannelType } from 'discord.js';
 import { config } from '../../config.js';
 import { END_GRACE_MS } from '../../db/events.js';
 import { isLocalHostname } from '../../lib/localHost.js';
-import { isPublicSource } from '../quoteBoard.js';
+import { splitPlatformGuildId } from '../../lib/platformId.js';
+import { platformOfGuild } from '../../platform/platformOf.js';
+import { canView, isAgeRestricted, isPublicSource } from '../quoteBoard.js';
 
 /** A page address is 32 lower-case hex characters: 128 random bits (db/events.js, newEventToken). */
 export const EVENT_TOKEN_RE = /^[0-9a-f]{32}$/;
 
-/** The path of an event's public page. */
+/** The path of an event's page. */
 export const eventPagePath = (token) => `/events/${token}`;
 
 /**
@@ -61,26 +67,103 @@ export function refusedLinkButton(err) {
   return Boolean(errors) && typeof errors === 'object' && Object.hasOwn(errors, 'components');
 }
 
-/** Is the Events module on with the public pages switched on? `mod` is a getGuildModule() answer. */
+/**
+ * Is the Events module on with the event pages switched on? `mod` is a getGuildModule() answer. The
+ * setting is stored as `publicPages` (the key it always had) and shown as "Event pages": it switches
+ * on the pages of events in public channels and of events in private channels alike.
+ */
 export const eventPagesOn = (mod) => mod?.enabled === true && mod.config?.publicPages === true;
 
+/** The platform a guild key belongs to: a bare id is Discord, "fluxer:<id>" is Fluxer. */
+export const platformOfKey = (key) => splitPlatformGuildId(key)?.platform ?? 'discord';
+
 /**
- * Can @everyone see this event's channel, right now? It asks the same question the quote board asks
- * when it saves a quote (isPublicSource: the @everyone role can view the channel, the channel is
- * not age-restricted, a thread follows its parent and a private thread never counts), but of the
- * channel as it is at this moment, not as it was when the event was made.
+ * Who can open the page of an event posted in this channel, right now:
+ *  - 'public': @everyone can see the channel. It asks the same question the quote board asks when it
+ *    saves a quote (isPublicSource: the @everyone role can view the channel, the channel is not
+ *    age-restricted, a thread follows its parent and a private thread never counts), of the channel
+ *    as it is at this moment, not as it was when the event was made. No sign-in is needed.
+ *  - 'private': the channel is one only some members see. Only a signed-in member who can see it
+ *    may open the page (viewerMaySee decides, per visitor).
+ *  - 'none': there is no page for anyone. A channel Sylo does not have in its cache (deleted, an
+ *    archived thread, a platform that cannot say), a private thread, and an age-restricted channel
+ *    (Sylo cannot tell whether a member has confirmed their age with the platform, so the public
+ *    rule against age-restricted channels holds for members too).
  *
- * It fails closed: a channel Sylo does not have in its cache (deleted, an archived thread, a
- * platform that cannot say), a missing @everyone role, permissions that cannot be read or an error
- * all answer "not public". The page route calls this on every request, and it only reads the
+ * It fails closed: anything that cannot be read, and any error, answer 'none'. It only reads the
  * cache, so a visitor cannot make Sylo call the platform.
  * @param {any} guild
  * @param {string} channelId
+ * @returns {'public' | 'private' | 'none'}
  */
-export function channelIsPublic(guild, channelId) {
+export function channelAudience(guild, channelId) {
   try {
     const channel = channelId ? guild?.channels?.cache?.get?.(channelId) : null;
-    return channel ? isPublicSource(guild, channel) === true : false;
+    if (!channel) return 'none';
+    if (isPublicSource(guild, channel) === true) return 'public';
+    if (channel.isThread?.() === true && channel.type === ChannelType.PrivateThread) return 'none';
+    return isAgeRestricted(guild, channel) ? 'none' : 'private';
+  } catch {
+    return 'none';
+  }
+}
+
+/** Can @everyone see this event's channel, right now? (channelAudience is 'public') */
+export const channelIsPublic = (guild, channelId) => channelAudience(guild, channelId) === 'public';
+
+/** How long a lookup of a member at the platform may take before the answer is no. */
+export const MEMBER_LOOKUP_MS = 4000;
+
+const defaultMembersIntent = () => config.intentGuildMembers !== false;
+let membersIntent = defaultMembersIntent;
+/** Tests only: replace the answer to "does the bot hold the server-members intent?". */
+export function _setMembersIntent(fn) {
+  membersIntent = fn ?? defaultMembersIntent;
+}
+
+/**
+ * The member's data as the bot has it now. On Fluxer, and on Discord with the server-members
+ * intent, the bot's member cache is kept current by the gateway (a role taken away, a member who
+ * left): it is used, and a member it does not hold is fetched. On Discord without that intent the
+ * cache is not kept current, so the member is always fetched fresh from the platform. A failure
+ * or a slow answer rejects, and the caller reads that as "no".
+ */
+function liveMember(guild, userId) {
+  const members = guild.members;
+  const lookup = (async () => {
+    if (platformOfGuild(guild) === 'fluxer' || membersIntent()) {
+      return members.cache?.get?.(userId) ?? (await members.fetch(userId));
+    }
+    return members.fetch({ user: userId, force: true });
+  })();
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('member lookup timed out')), MEMBER_LOOKUP_MS);
+  });
+  return Promise.race([lookup, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * May this person open the page of an event in this channel? They must be a member of the server on
+ * the guild's own platform, and the platform's permission rules must let them see the channel (a
+ * thread follows its parent), by the bot's live data of that moment. Nothing is remembered between
+ * requests: a person who loses a role or leaves the server is refused at the next request.
+ *
+ * It fails closed. Everything that is not a clear yes is a no: a member that cannot be found or read,
+ * a member object that is not that person, a channel Sylo does not have, a private thread, an
+ * age-restricted channel, permissions that cannot be read, a slow answer, an error.
+ * @param {any} guild
+ * @param {string} channelId
+ * @param {string | null | undefined} userId  the person's id on the guild's platform
+ */
+export async function viewerMaySee(guild, channelId, userId) {
+  try {
+    if (!guild || !channelId || !userId || typeof userId !== 'string') return false;
+    if (channelAudience(guild, channelId) === 'none') return false;
+    const channel = guild.channels.cache.get(channelId);
+    const member = await liveMember(guild, userId);
+    if (!member || String(member.id ?? member.user?.id) !== userId) return false;
+    return (await canView(channel, member)) === true;
   } catch {
     return false;
   }

@@ -174,7 +174,11 @@ export const SAMPLES = {
   'quotes-empty': { file: 'quotes.ejs', data: quotes({ quotes: [], total: 0 }) },
   'event-missing': {
     file: 'event-missing.ejs',
-    data: { message: 'There is no public event page at this address.' },
+    data: { message: 'There is no event page at this address.' },
+  },
+  'event-signin': {
+    file: 'event-signin.ejs',
+    data: { label: 'Discord', href: '/auth/discord/login?next=/events/0123456789abcdef0123456789abcdef' },
   },
   event: { file: 'event.ejs', data: eventPage() },
   'event-cancelled': {

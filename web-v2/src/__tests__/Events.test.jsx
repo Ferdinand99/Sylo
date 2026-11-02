@@ -186,10 +186,10 @@ describe('Events form', () => {
 });
 
 describe('Events public pages', () => {
-  it('has a Public event pages switch, off by default, that is saved with the other settings', async () => {
+  it('has an Event pages switch, off by default, that is saved with the other settings', async () => {
     saveModuleConfig.mockImplementation(async (_guild, _id, body) => ({ config: body }));
     renderAtGuild(<Events />, GUILD);
-    const box = await screen.findByLabelText('Public event pages');
+    const box = await screen.findByLabelText('Event pages');
     expect(box.checked).toBe(false);
     fireEvent.click(box);
     fireEvent.click(screen.getAllByRole('button', { name: /Save/ })[0]);
@@ -211,21 +211,23 @@ describe('Events public pages', () => {
       }))
       .mockImplementationOnce(async (_guild, _id, body) => ({ config: body, events: [event()] }));
     renderAtGuild(<Events />, GUILD);
-    fireEvent.click(await screen.findByLabelText('Public event pages'));
+    fireEvent.click(await screen.findByLabelText('Event pages'));
     fireEvent.click(screen.getAllByRole('button', { name: /Save/ })[0]);
     const link = await screen.findByRole('link', { name: 'Public page' });
     expect(link.getAttribute('href')).toBe(`${window.location.origin}${path}`);
 
-    fireEvent.click(screen.getByLabelText('Public event pages'));
+    fireEvent.click(screen.getByLabelText('Event pages'));
     fireEvent.click(screen.getAllByRole('button', { name: /Save/ })[0]);
     await waitFor(() => expect(screen.queryByRole('link', { name: 'Public page' })).toBeNull());
   });
 
   it('says what the page shows and what it never shows', async () => {
     renderAtGuild(<Events />, GUILD);
-    await screen.findByLabelText('Public event pages');
+    await screen.findByLabelText('Event pages');
     expect(screen.getByText(/no names, no host and no roles/i)).toBeTruthy();
-    expect(screen.getByText(/only for events in channels that everyone can see/i)).toBeTruthy();
+    expect(screen.getByText(/without signing in/i)).toBeTruthy();
+    expect(screen.getByText(/only people who sign in with Discord or Fluxer/i)).toBeTruthy();
+    expect(screen.getByText(/age-restricted channel has no page/i)).toBeTruthy();
   });
 
   it('links each event to its page, and gives no link while pages are off', async () => {
@@ -253,10 +255,35 @@ describe('Events public pages', () => {
     expect(screen.queryByText(/not public/i)).toBeNull();
   });
 
-  it('explains why an event in a private channel has no page', async () => {
+  it('explains why an event in an age-restricted channel has no page', async () => {
     load([event({ pageHidden: true })]);
     renderAtGuild(<Events />, GUILD);
-    expect(await screen.findByText(/No public page: Sylo does not see #general as a channel/)).toBeTruthy();
+    expect(
+      await screen.findByText(/No page: #general is age-restricted, or Sylo cannot see it/)
+    ).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Public page' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Members-only page' })).toBeNull();
+  });
+
+  it('links an event in a private channel to its members-only page, and says who can open it', async () => {
+    load([
+      event({ pagePath: '/events/0123456789abcdef0123456789abcdef', pageAudience: 'private' }),
+      event({
+        id: 6,
+        title: 'Open one',
+        pagePath: '/events/fedcba9876543210fedcba9876543210',
+        pageAudience: 'public',
+      }),
+    ]);
+    renderAtGuild(<Events />, GUILD);
+    const members = await screen.findByRole('link', { name: 'Members-only page' });
+    expect(members.getAttribute('href')).toBe(
+      `${window.location.origin}/events/0123456789abcdef0123456789abcdef`
+    );
+    expect(screen.getByText(/opens for people who sign in and can see #general/)).toBeTruthy();
+    const open = screen.getByRole('link', { name: 'Public page' });
+    expect(open.getAttribute('href')).toBe(
+      `${window.location.origin}/events/fedcba9876543210fedcba9876543210`
+    );
   });
 });

@@ -44,7 +44,7 @@ export function requestLog(req, res, next) {
   // Capture up front: sub-routers rewrite req.url while they run, so reading the
   // path from the res 'finish' handler can see a stale/stripped value.
   // The GitHub webhook's URL token is a credential: never written to a log. Neither is the address
-  // of a public event page: whoever has it can open the page.
+  // of an event page: whoever has it can open a public page, and a private page is only a sign-in away.
   const path = (req.originalUrl || req.url)
     .split('?', 1)[0]
     .replace(/^(\/webhooks\/github\/)[^/]+/i, '$1:token')

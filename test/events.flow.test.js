@@ -745,30 +745,55 @@ test('no link while the setting is off, the module is off, or the setting is not
   assert.equal(linkOf(w.sent[0]), undefined, 'module off');
 });
 
-test('no link for an event in a channel everyone cannot read, even with the setting on', async () => {
+test('an event in a channel everyone cannot read gets the link too, and the post says no more than a public one', async () => {
+  fresh();
+  await enable({ publicPages: true });
+  await postEvent();
+  const publicPost = w.sent[0];
+  const publicLink = linkOf(publicPost);
+  assert.ok(publicLink, 'the public post has the link');
+
   fresh();
   await enable({ publicPages: true });
   w.channel.open = false;
-  await postEvent();
-  assert.equal(linkOf(w.sent[0]), undefined);
-  assert.equal(w.sent[0].components[0].toJSON().components.length, 3);
+  const id = await postEvent();
+  const privateLink = linkOf(w.sent[0]);
+  assert.equal(
+    privateLink.url,
+    `https://sylo.example.test/events/${(await getEvent(id)).public_token}`,
+    'the private channel gets the link'
+  );
+  assert.equal(w.sent[0].components[0].toJSON().components.length, 4, 'Join, Maybe, Leave and the link');
+  // the post tells no more about the page than a public one: same label, same fields
+  assert.equal(privateLink.label, publicLink.label);
+  assert.equal(privateLink.label, 'Event page');
+  assert.deepEqual(Object.keys(w.sent[0]).sort(), Object.keys(publicPost).sort());
+  assert.equal(w.sent[0].content, publicPost.content);
+});
 
+test('no link for an event in an age-restricted channel or in one Sylo cannot see', async () => {
   fresh();
   await enable({ publicPages: true });
   w.channel.nsfw = true;
   await postEvent();
   assert.equal(linkOf(w.sent[0]), undefined, 'age-restricted');
+  assert.equal(w.sent[0].components[0].toJSON().components.length, 3);
 
   fresh();
   await enable({ publicPages: true });
-  w.channel.permissionsFor = () => {
-    throw new Error('boom');
-  };
+  w.channel.open = false;
+  w.channel.nsfw = true;
   await postEvent();
-  assert.equal(linkOf(w.sent[0]), undefined, 'an error in the check fails closed');
+  assert.equal(linkOf(w.sent[0]), undefined, 'private and age-restricted');
+
+  fresh();
+  await enable({ publicPages: true });
+  w.guild.channels.cache.delete(CH); // posting still works through fetch(); the page cannot know the channel
+  await postEvent();
+  assert.equal(linkOf(w.sent[0]), undefined, 'a channel that is not in the cache');
 });
 
-test('closing an event keeps the link, and a channel made private drops it at the next edit', async () => {
+test('closing an event keeps the link, and a channel made age-restricted drops it at the next edit', async () => {
   fresh();
   await enable({ publicPages: true });
   const id = await postEvent();
@@ -781,8 +806,13 @@ test('closing an event keeps the link, and a channel made private drops it at th
 
   w.channel.open = false;
   await refreshEventMessage(id);
-  assert.equal(linkOf(w.edits.at(-1)), undefined, 'the channel is private now');
+  assert.equal(linkOf(w.edits.at(-1)).url, url, 'a private channel keeps its page and its link');
   w.channel.open = true;
+
+  w.channel.nsfw = true;
+  await refreshEventMessage(id);
+  assert.equal(linkOf(w.edits.at(-1)), undefined, 'the channel is age-restricted now');
+  w.channel.nsfw = false;
 
   await cancelEvent(id, GID);
   const cancelled = w.edits.at(-1);

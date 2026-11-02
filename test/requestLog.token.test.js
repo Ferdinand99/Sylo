@@ -44,3 +44,27 @@ test('the debug request log masks the address of a public event page', () => {
     assert.ok(!line.includes('0123456789abcdef'));
   }
 });
+
+test('the debug request log keeps the address of an event page out of the sign-in and image requests too', () => {
+  const lines = [];
+  const orig = console.log;
+  console.log = (...a) => lines.push(a.join(' '));
+  try {
+    for (const url of [
+      '/events/0123456789abcdef0123456789abcdef/icon',
+      '/events/0123456789abcdef0123456789abcdef/image?x=1',
+      '/auth/discord/login?next=/events/0123456789abcdef0123456789abcdef',
+      '/auth/fluxer/login?next=%2Fevents%2F0123456789abcdef0123456789abcdef',
+    ]) {
+      const res = Object.assign(new EventEmitter(), { statusCode: 302 });
+      requestLog({ originalUrl: url, method: 'GET' }, res, () => {});
+      res.emit('finish');
+    }
+  } finally {
+    console.log = orig;
+  }
+  assert.equal(lines.length, 4);
+  for (const line of lines) assert.ok(!line.includes('0123456789abcdef'), line);
+  assert.match(lines[0], /GET \/events\/:token\/icon 302/);
+  assert.match(lines[2], /GET \/auth\/discord\/login 302/);
+});

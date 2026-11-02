@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow, noarchive" />
+  <title>Sylo — Sign in</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/public.css" />
+</head>
+<body>
+  <%# The sign-in page of the event addresses. It is the same for every address that has no page for
+      a visitor who is not signed in, so it holds nothing about any event: no title, no server, no
+      image and no link-preview tags (og:, twitter:). It loads no visit-count script either, since
+      the address holds the event's token and the stats service must not get it. %>
+  <main class="auth-wrap">
+    <div class="auth-brand">
+      <img src="/favicon.svg" alt="" width="36" height="36" />
+      <span>Sylo</span>
+    </div>
+    <section class="card auth-card">
+      <h1 class="auth-title">Sign in to continue</h1>
+      <p class="muted">This page opens for people who have access to it. Sign in to check.</p>
+      <div class="auth-actions">
+        <a class="btn" href="<%= href %>">Log in with <%= label %></a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

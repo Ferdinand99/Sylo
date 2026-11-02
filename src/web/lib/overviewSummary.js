@@ -387,7 +387,7 @@ async function moduleLines(id, guild, cfg) {
               `${next.title.slice(0, 40)} · ${new Date(next.start_at).toISOString().slice(0, 16).replace('T', ' ')} UTC`
             )
           : neutral('Next', 'none'),
-        cfg.publicPages === true ? on('Public pages', 'on') : off('Public pages', 'off'),
+        cfg.publicPages === true ? on('Event pages', 'on') : off('Event pages', 'off'),
       ];
     }
     case 'temp-roles': {

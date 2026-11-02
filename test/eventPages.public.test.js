@@ -35,7 +35,7 @@ const SG = '900000000000000124';
 const HOST = '900000000000000555';
 const MEMBERS = ['900000000000000561', '900000000000000562', '900000000000000563'];
 const HOUR = 3_600_000;
-const NO_PAGE = /There is no public event page at this address/;
+const NO_PAGE = /There is no event page at this address/;
 const ICON_LINK = `https://cdn.discordapp.com/icons/${GID}/a1b2c3.png?size=128`;
 const ATTACHMENT = `https://cdn.discordapp.com/attachments/${CH.general}/100000000000000042/poster.png`;
 const PNG = Buffer.concat([
@@ -537,7 +537,8 @@ test('the not-found page carries the policy too, and is not cached', async () =>
   const res = await get('0'.repeat(32));
   assert.equal(res.status, 404);
   assert.ok(res.headers.get('content-security-policy'));
-  assert.equal(res.headers.get('cache-control'), 'no-store');
+  assert.equal(res.headers.get('cache-control'), 'private, no-store');
+  assert.match(res.headers.get('x-robots-tag'), /noindex/);
   assert.deepEqual(plainProblems(await res.text()), []);
 });
 
