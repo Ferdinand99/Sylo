@@ -10,6 +10,7 @@ import { runtime } from '../src/runtime.js';
 import { routeComponent } from '../src/bot/lib/components.js';
 import { setGuildModule } from '../src/db/modules.js';
 import { startSchedules, stopSchedules } from '../src/modules/schedule.js';
+import { _setLoginOffered } from '../src/modules/lib/eventPage.js';
 import {
   createEvent as insertEvent,
   eventParticipantIds,
@@ -145,6 +146,7 @@ const fresh = (opts) => {
 };
 
 afterEach(async () => {
+  _setLoginOffered(null);
   mock.timers.reset();
   await stopSchedules();
   runtime.clients.discord = null;
@@ -746,6 +748,7 @@ test('no link while the setting is off, the module is off, or the setting is not
 });
 
 test('an event in a channel everyone cannot read gets the link too, and the post says no more than a public one', async () => {
+  _setLoginOffered(() => true); // the dashboard has a login: someone can sign in to open the page
   fresh();
   await enable({ publicPages: true });
   await postEvent();
@@ -771,7 +774,24 @@ test('an event in a channel everyone cannot read gets the link too, and the post
   assert.equal(w.sent[0].content, publicPost.content);
 });
 
+test('no link for an event in a private channel where nobody could sign in to open the page', async () => {
+  // open mode, or no login for the platform: the default in these tests
+  fresh();
+  await enable({ publicPages: true });
+  w.channel.open = false;
+  await postEvent();
+  assert.equal(linkOf(w.sent[0]), undefined);
+  assert.equal(w.sent[0].components[0].toJSON().components.length, 3);
+
+  // a public channel needs no login
+  fresh();
+  await enable({ publicPages: true });
+  await postEvent();
+  assert.ok(linkOf(w.sent[0]));
+});
+
 test('no link for an event in an age-restricted channel or in one Sylo cannot see', async () => {
+  _setLoginOffered(() => true);
   fresh();
   await enable({ publicPages: true });
   w.channel.nsfw = true;
@@ -794,6 +814,7 @@ test('no link for an event in an age-restricted channel or in one Sylo cannot se
 });
 
 test('closing an event keeps the link, and a channel made age-restricted drops it at the next edit', async () => {
+  _setLoginOffered(() => true);
   fresh();
   await enable({ publicPages: true });
   const id = await postEvent();

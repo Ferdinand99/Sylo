@@ -360,7 +360,10 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
   // silently never act.
   const botPermsIn = (channel) => {
     const me = channel?.guild?.members.me;
-    return me && channel ? me.permissionsIn(channel) : null;
+    if (!me || !channel) return null;
+    // A real member goes through the same calculation as permissionsFor, so an @everyone overwrite
+    // that denies something counts here too (the SDK's own permissionsIn ignores it).
+    return me instanceof GuildMember ? memberPermissionsIn(channel, me) : me.permissionsIn(channel);
   };
   define(
     GuildChannel.prototype,

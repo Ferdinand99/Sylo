@@ -41,7 +41,7 @@ import { log } from '../lib/log.js';
 import { idList } from '../web/lib/idList.js';
 import { every, after } from './schedule.js';
 import { canonicalTimeZone, formatInZone, localToUtc } from './lib/eventTime.js';
-import { channelAudience, eventPageUrl, eventPagesOn, refusedLinkButton } from './lib/eventPage.js';
+import { eventAudience, eventPageUrl, eventPagesOn, refusedLinkButton } from './lib/eventPage.js';
 
 /** Setting limits, served to the dashboard (modules/limits.js). */
 export const LIMITS = {
@@ -291,7 +291,7 @@ async function people(id) {
  */
 async function pageLinkFor(guild, ev) {
   if (!eventPagesOn(await getGuildModule(ev.guild_id, 'events'))) return null;
-  if (channelAudience(guild, ev.channel_id) === 'none') return null;
+  if (eventAudience(guild, ev) === 'none') return null;
   return eventPageUrl(ev.public_token);
 }
 

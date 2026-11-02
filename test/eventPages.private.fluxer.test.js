@@ -20,7 +20,9 @@ await startOAuthApp();
 const { runtime } = await import('../src/runtime.js');
 const { setGuildModule } = await import('../src/db/modules.js');
 const { createEvent, getEvent } = await import('../src/db/events.js');
-const { channelAudience, viewerMaySee } = await import('../src/modules/lib/eventPage.js');
+const { channelAudience, viewerMaySee, _setViewerCache } = await import('../src/modules/lib/eventPage.js');
+// A verdict is reused for a few seconds in production; these tests change access between requests.
+_setViewerCache({ ttlMs: 0 });
 const { _clearImageCache, _setImageFetcher } = await import('../src/modules/lib/eventImage.js');
 
 const KEY = `fluxer:${F_GUILD}`;
@@ -369,8 +371,55 @@ test('a public Fluxer channel still works without sign-in, and turns to sign-in 
   assert.equal((await get(anon(), url)).status, 200);
 });
 
-test('an event posted on Discord is not opened by a Fluxer member', async () => {
+test('an event posted on Discord is not opened by a Fluxer member, though the Discord server would let that id in', async () => {
+  // The Discord server is a real one for Sylo here: module on, a channel its member can see, and a
+  // member whose id is the id of the Fluxer account. Only the platform of the login refuses.
+  const dGuild = runtime.clients.discord.guilds.cache.get(D_GUILD);
+  const sees = { has: (p) => p === 'ViewChannel' };
+  const dChannel = {
+    id: CHANNEL.staff,
+    nsfw: false,
+    isThread: () => false,
+    permissionsFor: (target) => (target?.roles ? sees : { has: () => false }),
+  };
+  dGuild.roles = { cache: new Map(), everyone: { id: D_GUILD } };
+  dGuild.channels.cache.set(CHANNEL.staff, dChannel);
+  const dMember = { id: STAFF_USER, user: { id: STAFF_USER }, roles: { cache: new Map() } };
+  dGuild.members = { cache: new Map([[STAFF_USER, dMember]]), fetch: async () => dMember };
+  await setGuildModule(D_GUILD, 'events', { enabled: true, config: { publicPages: true } });
   const ev = await make(CHANNEL.staff, { guildId: D_GUILD });
-  const res = await get(who.staff, `/events/${ev.public_token}`);
-  assert.equal(res.status, 404);
+  const url = `/events/${ev.public_token}`;
+  assert.equal((await get(who.discordStaff, url)).status, 200, 'the Discord login of that id is let in');
+  assert.equal((await get(who.staff, url)).status, 404, 'the Fluxer login of that id is not');
+});
+
+test('a stale cached member is not trusted: the platform says the role is gone, so the page is gone', async () => {
+  const ev = await make(CHANNEL.staff);
+  const url = `/events/${ev.public_token}`;
+  const asked = [];
+  const fetch = members.fetch;
+  members.fetch = async (arg) => {
+    asked.push(arg);
+    return fetch(arg);
+  };
+  try {
+    // the bot's cache still holds the member with the role; the platform no longer has the role
+    members.set(STAFF_USER, new sdk.GuildMember(client, memberData(STAFF_USER, [STAFF]), guild));
+    live.set(STAFF_USER, new sdk.GuildMember(client, memberData(STAFF_USER, []), guild));
+    assert.equal((await get(who.staff, url)).status, 404);
+    assert.equal((await get(who.staff, `${url}/image`)).status, 404);
+    assert.deepEqual(asked[0], { user: STAFF_USER, force: true }, 'asked with force');
+
+    // the platform cannot be reached: no, whatever the cache holds
+    live.set(STAFF_USER, new sdk.GuildMember(client, memberData(STAFF_USER, [STAFF]), guild));
+    assert.equal((await get(who.staff, url)).status, 200);
+    members.fetch = async () => {
+      throw new Error('Fluxer is down');
+    };
+    assert.equal((await get(who.staff, url)).status, 404);
+  } finally {
+    members.fetch = fetch;
+    enrol(STAFF_USER, [STAFF]);
+  }
+  assert.equal((await get(who.staff, url)).status, 200);
 });

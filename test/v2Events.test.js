@@ -11,6 +11,7 @@ import { getGuildModule, setGuildModule } from '../src/db/modules.js';
 import { createEvent, getEvent, setEventMessage, upcomingEvents } from '../src/db/events.js';
 import { LIMITS } from '../src/lib/limits.js';
 import { localToUtc } from '../src/modules/lib/eventTime.js';
+import { _setLoginOffered } from '../src/modules/lib/eventPage.js';
 
 let app;
 let api;
@@ -272,6 +273,13 @@ test('each event in the list carries the path of its page while pages are on and
   const everyone = app.guild.roles.everyone;
   try {
     channel.permissionsFor = (role) => (role === everyone ? new PermissionsBitField(0n) : open(role));
+    // no login for the platform: nobody could sign in, so no link and the list says why
+    e = await find();
+    assert.equal(e.pagePath, null);
+    assert.equal(e.pageAudience, null);
+    assert.equal(e.pageHidden, true);
+
+    _setLoginOffered(() => true);
     e = await find();
     assert.equal(e.pagePath, `/events/${token}`, 'a private channel has a page too');
     assert.equal(e.pageAudience, 'private');
@@ -284,6 +292,7 @@ test('each event in the list carries the path of its page while pages are on and
     assert.equal(e.pageAudience, null);
     assert.equal(e.pageHidden, true);
   } finally {
+    _setLoginOffered(null);
     channel.nsfw = false;
     channel.permissionsFor = open;
   }

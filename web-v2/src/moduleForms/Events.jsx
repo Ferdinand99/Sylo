@@ -265,7 +265,8 @@ function PageLink({ ev }) {
   if (ev.pageHidden) {
     return (
       <p className="v2-field-hint">
-        No page: #{ev.channel} is age-restricted, or Sylo cannot see it, so this event has no page for anyone.
+        No page: #{ev.channel} is age-restricted, Sylo cannot see it, or the dashboard has no login for its
+        platform.
       </p>
     );
   }
@@ -377,9 +378,10 @@ export default function Events() {
             and no roles. For an event in a channel that everyone can see, anyone with the link can open the
             page without signing in. For an event in a private channel, only people who sign in with Discord
             or Fluxer, are members of the server and can see that channel can open it; Sylo checks this on
-            every visit, and everyone else sees the same &quot;not found&quot; page as for a wrong address. An
-            event in an age-restricted channel has no page. The link is added to the event&apos;s post, and
-            saving this updates the posts of the server&apos;s events, finished ones too.
+            every visit. Someone who is not signed in sees a plain sign-in page, and a signed-in person who
+            may not open it sees the same &quot;not found&quot; page as for a wrong address. An event in an
+            age-restricted channel has no page. The link is added to the event&apos;s post, and saving this
+            updates the posts of the server&apos;s events, finished ones too.
           </p>
         </div>
 

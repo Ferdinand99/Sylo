@@ -20,7 +20,10 @@ const { runtime } = await import('../src/runtime.js');
 const { setGuildModule } = await import('../src/db/modules.js');
 const { createEvent, getEvent } = await import('../src/db/events.js');
 const { _clearImageCache, _setImageFetcher } = await import('../src/modules/lib/eventImage.js');
-const { MEMBER_LOOKUP_MS, _setMembersIntent } = await import('../src/modules/lib/eventPage.js');
+const { MEMBER_LOOKUP_MS, _setMembersIntent, _setViewerCache } =
+  await import('../src/modules/lib/eventPage.js');
+// A verdict is reused for a few seconds in production; these tests change access between requests.
+_setViewerCache({ ttlMs: 0 });
 
 // --- the world: one Discord server with a public channel, a staff channel and some members ------
 
@@ -583,10 +586,30 @@ test('a Discord id never opens a Fluxer page, and a Fluxer id never opens a Disc
   assert.ok(!html.includes(staffEv.title));
   assert.equal((await get(fluxerAlice, `/events/${staffEv.public_token}/icon`)).status, 404);
 
-  // the other way: a Discord account on an event posted on Fluxer
+  // the other way: a Discord account on an event posted on Fluxer. The Fluxer server here is a
+  // real one for Sylo (module on, a channel the member can see, the member in its cache), so the
+  // only thing that refuses the Discord account is that it has no Fluxer identity.
+  const fGuild = runtime.clients.fluxer.guilds.cache.get(F_GUILD);
+  const sees = { has: (p) => p === 'ViewChannel' };
+  fGuild.nsfw = false;
+  fGuild.roles = { cache: new Map(), everyone: { id: F_GUILD } };
+  fGuild.channels.cache.set(CH_STAFF, {
+    id: CH_STAFF,
+    nsfw: false,
+    nsfwOverride: null,
+    parentId: null,
+    isThread: () => false,
+    permissionsFor: (target) => (target?.roles ? sees : { has: () => false }),
+  });
+  const fMember = memberOf(ALICE, [STAFF]);
+  fGuild.members = { cache: new Map([[ALICE, fMember]]), fetch: async () => fMember };
+  await setGuildModule(`fluxer:${F_GUILD}`, 'events', { enabled: true, config: { publicPages: true } });
   const fluxerEvent = await make(CH_STAFF, { guildId: `fluxer:${F_GUILD}` });
-  const back = await get(browsers.alice, `/events/${fluxerEvent.public_token}`);
-  assert.equal(back.status, 404);
+  const url = `/events/${fluxerEvent.public_token}`;
+  const { b: fluxerMember } = await signedIn('fluxer', ALICE);
+  assert.equal((await get(fluxerMember, url)).status, 200, 'the same person with a Fluxer login is let in');
+  const back = await get(browsers.alice, url);
+  assert.equal(back.status, 404, 'a Discord login is not');
   assert.equal(await text(back), wrong);
 });
 

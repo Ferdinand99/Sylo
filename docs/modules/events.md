@@ -86,7 +86,8 @@ of its own. Who can open it depends on the channel the event was posted in:
   link can open, with no sign-in. It is for sharing an event outside the server, for
   example with friends who have not joined yet.
 - An event in a **private** channel has a page that only people who **sign in** and can
-  see that channel can open. Everyone else sees a plain "not found" page. See
+  see that channel can open. Someone who is not signed in sees a plain sign-in page, and a
+  signed-in person who may not open it sees a plain "not found" page. See
   [Events in private channels](#events-in-private-channels).
 - An event in an **age-restricted** channel, or in a channel Sylo cannot see, has no
   page for anyone.
@@ -209,13 +210,16 @@ Fluxer, through the dashboard's own login, and brings the visitor back to the sa
 address afterwards. The page is the same for **every address that has no page** for a
 visitor who is not signed in: a private event, an address that is not an event, an
 event in an age-restricted channel, a page that is switched off. Which login it offers
-is the event's own platform, and for an address that is not an event a platform picked
-from the address with a secret key, so the page does not show whether an event exists.
+is the event's own platform, and for an address that is not an event, or an event whose
+platform has no login on this dashboard, a login picked from the address with a secret
+key, so the page does not show whether an event exists.
 (Only a code that is not 32 characters of 0-9 and a-f is a plain "not found" page.)
-With no login set up (open mode) there is nobody to ask, so only public pages exist.
+With no login set up (open mode), or none for the event's platform, there is nobody to ask,
+so a private channel's event has no page, no link in its post and no link in the dashboard
+list; only public pages exist.
 
-**After sign-in.** On **every** request Sylo checks, with the bot's live data of that
-moment, that the person:
+**After sign-in.** On **every** request Sylo checks, with the platform's data, that the
+person:
 
 - signed in with the **same platform** the event was posted on (a Discord account never
   opens a page of a Fluxer server, and the other way round, even if the two ids happen
@@ -226,22 +230,34 @@ moment, that the person:
   channel. A **private thread has no page**, because Sylo cannot tell its members apart
   from the bot's cache with enough certainty.
 
-Sylo remembers no answer: there is no cached "yes". A person who loses the role, leaves
-the server, or whose channel is closed to them loses the page on the **next request**,
-and gets it back as soon as they have access again. On Discord with the server-members
-intent, and always on Fluxer, the bot's member cache is kept current by the gateway
-and is used as it is (a member it does not hold is fetched); on Discord without that
-intent the cache is not trusted and the member is fetched fresh from Discord every time.
-A lookup that fails or takes longer than 4 seconds is a "no". The icon and the image of
-the page use the same check, and Sylo's own copy of an image is read only after the check
-passed, so a person without access never gets the bytes.
+The channel rules (public, private, age-restricted) are read again on every request. The
+person's membership and roles come from the platform: **on Fluxer the member is always
+fetched fresh** (`force`), because the bot's member cache there cannot be trusted after the
+bot's gateway session was down and could not resume, and a member removed meanwhile would
+stay in it. On Discord with the server-members intent the bot's member cache is kept
+current by the gateway and is used as it is (a member it does not hold is fetched); on
+Discord without that intent the member is fetched fresh every time. A lookup that fails or
+takes longer than 4 seconds is a "no".
+
+So that one person cannot hammer the platform's API (a page view is three requests: the
+page, the icon and the image), a plain **yes or no** that cost a call to the platform is
+reused for the same person, server and channel for **3 seconds**, and requests that arrive
+together share one call. Nothing else is kept. A person who loses the role, leaves the
+server, or whose channel is closed to them loses the page within those 3 seconds (at the
+next request after them), and gets it back as soon as the 3 seconds are up and they have
+access again. The icon and the image of the page use the same check, and Sylo's own copy
+of an image is read only after the check passed, so a person without access never gets the
+bytes.
 
 **Everything else is "not found".** A signed-in person who is not allowed gets the same
 plain "not found" page, with the same status (404), the same headers and the same bytes
 as for a wrong address: no access, a channel they cannot see, a server they are not in,
 an event on the other platform than the one they signed in with, a page that is switched
-off, a server Sylo has left, a check that cannot be made. They cannot tell a private
-event from a wrong code.
+off, a server Sylo has left, a check that cannot be made. The page itself cannot tell a
+private event from a wrong code. (A person who is not in the server makes Sylo ask the
+platform, which takes a moment longer than a wrong code does, so someone who already
+holds a valid code could in principle measure that delay and learn that the code is
+real. They would learn nothing else.)
 
 **Age-restricted channels.** The rule for public pages is that an age-restricted channel
 has no page. For members Sylo applies the same rule and shows **nothing to anyone**,
@@ -325,11 +341,15 @@ What Sylo fetches, and how:
   sign-ups, so the counts drop by one, and takes them off as host. The page never showed
   either, and the event, its page and its code stay as they were. This holds for a
   members-only page too: no member name appears on it, for the visitor either.
-- Signing in to a members-only page stores nothing new. The visitor is signed in by the
-  dashboard's ordinary login (which keeps the account, the session and the servers the
-  person manages, as described in the privacy policy), and Sylo reads the member's data
-  in the server only to check the request, without keeping the answer. The sign-in link
-  carries only the page's own address. Sylo's purge when it leaves a server, and `/forget`,
+- Signing in to a members-only page uses the dashboard's ordinary login, so a **first
+  sign-in creates a dashboard account** for a member who never used the dashboard: the
+  platform user id, username and avatar, an empty list of administered servers, and a
+  session for 7 days (see the [privacy policy](../privacy-policy.md), section 3). The
+  account stays until it is removed with *Delete account* on the dashboard's account page
+  (or by asking the operator); the session ends at logout or expiry. Beyond that, Sylo
+  reads the member's data in the server only to check a request, and keeps nothing of it
+  but a plain yes or no for a few seconds. The sign-in link carries only the page's own
+  address. Sylo's purge when it leaves a server, and `/forget`,
   need nothing added: they act on the event rows, which are the same for both kinds of page.
 - The code is stored with the event. It is deleted with the event when Sylo leaves the
   server. It is not part of a member's data and is not in `/mydata`.

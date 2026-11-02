@@ -364,3 +364,26 @@ test('permissionsFor(member) fails closed when the member cannot be read', () =>
   });
   assert.equal(w.channel.permissionsFor(broken), null);
 });
+
+test('viewable and manageable use the same calculation for the bot own member', () => {
+  // @everyone may manage channels in general, but a channel overwrite takes the view and the right away
+  const closed = world({
+    everyone: F.ViewChannel | F.ManageChannels,
+    overwrites: [overwrite(GID, { deny: F.ViewChannel | F.ManageChannels })],
+  });
+  closed.guild.members.me = memberOf(closed, [], '900000000000000760');
+  assert.equal(closed.channel.viewable, false, 'the SDK alone would say true');
+  assert.equal(closed.channel.manageable, false);
+
+  // a role of the bot gives them back
+  const reopened = world({
+    everyone: F.ViewChannel | F.ManageChannels,
+    overwrites: [
+      overwrite(GID, { deny: F.ViewChannel | F.ManageChannels }),
+      overwrite(MOD, { allow: F.ViewChannel | F.ManageChannels }),
+    ],
+  });
+  reopened.guild.members.me = memberOf(reopened, [MOD], '900000000000000760');
+  assert.equal(reopened.channel.viewable, true);
+  assert.equal(reopened.channel.manageable, true);
+});

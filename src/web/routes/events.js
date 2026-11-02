@@ -99,14 +99,17 @@ function signInPage(res, provider, token) {
 
 /**
  * Which login to offer for an address. For an event, the platform it was posted on, if that login
- * is offered. For an address that is no event, one of the offered logins picked by a keyed hash of
- * the address: the same address always gets the same one, and nobody without the key can tell it
- * from an event's own platform.
+ * is offered. Otherwise (an address that is no event, or an event whose platform has no login here),
+ * one of the offered logins picked by a keyed hash of the address: the same address always gets the
+ * same one, and nobody without the key can tell it from an event's own platform.
  */
 function signInProvider(ev, token) {
   const offered = enabledProviders();
-  if (ev) return offered.find((p) => p.platform === platformOfKey(ev.guild_id)) ?? null;
   if (!offered.length) return null;
+  // An event whose platform has no login here is treated like an address that is no event, so the
+  // answer does not show that it exists or where it was posted.
+  const own = ev ? offered.find((p) => p.platform === platformOfKey(ev.guild_id)) : null;
+  if (own) return own;
   const pick = createHmac('sha256', config.sessionSecret).update(`event-signin|${token}`).digest()[0];
   return offered[pick % offered.length];
 }

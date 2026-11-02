@@ -22,7 +22,7 @@ import {
   updateEvent,
 } from '../../modules/events.js';
 import { utcToLocalInput } from '../../modules/lib/eventTime.js';
-import { channelAudience, eventPagePath, eventPagesOn } from '../../modules/lib/eventPage.js';
+import { eventAudience, eventPagePath, eventPagesOn } from '../../modules/lib/eventPage.js';
 import { log } from '../../lib/log.js';
 
 /** How many finished or cancelled events the page lists. */
@@ -41,9 +41,7 @@ async function eventsView(guild) {
   // members who can see the channel). `pageHidden` says that the setting is on but the channel has
   // no page: it is age-restricted, or Sylo cannot see it.
   const pagesOn = eventPagesOn(await getGuildModule(guild.id, 'events'));
-  const audienceOf = new Map(
-    rows.map((ev) => [ev.id, pagesOn ? channelAudience(guild, ev.channel_id) : 'none'])
-  );
+  const audienceOf = new Map(rows.map((ev) => [ev.id, pagesOn ? eventAudience(guild, ev) : 'none']));
   return Promise.all(
     rows.map(async (ev) => ({
       id: ev.id,

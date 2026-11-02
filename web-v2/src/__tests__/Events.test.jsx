@@ -259,7 +259,9 @@ describe('Events public pages', () => {
     load([event({ pageHidden: true })]);
     renderAtGuild(<Events />, GUILD);
     expect(
-      await screen.findByText(/No page: #general is age-restricted, or Sylo cannot see it/)
+      await screen.findByText(
+        /No page: #general is age-restricted, Sylo cannot see it, or the dashboard has no login/
+      )
     ).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Public page' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Members-only page' })).toBeNull();

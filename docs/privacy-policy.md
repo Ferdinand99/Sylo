@@ -1,7 +1,7 @@
 # Privacy Policy — Sylo
 
 **Effective date:** 2 September 2026
-**Last updated:** 24 October 2026
+**Last updated:** 2 November 2026
 
 This Privacy Policy explains what data the **Sylo** Discord application and its
 test instance **Sylo - Test** (the "Bot"), the Sylo web dashboard (the
@@ -72,7 +72,7 @@ the public-leaderboard vanity slug.
 - **AFK** — a member's away status, away message and previous nickname.
 - **Birthdays** — the day and month (and optionally year) a member registers.
 - **Giveaways** — the host, the entrants, and the drawn winners.
-- **Events** — the host and, for each event, who pressed Join or Maybe. A server can switch on a page for each event that shows its title, time, place, description, image, capacity and how many pressed Join or Maybe, but no names, no host and no ids. For an event in a channel everyone can read, anyone with the link can open the page. For an event in a private channel, only a person who signs in with the Dashboard login (Discord or Fluxer, the platform the event was posted on), is a member of that server and can see that channel can open it: Sylo checks this against the bot's live data of that moment on every request, keeps no answer, and shows everyone else the same "not found" page as for a wrong address. A visitor who is not signed in sees a plain sign-in page that shows nothing about the event. An event in an age-restricted channel has no page for anyone. These pages are not cached by browsers or search engines, and nothing about the check is stored beyond the ordinary Dashboard login described above. The address of each event's page is a random code stored with the event. A visitor's browser contacts only Sylo: Sylo fetches the server icon and the event image from Discord's image servers itself and keeps a copy in memory only, for about ten minutes (a sweep removes expired copies every minute) and hands it out only to a visitor who passes the checks, and the pages carry no visit-count script when they are not found or ask for a sign-in.
+- **Events** — the host and, for each event, who pressed Join or Maybe. A server can switch on a page for each event that shows its title, time, place, description, image, capacity and how many pressed Join or Maybe, but no names, no host and no ids. For an event in a channel everyone can read, anyone with the link can open the page. For an event in a private channel, only a person who signs in with the Dashboard login (Discord or Fluxer, the platform the event was posted on), is a member of that server and can see that channel can open it: Sylo checks this against the platform's data on every request and keeps only a plain yes or no, in memory, for a few seconds, and shows a signed-in person who may not open the page the same "not found" page as for a wrong address. A visitor who is not signed in sees a plain sign-in page that shows nothing about the event. An event in an age-restricted channel has no page for anyone. These pages are not cached by browsers or search engines, and nothing about the check is stored beyond the ordinary Dashboard login described in section 3 (a first sign-in creates a dashboard account and a session, which you can delete as described in section 7). The address of each event's page is a random code stored with the event. A visitor's browser contacts only Sylo: Sylo fetches the server icon and the event image from Discord's image servers itself and keeps a copy in memory only, for about ten minutes (a sweep removes expired copies every minute) and hands it out only to a visitor who passes the checks, and the pages carry no visit-count script when they are not found or ask for a sign-in.
 - **Suggestions** — the text of each suggestion, who wrote it (unless they erase it), the staff member who decided it, and each member's 👍 / 👎 vote.
 - **Temporary roles** — which member holds which temporary role, when it ends, the reason, and the staff member who set it.
 - **Quote board** — the text of each saved message (up to 2000 characters), its author's id and display name as they were when it was saved, the channel and message ids, the message date, how many attachments it had (the files are not kept), and who saved it. A server can switch on a public page that shows the text, display name and date of the quotes saved from channels everyone can read, without ids.
@@ -108,7 +108,11 @@ The Dashboard can run with or without login.
   with Fluxer", the Operator receives, via that platform's OAuth2 (`identify` and
   `guilds` scopes), your user ID, username, avatar, and the list of servers you
   are in together with your permission level in each. This is used only to show
-  your name in the Dashboard and to check that you administer a given server.
+  your name in the Dashboard, to check that you administer a given server, and, when
+  you open the page of an event in a private channel (see Events in section 2), to
+  check that you are a member of that server and can see that channel. You do not have
+  to administer anything for that: a first sign-in from an event page creates the same
+  dashboard account as any other sign-in, with an empty list of administered servers.
   The Dashboard keeps a **dashboard account** in its database: for each platform
   you signed in with, your user ID, username, avatar, the IDs of the servers you
   administer (not every server you are in), and when that list was last
@@ -182,7 +186,7 @@ for modmail transcripts (section 1).
 | Running the modules a server enables (leveling, AFK, birthdays, counting, invite tracking, temporary voice channels, giveaways, polls, starboard, server statistics/insights) | Operating the features a server's administrators have turned on and its members choose to use |
 | Moderation & safety records (infractions/case log, ban appeals, auto-moderation, config audit log) | The interest of the server and its members in keeping the community safe and keeping an auditable record of moderation decisions |
 | Modmail ticket transcripts | Handling, and being able to review, the contact/support requests a member starts |
-| Dashboard login (Discord or Fluxer OAuth2 identity, the servers you administer, session records) | Authenticating server administrators; taken only when you choose "Log in with Discord" or "Log in with Fluxer" |
+| Dashboard login (Discord or Fluxer OAuth2 identity, the servers you administer, session records) | Authenticating server administrators, and members who open the page of an event in a private channel; taken only when you choose "Log in with Discord" or "Log in with Fluxer" |
 | Sylo app sign-in (device name, sign-in times, hashed token) | Keeping you signed in on a device you chose to sign in on, and letting you see and revoke those devices |
 | Sylo app notifications (push token, relay token or Pigeon handle, muted servers, notification text) | Telling staff about new ticket messages, which they turned on in the app |
 | Operational logs | Security, abuse prevention and debugging |
@@ -378,6 +382,12 @@ Consider your own legal obligations for the data your instance stores.
 This policy may be updated; the "Last updated" date will change and the revised
 version will be published at the same URL.
 
+- **2 November 2026** — event pages for events in private channels: the Dashboard login
+  is now also used to check that a member may open such a page (sections 2, 3 and 4), so
+  ordinary members, not only server administrators, can have a dashboard account and a
+  session; the check reads the member's data from the platform and keeps only a plain
+  yes or no for a few seconds; and the description of the event pages was extended
+  (section 2).
 - **17 October 2026** — added Sylo app notifications: what is stored for them
   (section 3), Apple and the hosted relay as recipients (section 6), and when
   they are deleted (section 7).

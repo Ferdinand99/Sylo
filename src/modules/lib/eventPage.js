@@ -13,7 +13,7 @@ import { config } from '../../config.js';
 import { END_GRACE_MS } from '../../db/events.js';
 import { isLocalHostname } from '../../lib/localHost.js';
 import { splitPlatformGuildId } from '../../lib/platformId.js';
-import { platformOfGuild } from '../../platform/platformOf.js';
+import { guildKey, platformOfGuild } from '../../platform/platformOf.js';
 import { canView, isAgeRestricted, isPublicSource } from '../quoteBoard.js';
 
 /** A page address is 32 lower-case hex characters: 128 random bits (db/events.js, newEventToken). */
@@ -113,6 +113,13 @@ export const channelIsPublic = (guild, channelId) => channelAudience(guild, chan
 
 /** How long a lookup of a member at the platform may take before the answer is no. */
 export const MEMBER_LOOKUP_MS = 4000;
+/**
+ * How long a yes or no that cost a call to the platform is reused for the same person, server and
+ * channel. A page view is three requests (the page, the icon, the image) and a person can reload,
+ * so without this every one of them would be a platform call. It is short on purpose: access that
+ * is taken away is gone from the page within this time, and nothing but the yes or no is kept.
+ */
+export const VIEWER_CACHE_MS = 3000;
 
 const defaultMembersIntent = () => config.intentGuildMembers !== false;
 let membersIntent = defaultMembersIntent;
@@ -121,18 +128,75 @@ export function _setMembersIntent(fn) {
   membersIntent = fn ?? defaultMembersIntent;
 }
 
+const defaultLoginOffered = (platform) =>
+  platform === 'fluxer' ? config.fluxerAuthEnabled : config.discordAuthEnabled;
+let loginOffered = defaultLoginOffered;
+/** Tests only: replace the answer to "does the dashboard offer a login for this platform?". */
+export function _setLoginOffered(fn) {
+  loginOffered = fn ?? defaultLoginOffered;
+}
+
 /**
- * The member's data as the bot has it now. On Fluxer, and on Discord with the server-members
- * intent, the bot's member cache is kept current by the gateway (a role taken away, a member who
- * left): it is used, and a member it does not hold is fetched. On Discord without that intent the
- * cache is not kept current, so the member is always fetched fresh from the platform. A failure
- * or a slow answer rejects, and the caller reads that as "no".
+ * Who can open the page of an event, right now: channelAudience, except that a page for a private
+ * channel counts as no page where the dashboard has no login for the event's platform (open mode, or
+ * a platform without a login), since nobody could sign in to open it. The link in the post and the
+ * dashboard list use this, so they offer a page only where one can open.
+ * @param {any} guild
+ * @param {{ channel_id: string, guild_id: string }} ev
+ * @returns {'public' | 'private' | 'none'}
+ */
+export function eventAudience(guild, ev) {
+  const audience = channelAudience(guild, ev.channel_id);
+  return audience === 'private' && !loginOffered(platformOfKey(ev.guild_id)) ? 'none' : audience;
+}
+
+let cacheMs = VIEWER_CACHE_MS;
+let clock = Date.now;
+const MAX_VERDICTS = 2000;
+/** @type {Map<string, { ok: boolean, at: number }>} */
+const verdicts = new Map();
+/** @type {Map<string, Promise<boolean>>} */
+const inflight = new Map();
+/** Tests only: change how long a verdict is reused (0 = never) and what time it is; empties both maps. */
+export function _setViewerCache({ ttlMs, now } = {}) {
+  cacheMs = ttlMs ?? VIEWER_CACHE_MS;
+  clock = now ?? Date.now;
+  verdicts.clear();
+  inflight.clear();
+}
+
+function rememberVerdict(key, ok) {
+  if (cacheMs <= 0) return;
+  const t = clock();
+  if (verdicts.size >= MAX_VERDICTS) {
+    for (const [k, v] of verdicts) if (t - v.at >= cacheMs) verdicts.delete(k);
+    if (verdicts.size >= MAX_VERDICTS) verdicts.clear();
+  }
+  verdicts.set(key, { ok, at: t });
+}
+
+/**
+ * The member's data as the platform has it now, and whether that cost a call. On Fluxer the member
+ * is always fetched fresh (`force`): the gateway cache cannot be trusted there, because a member
+ * removed or demoted while the bot's session was down (and could not resume) stays in it until the
+ * next update for that member. On Discord with the server-members intent the cache is kept current
+ * (a cleared cache comes with each new guild snapshot), so a member it holds is used as it is and a
+ * member it does not hold is fetched. On Discord without that intent the cache is not kept current,
+ * so the member is always fetched fresh. A failure or a slow answer rejects, and the caller reads
+ * that as "no".
  */
 function liveMember(guild, userId) {
   const members = guild.members;
+  let asked = true;
   const lookup = (async () => {
-    if (platformOfGuild(guild) === 'fluxer' || membersIntent()) {
-      return members.cache?.get?.(userId) ?? (await members.fetch(userId));
+    if (platformOfGuild(guild) === 'fluxer') return members.fetch({ user: userId, force: true });
+    if (membersIntent()) {
+      const cached = members.cache?.get?.(userId);
+      if (cached) {
+        asked = false;
+        return cached;
+      }
+      return members.fetch(userId);
     }
     return members.fetch({ user: userId, force: true });
   })();
@@ -140,14 +204,33 @@ function liveMember(guild, userId) {
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error('member lookup timed out')), MEMBER_LOOKUP_MS);
   });
-  return Promise.race([lookup, timeout]).finally(() => clearTimeout(timer));
+  return Promise.race([lookup, timeout])
+    .then((member) => ({ member, asked }))
+    .finally(() => clearTimeout(timer));
+}
+
+/** The check itself: `ok`, and `asked` when it cost a call to the platform. Never throws. */
+async function check(guild, channelId, userId) {
+  let asked = true;
+  try {
+    const channel = guild.channels.cache.get(channelId);
+    const found = await liveMember(guild, userId);
+    asked = found.asked;
+    const { member } = found;
+    if (!member || String(member.id ?? member.user?.id) !== userId) return { ok: false, asked };
+    return { ok: (await canView(channel, member)) === true, asked };
+  } catch {
+    return { ok: false, asked };
+  }
 }
 
 /**
  * May this person open the page of an event in this channel? They must be a member of the server on
  * the guild's own platform, and the platform's permission rules must let them see the channel (a
- * thread follows its parent), by the bot's live data of that moment. Nothing is remembered between
- * requests: a person who loses a role or leaves the server is refused at the next request.
+ * thread follows its parent), by the platform's data of that moment. The channel rules are read on
+ * every call. The only thing remembered is a plain yes or no for the same person, server and
+ * channel, for VIEWER_CACHE_MS and only when it cost a call to the platform, so a person who loses a
+ * role or leaves the server is refused within a few seconds, and repeated views cannot hammer the API.
  *
  * It fails closed. Everything that is not a clear yes is a no: a member that cannot be found or read,
  * a member object that is not that person, a channel Sylo does not have, a private thread, an
@@ -160,10 +243,19 @@ export async function viewerMaySee(guild, channelId, userId) {
   try {
     if (!guild || !channelId || !userId || typeof userId !== 'string') return false;
     if (channelAudience(guild, channelId) === 'none') return false;
-    const channel = guild.channels.cache.get(channelId);
-    const member = await liveMember(guild, userId);
-    if (!member || String(member.id ?? member.user?.id) !== userId) return false;
-    return (await canView(channel, member)) === true;
+    const key = `${guildKey(guild)}|${channelId}|${userId}`;
+    const hit = verdicts.get(key);
+    if (hit && clock() - hit.at < cacheMs) return hit.ok;
+    const running = inflight.get(key);
+    if (running) return await running;
+    const run = check(guild, channelId, userId)
+      .then(({ ok, asked }) => {
+        if (asked) rememberVerdict(key, ok);
+        return ok;
+      })
+      .finally(() => inflight.delete(key));
+    inflight.set(key, run);
+    return await run;
   } catch {
     return false;
   }
