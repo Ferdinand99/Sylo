@@ -6,6 +6,7 @@ import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import UnitInput from '../components/UnitInput.jsx';
 
 export default function Counting() {
   const limits = useModuleLimits('counting');
@@ -144,10 +145,10 @@ export default function Counting() {
         </div>
 
         <div className="v2-field">
-          <label htmlFor="penaltyMinutes">Bench for (minutes)</label>
-          <input
+          <label htmlFor="penaltyMinutes">Bench for</label>
+          <UnitInput
             id="penaltyMinutes"
-            type="number"
+            unit="minutes"
             min={limitOf(limits, 'penaltyMinutes').min}
             max={limitOf(limits, 'penaltyMinutes').max}
             value={form.penaltyMinutes}
@@ -203,6 +204,7 @@ export default function Counting() {
           <input
             id="countInput"
             type="number"
+            className="v2-input-num v2-input-num-wide"
             min={limitOf(limits, 'count').min}
             max={limitOf(limits, 'count').max}
             value={countInput}
@@ -218,7 +220,7 @@ export default function Counting() {
           </button>
           <button
             type="button"
-            className="v2-btn-danger v2-danger-push"
+            className="v2-btn-danger-ghost v2-danger-push"
             disabled={countBusy}
             onClick={onResetCount}
           >

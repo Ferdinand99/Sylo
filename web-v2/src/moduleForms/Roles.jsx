@@ -348,9 +348,14 @@ export default function Roles() {
               const title = rm.embed?.title || (rm.message || '').slice(0, 60) || 'Reaction role';
               const style = rm.style || 'reaction';
               return (
-                <div className="v2-row" key={rm.id}>
+                <div className="v2-row v2-row-stack" key={rm.id}>
                   <div className="v2-row-main">
-                    <h3>{title}</h3>
+                    <h3 className="v2-break">
+                      {title}
+                      <Badge tone={rm.messageId ? 'success' : 'neutral'} inline>
+                        {rm.messageId ? 'Published' : 'Draft'}
+                      </Badge>
+                    </h3>
                     <p>
                       #{channel ? channel.name : rm.channelId} · {(rm.pairs || []).length} role(s) · {style}
                       {style !== 'select' ? ` · ${rm.mode || 'default'}` : ''}
@@ -368,18 +373,11 @@ export default function Roles() {
                     ) : null}
                   </div>
                   {editingId === rm.id ? null : (
-                    <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                      <Badge tone={rm.messageId ? 'success' : 'neutral'}>
-                        {rm.messageId ? 'Published' : 'Draft'}
-                      </Badge>
+                    <div className="v2-row-actions">
                       <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(rm.id)}>
                         Edit
                       </button>
-                      <button
-                        type="button"
-                        className="v2-btn-danger v2-danger-sep"
-                        onClick={() => onDelete(rm.id)}
-                      >
+                      <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(rm.id)}>
                         Delete
                       </button>
                     </div>

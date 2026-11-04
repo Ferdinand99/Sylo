@@ -8,6 +8,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import Meta from '../components/Meta.jsx';
 
 const day = (ms) => new Date(ms).toISOString().slice(0, 10);
 
@@ -154,17 +155,26 @@ export default function QuoteBoard() {
                 </h3>
                 {q.text ? <p>{q.text}</p> : null}
                 <p className="v2-field-hint">
-                  {day(q.messageAt)}
-                  {q.channel ? ` · #${q.channel}` : ''}
-                  {q.attachments > 0 ? ` · 📎 ${q.attachments}` : ''}
-                  {q.publicSource ? '' : ' · not on the public page'} ·{' '}
-                  <a href={q.url} target="_blank" rel="noreferrer">
-                    Open message
-                  </a>
+                  <Meta
+                    items={[
+                      day(q.messageAt),
+                      q.channel && `#${q.channel}`,
+                      q.attachments > 0 && `📎 ${q.attachments}`,
+                      !q.publicSource && 'not on the public page',
+                      <a key="open" href={q.url} target="_blank" rel="noreferrer">
+                        Open message
+                      </a>,
+                    ]}
+                  />
                 </p>
               </div>
-              <div className="v2-field-row">
-                <button type="button" className="v2-btn-danger" disabled={busy} onClick={() => onRemove(q)}>
+              <div className="v2-row-actions">
+                <button
+                  type="button"
+                  className="v2-btn-danger-ghost"
+                  disabled={busy}
+                  onClick={() => onRemove(q)}
+                >
                   Remove
                 </button>
               </div>

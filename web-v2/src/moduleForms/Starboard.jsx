@@ -4,6 +4,8 @@ import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
+import { cardTitle, channelTitle } from '../util.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -108,9 +110,11 @@ export default function Starboard() {
         {form.boards.map((b) => (
           <div className="v2-rule-card" key={b.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Board</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeBoard(b.key)}>
-                remove
+              <span className="v2-rule-title">
+                {cardTitle(b.name, '') || channelTitle(d.channels, b.channelId, 'Board')}
+              </span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeBoard(b.key)}>
+                Remove
               </button>
             </div>
 
@@ -159,11 +163,10 @@ export default function Starboard() {
             <div className="v2-field-row">
               <div className="v2-field">
                 <label>Reactions needed</label>
-                <input
-                  type="number"
+                <UnitInput
+                  unit="reactions"
                   min={limitOf(limits, 'boards[].threshold').min}
                   max={limitOf(limits, 'boards[].threshold').max}
-                  style={{ maxWidth: '100px' }}
                   value={b.threshold}
                   onChange={(e) => updateBoard(b.key, { threshold: Number(e.target.value) })}
                 />
@@ -209,25 +212,24 @@ export default function Starboard() {
             </div>
             <div className="v2-field-row">
               <div className="v2-field">
-                <label>Ignore messages younger than (minutes)</label>
-                <input
-                  type="number"
+                <label>Ignore messages younger than</label>
+                <UnitInput
+                  unit="minutes"
                   min={limitOf(limits, 'boards[].minAgeMinutes').min}
                   max={limitOf(limits, 'boards[].minAgeMinutes').max}
-                  style={{ maxWidth: '100px' }}
                   value={b.minAgeMinutes}
                   onChange={(e) => updateBoard(b.key, { minAgeMinutes: Number(e.target.value) })}
                 />
               </div>
               <div className="v2-field">
                 <label>
-                  Ignore messages older than (minutes) <span className="v2-field-hint">— 0 = no limit</span>
+                  Ignore messages older than <span className="v2-field-hint">— 0 = no limit</span>
                 </label>
-                <input
-                  type="number"
+                <UnitInput
+                  unit="minutes"
+                  wide
                   min={limitOf(limits, 'boards[].maxAgeMinutes').min}
                   max={limitOf(limits, 'boards[].maxAgeMinutes').max}
-                  style={{ maxWidth: '100px' }}
                   value={b.maxAgeMinutes}
                   onChange={(e) => updateBoard(b.key, { maxAgeMinutes: Number(e.target.value) })}
                 />

@@ -78,7 +78,9 @@ describe('TempRoles form', () => {
     expect(await screen.findByRole('heading', { name: 'Temporary roles' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Active temporary roles (2)' })).toBeTruthy();
     expect(screen.getByText('Alice')).toBeTruthy();
-    expect(screen.getByText(/Ends 2030-01-05 12:30 UTC · set by Bob · Trial/)).toBeTruthy();
+    expect(screen.getAllByText(/Ends 2030-01-05 12:30 UTC/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/set by Bob/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Trial/).length).toBeGreaterThan(0);
     expect(screen.getByText('Carol')).toBeTruthy();
     expect(getModuleConfig).toHaveBeenCalledWith(GUILD, 'temp-roles');
   });

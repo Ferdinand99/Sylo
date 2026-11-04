@@ -8,6 +8,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import Meta from '../components/Meta.jsx';
 
 const when = (ms) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
 
@@ -209,6 +210,7 @@ export default function TempRoles() {
           <input
             id="defaultDuration"
             type="text"
+            className="v2-input-num"
             value={form.defaultDuration}
             onChange={(e) => set({ defaultDuration: e.target.value })}
           />
@@ -300,13 +302,22 @@ export default function TempRoles() {
                   {row.member} <span className="v2-field-hint">— {row.role}</span>
                 </h3>
                 <p className="v2-field-hint">
-                  Ends {when(row.expiresAt)}
-                  {row.addedByName ? ` · set by ${row.addedByName}` : ''}
-                  {row.reason ? ` · ${row.reason}` : ''}
+                  <Meta
+                    items={[
+                      `Ends ${when(row.expiresAt)}`,
+                      row.addedByName && `set by ${row.addedByName}`,
+                      row.reason,
+                    ]}
+                  />
                 </p>
               </div>
-              <div className="v2-field-row">
-                <button type="button" className="v2-btn-danger" disabled={busy} onClick={() => onRemove(row)}>
+              <div className="v2-row-actions">
+                <button
+                  type="button"
+                  className="v2-btn-danger-ghost"
+                  disabled={busy}
+                  onClick={() => onRemove(row)}
+                >
                   Remove
                 </button>
               </div>

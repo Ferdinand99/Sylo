@@ -8,6 +8,8 @@ import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import UnitInput from '../components/UnitInput.jsx';
+import Meta from '../components/Meta.jsx';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -159,9 +161,9 @@ export default function Leveling() {
             />
           </div>
           <div className="v2-field">
-            <label>XP cooldown (seconds)</label>
-            <input
-              type="number"
+            <label>XP cooldown</label>
+            <UnitInput
+              unit="seconds"
               min={limitOf(limits, 'cooldownSeconds').min}
               max={limitOf(limits, 'cooldownSeconds').max}
               value={form.cooldownSeconds}
@@ -211,8 +213,8 @@ export default function Leveling() {
                   </option>
                 ))}
               </select>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeReward(r.key)}>
-                remove
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeReward(r.key)}>
+                Remove
               </button>
             </div>
           ))}
@@ -268,10 +270,10 @@ export default function Leveling() {
           </div>
           <div className="v2-field">
             <label>
-              XP per active voice-minute <span className="v2-field-hint">— before rate/multipliers</span>
+              Voice XP <span className="v2-field-hint">— before rate/multipliers</span>
             </label>
-            <input
-              type="number"
+            <UnitInput
+              unit="XP per active minute"
               min={limitOf(limits, 'voiceXpPerMin').min}
               max={limitOf(limits, 'voiceXpPerMin').max}
               value={form.voiceXpPerMin}
@@ -330,8 +332,8 @@ export default function Leveling() {
                 value={m.factor}
                 onChange={(e) => updateMultiplier(m.key, { factor: Number(e.target.value) })}
               />
-              <button type="button" className="v2-btn-ghost" onClick={() => removeMultiplier(m.key)}>
-                remove
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeMultiplier(m.key)}>
+                Remove
               </button>
             </div>
           ))}
@@ -419,9 +421,14 @@ export default function Leveling() {
                     #{r.rank} {r.name}
                   </h3>
                   <p>
-                    Level {r.level} · {r.xp} XP
-                    {r.voiceXp ? ` · ${r.voiceXp} voice XP (${r.voiceMinutes} min)` : ''} · {r.messages}{' '}
-                    messages
+                    <Meta
+                      items={[
+                        `Level ${r.level}`,
+                        `${r.xp} XP`,
+                        r.voiceXp ? `${r.voiceXp} voice XP (${r.voiceMinutes} min)` : false,
+                        `${r.messages} messages`,
+                      ]}
+                    />
                   </p>
                 </div>
               </div>

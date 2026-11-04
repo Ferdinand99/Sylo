@@ -80,7 +80,8 @@ describe('QuoteBoard form', () => {
     expect(screen.getByRole('heading', { name: 'Quotes (2)' })).toBeTruthy();
     expect(screen.getByText('#2 · Alice')).toBeTruthy();
     expect(screen.getByText('I did not say that')).toBeTruthy();
-    expect(screen.getAllByText(/2030-01-05 · #general/)).toHaveLength(2);
+    expect(screen.getAllByText(/2030-01-05/)).toHaveLength(2);
+    expect(screen.getAllByText(/#general/)).toHaveLength(2);
     expect(screen.getByText(/📎 2/)).toBeTruthy();
     expect(screen.getByText(/not on the public page/)).toBeTruthy();
     expect(getModuleConfig).toHaveBeenCalledWith(GUILD, 'quote-board');
