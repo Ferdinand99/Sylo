@@ -6,6 +6,7 @@ import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import Time from '../components/Time.jsx';
 import UnitInput from '../components/UnitInput.jsx';
 
 export default function Counting() {
@@ -173,10 +174,7 @@ export default function Counting() {
                 <div className="v2-row-main">
                   <h3>{p.label}</h3>
                   <p>
-                    {p.roleName} · back at{' '}
-                    {Number.isFinite(p.restoreAt)
-                      ? new Date(p.restoreAt).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
-                      : '—'}
+                    {p.roleName} · back at {Number.isFinite(p.restoreAt) ? <Time value={p.restoreAt} /> : '—'}
                   </p>
                 </div>
                 <div className="v2-field-row">

@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import QuoteBoard from '../moduleForms/QuoteBoard.jsx';
+import { formatDay } from '../formatTime.js';
 import { resetModuleLimits } from '../components/useModuleLimits.js';
 import { renderAtGuild } from './routerHarness.jsx';
 
@@ -82,9 +83,11 @@ describe('QuoteBoard form', () => {
     expect(screen.getByText('I did not say that')).toBeTruthy();
     const metaOf = (title) =>
       screen.getByText(title).closest('.v2-row-main').querySelector('p.v2-field-hint');
-    expect(metaOf('#2 · Alice').textContent).toBe('2030-01-05 · #general · Open message');
+    expect(metaOf('#2 · Alice').textContent).toBe(
+      `${formatDay(Date.UTC(2030, 0, 5, 12, 30))} · #general · Open message`
+    );
     expect(metaOf('#1 · Bob').textContent).toBe(
-      '2030-01-05 · #general · 📎 2 · not on the public page · Open message'
+      `${formatDay(Date.UTC(2030, 0, 5, 12, 30))} · #general · 📎 2 · not on the public page · Open message`
     );
     expect(getModuleConfig).toHaveBeenCalledWith(GUILD, 'quote-board');
     const links = screen.getAllByRole('link', { name: 'Open message' });

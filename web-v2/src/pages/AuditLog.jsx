@@ -6,6 +6,7 @@ import Breadcrumb from '../components/Breadcrumb.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
+import Time from '../components/Time.jsx';
 
 // Plain names for the action keys that are not "module:<id>".
 const ACTION_LABELS = {
@@ -89,15 +90,13 @@ export default function AuditLog() {
                   <p className="is-wrap v2-break">
                     {a.actor}
                     {a.detail ? ` — ${a.detail}` : ''}
-                    <span className="v2-audit-ago-inline" title={new Date(a.at).toLocaleString()}>
+                    <span className="v2-audit-ago-inline">
                       {' · '}
-                      {a.ago}
+                      <Time value={a.at} relative fallback={a.ago} />
                     </span>
                   </p>
                 </div>
-                <span className="v2-field-hint v2-row-time" title={new Date(a.at).toLocaleString()}>
-                  {a.ago}
-                </span>
+                <Time className="v2-field-hint v2-row-time" value={a.at} relative fallback={a.ago} />
               </div>
             ))}
           </div>

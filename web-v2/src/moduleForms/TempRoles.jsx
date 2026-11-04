@@ -9,8 +9,8 @@ import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import Meta from '../components/Meta.jsx';
-
-const when = (ms) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+import Time from '../components/Time.jsx';
+import { formatDateTime } from '../formatTime.js';
 
 /** Pick a member by typing part of the name (or pasting the id); shows the matches to click. */
 function MemberPicker({ guildId, value, onChange }) {
@@ -134,7 +134,7 @@ export default function TempRoles() {
       });
       setData((d) => ({ ...d, list: out.list }));
       notify(
-        `${member.name} has the role until ${when(out.expiresAt)}${out.replaced ? ' (replaced the earlier time)' : ''}.`
+        `${member.name} has the role until ${formatDateTime(out.expiresAt)}${out.replaced ? ' (replaced the earlier time)' : ''}.`
       );
       setMember(null);
       setReason('');
@@ -304,7 +304,9 @@ export default function TempRoles() {
                 <p className="v2-field-hint">
                   <Meta
                     items={[
-                      `Ends ${when(row.expiresAt)}`,
+                      <span key="e">
+                        Ends <Time value={row.expiresAt} />
+                      </span>,
                       row.addedByName && `set by ${row.addedByName}`,
                       row.reason,
                     ]}

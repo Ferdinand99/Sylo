@@ -9,8 +9,7 @@ import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import Meta from '../components/Meta.jsx';
-
-const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+import { formatDay } from '../formatTime.js';
 
 export default function QuoteBoard() {
   const cmd = useCmd();
@@ -157,7 +156,7 @@ export default function QuoteBoard() {
                 <p className="v2-field-hint">
                   <Meta
                     items={[
-                      day(q.messageAt),
+                      formatDay(q.messageAt),
                       q.channel && `#${q.channel}`,
                       q.attachments > 0 && `📎 ${q.attachments}`,
                       !q.publicSource && 'not on the public page',

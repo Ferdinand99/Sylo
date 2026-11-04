@@ -4,6 +4,7 @@ import { useApiData } from '../useApiData.js';
 import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
+import Time from '../components/Time.jsx';
 
 function TicketRow({ ticket, guildId }) {
   const preview = `${ticket.previewKind === 'staff' ? 'You: ' : ''}${ticket.preview || '(no text)'}`;
@@ -22,7 +23,7 @@ function TicketRow({ ticket, guildId }) {
         </h3>
         <p title={preview}>{preview}</p>
       </div>
-      <span className="v2-field-hint v2-row-time">{ticket.ago}</span>
+      <Time className="v2-field-hint v2-row-time" value={ticket.lastAt} relative fallback={ticket.ago} />
     </Link>
   );
 }

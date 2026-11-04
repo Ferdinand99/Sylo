@@ -15,6 +15,7 @@ import LoadError from '../components/LoadError.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
+import { describeTime } from '../formatTime.js';
 
 function msToLocalInput(ms) {
   if (!ms) return '';
@@ -25,7 +26,7 @@ function msToLocalInput(ms) {
 
 function scheduleLabel(r, schedulePresets, weekdays) {
   if (r.mode === 'single') {
-    return r.runAt ? `once, at ${new Date(r.runAt).toLocaleString()}` : 'once — no time set';
+    return r.runAt ? `once, ${describeTime(r.runAt).text}` : 'once — no time set';
   }
   const preset = schedulePresets.find(([mins]) => Number(mins) === r.intervalMinutes);
   const every = preset ? preset[1].toLowerCase() : `every ${r.intervalMinutes}m`;
@@ -442,7 +443,9 @@ export default function Reminders() {
                     </h3>
                     <p>
                       #{channel ? channel.name : r.channelId} ·{' '}
-                      {scheduleLabel(r, d.schedulePresets, d.weekdays)}
+                      <span title={r.mode === 'single' && r.runAt ? describeTime(r.runAt).title : undefined}>
+                        {scheduleLabel(r, d.schedulePresets, d.weekdays)}
+                      </span>
                     </p>
                     {editingId === r.id ? (
                       <ReminderForm

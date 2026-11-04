@@ -8,6 +8,7 @@ import Meta from '../components/Meta.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import Badge from '../components/Badge.jsx';
 import CopyButton from '../components/CopyButton.jsx';
+import Time from '../components/Time.jsx';
 
 const POLL_MS = 6000;
 // Within this many px of the bottom counts as "reading the latest" — new
@@ -22,7 +23,13 @@ function Bubble({ m }) {
   return (
     <div className={`v2-bubble is-${m.kind}`}>
       <div className="v2-bubble-meta">
-        <Meta items={[m.who, m.ago, m.kind === 'staff' && !m.delivered && 'not delivered']} />
+        <Meta
+          items={[
+            m.who,
+            <Time key="t" value={m.at} relative fallback={m.ago} />,
+            m.kind === 'staff' && !m.delivered && 'not delivered',
+          ]}
+        />
       </div>
       {m.content ? <div className="v2-bubble-body">{m.content}</div> : null}
       {(m.attachments ?? []).filter(isHttp).map((url) => (
@@ -173,7 +180,9 @@ export default function TicketView() {
                 User ID <code>{ticket.userId}</code> <CopyButton text={ticket.userId} what="user ID" />
               </span>
             ),
-            `opened ${ticket.openedAgo}`,
+            <span key="o">
+              opened <Time value={ticket.openedAt} relative fallback={ticket.openedAgo} />
+            </span>,
             <Badge key="s" tone={status === 'open' ? 'warning' : 'neutral'}>
               {status === 'open' ? 'Open' : 'Closed'}
             </Badge>,

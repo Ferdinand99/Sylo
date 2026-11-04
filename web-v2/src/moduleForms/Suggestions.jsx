@@ -10,6 +10,7 @@ import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import Badge from '../components/Badge.jsx';
 import UnitInput from '../components/UnitInput.jsx';
+import Time from '../components/Time.jsx';
 
 const STATUS_LABEL = {
   open: '⏳ Open',
@@ -44,8 +45,6 @@ const ACTIONS = [
   ['consider', 'considering', 'Considering'],
 ];
 
-const day = (ms) => new Date(ms).toISOString().slice(0, 10);
-
 function Item({ item, busy, limits, onDecide, onDelete }) {
   const [action, setAction] = useState(null);
   const [reason, setReason] = useState('');
@@ -62,7 +61,7 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
         </h3>
         <p>{item.text}</p>
         <p className="v2-field-hint">
-          👍 {item.up} · 👎 {item.down} · {day(item.createdAt)}
+          👍 {item.up} · 👎 {item.down} · <Time value={item.createdAt} />
           {item.author
             ? ` · by ${item.author}${item.anonymous ? ' (hidden from members)' : ''}`
             : ' · author removed'}

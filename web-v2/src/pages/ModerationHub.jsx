@@ -25,6 +25,7 @@ import TabRow from '../components/TabRow.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
+import Time from '../components/Time.jsx';
 
 const SUB_TABS = [
   ['cases', 'Cases'],
@@ -171,7 +172,14 @@ function CaseRow({ c, guildId, run, busy }) {
           </div>
         ) : (
           <p className="v2-case-reason v2-break">
-            <Meta items={[c.reason || 'No reason', c.detail, `by ${c.moderator}`, c.ago]} />
+            <Meta
+              items={[
+                c.reason || 'No reason',
+                c.detail,
+                `by ${c.moderator}`,
+                <Time key="t" value={c.at} relative fallback={c.ago} />,
+              ]}
+            />
           </p>
         )}
       </div>
@@ -353,7 +361,7 @@ function InfractionsTab() {
                         items={[
                           l.lockdown ? 'part of a lockdown' : 'locked on its own',
                           `by ${l.lockedBy}`,
-                          l.ago,
+                          <Time key="t" value={l.at} relative fallback={l.ago} />,
                         ]}
                       />
                     </p>

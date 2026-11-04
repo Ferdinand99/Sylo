@@ -7,6 +7,7 @@ import Badge, { appealTone } from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
+import Time from '../components/Time.jsx';
 
 const STATUS_LABEL = { open: 'Open', accepted: 'Accepted', denied: 'Denied' };
 
@@ -31,13 +32,17 @@ function AppealCard({ appeal, onDecide }) {
           <p className="v2-field-hint v2-break">
             <Meta
               items={[
-                `submitted ${appeal.ago}`,
+                <span key="s">
+                  submitted <Time value={appeal.at} relative fallback={appeal.ago} />
+                </span>,
                 appeal.banReason && appeal.banReason !== '—'
                   ? `original ban reason: ${appeal.banReason}`
                   : 'no ban reason recorded',
                 appeal.status !== 'open' &&
                   `${STATUS_LABEL[appeal.status] ?? appeal.status} by ${appeal.decidedBy || 'a moderator'}`,
-                appeal.decidedAgo,
+                (appeal.decidedAt || appeal.decidedAgo) && (
+                  <Time key="d" value={appeal.decidedAt} relative fallback={appeal.decidedAgo} />
+                ),
               ]}
             />
           </p>
@@ -101,6 +106,7 @@ export default function AppealsReview() {
                 decidedBy: 'you',
                 decisionReason: reason || 'No reason given',
                 decidedAgo: 'just now',
+                decidedAt: Date.now(),
               }
             : a
         ),

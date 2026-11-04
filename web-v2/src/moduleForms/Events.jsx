@@ -8,6 +8,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { describeTime, formatDateTime } from '../formatTime.js';
 
 const browserZone = () => {
   try {
@@ -246,7 +247,11 @@ function EventForm({ initial, editing, channels, roles, saving, onSave, onCancel
   );
 }
 
-const when = (ev) => `${ev.start.replace('T', ' ')} ${ev.timeZone}`;
+/** "Sat 5 Jan, 19:00 (Europe/Oslo)": the event's own start time in its own time zone. */
+export const when = (ev) =>
+  ev.startAt
+    ? `${formatDateTime(ev.startAt, { timeZone: ev.timeZone || undefined })}${ev.timeZone ? ` (${ev.timeZone})` : ''}`
+    : `${ev.start.replace('T', ' ')} ${ev.timeZone}`;
 /** "4/12 going · 1 maybe": the sign-up counts in words; "maybe" is left out when nobody is one. */
 export const signups = (ev) =>
   `${ev.joined}${ev.capacity ? `/${ev.capacity}` : ''} going${ev.maybe ? ` · ${ev.maybe} maybe` : ''}`;
@@ -426,7 +431,7 @@ export default function Events() {
                 <h3>
                   #{ev.id} · {ev.title}
                 </h3>
-                <p>
+                <p title={describeTime(ev.startAt).title || undefined}>
                   {when(ev)} · #{ev.channel} · {signups(ev)}
                 </p>
                 <PageLink ev={ev} />
@@ -502,7 +507,7 @@ export default function Events() {
                   <h3>
                     #{ev.id} · {ev.title}
                   </h3>
-                  <p>
+                  <p title={describeTime(ev.startAt).title || undefined}>
                     {when(ev)} · {ev.state === 'cancelled' ? 'cancelled' : 'ended'} · {signups(ev)}
                   </p>
                   <PageLink ev={ev} />
