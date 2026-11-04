@@ -36,12 +36,12 @@ const FILTERS = [
   ['implemented', 'Implemented'],
 ];
 
-// The staff actions, in the order of the buttons: [action, button label].
+// The staff actions, in the order of the "Set status" list: [action, status it sets, label].
 const ACTIONS = [
-  ['approve', 'Approve'],
-  ['deny', 'Deny'],
-  ['implement', 'Implemented'],
-  ['consider', 'Considering'],
+  ['approve', 'approved', 'Approved'],
+  ['deny', 'denied', 'Denied'],
+  ['implement', 'implemented', 'Implemented'],
+  ['consider', 'considering', 'Considering'],
 ];
 
 const day = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -51,7 +51,7 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
   const [reason, setReason] = useState('');
 
   return (
-    <div className="v2-row">
+    <div className="v2-row v2-row-stack">
       <div className="v2-row-main">
         <h3>
           #{item.number}
@@ -95,7 +95,7 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
               />
             </div>
             <button type="submit" className="v2-btn-primary" disabled={busy}>
-              {ACTIONS.find(([a]) => a === action)[1]}
+              Set to {ACTIONS.find(([a]) => a === action)[2]}
             </button>
             <button type="button" className="v2-btn-ghost" onClick={() => setAction(null)}>
               Close
@@ -104,18 +104,20 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
         ) : null}
       </div>
       {action ? null : (
-        <div className="v2-field-row">
-          {ACTIONS.map(([a, label]) => (
-            <button
-              key={a}
-              type="button"
-              className="v2-btn-ghost"
-              disabled={busy}
-              onClick={() => setAction(a)}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="v2-row-actions">
+          <select
+            aria-label={`Set status of suggestion #${item.number}`}
+            value=""
+            disabled={busy}
+            onChange={(e) => setAction(e.target.value || null)}
+          >
+            <option value="">Set status…</option>
+            {ACTIONS.filter(([, status]) => status !== item.status).map(([a, , label]) => (
+              <option key={a} value={a}>
+                {label}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             className="v2-btn-danger-ghost"
@@ -307,7 +309,7 @@ export default function Suggestions() {
 
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Suggestions ({data.suggestions.length})</h2>
-        <div className="v2-field-row">
+        <div className="v2-field-row v2-sug-filters">
           <div className="v2-field">
             <label htmlFor="sug-filter">Show</label>
             <select id="sug-filter" value={filter} onChange={(e) => setFilter(e.target.value)}>

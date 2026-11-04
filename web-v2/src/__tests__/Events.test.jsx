@@ -88,10 +88,10 @@ describe('Events form', () => {
     renderAtGuild(<Events />, GUILD);
     expect(await screen.findByRole('heading', { name: 'Events' })).toBeTruthy();
     expect(screen.getByText(/#7 · Game night/)).toBeTruthy();
-    expect(screen.getByText(/2030-01-05 19:00 Europe\/Oslo · #general · ✅ 3\/10 · ❔ 1/)).toBeTruthy();
+    expect(screen.getByText(/2030-01-05 19:00 Europe\/Oslo · #general · 3\/10 going · 1 maybe/)).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Upcoming events (1)' })).toBeTruthy();
     expect(screen.getByText(/#6 · Old one/)).toBeTruthy();
-    expect(screen.getByText(/ended · ✅ 3/)).toBeTruthy();
+    expect(screen.getByText(/ended · 3\/10 going/)).toBeTruthy();
     expect(getModuleConfig).toHaveBeenCalledWith(GUILD, 'events');
   });
 
@@ -181,7 +181,7 @@ describe('Events form', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel event' }));
     await waitFor(() => expect(cancelEvent).toHaveBeenCalledWith(GUILD, 7));
     expect(confirmDialog).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(/cancelled · ✅ 3/)).toBeTruthy();
+    expect(await screen.findByText(/cancelled · 3\/10 going/)).toBeTruthy();
   });
 });
 

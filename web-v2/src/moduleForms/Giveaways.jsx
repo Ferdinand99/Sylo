@@ -146,7 +146,7 @@ export default function Giveaways() {
 
       {ended.length > 0 ? (
         <div className="v2-group v2-section-gap">
-          <h2 className="v2-group-title">Recently ended</h2>
+          <h2 className="v2-group-title">Recently ended ({ended.length})</h2>
           <div className="v2-list">
             {ended.map((g) => (
               <div className="v2-row" key={g.id}>
@@ -157,14 +157,17 @@ export default function Giveaways() {
                   <p>
                     {g.entries} entr{g.entries === 1 ? 'y' : 'ies'} ·{' '}
                     {g.wonIds && g.wonIds.length
-                      ? `won by ${g.wonIds.map((id) => `a member (ID ${id})`).join(', ')}`
+                      ? `won by ${g.wonIds.map((id, i) => (g.wonNames?.[i] && g.wonNames[i] !== id ? g.wonNames[i] : `a member (ID ${id})`)).join(', ')}`
                       : 'no winner'}
                   </p>
                 </div>
-                <div className="v2-field-row">
+                <div className="v2-field-row v2-wrap-row">
+                  <label htmlFor={`reroll-${g.id}`}>
+                    Reroll<span className="v2-sr-only"> winners of giveaway #{g.id}</span>
+                  </label>
                   <UnitInput
-                    unit="winners"
-                    aria-label={`Winners to reroll for giveaway #${g.id}`}
+                    id={`reroll-${g.id}`}
+                    unit={(rerollCounts[g.id] ?? 1) === 1 ? 'winner' : 'winners'}
                     min={limitOf(limits, 'winners').min}
                     max={limitOf(limits, 'winners').max}
                     value={rerollCounts[g.id] ?? 1}
@@ -176,7 +179,7 @@ export default function Giveaways() {
                     disabled={busyId === g.id}
                     onClick={() => onReroll(g.id)}
                   >
-                    Reroll
+                    Draw again
                   </button>
                 </div>
               </div>
