@@ -4,6 +4,7 @@
 // polls, welcome-channel, roles, custom-commands — get the exact same
 // click-into-the-preview editing UX via components/EmbedEditor.jsx, instead
 // of a second, visually different embed editor.
+import AutoGrowTextarea from './AutoGrowTextarea.jsx';
 import ColorPicker from './ColorPicker.jsx';
 import { limitOf, useModuleLimits } from './useModuleLimits.js';
 
@@ -14,13 +15,6 @@ export function pickImage(current) {
   if (u === null) return current;
   const trimmed = String(u).trim();
   return URL_RE.test(trimmed) ? trimmed : '';
-}
-
-// Auto-growing so a long title/description doesn't scroll inside its own
-// tiny box — it should just make the "message" taller, like Discord itself.
-export function autoGrow(e) {
-  e.target.style.height = 'auto';
-  e.target.style.height = `${e.target.scrollHeight}px`;
 }
 
 export function AvatarPick({ value, onChange, title }) {
@@ -179,21 +173,14 @@ export default function EmbedCard({
               onFocus={() => onFieldFocus?.('title')}
             />
             {description ? (
-              <textarea
+              <AutoGrowTextarea
                 className="v2-embed-input v2-embed-desc"
                 aria-label="Embed description"
                 placeholder={placeholders.description || 'Write your message here!'}
-                rows={1}
                 maxLength={lim('description').maxLength}
                 value={embed.description}
-                onChange={(e) => {
-                  autoGrow(e);
-                  set({ description: e.target.value });
-                }}
-                onFocus={(e) => {
-                  autoGrow(e);
-                  onFieldFocus?.('description');
-                }}
+                onChange={(e) => set({ description: e.target.value })}
+                onFocus={() => onFieldFocus?.('description')}
               />
             ) : null}
 
@@ -222,7 +209,7 @@ export default function EmbedCard({
                           value={f.name}
                           onChange={(e) => setField(f.key, { name: e.target.value })}
                         />
-                        <input
+                        <AutoGrowTextarea
                           className="v2-embed-input v2-embed-field-value"
                           aria-label="Field value"
                           placeholder="Field value"

@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import EmbedCard, { autoGrow, newKey } from './EmbedCard.jsx';
+import AppTag from './AppTag.jsx';
+import AutoGrowTextarea from './AutoGrowTextarea.jsx';
+import EmbedCard, { newKey } from './EmbedCard.jsx';
 import { initial } from '../util.js';
 import { limitOf } from './useModuleLimits.js';
 
@@ -105,27 +107,20 @@ export default function EmbedEditor({
         </div>
         <div className="v2-msg-head-text">
           <span className="v2-msg-botname">{botName}</span>
-          <span className="v2-msg-botbadge">BOT</span>
+          <AppTag />
           <span className="v2-msg-time">Today</span>
         </div>
       </div>
 
       {content ? (
-        <textarea
+        <AutoGrowTextarea
           className="v2-msg-content"
           aria-label="Message text"
-          rows={1}
           maxLength={limitOf(limits, 'content').maxLength}
           placeholder={placeholders.content || 'Write your message here!'}
           value={e.content}
-          onChange={(ev) => {
-            autoGrow(ev);
-            set({ content: ev.target.value });
-          }}
-          onFocus={(ev) => {
-            autoGrow(ev);
-            setLastFocused('content');
-          }}
+          onChange={(ev) => set({ content: ev.target.value })}
+          onFocus={() => setLastFocused('content')}
         />
       ) : null}
 
