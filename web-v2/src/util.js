@@ -186,22 +186,22 @@ export function hostOf(url, fallback) {
   }
 }
 
-/** "= 24 hours" style reading of a number of minutes, for fields that take minutes: "90" -> "1 hour 30 minutes",
- *  "1440" -> "24 hours", "2880" -> "2 days". Empty under an hour, where the number is clear enough. */
+/** "= 24 hours" style reading of a number of minutes, for fields that take minutes: the largest unit plus
+ *  one smaller ("90" -> "1 hour 30 minutes", "1500" -> "25 hours", "2880" -> "2 days", "3000" -> "2 days 2 hours").
+ *  Under two days it counts in hours, from two days up in days. A remainder that does not fit
+ *  those two units is not dropped silently: the text starts with "about". Empty under an hour. */
 export function minutesAsText(minutes) {
   const n = Math.round(Number(minutes));
   if (!Number.isFinite(n) || n < 60) return '';
+  const unit = (v, one) => `${v} ${one}${v === 1 ? '' : 's'}`;
+  if (n < 2880) {
+    const hours = Math.floor(n / 60);
+    const mins = n % 60;
+    return mins ? `${unit(hours, 'hour')} ${unit(mins, 'minute')}` : unit(hours, 'hour');
+  }
   const days = Math.floor(n / 1440);
   const hours = Math.floor((n % 1440) / 60);
-  const mins = n % 60;
-  const unit = (v, one) => `${v} ${one}${v === 1 ? '' : 's'}`;
-  // Whole days are clearer than "48 hours" from two days up; 24 hours stays "24 hours" (the common ask).
-  if (days >= 2 && hours === 0 && mins === 0) return unit(days, 'day');
-  const totalHours = Math.floor(n / 60);
-  if (totalHours >= 1 && mins === 0 && n < 2880) return unit(totalHours, 'hour');
-  const parts = [];
-  if (days) parts.push(unit(days, 'day'));
-  if (hours) parts.push(unit(hours, 'hour'));
-  if (mins) parts.push(unit(mins, 'minute'));
-  return parts.join(' ');
+  const exact = n % 60 === 0;
+  const text = hours ? `${unit(days, 'day')} ${unit(hours, 'hour')}` : unit(days, 'day');
+  return exact ? text : `about ${text}`;
 }

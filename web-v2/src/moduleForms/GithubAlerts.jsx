@@ -216,9 +216,9 @@ export default function GithubAlerts() {
 
   async function onDelete(id) {
     const ok = await confirmDialog({
-      title: 'Remove this repo watch?',
+      title: 'Delete this repo watch?',
       body: 'Sylo stops posting its activity and the webhook URL stops working.',
-      confirmLabel: 'Remove watch',
+      confirmLabel: 'Delete watch',
     });
     if (!ok) return;
     try {
@@ -323,7 +323,7 @@ export default function GithubAlerts() {
                       {w.enabled ? 'Pause' : 'Resume'}
                     </button>
                     <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(w.id)}>
-                      Remove
+                      Delete
                     </button>
                   </div>
                 )}

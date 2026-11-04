@@ -74,6 +74,13 @@ describe('minutesAsText', () => {
     expect(minutesAsText(1500)).toBe('25 hours');
   });
 
+  it('uses the largest unit plus one smaller, and says "about" when more is left over', () => {
+    expect(minutesAsText(1530)).toBe('25 hours 30 minutes');
+    expect(minutesAsText(3000)).toBe('2 days 2 hours');
+    expect(minutesAsText(3010)).toBe('about 2 days 2 hours');
+    expect(minutesAsText(1440 * 3 + 60)).toBe('3 days 1 hour');
+  });
+
   it('says nothing for a short or invalid number', () => {
     expect(minutesAsText(0)).toBe('');
     expect(minutesAsText(45)).toBe('');
@@ -83,12 +90,35 @@ describe('minutesAsText', () => {
 });
 
 describe('CopyButton', () => {
-  it('copies the value and says so', async () => {
+  const setClipboard = (value) =>
+    Object.defineProperty(navigator, 'clipboard', { value, configurable: true });
+
+  it('copies the value and says so, also to screen readers', async () => {
     const writeText = vi.fn().mockResolvedValue();
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    setClipboard({ writeText });
     render(<CopyButton text="123456789" what="user ID" />);
     fireEvent.click(screen.getByRole('button', { name: 'Copy user ID' }));
-    await waitFor(() => expect(screen.getByText('Copied')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copied user ID' })).toBeTruthy());
+    expect(screen.getByRole('status').textContent).toBe('user ID copied');
     expect(writeText).toHaveBeenCalledWith('123456789');
+  });
+
+  it('falls back to a hidden textarea when the clipboard API is missing', async () => {
+    setClipboard(undefined);
+    document.execCommand = vi.fn().mockReturnValue(true);
+    render(<CopyButton text="123456789" what="user ID" />);
+    fireEvent.click(screen.getByRole('button'));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('user ID copied'));
+    expect(document.execCommand).toHaveBeenCalledWith('copy');
+    expect(document.querySelector('textarea')).toBeNull();
+  });
+
+  it('asks to select and copy by hand when every way fails', async () => {
+    setClipboard({ writeText: vi.fn().mockRejectedValue(new Error('denied')) });
+    document.execCommand = vi.fn().mockReturnValue(false);
+    render(<CopyButton text="123456789" what="user ID" />);
+    fireEvent.click(screen.getByRole('button'));
+    await waitFor(() => expect(screen.getByText(/Select and copy manually/)).toBeTruthy());
+    expect(screen.getByRole('status').textContent).toMatch(/Could not copy the user ID/);
   });
 });

@@ -80,10 +80,12 @@ describe('QuoteBoard form', () => {
     expect(screen.getByRole('heading', { name: 'Quotes (2)' })).toBeTruthy();
     expect(screen.getByText('#2 · Alice')).toBeTruthy();
     expect(screen.getByText('I did not say that')).toBeTruthy();
-    expect(screen.getAllByText(/2030-01-05/)).toHaveLength(2);
-    expect(screen.getAllByText(/#general/)).toHaveLength(2);
-    expect(screen.getByText(/📎 2/)).toBeTruthy();
-    expect(screen.getByText(/not on the public page/)).toBeTruthy();
+    const metaOf = (title) =>
+      screen.getByText(title).closest('.v2-row-main').querySelector('p.v2-field-hint');
+    expect(metaOf('#2 · Alice').textContent).toBe('2030-01-05 · #general · Open message');
+    expect(metaOf('#1 · Bob').textContent).toBe(
+      '2030-01-05 · #general · 📎 2 · not on the public page · Open message'
+    );
     expect(getModuleConfig).toHaveBeenCalledWith(GUILD, 'quote-board');
     const links = screen.getAllByRole('link', { name: 'Open message' });
     expect(links[0].getAttribute('href')).toBe('https://discord.com/channels/1/2/3');
@@ -145,13 +147,13 @@ describe('QuoteBoard form', () => {
     getQuotes.mockResolvedValue({ total: 1, quotes: [quote({ number: 1, author: 'Bob', text: 'Second' })] });
     renderAtGuild(<QuoteBoard />, GUILD);
     confirmDialog.mockResolvedValueOnce(false);
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Remove' }))[0]);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Delete' }))[0]);
     await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
     expect(deleteQuote).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
     await waitFor(() => expect(deleteQuote).toHaveBeenCalledWith(GUILD, 2));
-    expect(confirmDialog).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Remove quote #2?' }));
+    expect(confirmDialog).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Delete quote #2?' }));
     await waitFor(() => expect(screen.queryByText('#2 · Alice')).toBeNull());
     expect(screen.getByRole('heading', { name: 'Quotes (1)' })).toBeTruthy();
   });
@@ -159,7 +161,7 @@ describe('QuoteBoard form', () => {
   it('shows the server error when a remove fails', async () => {
     deleteQuote.mockRejectedValue(new Error('No such quote.'));
     renderAtGuild(<QuoteBoard />, GUILD);
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Remove' }))[0]);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Delete' }))[0]);
     await waitFor(() => expect(notify).toHaveBeenCalledWith('No such quote.'));
     expect(screen.getByText('#2 · Alice')).toBeTruthy();
   });

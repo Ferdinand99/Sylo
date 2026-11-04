@@ -26,6 +26,9 @@
   /* Links used a separate sky blue; now they use the accent. Kept as an
      alias (resolves per theme) so existing var(--accent-2) uses still work. */
   --accent-2: var(--accent);
+  /* A second data colour for charts with two series (the accent is the first); not grey, so a series
+     never reads as "disabled". */
+  --series-2: #b794f6;
   --success: #30d158;
   --warn: #ffd60a;
   --danger: #ff453a;
@@ -99,6 +102,7 @@
   /* The logo cyan is too light on white; this step is 5.9:1 on #f5f5f7 and
      still 5:1 as text on a 16% accent tint, so it clears AA everywhere. */
   --accent: #076787;
+  --series-2: #6b3fb0;
   --success: #1e7f36;
   --warn: #b25000;
   --danger: #d70015;
@@ -3376,4 +3380,17 @@ textarea:disabled {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.85rem;
+}
+
+/* Text for screen readers only (live regions, the hidden part of a label). */
+.v2-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

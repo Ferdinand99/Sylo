@@ -1,3 +1,5 @@
+import { useContext } from 'react';
+import { PlatformContext } from '../platformContext.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
@@ -59,6 +61,7 @@ const fromForm = (form) => ({
 });
 
 export default function AutoReact() {
+  const { platform } = useContext(PlatformContext);
   const limits = useModuleLimits('auto-react');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('auto-react', {
     toForm,
@@ -140,14 +143,16 @@ export default function AutoReact() {
               </label>
               <input
                 type="text"
-                placeholder="e.g. 123456789012345678 @SomeUser"
+                placeholder="e.g. 123456789012345678 or <@123456789012345678>"
                 value={r.targetUsersText}
                 onChange={(e) => updateRule(r.key, { targetUsersText: e.target.value })}
               />
               <p className="v2-field-hint">
-                Paste one or more user IDs, separated by spaces or commas. To copy an ID, turn on developer
-                mode in your app's advanced settings, then right-click the member and choose Copy User ID. A
-                pasted mention like &lt;@123…&gt; works too; a typed @name is not looked up.
+                Paste one or more user IDs, separated by spaces or commas.{' '}
+                {platform === 'fluxer'
+                  ? "To copy an ID, turn on developer mode in Fluxer's settings, then right-click the member and choose Copy User ID."
+                  : "To copy an ID, turn on Developer Mode in your Discord app's advanced settings, then right-click the member and choose Copy User ID."}{' '}
+                A pasted mention like &lt;@123…&gt; works too; a typed @name is not looked up.
               </p>
             </div>
 

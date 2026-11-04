@@ -156,14 +156,23 @@ export default function TicketView() {
         <Link to={`/guilds/${guildId}/tickets`}>Back to tickets</Link>
       </p>
       <h1 className="v2-section-title v2-ticket-title">
-        Ticket #{ticket.id} <span className="v2-ticket-user">{ticket.user}</span>
+        Ticket #{ticket.id}
+        {/* An unresolved name is the raw ID, which the meta line below already shows with a Copy button. */}
+        {ticket.user && ticket.user !== ticket.userId ? (
+          <>
+            {' '}
+            <span className="v2-ticket-user">{ticket.user}</span>
+          </>
+        ) : null}
       </h1>
       <p className="v2-field-hint">
         <Meta
           items={[
-            <span key="id">
-              User ID <code>{ticket.userId}</code> <CopyButton text={ticket.userId} what="user ID" />
-            </span>,
+            ticket.userId && (
+              <span key="id">
+                User ID <code>{ticket.userId}</code> <CopyButton text={ticket.userId} what="user ID" />
+              </span>
+            ),
             `opened ${ticket.openedAgo}`,
             <Badge key="s" tone={status === 'open' ? 'warning' : 'neutral'}>
               {status === 'open' ? 'Open' : 'Closed'}

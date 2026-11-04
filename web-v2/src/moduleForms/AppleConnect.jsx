@@ -108,7 +108,7 @@ export default function AppleConnect() {
         <p className="v2-field-hint">
           Each alert can go to its own channel; leave it on main channel to use the one above.
         </p>
-        <div className="v2-field v2-alert-grid">
+        <div className="v2-field">
           <div className="v2-alert-row">
             <label className="v2-check">
               <input

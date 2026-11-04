@@ -42,9 +42,9 @@ export default function QuoteBoard() {
 
   async function onRemove(item) {
     const ok = await confirmDialog({
-      title: `Remove quote #${item.number}?`,
+      title: `Delete quote #${item.number}?`,
       body: 'The quote is deleted and its number will not be used again. The original message stays.',
-      confirmLabel: 'Remove',
+      confirmLabel: 'Delete',
     });
     if (!ok) return;
     setBusy(true);
@@ -175,7 +175,7 @@ export default function QuoteBoard() {
                   disabled={busy}
                   onClick={() => onRemove(q)}
                 >
-                  Remove
+                  Delete
                 </button>
               </div>
             </div>

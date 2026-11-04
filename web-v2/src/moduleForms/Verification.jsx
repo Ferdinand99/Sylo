@@ -141,11 +141,13 @@ export default function Verification() {
             min={limitOf(limits, 'kickAfterMinutes').min}
             max={limitOf(limits, 'kickAfterMinutes').max}
             value={form.kickAfterMinutes}
-            onChange={(e) => set({ kickAfterMinutes: Number(e.target.value) })}
+            // An emptied field means 0 = never kick, stated in the hint below.
+            onChange={(e) => set({ kickAfterMinutes: e.target.value === '' ? 0 : Number(e.target.value) })}
           />
           <p className="v2-field-hint">
-            {minutesAsText(form.kickAfterMinutes) ? `That is ${minutesAsText(form.kickAfterMinutes)}. ` : ''}0
-            means never.
+            {Number(form.kickAfterMinutes) === 0
+              ? '0 means never: nobody is kicked for not verifying.'
+              : `${minutesAsText(form.kickAfterMinutes) ? `That is ${minutesAsText(form.kickAfterMinutes)}. ` : ''}0 means never.`}
           </p>
         </div>
       </form>
