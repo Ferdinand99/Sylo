@@ -19,7 +19,9 @@ import Automod from '../moduleForms/Automod.jsx';
 import ModerationSettings from '../moduleForms/Moderation.jsx';
 import Logging from '../moduleForms/Logging.jsx';
 import Commands from './Commands.jsx';
+import Badge, { caseTone } from '../components/Badge.jsx';
 import Meta, { plural } from '../components/Meta.jsx';
+import TabRow from '../components/TabRow.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
@@ -132,8 +134,10 @@ function CaseRow({ c, guildId, run, busy }) {
         <h3 className="v2-break">
           <span className="v2-id">#{c.caseNumber}</span>
           {c.user}
-          <span className="v2-case-action">{c.action}</span>
-          {!c.active ? <span className="v2-case-action">deleted</span> : null}
+          <Badge tone={caseTone(c.action)} inline>
+            {c.action}
+          </Badge>
+          {!c.active ? <Badge inline>Deleted</Badge> : null}
         </h3>
         {editing ? (
           <div className="v2-field-row v2-wrap-row">
@@ -170,7 +174,7 @@ function CaseRow({ c, guildId, run, busy }) {
           </button>
           <button
             type="button"
-            className={c.active ? 'v2-btn-danger' : 'v2-btn-ghost'}
+            className={c.active ? 'v2-btn-danger-ghost' : 'v2-btn-ghost'}
             disabled={busy}
             onClick={() =>
               run(
@@ -201,7 +205,7 @@ function InfractionsTab() {
     <>
       <WarnPanel guildId={guildId} run={run} busy={busy} />
 
-      <div className="v2-tabs" role="tablist">
+      <TabRow role="tablist" activeKey={tab}>
         {SUB_TABS.map(([key, label]) => (
           <button
             key={key}
@@ -214,7 +218,7 @@ function InfractionsTab() {
             {label}
           </button>
         ))}
-      </div>
+      </TabRow>
 
       {tab === 'cases' ? (
         data.cases.length ? (
@@ -396,7 +400,7 @@ export default function ModerationHub() {
   return (
     <>
       <h1 className="v2-section-title">Moderation</h1>
-      <div className="v2-tabs v2-hub-tabs" role="tablist">
+      <TabRow className="v2-hub-tabs" role="tablist" activeKey={active}>
         {TABS.map(([key, label, moduleId]) => (
           <button
             key={key}
@@ -410,7 +414,7 @@ export default function ModerationHub() {
             {isOff(moduleId) ? <span className="v2-tab-off"> (off)</span> : null}
           </button>
         ))}
-      </div>
+      </TabRow>
       {/* Outside the keyed tab content, so the entrance plays on the first
           visit only — not again on a tab or server switch. */}
       <Reveal className="v2-embedded">

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { getAppealsReview, decideAppeal } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
+import Badge, { appealTone } from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
@@ -41,9 +42,7 @@ function AppealCard({ appeal, onDecide }) {
             />
           </p>
         </div>
-        <span className={`v2-status-pill ${appeal.status === 'accepted' ? 'completed' : 'pending'}`}>
-          {STATUS_LABEL[appeal.status] ?? appeal.status}
-        </span>
+        <Badge tone={appealTone(appeal.status)}>{STATUS_LABEL[appeal.status] ?? appeal.status}</Badge>
       </div>
       <dl className="v2-appeal-answers v2-break">
         {appeal.answers.map((qa, i) => (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getRoles, saveAutoroles, saveReactionRole, deleteReactionRole } from '../api.js';
+import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useFormState } from '../components/useModuleForm.js';
@@ -368,9 +369,9 @@ export default function Roles() {
                   </div>
                   {editingId === rm.id ? null : (
                     <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                      <span className={`v2-status-pill ${rm.messageId ? 'completed' : 'pending'}`}>
-                        {rm.messageId ? 'published' : 'draft'}
-                      </span>
+                      <Badge tone={rm.messageId ? 'success' : 'neutral'}>
+                        {rm.messageId ? 'Published' : 'Draft'}
+                      </Badge>
                       <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(rm.id)}>
                         Edit
                       </button>

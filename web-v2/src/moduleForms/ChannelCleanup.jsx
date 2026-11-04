@@ -8,6 +8,7 @@ import {
   toggleCleanupSchedule,
 } from '../api.js';
 import { notify } from '../notify.js';
+import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
@@ -240,9 +241,7 @@ export default function ChannelCleanup() {
                   </div>
                   {editingId === s.id ? null : (
                     <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                      <span className={`v2-status-pill ${s.enabled ? 'completed' : 'pending'}`}>
-                        {s.enabled ? 'on' : 'off'}
-                      </span>
+                      <Badge tone={s.enabled ? 'success' : 'neutral'}>{s.enabled ? 'On' : 'Off'}</Badge>
                       <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(s.id)}>
                         Edit
                       </button>

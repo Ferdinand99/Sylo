@@ -9,6 +9,7 @@ import {
   regenGithubSecret,
 } from '../api.js';
 import { notify } from '../notify.js';
+import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
@@ -298,9 +299,7 @@ export default function GithubAlerts() {
 
                 {editingId === w.id ? null : (
                   <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                    <span className={`v2-status-pill ${w.enabled ? 'completed' : 'pending'}`}>
-                      {w.enabled ? 'on' : 'off'}
-                    </span>
+                    <Badge tone={w.enabled ? 'success' : 'neutral'}>{w.enabled ? 'On' : 'Off'}</Badge>
                     <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(w.id)}>
                       Edit
                     </button>

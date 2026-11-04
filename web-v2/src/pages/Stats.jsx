@@ -1,4 +1,5 @@
 import { getStats, ApiError } from '../api.js';
+import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import Reveal from '../components/Reveal.jsx';
 import { plural } from '../components/Meta.jsx';
@@ -39,9 +40,7 @@ export default function Stats() {
                   {r.platform} · K/D {r.kd} · Win {r.winRate} · {r.timePlayed} · {r.ago}
                 </p>
               </div>
-              <span className={`v2-status-pill ${r.fresh ? 'completed' : 'pending'}`}>
-                {r.fresh ? 'fresh' : 'stale'}
-              </span>
+              <Badge tone={r.fresh ? 'success' : 'neutral'}>{r.fresh ? 'Fresh' : 'Stale'}</Badge>
             </div>
           ))}
         </div>

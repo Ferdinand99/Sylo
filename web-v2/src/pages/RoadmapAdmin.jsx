@@ -10,6 +10,7 @@ import {
   deleteRoadmapPost,
   ApiError,
 } from '../api.js';
+import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { formatCount } from '../util.js';
@@ -65,6 +66,8 @@ function EditRow({ post, onSave, onCancel }) {
     </form>
   );
 }
+
+const ROADMAP_TONES = { planned: 'neutral', started: 'warning', completed: 'success' };
 
 export default function RoadmapAdmin() {
   const [state, setState] = useState({ loading: true, data: null, error: null });
@@ -236,7 +239,7 @@ export default function RoadmapAdmin() {
               <div className="v2-row v2-row-stack v2-roadmap-row" key={p.id}>
                 <div className="v2-row-main">
                   <h3 className="v2-break">
-                    <span className={`v2-status-pill ${p.status}`}>{p.status}</span> {p.title}
+                    <Badge tone={ROADMAP_TONES[p.status]}>{p.status}</Badge> {p.title}
                   </h3>
                   <div
                     className="v2-roadmap-desc v2-break"

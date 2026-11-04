@@ -10,6 +10,7 @@ import {
   setReminderPings,
 } from '../api.js';
 import { notify } from '../notify.js';
+import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
@@ -449,9 +450,7 @@ export default function Reminders() {
                   </div>
                   {editingId === r.id ? null : (
                     <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                      <span className={`v2-status-pill ${r.enabled ? 'completed' : 'pending'}`}>
-                        {r.enabled ? 'on' : 'off'}
-                      </span>
+                      <Badge tone={r.enabled ? 'success' : 'neutral'}>{r.enabled ? 'On' : 'Off'}</Badge>
                       <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(r.id)}>
                         Edit
                       </button>
