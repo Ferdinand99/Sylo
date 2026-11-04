@@ -37,6 +37,7 @@ router.get(
     res.locals.extendCsp(TURNSTILE_SOURCES);
     res.render('verify', {
       state: 'challenge',
+      guildName: guildByKey(guildId)?.name ?? null,
       message: null,
       siteKey: config.turnstileSiteKey,
       token: req.query.t,
