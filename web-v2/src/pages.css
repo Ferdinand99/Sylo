@@ -1066,3 +1066,19 @@ a.v2-stat.is-link:focus-visible {
   min-width: 9rem;
 }
 
+/* ---------- Health ---------- */
+/* A second, quieter line under a tile's label ("Gateway ping 40 ms"). */
+.v2-stat .v2-stat-caption {
+  margin-top: 2px;
+  opacity: 0.85;
+}
+/* Three tiles that would wrap two-and-one stack in a single column on a narrow phone. */
+@media (max-width: 420px) {
+  .v2-stat-strip.v2-stat-strip-stack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.v2-backup-help {
+  margin-bottom: 20px;
+}
+
