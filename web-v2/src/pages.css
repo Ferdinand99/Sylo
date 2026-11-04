@@ -643,7 +643,7 @@
   fill: var(--accent);
 }
 .v2-ins-bar-voice {
-  fill: var(--text-muted);
+  fill: var(--series-2);
 }
 .v2-ins-line-grow,
 .v2-ins-line-join {
@@ -666,7 +666,7 @@
   background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .v2-ins-bar-fill-voice {
-  background: var(--text-muted);
+  background: var(--series-2);
 }
 .v2-ins-bar-val {
   font-size: var(--fs-xs);
