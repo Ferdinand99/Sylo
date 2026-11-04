@@ -1096,3 +1096,47 @@ a.v2-stat.is-link:focus-visible {
   border-top: 1px solid var(--border-subtle);
 }
 
+/* ---------- Welcome channel ---------- */
+/* Channel select and the "Create" button side by side; stacked on a narrow screen. */
+.v2-wc-channel {
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+.v2-wc-channel > .v2-field {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .v2-wc-channel > .v2-btn-ghost {
+    width: 100%;
+  }
+}
+.v2-wc-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 12px 16px;
+  margin-top: 12px;
+}
+.v2-wc-preset {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.v2-wc-preset .v2-field-hint {
+  margin: 0;
+}
+.v2-wc-reset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+.v2-wc-reset .v2-field-hint {
+  margin: 0;
+}
