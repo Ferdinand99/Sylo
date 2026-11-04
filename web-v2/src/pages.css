@@ -372,6 +372,14 @@
 /* Facts side by side (Meta.jsx) and small leading numbers line up. */
 .v2-meta-item {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* A long fact (a typed reason) may wrap inside itself, but still breaks between facts first. */
+.v2-meta-item.is-long {
+  white-space: normal;
+}
+.v2-meta-sep {
+  color: var(--text-muted);
 }
 .v2-muted {
   color: var(--text-muted);
@@ -852,4 +860,9 @@
   color: var(--text-muted);
   font-size: 0.85rem;
   overflow-wrap: anywhere;
+}
+
+/* A one-line explanation right under a card's title row. */
+.v2-rule-head + .v2-rule-lead {
+  margin: -6px 0 12px;
 }

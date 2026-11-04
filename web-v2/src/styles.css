@@ -1012,6 +1012,11 @@ a {
 .v2-list + .v2-field-hint {
   margin-top: 10px;
 }
+/* A note's own margin shorthand would beat the zero-specificity gap above. */
+.v2-list + .v2-note,
+.v2-list + .v2-state {
+  margin-top: 12px;
+}
 
 .v2-row {
   display: flex;
@@ -1164,6 +1169,17 @@ a.v2-row:active {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+}
+/* The card's title, taken from what it holds ("#general", a streamer's name). */
+.v2-rule-title {
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.v2-rule-title .v2-field-hint {
+  font-weight: 400;
 }
 
 /* Embed message builder (MessageBuilder.jsx) — a compact image-picker button
@@ -2066,6 +2082,12 @@ button.v2-toggle:disabled {
 .v2-btn-danger-ghost:active:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
+/* A small button that sits in a line of text ("Copy" after an ID). */
+.v2-btn-compact {
+  min-height: 26px;
+  padding: 2px 10px;
+  font-size: 0.78rem;
+}
 /* A page title with an action button on the same line (e.g. "+ New…") —
    used where a page needs one, most don't. */
 .v2-page-head {
@@ -2117,6 +2139,10 @@ button.v2-toggle:disabled {
   align-items: center;
 }
 .v2-check.v2-check-inline input[type='checkbox'] {
+  margin-top: 0;
+}
+/* The "stack inputs in a field" gap above must not push an input that sits inside the label text. */
+.v2-check.v2-check-inline input {
   margin-top: 0;
 }
 /* Checkboxes and radios drawn by us: the native empty box is a flat grey square in the dark theme
@@ -2294,6 +2320,7 @@ input[type='radio']:disabled {
 :where(form, .v2-field)
   :where(
     input[type='text'],
+    input[type='search'],
     input[type='url'],
     input[type='number'],
     input[type='time'],
@@ -2442,6 +2469,37 @@ textarea:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+/* Never breaks inside ("days before", "stars"). */
+.v2-nowrap {
+  white-space: nowrap;
+}
+/* App Store Connect alerts: the alert (checkbox + label) on the left, its channel on the right, so
+   every channel select lines up. One column on a phone. */
+.v2-alert-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 16rem);
+  align-items: center;
+  gap: 4px 16px;
+  margin-bottom: 10px;
+}
+.v2-alert-row > .v2-check {
+  margin-bottom: 0;
+}
+.v2-alert-row > .v2-alert-hint {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+@media (max-width: 600px) {
+  .v2-alert-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* A button right after a text box ("Search", "Update", "Select") is exactly as tall as the box,
+   whatever the box's font and padding come to. A wrapped button on a line of its own keeps its own
+   height. */
+.v2-field-row:has(> input) > :is(.v2-btn-primary, .v2-btn-ghost, .v2-btn-danger, .v2-btn-danger-ghost) {
+  align-self: stretch;
 }
 .v2-color-input {
   width: 40px;
@@ -2939,10 +2997,6 @@ textarea:disabled {
   }
 }
 
-/* components/Meta.jsx: facts side by side with space between, no separator character. */
-.v2-meta-item + .v2-meta-item {
-  margin-left: 0.9em;
-}
 /* Small muted number in front of a title ("#12 Prize"). */
 .v2-id {
   margin-right: 0.5em;

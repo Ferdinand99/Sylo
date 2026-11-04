@@ -157,3 +157,51 @@ export function markChangelogSeen() {
   }
   window.dispatchEvent(new Event(CHANGELOG_SEEN_EVENT));
 }
+
+/** The title of a repeatable card, taken from what it holds ("#general", "ninja"); the old generic
+ *  word ("Board", "New streamer") while the card is still empty. Long text is cut for the title. */
+export function cardTitle(value, fallback, max = 60) {
+  const s = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return fallback;
+  return s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s;
+}
+
+/** "#general" for a channel id found in `channels` ([{id, name}]); `fallback` when none is picked. */
+export function channelTitle(channels, id, fallback) {
+  const name = id ? channels?.find((c) => c.id === id)?.name : '';
+  return name ? `#${name}` : fallback;
+}
+
+/** "example.com" from a feed URL (without "www."), or `fallback` when it isn't a web address. */
+export function hostOf(url, fallback) {
+  try {
+    const u = new URL(String(url ?? '').trim());
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return fallback;
+    const host = u.hostname.replace(/^www\./, '');
+    return host || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** "= 24 hours" style reading of a number of minutes, for fields that take minutes: "90" -> "1 hour 30 minutes",
+ *  "1440" -> "24 hours", "2880" -> "2 days". Empty under an hour, where the number is clear enough. */
+export function minutesAsText(minutes) {
+  const n = Math.round(Number(minutes));
+  if (!Number.isFinite(n) || n < 60) return '';
+  const days = Math.floor(n / 1440);
+  const hours = Math.floor((n % 1440) / 60);
+  const mins = n % 60;
+  const unit = (v, one) => `${v} ${one}${v === 1 ? '' : 's'}`;
+  // Whole days are clearer than "48 hours" from two days up; 24 hours stays "24 hours" (the common ask).
+  if (days >= 2 && hours === 0 && mins === 0) return unit(days, 'day');
+  const totalHours = Math.floor(n / 60);
+  if (totalHours >= 1 && mins === 0 && n < 2880) return unit(totalHours, 'hour');
+  const parts = [];
+  if (days) parts.push(unit(days, 'day'));
+  if (hours) parts.push(unit(hours, 'hour'));
+  if (mins) parts.push(unit(mins, 'minute'));
+  return parts.join(' ');
+}
