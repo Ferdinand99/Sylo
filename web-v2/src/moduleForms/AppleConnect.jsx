@@ -169,21 +169,22 @@ export default function AppleConnect() {
             />
           </div>
           <div className="v2-field-row">
-            <label className="v2-check">
+            <label className="v2-check v2-check-inline">
               <input
                 type="checkbox"
                 checked={ev.reviews.enabled}
                 onChange={(e) => setKind('reviews', { enabled: e.target.checked })}
               />
-              New customer reviews — only up to
+              <span>New customer reviews — only up to</span>
               <input
                 type="number"
+                className="v2-input-num"
                 min={limitOf(limits, 'events.reviews.maxStars').min}
                 max={limitOf(limits, 'events.reviews.maxStars').max}
                 value={ev.reviews.maxStars}
                 onChange={(e) => setKind('reviews', { maxStars: Number(e.target.value) })}
               />
-              stars
+              <span>stars</span>
             </label>
             <ChannelPick
               channels={data.channels}
@@ -192,21 +193,22 @@ export default function AppleConnect() {
             />
           </div>
           <div className="v2-field-row">
-            <label className="v2-check">
+            <label className="v2-check v2-check-inline">
               <input
                 type="checkbox"
                 checked={ev.expiry.enabled}
                 onChange={(e) => setKind('expiry', { enabled: e.target.checked })}
               />
-              Certificates and profiles expiring — from
+              <span>Certificates and profiles expiring — from</span>
               <input
                 type="number"
+                className="v2-input-num"
                 min={limitOf(limits, 'events.expiry.days').min}
                 max={limitOf(limits, 'events.expiry.days').max}
                 value={ev.expiry.days}
                 onChange={(e) => setKind('expiry', { days: Number(e.target.value) })}
               />
-              days before (and at 7 and 1 days; needs a team API key)
+              <span>days before (and at 7 and 1 days; needs a team API key)</span>
             </label>
             <ChannelPick
               channels={data.channels}

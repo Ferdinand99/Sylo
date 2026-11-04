@@ -27,7 +27,9 @@ export default function Afk() {
               checked={form.setNickname}
               onChange={(e) => setForm((f) => ({ ...f, setNickname: e.target.checked }))}
             />
-            Prefix their nickname with <code>[AFK]</code> (needs Manage Nicknames)
+            <span>
+              Prefix their nickname with <code>[AFK]</code> (needs Manage Nicknames)
+            </span>
           </label>
           <label className="v2-check">
             <input
@@ -35,7 +37,7 @@ export default function Afk() {
               checked={form.mentionReply}
               onChange={(e) => setForm((f) => ({ ...f, mentionReply: e.target.checked }))}
             />
-            Reply in-channel when an AFK member is mentioned
+            <span>Reply in-channel when an AFK member is mentioned</span>
           </label>
         </div>
 

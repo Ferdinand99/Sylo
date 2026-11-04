@@ -248,10 +248,12 @@ export default function Automod() {
                       checked={Boolean(form.native[key])}
                       onChange={(e) => setNative({ [key]: e.target.checked })}
                     />
-                    {label}
-                    {mode(form.rules[key]) === 'off' ? (
-                      <span className="v2-field-hint"> — enable the check above first</span>
-                    ) : null}
+                    <span>
+                      {label}
+                      {mode(form.rules[key]) === 'off' ? (
+                        <span className="v2-field-hint"> — enable the check above first</span>
+                      ) : null}
+                    </span>
                   </label>
                 ))}
               </div>
