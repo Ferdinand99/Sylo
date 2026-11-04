@@ -212,13 +212,12 @@
   flex: none;
 }
 .v2-roadmap-admin-actions {
-  flex-direction: column;
-  align-items: stretch;
+  align-items: center;
 }
-@media (max-width: 600px) {
-  .v2-roadmap-admin-actions {
-    flex-direction: row;
-  }
+/* The status select keeps the app's select look (it is wrapped in .v2-field for that). */
+.v2-roadmap-admin-actions > .v2-field {
+  margin: 0;
+  min-width: 11rem;
 }
 
 /* Announcement banner — title + body share the free width; × stays put. */
@@ -1080,5 +1079,12 @@ a.v2-stat.is-link:focus-visible {
 }
 .v2-backup-help {
   margin-bottom: 20px;
+}
+
+/* Roadmap: a vote count that cannot be clicked (voting off, or not logged in) is plain text. */
+.v2-roadmap-vote.is-static {
+  border-color: transparent;
+  background: transparent;
+  cursor: default;
 }
 

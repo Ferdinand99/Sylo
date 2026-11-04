@@ -21,13 +21,22 @@ function VoteButton({ post, onVote, canVote }) {
     }
   }
 
+  // Without a login (or with voting off) the count is only shown: no button, no border, full colour.
+  if (!canVote) {
+    return (
+      <div className="v2-roadmap-vote is-static" title="Log in to vote">
+        <strong>{formatCount(post.votes)}</strong>
+        <span>vote{post.votes === 1 ? '' : 's'}</span>
+      </div>
+    );
+  }
+
   return (
     <button
       type="button"
       className={`v2-roadmap-vote${post.voted ? ' is-voted' : ''}`}
       onClick={click}
-      disabled={busy || !canVote}
-      title={canVote ? undefined : 'Log in to vote'}
+      disabled={busy}
       aria-pressed={Boolean(post.voted)}
       aria-label={`Vote for ${post.title}, ${formatCount(post.votes)} ${post.votes === 1 ? 'vote' : 'votes'}`}
     >
@@ -104,20 +113,17 @@ export default function Roadmap() {
           </Link>
         ) : null}
       </h1>
-      <p className="v2-note">
+      <p className={`v2-note${d.signedIn ? '' : ' v2-login-prompt'}`}>
         What's planned, in progress, and shipped. Vote on what matters to you, or suggest something new.
+        {d.signedIn ? null : d.open ? (
+          ' Voting and suggesting need a login, and this Sylo has none set up.'
+        ) : (
+          <>
+            {' '}
+            <a href={loginHref()}>Log in</a> to vote or suggest a feature.
+          </>
+        )}
       </p>
-      {!d.signedIn ? (
-        <p className="v2-note v2-login-prompt">
-          {d.open ? (
-            'Voting and suggesting need a login, and this Sylo has none set up.'
-          ) : (
-            <>
-              <a href={loginHref()}>Log in</a> to vote or suggest a feature.
-            </>
-          )}
-        </p>
-      ) : null}
 
       {notice ? <p className="v2-note">{notice}</p> : null}
 

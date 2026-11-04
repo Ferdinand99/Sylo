@@ -10,7 +10,6 @@ import {
   deleteRoadmapPost,
   ApiError,
 } from '../api.js';
-import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { formatCount } from '../util.js';
@@ -204,6 +203,7 @@ export default function RoadmapAdmin() {
               type="text"
               maxLength={100}
               required
+              placeholder="What it is, in a few words"
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
             />
@@ -215,6 +215,7 @@ export default function RoadmapAdmin() {
               rows={5}
               maxLength={2000}
               required
+              placeholder="What will change, and why it helps"
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
             />
@@ -225,6 +226,7 @@ export default function RoadmapAdmin() {
           <button type="submit" className="v2-btn-primary" disabled={submitting}>
             {submitting ? 'Posting…' : 'Post as planned'}
           </button>
+          <p className="v2-field-hint">New posts start as Planned. Change the status in the list below.</p>
         </form>
       </div>
 
@@ -237,12 +239,7 @@ export default function RoadmapAdmin() {
             {d.posts.map((p) => (
               <div className="v2-row v2-row-stack v2-roadmap-row" key={p.id}>
                 <div className="v2-row-main">
-                  <h3 className="v2-break">
-                    <Badge tone={ROADMAP_STATUS[p.status]?.tone}>
-                      {ROADMAP_STATUS[p.status]?.label ?? p.status}
-                    </Badge>{' '}
-                    {p.title}
-                  </h3>
+                  <h3 className="v2-break">{p.title}</h3>
                   <div
                     className="v2-roadmap-desc v2-break"
                     dangerouslySetInnerHTML={{ __html: p.descriptionHtml }}
@@ -253,27 +250,28 @@ export default function RoadmapAdmin() {
 
                   {editingId === p.id ? (
                     <EditRow post={p} onSave={onSaveEdit} onCancel={() => setEditingId(null)} />
-                  ) : (
-                    <div className="v2-field-row v2-section-gap">
-                      <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(p.id)}>
-                        Edit
-                      </button>
-                    </div>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="v2-row-actions v2-roadmap-admin-actions">
-                  <select
-                    aria-label={`Status of ${p.title}`}
-                    value={p.status}
-                    onChange={(e) => run(() => setRoadmapPostStatus(p.id, e.target.value))}
-                  >
-                    {d.statuses.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="v2-field">
+                    <select
+                      aria-label={`Status of ${p.title}`}
+                      value={p.status}
+                      onChange={(e) => run(() => setRoadmapPostStatus(p.id, e.target.value))}
+                    >
+                      {d.statuses.map((s) => (
+                        <option key={s} value={s}>
+                          {ROADMAP_STATUS[s]?.label ?? s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {editingId === p.id ? null : (
+                    <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(p.id)}>
+                      Edit
+                    </button>
+                  )}
                   <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(p)}>
                     Delete
                   </button>
