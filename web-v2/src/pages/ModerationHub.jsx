@@ -82,26 +82,34 @@ function WarnPanel({ guildId, run, busy }) {
   return (
     <form className="v2-rule-card" onSubmit={warn}>
       <h2 className="v2-group-title">Warn a member</h2>
-      <div className="v2-field-row v2-wrap-row">
-        <input
-          type="text"
-          aria-label="User ID or mention"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          placeholder="User ID or @mention"
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
-          required
-        />
-        <input
-          type="text"
-          aria-label="Reason"
-          placeholder="Reason"
-          maxLength={400}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
+      <div className="v2-field-row v2-wrap-row v2-warn-fields">
+        <div className="v2-field">
+          <label htmlFor="warn-member">Member</label>
+          <input
+            id="warn-member"
+            type="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="User ID or @mention"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            required
+          />
+        </div>
+        <div className="v2-field">
+          <label htmlFor="warn-reason">
+            Reason <span className="v2-field-hint">— shown to the member</span>
+          </label>
+          <input
+            id="warn-reason"
+            type="text"
+            placeholder="Why they are being warned"
+            maxLength={400}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </div>
       </div>
       <div className="v2-field-row v2-wrap-row v2-section-gap-sm">
         <button type="submit" className="v2-btn-primary" disabled={busy || !reason.trim()}>

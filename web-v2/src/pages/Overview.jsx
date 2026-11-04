@@ -197,7 +197,7 @@ export default function Overview() {
         </div>
       </div>
 
-      <p className="v2-note">Every module has its own page here.</p>
+      <p className="v2-field-hint">Switch a module on or off here, or open it to change its settings.</p>
 
       <div className="v2-stat-strip">
         <div className="v2-stat">
@@ -206,14 +206,14 @@ export default function Overview() {
           </strong>
           <span>modules active</span>
         </div>
-        <div className="v2-stat">
+        <Link className="v2-stat is-link" to={`/guilds/${guildId}/tickets`}>
           <strong>{formatCount(openTickets)}</strong>
           <span>open {openTickets === 1 ? 'ticket' : 'tickets'}</span>
-        </div>
-        <div className="v2-stat">
+        </Link>
+        <Link className="v2-stat is-link" to={`/guilds/${guildId}/appeals`}>
           <strong>{formatCount(openAppeals)}</strong>
           <span>open {openAppeals === 1 ? 'appeal' : 'appeals'}</span>
-        </div>
+        </Link>
       </div>
 
       <div className="v2-field-row v2-search-row">
@@ -226,7 +226,7 @@ export default function Overview() {
           aria-label="Search modules"
         />
         <button type="button" className="v2-btn-ghost" onClick={toggleSelecting}>
-          {selecting ? 'Cancel' : 'Select'}
+          {selecting ? 'Cancel' : 'Bulk edit'}
         </button>
       </div>
 
