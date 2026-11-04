@@ -27,6 +27,8 @@ function notFound(res) {
     title: 'Quotes unavailable',
     heading: 'No quotes here',
     message: NOT_FOUND,
+    backHref: null,
+    publicPage: true,
   });
 }
 

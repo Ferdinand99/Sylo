@@ -79,6 +79,8 @@ function notFound(res) {
     title: 'Leaderboard unavailable',
     heading: 'No leaderboard here',
     message: NOT_FOUND,
+    backHref: null,
+    publicPage: true,
   });
 }
 

@@ -1,11 +1,17 @@
+<%# Locals: title, heading, message. `backHref` is where the button goes (default: the dashboard);
+    pass null for a public page that has no dashboard to go back to. `publicPage: true` swaps the
+    footer for the "Powered by Sylo" line the other public pages have. %>
 <%- include('partials/auth-head', { title: `Sylo — ${typeof title !== 'undefined' ? title : 'Error'}` }) %>
 
+<% var back = typeof backHref !== 'undefined' ? backHref : '/v2/'; %>
 <section class="card auth-card">
   <h1 class="auth-title"><%= typeof heading !== 'undefined' ? heading : 'Something went wrong' %></h1>
   <p class="muted"><%= typeof message !== 'undefined' ? message : 'Please try again.' %></p>
-  <div class="auth-actions">
-    <a class="btn btn-ghost" href="/v2/">&larr; Back to the dashboard</a>
-  </div>
+  <% if (back) { %>
+    <div class="auth-actions auth-actions-inline">
+      <a class="btn btn-ghost" href="<%= back %>">&larr; Back to the dashboard</a>
+    </div>
+  <% } %>
 </section>
 
-<%- include('partials/auth-foot') %>
+<%- include('partials/auth-foot', { publicPage: typeof publicPage !== 'undefined' && publicPage }) %>
