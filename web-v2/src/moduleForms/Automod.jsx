@@ -5,6 +5,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import UnitInput from '../components/UnitInput.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
@@ -277,10 +278,10 @@ export default function Automod() {
         ) : null}
 
         <div className="v2-field">
-          <label htmlFor="timeoutMinutes">Timeout length for the "Delete + Timeout" action (minutes)</label>
-          <input
+          <label htmlFor="timeoutMinutes">Timeout length for the "Delete + Timeout" action</label>
+          <UnitInput
             id="timeoutMinutes"
-            type="number"
+            unit="minutes"
             min={limitOf(limits, 'timeoutMinutes').min}
             max={limitOf(limits, 'timeoutMinutes').max}
             value={form.timeoutMinutes}

@@ -1,7 +1,9 @@
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import UnitInput from '../components/UnitInput.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { minutesAsText } from '../util.js';
 
 export default function Verification() {
   const limits = useModuleLimits('verification');
@@ -131,15 +133,20 @@ export default function Verification() {
         </div>
 
         <div className="v2-field">
-          <label htmlFor="kickAfterMinutes">Kick members who don't verify within (minutes, 0 = never)</label>
-          <input
+          <label htmlFor="kickAfterMinutes">Kick members who don't verify within</label>
+          <UnitInput
             id="kickAfterMinutes"
-            type="number"
+            unit="minutes"
+            wide
             min={limitOf(limits, 'kickAfterMinutes').min}
             max={limitOf(limits, 'kickAfterMinutes').max}
             value={form.kickAfterMinutes}
             onChange={(e) => set({ kickAfterMinutes: Number(e.target.value) })}
           />
+          <p className="v2-field-hint">
+            {minutesAsText(form.kickAfterMinutes) ? `That is ${minutesAsText(form.kickAfterMinutes)}. ` : ''}0
+            means never.
+          </p>
         </div>
       </form>
 

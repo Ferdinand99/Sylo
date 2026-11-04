@@ -3,6 +3,7 @@ import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
 
 const QUESTION_SLOTS = 5;
 
@@ -97,15 +98,16 @@ export default function Appeals() {
         </div>
 
         <div className="v2-field">
-          <label htmlFor="cooldownDays">Cooldown after a denied appeal (days, 0 = allow immediately)</label>
-          <input
+          <label htmlFor="cooldownDays">Cooldown after a denied appeal</label>
+          <UnitInput
             id="cooldownDays"
-            type="number"
+            unit="days"
             min={limitOf(limits, 'cooldownDays').min}
             max={limitOf(limits, 'cooldownDays').max}
             value={form.cooldownDays}
             onChange={(e) => set({ cooldownDays: Number(e.target.value) })}
           />
+          <p className="v2-field-hint">0 lets them appeal again straight away.</p>
         </div>
 
         <div className="v2-field">

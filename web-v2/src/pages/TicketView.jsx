@@ -6,6 +6,8 @@ import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import Badge from '../components/Badge.jsx';
+import CopyButton from '../components/CopyButton.jsx';
 
 const POLL_MS = 6000;
 // Within this many px of the bottom counts as "reading the latest" — new
@@ -159,9 +161,13 @@ export default function TicketView() {
       <p className="v2-field-hint">
         <Meta
           items={[
-            ticket.userId,
+            <span key="id">
+              User ID <code>{ticket.userId}</code> <CopyButton text={ticket.userId} what="user ID" />
+            </span>,
             `opened ${ticket.openedAgo}`,
-            status === 'open' ? 'open' : 'closed',
+            <Badge key="s" tone={status === 'open' ? 'warning' : 'neutral'}>
+              {status === 'open' ? 'Open' : 'Closed'}
+            </Badge>,
             <a key="t" href={ticketTranscriptUrl(guildId, ticketId)} download>
               Download transcript
             </a>,

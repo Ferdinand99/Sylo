@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import UnitInput from '../components/UnitInput.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
@@ -79,8 +80,8 @@ export default function Moderation() {
           <div className="v2-rule-card" key={r.key}>
             <div className="v2-rule-head">
               <span className="v2-field-hint">Rule</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRule(r.key)}>
-                remove rule
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRule(r.key)}>
+                Remove rule
               </button>
             </div>
             <div className="v2-field-row">
@@ -88,6 +89,7 @@ export default function Moderation() {
                 <label>At warning #</label>
                 <input
                   type="number"
+                  className="v2-input-num"
                   min={limitOf(limits, 'warnThresholds[].count').min}
                   max={limitOf(limits, 'warnThresholds[].count').max}
                   value={r.count}
@@ -106,9 +108,9 @@ export default function Moderation() {
               </div>
               {r.action === 'timeout' ? (
                 <div className="v2-field">
-                  <label>Timeout (min)</label>
-                  <input
-                    type="number"
+                  <label>Timeout length</label>
+                  <UnitInput
+                    unit="minutes"
                     min={limitOf(limits, 'warnThresholds[].durationMinutes').min}
                     value={r.durationMinutes}
                     onChange={(e) => updateRule(r.key, { durationMinutes: Number(e.target.value) })}
@@ -123,20 +125,19 @@ export default function Moderation() {
         </button>
 
         <div className="v2-field v2-section-gap-sm">
-          <label htmlFor="infractionRetentionDays">
-            Delete inactive cases after <span className="v2-field-hint">— days; 0 = keep forever</span>
-          </label>
-          <input
+          <label htmlFor="infractionRetentionDays">Delete inactive cases after</label>
+          <UnitInput
             id="infractionRetentionDays"
-            type="number"
+            unit="days"
             min={limitOf(limits, 'infractionRetentionDays').min}
             max={limitOf(limits, 'infractionRetentionDays').max}
             value={form.infractionRetentionDays}
             onChange={(e) => set({ infractionRetentionDays: Number(e.target.value) })}
           />
           <p className="v2-field-hint">
-            A daily job removes cases that have been deleted or resolved (an unban / untimeout) once they are
-            older than this. Active warnings and the visible history are never auto-removed.
+            0 keeps them forever. A daily job removes cases that have been deleted or resolved (an unban /
+            untimeout) once they are older than this. Active warnings and the visible history are never
+            auto-removed.
           </p>
         </div>
       </form>

@@ -107,7 +107,7 @@ function WarnPanel({ guildId, run, busy }) {
         <button type="submit" className="v2-btn-primary" disabled={busy || !reason.trim()}>
           Warn
         </button>
-        <button type="button" className="v2-btn-danger v2-btn-apart" disabled={busy} onClick={clear}>
+        <button type="button" className="v2-btn-danger-ghost v2-btn-apart" disabled={busy} onClick={clear}>
           Clear their warnings
         </button>
       </div>
