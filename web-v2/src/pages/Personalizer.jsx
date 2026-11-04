@@ -10,6 +10,8 @@ import {
 } from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import { tokensFor } from '../placeholders.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { isDirty } from '../components/formEqual.js';
 import { useUnsavedChangesGuard } from '../components/useUnsavedChangesGuard.js';
@@ -258,6 +260,12 @@ export default function Personalizer() {
             type="text"
             value={presence.text}
             onChange={(e) => setPresence((p) => ({ ...p, text: e.target.value }))}
+          />
+          <PlaceholderHint
+            fieldId="ptext"
+            tokens={tokensFor('presence')}
+            value={presence.text}
+            onChange={(text) => setPresence((p) => ({ ...p, text }))}
           />
         </div>
         <div className="v2-composer-actions">

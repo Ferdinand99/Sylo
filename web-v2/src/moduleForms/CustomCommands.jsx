@@ -6,10 +6,12 @@ import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { PlatformContext } from '../platformContext.jsx';
 import Meta, { plural } from '../components/Meta.jsx';
+import { tokensFor } from '../placeholders.js';
 
 const ACTION_TYPES = [
   ['reply', 'Bot responds with a message in the current channel'],
@@ -34,7 +36,8 @@ function blankAction(type) {
   return a;
 }
 
-function ActionBlock({ action, index, count, roles, channels, onChange, onMove, onRemove }) {
+function ActionBlock({ action, index, count, roles, channels, placeholders, onChange, onMove, onRemove }) {
+  const tokens = tokensFor('customCommands', placeholders);
   const limits = useModuleLimits('custom-commands');
   const set = (patch) => onChange({ ...action, ...patch });
   const updateMessage = (key, patch) =>
@@ -132,11 +135,19 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
                 </div>
               </div>
               <textarea
+                id={`cc-msg-${action.key}-${m.key}`}
+                aria-label={`Message ${mi + 1} text`}
                 rows={2}
                 maxLength={limitOf(limits, 'commands[].actions[].messages[].content').maxLength}
                 placeholder="Write your message here… (leave blank for embed-only)"
                 value={m.content}
                 onChange={(e) => updateMessage(m.key, { content: e.target.value })}
+              />
+              <PlaceholderHint
+                fieldId={`cc-msg-${action.key}-${m.key}`}
+                tokens={tokens}
+                value={m.content}
+                onChange={(content) => updateMessage(m.key, { content })}
               />
               {m.embed ? (
                 <div className="u-mt-2">
@@ -145,6 +156,7 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
                     onChange={(embed) => updateMessage(m.key, { embed })}
                     timestamp
                     placeholders={{ title: 'Embed title', description: 'Embed description' }}
+                    vars={tokens.map((t) => ({ token: t.token, label: t.token.replace(/[{}]/g, '') }))}
                   />
                   <button
                     type="button"
@@ -300,21 +312,12 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
             count={actions.length}
             roles={roles}
             channels={channels}
+            placeholders={placeholders}
             onChange={(next) => updateAction(a.key, next)}
             onMove={(dir) => moveAction(a.key, dir)}
             onRemove={() => removeAction(a.key)}
           />
         ))}
-        {placeholders.length ? (
-          <p className="v2-field-hint">
-            Placeholders:{' '}
-            {placeholders.map((p) => (
-              <code key={p} style={{ marginRight: '6px' }}>
-                {p}
-              </code>
-            ))}
-          </p>
-        ) : null}
 
         {picking ? (
           <div className="v2-field-row" style={{ flexWrap: 'wrap' }}>

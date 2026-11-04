@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
 import ChipPicker from '../components/ChipPicker.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import UnitInput from '../components/UnitInput.jsx';
+import { tokensFor } from '../placeholders.js';
 
 export default function Tickets() {
   const limits = useModuleLimits('tickets');
@@ -27,10 +29,7 @@ export default function Tickets() {
 
       <form onSubmit={save} data-savebar>
         <div className="v2-field">
-          <label htmlFor="greeting">
-            Greeting sent when a ticket opens{' '}
-            <span className="v2-field-hint">— {'{server}'} is replaced</span>
-          </label>
+          <label htmlFor="greeting">Greeting sent when a ticket opens</label>
           <textarea
             id="greeting"
             rows={2}
@@ -38,6 +37,12 @@ export default function Tickets() {
             placeholder="Thanks for contacting the staff of {server}…"
             value={form.greeting}
             onChange={(e) => set({ greeting: e.target.value })}
+          />
+          <PlaceholderHint
+            fieldId="greeting"
+            tokens={tokensFor('tickets')}
+            value={form.greeting}
+            onChange={(greeting) => set({ greeting })}
           />
         </div>
 
@@ -50,6 +55,12 @@ export default function Tickets() {
             placeholder="This ticket has been closed…"
             value={form.closeMessage}
             onChange={(e) => set({ closeMessage: e.target.value })}
+          />
+          <PlaceholderHint
+            fieldId="closeMessage"
+            tokens={tokensFor('tickets')}
+            value={form.closeMessage}
+            onChange={(closeMessage) => set({ closeMessage })}
           />
         </div>
 

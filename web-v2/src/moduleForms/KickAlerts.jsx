@@ -1,8 +1,12 @@
+import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import SetupCallout from '../components/SetupCallout.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { cardTitle } from '../util.js';
+import { tokensFor } from '../placeholders.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -52,15 +56,17 @@ export default function KickAlerts() {
       <h1 className="v2-section-title">Kick alerts</h1>
       <p className="v2-field-hint">
         Sylo checks each streamer about once a minute and posts to the chosen channel when they go live.
-        Message placeholders: <code>{'{name}'}</code> <code>{'{title}'}</code> <code>{'{game}'}</code>{' '}
-        <code>{'{url}'}</code> <code>{'{viewers}'}</code>.
       </p>
 
       {!data.kickEnabled ? (
-        <p className="v2-warn-text">
-          Set KICK_CLIENT_ID and KICK_CLIENT_SECRET (a free app under kick.com/settings/developer) for alerts
-          to actually fire. You can still configure them here.
-        </p>
+        <SetupCallout
+          what="Kick alerts"
+          keys="Kick API keys"
+          vars={['KICK_CLIENT_ID', 'KICK_CLIENT_SECRET']}
+          where="a free app under kick.com/settings/developer"
+        >
+          You can set things up now; alerts start once the keys are in.
+        </SetupCallout>
       ) : null}
 
       <form onSubmit={save} data-savebar>
@@ -75,18 +81,23 @@ export default function KickAlerts() {
 
             <div className="v2-field-row">
               <div className="v2-field">
-                <label>Kick username</label>
+                <label htmlFor={`kk-user-${a.key}`}>Kick username</label>
                 <input
+                  id={`kk-user-${a.key}`}
                   type="text"
                   maxLength={limitOf(limits, 'alerts[].slug').maxLength}
-                  placeholder="xqc"
+                  placeholder="e.g. streamer_name"
                   value={a.slug}
                   onChange={(e) => updateRow(a.key, { slug: e.target.value })}
                 />
               </div>
               <div className="v2-field">
-                <label>Announce in</label>
-                <select value={a.channelId} onChange={(e) => updateRow(a.key, { channelId: e.target.value })}>
+                <label htmlFor={`kk-to-${a.key}`}>Announce in</label>
+                <select
+                  id={`kk-to-${a.key}`}
+                  value={a.channelId}
+                  onChange={(e) => updateRow(a.key, { channelId: e.target.value })}
+                >
                   <option value="">— select a channel —</option>
                   {data.channels.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -110,14 +121,25 @@ export default function KickAlerts() {
               </div>
             </div>
 
+            {a.slug && !a.channelId ? (
+              <p className="v2-field-hint">This streamer won't be checked until you choose a channel.</p>
+            ) : null}
+
             <div className="v2-field">
-              <label>Message</label>
-              <textarea
+              <label htmlFor={`kk-msg-${a.key}`}>Message</label>
+              <AutoGrowTextarea
+                id={`kk-msg-${a.key}`}
                 rows={2}
                 maxLength={limitOf(limits, 'alerts[].message').maxLength}
                 placeholder={data.defaultMessage}
                 value={a.message}
                 onChange={(e) => updateRow(a.key, { message: e.target.value })}
+              />
+              <PlaceholderHint
+                fieldId={`kk-msg-${a.key}`}
+                tokens={tokensFor('kick')}
+                value={a.message}
+                onChange={(message) => updateRow(a.key, { message })}
               />
             </div>
 

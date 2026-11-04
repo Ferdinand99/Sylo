@@ -1,10 +1,12 @@
 import ChipPicker from '../components/ChipPicker.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import UnitInput from '../components/UnitInput.jsx';
 import { cardTitle } from '../util.js';
+import { tokensFor } from '../placeholders.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -148,17 +150,22 @@ export default function TempVoice() {
             </div>
 
             <div className="v2-field">
-              <label>Temporary channel name</label>
+              <label htmlFor={`tv-name-${h.key}`}>Temporary channel name</label>
               <input
+                id={`tv-name-${h.key}`}
                 type="text"
                 maxLength={limitOf(limits, 'hubs[].nameTemplate').maxLength}
                 placeholder={DEFAULT_NAME}
                 value={h.nameTemplate}
                 onChange={(e) => updateHub(h.key, { nameTemplate: e.target.value })}
               />
-              <p className="v2-field-hint">
-                Tokens: {'{index}'} (Nth channel), {'{username}'}. Preview: {preview(h.nameTemplate)}
-              </p>
+              <PlaceholderHint
+                fieldId={`tv-name-${h.key}`}
+                tokens={tokensFor('tempVoice')}
+                value={h.nameTemplate}
+                onChange={(nameTemplate) => updateHub(h.key, { nameTemplate })}
+              />
+              <p className="v2-field-hint">Preview: {preview(h.nameTemplate)}</p>
             </div>
 
             <div className="v2-field-row">

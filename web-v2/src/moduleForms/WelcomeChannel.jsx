@@ -9,11 +9,13 @@ import {
 } from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { isDirty } from '../components/formEqual.js';
 import { useUnsavedChangesGuard } from '../components/useUnsavedChangesGuard.js';
 import EmbedCard, { EmbedToolbar, pickImage, newKey } from '../components/EmbedCard.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { tokensFor } from '../placeholders.js';
 
 // One line on what each "Add element" option gives you, by preset id; banners share one text.
 const PRESET_HINTS = {
@@ -241,8 +243,8 @@ export default function WelcomeChannel() {
     <form onSubmit={(e) => e.preventDefault()}>
       <h1 className="v2-section-title">Welcome channel</h1>
       <p className="v2-field-hint">
-        Build one rich message for a dedicated <strong>read-only</strong> channel. Placeholders:{' '}
-        <code>{'{server}'}</code>, <code>{'{memberCount}'}</code>.
+        Build one rich message for a dedicated <strong>read-only</strong> channel. Placeholders such as the
+        server name work in the message text and inside the embeds.
       </p>
 
       <div className="v2-field-row v2-wc-channel v2-section-gap">
@@ -273,6 +275,12 @@ export default function WelcomeChannel() {
           placeholder="Welcome to {server}!"
           value={form.content}
           onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+        />
+        <PlaceholderHint
+          fieldId="wc-content"
+          tokens={tokensFor('welcomeChannel')}
+          value={form.content}
+          onChange={(content) => setForm((f) => ({ ...f, content }))}
         />
       </div>
 

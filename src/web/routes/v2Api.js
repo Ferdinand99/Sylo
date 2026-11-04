@@ -195,6 +195,7 @@ import {
   normaliseVerificationConfig,
   VERIFY_MODES,
   ensureVerifyMessage,
+  effectiveMode as effectiveVerifyMode,
 } from '../../modules/verification.js';
 import {
   topMembers,
@@ -612,6 +613,8 @@ router.get(
       channels: guildTextChannels(guild),
       roles: assignableRoles(guild),
       verificationEnabled: verification.enabled,
+      // 'button' or 'captcha' (captcha only counts when the captcha keys are set), for the verify row.
+      verificationMode: effectiveVerifyMode(verification.config),
       placeholders: WELCOME_PLACEHOLDERS,
     });
   })

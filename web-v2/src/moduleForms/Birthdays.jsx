@@ -1,9 +1,11 @@
 import { useCmd } from '../platformContext.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { tokensFor } from '../placeholders.js';
 
 export default function Birthdays() {
   const cmd = useCmd();
@@ -19,8 +21,8 @@ export default function Birthdays() {
     <>
       <h1 className="v2-section-title">Birthdays</h1>
       <p className="v2-field-hint">
-        Members save their own date with <code>{cmd('/birthday set')}</code>. Sylo checks once a day and posts
-        here. Placeholders: <code>{'{user}'}</code> <code>{'{age}'}</code> (blank unless a year was given).
+        Members save their own date with <code>{cmd('/birthday set')}</code>. Sylo posts the message once a
+        day, shortly after midnight in the time zone Sylo runs in (not each member's own).
       </p>
 
       <form onSubmit={save} data-savebar>
@@ -45,6 +47,12 @@ export default function Birthdays() {
             placeholder="🎂 Happy birthday {user}! 🎉"
             value={form.message}
             onChange={(e) => set({ message: e.target.value })}
+          />
+          <PlaceholderHint
+            fieldId="message"
+            tokens={tokensFor('birthdays')}
+            value={form.message}
+            onChange={(message) => set({ message })}
           />
         </div>
 
@@ -75,7 +83,12 @@ export default function Birthdays() {
           Ping the birthday role in the announcement
         </label>
       </form>
-      <SendTestButton moduleId="birthdays" disabled={dirty} />
+      <SendTestButton
+        moduleId="birthdays"
+        disabled={dirty}
+        sample="a sample birthday message (not your own text)"
+        channelName={data.channels.find((c) => c.id === form.channel)?.name}
+      />
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ChipPicker from '../components/ChipPicker.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
@@ -12,6 +13,7 @@ import {
 } from '../../../src/lib/autoThreadName.js';
 import UnitInput from '../components/UnitInput.jsx';
 import { channelTitle } from '../util.js';
+import { tokensFor } from '../placeholders.js';
 
 const ARCHIVE_LABELS = { 60: '1 hour', 1440: '24 hours', 4320: '3 days', 10080: '7 days' };
 const SAMPLE_AUTHOR = 'Alex';
@@ -127,10 +129,15 @@ export default function AutoThreads() {
                   value={r.nameTemplate}
                   onChange={(e) => updateRule(r.key, { nameTemplate: e.target.value })}
                 />
+                <PlaceholderHint
+                  fieldId={`at-name-${r.key}`}
+                  tokens={tokensFor('autoThreadsName')}
+                  value={r.nameTemplate}
+                  onChange={(nameTemplate) => updateRule(r.key, { nameTemplate })}
+                  ignoreCase
+                />
                 <p className="v2-field-hint">
-                  <code>{'{author}'}</code> the poster, <code>{'{date}'}</code> the day (UTC),{' '}
-                  <code>{'{words}'}</code> the first 6 words of the post (the poster if it has none). Cut at
-                  100 characters.
+                  {'{words}'} is the poster's name if the post has no words. Names are cut at 100 characters.
                 </p>
                 <p className="v2-field-hint" data-testid={`at-preview-${i}`}>
                   Preview: <strong>{preview}</strong> ({[...preview].length}/100)
@@ -171,8 +178,8 @@ export default function AutoThreads() {
                   Only posts with a link
                 </label>
                 <p className="v2-field-hint">
-                  With both on, a post needs one of the two. Links are found in the text, so this needs the
-                  Message Content intent.
+                  With both on, a post needs one of the two. Sylo finds links by reading the post's text, so
+                  this only works when the bot owner has allowed Sylo to read message text.
                 </p>
                 <label className="v2-check">
                   <input
@@ -225,9 +232,12 @@ export default function AutoThreads() {
                   value={r.firstMessage}
                   onChange={(e) => updateRule(r.key, { firstMessage: e.target.value })}
                 />
-                <p className="v2-field-hint">
-                  <code>{'{author}'}</code> becomes a mention of the poster.
-                </p>
+                <PlaceholderHint
+                  fieldId={`at-first-${r.key}`}
+                  tokens={tokensFor('autoThreadsFirstReply')}
+                  value={r.firstMessage}
+                  onChange={(firstMessage) => updateRule(r.key, { firstMessage })}
+                />
               </div>
 
               <div className="v2-field">

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api.js';
 import ChipPicker from '../components/ChipPicker.jsx';
+import HowItWorks from '../components/HowItWorks.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -10,6 +12,7 @@ import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import UnitInput from '../components/UnitInput.jsx';
 import Meta from '../components/Meta.jsx';
+import { tokensFor } from '../placeholders.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -112,12 +115,19 @@ export default function Leveling() {
     <>
       <h1 className="v2-section-title">Leveling</h1>
       <p className="v2-field-hint">
-        Members earn 15–25 XP per message (once per cooldown), plus optional voice XP, with each level needing
-        more than the last — scaled by the XP rate and any role/channel multipliers below. The public web
-        leaderboard toggle is on the Leaderboard page. Turn the <code>/rank</code> and{' '}
-        <code>/leaderboard</code> commands off, or limit them to certain channels or roles, on the{' '}
-        <Link to={`/guilds/${guildId}/commands`}>Commands</Link> page.
+        Members earn XP by chatting and level up, and you can reward levels with roles.
       </p>
+      <p className="v2-field-hint">
+        Commands: <code>/rank</code> <code>/leaderboard</code>. Turn them off, or limit them to certain
+        channels or roles, on the <Link to={`/guilds/${guildId}/commands`}>Commands</Link> page.
+      </p>
+      <HowItWorks>
+        <p>
+          Members earn 15–25 XP per message (once per cooldown), plus optional voice XP. Each level needs more
+          than the last, scaled by the XP rate and any role or channel multipliers below.
+        </p>
+        <p>The public leaderboard on/off switch is on the Leaderboard page.</p>
+      </HowItWorks>
 
       <form onSubmit={save} data-savebar>
         <div className="v2-group">
@@ -146,18 +156,20 @@ export default function Leveling() {
             </select>
           </div>
           <div className="v2-field">
-            <label>
-              Level-up message{' '}
-              <span className="v2-field-hint">
-                — {'{player}'} {'{level}'} {'{username}'} {'{server}'}
-              </span>
-            </label>
+            <label htmlFor="announceMessage">Level-up message</label>
             <textarea
+              id="announceMessage"
               rows={2}
               maxLength={limitOf(limits, 'announceMessage').maxLength}
               placeholder="GG {player}, you just advanced to level {level}!"
               value={form.announceMessage}
               onChange={(e) => set({ announceMessage: e.target.value })}
+            />
+            <PlaceholderHint
+              fieldId="announceMessage"
+              tokens={tokensFor('leveling')}
+              value={form.announceMessage}
+              onChange={(announceMessage) => set({ announceMessage })}
             />
           </div>
           <div className="v2-field">
