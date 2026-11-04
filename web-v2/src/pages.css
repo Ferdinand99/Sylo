@@ -464,21 +464,7 @@
   border-color: transparent;
   font-weight: 500;
 }
-.v2-hub-tabs .v2-tab.is-active {
-  background: var(--bg-surface);
-  border-color: var(--border-strong);
-  color: var(--text);
-}
-.v2-case-action {
-  display: inline-block;
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  line-height: 1.5;
-  vertical-align: 0.1em;
-}
+/* The active hub tab looks like the active sub-tab (.v2-tab.is-active in styles.css). */
 
 /* ---------- Tickets: inbox + conversation ---------- */
 .v2-unread-dot {
