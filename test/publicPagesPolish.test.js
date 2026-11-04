@@ -6,6 +6,8 @@ import { SAMPLES, VIEWS, plainProblems, renderError, renderSample } from './help
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import ejs from 'ejs';
 
 const web = await startWebApp();
@@ -72,13 +74,59 @@ test('the verify page names the server, follows the theme and keeps the button o
   assert.match(html, /Verify to continue/, 'no server name known');
   assert.match(html, /data-theme="auto"/);
   assert.doesNotMatch(html, /data-theme="dark"/);
-  assert.match(html, /<script src="\/verify\.js" defer><\/script>/);
+  // verify.js comes first and is a plain blocking script, so its callbacks exist whenever
+  // Cloudflare's script renders the widget.
+  assert.match(html, /<script src="\/verify\.js"><\/script>/);
+  assert.ok(html.indexOf('/verify.js') < html.indexOf('challenges.cloudflare.com/turnstile/v0/api.js'));
+  assert.doesNotMatch(html, /<script src="\/verify\.js"[^>]*(async|defer)/);
+  assert.match(html, /id="verify-hint">Complete the check above to continue\./);
+  assert.match(html, /id="verify-submit" aria-describedby="verify-hint"/);
   assert.match(html, /data-callback="syloTurnstileDone"/);
   assert.match(html, /id="verify-submit"/);
 
   const named = await render('verify.ejs', { ...SAMPLES['verify-challenge'].data, guildName: 'Hedgerow HQ' });
   assert.match(named, /<h1 class="page-title">Verify to join Hedgerow HQ<\/h1>/);
   assert.deepEqual(plainProblems(named), []);
+});
+
+test('verify.js: callbacks exist at once, and a pass before the page is parsed is not undone', () => {
+  const src = readFileSync(new URL('../src/web/public/verify.js', import.meta.url), 'utf8');
+  const button = { disabled: false };
+  const hint = { hidden: false };
+  let parsed = false;
+  let onReady = null;
+  const win = {};
+  runInNewContext(src, {
+    window: win,
+    document: {
+      getElementById: (id) => (parsed ? { 'verify-submit': button, 'verify-hint': hint }[id] : null),
+      addEventListener: (type, fn) => {
+        if (type === 'DOMContentLoaded') onReady = fn;
+      },
+    },
+  });
+  assert.equal(typeof win.syloTurnstileDone, 'function');
+  assert.equal(typeof win.syloTurnstileReset, 'function');
+  // The check passes before the page is parsed (no button to find yet); then the page is ready.
+  win.syloTurnstileDone();
+  parsed = true;
+  onReady();
+  assert.equal(button.disabled, false, 'passed already: stays on');
+  assert.equal(hint.hidden, true);
+  win.syloTurnstileReset(); // expired
+  assert.equal(button.disabled, true);
+  assert.equal(hint.hidden, false);
+  win.syloTurnstileDone();
+  assert.equal(button.disabled, false);
+});
+
+test('verify wording follows the server platform', async () => {
+  const discord = await (await get('/verify/900000000000000201?t=bad')).text();
+  assert.match(discord, /Click Verify again in Discord\./);
+  const fluxer = await (await get('/verify/fluxer:900000000000000202?t=bad')).text();
+  assert.match(fluxer, /Click Verify again in Fluxer\./);
+  const done = await render('verify.ejs', { ...SAMPLES['verify-done'].data, platformName: 'Fluxer' });
+  assert.match(done, /head back to Fluxer\./);
 });
 
 test('a failed verification reads in the normal text colour', async () => {
@@ -94,23 +142,22 @@ test('the appeal form ties each label to its box and says what is required and h
   assert.match(html, /<p class="pub-eyebrow">Hedgerow HQ<\/p>/);
   assert.match(html, /<h1 class="page-title">Appeal your ban<\/h1>/);
   assert.match(html, /<p class="pub-callout">Bookmark this page: the decision will appear here\.<\/p>/);
+  // The server takes any one answer, so with several questions none is required on its own.
+  assert.match(html, /<label for="appeal-a-0">Why were you banned\?<\/label>/);
+  assert.match(html, /<label for="appeal-a-1">Why should we lift the ban\?<\/label>/);
   assert.match(
     html,
-    /<label for="appeal-a-0">Why were you banned\? <span class="muted small">\(required\)<\/span><\/label>/
+    /<textarea id="appeal-a-0" name="a" rows="3" maxlength="2000" aria-describedby="appeal-hint"><\/textarea>/
   );
+  assert.doesNotMatch(html, / required>/);
+  assert.match(html, /Answer at least one question\. Each answer can be up to 2,000 characters\./);
+
+  const single = await render('appeal.ejs', { ...SAMPLES['appeal-form'].data, questions: ['Why?'] });
   assert.match(
-    html,
-    /<label for="appeal-a-1">Why should we lift the ban\? <span class="muted small">\(optional\)<\/span><\/label>/
+    single,
+    /<label for="appeal-a-0">Why\? <span class="muted small">\(required\)<\/span><\/label>/
   );
-  assert.match(
-    html,
-    /<textarea id="appeal-a-0" name="a" rows="3" maxlength="2000" aria-describedby="appeal-hint" required>/
-  );
-  assert.match(
-    html,
-    /<textarea id="appeal-a-1" name="a" rows="3" maxlength="2000" aria-describedby="appeal-hint" >/
-  );
-  assert.match(html, /up to 2,000 characters/);
+  assert.match(single, /aria-describedby="appeal-hint" required><\/textarea>/);
 });
 
 test('an appeal error page has its own heading and normal-coloured text', async () => {
@@ -171,4 +218,30 @@ test('sign-in uses one verb, Discord first', async () => {
   assert.match(login, /Sign in with Discord[\s\S]*Sign in with Fluxer/);
   assert.doesNotMatch(login, /Log in/);
   assert.match(await renderSample('event-signin'), /Sign in with Discord/);
+});
+
+test('the public leaderboard works the level and the percent out from the xp, rounding down', async () => {
+  const { GID } = await import('./helpers/fakeGuild.js');
+  const { setGuildModule } = await import('../src/db/modules.js');
+  const { setXp } = await import('../src/db/leveling.js');
+  const { levelProgress } = await import('../src/modules/lib/levels.js');
+  await setGuildModule(GID, 'leveling', { enabled: true, config: {} });
+  // The page looks its members up on the platform; none are found here.
+  web.guild.client ??= { users: { fetch: async () => null } };
+  const inner = web.guild.members.fetch;
+  web.guild.members.fetch = async (arg) => (typeof arg === 'object' ? new Map() : inner(arg));
+  // An xp that sits just under a whole percent of its level, where rounding would go up.
+  let xp;
+  let p;
+  for (xp = 200; xp < 5000; xp += 1) {
+    p = levelProgress(xp);
+    if (p.pct * 100 - Math.floor(p.pct * 100) > 0.6) break;
+  }
+  await setXp(GID, '123456789012345001', xp);
+  const html = await (await get(`/leaderboard/${GID}`)).text();
+  assert.match(
+    html,
+    new RegExp(`<div class="lb-progress muted">${Math.floor(p.pct * 100)}% to level ${p.level + 1}</div>`)
+  );
+  assert.match(html, new RegExp(`<span class="lb-level">Level ${p.level}</span>`));
 });
