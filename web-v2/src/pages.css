@@ -233,9 +233,32 @@
 
 /* Audit log — the action key ("settings:server") reads as an identifier. */
 .v2-audit-action {
-  font-family: var(--mono);
-  font-size: var(--fs-sm);
   letter-spacing: 0;
+}
+/* The age sits on the meta line on a phone, in its own column from tablet width up. */
+.v2-audit-ago-inline {
+  display: none;
+  color: var(--text-muted);
+}
+@media (max-width: 600px) {
+  .v2-audit-ago-inline {
+    display: inline;
+  }
+  .v2-row-stack > .v2-row-time {
+    display: none;
+  }
+}
+/* "Settings › Audit log" above a sub-page title. */
+.v2-breadcrumb {
+  margin: 0 0 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.v2-breadcrumb a {
+  color: var(--text-muted);
+}
+.v2-breadcrumb [aria-current='page'] {
+  color: var(--text);
 }
 
 /* Member data — the lookup box takes the free width, the button keeps its own;
