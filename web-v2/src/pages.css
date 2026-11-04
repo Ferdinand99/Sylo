@@ -1088,3 +1088,11 @@ a.v2-stat.is-link:focus-visible {
   cursor: default;
 }
 
+/* ---------- Bot Personalizer ---------- */
+/* Identity, Presence and Announcement are three separate forms: a hairline and room between them. */
+.v2-group-title.v2-section-divided {
+  margin-top: 40px;
+  padding-top: 28px;
+  border-top: 1px solid var(--border-subtle);
+}
+

@@ -13,6 +13,9 @@ import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { isDirty } from '../components/formEqual.js';
 import { useUnsavedChangesGuard } from '../components/useUnsavedChangesGuard.js';
+import { initial } from '../util.js';
+
+const STATUS_LABELS = { online: 'Online', idle: 'Idle', dnd: 'Do not disturb', invisible: 'Invisible' };
 
 export default function Personalizer() {
   const [state, setState] = useState({
@@ -153,7 +156,13 @@ export default function Personalizer() {
         <p className="v2-note">The bot isn't connected yet — try again in a moment.</p>
       ) : (
         <div className="v2-hero">
-          <img src={state.bot.avatar} alt="" />
+          {state.bot.avatar ? (
+            <img src={state.bot.avatar} alt="" />
+          ) : (
+            <div className="v2-hero-ph" aria-hidden="true">
+              {initial(state.bot.tag)}
+            </div>
+          )}
           <div>
             <h2>{state.bot.tag}</h2>
             <p>Bot-wide identity — affects every server Sylo is in.</p>
@@ -161,6 +170,7 @@ export default function Personalizer() {
         </div>
       )}
 
+      <h2 className="v2-group-title">Identity</h2>
       <form onSubmit={onSaveIdentity}>
         <div className="v2-field">
           <label htmlFor="username">Username</label>
@@ -211,7 +221,7 @@ export default function Personalizer() {
         </div>
       </form>
 
-      <h2 className="v2-group-title v2-section-gap">Presence</h2>
+      <h2 className="v2-group-title v2-section-gap v2-section-divided">Presence</h2>
       <form onSubmit={onSavePresence}>
         <div className="v2-field">
           <label htmlFor="pstatus">Status</label>
@@ -222,7 +232,7 @@ export default function Personalizer() {
           >
             {state.statuses.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {STATUS_LABELS[s] ?? s.charAt(0).toUpperCase() + s.slice(1)}
               </option>
             ))}
           </select>
@@ -260,7 +270,7 @@ export default function Personalizer() {
         </div>
       </form>
 
-      <h2 className="v2-group-title v2-section-gap">Announcement</h2>
+      <h2 className="v2-group-title v2-section-gap v2-section-divided">Announcement</h2>
       <p className="v2-field-hint">
         Shown to everyone signed in to the dashboard, on every page — e.g. to explain an incident or outage.{' '}
         <strong>Critical</strong> announcements have no dismiss button and stay until you clear them.

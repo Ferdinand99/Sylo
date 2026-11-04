@@ -20,10 +20,9 @@ export default function CommandList() {
 
   return (
     <>
-      <h1 className="v2-section-title">Commands</h1>
+      <h1 className="v2-section-title">Command list</h1>
       <p className="v2-field-hint">
-        Every slash command Sylo has, generated from the commands it has loaded. Use them in any server Sylo
-        is in.
+        Every slash command Sylo has. Type them in any server Sylo is in; search by name or by what they do.
       </p>
       <input
         className="v2-search"
@@ -69,7 +68,7 @@ export default function CommandList() {
         </div>
       ) : (
         <p className="v2-state v2-break is-instant">
-          {q ? `No commands match "${query.trim()}".` : 'No commands loaded yet.'}
+          {q ? `No commands match "${query.trim()}".` : 'No commands to show yet.'}
         </p>
       )}
     </>
