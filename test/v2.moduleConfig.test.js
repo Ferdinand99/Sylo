@@ -176,7 +176,7 @@ test('automod pushes native rules once, ignores an unchanged save, and removes t
   const stored = (await getGuildModule(GID, 'automod')).config;
   assert.equal(stored.timeoutMinutes, 5);
   assert.deepEqual(stored.rules.words.list, ['badword', 'another']);
-  assert.deepEqual(stored.exemptRoles, [ROLE.member], 'immunity roles are not touched by this form');
+  assert.deepEqual(stored.exemptRoles, [ROLE.member], 'immunity roles are kept when the form sends none');
   assert.equal((await lastAudit('module:automod')).detail, 'settings saved');
 
   // Saving again with no change is a no-op.
@@ -186,6 +186,31 @@ test('automod pushes native rules once, ignores an unchanged save, and removes t
   // Turning native enforcement off tears the rule down.
   await api.post('/modules/automod/config', { ...body, native: { enabled: false } });
   assert.equal(app.sink.automodRules.length, 0);
+});
+
+test('automod saves the immunity roles with the rest of the form, and keeps them when none are sent', async () => {
+  const ROLE_A = '100000000000000701';
+  const ROLE_B = '100000000000000702';
+  await setGuildModule(GID, 'automod', { config: { exemptRoles: [ROLE.member] } });
+  const body = { timeoutMinutes: 6, rules: { words: { enabled: false } }, native: { enabled: false } };
+
+  // The list in the form replaces the stored one; junk ids and duplicates are dropped.
+  const saved = await api.post('/modules/automod/config', {
+    ...body,
+    exemptRoles: [ROLE_A, ROLE_B, ROLE_A, 'junk', 12],
+  });
+  assert.equal(saved.status, 200);
+  assert.deepEqual((await saved.json()).config.exemptRoles, [ROLE_A, ROLE_B]);
+  assert.deepEqual((await getGuildModule(GID, 'automod')).config.exemptRoles, [ROLE_A, ROLE_B]);
+  assert.equal((await getGuildModule(GID, 'automod')).config.timeoutMinutes, 6);
+
+  // Sending none at all (an older client) leaves them alone.
+  await api.post('/modules/automod/config', { ...body, timeoutMinutes: 8 });
+  assert.deepEqual((await getGuildModule(GID, 'automod')).config.exemptRoles, [ROLE_A, ROLE_B]);
+
+  // An empty list clears them.
+  await api.post('/modules/automod/config', { ...body, exemptRoles: [] });
+  assert.deepEqual((await getGuildModule(GID, 'automod')).config.exemptRoles, []);
 });
 
 // --- module switches --------------------------------------------------------------------------

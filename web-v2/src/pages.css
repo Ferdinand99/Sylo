@@ -934,3 +934,37 @@ a.v2-stat.is-link:focus-visible {
   margin: 0;
 }
 
+/* ---------- Auto-moderation ---------- */
+/* Rule text on the left, the action select in a fixed column on the right, so every select lines up. */
+.v2-am-rule-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: center;
+  gap: 8px 16px;
+}
+.v2-am-rule-text p {
+  margin: 2px 0 0;
+}
+@media (max-width: 600px) {
+  .v2-am-rule-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* A rule that is switched off reads as off: dimmed text (the select stays full strength) and an "Off" badge. */
+.v2-am-rule.is-off .v2-am-rule-text {
+  opacity: 0.62;
+}
+.v2-am-summary {
+  font-weight: 400;
+}
+/* Options that only apply once their parent switch is on. */
+.v2-check-sub {
+  margin-left: 26px;
+}
+.v2-check-sub.is-disabled {
+  opacity: 0.55;
+}
+.v2-check-sub-title {
+  margin-left: 26px;
+}
+

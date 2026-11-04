@@ -1014,14 +1014,14 @@ router.post(
 router.post(
   '/guilds/:guildId/modules/automod/config',
   asyncHandler(async (req, res) => {
-    // Immunity (exempt) roles are saved through their own route (/automod/immunity), not this
-    // form — keep whatever is already stored.
+    // The immunity roles are part of this form now (one Save button for the page). A caller that
+    // does not send the list (an older client, the immunity-only route below) keeps what is stored.
     const prev = (await getGuildModule(req.guild.id, 'automod')).config;
     const config = normaliseAutomodConfig({
       deleteMessage: true,
       timeoutMinutes: req.body.timeoutMinutes,
       exemptChannels: req.body.exemptChannels,
-      exemptRoles: prev.exemptRoles ?? [],
+      exemptRoles: Array.isArray(req.body.exemptRoles) ? req.body.exemptRoles : (prev.exemptRoles ?? []),
       native: req.body.native,
       rules: req.body.rules,
     });
