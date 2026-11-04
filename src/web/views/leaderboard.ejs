@@ -38,13 +38,16 @@
             <% if (m.avatar) { %><img class="lb-avatar" src="<%= m.avatar %>" alt="" /><% } else { %><span class="lb-avatar lb-avatar-blank"></span><% } %>
             <div class="lb-main">
               <div class="lb-name<%= m.left ? ' muted' : '' %>"><%= m.name %></div>
-              <% if (m.level !== null) { %><meter class="lb-bar" min="0" max="100" value="<%= m.pct %>" aria-label="Progress to the next level"><%= m.pct %>%</meter><% } %>
+              <% if (m.level !== null) { %>
+                <meter class="lb-bar" min="0" max="100" value="<%= m.pct %>" title="<%= m.pct %>% of the way to level <%= m.level + 1 %>" aria-label="Progress to level <%= m.level + 1 %>"><%= m.pct %>%</meter>
+                <div class="lb-progress muted"><%= m.pct %>% to level <%= m.level + 1 %></div>
+              <% } %>
             </div>
             <div class="lb-stats">
               <% if (m.level !== null) { %><span class="lb-level">Level <%= m.level %></span><% } %>
-              <span class="muted small"><%= m.xp.toLocaleString('en') %> XP · <%= m.messages.toLocaleString('en') %> msgs</span>
+              <span class="muted small"><span class="lb-stat"><%= m.xp.toLocaleString('en') %> XP</span> · <span class="lb-stat"><%= m.messages.toLocaleString('en') %> msgs</span></span>
               <% if (m.voiceXp > 0) { %>
-                <span class="muted small"><%= m.voiceXp.toLocaleString('en') %> voice XP<% if (m.voiceMinutes > 0) { %> · <%= hm(m.voiceMinutes) %><% } %></span>
+                <span class="muted small"><span class="lb-stat"><%= m.voiceXp.toLocaleString('en') %> voice XP</span><% if (m.voiceMinutes > 0) { %> · <span class="lb-stat"><%= hm(m.voiceMinutes) %></span><% } %></span>
               <% } %>
             </div>
           </li>

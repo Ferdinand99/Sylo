@@ -11,17 +11,20 @@
   <main class="verify-wrap">
     <div class="pub-brand"><img src="/favicon.svg" alt="" width="28" height="28" /><span>Sylo</span></div>
     <div class="card">
+      <% if (typeof guildName !== 'undefined' && guildName) { %><p class="pub-eyebrow"><%= guildName %></p><% } %>
       <% if (state === 'form') { %>
-        <h1 class="page-title">Appeal your ban<% if (guildName) { %> — <%= guildName %><% } %></h1>
-        <p class="muted">Answer honestly. A moderator will review this. The decision will show up on this page — keep the link.</p>
+        <h1 class="page-title">Appeal your ban</h1>
+        <p class="muted">Answer honestly. A moderator will review this.</p>
+        <p class="pub-callout">Bookmark this page: the decision will appear here.</p>
         <% if (typeof message !== 'undefined' && message) { %>
-          <p class="warn-text"><%= message %></p>
+          <p class="warn-text" role="alert"><%= message %></p>
         <% } %>
         <form method="POST" action="/appeal/<%= guildId %>" class="stack">
           <input type="hidden" name="t" value="<%= token %>" />
+          <p class="muted small" id="appeal-hint">Each answer can be up to 2,000 characters.<% if (questions.length > 1) { %> Answer the first question; the others are optional.<% } %></p>
           <% questions.forEach(function (q, i) { %>
-            <label class="small"><%= q %></label>
-            <textarea name="a" rows="3" maxlength="2000" <%= i === 0 ? 'required' : '' %>></textarea>
+            <label for="appeal-a-<%= i %>"><%= q %> <span class="muted small">(<%= i === 0 ? 'required' : 'optional' %>)</span></label>
+            <textarea id="appeal-a-<%= i %>" name="a" rows="3" maxlength="2000" aria-describedby="appeal-hint" <%= i === 0 ? 'required' : '' %>></textarea>
           <% }) %>
           <div class="u-mt-3"><button type="submit" class="btn">Submit appeal</button></div>
         </form>
@@ -61,8 +64,8 @@
         <% } %>
 
       <% } else { %>
-        <h1 class="page-title">Something went wrong</h1>
-        <p class="warn-text"><%= message %></p>
+        <h1 class="page-title"><%= typeof heading !== 'undefined' && heading ? heading : 'Something went wrong' %></h1>
+        <p><%= message %></p>
       <% } %>
     </div>
     <p class="lb-foot muted small">Powered by Sylo</p>

@@ -46,7 +46,7 @@
         <% } %>
         <div>
           <dt>Going</dt>
-          <dd><%= event.going %><% if (event.capacity) { %> of <%= event.capacity %><% if (event.full) { %> · Full<% } %><% } %></dd>
+          <dd><%= event.going %><% if (event.capacity) { %> of <%= event.capacity %> spot<%= event.capacity === 1 ? '' : 's' %><% if (event.full) { %> · Full<% } %><% } %></dd>
         </div>
         <div>
           <dt>Maybe</dt>

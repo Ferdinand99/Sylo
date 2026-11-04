@@ -29,7 +29,7 @@ function VoteButton({ post, onVote, canVote }) {
       className={`v2-roadmap-vote${post.voted ? ' is-voted' : ''}`}
       onClick={click}
       disabled={busy || !canVote}
-      title={canVote ? undefined : 'Log in to vote'}
+      title={canVote ? undefined : 'Sign in to vote'}
       aria-pressed={Boolean(post.voted)}
       aria-label={`Vote for ${post.title}, ${formatCount(post.votes)} ${post.votes === 1 ? 'vote' : 'votes'}`}
     >
@@ -115,7 +115,7 @@ export default function Roadmap() {
             'Voting and suggesting need a login, and this Sylo has none set up.'
           ) : (
             <>
-              <a href={loginHref()}>Log in</a> to vote or suggest a feature.
+              <a href={loginHref()}>Sign in</a> to vote or suggest a feature.
             </>
           )}
         </p>

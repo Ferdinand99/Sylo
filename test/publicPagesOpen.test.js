@@ -48,7 +48,7 @@ test('the verify page with a bad link is plain', async () => {
 test('the appeal page with a bad link is plain', async () => {
   const res = await get('/appeal/900000000000000201?t=bad');
   const text = await res.text();
-  assert.match(text, /Something went wrong|Nothing to appeal/);
+  assert.match(text, /isn&#39;t valid|Something went wrong|Nothing to appeal/);
   assert.deepEqual(plainProblems(text), []);
 });
 
