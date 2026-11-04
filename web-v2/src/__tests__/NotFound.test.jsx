@@ -70,6 +70,13 @@ describe('NotFound', () => {
     expect(screen.queryByText('Something went wrong on this page.')).toBeNull();
     const back = screen.getByRole('link', { name: 'Back to your servers' });
     expect(back.getAttribute('href')).toBe('/');
+    // The address was under a server, so that server is offered too.
+    expect(screen.getByRole('link', { name: 'Back to this server' }).getAttribute('href')).toBe('/guilds/1');
+  });
+
+  it('offers only the server list for an address outside any server', () => {
+    renderRoutes('/nothing/here');
+    expect(screen.queryByRole('link', { name: 'Back to this server' })).toBeNull();
   });
 
   it('offers the server page when it knows the server', () => {

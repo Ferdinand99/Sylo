@@ -86,6 +86,7 @@ function finishedRecently(req, res) {
     heading: 'Sign-in already complete',
     message:
       'This sign-in is already complete. Go back to the Sylo app. If the app did not open, start the sign-in again from the app.',
+    backHref: null,
   });
   return true;
 }
@@ -121,6 +122,7 @@ mobileAuthRouter.get('/start', (req, res) => {
       title: 'Sign-in failed',
       heading: 'Sign-in failed',
       message: 'The Sylo app sent an invalid sign-in request. Please try again from the app.',
+      backHref: null,
     });
   }
   req.session.mobile = { challenge, state, nonce: randomBytes(24).toString('base64url'), at: Date.now() };
@@ -141,6 +143,7 @@ mobileAuthRouter.get('/confirm', (req, res) => {
       heading: 'Sign-in expired',
       message:
         'This app sign-in has expired or was not started from the Sylo app. Please try again from the app.',
+      backHref: null,
     });
   }
   res.render('mobile-confirm', {
@@ -161,6 +164,7 @@ mobileAuthRouter.post('/confirm', async (req, res, next) => {
         title: 'Sign-in failed',
         heading: 'Sign-in failed',
         message: 'This confirmation was not sent from the sign-in page. Please try again from the app.',
+        backHref: null,
       });
     }
     req.session.mobile = undefined; // one code per flow

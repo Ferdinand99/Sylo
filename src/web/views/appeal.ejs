@@ -21,10 +21,13 @@
         <% } %>
         <form method="POST" action="/appeal/<%= guildId %>" class="stack">
           <input type="hidden" name="t" value="<%= token %>" />
-          <p class="muted small" id="appeal-hint">Each answer can be up to 2,000 characters.<% if (questions.length > 1) { %> Answer the first question; the others are optional.<% } %></p>
+          <%# The server wants at least one answer (any of them), so with several questions none is
+              required on its own; with a single question that one is. %>
+          <% var single = questions.length === 1; %>
+          <p class="muted small" id="appeal-hint"><%= single ? 'Required.' : 'Answer at least one question.' %> Each answer can be up to 2,000 characters.</p>
           <% questions.forEach(function (q, i) { %>
-            <label for="appeal-a-<%= i %>"><%= q %> <span class="muted small">(<%= i === 0 ? 'required' : 'optional' %>)</span></label>
-            <textarea id="appeal-a-<%= i %>" name="a" rows="3" maxlength="2000" aria-describedby="appeal-hint" <%= i === 0 ? 'required' : '' %>></textarea>
+            <label for="appeal-a-<%= i %>"><%= q %><% if (single) { %> <span class="muted small">(required)</span><% } %></label>
+            <textarea id="appeal-a-<%= i %>" name="a" rows="3" maxlength="2000" aria-describedby="appeal-hint"<%= single ? ' required' : '' %>></textarea>
           <% }) %>
           <div class="u-mt-3"><button type="submit" class="btn">Submit appeal</button></div>
         </form>

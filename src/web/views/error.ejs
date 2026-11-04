@@ -9,7 +9,7 @@
   <p class="muted"><%= typeof message !== 'undefined' ? message : 'Please try again.' %></p>
   <% if (back) { %>
     <div class="auth-actions auth-actions-inline">
-      <a class="btn btn-ghost" href="<%= back %>">&larr; Back to the dashboard</a>
+      <a class="btn btn-ghost" href="<%= back %>"><% if (typeof backLabel !== 'undefined') { %><%= backLabel %><% } else { %>&larr; Back to the dashboard<% } %></a>
     </div>
   <% } %>
 </section>
