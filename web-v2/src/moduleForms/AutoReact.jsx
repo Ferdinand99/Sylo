@@ -2,6 +2,8 @@ import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
+import { cardTitle, channelTitle } from '../util.js';
 
 const MODE_LABELS = { always: 'React to every message', random: 'React at a random chance' };
 const ROLE_ACTION_LABELS = { add: 'Give them the role', remove: 'Take the role away' };
@@ -22,6 +24,14 @@ function toFormRule(r) {
     roleId: r.roleId || '',
     roleAction: r.roleAction || 'add',
   };
+}
+
+// A rule's title says what it does: "🧟 🔥 in #general", or "Rule 2" while it is still empty.
+function ruleTitle(r, channels, index) {
+  const emojis = cardTitle(r.emojisText, '', 24);
+  const where = channelTitle(channels, r.channelId, '');
+  if (emojis && where) return `${emojis} in ${where}`;
+  return emojis || where || `Rule ${index + 1}`;
 }
 
 function emptyFormRule() {
@@ -75,10 +85,10 @@ export default function AutoReact() {
 
       <form onSubmit={save} data-savebar>
         <div className="v2-field">
-          <label htmlFor="cooldownSeconds">Per-user cooldown (seconds)</label>
-          <input
+          <label htmlFor="cooldownSeconds">Per-user cooldown</label>
+          <UnitInput
             id="cooldownSeconds"
-            type="number"
+            unit="seconds"
             min={limitOf(limits, 'cooldownSeconds').min}
             max={limitOf(limits, 'cooldownSeconds').max}
             value={form.cooldownSeconds}
@@ -112,16 +122,17 @@ export default function AutoReact() {
         </div>
 
         <h2 className="v2-group-title">Rules</h2>
-        {form.rules.map((r) => (
+        {form.rules.map((r, i) => (
           <div className="v2-rule-card" key={r.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">
-                Rule — matches if <strong>either</strong> the users or the role below match
-              </span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRule(r.key)}>
-                remove rule
+              <span className="v2-rule-title">{ruleTitle(r, data.channels, i)}</span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRule(r.key)}>
+                Remove rule
               </button>
             </div>
+            <p className="v2-field-hint v2-rule-lead">
+              Matches if <strong>either</strong> the users or the role below match.
+            </p>
 
             <div className="v2-field">
               <label>
@@ -134,7 +145,9 @@ export default function AutoReact() {
                 onChange={(e) => updateRule(r.key, { targetUsersText: e.target.value })}
               />
               <p className="v2-field-hint">
-                Paste one or more Discord user IDs or @mentions, separated by spaces or commas.
+                Paste one or more user IDs, separated by spaces or commas. To copy an ID, turn on developer
+                mode in your app's advanced settings, then right-click the member and choose Copy User ID. A
+                pasted mention like &lt;@123…&gt; works too; a typed @name is not looked up.
               </p>
             </div>
 
@@ -200,15 +213,15 @@ export default function AutoReact() {
                     </option>
                   ))}
                 </select>
-                <input
-                  type="number"
+                <UnitInput
+                  unit="% chance"
                   min={limitOf(limits, 'rules[].chance').min}
                   max={limitOf(limits, 'rules[].chance').max}
                   value={r.chance}
                   onChange={(e) => updateRule(r.key, { chance: Number(e.target.value) })}
                 />
-                <span className="v2-field-hint">% chance — only used when mode is "random chance"</span>
               </div>
+              <p className="v2-field-hint">The chance is only used when the mode is "random chance".</p>
             </div>
 
             <div className="v2-field">

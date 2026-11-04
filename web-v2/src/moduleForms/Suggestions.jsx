@@ -8,6 +8,8 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import Badge from '../components/Badge.jsx';
+import UnitInput from '../components/UnitInput.jsx';
 
 const STATUS_LABEL = {
   open: '⏳ Open',
@@ -15,6 +17,15 @@ const STATUS_LABEL = {
   approved: '✅ Approved',
   denied: '❌ Denied',
   implemented: '🚀 Implemented',
+};
+
+// Colour follows meaning; the label always carries the word too.
+const STATUS_TONE = {
+  open: 'neutral',
+  considering: 'warning',
+  approved: 'success',
+  denied: 'danger',
+  implemented: 'success',
 };
 
 const FILTERS = [
@@ -44,8 +55,10 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
       <div className="v2-row-main">
         <h3>
           #{item.number}
-          {item.title ? ` · ${item.title}` : ''}{' '}
-          <span className="v2-field-hint">{STATUS_LABEL[item.status]}</span>
+          {item.title ? ` · ${item.title}` : ''}
+          <Badge tone={STATUS_TONE[item.status] ?? 'neutral'} inline raw>
+            {STATUS_LABEL[item.status] ?? item.status}
+          </Badge>
         </h3>
         <p>{item.text}</p>
         <p className="v2-field-hint">
@@ -103,7 +116,12 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
               {label}
             </button>
           ))}
-          <button type="button" className="v2-btn-danger" disabled={busy} onClick={() => onDelete(item)}>
+          <button
+            type="button"
+            className="v2-btn-danger-ghost"
+            disabled={busy}
+            onClick={() => onDelete(item)}
+          >
             Delete
           </button>
         </div>
@@ -262,10 +280,10 @@ export default function Suggestions() {
         </div>
 
         <div className="v2-field">
-          <label htmlFor="cooldownSeconds">Cooldown between suggestions (seconds)</label>
-          <input
+          <label htmlFor="cooldownSeconds">Cooldown between suggestions</label>
+          <UnitInput
             id="cooldownSeconds"
-            type="number"
+            unit="seconds"
             min={cooldown.min}
             max={cooldown.max}
             value={form.cooldownSeconds}

@@ -9,6 +9,7 @@ import EmbedEditor from '../components/EmbedEditor.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { PlatformContext } from '../platformContext.jsx';
+import Meta, { plural } from '../components/Meta.jsx';
 
 const ACTION_TYPES = [
   ['reply', 'Bot responds with a message in the current channel'],
@@ -59,7 +60,7 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
           >
             ↓
           </button>
-          <button type="button" className="v2-btn-ghost" onClick={onRemove}>
+          <button type="button" className="v2-btn-danger-ghost" onClick={onRemove}>
             Remove
           </button>
         </div>
@@ -120,7 +121,11 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
                     </button>
                   ) : null}
                   {action.messages.length > 1 ? (
-                    <button type="button" className="v2-btn-ghost" onClick={() => removeMessage(m.key)}>
+                    <button
+                      type="button"
+                      className="v2-btn-danger-ghost"
+                      onClick={() => removeMessage(m.key)}
+                    >
                       Remove
                     </button>
                   ) : null}
@@ -442,13 +447,18 @@ export default function CustomCommands() {
         ) : (
           <div className="v2-list">
             {d.commands.map((c) => (
-              <div className="v2-row" key={c.id}>
+              <div className="v2-row v2-row-stack" key={c.id}>
                 <div className="v2-row-main">
                   <h3>/{c.name}</h3>
                   <p>
-                    {c.description || 'No description'} · {c.actions.length} action(s)
-                    {c.allowedRoles.length || c.allowedChannels.length ? ' · restricted' : ''}
-                    {c.cooldownSeconds ? ` · ${c.cooldownSeconds}s cooldown` : ''}
+                    <Meta
+                      items={[
+                        c.description || 'No description',
+                        plural(c.actions.length, 'action'),
+                        (c.allowedRoles.length > 0 || c.allowedChannels.length > 0) && 'restricted',
+                        c.cooldownSeconds ? `${c.cooldownSeconds}s cooldown` : false,
+                      ]}
+                    />
                   </p>
                   {c.reserved ? (
                     <p className="v2-note">
@@ -469,15 +479,11 @@ export default function CustomCommands() {
                   ) : null}
                 </div>
                 {editingId === c.id ? null : (
-                  <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div className="v2-row-actions">
                     <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(c.id)}>
                       Edit
                     </button>
-                    <button
-                      type="button"
-                      className="v2-btn-danger v2-danger-sep"
-                      onClick={() => onDelete(c.id)}
-                    >
+                    <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(c.id)}>
                       Delete
                     </button>
                   </div>

@@ -172,7 +172,7 @@ describe('Auto threads form', () => {
     expect(added.value).toBe('{words}');
     expect(screen.getAllByLabelText('Archive after')[1].value).toBe('1440');
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'remove rule' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove rule' })[0]);
     expect(screen.getAllByLabelText('Thread name')).toHaveLength(1);
     expect(screen.getByLabelText('Skip bots and webhooks').checked).toBe(true);
   });

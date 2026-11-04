@@ -7,6 +7,7 @@ import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import UnitInput from '../components/UnitInput.jsx';
 
 function rel(ms) {
   const s = Math.round((ms - Date.now()) / 1000);
@@ -156,14 +157,14 @@ export default function Giveaways() {
                   <p>
                     {g.entries} entr{g.entries === 1 ? 'y' : 'ies'} ·{' '}
                     {g.wonIds && g.wonIds.length
-                      ? `won by ${g.wonIds.map((id) => `@${id}`).join(', ')}`
+                      ? `won by ${g.wonIds.map((id) => `a member (ID ${id})`).join(', ')}`
                       : 'no winner'}
                   </p>
                 </div>
                 <div className="v2-field-row">
-                  <input
-                    type="number"
-                    className="v2-input-sm"
+                  <UnitInput
+                    unit="winners"
+                    aria-label={`Winners to reroll for giveaway #${g.id}`}
                     min={limitOf(limits, 'winners').min}
                     max={limitOf(limits, 'winners').max}
                     value={rerollCounts[g.id] ?? 1}

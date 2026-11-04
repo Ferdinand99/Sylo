@@ -3,6 +3,8 @@ import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
+import { cardTitle } from '../util.js';
 
 const MATCH_LABELS = {
   contains: 'contains',
@@ -76,10 +78,10 @@ export default function Autoresponder() {
 
       <form onSubmit={save} data-savebar>
         <div className="v2-field">
-          <label htmlFor="cooldownSeconds">Per-channel cooldown (seconds)</label>
-          <input
+          <label htmlFor="cooldownSeconds">Per-channel cooldown</label>
+          <UnitInput
             id="cooldownSeconds"
-            type="number"
+            unit="seconds"
             min={limitOf(limits, 'cooldownSeconds').min}
             max={limitOf(limits, 'cooldownSeconds').max}
             value={form.cooldownSeconds}
@@ -91,9 +93,9 @@ export default function Autoresponder() {
         {form.responders.map((r) => (
           <div className="v2-rule-card" key={r.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Responder</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRow(r.key)}>
-                remove
+              <span className="v2-rule-title">{cardTitle(r.trigger, 'Responder')}</span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRow(r.key)}>
+                Remove
               </button>
             </div>
 

@@ -2,6 +2,7 @@ import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -56,9 +57,16 @@ export default function ServerStats() {
         {form.channels.map((c) => (
           <div className="v2-rule-card" key={c.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Stat channel</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRow(c.key)}>
-                remove
+              <span className="v2-rule-title">
+                {[
+                  data.statTypes.find(([t]) => t === c.type)?.[1],
+                  data.voiceChannels.find((vc) => vc.id === c.channelId)?.name,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || 'Stat channel'}
+              </span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRow(c.key)}>
+                Remove
               </button>
             </div>
 
@@ -110,10 +118,10 @@ export default function ServerStats() {
         </button>
 
         <div className="v2-field v2-section-gap-sm">
-          <label htmlFor="refreshMinutes">Refresh every (minutes)</label>
-          <input
+          <label htmlFor="refreshMinutes">Refresh every</label>
+          <UnitInput
             id="refreshMinutes"
-            type="number"
+            unit="minutes"
             min={limitOf(limits, 'refreshMinutes').min}
             max={limitOf(limits, 'refreshMinutes').max}
             value={form.refreshMinutes}

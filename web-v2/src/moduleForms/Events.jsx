@@ -413,7 +413,7 @@ export default function Events() {
         {upcoming.length === 0 ? <p className="v2-note">None scheduled.</p> : null}
         <div className="v2-list">
           {upcoming.map((ev) => (
-            <div className="v2-row" key={ev.id}>
+            <div className="v2-row v2-row-stack" key={ev.id}>
               <div className="v2-row-main">
                 <h3>
                   #{ev.id} · {ev.title}
@@ -441,7 +441,7 @@ export default function Events() {
                 ) : null}
               </div>
               {editingId === ev.id ? null : (
-                <div className="v2-field-row">
+                <div className="v2-row-actions">
                   <button
                     type="button"
                     className="v2-btn-ghost"
@@ -452,11 +452,11 @@ export default function Events() {
                   </button>
                   <button
                     type="button"
-                    className="v2-btn-danger"
+                    className="v2-btn-danger-ghost"
                     disabled={busy}
                     onClick={() => onCancelEvent(ev)}
                   >
-                    Cancel
+                    Cancel event
                   </button>
                 </div>
               )}

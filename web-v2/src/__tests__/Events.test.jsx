@@ -178,7 +178,7 @@ describe('Events form', () => {
   it('cancels an event after confirming', async () => {
     cancelEvent.mockResolvedValue({ events: [event({ state: 'cancelled' })] });
     renderAtGuild(<Events />, GUILD);
-    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel event' }));
     await waitFor(() => expect(cancelEvent).toHaveBeenCalledWith(GUILD, 7));
     expect(confirmDialog).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(/cancelled · ✅ 3/)).toBeTruthy();

@@ -10,6 +10,8 @@ import {
   DEFAULT_TEMPLATE,
   renderThreadName,
 } from '../../../src/lib/autoThreadName.js';
+import UnitInput from '../components/UnitInput.jsx';
+import { channelTitle } from '../util.js';
 
 const ARCHIVE_LABELS = { 60: '1 hour', 1440: '24 hours', 4320: '3 days', 10080: '7 days' };
 const SAMPLE_AUTHOR = 'Alex';
@@ -92,9 +94,11 @@ export default function AutoThreads() {
           return (
             <div className="v2-rule-card" key={r.key}>
               <div className="v2-rule-head">
-                <span className="v2-field-hint">Rule {i + 1}</span>
-                <button type="button" className="v2-btn-ghost" onClick={() => removeRule(r.key)}>
-                  remove rule
+                <span className="v2-rule-title">
+                  {channelTitle(data.channels, r.channelId, `Rule ${i + 1}`)}
+                </span>
+                <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRule(r.key)}>
+                  Remove rule
                 </button>
               </div>
 
@@ -228,11 +232,11 @@ export default function AutoThreads() {
 
               <div className="v2-field">
                 <label htmlFor={`at-slow-${r.key}`}>
-                  Slowmode in the thread (seconds) <span className="v2-field-hint">— 0 = off</span>
+                  Slowmode in the thread <span className="v2-field-hint">— 0 = off</span>
                 </label>
-                <input
+                <UnitInput
                   id={`at-slow-${r.key}`}
-                  type="number"
+                  unit="seconds"
                   min={slowmode.min}
                   max={slowmode.max}
                   value={r.slowmodeSeconds}

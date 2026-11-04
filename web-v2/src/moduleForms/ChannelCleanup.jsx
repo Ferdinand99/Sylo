@@ -12,6 +12,8 @@ import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import Meta from '../components/Meta.jsx';
+import UnitInput from '../components/UnitInput.jsx';
 
 function dayLabel(days, weekdays) {
   if (days.length === 7) return 'every day';
@@ -90,16 +92,16 @@ function ScheduleForm({ initial, channels, weekdays, maxAgeHoursCap, onSave, onC
       <div className="v2-field">
         <label>
           Delete messages older than{' '}
-          <span className="v2-field-hint">hours ({maxAgeHoursCap} = 90 days max)</span>
+          <span className="v2-field-hint">({maxAgeHoursCap} hours = 90 days max)</span>
         </label>
-        <input
-          type="number"
+        <UnitInput
+          unit="hours"
+          wide
           min={ageLimit.min}
           max={ageLimit.max ?? maxAgeHoursCap}
           value={maxAgeHours}
           onChange={(e) => setMaxAgeHours(Number(e.target.value))}
           required
-          style={{ maxWidth: '120px' }}
         />
       </div>
 
@@ -219,13 +221,23 @@ export default function ChannelCleanup() {
             {d.schedules.map((s) => {
               const channel = d.channels.find((c) => c.id === s.channelId);
               return (
-                <div className="v2-row" key={s.id}>
+                <div className="v2-row v2-row-stack" key={s.id}>
                   <div className="v2-row-main">
-                    <h3>#{channel ? channel.name : s.channelId}</h3>
+                    <h3 className="v2-break">
+                      #{channel ? channel.name : s.channelId}
+                      <Badge tone={s.enabled ? 'success' : 'neutral'} inline>
+                        {s.enabled ? 'Active' : 'Paused'}
+                      </Badge>
+                    </h3>
                     <p>
-                      {dayLabel(s.days, d.weekdays)} at {s.timeHhmm} · older than {ageLabel(s.maxAgeHours)}
-                      {s.lastRunDate ? ` · last ran ${s.lastRunDate}` : ''}
-                      {s.lastRunCount ? ` (${s.lastRunCount} deleted)` : ''}
+                      <Meta
+                        items={[
+                          `${dayLabel(s.days, d.weekdays)} at ${s.timeHhmm}`,
+                          `older than ${ageLabel(s.maxAgeHours)}`,
+                          s.lastRunDate &&
+                            `last ran ${s.lastRunDate}${s.lastRunCount ? ` (${s.lastRunCount} deleted)` : ''}`,
+                        ]}
+                      />
                     </p>
                     {editingId === s.id ? (
                       <ScheduleForm
@@ -240,19 +252,14 @@ export default function ChannelCleanup() {
                     ) : null}
                   </div>
                   {editingId === s.id ? null : (
-                    <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                      <Badge tone={s.enabled ? 'success' : 'neutral'}>{s.enabled ? 'On' : 'Off'}</Badge>
+                    <div className="v2-row-actions">
                       <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(s.id)}>
                         Edit
                       </button>
                       <button type="button" className="v2-btn-ghost" onClick={() => onToggle(s.id)}>
                         {s.enabled ? 'Pause' : 'Resume'}
                       </button>
-                      <button
-                        type="button"
-                        className="v2-btn-danger v2-danger-sep"
-                        onClick={() => onDelete(s.id)}
-                      >
+                      <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(s.id)}>
                         Delete
                       </button>
                     </div>

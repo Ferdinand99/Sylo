@@ -3,6 +3,8 @@ import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
+import { cardTitle } from '../util.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -106,9 +108,11 @@ export default function TempVoice() {
         {form.hubs.map((h) => (
           <div className="v2-rule-card" key={h.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Hub</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeHub(h.key)}>
-                remove
+              <span className="v2-rule-title">
+                {cardTitle(d.voiceChannels.find((c) => c.id === h.hubChannelId)?.name, '') || 'Hub'}
+              </span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeHub(h.key)}>
+                Remove
               </button>
             </div>
 
@@ -162,25 +166,24 @@ export default function TempVoice() {
                 <label>
                   User limit <span className="v2-field-hint">— 0 = ∞</span>
                 </label>
-                <input
-                  type="number"
+                <UnitInput
+                  unit="members"
                   min={limitOf(limits, 'hubs[].userLimit').min}
                   max={limitOf(limits, 'hubs[].userLimit').max}
-                  style={{ maxWidth: '100px' }}
                   value={h.userLimit}
                   onChange={(e) => updateHub(h.key, { userLimit: Number(e.target.value) })}
                 />
               </div>
               <div className="v2-field">
                 <label>
-                  Bitrate (kbps) <span className="v2-field-hint">— 0 = default</span>
+                  Bitrate <span className="v2-field-hint">— 0 = default</span>
                 </label>
-                <input
-                  type="number"
+                <UnitInput
+                  unit="kbps"
+                  wide
                   min={limitOf(limits, 'hubs[].bitrate').min}
                   max={limitOf(limits, 'hubs[].bitrate').max}
                   step={8}
-                  style={{ maxWidth: '100px' }}
                   value={h.bitrate}
                   onChange={(e) => updateHub(h.key, { bitrate: Number(e.target.value) })}
                 />

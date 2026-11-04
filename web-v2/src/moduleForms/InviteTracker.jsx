@@ -6,6 +6,8 @@ import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
+import Meta from '../components/Meta.jsx';
 
 export default function InviteTracker() {
   const cmd = useCmd();
@@ -75,10 +77,10 @@ export default function InviteTracker() {
         </div>
 
         <div className="v2-field">
-          <label htmlFor="graceHours">Fake-invite grace window (hours)</label>
-          <input
+          <label htmlFor="graceHours">Fake-invite grace window</label>
+          <UnitInput
             id="graceHours"
-            type="number"
+            unit="hours"
             min={limitOf(limits, 'graceHours').min}
             max={limitOf(limits, 'graceHours').max}
             value={form.graceHours}
@@ -107,8 +109,14 @@ export default function InviteTracker() {
                   #{r.rank} · {r.name}
                 </h3>
                 <p>
-                  {r.net} invite{r.net === 1 ? '' : 's'} · {r.regular} joined · {r.leaves} left · {r.bonus}{' '}
-                  bonus
+                  <Meta
+                    items={[
+                      `${r.net} invite${r.net === 1 ? '' : 's'}`,
+                      `${r.regular} joined`,
+                      `${r.leaves} left`,
+                      `${r.bonus} bonus`,
+                    ]}
+                  />
                 </p>
               </div>
             </div>
