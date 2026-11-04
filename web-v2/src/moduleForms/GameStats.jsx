@@ -5,7 +5,8 @@ import LoadError from '../components/LoadError.jsx';
 import { useApiData } from '../useApiData.js';
 
 // Read-only — this module has nothing to configure beyond the shared
-// enable/disable toggle every module already has from Overview. No save form.
+// enable/disable toggle every module already has (Overview, and the bar at the
+// top of the module's own page). No save form.
 export default function GameStats() {
   const { guildId } = useParams();
   const cmd = useCmd();
@@ -20,8 +21,8 @@ export default function GameStats() {
       <p className="v2-field-hint">
         Adds <code>{cmd('/stats')}</code> — pick a game from the dropdown, give a player name, and Sylo
         returns an embed of their stats. Battlefield data comes from the public gametools.network API;
-        RuneScape data from Jagex's official Hiscores. Enable this module here to make the command available
-        in this server.
+        RuneScape data from Jagex's official Hiscores. Turn this module on, with the switch at the top of this
+        page, to make the command available in this server.
       </p>
 
       <h2 className="v2-group-title">Command</h2>

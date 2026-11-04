@@ -97,7 +97,9 @@ export default function Overview() {
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
-  const { data, error, setData } = useOverview();
+  const { data: shared, dataGuildId, error, setData } = useOverview();
+  // Not the previous server's modules while this one's load.
+  const data = dataGuildId === guildId ? shared : null;
 
   const filteredGroups = useMemo(() => {
     if (!data) return [];

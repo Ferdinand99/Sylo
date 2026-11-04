@@ -13,12 +13,13 @@ import Switch from '../components/Switch.jsx';
 // its own settings page. Reads and patches the same shared overview state the
 // Overview page and the sidebar use.
 function ModuleStatusBar({ card, onToggle }) {
+  // Missing gateway intents: the bot can't run the module, whatever the switch says (card.status 'blocked').
   const blocked = (card.missingIntents ?? []).length > 0;
   return (
     <>
       <div className="v2-module-status">
         <span className="v2-module-status-text">
-          <strong>{card.enabled ? 'On' : 'Off'}</strong>
+          <strong>{blocked ? 'Blocked' : card.enabled ? 'On' : 'Off'}</strong>
           <span className="v2-module-status-name">{card.name}</span>
         </span>
         <Switch
@@ -28,9 +29,17 @@ function ModuleStatusBar({ card, onToggle }) {
           disabled={blocked}
         />
       </div>
-      {!card.enabled ? (
-        <p className="v2-note">This module is off. Turn it on for these settings to take effect.</p>
+      {blocked ? (
+        <p className="v2-note v2-row-warn">
+          Needs the {card.missingIntents.join(', ')} intent — see docs/self-hosting.md.
+        </p>
       ) : null}
+      {/* Always rendered, so a screen reader announces the notice appearing after a toggle. */}
+      <div aria-live="polite">
+        {!blocked && !card.enabled ? (
+          <p className="v2-note">This module is off. Turn it on for these settings to take effect.</p>
+        ) : null}
+      </div>
     </>
   );
 }
@@ -43,7 +52,7 @@ export default function ModulePage() {
   const { guildId, moduleId } = useParams();
   const { info, loading } = usePlatformInfo(guildId);
   const { platform, notes } = info;
-  const { data, setData } = useOverview() ?? {};
+  const { data, dataGuildId, setData } = useOverview() ?? {};
   // Module ids with a save in flight, and the server the page is on now.
   const toggling = useRef(new Set());
   const currentGuild = useRef(guildId);
@@ -55,8 +64,10 @@ export default function ModulePage() {
   // Wait for the platform so a Fluxer server never flashes Discord wording or settings.
   if (loading) return <p className="v2-state">Loading…</p>;
   const note = notes[moduleId];
-  // No bar until the overview has loaded, or for a module it doesn't list (or one with no switch).
-  const card = data?.groups?.flatMap((g) => g.cards).find((c) => c.id === moduleId);
+  // No bar until this server's overview has loaded (not the previous server's, which stays in the
+  // shared state while the new one loads), or for a module it doesn't list (or one with no switch).
+  const card =
+    dataGuildId === guildId ? data?.groups?.flatMap((g) => g.cards).find((c) => c.id === moduleId) : null;
 
   // Same as Overview: the switch flips at once, and flips back (with the error
   // as a toast) if the save fails.
@@ -85,7 +96,7 @@ export default function ModulePage() {
 
   return (
     <PlatformContext.Provider value={info}>
-      {card && card.hasToggle !== false ? <ModuleStatusBar card={card} onToggle={onToggle} /> : null}
+      {card?.hasToggle ? <ModuleStatusBar card={card} onToggle={onToggle} /> : null}
       {note ? (
         <p className="v2-note v2-platform-note">
           <span className="v2-platform-note-tag">{platform === 'fluxer' ? 'Fluxer' : 'Discord'}</span> {note}

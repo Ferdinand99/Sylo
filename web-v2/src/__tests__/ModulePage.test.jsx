@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ModulePage from '../pages/ModulePage.jsx';
 import { OverviewProvider, useOverview } from '../OverviewContext.jsx';
@@ -165,5 +165,132 @@ describe('ModulePage status bar', () => {
     expect(await screen.findByText('Threads work differently here.')).toBeTruthy();
     expect(screen.getByText('Fluxer')).toBeTruthy();
     expect(screen.getByRole('switch', { name: 'Auto threads' })).toBeTruthy();
+  });
+});
+
+describe('ModulePage status bar edge cases', () => {
+  it('blocked module: switch disabled, intent warning, no off notice, not plain "On"', async () => {
+    const card = {
+      id: 'auto-threads',
+      name: 'Auto threads',
+      enabled: true,
+      hasToggle: true,
+      missingIntents: ['MessageContent'],
+      status: 'blocked',
+    };
+    getOverview.mockResolvedValue(overview(true, [card]));
+    renderPage();
+
+    const toggle = await screen.findByRole('switch', { name: 'Auto threads' });
+    expect(toggle.disabled).toBe(true);
+    expect(screen.getByText(/Needs the MessageContent intent/)).toBeTruthy();
+    expect(screen.getByText('Blocked')).toBeTruthy();
+    expect(screen.queryByText('On')).toBeNull();
+    expect(screen.queryByText(OFF_NOTICE)).toBeNull();
+  });
+
+  it('a blocked module that is also off shows no "turn it on" notice', async () => {
+    const card = {
+      id: 'auto-threads',
+      name: 'Auto threads',
+      enabled: false,
+      hasToggle: true,
+      missingIntents: ['MessageContent'],
+      status: 'blocked',
+    };
+    getOverview.mockResolvedValue(overview(false, [card]));
+    renderPage();
+
+    expect(await screen.findByText(/Needs the MessageContent intent/)).toBeTruthy();
+    expect(screen.queryByText(OFF_NOTICE)).toBeNull();
+  });
+
+  it('shows no bar for a card without a toggle', async () => {
+    const card = {
+      id: 'auto-threads',
+      name: 'Auto threads',
+      enabled: true,
+      hasToggle: false,
+      missingIntents: [],
+    };
+    getOverview.mockResolvedValue(overview(true, [card]));
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: 'Auto threads form' })).toBeTruthy();
+    await waitFor(() => expect(getOverview).toHaveBeenCalled());
+    expect(screen.queryByRole('switch')).toBeNull();
+  });
+
+  it('sends one save for a second click while the first is in flight', async () => {
+    getOverview.mockResolvedValue(overview(false));
+    let finish;
+    setModuleEnabled.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    renderPage();
+    const toggle = await screen.findByRole('switch', { name: 'Auto threads' });
+
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('switch', { name: 'Auto threads' }));
+    finish({});
+
+    await waitFor(() => expect(screen.getByTestId('shared').textContent).toBe('on'));
+    expect(setModuleEnabled).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces the off notice in a polite live region', async () => {
+    getOverview.mockResolvedValue(overview(false));
+    renderPage();
+
+    const notice = await screen.findByText(OFF_NOTICE);
+    expect(notice.parentElement.getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('shows no bar after a server switch until the new server overview has loaded', async () => {
+    const OTHER = '222222222222222222';
+    let loadOther;
+    getOverview.mockImplementation((id) =>
+      id === GUILD
+        ? Promise.resolve(overview(false))
+        : new Promise((resolve) => (loadOther = () => resolve(overview(true))))
+    );
+    setModuleEnabled.mockResolvedValue({});
+
+    function ByRoute({ children }) {
+      const { guildId } = useParams();
+      return <OverviewProvider guildId={guildId}>{children}</OverviewProvider>;
+    }
+    function Switcher() {
+      const navigate = useNavigate();
+      return <button onClick={() => navigate(`/guilds/${OTHER}/m/auto-threads`)}>switch server</button>;
+    }
+    render(
+      <MemoryRouter initialEntries={[`/guilds/${GUILD}/m/auto-threads`]}>
+        <Switcher />
+        <Routes>
+          <Route
+            path="guilds/:guildId/m/:moduleId"
+            element={
+              <ByRoute>
+                <ModulePage />
+              </ByRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect((await screen.findByRole('switch', { name: 'Auto threads' })).getAttribute('aria-checked')).toBe(
+      'false'
+    );
+
+    fireEvent.click(screen.getByText('switch server'));
+
+    // The first server's "off" must not show under the second server while its data loads.
+    await waitFor(() => expect(getOverview).toHaveBeenCalledWith(OTHER));
+    expect(screen.queryByRole('switch')).toBeNull();
+    expect(screen.queryByText(OFF_NOTICE)).toBeNull();
+
+    loadOther();
+    const toggle = await screen.findByRole('switch', { name: 'Auto threads' });
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(setModuleEnabled).not.toHaveBeenCalled();
   });
 });

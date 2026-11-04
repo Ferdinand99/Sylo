@@ -8,9 +8,14 @@ import { useEffect, useRef, useState } from 'react';
  * number (not a boolean "cancelled" flag) discards a response that resolves
  * after a newer one already has, so a slow first fetch can't clobber a
  * faster later one.
+ *
+ * Because the old result stays visible, `key` (optional) says what the
+ * result belongs to: whatever `key` was when the fetch started comes back
+ * as `dataKey` once its result lands. A caller can then tell the previous
+ * server's data from the current server's.
  */
-export function useApiData(fetchFn, deps) {
-  const [state, setState] = useState({ data: null, loading: true, error: null });
+export function useApiData(fetchFn, deps, key) {
+  const [state, setState] = useState({ data: null, loading: true, error: null, dataKey: undefined });
   const seq = useRef(0);
 
   useEffect(() => {
@@ -18,10 +23,10 @@ export function useApiData(fetchFn, deps) {
     setState((s) => ({ ...s, loading: true, error: null }));
     fetchFn()
       .then((data) => {
-        if (seq.current === mySeq) setState({ data, loading: false, error: null });
+        if (seq.current === mySeq) setState({ data, loading: false, error: null, dataKey: key });
       })
       .catch((error) => {
-        if (seq.current === mySeq) setState({ data: null, loading: false, error });
+        if (seq.current === mySeq) setState({ data: null, loading: false, error, dataKey: undefined });
       });
     // deps is the caller's own dependency array (this project has no
     // eslint-plugin-react-hooks to police it), by design — fetchFn is a
