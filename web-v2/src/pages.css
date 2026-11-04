@@ -991,3 +991,62 @@ a.v2-stat.is-link:focus-visible {
   margin-left: 26px;
 }
 
+/* ---------- Counting ---------- */
+/* A hint under a checkbox lines up with the checkbox's text. */
+.v2-check-hint {
+  margin: -2px 0 10px 26px;
+}
+.v2-count-set {
+  margin-top: 16px;
+}
+
+/* ---------- Leveling: "Level [5] → [role]" and "[role] × [2]" rows ---------- */
+.v2-pair-row {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+.v2-pair-row > select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.v2-pair-row > .v2-input-num {
+  flex: none;
+  width: 5rem;
+}
+.v2-pair-prefix,
+.v2-pair-arrow {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+@media (max-width: 600px) {
+  /* Keeps "Level 5 → role  Remove" together on one row; the select shrinks instead of the row breaking. */
+  .v2-pair-row {
+    flex-wrap: nowrap;
+  }
+  .v2-pair-row > .v2-btn-danger-ghost {
+    flex: none;
+    padding-inline: 10px;
+  }
+  /* A multiplier has a long select: it takes the first row, "× 2 Remove" sits under it. */
+  .v2-pair-row-multiplier {
+    flex-wrap: wrap;
+  }
+  .v2-pair-row-multiplier > select {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---------- Starboard ---------- */
+/* An option that only applies while the one above it is on: indented under it. */
+.v2-check-child {
+  margin-left: 26px;
+}
+.v2-check-child:has(> input:disabled) {
+  opacity: 0.6;
+}
+.v2-advanced {
+  margin-top: 6px;
+}
+
