@@ -185,7 +185,7 @@ export default function RoadmapAdmin() {
                   >
                     Approve
                   </button>
-                  <button type="button" className="v2-btn-danger" onClick={() => onReject(p)}>
+                  <button type="button" className="v2-btn-danger-ghost" onClick={() => onReject(p)}>
                     Reject
                   </button>
                 </div>
@@ -272,7 +272,7 @@ export default function RoadmapAdmin() {
                       </option>
                     ))}
                   </select>
-                  <button type="button" className="v2-btn-danger" onClick={() => onDelete(p)}>
+                  <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(p)}>
                     Delete
                   </button>
                 </div>

@@ -3,6 +3,7 @@ import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { cardTitle } from '../util.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -67,9 +68,9 @@ export default function TwitchAlerts() {
         {form.alerts.map((a) => (
           <div className="v2-rule-card" key={a.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Streamer</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRow(a.key)}>
-                remove
+              <span className="v2-rule-title">{cardTitle(a.login, 'New streamer')}</span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRow(a.key)}>
+                Remove
               </button>
             </div>
 

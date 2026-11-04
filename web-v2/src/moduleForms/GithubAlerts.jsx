@@ -13,6 +13,7 @@ import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import Meta from '../components/Meta.jsx';
 
 const BLANK = { repo: '', channelId: '', roleId: '', changelogPath: '', events: ['push', 'release'] };
 
@@ -157,7 +158,7 @@ function WebhookDetails({ watch, guildId, onRegenerated }) {
         <label>Secret</label>
         <input type="text" readOnly value={watch.secret} onClick={(e) => e.target.select()} />
       </div>
-      <button type="button" className="v2-btn-danger" onClick={regen} disabled={busy}>
+      <button type="button" className="v2-btn-danger-ghost" onClick={regen} disabled={busy}>
         Regenerate secret
       </button>
     </div>
@@ -258,14 +259,23 @@ export default function GithubAlerts() {
         ) : (
           <div className="v2-list">
             {d.watches.map((w) => (
-              <div className="v2-row" key={w.id}>
+              <div className="v2-row v2-row-stack" key={w.id}>
                 <div className="v2-row-main">
-                  <h3>{w.repo}</h3>
+                  <h3 className="v2-break">
+                    {w.repo}
+                    <Badge tone={w.enabled ? 'success' : 'neutral'} inline>
+                      {w.enabled ? 'Active' : 'Paused'}
+                    </Badge>
+                  </h3>
                   <p>
-                    #{d.channels.find((c) => c.id === w.channelId)?.name ?? w.channelId} · {w.events.length}{' '}
-                    event type{w.events.length === 1 ? '' : 's'}
-                    {w.roleId ? ` · pings @${d.roles.find((r) => r.id === w.roleId)?.name ?? w.roleId}` : ''}
-                    {w.changelogPath ? ` · watching ${w.changelogPath}` : ''}
+                    <Meta
+                      items={[
+                        `#${d.channels.find((c) => c.id === w.channelId)?.name ?? w.channelId}`,
+                        `${w.events.length} event type${w.events.length === 1 ? '' : 's'}`,
+                        w.roleId && `pings @${d.roles.find((r) => r.id === w.roleId)?.name ?? w.roleId}`,
+                        w.changelogPath && `watching ${w.changelogPath}`,
+                      ]}
+                    />
                   </p>
 
                   {editingId === w.id ? (
@@ -298,8 +308,7 @@ export default function GithubAlerts() {
                 </div>
 
                 {editingId === w.id ? null : (
-                  <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                    <Badge tone={w.enabled ? 'success' : 'neutral'}>{w.enabled ? 'On' : 'Off'}</Badge>
+                  <div className="v2-row-actions">
                     <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(w.id)}>
                       Edit
                     </button>
@@ -313,11 +322,7 @@ export default function GithubAlerts() {
                     <button type="button" className="v2-btn-ghost" onClick={() => onToggle(w.id)}>
                       {w.enabled ? 'Pause' : 'Resume'}
                     </button>
-                    <button
-                      type="button"
-                      className="v2-btn-danger v2-danger-sep"
-                      onClick={() => onDelete(w.id)}
-                    >
+                    <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(w.id)}>
                       Remove
                     </button>
                   </div>

@@ -78,8 +78,8 @@ export default function YoutubeAlerts() {
           <div className="v2-rule-card" key={a.key}>
             <div className="v2-rule-head">
               <span className="v2-field-hint">Channel</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRow(a.key)}>
-                remove
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRow(a.key)}>
+                Remove
               </button>
             </div>
 

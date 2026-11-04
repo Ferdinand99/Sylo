@@ -99,6 +99,7 @@ export default function AppleConnect() {
           <textarea
             id="apple-apps"
             rows={2}
+            placeholder="e.g. 1234567890 (one per line). Leave empty for all apps."
             value={form.appsText}
             onChange={(e) => setForm((f) => ({ ...f, appsText: e.target.value }))}
           />
@@ -107,8 +108,8 @@ export default function AppleConnect() {
         <p className="v2-field-hint">
           Each alert can go to its own channel; leave it on main channel to use the one above.
         </p>
-        <div className="v2-field">
-          <div className="v2-field-row">
+        <div className="v2-field v2-alert-grid">
+          <div className="v2-alert-row">
             <label className="v2-check">
               <input
                 type="checkbox"
@@ -123,7 +124,7 @@ export default function AppleConnect() {
               onChange={(channelId) => setKind('versionState', { channelId })}
             />
           </div>
-          <div className="v2-field-row">
+          <div className="v2-alert-row">
             <label className="v2-check">
               <input
                 type="checkbox"
@@ -138,7 +139,7 @@ export default function AppleConnect() {
               onChange={(channelId) => setKind('build', { channelId })}
             />
           </div>
-          <div className="v2-field-row">
+          <div className="v2-alert-row">
             <label className="v2-check">
               <input
                 type="checkbox"
@@ -153,7 +154,7 @@ export default function AppleConnect() {
               onChange={(channelId) => setKind('betaReview', { channelId })}
             />
           </div>
-          <div className="v2-field-row">
+          <div className="v2-alert-row">
             <label className="v2-check">
               <input
                 type="checkbox"
@@ -168,7 +169,7 @@ export default function AppleConnect() {
               onChange={(channelId) => setKind('feedback', { channelId })}
             />
           </div>
-          <div className="v2-field-row">
+          <div className="v2-alert-row">
             <label className="v2-check v2-check-inline">
               <input
                 type="checkbox"
@@ -184,7 +185,7 @@ export default function AppleConnect() {
                 value={ev.reviews.maxStars}
                 onChange={(e) => setKind('reviews', { maxStars: Number(e.target.value) })}
               />
-              <span>stars</span>
+              <span className="v2-nowrap">stars</span>
             </label>
             <ChannelPick
               channels={data.channels}
@@ -192,7 +193,7 @@ export default function AppleConnect() {
               onChange={(channelId) => setKind('reviews', { channelId })}
             />
           </div>
-          <div className="v2-field-row">
+          <div className="v2-alert-row">
             <label className="v2-check v2-check-inline">
               <input
                 type="checkbox"
@@ -208,13 +209,16 @@ export default function AppleConnect() {
                 value={ev.expiry.days}
                 onChange={(e) => setKind('expiry', { days: Number(e.target.value) })}
               />
-              <span>days before (and at 7 and 1 days; needs a team API key)</span>
+              <span className="v2-nowrap">days before</span>
             </label>
             <ChannelPick
               channels={data.channels}
               value={ev.expiry.channelId}
               onChange={(channelId) => setKind('expiry', { channelId })}
             />
+            <p className="v2-field-hint v2-alert-hint">
+              Also sent at 7 days and 1 day before. Needs a team API key.
+            </p>
           </div>
         </div>
       </form>

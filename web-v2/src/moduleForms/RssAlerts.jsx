@@ -2,6 +2,7 @@ import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { cardTitle, hostOf } from '../util.js';
 
 // Per-type ref field label/placeholder.
 const HINTS = {
@@ -75,9 +76,11 @@ export default function RssAlerts() {
           return (
             <div className="v2-rule-card" key={row.key}>
               <div className="v2-rule-head">
-                <span className="v2-field-hint">Feed</span>
-                <button type="button" className="v2-btn-ghost" onClick={() => removeRow(row.key)}>
-                  remove
+                <span className="v2-rule-title">
+                  {(row.type === 'url' ? hostOf(row.ref, '') : '') || cardTitle(row.ref, 'Feed')}
+                </span>
+                <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRow(row.key)}>
+                  Remove
                 </button>
               </div>
 
