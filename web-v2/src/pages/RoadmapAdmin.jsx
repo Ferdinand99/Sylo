@@ -14,6 +14,7 @@ import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { formatCount } from '../util.js';
+import { ROADMAP_STATUS } from '../roadmapStatus.js';
 
 function EditRow({ post, onSave, onCancel }) {
   const [title, setTitle] = useState(post.title);
@@ -66,8 +67,6 @@ function EditRow({ post, onSave, onCancel }) {
     </form>
   );
 }
-
-const ROADMAP_TONES = { planned: 'neutral', started: 'warning', completed: 'success' };
 
 export default function RoadmapAdmin() {
   const [state, setState] = useState({ loading: true, data: null, error: null });
@@ -239,7 +238,10 @@ export default function RoadmapAdmin() {
               <div className="v2-row v2-row-stack v2-roadmap-row" key={p.id}>
                 <div className="v2-row-main">
                   <h3 className="v2-break">
-                    <Badge tone={ROADMAP_TONES[p.status]}>{p.status}</Badge> {p.title}
+                    <Badge tone={ROADMAP_STATUS[p.status]?.tone}>
+                      {ROADMAP_STATUS[p.status]?.label ?? p.status}
+                    </Badge>{' '}
+                    {p.title}
                   </h3>
                   <div
                     className="v2-roadmap-desc v2-break"

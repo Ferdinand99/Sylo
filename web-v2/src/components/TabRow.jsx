@@ -12,13 +12,30 @@ export function scrollTarget(view, tab) {
 }
 
 /**
+ * Which tab an arrow key moves focus to, or null for any other key. Left/Right wrap around;
+ * Home and End jump to the ends.
+ */
+export function nextTabIndex(key, tabs, current) {
+  const at = tabs.indexOf(current);
+  if (at === -1) return null;
+  if (key === 'ArrowRight') return (at + 1) % tabs.length;
+  if (key === 'ArrowLeft') return (at - 1 + tabs.length) % tabs.length;
+  if (key === 'Home') return 0;
+  if (key === 'End') return tabs.length - 1;
+  return null;
+}
+
+/**
  * A row of tabs on a single line. When they don't fit (a phone) the row scrolls sideways, the
  * edge that has more tabs behind it fades out, and the active tab is scrolled into view. Put the
  * `.v2-tab` buttons inside as children and mark the current one with `is-active`; pass
- * `activeKey` (any value that changes with the selection) so the row follows it.
+ * `activeKey` (any value that changes with the selection) so the row follows it. Tabs are
+ * keyboard-operable as a tab list: only the active one is a Tab stop, the arrow keys / Home / End
+ * move focus between them, Enter or Space picks one; `panelId` is the id of the tab panel, which
+ * the active tab then points to with aria-controls.
  *   <TabRow className="v2-hub-tabs" role="tablist" activeKey={tab}>…buttons…</TabRow>
  */
-export default function TabRow({ activeKey, className = '', children, ...rest }) {
+export default function TabRow({ activeKey, panelId, className = '', children, onKeyDown, ...rest }) {
   const ref = useRef(null);
   const [edge, setEdge] = useState({ start: false, end: false });
 
@@ -29,6 +46,23 @@ export default function TabRow({ activeKey, className = '', children, ...rest })
     const end = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
     setEdge((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
   }, []);
+
+  // After every render: the tabs may have changed width (a "(off)" suffix arriving) without the
+  // row itself being resized, which the observer below would never see. Also the roving
+  // tabindex: only the active tab is in the Tab order, the arrow keys move between the others.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    for (const tab of el.querySelectorAll('[role="tab"]')) {
+      const active = tab.classList.contains('is-active');
+      tab.tabIndex = active ? 0 : -1;
+      if (panelId) {
+        if (active) tab.setAttribute('aria-controls', panelId);
+        else tab.removeAttribute('aria-controls');
+      }
+    }
+    measure();
+  });
 
   // Keep the selected tab visible: when the page opens on a tab far to the right, and after a
   // click on a half-hidden one.
@@ -60,6 +94,16 @@ export default function TabRow({ activeKey, className = '', children, ...rest })
       ref={ref}
       className={`v2-tabs${className ? ` ${className}` : ''}${fade}`}
       onScroll={measure}
+      onKeyDown={(e) => {
+        onKeyDown?.(e);
+        if (e.defaultPrevented) return;
+        const next = nextTabIndex(e.key, [...e.currentTarget.querySelectorAll('[role="tab"]')], e.target);
+        if (next === null) return;
+        e.preventDefault();
+        const tabs = e.currentTarget.querySelectorAll('[role="tab"]');
+        tabs[next].focus();
+        tabs[next].scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      }}
     >
       {children}
     </div>

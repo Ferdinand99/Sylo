@@ -400,7 +400,7 @@ export default function ModerationHub() {
   return (
     <>
       <h1 className="v2-section-title">Moderation</h1>
-      <TabRow className="v2-hub-tabs" role="tablist" activeKey={active}>
+      <TabRow className="v2-hub-tabs" role="tablist" activeKey={active} panelId="moderation-panel">
         {TABS.map(([key, label, moduleId]) => (
           <button
             key={key}
@@ -417,7 +417,7 @@ export default function ModerationHub() {
       </TabRow>
       {/* Outside the keyed tab content, so the entrance plays on the first
           visit only — not again on a tab or server switch. */}
-      <Reveal className="v2-embedded">
+      <Reveal className="v2-embedded" id="moderation-panel" role="tabpanel">
         <Content key={guildId} />
       </Reveal>
     </>

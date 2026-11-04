@@ -2,7 +2,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import AppTag from '../components/AppTag.jsx';
 import Badge, { appealTone, caseTone, sentenceCase } from '../components/Badge.jsx';
-import TabRow, { scrollTarget } from '../components/TabRow.jsx';
+import TabRow, { nextTabIndex, scrollTarget } from '../components/TabRow.jsx';
+import { ROADMAP_STATUS } from '../roadmapStatus.js';
 import UnitInput from '../components/UnitInput.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 import { DISCORD, PlatformContext } from '../platformContext.jsx';
@@ -13,6 +14,11 @@ describe('Badge', () => {
     expect(sentenceCase('PUBLISHED')).toBe('Published');
     expect(sentenceCase('not_set')).toBe('Not set');
     expect(sentenceCase('Fluxer')).toBe('Fluxer');
+    // Short acronyms and mixed-case words keep their capitals.
+    expect(sentenceCase('API')).toBe('API');
+    expect(sentenceCase('DM')).toBe('DM');
+    expect(sentenceCase('iOS')).toBe('iOS');
+    expect(sentenceCase('DM sent')).toBe('DM sent');
     expect(sentenceCase('')).toBe('');
   });
 
@@ -86,25 +92,94 @@ describe('scrollTarget', () => {
   });
 });
 
+describe('roadmap labels', () => {
+  it('has one label and tone per stage, shared by the public page and the admin list', () => {
+    expect(ROADMAP_STATUS.started).toEqual({ label: 'In progress', tone: 'warning' });
+    expect(Object.keys(ROADMAP_STATUS)).toEqual(['planned', 'started', 'completed']);
+  });
+});
+
+describe('nextTabIndex', () => {
+  const tabs = ['a', 'b', 'c'];
+  it('moves with the arrows, wrapping around, and Home/End jump', () => {
+    expect(nextTabIndex('ArrowRight', tabs, 'a')).toBe(1);
+    expect(nextTabIndex('ArrowRight', tabs, 'c')).toBe(0);
+    expect(nextTabIndex('ArrowLeft', tabs, 'a')).toBe(2);
+    expect(nextTabIndex('Home', tabs, 'c')).toBe(0);
+    expect(nextTabIndex('End', tabs, 'a')).toBe(2);
+  });
+  it('ignores other keys and elements that are not tabs', () => {
+    expect(nextTabIndex('Enter', tabs, 'a')).toBeNull();
+    expect(nextTabIndex('ArrowRight', tabs, 'x')).toBeNull();
+  });
+});
+
 describe('TabRow', () => {
-  it('renders its tabs in one .v2-tabs row and passes the role through', () => {
-    render(
-      <TabRow className="v2-hub-tabs" role="tablist" activeKey="a">
-        <button type="button" role="tab" className="v2-tab is-active">
-          A
-        </button>
-        <button type="button" role="tab" className="v2-tab">
-          B
-        </button>
+  function Row({ wide = false, active = 'a' }) {
+    return (
+      <TabRow className="v2-hub-tabs" role="tablist" activeKey={active} panelId="panel">
+        {['a', 'b', 'c'].map((k) => (
+          <button key={k} type="button" role="tab" className={`v2-tab${active === k ? ' is-active' : ''}`}>
+            {k}
+            {wide && k === 'c' ? ' (off)' : ''}
+          </button>
+        ))}
       </TabRow>
     );
+  }
+  function fakeLayout(row, { scrollLeft, clientWidth, scrollWidth }) {
+    Object.defineProperty(row, 'scrollLeft', { configurable: true, writable: true, value: scrollLeft });
+    Object.defineProperty(row, 'clientWidth', { configurable: true, value: clientWidth });
+    Object.defineProperty(row, 'scrollWidth', { configurable: true, get: () => scrollWidth.value });
+  }
+
+  it('renders its tabs in one .v2-tabs row and passes the role through', () => {
+    render(<Row />);
     const list = screen.getByRole('tablist');
     expect(list.className).toContain('v2-tabs');
     expect(list.className).toContain('v2-hub-tabs');
-    expect(screen.getAllByRole('tab')).toHaveLength(2);
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
     // Nothing overflows without layout, so no edge fades.
-    fireEvent.scroll(list);
     expect(list.className).not.toContain('fade-');
+  });
+
+  it('fades the end that has more tabs, and notices when the tabs widen without the row resizing', () => {
+    const width = { value: 300 };
+    const { rerender } = render(<Row />);
+    const row = screen.getByRole('tablist');
+    fakeLayout(row, { scrollLeft: 0, clientWidth: 300, scrollWidth: width });
+    rerender(<Row />);
+    expect(row.className).not.toContain('fade-');
+    // A suffix arrives and the tabs are now wider than the row.
+    width.value = 420;
+    rerender(<Row wide />);
+    expect(row.className).toContain('fade-end');
+    expect(row.className).not.toContain('fade-start');
+    // Scrolled to the far end: only the start fades.
+    row.scrollLeft = 120;
+    fireEvent.scroll(row);
+    expect(row.className).toContain('fade-start');
+    expect(row.className).not.toContain('fade-end');
+  });
+
+  it('keeps only the active tab in the Tab order and points it at the panel', () => {
+    render(<Row active="b" />);
+    const [a, b, c] = screen.getAllByRole('tab');
+    expect([a.tabIndex, b.tabIndex, c.tabIndex]).toEqual([-1, 0, -1]);
+    expect(b.getAttribute('aria-controls')).toBe('panel');
+    expect(a.getAttribute('aria-controls')).toBeNull();
+  });
+
+  it('moves focus with the arrow keys', () => {
+    render(<Row />);
+    const [a, b, c] = screen.getAllByRole('tab');
+    a.focus();
+    fireEvent.keyDown(a, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(b);
+    fireEvent.keyDown(b, { key: 'End' });
+    expect(document.activeElement).toBe(c);
+    fireEvent.keyDown(c, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(a);
   });
 });
 

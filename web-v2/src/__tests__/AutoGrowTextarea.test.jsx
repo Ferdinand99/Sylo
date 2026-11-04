@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AutoGrowTextarea, { resizeToContent } from '../components/AutoGrowTextarea.jsx';
 
 // jsdom does no layout, so scrollHeight is always 0: fake a height that follows the line count.
@@ -13,12 +13,26 @@ function fakeLineHeight(px) {
     },
   });
 }
+// jsdom claims to support every property; the script path is the one under test here.
+beforeEach(() => {
+  vi.stubGlobal('CSS', { supports: () => false });
+});
 afterEach(() => {
+  vi.unstubAllGlobals();
   if (original) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', original);
   else delete HTMLElement.prototype.scrollHeight;
 });
 
 describe('resizeToContent', () => {
+  it('leaves the height to the browser where field-sizing is supported', () => {
+    fakeLineHeight(20);
+    vi.stubGlobal('CSS', { supports: () => true });
+    const el = document.createElement('textarea');
+    el.value = 'a\nb';
+    resizeToContent(el);
+    expect(el.style.height).toBe('');
+  });
+
   it('sets the height from scrollHeight', () => {
     fakeLineHeight(20);
     const el = document.createElement('textarea');
@@ -29,6 +43,33 @@ describe('resizeToContent', () => {
 
   it('does nothing without an element', () => {
     expect(() => resizeToContent(null)).not.toThrow();
+  });
+});
+
+describe('resizeToContent scroll position', () => {
+  it('puts the page back where it was when measuring made the browser move it', () => {
+    let y = 500;
+    Object.defineProperty(window, 'scrollY', { configurable: true, get: () => y });
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        y = 300; // collapsing the box shortened the page
+        return 40;
+      },
+    });
+    const el = document.createElement('textarea');
+    resizeToContent(el);
+    expect(scrollTo).toHaveBeenCalledWith(window.scrollX, 500);
+    scrollTo.mockRestore();
+  });
+
+  it('leaves the scroll position alone when nothing moved', () => {
+    fakeLineHeight(20);
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    resizeToContent(document.createElement('textarea'));
+    expect(scrollTo).not.toHaveBeenCalled();
+    scrollTo.mockRestore();
   });
 });
 
@@ -75,7 +116,8 @@ describe('AutoGrowTextarea', () => {
       />
     );
     const box = screen.getByLabelText('Text');
-    expect(box.className).toBe('v2-autogrow v2-embed-input');
+    expect(box.classList.contains('v2-autogrow')).toBe(true);
+    expect(box.classList.contains('v2-embed-input')).toBe(true);
     expect(box.getAttribute('rows')).toBe('1');
     fireEvent.focus(box);
     expect(focused).toBe(true);

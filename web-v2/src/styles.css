@@ -1620,6 +1620,13 @@ a.v2-row:active {
   overflow: hidden;
   resize: none;
 }
+/* Where the browser can size a textarea to its text by itself, it does (the script then leaves
+   the height alone). The width stays what the field's own class says. */
+@supports (field-sizing: content) {
+  .v2-autogrow {
+    field-sizing: content;
+  }
+}
 /* Same specificity as the `font: inherit` reset above (and later in the file), so the
    per-field sizes below win; without the .v2-embed-preview prefix they lost to it
    and the title looked like body text. */

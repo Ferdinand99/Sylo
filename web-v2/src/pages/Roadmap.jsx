@@ -5,12 +5,9 @@ import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
 import { loginHref } from '../publicRoutes.js';
+import { ROADMAP_STATUS } from '../roadmapStatus.js';
 
-const GROUPS = [
-  { key: 'planned', label: 'Planned', tone: 'neutral' },
-  { key: 'started', label: 'In progress', tone: 'warning' },
-  { key: 'completed', label: 'Recently shipped', tone: 'success' },
-];
+const GROUPS = Object.entries(ROADMAP_STATUS).map(([key, v]) => ({ key, ...v }));
 
 function VoteButton({ post, onVote, canVote }) {
   const [busy, setBusy] = useState(false);

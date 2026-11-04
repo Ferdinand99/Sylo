@@ -12,14 +12,21 @@
 
 export const BADGE_TONES = ['danger', 'warning', 'success', 'neutral'];
 
-/** "timeout" -> "Timeout", "NOT_SET" -> "Not set". Mixed-case text keeps its capitals ("Fluxer"). */
+/**
+ * "timeout" -> "Timeout", "NOT_SET" -> "Not set", "PUBLISHED" -> "Published". Only long all-caps
+ * words (4+ letters) are lowercased; short acronyms and mixed-case words keep their capitals
+ * ("API", "DM", "iOS", "Fluxer").
+ */
 export function sentenceCase(text) {
   const s = String(text ?? '')
     .trim()
     .replace(/[_-]+/g, ' ');
   if (!s) return s;
-  const rest = s === s.toUpperCase() && s.length > 1 ? s.slice(1).toLowerCase() : s.slice(1);
-  return s.charAt(0).toUpperCase() + rest;
+  const words = s.split(' ').map((w) => (w.length > 3 && w === w.toUpperCase() ? w.toLowerCase() : w));
+  const first = words[0];
+  // A first word like "iOS" or "macOS" already has its own capitalisation.
+  if (!/^[a-z]+[A-Z]/.test(first)) words[0] = first.charAt(0).toUpperCase() + first.slice(1);
+  return words.join(' ');
 }
 
 // Tone per moderation action (the case type stored by the bot).
