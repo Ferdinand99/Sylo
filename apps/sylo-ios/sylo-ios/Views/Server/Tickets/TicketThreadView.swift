@@ -2,17 +2,19 @@ import SwiftUI
 import SyloKit
 import UIKit
 
-/// One ticket as a conversation, like Messages: the member's messages on the left, staff replies
-/// on the right in Sylo violet (the StaffBubble colour, the same as on the web), system notes
-/// centred, a time above each burst of messages, and a reply field at the bottom. New messages
-/// arrive every few seconds while it is open.
+/// One ticket as a conversation, like Messages: the member's messages on the left in neutral
+/// bubbles, staff replies on the right in Sylo cyan, system notes centred, a time above each burst
+/// of messages, and a reply field at the bottom. New messages arrive every few seconds while it is
+/// open.
 struct TicketThreadView: View {
     let server: ServerID
     let route: TicketRoute
 
     @Environment(PushCoordinator.self) private var push
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var model: TicketThreadModel
     @State private var reply = ""
+    @State private var sentCount = 0
     @State private var isConfirmingClose = false
     @State private var closingMessage = ""
 
@@ -24,6 +26,7 @@ struct TicketThreadView: View {
 
     var body: some View {
         content
+            .background { SyloBackground() }
             .navigationTitle(model.ticket?.user ?? route.user)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -69,15 +72,13 @@ struct TicketThreadView: View {
             conversation
                 .safeAreaInset(edge: .bottom) { composer }
         } else if let message = model.errorMessage {
-            ContentUnavailableView {
-                Label("Couldn't Load Ticket", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(message)
-            } actions: {
-                Button("Try Again") { Task { await model.load() } }
-            }
+            EmptyState(
+                "Couldn't Load Ticket", systemImage: "exclamationmark.triangle", message: Text(message),
+                isError: true, actionTitle: "Try Again") {
+                    Task { await model.load() }
+                }
         } else {
-            ProgressView()
+            SyloLoadingView()
         }
     }
 
@@ -87,21 +88,20 @@ struct TicketThreadView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 6) {
-                    if let opened = model.ticket?.openedAt {
-                        Text("Opened \(MessageTime.separatorLabel(for: opened))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    if let ticket = model.ticket {
+                        TicketHeader(ticket: ticket, isClosed: model.isClosed)
                             .padding(.bottom, 8)
                     }
                     ForEach(Array(model.messages.enumerated()), id: \.element.id) { index, message in
                         if let label = separator(before: index) {
                             Text(verbatim: label)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.syloNumber(.caption, weight: .regular))
+                                .foregroundStyle(Color.syloMuted)
                                 .padding(.top, 10)
                         }
-                        MessageBubble(message: message)
+                        MessageBubble(message: message, showsSender: startsRun(at: index))
                             .id(BubbleID.message(message.id))
+                            .transition(reduceMotion ? .opacity : .scale(scale: 0.92, anchor: message.kind == .staff ? .bottomTrailing : .bottomLeading).combined(with: .opacity))
                     }
                     ForEach(model.outgoing) { outgoing in
                         OutgoingBubble(reply: outgoing) {
@@ -110,6 +110,7 @@ struct TicketThreadView: View {
                             model.discard(outgoing.id)
                         }
                         .id(BubbleID.outgoing(outgoing.id))
+                        .transition(reduceMotion ? .opacity : .scale(scale: 0.92, anchor: .bottomTrailing).combined(with: .opacity))
                     }
                     if let warning = model.deliveryWarning {
                         StatusMessage(warning, kind: .notice)
@@ -118,7 +119,7 @@ struct TicketThreadView: View {
                     if model.isClosed {
                         Text("This ticket is closed.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.syloMuted)
                             .padding(.top, 12)
                     }
                     Color.clear.frame(height: 1).id(BubbleID.bottom)
@@ -128,6 +129,7 @@ struct TicketThreadView: View {
             }
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
+            .animation(reduceMotion ? nil : SyloMotion.quick, value: model.messages.count + model.outgoing.count)
             .onChange(of: model.messages.count + model.outgoing.count) {
                 withAnimation { proxy.scrollTo(BubbleID.bottom, anchor: .bottom) }
             }
@@ -144,21 +146,37 @@ struct TicketThreadView: View {
         return MessageTime.separatorLabel(for: date)
     }
 
+    /// Whether the message at `index` is the first of a run by the same side, which gets a name.
+    private func startsRun(at index: Int) -> Bool {
+        guard index > 0 else { return true }
+        return separator(before: index) != nil || model.messages[index - 1].kind != model.messages[index].kind
+    }
+
     // MARK: - Composer
 
     @ViewBuilder
     private var composer: some View {
         if !model.isClosed {
+            let canSend = !reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             HStack(alignment: .bottom, spacing: 8) {
                 ComposerField(text: $reply)
                 Button {
-                    if model.send(reply) != nil { reply = "" }
+                    if model.send(reply) != nil {
+                        reply = ""
+                        sentCount += 1
+                    }
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 32))
-                        .symbolRenderingMode(.hierarchical)
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(canSend ? Color.syloOnCyan : Color.syloMuted)
+                        .frame(width: 44, height: 44)
+                        .background(canSend ? Color.syloCyan : Color.syloCard2, in: Circle())
+                        .overlay { Circle().strokeBorder(canSend ? Color.clear : Color.syloLineStrong, lineWidth: 1) }
+                        .syloGlow(isLive: canSend, radius: 10)
                 }
-                .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .buttonStyle(.syloPress)
+                .disabled(!canSend)
+                .sensoryFeedback(.impact(weight: .light), trigger: sentCount)
                 .accessibilityLabel("Send")
             }
             .padding(.horizontal)
@@ -178,6 +196,44 @@ private enum BubbleID: Hashable {
     case bottom
 }
 
+/// The ticket at the top of the thread: its number, whether it is open, and when it was opened.
+private struct TicketHeader: View {
+    let ticket: TicketInfo
+    let isClosed: Bool
+
+    var body: some View {
+        HStack(spacing: SyloSpacing.s) {
+            Text(verbatim: "#\(ticket.id)")
+                .font(.syloNumber(.footnote))
+                .foregroundStyle(Color.syloText)
+            if isClosed {
+                SyloPill("Closed", systemImage: "checkmark.circle", tint: .syloMuted)
+            } else {
+                HStack(spacing: 5) {
+                    LiveDot(size: 7, pulses: false)
+                    Text("Open")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.syloBrand)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.syloCyan.opacity(0.14), in: Capsule())
+                .overlay { Capsule().strokeBorder(Color.syloCyan.opacity(0.35), lineWidth: 1) }
+            }
+            if let opened = ticket.openedAt {
+                Text("Opened \(MessageTime.separatorLabel(for: opened))")
+                    .font(.caption)
+                    .foregroundStyle(Color.syloMuted)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, SyloSpacing.m)
+        .padding(.vertical, 8)
+        .syloCard(radius: 18)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// The reply field: grows to five lines; Liquid Glass on iOS 26 and later.
 private struct ComposerField: View {
     @Binding var text: String
@@ -185,53 +241,82 @@ private struct ComposerField: View {
     var body: some View {
         let field = TextField("Reply as Staff", text: $text, axis: .vertical)
             .lineLimit(1...5)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
         if #available(iOS 26, *) {
-            field.glassEffect(.regular.interactive(), in: .rect(cornerRadius: 20))
+            field.glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
         } else {
             field.background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Color(uiColor: .separator)))
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(Color.syloLineStrong))
         }
     }
+}
+
+/// The shape of a chat bubble: round, with a tighter corner on the side of whoever wrote it.
+private func bubbleShape(isStaff: Bool) -> UnevenRoundedRectangle {
+    UnevenRoundedRectangle(
+        topLeadingRadius: 20, bottomLeadingRadius: isStaff ? 20 : 6,
+        bottomTrailingRadius: isStaff ? 6 : 20, topTrailingRadius: 20, style: .continuous)
 }
 
 /// One message from the server: the member's on the left, staff on the right, system centred.
 private struct MessageBubble: View {
     let message: TicketMessage
+    let showsSender: Bool
 
     var body: some View {
         switch message.kind {
         case .staff:
             VStack(alignment: .trailing, spacing: 2) {
+                if showsSender {
+                    sender
+                }
                 HStack {
                     Spacer(minLength: 48)
-                    bubble(foreground: .white, background: AnyShapeStyle(Color.staffBubble))
+                    bubble(isStaff: true)
                 }
                 if !message.isDelivered {
                     Label("Not delivered as a DM", systemImage: "exclamationmark.circle")
                         .font(.caption2)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.syloBad)
                 }
             }
         case .system:
             Text(verbatim: message.content)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.syloMuted)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(Color.syloLine, in: Capsule())
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
         default:
-            HStack {
-                bubble(foreground: .primary, background: AnyShapeStyle(Color(uiColor: .systemGray5)))
-                Spacer(minLength: 48)
+            VStack(alignment: .leading, spacing: 2) {
+                if showsSender {
+                    sender
+                }
+                HStack {
+                    bubble(isStaff: false)
+                    Spacer(minLength: 48)
+                }
             }
         }
     }
 
-    private func bubble(foreground: Color, background: AnyShapeStyle) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private var sender: some View {
+        Text(verbatim: message.who)
+            .font(.caption)
+            .foregroundStyle(Color.syloMuted)
+            .padding(.horizontal, 6)
+            .padding(.top, 4)
+    }
+
+    private func bubble(isStaff: Bool) -> some View {
+        let shape = bubbleShape(isStaff: isStaff)
+        let foreground = isStaff ? Color.syloOnCyan : Color.syloText
+        return VStack(alignment: .leading, spacing: 6) {
             if !message.content.isEmpty {
                 Text(verbatim: message.content)
             }
@@ -244,9 +329,18 @@ private struct MessageBubble: View {
             }
         }
         .foregroundStyle(foreground)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(background, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background {
+            if isStaff {
+                shape.fill(LinearGradient(
+                    colors: [Color.syloCyan, Color.syloCyan.opacity(0.88)], startPoint: .top, endPoint: .bottom))
+            } else {
+                shape.fill(Color.syloCard2)
+            }
+        }
+        .overlay { if !isStaff { shape.strokeBorder(Color.syloLine, lineWidth: 1) } }
+        .contentShape(.contextMenuPreview, shape)
         .contextMenu {
             if !message.content.isEmpty {
                 Button("Copy", systemImage: "doc.on.doc") {
@@ -270,10 +364,10 @@ private struct OutgoingBubble: View {
             HStack {
                 Spacer(minLength: 48)
                 Text(verbatim: reply.content)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.staffBubble, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .foregroundStyle(Color.syloOnCyan)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(Color.syloCyan, in: bubbleShape(isStaff: true))
                     .opacity(isSending ? 0.6 : 1)
                     .contextMenu {
                         Button("Delete", systemImage: "trash", role: .destructive, action: discard)
@@ -283,12 +377,12 @@ private struct OutgoingBubble: View {
             case .sending:
                 Text("Sending…")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.syloMuted)
             case .failed(let message):
                 Button(action: retry) {
                     Label("Not sent. Tap to try again.", systemImage: "exclamationmark.circle.fill")
                         .font(.caption2)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.syloBad)
                 }
                 .accessibilityHint(Text(verbatim: message))
             }
@@ -299,16 +393,4 @@ private struct OutgoingBubble: View {
         if case .sending = reply.state { return true }
         return false
     }
-}
-
-#Preview {
-    let session = AppSession.preview(.signedIn) { endpoint in
-        guard endpoint is Endpoints.Ticket else { return nil }
-        return PreviewData.ticketThread
-    }
-    NavigationStack {
-        TicketThreadView(server: "1", route: TicketRoute(id: 1, user: "member#0001"), session: session)
-    }
-    .environment(session)
-    .environment(PushCoordinator(session: session))
 }

@@ -10,6 +10,8 @@ public final class TicketsModel {
     public private(set) var isLoading = false
     /// Why the list could not be loaded (the last list, if any, stays).
     public var errorMessage: String?
+    /// Why closing a ticket from the list did not go through.
+    public var actionError: String?
 
     private let session: AppSession
 
@@ -31,5 +33,24 @@ public final class TicketsModel {
             let error = NetworkError(error)
             if error != .cancelled, error != .unauthorized { errorMessage = error.userMessage }
         }
+    }
+}
+
+extension TicketsModel {
+    /// Closes a ticket without a closing message (a swipe in the list), then loads the list again.
+    /// On failure explains in ``actionError``.
+    /// - Returns: Whether the ticket was closed.
+    @discardableResult
+    public func close(_ id: Int) async -> Bool {
+        actionError = nil
+        do {
+            _ = try await session.send(Endpoints.CloseTicket(server: server, id: id, message: ""))
+        } catch {
+            let error = NetworkError(error)
+            if error != .cancelled, error != .unauthorized { actionError = error.userMessage }
+            return false
+        }
+        await load()
+        return true
     }
 }
