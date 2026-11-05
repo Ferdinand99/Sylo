@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useCmd } from '../platformContext.jsx';
 import { setInviteBonus } from '../api.js';
 import { notify } from '../notify.js';
+import Callout from '../components/Callout.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
@@ -50,10 +51,10 @@ export default function InviteTracker() {
       </p>
 
       {!board.canReadInvites ? (
-        <p className="v2-warn-text">
-          Sylo needs the Manage Server permission to read this server's invites — without it, joins can't be
-          attributed to an inviter.
-        </p>
+        <Callout tone="warning">
+          Sylo needs the Manage Server permission to see this server's invites. Without it, joins can't be
+          credited to the member who invited them.
+        </Callout>
       ) : null}
 
       <form onSubmit={save} data-savebar>
@@ -101,37 +102,44 @@ export default function InviteTracker() {
       {board.rows.length === 0 ? (
         <p className="v2-field-hint">No invites tracked yet.</p>
       ) : (
-        <div className="v2-list">
-          {board.rows.map((r) => (
-            <div className="v2-row" key={r.userId}>
-              <div className="v2-row-main">
-                <h3>
-                  #{r.rank} · {r.name}
-                </h3>
-                <p>
-                  <Meta
-                    items={[
-                      `${r.net} invite${r.net === 1 ? '' : 's'}`,
-                      `${r.regular} joined`,
-                      `${r.leaves} left`,
-                      `${r.bonus} bonus`,
-                    ]}
-                  />
-                </p>
+        <>
+          <p className="v2-field-hint">
+            Invites = people who joined, minus those who left, plus any bonus you add below.
+          </p>
+          <div className="v2-list">
+            {board.rows.map((r) => (
+              <div className="v2-row" key={r.userId}>
+                <div className="v2-row-main">
+                  <h3>
+                    #{r.rank} · {r.name}
+                  </h3>
+                  <p>
+                    <Meta
+                      items={[
+                        `${r.net} invite${r.net === 1 ? '' : 's'}`,
+                        `${r.regular} joined`,
+                        `${r.leaves} left`,
+                        `${r.bonus} bonus`,
+                      ]}
+                    />
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
 
       <h2 className="v2-group-title v2-section-gap">Adjust bonus invites</h2>
       <p className="v2-field-hint">
-        Add or subtract from a member's total (e.g. to reward a giveaway). Sets the bonus outright.
+        Set a member's bonus invites, for example to reward a giveaway. This replaces their current bonus; use
+        a negative number to take invites away.
       </p>
       <form onSubmit={onSetBonus}>
         <div className="v2-field-row">
           <input
             type="text"
+            aria-label="Member ID or @mention"
             placeholder="Member ID or @mention"
             value={bonusUser}
             onChange={(e) => setBonusUser(e.target.value)}
@@ -139,6 +147,7 @@ export default function InviteTracker() {
           />
           <input
             type="number"
+            aria-label="Bonus invites"
             className="v2-input-sm"
             value={bonusValue}
             onChange={(e) => setBonusValue(e.target.value)}

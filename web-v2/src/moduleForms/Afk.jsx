@@ -14,7 +14,7 @@ export default function Afk() {
   return (
     <>
       <h1 className="v2-section-title">AFK</h1>
-      <p className="v2-note">
+      <p className="v2-field-hint">
         Members run <code>{cmd('/afk [reason]')}</code>. Sylo replies to anyone who mentions them, and clears
         the status automatically when they next send a message.
       </p>

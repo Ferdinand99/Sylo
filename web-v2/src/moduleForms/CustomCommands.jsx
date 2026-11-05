@@ -458,7 +458,8 @@ export default function CustomCommands() {
                       items={[
                         c.description || 'No description',
                         plural(c.actions.length, 'action'),
-                        (c.allowedRoles.length > 0 || c.allowedChannels.length > 0) && 'restricted',
+                        (c.allowedRoles.length > 0 || c.allowedChannels.length > 0) &&
+                          'limited to certain roles or channels',
                         c.cooldownSeconds ? `${c.cooldownSeconds}s cooldown` : false,
                       ]}
                     />

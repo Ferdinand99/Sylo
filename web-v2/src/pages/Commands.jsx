@@ -6,11 +6,13 @@ import { notify } from '../notify.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
 import Switch from '../components/Switch.jsx';
-import Meta from '../components/Meta.jsx';
+import Meta, { plural } from '../components/Meta.jsx';
+import { useCmd } from '../platformContext.jsx';
 
 // One command: on/off, plus optional limits to certain channels and roles.
 // Empty channel and role lists mean "allowed everywhere, for everyone".
 function CommandRow({ command, channels, roles, guildId, onSaved }) {
+  const cmd = useCmd();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -35,18 +37,19 @@ function CommandRow({ command, channels, roles, guildId, onSaved }) {
   }
 
   const limited = command.allowedChannels.length > 0 || command.allowedRoles.length > 0;
+  // "2 channels, 1 role": what the limits are, on the button that opens them.
+  const limitSummary = [
+    command.allowedChannels.length > 0 && plural(command.allowedChannels.length, 'channel'),
+    command.allowedRoles.length > 0 && plural(command.allowedRoles.length, 'role'),
+  ]
+    .filter(Boolean)
+    .join(', ');
   return (
     <div className={`v2-row v2-cmd-row ${command.enabled ? 'is-on' : 'is-off'}`}>
       <div className="v2-row-main">
-        <h3 className="v2-break">{command.name}</h3>
+        <h3 className="v2-break">{cmd(`/${command.name}`)}</h3>
         <p title={command.description || undefined}>
-          <Meta
-            items={[
-              command.description,
-              !command.enabled && 'turned off',
-              limited && 'limited to certain channels or roles',
-            ]}
-          />
+          <Meta items={[command.description, !command.enabled && 'turned off']} />
         </p>
         {open ? (
           <div className="v2-cmd-limits">
@@ -93,7 +96,7 @@ function CommandRow({ command, channels, roles, guildId, onSaved }) {
           </div>
         ) : (
           <button type="button" className="v2-btn-ghost v2-cmd-open" onClick={() => setOpen(true)}>
-            Limits
+            {limited ? `Limits: ${limitSummary}` : 'Limits'}
           </button>
         )}
       </div>

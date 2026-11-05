@@ -160,7 +160,7 @@ export default function TicketView() {
   return (
     <>
       <p className="v2-field-hint">
-        <Link to={`/guilds/${guildId}/tickets`}>Back to tickets</Link>
+        <Link to={`/guilds/${guildId}/tickets`}>← Tickets</Link>
       </p>
       <h1 className="v2-section-title v2-ticket-title">
         Ticket #{ticket.id}
@@ -233,8 +233,8 @@ export default function TicketView() {
             </button>
           </div>
           <p className="v2-field-hint" id="ticket-reply-hint">
-            Ctrl+Enter (⌘+Enter on a Mac) sends. Close ticket sends what you wrote as the final reply. With an
-            empty box it sends the default closing notice.
+            Ctrl+Enter (⌘+Enter on a Mac) sends. Close ticket sends your text as the last reply, or the
+            standard closing notice if the box is empty.
           </p>
         </div>
       ) : (

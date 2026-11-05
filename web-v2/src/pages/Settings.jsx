@@ -100,7 +100,7 @@ export default function Settings() {
         <Field
           group
           label="Bot master roles"
-          hint="Roles with Administrator already have dashboard access and don't need to be added here."
+          hint="Members with these roles can open this dashboard and change Sylo's settings for the server, like someone with Manage Server. Roles with Administrator already can."
         >
           <ChipPicker
             kind="role"

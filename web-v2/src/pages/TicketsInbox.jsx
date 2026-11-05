@@ -44,6 +44,12 @@ export default function TicketsInbox() {
       </p>
 
       <h2 className="v2-group-title">Open ({formatCount(data.open.length)})</h2>
+      {data.open.some((t) => t.unread) ? (
+        <p className="v2-field-hint">
+          <span className="v2-unread-dot" aria-hidden="true" /> A dot marks a ticket with new messages you
+          haven't opened yet.
+        </p>
+      ) : null}
       {data.open.length ? (
         <div className="v2-list">
           {data.open.map((t) => (
@@ -56,7 +62,9 @@ export default function TicketsInbox() {
 
       {data.closed.length ? (
         <>
-          <h2 className="v2-group-title v2-section-gap">Recently closed</h2>
+          <h2 className="v2-group-title v2-section-gap">
+            Recently closed ({formatCount(data.closed.length)})
+          </h2>
           <div className="v2-list">
             {data.closed.map((t) => (
               <TicketRow key={t.id} ticket={t} guildId={guildId} />

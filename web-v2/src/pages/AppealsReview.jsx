@@ -125,12 +125,17 @@ export default function AppealsReview() {
   const decided = data.appeals.filter((a) => a.status !== 'open');
   return (
     <>
-      <h1 className="v2-section-title">Ban appeals</h1>
+      <div className="v2-page-head">
+        <h1 className="v2-section-title">Appeals</h1>
+        <Link className="v2-row-arrow" to={`/guilds/${guildId}/m/appeals`}>
+          Appeal settings →
+        </Link>
+      </div>
       {!data.moduleEnabled || !data.configured ? (
         <p className="v2-note">
-          {!data.moduleEnabled ? 'The Ban appeals module is off. ' : ''}
+          {!data.moduleEnabled ? 'The Appeals module is off. ' : ''}
           {!data.configured ? 'No appeal questions are set up yet. ' : ''}
-          Set it up under <Link to={`/guilds/${guildId}/m/appeals`}>Ban appeals settings</Link>.
+          Set it up under <Link to={`/guilds/${guildId}/m/appeals`}>Appeal settings</Link>.
         </p>
       ) : null}
 

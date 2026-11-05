@@ -26,6 +26,8 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 import Time from '../components/Time.jsx';
+import { PlatformContext } from '../platformContext.jsx';
+import { usePlatformInfo } from '../usePlatformInfo.js';
 
 const SUB_TABS = [
   ['cases', 'Cases'],
@@ -412,9 +414,11 @@ export default function ModerationHub() {
   const Content = TAB_CONTENT[active];
   const cards = (overview?.data?.groups ?? []).flatMap((g) => g.cards);
   const isOff = (moduleId) => moduleId && cards.find((c) => c.id === moduleId)?.enabled === false;
+  // The tabs hold module forms that word commands and capabilities for the server's platform.
+  const { info } = usePlatformInfo(guildId);
 
   return (
-    <>
+    <PlatformContext.Provider value={info}>
       <h1 className="v2-section-title">Moderation</h1>
       <TabRow className="v2-hub-tabs" role="tablist" activeKey={active} panelId="moderation-panel">
         {TABS.map(([key, label, moduleId]) => (
@@ -436,6 +440,6 @@ export default function ModerationHub() {
       <Reveal className="v2-embedded" id="moderation-panel" role="tabpanel">
         <Content key={guildId} />
       </Reveal>
-    </>
+    </PlatformContext.Provider>
   );
 }

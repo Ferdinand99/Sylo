@@ -7,13 +7,15 @@ import LoadError from '../components/LoadError.jsx';
 import Breadcrumb from '../components/Breadcrumb.jsx';
 import Field from '../components/Field.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
-import { formatCount } from '../util.js';
+import { copyIdHint, formatCount } from '../util.js';
+import { usePlatformInfo } from '../usePlatformInfo.js';
 import Reveal from '../components/Reveal.jsx';
 
 // Look up what Sylo stores about one member in this server and delete it on request.
 // Moderation cases and other safety records are kept.
 export default function MemberData() {
   const { guildId } = useParams();
+  const { info } = usePlatformInfo(guildId);
   const [params, setParams] = useSearchParams();
   const user = params.get('user') ?? '';
   const [query, setQuery] = useState(user);
@@ -47,6 +49,7 @@ export default function MemberData() {
           className="v2-member-data-input"
           aria-label="User ID or @mention"
           placeholder="User ID or @mention"
+          aria-describedby="member-id-hint"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           required
@@ -55,6 +58,10 @@ export default function MemberData() {
           Look up
         </button>
       </form>
+
+      <p className="v2-field-hint" id="member-id-hint">
+        Paste the member's user ID or an @mention. {copyIdHint(info.platform)}
+      </p>
 
       {error ? (
         error.status === 400 ? (

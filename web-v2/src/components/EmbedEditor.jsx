@@ -148,6 +148,9 @@ export default function EmbedEditor({
               {v.label}
             </button>
           ))}
+          <span className="v2-field-hint v2-embed-vars-hint">
+            Click one to add it to the field you last edited.
+          </span>
         </div>
       ) : null}
     </div>

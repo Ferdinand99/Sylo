@@ -5,10 +5,10 @@ import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import UnitInput from '../components/UnitInput.jsx';
-import { cardTitle, channelTitle } from '../util.js';
+import { cardTitle, channelTitle, copyIdHint } from '../util.js';
 
 const MODE_LABELS = { always: 'React to every message', random: 'React at a random chance' };
-const ROLE_ACTION_LABELS = { add: 'Give them the role', remove: 'Take the role away' };
+const ROLE_ACTION_LABELS = { add: 'Give it to them', remove: 'Take it away from them' };
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -81,9 +81,9 @@ export default function AutoReact() {
     <>
       <h1 className="v2-section-title">Auto-react</h1>
       <p className="v2-field-hint">
-        Reacts automatically to messages from chosen users or roles. Each rule below is independent — the{' '}
-        <strong>first</strong> rule that matches a message wins. Example: react with 🧟 to anyone with the
-        "Infected" role, and also give the "Infected" role to a few specific people to kick off the game.
+        Reacts automatically to messages from chosen users or roles. Rules are checked top to bottom; the{' '}
+        <strong>first</strong> one that matches is used. Example: react with 🧟 to anyone with the "Infected"
+        role, and also give the "Infected" role to a few specific people to kick off the game.
       </p>
 
       <form onSubmit={save} data-savebar>
@@ -136,6 +136,12 @@ export default function AutoReact() {
             <p className="v2-field-hint v2-rule-lead">
               Matches if <strong>either</strong> the users or the role below match.
             </p>
+            {!r.targetUsersText.trim() && !r.targetRoleId ? (
+              <p className="v2-ph-warn" role="status">
+                <span aria-hidden="true">⚠ </span>
+                This rule has no users and no role yet, so it won't match anything.
+              </p>
+            ) : null}
 
             <div className="v2-field">
               <label>
@@ -148,11 +154,8 @@ export default function AutoReact() {
                 onChange={(e) => updateRule(r.key, { targetUsersText: e.target.value })}
               />
               <p className="v2-field-hint">
-                Paste one or more user IDs, separated by spaces or commas.{' '}
-                {platform === 'fluxer'
-                  ? "To copy an ID, turn on developer mode in Fluxer's settings, then right-click the member and choose Copy User ID."
-                  : "To copy an ID, turn on Developer Mode in your Discord app's advanced settings, then right-click the member and choose Copy User ID."}{' '}
-                A pasted mention like &lt;@123…&gt; works too; a typed @name is not looked up.
+                Paste one or more user IDs, separated by spaces or commas. {copyIdHint(platform)} A pasted
+                mention like &lt;@123…&gt; works too; a typed @name is not looked up.
               </p>
             </div>
 
@@ -218,15 +221,17 @@ export default function AutoReact() {
                     </option>
                   ))}
                 </select>
-                <UnitInput
-                  unit="% chance"
-                  min={limitOf(limits, 'rules[].chance').min}
-                  max={limitOf(limits, 'rules[].chance').max}
-                  value={r.chance}
-                  onChange={(e) => updateRule(r.key, { chance: Number(e.target.value) })}
-                />
+                {r.mode === 'random' ? (
+                  <UnitInput
+                    unit="% chance"
+                    aria-label="Chance to react"
+                    min={limitOf(limits, 'rules[].chance').min}
+                    max={limitOf(limits, 'rules[].chance').max}
+                    value={r.chance}
+                    onChange={(e) => updateRule(r.key, { chance: Number(e.target.value) })}
+                  />
+                ) : null}
               </div>
-              <p className="v2-field-hint">The chance is only used when the mode is "random chance".</p>
             </div>
 
             <div className="v2-field">
@@ -235,16 +240,10 @@ export default function AutoReact() {
               </label>
               <div className="v2-field-row">
                 <select
-                  value={r.roleAction}
-                  onChange={(e) => updateRule(r.key, { roleAction: e.target.value })}
+                  aria-label="Role to change"
+                  value={r.roleId}
+                  onChange={(e) => updateRule(r.key, { roleId: e.target.value })}
                 >
-                  {data.roleActions.map((a) => (
-                    <option key={a} value={a}>
-                      {ROLE_ACTION_LABELS[a] || a}
-                    </option>
-                  ))}
-                </select>
-                <select value={r.roleId} onChange={(e) => updateRule(r.key, { roleId: e.target.value })}>
                   <option value="">— no role change —</option>
                   {data.roles.map((rl) => (
                     <option key={rl.id} value={rl.id}>
@@ -252,6 +251,22 @@ export default function AutoReact() {
                     </option>
                   ))}
                 </select>
+                {r.roleId ? (
+                  <>
+                    <span aria-hidden="true">→</span>
+                    <select
+                      aria-label="What to do with the role"
+                      value={r.roleAction}
+                      onChange={(e) => updateRule(r.key, { roleAction: e.target.value })}
+                    >
+                      {data.roleActions.map((a) => (
+                        <option key={a} value={a}>
+                          {ROLE_ACTION_LABELS[a] || a}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : null}
               </div>
               <p className="v2-field-hint">
                 Leave as "no role change" to just react without touching roles. Set a role here to also give

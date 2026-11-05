@@ -1,3 +1,10 @@
+/** How to copy a member's ID in the platform's own app (Discord, or Fluxer). */
+export function copyIdHint(platform) {
+  return platform === 'fluxer'
+    ? "To copy an ID, turn on developer mode in Fluxer's settings, then right-click the member and choose Copy User ID."
+    : "To copy an ID, turn on Developer Mode in your Discord app's advanced settings, then right-click the member and choose Copy User ID.";
+}
+
 export function slugify(text) {
   return text
     .toLowerCase()
