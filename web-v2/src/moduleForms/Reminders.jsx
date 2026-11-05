@@ -323,6 +323,8 @@ export default function Reminders() {
 
   useEffect(() => {
     load();
+    // Reload when the server changes; `load` is re-created every render and reads guildId itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guildId]);
 
   if (state.error) return <LoadError error={state.error} what="Reminders" />;

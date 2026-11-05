@@ -28,9 +28,9 @@ export function useApiData(fetchFn, deps, key) {
       .catch((error) => {
         if (seq.current === mySeq) setState({ data: null, loading: false, error, dataKey: undefined });
       });
-    // deps is the caller's own dependency array (this project has no
-    // eslint-plugin-react-hooks to police it), by design — fetchFn is a
-    // fresh closure every render and isn't meant to be a dep itself.
+    // deps is the caller's own dependency array, by design — fetchFn is a fresh closure every
+    // render and isn't meant to be a dep itself (and `key` is only read when the fetch starts).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
   // Escape hatch for a page to patch its own data after a save, without a
