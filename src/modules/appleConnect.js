@@ -397,6 +397,14 @@ async function fetchReviews(client, appId) {
   }));
 }
 
+/** Apps whose feedback endpoints already answered 404 once in this process (see fetchFeedback). */
+const feedbackMissing = new Set();
+
+/**
+ * TestFlight feedback. Apple answers 404 ("no resource of type betaFeedback...") for the apps and
+ * accounts these endpoints are not available for; that is "no feedback", not a failure, so it
+ * is returned empty and noted once per app per process instead of an error on every poll.
+ */
 async function fetchFeedback(client, appId) {
   const kinds = [
     ['screenshot', `/v1/apps/${appId}/betaFeedbackScreenshotSubmissions`],
@@ -404,10 +412,18 @@ async function fetchFeedback(client, appId) {
   ];
   const out = [];
   for (const [kind, path] of kinds) {
-    const items = await optional(
-      async () => (await client.getAll(path, { limit: 50 }, { maxPages: 1 })).data,
-      []
-    );
+    const items = await optional(async () => {
+      try {
+        return (await client.getAll(path, { limit: 50 }, { maxPages: 1 })).data;
+      } catch (err) {
+        if (err?.status !== 404) throw err;
+        if (!feedbackMissing.has(appId)) {
+          feedbackMissing.add(appId);
+          log.warn('apple', `app ${appId}: TestFlight feedback is not available (404), treating it as none`);
+        }
+        return [];
+      }
+    }, []);
     for (const f of items) {
       out.push({
         id: f.id,
