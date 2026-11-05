@@ -312,6 +312,7 @@ public final class GuildSettingsModel {
         saved = draft
         self.draft = draft
         saveCount += 1
+        session.noteModulesChanged()
         await load()
         return true
     }

@@ -17,6 +17,8 @@ public final class OverviewModel {
     public private(set) var latency: Duration?
 
     private var lastLoaded: ContinuousClock.Instant?
+    /// The session's ``AppSession/modulesRevision`` when the overview was last loaded.
+    private var loadedRevision = -1
 
     private var pending: Set<String> = []
     private let session: AppSession
@@ -36,12 +38,14 @@ public final class OverviewModel {
     public func load() async {
         isLoading = true
         defer { isLoading = false }
+        let revision = session.modulesRevision
         do {
             let clock = ContinuousClock()
             let start = clock.now
             overview = try await session.send(Endpoints.Overview(server: server))
             latency = start.duration(to: clock.now)
             lastLoaded = clock.now
+            loadedRevision = revision
             errorMessage = nil
         } catch let error as NetworkError {
             if error != .cancelled, error != .unauthorized { errorMessage = error.userMessage }
@@ -109,9 +113,13 @@ extension OverviewModel {
 
 extension OverviewModel {
     /// Loads again unless the overview was loaded less than `interval` ago, for a screen that asks
-    /// every time it appears (switching tabs, coming back from a module).
+    /// every time it appears (switching tabs, coming back from a module). A module saved since the
+    /// last load always loads again, however recent that was, so a summary line never shows the
+    /// settings from before the save.
     public func loadIfStale(after interval: Duration = .seconds(10)) async {
-        if let lastLoaded, lastLoaded.duration(to: .now) < interval { return }
+        if loadedRevision == session.modulesRevision, let lastLoaded, lastLoaded.duration(to: .now) < interval {
+            return
+        }
         await load()
     }
 }

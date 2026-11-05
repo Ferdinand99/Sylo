@@ -31,6 +31,10 @@ public final class AppSession {
     /// Why the app is back at sign-in when the person didn't sign out (a revoked token).
     public var notice: String?
 
+    /// Goes up whenever the person changes a server's modules (a settings save, a record saved or
+    /// deleted), so screens that summarise the modules know their copy is out of date.
+    public private(set) var modulesRevision = 0
+
     /// Bumped on every sign-in and sign-out, so an answer for an older token cannot sign out a
     /// newer one.
     private(set) var generation = 0
@@ -229,6 +233,12 @@ public final class AppSession {
         guard generation == self.generation, case .signedIn(let server) = phase else { return }
         signOutLocally(of: server)
         notice = NetworkError.unauthorized.userMessage
+    }
+
+    /// Tells screens that summarise the modules (the overview, the module board) that a module was
+    /// changed, so they load again the next time they appear.
+    public func noteModulesChanged() {
+        modulesRevision += 1
     }
 
     // MARK: - Helpers

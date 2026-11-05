@@ -61,6 +61,7 @@ public final class ModuleSettingsModel<Page: ModuleSettingsPage> {
             saved = result.settings
             self.draft = result.settings
             saveCount += 1
+            session.noteModulesChanged()
             return true
         } catch {
             let error = NetworkError(error)
