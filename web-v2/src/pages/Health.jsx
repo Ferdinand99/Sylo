@@ -265,9 +265,11 @@ export default function Health() {
           <strong>{d.gatewayPing === null ? '—' : `${d.gatewayPing} ms`}</strong>
           <span>Gateway ping</span>
         </div>
-        <div className="v2-ping-graph">
-          <Sparkline history={d.pingHistory} />
-        </div>
+        {d.pingHistory?.length >= 2 ? (
+          <div className="v2-ping-graph">
+            <Sparkline history={d.pingHistory} />
+          </div>
+        ) : null}
       </div>
 
       {d.sessionSecret === 'generated-ephemeral' ? (

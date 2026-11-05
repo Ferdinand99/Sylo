@@ -897,8 +897,8 @@
 }
 /* A hint line sits right above a card or an "+ Add" button (empty state, section intro): give
    it air instead of gluing the two together. */
-.v2-field-hint + .v2-btn-ghost,
-.v2-field-hint + .v2-rule-card {
+p.v2-field-hint + .v2-btn-ghost,
+p.v2-field-hint + .v2-rule-card {
   margin-top: 12px;
 }
 
@@ -1094,6 +1094,12 @@ a.v2-stat.is-link:focus-visible {
    gateway ping, which needs room for its graph, is a card of its own right under them. */
 .v2-stat-strip.v2-stat-strip-tight {
   margin-bottom: 12px;
+}
+/* On a phone the strip's own gap is 8px: the ping card below keeps to it. */
+@media (max-width: 560px) {
+  .v2-stat-strip.v2-stat-strip-tight {
+    margin-bottom: 8px;
+  }
 }
 .v2-ping-card {
   display: flex;
