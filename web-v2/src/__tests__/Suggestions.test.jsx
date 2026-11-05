@@ -129,25 +129,62 @@ describe('Suggestions form', () => {
     decideSuggestion.mockResolvedValue({ suggestion: item({ status: 'approved' }) });
     getSuggestions.mockResolvedValue({ suggestions: [item({ status: 'approved', reason: 'Planned' })] });
     renderAtGuild(<Suggestions />, GUILD);
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Approve' }))[0]);
+    const setStatus = (await screen.findAllByRole('combobox', { name: /Set status of suggestion/ }))[0];
+    fireEvent.change(setStatus, { target: { value: 'approve' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Set…' })[0]);
     const reason = screen.getByLabelText(/Reason/);
     await waitFor(() => expect(reason.maxLength).toBe(500));
     fireEvent.change(reason, { target: { value: 'Planned' } });
-    fireEvent.click(within(reason.closest('form')).getByRole('button', { name: 'Approve' }));
+    fireEvent.click(within(reason.closest('form')).getByRole('button', { name: 'Set to Approved' }));
     await waitFor(() => expect(decideSuggestion).toHaveBeenCalledWith(GUILD, 7, 'approve', 'Planned'));
     expect(await screen.findByText('Reason: Planned')).toBeTruthy();
     expect(screen.queryByLabelText(/Reason/)).toBeNull();
   });
 
-  it('offers all four decisions', async () => {
+  it('offers all four decisions in one "Set status" list, without the current status, and one Delete', async () => {
     renderAtGuild(<Suggestions />, GUILD);
     await screen.findByText(/#7 · Movie night/);
-    const labels = ['Approve', 'Deny', 'Implemented', 'Considering', 'Delete'];
-    for (const name of labels) expect(screen.getAllByRole('button', { name }).length).toBe(2);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Deny' })[0]);
+    const lists = screen.getAllByRole('combobox', { name: /Set status of suggestion/ });
+    expect(lists).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+    const optionLabels = (select) =>
+      within(select)
+        .getAllByRole('option')
+        .map((o) => o.textContent);
+    const all = ['Approved', 'Denied', 'Implemented', 'Considering'];
+    for (const select of lists) {
+      const labels = optionLabels(select);
+      expect(labels[0]).toBe('Set status…');
+      expect(labels.slice(1).every((l) => all.includes(l))).toBe(true);
+    }
+    // The open suggestion offers all four; the approved one does not offer "Approved" again.
+    expect(lists.map((s) => optionLabels(s).length).sort()).toEqual([4, 5]);
+    expect(lists.some((s) => !optionLabels(s).includes('Approved'))).toBe(true);
+    fireEvent.change(lists[0], { target: { value: 'deny' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Set…' })[0]);
     const form = screen.getByLabelText(/Reason/).closest('form');
-    fireEvent.click(within(form).getByRole('button', { name: 'Deny' }));
+    fireEvent.click(within(form).getByRole('button', { name: 'Set to Denied' }));
     await waitFor(() => expect(decideSuggestion).toHaveBeenCalledWith(GUILD, 7, 'deny', ''));
+  });
+
+  it('a picked status opens the reason form only after "Set…"; the reason is focused and Close gives focus back', async () => {
+    renderAtGuild(<Suggestions />, GUILD);
+    const lists = await screen.findAllByRole('combobox', { name: /Set status of suggestion/ });
+    const buttons = screen.getAllByRole('button', { name: 'Set…' });
+    expect(buttons[0].disabled).toBe(true);
+    fireEvent.change(lists[0], { target: { value: 'deny' } });
+    expect(screen.queryByLabelText(/Reason/)).toBeNull();
+    expect(buttons[0].disabled).toBe(false);
+    fireEvent.click(buttons[0]);
+    expect(document.activeElement).toBe(screen.getByLabelText(/Reason/));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByLabelText(/Reason/)).toBeNull();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getAllByRole('combobox', { name: /Set status of suggestion/ })[0]
+      )
+    );
   });
 
   it('deletes after confirming', async () => {

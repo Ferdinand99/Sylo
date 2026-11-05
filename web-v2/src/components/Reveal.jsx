@@ -15,7 +15,7 @@ const isEnter = (name) => typeof name === 'string' && name.startsWith('v2-enter'
  * the same place, so React keeps it). A `.v2-state` child (Loading…, empty,
  * error) is never part of the entrance.
  */
-export default function Reveal({ className = '', children }) {
+export default function Reveal({ className = '', children, ...rest }) {
   const [done, setDone] = useState(false);
 
   // Also on cancel: a block that unmounts mid-entrance fires no animationend,
@@ -28,6 +28,7 @@ export default function Reveal({ className = '', children }) {
 
   return (
     <div
+      {...rest}
       className={`v2-enter${done ? ' is-done' : ''}${className ? ` ${className}` : ''}`}
       onAnimationEnd={onAnimationEnd}
       onAnimationCancel={onAnimationEnd}

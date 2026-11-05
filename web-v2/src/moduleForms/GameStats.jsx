@@ -2,7 +2,9 @@ import { Link, useParams } from 'react-router-dom';
 import { useCmd } from '../platformContext.jsx';
 import { getModuleConfig } from '../api.js';
 import LoadError from '../components/LoadError.jsx';
+import Meta from '../components/Meta.jsx';
 import { useApiData } from '../useApiData.js';
+import { platformLabel } from '../gamePlatforms.js';
 
 // Read-only — this module has nothing to configure beyond the shared
 // enable/disable toggle every module already has (Overview, and the bar at the
@@ -19,10 +21,9 @@ export default function GameStats() {
     <>
       <h1 className="v2-section-title">Game stats</h1>
       <p className="v2-field-hint">
-        Adds <code>{cmd('/stats')}</code> — pick a game from the dropdown, give a player name, and Sylo
-        returns an embed of their stats. Battlefield data comes from the public gametools.network API;
-        RuneScape data from Jagex's official Hiscores. Turn this module on, with the switch at the top of this
-        page, to make the command available in this server.
+        Adds <code>{cmd('/stats')}</code>: pick a game, give a player name, and Sylo posts that player's
+        stats. Battlefield numbers come from a public stats service and RuneScape numbers from Jagex's
+        official Hiscores.
       </p>
 
       <h2 className="v2-group-title">Command</h2>
@@ -35,34 +36,31 @@ export default function GameStats() {
         <li>Results are cached for a while to spare the upstream APIs.</li>
       </ul>
 
-      <h2 className="v2-group-title">Recently queried stats</h2>
-      {data.recent.length === 0 ? (
-        <p className="v2-field-hint">Nothing cached yet — run /stats in Discord.</p>
-      ) : (
-        <div className="v2-list">
-          {data.recent.map((r, i) => (
-            <div className="v2-row" key={i}>
-              <div className="v2-row-main">
-                <h3>
-                  {r.game} — {r.title}
-                </h3>
-                <p>
-                  {r.username} · {r.platform} · {r.ago}
-                </p>
-              </div>
+      {data.operator ? (
+        <>
+          <h2 className="v2-group-title">Recently queried stats</h2>
+          {data.recent.length === 0 ? (
+            <p className="v2-field-hint">Nothing cached yet. Run {cmd('/stats')} to fill it.</p>
+          ) : (
+            <div className="v2-list">
+              {data.recent.map((r, i) => (
+                <div className="v2-row" key={i}>
+                  <div className="v2-row-main">
+                    <h3>{r.title || r.game}</h3>
+                    <p>
+                      <Meta items={[r.username, platformLabel(r.platform), r.ago]} />
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
-      <p className="v2-field-hint">
-        The lookup cache is shared across every server this bot is in.
-        {data.operator ? (
-          <>
-            {' '}
+          )}
+          <p className="v2-field-hint">
+            The lookup cache is shared across every server this bot is in.{' '}
             <Link to="/stats">Full cache view →</Link>
-          </>
-        ) : null}
-      </p>
+          </p>
+        </>
+      ) : null}
     </>
   );
 }

@@ -3,6 +3,8 @@ import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
+import { channelTitle } from '../util.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -66,9 +68,9 @@ export default function Sticky() {
         {form.stickies.map((s) => (
           <div className="v2-rule-card" key={s.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Sticky</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRow(s.key)}>
-                remove
+              <span className="v2-rule-title">{channelTitle(data.channels, s.channelId, 'Sticky')}</span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRow(s.key)}>
+                Remove
               </button>
             </div>
 
@@ -138,10 +140,10 @@ export default function Sticky() {
 
             <div className="v2-field">
               <label>
-                Min seconds between reposts <span className="v2-field-hint">— 0 = default (4s)</span>
+                Minimum time between reposts <span className="v2-field-hint">— 0 = default (4s)</span>
               </label>
-              <input
-                type="number"
+              <UnitInput
+                unit="seconds"
                 min={cooldown.min}
                 max={cooldown.max}
                 value={s.cooldownSeconds}

@@ -4,18 +4,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ModulePage from '../pages/ModulePage.jsx';
 import { OverviewProvider, useOverview } from '../OverviewContext.jsx';
 import { subscribe } from '../notify.js';
+import { resetOperatorCache } from '../useOperator.js';
 
 vi.mock('../api.js', () => ({
   ApiError: class ApiError extends Error {},
   getOverview: vi.fn(),
   getPlatformInfo: vi.fn(),
+  getAccount: vi.fn(),
   setModuleEnabled: vi.fn(),
 }));
 // A stand-in settings form: the shell is under test, not a module's form.
 vi.mock('../moduleForms/index.js', () => ({
   MODULE_FORMS: { 'auto-threads': () => <h2>Auto threads form</h2> },
 }));
-const { getOverview, getPlatformInfo, setModuleEnabled } = await import('../api.js');
+const { getOverview, getPlatformInfo, getAccount, setModuleEnabled } = await import('../api.js');
 
 const GUILD = '123456789012345678';
 
@@ -64,6 +66,7 @@ const OFF_NOTICE = 'This module is off. Turn it on for these settings to take ef
 
 beforeEach(() => {
   vi.resetAllMocks();
+  resetOperatorCache();
   getPlatformInfo.mockResolvedValue(platform());
 });
 
@@ -183,10 +186,30 @@ describe('ModulePage status bar edge cases', () => {
 
     const toggle = await screen.findByRole('switch', { name: 'Auto threads' });
     expect(toggle.disabled).toBe(true);
-    expect(screen.getByText(/Needs the MessageContent intent/)).toBeTruthy();
+    expect(screen.getByText(/Sylo can't run this module yet/)).toBeTruthy();
+    expect(screen.queryByText(/MessageContent/)).toBeNull();
     expect(screen.getByText('Blocked')).toBeTruthy();
     expect(screen.queryByText('On')).toBeNull();
     expect(screen.queryByText(OFF_NOTICE)).toBeNull();
+  });
+
+  it('shows the bot owner which permission is missing', async () => {
+    resetOperatorCache();
+    getAccount.mockResolvedValue({ operator: true });
+    const card = {
+      id: 'auto-threads',
+      name: 'Auto threads',
+      enabled: true,
+      hasToggle: true,
+      missingIntents: ['MessageContent'],
+      status: 'blocked',
+    };
+    getOverview.mockResolvedValue(overview(true, [card]));
+    renderPage();
+
+    expect(await screen.findByText(/Needs the MessageContent intent/)).toBeTruthy();
+    resetOperatorCache();
+    getAccount.mockReset();
   });
 
   it('a blocked module that is also off shows no "turn it on" notice', async () => {
@@ -201,7 +224,7 @@ describe('ModulePage status bar edge cases', () => {
     getOverview.mockResolvedValue(overview(false, [card]));
     renderPage();
 
-    expect(await screen.findByText(/Needs the MessageContent intent/)).toBeTruthy();
+    expect(await screen.findByText(/Sylo can't run this module yet/)).toBeTruthy();
     expect(screen.queryByText(OFF_NOTICE)).toBeNull();
   });
 

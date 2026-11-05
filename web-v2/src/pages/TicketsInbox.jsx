@@ -4,6 +4,7 @@ import { useApiData } from '../useApiData.js';
 import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
+import Time from '../components/Time.jsx';
 
 function TicketRow({ ticket, guildId }) {
   const preview = `${ticket.previewKind === 'staff' ? 'You: ' : ''}${ticket.preview || '(no text)'}`;
@@ -22,7 +23,7 @@ function TicketRow({ ticket, guildId }) {
         </h3>
         <p title={preview}>{preview}</p>
       </div>
-      <span className="v2-field-hint v2-row-time">{ticket.ago}</span>
+      <Time className="v2-field-hint v2-row-time" value={ticket.lastAt} relative fallback={ticket.ago} />
     </Link>
   );
 }
@@ -43,6 +44,12 @@ export default function TicketsInbox() {
       </p>
 
       <h2 className="v2-group-title">Open ({formatCount(data.open.length)})</h2>
+      {data.open.some((t) => t.unread) ? (
+        <p className="v2-field-hint">
+          <span className="v2-unread-dot" aria-hidden="true" /> A dot marks a ticket with new messages you
+          haven't opened yet.
+        </p>
+      ) : null}
       {data.open.length ? (
         <div className="v2-list">
           {data.open.map((t) => (
@@ -55,7 +62,9 @@ export default function TicketsInbox() {
 
       {data.closed.length ? (
         <>
-          <h2 className="v2-group-title v2-section-gap">Recently closed</h2>
+          <h2 className="v2-group-title v2-section-gap">
+            Recently closed ({formatCount(data.closed.length)})
+          </h2>
           <div className="v2-list">
             {data.closed.map((t) => (
               <TicketRow key={t.id} ticket={t} guildId={guildId} />

@@ -9,6 +9,7 @@ import Switch from '../components/Switch.jsx';
 import { plural } from '../components/Meta.jsx';
 import { formatCount, initial } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
+import BlockedNote from '../components/BlockedNote.jsx';
 
 // A newly-added module gets this next to its name until it's had enough
 // real-world use to drop registry.js's `beta` flag.
@@ -62,7 +63,7 @@ function ModuleRow({ card, guildId, onToggle, selecting, picked, onPick }) {
         <p title={card.description}>{card.description}</p>
         {blocked ? (
           <p className="v2-row-warn">
-            Needs the {card.missingIntents.join(', ')} intent — see docs/self-hosting.md.
+            <BlockedNote intents={card.missingIntents} />
           </p>
         ) : null}
       </div>
@@ -197,23 +198,23 @@ export default function Overview() {
         </div>
       </div>
 
-      <p className="v2-note">Every module has its own page here.</p>
+      <p className="v2-field-hint">Switch a module on or off here, or open it to change its settings.</p>
 
-      <div className="v2-stat-strip">
+      <div className="v2-stat-strip v2-stat-strip-3">
         <div className="v2-stat">
           <strong>
             {formatCount(enabledCount)}/{formatCount(toggleCards.length)}
           </strong>
           <span>modules active</span>
         </div>
-        <div className="v2-stat">
+        <Link className="v2-stat is-link" to={`/guilds/${guildId}/tickets`}>
           <strong>{formatCount(openTickets)}</strong>
           <span>open {openTickets === 1 ? 'ticket' : 'tickets'}</span>
-        </div>
-        <div className="v2-stat">
+        </Link>
+        <Link className="v2-stat is-link" to={`/guilds/${guildId}/appeals`}>
           <strong>{formatCount(openAppeals)}</strong>
           <span>open {openAppeals === 1 ? 'appeal' : 'appeals'}</span>
-        </div>
+        </Link>
       </div>
 
       <div className="v2-field-row v2-search-row">
@@ -226,7 +227,7 @@ export default function Overview() {
           aria-label="Search modules"
         />
         <button type="button" className="v2-btn-ghost" onClick={toggleSelecting}>
-          {selecting ? 'Cancel' : 'Select'}
+          {selecting ? 'Cancel' : 'Bulk edit'}
         </button>
       </div>
 

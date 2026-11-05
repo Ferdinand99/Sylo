@@ -1,17 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getRoadmap, voteRoadmapPost, suggestRoadmapPost } from '../api.js';
+import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
 import { loginHref } from '../publicRoutes.js';
+import { ROADMAP_STATUS } from '../roadmapStatus.js';
 
-const GROUPS = [
-  { key: 'planned', label: 'Planned' },
-  { key: 'started', label: 'In progress' },
-  { key: 'completed', label: 'Recently shipped' },
-];
+const GROUPS = Object.entries(ROADMAP_STATUS).map(([key, v]) => ({ key, ...v }));
 
-function VoteButton({ post, onVote, canVote }) {
+function VoteButton({ post, onVote, canVote, canLogin }) {
   const [busy, setBusy] = useState(false);
 
   async function click() {
@@ -23,13 +21,22 @@ function VoteButton({ post, onVote, canVote }) {
     }
   }
 
+  // Without a login (or with voting off) the count is only shown: no button, no border, full colour.
+  if (!canVote) {
+    return (
+      <div className="v2-roadmap-vote is-static" title={canLogin ? 'Log in to vote' : undefined}>
+        <strong>{formatCount(post.votes)}</strong>
+        <span>vote{post.votes === 1 ? '' : 's'}</span>
+      </div>
+    );
+  }
+
   return (
     <button
       type="button"
       className={`v2-roadmap-vote${post.voted ? ' is-voted' : ''}`}
       onClick={click}
-      disabled={busy || !canVote}
-      title={canVote ? undefined : 'Log in to vote'}
+      disabled={busy}
       aria-pressed={Boolean(post.voted)}
       aria-label={`Vote for ${post.title}, ${formatCount(post.votes)} ${post.votes === 1 ? 'vote' : 'votes'}`}
     >
@@ -106,27 +113,24 @@ export default function Roadmap() {
           </Link>
         ) : null}
       </h1>
-      <p className="v2-note">
+      <p className={`v2-note${d.signedIn ? '' : ' v2-login-prompt'}`}>
         What's planned, in progress, and shipped. Vote on what matters to you, or suggest something new.
+        {d.signedIn ? null : d.open ? (
+          ' Voting and suggesting need a login, and this Sylo has none set up.'
+        ) : (
+          <>
+            {' '}
+            <a href={loginHref()}>Log in</a> to vote or suggest a feature.
+          </>
+        )}
       </p>
-      {!d.signedIn ? (
-        <p className="v2-note v2-login-prompt">
-          {d.open ? (
-            'Voting and suggesting need a login, and this Sylo has none set up.'
-          ) : (
-            <>
-              <a href={loginHref()}>Log in</a> to vote or suggest a feature.
-            </>
-          )}
-        </p>
-      ) : null}
 
       {notice ? <p className="v2-note">{notice}</p> : null}
 
-      {GROUPS.map(({ key, label }) => (
+      {GROUPS.map(({ key, label, tone }) => (
         <div className="v2-group" key={key}>
           <h2 className="v2-group-title">
-            <span className={`v2-status-pill ${key}`}>{label}</span>
+            <Badge tone={tone}>{label}</Badge>
           </h2>
           {!d.groups[key]?.length ? (
             <p className="v2-note">Nothing here yet.</p>
@@ -141,7 +145,7 @@ export default function Roadmap() {
                       dangerouslySetInnerHTML={{ __html: p.descriptionHtml }}
                     />
                   </div>
-                  <VoteButton post={p} onVote={onVote} canVote={d.signedIn} />
+                  <VoteButton post={p} onVote={onVote} canVote={d.signedIn} canLogin={!d.open} />
                 </div>
               ))}
             </div>

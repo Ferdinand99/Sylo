@@ -2,11 +2,13 @@ import { Link } from 'react-router-dom';
 import { welcomeCardPreviewUrl } from '../api.js';
 import ToggleSection from '../components/ToggleSection.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { tokensFor } from '../placeholders.js';
 
 export default function Welcome() {
   const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } =
@@ -17,15 +19,15 @@ export default function Welcome() {
   if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+  const tokens = tokensFor('welcome', data.placeholders);
+  const joinChannelName = data.channels.find((c) => c.id === form.joinChannel)?.name;
 
   return (
     <>
       <h1 className="v2-section-title">Welcome &amp; leave</h1>
-      <p className="v2-field-hint v2-placeholders">
-        Placeholders:{' '}
-        {data.placeholders.map((p) => (
-          <code key={p}>{p}</code>
-        ))}
+      <p className="v2-field-hint">
+        Greet new members, say goodbye when they leave, and give them starting roles. Under each message you
+        can insert placeholders such as the member's name.
       </p>
 
       <form onSubmit={save} data-savebar>
@@ -58,6 +60,12 @@ export default function Welcome() {
               placeholder="Welcome {user} to {server}!"
               value={form.joinMessage}
               onChange={(e) => set({ joinMessage: e.target.value })}
+            />
+            <PlaceholderHint
+              fieldId="joinMessage"
+              tokens={tokens}
+              value={form.joinMessage}
+              onChange={(joinMessage) => set({ joinMessage })}
             />
           </div>
           <label className="v2-check">
@@ -113,6 +121,12 @@ export default function Welcome() {
               value={form.dmMessage}
               onChange={(e) => set({ dmMessage: e.target.value })}
             />
+            <PlaceholderHint
+              fieldId="dmMessage"
+              tokens={tokens}
+              value={form.dmMessage}
+              onChange={(dmMessage) => set({ dmMessage })}
+            />
           </div>
         </ToggleSection>
 
@@ -146,6 +160,12 @@ export default function Welcome() {
               value={form.leaveMessage}
               onChange={(e) => set({ leaveMessage: e.target.value })}
             />
+            <PlaceholderHint
+              fieldId="leaveMessage"
+              tokens={tokens}
+              value={form.leaveMessage}
+              onChange={(leaveMessage) => set({ leaveMessage })}
+            />
           </div>
         </ToggleSection>
 
@@ -169,13 +189,21 @@ export default function Welcome() {
 
       <div className="v2-row v2-section-gap">
         <div className="v2-row-main">
-          <h3>Verify new members with a captcha</h3>
+          <h3>Verify new members</h3>
         </div>
         <Link className="v2-row-arrow" to={`/guilds/${guildId}/m/verification`}>
-          {data.verificationEnabled ? 'On — configure' : 'Set up'} →
+          {data.verificationEnabled
+            ? `On (${data.verificationMode === 'captcha' ? 'captcha' : 'button'}) — configure`
+            : 'Set up'}{' '}
+          →
         </Link>
       </div>
-      <SendTestButton moduleId="welcome" disabled={dirty} />
+      <SendTestButton
+        moduleId="welcome"
+        disabled={dirty}
+        sample="a sample join message (not your own text)"
+        channelName={joinChannelName}
+      />
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );

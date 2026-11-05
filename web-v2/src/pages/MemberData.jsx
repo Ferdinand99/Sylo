@@ -4,15 +4,18 @@ import { getMemberData, forgetMemberData } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
+import Breadcrumb from '../components/Breadcrumb.jsx';
 import Field from '../components/Field.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
-import { formatCount } from '../util.js';
+import { copyIdHint, formatCount } from '../util.js';
+import { usePlatformInfo } from '../usePlatformInfo.js';
 import Reveal from '../components/Reveal.jsx';
 
 // Look up what Sylo stores about one member in this server and delete it on request.
 // Moderation cases and other safety records are kept.
 export default function MemberData() {
   const { guildId } = useParams();
+  const { info } = usePlatformInfo(guildId);
   const [params, setParams] = useSearchParams();
   const user = params.get('user') ?? '';
   const [query, setQuery] = useState(user);
@@ -24,11 +27,16 @@ export default function MemberData() {
   function onLookup(e) {
     e.preventDefault();
     const next = query.trim();
-    setParams(next ? { user: next } : {});
+    // Same page, other search: the window stays where it is instead of jumping to the top.
+    setParams(next ? { user: next } : {}, { preventScrollReset: true });
   }
 
   return (
     <Reveal>
+      <Breadcrumb
+        parents={[{ label: 'Settings', to: `/guilds/${guildId}/settings` }]}
+        current="Member data"
+      />
       <h1 className="v2-section-title">Member data</h1>
       <p className="v2-field-hint">
         Look up what Sylo has stored about a member in this server and delete it on request (for example a
@@ -42,6 +50,7 @@ export default function MemberData() {
           className="v2-member-data-input"
           aria-label="User ID or @mention"
           placeholder="User ID or @mention"
+          aria-describedby="member-id-hint"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           required
@@ -50,6 +59,10 @@ export default function MemberData() {
           Look up
         </button>
       </form>
+
+      <p className="v2-field-hint" id="member-id-hint">
+        Paste the member's user ID or an @mention. {copyIdHint(info.platform)}
+      </p>
 
       {error ? (
         error.status === 400 ? (

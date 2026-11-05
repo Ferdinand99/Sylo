@@ -1,8 +1,13 @@
+import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import SetupCallout from '../components/SetupCallout.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { cardTitle } from '../util.js';
+import { tokensFor } from '../placeholders.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -52,31 +57,34 @@ export default function TwitchAlerts() {
       <h1 className="v2-section-title">Twitch alerts</h1>
       <p className="v2-field-hint">
         Sylo checks each streamer about once a minute and posts to the chosen channel when they go live.
-        Message placeholders: <code>{'{name}'}</code> <code>{'{title}'}</code> <code>{'{game}'}</code>{' '}
-        <code>{'{url}'}</code> <code>{'{viewers}'}</code>.
       </p>
 
       {!data.twitchEnabled ? (
-        <p className="v2-warn-text">
-          Set TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET (a free app at dev.twitch.tv/console) for alerts to
-          actually fire. You can still configure them here.
-        </p>
+        <SetupCallout
+          what="Twitch alerts"
+          keys="Twitch API keys"
+          vars={['TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET']}
+          where="a free app at dev.twitch.tv/console"
+        >
+          You can set things up now; alerts start once the keys are in.
+        </SetupCallout>
       ) : null}
 
       <form onSubmit={save} data-savebar>
         {form.alerts.map((a) => (
           <div className="v2-rule-card" key={a.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Streamer</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRow(a.key)}>
-                remove
+              <span className="v2-rule-title">{cardTitle(a.login, 'New streamer')}</span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRow(a.key)}>
+                Remove
               </button>
             </div>
 
             <div className="v2-field-row">
               <div className="v2-field">
-                <label>Twitch username</label>
+                <label htmlFor={`tw-user-${a.key}`}>Twitch username</label>
                 <input
+                  id={`tw-user-${a.key}`}
                   type="text"
                   maxLength={limitOf(limits, 'alerts[].login').maxLength}
                   placeholder="ninja"
@@ -85,8 +93,12 @@ export default function TwitchAlerts() {
                 />
               </div>
               <div className="v2-field">
-                <label>Announce in</label>
-                <select value={a.channelId} onChange={(e) => updateRow(a.key, { channelId: e.target.value })}>
+                <label htmlFor={`tw-to-${a.key}`}>Announce in</label>
+                <select
+                  id={`tw-to-${a.key}`}
+                  value={a.channelId}
+                  onChange={(e) => updateRow(a.key, { channelId: e.target.value })}
+                >
                   <option value="">— select a channel —</option>
                   {data.channels.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -110,14 +122,25 @@ export default function TwitchAlerts() {
               </div>
             </div>
 
+            {a.login && !a.channelId ? (
+              <p className="v2-field-hint">This streamer won't be checked until you choose a channel.</p>
+            ) : null}
+
             <div className="v2-field">
-              <label>Message</label>
-              <textarea
+              <label htmlFor={`tw-msg-${a.key}`}>Message</label>
+              <AutoGrowTextarea
+                id={`tw-msg-${a.key}`}
                 rows={2}
                 maxLength={limitOf(limits, 'alerts[].message').maxLength}
                 placeholder={data.defaultMessage}
                 value={a.message}
                 onChange={(e) => updateRow(a.key, { message: e.target.value })}
+              />
+              <PlaceholderHint
+                fieldId={`tw-msg-${a.key}`}
+                tokens={tokensFor('twitch')}
+                value={a.message}
+                onChange={(message) => updateRow(a.key, { message })}
               />
             </div>
 
@@ -152,7 +175,13 @@ export default function TwitchAlerts() {
           + Add streamer
         </button>
       </form>
-      <SendTestButton moduleId="twitch-alerts" disabled={dirty} />
+      <SendTestButton
+        moduleId="twitch-alerts"
+        disabled={dirty}
+        sample="a sample alert"
+        channelName={data.channels.find((c) => c.id === form.alerts[0]?.channelId)?.name}
+        note={form.alerts.length > 1 ? 'the first streamer in the list' : ''}
+      />
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );

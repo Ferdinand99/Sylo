@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getRoles, saveAutoroles, saveReactionRole, deleteReactionRole } from '../api.js';
+import Badge from '../components/Badge.jsx';
+import Meta, { plural } from '../components/Meta.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useFormState } from '../components/useModuleForm.js';
@@ -347,13 +349,24 @@ export default function Roles() {
               const title = rm.embed?.title || (rm.message || '').slice(0, 60) || 'Reaction role';
               const style = rm.style || 'reaction';
               return (
-                <div className="v2-row" key={rm.id}>
+                <div className="v2-row v2-row-stack" key={rm.id}>
                   <div className="v2-row-main">
-                    <h3>{title}</h3>
+                    <h3 className="v2-break">
+                      {title}
+                      <Badge tone={rm.messageId ? 'success' : 'neutral'} inline>
+                        {rm.messageId ? 'Published' : 'Draft'}
+                      </Badge>
+                    </h3>
                     <p>
-                      #{channel ? channel.name : rm.channelId} · {(rm.pairs || []).length} role(s) · {style}
-                      {style !== 'select' ? ` · ${rm.mode || 'default'}` : ''}
-                      {rm.exclusive ? ' · exclusive' : ''}
+                      <Meta
+                        items={[
+                          `#${channel ? channel.name : rm.channelId}`,
+                          plural((rm.pairs || []).length, 'role'),
+                          STYLES.find(([key]) => key === style)?.[1] ?? style,
+                          style !== 'select' && `${rm.mode === 'reverse' ? 'Reverse' : 'Default'} style`,
+                          rm.exclusive && 'Exclusive',
+                        ]}
+                      />
                     </p>
                     {editingId === rm.id ? (
                       <ReactionRoleForm
@@ -367,18 +380,11 @@ export default function Roles() {
                     ) : null}
                   </div>
                   {editingId === rm.id ? null : (
-                    <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                      <span className={`v2-status-pill ${rm.messageId ? 'completed' : 'pending'}`}>
-                        {rm.messageId ? 'published' : 'draft'}
-                      </span>
+                    <div className="v2-row-actions">
                       <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(rm.id)}>
                         Edit
                       </button>
-                      <button
-                        type="button"
-                        className="v2-btn-danger v2-danger-sep"
-                        onClick={() => onDelete(rm.id)}
-                      >
+                      <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(rm.id)}>
                         Delete
                       </button>
                     </div>
@@ -410,7 +416,10 @@ export default function Roles() {
 
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Autoroles on join</h2>
-        <p className="v2-field-hint">Given automatically when a member joins.</p>
+        <p className="v2-field-hint">
+          Given automatically when a member joins. These are the same roles as under "Give roles to new
+          members" in Welcome &amp; leave.
+        </p>
         <form onSubmit={onSaveAutoroles} data-savebar>
           <ChipPicker kind="role" items={d.roles} value={autoroles.form} onChange={autoroles.setForm} />
         </form>

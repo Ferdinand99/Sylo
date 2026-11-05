@@ -4,6 +4,8 @@ import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
+import { cardTitle, channelTitle } from '../util.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -36,19 +38,39 @@ function toFormRow(b = {}) {
   };
 }
 
+// [key, label, parentKey]: an option with a parent only applies while the parent is on, so it is
+// indented under it and disabled while the parent is off.
 const CHECKS_BEHAVIOUR = [
   ['autoReact', 'React to the starboard post with the board emoji(s)'],
-  ['autoReactFirstOnly', '…but only with the first emoji'],
+  ['autoReactFirstOnly', 'Only with the first emoji', 'autoReact'],
   ['removeOnDelete', 'Delete the starboard post if the original message is deleted'],
   ['removeOnUnstar', 'Remove the post if it drops back below the threshold'],
   ['repostCooldown', 'After a post is removed, wait a minute before it can return'],
 ];
 const CHECKS_ANTIABUSE = [
   ['ignoreSelfStars', "Don't count the author reacting to their own message"],
-  ['removeSelfStarReactions', '…and remove that reaction when they do'],
+  ['removeSelfStarReactions', 'Also remove that reaction when they do', 'ignoreSelfStars'],
   ['ignoreBotMessages', 'Ignore messages posted by bots'],
-  ['removeBotReactions', '…and clear reactions members add to bot messages'],
+  ['removeBotReactions', 'Also clear reactions members add to bot messages', 'ignoreBotMessages'],
 ];
+
+function CheckList({ checks, board, onChange }) {
+  return (
+    <div className="v2-field">
+      {checks.map(([key, label, parent]) => (
+        <label className={`v2-check${parent ? ' v2-check-child' : ''}`} key={key}>
+          <input
+            type="checkbox"
+            checked={board[key]}
+            disabled={parent ? !board[parent] : false}
+            onChange={(e) => onChange({ [key]: e.target.checked })}
+          />
+          <span>{label}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
 
 // `removedBoardIds`: the saved boards the person removed in this session. The server deletes a
 // board's post records only for ids named here, never because a board is missing from the list.
@@ -108,9 +130,11 @@ export default function Starboard() {
         {form.boards.map((b) => (
           <div className="v2-rule-card" key={b.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Board</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeBoard(b.key)}>
-                remove
+              <span className="v2-rule-title">
+                {cardTitle(b.name, '') || channelTitle(d.channels, b.channelId, 'Board')}
+              </span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeBoard(b.key)}>
+                Remove
               </button>
             </div>
 
@@ -159,11 +183,10 @@ export default function Starboard() {
             <div className="v2-field-row">
               <div className="v2-field">
                 <label>Reactions needed</label>
-                <input
-                  type="number"
+                <UnitInput
+                  unit="reactions"
                   min={limitOf(limits, 'boards[].threshold').min}
                   max={limitOf(limits, 'boards[].threshold').max}
-                  style={{ maxWidth: '100px' }}
                   value={b.threshold}
                   onChange={(e) => updateBoard(b.key, { threshold: Number(e.target.value) })}
                 />
@@ -180,91 +203,85 @@ export default function Starboard() {
               </label>
             </div>
 
-            <h3 className="v2-field-hint u-mt-2">Behaviour</h3>
-            <div className="v2-field">
-              {CHECKS_BEHAVIOUR.map(([key, label]) => (
-                <label className="v2-check" key={key}>
-                  <input
-                    type="checkbox"
-                    checked={b[key]}
-                    onChange={(e) => updateBoard(b.key, { [key]: e.target.checked })}
+            <details className="v2-am-params v2-advanced">
+              <summary>
+                Advanced
+                <span className="v2-am-summary"> · behaviour, anti-abuse and restrictions</span>
+              </summary>
+
+              <h3 className="v2-field-hint u-mt-2">Behaviour</h3>
+              <CheckList
+                checks={CHECKS_BEHAVIOUR}
+                board={b}
+                onChange={(patch) => updateBoard(b.key, patch)}
+              />
+
+              <h3 className="v2-field-hint u-mt-2">Anti-abuse</h3>
+              <CheckList
+                checks={CHECKS_ANTIABUSE}
+                board={b}
+                onChange={(patch) => updateBoard(b.key, patch)}
+              />
+              <div className="v2-field-row">
+                <div className="v2-field">
+                  <label>
+                    Ignore messages younger than <span className="v2-field-hint">— 0 = no limit</span>
+                  </label>
+                  <UnitInput
+                    unit="minutes"
+                    min={limitOf(limits, 'boards[].minAgeMinutes').min}
+                    max={limitOf(limits, 'boards[].minAgeMinutes').max}
+                    value={b.minAgeMinutes}
+                    onChange={(e) => updateBoard(b.key, { minAgeMinutes: Number(e.target.value) })}
                   />
-                  {label}
-                </label>
-              ))}
-            </div>
-
-            <h3 className="v2-field-hint u-mt-2">Anti-abuse</h3>
-            <div className="v2-field">
-              {CHECKS_ANTIABUSE.map(([key, label]) => (
-                <label className="v2-check" key={key}>
-                  <input
-                    type="checkbox"
-                    checked={b[key]}
-                    onChange={(e) => updateBoard(b.key, { [key]: e.target.checked })}
+                </div>
+                <div className="v2-field">
+                  <label>
+                    Ignore messages older than <span className="v2-field-hint">— 0 = no limit</span>
+                  </label>
+                  <UnitInput
+                    unit="minutes"
+                    wide
+                    min={limitOf(limits, 'boards[].maxAgeMinutes').min}
+                    max={limitOf(limits, 'boards[].maxAgeMinutes').max}
+                    value={b.maxAgeMinutes}
+                    onChange={(e) => updateBoard(b.key, { maxAgeMinutes: Number(e.target.value) })}
                   />
-                  {label}
-                </label>
-              ))}
-            </div>
-            <div className="v2-field-row">
-              <div className="v2-field">
-                <label>Ignore messages younger than (minutes)</label>
-                <input
-                  type="number"
-                  min={limitOf(limits, 'boards[].minAgeMinutes').min}
-                  max={limitOf(limits, 'boards[].minAgeMinutes').max}
-                  style={{ maxWidth: '100px' }}
-                  value={b.minAgeMinutes}
-                  onChange={(e) => updateBoard(b.key, { minAgeMinutes: Number(e.target.value) })}
-                />
+                </div>
               </div>
+
+              <h3 className="v2-field-hint u-mt-2">Restrictions</h3>
               <div className="v2-field">
-                <label>
-                  Ignore messages older than (minutes) <span className="v2-field-hint">— 0 = no limit</span>
-                </label>
-                <input
-                  type="number"
-                  min={limitOf(limits, 'boards[].maxAgeMinutes').min}
-                  max={limitOf(limits, 'boards[].maxAgeMinutes').max}
-                  style={{ maxWidth: '100px' }}
-                  value={b.maxAgeMinutes}
-                  onChange={(e) => updateBoard(b.key, { maxAgeMinutes: Number(e.target.value) })}
-                />
+                <label>Whose reactions count</label>
+                <select value={b.roleMode} onChange={(e) => updateBoard(b.key, { roleMode: e.target.value })}>
+                  <option value="allow">Everyone except the roles below</option>
+                  <option value="deny">Only members with a role below</option>
+                </select>
               </div>
-            </div>
+              <ChipPicker
+                kind="role"
+                items={d.roles}
+                value={b.roleList}
+                onChange={(roleList) => updateBoard(b.key, { roleList })}
+              />
 
-            <h3 className="v2-field-hint u-mt-2">Restrictions</h3>
-            <div className="v2-field">
-              <label>Whose reactions count</label>
-              <select value={b.roleMode} onChange={(e) => updateBoard(b.key, { roleMode: e.target.value })}>
-                <option value="allow">Everyone except the roles below</option>
-                <option value="deny">Only members with a role below</option>
-              </select>
-            </div>
-            <ChipPicker
-              kind="role"
-              items={d.roles}
-              value={b.roleList}
-              onChange={(roleList) => updateBoard(b.key, { roleList })}
-            />
-
-            <div className="v2-field u-mt-2">
-              <label>Which channels this board watches</label>
-              <select
-                value={b.channelMode}
-                onChange={(e) => updateBoard(b.key, { channelMode: e.target.value })}
-              >
-                <option value="allow">Every channel except the ones below</option>
-                <option value="deny">Only the channels below</option>
-              </select>
-            </div>
-            <ChipPicker
-              kind="channel"
-              items={d.channels}
-              value={b.channelList}
-              onChange={(channelList) => updateBoard(b.key, { channelList })}
-            />
+              <div className="v2-field u-mt-2">
+                <label>Which channels this board watches</label>
+                <select
+                  value={b.channelMode}
+                  onChange={(e) => updateBoard(b.key, { channelMode: e.target.value })}
+                >
+                  <option value="allow">Every channel except the ones below</option>
+                  <option value="deny">Only the channels below</option>
+                </select>
+              </div>
+              <ChipPicker
+                kind="channel"
+                items={d.channels}
+                value={b.channelList}
+                onChange={(channelList) => updateBoard(b.key, { channelList })}
+              />
+            </details>
           </div>
         ))}
         <button type="button" className="v2-btn-ghost" onClick={addBoard}>

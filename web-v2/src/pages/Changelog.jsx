@@ -50,35 +50,39 @@ function Release({ release, isRunning }) {
           </time>
         ) : null}
       </header>
-      {release.sections.map((section) => (
-        <section className="v2-cl-section" key={section.title}>
-          {/* The same words the app shows (src/lib/changelog.js). */}
-          <h3 className={sectionKind(section.title) === 'breaking' ? 'is-breaking' : undefined}>
-            {sectionLabel(section.title)}
-          </h3>
-          <ul>
-            {section.items.map((item, i) => (
-              <li key={i}>
-                {item.scope ? <span className="v2-cl-scope">{item.scope}</span> : null}
-                <span className="v2-cl-text">
-                  <Segments segments={item.segments} />
-                </span>
-                {item.refs.map((ref) => (
-                  <a
-                    key={ref.label}
-                    className="v2-cl-ref"
-                    href={ref.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {ref.label}
-                  </a>
-                ))}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      {release.sections.map((section) => {
+        // Tags on some items only look random: show them when every item in the list has one.
+        const tagged = section.items.every((item) => item.scope);
+        return (
+          <section className="v2-cl-section" key={section.title}>
+            {/* The same words the app shows (src/lib/changelog.js). */}
+            <h3 className={sectionKind(section.title) === 'breaking' ? 'is-breaking' : undefined}>
+              {sectionLabel(section.title)}
+            </h3>
+            <ul>
+              {section.items.map((item, i) => (
+                <li key={i}>
+                  {tagged ? <span className="v2-cl-scope">{item.scope}</span> : null}
+                  <span className="v2-cl-text">
+                    <Segments segments={item.segments} />
+                  </span>
+                  {item.refs.map((ref) => (
+                    <a
+                      key={ref.label}
+                      className="v2-cl-ref"
+                      href={ref.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {ref.label}
+                    </a>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
     </article>
   );
 }

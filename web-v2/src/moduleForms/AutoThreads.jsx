@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ChipPicker from '../components/ChipPicker.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
@@ -10,6 +11,9 @@ import {
   DEFAULT_TEMPLATE,
   renderThreadName,
 } from '../../../src/lib/autoThreadName.js';
+import UnitInput from '../components/UnitInput.jsx';
+import { channelTitle } from '../util.js';
+import { tokensFor } from '../placeholders.js';
 
 const ARCHIVE_LABELS = { 60: '1 hour', 1440: '24 hours', 4320: '3 days', 10080: '7 days' };
 const SAMPLE_AUTHOR = 'Alex';
@@ -92,9 +96,11 @@ export default function AutoThreads() {
           return (
             <div className="v2-rule-card" key={r.key}>
               <div className="v2-rule-head">
-                <span className="v2-field-hint">Rule {i + 1}</span>
-                <button type="button" className="v2-btn-ghost" onClick={() => removeRule(r.key)}>
-                  remove rule
+                <span className="v2-rule-title">
+                  {channelTitle(data.channels, r.channelId, `Rule ${i + 1}`)}
+                </span>
+                <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRule(r.key)}>
+                  Remove rule
                 </button>
               </div>
 
@@ -123,10 +129,15 @@ export default function AutoThreads() {
                   value={r.nameTemplate}
                   onChange={(e) => updateRule(r.key, { nameTemplate: e.target.value })}
                 />
+                <PlaceholderHint
+                  fieldId={`at-name-${r.key}`}
+                  tokens={tokensFor('autoThreadsName')}
+                  value={r.nameTemplate}
+                  onChange={(nameTemplate) => updateRule(r.key, { nameTemplate })}
+                  ignoreCase
+                />
                 <p className="v2-field-hint">
-                  <code>{'{author}'}</code> the poster, <code>{'{date}'}</code> the day (UTC),{' '}
-                  <code>{'{words}'}</code> the first 6 words of the post (the poster if it has none). Cut at
-                  100 characters.
+                  {'{words}'} is the poster's name if the post has no words. Names are cut at 100 characters.
                 </p>
                 <p className="v2-field-hint" data-testid={`at-preview-${i}`}>
                   Preview: <strong>{preview}</strong> ({[...preview].length}/100)
@@ -167,8 +178,8 @@ export default function AutoThreads() {
                   Only posts with a link
                 </label>
                 <p className="v2-field-hint">
-                  With both on, a post needs one of the two. Links are found in the text, so this needs the
-                  Message Content intent.
+                  With both on, a post needs one of the two. Sylo finds links by reading the post's text, so
+                  this only works when the bot owner has allowed Sylo to read message text.
                 </p>
                 <label className="v2-check">
                   <input
@@ -221,18 +232,22 @@ export default function AutoThreads() {
                   value={r.firstMessage}
                   onChange={(e) => updateRule(r.key, { firstMessage: e.target.value })}
                 />
-                <p className="v2-field-hint">
-                  <code>{'{author}'}</code> becomes a mention of the poster.
-                </p>
+                <PlaceholderHint
+                  fieldId={`at-first-${r.key}`}
+                  tokens={tokensFor('autoThreadsFirstReply')}
+                  ignoreCase
+                  value={r.firstMessage}
+                  onChange={(firstMessage) => updateRule(r.key, { firstMessage })}
+                />
               </div>
 
               <div className="v2-field">
                 <label htmlFor={`at-slow-${r.key}`}>
-                  Slowmode in the thread (seconds) <span className="v2-field-hint">— 0 = off</span>
+                  Slowmode in the thread <span className="v2-field-hint">— 0 = off</span>
                 </label>
-                <input
+                <UnitInput
                   id={`at-slow-${r.key}`}
-                  type="number"
+                  unit="seconds"
                   min={slowmode.min}
                   max={slowmode.max}
                   value={r.slowmodeSeconds}

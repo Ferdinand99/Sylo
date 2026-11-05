@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { Link, Outlet, useLocation, useParams } from 'react-router-dom';
+import { Link, Outlet, ScrollRestoration, useLocation, useParams } from 'react-router-dom';
 import { getGuilds, getPublicSession } from '../api.js';
 import { readLastGuildId, writeLastGuildId } from '../util.js';
 import { isPublicPath } from '../publicRoutes.js';
@@ -136,6 +136,16 @@ export default function Shell() {
       .catch(() => setViewer({ signedIn: false, open: false }));
   }, [viewer]);
 
-  if (viewer === undefined) return <p className="v2-state">Loading…</p>;
-  return viewer.signedIn || viewer.open ? <SignedInShell /> : <PublicShell />;
+  let layout;
+  if (viewer === undefined) layout = <p className="v2-state">Loading…</p>;
+  else layout = viewer.signedIn || viewer.open ? <SignedInShell /> : <PublicShell />;
+
+  // A new page opens at its top (a link to #something goes to that spot instead) and the browser's
+  // Back returns to where the page was left. Without this the window keeps the previous page's scroll.
+  return (
+    <>
+      <ScrollRestoration />
+      {layout}
+    </>
+  );
 }

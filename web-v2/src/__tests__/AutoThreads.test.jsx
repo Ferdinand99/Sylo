@@ -70,6 +70,17 @@ describe('Auto threads form', () => {
     expect(slowmode.min).toBe('0');
   });
 
+  it('does not warn about {AUTHOR} in the first message (the server reads placeholders in any case)', async () => {
+    getModuleConfig.mockResolvedValue({
+      config: { rules: [{ ...rule, firstMessage: 'Hi {AUTHOR}!' }] },
+      channels,
+      roles,
+    });
+    renderAtGuild(<AutoThreads />, GUILD);
+    await screen.findByLabelText(/First message in the thread/);
+    expect(screen.queryByText(/isn't a placeholder here/)).toBeNull();
+  });
+
   it('offers only the channels the server sent (forums are left out there)', async () => {
     renderAtGuild(<AutoThreads />, GUILD);
     const picker = await screen.findByLabelText('Channel');
@@ -172,7 +183,7 @@ describe('Auto threads form', () => {
     expect(added.value).toBe('{words}');
     expect(screen.getAllByLabelText('Archive after')[1].value).toBe('1440');
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'remove rule' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove rule' })[0]);
     expect(screen.getAllByLabelText('Thread name')).toHaveLength(1);
     expect(screen.getByLabelText('Skip bots and webhooks').checked).toBe(true);
   });

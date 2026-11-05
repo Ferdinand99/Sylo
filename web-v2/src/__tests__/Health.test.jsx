@@ -37,6 +37,20 @@ function health(sessionSecret) {
   };
 }
 
+describe('Health: stat tiles', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('names the lower tiles noun first, in sentence case', async () => {
+    getHealth.mockResolvedValue({
+      ...health(),
+      stats: { warningsTotal: 0, warningsWeek: 0, composedTotal: 4, cachedLookups: 9 },
+    });
+    render(<Health />);
+    expect(await screen.findByText('Composed messages')).toBeTruthy();
+    expect(screen.getByText('Game stats cached')).toBeTruthy();
+  });
+});
+
 describe('Health: session secret warning', () => {
   beforeEach(() => vi.clearAllMocks());
 

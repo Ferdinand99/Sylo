@@ -1,7 +1,10 @@
 import LoadError from '../components/LoadError.jsx';
+import SetupCallout from '../components/SetupCallout.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import UnitInput from '../components/UnitInput.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { minutesAsText } from '../util.js';
 
 export default function Verification() {
   const limits = useModuleLimits('verification');
@@ -19,16 +22,17 @@ export default function Verification() {
         Posts a message with a <strong>Verify</strong> button in the chosen channel. New members click it to
         get the verified role. In <strong>captcha</strong> mode the button sends them a private link to a
         Cloudflare Turnstile check on this dashboard first.
-        {!data.turnstileEnabled ? (
-          <>
-            {' '}
-            <span className="v2-row-warn">
-              Captcha mode needs <code>TURNSTILE_SITE_KEY</code> and <code>TURNSTILE_SECRET_KEY</code> set —
-              until then it behaves like button mode.
-            </span>
-          </>
-        ) : null}
       </p>
+      {!data.turnstileEnabled ? (
+        <SetupCallout
+          what="Captcha mode"
+          singular
+          keys="Cloudflare Turnstile keys"
+          vars={['TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY']}
+        >
+          Until then the Verify button works on its own, without the check.
+        </SetupCallout>
+      ) : null}
 
       <form onSubmit={save} data-savebar>
         <div className="v2-field">
@@ -44,8 +48,7 @@ export default function Verification() {
 
         <div className="v2-field">
           <label htmlFor="verifiedRoleId">
-            Verified role{' '}
-            <span className="v2-field-hint">— granted on success; put Sylo's role above it</span>
+            Verified role <span className="v2-field-hint">— given to members who pass</span>
           </label>
           <select
             id="verifiedRoleId"
@@ -60,6 +63,9 @@ export default function Verification() {
               </option>
             ))}
           </select>
+          <p className="v2-field-hint">
+            Sylo's own role must be higher than this one in your server's role list, or it can't give it out.
+          </p>
         </div>
 
         <div className="v2-field">
@@ -77,6 +83,10 @@ export default function Verification() {
               </option>
             ))}
           </select>
+          <p className="v2-field-hint">
+            Saving posts the verify message here, or updates the one that is already there. Sylo needs to see
+            the channel, send messages and embed links in it.
+          </p>
         </div>
 
         <div className="v2-field">
@@ -131,15 +141,22 @@ export default function Verification() {
         </div>
 
         <div className="v2-field">
-          <label htmlFor="kickAfterMinutes">Kick members who don't verify within (minutes, 0 = never)</label>
-          <input
+          <label htmlFor="kickAfterMinutes">Kick members who don't verify within</label>
+          <UnitInput
             id="kickAfterMinutes"
-            type="number"
+            unit="minutes"
+            wide
             min={limitOf(limits, 'kickAfterMinutes').min}
             max={limitOf(limits, 'kickAfterMinutes').max}
             value={form.kickAfterMinutes}
-            onChange={(e) => set({ kickAfterMinutes: Number(e.target.value) })}
+            // An emptied field means 0 = never kick, stated in the hint below.
+            onChange={(e) => set({ kickAfterMinutes: e.target.value === '' ? 0 : Number(e.target.value) })}
           />
+          <p className="v2-field-hint">
+            {Number(form.kickAfterMinutes) === 0
+              ? '0 means never: nobody is kicked for not verifying.'
+              : `${minutesAsText(form.kickAfterMinutes) ? `That is ${minutesAsText(form.kickAfterMinutes)}. ` : ''}0 means never.`}
+          </p>
         </div>
       </form>
 

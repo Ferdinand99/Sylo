@@ -227,6 +227,9 @@ staffRouter.get(
       decisionReason: a.decision_reason,
       ago: timeAgo(a.created_at),
       decidedAgo: a.decided_at ? timeAgo(a.decided_at) : null,
+      // Epoch milliseconds, so the dashboard can write the date in its own format.
+      at: Number(a.created_at),
+      decidedAt: a.decided_at ? Number(a.decided_at) : null,
     }));
     res.json({
       appeals,
@@ -348,6 +351,7 @@ staffRouter.get(
       reason: c.reason,
       detail: c.detail,
       ago: timeAgo(c.created_at),
+      at: Number(c.created_at),
     }));
 
     let bans = [];
@@ -375,6 +379,7 @@ staffRouter.get(
       lockedBy: r.locked_by,
       lockdown: r.lockdown === 1,
       ago: timeAgo(r.locked_at),
+      at: Number(r.locked_at),
     }));
     const tbRows = await guildTempBans(guild.id);
     const tbTags = await resolveUserTags(

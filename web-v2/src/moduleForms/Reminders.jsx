@@ -10,10 +10,12 @@ import {
   setReminderPings,
 } from '../api.js';
 import { notify } from '../notify.js';
+import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
+import { describeTime } from '../formatTime.js';
 
 function msToLocalInput(ms) {
   if (!ms) return '';
@@ -24,7 +26,7 @@ function msToLocalInput(ms) {
 
 function scheduleLabel(r, schedulePresets, weekdays) {
   if (r.mode === 'single') {
-    return r.runAt ? `once, at ${new Date(r.runAt).toLocaleString()}` : 'once — no time set';
+    return r.runAt ? `once, ${describeTime(r.runAt).text}` : 'once — no time set';
   }
   const preset = schedulePresets.find(([mins]) => Number(mins) === r.intervalMinutes);
   const every = preset ? preset[1].toLowerCase() : `every ${r.intervalMinutes}m`;
@@ -431,12 +433,19 @@ export default function Reminders() {
             {d.reminders.map((r) => {
               const channel = d.channels.find((c) => c.id === r.channelId);
               return (
-                <div className="v2-row" key={r.id}>
+                <div className="v2-row v2-row-stack" key={r.id}>
                   <div className="v2-row-main">
-                    <h3>{r.name}</h3>
+                    <h3 className="v2-break">
+                      {r.name}
+                      <Badge tone={r.enabled ? 'success' : 'neutral'} inline>
+                        {r.enabled ? 'Active' : 'Paused'}
+                      </Badge>
+                    </h3>
                     <p>
                       #{channel ? channel.name : r.channelId} ·{' '}
-                      {scheduleLabel(r, d.schedulePresets, d.weekdays)}
+                      <span title={r.mode === 'single' && r.runAt ? describeTime(r.runAt).title : undefined}>
+                        {scheduleLabel(r, d.schedulePresets, d.weekdays)}
+                      </span>
                     </p>
                     {editingId === r.id ? (
                       <ReminderForm
@@ -448,21 +457,14 @@ export default function Reminders() {
                     ) : null}
                   </div>
                   {editingId === r.id ? null : (
-                    <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                      <span className={`v2-status-pill ${r.enabled ? 'completed' : 'pending'}`}>
-                        {r.enabled ? 'on' : 'off'}
-                      </span>
+                    <div className="v2-row-actions">
                       <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(r.id)}>
                         Edit
                       </button>
                       <button type="button" className="v2-btn-ghost" onClick={() => onToggle(r.id)}>
                         {r.enabled ? 'Pause' : 'Resume'}
                       </button>
-                      <button
-                        type="button"
-                        className="v2-btn-danger v2-danger-sep"
-                        onClick={() => onDelete(r.id)}
-                      >
+                      <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(r.id)}>
                         Delete
                       </button>
                     </div>

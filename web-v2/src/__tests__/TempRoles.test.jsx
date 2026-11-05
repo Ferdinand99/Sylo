@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TempRoles from '../moduleForms/TempRoles.jsx';
+import { formatDateTime } from '../formatTime.js';
 import { resetModuleLimits } from '../components/useModuleLimits.js';
 import { renderAtGuild } from './routerHarness.jsx';
 
@@ -78,7 +79,10 @@ describe('TempRoles form', () => {
     expect(await screen.findByRole('heading', { name: 'Temporary roles' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Active temporary roles (2)' })).toBeTruthy();
     expect(screen.getByText('Alice')).toBeTruthy();
-    expect(screen.getByText(/Ends 2030-01-05 12:30 UTC · set by Bob · Trial/)).toBeTruthy();
+    const metaOf = (name) => screen.getByText(name).closest('.v2-row-main').querySelector('p.v2-field-hint');
+    expect(metaOf('Alice').textContent).toBe(
+      `Ends ${formatDateTime(Date.UTC(2030, 0, 5, 12, 30))} · set by Bob · Trial`
+    );
     expect(screen.getByText('Carol')).toBeTruthy();
     expect(getModuleConfig).toHaveBeenCalledWith(GUILD, 'temp-roles');
   });
@@ -133,7 +137,9 @@ describe('TempRoles form', () => {
       })
     );
     expect(await screen.findByText('Dave')).toBeTruthy();
-    expect(notify).toHaveBeenCalledWith('Dave has the role until 2030-01-02 08:00 UTC.');
+    expect(notify).toHaveBeenCalledWith(
+      `Dave has the role until ${formatDateTime(Date.UTC(2030, 0, 2, 8, 0))}.`
+    );
     expect(screen.queryByRole('button', { name: 'Clear Dave' }), 'the member is cleared').toBeNull();
   });
 

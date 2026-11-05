@@ -195,6 +195,7 @@ import {
   normaliseVerificationConfig,
   VERIFY_MODES,
   ensureVerifyMessage,
+  effectiveMode as effectiveVerifyMode,
 } from '../../modules/verification.js';
 import {
   topMembers,
@@ -612,6 +613,8 @@ router.get(
       channels: guildTextChannels(guild),
       roles: assignableRoles(guild),
       verificationEnabled: verification.enabled,
+      // 'button' or 'captcha' (captcha only counts when the captcha keys are set), for the verify row.
+      verificationMode: effectiveVerifyMode(verification.config),
       placeholders: WELCOME_PLACEHOLDERS,
     });
   })
@@ -1014,14 +1017,16 @@ router.post(
 router.post(
   '/guilds/:guildId/modules/automod/config',
   asyncHandler(async (req, res) => {
-    // Immunity (exempt) roles are saved through their own route (/automod/immunity), not this
-    // form — keep whatever is already stored.
+    // The web form saves the immunity roles with the rest of the page through `immunityRoles`
+    // (absent = keep what is stored, [] = clear). `exemptRoles` in this body is ignored on purpose:
+    // the Sylo app sends its stale copy of that list back on every save and would overwrite
+    // changes made in the web dashboard.
     const prev = (await getGuildModule(req.guild.id, 'automod')).config;
     const config = normaliseAutomodConfig({
       deleteMessage: true,
       timeoutMinutes: req.body.timeoutMinutes,
       exemptChannels: req.body.exemptChannels,
-      exemptRoles: prev.exemptRoles ?? [],
+      exemptRoles: Array.isArray(req.body.immunityRoles) ? req.body.immunityRoles : (prev.exemptRoles ?? []),
       native: req.body.native,
       rules: req.body.rules,
     });
@@ -1040,10 +1045,15 @@ router.post(
       nativeNote = `native rules +${r.created} ~${r.edited} -${r.removed}`;
     }
 
+    const before = prev.exemptRoles ?? [];
+    const immunityChanged =
+      before.length !== config.exemptRoles.length || before.some((id, i) => id !== config.exemptRoles[i]);
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:automod',
-      detail: 'settings saved',
+      detail: immunityChanged
+        ? `settings saved, immunity roles (${config.exemptRoles.length})`
+        : 'settings saved',
     });
     res.json({ config, nativeNote, nativeWarned });
   })
@@ -1649,6 +1659,14 @@ async function giveawaysList(guild) {
     ...(await activeGiveaways(guild.id)).map((g) => ({ ...g, state: 'active' })),
     ...(await endedGiveaways(guild.id, 8)).map((g) => ({ ...g, state: 'ended' })),
   ];
+  // Winner names for the "Recently ended" rows; an id that cannot be resolved stays its own name.
+  // The member cache is read first and at most 25 users are fetched per request; the rest show as
+  // "a member (ID …)".
+  const winnerTags = await resolveUserTags(
+    guild.client,
+    raw.flatMap((g) => g.wonIds ?? []),
+    { guild, maxFetch: 25 }
+  );
   return Promise.all(
     raw.map(async (g) => ({
       id: g.id,
@@ -1658,6 +1676,7 @@ async function giveawaysList(guild) {
       endsAt: g.ends_at,
       entries: await giveawayEntryCount(g.id),
       wonIds: g.wonIds,
+      wonNames: (g.wonIds ?? []).map((id) => winnerTags.get(id) ?? id),
       channel: channels.find((c) => c.id === g.channel_id)?.name ?? g.channel_id,
       requiredRoleId: g.required_role_id,
     }))
@@ -2373,9 +2392,13 @@ router.get(
       modules,
       lastError: runtime.lastError,
       lastErrorAgo: runtime.lastError ? timeAgo(runtime.lastError.at) : null,
-      errors: runtime.errors
-        .slice(0, 25)
-        .map((e) => ({ message: e.message, scope: e.scope, ago: timeAgo(e.at) })),
+      errors: runtime.errors.slice(0, 25).map((e) => ({
+        message: e.message,
+        scope: e.scope,
+        // The module's display name when the error came from one ("module:starboard", "youtube-alerts").
+        source: getModule(String(e.scope ?? '').replace(/^module:/, ''))?.name ?? null,
+        ago: timeAgo(e.at),
+      })),
       botAudit: (await listBotAudit(50)).map((a) => ({
         actor: a.actor,
         action: a.action,

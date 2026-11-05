@@ -69,6 +69,14 @@ function fmtDuration(minsRaw) {
   return `${h.toLocaleString('en')} h${mins % 60 ? ` ${mins % 60} m` : ''}`;
 }
 
+/** A duration for a tile: from 10 hours up whole hours only ("2,402 h"), so a long total never wraps;
+ *  the exact figure goes in the tile's tooltip. */
+export function fmtDurationShort(minsRaw) {
+  const mins = Math.round(minsRaw || 0);
+  if (mins < 600) return fmtDuration(mins);
+  return `${Math.round(mins / 60).toLocaleString('en')} h`;
+}
+
 const RANGES = [
   ['24', 'Last 24 hours'],
   ['48', 'Last 48 hours'],
@@ -111,7 +119,12 @@ export default function Insights() {
 
   return (
     <Reveal>
-      <h1 className="v2-section-title">Server insights</h1>
+      <div className="v2-page-head">
+        <h1 className="v2-section-title">Server insights</h1>
+        <button type="button" className="v2-btn-ghost" onClick={onRefresh} disabled={refreshing}>
+          {refreshing ? 'Refreshing…' : '↻ Refresh now'}
+        </button>
+      </div>
 
       <div className="v2-ins-range" role="group" aria-label="Time range">
         {RANGES.map(([value, label]) => (
@@ -125,18 +138,9 @@ export default function Insights() {
             {label}
           </button>
         ))}
-        <button
-          type="button"
-          className="v2-btn-ghost v2-ins-refresh"
-          onClick={onRefresh}
-          disabled={refreshing}
-        >
-          {refreshing ? 'Refreshing…' : '↻ Refresh now'}
-        </button>
       </div>
       <p className="v2-field-hint">
-        Buffered activity is written every ~10 minutes; use Refresh now to pull the last few minutes
-        immediately.
+        These numbers update every 10 minutes. Refresh now pulls in the latest activity.
       </p>
 
       <div className="v2-ins-tiles">
@@ -156,8 +160,8 @@ export default function Insights() {
           <span className="v2-ins-n v2-ins-bad">{num(totals.leaves)}</span>
           <span className="v2-field-hint">{totals.leaves === 1 ? 'leave' : 'leaves'}</span>
         </div>
-        <div className="v2-ins-tile">
-          <span className="v2-ins-n">{fmtDuration(totals.voiceMinutes)}</span>
+        <div className="v2-ins-tile" title={fmtDuration(totals.voiceMinutes)}>
+          <span className="v2-ins-n">{fmtDurationShort(totals.voiceMinutes)}</span>
           <span className="v2-field-hint">in voice</span>
         </div>
         <div className="v2-ins-tile">

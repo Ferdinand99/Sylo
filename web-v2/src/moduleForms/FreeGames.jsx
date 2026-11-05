@@ -17,9 +17,9 @@ export default function FreeGames() {
     <>
       <h1 className="v2-section-title">Free games</h1>
       <p className="v2-field-hint">
-        Sylo checks hourly and posts an embed when a game becomes free to claim — from the Epic Games Store,
-        plus Steam / GOG / Fanatical / Humble and more when an <code>ITAD_API_KEY</code> is set. DLC is
-        filtered out of announcements; <code>{cmd('/freegames dlc:true')}</code> shows free DLC on demand.
+        Sylo checks hourly and posts when a game becomes free to claim. Epic Games Store deals are always
+        included; Steam, GOG and other stores are included when the bot owner has switched that on. DLC is
+        left out of announcements; <code>{cmd('/freegames dlc:true')}</code> shows free DLC on demand.
       </p>
 
       <form onSubmit={save} data-savebar>
@@ -38,6 +38,7 @@ export default function FreeGames() {
               </option>
             ))}
           </select>
+          <p className="v2-field-hint">Sylo needs to see the channel, send messages and embed links in it.</p>
         </div>
 
         <div className="v2-field">
@@ -55,10 +56,12 @@ export default function FreeGames() {
         </div>
       </form>
 
-      <p className="v2-field-hint v2-section-gap">
-        Sylo needs View Channel / Send Messages / Embed Links in that channel.
-      </p>
-      <SendTestButton moduleId="free-games" disabled={dirty} />
+      <SendTestButton
+        moduleId="free-games"
+        disabled={dirty}
+        sample="a sample announcement"
+        channelName={data.channels.find((c) => c.id === form.channelId)?.name}
+      />
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );

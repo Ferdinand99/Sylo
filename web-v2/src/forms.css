@@ -888,3 +888,123 @@ textarea[aria-invalid='true']:focus-visible {
     height: 40px;
   }
 }
+
+/* ---------- Placeholder chips (components/PlaceholderHint.jsx) ---------- */
+/* Shares the pill look of the embed editor's "Insert:" row; sits right under the field it writes
+   into. */
+.v2-ph {
+  margin-top: 8px;
+}
+.v2-ph-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+}
+.v2-ph-label {
+  color: var(--text-muted);
+}
+.v2-ph-chips button {
+  min-height: 26px;
+  margin: 0;
+  padding: 2px 10px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-ui) ease,
+    transform var(--dur-press) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-ph-chips button:hover {
+    background: var(--bg-surface-2);
+  }
+}
+.v2-ph-chips button:active {
+  transform: scale(0.97);
+}
+@media (pointer: coarse) {
+  .v2-ph-chips button {
+    min-height: 36px;
+    padding: 0 12px;
+  }
+}
+.v2-ph .v2-field-hint {
+  margin-top: 6px;
+}
+.v2-ph-warn {
+  margin: 6px 0 0;
+  color: var(--warn);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+
+/* ---------- Callout (components/Callout.jsx) ---------- */
+.v2-callout {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--callout-tone) 40%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--callout-tone) 10%, transparent);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  --callout-tone: var(--accent);
+}
+.v2-callout.is-warning {
+  --callout-tone: var(--warn);
+}
+.v2-callout-icon {
+  flex: none;
+  display: inline-flex;
+  margin-top: 1px;
+  color: var(--callout-tone);
+}
+.v2-callout-body {
+  min-width: 0;
+  color: var(--text);
+}
+.v2-callout-body p {
+  margin: 0;
+}
+.v2-callout-body p + p {
+  margin-top: 6px;
+}
+.v2-callout-title {
+  display: block;
+  margin-bottom: 2px;
+}
+.v2-callout-owner {
+  color: var(--text-muted);
+}
+
+/* ---------- How it works (components/HowItWorks.jsx) ---------- */
+.v2-howitworks {
+  margin: 8px 0 16px;
+}
+.v2-howitworks > div {
+  margin-top: 8px;
+}
+.v2-howitworks > div > p {
+  margin: 0;
+}
+.v2-howitworks > div > p + p {
+  margin-top: 6px;
+}
+
+/* A small heading that names a group of checkboxes inside one field ("Members", "Messages"). */
+.v2-subtitle {
+  margin: 14px 0 6px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}

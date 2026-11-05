@@ -1,8 +1,12 @@
 import ChipPicker from '../components/ChipPicker.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
+import { cardTitle } from '../util.js';
+import { tokensFor } from '../placeholders.js';
 
 const MATCH_LABELS = {
   contains: 'contains',
@@ -67,19 +71,15 @@ export default function Autoresponder() {
       <h1 className="v2-section-title">Autoresponder</h1>
       <p className="v2-field-hint">
         Replies automatically when a message matches a trigger — no prefix. First matching responder wins.
-        Placeholders:{' '}
-        {data.placeholders.map((p) => (
-          <code key={p}> {p} </code>
-        ))}
-        . Deleting the trigger needs the Manage Messages permission.
+        Deleting the trigger needs the Manage Messages permission.
       </p>
 
       <form onSubmit={save} data-savebar>
         <div className="v2-field">
-          <label htmlFor="cooldownSeconds">Per-channel cooldown (seconds)</label>
-          <input
+          <label htmlFor="cooldownSeconds">Per-channel cooldown</label>
+          <UnitInput
             id="cooldownSeconds"
-            type="number"
+            unit="seconds"
             min={limitOf(limits, 'cooldownSeconds').min}
             max={limitOf(limits, 'cooldownSeconds').max}
             value={form.cooldownSeconds}
@@ -91,9 +91,9 @@ export default function Autoresponder() {
         {form.responders.map((r) => (
           <div className="v2-rule-card" key={r.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Responder</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRow(r.key)}>
-                remove
+              <span className="v2-rule-title">{cardTitle(r.trigger, 'Responder')}</span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRow(r.key)}>
+                Remove
               </button>
             </div>
 
@@ -121,13 +121,20 @@ export default function Autoresponder() {
             </div>
 
             <div className="v2-field">
-              <label>Reply</label>
+              <label htmlFor={`ar-reply-${r.key}`}>Reply</label>
               <textarea
+                id={`ar-reply-${r.key}`}
                 rows={2}
                 maxLength={limitOf(limits, 'responders[].response').maxLength}
                 placeholder="Reply…"
                 value={r.response}
                 onChange={(e) => updateRow(r.key, { response: e.target.value })}
+              />
+              <PlaceholderHint
+                fieldId={`ar-reply-${r.key}`}
+                tokens={tokensFor('autoresponder', data.placeholders)}
+                value={r.response}
+                onChange={(response) => updateRow(r.key, { response })}
               />
             </div>
 

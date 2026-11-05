@@ -144,7 +144,7 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
     { key: 'command-list', label: 'Command list', icon: 'terminal', path: '/commands' },
     { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', path: '/roadmap' },
     { key: 'health', label: 'Health', icon: 'pulse', path: '/health' },
-    { key: 'stats', label: 'Stats', icon: 'chart', path: '/stats' },
+    { key: 'stats', label: 'Game stats cache', icon: 'chart', path: '/stats' },
   ].map((it) => ({ ...it, href: it.guild ? (guildBase ? `${guildBase}${it.path}` : null) : it.path }));
 
   // Only modules actually turned on for this server, grouped the same way
@@ -219,8 +219,8 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
                     >
                       {card.name}{' '}
                       {card.beta ? (
-                        <span className="v2-sidebar-beta-mark" title="New module — behavior may still change">
-                          ●
+                        <span className="v2-sidebar-beta-pill" title="New module — behavior may still change">
+                          Beta
                         </span>
                       ) : null}
                     </Link>

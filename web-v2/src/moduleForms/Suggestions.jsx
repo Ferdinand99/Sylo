@@ -8,6 +8,9 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import Badge from '../components/Badge.jsx';
+import UnitInput from '../components/UnitInput.jsx';
+import Time from '../components/Time.jsx';
 
 const STATUS_LABEL = {
   open: '⏳ Open',
@@ -15,6 +18,15 @@ const STATUS_LABEL = {
   approved: '✅ Approved',
   denied: '❌ Denied',
   implemented: '🚀 Implemented',
+};
+
+// Colour follows meaning; the label always carries the word too.
+const STATUS_TONE = {
+  open: 'neutral',
+  considering: 'warning',
+  approved: 'success',
+  denied: 'danger',
+  implemented: 'success',
 };
 
 const FILTERS = [
@@ -25,31 +37,48 @@ const FILTERS = [
   ['implemented', 'Implemented'],
 ];
 
-// The staff actions, in the order of the buttons: [action, button label].
+// The staff actions, in the order of the "Set status" list: [action, status it sets, label].
 const ACTIONS = [
-  ['approve', 'Approve'],
-  ['deny', 'Deny'],
-  ['implement', 'Implemented'],
-  ['consider', 'Considering'],
+  ['approve', 'approved', 'Approved'],
+  ['deny', 'denied', 'Denied'],
+  ['implement', 'implemented', 'Implemented'],
+  ['consider', 'considering', 'Considering'],
 ];
-
-const day = (ms) => new Date(ms).toISOString().slice(0, 10);
 
 function Item({ item, busy, limits, onDecide, onDelete }) {
   const [action, setAction] = useState(null);
+  const [pick, setPick] = useState('');
   const [reason, setReason] = useState('');
+  const pickRef = useRef(null);
+  const returnFocus = useRef(false);
+
+  // The panel replaces the select; when it closes, focus goes back to the select.
+  useEffect(() => {
+    if (!action && returnFocus.current) {
+      returnFocus.current = false;
+      pickRef.current?.focus();
+    }
+  }, [action]);
+
+  function closePanel() {
+    returnFocus.current = true;
+    setAction(null);
+    setPick('');
+  }
 
   return (
-    <div className="v2-row">
+    <div className="v2-row v2-row-stack">
       <div className="v2-row-main">
         <h3>
           #{item.number}
-          {item.title ? ` · ${item.title}` : ''}{' '}
-          <span className="v2-field-hint">{STATUS_LABEL[item.status]}</span>
+          {item.title ? ` · ${item.title}` : ''}
+          <Badge tone={STATUS_TONE[item.status] ?? 'neutral'} inline raw>
+            {STATUS_LABEL[item.status] ?? item.status}
+          </Badge>
         </h3>
         <p>{item.text}</p>
         <p className="v2-field-hint">
-          👍 {item.up} · 👎 {item.down} · {day(item.createdAt)}
+          👍 {item.up} · 👎 {item.down} · <Time value={item.createdAt} />
           {item.author
             ? ` · by ${item.author}${item.anonymous ? ' (hidden from members)' : ''}`
             : ' · author removed'}
@@ -62,7 +91,7 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
               e.preventDefault();
               onDecide(item, action, reason).then((ok) => {
                 if (ok) {
-                  setAction(null);
+                  closePanel();
                   setReason('');
                 }
               });
@@ -77,33 +106,50 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
                 id={`reason-${item.number}`}
                 type="text"
                 maxLength={limitOf(limits, 'reason').maxLength}
+                autoFocus
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
               />
             </div>
             <button type="submit" className="v2-btn-primary" disabled={busy}>
-              {ACTIONS.find(([a]) => a === action)[1]}
+              Set to {ACTIONS.find(([a]) => a === action)[2]}
             </button>
-            <button type="button" className="v2-btn-ghost" onClick={() => setAction(null)}>
+            <button type="button" className="v2-btn-ghost" onClick={closePanel}>
               Close
             </button>
           </form>
         ) : null}
       </div>
       {action ? null : (
-        <div className="v2-field-row">
-          {ACTIONS.map(([a, label]) => (
-            <button
-              key={a}
-              type="button"
-              className="v2-btn-ghost"
-              disabled={busy}
-              onClick={() => setAction(a)}
-            >
-              {label}
-            </button>
-          ))}
-          <button type="button" className="v2-btn-danger" disabled={busy} onClick={() => onDelete(item)}>
+        <div className="v2-row-actions">
+          <select
+            ref={pickRef}
+            aria-label={`Set status of suggestion #${item.number}`}
+            value={pick}
+            disabled={busy}
+            onChange={(e) => setPick(e.target.value)}
+          >
+            <option value="">Set status…</option>
+            {ACTIONS.filter(([, status]) => status !== item.status).map(([a, , label]) => (
+              <option key={a} value={a}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            disabled={busy || !pick}
+            onClick={() => setAction(pick)}
+          >
+            Set…
+          </button>
+          <button
+            type="button"
+            className="v2-btn-danger-ghost"
+            disabled={busy}
+            onClick={() => onDelete(item)}
+          >
             Delete
           </button>
         </div>
@@ -256,16 +302,17 @@ export default function Suggestions() {
             Turn messages in the channel into suggestions
           </label>
           <p className="v2-field-hint">
-            Sylo deletes the message and posts it as a suggestion. Needs the suggestions channel above, Manage
-            Messages and the Message Content intent. Messages with attachments are left alone.
+            Sylo deletes the message and posts it as a suggestion. Needs the suggestions channel above and the
+            Manage Messages permission. It also has to be allowed to read message text, which only the bot
+            owner can switch on. Messages with attachments are left alone.
           </p>
         </div>
 
         <div className="v2-field">
-          <label htmlFor="cooldownSeconds">Cooldown between suggestions (seconds)</label>
-          <input
+          <label htmlFor="cooldownSeconds">Cooldown between suggestions</label>
+          <UnitInput
             id="cooldownSeconds"
-            type="number"
+            unit="seconds"
             min={cooldown.min}
             max={cooldown.max}
             value={form.cooldownSeconds}
@@ -289,7 +336,7 @@ export default function Suggestions() {
 
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Suggestions ({data.suggestions.length})</h2>
-        <div className="v2-field-row">
+        <div className="v2-field-row v2-sug-filters">
           <div className="v2-field">
             <label htmlFor="sug-filter">Show</label>
             <select id="sug-filter" value={filter} onChange={(e) => setFilter(e.target.value)}>

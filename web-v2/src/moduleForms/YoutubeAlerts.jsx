@@ -1,8 +1,13 @@
+import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
+import HowItWorks from '../components/HowItWorks.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { tokensFor } from '../placeholders.js';
+import { cardTitle } from '../util.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -67,38 +72,43 @@ export default function YoutubeAlerts() {
     <>
       <h1 className="v2-section-title">YouTube alerts</h1>
       <p className="v2-field-hint">
-        Add a channel by URL or @handle — Sylo resolves it on save. New uploads come from YouTube's public
-        feed; "went live" is detected from the channel's live page (no API key needed). Checks run about every
-        3 minutes. Message placeholders: <code>{'{name}'}</code> <code>{'{title}'}</code>{' '}
-        <code>{'{url}'}</code>.
+        Posts in a channel when a YouTube channel uploads a video or goes live. Add a channel by URL or
+        @handle; Sylo looks it up when you save.
       </p>
+      <HowItWorks>
+        <p>
+          New uploads come from YouTube's public feed, and "went live" is detected from the channel's live
+          page, so no API key is needed. Checks run about every 3 minutes.
+        </p>
+      </HowItWorks>
 
       <form onSubmit={save} data-savebar>
         {form.alerts.map((a) => (
           <div className="v2-rule-card" key={a.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Channel</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRow(a.key)}>
-                remove
+              <span className="v2-rule-title">{cardTitle(a.name, 'New channel')}</span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRow(a.key)}>
+                Remove
               </button>
             </div>
 
             <div className="v2-field-row">
               <div className="v2-field">
-                <label>
+                <label htmlFor={`yt-ch-${a.key}`}>
                   YouTube channel <span className="v2-field-hint">— URL or @handle</span>
                 </label>
                 <input
+                  id={`yt-ch-${a.key}`}
                   type="text"
                   placeholder="@MrBeast or a channel URL"
                   value={a.input}
                   onChange={(e) => updateRow(a.key, { input: e.target.value })}
                 />
-                {a.ytChannelId ? <p className="v2-field-hint">resolved: {a.ytChannelId}</p> : null}
               </div>
               <div className="v2-field">
-                <label>Announce in</label>
+                <label htmlFor={`yt-to-${a.key}`}>Announce in</label>
                 <select
+                  id={`yt-to-${a.key}`}
                   value={a.discordChannelId}
                   onChange={(e) => updateRow(a.key, { discordChannelId: e.target.value })}
                 >
@@ -111,6 +121,13 @@ export default function YoutubeAlerts() {
                 </select>
               </div>
             </div>
+
+            {a.ytChannelId ? (
+              <p className="v2-field-hint">
+                Found: {a.name || a.ytChannelId}
+                {a.name ? <span className="v2-field-hint"> (ID {a.ytChannelId})</span> : null}
+              </p>
+            ) : null}
 
             <div className="v2-field-row">
               <div className="v2-field">
@@ -137,23 +154,37 @@ export default function YoutubeAlerts() {
             </div>
 
             <div className="v2-field">
-              <label>New-video message</label>
-              <textarea
+              <label htmlFor={`yt-vid-${a.key}`}>New-video message</label>
+              <AutoGrowTextarea
+                id={`yt-vid-${a.key}`}
                 rows={2}
                 maxLength={limitOf(limits, 'alerts[].videoMessage').maxLength}
                 placeholder={data.defaultVideoMessage}
                 value={a.videoMessage}
                 onChange={(e) => updateRow(a.key, { videoMessage: e.target.value })}
               />
+              <PlaceholderHint
+                fieldId={`yt-vid-${a.key}`}
+                tokens={tokensFor('youtube')}
+                value={a.videoMessage}
+                onChange={(videoMessage) => updateRow(a.key, { videoMessage })}
+              />
             </div>
             <div className="v2-field">
-              <label>Went-live message</label>
-              <textarea
+              <label htmlFor={`yt-live-${a.key}`}>Went-live message</label>
+              <AutoGrowTextarea
+                id={`yt-live-${a.key}`}
                 rows={2}
                 maxLength={limitOf(limits, 'alerts[].liveMessage').maxLength}
                 placeholder={data.defaultLiveMessage}
                 value={a.liveMessage}
                 onChange={(e) => updateRow(a.key, { liveMessage: e.target.value })}
+              />
+              <PlaceholderHint
+                fieldId={`yt-live-${a.key}`}
+                tokens={tokensFor('youtube')}
+                value={a.liveMessage}
+                onChange={(liveMessage) => updateRow(a.key, { liveMessage })}
               />
             </div>
             <div className="v2-field">
@@ -177,7 +208,13 @@ export default function YoutubeAlerts() {
           + Add channel
         </button>
       </form>
-      <SendTestButton moduleId="youtube-alerts" disabled={dirty} />
+      <SendTestButton
+        moduleId="youtube-alerts"
+        disabled={dirty}
+        sample="a sample alert"
+        channelName={data.channels.find((c) => c.id === form.alerts[0]?.discordChannelId)?.name}
+        note={form.alerts.length > 1 ? 'the first channel in the list' : ''}
+      />
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>
   );

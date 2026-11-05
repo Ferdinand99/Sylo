@@ -1,7 +1,10 @@
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
+import { tokensFor } from '../placeholders.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -44,9 +47,8 @@ export default function ServerStats() {
     <>
       <h1 className="v2-section-title">Server statistics</h1>
       <p className="v2-field-hint">
-        Pick a voice channel (make one, lock it so nobody can join) and Sylo renames it to show a live count.
-        Use <code>{'{count}'}</code> in the name, e.g. "Members: {'{count}'}". Sylo needs Manage Channels on
-        each one.
+        Pick a voice channel (make one, lock it so nobody can join) and Sylo renames it to show a live count,
+        e.g. "Members: 1,284". Sylo needs Manage Channels on each one.
       </p>
 
       <form onSubmit={save} data-savebar>
@@ -56,9 +58,16 @@ export default function ServerStats() {
         {form.channels.map((c) => (
           <div className="v2-rule-card" key={c.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">Stat channel</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRow(c.key)}>
-                remove
+              <span className="v2-rule-title">
+                {[
+                  data.statTypes.find(([t]) => t === c.type)?.[1],
+                  data.voiceChannels.find((vc) => vc.id === c.channelId)?.name,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || 'Stat channel'}
+              </span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRow(c.key)}>
+                Remove
               </button>
             </div>
 
@@ -87,15 +96,23 @@ export default function ServerStats() {
             </div>
 
             <div className="v2-field">
-              <label>
-                Channel name template <span className="v2-field-hint">— must include {'{count}'}</span>
+              <label htmlFor={`ss-name-${c.key}`}>
+                Channel name{' '}
+                <span className="v2-field-hint">— include {'{count}'} where the number goes</span>
               </label>
               <input
+                id={`ss-name-${c.key}`}
                 type="text"
                 maxLength={limitOf(limits, 'channels[].template').maxLength}
                 placeholder="Members: {count}"
                 value={c.template}
                 onChange={(e) => updateRow(c.key, { template: e.target.value })}
+              />
+              <PlaceholderHint
+                fieldId={`ss-name-${c.key}`}
+                tokens={tokensFor('serverStats')}
+                value={c.template}
+                onChange={(template) => updateRow(c.key, { template })}
               />
             </div>
           </div>
@@ -110,10 +127,10 @@ export default function ServerStats() {
         </button>
 
         <div className="v2-field v2-section-gap-sm">
-          <label htmlFor="refreshMinutes">Refresh every (minutes)</label>
-          <input
+          <label htmlFor="refreshMinutes">Refresh every</label>
+          <UnitInput
             id="refreshMinutes"
-            type="number"
+            unit="minutes"
             min={limitOf(limits, 'refreshMinutes').min}
             max={limitOf(limits, 'refreshMinutes').max}
             value={form.refreshMinutes}

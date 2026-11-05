@@ -8,6 +8,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { describeTime, formatDateTime } from '../formatTime.js';
 
 const browserZone = () => {
   try {
@@ -246,7 +247,14 @@ function EventForm({ initial, editing, channels, roles, saving, onSave, onCancel
   );
 }
 
-const when = (ev) => `${ev.start.replace('T', ' ')} ${ev.timeZone}`;
+/** "Sat 5 Jan, 19:00 (Europe/Oslo)": the event's own start time in its own time zone. */
+export const when = (ev) =>
+  ev.startAt
+    ? `${formatDateTime(ev.startAt, { timeZone: ev.timeZone || undefined })}${ev.timeZone ? ` (${ev.timeZone})` : ''}`
+    : `${ev.start.replace('T', ' ')} ${ev.timeZone}`;
+/** "4/12 going · 1 maybe": the sign-up counts in words; "maybe" is left out when nobody is one. */
+export const signups = (ev) =>
+  `${ev.joined}${ev.capacity ? `/${ev.capacity}` : ''} going${ev.maybe ? ` · ${ev.maybe} maybe` : ''}`;
 
 // The link to an event's page, or why there is none while the setting is on. A page in a channel that
 // everyone can see opens for anyone; one in a private channel only for signed-in members who see it.
@@ -373,16 +381,21 @@ export default function Events() {
             Event pages
           </label>
           <p className="v2-field-hint">
-            Every event gets a page. It shows the title, the time in the visitor&apos;s own time zone, the
-            description, the place, the image, the capacity and how many are going or maybe: no names, no host
-            and no roles. For an event in a channel that everyone can see, anyone with the link can open the
-            page without signing in. For an event in a private channel, only people who sign in with Discord
-            or Fluxer, are members of the server and can see that channel can open it; Sylo checks this on
-            every visit. Someone who is not signed in sees a plain sign-in page, and a signed-in person who
-            may not open it sees the same &quot;not found&quot; page as for a wrong address. An event in an
-            age-restricted channel has no page. The link is added to the event&apos;s post, and saving this
-            updates the posts of the server&apos;s events, finished ones too.
+            Every event gets a page with its title, time, place, image and sign-up counts: no names, no host
+            and no roles. The link is added to the event&apos;s post. Saving this updates the posts of the
+            server&apos;s events, finished ones too.
           </p>
+          <details className="v2-am-params">
+            <summary>Who can open the page?</summary>
+            <p className="v2-field-hint">
+              For an event in a channel that everyone can see, anyone with the link can open the page without
+              signing in. For an event in a private channel, only people who sign in with Discord or Fluxer,
+              are members of the server and can see that channel can open it; Sylo checks this on every visit.
+              Someone who is not signed in sees a plain sign-in page, and a signed-in person who may not open
+              it sees the same &quot;not found&quot; page as for a wrong address. An event in an
+              age-restricted channel has no page.
+            </p>
+          </details>
         </div>
 
         <div className="v2-field">
@@ -413,14 +426,13 @@ export default function Events() {
         {upcoming.length === 0 ? <p className="v2-note">None scheduled.</p> : null}
         <div className="v2-list">
           {upcoming.map((ev) => (
-            <div className="v2-row" key={ev.id}>
+            <div className="v2-row v2-row-stack" key={ev.id}>
               <div className="v2-row-main">
                 <h3>
                   #{ev.id} · {ev.title}
                 </h3>
-                <p>
-                  {when(ev)} · #{ev.channel} · ✅ {ev.joined}
-                  {ev.capacity ? `/${ev.capacity}` : ''} · ❔ {ev.maybe}
+                <p title={describeTime(ev.startAt).title || undefined}>
+                  {when(ev)} · #{ev.channel} · {signups(ev)}
                 </p>
                 <PageLink ev={ev} />
                 {editingId === ev.id ? (
@@ -441,7 +453,7 @@ export default function Events() {
                 ) : null}
               </div>
               {editingId === ev.id ? null : (
-                <div className="v2-field-row">
+                <div className="v2-row-actions">
                   <button
                     type="button"
                     className="v2-btn-ghost"
@@ -452,11 +464,11 @@ export default function Events() {
                   </button>
                   <button
                     type="button"
-                    className="v2-btn-danger"
+                    className="v2-btn-danger-ghost"
                     disabled={busy}
                     onClick={() => onCancelEvent(ev)}
                   >
-                    Cancel
+                    Cancel event
                   </button>
                 </div>
               )}
@@ -495,9 +507,8 @@ export default function Events() {
                   <h3>
                     #{ev.id} · {ev.title}
                   </h3>
-                  <p>
-                    {when(ev)} · {ev.state === 'cancelled' ? 'cancelled' : 'ended'} · ✅ {ev.joined} · ❔{' '}
-                    {ev.maybe}
+                  <p title={describeTime(ev.startAt).title || undefined}>
+                    {when(ev)} · {ev.state === 'cancelled' ? 'cancelled' : 'ended'} · {signups(ev)}
                   </p>
                   <PageLink ev={ev} />
                 </div>

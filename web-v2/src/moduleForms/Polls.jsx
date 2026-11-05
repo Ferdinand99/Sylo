@@ -123,7 +123,7 @@ export default function Polls() {
         </div>
 
         <div className="v2-group">
-          <h2 className="v2-group-title">Polls message</h2>
+          <h2 className="v2-group-title">Poll message</h2>
           <p className="v2-field-hint">How a live poll looks. Sylo fills the greyed-out body.</p>
           <EmbedEditor
             key={`poll-${formKey}`}
