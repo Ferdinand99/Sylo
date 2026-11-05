@@ -6,6 +6,7 @@ import KickAlerts from '../moduleForms/KickAlerts.jsx';
 import YoutubeAlerts from '../moduleForms/YoutubeAlerts.jsx';
 import RssAlerts from '../moduleForms/RssAlerts.jsx';
 import AutoThreads from '../moduleForms/AutoThreads.jsx';
+import Appeals from '../moduleForms/Appeals.jsx';
 import Logging, { groupEvents } from '../moduleForms/Logging.jsx';
 import SetupCallout from '../components/SetupCallout.jsx';
 import Time from '../components/Time.jsx';
@@ -265,6 +266,46 @@ describe('Logging', () => {
     expect(boxes().every((b) => b.checked)).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
     expect(boxes().some((b) => b.checked)).toBe(false);
+  });
+});
+
+describe('Appeals form', () => {
+  const appeals = (over = {}) => ({
+    config: {
+      questions: ['Why were you banned?'],
+      autoUnbanOnAccept: false,
+      reviewChannelId: '',
+      cooldownDays: 7,
+      appealMessage: '',
+      appealServerInvite: '',
+    },
+    channels,
+    dashboardUrlSet: false,
+    ...over,
+  });
+
+  it('renders the loaded form (the owner hint reads the operator flag without breaking the hook order)', async () => {
+    getAccount.mockResolvedValue({ operator: true });
+    getModuleConfig.mockResolvedValue(appeals());
+    renderAtGuild(<Appeals />, GUILD);
+    expect(await screen.findByRole('heading', { name: 'Ban appeals' })).toBeTruthy();
+    expect(await screen.findByText(/DASHBOARD_URL/)).toBeTruthy();
+  });
+
+  it('shows no variable names to someone who is not the owner', async () => {
+    getAccount.mockResolvedValue({ operator: false });
+    getModuleConfig.mockResolvedValue(appeals());
+    renderAtGuild(<Appeals />, GUILD);
+    expect(await screen.findByRole('heading', { name: 'Ban appeals' })).toBeTruthy();
+    await waitFor(() => expect(getAccount).toHaveBeenCalled());
+    expect(screen.queryByText(/DASHBOARD_URL/)).toBeNull();
+  });
+
+  it('counts everyone as the operator when the dashboard has no login (open mode)', async () => {
+    getAccount.mockResolvedValue({ open: true, platforms: [], devices: [] });
+    getModuleConfig.mockResolvedValue(appeals());
+    renderAtGuild(<Appeals />, GUILD);
+    expect(await screen.findByText(/DASHBOARD_URL/)).toBeTruthy();
   });
 });
 

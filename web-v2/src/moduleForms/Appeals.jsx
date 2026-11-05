@@ -27,10 +27,11 @@ export default function Appeals() {
     }
   );
 
+  const operator = useOperator();
+
   if (status === 'error') return <LoadError error={error} what="Ban appeals settings" />;
   if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
-  const operator = useOperator();
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const setQuestion = (i, value) =>
     setForm((f) => ({ ...f, questions: f.questions.map((q, idx) => (idx === i ? value : q)) }));
