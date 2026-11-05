@@ -35,20 +35,29 @@ export function guildCategories(guild) {
 /**
  * Resolve a set of user IDs to `{ id, tag }`, using the cache and falling back
  * to a REST fetch. Unknown IDs map to their raw id.
+ * With `guild`, its member cache is looked at first. `maxFetch` caps the REST lookups of one call
+ * (default: no cap); the ids beyond it keep their raw id.
  * @param {import('discord.js').Client} client
  * @param {Iterable<string>} ids
+ * @param {{ guild?: import('discord.js').Guild, maxFetch?: number }} [options]
  * @returns {Promise<Map<string, string>>} id -> tag
  */
-export async function resolveUserTags(client, ids) {
+export async function resolveUserTags(client, ids, { guild, maxFetch = Infinity } = {}) {
   const unique = [...new Set(ids)].filter(Boolean);
   const out = new Map();
+  let fetches = 0;
   await Promise.all(
     unique.map(async (id) => {
-      const cached = client.users.cache.get(id);
+      const cached = guild?.members?.cache?.get(id)?.user ?? client.users.cache.get(id);
       if (cached) {
         out.set(id, cached.tag);
         return;
       }
+      if (fetches >= maxFetch) {
+        out.set(id, id);
+        return;
+      }
+      fetches += 1;
       try {
         const user = await client.users.fetch(id);
         out.set(id, user.tag);

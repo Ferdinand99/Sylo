@@ -1660,9 +1660,12 @@ async function giveawaysList(guild) {
     ...(await endedGiveaways(guild.id, 8)).map((g) => ({ ...g, state: 'ended' })),
   ];
   // Winner names for the "Recently ended" rows; an id that cannot be resolved stays its own name.
+  // The member cache is read first and at most 25 users are fetched per request; the rest show as
+  // "a member (ID …)".
   const winnerTags = await resolveUserTags(
     guild.client,
-    raw.flatMap((g) => g.wonIds ?? [])
+    raw.flatMap((g) => g.wonIds ?? []),
+    { guild, maxFetch: 25 }
   );
   return Promise.all(
     raw.map(async (g) => ({
