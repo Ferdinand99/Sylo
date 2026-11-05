@@ -16,6 +16,8 @@ public final class OverviewModel {
     /// How long the last successful load took, a round trip to the Sylo server. Nil before one.
     public private(set) var latency: Duration?
 
+    private var lastLoaded: ContinuousClock.Instant?
+
     private var pending: Set<String> = []
     private let session: AppSession
 
@@ -39,6 +41,7 @@ public final class OverviewModel {
             let start = clock.now
             overview = try await session.send(Endpoints.Overview(server: server))
             latency = start.duration(to: clock.now)
+            lastLoaded = clock.now
             errorMessage = nil
         } catch let error as NetworkError {
             if error != .cancelled, error != .unauthorized { errorMessage = error.userMessage }
@@ -101,5 +104,14 @@ extension OverviewModel {
     public var latencyMilliseconds: Int? {
         guard let latency else { return nil }
         return max(1, Int((latency / .milliseconds(1)).rounded()))
+    }
+}
+
+extension OverviewModel {
+    /// Loads again unless the overview was loaded less than `interval` ago, for a screen that asks
+    /// every time it appears (switching tabs, coming back from a module).
+    public func loadIfStale(after interval: Duration = .seconds(10)) async {
+        if let lastLoaded, lastLoaded.duration(to: .now) < interval { return }
+        await load()
     }
 }

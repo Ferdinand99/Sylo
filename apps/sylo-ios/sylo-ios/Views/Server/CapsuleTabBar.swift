@@ -17,6 +17,17 @@ struct CapsuleTabBar: View {
         var id: ServerView.ServerTab { tab }
     }
 
+    /// The bar's own measurements, so everything that makes room for it uses the same numbers.
+    static let itemHeight: CGFloat = 44
+    static let padding: CGFloat = 5
+    static let bottomGap: CGFloat = SyloSpacing.xs
+    /// The height of the capsule.
+    static let height: CGFloat = itemHeight + padding * 2
+    /// How far a scroll view's content stops short of the bottom edge: the bar, its gap and some air.
+    static let clearance: CGFloat = height + bottomGap + 26
+    /// How tall the fade behind the bar is.
+    static let fadeHeight: CGFloat = clearance + 20
+
     let items: [Item]
     @Binding var selection: ServerView.ServerTab
 
@@ -30,14 +41,15 @@ struct CapsuleTabBar: View {
                 button(for: item)
             }
         }
-        .padding(5)
+        .accessibilityElement(children: .contain)
+        .padding(Self.padding)
         .background { barBackground }
         .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
         // The system caps its tab bar's type size; so does this one.
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .sensoryFeedback(.selection, trigger: selection)
         .padding(.horizontal, SyloSpacing.l)
-        .padding(.bottom, SyloSpacing.xs)
+        .padding(.bottom, Self.bottomGap)
     }
 
     @ViewBuilder
@@ -77,7 +89,7 @@ struct CapsuleTabBar: View {
             }
             .foregroundStyle(isSelected ? Color.syloOnCyan : Color.syloText.opacity(0.78))
             .padding(.horizontal, isSelected ? 14 : 12)
-            .frame(minWidth: 44, minHeight: 44)
+            .frame(minWidth: Self.itemHeight, minHeight: Self.itemHeight)
             .background {
                 if isSelected {
                     Capsule()
@@ -90,6 +102,10 @@ struct CapsuleTabBar: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(item.title))
+        // The bar stops growing with text size, so a press and hold shows the item large, like the system bar.
+        .accessibilityShowsLargeContentViewer {
+            Label(item.title, systemImage: item.systemImage)
+        }
         .accessibilityValue(item.badge > 0 ? Text("\(item.badge) unread") : Text(verbatim: ""))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

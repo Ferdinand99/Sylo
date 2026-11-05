@@ -8,7 +8,6 @@ struct ServerListView: View {
     let servers: ServersModel
     let selection: ServerID?
     let open: (ServerID) -> Void
-    let zoomNamespace: Namespace.ID
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -33,7 +32,6 @@ struct ServerListView: View {
                                 isSelected: horizontalSizeClass == .regular && selection == server.id)
                         }
                         .buttonStyle(.syloPress)
-                        .syloZoomSource(id: server.id, in: zoomNamespace)
                         .syloArrival(index: index)
                     }
                 }
@@ -130,6 +128,7 @@ struct ServerCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .syloCard(radius: SyloRadius.tile, isLive: server.unreadTickets > 0, isSelected: isSelected)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityHint(Text("Opens the server"))
     }
 

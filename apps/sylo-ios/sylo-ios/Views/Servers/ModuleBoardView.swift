@@ -15,13 +15,14 @@ struct ModuleBoardView: View {
 
     @Environment(AppSession.self) private var session
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         content
             .task { if model.overview == nil { await model.load() } }
             // Back from a module's settings or another tab: summary lines may have changed.
             .onAppear {
-                if model.overview != nil { Task { await model.load() } }
+                if model.overview != nil { Task { await model.loadIfStale() } }
             }
             .alert(
                 "Couldn't Change Module", isPresented: isShowingToggleError, presenting: model.toggleError
@@ -79,10 +80,14 @@ struct ModuleBoardView: View {
         }
     }
 
-    /// Two tiles side by side; one at accessibility text sizes, where a tile needs the width.
+    /// As many tiles side by side as fit (two on iPhone, more on iPad); one at accessibility text
+    /// sizes, where a tile needs the width.
     private var columns: [GridItem] {
-        let count = dynamicTypeSize.isAccessibilitySize ? 1 : 2
-        return Array(repeating: GridItem(.flexible(), spacing: SyloSpacing.tileGap, alignment: .top), count: count)
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible(), spacing: SyloSpacing.tileGap, alignment: .top)]
+        }
+        let minimum: CGFloat = horizontalSizeClass == .regular ? 220 : 150
+        return [GridItem(.adaptive(minimum: minimum), spacing: SyloSpacing.tileGap, alignment: .top)]
     }
 
     private var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }

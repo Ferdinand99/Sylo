@@ -26,8 +26,6 @@ extension Color {
 
     /// The screen background (#070b0f in dark).
     static let syloBackground = Color(dark: rgb(0x070B0F), light: rgb(0xEAF2F6))
-    /// A step above the background, for bars and wells (#0c1319 in dark).
-    static let syloBackground2 = Color(dark: rgb(0x0C1319), light: rgb(0xDFEAF0))
     /// Cards and tiles (#101820 in dark).
     static let syloCard = Color(dark: rgb(0x101820), light: rgb(0xFFFFFF))
     /// A card on a card, hover and pressed states (#14202a in dark).
@@ -60,7 +58,6 @@ extension Color {
 
     // MARK: Status
 
-    static let syloOK = Color(dark: rgb(0x30D158), light: rgb(0x1A8A3A))
     static let syloWarn = Color(dark: rgb(0xFFD60A), light: rgb(0x8A5E00))
     static let syloBad = Color(dark: rgb(0xFF453A), light: rgb(0xC92A20))
 

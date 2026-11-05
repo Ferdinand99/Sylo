@@ -90,6 +90,6 @@ extension View {
     /// Room under the last row of a tab's content, so it scrolls fully clear of the floating tab
     /// bar (``CapsuleTabBar``). Screens pushed from a tab cover the bar, so they need none.
     func tabBarClearance() -> some View {
-        contentMargins(.bottom, 84, for: .scrollContent)
+        contentMargins(.bottom, CapsuleTabBar.clearance, for: .scrollContent)
     }
 }

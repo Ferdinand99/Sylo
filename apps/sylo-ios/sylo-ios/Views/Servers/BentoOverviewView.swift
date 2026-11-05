@@ -19,13 +19,16 @@ struct BentoOverviewView: View {
     @ScaledMetric(relativeTo: .body) private var smallTile: CGFloat = 112
     @ScaledMetric(relativeTo: .body) private var wideTile: CGFloat = 128
     private let gap = SyloSpacing.tileGap
+    /// Tile heights line neighbours up; at accessibility sizes the tiles stack and just fit their text.
+    private var smallMin: CGFloat { dynamicTypeSize.isAccessibilitySize ? 0 : smallTile }
+    private var wideMin: CGFloat { dynamicTypeSize.isAccessibilitySize ? 0 : wideTile }
 
     var body: some View {
         content
             .task { if model.overview == nil { await model.load() } }
             // Back from a module's settings or another tab: the numbers may have changed.
             .onAppear {
-                if model.overview != nil { Task { await model.load() } }
+                if model.overview != nil { Task { await model.loadIfStale() } }
             }
     }
 
@@ -60,6 +63,9 @@ struct BentoOverviewView: View {
                 }
                 .padding(.horizontal, SyloSpacing.screen)
                 .padding(.top, SyloSpacing.s)
+                // A readable width on iPad; the grid centres in the column.
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity)
             }
             .tabBarClearance()
             .refreshable { await model.load() }
@@ -160,7 +166,7 @@ struct BentoOverviewView: View {
     }
 
     private func members(_ overview: ServerOverview) -> some View {
-        BentoTile(title: "Members", systemImage: "person.2", minHeight: smallTile) {
+        BentoTile(title: "Members", systemImage: "person.2", minHeight: smallMin) {
             VStack(alignment: .leading, spacing: 0) {
                 HeroNumber(overview.server.memberCount)
             }
@@ -171,7 +177,7 @@ struct BentoOverviewView: View {
     @ViewBuilder
     private var activity: some View {
         let target = canOpen("server-stats") ? "server-stats" : nil
-        BentoTile(title: "Messages today", systemImage: "waveform.path.ecg", minHeight: smallTile) {
+        BentoTile(title: "Messages today", systemImage: "waveform.path.ecg", minHeight: smallMin) {
             if let messages = summary.messagesToday {
                 HeroNumber(messages)
             } else {
@@ -193,7 +199,7 @@ struct BentoOverviewView: View {
     private func modules(_ overview: ServerOverview) -> some View {
         let cards = overview.groups.flatMap(\.cards).filter(\.hasToggle)
         let enabled = cards.count(where: { $0.isEnabled == true })
-        return BentoTile(title: "Modules", systemImage: "switch.2", minHeight: wideTile) {
+        return BentoTile(title: "Modules", systemImage: "switch.2", minHeight: wideMin) {
             ModuleRing(enabled: enabled, total: cards.count)
         }
         .syloPressable { openTab(.modules) }
@@ -205,7 +211,7 @@ struct BentoOverviewView: View {
     @ViewBuilder
     private func appeals(_ overview: ServerOverview) -> some View {
         let target = canOpen("appeals") ? "appeals" : nil
-        BentoTile(title: "Open appeals", systemImage: "hand.raised", isLive: overview.openAppeals > 0, minHeight: wideTile) {
+        BentoTile(title: "Open appeals", systemImage: "hand.raised", isLive: overview.openAppeals > 0, minHeight: wideMin) {
             VStack(alignment: .leading, spacing: SyloSpacing.xs) {
                 HeroNumber(overview.openAppeals)
                 Spacer(minLength: 0)

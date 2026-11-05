@@ -41,8 +41,8 @@ extension View {
 }
 
 /// The label colour for text on the accent colour (dark on the light cyan, white on the dark one).
-/// Only while the button is enabled: a disabled button keeps the system's dimmed look, which the
-/// system keeps readable. Apply it before `.disabled(...)`, so it can see that.
+/// While the button is disabled the label is the primary colour at 60 %, which
+/// reads on the dimmed glass. Apply it before `.disabled(...)`, so it can see that.
 private struct OnAccentLabel: ViewModifier {
     @Environment(\.isEnabled) private var isEnabled
 
@@ -50,7 +50,8 @@ private struct OnAccentLabel: ViewModifier {
         if isEnabled {
             content.foregroundStyle(Color.onAccent)
         } else {
-            content
+            // The system's dimmed glass is pale; a mid-strength primary stays readable on it in both appearances.
+            content.foregroundStyle(Color.primary.opacity(0.6))
         }
     }
 }

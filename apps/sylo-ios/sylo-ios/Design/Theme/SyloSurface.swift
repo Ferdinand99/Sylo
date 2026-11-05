@@ -31,8 +31,8 @@ struct SyloSurface: ViewModifier {
     }
 
     private var border: Color {
-        if isLive { return Color.syloCyan.opacity(0.55) }
         if isSelected { return Color.syloCyan.opacity(0.85) }
+        if isLive { return Color.syloCyan.opacity(0.55) }
         return contrast == .increased ? Color.syloLineStrong : Color.syloLine
     }
 }
@@ -43,19 +43,6 @@ extension View {
         radius: CGFloat = SyloRadius.tile, isLive: Bool = false, isSelected: Bool = false, showsGlow: Bool = true
     ) -> some View {
         modifier(SyloSurface(radius: radius, isLive: isLive, isSelected: isSelected, showsGlow: showsGlow))
-    }
-}
-
-/// A padded container drawn as a card.
-struct SyloCard<Content: View>: View {
-    var isLive = false
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        content
-            .padding(SyloSpacing.l)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .syloCard(isLive: isLive)
     }
 }
 
@@ -96,8 +83,6 @@ struct BentoTile<Content: View>: View {
     var minHeight: CGFloat = 0
     @ViewBuilder var content: Content
 
-    @ScaledMetric(relativeTo: .body) private var scaledMinHeight: CGFloat = 1
-
     var body: some View {
         VStack(alignment: .leading, spacing: SyloSpacing.s) {
             Label {
@@ -115,7 +100,7 @@ struct BentoTile<Content: View>: View {
             content
         }
         .padding(SyloSpacing.l)
-        .frame(maxWidth: .infinity, minHeight: minHeight * scaledMinHeight, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
         .syloCard(isLive: isLive)
     }
 }

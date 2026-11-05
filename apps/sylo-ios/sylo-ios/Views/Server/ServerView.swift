@@ -14,6 +14,8 @@ struct ServerView: View {
     @Binding var tab: ServerTab
     /// The detail column's pushed screens, so a tile can open a module.
     @Binding var path: NavigationPath
+    /// Reloads the server list, whose ticket counts change when a ticket is closed here.
+    let refreshServers: () -> Void
 
     @Environment(AppSession.self) private var session
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -27,10 +29,14 @@ struct ServerView: View {
         case overview, modules, tickets, settings
     }
 
-    init(summary: ServerSummary, session: AppSession, tab: Binding<ServerTab>, path: Binding<NavigationPath>) {
+    init(
+        summary: ServerSummary, session: AppSession, tab: Binding<ServerTab>, path: Binding<NavigationPath>,
+        refreshServers: @escaping () -> Void
+    ) {
         self.summary = summary
         _tab = tab
         _path = path
+        self.refreshServers = refreshServers
         _overview = State(initialValue: OverviewModel(server: summary.id, session: session))
         _tickets = State(initialValue: TicketsModel(server: summary.id, session: session))
         _settings = State(initialValue: GuildSettingsModel(server: summary.id, session: session))
@@ -45,11 +51,13 @@ struct ServerView: View {
                     LinearGradient(
                         colors: [Color.syloBackground.opacity(0), Color.syloBackground.opacity(0.94)],
                         startPoint: .top, endPoint: .bottom)
-                        .frame(height: 104)
+                        .frame(height: CapsuleTabBar.fadeHeight)
                         .ignoresSafeArea(edges: .bottom)
                         .allowsHitTesting(false)
                     CapsuleTabBar(items: tabItems, selection: $tab)
                 }
+                // The bar stays put when the keyboard opens (a search or a settings field), instead of riding up over the content.
+                .ignoresSafeArea(.keyboard, edges: .bottom)
             }
             .syloScreen()
             .navigationTitle(title)
@@ -72,6 +80,7 @@ struct ServerView: View {
                 Text(message)
             }
             .sensoryFeedback(.success, trigger: settings.saveCount)
+            .onChange(of: tickets.closeCount) { refreshServers() }
             // The Tickets badge is right before the tab is ever opened.
             .task { await tickets.load() }
     }

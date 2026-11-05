@@ -13,6 +13,7 @@ struct ModuleTile: View {
     let setEnabled: @MainActor (Bool) -> Void
 
     @ScaledMetric(relativeTo: .body) private var minHeight: CGFloat = 112
+    @State private var holdCount = 0
     @ScaledMetric(relativeTo: .body) private var scaledIconWell: CGFloat = 36
     private var iconWell: CGFloat { min(scaledIconWell, 54) }
 
@@ -26,6 +27,7 @@ struct ModuleTile: View {
                 .accessibilityAddTraits(hasScreen ? .isButton : [])
                 .accessibilityHint(hasScreen ? Text("Opens the settings") : Text(verbatim: ""))
                 .accessibilityAction(named: Text(isOn ? "Switch off" : "Switch on")) { toggleByHold() }
+                .sensoryFeedback(.impact(flexibility: .solid, intensity: 0.8), trigger: holdCount)
             Toggle(isOn: Binding(get: { isOn }, set: setEnabled)) {
                 Text(verbatim: card.name)
             }
@@ -84,6 +86,7 @@ struct ModuleTile: View {
 
     private func toggleByHold() {
         guard !isPending else { return }
+        holdCount += 1
         setEnabled(!isOn)
     }
 

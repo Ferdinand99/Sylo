@@ -219,13 +219,12 @@ private struct TicketRow: View {
                     .multilineTextAlignment(.leading)
                 Text(verbatim: "#\(ticket.id)")
                     .font(.syloNumber(.caption2, weight: .regular))
-                    .foregroundStyle(Color.syloMuted.opacity(0.8))
+                    .foregroundStyle(Color.syloMuted)
             }
         }
         .padding(SyloSpacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .syloCard(radius: SyloRadius.row + 4, isLive: ticket.isUnread, showsGlow: false)
-        .opacity(isClosed ? 0.72 : 1)
         .accessibilityElement(children: .combine)
         .accessibilityValue(ticket.isUnread ? Text("Unread") : Text(verbatim: ""))
     }
@@ -239,6 +238,8 @@ private struct TicketRow: View {
                 .foregroundStyle(Color.syloBrand)
         }
         .frame(width: avatarSize, height: avatarSize)
+        // A closed ticket sits back by its avatar only; the text keeps full contrast.
+        .opacity(isClosed ? 0.6 : 1)
         .overlay(alignment: .topTrailing) {
             if ticket.isUnread {
                 LiveDot(size: 10)

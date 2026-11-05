@@ -12,6 +12,10 @@ public final class TicketsModel {
     public var errorMessage: String?
     /// Why closing a ticket from the list did not go through.
     public var actionError: String?
+    /// How many tickets were closed from the list, so a screen can refresh what depends on the counts.
+    public private(set) var closeCount = 0
+
+    private var closing: Set<Int> = []
 
     private let session: AppSession
 
@@ -37,11 +41,18 @@ public final class TicketsModel {
 }
 
 extension TicketsModel {
+    /// Whether a close of this ticket is on its way to the server.
+    public func isClosing(_ id: Int) -> Bool { closing.contains(id) }
+
     /// Closes a ticket without a closing message (a swipe in the list), then loads the list again.
-    /// On failure explains in ``actionError``.
+    /// On failure explains in ``actionError``. Closing a ticket that is already being closed does
+    /// nothing, so a second tap cannot send it twice.
     /// - Returns: Whether the ticket was closed.
     @discardableResult
     public func close(_ id: Int) async -> Bool {
+        guard !closing.contains(id) else { return false }
+        closing.insert(id)
+        defer { closing.remove(id) }
         actionError = nil
         do {
             _ = try await session.send(Endpoints.CloseTicket(server: server, id: id, message: ""))
@@ -50,6 +61,7 @@ extension TicketsModel {
             if error != .cancelled, error != .unauthorized { actionError = error.userMessage }
             return false
         }
+        closeCount += 1
         await load()
         return true
     }

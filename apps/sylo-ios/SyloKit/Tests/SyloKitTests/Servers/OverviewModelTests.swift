@@ -128,4 +128,23 @@ struct OverviewModelTests {
         await model.setModule("logging", enabled: true)?.value
         #expect(model.toggleError == nil)
     }
+
+    @Test("a load records its round trip time")
+    func recordsLatency() async {
+        let model = OverviewModel(server: "1", session: makeSignedInSession(clients: Self.clients()))
+        #expect(model.latencyMilliseconds == nil)
+        await model.load()
+        #expect((model.latencyMilliseconds ?? 0) >= 1)
+    }
+
+    @Test("loading when stale skips a load made a moment ago and runs one after the interval")
+    func loadsOnlyWhenStale() async {
+        let clients = Self.clients()
+        let model = await loadedModel(clients)
+        let calls = clients.calls.count
+        await model.loadIfStale(after: .seconds(60))
+        #expect(clients.calls.count == calls)
+        await model.loadIfStale(after: .zero)
+        #expect(clients.calls.count == calls + 1)
+    }
 }

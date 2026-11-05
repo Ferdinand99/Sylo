@@ -20,7 +20,6 @@ struct MainView: View {
     @State private var detailPath = NavigationPath()
     @State private var column = NavigationSplitViewColumn.sidebar
     @State private var isShowingSettings = false
-    @Namespace private var zoomNamespace
 
     init(server: ServerURL, session: AppSession) {
         self.server = server
@@ -38,7 +37,7 @@ struct MainView: View {
 
     var body: some View {
         NavigationSplitView(preferredCompactColumn: $column) {
-            ServerListView(servers: servers, selection: selection, open: openServer, zoomNamespace: zoomNamespace)
+            ServerListView(servers: servers, selection: selection, open: openServer)
                 .navigationTitle("Servers")
                 .toolbar {
                     // iPad: a hardware keyboard and room in the bar; iPhone pulls to refresh.
@@ -64,9 +63,10 @@ struct MainView: View {
         } detail: {
             NavigationStack(path: $detailPath) {
                 if let summary = servers.server(selection) {
-                    ServerView(summary: summary, session: session, tab: $serverTab, path: $detailPath)
+                    ServerView(
+                        summary: summary, session: session, tab: $serverTab, path: $detailPath,
+                        refreshServers: { Task { await loadServers() } })
                         .id(summary.id)
-                        .syloZoomDestination(id: summary.id, in: zoomNamespace)
                 } else {
                     EmptyState(
                         "Choose a Server", systemImage: "server.rack",

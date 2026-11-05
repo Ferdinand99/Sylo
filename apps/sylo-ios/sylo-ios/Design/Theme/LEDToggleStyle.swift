@@ -22,6 +22,7 @@ private struct LEDToggleBody: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
+    @State private var taps = 0
 
     private var isCompact: Bool { compactLabel != nil }
     private var trackSize: CGSize {
@@ -32,6 +33,7 @@ private struct LEDToggleBody: View {
     var body: some View {
         Button {
             configuration.isOn.toggle()
+            taps += 1
         } label: {
             if compactLabel != nil {
                 led
@@ -49,7 +51,8 @@ private struct LEDToggleBody: View {
             }
         }
         .buttonStyle(.plain)
-        .sensoryFeedback(.selection, trigger: configuration.isOn)
+        // Only for a tap on the switch; a change from elsewhere (the server, a long press) does not buzz here.
+        .sensoryFeedback(trigger: taps) { _, _ in isCompact ? .impact(flexibility: .solid, intensity: 0.8) : .selection }
         .opacity(isEnabled ? 1 : 0.5)
         // One element, a real switch to VoiceOver and Switch Control.
         .accessibilityRepresentation {
@@ -79,25 +82,3 @@ private struct LEDToggleBody: View {
     }
 }
 
-extension ToggleStyle where Self == LEDToggleStyle {
-    static var led: LEDToggleStyle { LEDToggleStyle() }
-    static func led(compactLabel: String) -> LEDToggleStyle { LEDToggleStyle(compactLabel: compactLabel) }
-}
-
-/// An LED that only shows a state (no control): on, off, or blocked.
-struct LEDIndicator: View {
-    enum Level { case on, off, blocked }
-    let state: Level
-    var size: CGFloat = 9
-
-    var body: some View {
-        switch state {
-        case .on:
-            LiveDot(size: size, pulses: false)
-        case .off:
-            LiveDot(size: size, isLive: false)
-        case .blocked:
-            Circle().fill(Color.syloWarn).frame(width: size, height: size).accessibilityHidden(true)
-        }
-    }
-}

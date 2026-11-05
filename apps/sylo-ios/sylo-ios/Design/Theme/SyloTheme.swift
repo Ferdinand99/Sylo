@@ -3,13 +3,11 @@ import SwiftUI
 /// Spacing, corner radii and type for the Sylo look. Everything scales with Dynamic Type where it
 /// holds text; the numbers are for the layout around it.
 enum SyloSpacing {
-    static let hairline: CGFloat = 1
     static let xs: CGFloat = 4
     static let s: CGFloat = 8
     static let m: CGFloat = 12
     static let l: CGFloat = 16
     static let xl: CGFloat = 24
-    static let xxl: CGFloat = 32
     /// The gap between bento tiles.
     static let tileGap: CGFloat = 10
     /// The side margin of a screen.
@@ -29,16 +27,6 @@ extension Font {
     /// Numbers and ids: SF Mono digits that line up, scaling with the text style.
     static func syloNumber(_ style: Font.TextStyle = .title2, weight: Font.Weight = .semibold) -> Font {
         .system(style, design: .monospaced, weight: weight)
-    }
-
-    /// A small label above or beside a number.
-    static let syloCaption: Font = .caption.weight(.medium)
-}
-
-extension View {
-    /// Monospaced digits for a number or an id inside ordinary text.
-    func syloMono() -> some View {
-        monospacedDigit()
     }
 }
 

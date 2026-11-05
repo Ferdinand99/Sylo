@@ -53,4 +53,36 @@ struct TicketsModelTests {
         #expect(model.list == nil)
         #expect(model.errorMessage == nil)
     }
+
+    @Test("closing a ticket from the list sends no message, reloads the list and counts the close")
+    func closesFromTheList() async throws {
+        let clients = StubClients { endpoint in
+            endpoint is Endpoints.CloseTicket ? OKResponse() : Self.list
+        }
+        let model = TicketsModel(server: "1", session: makeSignedInSession(clients: clients))
+        await model.load()
+        let closed = await model.close(11)
+        #expect(closed)
+        #expect(model.closeCount == 1)
+        #expect(!model.isClosing(11))
+        let close = try #require(clients.calls.compactMap { $0.endpoint as? Endpoints.CloseTicket }.first)
+        #expect(close.id == 11)
+        #expect(close.message == "")
+        #expect(clients.calls.last?.endpoint is Endpoints.Tickets)
+    }
+
+    @Test("a close that fails explains and does not count; the ticket can be closed again")
+    func failedClose() async {
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.CloseTicket { throw NetworkError.forbidden }
+            return Self.list
+        }
+        let model = TicketsModel(server: "1", session: makeSignedInSession(clients: clients))
+        await model.load()
+        let closed = await model.close(11)
+        #expect(!closed)
+        #expect(model.actionError == NetworkError.forbidden.userMessage)
+        #expect(model.closeCount == 0)
+        #expect(!model.isClosing(11))
+    }
 }
