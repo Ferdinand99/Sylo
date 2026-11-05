@@ -5,6 +5,7 @@ import { useOverview } from '../OverviewContext.jsx';
 import { MODULE_FORMS } from '../moduleForms/index.js';
 import { notify } from '../notify.js';
 import { usePlatformInfo } from '../usePlatformInfo.js';
+import BlockedNote from '../components/BlockedNote.jsx';
 import { PlatformContext } from '../platformContext.jsx';
 import Reveal from '../components/Reveal.jsx';
 import Switch from '../components/Switch.jsx';
@@ -31,7 +32,7 @@ function ModuleStatusBar({ card, onToggle }) {
       </div>
       {blocked ? (
         <p className="v2-note v2-row-warn">
-          Needs the {card.missingIntents.join(', ')} intent — see docs/self-hosting.md.
+          <BlockedNote intents={card.missingIntents} />
         </p>
       ) : null}
       {/* Always rendered, so a screen reader announces the notice appearing after a toggle. */}

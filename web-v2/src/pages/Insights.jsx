@@ -140,8 +140,7 @@ export default function Insights() {
         ))}
       </div>
       <p className="v2-field-hint">
-        Buffered activity is written every ~10 minutes; use Refresh now to pull the last few minutes
-        immediately.
+        These numbers update every 10 minutes. Refresh now pulls in the latest activity.
       </p>
 
       <div className="v2-ins-tiles">

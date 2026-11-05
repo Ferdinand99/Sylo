@@ -1,4 +1,5 @@
 import LoadError from '../components/LoadError.jsx';
+import SetupCallout from '../components/SetupCallout.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
@@ -42,16 +43,20 @@ export default function AppleConnect() {
   return (
     <>
       <h1 className="v2-section-title">App Store Connect</h1>
-      <p className="v2-note">
+      <p className="v2-field-hint">
         Alerts from your Apple Developer account: an app version moving through review, builds and TestFlight,
         new reviews, tester feedback, and certificates about to expire. Checked about every 5 minutes. Only
         the Sylo owner can see this module.
       </p>
       {!data.appleEnabled ? (
-        <p className="v2-warn-text">
-          Set APPLE_KEY_ID and APPLE_PRIVATE_KEY (and APPLE_ISSUER_ID for a team key) on the bot for alerts to
-          fire. You can still configure them here.
-        </p>
+        <SetupCallout
+          what="App Store Connect alerts"
+          keys="an Apple API key"
+          vars={['APPLE_KEY_ID', 'APPLE_PRIVATE_KEY', 'APPLE_ISSUER_ID']}
+          where="the issuer ID is only needed for a team key"
+        >
+          You can set things up now; alerts start once the key is in.
+        </SetupCallout>
       ) : null}
 
       <form onSubmit={save} data-savebar>

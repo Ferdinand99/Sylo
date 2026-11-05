@@ -80,13 +80,12 @@ export default function Giveaways() {
       <h1 className="v2-section-title">Giveaways</h1>
       <p className="v2-field-hint">
         Staff start giveaways with <code>{cmd('/giveaway start')}</code>; members join by clicking the 🎉
-        Enter button. Winners are drawn automatically at the end time — no reactions, no Message Content
-        intent.
+        Enter button. Winners are drawn automatically at the end time.
       </p>
 
       <form onSubmit={save} data-savebar>
         <div className="v2-field">
-          <label htmlFor="ping">Ping with the winner message</label>
+          <label htmlFor="ping">Who to ping when winners are announced</label>
           <select
             id="ping"
             value={form.ping}

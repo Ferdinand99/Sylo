@@ -275,8 +275,9 @@ export default function Suggestions() {
             Turn messages in the channel into suggestions
           </label>
           <p className="v2-field-hint">
-            Sylo deletes the message and posts it as a suggestion. Needs the suggestions channel above, Manage
-            Messages and the Message Content intent. Messages with attachments are left alone.
+            Sylo deletes the message and posts it as a suggestion. Needs the suggestions channel above and the
+            Manage Messages permission. It also has to be allowed to read message text, which only the bot
+            owner can switch on. Messages with attachments are left alone.
           </p>
         </div>
 

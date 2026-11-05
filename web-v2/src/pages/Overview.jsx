@@ -9,6 +9,7 @@ import Switch from '../components/Switch.jsx';
 import { plural } from '../components/Meta.jsx';
 import { formatCount, initial } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
+import BlockedNote from '../components/BlockedNote.jsx';
 
 // A newly-added module gets this next to its name until it's had enough
 // real-world use to drop registry.js's `beta` flag.
@@ -62,7 +63,7 @@ function ModuleRow({ card, guildId, onToggle, selecting, picked, onPick }) {
         <p title={card.description}>{card.description}</p>
         {blocked ? (
           <p className="v2-row-warn">
-            Needs the {card.missingIntents.join(', ')} intent — see docs/self-hosting.md.
+            <BlockedNote intents={card.missingIntents} />
           </p>
         ) : null}
       </div>

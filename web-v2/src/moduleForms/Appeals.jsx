@@ -1,8 +1,11 @@
 import { Link } from 'react-router-dom';
+import Callout from '../components/Callout.jsx';
+import HowItWorks from '../components/HowItWorks.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { useOperator } from '../useOperator.js';
 import UnitInput from '../components/UnitInput.jsx';
 
 const QUESTION_SLOTS = 5;
@@ -27,6 +30,7 @@ export default function Appeals() {
   if (status === 'error') return <LoadError error={error} what="Ban appeals settings" />;
   if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
+  const operator = useOperator();
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const setQuestion = (i, value) =>
     setForm((f) => ({ ...f, questions: f.questions.map((q, idx) => (idx === i ? value : q)) }));
@@ -35,20 +39,29 @@ export default function Appeals() {
     <>
       <h1 className="v2-section-title">Ban appeals</h1>
       <p className="v2-field-hint">
-        When a member is banned, Sylo DMs them a private link to an appeal form on this dashboard. Their
-        answers show up on the <Link to={`/guilds/${guildId}/appeals`}>Appeals tab</Link>. The decision (and,
-        on accept, a single-use rejoin invite) is always shown on that same link when they reopen it — Discord
-        won't let a bot DM someone it no longer shares a server with, so the page is the reliable channel.
-        {!data.dashboardUrlSet ? (
-          <>
-            {' '}
-            <span className="v2-row-warn">
-              Set <code>DASHBOARD_URL</code> to a URL your members can reach — without it the appeal link
-              cannot be built.
-            </span>
-          </>
-        ) : null}
+        When a member is banned, Sylo DMs them a private link to an appeal form. Their answers show up on the{' '}
+        <Link to={`/guilds/${guildId}/appeals`}>Appeals page</Link>.
       </p>
+      <HowItWorks title="Why a link?">
+        <p>
+          A bot can't message someone it no longer shares a server with, so the decision can't be sent to a
+          banned member as a DM. Instead the appeal link shows the decision (and, when an appeal is accepted,
+          a single-use rejoin invite) every time they reopen it.
+        </p>
+      </HowItWorks>
+      {!data.dashboardUrlSet ? (
+        <Callout tone="warning">
+          <p>
+            Appeal links can't be created yet: this Sylo doesn't know the web address members should use. The
+            bot owner needs to set it.
+          </p>
+          {operator ? (
+            <p className="v2-callout-owner">
+              For the bot owner: set <code>DASHBOARD_URL</code> to an address your members can reach.
+            </p>
+          ) : null}
+        </Callout>
+      ) : null}
 
       <form onSubmit={save} data-savebar>
         <div className="v2-field">
