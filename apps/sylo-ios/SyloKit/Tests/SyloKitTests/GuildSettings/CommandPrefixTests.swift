@@ -109,6 +109,9 @@ struct CommandPrefixTests {
         #expect(GuildSettings(commandPrefix: "abc").commandPrefixProblem(max: 2)?.contains("at most 2") == true)
         #expect(GuildSettings(commandPrefix: nil).commandPrefixProblem() == nil)
         #expect(GuildSettings(commandPrefix: "  ! ").normalised.commandPrefix == "!")
+        #expect(GuildSettings.trimmed("\u{00A0}!\u{3000}") == "!")
+        #expect(GuildSettings.trimmed("\u{FEFF}!") == "!")
+        #expect(GuildSettings.trimmed("!\u{200B}") == "!\u{200B}", "a zero-width space is not trimmed, so it is refused")
     }
 }
 
@@ -141,14 +144,16 @@ struct CommandPrefixModelTests {
 
     @Test("a good prefix is saved trimmed and the page is read again")
     func savesTrimmed() async throws {
-        let clients = StubClients { endpoint in
+        let clients = StubClients { _ in Self.page }
+        let model = await loaded(clients)
+        // From now on the server answers like one that has stored the new prefix.
+        clients.setHandler { endpoint in
             if endpoint is Endpoints.SaveGuildSettings { return OKResponse() }
             return GuildSettingsPage(
                 settings: GuildSettings(modlogChannelId: "1", embedColorHex: "#ff8000", commandPrefix: "$"),
                 channels: Self.page.channels, roles: [], platform: .fluxer, defaultCommandPrefix: "!",
                 effectiveCommandPrefix: "$")
         }
-        let model = await loaded(clients)
         model.draft?.commandPrefix = " $ "
         #expect(model.draftProblem == nil)
         let ok = await model.save()

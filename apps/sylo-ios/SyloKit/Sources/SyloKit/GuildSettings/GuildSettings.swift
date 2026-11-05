@@ -35,7 +35,7 @@ public struct GuildSettings: Codable, Sendable, Equatable {
     /// The settings as they are sent and compared: the prefix trimmed, like the web form does.
     public var normalised: GuildSettings {
         var copy = self
-        copy.commandPrefix = commandPrefix?.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.commandPrefix = commandPrefix.map(Self.trimmed)
         return copy
     }
 
@@ -44,8 +44,19 @@ public struct GuildSettings: Codable, Sendable, Equatable {
     /// otherwise at most `max` characters counted as UTF-16 units (an emoji counts as two), none of
     /// them whitespace, a backtick or an invisible or control character.
     public func commandPrefixProblem(max: Int = GuildSettings.defaultCommandPrefixMaxLength) -> String? {
-        guard let prefix = commandPrefix?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        guard let prefix = commandPrefix.map(Self.trimmed) else { return nil }
         return Self.commandPrefixProblem(prefix, max: max)
+    }
+
+    /// The text without whitespace at either end, the way JavaScript's trim() does it (what the
+    /// web form and the server do): not Foundation's, which also strips zero-width spaces that the
+    /// server then refuses as invisible characters.
+    static func trimmed(_ text: String) -> String {
+        func isSpace(_ scalar: Unicode.Scalar) -> Bool { scalar.properties.isWhitespace || scalar.value == 0xFEFF }
+        var scalars = Substring(text).unicodeScalars
+        while let first = scalars.first, isSpace(first) { scalars.removeFirst() }
+        while let last = scalars.last, isSpace(last) { scalars.removeLast() }
+        return String(scalars)
     }
 
     /// See ``commandPrefixProblem(max:)``; `prefix` is already trimmed.
@@ -138,7 +149,7 @@ public struct GuildSettings: Codable, Sendable, Equatable {
         if embedColorHex.isEmpty { try c.encode(true, forKey: .embedColorReset) }
         // Only Fluxer servers have one (the server refuses a prefix for Discord); "" resets it.
         if let commandPrefix {
-            try c.encode(commandPrefix.trimmingCharacters(in: .whitespacesAndNewlines), forKey: .commandPrefix)
+            try c.encode(Self.trimmed(commandPrefix), forKey: .commandPrefix)
         }
     }
 }
