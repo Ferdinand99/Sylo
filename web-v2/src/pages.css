@@ -1164,3 +1164,27 @@ a.v2-stat.is-link:focus-visible {
 .v2-overview-hint {
   margin-bottom: 14px;
 }
+
+/* ---------- Ban appeals: question rows ---------- */
+/* A question grows with its text; its move/remove buttons sit beside it, or under it on a phone. */
+.v2-question-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px 8px;
+  margin-bottom: 8px;
+}
+.v2-question-row > textarea {
+  flex: 1 1 220px;
+  width: auto;
+  min-width: 0;
+}
+.v2-question-actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+.v2-question-actions .v2-btn-ghost {
+  min-width: 36px;
+  padding: 6px 10px;
+}
