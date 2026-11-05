@@ -182,8 +182,8 @@ describe('Suggestions form', () => {
     expect(screen.queryByLabelText(/Reason/)).toBeNull();
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        screen.getAllByRole('combobox', { name: /Set status of suggestion/ })[0],
-      ),
+        screen.getAllByRole('combobox', { name: /Set status of suggestion/ })[0]
+      )
     );
   });
 

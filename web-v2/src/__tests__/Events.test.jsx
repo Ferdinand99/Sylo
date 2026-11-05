@@ -236,7 +236,9 @@ describe('Events public pages', () => {
   it('keeps the warning that saving updates the event posts outside the closed details', async () => {
     renderAtGuild(<Events />, GUILD);
     await screen.findByLabelText('Event pages');
-    const warning = screen.getByText(/Saving this updates the posts of the server's events, finished ones too/);
+    const warning = screen.getByText(
+      /Saving this updates the posts of the server's events, finished ones too/
+    );
     expect(warning.closest('details')).toBeNull();
   });
 

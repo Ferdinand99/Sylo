@@ -314,7 +314,8 @@ describe('Appeals form', () => {
 describe('Invite tracker and Auto-react wording', () => {
   it('names the grace window in the invite formula, and leaves it out when the guard is off', async () => {
     const data = (graceHours) => ({
-      config: { graceHours, announce: false },
+      config: { graceHours, joinLogChannelId: '' },
+      channels: [],
       board: {
         canReadInvites: true,
         total: 1,
@@ -323,7 +324,7 @@ describe('Invite tracker and Auto-react wording', () => {
     });
     getModuleConfig.mockResolvedValue(data(6));
     const { unmount } = renderAtGuild(<InviteTracker />, GUILD);
-    expect(await screen.findByText(/minus those who left within the grace window (6 h)/)).toBeTruthy();
+    expect(await screen.findByText(/minus those who left within the grace window [(]6 h[)]/)).toBeTruthy();
     unmount();
     getModuleConfig.mockResolvedValue(data(0));
     renderAtGuild(<InviteTracker />, GUILD);

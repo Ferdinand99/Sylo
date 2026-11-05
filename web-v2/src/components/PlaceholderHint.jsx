@@ -62,7 +62,7 @@ export default function PlaceholderHint({
     if (el && start !== undefined && end !== undefined) {
       el.focus();
       el.setSelectionRange(start, end);
-      let done = false;
+      let done;
       try {
         done = typeof document.execCommand === 'function' && document.execCommand('insertText', false, token);
       } catch {

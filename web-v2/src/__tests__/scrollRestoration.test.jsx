@@ -82,6 +82,11 @@ describe('scrolling inside the real Shell', () => {
     scrollTo = vi.fn();
     window.scrollTo = scrollTo;
     Element.prototype.scrollIntoView = vi.fn();
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -104,7 +109,7 @@ describe('scrolling inside the real Shell', () => {
 
   it('a member lookup (a new search on the same page) does not jump to the top, a new page does', async () => {
     const router = setupShell();
-    const field = await screen.findByRole('textbox');
+    const field = await screen.findByLabelText('User ID or @mention');
     scrollTo.mockClear();
     fireEvent.change(field, { target: { value: '222222222222222222' } });
     await act(async () => {
