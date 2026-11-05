@@ -40,6 +40,11 @@ test('normaliseAppealsConfig: defaults, question cap, clamps', () => {
   assert.equal(c2.appealServerInvite, 'https://discord.gg/abc123');
 });
 
+test('normaliseAppealsConfig: a question is one line', () => {
+  const c = normaliseAppealsConfig({ questions: ['Why\nwere  you\r\n banned?', '\n\t', ' Plain '] });
+  assert.deepEqual(c.questions, ['Why were you banned?', 'Plain']);
+});
+
 test('normaliseAppealsConfig: rejects non-invite URLs in appealServerInvite', () => {
   assert.equal(
     normaliseAppealsConfig({ appealServerInvite: 'https://evil.example/x' }).appealServerInvite,
