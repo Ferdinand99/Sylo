@@ -52,7 +52,9 @@ private struct LEDToggleBody: View {
         }
         .buttonStyle(.plain)
         // Only for a tap on the switch; a change from elsewhere (the server, a long press) does not buzz here.
-        .sensoryFeedback(trigger: taps) { _, _ in isCompact ? .impact(flexibility: .solid, intensity: 0.8) : .selection }
+        // The feedback is worked out here, not in a closure: SwiftUI may call a feedback closure off
+        // the main actor, and this app's code is main-actor isolated by default, which traps.
+        .sensoryFeedback(isCompact ? .impact(flexibility: .solid, intensity: 0.8) : .selection, trigger: taps)
         .opacity(isEnabled ? 1 : 0.5)
         // One element, a real switch to VoiceOver and Switch Control.
         .accessibilityRepresentation {
