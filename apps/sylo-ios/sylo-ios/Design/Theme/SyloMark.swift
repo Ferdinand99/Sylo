@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The Sylo mark, drawn as a swept feather: a pointed blade rising from bottom left to top right,
 /// with its quill. Drawn from paths so it is sharp at any size and takes any colour.
-struct SyloMarkShape: Shape {
+nonisolated struct SyloMarkShape: Shape {
     func path(in rect: CGRect) -> Path {
         func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
             CGPoint(x: rect.minX + rect.width * x, y: rect.minY + rect.height * y)
@@ -20,7 +20,7 @@ struct SyloMarkShape: Shape {
 }
 
 /// The quill: a thin line along the blade, cut out of it.
-private struct SyloQuillShape: Shape {
+private nonisolated struct SyloQuillShape: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.move(to: CGPoint(x: rect.minX + rect.width * 0.20, y: rect.minY + rect.height * 0.80))
