@@ -16,7 +16,7 @@ export const PlatformContext = createContext(DISCORD);
 /** `cmd('/giveaway start')` -> `!giveaway start` on Fluxer, unchanged on Discord. */
 export function useCmd() {
   const { commandPrefix } = useContext(PlatformContext);
-  return (text) => (commandPrefix === '/' ? text : text.replace(/^\/(?=[a-z])/, commandPrefix));
+  return (text) => (commandPrefix === '/' ? text : text.replace(/^\/(?=[a-z])/, () => commandPrefix));
 }
 
 /** Link to a message on the platform's web app; `guildId` is the dashboard's guild key. */

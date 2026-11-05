@@ -27,23 +27,29 @@ test('a command prefix is 1 to 5 characters with no whitespace or control charac
     assert.equal(commandPrefixError(ok), null, ok);
   }
   assert.equal(COMMAND_PREFIX_MAX, 5);
-  for (const bad of [
-    '',
-    'abcdef',
-    '! ',
-    ' !',
-    'a b',
-    '\t',
-    '!\n',
-    '\u00a0',
-    '\u2003x',
-    '!\u0000',
-    null,
-    undefined,
-    5,
-  ]) {
+  for (const bad of ['', 'abcdef', '! ', ' !', 'a b', '\t', '!\n', '\u00a0', '\u2003x', '!\u0000']) {
     assert.ok(commandPrefixError(bad), JSON.stringify(bad));
   }
+  for (const bad of [null, undefined, 5, ['!']]) assert.ok(commandPrefixError(bad), String(bad));
+});
+
+test('a backtick is refused: help, usage and temp voice wrap the prefix in a code span', () => {
+  for (const bad of ['`', '!`', '``']) assert.match(commandPrefixError(bad), /backtick/, bad);
+  assert.equal(commandPrefixError("'"), null);
+});
+
+test('the messages name the real problem', () => {
+  assert.match(commandPrefixError('a b'), /spaces/);
+  // Zero-width joiner, bidi mark, private use: not spaces, and the message does not say so.
+  for (const bad of ['\u200d', '\u202e', '\ue000', '!\u0007']) {
+    const msg = commandPrefixError(bad);
+    assert.match(msg, /invisible or control/, JSON.stringify(bad));
+    assert.doesNotMatch(msg, /spaces/);
+  }
+  assert.match(commandPrefixError('abcdef'), /1 to 5 characters/);
+  // An emoji is two UTF-16 units: three of them are too long, and the message says why.
+  assert.equal(commandPrefixError('\u{1F600}\u{1F600}'), null);
+  assert.match(commandPrefixError('\u{1F600}\u{1F600}\u{1F600}'), /count as two/);
 });
 
 test('the prefix is stored with the other server settings, and read back empty when unset', async () => {

@@ -71,13 +71,23 @@ test('saving a prefix stores it, shows it, audits it and reaches the platform in
 
 test('the server refuses a prefix that breaks the rules and changes nothing', async () => {
   await fluxer.post('/settings', { modlogChannelId: CH.bots, commandPrefix: '+' });
-  for (const bad of ['abcdef', 'a b', '! ?', '\u00a0x\u00a0y', '!\u0000']) {
+  for (const bad of ['abcdef', 'a b', '! ?', '\u00a0x\u00a0y', '!\u0000', '`', 'a`', '\u200d']) {
     const res = await fluxer.post('/settings', { modlogChannelId: CH.general, commandPrefix: bad });
     assert.equal(res.status, 400, JSON.stringify(bad));
     assert.match((await res.json()).error, /prefix/i);
   }
   assert.equal(await getCommandPrefix(FKEY), '+');
   assert.equal((await getGuildSettings(FKEY)).modlog_channel_id, CH.bots, 'nothing else was saved either');
+  await fluxer.post('/settings', { modlogChannelId: CH.bots, commandPrefix: '' });
+});
+
+test('anything but text is refused', async () => {
+  await fluxer.post('/settings', { modlogChannelId: CH.bots, commandPrefix: '+' });
+  for (const bad of [['!'], ['?', '!'], 5, true, null, { a: 1 }]) {
+    const res = await fluxer.post('/settings', { modlogChannelId: CH.bots, commandPrefix: bad });
+    assert.equal(res.status, 400, JSON.stringify(bad));
+  }
+  assert.equal(await getCommandPrefix(FKEY), '+');
   await fluxer.post('/settings', { modlogChannelId: CH.bots, commandPrefix: '' });
 });
 

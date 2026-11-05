@@ -185,7 +185,8 @@ lists the commands, and a wrong argument answers with the correct usage.
 
 `COMMAND_PREFIX` sets the default prefix for the whole Sylo. Each Fluxer server can
 use its own instead: open the server's **Settings** page in the dashboard and fill in
-**Command prefix** (1 to 5 characters, no spaces). Leave it empty to use the default.
+**Command prefix** (1 to 5 characters, no spaces). Leave it empty to use the default. A prefix is case-sensitive (`A!` is not `a!`); the
+command name after it is not.
 The change applies at once, and Sylo writes it to the audit log. The help texts, the
 usage hints and the dashboard show the server's prefix. A mention (`@Sylo help`)
 works on every server whatever its prefix is, and so does the default prefix in a

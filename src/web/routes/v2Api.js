@@ -2119,7 +2119,10 @@ router.post(
     // Left out of the request = unchanged; '' = back to the instance default.
     let newPrefix;
     if (req.body.commandPrefix !== undefined) {
-      newPrefix = String(req.body.commandPrefix ?? '').trim();
+      if (typeof req.body.commandPrefix !== 'string') {
+        return res.status(400).json({ error: 'The command prefix must be text.' });
+      }
+      newPrefix = req.body.commandPrefix.trim();
       if (newPrefix !== '') {
         if (platformOfGuild(guild) === 'discord') {
           return res

@@ -11,6 +11,7 @@ vi.mock('../api.js', () => ({
 }));
 vi.mock('../notify.js', () => ({ notify: vi.fn() }));
 const { getGuildSettings, saveGuildSettings } = await import('../api.js');
+const { notify } = await import('../notify.js');
 
 const GUILD = '123456789012345678';
 
@@ -82,5 +83,36 @@ describe('Settings: command prefix', () => {
     expect(input.getAttribute('aria-invalid')).toBe('true');
     fireEvent.change(input, { target: { value: '!' } });
     expect(screen.queryByText('The prefix can not contain spaces.')).toBeNull();
+  });
+
+  it('flags a backtick and invisible characters', async () => {
+    getGuildSettings.mockResolvedValue(settings({ platform: 'fluxer' }));
+    renderAtGuild(<Settings />, GUILD);
+    const input = await screen.findByLabelText(/Command prefix/);
+    fireEvent.change(input, { target: { value: '`' } });
+    expect(screen.getByText('The prefix can not contain a backtick (`).')).toBeTruthy();
+    fireEvent.change(input, { target: { value: '!\u200d' } });
+    expect(screen.getByText('The prefix can not contain invisible or control characters.')).toBeTruthy();
+  });
+
+  it('does not send a prefix that is not allowed, and says why', async () => {
+    getGuildSettings.mockResolvedValue(settings({ platform: 'fluxer' }));
+    renderAtGuild(<Settings />, GUILD);
+    const input = await screen.findByLabelText(/Command prefix/);
+    fireEvent.change(input, { target: { value: 'a b' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('The prefix can not contain spaces.'));
+    expect(saveGuildSettings).not.toHaveBeenCalled();
+  });
+
+  it('trims the prefix: what is sent and what the field shows after saving', async () => {
+    getGuildSettings.mockResolvedValue(settings({ platform: 'fluxer' }));
+    renderAtGuild(<Settings />, GUILD);
+    const input = await screen.findByLabelText(/Command prefix/);
+    fireEvent.change(input, { target: { value: ' ?? ' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(saveGuildSettings).toHaveBeenCalledTimes(1));
+    expect(saveGuildSettings.mock.calls[0][1].commandPrefix).toBe('??');
+    await waitFor(() => expect(screen.getByLabelText(/Command prefix/).value).toBe('??'));
   });
 });
