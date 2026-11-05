@@ -27,7 +27,8 @@ const NO_ARGS = { subcommand: null, values: {} };
  * @returns {Promise<string>}
  */
 export async function prefixFor(message, fallback) {
-  return effectiveCommandPrefix(message.guild ? guildKeyOf(message) : null, fallback);
+  // By guild id as well as guild object: a Fluxer guild that is not cached still has its prefix.
+  return effectiveCommandPrefix(guildKeyOf(message), fallback);
 }
 
 /**

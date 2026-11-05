@@ -306,6 +306,22 @@ test('the prefix lookup is cached: a message does not query the database once th
   });
 });
 
+test('a guild that is not cached (only a guild id on the message) still gets its prefix', async () => {
+  await withPrefix('?', async () => {
+    const { commands, calls } = setup();
+    const { message } = fluxerMessage('?ping');
+    message.guildId = RAW_GUILD;
+    message.guild = null;
+    await run(message, commands);
+    assert.equal(calls.length, 1);
+    const other = fluxerMessage('!ping').message;
+    other.guildId = RAW_GUILD;
+    other.guild = null;
+    await run(other, commands);
+    assert.equal(calls.length, 1, 'the default prefix does not apply there either');
+  });
+});
+
 test('splitCommand tries the mention before the prefix', () => {
   assert.deepEqual(splitCommand(`<@${BOT_ID}> ping`, '<', BOT_ID), { name: 'ping', rest: '' });
   assert.deepEqual(splitCommand('<ping', '<', BOT_ID), { name: 'ping', rest: '' });
