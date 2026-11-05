@@ -60,12 +60,13 @@ export function paramSummary(key, rule) {
 // arrays (normaliseAutomodConfig's canonical shape) — but the textarea
 // editing them needs a plain string. Convert on the way in; the backend's
 // termList() already accepts a raw comma/newline-separated string just as
-// happily as an array, so no conversion is needed on the way out. The immunity roles
-// (`exemptRoles`) ride along in the form and are saved with everything else.
-function toFormConfig(config) {
+// happily as an array, so no conversion is needed on the way out. The immunity roles ride
+// along in the form as `immunityRoles` and are saved with everything else; the stored list is
+// `exemptRoles`, which the server ignores in the save body (the Sylo app echoes a stale copy).
+function toFormConfig({ exemptRoles, ...config }) {
   return {
     ...config,
-    exemptRoles: config.exemptRoles ?? [],
+    immunityRoles: exemptRoles ?? [],
     rules: {
       ...config.rules,
       links: { ...config.rules.links, allowed: (config.rules.links.allowed || []).join(', ') },
@@ -339,10 +340,11 @@ export default function Automod() {
 
         <h2 className="v2-group-title">Exemptions</h2>
         <div className="v2-field">
-          <label>
+          <label htmlFor="am-exempt-channels">
             Exempt channels <span className="v2-field-hint">— automod never acts here</span>
           </label>
           <ChipPicker
+            id="am-exempt-channels"
             kind="channel"
             items={data.channels}
             value={form.exemptChannels}
@@ -351,16 +353,17 @@ export default function Automod() {
         </div>
 
         <div className="v2-field">
-          <label>Immunity roles</label>
+          <label htmlFor="am-immunity-roles">Immunity roles</label>
           <p className="v2-field-hint">
             Members with one of these roles are never touched by auto-moderation or the warning auto-actions.
             Administrators, the server owner and bot-master roles are always immune.
           </p>
           <ChipPicker
+            id="am-immunity-roles"
             kind="role"
             items={data.roles}
-            value={form.exemptRoles}
-            onChange={(exemptRoles) => setForm((f) => ({ ...f, exemptRoles }))}
+            value={form.immunityRoles}
+            onChange={(immunityRoles) => setForm((f) => ({ ...f, immunityRoles }))}
           />
         </div>
       </form>

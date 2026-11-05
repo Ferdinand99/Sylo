@@ -10,7 +10,6 @@ vi.mock('../api.js', () => ({
   getModuleConfig: vi.fn(),
   saveModuleConfig: vi.fn(),
   getModuleLimits: vi.fn(),
-  saveAutomodImmunity: vi.fn(),
 }));
 vi.mock('../notify.js', () => ({ notify: vi.fn() }));
 const api = await import('../api.js');
@@ -31,6 +30,22 @@ const config = (over = {}) => ({
   },
   ...over,
 });
+
+// What the server answers a save with: the stored config, lists as arrays, immunity roles as exemptRoles.
+const echo = (body) => {
+  const { immunityRoles, ...rest } = body;
+  return {
+    config: {
+      ...rest,
+      exemptRoles: immunityRoles,
+      rules: {
+        ...rest.rules,
+        links: { ...rest.rules.links, allowed: [] },
+        words: { ...rest.rules.words, list: rest.rules.words.list.split(', ') },
+      },
+    },
+  };
+};
 
 function respond(cfg = config()) {
   api.getModuleConfig.mockResolvedValue({
@@ -105,7 +120,7 @@ describe('Automod form', () => {
   });
 
   it('has no separate immunity save button; the roles are saved with the form', async () => {
-    api.saveModuleConfig.mockImplementation(async (_g, _id, body) => ({ config: body }));
+    api.saveModuleConfig.mockImplementation(async (_g, _id, body) => echo(body));
     renderForm();
     expect(await screen.findByText('Mods')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Save immunity roles/ })).toBeNull();
@@ -119,17 +134,27 @@ describe('Automod form', () => {
     await waitFor(() => expect(api.saveModuleConfig).toHaveBeenCalledTimes(1));
     const [guild, id, body] = api.saveModuleConfig.mock.calls[0];
     expect([guild, id]).toEqual([GUILD, 'automod']);
-    expect(body.exemptRoles).toEqual([ROLE_A, ROLE_B]);
+    expect(body.immunityRoles).toEqual([ROLE_A, ROLE_B]);
+    expect(body).not.toHaveProperty('exemptRoles');
     expect(body.rules.words.list).toBe('one, two');
-    expect(api.saveAutomodImmunity).not.toHaveBeenCalled();
+    // The save goes through and the page is clean again.
+    await waitFor(() => expect(screen.queryByText(/Unsaved changes/)).toBeNull());
+    expect(screen.getByText('Helpers')).toBeTruthy();
   });
 
   it('removing the last immunity role is saved as an empty list', async () => {
-    api.saveModuleConfig.mockImplementation(async (_g, _id, body) => ({ config: body }));
+    api.saveModuleConfig.mockImplementation(async (_g, _id, body) => echo(body));
     renderForm();
     fireEvent.click(await screen.findByRole('button', { name: 'Remove Mods' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.saveModuleConfig).toHaveBeenCalled());
-    expect(api.saveModuleConfig.mock.calls[0][2].exemptRoles).toEqual([]);
+    expect(api.saveModuleConfig.mock.calls[0][2].immunityRoles).toEqual([]);
+  });
+
+  it('ties the Immunity roles and Exempt channels labels to their pickers', async () => {
+    renderForm();
+    await screen.findByText('Mods');
+    expect(screen.getByLabelText('Immunity roles').tagName).toBe('SELECT');
+    expect(screen.getByLabelText(/Exempt channels/).tagName).toBe('SELECT');
   });
 });
