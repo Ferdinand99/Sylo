@@ -31,6 +31,9 @@ export function removeQuestion(questions, index) {
   return padQuestions(questions.filter((_, i) => i !== index));
 }
 
+// A question is one line: a pasted line break becomes a space, and Enter does not add one.
+const oneLine = (text) => text.replace(/\s*[\r\n]+\s*/g, ' ');
+
 const toForm = (config) => ({ ...config, questions: padQuestions(config.questions) });
 
 export default function Appeals() {
@@ -93,7 +96,10 @@ export default function Appeals() {
                 maxLength={limitOf(limits, 'questions[]').maxLength}
                 placeholder={`Question ${i + 1}${i === 0 ? ' (required)' : ' (optional)'}`}
                 value={q}
-                onChange={(e) => setQuestion(i, e.target.value)}
+                onChange={(e) => setQuestion(i, oneLine(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.preventDefault();
+                }}
               />
               <div className="v2-question-actions">
                 <button
