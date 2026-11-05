@@ -10,6 +10,7 @@ struct OverviewView: View {
     let model: OverviewModel
 
     @Environment(AppSession.self) private var session
+    @State private var searchText = ""
 
     var body: some View {
         content
@@ -40,7 +41,9 @@ struct OverviewView: View {
                 Section {
                     OverviewHeader(summary: summary, overview: overview)
                 }
-                ForEach(overview.groups.filter { $0.cards.contains { $0.id != Self.settingsCardID } }) { group in
+                let groups = overview.groups(matching: searchText)
+                    .filter { $0.cards.contains { $0.id != Self.settingsCardID } }
+                ForEach(groups) { group in
                     Section(group.title) {
                         ForEach(group.cards.filter { $0.id != Self.settingsCardID }) { card in
                             if card.hasToggle, ModuleScreens.hasScreen(card.id) {
@@ -54,6 +57,14 @@ struct OverviewView: View {
                             }
                         }
                     }
+                }
+            }
+            .tabBarClearance()
+            .searchable(text: $searchText, prompt: "Search modules")
+            .overlay {
+                if !searchText.trimmingCharacters(in: .whitespaces).isEmpty,
+                   overview.groups(matching: searchText).isEmpty {
+                    ContentUnavailableView.search(text: searchText)
                 }
             }
             .refreshable { await model.load() }

@@ -10,9 +10,9 @@ extension View {
     @ViewBuilder
     func primaryActionStyle() -> some View {
         if #available(iOS 26, *) {
-            buttonStyle(.glassProminent)
+            buttonStyle(.glassProminent).foregroundStyle(Color.onAccent)
         } else {
-            buttonStyle(.borderedProminent)
+            buttonStyle(.borderedProminent).foregroundStyle(Color.onAccent)
         }
     }
 
