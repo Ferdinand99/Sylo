@@ -47,7 +47,24 @@ const ACTIONS = [
 
 function Item({ item, busy, limits, onDecide, onDelete }) {
   const [action, setAction] = useState(null);
+  const [pick, setPick] = useState('');
   const [reason, setReason] = useState('');
+  const pickRef = useRef(null);
+  const returnFocus = useRef(false);
+
+  // The panel replaces the select; when it closes, focus goes back to the select.
+  useEffect(() => {
+    if (!action && returnFocus.current) {
+      returnFocus.current = false;
+      pickRef.current?.focus();
+    }
+  }, [action]);
+
+  function closePanel() {
+    returnFocus.current = true;
+    setAction(null);
+    setPick('');
+  }
 
   return (
     <div className="v2-row v2-row-stack">
@@ -74,7 +91,7 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
               e.preventDefault();
               onDecide(item, action, reason).then((ok) => {
                 if (ok) {
-                  setAction(null);
+                  closePanel();
                   setReason('');
                 }
               });
@@ -89,6 +106,7 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
                 id={`reason-${item.number}`}
                 type="text"
                 maxLength={limitOf(limits, 'reason').maxLength}
+                autoFocus
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
               />
@@ -96,7 +114,7 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
             <button type="submit" className="v2-btn-primary" disabled={busy}>
               Set to {ACTIONS.find(([a]) => a === action)[2]}
             </button>
-            <button type="button" className="v2-btn-ghost" onClick={() => setAction(null)}>
+            <button type="button" className="v2-btn-ghost" onClick={closePanel}>
               Close
             </button>
           </form>
@@ -105,10 +123,11 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
       {action ? null : (
         <div className="v2-row-actions">
           <select
+            ref={pickRef}
             aria-label={`Set status of suggestion #${item.number}`}
-            value=""
+            value={pick}
             disabled={busy}
-            onChange={(e) => setAction(e.target.value || null)}
+            onChange={(e) => setPick(e.target.value)}
           >
             <option value="">Set status…</option>
             {ACTIONS.filter(([, status]) => status !== item.status).map(([a, , label]) => (
@@ -117,6 +136,14 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            disabled={busy || !pick}
+            onClick={() => setAction(pick)}
+          >
+            Set…
+          </button>
           <button
             type="button"
             className="v2-btn-danger-ghost"

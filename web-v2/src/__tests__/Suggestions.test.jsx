@@ -131,6 +131,7 @@ describe('Suggestions form', () => {
     renderAtGuild(<Suggestions />, GUILD);
     const setStatus = (await screen.findAllByRole('combobox', { name: /Set status of suggestion/ }))[0];
     fireEvent.change(setStatus, { target: { value: 'approve' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Set…' })[0]);
     const reason = screen.getByLabelText(/Reason/);
     await waitFor(() => expect(reason.maxLength).toBe(500));
     fireEvent.change(reason, { target: { value: 'Planned' } });
@@ -161,9 +162,29 @@ describe('Suggestions form', () => {
     expect(lists.map((s) => optionLabels(s).length).sort()).toEqual([4, 5]);
     expect(lists.some((s) => !optionLabels(s).includes('Approved'))).toBe(true);
     fireEvent.change(lists[0], { target: { value: 'deny' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Set…' })[0]);
     const form = screen.getByLabelText(/Reason/).closest('form');
     fireEvent.click(within(form).getByRole('button', { name: 'Set to Denied' }));
     await waitFor(() => expect(decideSuggestion).toHaveBeenCalledWith(GUILD, 7, 'deny', ''));
+  });
+
+  it('a picked status opens the reason form only after "Set…"; the reason is focused and Close gives focus back', async () => {
+    renderAtGuild(<Suggestions />, GUILD);
+    const lists = await screen.findAllByRole('combobox', { name: /Set status of suggestion/ });
+    const buttons = screen.getAllByRole('button', { name: 'Set…' });
+    expect(buttons[0].disabled).toBe(true);
+    fireEvent.change(lists[0], { target: { value: 'deny' } });
+    expect(screen.queryByLabelText(/Reason/)).toBeNull();
+    expect(buttons[0].disabled).toBe(false);
+    fireEvent.click(buttons[0]);
+    expect(document.activeElement).toBe(screen.getByLabelText(/Reason/));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByLabelText(/Reason/)).toBeNull();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getAllByRole('combobox', { name: /Set status of suggestion/ })[0],
+      ),
+    );
   });
 
   it('deletes after confirming', async () => {
