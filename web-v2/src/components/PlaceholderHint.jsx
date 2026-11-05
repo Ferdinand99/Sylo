@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { insertAtCursor, unknownTokens } from '../placeholders.js';
 
 const MAX_WARNINGS = 3;
@@ -28,6 +28,8 @@ export default function PlaceholderHint({
   // The field's last selection, remembered when it loses focus (clicking a chip blurs it on
   // browsers that ignore the mousedown guard below).
   const lastSelection = useRef(null);
+  // The token that did not fit the field's character limit, for a short note under the chips.
+  const [noRoom, setNoRoom] = useState('');
 
   useEffect(() => {
     const el = document.getElementById(fieldId);
@@ -50,7 +52,27 @@ export default function PlaceholderHint({
       ({ start, end } = lastSelection.current);
     }
     const next = insertAtCursor(value, token, start, end);
-    if (el && el.maxLength > 0 && next.value.length > el.maxLength) return;
+    if (el && el.maxLength > 0 && next.value.length > el.maxLength) {
+      setNoRoom(token);
+      return;
+    }
+    setNoRoom('');
+    // Typing-like insert first: the browser keeps its undo history (Ctrl+Z takes the chip back) and
+    // fires the field's own input event. Falls back to setting the value where that is unsupported.
+    if (el && start !== undefined && end !== undefined) {
+      el.focus();
+      el.setSelectionRange(start, end);
+      let done = false;
+      try {
+        done = typeof document.execCommand === 'function' && document.execCommand('insertText', false, token);
+      } catch {
+        done = false;
+      }
+      if (done) {
+        lastSelection.current = { start: next.caret, end: next.caret };
+        return;
+      }
+    }
     onChange(next.value);
     lastSelection.current = { start: next.caret, end: next.caret };
     // The new value is not in the field yet: give the caret back after React has rendered it.
@@ -83,6 +105,12 @@ export default function PlaceholderHint({
         ))}
       </div>
       <p className="v2-field-hint">Click one to insert it at the cursor.</p>
+      {noRoom ? (
+        <p className="v2-ph-warn" role="status">
+          <span aria-hidden="true">⚠ </span>
+          No room for <code>{noRoom}</code>: the field is full.
+        </p>
+      ) : null}
       {unknown.slice(0, MAX_WARNINGS).map((u) => (
         <p className="v2-ph-warn" role="status" key={u.token}>
           <span aria-hidden="true">⚠ </span>

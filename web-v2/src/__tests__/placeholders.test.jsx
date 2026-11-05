@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import {
   PLACEHOLDER_SETS,
@@ -165,5 +165,30 @@ describe('PlaceholderHint', () => {
     render(<Limited />);
     fireEvent.click(screen.getByRole('button', { name: 'Insert {count}' }));
     expect(screen.getByLabelText('Limited').value).toBe('12345');
+    // It says so instead of dropping the click silently.
+    expect(screen.getByRole('status').textContent).toContain('No room for {count}');
+  });
+
+  it('types the token through the browser (so Ctrl+Z works) when execCommand is available', () => {
+    const original = document.execCommand;
+    document.execCommand = vi.fn((command, _ui, token) => {
+      const field = document.activeElement;
+      const { selectionStart: from, selectionEnd: to } = field;
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(field, field.value.slice(0, from) + token + field.value.slice(to));
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      return command === 'insertText';
+    });
+    try {
+      render(<Harness initial="Welcome to !" />);
+      const field = screen.getByLabelText('Message');
+      field.focus();
+      field.setSelectionRange(11, 11);
+      fireEvent.click(screen.getByRole('button', { name: 'Insert {server}' }));
+      expect(document.execCommand).toHaveBeenCalledWith('insertText', false, '{server}');
+      expect(field.value).toBe('Welcome to {server}!');
+    } finally {
+      document.execCommand = original;
+    }
   });
 });

@@ -70,6 +70,17 @@ describe('Auto threads form', () => {
     expect(slowmode.min).toBe('0');
   });
 
+  it('does not warn about {AUTHOR} in the first message (the server reads placeholders in any case)', async () => {
+    getModuleConfig.mockResolvedValue({
+      config: { rules: [{ ...rule, firstMessage: 'Hi {AUTHOR}!' }] },
+      channels,
+      roles,
+    });
+    renderAtGuild(<AutoThreads />, GUILD);
+    await screen.findByLabelText(/First message in the thread/);
+    expect(screen.queryByText(/isn't a placeholder here/)).toBeNull();
+  });
+
   it('offers only the channels the server sent (forums are left out there)', async () => {
     renderAtGuild(<AutoThreads />, GUILD);
     const picker = await screen.findByLabelText('Channel');

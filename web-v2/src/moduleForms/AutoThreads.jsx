@@ -235,6 +235,7 @@ export default function AutoThreads() {
                 <PlaceholderHint
                   fieldId={`at-first-${r.key}`}
                   tokens={tokensFor('autoThreadsFirstReply')}
+                  ignoreCase
                   value={r.firstMessage}
                   onChange={(firstMessage) => updateRule(r.key, { firstMessage })}
                 />
