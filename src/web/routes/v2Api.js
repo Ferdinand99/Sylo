@@ -1017,14 +1017,16 @@ router.post(
 router.post(
   '/guilds/:guildId/modules/automod/config',
   asyncHandler(async (req, res) => {
-    // The immunity roles are part of this form now (one Save button for the page). A caller that
-    // does not send the list (an older client, the immunity-only route below) keeps what is stored.
+    // The web form saves the immunity roles with the rest of the page through `immunityRoles`
+    // (absent = keep what is stored, [] = clear). `exemptRoles` in this body is ignored on purpose:
+    // the Sylo app sends its stale copy of that list back on every save and would overwrite
+    // changes made in the web dashboard.
     const prev = (await getGuildModule(req.guild.id, 'automod')).config;
     const config = normaliseAutomodConfig({
       deleteMessage: true,
       timeoutMinutes: req.body.timeoutMinutes,
       exemptChannels: req.body.exemptChannels,
-      exemptRoles: Array.isArray(req.body.exemptRoles) ? req.body.exemptRoles : (prev.exemptRoles ?? []),
+      exemptRoles: Array.isArray(req.body.immunityRoles) ? req.body.immunityRoles : (prev.exemptRoles ?? []),
       native: req.body.native,
       rules: req.body.rules,
     });
@@ -1043,10 +1045,15 @@ router.post(
       nativeNote = `native rules +${r.created} ~${r.edited} -${r.removed}`;
     }
 
+    const before = prev.exemptRoles ?? [];
+    const immunityChanged =
+      before.length !== config.exemptRoles.length || before.some((id, i) => id !== config.exemptRoles[i]);
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:automod',
-      detail: 'settings saved',
+      detail: immunityChanged
+        ? `settings saved, immunity roles (${config.exemptRoles.length})`
+        : 'settings saved',
     });
     res.json({ config, nativeNote, nativeWarned });
   })
