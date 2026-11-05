@@ -67,7 +67,7 @@ At least one platform must be configured.
 | `FLUXER_TOKEN`            | —                               | Optional: bot token for [Fluxer](fluxer.md). Setting it runs Sylo on Fluxer too (experimental) |
 | `FLUXER_CLIENT_ID`        | —                               | Fluxer application id (**required** with `FLUXER_TOKEN`) |
 | `FLUXER_WEB_URL`          | hosted Fluxer                   | Web app origin of a self-hosted Fluxer instance, e.g. `https://chat.example.com` |
-| `COMMAND_PREFIX`          | `!`                             | Chat prefix for commands on Fluxer, which has no slash commands (1–5 characters) |
+| `COMMAND_PREFIX`          | `!`                             | Default chat prefix for commands on Fluxer, which has no slash commands (1–5 characters); each server can set its own in Settings |
 | `APPLE_KEY_ID`            | —                               | Optional: App Store Connect API key id for the owner-only [App Store Connect module](modules/apple-connect.md) |
 | `APPLE_ISSUER_ID`         | —                               | Issuer id of a team API key (leave unset for an individual key) |
 | `APPLE_PRIVATE_KEY`       | —                               | The key's `.p8` file: PEM text, PEM on one line with literal `\n`, or base64 |

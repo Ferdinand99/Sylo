@@ -74,7 +74,7 @@ for local testing.
 | `FLUXER_CLIENT_ID`      | n/a                      | Application id. **Required** when `FLUXER_TOKEN` is set.                                                                                                                                                                                            |
 | `FLUXER_WEB_URL`        | hosted Fluxer            | The web app origin of the Fluxer instance, for example `https://chat.example.com`. Leave unset for hosted Fluxer. For a self-hosted instance Sylo reads the API, gateway and CDN addresses from `<FLUXER_WEB_URL>/.well-known/fluxer`.                |
 | `FLUXER_API_URL`        | from `.well-known`       | Overrides only the API origin. You rarely need this.                                                                                                                                                                                                |
-| `COMMAND_PREFIX`        | `!`                      | The chat prefix for commands on Fluxer (see [Using commands](#using-commands)). 1 to 5 characters, no spaces.                                                                                                                                       |
+| `COMMAND_PREFIX`        | `!`                      | The default chat prefix for commands on Fluxer (see [Using commands](#using-commands)). 1 to 5 characters, no spaces. Each server can set its own in Settings.                                                                                      |
 | `FLUXER_CLIENT_SECRET`  | n/a                      | The application's client secret. Setting it adds **Log in with Fluxer** to the dashboard.                                                                                                                                                           |
 | `FLUXER_OWNER_IDS`      | n/a                      | Your Fluxer user id(s), comma or space separated. The Fluxer counterpart of `OWNER_IDS`: these accounts can open `/health` and the other bot-wide pages. `OWNER_IDS` holds Discord ids only, so an id on one platform never grants access on the other. |
 
@@ -178,9 +178,18 @@ command code as Discord:
 @Sylo ping
 ```
 
-Both forms work: the prefix (`!` by default, set with `COMMAND_PREFIX`) or a
-mention of the bot. `!help` lists the commands, and a wrong argument answers with
-the correct usage.
+Both forms work: the prefix (`!` by default) or a mention of the bot. `!help`
+lists the commands, and a wrong argument answers with the correct usage.
+
+### Changing the prefix
+
+`COMMAND_PREFIX` sets the default prefix for the whole Sylo. Each Fluxer server can
+use its own instead: open the server's **Settings** page in the dashboard and fill in
+**Command prefix** (1 to 5 characters, no spaces). Leave it empty to use the default.
+The change applies at once, and Sylo writes it to the audit log. The help texts, the
+usage hints and the dashboard show the server's prefix. A mention (`@Sylo help`)
+works on every server whatever its prefix is, and so does the default prefix in a
+direct message to the bot.
 
 ### Arguments
 
@@ -292,7 +301,7 @@ codebase to keep up with and no separate releases.
 | Symptom                                               | Check                                                                                                                                                                                                           |
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | No `fluxer  Logged in` line at start-up               | `FLUXER_TOKEN` and `FLUXER_CLIENT_ID` both set? Self-hosted instance: is `FLUXER_WEB_URL` reachable from the Sylo container, and does `<origin>/.well-known/fluxer` answer?                                      |
-| The bot connects, commands do nothing                 | Use the prefix (`!ping`) or a mention (`@Sylo ping`), not `/`. If you changed `COMMAND_PREFIX`, use the new one. The bot needs permission to read and send messages in that channel.                            |
+| The bot connects, commands do nothing                 | Use the prefix (`!ping`) or a mention (`@Sylo ping`), not `/`. If you changed `COMMAND_PREFIX` or the server's **Command prefix** setting, use the new one. The bot needs permission to read and send messages in that channel.                            |
 | "You don't have permission to use this command"       | The command needs the same permission as on Discord, or a per-server override blocks it. Check the dashboard's Commands page.                                                                                   |
 | Login with Fluxer fails or loops                      | The redirect URL on the application must be exactly `<DASHBOARD_URL>/auth/fluxer/callback`. Behind a proxy set `DASHBOARD_URL` to the public https address.                                                     |
 | Logged in, but my Fluxer server is missing            | You need to own the server, or have Administrator or Manage Server there, and the bot has to be in it. Sign out and in again to refresh the list (it is refreshed automatically about every 10 minutes).             |
