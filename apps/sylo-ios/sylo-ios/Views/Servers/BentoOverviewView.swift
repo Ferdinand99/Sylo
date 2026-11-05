@@ -360,7 +360,7 @@ private struct ModuleRing: View {
     }
 }
 
-/// One line of the tickets tile: a dot (lit while unread), the member and how long ago.
+/// One line of the tickets tile: a dot (lit while unread) and the member.
 private struct RecentTicketLine: View {
     let ticket: TicketSummary
 
@@ -375,16 +375,7 @@ private struct RecentTicketLine: View {
                 .font(.caption.weight(.medium))
                 .foregroundStyle(Color.syloText)
                 .lineLimit(1)
-            Spacer(minLength: 4)
-            Text(verbatim: when)
-                .font(.syloNumber(.caption2, weight: .regular))
-                .foregroundStyle(Color.syloMuted)
-                .lineLimit(1)
         }
         .accessibilityHidden(true)
-    }
-
-    private var when: String {
-        ticket.lastAt.map { MessageTime.listLabel(for: $0) } ?? ticket.ago
     }
 }
