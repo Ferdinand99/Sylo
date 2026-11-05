@@ -20,15 +20,25 @@ struct MainView: View {
     @State private var detailPath = NavigationPath()
     @State private var column = NavigationSplitViewColumn.sidebar
     @State private var isShowingSettings = false
+    @Namespace private var zoomNamespace
 
     init(server: ServerURL, session: AppSession) {
         self.server = server
         _servers = State(initialValue: ServersModel(session: session))
+        #if DEBUG
+        // Screenshot builds: start on the screen named by the demo launch arguments.
+        if let start = DemoLaunch.start {
+            _selection = State(initialValue: start.server)
+            _serverTab = State(initialValue: start.tab)
+            _detailPath = State(initialValue: start.path)
+            _column = State(initialValue: start.server == nil ? .sidebar : .detail)
+        }
+        #endif
     }
 
     var body: some View {
         NavigationSplitView(preferredCompactColumn: $column) {
-            ServerSidebar(servers: servers, selection: sidebarSelection)
+            ServerListView(servers: servers, selection: selection, open: openServer, zoomNamespace: zoomNamespace)
                 .navigationTitle("Servers")
                 .toolbar {
                     // iPad: a hardware keyboard and room in the bar; iPhone pulls to refresh.
@@ -56,10 +66,12 @@ struct MainView: View {
                 if let summary = servers.server(selection) {
                     ServerView(summary: summary, session: session, tab: $serverTab)
                         .id(summary.id)
+                        .syloZoomDestination(id: summary.id, in: zoomNamespace)
                 } else {
-                    ContentUnavailableView(
+                    EmptyState(
                         "Choose a Server", systemImage: "server.rack",
-                        description: Text("Pick a server to see and switch its modules."))
+                        message: Text("Pick a server to see and switch its modules."))
+                        .syloScreen()
                 }
             }
         }
@@ -81,17 +93,15 @@ struct MainView: View {
         .onChange(of: servers.hasLoaded) { openPendingTicket() }
     }
 
-    /// The sidebar's selection: another server starts on its Modules tab, at the top.
-    private var sidebarSelection: Binding<ServerID?> {
-        Binding {
-            selection
-        } set: { newValue in
-            if newValue != selection {
-                serverTab = .modules
-                detailPath = NavigationPath()
-            }
-            selection = newValue
+    /// A tapped server card: another server starts on its first tab, at the top, and the detail
+    /// column comes forward (on iPhone, the push from the list).
+    private func openServer(_ id: ServerID) {
+        if id != selection {
+            serverTab = .modules
+            detailPath = NavigationPath()
         }
+        selection = id
+        column = .detail
     }
 
     /// Opens a tapped ticket notification: its server, the Tickets tab, the conversation. Waits
@@ -119,72 +129,6 @@ struct MainView: View {
     }
 }
 
-/// The sidebar: servers grouped by platform, pull to refresh.
-private struct ServerSidebar: View {
-    let servers: ServersModel
-    @Binding var selection: ServerID?
-
-    var body: some View {
-        List(selection: $selection) {
-            if servers.hasLoaded, let message = servers.errorMessage {
-                Section {
-                    StatusMessage(message, kind: .error)
-                }
-            }
-            ForEach(servers.sections) { section in
-                Section(section.platform.displayName) {
-                    ForEach(section.servers) { server in
-                        HStack {
-                            Label {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(server.name)
-                                    if let subtitle = server.subtitle() {
-                                        Text(verbatim: subtitle)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                            .truncationMode(.tail)
-                                    }
-                                }
-                            } icon: {
-                                ServerIcon(url: server.iconURL, name: server.name)
-                            }
-                            Spacer(minLength: 8)
-                            TicketCountBadge(open: server.openTickets, unread: server.unreadTickets)
-                        }
-                        .tag(server.id)
-                    }
-                }
-            }
-        }
-        .overlay { placeholder }
-        .refreshable { await servers.load() }
-    }
-
-    @ViewBuilder
-    private var placeholder: some View {
-        if servers.hasLoaded, servers.servers.isEmpty {
-            ContentUnavailableView(
-                "No Servers", systemImage: "server.rack",
-                description: Text("You don't manage a server with Sylo on it yet. Add Sylo to a server, then pull to refresh."))
-                // Let the pull to refresh reach the list underneath.
-                .allowsHitTesting(false)
-        } else if !servers.hasLoaded {
-            if let message = servers.errorMessage {
-                ContentUnavailableView {
-                    Label("Couldn't Load Servers", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(message)
-                } actions: {
-                    Button("Try Again") { Task { await servers.load() } }
-                }
-            } else {
-                ProgressView()
-            }
-        }
-    }
-}
-
 #Preview {
     let session = AppSession.preview(.signedIn)
     MainView(server: .hosted, session: session)
@@ -192,32 +136,3 @@ private struct ServerSidebar: View {
         .environment(PushCoordinator(session: session))
 }
 
-/// Tickets waiting on a server: the unread ones as a filled count, otherwise how many are open.
-private struct TicketCountBadge: View {
-    let open: Int
-    let unread: Int
-
-    var body: some View {
-        if unread > 0 {
-            Text(verbatim: "\(unread)")
-                .font(.caption.weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(Color.onAccent)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2)
-                .background(.tint, in: Capsule())
-                .accessibilityLabel(Text("^[\(unread) unread ticket](inflect: true)"))
-        } else if open > 0 {
-            Label {
-                Text(verbatim: "\(open)")
-                    .monospacedDigit()
-            } icon: {
-                Image(systemName: "ticket")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text("^[\(open) open ticket](inflect: true)"))
-        }
-    }
-}

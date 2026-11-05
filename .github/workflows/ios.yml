@@ -61,4 +61,48 @@ jobs:
             -project apps/sylo-ios/sylo-ios.xcodeproj \
             -scheme sylo-ios \
             -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
             CODE_SIGNING_ALLOWED=NO
+
+      # Screenshots of the main screens, from the Debug build's demo launch arguments (see
+      # Previews/DemoLaunch.swift): a made-up Sylo, no server or sign-in needed. Dark and light,
+      # plus large text. For checking the design without a Mac; not part of the pass/fail of the build.
+      - name: Take screenshots in the simulator
+        continue-on-error: true
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/sylo-ios.app"
+          OUT="$RUNNER_TEMP/shots"
+          mkdir -p "$OUT"
+          UDID=$(xcrun simctl list devices available | grep -E "iPhone [0-9]+ Pro \(" | tail -1 | grep -oE '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}')
+          [ -n "$UDID" ] || UDID=$(xcrun simctl list devices available | grep -E "iPhone" | tail -1 | grep -oE '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}')
+          echo "Simulator: $UDID"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+          xcrun simctl install "$UDID" "$APP"
+          shoot() { # name screen appearance content-size
+            xcrun simctl ui "$UDID" appearance "$3"
+            xcrun simctl ui "$UDID" content_size "$4"
+            xcrun simctl terminate "$UDID" net.opland.sylo >/dev/null 2>&1 || true
+            xcrun simctl launch "$UDID" net.opland.sylo -SyloDemo YES -SyloDemoScreen "$2"
+            sleep 6
+            xcrun simctl io "$UDID" screenshot "$OUT/$1.png"
+          }
+          for mode in dark light; do
+            for screen in servers overview modules module tickets thread; do
+              shoot "$screen-$mode" "$screen" "$mode" large
+            done
+          done
+          shoot overview-dark-largetext overview dark accessibility-extra-large
+          shoot modules-dark-largetext modules dark accessibility-extra-large
+          shoot tickets-dark-largetext tickets dark accessibility-extra-large
+          shoot servers-dark-largetext servers dark accessibility-extra-large
+          ls -la "$OUT"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: redesign-screenshots
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: warn

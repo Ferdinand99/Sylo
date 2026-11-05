@@ -9,6 +9,15 @@ import UserNotifications
     @State private var push: PushCoordinator
 
     init() {
+        #if DEBUG
+        // Screenshot builds: a made-up Sylo, see DemoLaunch.
+        if DemoLaunch.isActive {
+            let demo = DemoLaunch.session()
+            _session = State(initialValue: demo)
+            _push = State(initialValue: PushCoordinator(session: demo))
+            return
+        }
+        #endif
         let session = AppSession.live()
         // Reads the remembered server and token before the first frame, so a signed-in launch
         // never flashes the sign-in screen.

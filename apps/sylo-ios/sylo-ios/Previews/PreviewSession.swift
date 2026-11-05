@@ -10,29 +10,67 @@ nonisolated enum PreviewData {
     static let pushSettings = PushSettingsInfo(isEnabled: true, mutedServers: ["2"])
 
     static let servers = [
-        ServerSummary(id: "1", name: "Sylo Test Server", platform: .discord, openTickets: 2, unreadTickets: 1),
-        ServerSummary(id: "2", name: "Gaming Night", platform: .discord),
-        ServerSummary(id: "fluxer:3", name: "Fluxer Friends", platform: .fluxer, openTickets: 1),
+        ServerSummary(id: "1", name: "Sylo Test Server", platform: .discord, openTickets: 2, unreadTickets: 1,
+                      memberCount: 128, messagesToday: 312),
+        ServerSummary(id: "2", name: "Gaming Night", platform: .discord, memberCount: 1_204, messagesToday: 1_840),
+        ServerSummary(id: "4", name: "Midnight Library", platform: .discord, memberCount: 86),
+        ServerSummary(id: "fluxer:3", name: "Fluxer Friends", platform: .fluxer, openTickets: 1,
+                      memberCount: 24, messagesToday: 57),
     ]
+
+    private static func module(
+        _ id: String, _ name: String, icon: String, on: Bool, beta: Bool = false, blocked: Bool = false,
+        line: (String, String)? = nil
+    ) -> OverviewCard {
+        OverviewCard(
+            kind: .module, id: id, name: name, icon: icon, hasToggle: true, isEnabled: on, isBeta: beta,
+            missingIntents: blocked ? ["GuildMembers"] : [],
+            status: blocked ? .blocked : (on ? .on : .off),
+            lines: line.map { [StatusLine(label: $0.0, value: $0.1, state: on ? .on : .neutral)] } ?? [])
+    }
 
     static let overview = ServerOverview(
         server: OverviewServer(id: "1", name: "Sylo Test Server", memberCount: 128),
         openTickets: 2,
+        openAppeals: 1,
         groups: [
             OverviewGroup(title: "Core", cards: [
                 OverviewCard(kind: .link, id: "general", name: "Settings", icon: "gear", hasToggle: false,
                              isEnabled: nil, status: .link, webPath: "/guild/1"),
-                OverviewCard(kind: .module, id: "logging", name: "Logging", icon: "file-text", hasToggle: true,
-                             isEnabled: true, status: .on,
-                             lines: [StatusLine(label: "Log channel", value: "#mod-log", state: .on)]),
-                OverviewCard(kind: .module, id: "automod", name: "Auto-moderation", icon: "shield", hasToggle: true,
-                             isEnabled: false, status: .off),
             ]),
-            OverviewGroup(title: "Engagement", cards: [
-                OverviewCard(kind: .module, id: "welcome", name: "Welcome", icon: "user-plus", hasToggle: true,
-                             isEnabled: true, missingIntents: ["GuildMembers"], status: .blocked),
-                OverviewCard(kind: .module, id: "auto-react", name: "Auto-react", icon: "smile", hasToggle: true,
-                             isEnabled: false, isBeta: true, status: .off),
+            OverviewGroup(title: "Moderation and safety", cards: [
+                module("moderation", "Moderation", icon: "gavel", on: true, line: ("Mod-log", "#mod-log")),
+                module("automod", "Auto-moderation", icon: "shield", on: true, line: ("Rules", "6 active")),
+                module("honeypot", "Honeypot", icon: "target", on: true, line: ("Traps", "2 channels")),
+                module("logging", "Logging", icon: "file-text", on: true, line: ("Log channel", "#audit")),
+                module("verification", "Verification", icon: "shield-check", on: false),
+                module("tickets", "Tickets", icon: "ticket", on: true, line: ("Staff role", "@Support")),
+                module("appeals", "Appeals", icon: "message-circle", on: true, line: ("Open", "1")),
+            ]),
+            OverviewGroup(title: "Members and engagement", cards: [
+                module("welcome", "Welcome", icon: "user-plus", on: true, blocked: true),
+                module("leveling", "Leveling", icon: "trending-up", on: true, line: ("Top", "Mia, level 14")),
+                module("birthdays", "Birthdays", icon: "cake", on: true, line: ("Channel", "#general")),
+                module("starboard", "Starboard", icon: "star", on: false),
+                module("giveaways", "Giveaways", icon: "gift", on: false),
+                module("polls", "Polls", icon: "bar-chart", on: true),
+                module("events", "Events", icon: "calendar", on: true, beta: true),
+                module("suggestions", "Suggestions", icon: "lightbulb", on: false, beta: true),
+                module("temp-roles", "Temporary roles", icon: "hourglass", on: false, beta: true),
+                module("invite-tracker", "Invite tracker", icon: "users", on: true),
+            ]),
+            OverviewGroup(title: "Messages and channels", cards: [
+                module("autoresponder", "Autoresponder", icon: "zap", on: true, line: ("Triggers", "9")),
+                module("auto-react", "Auto-react", icon: "smile", on: false, beta: true),
+                module("sticky", "Sticky messages", icon: "pin", on: true),
+                module("temp-voice", "Temporary voice", icon: "mic", on: false),
+                module("server-stats", "Server stats", icon: "activity", on: true),
+            ]),
+            OverviewGroup(title: "Alerts", cards: [
+                module("twitch-alerts", "Twitch alerts", icon: "twitch", on: true, line: ("Streamers", "3")),
+                module("youtube-alerts", "YouTube alerts", icon: "youtube", on: false),
+                module("rss", "RSS feeds", icon: "rss", on: true),
+                module("free-games", "Free games", icon: "gamepad", on: false),
             ]),
         ])
 
@@ -111,6 +149,8 @@ nonisolated struct PreviewClient: APIClient {
     var extra: Answer?
 
     func send<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response {
+        // A short wait on the overview, so the bento shows a round trip time like a real server.
+        if endpoint is Endpoints.Overview { try? await Task.sleep(for: .milliseconds(38)) }
         guard let response = (extra?(endpoint) ?? Self.shared(endpoint)) as? E.Response else {
             throw NetworkError.notFound
         }
