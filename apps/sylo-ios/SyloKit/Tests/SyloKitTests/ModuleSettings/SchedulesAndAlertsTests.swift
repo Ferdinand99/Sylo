@@ -133,7 +133,8 @@ struct RemindersModuleTests {
     func test() async throws {
         let page = try JSONDecoder().decode(RemindersPage.self, from: Data(Self.pageJSON.utf8))
         let clients = StubClients { endpoint in
-            endpoint is Endpoints.TestReminder ? OKResponse() : page
+            if endpoint is Endpoints.TestReminder { return OKResponse() }
+            return page
         }
         let session = makeSignedInSession(clients: clients)
         let model = RecordListModel<RemindersPage>(reminders: "1", session: session)
@@ -363,7 +364,8 @@ struct InsightsTests {
     func model() async throws {
         let page = try JSONDecoder().decode(InsightsPage.self, from: Data(Self.pageJSON.utf8))
         let clients = StubClients { endpoint in
-            endpoint is Endpoints.RefreshInsights ? OKResponse() : page
+            if endpoint is Endpoints.RefreshInsights { return OKResponse() }
+            return page
         }
         let model = InsightsModel(server: "1", session: makeSignedInSession(clients: clients))
         await model.load()
