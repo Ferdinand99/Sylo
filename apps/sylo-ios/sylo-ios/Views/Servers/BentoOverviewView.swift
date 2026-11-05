@@ -10,6 +10,8 @@ struct BentoOverviewView: View {
     let model: OverviewModel
     /// Tickets with something new, from the inbox (the overview only knows how many are open).
     let unreadTickets: Int
+    /// The newest open tickets, for the tickets tile (empty until the inbox has loaded).
+    let recentTickets: [TicketSummary]
     let openTab: (ServerView.ServerTab) -> Void
     let openModule: (String) -> Void
 
@@ -40,6 +42,7 @@ struct BentoOverviewView: View {
                         activity.syloArrival(index: 3)
                         modules(overview).syloArrival(index: 4)
                         appeals(overview).syloArrival(index: 5)
+                        attention(overview).syloArrival(index: 6)
                     } else {
                         HStack(alignment: .top, spacing: gap) {
                             tickets(overview, minHeight: smallTile * 2 + gap).syloArrival(index: 1)
@@ -52,6 +55,7 @@ struct BentoOverviewView: View {
                             modules(overview).syloArrival(index: 4)
                             appeals(overview).syloArrival(index: 5)
                         }
+                        attention(overview).syloArrival(index: 6)
                     }
                 }
                 .padding(.horizontal, SyloSpacing.screen)
@@ -121,8 +125,15 @@ struct BentoOverviewView: View {
         let open = overview.openTickets
         return BentoTile(title: "Open tickets", systemImage: "ticket", isLive: unreadTickets > 0, minHeight: minHeight) {
             VStack(alignment: .leading, spacing: SyloSpacing.xs) {
-                Spacer(minLength: 0)
-                HeroNumber(open, scale: minHeight > 0 ? 1.9 : 1)
+                HeroNumber(open, scale: minHeight > 0 ? 1.35 : 1)
+                if minHeight > 0, !recentTickets.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(recentTickets.prefix(3)) { ticket in
+                            RecentTicketLine(ticket: ticket)
+                        }
+                    }
+                    .padding(.top, SyloSpacing.xs)
+                }
                 Spacer(minLength: 0)
                 if unreadTickets > 0 {
                     HStack(spacing: 6) {
@@ -208,6 +219,48 @@ struct BentoOverviewView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(target == nil ? [] : .isButton)
+    }
+
+    /// Modules that are on but cannot run (the bot lacks a privileged intent), or a calm "all
+    /// running" when there are none.
+    private func attention(_ overview: ServerOverview) -> some View {
+        let blocked = overview.groups.flatMap(\.cards).filter { $0.status == .blocked }
+        return BentoTile(
+            title: "Needs attention", systemImage: blocked.isEmpty ? "checkmark.seal" : "exclamationmark.triangle",
+            minHeight: 0
+        ) {
+            if blocked.isEmpty {
+                Label("Every module that is on can run", systemImage: "checkmark.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.syloMuted)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(blocked.prefix(3)) { card in
+                        HStack(spacing: SyloSpacing.s) {
+                            Image(systemName: ModuleSymbol.name(forIcon: card.icon))
+                                .foregroundStyle(Color.syloWarn)
+                                .frame(width: 22)
+                            Text(verbatim: card.name)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color.syloText)
+                            Spacer(minLength: SyloSpacing.s)
+                            Text("Needs an intent")
+                                .font(.caption)
+                                .foregroundStyle(Color.syloWarn)
+                        }
+                    }
+                    if blocked.count > 3 {
+                        Text("+\(blocked.count - 3) more")
+                            .font(.caption)
+                            .foregroundStyle(Color.syloMuted)
+                    }
+                }
+            }
+        }
+        .syloPressable { openTab(.modules) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(Text("Opens the modules"))
     }
 
     /// Whether this server has the module and the app has a settings screen for it.
@@ -304,5 +357,34 @@ private struct ModuleRing: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Modules on"))
         .accessibilityValue(Text("\(enabled) of \(total)"))
+    }
+}
+
+/// One line of the tickets tile: a dot (lit while unread), the member and how long ago.
+private struct RecentTicketLine: View {
+    let ticket: TicketSummary
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if ticket.isUnread {
+                LiveDot(size: 6, pulses: false)
+            } else {
+                Circle().fill(Color.syloMuted.opacity(0.4)).frame(width: 6, height: 6)
+            }
+            Text(verbatim: ticket.user)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Color.syloText)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Text(verbatim: when)
+                .font(.syloNumber(.caption2, weight: .regular))
+                .foregroundStyle(Color.syloMuted)
+                .lineLimit(1)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var when: String {
+        ticket.lastAt.map { MessageTime.listLabel(for: $0) } ?? ticket.ago
     }
 }

@@ -82,6 +82,7 @@ struct ServerView: View {
         case .overview:
             BentoOverviewView(
                 summary: summary, model: overview, unreadTickets: tickets.unreadCount,
+                recentTickets: Array((tickets.list?.open ?? []).prefix(3)),
                 openTab: { tab = $0 }, openModule: openModule)
                 .transition(.opacity)
         case .modules:
