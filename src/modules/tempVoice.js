@@ -11,15 +11,9 @@
 //     ignoredRoles: [], moderatorRoles: [],
 //     ownerPerms: { manageChannels, managePermissions, prioritySpeaker, moveMembers },
 //     textChannel: { enabled, restrictCommands, pinUsages, restrict } }
-import {
-  allClientsReady,
-  guildByKey,
-  guildKey,
-  guildSupports,
-  platformOfGuild,
-} from '../platform/platformOf.js';
+import { allClientsReady, guildByKey, guildKey, guildSupports } from '../platform/platformOf.js';
 import { createGuildChannel, deleteGuildChannel } from '../platform/channels.js';
-import { config } from '../config.js';
+import { guildCommandPrefix } from '../platform/commandPrefix.js';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
 import { getGuildModule } from '../db/modules.js';
@@ -255,7 +249,7 @@ async function handleJoin(guild, member, hub) {
   }
 
   // Commands are slash commands on Discord and prefix commands elsewhere.
-  const prefix = platformOfGuild(guild) === 'discord' ? '/' : config.commandPrefix;
+  const prefix = await guildCommandPrefix(guild);
   let textChannelId = null;
   if (hub.textChannel.enabled) {
     try {

@@ -8,6 +8,9 @@ test('commandText: a slash command becomes the platform prefix form on Fluxer, u
   assert.equal(commandText('fluxer', '/afk [reason]', '?'), '?afk [reason]');
   assert.equal(commandText('fluxer', 'plain text', '!'), 'plain text');
   assert.equal(commandText('fluxer', '/', '!'), '/');
+  // `$` in a prefix is literal, not a replacement pattern.
+  assert.equal(commandText('fluxer', '/afk', '$$'), '$$afk');
+  assert.equal(commandText('fluxer', '/afk', '$&'), '$&afk');
 });
 
 const names = new Set(['giveaway', 'afk', 'leaderboard', 'poll', 'poll-end', 'voice-lock', 'voice-unlock']);

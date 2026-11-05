@@ -6,7 +6,8 @@ import { revokeApiToken } from '../../db/apiTokens.js';
 import { deleteAccount, unlinkIdentity } from '../../db/accounts.js';
 import { listDevLogEntries } from '../../db/devLogEntries.js';
 import { openTicketCount, unreadTicketCount } from '../../db/tickets.js';
-import { allGuilds, clientOfGuild, primaryClient } from '../../platform/platformOf.js';
+import { allGuilds, clientOfGuild, platformOfGuild, primaryClient } from '../../platform/platformOf.js';
+import { COMMAND_PREFIX_MAX, commandPrefixError } from '../../lib/commandPrefix.js';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { Router, raw } from 'express';
@@ -214,11 +215,14 @@ import {
   setBotMasterRoles,
   setEmbedColor,
   guildEmbedColor,
+  getCommandPrefix,
+  setCommandPrefix,
   withoutEveryone,
 } from '../../db/guildSettings.js';
 import { recordAudit } from '../../db/audit.js';
 import { recordBotAudit, listBotAudit } from '../../db/botAudit.js';
 import { platformInfo } from '../../platform/modulePlatformNotes.js';
+import { guildCommandPrefix } from '../../platform/commandPrefix.js';
 import { normaliseAppleConfig } from '../../modules/appleConnect.js';
 import { runtime, uptimeSeconds, isAnyClientReady, totalGuildCount, platformStatus } from '../../runtime.js';
 import {
@@ -409,7 +413,12 @@ router.use('/guilds/:guildId', quotesRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
-router.get('/guilds/:guildId/platform', (req, res) => res.json(platformInfo(req.guild)));
+router.get(
+  '/guilds/:guildId/platform',
+  asyncHandler(async (req, res) => {
+    res.json(platformInfo(req.guild, await guildCommandPrefix(req.guild)));
+  })
+);
 
 // Custom emojis for the reaction-role emoji picker (custom emojis of the server).
 router.get('/guilds/:guildId/emojis', (req, res) => res.json({ custom: guildCustomEmojis(req.guild) }));
@@ -2074,8 +2083,16 @@ router.get(
     const color = await guildEmbedColor(guild.id);
     const roles = assignableRoles(guild);
     const stored = new Set(await getBotMasterRoles(guild.id));
+    const platform = platformOfGuild(guild);
     res.json({
       guild: { id: guild.id, name: guild.name, icon: guild.iconURL({ size: 64 }) },
+      platform,
+      // Fluxer only (Discord uses slash commands). commandPrefix is the server's own, '' = the
+      // instance default; effectiveCommandPrefix is the one members type today.
+      commandPrefix: settings?.command_prefix ?? '',
+      defaultCommandPrefix: config.commandPrefix,
+      commandPrefixMaxLength: COMMAND_PREFIX_MAX,
+      effectiveCommandPrefix: await guildCommandPrefix(guild),
       modlogChannelId: settings?.modlog_channel_id ?? '',
       embedColorHex: '#' + color.toString(16).padStart(6, '0'),
       channels: guildTextChannels(guild),
@@ -2097,6 +2114,25 @@ router.post(
       botMasterRoleIds,
       await getBotMasterRoles(guild.id)
     );
+
+    // Checked before anything is saved, so a bad prefix does not leave a half-saved form.
+    // Left out of the request = unchanged; '' = back to the instance default.
+    let newPrefix;
+    if (req.body.commandPrefix !== undefined) {
+      if (typeof req.body.commandPrefix !== 'string') {
+        return res.status(400).json({ error: 'The command prefix must be text.' });
+      }
+      newPrefix = req.body.commandPrefix.trim();
+      if (newPrefix !== '') {
+        if (platformOfGuild(guild) === 'discord') {
+          return res
+            .status(400)
+            .json({ error: 'A command prefix is for Fluxer servers; Discord uses slash commands.' });
+        }
+        const prefixError = commandPrefixError(newPrefix);
+        if (prefixError) return res.status(400).json({ error: prefixError });
+      }
+    }
 
     const channelId = String(req.body.modlogChannelId ?? '').trim();
     const storedModlog = (await getGuildSettings(guild.id))?.modlog_channel_id ?? '';
@@ -2122,10 +2158,21 @@ router.post(
     else if (/^[0-9a-fA-F]{6}$/.test(hex)) await setEmbedColor(guild.id, parseInt(hex, 16));
     else return res.status(400).json({ error: 'embedColor must be a 6-digit hex value' });
 
+    let detail = 'saved';
+    if (newPrefix !== undefined && platformOfGuild(guild) !== 'discord') {
+      const before = await getCommandPrefix(guild.id);
+      if ((newPrefix || null) !== before) {
+        await setCommandPrefix(guild.id, newPrefix || null);
+        detail = newPrefix
+          ? `saved; command prefix set to ${newPrefix}`
+          : `saved; command prefix reset to the default (${config.commandPrefix})`;
+      }
+    }
+
     await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: 'settings:server',
-      detail: 'saved',
+      detail,
     });
     res.json({ ok: true });
   })

@@ -3,6 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { registerFluxerModuleEvents } from '../src/bot/fluxerModuleEvents.js';
+import { moderationOutcome } from '../src/modules/lib/messageModeration.js';
+import { log } from '../src/lib/log.js';
 
 const RAW = '900000000000000060';
 const KEY = `fluxer:${RAW}`;
@@ -210,6 +212,61 @@ test('a command message reaches messageCreateAny and the moderation-only command
     'messageCreateAny:!afk lunsj',
     'messageCreateAny:hello',
   ]);
+});
+
+// isCommand may be async (a server's own prefix is looked up): the answer is awaited.
+function commandSetup(isCommand) {
+  const calls = [];
+  const client = new EventEmitter();
+  client.user = { id: BOT };
+  client.channels = new Map();
+  client.users = { fetch: async () => null };
+  registerFluxerModuleEvents(client, {
+    dispatch: async (event, key, message) => calls.push(`${event}:${message.content}`),
+    isCommand,
+  });
+  const fire = async (message) => {
+    client.emit('messageCreate', message);
+    await new Promise((r) => setTimeout(r, 20));
+  };
+  return { calls, fire };
+}
+
+test('an isCommand that answers true later still makes it a command message', async () => {
+  const { calls, fire } = commandSetup(async (m) => {
+    await new Promise((r) => setTimeout(r, 5));
+    return m.content.startsWith('?');
+  });
+  await fire({ guildId: RAW, content: '?afk', author: { id: 'u1', bot: false } });
+  await fire({ guildId: RAW, content: 'hello', author: { id: 'u1', bot: false } });
+  assert.deepEqual(calls, [
+    'messageCreateAny:?afk',
+    'commandMessageCreate:?afk',
+    'messageCreateAny:hello',
+    'messageCreate:hello',
+  ]);
+});
+
+test('an isCommand that rejects is logged, escapes nowhere and does not hold moderation back', async (t) => {
+  const logged = t.mock.method(log, 'error', () => {});
+  const unhandled = [];
+  const onUnhandled = (err) => unhandled.push(err);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    const { calls, fire } = commandSetup(async () => {
+      throw new Error('lookup failed');
+    });
+    const message = { guildId: RAW, content: '?afk', author: { id: 'u1', bot: false } };
+    await fire(message);
+    assert.equal(logged.mock.callCount(), 1);
+    assert.match(String(logged.mock.calls[0].arguments[1]), /messageCreate handler failed/);
+    assert.deepEqual(calls, ['messageCreateAny:?afk'], 'not dispatched as chat or as a command');
+    assert.equal(await moderationOutcome(message), false, 'the command router is not kept waiting');
+    await new Promise((r) => setImmediate(r));
+    assert.deepEqual(unhandled, []);
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
 });
 
 test('voice state changes from the tracker reach the modules keyed by the fluxer guild', async () => {

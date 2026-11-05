@@ -2,7 +2,7 @@ import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setGuildModule } from '../src/db/modules.js';
-import { setModlogChannel } from '../src/db/guildSettings.js';
+import { setCommandPrefix, setEmbedColor, setModlogChannel } from '../src/db/guildSettings.js';
 import { createReminder } from '../src/db/scheduledMessages.js';
 import { exportGuildConfig } from '../src/db/exportConfig.js';
 
@@ -25,6 +25,7 @@ test('exportGuildConfig captures settings, modules and scheduled messages, exclu
   assert.equal(dump.sylo, 'guild-config-export');
   assert.equal(dump.guildId, G);
   assert.equal(dump.settings.modlog_channel_id, '123456789012345678');
+  assert.equal(dump.settings.command_prefix, null);
 
   const counting = dump.modules.find((m) => m.moduleId === 'counting');
   assert.ok(counting?.enabled);
@@ -34,4 +35,13 @@ test('exportGuildConfig captures settings, modules and scheduled messages, exclu
   assert.equal(dump.scheduledMessages[0].intervalMinutes, 1440);
 
   assert.ok(!('warnings' in dump) && !('leveling' in dump), 'no member data in the export');
+});
+
+test('the export carries the embed colour and the command prefix', async () => {
+  const g = '800000000000000002';
+  await setCommandPrefix(g, '?');
+  await setEmbedColor(g, 0x112233);
+  const dump = await exportGuildConfig(g);
+  assert.equal(dump.settings.command_prefix, '?');
+  assert.equal(dump.settings.embed_color, 0x112233);
 });

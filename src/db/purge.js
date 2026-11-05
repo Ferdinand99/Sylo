@@ -10,6 +10,7 @@
 // deleted on the next attempt — self-healing, not a race. So both run as a
 // plain sequence of awaited statements instead of a transaction.
 import { prepare } from './driver.js';
+import { clearCommandPrefixCache } from './guildSettings.js';
 
 // This file owns no table of its own — every DELETE below targets a table
 // bootstrapped by its owning file. But `registerPostgresBootstrap()` only
@@ -125,6 +126,7 @@ export async function purgeGuild(guildId) {
   await eventParticipantStmt.run(guildId); // before `guild_events`, which the subquery reads
   await suggestionVoteStmt.run(guildId); // before `guild_suggestions`, which the subquery reads
   for (const stmt of simpleStmts) await stmt.run(guildId);
+  clearCommandPrefixCache(guildId);
 }
 
 // --- per-user erasure (for /forget) -----------------------------------------

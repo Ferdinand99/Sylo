@@ -9,7 +9,7 @@ import { config } from '../config.js';
 import { setClientFor } from '../runtime.js';
 import { log } from '../lib/log.js';
 import { loadCommands } from './loadCommands.js';
-import { attachPrefixCommands, isCommandMessage } from './framework/router.js';
+import { attachPrefixCommands, isCommandMessage, prefixFor } from './framework/router.js';
 import { installFluxerCompat } from '../platform/compat.js';
 import { setFluxerInstance } from '../platform/instance.js';
 import { installSendBridge } from '../platform/fluxerSendBridge.js';
@@ -95,7 +95,9 @@ export async function startFluxerBot(opts = {}) {
   client.once('ready', () =>
     log.info('fluxer', `Logged in as ${client.user?.username} - serving ${client.guilds.cache.size} guild(s)`)
   );
-  const isCommand = (message) => isCommandMessage(message, { commands, prefix });
+  // The prefix is the server's own when it set one (see prefixFor), else the instance default.
+  const isCommand = async (message) =>
+    isCommandMessage(message, { commands, prefix: await prefixFor(message, prefix) });
   registerFluxerModuleEvents(client, { voice, isCommand });
   registerDmTickets(client, { isCommand }); // a DM to the bot opens a ticket, as on Discord
   attachPrefixCommands(client, { commands, prefix });

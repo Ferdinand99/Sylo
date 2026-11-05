@@ -15,7 +15,7 @@ const keyOf = (rawGuildId) => (rawGuildId ? makePlatformGuildId('fluxer', rawGui
 
 /**
  * @param {import('node:events').EventEmitter & { user?: any, channels?: any, users?: any }} client
- * @param {{ dispatch?: typeof realDispatch, purge?: typeof purgeGuild, isCommand?: (message: any) => boolean, voice?: { track: Function } }} [opts]
+ * @param {{ dispatch?: typeof realDispatch, purge?: typeof purgeGuild, isCommand?: (message: any) => boolean | Promise<boolean>, voice?: { track: Function } }} [opts]
  */
 export function registerFluxerModuleEvents(
   client,
@@ -89,7 +89,11 @@ export function registerFluxerModuleEvents(
     const work = (async () => {
       await send('messageCreateAny', message.guildId, message);
       if (human)
-        await send(isCommand(message) ? 'commandMessageCreate' : 'messageCreate', message.guildId, message);
+        await send(
+          (await isCommand(message)) ? 'commandMessageCreate' : 'messageCreate',
+          message.guildId,
+          message
+        );
     })();
     // The command router waits for this before running a command (see messageModeration.js).
     if (human) beginModeration(message, work);

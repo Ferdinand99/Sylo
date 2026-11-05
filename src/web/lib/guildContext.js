@@ -1,6 +1,7 @@
 // Shared view-model for the per-guild control panel.
 import { guildByKey, keyedGuild, rawGuildId } from '../../platform/platformOf.js';
 import { platformInfo } from '../../platform/modulePlatformNotes.js';
+import { guildCommandPrefix } from '../../platform/commandPrefix.js';
 import { MODULES, missingIntents } from '../../modules/registry.js';
 import { getGuildModules } from '../../db/modules.js';
 import { openTicketCount } from '../../db/tickets.js';
@@ -28,7 +29,10 @@ export function assignableRoles(guild) {
  */
 export async function baseContext(guild, panel) {
   const enabledById = new Map((await getGuildModules(guild.id)).map((m) => [m.id, m.enabled]));
-  const { platform, capabilities, webAppUrl, commandPrefix } = platformInfo(guild);
+  const { platform, capabilities, webAppUrl, commandPrefix } = platformInfo(
+    guild,
+    await guildCommandPrefix(guild)
+  );
   const modules = MODULES.map((m) => ({
     id: m.id,
     name: m.name,

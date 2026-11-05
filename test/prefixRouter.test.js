@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { SlashCommandBuilder, InteractionContextType, PermissionFlagsBits } from 'discord.js';
 import { handleMessage, splitCommand } from '../src/bot/framework/router.js';
 import { setCommandOverride } from '../src/db/commandOverrides.js';
+import { setCommandPrefix } from '../src/db/guildSettings.js';
+import { runtime } from '../src/runtime.js';
 import { beginModeration, markModerated } from '../src/modules/lib/messageModeration.js';
 
 const RAW_GUILD = '900000000000000080';
@@ -196,4 +198,133 @@ test('a command whose message moderation already acted on is not run', async () 
   beginModeration(fine.message, Promise.resolve());
   await handleMessage(fine.message, { commands: cmds, prefix: '!' });
   assert.equal(ran, 1);
+});
+
+// --- a prefix per server ------------------------------------------------------------------
+
+// The server's own prefix is stored under the guild key, so these messages come from a guild whose
+// client is the registered Fluxer client (as the SDK's are).
+const KEY = `fluxer:${RAW_GUILD}`;
+function fluxerMessage(content, { inGuild = true } = {}) {
+  const made = fakeMessage({ content, inGuild });
+  runtime.clients.fluxer = made.message.client;
+  if (made.message.guild) made.message.guild.client = made.message.client;
+  return made;
+}
+const withPrefix = async (prefix, fn) => {
+  await setCommandPrefix(KEY, prefix);
+  try {
+    await fn();
+  } finally {
+    await setCommandPrefix(KEY, null);
+    runtime.clients.fluxer = null;
+  }
+};
+
+test("a server's own prefix runs commands, and the instance default no longer does there", async () => {
+  await withPrefix('?', async () => {
+    const { commands, calls } = setup();
+    await run(fluxerMessage('?ping').message, commands);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].guildId, KEY);
+    await run(fluxerMessage('!ping').message, commands);
+    assert.equal(calls.length, 1, 'the default prefix is not used on a server that set its own');
+  });
+});
+
+test('a server without a prefix of its own uses the instance default', async () => {
+  const { commands, calls } = setup();
+  try {
+    await run(fluxerMessage('!ping').message, commands);
+    assert.equal(calls.length, 1);
+    await run(fluxerMessage('?ping').message, commands);
+    assert.equal(calls.length, 1);
+  } finally {
+    runtime.clients.fluxer = null;
+  }
+});
+
+test('a mention works on a server with its own prefix, also one that would swallow it', async () => {
+  for (const prefix of ['?', '<', '<@', '@']) {
+    await withPrefix(prefix, async () => {
+      const { commands, calls } = setup();
+      await run(fluxerMessage(`<@${BOT_ID}> ping`).message, commands);
+      assert.equal(calls.length, 1, prefix);
+    });
+  }
+});
+
+test('in a DM there is no server: the default prefix applies', async () => {
+  await withPrefix('?', async () => {
+    const { commands, calls } = setup();
+    await run(fluxerMessage('!ping', { inGuild: false }).message, commands);
+    assert.equal(calls.length, 1);
+    await run(fluxerMessage('?ping', { inGuild: false }).message, commands);
+    assert.equal(calls.length, 1, "a server's prefix does not leak into a DM");
+  });
+});
+
+test("the usage hint after a bad command shows the server's prefix", async () => {
+  await withPrefix('?', async () => {
+    const { commands, calls } = setup();
+    const { message, replies } = fluxerMessage('?say');
+    await run(message, commands);
+    assert.equal(calls.length, 0);
+    assert.match(replies[0].content, /`\?say <who> \[text\]`/);
+  });
+});
+
+test("isCommandMessage follows the server's prefix through prefixFor", async () => {
+  const { isCommandMessage, prefixFor } = await import('../src/bot/framework/router.js');
+  const { commands } = setup();
+  await withPrefix('?', async () => {
+    const check = async (content) => {
+      const { message } = fluxerMessage(content);
+      return isCommandMessage(message, {
+        commands,
+        prefix: await prefixFor(message, '!'),
+        botId: BOT_ID,
+      });
+    };
+    assert.equal(await check('?ping'), true);
+    assert.equal(await check('!ping'), false);
+    assert.equal(await check(`<@${BOT_ID}> ping`), true);
+  });
+});
+
+test('the prefix lookup is cached: a message does not query the database once the prefix is known', async () => {
+  const { db } = await import('../src/db/index.js');
+  await withPrefix('?', async () => {
+    const { commands, calls } = setup();
+    await run(fluxerMessage('?ping').message, commands); // warm
+    db.prepare('UPDATE guild_settings SET command_prefix = ? WHERE guild_id = ?').run('%', KEY);
+    await run(fluxerMessage('?ping').message, commands);
+    assert.equal(calls.length, 2, 'the cached prefix answered, not the changed row');
+    await setCommandPrefix(KEY, '%'); // a save refreshes the cache
+    await run(fluxerMessage('%ping').message, commands);
+    assert.equal(calls.length, 3);
+  });
+});
+
+test('a guild that is not cached (only a guild id on the message) still gets its prefix', async () => {
+  await withPrefix('?', async () => {
+    const { commands, calls } = setup();
+    const { message } = fluxerMessage('?ping');
+    message.guildId = RAW_GUILD;
+    message.guild = null;
+    await run(message, commands);
+    assert.equal(calls.length, 1);
+    const other = fluxerMessage('!ping').message;
+    other.guildId = RAW_GUILD;
+    other.guild = null;
+    await run(other, commands);
+    assert.equal(calls.length, 1, 'the default prefix does not apply there either');
+  });
+});
+
+test('splitCommand tries the mention before the prefix', () => {
+  assert.deepEqual(splitCommand(`<@${BOT_ID}> ping`, '<', BOT_ID), { name: 'ping', rest: '' });
+  assert.deepEqual(splitCommand('<ping', '<', BOT_ID), { name: 'ping', rest: '' });
+  assert.deepEqual(splitCommand('??ping', '??', BOT_ID), { name: 'ping', rest: '' });
+  assert.equal(splitCommand('?ping', '??', BOT_ID), null);
 });

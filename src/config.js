@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { resolveSessionSecret } from './lib/sessionSecret.js';
 import { normalisePrivateKey } from './lib/appStoreConnect.js';
 import { checkPigeonUrl } from './lib/pigeonUrl.js';
+import { commandPrefixError } from './lib/commandPrefix.js';
 
 /**
  * Read a required string env var, or exit with a clear message.
@@ -272,10 +273,12 @@ const fluxerClientId = fluxerToken ? required('FLUXER_CLIENT_ID') : null;
 const fluxerWebUrl = optionalOrNull('FLUXER_WEB_URL')?.replace(/\/+$/, '') ?? null;
 const fluxerApiUrl = optionalOrNull('FLUXER_API_URL')?.replace(/\/+$/, '') ?? null;
 
-// Fluxer has no slash commands yet, so commands run from chat as <prefix>name.
+// Fluxer has no slash commands yet, so commands run from chat as <prefix>name. This is the
+// default for the whole instance; a server can set its own in the dashboard.
 const commandPrefix = optional('COMMAND_PREFIX', '!');
-if (/\s/.test(commandPrefix) || commandPrefix.length > 5) {
-  console.error('[config] COMMAND_PREFIX must be 1-5 characters with no spaces.');
+const commandPrefixProblem = commandPrefixError(commandPrefix);
+if (commandPrefixProblem) {
+  console.error(`[config] COMMAND_PREFIX: ${commandPrefixProblem}`);
   process.exit(1);
 }
 
