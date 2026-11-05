@@ -913,12 +913,16 @@ a.v2-stat.is-link:focus-visible {
   flex: none;
   white-space: nowrap;
 }
-/* Three compact tiles side by side on a phone, never two and one. */
+/* Compact tiles on a phone: a 3-tile strip (.v2-stat-strip-3) keeps its three side by side, never two
+   and one; any other strip (Health's four) goes two by two. */
 @media (max-width: 560px) {
   .v2-stat-strip {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     margin-bottom: 28px;
+  }
+  .v2-stat-strip.v2-stat-strip-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .v2-stat-strip .v2-stat {
     padding: 12px 10px;

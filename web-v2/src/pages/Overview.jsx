@@ -200,7 +200,7 @@ export default function Overview() {
 
       <p className="v2-field-hint">Switch a module on or off here, or open it to change its settings.</p>
 
-      <div className="v2-stat-strip">
+      <div className="v2-stat-strip v2-stat-strip-3">
         <div className="v2-stat">
           <strong>
             {formatCount(enabledCount)}/{formatCount(toggleCards.length)}

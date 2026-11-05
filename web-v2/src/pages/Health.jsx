@@ -234,7 +234,7 @@ export default function Health() {
 
       {notice ? <p className="v2-note">{notice}</p> : null}
 
-      <div className="v2-stat-strip v2-stat-strip-stack">
+      <div className="v2-stat-strip v2-stat-strip-3 v2-stat-strip-stack">
         <div className="v2-stat">
           <strong>{d.ready ? 'Online' : 'Offline'}</strong>
           <span>
