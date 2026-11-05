@@ -258,6 +258,8 @@ public struct SavedComposedMessage: Decodable, Sendable, Equatable {
 public struct UnpublishedComposedMessage: Decodable, Sendable, Equatable {
     public let record: ComposedMessageRecord
 
+    public init(record: ComposedMessageRecord) { self.record = record }
+
     private enum CodingKeys: String, CodingKey { case rec }
 
     public init(from decoder: any Decoder) throws {

@@ -254,7 +254,10 @@ struct ComposedMessageModelTests {
                         id: id, name: save.name.isEmpty ? "Untitled embed" : save.name, channelId: save.channelId,
                         messageId: save.publish ? "777" : nil, spec: save.spec),
                     status: save.publish ? .sent : .saved)
-            case is Endpoints.UnpublishComposedMessage, is Endpoints.DeleteComposedMessage:
+            case is Endpoints.UnpublishComposedMessage:
+                return UnpublishedComposedMessage(
+                    record: ComposedMessageRecord(id: 7, name: "Rules", channelId: "1", messageId: nil, spec: ComposedSpec()))
+            case is Endpoints.DeleteComposedMessage:
                 return OKResponse()
             default:
                 throw NetworkError.notFound
