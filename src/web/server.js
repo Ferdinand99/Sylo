@@ -251,7 +251,8 @@ export function createApp() {
 
   // Nothing answered: a page of our own instead of Express's bare "Cannot GET". Code that asks for
   // JSON (or anything under /api/) gets JSON. Behind requireAuth like the routes above, so a
-  // signed-out visitor is sent to sign in first, as for every other address.
+  // signed-out visitor is sent to sign in first, as for every other address; whoever sees this
+  // page is signed in (or on an open Sylo), so it has the dashboard footer and way back.
   app.use((req, res) => {
     if (req.originalUrl.startsWith('/api/') || !req.accepts('html')) {
       return res.status(404).json({ error: 'Not found' });
@@ -260,7 +261,6 @@ export function createApp() {
       title: 'Page not found',
       heading: 'Page not found',
       message: "There's nothing at this address.",
-      publicPage: true,
     });
   });
 

@@ -948,9 +948,6 @@ a {
 /* The Overview page's search bar gains a "Select" button alongside it for
    bulk enable/disable — the input gives up its own bottom margin to the
    row wrapper so the button stays vertically centered with it. */
-.v2-search-row {
-  margin-bottom: 16px;
-}
 .v2-search-row .v2-search {
   flex: 1;
   margin-bottom: 0;
@@ -2293,12 +2290,6 @@ input[type='radio']:disabled {
 }
 .v2-am-rule:last-child {
   border-bottom: none;
-}
-.v2-am-rule-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
 }
 .v2-am-params {
   margin-top: 10px;

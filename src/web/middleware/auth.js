@@ -400,13 +400,16 @@ async function attachAccount(req, _res, next) {
 
 const redirectUri = (req, provider) => `${baseUrl(req)}${provider.callbackPath}`;
 
-function loginError(res, message, status = 400) {
+function loginError(req, res, message, status = 400) {
+  // Someone already signed in was connecting a second account: back to the Account page, where
+  // they started. Anyone else gets the sign-in page again.
+  const signedIn = Boolean(req.account);
   return res.status(status).render('error', {
     title: 'Sign-in failed',
     heading: 'Sign-in failed',
     message,
-    backHref: '/auth/login',
-    backLabel: 'Try again',
+    backHref: signedIn ? '/v2/account' : '/auth/login',
+    backLabel: signedIn ? 'Back to your account' : 'Try again',
   });
 }
 
@@ -527,9 +530,10 @@ export function mountAuth(app) {
         req.session.oauthState = undefined;
         if (error || !code || !state || state !== expected || startedOn !== provider.platform) {
           return loginError(
+            req,
             res,
             error === 'access_denied'
-              ? `Login was cancelled on ${provider.label}.`
+              ? `Sign-in was cancelled on ${provider.label}.`
               : 'The login response was invalid or expired. Please try again.'
           );
         }
@@ -540,7 +544,7 @@ export function mountAuth(app) {
           await completeOAuth(req, provider, identity);
         } catch (err) {
           if (err instanceof IdentityLinkedError || err instanceof PlatformAlreadyLinkedError) {
-            return loginError(res, err.message, 409);
+            return loginError(req, res, err.message, 409);
           }
           throw err;
         }

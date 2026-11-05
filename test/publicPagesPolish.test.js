@@ -26,7 +26,9 @@ test('an unknown address gets the Sylo 404 page, not "Cannot GET"', async () => 
   assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1"/);
   assert.match(html, /Page not found/);
   assert.match(html, /There&#39;s nothing at this address\./);
-  assert.match(html, /Powered by Sylo/);
+  // Only someone signed in (or on an open Sylo) gets here, so it is the dashboard's footer and way back.
+  assert.doesNotMatch(html, /Powered by Sylo/);
+  assert.match(html, /Back to the dashboard/);
   assert.deepEqual(plainProblems(html), []);
 });
 

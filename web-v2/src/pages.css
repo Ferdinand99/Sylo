@@ -915,6 +915,7 @@ a.v2-stat.is-link:focus-visible {
 /* "Bulk edit" is as tall as the search field next to it. */
 .v2-search-row {
   align-items: stretch;
+  margin-bottom: 16px;
 }
 .v2-search-row > .v2-btn-ghost {
   flex: none;

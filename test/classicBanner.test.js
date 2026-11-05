@@ -85,6 +85,17 @@ test('the error page from a failed login (auth.js) is plain', async () => {
   assertPlain(text, 'login failed');
 });
 
+test('a failed connect while signed in leads back to the Account page', async () => {
+  const b = browser();
+  await signIn(b, 'discord');
+  const res = await b.get('/auth/discord/callback?code=x&state=not-the-state');
+  assert.ok(res.status >= 400 && res.status < 500, `status ${res.status}`);
+  const text = await res.text();
+  assert.match(text, /Sign-in failed/);
+  assert.match(text, /<a class="btn btn-ghost" href="\/v2\/account">Back to your account<\/a>/);
+  assertPlain(text, 'connect failed');
+});
+
 test('an unknown address: signed out goes to sign-in, signed in gets the 404 page with the policy', async () => {
   const out = await browser().get('/no/such/page', { headers: { accept: 'text/html' } });
   assert.equal(out.status, 302);
