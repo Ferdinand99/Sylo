@@ -13,10 +13,9 @@ struct AutomodSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Auto-moderation", model: model) { $settings, page in
+            ModuleIntro("Each check scans new and edited messages and acts on the first match. Administrators are always skipped, and Sylo never acts on other bots.")
+
             Section {
-                Text("Each check scans new and edited messages and acts on the first match. Administrators are always skipped, and Sylo never acts on other bots.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
                 if page.modlogChannelId.isEmpty {
                     Label("No mod-log channel is set, so actions aren't logged. Set one in the server's general settings.",
                           systemImage: "exclamationmark.triangle")

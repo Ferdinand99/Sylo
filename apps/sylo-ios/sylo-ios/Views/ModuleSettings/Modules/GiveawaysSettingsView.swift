@@ -12,11 +12,7 @@ struct GiveawaysSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Giveaways", model: model) { $settings, page in
-            Section {
-                Text("Staff start giveaways with /giveaway start; members join with the Enter button. Winners are drawn automatically at the end time.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Staff start giveaways with /giveaway start; members join with the Enter button. Winners are drawn automatically at the end time.")
 
             Section {
                 Picker("Ping", selection: $settings.ping) {

@@ -13,11 +13,7 @@ struct StickySettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Sticky Messages", model: model) { $settings, page in
-            Section {
-                Text("Each channel can have one sticky message: text, an embed, or both. It is re-posted at the bottom whenever someone else writes in that channel.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Each channel can have one sticky message: text, an embed, or both. It is re-posted at the bottom whenever someone else writes in that channel.")
 
             // One section per sticky, so each control gets its own row.
             ForEach($settings.stickies) { $sticky in

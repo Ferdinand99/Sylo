@@ -13,11 +13,7 @@ struct WelcomeChannelSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Welcome Channel", model: model) { $settings, page in
-            Section {
-                Text("Build one rich message for a dedicated read-only channel. Saving keeps it as a draft; publish it to the channel from the web dashboard.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Build one rich message for a dedicated read-only channel. Saving keeps it as a draft; publish it to the channel from the web dashboard.")
 
             Section {
                 ChannelPicker(title: "Channel", selection: $settings.channelId, channels: page.channels,

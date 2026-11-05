@@ -13,11 +13,7 @@ struct VerificationSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Verification", model: model) { $settings, page in
-            Section {
-                Text("Sylo posts a message with a Verify button in the chosen channel. New members tap it to get the verified role. In captcha mode the button first sends them a private link to a Cloudflare Turnstile check.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Sylo posts a message with a Verify button in the chosen channel. New members tap it to get the verified role. In captcha mode the button first sends them a private link to a Cloudflare Turnstile check.")
 
             Section {
                 Picker("Mode", selection: $settings.mode) {
@@ -37,7 +33,7 @@ struct VerificationSettingsView: View {
                 ChannelPicker(title: "Verify channel", selection: $settings.channelId, channels: page.channels,
                               noneTitle: "Choose a channel")
             } footer: {
-                Text("The role is granted on success. Sylo's own role must be above it.")
+                Text("The role is granted on success. Sylo's own role must be higher than this one in Server Settings › Roles, or it can't give it out.")
             }
 
             Section("Message title") {

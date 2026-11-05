@@ -13,11 +13,7 @@ struct LevelingSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Leveling", model: model) { $settings, page in
-            Section {
-                Text("Members earn 15–25 XP per message (once per cooldown), plus optional voice XP, scaled by the XP rate and any multipliers below. The public web leaderboard is switched on the Leaderboard page.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Members earn 15–25 XP per message (once per cooldown), plus optional voice XP, scaled by the XP rate and any multipliers below. The public web leaderboard is switched on the Leaderboard page.")
 
             Section {
                 Picker("Announcement", selection: $settings.announce) {

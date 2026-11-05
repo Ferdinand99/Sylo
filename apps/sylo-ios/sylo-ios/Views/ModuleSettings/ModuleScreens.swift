@@ -11,6 +11,7 @@ enum ModuleScreens {
         "counting", "free-games", "giveaways", "honeypot", "invite-tracker", "kick-alerts", "leveling",
         "logging", "moderation", "polls", "rss", "server-stats", "starboard", "sticky", "temp-voice",
         "tickets", "twitch-alerts", "verification", "welcome", "welcome-channel", "youtube-alerts",
+        "events", "suggestions", "temp-roles", "auto-threads", "quote-board",
     ]
 
     @ViewBuilder
@@ -35,12 +36,17 @@ enum ModuleScreens {
         case "starboard": StarboardSettingsView(server: server, session: session)
         case "giveaways": GiveawaysSettingsView(server: server, session: session)
         case "polls": PollsSettingsView(server: server, session: session)
+        case "events": EventsSettingsView(server: server, session: session)
+        case "suggestions": SuggestionsSettingsView(server: server, session: session)
+        case "temp-roles": TempRolesSettingsView(server: server, session: session)
+        case "quote-board": QuoteBoardSettingsView(server: server, session: session)
         // Messages and channels
         case "autoresponder": AutoresponderSettingsView(server: server, session: session)
         case "auto-react": AutoReactSettingsView(server: server, session: session)
         case "sticky": StickySettingsView(server: server, session: session)
         case "temp-voice": TempVoiceSettingsView(server: server, session: session)
         case "server-stats": ServerStatsSettingsView(server: server, session: session)
+        case "auto-threads": AutoThreadsSettingsView(server: server, session: session)
         // Alerts
         case "twitch-alerts": TwitchAlertsSettingsView(server: server, session: session)
         case "kick-alerts": KickAlertsSettingsView(server: server, session: session)

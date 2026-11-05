@@ -13,11 +13,7 @@ struct YoutubeAlertsSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("YouTube Alerts", model: model) { $settings, page in
-            Section {
-                Text("Add a channel by URL or @handle; Sylo looks it up when you save. New uploads come from YouTube's public feed, and going live is spotted on the channel's live page. Checks run about every 3 minutes. Message placeholders: {name} {title} {url}.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Add a channel by URL or @handle; Sylo looks it up when you save. New uploads come from YouTube's public feed, and going live is spotted on the channel's live page. Checks run about every 3 minutes. Message placeholders: {name} {title} {url}.")
 
             // One section per channel, so each control gets its own row.
             ForEach($settings.alerts) { $alert in
