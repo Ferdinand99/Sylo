@@ -32,7 +32,7 @@ const FLUXER_NOTES = {
   tickets: () =>
     'DM tickets work as on Discord. Any button or dropdown in a ticket message is shown as reactions on Fluxer.',
   'custom-commands': ({ prefix }) =>
-    `Fluxer has no slash commands, so a custom command runs from chat as ${prefix}name (extra text fills {args}). The prefix is set with COMMAND_PREFIX. Nothing is registered with Fluxer.`,
+    `Fluxer has no slash commands, so a custom command runs from chat as ${prefix}name (extra text fills {args}). The prefix is set per server in Settings. Nothing is registered with Fluxer.`,
 };
 
 /**
@@ -40,21 +40,22 @@ const FLUXER_NOTES = {
  * @param {string} moduleId
  * @returns {string | null}
  */
-export function modulePlatformNote(platform, moduleId) {
+export function modulePlatformNote(platform, moduleId, prefix = config.commandPrefix) {
   if (platform !== 'fluxer') return null;
-  return FLUXER_NOTES[moduleId]?.({ prefix: config.commandPrefix }) ?? null;
+  return FLUXER_NOTES[moduleId]?.({ prefix }) ?? null;
 }
 
 /**
  * What the dashboard needs to know about a guild's platform.
  * @param {any} guild
+ * @param {string} [prefix]  the Fluxer server's effective prefix (see commandPrefix.js); the instance default when omitted
  * @returns {{ platform: 'discord' | 'fluxer', capabilities: Record<string, boolean>, notes: Record<string, string>, commandPrefix: string, webAppUrl: string }}
  */
-export function platformInfo(guild) {
+export function platformInfo(guild, prefix = config.commandPrefix) {
   const platform = platformOfGuild(guild);
   const notes = {};
   for (const id of Object.keys(FLUXER_NOTES)) {
-    const note = modulePlatformNote(platform, id);
+    const note = modulePlatformNote(platform, id, prefix);
     if (note) notes[id] = note;
   }
   return {
@@ -62,7 +63,7 @@ export function platformInfo(guild) {
     capabilities: { ...CAPABILITIES[platform] },
     notes,
     // How a command is written in help text, and where a message link points.
-    commandPrefix: platform === 'fluxer' ? config.commandPrefix : '/',
+    commandPrefix: platform === 'fluxer' ? prefix : '/',
     webAppUrl: platform === 'fluxer' ? fluxerEndpoints().webapp : 'https://discord.com',
   };
 }

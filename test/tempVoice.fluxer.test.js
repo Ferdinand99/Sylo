@@ -8,6 +8,7 @@ import { setGuildModule } from '../src/db/modules.js';
 import { db } from '../src/db/index.js';
 import { getTempChannel, addTempChannel } from '../src/db/tempVoice.js';
 import { sweepTempChannels } from '../src/modules/tempVoice.js';
+import { setCommandPrefix } from '../src/db/guildSettings.js';
 
 // A Fluxer guild cannot move a member into a new channel (a bot move leaves them
 // connected but invisible — see platform/capabilities.js), so temp voice creates the
@@ -24,7 +25,7 @@ function world({ moveRights = false } = {}) {
   NEW_CHANNEL = `70000000000000009${seq}`;
   const client = {};
   runtime.clients.fluxer = client;
-  const log = { created: [], dms: [], moves: [], deleted: [] };
+  const log = { created: [], dms: [], moves: [], deleted: [], sent: [] };
   const channelObjects = new Map([[HUB, { id: HUB, parentId: null }]]);
   const guild = {
     id: RAW,
@@ -41,6 +42,10 @@ function world({ moveRights = false } = {}) {
         id: NEW_CHANNEL,
         members: new Map(),
         delete: async (reason) => log.deleted.push(reason),
+        send: async (o) => {
+          log.sent.push(o);
+          return { pin: async () => {} };
+        },
       };
       channelObjects.set(NEW_CHANNEL, ch);
       return ch;
@@ -132,4 +137,29 @@ test('a channel nobody joined survives the grace period and is then removed', as
   await sweepTempChannels();
   assert.equal(log.deleted.length, 1);
   assert.equal(await getTempChannel(NEW_CHANNEL), null);
+});
+
+test("the pinned controls of a temp voice text channel use the server's command prefix", async () => {
+  await setGuildModule(KEY, 'temp-voice', {
+    enabled: true,
+    config: { hubs: [{ hubChannelId: HUB, textChannel: { enabled: true, pinUsages: true } }] },
+  });
+  const controls = async () => {
+    const { guild, member, log } = world();
+    await joinHub(guild, member);
+    return log.sent[0].embeds[0].description;
+  };
+  assert.match(
+    await controls(),
+    /`!voice-lock`/,
+    'the instance default (COMMAND_PREFIX) without a server prefix'
+  );
+  await setCommandPrefix(KEY, '?');
+  try {
+    const text = await controls();
+    assert.match(text, /`\?voice-lock`/);
+    assert.doesNotMatch(text, /`!voice-/);
+  } finally {
+    await setCommandPrefix(KEY, null);
+  }
 });

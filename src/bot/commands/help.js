@@ -14,10 +14,12 @@ import {
 } from 'discord.js';
 import { config } from '../../config.js';
 import { respondSafely } from '../../lib/discordErrors.js';
+import { interactionCommandPrefix } from '../../platform/commandPrefix.js';
 
 const COLOR = 0x5b7cfa;
-const OVERVIEW_DESCRIPTION =
-  'Slash commands are grouped by category below. Server features — moderation, logging, ' +
+const overviewDescription = (prefix) =>
+  `${prefix === '/' ? 'Slash commands are' : 'Commands are'} grouped by category below. ` +
+  'Server features — moderation, logging, ' +
   'tickets, reaction roles, welcome, sticky messages, auto-moderation, counting, custom ' +
   'commands, autoresponder, auto-react, scheduled messages and leveling — are enabled and ' +
   'configured from the dashboard.';
@@ -80,11 +82,11 @@ export const GROUPS = [
 const FIELD_LIMIT = 1024;
 const COLLECTOR_TIMEOUT_MS = 5 * 60_000;
 
-function commandLines(all, names) {
+function commandLines(all, names, prefix) {
   return names
     .map((n) => all.get(n))
     .filter(Boolean)
-    .map((c) => `\`/${c.data.name}\` — ${c.data.description}`);
+    .map((c) => `\`${prefix}${c.data.name}\` — ${c.data.description}`);
 }
 
 /** Every command not covered by any GROUPS entry — empty when the list above is kept in sync. */
@@ -97,24 +99,28 @@ function truncated(value) {
   return value.length > FIELD_LIMIT ? `${value.slice(0, FIELD_LIMIT - 1)}…` : value;
 }
 
-function categories(all) {
-  const list = GROUPS.map((g, i) => ({ key: String(i), name: g.name, lines: commandLines(all, g.commands) }));
+function categories(all, prefix) {
+  const list = GROUPS.map((g, i) => ({
+    key: String(i),
+    name: g.name,
+    lines: commandLines(all, g.commands, prefix),
+  }));
   const other = otherCommands(all);
   if (other.length) {
     list.push({
       key: 'other',
       name: 'Other',
-      lines: other.map((c) => `\`/${c.data.name}\` — ${c.data.description}`),
+      lines: other.map((c) => `\`${prefix}${c.data.name}\` — ${c.data.description}`),
     });
   }
   return list.filter((c) => c.lines.length > 0);
 }
 
-function buildOverviewEmbed(cats) {
+function buildOverviewEmbed(cats, prefix) {
   return new EmbedBuilder()
     .setColor(COLOR)
     .setTitle('Sylo — help')
-    .setDescription(OVERVIEW_DESCRIPTION)
+    .setDescription(overviewDescription(prefix))
     .addFields({
       name: 'Categories',
       value: cats.map((c) => `**${c.name}** — ${c.lines.length} command(s)`).join('\n'),
@@ -165,10 +171,12 @@ export const data = new SlashCommandBuilder()
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
   const all = interaction.client.commands;
-  const cats = categories(all);
+  // `/` on Discord; on Fluxer the prefix of the server the command was typed in.
+  const prefix = await interactionCommandPrefix(interaction);
+  const cats = categories(all, prefix);
 
   await interaction.reply({
-    embeds: [buildOverviewEmbed(cats)],
+    embeds: [buildOverviewEmbed(cats, prefix)],
     components: buildComponents(cats, 'overview'),
     flags: MessageFlags.Ephemeral,
   });
@@ -185,7 +193,7 @@ export async function execute(interaction) {
     respondSafely('bot', '/help menu', async () => {
       if (i.user.id !== interaction.user.id) {
         await i.reply({
-          content: "This isn't your help menu — run `/help` yourself.",
+          content: `This isn't your help menu — run \`${prefix}help\` yourself.`,
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -193,7 +201,7 @@ export async function execute(interaction) {
       const value = i.values[0];
       const embed =
         value === 'overview'
-          ? buildOverviewEmbed(cats)
+          ? buildOverviewEmbed(cats, prefix)
           : buildCategoryEmbed(cats.find((c) => c.key === value));
       await i.update({ embeds: [embed], components: buildComponents(cats, value) });
     })

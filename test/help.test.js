@@ -2,7 +2,9 @@ import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadCommands } from '../src/bot/loadCommands.js';
-import { GROUPS, otherCommands } from '../src/bot/commands/help.js';
+import { GROUPS, otherCommands, execute } from '../src/bot/commands/help.js';
+import { runtime } from '../src/runtime.js';
+import { setCommandPrefix } from '../src/db/guildSettings.js';
 
 // Regression test for a real bug: /help crashed ("Received one or more
 // errors") once the commands left ungrouped under "Other" pushed that
@@ -63,4 +65,73 @@ test("help: GROUPS names are unique and stay within Discord's 25-option select-m
   assert.equal(new Set(names).size, names.length);
   // +1 for "Overview" and +1 for a possible "Other" option.
   assert.ok(GROUPS.length + 2 <= 25);
+});
+
+// --- the prefix in the help texts --------------------------------------------------------------
+
+const RAW = '900000000000000070';
+const KEY = `fluxer:${RAW}`;
+
+/** Runs /help (or !help) and returns the overview embed, the first page and the select-menu handler. */
+async function runHelp({ client, guild }) {
+  const commands = await loadCommands();
+  client.commands = commands;
+  const sent = { replies: [] };
+  let onCollect;
+  const message = {
+    createMessageComponentCollector: () => ({
+      on: (event, fn) => {
+        if (event === 'collect') onCollect = fn;
+      },
+    }),
+  };
+  const interaction = {
+    client,
+    guild,
+    user: { id: 'u1' },
+    reply: async (payload) => sent.replies.push(payload),
+    fetchReply: async () => message,
+    editReply: async () => {},
+  };
+  await execute(interaction);
+  const page = async (value, userId = 'u1') => {
+    const updates = [];
+    await onCollect({
+      user: { id: userId },
+      values: [value],
+      update: async (p) => updates.push(p),
+      reply: async (p) => updates.push(p),
+    });
+    return updates[0];
+  };
+  return { overview: sent.replies[0].embeds[0].data, page };
+}
+
+test("help on Discord lists slash commands; on Fluxer it lists the server's prefix", async () => {
+  const discord = await runHelp({ client: {}, guild: { id: '900000000000000071' } });
+  assert.match(discord.overview.description, /^Slash commands are grouped/);
+  assert.match((await discord.page('0')).embeds[0].data.description, /`\/help` —/);
+
+  const fluxerClient = {};
+  runtime.clients.fluxer = fluxerClient;
+  const guild = { id: RAW, client: fluxerClient };
+  try {
+    const byDefault = await runHelp({ client: fluxerClient, guild });
+    assert.match(byDefault.overview.description, /^Commands are grouped/);
+    assert.match((await byDefault.page('0')).embeds[0].data.description, /`!help` —/);
+
+    await setCommandPrefix(KEY, '?');
+    const own = await runHelp({ client: fluxerClient, guild });
+    const text = (await own.page('0')).embeds[0].data.description;
+    assert.match(text, /`\?help` —/);
+    assert.doesNotMatch(text, /`[!/]help`/);
+    assert.match((await own.page('0', 'someone-else')).content, /run `\?help` yourself/);
+
+    // A direct message has no server: the instance default.
+    const dm = await runHelp({ client: fluxerClient, guild: null });
+    assert.match((await dm.page('0')).embeds[0].data.description, /`!help` —/);
+  } finally {
+    await setCommandPrefix(KEY, null);
+    runtime.clients.fluxer = null;
+  }
 });
