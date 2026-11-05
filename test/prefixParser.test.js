@@ -173,3 +173,21 @@ test('an option given by name later in the line does not stop the reason taking 
   assert.equal(before.values.reason.value, 'Test temp ban');
   assert.equal(before.values.duration.value, '1m');
 });
+
+test('a command can name its rest option: it takes the line even when another string option follows', () => {
+  const suggest = new SlashCommandBuilder()
+    .setName('suggest')
+    .setDescription('s')
+    .addStringOption((o) => o.setName('text').setDescription('t').setRequired(true))
+    .addStringOption((o) => o.setName('title').setDescription('ti'))
+    .toJSON();
+  const vals = (line, opts) =>
+    Object.fromEntries(Object.entries(parseArgs(suggest, line, opts).values).map(([k, v]) => [k, v.value]));
+  // without the hint the first word is the text and the rest is the title (the old behaviour)
+  assert.deepEqual(vals('Add a channel'), { text: 'Add', title: 'a channel' });
+  const rest = { rest: 'text' };
+  assert.deepEqual(vals('Add a channel', rest), { text: 'Add a channel' });
+  assert.deepEqual(vals('Add a channel title:Pixels', rest), { text: 'Add a channel', title: 'Pixels' });
+  assert.deepEqual(vals('text:Add title:"A b"', rest), { text: 'Add', title: 'A b' });
+  assert.throws(() => vals('', rest), ParseError);
+});

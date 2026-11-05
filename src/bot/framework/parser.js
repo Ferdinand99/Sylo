@@ -11,7 +11,8 @@
 //   - Anything else fills the remaining options positionally, in declared order.
 //   - The last string option, when only optional options follow it, takes the rest
 //     of the line (up to the next `name:value`), so a multi-word reason needs no
-//     quotes. An earlier string option takes a single word.
+//     quotes. An earlier string option takes a single word, unless the command names it as
+//     its `rest` option (`prefixRest` export), e.g. `!suggest Add a channel title:Pixels`.
 //
 // Users, channels and roles are returned as the raw reference text; resolving
 // them against a guild is resolve.js's job.
@@ -124,9 +125,10 @@ function coerce(opt, raw) {
  * @param {{ options?: any[] }} schema  a command's `data.toJSON()`
  * @param {string} text  everything after the command name
  * @returns {{ subcommand: string | null, values: Record<string, { type: number, value: string | number | boolean }> }}
+ * @param {{ rest?: string }} [opts]  `rest`: an option that takes the rest of the line when filled positionally
  * @throws {ParseError}
  */
-export function parseArgs(schema, text) {
+export function parseArgs(schema, text, opts = {}) {
   const top = schema.options ?? [];
   const subs = top.filter((o) => o.type === T.Subcommand);
   let scope = top;
@@ -168,8 +170,11 @@ export function parseArgs(schema, text) {
     // An option given by name further along the line is spoken for too.
     const named = new Set(tokens.filter((x) => x.name).map((x) => x.name));
     const later = scope.slice(cursor).filter((o) => !(o.name in values) && !named.has(o.name));
+    // A command can name its main text option (`prefixRest`) to take the rest regardless.
     const takesRest =
-      opt.type === T.String && later.every((o) => !o.required) && !later.some((o) => o.type === T.String);
+      opt.type === T.String &&
+      (opt.name === opts.rest ||
+        (later.every((o) => !o.required) && !later.some((o) => o.type === T.String)));
     if (!takesRest) {
       set(opt, tok.value);
       continue;

@@ -106,7 +106,7 @@ export async function handleMessage(message, { commands, prefix, botId = message
   let parsed;
   let resolved;
   try {
-    parsed = parseArgs(schema, split.rest);
+    parsed = parseArgs(schema, split.rest, { rest: command.prefixRest });
     resolved = await resolveOptions(parsed.values, { client: message.client, guild: message.guild });
   } catch (err) {
     if (!(err instanceof ParseError)) throw err;
