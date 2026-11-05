@@ -49,13 +49,9 @@ struct MessagePreview: View {
 
     private var trimmedContent: String { content.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-    /// Link buttons the server would post: a link, and a label or an emoji.
+    /// Link buttons the server would post: an http(s) link, and a label or an emoji.
     private var readyLinks: [LinkButton] {
-        links.filter { link in
-            !link.url.trimmingCharacters(in: .whitespaces).isEmpty
-                && !(link.label.trimmingCharacters(in: .whitespaces).isEmpty
-                    && link.emoji.trimmingCharacters(in: .whitespaces).isEmpty)
-        }
+        links.filter(\.isReady)
     }
 
     private var avatar: some View {
@@ -277,6 +273,5 @@ struct LinkButtonPreview: View {
                 .strokeBorder(Color.syloLineStrong, lineWidth: 1)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isLink)
     }
 }

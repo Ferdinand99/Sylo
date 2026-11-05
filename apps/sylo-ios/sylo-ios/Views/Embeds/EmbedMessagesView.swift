@@ -53,7 +53,7 @@ struct EmbedMessagesView: View {
                                         Button("Unpublish", systemImage: "eye.slash") {
                                             pendingUnpublish = item
                                         }
-                                        .tint(.orange)
+                                        .tint(Color.syloWarn)
                                     }
                                 }
                                 .contextMenu {
@@ -63,8 +63,10 @@ struct EmbedMessagesView: View {
                                     Button("Delete", systemImage: "trash", role: .destructive) { pendingDelete = item }
                                 }
                                 .accessibilityAction(named: Text("Delete")) { pendingDelete = item }
-                                .accessibilityAction(named: Text("Unpublish")) {
-                                    if item.isPublished { pendingUnpublish = item }
+                                .accessibilityActions {
+                                    if item.isPublished {
+                                        Button("Unpublish") { pendingUnpublish = item }
+                                    }
                                 }
                             }
                         } header: {

@@ -50,7 +50,7 @@ struct RemindersSettingsView: View {
                         ) {
                             Task { _ = await model.toggle(reminder) }
                         }
-                        .tint(.orange)
+                        .tint(Color.syloWarn)
                     }
                     .contextMenu {
                         Button(

@@ -16,12 +16,21 @@ final class StubClients: @unchecked Sendable {
     private let lock = NSLock()
     private var handler: Handler
     private var sent: [Call] = []
+    private var gateHook: (@Sendable (any APIEndpoint) async -> Void)?
 
     init(handler: @escaping Handler) {
         self.handler = handler
     }
 
     var calls: [Call] { lock.withLock { sent } }
+
+    /// Runs after a call was recorded and answered, and holds the answer back until it returns,
+    /// so a test can make one call finish after another.
+    func setGate(_ gate: (@Sendable (any APIEndpoint) async -> Void)?) {
+        lock.withLock { gateHook = gate }
+    }
+
+    fileprivate var gate: (@Sendable (any APIEndpoint) async -> Void)? { lock.withLock { gateHook } }
 
     func setHandler(_ handler: @escaping Handler) {
         lock.withLock { self.handler = handler }
@@ -45,8 +54,10 @@ final class StubClients: @unchecked Sendable {
         let token: String?
 
         func send<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response {
+            let outcome = Result { try owner.answer(endpoint, server: server, token: token) }
+            if let gate = owner.gate { await gate(endpoint) }
             do {
-                guard let response = try owner.answer(endpoint, server: server, token: token) as? E.Response else {
+                guard let response = try outcome.get() as? E.Response else {
                     throw NetworkError.decoding("stub answered \(E.self) with the wrong type")
                 }
                 return response

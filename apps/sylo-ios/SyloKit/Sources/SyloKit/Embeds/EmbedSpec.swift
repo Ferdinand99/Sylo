@@ -111,6 +111,13 @@ public struct EmbedSpec: Codable, Sendable, Equatable, Identifiable {
             && footerText.isEmpty && !fields.contains { !$0.name.isEmpty && !$0.value.isEmpty }
     }
 
+    /// The characters Discord counts toward the 6000 of a message: title, description, author name,
+    /// footer text and the names and values of the fields that are sent.
+    public var characterCount: Int {
+        title.count + description.count + authorName.count + footerText.count
+            + fields.filter { !$0.name.isEmpty || !$0.value.isEmpty }.reduce(0) { $0 + $1.name.count + $1.value.count }
+    }
+
     /// A copy with its own identity, for duplicating an embed in a list.
     public func duplicated() -> EmbedSpec {
         EmbedSpec(

@@ -262,6 +262,11 @@ public struct ReactionRoleDraft: Sendable, Equatable, Identifiable {
         if channelId.isEmpty { return "Choose a channel." }
         let filled = rows.filter { !$0.roleId.isEmpty || !$0.emoji.isEmpty || !$0.label.isEmpty }
         if filled.isEmpty { return "Add at least one role." }
+        if filled.count > style.maxRoles {
+            let extra = filled.count - style.maxRoles
+            let other = style == .reaction ? " or switch to Buttons" : ""
+            return "This style holds at most \(style.maxRoles) roles. Remove \(extra) row\(extra == 1 ? "" : "s")\(other)."
+        }
         if filled.contains(where: { $0.roleId.isEmpty }) { return "Every row needs a role." }
         if style == .reaction, filled.contains(where: { $0.emoji.trimmingCharacters(in: .whitespaces).isEmpty }) {
             return "The Reactions style needs an emoji on every row."

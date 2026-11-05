@@ -18,6 +18,8 @@ struct CustomCommandsSettingsView: View {
             initialValue: ModulePlatformNoteModel(server: server, module: CustomCommandsPage.moduleID, session: session))
     }
 
+    private var isFluxer: Bool { server.rawValue.hasPrefix("fluxer:") }
+
     var body: some View {
         RecordScreen("Custom Commands", model: model, note: note) { page in
             ModuleIntro("Build your own commands from a list of actions that run in order: reply, post to a channel, or give or take a role. Members run them like any other command.")
@@ -29,9 +31,9 @@ struct CustomCommandsSettingsView: View {
                 }
                 ForEach(page.commands) { command in
                     RecordRow(
-                        title: "/\(command.name)", details: details(of: command),
+                        title: page.trigger(for: command.name, isFluxer: isFluxer), details: details(of: command),
                         warning: command.isReserved
-                            ? String(localized: "Rename needed: /\(command.name) is now a built-in command, so this command is off until you give it another name.")
+                            ? String(localized: "Rename needed: \(page.trigger(for: command.name, isFluxer: isFluxer)) is now a built-in command, so this command is off until you give it another name.")
                             : nil
                     ) {
                         editing = command
@@ -126,7 +128,7 @@ private struct CommandEditor: View {
             Section {
                 LabeledContent("Name") {
                     HStack(spacing: 2) {
-                        Text(verbatim: isFluxer ? "" : "/")
+                        Text(verbatim: isFluxer ? (page.commandPrefix ?? "") : "/")
                             .foregroundStyle(Color.syloMuted)
                         TextField("my-command", text: $command.name)
                             .multilineTextAlignment(.trailing)
@@ -145,7 +147,11 @@ private struct CommandEditor: View {
                         }
                     }
             } footer: {
-                Text("Lowercase letters, numbers, - and _. The description is shown in the command list.")
+                if isFluxer {
+                    Text("Lowercase letters, numbers, - and _. Members type the prefix and the name to run it, for example \(page.trigger(for: command.name.isEmpty ? "name" : command.name, isFluxer: true)).")
+                } else {
+                    Text("Lowercase letters, numbers, - and _. The description is shown in the command list.")
+                }
             }
 
             ForEach($command.actions) { $action in

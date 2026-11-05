@@ -145,6 +145,24 @@ public struct CleanupScheduleDraft: Sendable, Equatable, Identifiable {
         return nil
     }
 
+    /// Whether saving needs a confirmation: a new schedule starts deleting messages for good, and
+    /// so does a changed channel, a shorter age or no longer keeping pinned messages.
+    /// - Parameter original: The schedule as it was when the editor opened; nil counts as new.
+    public func needsConfirmation(comparedTo original: CleanupScheduleDraft?) -> Bool {
+        guard scheduleID != nil, let original else { return true }
+        return channelId != original.channelId || maxAgeHours < original.maxAgeHours
+            || (original.skipPinned && !skipPinned)
+    }
+
+    /// The sentence the confirmation shows, such as "Every Mon/Wed at 03:00 (server time), messages
+    /// older than 2d in #general are deleted permanently. Pinned messages are kept."
+    public func confirmationSentence(channelName: String, weekdays: [WeekdayOption] = WeekdayOption.week) -> String {
+        let summary = WeekdayOption.summary(of: days.sorted(), in: weekdays)
+        let when = summary == "every day" ? "Every day" : "Every \(summary)"
+        let pinned = skipPinned ? "Pinned messages are kept." : "Pinned messages are deleted too."
+        return "\(when) at \(timeHhmm) (server time), messages older than \(CleanupSchedule.ageSummary(hours: maxAgeHours)) in \(channelName) are deleted permanently. \(pinned)"
+    }
+
     struct Body: Encodable, Sendable {
         let channelId: String
         let days: [Int]

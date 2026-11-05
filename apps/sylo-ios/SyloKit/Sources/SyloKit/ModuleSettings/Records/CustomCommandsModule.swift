@@ -228,15 +228,25 @@ public struct CustomCommandsPage: Decodable, Sendable, Equatable {
     public let roles: [RoleOption]
     /// What a message can contain, such as `{user}`.
     public let placeholders: [String]
+    /// Fluxer only: the prefix members type before a command. Not part of this page's answer; the
+    /// screen's loader fills it in from the server settings.
+    public var commandPrefix: String?
 
     public init(
         commands: [CustomCommand] = [], channels: [ChannelOption] = [], roles: [RoleOption] = [],
-        placeholders: [String] = []
+        placeholders: [String] = [], commandPrefix: String? = nil
     ) {
         self.commands = commands
         self.channels = channels
         self.roles = roles
         self.placeholders = placeholders
+        self.commandPrefix = commandPrefix
+    }
+
+    /// How members type the command: `/name` on Discord, the server's prefix and the name on Fluxer
+    /// (just the name when the prefix is not known).
+    public func trigger(for name: String, isFluxer: Bool) -> String {
+        isFluxer ? (commandPrefix ?? "") + name : "/" + name
     }
 
     private enum CodingKeys: String, CodingKey { case commands, channels, roles, placeholders }
@@ -300,7 +310,15 @@ extension RecordListModel where Page == CustomCommandsPage {
     /// The custom commands screen's model.
     public convenience init(customCommands server: ServerID, session: AppSession) {
         self.init(server: server, session: session) { session, server in
-            try await session.send(Endpoints.LoadCustomCommands(server: server))
+            var page = try await session.send(Endpoints.LoadCustomCommands(server: server))
+            if server.rawValue.hasPrefix("fluxer:") {
+                // Fluxer has no slash commands; the prefix is a server setting. A failure only
+                // leaves the names bare, it must not stop the list from loading.
+                let settings = try? await session.send(Endpoints.LoadGuildSettings(server: server))
+                let prefix = settings?.effectiveCommandPrefix ?? ""
+                page.commandPrefix = prefix.isEmpty ? nil : prefix
+            }
+            return page
         }
     }
 

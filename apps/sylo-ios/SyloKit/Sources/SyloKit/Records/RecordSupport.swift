@@ -96,7 +96,10 @@ public final class RecordListModel<Page: Sendable> {
     public func attempt<Output>(
         _ work: @MainActor (AppSession, ServerID) async throws -> Output
     ) async -> Output? {
-        guard !isWorking else { return nil }
+        guard !isWorking else {
+            actionError = "Another change is still saving."
+            return nil
+        }
         isWorking = true
         defer { isWorking = false }
         actionError = nil

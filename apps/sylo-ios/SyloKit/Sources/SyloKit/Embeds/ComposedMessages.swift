@@ -47,6 +47,14 @@ public struct LinkButton: Sendable, Equatable, Identifiable {
 
     public static let maxLabelLength = 80
     public static let maxEmojiLength = 64
+
+    /// Whether the server would post this button: an http(s) link, and a label or an emoji.
+    public var isReady: Bool {
+        let text = self.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let symbol = self.emoji.trimmingCharacters(in: .whitespacesAndNewlines)
+        let link = self.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        return EmbedSpec.isWebLink(link) && (!text.isEmpty || !symbol.isEmpty)
+    }
 }
 
 /// What the message editor changes: the message text, the embeds and the link buttons.
@@ -68,6 +76,17 @@ public struct ComposedMessageDraft: Sendable, Equatable {
     public static let maxEmbeds = 10
     public static let maxLinks = 5
     public static let maxNameLength = 100
+    /// Discord's limit on the text of all embeds in one message together.
+    public static let maxEmbedCharacters = 6000
+
+    /// The characters Discord counts across every embed: titles, descriptions, author names, footers
+    /// and the names and values of the fields that are sent.
+    public var embedCharacterCount: Int {
+        embeds.reduce(0) { $0 + $1.characterCount }
+    }
+
+    /// How many characters over Discord's limit the embeds are; 0 when within it.
+    public var embedCharactersOver: Int { max(0, embedCharacterCount - Self.maxEmbedCharacters) }
 
     /// The editor's form of a stored message, the way the web editor opens it: embeds with the
     /// default colour where none is set, and every link button gathered into one list.
@@ -102,7 +121,7 @@ public struct ComposedMessageDraft: Sendable, Equatable {
             let label = link.label.trimmingCharacters(in: .whitespacesAndNewlines)
             let emoji = link.emoji.trimmingCharacters(in: .whitespacesAndNewlines)
             let url = link.url.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !url.isEmpty, !label.isEmpty || !emoji.isEmpty else { return nil }
+            guard link.isReady else { return nil }
             return JSONValue.object([
                 "style": .string("link"), "label": .string(label), "emoji": .string(emoji), "url": .string(url),
             ])
@@ -484,7 +503,51 @@ public final class ComposedMessageEditorModel {
     public var publishProblem: String? {
         if channelId.isEmpty { return "Choose a channel before publishing." }
         if draft.isEmpty { return "Add some text or an embed before publishing." }
+        let over = draft.embedCharactersOver
+        if over > 0 {
+            return "The embeds are \(over) characters over Discord's limit of \(ComposedMessageDraft.maxEmbedCharacters). Shorten them before publishing."
+        }
         return nil
+    }
+
+    /// Set while the message is posted and a different channel is chosen. The server keeps the
+    /// posted message's id when the channel changes, so saving then would orphan the post. Both
+    /// Save Draft and Update wait until the message is taken down.
+    public var channelChangeProblem: String? {
+        guard isPublished, let saved, saved.channelId != channelId else { return nil }
+        return "Unpublish first, then pick the new channel."
+    }
+
+    /// Whether Save Draft can be used: something changed and the channel change is not blocking.
+    public var canSaveDraft: Bool { hasChanges && channelChangeProblem == nil }
+
+    /// Whether Publish or Update can be used.
+    public var canPublish: Bool { publishProblem == nil && channelChangeProblem == nil }
+
+    /// Takes the posted message down and keeps the draft, so the channel can be changed.
+    /// - Returns: Whether it went through.
+    @discardableResult
+    public func unpublish() async -> Bool {
+        guard let recordID, isPublished, !isBusy else { return false }
+        isBusy = true
+        defer { isBusy = false }
+        actionError = nil
+        do {
+            let result = try await session.send(Endpoints.UnpublishComposedMessage(server: server, id: recordID))
+            messageID = result.record.messageId
+            // The posted copy is gone; the saved channel stays what the server holds.
+            if var snapshot = saved {
+                snapshot.channelId = result.record.channelId
+                saved = snapshot
+            }
+            saveCount += 1
+            session.noteModulesChanged()
+            return true
+        } catch {
+            let error = NetworkError(error)
+            if error != .cancelled, error != .unauthorized { actionError = error.detailMessage }
+            return false
+        }
     }
 
     public func load() async {
@@ -504,13 +567,17 @@ public final class ComposedMessageEditorModel {
     /// Saves without posting.
     @discardableResult
     public func saveDraft() async -> Bool {
-        await save(publish: false)
+        if let problem = channelChangeProblem {
+            actionError = problem
+            return false
+        }
+        return await save(publish: false)
     }
 
     /// Saves, then posts the message to the channel, or edits the posted one.
     @discardableResult
     public func publish() async -> Bool {
-        if let problem = publishProblem {
+        if let problem = publishProblem ?? channelChangeProblem {
             actionError = problem
             return false
         }

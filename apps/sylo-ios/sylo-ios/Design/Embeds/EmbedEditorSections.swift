@@ -33,6 +33,11 @@ struct EmbedEditorSections: View {
 
         Section("Author") {
             TextField("Name", text: $embed.authorName)
+                .onChange(of: embed.authorName) {
+                    if embed.authorName.count > EmbedSpec.maxAuthorNameLength {
+                        embed.authorName = String(embed.authorName.prefix(EmbedSpec.maxAuthorNameLength))
+                    }
+                }
             WebLinkField(title: "Icon link", text: $embed.authorIcon)
         }
 
@@ -47,6 +52,11 @@ struct EmbedEditorSections: View {
 
         Section("Footer") {
             TextField("Text", text: $embed.footerText)
+                .onChange(of: embed.footerText) {
+                    if embed.footerText.count > EmbedSpec.maxFooterLength {
+                        embed.footerText = String(embed.footerText.prefix(EmbedSpec.maxFooterLength))
+                    }
+                }
             WebLinkField(title: "Icon link", text: $embed.footerIcon)
             if showsTimestamp {
                 Toggle("Show the time in the footer", isOn: $embed.timestamp)
@@ -56,6 +66,11 @@ struct EmbedEditorSections: View {
         ForEach($embed.fields) { $field in
             Section("Field") {
                 TextField("Name", text: $field.name)
+                    .onChange(of: field.name) {
+                        if field.name.count > EmbedSpec.Field.maxNameLength {
+                            field.name = String(field.name.prefix(EmbedSpec.Field.maxNameLength))
+                        }
+                    }
                 TextArea(title: "Value", text: $field.value, limit: EmbedSpec.Field.maxValueLength, lines: 2...6)
                 Toggle("Show next to other fields", isOn: $field.inline)
                 Button("Remove Field", role: .destructive) {

@@ -123,10 +123,15 @@ struct RecordEditor<Content: View>: View {
     let save: () async -> Bool
     /// Where the reason for a failed save is kept after it ran.
     let failure: () -> String?
+    /// The label of the confirm button.
+    var saveTitle: LocalizedStringKey = "Save"
+    /// When set, Save first asks with this sentence; nil saves straight away.
+    var confirmation: String?
     @ViewBuilder let content: Content
 
     @Environment(\.dismiss) private var dismiss
     @State private var isConfirmingDiscard = false
+    @State private var isConfirmingSave = false
     @State private var isSaving = false
     @State private var saveError: String?
 
@@ -161,7 +166,9 @@ struct RecordEditor<Content: View>: View {
                     if isSaving {
                         ProgressView()
                     } else {
-                        Button("Save") { run() }
+                        Button(saveTitle) {
+                            if confirmation != nil { isConfirmingSave = true } else { run() }
+                        }
                             .toolbarSaveStyle()
                             .disabled(problem != nil)
                     }
@@ -175,6 +182,11 @@ struct RecordEditor<Content: View>: View {
             } message: { message in
                 Text(message)
             }
+        }
+        .confirmationDialog(saveTitle, isPresented: $isConfirmingSave, titleVisibility: .visible) {
+            Button(saveTitle) { run() }
+        } message: {
+            Text(verbatim: confirmation ?? "")
         }
         .interactiveDismissDisabled(hasChanges)
         .presentationDragIndicator(.visible)

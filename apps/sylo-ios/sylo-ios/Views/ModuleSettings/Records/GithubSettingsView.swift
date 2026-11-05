@@ -54,11 +54,11 @@ struct GithubSettingsView: View {
                         ) {
                             Task { _ = await model.toggle(watch) }
                         }
-                        .tint(.orange)
+                        .tint(Color.syloWarn)
                     }
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                         Button("Webhook", systemImage: "link") { settingUp = watch }
-                            .tint(.indigo)
+                            .tint(Color.syloCyan)
                     }
                     .contextMenu {
                         Button("Webhook Setup", systemImage: "link") { settingUp = watch }
@@ -71,6 +71,9 @@ struct GithubSettingsView: View {
                         Button("Delete", systemImage: "trash", role: .destructive) { pendingDelete = watch }
                     }
                     .accessibilityAction(named: Text("Webhook setup")) { settingUp = watch }
+                    .accessibilityAction(named: Text(watch.isEnabled ? "Pause" : "Resume")) {
+                        Task { _ = await model.toggle(watch) }
+                    }
                     .accessibilityAction(named: Text("Delete")) { pendingDelete = watch }
                 }
                 Button("Add Repository", systemImage: "plus") {
@@ -223,6 +226,9 @@ private struct WebhookSetupForm: View {
 
     @State private var isConfirmingRegenerate = false
     @State private var copied: String?
+    /// Why a new secret could not be made. Kept here, not in the model's own error, so the list
+    /// screen behind this one does not show a second alert for the same thing.
+    @State private var setupError: String?
 
     private var watch: GithubWatch? { model.page?.watches.first { $0.id == watchID } }
 
@@ -257,12 +263,16 @@ private struct WebhookSetupForm: View {
             "Generate a new webhook secret?", isPresented: $isConfirmingRegenerate, titleVisibility: .visible
         ) {
             Button("Generate New Secret", role: .destructive) {
-                if let watch { Task { _ = await model.regenerateSecret(watch) } }
+                if let watch {
+                    Task {
+                        if !(await model.regenerateSecret(watch)) { setupError = model.takeActionError() }
+                    }
+                }
             }
         } message: {
             Text("The old secret, and the one saved in GitHub's webhook settings, stops working at once. You will need to paste the new one into GitHub.")
         }
-        .alert("Couldn't Complete", isPresented: isShowingError, presenting: model.actionError) { _ in
+        .alert("Couldn't Complete", isPresented: isShowingError, presenting: setupError) { _ in
             Button("OK") {}
         } message: { message in
             Text(message)
@@ -278,7 +288,7 @@ private struct WebhookSetupForm: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             if canCopy {
                 Button {
-                    UIPasteboard.general.string = value
+                    copy(value)
                     copied = label
                 } label: {
                     Label(copied == label ? "Copied" : "Copy", systemImage: copied == label ? "checkmark" : "doc.on.doc")
@@ -292,7 +302,14 @@ private struct WebhookSetupForm: View {
         }
     }
 
+    /// Puts the text on this device's clipboard only (no Universal Clipboard) and lets it expire.
+    private func copy(_ value: String) {
+        UIPasteboard.general.setItems(
+            [["public.utf8-plain-text": value]],
+            options: [.localOnly: true, .expirationDate: Date.now.addingTimeInterval(120)])
+    }
+
     private var isShowingError: Binding<Bool> {
-        Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })
+        Binding(get: { setupError != nil }, set: { if !$0 { setupError = nil } })
     }
 }

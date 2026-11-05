@@ -223,9 +223,11 @@ public final class InsightsModel {
     }
 
     public func load() async {
-        isLoading = true
-        defer { isLoading = false }
         let requested = range
+        isLoading = true
+        // Only the latest request ends the loading state or reports an error; an older one
+        // that finishes late must not hide the newer one still on its way.
+        defer { if requested == range { isLoading = false } }
         do {
             let page = try await session.send(Endpoints.Insights(server: server, range: requested))
             // The person may have picked another range while this one was on its way.
@@ -233,6 +235,7 @@ public final class InsightsModel {
             self.page = page
             errorMessage = nil
         } catch {
+            guard requested == range else { return }
             let error = NetworkError(error)
             if error != .cancelled, error != .unauthorized { errorMessage = error.detailMessage }
         }

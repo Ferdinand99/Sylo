@@ -43,7 +43,7 @@ struct ChannelCleanupSettingsView: View {
                         ) {
                             Task { _ = await model.toggle(schedule) }
                         }
-                        .tint(.orange)
+                        .tint(Color.syloWarn)
                     }
                     .contextMenu {
                         Button(
@@ -53,6 +53,9 @@ struct ChannelCleanupSettingsView: View {
                             Task { _ = await model.toggle(schedule) }
                         }
                         Button("Delete", systemImage: "trash", role: .destructive) { pendingDelete = schedule }
+                    }
+                    .accessibilityAction(named: Text(schedule.isEnabled ? "Pause" : "Resume")) {
+                        Task { _ = await model.toggle(schedule) }
                     }
                     .accessibilityAction(named: Text("Delete")) { pendingDelete = schedule }
                 }
@@ -115,7 +118,8 @@ private struct ScheduleEditor: View {
             title: draft.scheduleID == nil ? "New Schedule" : "Edit Schedule",
             problem: draft.problem(maxAgeHoursCap: page.maxAgeHoursCap),
             hasChanges: initial.map { $0 != draft } ?? false,
-            save: { await save(draft) }, failure: failure
+            save: { await save(draft) }, failure: failure,
+            saveTitle: "Save schedule", confirmation: confirmation
         ) {
             Section {
                 ChannelPicker(
@@ -140,6 +144,14 @@ private struct ScheduleEditor: View {
             }
         }
         .onAppear { if initial == nil { initial = draft } }
+    }
+
+    /// What Save asks before it starts permanent deletion; nil when nothing new is being deleted.
+    private var confirmation: String? {
+        guard draft.needsConfirmation(comparedTo: initial) else { return nil }
+        let channel = page.channels.first { $0.id == draft.channelId }.map { "#\($0.name)" }
+            ?? String(localized: "the channel")
+        return draft.confirmationSentence(channelName: channel, weekdays: page.weekdays)
     }
 
     /// The time of day as a date, for the picker.

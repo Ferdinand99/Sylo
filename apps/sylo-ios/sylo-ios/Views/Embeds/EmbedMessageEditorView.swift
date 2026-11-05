@@ -41,6 +41,7 @@ private struct EmbedMessageForm: View {
     let isFluxer: Bool
 
     @State private var isConfirmingDiscard = false
+    @State private var isConfirmingUnpublish = false
 
     var body: some View {
         Form {
@@ -69,12 +70,17 @@ private struct EmbedMessageForm: View {
                 } else {
                     Button(model.isPublished ? "Update" : "Publish") { Task { await model.publish() } }
                         .toolbarSaveStyle()
-                        .disabled(model.publishProblem != nil)
+                        .disabled(!model.canPublish)
                 }
             }
         }
         .confirmationDialog("Discard your changes?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
             Button("Discard Changes", role: .destructive) { model.discardChanges() }
+        }
+        .confirmationDialog("Unpublish this message?", isPresented: $isConfirmingUnpublish, titleVisibility: .visible) {
+            Button("Unpublish", role: .destructive) { Task { await model.unpublish() } }
+        } message: {
+            Text("The posted message is deleted from its channel. Your draft and your changes stay here, so you can pick the new channel and publish again.")
         }
         .alert("Couldn't Save", isPresented: isShowingError, presenting: model.actionError) { _ in
             Button("OK") {}
@@ -98,13 +104,20 @@ private struct EmbedMessageForm: View {
             ChannelPicker(
                 title: "Channel", selection: $model.channelId, channels: model.channels, noneTitle: "Choose a channel")
             Button("Save Draft", systemImage: "square.and.arrow.down") { Task { await model.saveDraft() } }
-                .disabled(!model.hasChanges)
+                .disabled(!model.canSaveDraft)
+            if model.channelChangeProblem != nil {
+                Button("Unpublish…", systemImage: "eye.slash") { isConfirmingUnpublish = true }
+            }
         } header: {
             Text("Message")
         } footer: {
             VStack(alignment: .leading, spacing: SyloSpacing.xs) {
                 if model.isPublished {
-                    Text("Published. Update edits the posted message; changing the channel posts a fresh one. Save Draft keeps your changes without touching the posted message.")
+                    Text("Published. Update edits the posted message in place, in the channel it was posted to. To use another channel, unpublish first, then pick the new channel and publish again. Save Draft keeps your changes without touching the posted message.")
+                }
+                if let problem = model.channelChangeProblem {
+                    Text(problem)
+                        .foregroundStyle(Color.syloWarn)
                 }
                 if !model.hasChanges {
                     statusLine
@@ -187,8 +200,22 @@ private struct EmbedMessageForm: View {
         } header: {
             Text("Embeds (\(model.draft.embeds.count) / \(ComposedMessageDraft.maxEmbeds))")
         } footer: {
-            Text("Touch and hold an embed to move, copy or remove it.")
+            VStack(alignment: .leading, spacing: SyloSpacing.xs) {
+                Text("Touch and hold an embed to move, copy or remove it.")
+                Text(characterCountText)
+                    .foregroundStyle(model.draft.embedCharactersOver > 0 ? Color.syloBad : Color.syloMuted)
+            }
         }
+    }
+
+    private var characterCountText: String {
+        let count = model.draft.embedCharacterCount
+        let limit = ComposedMessageDraft.maxEmbedCharacters
+        let line = String(localized: "Text in all embeds: \(count) of \(limit) characters.")
+        if model.draft.embedCharactersOver > 0 {
+            return line + " " + String(localized: "Discord rejects a message over the limit.")
+        }
+        return line
     }
 
     @ViewBuilder
