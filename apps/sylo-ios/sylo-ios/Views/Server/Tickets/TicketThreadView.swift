@@ -181,7 +181,7 @@ struct TicketThreadView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
-            .background(.bar)
+            .background { Color.syloBackground2.opacity(0.96).ignoresSafeArea(edges: .bottom) }
         }
     }
 

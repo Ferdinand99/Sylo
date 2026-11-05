@@ -121,7 +121,8 @@ struct BentoOverviewView: View {
         let open = overview.openTickets
         return BentoTile(title: "Open tickets", systemImage: "ticket", isLive: unreadTickets > 0, minHeight: minHeight) {
             VStack(alignment: .leading, spacing: SyloSpacing.xs) {
-                HeroNumber(open)
+                Spacer(minLength: 0)
+                HeroNumber(open, scale: minHeight > 0 ? 1.9 : 1)
                 Spacer(minLength: 0)
                 if unreadTickets > 0 {
                     HStack(spacing: 6) {
@@ -219,6 +220,7 @@ struct BentoOverviewView: View {
 /// its tile.
 private struct HeroNumber: View {
     let value: Value
+    var scale: CGFloat = 1
     @ScaledMetric(relativeTo: .largeTitle) private var size: CGFloat = 40
 
     enum Value {
@@ -226,7 +228,10 @@ private struct HeroNumber: View {
         case text(String)
     }
 
-    init(_ value: Int) { self.value = .number(value) }
+    init(_ value: Int, scale: CGFloat = 1) {
+        self.value = .number(value)
+        self.scale = scale
+    }
     init(text: String) { self.value = .text(text) }
 
     var body: some View {
@@ -236,7 +241,7 @@ private struct HeroNumber: View {
             case .text(let text): Text(verbatim: text)
             }
         }
-        .font(.system(size: size, weight: .semibold, design: .monospaced))
+        .font(.system(size: size * scale, weight: .semibold, design: .monospaced))
         .foregroundStyle(Color.syloText)
         .lineLimit(1)
         .minimumScaleFactor(0.5)

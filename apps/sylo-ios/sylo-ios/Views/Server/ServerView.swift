@@ -40,7 +40,16 @@ struct ServerView: View {
         screen
             .animation(reduceMotion ? nil : SyloMotion.quick, value: tab)
             .overlay(alignment: .bottom) {
-                CapsuleTabBar(items: tabItems, selection: $tab)
+                ZStack(alignment: .bottom) {
+                    // Content fades out behind the bar instead of showing through the glass.
+                    LinearGradient(
+                        colors: [Color.syloBackground.opacity(0), Color.syloBackground.opacity(0.94)],
+                        startPoint: .top, endPoint: .bottom)
+                        .frame(height: 104)
+                        .ignoresSafeArea(edges: .bottom)
+                        .allowsHitTesting(false)
+                    CapsuleTabBar(items: tabItems, selection: $tab)
+                }
             }
             .syloScreen()
             .navigationTitle(title)

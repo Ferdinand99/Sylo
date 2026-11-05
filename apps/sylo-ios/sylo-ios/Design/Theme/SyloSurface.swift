@@ -6,6 +6,8 @@ struct SyloSurface: ViewModifier {
     var radius: CGFloat = SyloRadius.tile
     var isLive = false
     var isSelected = false
+    /// The soft halo of a live surface. Off for rows inside a list, which would clip it to a box.
+    var showsGlow = true
 
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.colorScheme) private var colorScheme
@@ -23,7 +25,7 @@ struct SyloSurface: ViewModifier {
                 shape.strokeBorder(border, lineWidth: isLive || isSelected ? 1.25 : 1)
             }
             .shadow(
-                color: isLive ? Color.syloGlow.opacity(colorScheme == .dark ? 0.22 : 0.18) : .clear,
+                color: isLive && showsGlow ? Color.syloGlow.opacity(colorScheme == .dark ? 0.22 : 0.18) : .clear,
                 radius: 16, y: 2)
             .contentShape(shape)
     }
@@ -37,8 +39,10 @@ struct SyloSurface: ViewModifier {
 
 extension View {
     /// Draws this view on a Sylo card: card colour, hairline border, optional live glow.
-    func syloCard(radius: CGFloat = SyloRadius.tile, isLive: Bool = false, isSelected: Bool = false) -> some View {
-        modifier(SyloSurface(radius: radius, isLive: isLive, isSelected: isSelected))
+    func syloCard(
+        radius: CGFloat = SyloRadius.tile, isLive: Bool = false, isSelected: Bool = false, showsGlow: Bool = true
+    ) -> some View {
+        modifier(SyloSurface(radius: radius, isLive: isLive, isSelected: isSelected, showsGlow: showsGlow))
     }
 }
 

@@ -13,7 +13,8 @@ struct ModuleTile: View {
     let setEnabled: @MainActor (Bool) -> Void
 
     @ScaledMetric(relativeTo: .body) private var minHeight: CGFloat = 112
-    @ScaledMetric(relativeTo: .body) private var iconWell: CGFloat = 36
+    @ScaledMetric(relativeTo: .body) private var scaledIconWell: CGFloat = 36
+    private var iconWell: CGFloat { min(scaledIconWell, 54) }
 
     private var isOn: Bool { card.isEnabled ?? false }
 
@@ -106,7 +107,8 @@ struct LinkTile: View {
     let card: OverviewCard
     let url: URL
 
-    @ScaledMetric(relativeTo: .body) private var iconWell: CGFloat = 36
+    @ScaledMetric(relativeTo: .body) private var scaledIconWell: CGFloat = 36
+    private var iconWell: CGFloat { min(scaledIconWell, 54) }
 
     var body: some View {
         Link(destination: url) {

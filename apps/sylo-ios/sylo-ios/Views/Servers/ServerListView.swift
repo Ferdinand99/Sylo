@@ -161,14 +161,16 @@ struct ServerCard: View {
 private struct StatusRingIcon: View {
     let server: ServerSummary
 
-    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 44
+    @ScaledMetric(relativeTo: .body) private var scaledIconSize: CGFloat = 44
+    /// Matches ``ServerIcon``, which stops growing at 1.6 times its base size.
+    private var iconSize: CGFloat { min(scaledIconSize, 44 * 1.6) }
     private let gap: CGFloat = 4
 
     private var isLive: Bool { (server.messagesToday ?? 0) > 0 || server.unreadTickets > 0 }
 
     var body: some View {
         let ring = RoundedRectangle(cornerRadius: iconSize * 0.28 + gap + 1, style: .continuous)
-        ServerIcon(url: server.iconURL, name: server.name, size: iconSize)
+        ServerIcon(url: server.iconURL, name: server.name, size: 44)
             .padding(gap + 1)
             .overlay {
                 ring.strokeBorder(
@@ -188,26 +190,41 @@ private struct ActivityMeter: View {
     let messages: Int
     let busiest: Int
 
-    @ScaledMetric(relativeTo: .caption) private var meterWidth: CGFloat = 44
-
     var body: some View {
-        HStack(spacing: SyloSpacing.s) {
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.syloLine)
-                Capsule()
-                    .fill(LinearGradient(
-                        colors: [Color.syloCyan.opacity(0.5), Color.syloCyan], startPoint: .leading, endPoint: .trailing))
-                    .frame(width: max(meterWidth * fraction, messages > 0 ? 4 : 0))
+        // Side by side when there is room; stacked, with the text free to wrap, at large sizes.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: SyloSpacing.s) {
+                meter
+                label.lineLimit(1)
             }
-            .frame(width: meterWidth, height: 5)
-            .accessibilityHidden(true)
-            Text("^[\(messages) message](inflect: true) today")
-                .font(.caption)
-                .monospacedDigit()
-                .foregroundStyle(Color.syloMuted)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                meter
+                label
+            }
         }
     }
+
+    private var meter: some View {
+        ZStack(alignment: .leading) {
+            Capsule().fill(Color.syloLine)
+            Capsule()
+                .fill(LinearGradient(
+                    colors: [Color.syloCyan.opacity(0.5), Color.syloCyan], startPoint: .leading, endPoint: .trailing))
+                .frame(width: max(Self.meterWidth * fraction, messages > 0 ? 4 : 0))
+        }
+        .frame(width: Self.meterWidth, height: 5)
+        .accessibilityHidden(true)
+    }
+
+    private var label: some View {
+        Text("^[\(messages) message](inflect: true) today")
+            .font(.caption)
+            .monospacedDigit()
+            .foregroundStyle(Color.syloMuted)
+            .multilineTextAlignment(.leading)
+    }
+
+    private static let meterWidth: CGFloat = 44
 
     private var fraction: CGFloat {
         busiest > 0 ? min(CGFloat(messages) / CGFloat(busiest), 1) : 0

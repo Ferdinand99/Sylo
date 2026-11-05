@@ -5,10 +5,14 @@ struct ServerIcon: View {
     let url: URL?
     let name: String
     @ScaledMetric private var size: CGFloat
+    /// The size at the default text size; the icon grows with Dynamic Type, but never past 1.6 times that.
+    private let baseSize: CGFloat
+    private var shownSize: CGFloat { min(size, baseSize * 1.6) }
 
     init(url: URL?, name: String, size: CGFloat = 28) {
         self.url = url
         self.name = name
+        self.baseSize = size
         _size = ScaledMetric(wrappedValue: size, relativeTo: .body)
     }
 
@@ -20,8 +24,8 @@ struct ServerIcon: View {
                 initials
             }
         }
-        .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+        .frame(width: shownSize, height: shownSize)
+        .clipShape(RoundedRectangle(cornerRadius: shownSize * 0.28, style: .continuous))
         .accessibilityHidden(true)
     }
 
@@ -29,7 +33,7 @@ struct ServerIcon: View {
         ZStack {
             Rectangle().fill(.tint.opacity(0.15))
             Text(Self.initials(of: name))
-                .font(.system(size: size * 0.4, weight: .semibold, design: .rounded))
+                .font(.system(size: shownSize * 0.4, weight: .semibold, design: .rounded))
                 .foregroundStyle(.tint)
         }
     }

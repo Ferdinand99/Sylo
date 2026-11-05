@@ -69,7 +69,7 @@ jobs:
       # plus large text. For checking the design without a Mac; not part of the pass/fail of the build.
       - name: Take screenshots in the simulator
         continue-on-error: true
-        timeout-minutes: 10
+        timeout-minutes: 25
         run: |
           APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/sylo-ios.app"
           OUT="$RUNNER_TEMP/shots"

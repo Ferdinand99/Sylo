@@ -65,7 +65,7 @@ struct CapsuleTabBar: View {
                 Image(systemName: item.systemImage)
                     .font(.system(size: 17, weight: .semibold))
                     .symbolVariant(isSelected ? .fill : .none)
-                    .overlay(alignment: .topTrailing) {
+                    .overlay(alignment: .topLeading) {
                         if item.badge > 0 { badge(item.badge) }
                     }
                 if isSelected {
@@ -102,7 +102,7 @@ struct CapsuleTabBar: View {
             .frame(minWidth: 16, minHeight: 16)
             .background(Color.syloBad, in: Capsule())
             .overlay { Capsule().strokeBorder(Color.syloBackground, lineWidth: 1.5) }
-            .offset(x: 10, y: -8)
+            .offset(x: -9, y: -8)
             .accessibilityHidden(true)
     }
 }

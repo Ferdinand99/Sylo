@@ -176,17 +176,23 @@ private struct NotificationCard: View {
     let turnOn: () -> Void
     let notNow: () -> Void
 
+    private var turnOnButton: some View {
+        Button("Turn On", action: turnOn).primaryActionStyle()
+    }
+
+    private var notNowButton: some View {
+        Button("Not Now", action: notNow).secondaryActionStyle()
+    }
+
     var body: some View {
         SectionCard(title: "Get notified about new tickets", systemImage: "bell.badge") {
             Text("Sylo can tell you when a member opens a ticket or writes in one, so you can answer right away.")
                 .font(.subheadline)
                 .foregroundStyle(Color.syloMuted)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: SyloSpacing.m) {
-                Button("Turn On", action: turnOn)
-                    .primaryActionStyle()
-                Button("Not Now", action: notNow)
-                    .secondaryActionStyle()
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: SyloSpacing.m) { turnOnButton; notNowButton }
+                VStack(spacing: SyloSpacing.s) { turnOnButton; notNowButton }
             }
         }
     }
@@ -198,7 +204,8 @@ private struct TicketRow: View {
     let isClosed: Bool
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .body) private var avatarSize = 44
+    @ScaledMetric(relativeTo: .body) private var scaledAvatarSize: CGFloat = 44
+    private var avatarSize: CGFloat { min(scaledAvatarSize, 64) }
 
     var body: some View {
         HStack(alignment: .top, spacing: SyloSpacing.m) {
@@ -217,7 +224,7 @@ private struct TicketRow: View {
         }
         .padding(SyloSpacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .syloCard(radius: SyloRadius.row + 4, isLive: ticket.isUnread)
+        .syloCard(radius: SyloRadius.row + 4, isLive: ticket.isUnread, showsGlow: false)
         .opacity(isClosed ? 0.72 : 1)
         .accessibilityElement(children: .combine)
         .accessibilityValue(ticket.isUnread ? Text("Unread") : Text(verbatim: ""))
