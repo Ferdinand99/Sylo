@@ -47,6 +47,13 @@ describe('formatRelative', () => {
     expect(formatRelative(NOW + 20_000, opts)).toBe('just now');
   });
 
+  it('rolls over to the next unit instead of writing 60m or 24h', () => {
+    expect(formatRelative(NOW - (60 * 60_000 - 20_000), opts)).toBe('1h ago');
+    expect(formatRelative(NOW + (24 * 3_600_000 - 20 * 60_000), opts)).toBe('in 1 day');
+    expect(formatRelative(NOW - 59 * 60_000, opts)).toBe('59m ago');
+    expect(formatRelative(NOW - 23 * 3_600_000, opts)).toBe('23h ago');
+  });
+
   it('spells out days', () => {
     expect(formatRelative(NOW + 2 * 86_400_000, opts)).toBe('in 2 days');
     expect(formatRelative(NOW - 86_400_000, opts)).toBe('1 day ago');

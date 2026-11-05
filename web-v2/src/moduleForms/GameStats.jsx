@@ -4,7 +4,7 @@ import { getModuleConfig } from '../api.js';
 import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import { useApiData } from '../useApiData.js';
-import { platformLabel } from '../pages/Stats.jsx';
+import { platformLabel } from '../gamePlatforms.js';
 
 // Read-only — this module has nothing to configure beyond the shared
 // enable/disable toggle every module already has (Overview, and the bar at the

@@ -80,8 +80,11 @@ export function formatRelative(value, { now = Date.now(), locale } = {}) {
   const later = diff > 0;
   if (abs < MINUTE) return 'just now';
   const wrap = (text) => (later ? `in ${text}` : `${text} ago`);
-  if (abs < HOUR) return wrap(`${Math.round(abs / MINUTE)}m`);
-  if (abs < DAY) return wrap(`${Math.round(abs / HOUR)}h`);
+  // Rounding can reach the next unit ("60m", "24h"): then the next unit is the answer.
+  const minutes = Math.round(abs / MINUTE);
+  if (minutes < 60) return wrap(`${minutes}m`);
+  const hours = Math.round(abs / HOUR);
+  if (hours < 24) return wrap(`${hours}h`);
   const days = Math.round(abs / DAY);
   if (days < 60) return wrap(`${days} ${days === 1 ? 'day' : 'days'}`);
   return formatDay(d, { locale, now });

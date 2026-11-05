@@ -7,6 +7,8 @@ import YoutubeAlerts from '../moduleForms/YoutubeAlerts.jsx';
 import RssAlerts from '../moduleForms/RssAlerts.jsx';
 import AutoThreads from '../moduleForms/AutoThreads.jsx';
 import Appeals from '../moduleForms/Appeals.jsx';
+import InviteTracker from '../moduleForms/InviteTracker.jsx';
+import AutoReact from '../moduleForms/AutoReact.jsx';
 import Logging, { groupEvents } from '../moduleForms/Logging.jsx';
 import SetupCallout from '../components/SetupCallout.jsx';
 import Time from '../components/Time.jsx';
@@ -306,6 +308,39 @@ describe('Appeals form', () => {
     getModuleConfig.mockResolvedValue(appeals());
     renderAtGuild(<Appeals />, GUILD);
     expect(await screen.findByText(/DASHBOARD_URL/)).toBeTruthy();
+  });
+});
+
+describe('Invite tracker and Auto-react wording', () => {
+  it('names the grace window in the invite formula, and leaves it out when the guard is off', async () => {
+    const data = (graceHours) => ({
+      config: { graceHours, announce: false },
+      board: {
+        canReadInvites: true,
+        total: 1,
+        rows: [{ userId: '1', rank: 1, name: 'Alice', net: 2, regular: 3, leaves: 1, bonus: 0 }],
+      },
+    });
+    getModuleConfig.mockResolvedValue(data(6));
+    const { unmount } = renderAtGuild(<InviteTracker />, GUILD);
+    expect(await screen.findByText(/minus those who left within the grace window (6 h)/)).toBeTruthy();
+    unmount();
+    getModuleConfig.mockResolvedValue(data(0));
+    renderAtGuild(<InviteTracker />, GUILD);
+    expect(await screen.findByText(/minus those who left, plus any bonus/)).toBeTruthy();
+  });
+
+  it('tells an empty auto-react rule that it is removed on save', async () => {
+    getModuleConfig.mockResolvedValue({
+      config: { cooldownSeconds: 5, logChannelId: '', rules: [] },
+      channels,
+      roles: [],
+      modes: ['always', 'random'],
+      roleActions: ['add', 'remove'],
+    });
+    renderAtGuild(<AutoReact />, GUILD);
+    expect(await screen.findByText(/will be removed when you save/)).toBeTruthy();
+    expect(screen.queryByText(/won't match anything/)).toBeNull();
   });
 });
 

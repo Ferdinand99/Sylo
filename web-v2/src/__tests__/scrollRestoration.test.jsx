@@ -1,6 +1,21 @@
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { Link, Outlet, RouterProvider, ScrollRestoration, createMemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import Shell from '../components/Shell.jsx';
+import MemberData from '../pages/MemberData.jsx';
+
+// Only what the real Shell and the Member data page call; everything resolves to an empty answer.
+vi.mock('../api.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getGuilds: vi.fn().mockResolvedValue([]),
+  getOverview: vi.fn().mockResolvedValue(null),
+  getAnnouncement: vi.fn().mockResolvedValue(null),
+  getAccount: vi.fn().mockResolvedValue({ open: true, platforms: [], devices: [] }),
+  getInvites: vi.fn().mockResolvedValue([]),
+  getCsrfToken: vi.fn().mockResolvedValue('t'),
+  getPlatformInfo: vi.fn().mockResolvedValue({ platform: 'discord', capabilities: {} }),
+  getMemberData: vi.fn().mockResolvedValue({ lookup: null }),
+}));
 
 // The same wiring as components/Shell.jsx: a <ScrollRestoration /> beside the layout of a data router.
 function Layout() {
@@ -56,5 +71,51 @@ describe('scrolling between pages', () => {
       await router.navigate('/b#section');
     });
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  });
+});
+
+describe('scrolling inside the real Shell', () => {
+  const GUILD = '123456789012345678';
+  let scrollTo;
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    scrollTo = vi.fn();
+    window.scrollTo = scrollTo;
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  function setupShell() {
+    const router = createMemoryRouter(
+      [
+        {
+          element: <Shell />,
+          children: [
+            { path: '/guilds/:guildId/member-data', element: <MemberData /> },
+            { path: '/guilds/:guildId/other', element: <p>other page</p> },
+          ],
+        },
+      ],
+      { initialEntries: [`/guilds/${GUILD}/member-data`] }
+    );
+    render(<RouterProvider router={router} />);
+    return router;
+  }
+
+  it('a member lookup (a new search on the same page) does not jump to the top, a new page does', async () => {
+    const router = setupShell();
+    const field = await screen.findByRole('textbox');
+    scrollTo.mockClear();
+    fireEvent.change(field, { target: { value: '222222222222222222' } });
+    await act(async () => {
+      fireEvent.submit(field.closest('form'));
+    });
+    expect(router.state.location.search).toBe('?user=222222222222222222');
+    expect(scrollTo).not.toHaveBeenCalledWith(0, 0);
+
+    await act(async () => {
+      await router.navigate(`/guilds/${GUILD}/other`);
+    });
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
   });
 });

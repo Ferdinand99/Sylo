@@ -139,7 +139,7 @@ export default function AutoReact() {
             {!r.targetUsersText.trim() && !r.targetRoleId ? (
               <p className="v2-ph-warn" role="status">
                 <span aria-hidden="true">⚠ </span>
-                This rule has no users and no role yet, so it won't match anything.
+                This rule has no users and no role yet, so it will be removed when you save.
               </p>
             ) : null}
 

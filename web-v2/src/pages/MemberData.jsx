@@ -27,7 +27,8 @@ export default function MemberData() {
   function onLookup(e) {
     e.preventDefault();
     const next = query.trim();
-    setParams(next ? { user: next } : {});
+    // Same page, other search: the window stays where it is instead of jumping to the top.
+    setParams(next ? { user: next } : {}, { preventScrollReset: true });
   }
 
   return (

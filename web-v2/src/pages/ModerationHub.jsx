@@ -428,7 +428,7 @@ export default function ModerationHub() {
             role="tab"
             aria-selected={active === key}
             className={`v2-tab${active === key ? ' is-active' : ''}`}
-            onClick={() => navigate(`/guilds/${guildId}/moderation/${key}`)}
+            onClick={() => navigate(`/guilds/${guildId}/moderation/${key}`, { preventScrollReset: true })}
           >
             {label}
             {isOff(moduleId) ? <span className="v2-tab-off"> (off)</span> : null}

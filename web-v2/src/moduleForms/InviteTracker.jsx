@@ -104,7 +104,9 @@ export default function InviteTracker() {
       ) : (
         <>
           <p className="v2-field-hint">
-            Invites = people who joined, minus those who left, plus any bonus you add below.
+            {`Invites = people who joined, minus those who left${
+              form.graceHours > 0 ? ` within the grace window (${form.graceHours} h)` : ''
+            }, plus any bonus you add below.`}
           </p>
           <div className="v2-list">
             {board.rows.map((r) => (
