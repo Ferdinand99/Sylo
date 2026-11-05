@@ -88,7 +88,7 @@ test('a visitor who is not signed in gets the same sign-in page for a Fluxer eve
     const res = await get(browser(), `/events/${token}`);
     assert.equal(res.status, 401, token === fluxerEvent.public_token ? 'the Fluxer event' : 'the rest');
     const html = await text(res);
-    assert.match(html, /Log in with Discord/, 'the only login there is');
+    assert.match(html, /Sign in with Discord/, 'the only login there is');
     assert.ok(!html.includes('Fluxer'));
     assert.ok(!html.includes('Only for the team'));
     bodies.push(masked(html, token));

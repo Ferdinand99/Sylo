@@ -36,7 +36,7 @@ function render(res, state, extra = {}) {
 
 /**
  * Resolve the token + guild + module and work out which state to show.
- * @returns {{ error?: string, state?: string, message?: string, guild?: any,
+ * @returns {{ error?: string, heading?: string, state?: string, message?: string, guild?: any,
  *   cfg?: any, parsed?: any, verdict?: string, decisionReason?: string,
  *   reappealDays?: number }}
  */
@@ -44,13 +44,16 @@ async function resolve(req) {
   const { guildId } = req.params;
   const parsed = verifyAppealToken(req.query.t ?? req.body?.t);
   if (!parsed || parsed.guildId !== guildId) {
-    return { error: 'This appeal link is invalid or has expired. Contact the server staff for a new one.' };
+    return {
+      heading: "This appeal link isn't valid",
+      error: 'This appeal link is invalid or has expired. Contact the server staff for a new one.',
+    };
   }
   if (!(await isModuleEnabled(guildId, 'appeals'))) {
-    return { error: 'This server is not accepting ban appeals right now.' };
+    return { heading: 'Appeals are closed', error: 'This server is not accepting ban appeals right now.' };
   }
   const guild = guildByKey(guildId);
-  if (!guild) return { error: 'That server could not be found.' };
+  if (!guild) return { heading: 'Server not found', error: 'That server could not be found.' };
   const cfg = normaliseAppealsConfig((await getGuildModule(guildId, 'appeals')).config);
 
   if (await getOpenAppeal(guildId, parsed.userId)) {
@@ -124,7 +127,7 @@ const inviteOf = (r) => r.cfg?.appealServerInvite || null;
 router.get('/:guildId', async (req, res, next) => {
   try {
     const r = await resolve(req);
-    if (r.error) return render(res, 'error', { message: r.error });
+    if (r.error) return render(res, 'error', { heading: r.heading, message: r.error });
     if (r.state !== 'form') {
       return render(res, r.state, {
         message: r.message ?? null,
@@ -151,7 +154,7 @@ router.get('/:guildId', async (req, res, next) => {
 router.post('/:guildId', async (req, res, next) => {
   try {
     const r = await resolve(req);
-    if (r.error) return render(res, 'error', { message: r.error });
+    if (r.error) return render(res, 'error', { heading: r.heading, message: r.error });
     if (r.state !== 'form') {
       return render(res, r.state, {
         message: r.message ?? null,

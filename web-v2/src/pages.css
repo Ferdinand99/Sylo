@@ -309,6 +309,13 @@
   gap: 8px;
   margin-top: 20px;
 }
+/* Buttons that are links: `.v2-state a` (styles.css) would paint their label in the link colour. */
+.v2-state a.v2-btn-ghost {
+  color: var(--text);
+}
+.v2-state a.v2-btn-primary {
+  color: var(--bg-main);
+}
 
 /* ==========================================================================
    Revamp (sylobot.com look) — page level. Loaded after styles.css and

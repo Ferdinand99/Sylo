@@ -7,6 +7,7 @@ import { notify } from '../notify.js';
 import { usePlatformInfo } from '../usePlatformInfo.js';
 import BlockedNote from '../components/BlockedNote.jsx';
 import { PlatformContext } from '../platformContext.jsx';
+import NotFound from '../components/NotFound.jsx';
 import Reveal from '../components/Reveal.jsx';
 import Switch from '../components/Switch.jsx';
 
@@ -46,9 +47,9 @@ function ModuleStatusBar({ card, onToggle }) {
 }
 
 // Generic shell for /guilds/:guildId/m/:moduleId — just looks up the
-// module's form component. Reachable directly only if someone bookmarks/
-// types the URL for a module without one yet; Overview only ever links
-// here for modules that do (see MODULE_FORMS).
+// module's form component. Reachable with an unknown id only if someone
+// bookmarks/types the URL; Overview only ever links here for modules that
+// have a form (see MODULE_FORMS), and an unknown id shows the not-found page.
 export default function ModulePage() {
   const { guildId, moduleId } = useParams();
   const { info, loading } = usePlatformInfo(guildId);
@@ -60,7 +61,8 @@ export default function ModulePage() {
   currentGuild.current = guildId;
   const Form = MODULE_FORMS[moduleId];
   if (!Form) {
-    return <p className="v2-state">This module doesn't have a V2 settings page yet.</p>;
+    // No settings page under this id: a mistyped or old address, inside the Shell like any other.
+    return <NotFound title="Settings page not found" guildId={guildId} />;
   }
   // Wait for the platform so a Fluxer server never flashes Discord wording or settings.
   if (loading) return <p className="v2-state">Loading…</p>;

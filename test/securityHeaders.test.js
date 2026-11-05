@@ -185,7 +185,13 @@ test('the verify page, and only it, may load Turnstile', async () => {
   const token = signVerifyToken(guild.id, '123456789012345678');
   const res = await fetch(`${base}/verify/${guild.id}?t=${encodeURIComponent(token)}`);
   assert.equal(res.status, 200);
-  assert.match(await res.text(), /challenges\.cloudflare\.com\/turnstile/);
+  const html = await res.text();
+  assert.match(html, /challenges\.cloudflare\.com\/turnstile/);
+  assert.match(html, new RegExp(`Verify to join ${guild.name}`), 'names the server');
+  assert.match(html, /data-theme="auto"/);
+  const script = await fetch(`${base}/verify.js`);
+  assert.equal(script.status, 200, 'the script that keeps Verify off until the check passes');
+  await script.arrayBuffer();
   const policy = parse(res.headers.get('content-security-policy'));
   assert.deepEqual(policy['script-src'], ["'self'", KESTREL, CLOUDFLARE]);
   assert.deepEqual(policy['frame-src'], ["'self'", CLOUDFLARE]);

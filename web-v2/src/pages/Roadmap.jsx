@@ -24,7 +24,7 @@ function VoteButton({ post, onVote, canVote, canLogin }) {
   // Without a login (or with voting off) the count is only shown: no button, no border, full colour.
   if (!canVote) {
     return (
-      <div className="v2-roadmap-vote is-static" title={canLogin ? 'Log in to vote' : undefined}>
+      <div className="v2-roadmap-vote is-static" title={canLogin ? 'Sign in to vote' : undefined}>
         <strong>{formatCount(post.votes)}</strong>
         <span>vote{post.votes === 1 ? '' : 's'}</span>
       </div>
@@ -120,7 +120,7 @@ export default function Roadmap() {
         ) : (
           <>
             {' '}
-            <a href={loginHref()}>Log in</a> to vote or suggest a feature.
+            <a href={loginHref()}>Sign in</a> to vote or suggest a feature.
           </>
         )}
       </p>

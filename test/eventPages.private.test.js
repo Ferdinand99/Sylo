@@ -293,14 +293,14 @@ test('a link preview bot sees the same page: no title, no description, no image,
 test('the sign-in link is for the platform the event was posted on', async () => {
   const d = await text(await get(anon(), `/events/${staffEv.public_token}`));
   assert.match(d, new RegExp(`href="/auth/discord/login\\?next=/events/${staffEv.public_token}"`));
-  assert.match(d, /Log in with Discord/);
+  assert.match(d, /Sign in with Discord/);
   assert.doesNotMatch(d, /Fluxer/);
 
   // an event posted on Fluxer (its server key carries the prefix)
   const fluxer = await make(CH_STAFF, { guildId: `fluxer:${F_GUILD}` });
   const f = await text(await get(anon(), `/events/${fluxer.public_token}`));
   assert.match(f, new RegExp(`href="/auth/fluxer/login\\?next=/events/${fluxer.public_token}"`));
-  assert.match(f, /Log in with Fluxer/);
+  assert.match(f, /Sign in with Fluxer/);
   assert.doesNotMatch(f, /Discord/);
 });
 
@@ -856,11 +856,11 @@ test('/forget by the host leaves a members-only page as it was, without a host t
   const mine = await make(CH_STAFF, { title: 'Mine', hostId: BOB });
   await setEventParticipant(mine.id, BOB, 'join');
   const url = `/events/${mine.public_token}`;
-  assert.match(await text(await get(browsers.alice, url)), /<dt>Going<\/dt>\s*<dd>1 of 10<\/dd>/);
+  assert.match(await text(await get(browsers.alice, url)), /<dt>Going<\/dt>\s*<dd>1 of 10 spots<\/dd>/);
   await forgetUser(D_GUILD, BOB);
   const html = await text(await get(browsers.alice, url));
   assert.match(html, /Mine/);
-  assert.match(html, /<dt>Going<\/dt>\s*<dd>0 of 10<\/dd>/, 'their sign-up is gone from the count');
+  assert.match(html, /<dt>Going<\/dt>\s*<dd>0 of 10 spots<\/dd>/, 'their sign-up is gone from the count');
   assert.ok(!html.includes(BOB), 'no member id on the page');
 });
 

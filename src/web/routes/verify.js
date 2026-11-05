@@ -13,6 +13,12 @@ import { verifyVerifyToken, normaliseVerificationConfig, grantVerified } from '.
 const router = Router();
 const SITEVERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
+// The platform a server key belongs to, for wording ("fluxer:123" is a Fluxer server).
+const platformName = (guildId) => (String(guildId).startsWith('fluxer:') ? 'Fluxer' : 'Discord');
+
+const expiredLink = (guildId) =>
+  `This verification link is invalid or has expired. Click Verify again in ${platformName(guildId)}.`;
+
 function fail(res, message) {
   return res
     .status(400)
@@ -25,7 +31,7 @@ router.get(
     const { guildId } = req.params;
     const parsed = verifyVerifyToken(req.query.t);
     if (!parsed || parsed.guildId !== guildId) {
-      return fail(res, 'This verification link is invalid or has expired. Click Verify again in Discord.');
+      return fail(res, expiredLink(guildId));
     }
     if (!config.turnstileEnabled) {
       return fail(res, 'The captcha is not configured on this server. Ask an admin.');
@@ -37,6 +43,8 @@ router.get(
     res.locals.extendCsp(TURNSTILE_SOURCES);
     res.render('verify', {
       state: 'challenge',
+      guildName: guildByKey(guildId)?.name ?? null,
+      platformName: platformName(guildId),
       message: null,
       siteKey: config.turnstileSiteKey,
       token: req.query.t,
@@ -50,7 +58,7 @@ router.post('/:guildId', async (req, res, next) => {
     const { guildId } = req.params;
     const parsed = verifyVerifyToken(req.body.t);
     if (!parsed || parsed.guildId !== guildId) {
-      return fail(res, 'This verification link is invalid or has expired. Click Verify again in Discord.');
+      return fail(res, expiredLink(guildId));
     }
     if (!config.turnstileEnabled) return fail(res, 'The captcha is not configured.');
 
@@ -87,7 +95,7 @@ router.post('/:guildId', async (req, res, next) => {
 
     if (result === 'ok' || result === 'already') {
       if (result === 'ok') {
-        // Let them know back in Discord too (the interaction token is long gone).
+        // Let them know back in the server's app too (the interaction token is long gone).
         guild.client.users
           .fetch(parsed.userId)
           .then((u) => u.send({ content: `${cfg.successMessage}\n*(${guild.name})*` }))
@@ -96,6 +104,7 @@ router.post('/:guildId', async (req, res, next) => {
       return res.render('verify', {
         state: 'done',
         message: result === 'already' ? 'You were already verified.' : cfg.successMessage,
+        platformName: platformName(guildId),
         siteKey: null,
         token: null,
         guildId,

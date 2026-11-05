@@ -61,7 +61,13 @@ test('the error page from the app sign-in (mobile.js) is plain', async () => {
   const b = browser();
   const invalid = await b.get('/auth/mobile/start?challenge=x&state=y');
   assert.equal(invalid.status, 400);
-  assertPlain(await invalid.text(), 'mobile start');
+  const invalidText = await invalid.text();
+  assert.doesNotMatch(
+    invalidText,
+    /Back to the dashboard/,
+    'the app, not the dashboard, is where they go back to'
+  );
+  assertPlain(invalidText, 'mobile start');
   await signIn(b, 'discord');
   const expired = await b.get('/auth/mobile/confirm');
   assert.equal(expired.status, 400);
@@ -74,8 +80,29 @@ test('the error page from a failed login (auth.js) is plain', async () => {
   const res = await browser().get('/auth/discord/callback?code=x&state=not-the-state');
   assert.ok(res.status >= 400 && res.status < 500, `status ${res.status}`);
   const text = await res.text();
-  assert.match(text, /Login failed/);
+  assert.match(text, /Sign-in failed/);
+  assert.match(text, /<a class="btn btn-ghost" href="\/auth\/login">Try again<\/a>/);
   assertPlain(text, 'login failed');
+});
+
+test('an unknown address: signed out goes to sign-in, signed in gets the 404 page with the policy', async () => {
+  const out = await browser().get('/no/such/page', { headers: { accept: 'text/html' } });
+  assert.equal(out.status, 302);
+  assert.equal(out.headers.get('location'), '/auth/login');
+
+  setProfiles();
+  const b = browser();
+  await signIn(b, 'discord');
+  const res = await b.get('/no/such/page', { headers: { accept: 'text/html' } });
+  assert.equal(res.status, 404);
+  assert.match(res.headers.get('content-security-policy') ?? '', /default-src 'self'/);
+  assert.equal(res.headers.get('x-frame-options'), 'DENY');
+  const text = await res.text();
+  assert.match(text, /Page not found/);
+  assertPlain(text, 'unknown address');
+  const json = await b.get('/api/nothing-here', { headers: { accept: 'text/html' } });
+  assert.equal(json.status, 404);
+  assert.deepEqual(await json.json(), { error: 'Not found' });
 });
 
 test('the error page from the public leaderboard (leaderboard.js) is plain', async () => {

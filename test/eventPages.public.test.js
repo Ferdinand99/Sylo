@@ -211,7 +211,7 @@ test('switched on, the page shows the event: title, time, place, capacity, count
   // the time is an element the page script turns into the visitor's own zone; UTC without script
   assert.match(html, /<time [^>]*datetime="2030-01-05T18:00:00\.000Z"[^>]*>2030-01-05 18:00 UTC<\/time>/);
   assert.match(html, /datetime="2030-01-05T21:00:00\.000Z"/, 'the end');
-  assert.match(html, /<dt>Going<\/dt>\s*<dd>2 of 10<\/dd>/);
+  assert.match(html, /<dt>Going<\/dt>\s*<dd>2 of 10 spots<\/dd>/);
   assert.match(html, /<dt>Maybe<\/dt>\s*<dd>1<\/dd>/);
   assert.match(html, /<script src="\/event-time\.js" defer><\/script>/);
 });
@@ -229,7 +229,7 @@ test('an event without a capacity, a place or an end shows only what it has', as
 test('a full event says so', async () => {
   const small = await make({ capacity: 1 });
   await setEventParticipant(small.id, MEMBERS[0], 'join');
-  assert.match(await page(small), /<dd>1 of 1 · Full<\/dd>/);
+  assert.match(await page(small), /<dd>1 of 1 spot · Full<\/dd>/);
 });
 
 test('a cancelled event still has its page, marked cancelled', async () => {
@@ -640,11 +640,11 @@ test('when the answer cannot be had, there is no page: an error, no answer, a ch
 test('/forget by the host leaves the page as it was, without a host to show', async () => {
   const mine = await make({ title: 'Mine', hostId: MEMBERS[0] });
   await setEventParticipant(mine.id, MEMBERS[0], 'join');
-  assert.match(await page(mine), /<dt>Going<\/dt>\s*<dd>1 of 10<\/dd>/);
+  assert.match(await page(mine), /<dt>Going<\/dt>\s*<dd>1 of 10 spots<\/dd>/);
   await forgetUser(SG, MEMBERS[0]);
   const html = await page(mine);
   assert.match(html, /Mine/);
-  assert.match(html, /<dt>Going<\/dt>\s*<dd>0 of 10<\/dd>/, 'their sign-up is gone from the count');
+  assert.match(html, /<dt>Going<\/dt>\s*<dd>0 of 10 spots<\/dd>/, 'their sign-up is gone from the count');
   assert.ok(!html.includes(MEMBERS[0]));
 });
 

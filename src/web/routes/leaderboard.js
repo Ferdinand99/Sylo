@@ -79,6 +79,8 @@ function notFound(res) {
     title: 'Leaderboard unavailable',
     heading: 'No leaderboard here',
     message: NOT_FOUND,
+    backHref: null,
+    publicPage: true,
   });
 }
 
@@ -121,14 +123,15 @@ async function renderLeaderboard(req, res, next, guildId, canonical) {
           name: name || 'Unknown member',
           avatar,
           left: !member && !name,
-          level: periodKey ? null : r.level,
+          // The level the xp works out to (levelProgress), the same one the bar is measured against.
+          level: periodKey ? null : p.level,
           xp: r.xp,
           voiceXp: r.voice_xp ?? 0,
           voiceMinutes: r.voice_minutes ?? 0, // only on all-time rows
           messages: r.messages,
           into: p ? p.into : 0,
           need: p ? p.need : 0,
-          pct: p ? Math.round(p.pct * 100) : 0,
+          pct: p ? Math.floor(p.pct * 100) : 0,
         };
       })
     );

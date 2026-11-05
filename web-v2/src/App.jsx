@@ -9,6 +9,7 @@ import {
 import { lazy } from 'react';
 import Shell from './components/Shell.jsx';
 import RouteError from './components/RouteError.jsx';
+import NotFound from './components/NotFound.jsx';
 import GuildPicker from './pages/GuildPicker.jsx';
 import Overview from './pages/Overview.jsx';
 const Leaderboard = lazy(() => import('./pages/Leaderboard.jsx'));
@@ -73,6 +74,7 @@ const router = createBrowserRouter(
         <Route path="roadmap/admin" element={<RoadmapAdmin />} />
         <Route path="health" element={<Health />} />
         <Route path="stats" element={<Stats />} />
+        <Route path="*" element={<NotFound />} />
       </Route>
     </Route>
   ),

@@ -29,8 +29,9 @@ test('an unauthenticated visitor is sent to the chooser when both logins are off
   assert.equal(res.status, 302);
   assert.equal(res.headers.get('location'), '/auth/login');
   const page = await (await browser().get('/auth/login')).text();
-  assert.match(page, /Log in with Discord/);
-  assert.match(page, /Log in with Fluxer/);
+  assert.match(page, /Sign in with Discord/);
+  assert.match(page, /Sign in with Fluxer/);
+  assert.ok(page.indexOf('Sign in with Discord') < page.indexOf('Sign in with Fluxer'), 'Discord first');
   for (const platform of ['discord', 'fluxer']) {
     assert.match(page, new RegExp(`<a[^>]*href="/auth/${platform}/login"`));
   }

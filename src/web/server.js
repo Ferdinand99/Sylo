@@ -249,6 +249,21 @@ export function createApp() {
   app.use('/api/v2', v2ApiRouter);
   app.use('/v2', v2ClientRouter);
 
+  // Nothing answered: a page of our own instead of Express's bare "Cannot GET". Code that asks for
+  // JSON (or anything under /api/) gets JSON. Behind requireAuth like the routes above, so a
+  // signed-out visitor is sent to sign in first, as for every other address.
+  app.use((req, res) => {
+    if (req.originalUrl.startsWith('/api/') || !req.accepts('html')) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    res.status(404).render('error', {
+      title: 'Page not found',
+      heading: 'Page not found',
+      message: "There's nothing at this address.",
+      publicPage: true,
+    });
+  });
+
   // Central error handler — keep the server up, record the error for the dashboard.
   // Express recognises an error handler by its 4-arg signature, so `_next` must
   // be present even though it is unused.

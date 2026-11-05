@@ -401,7 +401,13 @@ async function attachAccount(req, _res, next) {
 const redirectUri = (req, provider) => `${baseUrl(req)}${provider.callbackPath}`;
 
 function loginError(res, message, status = 400) {
-  return res.status(status).render('error', { title: 'Login failed', heading: 'Login failed', message });
+  return res.status(status).render('error', {
+    title: 'Sign-in failed',
+    heading: 'Sign-in failed',
+    message,
+    backHref: '/auth/login',
+    backLabel: 'Try again',
+  });
 }
 
 /** Start an OAuth round-trip. `connect` adds the identity to the signed-in account instead of signing in. */

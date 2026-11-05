@@ -7,6 +7,8 @@
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="/public.css" />
   <% if (state === 'challenge') { %>
+    <%# First, and not async: the callbacks have to exist before Cloudflare's script can render the widget. %>
+    <script src="/verify.js"></script>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <% } %>
 </head>
@@ -14,21 +16,23 @@
   <main class="verify-wrap">
     <div class="pub-brand"><img src="/favicon.svg" alt="" width="28" height="28" /><span>Sylo</span></div>
     <div class="card">
+      <% var serverName = typeof guildName !== 'undefined' && guildName ? guildName : null; %>
       <% if (state === 'challenge') { %>
-        <h1 class="page-title">Verify to continue</h1>
+        <h1 class="page-title"><%= serverName ? 'Verify to join ' + serverName : 'Verify to continue' %></h1>
         <p class="muted">Complete the check below and you'll get access to the server.</p>
         <form method="POST" action="/verify/<%= guildId %>" class="stack verify-form">
           <input type="hidden" name="t" value="<%= token %>" />
-          <div class="cf-turnstile" data-sitekey="<%= siteKey %>" data-theme="dark"></div>
-          <div class="u-mt-3"><button type="submit" class="btn">Verify</button></div>
+          <div class="cf-turnstile" data-sitekey="<%= siteKey %>" data-theme="auto" data-callback="syloTurnstileDone" data-expired-callback="syloTurnstileReset" data-error-callback="syloTurnstileReset" data-timeout-callback="syloTurnstileReset"></div>
+          <p class="muted small" id="verify-hint">Complete the check above to continue.</p>
+          <div class="u-mt-3"><button type="submit" class="btn" id="verify-submit" aria-describedby="verify-hint">Verify</button></div>
         </form>
       <% } else if (state === 'done') { %>
         <h1 class="page-title">✅ Verified</h1>
         <p><%= message %></p>
-        <p class="muted small">You can close this tab and head back to Discord.</p>
+        <p class="muted small">You can close this tab and head back to <%= typeof platformName !== 'undefined' ? platformName : 'the server' %>.</p>
       <% } else { %>
         <h1 class="page-title">Verification failed</h1>
-        <p class="warn-text"><%= message %></p>
+        <p><%= message %></p>
       <% } %>
     </div>
     <p class="lb-foot muted small">Powered by Sylo</p>

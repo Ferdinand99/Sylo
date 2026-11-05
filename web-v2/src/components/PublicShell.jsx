@@ -31,7 +31,7 @@ export default function PublicShell() {
           <NavLink to="/roadmap">Roadmap</NavLink>
         </nav>
         <a className="v2-pill-link v2-public-login" href={loginHref()}>
-          Log in
+          Sign in
         </a>
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
       </header>
