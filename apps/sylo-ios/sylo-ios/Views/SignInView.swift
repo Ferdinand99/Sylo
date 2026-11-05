@@ -97,13 +97,16 @@ struct SignInView: View {
             Text("Sign In with \(provider.displayName)")
                 .frame(maxWidth: .infinity)
         }
-        .disabled(session.isBusy)
 
-        if isPrimary {
-            button.primaryActionStyle()
-        } else {
-            button.secondaryActionStyle()
+        // `.disabled` goes last, so the primary style can see it and dim its label.
+        Group {
+            if isPrimary {
+                button.primaryActionStyle()
+            } else {
+                button.secondaryActionStyle()
+            }
         }
+        .disabled(session.isBusy)
     }
 
     private func signIn(with provider: Platform) async {

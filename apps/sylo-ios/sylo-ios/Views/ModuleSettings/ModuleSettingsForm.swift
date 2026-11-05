@@ -67,6 +67,7 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
                     ProgressView()
                 } else {
                     Button("Save") { Task { await model.save() } }
+                        .toolbarSaveStyle()
                         .disabled(!model.hasChanges || problem != nil)
                 }
             }

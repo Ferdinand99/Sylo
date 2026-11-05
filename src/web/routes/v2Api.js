@@ -311,7 +311,9 @@ router.get(
     // rights (checked live, the same way requireGuildAdmin does for token requests).
     const live = await Promise.all(guilds.map((g) => managesGuildLive(g.id, userIdForGuild(req, g.id))));
     // Server insights, for the app's "messages today": one query each for every server, and a
-    // server only has a number while the module is on for it (null otherwise).
+    // server only has a number while the module is on for it (null otherwise). "Today" is the UTC
+    // day, which is how Server insights keeps its daily rows (it also flushes about hourly, so the
+    // number can lag by up to an hour).
     const insightsOn = new Set((await listEnabledModuleConfigs('insights')).map((m) => m.guildId));
     const messagesToday = insightsOn.size ? await messagesOnDay(utcDay()) : new Map();
     // Ticket counts for the app's server list: which servers have tickets waiting. The member
@@ -321,7 +323,9 @@ router.get(
         .filter((_, i) => live[i])
         .map(async (g) => ({
           ...g,
-          memberCount: guildByKey(g.id)?.memberCount ?? null,
+          // The same cached count on both platforms (guild.memberCount, as the dashboard
+          // overview reads it); null when the platform sent none, so the app shows nothing.
+          memberCount: Number.isFinite(guildByKey(g.id)?.memberCount) ? guildByKey(g.id).memberCount : null,
           messagesToday: insightsOn.has(g.id) ? (messagesToday.get(g.id) ?? 0) : null,
           openTickets: await openTicketCount(g.id),
           unreadTickets: await unreadTicketCount(g.id),

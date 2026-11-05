@@ -89,6 +89,7 @@ struct ServerView: View {
                     ProgressView()
                 } else {
                     Button("Save") { Task { await settings.save() } }
+                        .toolbarSaveStyle()
                         .disabled(!settings.hasChanges || settings.draftProblem != nil)
                 }
             }

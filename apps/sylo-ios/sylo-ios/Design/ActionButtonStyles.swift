@@ -10,9 +10,21 @@ extension View {
     @ViewBuilder
     func primaryActionStyle() -> some View {
         if #available(iOS 26, *) {
-            buttonStyle(.glassProminent).foregroundStyle(Color.onAccent)
+            buttonStyle(.glassProminent).modifier(OnAccentLabel())
         } else {
-            buttonStyle(.borderedProminent).foregroundStyle(Color.onAccent)
+            buttonStyle(.borderedProminent).modifier(OnAccentLabel())
+        }
+    }
+
+    /// The Save button in a toolbar. On iOS 26 and later it is drawn as tinted glass with a label
+    /// that stays readable on the accent in both appearances; before that it is a plain text
+    /// button, which needs nothing. Put `.disabled(...)` after this, so the label can dim.
+    @ViewBuilder
+    func toolbarSaveStyle() -> some View {
+        if #available(iOS 26, *) {
+            buttonStyle(.glassProminent).modifier(OnAccentLabel())
+        } else {
+            self
         }
     }
 
@@ -24,6 +36,21 @@ extension View {
             buttonStyle(.glass)
         } else {
             buttonStyle(.bordered)
+        }
+    }
+}
+
+/// The label colour for text on the accent colour (dark on the light cyan, white on the dark one).
+/// Only while the button is enabled: a disabled button keeps the system's dimmed look, which the
+/// system keeps readable. Apply it before `.disabled(...)`, so it can see that.
+private struct OnAccentLabel: ViewModifier {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.foregroundStyle(Color.onAccent)
+        } else {
+            content
         }
     }
 }

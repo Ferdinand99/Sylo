@@ -174,4 +174,10 @@ public struct TempRoleRow: Decodable, Sendable, Hashable, Identifiable {
     }
 
     public var expiresDate: Date { Date(timeIntervalSince1970: expiresAt / 1000) }
+
+    /// "Ends in 2 days". A role whose time has passed but that the server has not swept yet (it
+    /// does so every minute) reads "Ending now", not "Ends 3 min. ago".
+    public func endsText(now: Date = .now, locale: Locale = .current) -> String {
+        expiresDate <= now ? "Ending now" : "Ends " + DateText.relative(expiresDate, now: now, locale: locale)
+    }
 }

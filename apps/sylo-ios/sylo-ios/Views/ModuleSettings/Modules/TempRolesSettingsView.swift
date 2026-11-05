@@ -75,9 +75,9 @@ struct TempRolesSettingsView: View {
         .task { await note.load() }
     }
 
-    /// "Ends in 2 days · set by Alex · Trial period".
+    /// "Ends in 2 days · set by Alex · Trial period"; "Ending now" once the time has passed.
     static func details(of row: TempRoleRow) -> String {
-        var parts = ["Ends " + DateText.relative(row.expiresDate)]
+        var parts = [row.endsText()]
         if let by = row.addedByName { parts.append("set by \(by)") }
         if !row.reason.isEmpty { parts.append(row.reason) }
         return parts.joined(separator: " · ")

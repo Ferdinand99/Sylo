@@ -5,7 +5,15 @@
 // count at once.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { D_GUILD, browser, profiles, setProfiles, signIn, startOAuthApp } from './helpers/oauthApp.js';
+import {
+  D_GUILD,
+  F_GUILD,
+  browser,
+  profiles,
+  setProfiles,
+  signIn,
+  startOAuthApp,
+} from './helpers/oauthApp.js';
 
 await startOAuthApp();
 
@@ -148,4 +156,22 @@ test('the app server list carries the cached member count, and messages today on
   await accrueDaily(D_GUILD, utcDay(), { messages: 312 });
   assert.equal((await row()).messagesToday, 312);
   await setGuildModule(D_GUILD, 'insights', { enabled: false });
+});
+
+test('a Fluxer server in the app list carries its cached member count too', async () => {
+  setProfiles();
+  const id = profiles.fluxer.id;
+  const b = browser();
+  await signIn(b, 'fluxer');
+  const { accountId } = await findIdentity('fluxer', id);
+  const { token } = await createApiToken(accountId, { deviceName: 'iPhone', ttlMs: 60_000 });
+  const fluxerGuild = runtime.clients.fluxer.guilds.cache.get(F_GUILD);
+  fluxerGuild.ownerId = id;
+  fluxerGuild.memberCount = 77;
+  const row = async () =>
+    (await (await get('/api/v2/guilds', token)).json()).guilds.find((g) => g.platform === 'fluxer');
+  assert.equal((await row()).memberCount, 77, 'the same property the dashboard overview reads');
+  fluxerGuild.memberCount = null; // Fluxer did not send a count: nothing is shown, not 0
+  assert.equal((await row()).memberCount, null);
+  fluxerGuild.ownerId = 'x';
 });

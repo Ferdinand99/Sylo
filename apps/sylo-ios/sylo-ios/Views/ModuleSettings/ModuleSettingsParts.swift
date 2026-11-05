@@ -87,7 +87,22 @@ struct ListLine: View {
 
 extension View {
     /// Room under the last row of a tab's list, so it scrolls fully clear of the floating tab bar.
+    /// Only where that bar floats over the content: iOS 26 and later, in a narrow window (iPhone).
+    /// An iPad has its tabs at the top, and earlier systems inset the list themselves. Screens
+    /// pushed from a tab cover the bar, so they need none.
     func tabBarClearance() -> some View {
-        contentMargins(.bottom, 64, for: .scrollContent)
+        modifier(TabBarClearance())
+    }
+}
+
+private struct TabBarClearance: ViewModifier {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *), horizontalSizeClass == .compact {
+            content.contentMargins(.bottom, 64, for: .scrollContent)
+        } else {
+            content
+        }
     }
 }

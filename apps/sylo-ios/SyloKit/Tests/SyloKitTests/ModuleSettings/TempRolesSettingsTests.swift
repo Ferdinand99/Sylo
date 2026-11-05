@@ -61,6 +61,21 @@ struct TempRolesSettingsTests {
         #expect(try JSONDecoder().decode(TempRolesSettings.self, from: data) == page.settings)
     }
 
+    @Test("a role past its end time reads Ending now, a coming one is relative")
+    func endsText() throws {
+        let now = Date(timeIntervalSince1970: 1_794_000_000)
+        func row(endingAt date: Date) -> TempRoleRow {
+            TempRoleRow(userId: "1", roleId: "2", member: "Alex", role: "Trial",
+                        expiresAt: date.timeIntervalSince1970 * 1000)
+        }
+        let us = Locale(identifier: "en_US")
+        #expect(row(endingAt: now.addingTimeInterval(-180)).endsText(now: now, locale: us) == "Ending now")
+        #expect(row(endingAt: now).endsText(now: now, locale: us) == "Ending now")
+        let later = row(endingAt: now.addingTimeInterval(2 * 86_400)).endsText(now: now, locale: us)
+        #expect(later.hasPrefix("Ends "))
+        #expect(!later.contains("ago"))
+    }
+
     @Test("durations the server accepts have no problem", arguments: [
         "30m", "12h", "7d", "2w", "1d12h", "1D", " 2 w ", "1w2d3h4m", "365d", "1m", "8760h",
     ])
