@@ -162,8 +162,8 @@ private struct RangePicker: View {
     let choose: (InsightsRange) -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: SyloSpacing.s) {
+        FlowLayout(spacing: SyloSpacing.s) {
+            Group {
                 ForEach(InsightsRange.allCases.sorted { $0.hours < $1.hours }) { range in
                     let isOn = range == selected
                     Button {

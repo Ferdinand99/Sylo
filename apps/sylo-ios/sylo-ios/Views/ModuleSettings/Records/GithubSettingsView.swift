@@ -102,7 +102,7 @@ struct GithubSettingsView: View {
 
     private func details(of watch: GithubWatch, page: GithubPage) -> String {
         let channel = page.channels.first { $0.id == watch.channelId }.map { "#\($0.name)" } ?? String(localized: "deleted channel")
-        var parts = [channel, String(localized: "\(watch.events.count) event types")]
+        var parts = [channel, (watch.events.count == 1 ? String(localized: "1 event type") : String(localized: "\(watch.events.count) event types"))]
         if !watch.roleId.isEmpty {
             let role = page.roles.first { $0.id == watch.roleId }?.name ?? String(localized: "deleted role")
             parts.append(String(localized: "pings @\(role)"))

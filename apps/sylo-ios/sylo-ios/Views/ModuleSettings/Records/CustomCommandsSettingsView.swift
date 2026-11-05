@@ -71,7 +71,7 @@ struct CustomCommandsSettingsView: View {
 
     private func details(of command: CustomCommand) -> String {
         var parts = [command.description.isEmpty ? String(localized: "No description") : command.description]
-        parts.append(String(localized: "\(command.actions.count) actions"))
+        parts.append(command.actions.count == 1 ? String(localized: "1 action") : String(localized: "\(command.actions.count) actions"))
         if !command.allowedRoles.isEmpty || !command.allowedChannels.isEmpty {
             parts.append(String(localized: "limited to certain roles or channels"))
         }

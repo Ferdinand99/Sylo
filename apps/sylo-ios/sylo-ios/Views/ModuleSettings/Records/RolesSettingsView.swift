@@ -102,7 +102,7 @@ struct RolesSettingsView: View {
 
     private func details(of set: ReactionRoleSet, page: RolesPage) -> String {
         let channel = page.channels.first { $0.id == set.channelId }.map { "#\($0.name)" } ?? String(localized: "deleted channel")
-        var parts = [channel, String(localized: "\(set.pairs.count) roles"), set.style.title]
+        var parts = [channel, (set.pairs.count == 1 ? String(localized: "1 role") : String(localized: "\(set.pairs.count) roles")), set.style.title]
         if set.style != .select {
             parts.append(set.mode == .reverse ? String(localized: "Reverse style") : String(localized: "Default style"))
         }

@@ -67,8 +67,6 @@ private struct EmbedMessageForm: View {
                 if model.isBusy {
                     ProgressView()
                 } else {
-                    Button("Save Draft") { Task { await model.saveDraft() } }
-                        .disabled(!model.hasChanges)
                     Button(model.isPublished ? "Update" : "Publish") { Task { await model.publish() } }
                         .toolbarSaveStyle()
                         .disabled(model.publishProblem != nil)
@@ -99,12 +97,14 @@ private struct EmbedMessageForm: View {
                 .accessibilityLabel(Text("Name"))
             ChannelPicker(
                 title: "Channel", selection: $model.channelId, channels: model.channels, noneTitle: "Choose a channel")
+            Button("Save Draft", systemImage: "square.and.arrow.down") { Task { await model.saveDraft() } }
+                .disabled(!model.hasChanges)
         } header: {
             Text("Message")
         } footer: {
             VStack(alignment: .leading, spacing: SyloSpacing.xs) {
                 if model.isPublished {
-                    Text("Published. Update edits the posted message; changing the channel posts a fresh one.")
+                    Text("Published. Update edits the posted message; changing the channel posts a fresh one. Save Draft keeps your changes without touching the posted message.")
                 }
                 if !model.hasChanges {
                     statusLine
