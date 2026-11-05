@@ -97,7 +97,13 @@ jobs:
               shoot "$screen-$mode" "$screen" "$mode" large
             done
           done
+          for mode in dark light; do
+            for screen in custom-commands insights embeds embed-editor; do
+              shoot "$screen-$mode" "$screen" "$mode" large
+            done
+          done
           shoot overview-dark-largetext overview dark accessibility-extra-large
+          shoot embed-editor-dark-largetext embed-editor dark accessibility-extra-large
           shoot modules-dark-largetext modules dark accessibility-extra-large
           shoot tickets-dark-largetext tickets dark accessibility-extra-large
           shoot servers-dark-largetext servers dark accessibility-extra-large
@@ -107,6 +113,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: redesign-screenshots
+          name: ios-screenshots
           path: ${{ runner.temp }}/shots
           if-no-files-found: warn

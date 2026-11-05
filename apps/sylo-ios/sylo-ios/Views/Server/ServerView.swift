@@ -71,6 +71,9 @@ struct ServerView: View {
             .navigationDestination(for: TicketRoute.self) { route in
                 TicketThreadView(server: summary.id, route: route, session: session)
             }
+            .navigationDestination(for: EmbedMessageRoute.self) { route in
+                EmbedMessageEditorView(server: summary.id, session: session, id: route.id)
+            }
             .confirmationDialog("Discard your changes?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
                 Button("Discard Changes", role: .destructive) { settings.discardChanges() }
             }

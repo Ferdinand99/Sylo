@@ -140,3 +140,41 @@ struct LinkTile: View {
         .accessibilityHint("Opens in the web dashboard")
     }
 }
+
+/// A card without a switch that opens a screen in the app (Embed messages).
+struct InAppLinkTile: View {
+    let card: OverviewCard
+    let open: () -> Void
+
+    @ScaledMetric(relativeTo: .body) private var scaledIconWell: CGFloat = 36
+    private var iconWell: CGFloat { min(scaledIconWell, 54) }
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: SyloSpacing.m) {
+                Image(systemName: ModuleSymbol.name(forIcon: card.icon))
+                    .font(.system(size: iconWell * 0.46, weight: .semibold))
+                    .foregroundStyle(Color.syloBrand)
+                    .frame(width: iconWell, height: iconWell)
+                    .background(
+                        Color.syloCyan.opacity(0.14),
+                        in: RoundedRectangle(cornerRadius: SyloRadius.chip, style: .continuous))
+                    .accessibilityHidden(true)
+                Text(verbatim: card.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.syloText)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.syloMuted)
+                    .accessibilityHidden(true)
+            }
+            .padding(SyloSpacing.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .syloCard(radius: SyloRadius.row + 4)
+        }
+        .buttonStyle(.syloPress)
+        .accessibilityHint("Opens the screen")
+    }
+}

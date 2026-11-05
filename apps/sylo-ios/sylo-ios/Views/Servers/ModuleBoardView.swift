@@ -4,8 +4,8 @@ import SyloKit
 /// The Modules tab of a server: the modules as tiles, one group per category like the web
 /// overview, each with an LED switch. Tap a tile for its settings; press and hold to switch it on or
 /// off. The search field stays pinned above the board. A module with a settings screen in the app
-/// opens it (``ModuleRoute``, handled by ``ServerView``); cards without a switch (Commands, Embed
-/// messages) open in the web dashboard. The server's general settings are their own tab, so that
+/// opens it (``ModuleRoute``, handled by ``ServerView``). The Embed messages card has no switch and opens
+/// its screen in the app; the Commands card opens in the web dashboard. The server's general settings are their own tab, so that
 /// card is left out here.
 struct ModuleBoardView: View {
     let summary: ServerSummary
@@ -111,6 +111,8 @@ struct ModuleBoardView: View {
                 card: card, isPending: model.isPending(card.id), hasScreen: ModuleScreens.hasScreen(card.id),
                 open: { openModule(card.id) },
                 setEnabled: { enabled in model.setModule(card.id, enabled: enabled) })
+        } else if ModuleScreens.hasScreen(card.id) {
+            InAppLinkTile(card: card) { openModule(card.id) }
         } else if let url = webURL(for: card) {
             LinkTile(card: card, url: url)
         }

@@ -8,7 +8,8 @@ import SyloKit
 ///
 ///     xcrun simctl launch booted net.opland.sylo -SyloDemo YES -SyloDemoScreen overview
 ///
-/// Screens: `servers`, `overview`, `modules`, `module` (a module's settings), `tickets`, `thread`.
+/// Screens: `servers`, `overview`, `modules`, `module` (a module's settings), `tickets`, `thread`,
+/// `custom-commands`, `insights`, `embeds` (the embed message list) and `embed-editor`.
 enum DemoLaunch {
     /// Where the app starts.
     struct Start {
@@ -32,6 +33,19 @@ enum DemoLaunch {
         case "module":
             var path = NavigationPath()
             path.append(ModuleRoute(moduleID: "honeypot"))
+            return Start(server: demoServer, tab: .modules, path: path)
+        case "custom-commands", "insights":
+            var path = NavigationPath()
+            path.append(ModuleRoute(moduleID: name))
+            return Start(server: demoServer, tab: .modules, path: path)
+        case "embeds":
+            var path = NavigationPath()
+            path.append(ModuleRoute(moduleID: "messages"))
+            return Start(server: demoServer, tab: .modules, path: path)
+        case "embed-editor":
+            var path = NavigationPath()
+            path.append(ModuleRoute(moduleID: "messages"))
+            path.append(EmbedMessageRoute(id: 7))
             return Start(server: demoServer, tab: .modules, path: path)
         case "tickets":
             return Start(server: demoServer, tab: .tickets, path: NavigationPath())

@@ -62,15 +62,24 @@ nonisolated enum PreviewData {
             OverviewGroup(title: "Messages and channels", cards: [
                 module("autoresponder", "Autoresponder", icon: "zap", on: true, line: ("Triggers", "9")),
                 module("auto-react", "Auto-react", icon: "smile", on: false, beta: true),
+                OverviewCard(kind: .link, id: "messages", name: "Embed messages", icon: "message-square",
+                             hasToggle: false, isEnabled: nil, status: .link, webPath: "/v2/guilds/1/messages"),
+                module("custom-commands", "Custom commands", icon: "command", on: true, line: ("Commands", "3")),
+                module("reminders", "Reminders", icon: "bell", on: true, line: ("Active", "2")),
+                module("channel-cleanup", "Channel cleanup", icon: "trash-2", on: false),
                 module("sticky", "Sticky messages", icon: "pin", on: true),
                 module("temp-voice", "Temporary voice", icon: "mic", on: false),
                 module("server-stats", "Server stats", icon: "activity", on: true),
+                module("insights", "Server insights", icon: "trending-up", on: true),
+                module("game-stats", "Game stats", icon: "target", on: false),
+                module("roles", "Reaction roles", icon: "smile", on: true, line: ("Sets", "2")),
             ]),
             OverviewGroup(title: "Alerts", cards: [
                 module("twitch-alerts", "Twitch alerts", icon: "twitch", on: true, line: ("Streamers", "3")),
                 module("youtube-alerts", "YouTube alerts", icon: "youtube", on: false),
                 module("rss", "RSS feeds", icon: "rss", on: true),
                 module("free-games", "Free games", icon: "gamepad", on: false),
+                module("github", "GitHub alerts", icon: "github", on: false),
             ]),
         ])
 

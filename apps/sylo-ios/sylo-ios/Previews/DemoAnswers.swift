@@ -22,6 +22,12 @@ extension PreviewData {
                 channels: [ChannelOption(id: "c1", name: "trap"), ChannelOption(id: "c2", name: "general")],
                 roles: [RoleOption(id: "r1", name: "Moderators")])
         }
+        if endpoint is Endpoints.ComposedMessages { return composedList }
+        if let load = endpoint as? Endpoints.ComposedMessage {
+            return load.id == nil ? composedNew : composedPage
+        }
+        if endpoint is Endpoints.LoadCustomCommands { return customCommands }
+        if endpoint is Endpoints.Insights { return insights }
         return nil
     }
 }

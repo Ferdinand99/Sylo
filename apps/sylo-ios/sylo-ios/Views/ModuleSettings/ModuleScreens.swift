@@ -12,6 +12,9 @@ enum ModuleScreens {
         "logging", "moderation", "polls", "rss", "server-stats", "starboard", "sticky", "temp-voice",
         "tickets", "twitch-alerts", "verification", "welcome", "welcome-channel", "youtube-alerts",
         "events", "suggestions", "temp-roles", "auto-threads", "quote-board",
+        "roles", "custom-commands", "reminders", "insights", "game-stats", "channel-cleanup", "github",
+        // The Embed messages card, which is not a module but opens in the app too.
+        "messages",
     ]
 
     @ViewBuilder
@@ -28,6 +31,8 @@ enum ModuleScreens {
         // Members and engagement
         case "welcome": WelcomeSettingsView(server: server, session: session)
         case "welcome-channel": WelcomeChannelSettingsView(server: server, session: session)
+        case "roles": RolesSettingsView(server: server, session: session)
+        case "custom-commands": CustomCommandsSettingsView(server: server, session: session)
         case "birthdays": BirthdaysSettingsView(server: server, session: session)
         case "leveling": LevelingSettingsView(server: server, session: session)
         case "invite-tracker": InviteTrackerSettingsView(server: server, session: session)
@@ -41,13 +46,20 @@ enum ModuleScreens {
         case "temp-roles": TempRolesSettingsView(server: server, session: session)
         case "quote-board": QuoteBoardSettingsView(server: server, session: session)
         // Messages and channels
+        case "messages": EmbedMessagesView(server: server, session: session)
+        case "reminders": RemindersSettingsView(server: server, session: session)
+        case "channel-cleanup": ChannelCleanupSettingsView(server: server, session: session)
         case "autoresponder": AutoresponderSettingsView(server: server, session: session)
         case "auto-react": AutoReactSettingsView(server: server, session: session)
         case "sticky": StickySettingsView(server: server, session: session)
         case "temp-voice": TempVoiceSettingsView(server: server, session: session)
         case "server-stats": ServerStatsSettingsView(server: server, session: session)
         case "auto-threads": AutoThreadsSettingsView(server: server, session: session)
+        // Insights
+        case "insights": InsightsView(server: server, session: session)
+        case "game-stats": GameStatsSettingsView(server: server, session: session)
         // Alerts
+        case "github": GithubSettingsView(server: server, session: session)
         case "twitch-alerts": TwitchAlertsSettingsView(server: server, session: session)
         case "kick-alerts": KickAlertsSettingsView(server: server, session: session)
         case "youtube-alerts": YoutubeAlertsSettingsView(server: server, session: session)
