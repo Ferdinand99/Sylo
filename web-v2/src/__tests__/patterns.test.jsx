@@ -113,6 +113,20 @@ describe('CopyButton', () => {
     expect(document.querySelector('textarea')).toBeNull();
   });
 
+  it('puts focus back on the button after the textarea fallback', async () => {
+    setClipboard(undefined);
+    document.execCommand = vi.fn(() => {
+      document.querySelector('textarea').focus();
+      return true;
+    });
+    render(<CopyButton text="123456789" what="user ID" />);
+    const button = screen.getByRole('button');
+    button.focus();
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('user ID copied'));
+    expect(document.activeElement).toBe(button);
+  });
+
   it('asks to select and copy by hand when every way fails', async () => {
     setClipboard({ writeText: vi.fn().mockRejectedValue(new Error('denied')) });
     document.execCommand = vi.fn().mockReturnValue(false);

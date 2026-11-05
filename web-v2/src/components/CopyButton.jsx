@@ -8,6 +8,8 @@ function copyWithTextarea(value) {
   area.style.position = 'fixed';
   area.style.top = '0';
   area.style.left = '-9999px';
+  // select() moves focus to the textarea; put it back where it was afterwards.
+  const previous = document.activeElement;
   document.body.appendChild(area);
   area.select();
   let ok;
@@ -17,6 +19,7 @@ function copyWithTextarea(value) {
     ok = false;
   }
   area.remove();
+  if (previous instanceof HTMLElement && previous !== document.body) previous.focus();
   return ok;
 }
 
