@@ -16,8 +16,13 @@ nonisolated private func rgb(_ hex: UInt32, alpha: CGFloat = 1) -> UIColor {
 
 extension Color {
     /// A colour that is `dark` in dark appearance and `light` in light appearance.
-    fileprivate init(dark: UIColor, light: UIColor) {
-        self.init(uiColor: UIColor { traits in
+    ///
+    /// `nonisolated` and a `@Sendable` provider on purpose: UIKit and SwiftUI resolve dynamic
+    /// colours on whatever thread renders (SwiftUI's async renderer included). This app's code is
+    /// main-actor isolated by default, so a provider closure made here would carry that isolation
+    /// and trap (EXC_BREAKPOINT) the first time it is resolved off the main thread.
+    nonisolated fileprivate init(dark: UIColor, light: UIColor) {
+        self.init(uiColor: UIColor { @Sendable traits in
             traits.userInterfaceStyle == .dark ? dark : light
         })
     }
