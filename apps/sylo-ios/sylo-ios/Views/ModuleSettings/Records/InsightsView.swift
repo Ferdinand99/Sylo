@@ -265,7 +265,10 @@ private struct ChartTile<Content: View>: View {
 }
 
 /// One line of a ranking: a name, a bar and a figure.
-private struct RankingRow: Identifiable {
+///
+/// `nonisolated` because SwiftUI reads its `id` to diff the `ForEach`, possibly off the main
+/// thread; a main-actor `Identifiable` conformance (this app's default) would trap there.
+private nonisolated struct RankingRow: Identifiable {
     let name: String
     let amount: Int
     let text: String

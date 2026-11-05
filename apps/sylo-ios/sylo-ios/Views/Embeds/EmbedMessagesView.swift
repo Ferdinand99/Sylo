@@ -2,7 +2,10 @@ import SwiftUI
 import SyloKit
 
 /// An embed message editor to push from the list: a saved message, or nil for a new one.
-struct EmbedMessageRoute: Hashable {
+///
+/// `nonisolated` so SwiftUI can hash and compare it as a navigation value on any thread; a
+/// main-actor `Hashable` conformance (this app's default) would trap off the main thread.
+nonisolated struct EmbedMessageRoute: Hashable {
     let id: Int?
 }
 

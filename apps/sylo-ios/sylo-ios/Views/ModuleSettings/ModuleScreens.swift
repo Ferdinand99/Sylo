@@ -75,6 +75,9 @@ enum ModuleScreens {
 }
 
 /// A module settings screen to push from the overview.
-struct ModuleRoute: Hashable {
+///
+/// `nonisolated` so SwiftUI can hash and compare it as a navigation value on any thread; a
+/// main-actor `Hashable` conformance (this app's default) would trap off the main thread.
+nonisolated struct ModuleRoute: Hashable {
     let moduleID: String
 }

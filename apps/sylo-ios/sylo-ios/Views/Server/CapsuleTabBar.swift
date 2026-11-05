@@ -8,7 +8,9 @@ import SwiftUI
 /// "selected" trait for VoiceOver, 44 pt high, and it keeps working with the keyboard and Switch
 /// Control. The screens pushed from a tab cover it, like the system bar.
 struct CapsuleTabBar: View {
-    struct Item: Identifiable {
+    /// `nonisolated` so the `ForEach` identity SwiftUI reads from it is not main-actor isolated,
+    /// like ``ServerView/ServerTab``: SwiftUI may diff ids off the main thread.
+    nonisolated struct Item: Identifiable {
         let tab: ServerView.ServerTab
         let title: LocalizedStringKey
         let systemImage: String

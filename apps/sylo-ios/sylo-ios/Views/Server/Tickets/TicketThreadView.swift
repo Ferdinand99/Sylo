@@ -195,7 +195,10 @@ struct TicketThreadView: View {
     }
 }
 
-private enum BubbleID: Hashable {
+/// The scroll ids of the thread's rows. `nonisolated` on purpose: SwiftUI hashes and compares
+/// view identities (`.id(_:)`, `scrollTo`) while it diffs, possibly on its async render thread,
+/// and a main-actor `Hashable` conformance (this app's default) would trap there.
+private nonisolated enum BubbleID: Hashable {
     case message(Int)
     case outgoing(UUID)
     case bottom

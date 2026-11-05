@@ -25,7 +25,10 @@ struct ServerView: View {
     @State private var searchText = ""
     @State private var isConfirmingDiscard = false
 
-    enum ServerTab: Hashable {
+    /// `nonisolated` on purpose: SwiftUI compares the tab as the tab bar's `sensoryFeedback`
+    /// trigger, an `animation(_:value:)` value and a `ForEach` id, and may do that on its async
+    /// render thread. A main-actor `Hashable` conformance (this app's default) would trap there.
+    nonisolated enum ServerTab: Hashable {
         case overview, modules, tickets, settings
     }
 
@@ -161,7 +164,10 @@ struct ServerView: View {
 }
 
 /// A ticket conversation to push from the Tickets tab.
-struct TicketRoute: Hashable {
+///
+/// `nonisolated` so SwiftUI can hash and compare it as a navigation value on any thread; a
+/// main-actor `Hashable` conformance (this app's default) would trap off the main thread.
+nonisolated struct TicketRoute: Hashable {
     let id: Int
     /// The member's name, for the title before the ticket has loaded.
     let user: String

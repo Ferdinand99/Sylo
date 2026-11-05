@@ -2,7 +2,11 @@ import SwiftUI
 
 /// Places its children left to right and wraps to a new line when a line is full, for a row of
 /// chips or buttons whose count and width are not known.
-struct FlowLayout: Layout {
+///
+/// `nonisolated` on purpose: `Layout` is not a main-actor protocol, and SwiftUI may measure and
+/// place (and read `animatableData` of) a layout off the main thread. This app's code is main-actor
+/// isolated by default, so an inferred main-actor conformance would trap (EXC_BREAKPOINT) there.
+nonisolated struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

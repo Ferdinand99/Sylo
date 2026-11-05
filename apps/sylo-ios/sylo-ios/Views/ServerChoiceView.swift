@@ -8,7 +8,9 @@ struct ServerChoiceView: View {
     @State private var address = ""
     @FocusState private var isAddressFocused: Bool
 
-    private enum Choice: Hashable {
+    /// `nonisolated` so SwiftUI can compare the picker's tags off the main thread; a main-actor
+    /// `Hashable` conformance (this app's default) would trap there.
+    private nonisolated enum Choice: Hashable {
         case hosted
         case own
     }

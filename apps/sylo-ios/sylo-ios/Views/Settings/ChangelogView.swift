@@ -271,7 +271,10 @@ private struct ChangeRow: View {
 }
 
 /// A link in a change, offered to VoiceOver as an action.
-private struct ChangeLink: Hashable {
+///
+/// `nonisolated` because it is a `ForEach` id (`\.self`), which SwiftUI may hash off the main
+/// thread; a main-actor `Hashable` conformance (this app's default) would trap there.
+private nonisolated struct ChangeLink: Hashable {
     let label: String
     let url: URL
 }
