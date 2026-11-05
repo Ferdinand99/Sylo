@@ -13,7 +13,16 @@ const toForm = (data) => ({
   modlogChannelId: data.modlogChannelId,
   embedColor: data.embedColorHex,
   botMasterRoleIds: data.botMasterRoleIds,
+  commandPrefix: data.commandPrefix ?? '',
 });
+
+// The same rules the server enforces (it has the last word): no spaces, up to `max` characters.
+function prefixProblem(value, max) {
+  const v = value.trim();
+  if (/\s/.test(v)) return 'The prefix can not contain spaces.';
+  if (v.length > max) return `The prefix can be at most ${max} characters.`;
+  return null;
+}
 
 export default function Settings() {
   const { guildId, data, form, setForm, load, status, error, dirty, saving, save, reset } = useModuleForm(
@@ -96,6 +105,27 @@ export default function Settings() {
             ))}
           </select>
         </Field>
+
+        {data.platform === 'fluxer' ? (
+          <Field
+            label="Command prefix"
+            labelNote="— optional"
+            hint={`Fluxer has no slash commands, so members start a command with this, for example ${
+              form.commandPrefix.trim() || data.defaultCommandPrefix
+            }help. Leave it empty to use the default for this Sylo (${data.defaultCommandPrefix}). Mentioning Sylo (@Sylo help) always works.`}
+            error={prefixProblem(form.commandPrefix, data.commandPrefixMaxLength)}
+          >
+            <input
+              type="text"
+              value={form.commandPrefix}
+              maxLength={data.commandPrefixMaxLength}
+              placeholder={data.defaultCommandPrefix}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => setForm((f) => ({ ...f, commandPrefix: e.target.value }))}
+            />
+          </Field>
+        ) : null}
 
         <Field
           group
