@@ -1085,10 +1085,38 @@ a.v2-stat.is-link:focus-visible {
 }
 
 /* ---------- Health ---------- */
-/* A second, quieter line under a tile's label ("Gateway ping 40 ms"). */
+/* A second, quieter line under a tile's label ("3 tickets all-time"). */
 .v2-stat .v2-stat-caption {
   margin-top: 2px;
   opacity: 0.85;
+}
+/* The three top tiles are one value and one label each, so they are the same compact height; the
+   gateway ping, which needs room for its graph, is a card of its own right under them. */
+.v2-stat-strip.v2-stat-strip-tight {
+  margin-bottom: 12px;
+}
+.v2-ping-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  margin-bottom: 36px;
+  padding: 14px 20px;
+}
+.v2-ping-now {
+  flex: none;
+  min-width: 0;
+}
+.v2-ping-now strong {
+  font-size: 1.25rem;
+}
+.v2-ping-graph {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.v2-ping-graph .v2-sparkline {
+  max-width: 360px;
+  margin-top: 0;
 }
 /* Three tiles that would wrap two-and-one stack in a single column on a narrow phone. */
 @media (max-width: 420px) {
