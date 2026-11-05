@@ -12,10 +12,9 @@ struct AutoresponderSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Autoresponder", model: model) { $settings, page in
+            ModuleIntro("Replies automatically when a message matches a trigger, with no prefix. The first matching responder wins.")
+
             Section {
-                Text("Replies automatically when a message matches a trigger, with no prefix. The first matching responder wins.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
                 if !page.placeholders.isEmpty {
                     LabeledContent("Placeholders") {
                         Text(verbatim: page.placeholders.joined(separator: " "))

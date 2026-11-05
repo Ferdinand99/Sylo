@@ -12,11 +12,7 @@ struct TicketsSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Tickets", model: model) { $settings, page in
-            Section {
-                Text("Members open a ticket by sending Sylo a direct message. Staff read and reply from the dashboard's Tickets page; replies reach the member as an anonymous \"Staff\" DM.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Members open a ticket by sending Sylo a direct message. Staff read and reply from the dashboard's Tickets page; replies reach the member as an anonymous \"Staff\" DM.")
 
             Section {
                 TextArea(title: "Thanks for contacting the staff of {server}…", text: $settings.greeting,

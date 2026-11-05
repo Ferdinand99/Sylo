@@ -12,11 +12,7 @@ struct HoneypotSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Honeypot", model: model) { $settings, page in
-            Section {
-                Text("Any real member who posts in a trap channel, or reacts to a trap message, is punished at once, with no warning. Administrators and exempt roles are never acted on. Every catch goes to the mod-log channel.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Any real member who posts in a trap channel, or reacts to a trap message, is punished at once, with no warning. Administrators and exempt roles are never acted on. Every catch goes to the mod-log channel.")
 
             // One section per trap, so each control gets its own row.
             ForEach($settings.channels) { $trap in

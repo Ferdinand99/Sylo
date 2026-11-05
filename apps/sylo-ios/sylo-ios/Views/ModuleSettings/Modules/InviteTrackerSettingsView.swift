@@ -12,10 +12,9 @@ struct InviteTrackerSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Invite Tracker", model: model) { $settings, page in
+            ModuleIntro("Members get a personal invite link with /invites. When someone joins through it, that member's invite count goes up. /inviter and /invites-leaderboard read the same data.")
+
             Section {
-                Text("Members get a personal invite link with /invites. When someone joins through it, that member's invite count goes up. /inviter and /invites-leaderboard read the same data.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
                 if !page.board.canReadInvites {
                     Label("Sylo needs the Manage Server permission to read this server's invites. Without it, joins can't be credited to an inviter.", systemImage: "exclamationmark.triangle")
                         .font(.subheadline)

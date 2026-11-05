@@ -6,7 +6,13 @@ import { revokeApiToken } from '../../db/apiTokens.js';
 import { deleteAccount, unlinkIdentity } from '../../db/accounts.js';
 import { listDevLogEntries } from '../../db/devLogEntries.js';
 import { openTicketCount, unreadTicketCount } from '../../db/tickets.js';
-import { allGuilds, clientOfGuild, platformOfGuild, primaryClient } from '../../platform/platformOf.js';
+import {
+  allGuilds,
+  clientOfGuild,
+  guildByKey,
+  platformOfGuild,
+  primaryClient,
+} from '../../platform/platformOf.js';
 import { COMMAND_PREFIX_MAX, commandPrefixError } from '../../lib/commandPrefix.js';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
@@ -64,7 +70,7 @@ import {
 import { mdToHtml } from '../lib/markdown.js';
 import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } from '../lib/roadmapLimits.js';
 import { roadmapView } from '../lib/roadmapView.js';
-import { getGuildModule, setGuildModule } from '../../db/modules.js';
+import { getGuildModule, listEnabledModuleConfigs, setGuildModule } from '../../db/modules.js';
 import {
   normaliseLevelingConfig,
   validXp,
@@ -169,7 +175,14 @@ import { syncSubscriptions as syncYoutubeWebsub } from '../../modules/youtubeWeb
 import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TPL, FEED_TYPES } from '../../modules/rss.js';
 import { clearScope } from '../../db/postedKeys.js';
 import { deleteBoardEntries } from '../../db/starboard.js';
-import { dailySeries, hourlySeries, topChannels, topVoiceChannels } from '../../db/insights.js';
+import {
+  dailySeries,
+  hourlySeries,
+  messagesOnDay,
+  topChannels,
+  topVoiceChannels,
+  utcDay,
+} from '../../db/insights.js';
 import { flushGuild as flushGuildInsights } from '../../modules/insights.js';
 import { recentLookups } from '../../db/cache.js';
 import { normaliseGiveawaysConfig, endGiveaway, clampWinners } from '../../modules/giveaways.js';
@@ -297,12 +310,23 @@ router.get(
     // The Sylo app: the sign-in snapshot, minus any server where the person no longer has the
     // rights (checked live, the same way requireGuildAdmin does for token requests).
     const live = await Promise.all(guilds.map((g) => managesGuildLive(g.id, userIdForGuild(req, g.id))));
-    // Ticket counts for the app's server list: which servers have tickets waiting.
+    // Server insights, for the app's "messages today": one query each for every server, and a
+    // server only has a number while the module is on for it (null otherwise). "Today" is the UTC
+    // day, which is how Server insights keeps its daily rows (it also flushes about hourly, so the
+    // number can lag by up to an hour).
+    const insightsOn = new Set((await listEnabledModuleConfigs('insights')).map((m) => m.guildId));
+    const messagesToday = insightsOn.size ? await messagesOnDay(utcDay()) : new Map();
+    // Ticket counts for the app's server list: which servers have tickets waiting. The member
+    // count is the bot's cached one (the figure on the dashboard's Overview), never fetched.
     const withCounts = await Promise.all(
       guilds
         .filter((_, i) => live[i])
         .map(async (g) => ({
           ...g,
+          // The same cached count on both platforms (guild.memberCount, as the dashboard
+          // overview reads it); null when the platform sent none, so the app shows nothing.
+          memberCount: Number.isFinite(guildByKey(g.id)?.memberCount) ? guildByKey(g.id).memberCount : null,
+          messagesToday: insightsOn.has(g.id) ? (messagesToday.get(g.id) ?? 0) : null,
           openTickets: await openTicketCount(g.id),
           unreadTickets: await unreadTicketCount(g.id),
         }))

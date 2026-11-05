@@ -10,6 +10,7 @@ struct OverviewView: View {
     let model: OverviewModel
 
     @Environment(AppSession.self) private var session
+    @State private var searchText = ""
 
     var body: some View {
         content
@@ -40,9 +41,9 @@ struct OverviewView: View {
                 Section {
                     OverviewHeader(summary: summary, overview: overview)
                 }
-                ForEach(overview.groups.filter { $0.cards.contains { $0.id != Self.settingsCardID } }) { group in
+                ForEach(shownGroups(overview)) { group in
                     Section(group.title) {
-                        ForEach(group.cards.filter { $0.id != Self.settingsCardID }) { card in
+                        ForEach(group.cards) { card in
                             if card.hasToggle, ModuleScreens.hasScreen(card.id) {
                                 NavigationLink(value: ModuleRoute(moduleID: card.id)) {
                                     moduleRow(card)
@@ -56,6 +57,15 @@ struct OverviewView: View {
                     }
                 }
             }
+            .tabBarClearance()
+            .searchable(text: $searchText, prompt: "Search modules")
+            .overlay {
+                if isSearching, shownGroups(overview).isEmpty {
+                    ContentUnavailableView(
+                        "No Modules Match", systemImage: "magnifyingglass",
+                        description: Text("No module matches \u{201C}\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))\u{201D}."))
+                }
+            }
             .refreshable { await model.load() }
         } else if let message = model.errorMessage {
             ContentUnavailableView {
@@ -67,6 +77,17 @@ struct OverviewView: View {
             }
         } else {
             ProgressView()
+        }
+    }
+
+    private var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    /// The groups to list: the search applied, and the "Settings" card (its own tab) left out, so
+    /// a group that only had that card does not show up empty.
+    private func shownGroups(_ overview: ServerOverview) -> [OverviewGroup] {
+        overview.groups(matching: searchText).compactMap { group in
+            let cards = group.cards.filter { $0.id != Self.settingsCardID }
+            return cards.isEmpty ? nil : OverviewGroup(title: group.title, cards: cards)
         }
     }
 

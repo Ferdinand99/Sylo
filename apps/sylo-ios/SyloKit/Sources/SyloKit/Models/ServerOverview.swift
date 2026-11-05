@@ -26,6 +26,23 @@ public struct ServerOverview: Decodable, Sendable, Equatable {
     }
 }
 
+extension ServerOverview {
+    /// The groups with only the cards whose name or description contains `query` (ignoring case,
+    /// accents and surrounding spaces), like the web overview's search; groups left empty are
+    /// dropped. An empty query keeps everything.
+    public func groups(matching query: String) -> [OverviewGroup] {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return groups }
+        func matches(_ value: String?) -> Bool {
+            value?.range(of: text, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
+        return groups.compactMap { group in
+            let cards = group.cards.filter { matches($0.name) || matches($0.description) }
+            return cards.isEmpty ? nil : OverviewGroup(title: group.title, cards: cards)
+        }
+    }
+}
+
 /// The overview's header. Its platform is not sent; take it from the ``ServerSummary``.
 public struct OverviewServer: Decodable, Sendable, Hashable {
     public let id: ServerID

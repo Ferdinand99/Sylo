@@ -12,11 +12,7 @@ struct TempVoiceSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Temporary Voice", model: model) { $settings, page in
-            Section {
-                Text("A hub is a \"Join to create\" voice channel. When a member joins it, Sylo makes them a personal voice channel, moves them in, and cleans it up after everyone leaves. Needs the Manage Channels and Move Members permissions.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("A hub is a \"Join to create\" voice channel. When a member joins it, Sylo makes them a personal voice channel, moves them in, and cleans it up after everyone leaves. Needs the Manage Channels and Move Members permissions.")
 
             // A hub has many settings, so it gets a few sections; each control has its own row.
             ForEach($settings.hubs) { $hub in

@@ -13,11 +13,7 @@ struct AppleConnectSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("App Store Connect", model: model) { $settings, page in
-            Section {
-                Text("Alerts from your Apple Developer account: app versions moving through review, builds and TestFlight, new reviews, tester feedback, and certificates about to expire. Checked about every 5 minutes. Only the Sylo owner can see this module.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Alerts from your Apple Developer account: app versions moving through review, builds and TestFlight, new reviews, tester feedback, and certificates about to expire. Checked about every 5 minutes. Only the Sylo owner can see this module.")
 
             if !page.appleEnabled {
                 Section {

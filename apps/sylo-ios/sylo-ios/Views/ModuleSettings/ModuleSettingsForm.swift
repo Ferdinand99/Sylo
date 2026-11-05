@@ -15,16 +15,20 @@ import SyloKit
 struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
     let title: LocalizedStringKey
     let model: ModuleSettingsModel<Page>
+    /// Why the draft cannot be saved yet; Save stays off while this is set. The screen words it
+    /// next to the setting that is wrong.
+    let problem: String?
     @ViewBuilder let content: (Binding<Page.Settings>, Page) -> Content
 
     @State private var isConfirmingDiscard = false
 
     init(
-        _ title: LocalizedStringKey, model: ModuleSettingsModel<Page>,
+        _ title: LocalizedStringKey, model: ModuleSettingsModel<Page>, problem: String? = nil,
         @ViewBuilder content: @escaping (Binding<Page.Settings>, Page) -> Content
     ) {
         self.title = title
         self.model = model
+        self.problem = problem
         self.content = content
     }
 
@@ -63,7 +67,8 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
                     ProgressView()
                 } else {
                     Button("Save") { Task { await model.save() } }
-                        .disabled(!model.hasChanges)
+                        .toolbarSaveStyle()
+                        .disabled(!model.hasChanges || problem != nil)
                 }
             }
         }

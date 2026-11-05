@@ -12,10 +12,9 @@ struct KickAlertsSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Kick Alerts", model: model) { $settings, page in
+            ModuleIntro("Sylo checks each streamer about once a minute and posts to the chosen channel when they go live. Message placeholders: {name} {title} {game} {url} {viewers}.")
+
             Section {
-                Text("Sylo checks each streamer about once a minute and posts to the chosen channel when they go live. Message placeholders: {name} {title} {game} {url} {viewers}.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
                 if !page.kickEnabled {
                     Label("The bot has no Kick app set up (KICK_CLIENT_ID and KICK_CLIENT_SECRET), so alerts won't fire yet. You can still set them up here.", systemImage: "exclamationmark.triangle")
                         .font(.subheadline)
