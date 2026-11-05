@@ -26,7 +26,7 @@ enum DemoLaunch {
         let demoServer: ServerID = "1"
         switch name {
         case "overview":
-            return Start(server: demoServer, tab: .modules, path: NavigationPath())
+            return Start(server: demoServer, tab: .overview, path: NavigationPath())
         case "modules":
             return Start(server: demoServer, tab: .modules, path: NavigationPath())
         case "module":
@@ -40,7 +40,7 @@ enum DemoLaunch {
             path.append(TicketRoute(id: 1, user: "member#0001"))
             return Start(server: demoServer, tab: .tickets, path: path)
         default:
-            return Start(server: nil, tab: .modules, path: NavigationPath())
+            return Start(server: nil, tab: .overview, path: NavigationPath())
         }
     }
 

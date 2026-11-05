@@ -16,7 +16,7 @@ struct MainView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var servers: ServersModel
     @State private var selection: ServerID?
-    @State private var serverTab = ServerView.ServerTab.modules
+    @State private var serverTab = ServerView.ServerTab.overview
     @State private var detailPath = NavigationPath()
     @State private var column = NavigationSplitViewColumn.sidebar
     @State private var isShowingSettings = false
@@ -64,7 +64,7 @@ struct MainView: View {
         } detail: {
             NavigationStack(path: $detailPath) {
                 if let summary = servers.server(selection) {
-                    ServerView(summary: summary, session: session, tab: $serverTab)
+                    ServerView(summary: summary, session: session, tab: $serverTab, path: $detailPath)
                         .id(summary.id)
                         .syloZoomDestination(id: summary.id, in: zoomNamespace)
                 } else {
@@ -97,7 +97,7 @@ struct MainView: View {
     /// column comes forward (on iPhone, the push from the list).
     private func openServer(_ id: ServerID) {
         if id != selection {
-            serverTab = .modules
+            serverTab = .overview
             detailPath = NavigationPath()
         }
         selection = id

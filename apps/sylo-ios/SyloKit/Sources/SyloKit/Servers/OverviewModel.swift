@@ -13,6 +13,9 @@ public final class OverviewModel {
     /// Why the last switch did not go through (the toggle is back where it was).
     public var toggleError: String?
 
+    /// How long the last successful load took, a round trip to the Sylo server. Nil before one.
+    public private(set) var latency: Duration?
+
     private var pending: Set<String> = []
     private let session: AppSession
 
@@ -32,7 +35,10 @@ public final class OverviewModel {
         isLoading = true
         defer { isLoading = false }
         do {
+            let clock = ContinuousClock()
+            let start = clock.now
             overview = try await session.send(Endpoints.Overview(server: server))
+            latency = start.duration(to: clock.now)
             errorMessage = nil
         } catch let error as NetworkError {
             if error != .cancelled, error != .unauthorized { errorMessage = error.userMessage }
@@ -87,5 +93,13 @@ extension OverviewCard {
             isEnabled: isEnabled, isBeta: isBeta, missingIntents: missingIntents,
             status: status == .blocked ? .blocked : (isEnabled ? .on : .off),
             webPath: webPath, lines: lines)
+    }
+}
+
+extension OverviewModel {
+    /// ``latency`` in whole milliseconds, at least 1; nil before the first load.
+    public var latencyMilliseconds: Int? {
+        guard let latency else { return nil }
+        return max(1, Int((latency / .milliseconds(1)).rounded()))
     }
 }

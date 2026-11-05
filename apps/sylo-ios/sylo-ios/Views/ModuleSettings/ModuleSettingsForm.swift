@@ -37,21 +37,22 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
             if let page = model.page {
                 Form {
                     content(draft(fallback: page.settings), page)
+                        .syloSectionCards()
                 }
+                .syloFormStyle()
                 .disabled(model.isSaving)
                 .refreshable { await model.load() }
             } else if let message = model.errorMessage {
-                ContentUnavailableView {
-                    Label("Couldn't Load Settings", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(message)
-                } actions: {
-                    Button("Try Again") { Task { await model.load() } }
-                }
+                EmptyState(
+                    "Couldn't Load Settings", systemImage: "exclamationmark.triangle", message: Text(message),
+                    isError: true, actionTitle: "Try Again") {
+                        Task { await model.load() }
+                    }
             } else {
-                ProgressView()
+                SyloLoadingView()
             }
         }
+        .background { SyloBackground() }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(model.hasChanges)

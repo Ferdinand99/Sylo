@@ -14,15 +14,13 @@ struct GuildSettingsForm: View {
             if let page = model.page {
                 form(page)
             } else if let message = model.errorMessage {
-                ContentUnavailableView {
-                    Label("Couldn't Load Settings", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(message)
-                } actions: {
-                    Button("Try Again") { Task { await model.load() } }
-                }
+                EmptyState(
+                    "Couldn't Load Settings", systemImage: "exclamationmark.triangle", message: Text(message),
+                    isError: true, actionTitle: "Try Again") {
+                        Task { await model.load() }
+                    }
             } else {
-                ProgressView()
+                SyloLoadingView()
             }
         }
         .task {
@@ -33,6 +31,7 @@ struct GuildSettingsForm: View {
     private func form(_ page: GuildSettingsPage) -> some View {
         let settings = Binding(get: { model.draft ?? page.settings }, set: { model.draft = $0 })
         return Form {
+            Group {
             Section {
                 ChannelPicker(title: "Mod-log channel", selection: settings.modlogChannelId,
                               channels: page.channels, noneTitle: "Off")
@@ -66,7 +65,10 @@ struct GuildSettingsForm: View {
             } footer: {
                 Text("Members with these roles can open the dashboard and change Sylo's settings for the server, like someone with Manage Server. Roles with Administrator already can.")
             }
+            }
+            .syloSectionCards()
         }
+        .syloFormStyle()
         .tabBarClearance()
         .disabled(model.isSaving)
         .refreshable { await model.load() }
