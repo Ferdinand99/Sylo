@@ -9,7 +9,7 @@ import { ROADMAP_STATUS } from '../roadmapStatus.js';
 
 const GROUPS = Object.entries(ROADMAP_STATUS).map(([key, v]) => ({ key, ...v }));
 
-function VoteButton({ post, onVote, canVote }) {
+function VoteButton({ post, onVote, canVote, canLogin }) {
   const [busy, setBusy] = useState(false);
 
   async function click() {
@@ -24,7 +24,7 @@ function VoteButton({ post, onVote, canVote }) {
   // Without a login (or with voting off) the count is only shown: no button, no border, full colour.
   if (!canVote) {
     return (
-      <div className="v2-roadmap-vote is-static" title="Log in to vote">
+      <div className="v2-roadmap-vote is-static" title={canLogin ? 'Log in to vote' : undefined}>
         <strong>{formatCount(post.votes)}</strong>
         <span>vote{post.votes === 1 ? '' : 's'}</span>
       </div>
@@ -145,7 +145,7 @@ export default function Roadmap() {
                       dangerouslySetInnerHTML={{ __html: p.descriptionHtml }}
                     />
                   </div>
-                  <VoteButton post={p} onVote={onVote} canVote={d.signedIn} />
+                  <VoteButton post={p} onVote={onVote} canVote={d.signedIn} canLogin={!d.open} />
                 </div>
               ))}
             </div>

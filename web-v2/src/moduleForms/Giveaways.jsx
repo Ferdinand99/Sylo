@@ -178,7 +178,7 @@ export default function Giveaways() {
                     disabled={busyId === g.id}
                     onClick={() => onReroll(g.id)}
                   >
-                    Draw again
+                    Reroll<span className="v2-sr-only"> giveaway #{g.id}</span>
                   </button>
                 </div>
               </div>

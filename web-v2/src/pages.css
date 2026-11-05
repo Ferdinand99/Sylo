@@ -976,9 +976,10 @@ a.v2-stat.is-link:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 }
-/* A rule that is switched off reads as off: dimmed text (the select stays full strength) and an "Off" badge. */
-.v2-am-rule.is-off .v2-am-rule-text {
-  opacity: 0.62;
+/* A rule that is switched off reads as off: its title turns muted (the hint keeps its own contrast, so
+   it stays readable in the light theme; the select stays full strength) and an "Off" badge. */
+.v2-am-rule.is-off .v2-am-rule-text strong {
+  color: var(--text-muted);
 }
 .v2-am-summary {
   font-weight: 400;

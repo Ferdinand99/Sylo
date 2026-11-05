@@ -283,7 +283,7 @@ describe('Giveaways', () => {
     fireEvent.change(input, { target: { value: '2' } });
     expect(screen.getByText('winners')).toBeTruthy();
     expect(screen.getByText(/won by alice, a member \(ID 222222222222222222\)/)).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Draw again' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Reroll giveaway #4' })).toBeTruthy());
   });
 });
 
