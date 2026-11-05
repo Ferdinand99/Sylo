@@ -144,7 +144,7 @@ export default function AutoReact() {
               Matches if <strong>either</strong> the users or the role below match.
             </p>
             {!r.targetUsersText.trim() && !r.targetRoleId ? (
-              <p className="v2-ph-warn" role="status">
+              <p className="v2-ph-warn v2-ph-warn-block" role="status">
                 <span aria-hidden="true">⚠ </span>
                 This rule has no users and no role yet, so it will be removed when you save.
               </p>
@@ -206,7 +206,7 @@ export default function AutoReact() {
 
             <div className="v2-field">
               <label htmlFor={`emojis-${r.key}`}>Emoji to react with</label>
-              <div className="v2-field-row">
+              <div className="v2-field-row v2-emoji-row">
                 <input
                   id={`emojis-${r.key}`}
                   type="text"

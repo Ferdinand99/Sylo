@@ -941,6 +941,10 @@ textarea[aria-invalid='true']:focus-visible {
   font-size: var(--fs-sm);
   line-height: 1.45;
 }
+/* A warning line that sits above the next field (not under its own): room before the label. */
+.v2-ph-warn.v2-ph-warn-block {
+  margin: 0 0 14px;
+}
 
 /* ---------- Callout (components/Callout.jsx) ---------- */
 .v2-callout {

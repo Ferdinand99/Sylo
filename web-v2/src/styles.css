@@ -834,6 +834,10 @@ a {
 .v2-section-gap-sm {
   margin-top: 10px;
 }
+/* Below an "+ Add …" button: clear air before the next label or heading. */
+.v2-section-gap-md {
+  margin-top: 24px;
+}
 .v2-hero p {
   margin: 0;
   color: var(--text-muted);
@@ -2262,6 +2266,12 @@ input[type='radio']:disabled {
   max-width: 8rem;
   min-width: 5rem;
   font-variant-numeric: tabular-nums;
+}
+/* A short text value of a few characters (a command prefix): narrow like .v2-input-num. */
+.v2-input-short {
+  width: 100%;
+  max-width: 8rem;
+  min-width: 5rem;
 }
 .v2-input-num.v2-input-num-wide {
   max-width: 10rem;

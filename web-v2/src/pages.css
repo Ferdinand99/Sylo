@@ -37,6 +37,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Emoji text box + picker button: one row at every width (the box shrinks, the button never wraps). */
+.v2-field-row.v2-emoji-row {
+  flex-wrap: nowrap;
+}
+.v2-emoji-row > input {
+  flex: 1;
+  min-width: 0;
+}
+.v2-emoji-row > .v2-emojipicker {
+  flex: none;
+}
+
 /* A plain .v2-field-row that may wrap at any width (buttons + inputs). */
 .v2-field-row.v2-wrap-row {
   flex-wrap: wrap;
@@ -1082,6 +1094,41 @@ a.v2-stat.is-link:focus-visible {
 .v2-row-actions > select {
   width: auto;
   min-width: 9rem;
+  /* Outside a <form>/.v2-field, so the app's select look is repeated here (see styles.css). */
+  background-color: var(--bg-surface-2);
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 10px 6px;
+  border: 1px solid var(--border-field);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 9px 36px 9px 12px;
+  font: inherit;
+  font-size: var(--fs-md);
+  -webkit-appearance: none;
+  appearance: none;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-ui) ease,
+    box-shadow var(--dur-ui) ease;
+}
+.v2-row-actions > select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.v2-row-actions > select:disabled {
+  cursor: not-allowed;
+}
+@media (forced-colors: active) {
+  .v2-row-actions > select {
+    -webkit-appearance: auto;
+    appearance: auto;
+    background-image: none;
+    padding-right: 12px;
+  }
 }
 
 /* ---------- Health ---------- */
@@ -1108,6 +1155,13 @@ a.v2-stat.is-link:focus-visible {
   gap: 8px 24px;
   margin-bottom: 36px;
   padding: 14px 20px;
+}
+/* On a phone: the same inner padding as the tiles above and the same 28px section gap as them. */
+@media (max-width: 560px) {
+  .v2-stat.v2-ping-card {
+    margin-bottom: 28px;
+    padding: 12px 10px;
+  }
 }
 .v2-ping-now {
   flex: none;
@@ -1213,10 +1267,21 @@ a.v2-stat.is-link:focus-visible {
   width: auto;
   min-width: 0;
 }
+/* The buttons sit in a box as tall as a one-line textarea (1 line + 9px padding + 1px border each side)
+   and are centred in it: centred on a one-line row, level with the first line on a tall one. */
 .v2-question-actions {
   display: flex;
   flex: none;
+  align-items: center;
   gap: 4px;
+  height: 40px;
+  height: calc(1lh + 20px);
+  font-size: var(--fs-md);
+}
+@media (pointer: coarse) {
+  .v2-question-actions {
+    font-size: 16px;
+  }
 }
 .v2-question-actions .v2-btn-ghost {
   min-width: 36px;

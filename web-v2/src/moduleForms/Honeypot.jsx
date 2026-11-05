@@ -259,7 +259,7 @@ export default function Honeypot() {
           + Add message honeypot
         </button>
 
-        <div className="v2-field v2-section-gap-sm">
+        <div className="v2-field v2-section-gap-md">
           <label>Exempt roles</label>
           <ChipPicker
             kind="role"

@@ -124,7 +124,7 @@ export default function Moderation() {
           + Add rule
         </button>
 
-        <div className="v2-field v2-section-gap-sm">
+        <div className="v2-field v2-section-gap-md">
           <label htmlFor="infractionRetentionDays">Delete inactive cases after</label>
           <UnitInput
             id="infractionRetentionDays"

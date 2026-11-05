@@ -126,13 +126,19 @@ export default function Settings() {
           <Field
             label="Command prefix"
             labelNote="— optional"
-            hint={`Fluxer has no slash commands, so members start a command with this, for example ${
-              form.commandPrefix.trim() || data.defaultCommandPrefix
-            }help. Leave it empty to use the default for this Sylo (${data.defaultCommandPrefix}). Mentioning Sylo (@Sylo help) always works.`}
+            hint={
+              <>
+                Fluxer has no slash commands, so members start a command with this, for example{' '}
+                <code>{`${form.commandPrefix.trim() || data.defaultCommandPrefix}help`}</code>. Leave it empty
+                to use the default, <code>{data.defaultCommandPrefix}</code>. Mentioning Sylo (@Sylo help)
+                always works.
+              </>
+            }
             error={prefixProblem(form.commandPrefix, data.commandPrefixMaxLength)}
           >
             <input
               type="text"
+              className="v2-input-short"
               value={form.commandPrefix}
               maxLength={data.commandPrefixMaxLength}
               placeholder={data.defaultCommandPrefix}

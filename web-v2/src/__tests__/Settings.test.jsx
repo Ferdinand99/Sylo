@@ -52,8 +52,8 @@ describe('Settings: command prefix', () => {
     expect(input.value).toBe('?');
     expect(input.getAttribute('placeholder')).toBe('!');
     expect(input.getAttribute('maxlength')).toBe('5');
-    expect(screen.getByText(/for example \?help/)).toBeTruthy();
-    expect(screen.getByText(/default for this Sylo \(!\)/)).toBeTruthy();
+    expect(screen.getByText('?help', { selector: 'code' })).toBeTruthy();
+    expect(screen.getByText('!', { selector: 'code' })).toBeTruthy();
   });
 
   it('with no prefix of its own it explains with the default', async () => {
@@ -61,7 +61,7 @@ describe('Settings: command prefix', () => {
     renderAtGuild(<Settings />, GUILD);
     const input = await screen.findByLabelText(/Command prefix/);
     expect(input.value).toBe('');
-    expect(screen.getByText(/for example !help/)).toBeTruthy();
+    expect(screen.getByText('!help', { selector: 'code' })).toBeTruthy();
   });
 
   it('saves the new prefix with the rest of the settings', async () => {
