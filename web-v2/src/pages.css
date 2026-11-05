@@ -895,6 +895,12 @@
 .v2-rule-head + .v2-rule-lead {
   margin: -6px 0 12px;
 }
+/* A hint line sits right above a card or an "+ Add" button (empty state, section intro): give
+   it air instead of gluing the two together. */
+.v2-field-hint + .v2-btn-ghost,
+.v2-field-hint + .v2-rule-card {
+  margin-top: 12px;
+}
 
 /* ---------- Overview ---------- */
 /* The ticket and appeal tiles are links: same box, with a hover edge and a focus ring. */
