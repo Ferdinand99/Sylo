@@ -9,6 +9,7 @@ import { resetOperatorCache } from '../useOperator.js';
 import { DISCORD, PlatformContext } from '../platformContext.jsx';
 import { renderAtGuild } from './routerHarness.jsx';
 
+vi.mock('../notify.js', () => ({ notify: vi.fn() }));
 vi.mock('../api.js', () => ({
   ApiError: class ApiError extends Error {},
   getModuleConfig: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('../api.js', () => ({
   getGuildEmojis: vi.fn(),
 }));
 const { getModuleConfig, getModuleLimits, getAccount, getGuildEmojis } = await import('../api.js');
+const { notify } = await import('../notify.js');
 
 const GUILD = '123456789012345678';
 
@@ -68,6 +70,51 @@ describe('EmbedEditor variable chips', () => {
     expect(title.value).toBe('Hi {user}');
   });
 
+  it('goes into the name or value of an extra field when that is where the cursor is', () => {
+    const onChange = vi.fn();
+    render(
+      <EmbedEditor
+        spec={{ title: 'Title', fields: [{ name: 'Name', value: 'Value !' }] }}
+        onChange={onChange}
+        vars={vars}
+      />
+    );
+    const value = screen.getByLabelText('Field value');
+    value.focus();
+    value.setSelectionRange(6, 6);
+    fireEvent.click(screen.getByRole('button', { name: 'User' }));
+    expect(value.value).toBe('Value {user}!');
+    expect(screen.getByLabelText('Embed title').value).toBe('Title');
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ fields: [{ name: 'Name', value: 'Value {user}!', inline: false }] })
+    );
+
+    const name = screen.getByLabelText('Field name');
+    name.focus();
+    name.setSelectionRange(0, 0);
+    fireEvent.click(screen.getByRole('button', { name: 'User' }));
+    expect(name.value).toBe('{user}Name');
+  });
+
+  it('says so, and leaves the text alone, when the variable does not fit the field', () => {
+    const onChange = vi.fn();
+    render(
+      <EmbedEditor
+        spec={{ title: 'Hello' }}
+        onChange={onChange}
+        vars={vars}
+        limits={{ title: { maxLength: 8 } }}
+      />
+    );
+    const title = screen.getByLabelText('Embed title');
+    title.focus();
+    title.setSelectionRange(5, 5);
+    fireEvent.click(screen.getByRole('button', { name: 'User' }));
+    expect(title.value).toBe('Hello');
+    expect(notify).toHaveBeenCalledWith('No room for {user}: the field is full.');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('adds it at the end, after a space, when no field was clicked into yet', () => {
     setup({ title: 'Hello' });
     fireEvent.click(screen.getByRole('button', { name: 'User' }));
@@ -113,6 +160,28 @@ describe('Ban appeals questions', () => {
   it('removeQuestion closes the gap and keeps five slots', () => {
     expect(removeQuestion(['a', 'b', 'c', '', ''], 0)).toEqual(['b', 'c', '', '', '']);
     expect(removeQuestion(['a', 'b', 'c', 'd', 'e'], 4)).toEqual(['a', 'b', 'c', 'd', '']);
+  });
+
+  it('keeps a question on one line: Enter adds nothing, pasted line breaks become spaces', async () => {
+    getModuleConfig.mockResolvedValue({
+      config: {
+        questions: ['First?'],
+        autoUnbanOnAccept: false,
+        reviewChannelId: '',
+        cooldownDays: 7,
+        appealMessage: '',
+        appealServerInvite: '',
+      },
+      channels: [],
+      dashboardUrlSet: true,
+    });
+    renderAtGuild(<Appeals />, GUILD);
+    const first = await screen.findByLabelText('Question 1');
+    // fireEvent returns false when the event's default was prevented.
+    expect(fireEvent.keyDown(first, { key: 'Enter' })).toBe(false);
+    expect(fireEvent.keyDown(first, { key: 'a' })).toBe(true);
+    fireEvent.change(first, { target: { value: 'Why\r\n  were you\nbanned?' } });
+    expect(first.value).toBe('Why were you banned?');
   });
 
   it('shows each question in a growing box with move and remove buttons', async () => {

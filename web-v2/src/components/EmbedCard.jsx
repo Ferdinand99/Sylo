@@ -208,6 +208,7 @@ export default function EmbedCard({
                           maxLength={lim('fields[].name').maxLength}
                           value={f.name}
                           onChange={(e) => setField(f.key, { name: e.target.value })}
+                          onFocus={() => onFieldFocus?.({ field: f.key, prop: 'name' })}
                         />
                         <AutoGrowTextarea
                           className="v2-embed-input v2-embed-field-value"
@@ -216,6 +217,7 @@ export default function EmbedCard({
                           maxLength={lim('fields[].value').maxLength}
                           value={f.value}
                           onChange={(e) => setField(f.key, { value: e.target.value })}
+                          onFocus={() => onFieldFocus?.({ field: f.key, prop: 'value' })}
                         />
                       </div>
                     ))}
