@@ -27,6 +27,7 @@ registerPostgresBootstrap(`
     bot_master_roles  TEXT NOT NULL DEFAULT '[]',
     embed_color       INTEGER
   );
+  ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS command_prefix TEXT;
 `);
 
 const selectStmt = prepare('SELECT * FROM guild_settings WHERE guild_id = ?');
@@ -42,12 +43,15 @@ const setCol = {
     'UPDATE guild_settings SET bot_master_roles = @v, updated_at = @t WHERE guild_id = @g'
   ),
   embed_color: prepare('UPDATE guild_settings SET embed_color = @v, updated_at = @t WHERE guild_id = @g'),
+  command_prefix: prepare(
+    'UPDATE guild_settings SET command_prefix = @v, updated_at = @t WHERE guild_id = @g'
+  ),
 };
 
 /**
  * @param {string} guildId
  * @returns {Promise<{ guild_id: string, modlog_channel_id: string|null, bot_master_roles: string,
- *   embed_color: number|null, updated_at: number } | undefined>}
+ *   embed_color: number|null, command_prefix: string|null, updated_at: number } | undefined>}
  */
 export async function getGuildSettings(guildId) {
   return selectStmt.get(guildId);
@@ -98,7 +102,45 @@ export async function guildEmbedColor(guildId) {
   return Number.isInteger(c) ? c : DEFAULT_EMBED_COLOR;
 }
 
+// The per-server command prefix is read on every chat message, so it is cached per guild:
+// no query per message. A save replaces the entry; the TTL only covers a change made by
+// another process (a second replica sharing the database).
+const PREFIX_TTL_MS = 10 * 60 * 1000;
+const prefixCache = new Map(); // guild key -> { value: string | null, at: number }
+
+/** Forget the cached command prefix (all guilds, or one). */
+export function clearCommandPrefixCache(guildId) {
+  if (guildId === undefined) prefixCache.clear();
+  else prefixCache.delete(guildId);
+}
+
+/**
+ * The prefix a server set for itself, or null when it uses the instance default. Cached.
+ * @param {string} guildId  the guild key
+ * @returns {Promise<string | null>}
+ */
+export async function getCommandPrefix(guildId) {
+  const hit = prefixCache.get(guildId);
+  if (hit && Date.now() - hit.at < PREFIX_TTL_MS) return hit.value;
+  const value = (await getGuildSettings(guildId))?.command_prefix || null;
+  prefixCache.set(guildId, { value, at: Date.now() });
+  return value;
+}
+
+/**
+ * Set (or clear, with null) a server's command prefix. The caller validates it
+ * (lib/commandPrefix.js); this only stores it and refreshes the cache.
+ * @param {string} guildId
+ * @param {string | null} prefix
+ */
+export async function setCommandPrefix(guildId, prefix) {
+  const value = prefix || null;
+  await put(guildId, 'command_prefix', value);
+  prefixCache.set(guildId, { value, at: Date.now() });
+}
+
 /** Remove all settings for a guild (used when Sylo leaves it). */
 export async function deleteGuildSettings(guildId) {
   await deleteStmt.run(guildId);
+  prefixCache.delete(guildId);
 }

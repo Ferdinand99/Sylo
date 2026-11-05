@@ -1188,6 +1188,12 @@ export const MIGRATIONS = [
     }
     database.exec('CREATE UNIQUE INDEX idx_guild_events_token ON guild_events (public_token);');
   },
+
+  // A command prefix per Fluxer server (null = the instance default, COMMAND_PREFIX).
+  // Postgres: the ADD COLUMN IF NOT EXISTS in the bootstrap in src/db/guildSettings.js.
+  (database) => {
+    database.exec('ALTER TABLE guild_settings ADD COLUMN command_prefix TEXT;');
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

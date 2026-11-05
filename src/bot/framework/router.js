@@ -12,14 +12,28 @@ import { resolveOptions } from './resolve.js';
 import { usageLines } from './usage.js';
 import { handleCustomSlash } from '../lib/customCommandSync.js';
 import { moderationOutcome } from '../../modules/lib/messageModeration.js';
+import { effectiveCommandPrefix } from '../../platform/commandPrefix.js';
+import { guildKeyOf } from '../../platform/platformOf.js';
 import { log } from '../../lib/log.js';
 import { inc } from '../../lib/metrics.js';
 
 const NO_ARGS = { subcommand: null, values: {} };
 
 /**
+ * The prefix that applies to this message: the server's own, else `fallback` (the instance
+ * default). A DM has no server, so it always gets the default.
+ * @param {any} message
+ * @param {string} fallback
+ * @returns {Promise<string>}
+ */
+export async function prefixFor(message, fallback) {
+  return effectiveCommandPrefix(message.guild ? guildKeyOf(message) : null, fallback);
+}
+
+/**
  * Split a message into command name + argument text, or null when it isn't a
- * command. Accepts the prefix or a leading mention of the bot.
+ * command. Accepts a leading mention of the bot or the prefix. The mention is tried first,
+ * so it works whatever the prefix is (a prefix such as `<` would otherwise swallow it).
  * @param {string} content
  * @param {string} prefix
  * @param {string | null | undefined} botId
@@ -27,11 +41,11 @@ const NO_ARGS = { subcommand: null, values: {} };
  */
 export function splitCommand(content, prefix, botId) {
   let body = null;
-  if (content.startsWith(prefix)) body = content.slice(prefix.length);
-  else if (botId && /^\d+$/.test(botId)) {
+  if (botId && /^\d+$/.test(botId)) {
     const m = new RegExp(`^<@!?${botId}>\\s*`).exec(content);
     if (m) body = content.slice(m[0].length);
   }
+  if (body == null && content.startsWith(prefix)) body = content.slice(prefix.length);
   if (body == null) return null;
   const m = /^([a-z0-9_-]+)(?:\s+|$)/i.exec(body);
   if (!m) return null;
@@ -61,7 +75,7 @@ async function runCustomCommand(message, split) {
  * (AFK, leveling, counting) must not treat it as chat, just as they never see a slash
  * command. Moderation (automod, honeypot) still scans it: see `commandMessageCreate`.
  * @param {any} message
- * @param {{ commands: Map<string, unknown>, prefix: string, botId?: string }} opts
+ * @param {{ commands: Map<string, unknown>, prefix: string, botId?: string }} opts  `prefix`: the one that applies to this message (see prefixFor)
  */
 export function isCommandMessage(message, { commands, prefix, botId = message.client?.user?.id }) {
   if (message.author?.bot || typeof message.content !== 'string') return false;
@@ -71,10 +85,14 @@ export function isCommandMessage(message, { commands, prefix, botId = message.cl
 
 /**
  * @param {any} message  the incoming message
- * @param {{ commands: Map<string, { data: any, execute: Function }>, prefix: string, botId?: string }} opts
+ * @param {{ commands: Map<string, { data: any, execute: Function }>, prefix: string, botId?: string }} opts  `prefix`: the instance default; a server's own prefix wins
  */
-export async function handleMessage(message, { commands, prefix, botId = message.client?.user?.id }) {
+export async function handleMessage(
+  message,
+  { commands, prefix: defaultPrefix, botId = message.client?.user?.id }
+) {
   if (message.author?.bot || typeof message.content !== 'string') return;
+  const prefix = await prefixFor(message, defaultPrefix);
   const split = splitCommand(message.content, prefix, botId);
   if (!split) return;
   // Moderation gets the message first: one automod deleted or the honeypot punished does not run.

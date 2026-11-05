@@ -108,9 +108,13 @@ registerComponent('tickets', SELECT_ID, handleSelect);
 
 /** @param {import('discord.js').Client} client */
 export function register(client, { isCommand = () => false } = {}) {
-  client.on(Events.MessageCreate, (message) => {
-    // `!help` in a DM is a command for the router (Fluxer), not a ticket message.
-    if (isCommand(message)) return;
-    handleDM(message).catch((err) => log.error('tickets', 'DM handler failed:', err));
+  client.on(Events.MessageCreate, async (message) => {
+    try {
+      // `!help` in a DM is a command for the router (Fluxer), not a ticket message.
+      if (await isCommand(message)) return;
+      await handleDM(message);
+    } catch (err) {
+      log.error('tickets', 'DM handler failed:', err);
+    }
   });
 }
