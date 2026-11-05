@@ -195,8 +195,7 @@ struct ComposedMessageTests {
             server: "fluxer:5", id: nil, name: "Greeting", channelId: "333", publish: true, spec: draft.spec)
         #expect(save.path == "/api/v2/guilds/fluxer%3A5/messages/new")
         #expect(save.method == .post)
-        let data = try JSONEncoder().encode(try #require(save.body))
-        let body = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let body = try bodyObject(save)
         #expect(Set(body.keys) == ["name", "channelId", "action", "spec"])
         #expect(body["action"] as? String == "publish")
         let spec = try #require(body["spec"] as? [String: Any])
@@ -205,8 +204,7 @@ struct ComposedMessageTests {
         let draftSave = Endpoints.SaveComposedMessage(
             server: "1", id: 12, name: "x", channelId: "", publish: false, spec: draft.spec)
         #expect(draftSave.path == "/api/v2/guilds/1/messages/12")
-        let draftData = try JSONEncoder().encode(try #require(draftSave.body))
-        let draftBody = try #require(try JSONSerialization.jsonObject(with: draftData) as? [String: Any])
+        let draftBody = try bodyObject(draftSave)
         #expect(draftBody["action"] as? String == "save")
     }
 

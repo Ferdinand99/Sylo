@@ -4,9 +4,12 @@ import Testing
 
 /// Encodes an endpoint's body and reads it back as a dictionary.
 func bodyObject(_ endpoint: some APIEndpoint) throws -> [String: Any] {
-    let body = try #require(endpoint.body)
+    guard let body = endpoint.body else { throw NetworkError.encoding("no body") }
     let data = try JSONEncoder().encode(body)
-    return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        throw NetworkError.encoding("not an object")
+    }
+    return object
 }
 
 @Suite("Reaction roles")
