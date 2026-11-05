@@ -13,6 +13,7 @@ struct ChangelogView: View {
 
     var body: some View {
         List {
+            Group {
             if let message = model.errorMessage, !model.releases.isEmpty {
                 Section { StatusMessage(message, kind: .error) }
             }
@@ -24,10 +25,13 @@ struct ChangelogView: View {
                     Button("Show Older Releases", action: showOlderReleases)
                 }
             }
+            }
+            .syloSectionCards()
         }
         .overlay {
             ChangelogPlaceholder(model: model)
         }
+        .syloScreen()
         .navigationTitle("What's New")
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
@@ -48,7 +52,7 @@ private struct ChangelogPlaceholder: View {
     var body: some View {
         if model.releases.isEmpty {
             if !model.hasLoaded {
-                ProgressView()
+                SyloLoadingView()
             } else if let message = model.errorMessage {
                 ContentUnavailableView {
                     Label("Couldn't Load What's New", systemImage: "exclamationmark.triangle")

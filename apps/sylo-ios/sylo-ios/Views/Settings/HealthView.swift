@@ -13,6 +13,7 @@ struct HealthView: View {
 
     var body: some View {
         List {
+            Group {
             if let message = model.errorMessage {
                 Section { StatusMessage(message, kind: .error) }
             }
@@ -23,7 +24,10 @@ struct HealthView: View {
                 Section { ProgressView() }
             }
             DevLogSection(model: model)
+            }
+            .syloSectionCards()
         }
+        .syloScreen()
         .navigationTitle("Health")
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }

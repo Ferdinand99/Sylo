@@ -16,6 +16,7 @@ struct ServerChoiceView: View {
     var body: some View {
         NavigationStack {
             Form {
+            Group {
                 Section {
                     Picker("Sylo server", selection: $choice) {
                         ChoiceRow(title: "Sylo", detail: "app.sylobot.com")
@@ -54,6 +55,9 @@ struct ServerChoiceView: View {
                     }
                 }
             }
+            .syloSectionCards()
+            }
+            .syloFormStyle()
             .navigationTitle("Welcome to Sylo")
             .safeAreaInset(edge: .bottom) {
                 Button {

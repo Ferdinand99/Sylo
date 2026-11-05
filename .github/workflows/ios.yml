@@ -69,14 +69,14 @@ jobs:
       # plus large text. For checking the design without a Mac; not part of the pass/fail of the build.
       - name: Take screenshots in the simulator
         continue-on-error: true
-        timeout-minutes: 25
+        timeout-minutes: 10
         run: |
           APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/sylo-ios.app"
           OUT="$RUNNER_TEMP/shots"
           mkdir -p "$OUT"
           UDID=$(xcrun simctl list devices available | grep -E "iPhone [0-9]+ Pro \(" | tail -1 | grep -oE '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}')
           [ -n "$UDID" ] || UDID=$(xcrun simctl list devices available | grep -E "iPhone" | tail -1 | grep -oE '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}')
-          echo "Simulator: $UDID"
+          echo "Simulator: $UDID"; xcrun simctl list devices available | grep -E "iPhone" | head -20; xcrun simctl list runtimes
           xcrun simctl boot "$UDID" || true
           echo "Booting..."; date
           xcrun simctl bootstatus "$UDID" -b

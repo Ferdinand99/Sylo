@@ -15,11 +15,8 @@ struct SignInView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    Image(systemName: "person.crop.circle.badge.checkmark")
-                        .font(.system(size: symbolSize))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.tint)
-                        .accessibilityHidden(true)
+                    SyloMark(size: symbolSize)
+                        .syloGlow(radius: 20)
 
                     Text("Sign in to \(server.displayName)")
                         .font(.title2.bold())
@@ -53,6 +50,7 @@ struct SignInView: View {
                     .padding([.horizontal, .bottom])
             }
             .task { await session.loadServerInfo() }
+            .background { SyloBackground() }
         }
     }
 

@@ -26,6 +26,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+            Group {
                 accountSection
                 NotificationsSection(push: push, servers: servers.servers)
                 DevicesSection(account: account)
@@ -58,6 +59,9 @@ struct SettingsView: View {
                     Text("Deletes your Sylo account on \(server.displayName). Your servers and their settings stay as they are.")
                 }
             }
+            .syloSectionCards()
+            }
+            .syloFormStyle()
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -9,7 +9,7 @@ struct RootView: View {
         Group {
             switch session.phase {
             case .starting:
-                ProgressView()
+                SyloLoadingView()
             case .choosingServer:
                 ServerChoiceView()
             case .signIn(let server):
