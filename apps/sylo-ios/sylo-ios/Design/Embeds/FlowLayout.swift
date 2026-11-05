@@ -3,7 +3,7 @@ import SwiftUI
 /// Places its children left to right and wraps to a new line when a line is full, for a row of
 /// chips or buttons whose count and width are not known.
 struct FlowLayout: Layout {
-    var spacing: CGFloat = SyloSpacing.s
+    var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         arrange(width: proposal.width ?? .infinity, subviews: subviews).size

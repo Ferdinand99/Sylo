@@ -2,7 +2,7 @@
 import Foundation
 import SyloKit
 
-extension PreviewData {
+nonisolated extension PreviewData {
     private static func demoDecode<T: Decodable>(_ json: String) -> T {
         // Sample data spelled out below; a typo here is a programming error in the previews.
         try! JSONDecoder().decode(T.self, from: Data(json.utf8))
