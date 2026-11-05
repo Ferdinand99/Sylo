@@ -735,10 +735,6 @@ textarea[aria-invalid='true']:focus-visible {
   color: var(--text-muted);
   font-size: 0.8125rem;
 }
-/* A destructive button at the end of a vertical stack of row actions. */
-.v2-danger-sep {
-  margin-top: 6px;
-}
 
 /* ---------- Composer pages (MessageBuilder, Welcome channel) ---------- */
 /* Save draft / Publish row with an "Unsaved changes" marker in front. These

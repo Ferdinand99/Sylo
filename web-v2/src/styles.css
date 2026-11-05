@@ -1148,10 +1148,6 @@ a.v2-row:active {
   border-radius: 50%;
   background: var(--warn);
 }
-.v2-sidebar-beta-mark {
-  color: var(--warn);
-  opacity: 0.85;
-}
 .v2-row-arrow {
   color: var(--text-muted);
   flex: none;
@@ -2316,11 +2312,6 @@ input[type='radio']:disabled {
 .v2-am-params .v2-field-row {
   margin-top: 8px;
 }
-.v2-warn-text {
-  color: var(--warn);
-  font-size: 0.82rem;
-  margin: 6px 0 0;
-}
 /* Scoped to any form, not just .v2-field, so a card of raw inputs (e.g.
    .v2-rule-card's embed fields) gets the same look without every single
    input needing its own .v2-field wrapper (and that wrapper's label-sized
@@ -2546,10 +2537,6 @@ textarea:disabled {
   border-top: 1px solid var(--border-subtle);
 }
 
-.v2-placeholders code {
-  margin-right: 6px;
-}
-
 .v2-card-preview {
   max-width: 480px;
   width: 100%;
@@ -2698,9 +2685,6 @@ textarea:disabled {
   border-radius: 4px;
   padding: 1px 5px;
   font-size: 0.85em;
-}
-.v2-ins-refresh {
-  margin-left: auto;
 }
 .v2-ins-tiles {
   display: flex;

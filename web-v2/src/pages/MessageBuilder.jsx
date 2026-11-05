@@ -177,7 +177,11 @@ export default function MessageBuilder() {
         setMessageId(rec.messageId);
         setSavedSnapshot({ ...sent, channelId: rec.channelId });
         if (isNew) {
-          navigate(`/guilds/${guildId}/messages/${rec.id}`, { replace: true, state: SKIP_UNSAVED_GUARD });
+          navigate(`/guilds/${guildId}/messages/${rec.id}`, {
+            replace: true,
+            preventScrollReset: true,
+            state: SKIP_UNSAVED_GUARD,
+          });
         }
       }
     } catch (err) {
