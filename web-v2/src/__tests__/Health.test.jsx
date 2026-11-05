@@ -51,6 +51,23 @@ describe('Health: stat tiles', () => {
   });
 });
 
+describe('Health: gateway ping card', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('shows the ping, and the graph only once there are two samples to draw', async () => {
+    getHealth.mockResolvedValue({ ...health(), pingHistory: [38] });
+    const first = render(<Health />);
+    expect(await screen.findByText('40 ms')).toBeTruthy();
+    expect(first.container.querySelector('.v2-ping-graph')).toBeNull();
+    first.unmount();
+
+    getHealth.mockResolvedValue({ ...health(), pingHistory: [38, 52, 40] });
+    const second = render(<Health />);
+    await screen.findByText('40 ms');
+    expect(second.container.querySelector('.v2-ping-graph svg')).not.toBeNull();
+  });
+});
+
 describe('Health: session secret warning', () => {
   beforeEach(() => vi.clearAllMocks());
 

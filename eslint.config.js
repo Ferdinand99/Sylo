@@ -4,6 +4,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import n from 'eslint-plugin-n';
 import prettier from 'eslint-config-prettier';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 export default [
   {
@@ -93,6 +94,18 @@ export default [
     rules: {
       'n/no-unsupported-features/node-builtins': 'off',
       'n/no-missing-import': 'off',
+    },
+  },
+
+  // React hooks: calling a hook conditionally breaks the app, so that is an error;
+  // a missing effect dependency is only a warning (useApiData deliberately takes a
+  // deps array, see web-v2/src/useApiData.js).
+  {
+    files: ['web-v2/src/**/*.{js,jsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: {
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
     },
   },
 

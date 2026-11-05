@@ -1,3 +1,5 @@
+import { useContext } from 'react';
+import { PlatformContext } from '../platformContext.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -29,11 +31,15 @@ const fromForm = (form) => ({
 });
 
 export default function ServerStats() {
+  const { platform } = useContext(PlatformContext);
   const limits = useModuleLimits('server-stats');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('server-stats', {
     toForm,
     fromForm,
   });
+
+  // Only Discord is known to rename-limit channels this way; any other platform gets neutral wording.
+  const renameLimitOwner = platform === 'discord' ? "Discord's" : "the platform's";
 
   if (status === 'error') return <LoadError error={error} what="Server statistics settings" />;
   if (status === 'loading') return <p className="v2-state">Loading…</p>;
@@ -136,7 +142,9 @@ export default function ServerStats() {
             value={form.refreshMinutes}
             onChange={(e) => setForm((f) => ({ ...f, refreshMinutes: Number(e.target.value) }))}
           />
-          <p className="v2-field-hint">5–60. Lower is more current but closer to Discord's rename limit.</p>
+          <p className="v2-field-hint">
+            5–60. Lower is more current but closer to {renameLimitOwner} rename limit.
+          </p>
         </div>
       </form>
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />

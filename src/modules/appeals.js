@@ -73,6 +73,8 @@ export function normaliseAppealsConfig(raw = {}) {
   const questions = (Array.isArray(raw.questions) ? raw.questions : [])
     .map((q) =>
       String(q ?? '')
+        // One line: a question ends up in labels and embed field names.
+        .replace(/\s+/g, ' ')
         .trim()
         .slice(0, LIMITS['questions[]'].maxLength)
     )
@@ -86,6 +88,34 @@ export function normaliseAppealsConfig(raw = {}) {
     appealMessage: String(raw.appealMessage ?? '').slice(0, LIMITS.appealMessage.maxLength),
     appealServerInvite: inviteUrl(raw.appealServerInvite),
   };
+}
+
+/**
+ * What the public appeal form posted, matched to the questions as they are NOW. The form carries
+ * the question texts it was rendered with (`formQuestions`) because it posts its answers by
+ * position, and staff can reorder or edit the questions while someone is writing: answers must
+ * not end up under the wrong question.
+ * `current` is true when the form's questions are the live ones (or the form did not say which it
+ * had, e.g. one opened before this check existed); otherwise `answers` holds, per live question,
+ * what was typed under the same question text ('' for a new or changed one).
+ * @param {string[]} questions the live questions
+ * @param {string[] | null} formQuestions the questions the form was rendered with
+ * @param {string[]} rawAnswers the posted answers, by position
+ * @returns {{ current: boolean, answers: string[] }}
+ */
+export function matchAnswers(questions, formQuestions, rawAnswers) {
+  const typed = rawAnswers.map((a) => String(a ?? ''));
+  if (!formQuestions) return { current: true, answers: questions.map((_, i) => typed[i] ?? '') };
+  const same = formQuestions.length === questions.length && formQuestions.every((q, i) => q === questions[i]);
+  if (same) return { current: true, answers: questions.map((_, i) => typed[i] ?? '') };
+  const used = new Set();
+  const answers = questions.map((q) => {
+    const at = formQuestions.findIndex((fq, i) => fq === q && !used.has(i));
+    if (at === -1) return '';
+    used.add(at);
+    return typed[at] ?? '';
+  });
+  return { current: false, answers };
 }
 
 // --- signed appeal link --------------------------------------------------

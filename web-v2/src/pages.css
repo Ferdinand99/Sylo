@@ -895,6 +895,12 @@
 .v2-rule-head + .v2-rule-lead {
   margin: -6px 0 12px;
 }
+/* A hint line sits right above a card or an "+ Add" button (empty state, section intro): give
+   it air instead of gluing the two together. */
+p.v2-field-hint + .v2-btn-ghost,
+p.v2-field-hint + .v2-rule-card {
+  margin-top: 12px;
+}
 
 /* ---------- Overview ---------- */
 /* The ticket and appeal tiles are links: same box, with a hover edge and a focus ring. */
@@ -1079,10 +1085,44 @@ a.v2-stat.is-link:focus-visible {
 }
 
 /* ---------- Health ---------- */
-/* A second, quieter line under a tile's label ("Gateway ping 40 ms"). */
+/* A second, quieter line under a tile's label ("3 tickets all-time"). */
 .v2-stat .v2-stat-caption {
   margin-top: 2px;
   opacity: 0.85;
+}
+/* The three top tiles are one value and one label each, so they are the same compact height; the
+   gateway ping, which needs room for its graph, is a card of its own right under them. */
+.v2-stat-strip.v2-stat-strip-tight {
+  margin-bottom: 12px;
+}
+/* On a phone the strip's own gap is 8px: the ping card below keeps to it. */
+@media (max-width: 560px) {
+  .v2-stat-strip.v2-stat-strip-tight {
+    margin-bottom: 8px;
+  }
+}
+.v2-ping-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  margin-bottom: 36px;
+  padding: 14px 20px;
+}
+.v2-ping-now {
+  flex: none;
+  min-width: 0;
+}
+.v2-ping-now strong {
+  font-size: 1.25rem;
+}
+.v2-ping-graph {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.v2-ping-graph .v2-sparkline {
+  max-width: 360px;
+  margin-top: 0;
 }
 /* Three tiles that would wrap two-and-one stack in a single column on a narrow phone. */
 @media (max-width: 420px) {
@@ -1157,4 +1197,28 @@ a.v2-stat.is-link:focus-visible {
 /* Overview: the one instruction line above the stat tiles needs room before them. */
 .v2-overview-hint {
   margin-bottom: 14px;
+}
+
+/* ---------- Ban appeals: question rows ---------- */
+/* A question grows with its text; its move/remove buttons sit beside it, or under it on a phone. */
+.v2-question-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px 8px;
+  margin-bottom: 8px;
+}
+.v2-question-row > textarea {
+  flex: 1 1 220px;
+  width: auto;
+  min-width: 0;
+}
+.v2-question-actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+.v2-question-actions .v2-btn-ghost {
+  min-width: 36px;
+  padding: 6px 10px;
 }

@@ -234,7 +234,7 @@ export default function Health() {
 
       {notice ? <p className="v2-note">{notice}</p> : null}
 
-      <div className="v2-stat-strip v2-stat-strip-3 v2-stat-strip-stack">
+      <div className="v2-stat-strip v2-stat-strip-3 v2-stat-strip-stack v2-stat-strip-tight">
         <div className="v2-stat">
           <strong>{d.ready ? 'Online' : 'Offline'}</strong>
           <span>
@@ -258,11 +258,18 @@ export default function Health() {
         <div className="v2-stat">
           <strong>{d.uptime}</strong>
           <span>Uptime</span>
-          <span className="v2-stat-caption">
-            Gateway ping {d.gatewayPing === null ? '—' : `${d.gatewayPing} ms`}
-          </span>
-          <Sparkline history={d.pingHistory} />
         </div>
+      </div>
+      <div className="v2-stat v2-ping-card">
+        <div className="v2-ping-now">
+          <strong>{d.gatewayPing === null ? '—' : `${d.gatewayPing} ms`}</strong>
+          <span>Gateway ping</span>
+        </div>
+        {d.pingHistory?.length >= 2 ? (
+          <div className="v2-ping-graph">
+            <Sparkline history={d.pingHistory} />
+          </div>
+        ) : null}
       </div>
 
       {d.sessionSecret === 'generated-ephemeral' ? (

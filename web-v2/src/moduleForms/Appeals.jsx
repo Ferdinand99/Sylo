@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
 import Callout from '../components/Callout.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import LoadError from '../components/LoadError.jsx';
@@ -15,6 +16,23 @@ function padQuestions(questions) {
   while (padded.length < QUESTION_SLOTS) padded.push('');
   return padded.slice(0, QUESTION_SLOTS);
 }
+
+/** The questions with the one at `index` swapped with its neighbour (`by` is -1 or 1). */
+export function moveQuestion(questions, index, by) {
+  const to = index + by;
+  if (index < 0 || index >= questions.length || to < 0 || to >= questions.length) return questions;
+  const next = [...questions];
+  [next[index], next[to]] = [next[to], next[index]];
+  return next;
+}
+
+/** The questions without the one at `index`; the ones below move up and the slots stay five. */
+export function removeQuestion(questions, index) {
+  return padQuestions(questions.filter((_, i) => i !== index));
+}
+
+// A question is one line: a pasted line break becomes a space, and Enter does not add one.
+const oneLine = (text) => text.replace(/\s*[\r\n]+\s*/g, ' ');
 
 const toForm = (config) => ({ ...config, questions: padQuestions(config.questions) });
 
@@ -35,6 +53,8 @@ export default function Appeals() {
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const setQuestion = (i, value) =>
     setForm((f) => ({ ...f, questions: f.questions.map((q, idx) => (idx === i ? value : q)) }));
+  const move = (i, by) => setForm((f) => ({ ...f, questions: moveQuestion(f.questions, i, by) }));
+  const remove = (i) => setForm((f) => ({ ...f, questions: removeQuestion(f.questions, i) }));
 
   return (
     <>
@@ -70,14 +90,50 @@ export default function Appeals() {
             Appeal form questions <span className="v2-field-hint">— 1 to 5; blank rows are dropped</span>
           </label>
           {form.questions.map((q, i) => (
-            <input
-              key={i}
-              type="text"
-              maxLength={limitOf(limits, 'questions[]').maxLength}
-              placeholder={`Question ${i + 1}${i === 0 ? ' (required)' : ' (optional)'}`}
-              value={q}
-              onChange={(e) => setQuestion(i, e.target.value)}
-            />
+            <div className="v2-question-row" key={i}>
+              <AutoGrowTextarea
+                aria-label={`Question ${i + 1}`}
+                maxLength={limitOf(limits, 'questions[]').maxLength}
+                placeholder={`Question ${i + 1}${i === 0 ? ' (required)' : ' (optional)'}`}
+                value={q}
+                onChange={(e) => setQuestion(i, oneLine(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.preventDefault();
+                }}
+              />
+              <div className="v2-question-actions">
+                <button
+                  type="button"
+                  className="v2-btn-ghost"
+                  title="Move up"
+                  aria-label={`Move question ${i + 1} up`}
+                  disabled={i === 0}
+                  onClick={() => move(i, -1)}
+                >
+                  <span aria-hidden="true">↑</span>
+                </button>
+                <button
+                  type="button"
+                  className="v2-btn-ghost"
+                  title="Move down"
+                  aria-label={`Move question ${i + 1} down`}
+                  disabled={i === form.questions.length - 1}
+                  onClick={() => move(i, 1)}
+                >
+                  <span aria-hidden="true">↓</span>
+                </button>
+                <button
+                  type="button"
+                  className="v2-btn-ghost"
+                  title="Remove question"
+                  aria-label={`Remove question ${i + 1}`}
+                  disabled={!q.trim()}
+                  onClick={() => remove(i)}
+                >
+                  <span aria-hidden="true">✕</span>
+                </button>
+              </div>
+            </div>
           ))}
         </div>
 
