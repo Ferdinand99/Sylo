@@ -26,8 +26,10 @@
           <% var single = questions.length === 1; %>
           <p class="muted small" id="appeal-hint"><%= single ? 'Required.' : 'Answer at least one question.' %> Each answer can be up to 2,000 characters.</p>
           <% questions.forEach(function (q, i) { %>
+            <%# The questions this form shows, so the server can tell if they changed meanwhile. %>
+            <input type="hidden" name="q" value="<%= q %>" />
             <label for="appeal-a-<%= i %>"><%= q %><% if (single) { %> <span class="muted small">(required)</span><% } %></label>
-            <textarea id="appeal-a-<%= i %>" name="a" rows="3" maxlength="2000" aria-describedby="appeal-hint"<%= single ? ' required' : '' %>></textarea>
+            <textarea id="appeal-a-<%= i %>" name="a" rows="3" maxlength="2000" aria-describedby="appeal-hint"<%= single ? ' required' : '' %>><%= (typeof answers !== 'undefined' && answers[i]) || '' %></textarea>
           <% }) %>
           <div class="u-mt-3"><button type="submit" class="btn">Submit appeal</button></div>
         </form>
