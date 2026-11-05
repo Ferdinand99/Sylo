@@ -57,7 +57,8 @@ struct TicketsModelTests {
     @Test("closing a ticket from the list sends no message, reloads the list and counts the close")
     func closesFromTheList() async throws {
         let clients = StubClients { endpoint in
-            endpoint is Endpoints.CloseTicket ? OKResponse() : Self.list
+            if endpoint is Endpoints.CloseTicket { return OKResponse() }
+            return Self.list
         }
         let model = TicketsModel(server: "1", session: makeSignedInSession(clients: clients))
         await model.load()
@@ -65,7 +66,8 @@ struct TicketsModelTests {
         #expect(closed)
         #expect(model.closeCount == 1)
         #expect(!model.isClosing(11))
-        let close = try #require(clients.calls.compactMap { $0.endpoint as? Endpoints.CloseTicket }.first)
+        let closeCalls = clients.calls.compactMap { $0.endpoint as? Endpoints.CloseTicket }
+        let close = try #require(closeCalls.first)
         #expect(close.id == 11)
         #expect(close.message == "")
         #expect(clients.calls.last?.endpoint is Endpoints.Tickets)
