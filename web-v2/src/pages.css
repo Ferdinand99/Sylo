@@ -1153,3 +1153,8 @@ a.v2-stat.is-link:focus-visible {
 .v2-wc-reset .v2-field-hint {
   margin: 0;
 }
+
+/* Overview: the one instruction line above the stat tiles needs room before them. */
+.v2-overview-hint {
+  margin-bottom: 14px;
+}

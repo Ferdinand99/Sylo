@@ -198,7 +198,7 @@ export default function Overview() {
         </div>
       </div>
 
-      <p className="v2-field-hint">Switch a module on or off here, or open it to change its settings.</p>
+      <p className="v2-field-hint v2-overview-hint">Switch a module on or off here, or open it to change its settings.</p>
 
       <div className="v2-stat-strip v2-stat-strip-3">
         <div className="v2-stat">

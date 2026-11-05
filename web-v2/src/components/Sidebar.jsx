@@ -144,7 +144,7 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
     { key: 'command-list', label: 'Command list', icon: 'terminal', path: '/commands' },
     { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', path: '/roadmap' },
     { key: 'health', label: 'Health', icon: 'pulse', path: '/health' },
-    { key: 'stats', label: 'Game stats cache', icon: 'chart', path: '/stats' },
+    { key: 'stats', label: 'Stats cache', icon: 'chart', path: '/stats' },
   ].map((it) => ({ ...it, href: it.guild ? (guildBase ? `${guildBase}${it.path}` : null) : it.path }));
 
   // Only modules actually turned on for this server, grouped the same way

@@ -45,7 +45,7 @@ export default function Stats() {
 
   return (
     <Reveal>
-      <h1 className="v2-section-title">Game stats cache</h1>
+      <h1 className="v2-section-title">Stats cache</h1>
       <p className="v2-field-hint">
         Lookups made through <code>/stats</code>, from every server. Results are cached for{' '}
         {plural(data.ttlMinutes, 'minute')}; stale rows are refreshed on the next lookup.
