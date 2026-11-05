@@ -54,7 +54,7 @@ function WatchForm({ initial, channels, roles, eventTypes, onSave, onCancel, sav
       </div>
 
       <div className="v2-field">
-        <label>Post in</label>
+        <label>Announce in</label>
         <select value={channelId} onChange={(e) => setChannelId(e.target.value)} required>
           <option value="">— select a channel —</option>
           {channels.map((c) => (
@@ -347,7 +347,7 @@ export default function GithubAlerts() {
           />
         </div>
       ) : (
-        <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
+        <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
           + Add repository
         </button>
       )}

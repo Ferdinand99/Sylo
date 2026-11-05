@@ -8,6 +8,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import HowItWorks from '../components/HowItWorks.jsx';
 import Meta from '../components/Meta.jsx';
 import Time from '../components/Time.jsx';
 import { formatDateTime } from '../formatTime.js';
@@ -169,12 +170,16 @@ export default function TempRoles() {
   return (
     <>
       <h1 className="v2-section-title">Temporary roles</h1>
+      <p className="v2-field-hint">Give a member a role for a set time; Sylo takes it back by itself.</p>
       <p className="v2-field-hint">
-        Give a member a role for a set time with <code>{cmd('/temprole add')}</code> or below. Sylo takes it
-        back by itself and writes the mod log. <code>{cmd('/temprole remove')}</code> ends one early,{' '}
-        <code>{cmd('/temprole list')}</code> shows them. Adding the same member and role again replaces the
-        end time.
+        Commands: <code>{cmd('/temprole add')}</code> (or the form below),{' '}
+        <code>{cmd('/temprole remove')}</code> to end one early, <code>{cmd('/temprole list')}</code>.
       </p>
+      <HowItWorks>
+        <p>
+          Adding the same member and role again replaces the end time. Each removal is written to the mod log.
+        </p>
+      </HowItWorks>
 
       <form onSubmit={save} data-savebar>
         <div className="v2-field">

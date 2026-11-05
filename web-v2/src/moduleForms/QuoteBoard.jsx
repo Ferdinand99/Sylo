@@ -8,6 +8,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import HowItWorks from '../components/HowItWorks.jsx';
 import Meta from '../components/Meta.jsx';
 import { formatDay } from '../formatTime.js';
 
@@ -63,13 +64,15 @@ export default function QuoteBoard() {
   return (
     <>
       <h1 className="v2-section-title">Quote board</h1>
+      <p className="v2-field-hint">Members save memorable messages as quotes and bring them back later.</p>
       <p className="v2-field-hint">
-        Members save a message with the <strong>Save quote</strong> menu (right-click a message, Apps) or{' '}
-        <code>{cmd('/quote save')}</code>, and bring quotes back with <code>{cmd('/quote random')}</code>,{' '}
-        <code>{cmd('/quote search')}</code>, <code>{cmd('/quote user')}</code> and{' '}
-        <code>{cmd('/quote show')}</code>. Only the text, the author&apos;s name and the date are kept; files
-        are counted, never copied.
+        Commands: <code>{cmd('/quote save')}</code> (or <strong>Save quote</strong> in a message's Apps menu),{' '}
+        <code>{cmd('/quote random')}</code>, <code>{cmd('/quote search')}</code>,{' '}
+        <code>{cmd('/quote user')}</code>, <code>{cmd('/quote show')}</code>.
       </p>
+      <HowItWorks>
+        <p>Only the text, the author&apos;s name and the date are kept. Files are counted, never copied.</p>
+      </HowItWorks>
 
       <form onSubmit={save} data-savebar>
         <div className="v2-field">
