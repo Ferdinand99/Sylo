@@ -127,3 +127,25 @@ test('the app server list carries open and unread ticket counts', async () => {
   assert.equal(after.openTickets, before.openTickets + 2);
   assert.equal(after.unreadTickets, before.unreadTickets + 1);
 });
+
+test('the app server list carries the cached member count, and messages today only with insights on', async () => {
+  const { setGuildModule } = await import('../src/db/modules.js');
+  const { accrueDaily, utcDay } = await import('../src/db/insights.js');
+  const { id, token } = await person();
+  member(id, { perms: ['ManageGuild'] });
+  const row = async () =>
+    (await (await get('/api/v2/guilds', token)).json()).guilds.find((g) => g.id === D_GUILD);
+
+  assert.equal((await row()).memberCount, null, 'a server the bot has no count for');
+  guild.memberCount = 1284;
+  await setGuildModule(D_GUILD, 'insights', { enabled: false });
+  const off = await row();
+  assert.equal(off.memberCount, 1284, "the bot's cached count, not fetched");
+  assert.equal(off.messagesToday, null, 'insights off: no activity number');
+
+  await setGuildModule(D_GUILD, 'insights', { enabled: true });
+  assert.equal((await row()).messagesToday, 0, 'on, nothing counted yet');
+  await accrueDaily(D_GUILD, utcDay(), { messages: 312 });
+  assert.equal((await row()).messagesToday, 312);
+  await setGuildModule(D_GUILD, 'insights', { enabled: false });
+});

@@ -74,6 +74,7 @@ const stmts = {
       voice_channels       = excluded.voice_channels
   `),
   pruneDay: prepare('DELETE FROM guild_daily WHERE day < ?'),
+  messagesOnDay: prepare('SELECT guild_id, messages FROM guild_daily WHERE day = ?'),
 
   hourRange: prepare('SELECT * FROM guild_hourly WHERE guild_id = ? AND hour >= ? ORDER BY hour ASC'),
   upsertHour: prepare(`
@@ -183,6 +184,17 @@ function shapeRow(r) {
     voiceActiveMembers: Number(r.voice_active_members) || 0,
     voicePeak: Number(r.voice_peak) || 0,
   };
+}
+
+/**
+ * The messages counted so far on one UTC day, for every server that has a row: guild id to count.
+ * One query for all servers (the Sylo app's server list). The module flushes about hourly, so the
+ * number can be up to an hour behind.
+ * @param {string} day  'YYYY-MM-DD'
+ * @returns {Promise<Map<string, number>>}
+ */
+export async function messagesOnDay(day) {
+  return new Map((await stmts.messagesOnDay.all(day)).map((r) => [r.guild_id, Number(r.messages)]));
 }
 
 /**
