@@ -1,5 +1,6 @@
 import { useContext } from 'react';
 import { PlatformContext } from '../platformContext.jsx';
+import EmojiPicker from '../components/EmojiPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
@@ -12,6 +13,12 @@ const ROLE_ACTION_LABELS = { add: 'Give it to them', remove: 'Take it away from 
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
+}
+
+/** The emoji list with `emoji` added at the end, space-separated (the field takes several). */
+export function appendEmoji(text, emoji) {
+  const current = String(text ?? '').trimEnd();
+  return current ? `${current} ${emoji}` : emoji;
 }
 
 function toFormRule(r) {
@@ -198,16 +205,22 @@ export default function AutoReact() {
             </div>
 
             <div className="v2-field">
-              <label>Emoji to react with</label>
-              <input
-                type="text"
-                placeholder="🧟 🔥"
-                value={r.emojisText}
-                onChange={(e) => updateRule(r.key, { emojisText: e.target.value })}
-              />
+              <label htmlFor={`emojis-${r.key}`}>Emoji to react with</label>
+              <div className="v2-field-row">
+                <input
+                  id={`emojis-${r.key}`}
+                  type="text"
+                  placeholder="🧟 🔥"
+                  value={r.emojisText}
+                  onChange={(e) => updateRule(r.key, { emojisText: e.target.value })}
+                />
+                <EmojiPicker
+                  onPick={(emoji) => updateRule(r.key, { emojisText: appendEmoji(r.emojisText, emoji) })}
+                />
+              </div>
               <p className="v2-field-hint">
-                Paste one or more emoji, separated by spaces or commas — unicode (🧟) or a server custom
-                emoji.
+                Pick one or more with the smiley, or type or paste them, separated by spaces or commas —
+                unicode (🧟) or a server custom emoji.
               </p>
             </div>
 
