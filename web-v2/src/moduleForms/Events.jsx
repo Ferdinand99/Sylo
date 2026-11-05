@@ -382,7 +382,8 @@ export default function Events() {
           </label>
           <p className="v2-field-hint">
             Every event gets a page with its title, time, place, image and sign-up counts: no names, no host
-            and no roles. The link is added to the event&apos;s post.
+            and no roles. The link is added to the event&apos;s post. Saving this updates the posts of the
+            server&apos;s events, finished ones too.
           </p>
           <details className="v2-am-params">
             <summary>Who can open the page?</summary>
@@ -392,8 +393,7 @@ export default function Events() {
               are members of the server and can see that channel can open it; Sylo checks this on every visit.
               Someone who is not signed in sees a plain sign-in page, and a signed-in person who may not open
               it sees the same &quot;not found&quot; page as for a wrong address. An event in an
-              age-restricted channel has no page. Saving this updates the posts of the server&apos;s events,
-              finished ones too.
+              age-restricted channel has no page.
             </p>
           </details>
         </div>

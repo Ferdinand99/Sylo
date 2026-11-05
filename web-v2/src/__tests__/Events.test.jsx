@@ -233,6 +233,13 @@ describe('Events public pages', () => {
     expect(screen.getByText(/age-restricted channel has no page/i)).toBeTruthy();
   });
 
+  it('keeps the warning that saving updates the event posts outside the closed details', async () => {
+    renderAtGuild(<Events />, GUILD);
+    await screen.findByLabelText('Event pages');
+    const warning = screen.getByText(/Saving this updates the posts of the server's events, finished ones too/);
+    expect(warning.closest('details')).toBeNull();
+  });
+
   it('links each event to its page, and gives no link while pages are off', async () => {
     load([
       event({ pagePath: '/events/0123456789abcdef0123456789abcdef' }),

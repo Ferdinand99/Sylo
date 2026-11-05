@@ -363,11 +363,11 @@ export default function Health() {
         </div>
         <div className="v2-stat">
           <strong>{formatCount(d.stats.composedTotal)}</strong>
-          <span>composed messages</span>
+          <span>Composed messages</span>
         </div>
         <div className="v2-stat">
           <strong>{formatCount(d.stats.cachedLookups)}</strong>
-          <span>cached stat lookups</span>
+          <span>Game stats cached</span>
         </div>
       </div>
 
