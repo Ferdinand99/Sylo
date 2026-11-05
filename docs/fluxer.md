@@ -193,7 +193,9 @@ its `/` version takes.
 - **Free text.** The **last** text option takes the rest of the line, so a multi-word
   reason needs no quotes. An earlier text option takes one word. That is why
   `!ban @user 1m spam` reads `1m` as the reason; write `duration:1m` for a
-  temporary ban: `!ban @user spam duration:1m`.
+  temporary ban: `!ban @user spam duration:1m`. `!suggest` is the exception: its text
+  comes first and takes the rest of the line, so `!suggest Add a pixel-art channel`
+  works; add the optional title by name at the end: `!suggest Add a pixel-art channel title:Pixel art`.
 - **People, channels and roles** can be a mention or an id.
 
 ### Permissions

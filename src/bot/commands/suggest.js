@@ -1,5 +1,6 @@
 // /suggest <text> [title] — post a suggestion for the server to vote on. Open to every member of
-// a server that has the Suggestions module on. On Fluxer: `!suggest text:"Add a movie night"`.
+// a server that has the Suggestions module on. On Fluxer: `!suggest Add a movie night`, or
+// `!suggest Add a movie night title:Movies` (the text is everything up to a `title:`).
 import { SlashCommandBuilder, InteractionContextType, MessageFlags } from 'discord.js';
 import { getGuildModule } from '../../db/modules.js';
 import {
@@ -19,6 +20,9 @@ export const data = new SlashCommandBuilder()
   .addStringOption((o) =>
     o.setName('title').setDescription('A short title (optional)').setMaxLength(LIMITS.title.maxLength)
   );
+
+/** Fluxer: free text after `!suggest` is the suggestion text, not split over text and title. */
+export const prefixRest = 'text';
 
 const eph = (interaction, content) =>
   interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });

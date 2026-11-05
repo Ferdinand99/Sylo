@@ -46,7 +46,7 @@ status and sort by newest or most votes, and the staff actions.
 
 | Command | |
 |---|---|
-| `/suggest` | Anyone. `text` (up to 1000 characters) and an optional `title` (up to 100). |
+| `/suggest` | Anyone. `text` (up to 1000 characters) and an optional `title` (up to 100). On Fluxer: `!suggest Add a pixel-art channel`, or with a title `!suggest Add a pixel-art channel title:Pixel art`. |
 | `/suggestion approve` | Staff. `id` and an optional `reason` (up to 500 characters). |
 | `/suggestion deny` | Staff. Same options. |
 | `/suggestion implement` | Staff. Same options. |

@@ -23,7 +23,7 @@ export async function loadCommands() {
       log.warn('bot', `Skipping ${file}: missing "data" or "execute" export`);
       continue;
     }
-    commands.set(mod.data.name, { data: mod.data, execute: mod.execute });
+    commands.set(mod.data.name, { data: mod.data, execute: mod.execute, prefixRest: mod.prefixRest });
   }
 
   return commands;

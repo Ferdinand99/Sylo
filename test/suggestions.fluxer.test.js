@@ -3,7 +3,7 @@
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { data as suggestData } from '../src/bot/commands/suggest.js';
+import { data as suggestData, prefixRest } from '../src/bot/commands/suggest.js';
 import { data as suggestionData } from '../src/bot/commands/suggestion.js';
 import { parseArgs, ParseError } from '../src/bot/framework/parser.js';
 import { planComponents, withComponentText } from '../src/platform/components.js';
@@ -23,6 +23,29 @@ test('!suggest takes a quoted text, with or without names, and an optional title
   assert.throws(() => parseArgs(suggest, ''), /text/);
   assert.throws(() => parseArgs(suggest, `text:${'a'.repeat(1001)}`), ParseError);
   assert.throws(() => parseArgs(suggest, `text:x title:${'a'.repeat(101)}`), ParseError);
+});
+
+test('!suggest: plain words after the command are the suggestion text', () => {
+  const run = (line) => plain(parseArgs(suggest, line, { rest: prefixRest }));
+  assert.equal(prefixRest, 'text');
+  assert.deepEqual(run('Add a pixel-art channel'), { text: 'Add a pixel-art channel' });
+  assert.deepEqual(run('text:"Add a movie night" title:Movies'), {
+    text: 'Add a movie night',
+    title: 'Movies',
+  });
+  assert.deepEqual(run('Add a pixel-art channel title:Pixel'), {
+    text: 'Add a pixel-art channel',
+    title: 'Pixel',
+  });
+  assert.deepEqual(run('title:"Pixel art" Add a pixel-art channel'), {
+    text: 'Add a pixel-art channel',
+    title: 'Pixel art',
+  });
+  assert.deepEqual(run('"Add a movie night"'), { text: 'Add a movie night' });
+  assert.deepEqual(run('Ask: why not? note:yes'), { text: 'Ask: why not? note:yes' });
+  assert.throws(() => run(''), /text/);
+  assert.throws(() => run('title:Movies'), /text/);
+  assert.throws(() => run(`${'a '.repeat(501)}`), ParseError);
 });
 
 test('!suggestion approve|deny|implement|consider id:12 reason:"..."', () => {
