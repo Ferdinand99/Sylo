@@ -17,7 +17,8 @@ struct ModuleIntro: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                // Inset enough that the section's rounded corner never clips the first and last line.
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         }
     }
 }

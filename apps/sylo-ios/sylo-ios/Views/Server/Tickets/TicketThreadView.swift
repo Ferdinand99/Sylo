@@ -181,7 +181,12 @@ struct TicketThreadView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
-            .background { Color.syloBackground2.opacity(0.96).ignoresSafeArea(edges: .bottom) }
+            .background {
+                LinearGradient(
+                    colors: [Color.syloBackground.opacity(0), Color.syloBackground.opacity(0.95)],
+                    startPoint: .top, endPoint: .bottom)
+                    .ignoresSafeArea(edges: .bottom)
+            }
         }
     }
 
