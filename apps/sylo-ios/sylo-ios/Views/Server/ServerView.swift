@@ -89,7 +89,7 @@ struct ServerView: View {
                     ProgressView()
                 } else {
                     Button("Save") { Task { await settings.save() } }
-                        .disabled(!settings.hasChanges)
+                        .disabled(!settings.hasChanges || settings.draftProblem != nil)
                 }
             }
         }

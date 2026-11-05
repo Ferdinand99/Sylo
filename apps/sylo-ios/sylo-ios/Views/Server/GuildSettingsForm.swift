@@ -40,10 +40,18 @@ struct GuildSettingsForm: View {
                 Text("Every moderation action posts an embed here.")
             }
 
+            if page.hasCommandPrefix {
+                commandPrefixSection(page, settings)
+            }
+
             Section {
                 ColorPicker("Default embed colour", selection: colour(settings), supportsOpacity: false)
-                Button("Use Sylo's Colour") { settings.wrappedValue.useDefaultColor() }
-                    .disabled(settings.wrappedValue.usesDefaultColor)
+                // Only while a colour of its own is set; otherwise there is nothing to reset.
+                if !settings.wrappedValue.usesDefaultColor {
+                    Button("Reset to Sylo's Colour", systemImage: "arrow.counterclockwise") {
+                        settings.wrappedValue.useDefaultColor()
+                    }
+                }
             } footer: {
                 if settings.wrappedValue.usesDefaultColor {
                     Text("Sylo's embeds in this server use Sylo's own colour.")
@@ -56,11 +64,39 @@ struct GuildSettingsForm: View {
                 MultiPicker(title: "Bot master roles", selection: settings.botMasterRoleIds,
                             options: page.roles, prefix: "@")
             } footer: {
-                Text("Roles with Administrator already have dashboard access and don't need to be added here.")
+                Text("Members with these roles can open the dashboard and change Sylo's settings for the server, like someone with Manage Server. Roles with Administrator already can.")
             }
         }
+        .tabBarClearance()
         .disabled(model.isSaving)
         .refreshable { await model.load() }
+    }
+
+    /// Fluxer only: the prefix members type before a command. Same rules as the server; the
+    /// message under the field says what is wrong, and Save stays off until it is fixed.
+    private func commandPrefixSection(_ page: GuildSettingsPage, _ settings: Binding<GuildSettings>) -> some View {
+        let text = Binding(
+            get: { settings.wrappedValue.commandPrefix ?? "" },
+            set: { settings.wrappedValue.commandPrefix = $0 })
+        let typed = text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shown = typed.isEmpty ? page.defaultCommandPrefix : typed
+        return Section {
+            LabeledContent("Command prefix") {
+                TextField("Command prefix", text: text, prompt: Text(verbatim: page.defaultCommandPrefix))
+                    .multilineTextAlignment(.trailing)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+            }
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                if let problem = settings.wrappedValue.commandPrefixProblem(max: page.commandPrefixMaxLength) {
+                    Text(verbatim: problem)
+                        .foregroundStyle(.red)
+                }
+                Text("Fluxer has no slash commands, so members start a command with this, for example \(shown)help. Leave it empty to use the default, \(page.defaultCommandPrefix). Mentioning Sylo (@Sylo help) always works.")
+            }
+        }
     }
 
     private func colour(_ settings: Binding<GuildSettings>) -> Binding<Color> {
