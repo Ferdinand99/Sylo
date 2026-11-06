@@ -19,7 +19,7 @@ Add the hosted instance in one click, or self-host it with Docker or Unraid.
 [![GHCR](https://img.shields.io/badge/ghcr.io-Ferdinand99%2FSylo-2496ED?logo=github&logoColor=white)](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/github/license/Ferdinand99/Sylo)](LICENSE)
-[![iOS app: join the TestFlight beta](https://img.shields.io/badge/iOS%20app-TestFlight%20beta-0D96F6?logo=apple&logoColor=white)](https://testflight.apple.com/join/6FXxPjxu)
+[![iOS app on the App Store](https://img.shields.io/badge/iOS%20app-App%20Store-0D96F6?logo=apple&logoColor=white)](https://apps.apple.com/app/sylo-server-manager/id6824036901)
 [![Website](https://img.shields.io/badge/website-sylobot.com-7C6CFF)](https://sylobot.com)
 [![Roadmap](https://img.shields.io/badge/roadmap-app.sylobot.com-8B5CF6)](https://app.sylobot.com/roadmap)
 
@@ -32,15 +32,13 @@ Add the hosted instance in one click, or self-host it with Docker or Unraid.
 </div>
 
 > [!TIP]
-> ### 📱 The Sylo app is in public beta
+> ### 📱 The Sylo app is on the App Store
 >
-> [![Join the TestFlight beta](https://img.shields.io/badge/TestFlight-Join%20the%20beta-0D96F6?logo=apple&logoColor=white&style=for-the-badge)](https://testflight.apple.com/join/6FXxPjxu)
+> [![Download on the App Store](https://img.shields.io/badge/App%20Store-Download-0D96F6?logo=apple&logoColor=white&style=for-the-badge)](https://apps.apple.com/app/sylo-server-manager/id6824036901)
 >
 > **Sylo – Server Manager** for iPhone and iPad: manage your modules, answer
-> tickets and get notified about new ones. Open the link on your iPhone or iPad
-> to join with the TestFlight app: <https://testflight.apple.com/join/6FXxPjxu>.
-> Feedback goes through TestFlight or the
-> [community Discord](https://discord.gg/GAzR9k5hhS).
+> tickets and get notified about new ones.
+> Feedback is welcome in the [community Discord](https://discord.gg/GAzR9k5hhS).
 
 ---
 
@@ -237,8 +235,8 @@ in [docs/grafana-dashboard.json](docs/grafana-dashboard.json). See
 **Sylo – Server Manager** is a native SwiftUI app (source in
 [`apps/sylo-ios`](apps/sylo-ios)) that signs in to the hosted Sylo or your own
 instance and manages your servers through the same API as the dashboard,
-with push notifications for new tickets. It is in public beta on TestFlight and
-not on the App Store yet: [join the beta](https://testflight.apple.com/join/6FXxPjxu).
+with push notifications for new tickets. Get it on the
+[App Store](https://apps.apple.com/app/sylo-server-manager/id6824036901).
 
 A self-hosted instance needs nothing extra beyond a working dashboard login
 (Discord or Fluxer OAuth). Notifications reach the phone through the hosted
