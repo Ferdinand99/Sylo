@@ -594,6 +594,11 @@ public struct RoadmapVoteResult: Decodable, Sendable, Equatable {
     public let hasVoted: Bool
     public let votes: Int
 
+    public init(hasVoted: Bool, votes: Int) {
+        self.hasVoted = hasVoted
+        self.votes = votes
+    }
+
     private enum CodingKeys: String, CodingKey { case voted, votes }
 
     public init(from decoder: any Decoder) throws {

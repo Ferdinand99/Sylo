@@ -355,7 +355,7 @@ struct ServerToolsTests {
         await model.forget(note: "  done ")
         #expect(model.deletionNotice?.contains("DM'd") == true)
         #expect(model.deleteCount == 1)
-        #expect(clients.calls.compactMap { $0.endpoint as? Endpoints.ForgetMember }.first?.reason == "  done ")
+        #expect(clients.calls.compactMap { $0.endpoint as? Endpoints.ForgetMember }.first?.reason == "done")
         #expect(clients.calls.count == 3)
     }
 
