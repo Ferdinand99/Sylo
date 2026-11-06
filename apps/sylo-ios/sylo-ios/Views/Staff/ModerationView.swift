@@ -12,7 +12,7 @@ struct ModerationView: View {
         case cases, bans, locks
     }
 
-    @State private var model: RecordListModel<ModerationPage>
+    @State private var model: RecordListModel<ModerationHubPage>
     @State private var tab = Listing.cases
     @State private var isWarning = false
     @State private var isClearing = false
@@ -147,7 +147,7 @@ struct ModerationView: View {
     // MARK: Cases
 
     @ViewBuilder
-    private func casesSections(_ page: ModerationPage) -> some View {
+    private func casesSections(_ page: ModerationHubPage) -> some View {
         Section {
             if page.cases.isEmpty {
                 Text("No cases yet.").foregroundStyle(Color.syloMuted)
@@ -195,7 +195,7 @@ struct ModerationView: View {
     // MARK: Bans
 
     @ViewBuilder
-    private func bansSections(_ page: ModerationPage) -> some View {
+    private func bansSections(_ page: ModerationHubPage) -> some View {
         Section {
             if let problem = page.bansError {
                 Label(problem, systemImage: "info.circle").font(.subheadline).foregroundStyle(Color.syloMuted)
@@ -246,7 +246,7 @@ struct ModerationView: View {
     // MARK: Locks
 
     @ViewBuilder
-    private func locksSections(_ page: ModerationPage) -> some View {
+    private func locksSections(_ page: ModerationHubPage) -> some View {
         Section {
             Button("Lock All Channels", systemImage: "lock.fill", role: .destructive) { isConfirmingLock = true }
             Button("End Lockdown", systemImage: "lock.open") {
@@ -367,11 +367,11 @@ private struct CaseRow: View {
 /// Edits a case's reason in a sheet.
 private struct CaseReasonEditor: View {
     let item: ModerationCase
-    let model: RecordListModel<ModerationPage>
+    let model: RecordListModel<ModerationHubPage>
 
     @State private var reason: String
 
-    init(item: ModerationCase, model: RecordListModel<ModerationPage>) {
+    init(item: ModerationCase, model: RecordListModel<ModerationHubPage>) {
         self.item = item
         self.model = model
         _reason = State(initialValue: item.reason)

@@ -69,7 +69,7 @@ jobs:
       # plus large text. For checking the design without a Mac; not part of the pass/fail of the build.
       - name: Take screenshots in the simulator
         continue-on-error: true
-        timeout-minutes: 25
+        timeout-minutes: 40
         run: |
           APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/sylo-ios.app"
           OUT="$RUNNER_TEMP/shots"
@@ -102,6 +102,14 @@ jobs:
               shoot "$screen-$mode" "$screen" "$mode" large
             done
           done
+          # The web-free screens: the appeals list and one appeal, moderation, commands and the audit log.
+          for mode in dark light; do
+            for screen in appeals appeal moderation commands audit; do
+              shoot "$screen-$mode" "$screen" "$mode" large
+            done
+          done
+          shoot appeal-dark-largetext appeal dark accessibility-extra-large
+          shoot moderation-dark-largetext moderation dark accessibility-extra-large
           shoot overview-dark-largetext overview dark accessibility-extra-large
           shoot embed-editor-dark-largetext embed-editor dark accessibility-extra-large
           shoot modules-dark-largetext modules dark accessibility-extra-large

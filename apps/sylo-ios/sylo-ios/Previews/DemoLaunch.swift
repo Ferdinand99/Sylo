@@ -9,7 +9,8 @@ import SyloKit
 ///     xcrun simctl launch booted net.opland.sylo -SyloDemo YES -SyloDemoScreen overview
 ///
 /// Screens: `servers`, `overview`, `modules`, `module` (a module's settings), `tickets`, `thread`,
-/// `custom-commands`, `insights`, `embeds` (the embed message list) and `embed-editor`.
+/// `custom-commands`, `insights`, `embeds` (the embed message list), `embed-editor`, `appeals` (the
+/// appeals list), `appeal` (one open appeal), `moderation`, `commands` and `audit`.
 enum DemoLaunch {
     /// Where the app starts.
     struct Start {
@@ -33,6 +34,27 @@ enum DemoLaunch {
         case "module":
             var path = NavigationPath()
             path.append(ModuleRoute(moduleID: "honeypot"))
+            return Start(server: demoServer, tab: .modules, path: path)
+        case "appeals":
+            var path = NavigationPath()
+            path.append(ModuleRoute(moduleID: "appeals-inbox"))
+            return Start(server: demoServer, tab: .modules, path: path)
+        case "appeal":
+            var path = NavigationPath()
+            path.append(ModuleRoute(moduleID: "appeals-inbox"))
+            path.append(AppealRoute(id: 12))
+            return Start(server: demoServer, tab: .modules, path: path)
+        case "moderation":
+            var path = NavigationPath()
+            path.append(ModuleRoute(moduleID: "moderation-hub"))
+            return Start(server: demoServer, tab: .modules, path: path)
+        case "commands":
+            var path = NavigationPath()
+            path.append(ModuleRoute(moduleID: "commands"))
+            return Start(server: demoServer, tab: .modules, path: path)
+        case "audit":
+            var path = NavigationPath()
+            path.append(ModuleRoute(moduleID: "audit-log"))
             return Start(server: demoServer, tab: .modules, path: path)
         case "custom-commands", "insights":
             var path = NavigationPath()

@@ -14,7 +14,7 @@ struct AppealsView: View {
     let server: ServerID
 
     @Environment(AppSession.self) private var session
-    @State private var model: RecordListModel<AppealsPage>
+    @State private var model: RecordListModel<AppealsInboxPage>
 
     init(server: ServerID, session: AppSession) {
         self.server = server
@@ -58,7 +58,7 @@ struct AppealsView: View {
         .onChange(of: session.modulesRevision) { Task { await model.load() } }
     }
 
-    private func setupNote(_ page: AppealsPage) -> String {
+    private func setupNote(_ page: AppealsInboxPage) -> String {
         var parts: [String] = []
         if !page.moduleEnabled { parts.append(String(localized: "The Appeals module is off.")) }
         if !page.configured { parts.append(String(localized: "No appeal questions are set up yet.")) }
@@ -125,7 +125,7 @@ struct AppealStatusPill: View {
 struct AppealDetailView: View {
     let id: Int
 
-    @State private var model: RecordListModel<AppealsPage>
+    @State private var model: RecordListModel<AppealsInboxPage>
     @State private var reason = ""
     @State private var pending: AppealDecision?
     @State private var outcome: AppealDecisionResult?

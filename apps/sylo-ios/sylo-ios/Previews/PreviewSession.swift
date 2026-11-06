@@ -36,7 +36,7 @@ nonisolated enum PreviewData {
         groups: [
             OverviewGroup(title: "Core", cards: [
                 OverviewCard(kind: .link, id: "general", name: "Settings", icon: "gear", hasToggle: false,
-                             isEnabled: nil, status: .link, webPath: "/guild/1"),
+                             isEnabled: nil, status: .link),
             ]),
             OverviewGroup(title: "Moderation and safety", cards: [
                 module("moderation", "Moderation", icon: "gavel", on: true, line: ("Mod-log", "#mod-log")),
@@ -63,7 +63,7 @@ nonisolated enum PreviewData {
                 module("autoresponder", "Autoresponder", icon: "zap", on: true, line: ("Triggers", "9")),
                 module("auto-react", "Auto-react", icon: "smile", on: false, beta: true),
                 OverviewCard(kind: .link, id: "messages", name: "Embed messages", icon: "message-square",
-                             hasToggle: false, isEnabled: nil, status: .link, webPath: "/v2/guilds/1/messages"),
+                             hasToggle: false, isEnabled: nil, status: .link),
                 module("custom-commands", "Custom commands", icon: "command", on: true, line: ("Commands", "3")),
                 module("reminders", "Reminders", icon: "bell", on: true, line: ("Active", "2")),
                 module("channel-cleanup", "Channel cleanup", icon: "trash-2", on: false),

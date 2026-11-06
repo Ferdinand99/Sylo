@@ -114,7 +114,7 @@ public struct Appeal: Decodable, Sendable, Hashable, Identifiable {
 }
 
 /// `GET /api/v2/guilds/:id/appeals`: the open appeals first, then the decided ones (up to 100).
-public struct AppealsPage: Decodable, Sendable, Equatable {
+public struct AppealsInboxPage: Decodable, Sendable, Equatable {
     public let appeals: [Appeal]
     public let open: Int
     /// Whether the Appeals module is on.
@@ -192,7 +192,7 @@ public struct AppealDecisionResult: Decodable, Sendable, Equatable {
 extension Endpoints {
     /// `GET /api/v2/guilds/:id/appeals`.
     public struct Appeals: APIEndpoint {
-        public typealias Response = AppealsPage
+        public typealias Response = AppealsInboxPage
         public let server: ServerID
         public init(server: ServerID) { self.server = server }
         public var path: String { "/api/v2/guilds/\(server.pathComponent)/appeals" }
@@ -230,7 +230,7 @@ extension Endpoints {
     }
 }
 
-extension RecordListModel where Page == AppealsPage {
+extension RecordListModel where Page == AppealsInboxPage {
     /// The appeals screen's model.
     public convenience init(appeals server: ServerID, session: AppSession) {
         self.init(server: server, session: session) { session, server in

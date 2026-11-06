@@ -28,6 +28,10 @@ extension PreviewData {
         }
         if endpoint is Endpoints.LoadCustomCommands { return customCommands }
         if endpoint is Endpoints.Insights { return insights }
+        if endpoint is Endpoints.Appeals { return appeals }
+        if endpoint is Endpoints.Moderation { return moderation }
+        if endpoint is Endpoints.Commands { return commands }
+        if endpoint is Endpoints.Audit { return audit }
         return nil
     }
 }

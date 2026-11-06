@@ -139,7 +139,7 @@ public struct ChannelLock: Decodable, Sendable, Hashable, Identifiable {
 
 /// `GET /api/v2/guilds/:id/moderation`: the newest 200 cases, the bans (first 200), temporary bans
 /// and the channel locks.
-public struct ModerationPage: Decodable, Sendable, Equatable {
+public struct ModerationHubPage: Decodable, Sendable, Equatable {
     public let cases: [ModerationCase]
     public let caseTotal: Int
     public let bans: [BannedMember]
@@ -258,7 +258,7 @@ extension Endpoints {
 
     /// `GET /api/v2/guilds/:id/moderation`.
     public struct Moderation: APIEndpoint {
-        public typealias Response = ModerationPage
+        public typealias Response = ModerationHubPage
         public let server: ServerID
         public init(server: ServerID) { self.server = server }
         public var path: String { Endpoints.moderation(server, "") }
@@ -384,7 +384,7 @@ extension Endpoints {
     }
 }
 
-extension RecordListModel where Page == ModerationPage {
+extension RecordListModel where Page == ModerationHubPage {
     /// The moderation screen's model.
     public convenience init(moderation server: ServerID, session: AppSession) {
         self.init(server: server, session: session) { session, server in

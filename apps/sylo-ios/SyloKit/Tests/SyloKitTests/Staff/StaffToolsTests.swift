@@ -21,7 +21,7 @@ struct AppealsTests {
 
     @Test("the page decodes open and decided appeals with their answers")
     func decodes() throws {
-        let page = try JSONDecoder().decode(AppealsPage.self, from: Data(Self.pageJSON.utf8))
+        let page = try JSONDecoder().decode(AppealsInboxPage.self, from: Data(Self.pageJSON.utf8))
         #expect(page.appeals.count == 2)
         #expect(page.open == 1)
         #expect(page.moduleEnabled)
@@ -49,7 +49,7 @@ struct AppealsTests {
     @Test("an unknown status is kept, not an error")
     func unknownStatus() throws {
         let json = #"{"appeals": [{"id": 1, "user": "x", "status": "withdrawn", "answers": []}]}"#
-        let page = try JSONDecoder().decode(AppealsPage.self, from: Data(json.utf8))
+        let page = try JSONDecoder().decode(AppealsInboxPage.self, from: Data(json.utf8))
         #expect(page.appeals[0].status == .other("withdrawn"))
         #expect(page.open == 0)
     }
@@ -92,13 +92,13 @@ struct AppealsTests {
     @MainActor
     @Test("deciding reloads the list and counts as a module change")
     func decide() async throws {
-        let page = try JSONDecoder().decode(AppealsPage.self, from: Data(Self.pageJSON.utf8))
+        let page = try JSONDecoder().decode(AppealsInboxPage.self, from: Data(Self.pageJSON.utf8))
         let clients = StubClients { endpoint in
             if endpoint is Endpoints.DecideAppeal { return AppealDecisionResult(status: .accepted, dmDelivered: true, unbanned: true) }
             return page
         }
         let session = makeSignedInSession(clients: clients)
-        let model = RecordListModel<AppealsPage>(appeals: "1", session: session)
+        let model = RecordListModel<AppealsInboxPage>(appeals: "1", session: session)
         await model.load()
         let before = session.modulesRevision
         let result = await model.decide(try #require(page.appeal(id: 12)), .accept, reason: "ok")
@@ -111,12 +111,12 @@ struct AppealsTests {
     @MainActor
     @Test("an appeal someone else decided (409) shows a clear reason and loads the list again")
     func alreadyDecided() async throws {
-        let page = try JSONDecoder().decode(AppealsPage.self, from: Data(Self.pageJSON.utf8))
+        let page = try JSONDecoder().decode(AppealsInboxPage.self, from: Data(Self.pageJSON.utf8))
         let clients = StubClients { endpoint in
             if endpoint is Endpoints.DecideAppeal { throw NetworkError.http(status: 409) }
             return page
         }
-        let model = RecordListModel<AppealsPage>(appeals: "1", session: makeSignedInSession(clients: clients))
+        let model = RecordListModel<AppealsInboxPage>(appeals: "1", session: makeSignedInSession(clients: clients))
         await model.load()
         let result = await model.decide(try #require(page.appeal(id: 12)), .deny, reason: "")
         #expect(result == nil)
@@ -147,7 +147,7 @@ struct ModerationHubTests {
 
     @Test("the page decodes cases, bans, temporary bans and locks")
     func decodes() throws {
-        let page = try JSONDecoder().decode(ModerationPage.self, from: Data(Self.pageJSON.utf8))
+        let page = try JSONDecoder().decode(ModerationHubPage.self, from: Data(Self.pageJSON.utf8))
         #expect(page.cases.map(\.caseNumber) == [7, 6])
         #expect(page.cases[0].isActive)
         #expect(page.cases[0].reason == "Spam")
@@ -168,7 +168,7 @@ struct ModerationHubTests {
     @Test("a missing ban permission arrives as the ban list's error")
     func bansError() throws {
         let json = #"{"cases": [], "caseTotal": 0, "bans": [], "bansTotal": 0, "bansError": "The bot is missing the Ban Members permission in this server.", "banLimit": 200, "channelLocks": [], "tempBans": [], "lockdownActive": false}"#
-        let page = try JSONDecoder().decode(ModerationPage.self, from: Data(json.utf8))
+        let page = try JSONDecoder().decode(ModerationHubPage.self, from: Data(json.utf8))
         #expect(page.bansError == "The bot is missing the Ban Members permission in this server.")
         #expect(page.bans.isEmpty)
         #expect(!page.lockdownActive)
@@ -226,12 +226,12 @@ struct ModerationHubTests {
     @MainActor
     @Test("warning trims the reason, finds the id in a mention and reloads the page")
     func warn() async throws {
-        let page = try JSONDecoder().decode(ModerationPage.self, from: Data(Self.pageJSON.utf8))
+        let page = try JSONDecoder().decode(ModerationHubPage.self, from: Data(Self.pageJSON.utf8))
         let clients = StubClients { endpoint in
             if endpoint is Endpoints.WarnMember { return WarnResult(warnings: 2, dmDelivered: true) }
             return page
         }
-        let model = RecordListModel<ModerationPage>(moderation: "1", session: makeSignedInSession(clients: clients))
+        let model = RecordListModel<ModerationHubPage>(moderation: "1", session: makeSignedInSession(clients: clients))
         await model.load()
         let result = await model.warn(userId: "<@111111111111111111>", reason: "  spam  ")
         #expect(result?.warnings == 2)
@@ -244,12 +244,12 @@ struct ModerationHubTests {
     @MainActor
     @Test("a refused change keeps the page and shows the server's sentence")
     func refused() async throws {
-        let page = try JSONDecoder().decode(ModerationPage.self, from: Data(Self.pageJSON.utf8))
+        let page = try JSONDecoder().decode(ModerationHubPage.self, from: Data(Self.pageJSON.utf8))
         let clients = StubClients { endpoint in
             if endpoint is Endpoints.Unban { throw NetworkError.badRequest(message: "That is not a user ID or mention.") }
             return page
         }
-        let model = RecordListModel<ModerationPage>(moderation: "1", session: makeSignedInSession(clients: clients))
+        let model = RecordListModel<ModerationHubPage>(moderation: "1", session: makeSignedInSession(clients: clients))
         await model.load()
         #expect(await model.unban(userId: "x") == false)
         #expect(model.actionError == "That is not a user ID or mention.")
