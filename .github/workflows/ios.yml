@@ -15,6 +15,11 @@ on:
       - 'apps/sylo-ios/**'
       - '.github/workflows/ios.yml'
   workflow_dispatch:
+    inputs:
+      appstore:
+        description: 'Also produce the App Store screenshots (iPhone 6.9 inch and iPad 13 inch)'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -124,3 +129,82 @@ jobs:
           name: ios-screenshots
           path: ${{ runner.temp }}/shots
           if-no-files-found: warn
+
+  # App Store screenshots at the sizes App Store Connect asks for: iPhone 6.9 inch (1320 x 2868) and
+  # iPad 13 inch (2064 x 2752), portrait, dark appearance, default text size, clean status bar.
+  # Runs on pushes to the redesign branch and on a manual run with `appstore: true`.
+  appstore:
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/feat/ios-redesign'
+      || github.event_name == 'workflow_dispatch' && inputs.appstore
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select Xcode 27
+        run: |
+          XCODE=$(for x in /Applications/Xcode_27*.app; do realpath "$x"; done 2>/dev/null             | grep -viE 'beta|release_candidate' | sort -uV | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then
+            echo "::error::No Xcode 27 on this runner. Installed:"; ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Build for the iOS simulator
+        run: |
+          xcodebuild build             -project apps/sylo-ios/sylo-ios.xcodeproj             -scheme sylo-ios             -destination 'generic/platform=iOS Simulator'             -derivedDataPath "$RUNNER_TEMP/dd"             CODE_SIGNING_ALLOWED=NO
+
+      - name: Take the App Store screenshots
+        timeout-minutes: 40
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/sylo-ios.app"
+          OUT="$RUNNER_TEMP/appstore"
+          mkdir -p "$OUT"
+          xcrun simctl list devices available
+          udid_of() { # name pattern, newest last
+            xcrun simctl list devices available | grep -E "$1" | tail -1 | grep -oE '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}'
+          }
+          IPHONE=$(udid_of "iPhone [0-9]+ Pro Max \(")
+          IPAD=$(udid_of "iPad Pro 13-inch")
+          echo "iPhone: $IPHONE  iPad: $IPAD"
+          [ -n "$IPHONE" ] && [ -n "$IPAD" ] || { echo "::error::Simulator missing"; exit 1; }
+
+          run_device() { # udid prefix expected-width expected-height
+            local UDID="$1" PREFIX="$2" W="$3" H="$4" n=0
+            xcrun simctl boot "$UDID" || true
+            xcrun simctl bootstatus "$UDID" -b
+            xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+            xcrun simctl ui "$UDID" appearance dark
+            xcrun simctl ui "$UDID" content_size large
+            xcrun simctl install "$UDID" "$APP"
+            for pair in servers:servers overview:overview modules:modules ticket:thread embed-editor:embed-editor appeals:appeals; do
+              n=$((n + 1))
+              local name="${pair%%:*}" screen="${pair##*:}"
+              local file="$OUT/$PREFIX-$(printf '%02d' $n)-$name.png"
+              xcrun simctl terminate "$UDID" net.opland.sylo >/dev/null 2>&1 || true
+              xcrun simctl launch "$UDID" net.opland.sylo -SyloDemo YES -SyloDemoScreen "$screen"
+              sleep 8
+              xcrun simctl io "$UDID" screenshot "$file"
+              local size
+              size="$(sips -g pixelWidth -g pixelHeight "$file" | awk '/pixelWidth/{w=$2} /pixelHeight/{h=$2} END{print w "x" h}')"
+              echo "$file $size"
+              if [ "$size" != "${W}x${H}" ]; then
+                echo "::error::$file is $size, expected ${W}x${H}"; exit 1
+              fi
+            done
+            xcrun simctl shutdown "$UDID" || true
+          }
+          run_device "$IPHONE" iphone-69 1320 2868
+          run_device "$IPAD" ipad-13 2064 2752
+          ls -la "$OUT"
+
+      - name: Upload App Store screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: appstore-screenshots
+          path: ${{ runner.temp }}/appstore
+          if-no-files-found: error
