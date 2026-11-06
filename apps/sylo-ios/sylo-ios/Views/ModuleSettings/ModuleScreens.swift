@@ -1,8 +1,9 @@
 import SwiftUI
 import SyloKit
 
-/// Which modules have a settings screen in the app, and the screen for each. Modules without one
-/// keep their switch on the overview and open in the web dashboard.
+/// Which modules have a settings screen in the app, and the screen for each, plus the server tools
+/// that are not modules (appeals, moderation, commands, audit log, member data, leaderboard). Every
+/// module and tool has a screen: the app never sends anyone to the web dashboard.
 enum ModuleScreens {
     static func hasScreen(_ moduleID: String) -> Bool { ids.contains(moduleID) }
 
@@ -15,6 +16,8 @@ enum ModuleScreens {
         "roles", "custom-commands", "reminders", "insights", "game-stats", "channel-cleanup", "github",
         // The Embed messages card, which is not a module but opens in the app too.
         "messages",
+        // Server tools of the dashboard that are not modules.
+        "commands", "appeals-inbox", "moderation-hub", "audit-log", "member-data", "leaderboard",
     ]
 
     @ViewBuilder
@@ -55,6 +58,13 @@ enum ModuleScreens {
         case "temp-voice": TempVoiceSettingsView(server: server, session: session)
         case "server-stats": ServerStatsSettingsView(server: server, session: session)
         case "auto-threads": AutoThreadsSettingsView(server: server, session: session)
+        // Server tools
+        case "commands": CommandsView(server: server, session: session)
+        case "appeals-inbox": AppealsView(server: server, session: session)
+        case "moderation-hub": ModerationView(server: server, session: session)
+        case "audit-log": AuditLogView(server: server, session: session)
+        case "member-data": MemberDataView(server: server, session: session)
+        case "leaderboard": LeaderboardView(server: server, session: session)
         // Insights
         case "insights": InsightsView(server: server, session: session)
         case "game-stats": GameStatsSettingsView(server: server, session: session)
@@ -67,9 +77,10 @@ enum ModuleScreens {
         case "free-games": FreeGamesSettingsView(server: server, session: session)
         case "apple-connect": AppleConnectSettingsView(server: server, session: session)
         default:
+            // A module this app build does not know yet (a newer Sylo): update the app.
             ContentUnavailableView(
-                "Not in the App Yet", systemImage: "square.grid.2x2",
-                description: Text("Change this module's settings in the web dashboard for now."))
+                "Update the App", systemImage: "arrow.down.app",
+                description: Text("This module is newer than this version of the app. Update the app to change its settings."))
         }
     }
 }

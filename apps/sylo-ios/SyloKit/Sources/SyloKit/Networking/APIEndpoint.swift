@@ -22,6 +22,9 @@ public protocol APIEndpoint: Sendable {
     var body: (any Encodable & Sendable)? { get }
     /// Whether the app token goes along. False only before sign-in (info, code exchange).
     var requiresAuth: Bool { get }
+    /// Sent as is with `Content-Type: application/octet-stream`, instead of ``body``. Only the
+    /// backup import uses it.
+    var rawBody: Data? { get }
 }
 
 extension APIEndpoint {
@@ -29,6 +32,19 @@ extension APIEndpoint {
     public var query: [URLQueryItem] { [] }
     public var body: (any Encodable & Sendable)? { nil }
     public var requiresAuth: Bool { true }
+    public var rawBody: Data? { nil }
+}
+
+/// The answer of a call that returns a file (a backup download): the bytes, whatever they are.
+public struct RawBytes: Decodable, Sendable, Equatable {
+    public let data: Data
+
+    public init(data: Data) { self.data = data }
+
+    public init(from decoder: any Decoder) throws {
+        throw DecodingError.dataCorrupted(
+            DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Raw bytes are not JSON"))
+    }
 }
 
 /// The answer of a call that returns nothing worth reading (`204 No Content`); any body is ignored.

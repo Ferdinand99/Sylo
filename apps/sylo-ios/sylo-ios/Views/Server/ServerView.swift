@@ -74,6 +74,9 @@ struct ServerView: View {
             .navigationDestination(for: TicketRoute.self) { route in
                 TicketThreadView(server: summary.id, route: route, session: session)
             }
+            .navigationDestination(for: AppealRoute.self) { route in
+                AppealDetailView(server: summary.id, id: route.id, session: session)
+            }
             .navigationDestination(for: EmbedMessageRoute.self) { route in
                 EmbedMessageEditorView(server: summary.id, session: session, id: route.id)
             }

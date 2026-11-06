@@ -3,11 +3,13 @@ import SyloKit
 
 /// Events: the default channel and reminder, DM reminders, event pages, the time zone commands
 /// read times in and the staff roles, with the events listed read only. Creating, editing and
-/// cancelling an event stays in the web dashboard. Mirrors web-v2/src/moduleForms/Events.jsx.
+/// cancelling an event are on their own screen. Mirrors web-v2/src/moduleForms/Events.jsx.
 struct EventsSettingsView: View {
     @State private var model: ModuleSettingsModel<EventsPage>
     @State private var note: ModulePlatformNoteModel
     private let server: ServerID
+
+    @Environment(AppSession.self) private var session
 
     init(server: ServerID, session: AppSession) {
         self.server = server
@@ -56,14 +58,19 @@ struct EventsSettingsView: View {
                 Text("May manage events without Manage Events.")
             }
 
-            eventSection("Upcoming events", page.upcoming, emptyText: "None scheduled.")
-            if !page.past.isEmpty {
-                eventSection("Past events", page.past, emptyText: "")
+            Section {
+                NavigationLink {
+                    EventsManageView(server: server, session: session)
+                } label: {
+                    LabeledContent {
+                        Text("\(page.upcoming.count) upcoming")
+                    } label: {
+                        Label("Events", systemImage: "calendar")
+                    }
+                }
+            } footer: {
+                Text("Post, change and cancel events.")
             }
-
-            DashboardLinkSection(
-                server: server, module: EventsPage.moduleID,
-                footer: "Create, edit and cancel events in the web dashboard.")
         }
         .task { await note.load() }
     }
@@ -107,7 +114,7 @@ struct EventsSettingsView: View {
 }
 
 /// The time zone commands read times in: a row that opens a searchable list. "" is UTC.
-private struct TimeZoneRow: View {
+struct TimeZoneRow: View {
     @Binding var selection: String
 
     var body: some View {
@@ -121,7 +128,7 @@ private struct TimeZoneRow: View {
     }
 }
 
-private struct TimeZoneList: View {
+struct TimeZoneList: View {
     @Binding var selection: String
     @State private var search = ""
 

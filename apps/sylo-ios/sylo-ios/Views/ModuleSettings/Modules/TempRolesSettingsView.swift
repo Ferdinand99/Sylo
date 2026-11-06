@@ -2,12 +2,14 @@ import SwiftUI
 import SyloKit
 
 /// Temporary roles: the staff roles, DMs to the member and the default duration, with the active
-/// temporary roles listed read only. Giving and removing one stays in the web dashboard. Mirrors
+/// temporary roles listed read only. Giving and taking one back are on their own screen. Mirrors
 /// web-v2/src/moduleForms/TempRoles.jsx.
 struct TempRolesSettingsView: View {
     @State private var model: ModuleSettingsModel<TempRolesPage>
     @State private var note: ModulePlatformNoteModel
     private let server: ServerID
+
+    @Environment(AppSession.self) private var session
 
     init(server: ServerID, session: AppSession) {
         self.server = server
@@ -49,7 +51,7 @@ struct TempRolesSettingsView: View {
                     Text(verbatim: problem)
                         .foregroundStyle(.red)
                 } else {
-                    Text("What the Add form in the web dashboard starts with. Like 30m, 12h, 7d, 2w or 1d12h; from 1 minute to 365 days.")
+                    Text("What the Add form starts with. Like 30m, 12h, 7d, 2w or 1d12h; from 1 minute to 365 days.")
                 }
             }
 
@@ -68,9 +70,16 @@ struct TempRolesSettingsView: View {
                 }
             }
 
-            DashboardLinkSection(
-                server: server, module: TempRolesPage.moduleID,
-                footer: "Give a temporary role or take one back early in the web dashboard.")
+            Section {
+                NavigationLink {
+                    TempRolesManageView(
+                        server: server, roles: page.roles, defaultDuration: settings.defaultDuration, session: session)
+                } label: {
+                    Label("Give or Take Back a Role", systemImage: "hourglass")
+                }
+            } footer: {
+                Text("Give a temporary role, or take one back early.")
+            }
         }
         .task { await note.load() }
     }

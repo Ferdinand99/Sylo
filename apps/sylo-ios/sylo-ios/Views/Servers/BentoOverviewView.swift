@@ -189,11 +189,10 @@ struct BentoOverviewView: View {
                 }
             }
         }
-        .syloPressable {
-            if let target { openModule(target) }
-        }
+        .syloPressable { openModule("appeals-inbox") }
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(target == nil ? [] : .isButton)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(Text("Opens the appeals"))
     }
 
     private func modules(_ overview: ServerOverview) -> some View {
@@ -210,7 +209,6 @@ struct BentoOverviewView: View {
 
     @ViewBuilder
     private func appeals(_ overview: ServerOverview) -> some View {
-        let target = canOpen("appeals") ? "appeals" : nil
         BentoTile(title: "Open appeals", systemImage: "hand.raised", isLive: overview.openAppeals > 0, minHeight: wideMin) {
             VStack(alignment: .leading, spacing: SyloSpacing.xs) {
                 HeroNumber(overview.openAppeals)
@@ -220,11 +218,10 @@ struct BentoOverviewView: View {
                     .foregroundStyle(Color.syloMuted)
             }
         }
-        .syloPressable {
-            if let target { openModule(target) }
-        }
+        .syloPressable { openModule("appeals-inbox") }
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(target == nil ? [] : .isButton)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(Text("Opens the appeals"))
     }
 
     /// Modules that are on but cannot run (the bot lacks a privileged intent), or a calm "all

@@ -3,12 +3,14 @@ import SyloKit
 
 /// Suggestions: where they are posted and logged, anonymous posts, DMs to the author, turning
 /// messages into suggestions, the cooldown and the staff roles, with the latest suggestions listed
-/// read only. Deciding on or deleting a suggestion stays in the web dashboard. Mirrors
+/// with their own screen to decide on or delete a suggestion. Mirrors
 /// web-v2/src/moduleForms/Suggestions.jsx.
 struct SuggestionsSettingsView: View {
     @State private var model: ModuleSettingsModel<SuggestionsPage>
     @State private var note: ModulePlatformNoteModel
     private let server: ServerID
+
+    @Environment(AppSession.self) private var session
 
     init(server: ServerID, session: AppSession) {
         self.server = server
@@ -18,7 +20,7 @@ struct SuggestionsSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Suggestions", model: model) { $settings, page in
-            ModuleIntro("Members post ideas and everyone votes with thumbs up and down. Staff approve, deny or mark a suggestion as implemented, in chat or in the web dashboard.")
+            ModuleIntro("Members post ideas and everyone votes with thumbs up and down. Staff approve, deny or mark a suggestion as implemented, in chat or in the app.")
             PlatformNoteSection(model: note)
 
             Section {
@@ -36,7 +38,7 @@ struct SuggestionsSettingsView: View {
             Section {
                 Toggle("Anonymous suggestions", isOn: $settings.anonymous)
             } footer: {
-                Text("New posts do not show who wrote them. Staff still see the author in the web dashboard.")
+                Text("New posts do not show who wrote them. Staff still see the author in the app.")
             }
 
             Section {
@@ -64,18 +66,15 @@ struct SuggestionsSettingsView: View {
                 Text("May decide on suggestions without Manage Server.")
             }
 
-            Section("Latest suggestions") {
-                if page.suggestions.isEmpty {
-                    Text("Nothing here yet.").foregroundStyle(.secondary)
+            Section {
+                NavigationLink {
+                    SuggestionsManageView(server: server, session: session)
+                } label: {
+                    Label("Suggestions", systemImage: "lightbulb")
                 }
-                ForEach(page.suggestions) { item in
-                    SuggestionLine(item: item)
-                }
+            } footer: {
+                Text("Filter the suggestions, set a status with a reason, or delete one.")
             }
-
-            DashboardLinkSection(
-                server: server, module: SuggestionsPage.moduleID,
-                footer: "Set a status, add a reason or delete a suggestion in the web dashboard.")
         }
         .task { await note.load() }
     }

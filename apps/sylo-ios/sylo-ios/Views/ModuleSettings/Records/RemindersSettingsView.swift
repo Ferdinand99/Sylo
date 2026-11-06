@@ -144,7 +144,7 @@ private struct ReminderEditor: View {
                     title: "Channel", selection: $draft.channelId, channels: page.channels,
                     noneTitle: "Choose a channel")
             } footer: {
-                Text("The name is shown on the dashboard only.")
+                Text("The name is only shown to staff in Sylo's lists.")
             }
 
             Section {

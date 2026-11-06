@@ -100,7 +100,10 @@ public final class URLSessionAPIClient: APIClient {
         var request = URLRequest(url: server.url(for: endpoint.path, query: endpoint.query))
         request.httpMethod = endpoint.method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let body = endpoint.body {
+        if let raw = endpoint.rawBody {
+            request.httpBody = raw
+            request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        } else if let body = endpoint.body {
             do {
                 request.httpBody = try JSONEncoder().encode(body)
             } catch {
@@ -139,6 +142,7 @@ public final class URLSessionAPIClient: APIClient {
             throw NetworkError.from(status: http.statusCode, body: data, isJSON: isJSON)
         }
         if let empty = EmptyResponse() as? Response { return empty }
+        if let bytes = RawBytes(data: data) as? Response { return bytes }
         guard isJSON else { throw .notASyloServer }
         do {
             return try decoder.decode(Response.self, from: data)

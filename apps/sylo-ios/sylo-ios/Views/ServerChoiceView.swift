@@ -47,7 +47,7 @@ struct ServerChoiceView: View {
                     } header: {
                         Text("Server address")
                     } footer: {
-                        Text("The address you open your Sylo dashboard at.")
+                        Text("The address of your Sylo server.")
                     }
                 }
 

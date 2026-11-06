@@ -13,7 +13,13 @@ struct AppealsSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Ban Appeals", model: model) { $settings, page in
-            ModuleIntro("When a member is banned, Sylo DMs them a private link to an appeal form. Their answers show up on the dashboard's Appeals tab, and the decision (with a single-use rejoin invite on accept) is shown on that same link when they reopen it.")
+            ModuleIntro("When a member is banned, Sylo DMs them a private link to an appeal form. Their answers show up under Appeals, where staff accept or deny them, and the decision (with a single-use rejoin invite on accept) is shown on that same link when they reopen it.")
+
+            Section {
+                NavigationLink(value: ModuleRoute(moduleID: "appeals-inbox")) {
+                    Label("Review Appeals", systemImage: "flag")
+                }
+            }
 
             Section {
                 if !page.dashboardUrlSet {

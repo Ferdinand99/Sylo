@@ -3,27 +3,48 @@ import SyloKit
 
 /// Welcome Channel: the channel, the message text and its embeds and banners (each edited on its
 /// own screen). Mirrors web-v2/src/moduleForms/WelcomeChannel.jsx; saving here is the web page's
-/// Save Draft. Publishing, removing the published message and creating the channel stay on the web.
+/// Save Draft. Publishing, removing the published message and creating the channel are buttons below.
 struct WelcomeChannelSettingsView: View {
     @State private var model: ModuleSettingsModel<WelcomeChannelPage>
+    @State private var runner: ActionRunner
+    @State private var isConfirmingUnpublish = false
+    @State private var notice: String?
+    private let server: ServerID
 
     init(server: ServerID, session: AppSession) {
+        self.server = server
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _runner = State(initialValue: ActionRunner(session: session))
     }
 
     var body: some View {
         ModuleSettingsForm("Welcome Channel", model: model) { $settings, page in
-            ModuleIntro("Build one rich message for a dedicated read-only channel. Saving keeps it as a draft; publish it to the channel from the web dashboard.")
+            ModuleIntro("Build one rich message for a dedicated read-only channel. Saving keeps it as a draft; publish it to the channel when it is ready.")
 
             Section {
                 ChannelPicker(title: "Channel", selection: $settings.channelId, channels: page.channels,
                               noneTitle: "Choose a channel")
             } footer: {
                 if settings.isPublished {
-                    Text("Published. Publish again from the web dashboard to update the message in the channel.")
+                    Text("Published. Publish again to update the message in the channel.")
                 } else {
                     Text("Not published yet.")
                 }
+            }
+
+            Section {
+                Button(settings.isPublished ? "Update the Published Message" : "Publish to the Channel", systemImage: "paperplane") {
+                    publish(channel: settings.channelId)
+                }
+                .disabled(settings.channelId.isEmpty)
+                if settings.isPublished {
+                    Button("Remove the Published Message", systemImage: "trash", role: .destructive) {
+                        isConfirmingUnpublish = true
+                    }
+                }
+                Button("Create a Read-Only #welcome Channel", systemImage: "number.square") { createChannel() }
+            } footer: {
+                Text("Publishing saves your changes first. Removing the post keeps the draft.")
             }
 
             Section {
@@ -89,6 +110,58 @@ struct WelcomeChannelSettingsView: View {
                 Text("Up to 10 embeds and banners.")
             }
         }
+        .confirmationDialog("Remove the published message?", isPresented: $isConfirmingUnpublish, titleVisibility: .visible) {
+            Button("Remove Message", role: .destructive) {
+                Task {
+                    if await runner.run(Endpoints.UnpublishWelcomeChannel(server: server)) != nil {
+                        notice = String(localized: "Published message removed.")
+                        await model.load()
+                    }
+                }
+            }
+        } message: {
+            Text("The message is deleted from the channel. Your draft stays here.")
+        }
+        .alert("Done", isPresented: isShowingNotice, presenting: notice) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .alert("Couldn't Complete", isPresented: isShowingError, presenting: runner.errorMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .sensoryFeedback(.success, trigger: runner.successCount)
+    }
+
+    /// Saves the draft, then posts it.
+    private func publish(channel: String) {
+        Task {
+            if model.hasChanges { guard await model.save() else { return } }
+            guard let saved = model.saved else { return }
+            if await runner.run(Endpoints.PublishWelcomeChannel(server: server, settings: saved)) != nil {
+                notice = String(localized: "Published to the channel.")
+                await model.load()
+            }
+        }
+    }
+
+    private func createChannel() {
+        Task {
+            if await runner.run(Endpoints.CreateWelcomeChannel(server: server)) != nil {
+                notice = String(localized: "Created #welcome. Save to keep it chosen, then publish.")
+                await model.load()
+            }
+        }
+    }
+
+    private var isShowingNotice: Binding<Bool> {
+        Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })
+    }
+
+    private var isShowingError: Binding<Bool> {
+        Binding(get: { runner.errorMessage != nil }, set: { if !$0 { runner.errorMessage = nil } })
     }
 }
 

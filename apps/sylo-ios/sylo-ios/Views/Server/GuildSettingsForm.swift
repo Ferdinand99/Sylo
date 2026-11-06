@@ -9,6 +9,8 @@ import SyloKit
 struct GuildSettingsForm: View {
     let model: GuildSettingsModel
 
+    @Environment(AppSession.self) private var session
+
     var body: some View {
         Group {
             if let page = model.page {
@@ -63,8 +65,23 @@ struct GuildSettingsForm: View {
                 MultiPicker(title: "Bot master roles", selection: settings.botMasterRoleIds,
                             options: page.roles, prefix: "@")
             } footer: {
-                Text("Members with these roles can open the dashboard and change Sylo's settings for the server, like someone with Manage Server. Roles with Administrator already can.")
+                Text("Members with these roles can change Sylo's settings for the server in the app and the dashboard, like someone with Manage Server. Roles with Administrator already can.")
             }
+
+            Section {
+                NavigationLink(value: ModuleRoute(moduleID: "audit-log")) {
+                    Label("Audit Log", systemImage: "clock.arrow.circlepath")
+                }
+                NavigationLink(value: ModuleRoute(moduleID: "member-data")) {
+                    Label("Member Data", systemImage: "person.text.rectangle")
+                }
+            } header: {
+                Text("Server data")
+            } footer: {
+                Text("The audit log lists configuration changes. Member data looks up and deletes what Sylo stores about a member.")
+            }
+
+            ConfigExportRow(server: model.server, session: session)
             }
             .syloSectionCards()
         }

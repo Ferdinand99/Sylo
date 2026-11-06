@@ -2,12 +2,17 @@ import SwiftUI
 import SyloKit
 
 /// Invite tracker: the join/leave log channel, the fake-invite grace window, and the invite
-/// leaderboard. Mirrors web-v2/src/moduleForms/InviteTracker.jsx (without its bonus form).
+/// leaderboard. Mirrors web-v2/src/moduleForms/InviteTracker.jsx (with its bonus form).
 struct InviteTrackerSettingsView: View {
     @State private var model: ModuleSettingsModel<InviteTrackerPage>
+    @State private var runner: ActionRunner
+    @State private var isAddingBonus = false
+    private let server: ServerID
 
     init(server: ServerID, session: AppSession) {
+        self.server = server
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _runner = State(initialValue: ActionRunner(session: session))
     }
 
     var body: some View {
@@ -45,14 +50,38 @@ struct InviteTrackerSettingsView: View {
                         InviteTrackerInviterRow(row: row)
                     }
                 }
+                Button("Set a Bonus for a Member", systemImage: "plus.forwardslash.minus") { isAddingBonus = true }
             } header: {
                 Text("Leaderboard")
             } footer: {
                 if page.board.total > 0 {
-                    Text("^[\(page.board.total) member](inflect: true) invited someone.")
+                    Text("^[\(page.board.total) member](inflect: true) invited someone. A bonus adds to (or with a minus, takes from) a member's invite count.")
+                } else {
+                    Text("A bonus adds to (or with a minus, takes from) a member's invite count.")
                 }
             }
         }
+        .sheet(isPresented: $isAddingBonus) {
+            MemberNumberEditor(
+                title: "Invite Bonus", valueTitle: "Bonus", unit: "invites", range: Endpoints.SetInviteBonus.bonusRange,
+                footer: "From -100000 to 100000. It replaces the bonus the member has now; 0 removes it.",
+                save: { member, bonus in
+                    let id = ModerationInput.userID(from: member) ?? member
+                    guard await runner.run(Endpoints.SetInviteBonus(server: server, userId: id, bonus: bonus)) != nil else { return false }
+                    await model.load()
+                    return true
+                }, failure: { runner.errorMessage })
+        }
+        .alert("Couldn't Complete", isPresented: isShowingError, presenting: runner.errorMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .sensoryFeedback(.success, trigger: runner.successCount)
+    }
+
+    private var isShowingError: Binding<Bool> {
+        Binding(get: { runner.errorMessage != nil && !isAddingBonus }, set: { if !$0 { runner.errorMessage = nil } })
     }
 }
 

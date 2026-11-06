@@ -2,12 +2,18 @@ import SwiftUI
 import SyloKit
 
 /// Giveaways: the winner ping and winner DMs, plus the running and recently ended giveaways.
-/// Mirrors web-v2/src/moduleForms/Giveaways.jsx (End Now and Reroll stay on the web for now).
+/// Mirrors web-v2/src/moduleForms/Giveaways.jsx (with End Now and Reroll).
 struct GiveawaysSettingsView: View {
     @State private var model: ModuleSettingsModel<GiveawaysPage>
+    @State private var runner: ActionRunner
+    @State private var pendingEnd: GiveawaysGiveaway?
+    @State private var rerolling: GiveawaysGiveaway?
+    private let server: ServerID
 
     init(server: ServerID, session: AppSession) {
+        self.server = server
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _runner = State(initialValue: ActionRunner(session: session))
     }
 
     var body: some View {
@@ -34,6 +40,13 @@ struct GiveawaysSettingsView: View {
                 } else {
                     ForEach(page.activeGiveaways) { giveaway in
                         GiveawaysRow(giveaway: giveaway)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button("End Now", systemImage: "flag.checkered", role: .destructive) { pendingEnd = giveaway }
+                            }
+                            .contextMenu {
+                                Button("End Now", systemImage: "flag.checkered", role: .destructive) { pendingEnd = giveaway }
+                            }
+                            .accessibilityAction(named: Text("End Now")) { pendingEnd = giveaway }
                     }
                 }
             } header: {
@@ -44,10 +57,51 @@ struct GiveawaysSettingsView: View {
                 Section("Recently ended") {
                     ForEach(page.endedGiveaways) { giveaway in
                         GiveawaysRow(giveaway: giveaway)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button("Reroll", systemImage: "dice") { rerolling = giveaway }
+                                    .tint(Color.syloCyan)
+                            }
+                            .contextMenu {
+                                Button("Reroll", systemImage: "dice") { rerolling = giveaway }
+                            }
+                            .accessibilityAction(named: Text("Reroll")) { rerolling = giveaway }
                     }
                 }
             }
         }
+        .sheet(item: $rerolling) { giveaway in
+            MemberNumberEditor(
+                title: "Reroll Winners", asksForMember: false, valueTitle: "Winners", range: 1...20, initial: giveaway.winners,
+                footer: "Draws new winners from the entries of \u{201C}\(giveaway.prize)\u{201D}.", saveTitle: "Reroll",
+                save: { _, count in
+                    guard await runner.run(Endpoints.RerollGiveaway(server: server, id: giveaway.id, count: count)) != nil else { return false }
+                    await model.load()
+                    return true
+                }, failure: { runner.errorMessage })
+        }
+        .confirmationDialog(
+            "End this giveaway now?", isPresented: isConfirmingEnd, titleVisibility: .visible, presenting: pendingEnd
+        ) { giveaway in
+            Button("End Giveaway", role: .destructive) {
+                Task { if await runner.run(Endpoints.EndGiveaway(server: server, id: giveaway.id)) != nil { await model.load() } }
+            }
+        } message: { giveaway in
+            Text("Winners are drawn for \u{201C}\(giveaway.prize)\u{201D} straight away and announced in the channel.")
+        }
+        .alert("Couldn't Complete", isPresented: isShowingError, presenting: runner.errorMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .sensoryFeedback(.success, trigger: runner.successCount)
+    }
+
+    private var isConfirmingEnd: Binding<Bool> {
+        Binding(get: { pendingEnd != nil }, set: { if !$0 { pendingEnd = nil } })
+    }
+
+    private var isShowingError: Binding<Bool> {
+        Binding(get: { runner.errorMessage != nil && rerolling == nil }, set: { if !$0 { runner.errorMessage = nil } })
     }
 }
 

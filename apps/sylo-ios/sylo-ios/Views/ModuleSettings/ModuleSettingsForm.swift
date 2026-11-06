@@ -20,6 +20,7 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
     let problem: String?
     @ViewBuilder let content: (Binding<Page.Settings>, Page) -> Content
 
+    @Environment(AppSession.self) private var session
     @State private var isConfirmingDiscard = false
 
     init(
@@ -36,8 +37,16 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
         Group {
             if let page = model.page {
                 Form {
-                    content(draft(fallback: page.settings), page)
-                        .syloSectionCards()
+                    Group {
+                        content(draft(fallback: page.settings), page)
+                        // "Send test message" for the modules that post to one channel, from the saved settings.
+                        if ModuleTest.supports(Page.moduleID) {
+                            SendTestSection(
+                                server: model.server, module: Page.moduleID, hasUnsavedChanges: model.hasChanges,
+                                session: session)
+                        }
+                    }
+                    .syloSectionCards()
                 }
                 .syloFormStyle()
                 .disabled(model.isSaving)

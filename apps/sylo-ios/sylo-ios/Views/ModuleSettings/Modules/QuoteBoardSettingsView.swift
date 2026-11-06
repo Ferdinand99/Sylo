@@ -2,7 +2,7 @@ import SwiftUI
 import SyloKit
 
 /// Quote board: the public quote page, who may save a quote and the staff roles, with the latest
-/// quotes listed read only. Searching and deleting quotes stays in the web dashboard. Mirrors
+/// quotes listed read only. Searching and deleting quotes has its own screen. Mirrors
 /// web-v2/src/moduleForms/QuoteBoard.jsx.
 struct QuoteBoardSettingsView: View {
     @State private var model: ModuleSettingsModel<QuoteBoardPage>
@@ -51,19 +51,18 @@ struct QuoteBoardSettingsView: View {
             }
 
             Section {
-                if page.quotes.isEmpty {
-                    Text("Nothing here yet.").foregroundStyle(.secondary)
+                NavigationLink {
+                    QuotesManageView(server: server, session: session)
+                } label: {
+                    LabeledContent {
+                        Text("\(page.total)")
+                    } label: {
+                        Label("Quotes", systemImage: "quote.bubble")
+                    }
                 }
-                ForEach(page.quotes) { quote in
-                    QuoteLine(quote: quote)
-                }
-            } header: {
-                Text("Quotes (\(page.total))")
+            } footer: {
+                Text("Search the saved quotes and delete one.")
             }
-
-            DashboardLinkSection(
-                server: server, module: QuoteBoardPage.moduleID,
-                footer: "Search and delete quotes in the web dashboard.")
         }
         .task { await note.load() }
     }

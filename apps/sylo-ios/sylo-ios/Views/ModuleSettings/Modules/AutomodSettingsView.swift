@@ -2,12 +2,16 @@ import SwiftUI
 import SyloKit
 
 /// Auto-moderation: each check's action and settings, native Discord AutoMod, the timeout length
-/// and exempt channels. The immunity roles are shown but saved in the web dashboard. Mirrors
+/// and exempt channels. The immunity roles are saved on their own screen. Mirrors
 /// web-v2/src/moduleForms/Automod.jsx.
 struct AutomodSettingsView: View {
     @State private var model: ModuleSettingsModel<AutomodPage>
+    private let server: ServerID
+    private let session: AppSession
 
     init(server: ServerID, session: AppSession) {
+        self.server = server
+        self.session = session
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
     }
 
@@ -186,23 +190,19 @@ struct AutomodSettingsView: View {
             }
 
             Section {
-                if settings.exemptRoles.isEmpty {
-                    Text("None")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(settings.exemptRoles, id: \.self) { id in
-                        if let role = page.roles.first(where: { $0.id == id }) {
-                            Text(verbatim: "@\(role.name)")
-                        } else {
-                            Text("Deleted role")
-                                .foregroundStyle(.secondary)
-                        }
+                NavigationLink {
+                    ImmunityRolesScreen(
+                        server: server, session: session, roles: page.roles, selected: settings.exemptRoles
+                    ) { _ in
+                        Task { await model.load() }
+                    }
+                } label: {
+                    LabeledContent("Immunity roles") {
+                        Text(settings.exemptRoles.isEmpty ? String(localized: "None") : String(localized: "\(settings.exemptRoles.count) selected"))
                     }
                 }
-            } header: {
-                Text("Immunity roles")
             } footer: {
-                Text("Members with one of these roles are never touched by auto-moderation or the warning auto-actions. Change them in the web dashboard.")
+                Text("Members with one of these roles are never touched by auto-moderation or the warning auto-actions. They are saved on their own screen, straight away.")
             }
         }
     }
@@ -267,4 +267,85 @@ private struct AutomodPresetLabel: View {
         AutomodSettingsView(server: "1", session: session)
     }
     .environment(session)
+}
+
+/// The immunity roles: pick the roles and save them on their own, like the dashboard (they are not
+/// part of the settings Save).
+private struct ImmunityRolesScreen: View {
+    let server: ServerID
+    let roles: [RoleOption]
+    let saved: ([String]) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var runner: ActionRunner
+    @State private var selection: [String]
+    private let original: [String]
+
+    init(server: ServerID, session: AppSession, roles: [RoleOption], selected: [String], saved: @escaping ([String]) -> Void) {
+        self.server = server
+        self.roles = roles
+        self.saved = saved
+        original = selected
+        _selection = State(initialValue: selected)
+        _runner = State(initialValue: ActionRunner(session: session))
+    }
+
+    var body: some View {
+        Form {
+            Group {
+                Section {
+                    ForEach(roles) { role in
+                        Button {
+                            toggle(role.id)
+                        } label: {
+                            HStack {
+                                Text(verbatim: "@\(role.name)").foregroundStyle(.primary)
+                                Spacer()
+                                if selection.contains(role.id) {
+                                    Image(systemName: "checkmark").foregroundStyle(.tint).fontWeight(.semibold)
+                                }
+                            }
+                        }
+                        .accessibilityAddTraits(selection.contains(role.id) ? .isSelected : [])
+                    }
+                } footer: {
+                    Text("Members with one of these roles are never touched by auto-moderation or the warning auto-actions.")
+                }
+                if let message = runner.errorMessage {
+                    Section { StatusMessage(message, kind: .error) }
+                }
+            }
+            .syloSectionCards()
+        }
+        .syloFormStyle()
+        .disabled(runner.isWorking)
+        .navigationTitle("Immunity Roles")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                if runner.isWorking {
+                    ProgressView()
+                } else {
+                    Button("Save") {
+                        Task {
+                            if let result = await runner.run(Endpoints.SetAutomodImmunity(server: server, roles: selection)) {
+                                saved(result.exemptRoles)
+                                dismiss()
+                            }
+                        }
+                    }
+                    .toolbarSaveStyle()
+                    .disabled(Set(selection) == Set(original))
+                }
+            }
+        }
+    }
+
+    private func toggle(_ id: String) {
+        if let index = selection.firstIndex(of: id) {
+            selection.remove(at: index)
+        } else {
+            selection.append(id)
+        }
+    }
 }

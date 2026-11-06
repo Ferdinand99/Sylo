@@ -3,17 +3,23 @@ import SyloKit
 
 /// Leveling: level-up announcements, XP cooldown and rate, role rewards, voice XP, XP multipliers,
 /// and no-XP roles and channels. Mirrors the settings part of web-v2/src/moduleForms/Leveling.jsx
-/// (the leaderboard preview and the set-XP / reset tools stay on the web).
+/// (with the leaderboard and the set-XP / reset tools).
 struct LevelingSettingsView: View {
     @State private var model: ModuleSettingsModel<LevelingPage>
+    @State private var runner: ActionRunner
+    @State private var isSettingXP = false
+    @State private var isConfirmingReset = false
+    private let server: ServerID
 
     init(server: ServerID, session: AppSession) {
+        self.server = server
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _runner = State(initialValue: ActionRunner(session: session))
     }
 
     var body: some View {
         ModuleSettingsForm("Leveling", model: model) { $settings, page in
-            ModuleIntro("Members earn 15–25 XP per message (once per cooldown), plus optional voice XP, scaled by the XP rate and any multipliers below. The public web leaderboard is switched on the Leaderboard page.")
+            ModuleIntro("Members earn 15–25 XP per message (once per cooldown), plus optional voice XP, scaled by the XP rate and any multipliers below. The public leaderboard page is switched under Leaderboard, in the tools at the bottom.")
 
             Section {
                 Picker("Announcement", selection: $settings.announce) {
@@ -157,7 +163,46 @@ struct LevelingSettingsView: View {
                     Text("No channels give XP, except the ones chosen.")
                 }
             }
+
+            Section {
+                NavigationLink(value: ModuleRoute(moduleID: "leaderboard")) {
+                    Label("Leaderboard", systemImage: "trophy")
+                }
+                Button("Set a Member's XP", systemImage: "plusminus") { isSettingXP = true }
+                Button("Reset Everyone's XP", systemImage: "arrow.counterclockwise", role: .destructive) {
+                    isConfirmingReset = true
+                }
+            } header: {
+                Text("Tools")
+            } footer: {
+                Text("The leaderboard shows the top members and switches the public page. Setting XP also updates the member's level and reward roles.")
+            }
         }
+        .sheet(isPresented: $isSettingXP) {
+            MemberNumberEditor(
+                title: "Set XP", valueTitle: "XP", range: 0...1_000_000_000_000, footer: "The member's XP becomes this number.",
+                save: { member, xp in
+                    let id = ModerationInput.userID(from: member) ?? member
+                    return await runner.run(Endpoints.SetLevelingXP(server: server, userId: id, xp: xp)) != nil
+                }, failure: { runner.errorMessage })
+        }
+        .confirmationDialog("Reset everyone's XP?", isPresented: $isConfirmingReset, titleVisibility: .visible) {
+            Button("Reset All XP", role: .destructive) {
+                Task { _ = await runner.run(Endpoints.SetLevelingXP.resetAll(server: server)) }
+            }
+        } message: {
+            Text("Every member goes back to zero XP and level 1 on this server. This can't be undone.")
+        }
+        .alert("Couldn't Complete", isPresented: isShowingError, presenting: runner.errorMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .sensoryFeedback(.success, trigger: runner.successCount)
+    }
+
+    private var isShowingError: Binding<Bool> {
+        Binding(get: { runner.errorMessage != nil && !isSettingXP }, set: { if !$0 { runner.errorMessage = nil } })
     }
 }
 

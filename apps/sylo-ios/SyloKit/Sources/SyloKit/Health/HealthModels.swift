@@ -98,12 +98,47 @@ public struct HealthReport: Decodable, Sendable, Equatable {
     public let database: Database?
     public let backups: [Backup]
     public let isDevLogChannelSet: Bool
+    /// The latest changes made with the Bot Personalizer and other bot-wide actions.
+    public let botAudit: [BotAuditEntry]
+    /// Where the session secret comes from: `env`, `file` or `generated-ephemeral` (sessions and signed
+    /// links then die on every restart).
+    public let sessionSecret: String?
+
+    /// Whether the session secret is generated at every start.
+    public var hasEphemeralSessionSecret: Bool { sessionSecret == "generated-ephemeral" }
+
+    /// One line of the bot-wide audit log.
+    public struct BotAuditEntry: Decodable, Sendable, Hashable {
+        public let actor: String
+        public let action: String
+        public let detail: String
+        public let ago: String
+
+        public init(actor: String, action: String, detail: String = "", ago: String = "") {
+            self.actor = actor
+            self.action = action
+            self.detail = detail
+            self.ago = ago
+        }
+
+        private enum CodingKeys: String, CodingKey { case actor, action, detail, ago }
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(
+                actor: try c.decodeIfPresent(String.self, forKey: .actor) ?? "",
+                action: try c.decodeIfPresent(String.self, forKey: .action) ?? "",
+                detail: try c.decodeIfPresent(String.self, forKey: .detail) ?? "",
+                ago: try c.decodeIfPresent(String.self, forKey: .ago) ?? "")
+        }
+    }
 
     public init(
         isReady: Bool, botTag: String? = nil, version: String? = nil, uptime: String? = nil, serverCount: Int = 0,
         memberReach: Int = 0, gatewayPing: Int? = nil, openTickets: Int = 0, ticketsTotal: Int = 0,
         warningsThisWeek: Int = 0, warningsTotal: Int = 0, modules: [ModuleUse] = [], database: Database? = nil,
-        backups: [Backup] = [], isDevLogChannelSet: Bool = false
+        backups: [Backup] = [], isDevLogChannelSet: Bool = false, botAudit: [BotAuditEntry] = [],
+        sessionSecret: String? = nil
     ) {
         self.isReady = isReady
         self.botTag = botTag
@@ -120,11 +155,13 @@ public struct HealthReport: Decodable, Sendable, Equatable {
         self.database = database
         self.backups = backups
         self.isDevLogChannelSet = isDevLogChannelSet
+        self.botAudit = botAudit
+        self.sessionSecret = sessionSecret
     }
 
     private enum CodingKeys: String, CodingKey {
         case ready, botTag, version, uptime, guildCount, memberReach, gatewayPing, stats, modules, db, backups
-        case devLogConfigured
+        case devLogConfigured, botAudit, sessionSecret
     }
 
     private enum StatsKeys: String, CodingKey { case openTickets, ticketsTotal, warningsWeek, warningsTotal }
@@ -154,6 +191,8 @@ public struct HealthReport: Decodable, Sendable, Equatable {
         database = try c.decodeIfPresent(Database.self, forKey: .db)
         backups = try c.decodeLossyArray(of: Backup.self, forKey: .backups)
         isDevLogChannelSet = try c.decodeIfPresent(Bool.self, forKey: .devLogConfigured) ?? false
+        botAudit = try c.decodeLossyArray(of: BotAuditEntry.self, forKey: .botAudit)
+        sessionSecret = try c.decodeIfPresent(String.self, forKey: .sessionSecret)
     }
 }
 

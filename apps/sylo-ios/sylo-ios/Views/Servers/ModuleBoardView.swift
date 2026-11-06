@@ -4,8 +4,8 @@ import SyloKit
 /// The Modules tab of a server: the modules as tiles, one group per category like the web
 /// overview, each with an LED switch. Tap a tile for its settings; press and hold to switch it on or
 /// off. The search field stays pinned above the board. A module with a settings screen in the app
-/// opens it (``ModuleRoute``, handled by ``ServerView``). The Embed messages card has no switch and opens
-/// its screen in the app; the Commands card opens in the web dashboard. The server's general settings are their own tab, so that
+/// opens it (``ModuleRoute``, handled by ``ServerView``). The Embed messages and Commands cards have no
+/// switch and open their screens in the app. The server's general settings are their own tab, so that
 /// card is left out here.
 struct ModuleBoardView: View {
     let summary: ServerSummary
@@ -95,11 +95,30 @@ struct ModuleBoardView: View {
     /// The groups to show: the search applied, and the "Settings" card (its own tab) left out, so
     /// a group that only had that card does not show up empty.
     private func shownGroups(_ overview: ServerOverview) -> [OverviewGroup] {
-        overview.groups(matching: searchText).compactMap { group in
+        let tools = ServerOverview(server: overview.server, groups: [Self.toolsGroup]).groups(matching: searchText)
+        let modules = overview.groups(matching: searchText).compactMap { group in
             let cards = group.cards.filter { $0.id != Self.settingsCardID }
             return cards.isEmpty ? nil : OverviewGroup(title: group.title, cards: cards)
         }
+        return tools + modules
     }
+
+    /// The dashboard's server tools that are not modules: appeals, moderation, audit log, member data
+    /// and the leaderboard (the Commands card comes from the server's own cards).
+    private static let toolsGroup = OverviewGroup(
+        title: String(localized: "Server tools"),
+        cards: [
+            ("moderation-hub", String(localized: "Moderation"), "shield-check",
+             String(localized: "Warn members, cases, bans and lockdown.")),
+            ("appeals-inbox", String(localized: "Appeals"), "flag", String(localized: "Review ban appeals.")),
+            ("leaderboard", String(localized: "Leaderboard"), "trophy", String(localized: "Top members and the public page.")),
+            ("audit-log", String(localized: "Audit Log"), "history", String(localized: "Configuration changes, newest first.")),
+            ("member-data", String(localized: "Member Data"), "user-search", String(localized: "Look up and delete a member's data.")),
+        ].map { id, name, icon, description in
+            OverviewCard(
+                kind: .link, id: id, name: name, icon: icon, description: description, hasToggle: false, isEnabled: nil,
+                status: .link)
+        })
 
     /// The "Settings" card: the Settings tab instead.
     private static let settingsCardID = "general"
@@ -113,8 +132,6 @@ struct ModuleBoardView: View {
                 setEnabled: { enabled in model.setModule(card.id, enabled: enabled) })
         } else if ModuleScreens.hasScreen(card.id) {
             InAppLinkTile(card: card) { openModule(card.id) }
-        } else if let url = webURL(for: card) {
-            LinkTile(card: card, url: url)
         }
     }
 
@@ -122,12 +139,6 @@ struct ModuleBoardView: View {
         Binding(
             get: { model.toggleError != nil },
             set: { if !$0 { model.toggleError = nil } })
-    }
-
-    /// The card's page in the web dashboard on this Sylo server.
-    private func webURL(for card: OverviewCard) -> URL? {
-        guard let path = card.webPath, !path.contains("?"), let server = session.server else { return nil }
-        return server.url(for: path)
     }
 }
 

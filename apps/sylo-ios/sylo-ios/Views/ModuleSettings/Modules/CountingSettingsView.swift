@@ -5,9 +5,16 @@ import SyloKit
 /// and who is benched. Mirrors web-v2/src/moduleForms/Counting.jsx.
 struct CountingSettingsView: View {
     @State private var model: ModuleSettingsModel<CountingPage>
+    @State private var runner: ActionRunner
+    @State private var isSettingCount = false
+    @State private var isConfirmingReset = false
+    @State private var pendingRelease: CountingPenalty?
+    private let server: ServerID
 
     init(server: ServerID, session: AppSession) {
+        self.server = server
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _runner = State(initialValue: ActionRunner(session: session))
     }
 
     var body: some View {
@@ -58,6 +65,14 @@ struct CountingSettingsView: View {
                             }
                         }
                         .accessibilityElement(children: .combine)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button("Release", systemImage: "person.badge.key") { pendingRelease = penalty }
+                                .tint(Color.syloCyan)
+                        }
+                        .contextMenu {
+                            Button("Release", systemImage: "person.badge.key") { pendingRelease = penalty }
+                        }
+                        .accessibilityAction(named: Text("Release")) { pendingRelease = penalty }
                     }
                 }
             }
@@ -69,12 +84,60 @@ struct CountingSettingsView: View {
                 LabeledContent("Best streak") {
                     Text(page.state.record, format: .number)
                 }
+                Button("Set the Count", systemImage: "number") { isSettingCount = true }
+                Button("Reset the Count to 0", systemImage: "arrow.counterclockwise", role: .destructive) {
+                    isConfirmingReset = true
+                }
             } header: {
                 Text("Current game")
             } footer: {
-                Text("Set or reset the count in the web dashboard.")
+                Text("Set or reset the count. Swipe a benched member to give their access back early.")
             }
         }
+        .sheet(isPresented: $isSettingCount) {
+            MemberNumberEditor(
+                title: "Set the Count", asksForMember: false, valueTitle: "Count", range: 0...1_000_000_000_000,
+                initial: model.page?.state.current ?? 0, footer: "The next number to post is one more than this.",
+                save: { _, count in
+                    guard await runner.run(Endpoints.SetCount(server: server, count: count)) != nil else { return false }
+                    await model.load()
+                    return true
+                }, failure: { runner.errorMessage })
+        }
+        .confirmationDialog("Reset the count to 0?", isPresented: $isConfirmingReset, titleVisibility: .visible) {
+            Button("Reset the Count", role: .destructive) {
+                Task { if await runner.run(Endpoints.SetCount(server: server, count: nil)) != nil { await model.load() } }
+            }
+        } message: {
+            Text("The next number to post is 1. The best streak is kept.")
+        }
+        .confirmationDialog(
+            "Give their access back?", isPresented: isConfirmingRelease, titleVisibility: .visible, presenting: pendingRelease
+        ) { penalty in
+            Button("Release \(penalty.label)") {
+                Task {
+                    if await runner.run(Endpoints.ReleaseCountingPenalty(server: server, userId: penalty.userId)) != nil {
+                        await model.load()
+                    }
+                }
+            }
+        } message: { penalty in
+            Text("\(penalty.label) gets the penalty role back and can count again.")
+        }
+        .alert("Couldn't Complete", isPresented: isShowingError, presenting: runner.errorMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .sensoryFeedback(.success, trigger: runner.successCount)
+    }
+
+    private var isConfirmingRelease: Binding<Bool> {
+        Binding(get: { pendingRelease != nil }, set: { if !$0 { pendingRelease = nil } })
+    }
+
+    private var isShowingError: Binding<Bool> {
+        Binding(get: { runner.errorMessage != nil && !isSettingCount }, set: { if !$0 { runner.errorMessage = nil } })
     }
 }
 

@@ -53,5 +53,9 @@ public enum ModuleSymbol {
         "github": "chevron.left.forwardslash.chevron.right",
         "gear": "gearshape",
         "message-square": "text.bubble",
+        "flag": "flag",
+        "history": "clock.arrow.circlepath",
+        "user-search": "person.text.rectangle",
+        "trophy": "trophy",
     ]
 }

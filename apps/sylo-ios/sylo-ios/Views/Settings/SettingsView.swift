@@ -16,6 +16,9 @@ struct SettingsView: View {
     @State private var isConfirmingSignOut = false
     @State private var isConfirmingDelete = false
     @State private var isShowingHealth = false
+    @State private var invites: [BotInvite] = []
+    @State private var pendingDisconnect: PlatformConnection?
+    @State private var disconnectError: String?
 
     init(server: ServerURL, session: AppSession, servers: ServersModel) {
         self.server = server
@@ -71,6 +74,10 @@ struct SettingsView: View {
             }
             .task { await account.load() }
             .task { await push.settings.load() }
+            .task {
+                // The links to add Sylo to a server, one per platform (the platforms' own pages).
+                if let list = try? await session.send(Endpoints.Invites()) { invites = list.invites }
+            }
             .navigationDestination(isPresented: $isShowingHealth) {
                 HealthView(session: session)
             }
@@ -111,6 +118,29 @@ struct SettingsView: View {
             } message: { message in
                 Text(message)
             }
+            .confirmationDialog(
+                "Disconnect this sign-in?", isPresented: isConfirmingDisconnect, titleVisibility: .visible,
+                presenting: pendingDisconnect
+            ) { connection in
+                Button("Disconnect \(connection.label)", role: .destructive) {
+                    Task {
+                        let runner = ActionRunner(session: session)
+                        if await runner.run(Endpoints.DisconnectPlatform(platform: connection.platform.rawValue), changesModules: true) != nil {
+                            await account.load()
+                            await servers.load()
+                        } else {
+                            disconnectError = runner.errorMessage
+                        }
+                    }
+                }
+            } message: { connection in
+                Text("You stop managing your \(connection.label) servers with this account. Your other sign-in stays.")
+            }
+            .alert("Couldn't Disconnect", isPresented: isShowingDisconnectError, presenting: disconnectError) { _ in
+                Button("OK") {}
+            } message: { message in
+                Text(message)
+            }
             .alert("Couldn't Revoke Device", isPresented: isShowingRevokeError, presenting: account.revokeError) { _ in
                 Button("OK") {}
             } message: { message in
@@ -127,6 +157,19 @@ struct SettingsView: View {
             }
             ForEach(account.connectedPlatforms) { connection in
                 LabeledContent(connection.label, value: connection.username ?? "Connected")
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if connection.canDisconnect {
+                            Button("Disconnect", role: .destructive) { pendingDisconnect = connection }
+                        }
+                    }
+                    .contextMenu {
+                        if connection.canDisconnect {
+                            Button("Disconnect", systemImage: "link.badge.plus", role: .destructive) { pendingDisconnect = connection }
+                        }
+                    }
+                    .accessibilityAction(named: Text("Disconnect")) {
+                        if connection.canDisconnect { pendingDisconnect = connection }
+                    }
             }
             if let message = account.errorMessage {
                 StatusMessage(message, kind: .error)
@@ -144,8 +187,20 @@ struct SettingsView: View {
             if let version = session.serverInfo?.version ?? push.settings.serverInfo?.version {
                 LabeledContent("Version", value: version)
             }
-            Link(destination: server.baseURL) {
-                Label("Open Dashboard", systemImage: "safari")
+            NavigationLink {
+                RoadmapView(session: session)
+            } label: {
+                Label("Roadmap", systemImage: "map")
+            }
+            NavigationLink {
+                CommandListView(session: session)
+            } label: {
+                Label("Command List", systemImage: "terminal")
+            }
+            ForEach(invites) { invite in
+                Link(destination: invite.url) {
+                    Label("Add Sylo to a \(invite.label) Server", systemImage: "plus.app")
+                }
             }
         }
     }
@@ -159,10 +214,20 @@ struct SettingsView: View {
             } label: {
                 Label("Health", systemImage: "stethoscope")
             }
+            NavigationLink {
+                PersonalizerView(session: session)
+            } label: {
+                Label("Bot Personalizer", systemImage: "person.crop.circle.badge.checkmark")
+            }
+            NavigationLink {
+                StatsCacheView(session: session)
+            } label: {
+                Label("Stats Cache", systemImage: "chart.bar")
+            }
         } header: {
             Text("Operator")
         } footer: {
-            Text("You run this Sylo. Health shows its status, database, backups and dev log.")
+            Text("You run this Sylo. Health shows its status, database, backups and dev log. The Personalizer changes the bot's name, status and announcement. The roadmap board is managed from the Roadmap.")
         }
     }
 
@@ -195,6 +260,14 @@ struct SettingsView: View {
                 Label("Terms of Service", systemImage: "doc.text")
             }
         }
+    }
+
+    private var isConfirmingDisconnect: Binding<Bool> {
+        Binding(get: { pendingDisconnect != nil }, set: { if !$0 { pendingDisconnect = nil } })
+    }
+
+    private var isShowingDisconnectError: Binding<Bool> {
+        Binding(get: { disconnectError != nil }, set: { if !$0 { disconnectError = nil } })
     }
 
     private var isShowingRevokeError: Binding<Bool> {
