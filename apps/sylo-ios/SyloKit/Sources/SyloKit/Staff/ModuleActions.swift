@@ -796,6 +796,26 @@ public struct EventDraft: Sendable, Equatable, Identifiable {
         let imageUrl: String
         let capacity: Int?
         let reminderMinutes: Int
+
+        private enum CodingKeys: String, CodingKey {
+            case title, description, start, end, timeZone, channelId, roleId, location, imageUrl, capacity, reminderMinutes
+        }
+
+        /// Like the dashboard's form: no limit is an explicit `null`, not a missing key.
+        func encode(to encoder: any Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(title, forKey: .title)
+            try c.encode(description, forKey: .description)
+            try c.encode(start, forKey: .start)
+            try c.encode(end, forKey: .end)
+            try c.encode(timeZone, forKey: .timeZone)
+            try c.encode(channelId, forKey: .channelId)
+            try c.encode(roleId, forKey: .roleId)
+            try c.encode(location, forKey: .location)
+            try c.encode(imageUrl, forKey: .imageUrl)
+            try c.encode(capacity, forKey: .capacity)
+            try c.encode(reminderMinutes, forKey: .reminderMinutes)
+        }
     }
 
     var body: Body {

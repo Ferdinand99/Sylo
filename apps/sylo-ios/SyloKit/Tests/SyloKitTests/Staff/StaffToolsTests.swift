@@ -807,7 +807,7 @@ struct OwnerToolsTests {
         #expect(Endpoints.SendDevLogErrorTest().path == "/api/v2/health/dev-log-error-test")
         #expect(Endpoints.DisconnectPlatform(platform: "discord").path == "/api/v2/account/disconnect/discord")
         let url = try BackupFiles.write(RawBytes(data: data), name: "../sylo 1.db")
-        #expect(url.lastPathComponent == "---sylo-1.db")
+        #expect(url.lastPathComponent == "..-sylo-1.db")
         #expect(try Data(contentsOf: url) == data)
         try? FileManager.default.removeItem(at: url)
     }

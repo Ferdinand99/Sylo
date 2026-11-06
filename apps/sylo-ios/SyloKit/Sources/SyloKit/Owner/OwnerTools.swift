@@ -115,7 +115,9 @@ public struct CachedStat: Decodable, Sendable, Hashable, Identifiable {
     /// A number or text, "" for the server's "—".
     private static func text(_ c: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) throws -> String {
         if let string = try? c.decodeIfPresent(String.self, forKey: key) { return string == "—" ? "" : string }
-        if let number = try? c.decodeIfPresent(Double.self, forKey: key) { return number.formatted() }
+        if let number = try? c.decodeIfPresent(Double.self, forKey: key) {
+            return number == number.rounded() ? String(Int(number)) : String(number)
+        }
         return ""
     }
 
