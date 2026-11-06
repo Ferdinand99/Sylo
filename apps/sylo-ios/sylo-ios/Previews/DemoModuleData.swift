@@ -24,7 +24,7 @@ nonisolated extension PreviewData {
              "spec": {"content": "Welcome! Please read the rules before you chat.",
                       "embeds": [
                         {"kind": "embed", "color": "#38c8f0", "title": "Be kind", "description": "Treat everyone with **respect**. No harassment, hate speech or spam.\nQuestions? Ask a *moderator*.",
-                         "authorName": "Sylo Test Server", "authorIcon": "", "image": "", "thumbnail": "",
+                         "authorName": "Pixel Harbor", "authorIcon": "", "image": "", "thumbnail": "",
                          "footerText": "Last updated today", "footerIcon": "", "timestamp": false,
                          "fields": [{"name": "Reports", "value": "Open a ticket", "inline": true},
                                     {"name": "Appeals", "value": "Use the appeals form", "inline": true},

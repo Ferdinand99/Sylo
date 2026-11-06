@@ -199,9 +199,9 @@ jobs:
             xcrun simctl shutdown "$UDID" || true
           }
           run_device "$IPHONE" iphone-69 1320 2868             servers:servers overview:overview modules:modules ticket:thread embed-editor:embed-editor appeals:appeal
-          # On the iPad the server list is always in the sidebar, so the first shot opens a server next
-          # to it (the bare list would show an empty detail pane); the second shows the tickets tab.
-          run_device "$IPAD" ipad-13 2064 2752             servers:overview tickets:tickets modules:modules ticket:thread embed-editor:embed-editor appeals:appeal
+          # On the iPad the server list is always in the sidebar, so the first shot is the module board
+          # beside it. The bento overview leaves half the tall canvas empty, so it is left out here.
+          run_device "$IPAD" ipad-13 2064 2752 servers:modules tickets:tickets ticket:thread embed-editor:embed-editor appeals:appeal moderation:moderation
           ls -la "$OUT"
 
       - name: Upload App Store screenshots

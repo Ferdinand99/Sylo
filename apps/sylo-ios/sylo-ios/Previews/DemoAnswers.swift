@@ -5,6 +5,8 @@ extension PreviewData {
     /// What the demo session answers beyond the shared preview answers: the ticket inbox, a ticket,
     /// the server's general settings and one module's settings page (Honeypot).
     static let demoAnswer: PreviewClient.Answer = { endpoint in
+        if endpoint is Endpoints.Servers { return ServerList(servers: demoServers) }
+        if endpoint is Endpoints.Overview { return demoOverview }
         if endpoint is Endpoints.Tickets { return tickets }
         if endpoint is Endpoints.Ticket { return ticketThread }
         if endpoint is Endpoints.LoadGuildSettings {
