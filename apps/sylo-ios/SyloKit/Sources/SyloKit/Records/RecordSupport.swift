@@ -17,10 +17,10 @@ public struct LocalID: Sendable, Hashable {
 }
 
 extension NetworkError {
-    /// What to tell the person: the server's own words for a refused change ("Pick a channel.")
-    /// when it sent some, else the usual ``userMessage``.
+    /// What to tell the person: the server's own words for a refused change ("Pick a channel.",
+    /// "You can't disconnect your only sign-in.") when it sent some, else the usual ``userMessage``.
     public var detailMessage: String {
-        if case .badRequest(let message) = self, let message, !message.isEmpty, message != "invalid_grant" {
+        if let message = serverMessage, !message.isEmpty, message != "invalid_grant" {
             return message
         }
         return userMessage

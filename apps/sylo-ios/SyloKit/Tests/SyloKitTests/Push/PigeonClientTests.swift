@@ -129,14 +129,14 @@ struct PigeonClientTests {
     func errorMapping() async throws {
         let cases: [(NetworkError, PigeonError)] = [
             (.unauthorized, .invalidCredentials),
-            (.notFound, .gone),
+            (.notFound(message: nil), .gone),
             (.rateLimited, .rateLimited),
-            (.http(status: 409), .limitReached),
-            (.server(status: 503), .unavailable),
+            (.http(status: 409, message: nil), .limitReached),
+            (.server(status: 503, message: nil), .unavailable),
             (.offline, .unavailable),
             (.timeout, .unavailable),
             (.unreachable, .unavailable),
-            (.forbidden, .unexpected),
+            (.forbidden(message: nil), .unexpected),
             (.badRequest(message: nil), .unexpected),
             (.notASyloServer, .unexpected),
             (.decoding("x"), .unexpected),
@@ -197,7 +197,7 @@ struct PigeonClientTests {
             switch endpoint {
             case is PigeonEndpoints.RegisterDevice: return PigeonRegistration(deviceId: "hrd_a/../b", manageKey: "hrm_k")
             case is PigeonEndpoints.CreateHandle: return PigeonHandle(handleId: "h1", handle: "not-a-handle")
-            default: throw NetworkError.notFound
+            default: throw NetworkError.notFound(message: nil)
             }
         }
         let client = PigeonClient { key in odd.make(PigeonRelay.official, key) }
@@ -284,7 +284,7 @@ struct PigeonRegistrarTests {
 
     @Test("A device Pigeon forgot, or a refused key, registers again once")
     func forgotten() async throws {
-        for failure in [NetworkError.notFound, .unauthorized] {
+        for failure in [NetworkError.notFound(message: nil), .unauthorized] {
             let fake = FakePigeon()
             let clock = TestClock()
             let registrar = makeRegistrar(fake, clock: clock)
@@ -304,7 +304,7 @@ struct PigeonRegistrarTests {
         let registrar = makeRegistrar(fake, clock: clock)
         try await registrar.apply(token: Data([1]))
         clock.advance(hours: 25)
-        fake.fail("update", with: .server(status: 503))
+        fake.fail("update", with: .server(status: 503, message: nil))
         await #expect(throws: PigeonError.unavailable) { try await registrar.apply(token: Data([1])) }
         #expect(fake.count("register") == 1)
     }

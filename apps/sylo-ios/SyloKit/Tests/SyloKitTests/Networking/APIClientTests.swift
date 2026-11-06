@@ -106,13 +106,13 @@ struct APIClientTests {
 
     @Test("Maps status codes to errors", arguments: [
         (401, #"{"error":"Not signed in, or the token is no longer valid."}"#, NetworkError.unauthorized),
-        (403, #"{"error":"You do not manage this server."}"#, .forbidden),
-        (404, #"{"error":"Unknown or unavailable server"}"#, .notFound),
+        (403, #"{"error":"You do not manage this server."}"#, .forbidden(message: nil)),
+        (404, #"{"error":"Unknown or unavailable server"}"#, .notFound(message: nil)),
         (400, #"{"error":"invalid_grant"}"#, .badRequest(message: "invalid_grant")),
         (400, "", .badRequest(message: nil)),
-        (409, #"{"error":"You can't disconnect your only sign-in."}"#, .http(status: 409)),
-        (500, #"{"error":"boom"}"#, .server(status: 500)),
-        (418, "", .http(status: 418)),
+        (409, #"{"error":"You can't disconnect your only sign-in."}"#, .http(status: 409, message: nil)),
+        (500, #"{"error":"boom"}"#, .server(status: 500, message: nil)),
+        (418, "", .http(status: 418, message: nil)),
     ])
     func statusCodes(status: Int, body: String, expected: NetworkError) async throws {
         mock.reset([.json(status, body)])
@@ -195,21 +195,21 @@ struct APIClientTests {
         #expect(mock.requests.count == 3)
 
         mock.reset([.json(503, "")])
-        await #expect(throws: NetworkError.server(status: 503)) { try await client().send(Endpoints.Servers()) }
+        await #expect(throws: NetworkError.server(status: 503, message: nil)) { try await client().send(Endpoints.Servers()) }
         #expect(mock.requests.count == 3)
     }
 
     @Test("A GET is not retried on a final error")
     func noRetryOnFinal() async throws {
         mock.reset([.json(404, #"{"error":"Unknown or unavailable server"}"#)])
-        await #expect(throws: NetworkError.notFound) { try await client().send(Endpoints.Overview(server: "1")) }
+        await #expect(throws: NetworkError.notFound(message: nil)) { try await client().send(Endpoints.Overview(server: "1")) }
         #expect(mock.requests.count == 1)
     }
 
     @Test("POST and DELETE are never retried")
     func noRetryOnWrites() async throws {
         mock.reset([.json(503, "")])
-        await #expect(throws: NetworkError.server(status: 503)) {
+        await #expect(throws: NetworkError.server(status: 503, message: nil)) {
             try await client().send(Endpoints.SetModule(server: "1", module: "welcome", enabled: true))
         }
         #expect(mock.requests.count == 1)
@@ -282,7 +282,7 @@ struct APIClientTests {
     @Test("A GET is tried once when no retries are asked for, and again when they are")
     func retries() async throws {
         mock.reset([.json(503, "{}")])
-        await #expect(throws: NetworkError.server(status: 503)) {
+        await #expect(throws: NetworkError.server(status: 503, message: nil)) {
             try await URLSessionAPIClient(
                 server: try ServerURL("https://example.com"), session: MockURLProtocol.session(), retryDelays: [],
                 token: { "sylo_secret" }
@@ -291,7 +291,7 @@ struct APIClientTests {
         #expect(mock.requests.count == 1)
 
         mock.reset([.json(503, "{}")])
-        await #expect(throws: NetworkError.server(status: 503)) {
+        await #expect(throws: NetworkError.server(status: 503, message: nil)) {
             try await URLSessionAPIClient(
                 server: try ServerURL("https://example.com"), session: MockURLProtocol.session(),
                 retryDelays: [.zero, .zero], token: { "sylo_secret" }

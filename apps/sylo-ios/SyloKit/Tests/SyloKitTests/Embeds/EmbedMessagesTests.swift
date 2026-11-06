@@ -260,7 +260,7 @@ struct ComposedMessageModelTests {
             case is Endpoints.DeleteComposedMessage:
                 return OKResponse()
             default:
-                throw NetworkError.notFound
+                throw NetworkError.notFound(message: nil)
             }
         }
     }

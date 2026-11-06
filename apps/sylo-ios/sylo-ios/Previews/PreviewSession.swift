@@ -161,7 +161,7 @@ nonisolated struct PreviewClient: APIClient {
         // A short wait on the overview, so the bento shows a round trip time like a real server.
         if endpoint is Endpoints.Overview { try? await Task.sleep(for: .milliseconds(38)) }
         guard let response = (extra?(endpoint) ?? Self.shared(endpoint)) as? E.Response else {
-            throw NetworkError.notFound
+            throw NetworkError.notFound(message: nil)
         }
         return response
     }

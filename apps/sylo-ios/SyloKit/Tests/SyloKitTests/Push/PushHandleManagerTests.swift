@@ -135,8 +135,8 @@ struct PushHandleManagerTests {
     func pigeonFails() async throws {
         let cases: [(NetworkError, PigeonError)] = [
             (.rateLimited, .rateLimited),
-            (.http(status: 409), .limitReached),
-            (.server(status: 503), .unavailable),
+            (.http(status: 409, message: nil), .limitReached),
+            (.server(status: 503, message: nil), .unavailable),
             (.offline, .unavailable),
         ]
         for (failure, expected) in cases {
@@ -177,7 +177,7 @@ struct PushHandleManagerTests {
     func noLoop() async throws {
         let h = PushHarness()
         defer { h.cleanUp() }
-        h.pigeon.fail("create", with: .notFound)
+        h.pigeon.fail("create", with: .notFound(message: nil))
         await #expect(throws: PigeonError.gone) { try await h.setUp() }
         #expect(h.pigeon.count("register") == 2)
         #expect(h.pigeon.count("create") == 2)
@@ -207,7 +207,7 @@ struct PushHandleManagerTests {
     func listFails() async throws {
         let h = PushHarness()
         defer { h.cleanUp() }
-        h.pigeon.fail("list", with: .server(status: 503))
+        h.pigeon.fail("list", with: .server(status: 503, message: nil))
         try await h.setUp()
         #expect(h.registry.entry(forServer: h.server) != nil)
         #expect(h.sylo.handlesGiven.count == 1)

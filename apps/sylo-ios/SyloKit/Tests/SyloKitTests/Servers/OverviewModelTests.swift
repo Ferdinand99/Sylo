@@ -42,11 +42,11 @@ struct OverviewModelTests {
 
     @Test("a failed load explains, and a later load clears it")
     func failedLoad() async {
-        let clients = StubClients { _ in throw NetworkError.forbidden }
+        let clients = StubClients { _ in throw NetworkError.forbidden(message: nil) }
         let model = OverviewModel(server: "1", session: makeSignedInSession(clients: clients))
         await model.load()
         #expect(model.overview == nil)
-        #expect(model.errorMessage == NetworkError.forbidden.userMessage)
+        #expect(model.errorMessage == NetworkError.forbidden(message: nil).userMessage)
 
         clients.setHandler { _ in Self.overview }
         await model.load()

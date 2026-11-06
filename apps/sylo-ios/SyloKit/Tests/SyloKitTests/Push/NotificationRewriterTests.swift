@@ -26,7 +26,7 @@ struct RewriterHarness: Sendable {
                     created: Date()))
         }
         let stub = StubClients { endpoint in
-            guard let event = endpoint as? Endpoints.PushEvent else { throw NetworkError.notFound }
+            guard let event = endpoint as? Endpoints.PushEvent else { throw NetworkError.notFound(message: nil) }
             return try answer(event)
         }
         clients = stub
@@ -185,7 +185,7 @@ struct NotificationRewriterTests {
     @Test("Any failure keeps the generic text, grouped by server")
     func failures() async {
         let errors: [NetworkError] = [
-            .notFound, .unauthorized, .forbidden, .offline, .timeout, .server(status: 500), .rateLimited,
+            .notFound(message: nil), .unauthorized, .forbidden(message: nil), .offline, .timeout, .server(status: 500, message: nil), .rateLimited,
             .notASyloServer, .decoding("x"),
         ]
         for error in errors {

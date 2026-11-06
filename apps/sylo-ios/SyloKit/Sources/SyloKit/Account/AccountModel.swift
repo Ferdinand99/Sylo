@@ -73,7 +73,7 @@ public final class AccountModel {
                 _ = try await session.send(Endpoints.RevokeDevice(id: id))
             } catch {
                 let error = NetworkError(error)
-                if error == .notFound { return }
+                if error == .notFound(message: nil) { return }
                 restore(removed, at: index)
                 if error != .cancelled, error != .unauthorized { revokeError = error.userMessage }
             }

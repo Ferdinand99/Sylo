@@ -35,10 +35,10 @@ struct TicketsModelTests {
         let model = TicketsModel(server: "1", session: makeSignedInSession(clients: clients))
         await model.load()
 
-        clients.setHandler { _ in throw NetworkError.forbidden }
+        clients.setHandler { _ in throw NetworkError.forbidden(message: nil) }
         await model.load()
         #expect(model.list == Self.list)
-        #expect(model.errorMessage == NetworkError.forbidden.userMessage)
+        #expect(model.errorMessage == NetworkError.forbidden(message: nil).userMessage)
 
         clients.setHandler { _ in Self.list }
         await model.load()
@@ -76,14 +76,14 @@ struct TicketsModelTests {
     @Test("a close that fails explains and does not count; the ticket can be closed again")
     func failedClose() async {
         let clients = StubClients { endpoint in
-            if endpoint is Endpoints.CloseTicket { throw NetworkError.forbidden }
+            if endpoint is Endpoints.CloseTicket { throw NetworkError.forbidden(message: nil) }
             return Self.list
         }
         let model = TicketsModel(server: "1", session: makeSignedInSession(clients: clients))
         await model.load()
         let closed = await model.close(11)
         #expect(!closed)
-        #expect(model.actionError == NetworkError.forbidden.userMessage)
+        #expect(model.actionError == NetworkError.forbidden(message: nil).userMessage)
         #expect(model.closeCount == 0)
         #expect(!model.isClosing(11))
     }

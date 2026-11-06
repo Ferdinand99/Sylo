@@ -31,7 +31,7 @@ struct PigeonRig: Sendable {
                 sylo.lose()
                 return EmptyResponse()
             default:
-                throw NetworkError.notFound
+                throw NetworkError.notFound(message: nil)
             }
         }
     }
@@ -148,7 +148,7 @@ struct NotificationSettingsPigeonTests {
 
     @Test("A busy or limited Pigeon explains, and the server hears nothing")
     func pigeonBusy() async {
-        for failure in [NetworkError.rateLimited, .http(status: 409), .server(status: 503), .offline] {
+        for failure in [NetworkError.rateLimited, .http(status: 409, message: nil), .server(status: 503, message: nil), .offline] {
             let rig = PigeonRig(info: Self.pigeonInfo)
             defer { rig.cleanUp() }
             let (model, _) = makeModel(rig)

@@ -32,7 +32,7 @@ struct NotificationSettingsModelTests {
             case is Endpoints.RegisterWithRelay: return PushRelayRegistration(relayToken: "relay-1")
             case is Endpoints.UnregisterPush: return EmptyResponse()
             case let set as Endpoints.MutePushForServer: return try mute(set)
-            default: throw NetworkError.notFound
+            default: throw NetworkError.notFound(message: nil)
             }
         }
     }
@@ -265,7 +265,7 @@ struct NotificationSettingsModelTests {
     func registerFails() async {
         let cases: [(NetworkError, String)] = [
             (.badRequest(message: "invalid_push_token"), NotificationSettingsModel.invalidTokenMessage),
-            (.server(status: 503), NotificationSettingsModel.unavailableMessage),
+            (.server(status: 503, message: nil), NotificationSettingsModel.unavailableMessage),
             (.offline, NetworkError.offline.userMessage),
         ]
         for (error, message) in cases {

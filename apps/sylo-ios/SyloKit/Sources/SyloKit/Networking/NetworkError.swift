@@ -8,18 +8,21 @@ import FoundationNetworking
 public enum NetworkError: Error, Sendable, Equatable {
     /// 401: the token is missing, expired or revoked. Sign in again.
     case unauthorized
-    /// 403: signed in, but not allowed (not a manager of that server, or operators only).
-    case forbidden
-    /// 404: unknown server or module, a device already signed out, or a Sylo too old for the app.
-    case notFound
+    /// 403: signed in, but not allowed (not a manager of that server, or operators only), with the
+    /// server's `error` text when it sent one.
+    case forbidden(message: String?)
+    /// 404: unknown server or module, a device already signed out, or a Sylo too old for the app,
+    /// with the server's `error` text when it sent one.
+    case notFound(message: String?)
     /// 400, with the server's `error` field (`invalid_grant` for a failed code exchange).
     case badRequest(message: String?)
     /// 429: too many requests from this address.
     case rateLimited
-    /// 5xx.
-    case server(status: Int)
-    /// Any other status the app does not handle on its own (for example 409).
-    case http(status: Int)
+    /// 5xx, with the server's `error` text when it sent one.
+    case server(status: Int, message: String?)
+    /// Any other status the app does not handle on its own (for example 409), with the server's
+    /// `error` text when it sent one.
+    case http(status: Int, message: String?)
     /// An HTML page, a redirect or other non-JSON where Sylo would answer JSON: a wrong address,
     /// or a proxy login in front of the API paths.
     case notASyloServer
@@ -53,7 +56,7 @@ public enum NetworkError: Error, Sendable, Equatable {
     public var isRetryable: Bool {
         switch self {
         case .timeout, .offline, .unreachable: true
-        case .server(let status): [502, 503, 504].contains(status)
+        case .server(let status, _): [502, 503, 504].contains(status)
         default: false
         }
     }
@@ -69,7 +72,7 @@ public enum NetworkError: Error, Sendable, Equatable {
         case .badRequest: "The server couldn't do that. Refresh and try again."
         case .rateLimited: "Too many requests. Wait a minute, then try again."
         case .server: "The server ran into a problem. Try again in a moment."
-        case .http(let status): "Something went wrong (error \(status)). Try again."
+        case .http(let status, _): "Something went wrong (error \(status)). Try again."
         case .notASyloServer: "This address doesn't answer like a Sylo server. Check the address."
         case .timeout: "The server took too long to answer. Try again."
         case .offline: "You're offline. Check your connection and try again."
@@ -107,22 +110,56 @@ public enum NetworkError: Error, Sendable, Equatable {
     static func from(status: Int, body: Data, isJSON: Bool) -> NetworkError {
         // Sylo answers 401 and 403 as JSON; an HTML page is a proxy's login in the way, not a sign-out.
         if status == 401 || status == 403, !body.isEmpty, !isJSON { return .notASyloServer }
+        let message = isJSON ? errorText(in: body) : nil
         switch status {
         case 300..<400: return .notASyloServer
         case 401: return .unauthorized
-        case 403: return .forbidden
-        case 400: return .badRequest(message: isJSON ? serverMessage(in: body) : nil)
-        case 404: return .notFound
+        case 403: return .forbidden(message: message)
+        case 400: return .badRequest(message: message)
+        case 404: return .notFound(message: message)
         case 429: return .rateLimited
-        case 500..<600: return .server(status: status)
-        default: return .http(status: status)
+        case 500..<600: return .server(status: status, message: message)
+        default: return .http(status: status, message: message)
+        }
+    }
+
+    /// The server's own words for this error, when it sent some: the `error` text of a JSON answer.
+    public var serverMessage: String? {
+        switch self {
+        case .forbidden(let message), .notFound(let message), .badRequest(let message),
+             .server(_, let message), .http(_, let message):
+            message
+        default:
+            nil
+        }
+    }
+
+    /// Two errors are the same when they are the same kind (and status): the server's wording does
+    /// not make one a different error, so `error == .forbidden(message: nil)` holds for any 403.
+    public static func == (lhs: NetworkError, rhs: NetworkError) -> Bool {
+        switch (lhs, rhs) {
+        case (.unauthorized, .unauthorized), (.forbidden, .forbidden), (.notFound, .notFound),
+             (.rateLimited, .rateLimited), (.notASyloServer, .notASyloServer), (.timeout, .timeout),
+             (.offline, .offline), (.unreachable, .unreachable),
+             (.secureConnectionFailed, .secureConnectionFailed), (.cancelled, .cancelled),
+             (.invalidURL, .invalidURL):
+            true
+        case let (.badRequest(a), .badRequest(b)): a == b
+        case let (.server(a, _), .server(b, _)): a == b
+        case let (.http(a, _), .http(b, _)): a == b
+        case let (.decoding(a), .decoding(b)): a == b
+        case let (.encoding(a), .encoding(b)): a == b
+        case let (.transport(a), .transport(b)): a == b
+        default: false
         }
     }
 
     private struct ErrorBody: Decodable { let error: String? }
 
-    private static func serverMessage(in body: Data) -> String? {
-        (try? JSONDecoder().decode(ErrorBody.self, from: body))?.error
+    private static func errorText(in body: Data) -> String? {
+        guard let text = (try? JSONDecoder().decode(ErrorBody.self, from: body))?.error else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func describe(_ error: DecodingError) -> String {

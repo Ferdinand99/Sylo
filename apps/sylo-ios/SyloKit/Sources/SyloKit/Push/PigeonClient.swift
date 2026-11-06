@@ -122,7 +122,7 @@ extension PigeonError {
         case .notFound: return notFound
         case .unauthorized: return PigeonError.invalidCredentials
         case .rateLimited: return PigeonError.rateLimited
-        case .http(status: 409): return PigeonError.limitReached
+        case .http(status: 409, message: _): return PigeonError.limitReached
         case .server, .offline, .timeout, .unreachable, .secureConnectionFailed, .transport:
             return PigeonError.unavailable
         default: return PigeonError.unexpected

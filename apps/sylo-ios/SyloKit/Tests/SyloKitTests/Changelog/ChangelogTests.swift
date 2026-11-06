@@ -122,7 +122,7 @@ struct ChangelogModelTests {
         StubClients { endpoint in
             switch endpoint {
             case is Endpoints.Changelog: return page
-            default: throw NetworkError.notFound
+            default: throw NetworkError.notFound(message: nil)
             }
         }
     }
@@ -172,7 +172,7 @@ struct ChangelogModelTests {
 
     @Test("A refused or missing changelog is a plain message, not a crash")
     func refused() async {
-        for error in [NetworkError.forbidden, .notFound] {
+        for error in [NetworkError.forbidden(message: nil), .notFound(message: nil)] {
             let model = ChangelogModel(session: makeSignedInSession(clients: StubClients { _ in throw error }))
             await model.load()
             #expect(model.releases.isEmpty)

@@ -226,7 +226,7 @@ public final class NotificationSettingsModel {
             fetchedInfo = nil
             fetchedFor = nil
             errorMessage = Self.modeChangedMessage
-        case .server(status: 503):
+        case .server(status: 503, message: _):
             errorMessage = Self.unavailableMessage
         default:
             show(error)

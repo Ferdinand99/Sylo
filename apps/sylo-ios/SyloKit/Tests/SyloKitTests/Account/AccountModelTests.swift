@@ -106,7 +106,7 @@ struct AccountModelTests {
 
     @Test("a device that is already gone counts as revoked")
     func alreadyGone() async {
-        let model = await loadedModel(Self.clients { _ in throw NetworkError.notFound })
+        let model = await loadedModel(Self.clients { _ in throw NetworkError.notFound(message: nil) })
         await model.revoke(Self.tablet)?.value
         #expect(model.account?.devices.map(\.id) == ["d-laptop", "d-phone"])
         #expect(model.revokeError == nil)

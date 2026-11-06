@@ -12,7 +12,7 @@ struct AppSessionTests {
         switch endpoint {
         case is Endpoints.ServerInfo: return ServerInfo()
         case is Endpoints.SignOut: return EmptyResponse()
-        default: throw NetworkError.notFound
+        default: throw NetworkError.notFound(message: nil)
         }
     }
 
@@ -99,7 +99,7 @@ struct AppSessionTests {
 
     @Test("a server without the app API is too old, and is not remembered")
     func rejectsOldServer() async {
-        clients.setHandler { _ in throw NetworkError.notFound }
+        clients.setHandler { _ in throw NetworkError.notFound(message: nil) }
         let session = makeSession()
         session.start()
         await session.chooseServer("sylo.example.com")

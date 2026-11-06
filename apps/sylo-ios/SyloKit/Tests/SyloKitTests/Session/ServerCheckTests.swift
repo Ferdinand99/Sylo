@@ -33,7 +33,7 @@ struct ServerCheckTests {
 
     @Test("a missing info endpoint means an older Sylo; anything not Sylo-shaped means not Sylo")
     func fromErrors() {
-        #expect(ServerCheck(NetworkError.notFound) == .tooOld)
+        #expect(ServerCheck(NetworkError.notFound(message: nil)) == .tooOld)
         #expect(ServerCheck(NetworkError.notASyloServer) == .notSylo)
         #expect(ServerCheck(NetworkError.decoding("x")) == .notSylo)
         #expect(ServerCheck(NetworkError.offline) == .failed(.offline))

@@ -246,7 +246,7 @@ extension RecordListModel where Page == AppealsInboxPage {
             do {
                 return try await session.send(
                     Endpoints.DecideAppeal(server: server, id: appeal.id, decision: decision, reason: reason))
-            } catch NetworkError.http(status: 409) {
+            } catch NetworkError.http(status: 409, message: _) {
                 throw NetworkError.badRequest(message: "This appeal has already been decided.")
             }
         }

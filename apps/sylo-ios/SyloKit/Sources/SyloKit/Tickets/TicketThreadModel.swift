@@ -145,7 +145,7 @@ public final class TicketThreadModel {
                 discard(reply.id)
             } catch {
                 let error = NetworkError(error)
-                if error == .http(status: 409) {
+                if error == .http(status: 409, message: nil) {
                     markFailed(reply.id, "This ticket was closed, so the reply wasn't sent.")
                     await refresh()
                 } else {

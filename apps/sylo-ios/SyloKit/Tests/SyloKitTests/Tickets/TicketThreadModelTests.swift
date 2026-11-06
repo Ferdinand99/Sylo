@@ -76,10 +76,10 @@ struct TicketThreadModelTests {
 
     @Test("a failed load explains; a cancelled one says nothing")
     func failedLoad() async {
-        let clients = StubClients { _ in throw NetworkError.notFound }
+        let clients = StubClients { _ in throw NetworkError.notFound(message: nil) }
         let model = await loadedModel(clients)
         #expect(model.ticket == nil)
-        #expect(model.errorMessage == NetworkError.notFound.userMessage)
+        #expect(model.errorMessage == NetworkError.notFound(message: nil).userMessage)
 
         let quiet = await loadedModel(StubClients { _ in throw NetworkError.cancelled })
         #expect(quiet.errorMessage == nil)
@@ -172,7 +172,7 @@ struct TicketThreadModelTests {
     func closedMeanwhile() async throws {
         let clients = Self.clients(
             update: { _ in TicketUpdate(status: .closed, messages: []) },
-            reply: { _ in throw NetworkError.http(status: 409) })
+            reply: { _ in throw NetworkError.http(status: 409, message: nil) })
         let model = await loadedModel(clients)
         await model.send("On it")?.value
         guard case .failed(let reason)? = model.outgoing.first?.state else {
@@ -257,9 +257,9 @@ struct TicketThreadModelTests {
 
     @Test("a failed close explains and leaves the ticket open")
     func failedClose() async {
-        let model = await loadedModel(Self.clients(close: { _ in throw NetworkError.forbidden }))
+        let model = await loadedModel(Self.clients(close: { _ in throw NetworkError.forbidden(message: nil) }))
         #expect(await model.close(message: "") == false)
-        #expect(model.actionError == NetworkError.forbidden.userMessage)
+        #expect(model.actionError == NetworkError.forbidden(message: nil).userMessage)
         #expect(!model.isClosed)
     }
 }

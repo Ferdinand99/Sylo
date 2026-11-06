@@ -19,7 +19,7 @@ final class FakePigeon: @unchecked Sendable {
     init() {
         let box = Box()
         clients = StubClients { endpoint in
-            guard let fake = box.fake else { throw NetworkError.notFound }
+            guard let fake = box.fake else { throw NetworkError.notFound(message: nil) }
             return try fake.answer(endpoint)
         }
         box.fake = self
@@ -112,7 +112,7 @@ final class FakePigeon: @unchecked Sendable {
                 return PigeonRegistration(deviceId: id, manageKey: "hrm_key\(counter)")
             case let update as PigeonEndpoints.UpdateDevice:
                 try record("update", operation: "update")
-                guard devices[update.deviceId] != nil else { throw NetworkError.notFound }
+                guard devices[update.deviceId] != nil else { throw NetworkError.notFound(message: nil) }
                 return EmptyResponse()
             case let remove as PigeonEndpoints.RemoveDevice:
                 try record("remove", operation: "remove")
@@ -121,24 +121,24 @@ final class FakePigeon: @unchecked Sendable {
                 return EmptyResponse()
             case let create as PigeonEndpoints.CreateHandle:
                 try record("create", operation: "create")
-                guard devices[create.deviceId] != nil else { throw NetworkError.notFound }
+                guard devices[create.deviceId] != nil else { throw NetworkError.notFound(message: nil) }
                 counter += 1
                 let id = "handle\(counter)"
                 handles[create.deviceId, default: [:]][id] = create.tag
                 return PigeonHandle(handleId: id, handle: "hrh_secret\(counter)")
             case let revoke as PigeonEndpoints.RevokeHandle:
                 try record("revoke:\(revoke.handleId)", operation: "revoke")
-                guard devices[revoke.deviceId] != nil else { throw NetworkError.notFound }
+                guard devices[revoke.deviceId] != nil else { throw NetworkError.notFound(message: nil) }
                 handles[revoke.deviceId]?[revoke.handleId] = nil
                 return EmptyResponse()
             case let list as PigeonEndpoints.ListHandles:
                 try record("list", operation: "list")
-                guard devices[list.deviceId] != nil else { throw NetworkError.notFound }
+                guard devices[list.deviceId] != nil else { throw NetworkError.notFound(message: nil) }
                 let infos = (handles[list.deviceId] ?? [:]).sorted { $0.key < $1.key }
                     .map { PigeonHandleInfo(handleId: $0.key, tag: $0.value) }
                 return PigeonEndpoints.ListHandles.HandleList(handles: infos)
             default:
-                throw NetworkError.notFound
+                throw NetworkError.notFound(message: nil)
             }
         }
     }
