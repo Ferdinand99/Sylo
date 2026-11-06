@@ -172,15 +172,16 @@ jobs:
           echo "iPhone: $IPHONE  iPad: $IPAD"
           [ -n "$IPHONE" ] && [ -n "$IPAD" ] || { echo "::error::Simulator missing"; exit 1; }
 
-          run_device() { # udid prefix expected-width expected-height
+          run_device() { # udid prefix expected-width expected-height name:screen...
             local UDID="$1" PREFIX="$2" W="$3" H="$4" n=0
+            shift 4
             xcrun simctl boot "$UDID" || true
             xcrun simctl bootstatus "$UDID" -b
             xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
             xcrun simctl ui "$UDID" appearance dark
             xcrun simctl ui "$UDID" content_size large
             xcrun simctl install "$UDID" "$APP"
-            for pair in servers:servers overview:overview modules:modules ticket:thread embed-editor:embed-editor appeals:appeals; do
+            for pair in "$@"; do
               n=$((n + 1))
               local name="${pair%%:*}" screen="${pair##*:}"
               local file="$OUT/$PREFIX-$(printf '%02d' $n)-$name.png"
@@ -197,8 +198,10 @@ jobs:
             done
             xcrun simctl shutdown "$UDID" || true
           }
-          run_device "$IPHONE" iphone-69 1320 2868
-          run_device "$IPAD" ipad-13 2064 2752
+          run_device "$IPHONE" iphone-69 1320 2868             servers:servers overview:overview modules:modules ticket:thread embed-editor:embed-editor appeals:appeal
+          # On the iPad the server list is always in the sidebar, so the first shot opens a server next
+          # to it (the bare list would show an empty detail pane); the second shows the tickets tab.
+          run_device "$IPAD" ipad-13 2064 2752             servers:overview tickets:tickets modules:modules ticket:thread embed-editor:embed-editor appeals:appeal
           ls -la "$OUT"
 
       - name: Upload App Store screenshots
