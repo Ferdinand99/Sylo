@@ -83,10 +83,11 @@ private struct CommandRow: View {
             .buttonStyle(.plain)
             .accessibilityHint("Edits the limits")
 
+            // The LED switch draws its label, so the name is an accessibility label only.
             Toggle(isOn: Binding(get: { command.isEnabled }, set: setEnabled)) {
-                Text(verbatim: command.name)
+                EmptyView()
             }
-            .labelsHidden()
+            .accessibilityLabel(Text(verbatim: command.name))
         }
         .accessibilityElement(children: .contain)
     }
