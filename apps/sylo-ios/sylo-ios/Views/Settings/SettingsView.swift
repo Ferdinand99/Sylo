@@ -1,3 +1,4 @@
+import StoreKit
 import SwiftUI
 import SyloKit
 import UIKit
@@ -20,6 +21,7 @@ struct SettingsView: View {
     @State private var pendingDisconnect: PlatformConnection?
     @State private var disconnectError: String?
     @State private var isDisconnecting = false
+    @State private var isTestFlightBuild = false
 
     init(server: ServerURL, session: AppSession, servers: ServersModel) {
         self.server = server
@@ -258,10 +260,14 @@ struct SettingsView: View {
         Section("About") {
             LabeledContent("App version") {
                 HStack(spacing: 8) {
-                    PublicBetaBadge()
+                    // Only TestFlight builds say so; the App Store app shows just its version.
+                    if isTestFlightBuild {
+                        TestFlightBadge()
+                    }
                     Text(verbatim: Self.appVersion)
                 }
             }
+            .task { isTestFlightBuild = await Distribution.isTestFlight() }
             // In the app when this Sylo server sends its changelog (its info is fetched with the
             // notification settings when the session has none); older servers open the V2
             // dashboard's What's new page in the browser.
@@ -317,9 +323,23 @@ struct SettingsView: View {
     private static let terms = URL(string: "https://github.com/Ferdinand99/Sylo/blob/main/docs/terms-of-service.md")!
 }
 
-/// "Public beta", as on sylobot.com: a hairline capsule with a small accent dot. The text stays
-/// secondary so it reads on every row background; the accent is only in the dot.
-private struct PublicBetaBadge: View {
+/// Where this copy of the app came from. StoreKit signs an `AppTransaction` for every install:
+/// TestFlight builds report the sandbox environment, App Store installs production, and a build
+/// run from Xcode reports `.xcode`. Anything unexpected (no transaction, an error) counts as not
+/// TestFlight, so the App Store app never shows a beta badge by mistake.
+private enum Distribution {
+    static func isTestFlight() async -> Bool {
+        guard let result = try? await AppTransaction.shared else { return false }
+        switch result {
+        case .verified(let transaction), .unverified(let transaction, _):
+            return transaction.environment == .sandbox
+        }
+    }
+}
+
+/// "TestFlight", shown only in TestFlight builds: a hairline capsule with a small accent dot. The
+/// text stays secondary so it reads on every row background; the accent is only in the dot.
+private struct TestFlightBadge: View {
     @ScaledMetric(relativeTo: .caption) private var dot = 6.0
 
     var body: some View {
@@ -327,7 +347,7 @@ private struct PublicBetaBadge: View {
             Circle()
                 .fill(.tint)
                 .frame(width: dot, height: dot)
-            Text("Public beta")
+            Text(verbatim: "TestFlight")
         }
         .font(.caption.weight(.medium))
         .foregroundStyle(.secondary)

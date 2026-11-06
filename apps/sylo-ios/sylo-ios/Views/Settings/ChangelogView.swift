@@ -137,7 +137,7 @@ private struct ReleaseHeader: View {
     }
 }
 
-/// "This version", in the same hairline capsule with an accent dot as Settings' "Public beta".
+/// "This version", in the same hairline capsule with an accent dot as Settings' "TestFlight".
 private struct ThisVersionBadge: View {
     @ScaledMetric(relativeTo: .caption) private var dot = 6.0
 
