@@ -113,7 +113,7 @@ struct AppealsTests {
     func alreadyDecided() async throws {
         let page = try JSONDecoder().decode(AppealsInboxPage.self, from: Data(Self.pageJSON.utf8))
         let clients = StubClients { endpoint in
-            if endpoint is Endpoints.DecideAppeal { throw NetworkError.http(status: 409) }
+            if endpoint is Endpoints.DecideAppeal { throw NetworkError.http(status: 409, message: nil) }
             return page
         }
         let model = RecordListModel<AppealsInboxPage>(appeals: "1", session: makeSignedInSession(clients: clients))
@@ -405,17 +405,19 @@ struct ServerToolsTests {
     }
 
     @MainActor
-    @Test("the export is written as a pretty JSON file named like the dashboard's")
+    @Test("the export is written as the server sent it, in a protected file named like the dashboard's")
     func export() async throws {
-        let config: JSONValue = .object(["guildId": .string("fluxer:9"), "modules": .object(["afk": .object(["enabled": .bool(true)])])])
-        let clients = StubClients { _ in config }
+        let sent = Data(#"{"guildId":"fluxer:9", "modules": {"afk": {"enabled": true}}}"#.utf8)
+        let clients = StubClients { _ in RawBytes(data: sent) }
         let model = ConfigExportModel(server: "fluxer:9", session: makeSignedInSession(clients: clients))
         await model.export()
         let url = try #require(model.fileURL)
         #expect(url.lastPathComponent == "sylo-fluxer-9-config.json")
-        let text = try String(contentsOf: url, encoding: .utf8)
-        #expect(text.contains("\"guildId\" : \"fluxer:9\""))
-        try? FileManager.default.removeItem(at: url)
+        #expect(url.deletingLastPathComponent().lastPathComponent == SharedFiles.folderName)
+        #expect(try Data(contentsOf: url) == sent)
+        model.discardFile()
+        #expect(model.fileURL == nil)
+        #expect(!FileManager.default.fileExists(atPath: url.path))
         #expect(Endpoints.ExportConfig(server: "1").path == "/api/v2/guilds/1/export")
     }
 }
@@ -431,7 +433,7 @@ struct ModuleActionsTests {
         let count = Endpoints.SetCount(server: "1", count: 41)
         #expect(count.path == "/api/v2/guilds/1/modules/counting/count")
         #expect(try bodyObject(count) as NSDictionary == ["current": 41])
-        #expect(try bodyObject(Endpoints.SetCount(server: "1", count: nil)) as NSDictionary == ["reset": true])
+        #expect(try bodyObject(Endpoints.SetCount.reset(server: "1")) as NSDictionary == ["reset": true])
         let release = Endpoints.ReleaseCountingPenalty(server: "1", userId: "111111111111111111")
         #expect(release.path == "/api/v2/guilds/1/modules/counting/penalty/release")
         #expect(try bodyObject(release)["userId"] as? String == "111111111111111111")
@@ -574,6 +576,12 @@ struct ModuleActionsTests {
         let fresh = EventDraft(settings: EventsSettings(channel: "c1", reminderMinutes: 15), now: Date(timeIntervalSince1970: 1_730_000_000))
         #expect(fresh.channelId == "c1")
         #expect(fresh.reminderMinutes == 15)
+        // The zone: the device's when the server sets none (or an unknown one), else the server's.
+        let device = TimeZone(identifier: "Asia/Tokyo")!
+        let now = Date(timeIntervalSince1970: 1_730_000_000)
+        #expect(EventDraft(settings: EventsSettings(), now: now, deviceZone: device).timeZone == "Asia/Tokyo")
+        #expect(EventDraft(settings: EventsSettings(timeZone: "Not/AZone"), now: now, deviceZone: device).timeZone == "Asia/Tokyo")
+        #expect(EventDraft(settings: EventsSettings(timeZone: "Europe/Oslo"), now: now, deviceZone: device).timeZone == "Europe/Oslo")
         #expect(Endpoints.SaveEvent(server: "1", draft: fresh).path == "/api/v2/guilds/1/modules/events/events")
         #expect(fresh.problem(now: Date(timeIntervalSince1970: 1_730_000_000)) == "Give the event a title.")
         #expect(Endpoints.CancelEvent(server: "1", id: 12).path == "/api/v2/guilds/1/modules/events/events/12/cancel")
@@ -808,8 +816,15 @@ struct OwnerToolsTests {
         #expect(Endpoints.DisconnectPlatform(platform: "discord").path == "/api/v2/account/disconnect/discord")
         let url = try BackupFiles.write(RawBytes(data: data), name: "../sylo 1.db")
         #expect(url.lastPathComponent == "..-sylo-1.db")
+        #expect(url.deletingLastPathComponent().lastPathComponent == SharedFiles.folderName)
         #expect(try Data(contentsOf: url) == data)
-        try? FileManager.default.removeItem(at: url)
+        #expect(try BackupFiles.read(from: url) == data)
+        #expect(throws: BackupFiles.ReadError.tooLarge) { try BackupFiles.read(from: url, maxBytes: data.count - 1) }
+        #expect(throws: BackupFiles.ReadError.unreadable) {
+            try BackupFiles.read(from: url.deletingLastPathComponent().appendingPathComponent("missing.db"))
+        }
+        SharedFiles.remove(url)
+        #expect(!FileManager.default.fileExists(atPath: url.path))
     }
 
     @Test("the health report reads the bot audit log and the session secret")

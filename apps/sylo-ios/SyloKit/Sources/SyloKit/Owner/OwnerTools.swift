@@ -840,14 +840,31 @@ public struct BackupName: Decodable, Sendable, Equatable {
     public let name: String
 }
 
-/// Writes a downloaded backup to a temporary file, to hand to the share sheet.
+/// Writes a downloaded backup to a protected temporary file (see ``SharedFiles``), to hand to the share sheet.
 public enum BackupFiles {
+    /// The most the server accepts as a backup import (`/api/v2/health/backups/import`).
+    public static let maxImportBytes = 128 * 1024 * 1024
+
+    public enum ReadError: Error, Sendable, Equatable {
+        case tooLarge
+        case unreadable
+    }
+
+    /// Reads a backup file to import, refusing one over `maxBytes` before it is read into memory. Does
+    /// blocking file work: call it off the main actor.
+    public static func read(from url: URL, maxBytes: Int = maxImportBytes) throws -> Data {
+        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > maxBytes {
+            throw ReadError.tooLarge
+        }
+        guard let data = try? Data(contentsOf: url) else { throw ReadError.unreadable }
+        guard data.count <= maxBytes else { throw ReadError.tooLarge }
+        return data
+    }
+
     /// The file for a backup named like `sylo-2026-11-05.db`. The name is reduced to safe characters.
     public static func write(_ bytes: RawBytes, name: String) throws -> URL {
         let safe = String(name.map { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" ? $0 : "-" })
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(safe.isEmpty ? "sylo-backup" : safe)
-        try bytes.data.write(to: url, options: .atomic)
-        return url
+        return try SharedFiles.write(bytes.data, fileName: safe.isEmpty ? "sylo-backup" : safe)
     }
 }
 

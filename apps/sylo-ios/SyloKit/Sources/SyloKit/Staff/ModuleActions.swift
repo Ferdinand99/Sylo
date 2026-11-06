@@ -138,16 +138,23 @@ extension Endpoints {
         public var body: (any Encodable & Sendable)? { EmptyBody() }
     }
 
-    /// `POST …/counting/count` with `{current}` sets the count, `{reset: true}` sets it to 0.
+    /// `POST …/counting/count` with `{current}` sets the count; ``reset(server:)`` sets it to 0.
     public struct SetCount: APIEndpoint {
         public typealias Response = CountingStateResult
         public let server: ServerID
-        /// nil resets the count.
+        /// The new count; nil only for ``reset(server:)``.
         public let count: Int?
-        public init(server: ServerID, count: Int?) {
+        public init(server: ServerID, count: Int) {
             self.server = server
             self.count = count
         }
+        private init(resetOn server: ServerID) {
+            self.server = server
+            self.count = nil
+        }
+        /// Sets the count back to 0. The only way to build a reset, so a missing number can never
+        /// wipe the count by accident.
+        public static func reset(server: ServerID) -> SetCount { SetCount(resetOn: server) }
         public var path: String { Endpoints.module(server, "counting", "/count") }
         public var method: HTTPMethod { .post }
         public var body: (any Encodable & Sendable)? {
@@ -177,15 +184,22 @@ extension Endpoints {
     public struct SetLevelingXP: APIEndpoint {
         public typealias Response = OKResponse
         public let server: ServerID
-        /// nil with no `xp` wipes the XP of the whole server.
+        /// nil only for ``resetAll(server:)``, which wipes the XP of the whole server.
         public let userId: String?
         public let xp: Int?
-        public init(server: ServerID, userId: String?, xp: Int?) {
+        public init(server: ServerID, userId: String, xp: Int) {
             self.server = server
             self.userId = userId
             self.xp = xp
         }
-        public static func resetAll(server: ServerID) -> SetLevelingXP { SetLevelingXP(server: server, userId: nil, xp: nil) }
+        private init(resetAllOn server: ServerID) {
+            self.server = server
+            self.userId = nil
+            self.xp = nil
+        }
+        /// Wipes everyone's XP. The only way to build a reset, so a missing member or number can
+        /// never wipe the whole server by accident.
+        public static func resetAll(server: ServerID) -> SetLevelingXP { SetLevelingXP(resetAllOn: server) }
         public var path: String { Endpoints.module(server, "leveling", "/xp") }
         public var method: HTTPMethod { .post }
         public var body: (any Encodable & Sendable)? {
@@ -721,7 +735,7 @@ public struct EventDraft: Sendable, Equatable, Identifiable {
 
     public static let defaultCapacity = 10
 
-    /// A new event: tomorrow, an hour from now, in the zone the server reads commands in.
+    /// A new event: tomorrow, an hour from now, in the zone set for events on the server, else the device's.
     public init(settings: EventsSettings = EventsSettings(), now: Date = .now, deviceZone: TimeZone = .current) {
         eventID = nil
         title = ""
@@ -731,7 +745,8 @@ public struct EventDraft: Sendable, Equatable, Identifiable {
         start = Date(timeIntervalSince1970: hour)
         hasEnd = false
         end = start.addingTimeInterval(3600)
-        timeZone = deviceZone.identifier
+        // The server's own zone for events when it is set (and a real one), else this device's.
+        timeZone = TimeZone(identifier: settings.timeZone) != nil ? settings.timeZone : deviceZone.identifier
         channelId = settings.channel
         roleId = ""
         location = ""

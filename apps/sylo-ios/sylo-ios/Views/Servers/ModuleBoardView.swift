@@ -108,7 +108,7 @@ struct ModuleBoardView: View {
     private static let toolsGroup = OverviewGroup(
         title: String(localized: "Server tools"),
         cards: [
-            ("moderation-hub", String(localized: "Moderation"), "shield-check",
+            ("moderation-hub", String(localized: "Cases & Bans"), "shield-check",
              String(localized: "Warn members, cases, bans and lockdown.")),
             ("appeals-inbox", String(localized: "Appeals"), "flag", String(localized: "Review ban appeals.")),
             ("leaderboard", String(localized: "Leaderboard"), "trophy", String(localized: "Top members and the public page.")),

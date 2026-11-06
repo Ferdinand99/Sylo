@@ -113,7 +113,7 @@ struct HealthModelTests {
             case let log as Endpoints.DevLog:
                 return log.errorsOnly ? DevLogPage(entries: all.entries.filter { $0.level == .error }) : all
             case is Endpoints.SendDevLogTest: return try test()
-            default: throw NetworkError.notFound
+            default: throw NetworkError.notFound(message: nil)
             }
         }
     }
@@ -147,9 +147,63 @@ struct HealthModelTests {
         #expect(failing.testResult == .failed("DEV_LOG_CHANNEL_ID is not set."))
     }
 
+    @Test("A restore blocks the page, waits until Sylo answers again, then loads it")
+    func restoreWaits() async {
+        let downCalls = LockedCounter()
+        let clients = StubClients { endpoint in
+            switch endpoint {
+            case is Endpoints.RestoreBackup: return OKResponse()
+            case is Endpoints.Health:
+                // Down for the first two questions (a proxy error, then no connection), then back.
+                switch downCalls.next() {
+                case 1: throw NetworkError.server(status: 502, message: nil)
+                case 2: throw NetworkError.unreachable
+                default: return Self.report
+                }
+            case is Endpoints.DevLog: return Self.all
+            default: throw NetworkError.notFound(message: nil)
+            }
+        }
+        let model = HealthModel(session: makeSignedInSession(clients: clients), pollInterval: .milliseconds(1))
+        await model.restore(backup: "sylo-1.db")
+        #expect(model.restoringFrom == nil)
+        #expect(model.restoreError == nil)
+        #expect(model.report == Self.report)
+        #expect(model.errorMessage == nil)
+        let paths = clients.calls.map { $0.endpoint.path }
+        #expect(paths.first == "/api/v2/health/backups/sylo-1.db/restore")
+        #expect(paths.filter { $0 == "/api/v2/health" }.count >= 4)
+    }
+
+    @Test("A refused restore says why and leaves the page usable")
+    func restoreRefused() async {
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.RestoreBackup { throw NetworkError.http(status: 409, message: "A restore is already running.") }
+            throw NetworkError.notFound(message: nil)
+        }
+        let model = HealthModel(session: makeSignedInSession(clients: clients), pollInterval: .milliseconds(1))
+        await model.restore(backup: "sylo-1.db")
+        #expect(model.restoringFrom == nil)
+        #expect(model.restoreError == "A restore is already running.")
+        #expect(clients.calls.count == 1)
+    }
+
+    @Test("A restore that never gets an answer stops waiting and says so")
+    func restoreGivesUp() async {
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.RestoreBackup { return OKResponse() }
+            throw NetworkError.offline
+        }
+        let model = HealthModel(session: makeSignedInSession(clients: clients), pollInterval: .milliseconds(1), maxPolls: 3)
+        await model.restore(backup: "sylo-1.db")
+        #expect(model.restoringFrom == nil)
+        #expect(model.errorMessage != nil)
+        #expect(clients.calls.count == 4)
+    }
+
     @Test("A person who is not an operator gets a plain message, not a crash")
     func forbidden() async {
-        let clients = StubClients { _ in throw NetworkError.forbidden }
+        let clients = StubClients { _ in throw NetworkError.forbidden(message: nil) }
         let model = HealthModel(session: makeSignedInSession(clients: clients))
         await model.load()
         #expect(model.report == nil)
@@ -169,9 +223,9 @@ struct DevLogSettingTests {
             case is Endpoints.PushSettings:
                 return PushSettingsInfo(isEnabled: true, mutedServers: [], devLog: .errors)
             case let set as Endpoints.SetDevLogNotifications:
-                if refuse.value { throw NetworkError.forbidden }
+                if refuse.value { throw NetworkError.forbidden(message: nil) }
                 return DevLogSettingResult(devLog: set.level)
-            default: throw NetworkError.notFound
+            default: throw NetworkError.notFound(message: nil)
             }
         }
         let model = NotificationSettingsModel(session: makeSignedInSession(clients: clients))
@@ -184,6 +238,13 @@ struct DevLogSettingTests {
         #expect(model.devLog == .warnings)
         #expect(model.errorMessage != nil)
     }
+}
+
+/// A counter a @Sendable stub can bump while a test reads it.
+final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func next() -> Int { lock.withLock { count += 1; return count } }
 }
 
 /// A Bool a @Sendable stub can read while a test flips it.

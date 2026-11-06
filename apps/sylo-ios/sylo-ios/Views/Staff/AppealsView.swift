@@ -189,10 +189,14 @@ struct AppealDetailView: View {
                     if let date = appeal.submittedAt {
                         LabeledContent("Submitted") { Text(verbatim: DateText.dayAndTime(date)) }
                     }
-                    LabeledContent("Banned for") {
+                    VStack(alignment: .leading, spacing: SyloSpacing.xs) {
+                        Text("Banned for")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.syloMuted)
                         Text(verbatim: appeal.originalBanReason ?? String(localized: "No reason recorded"))
-                            .multilineTextAlignment(.trailing)
+                            .textSelection(.enabled)
                     }
+                    .accessibilityElement(children: .combine)
                 }
 
                 Section("Their answers") {

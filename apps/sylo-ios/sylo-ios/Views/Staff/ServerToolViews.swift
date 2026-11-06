@@ -532,7 +532,8 @@ struct ConfigExportRow: View {
         } footer: {
             Text("Saves this server's module configuration as a JSON file. Member data (warnings, XP, tickets) is not included.")
         }
-        .sheet(isPresented: $isSharing) {
+        // The file holds the server's configuration: it goes as soon as the share sheet closes.
+        .sheet(isPresented: $isSharing, onDismiss: { model.discardFile() }) {
             if let url = model.fileURL {
                 ShareSheet(url: url)
             }

@@ -106,7 +106,7 @@ struct CountingSettingsView: View {
         }
         .confirmationDialog("Reset the count to 0?", isPresented: $isConfirmingReset, titleVisibility: .visible) {
             Button("Reset the Count", role: .destructive) {
-                Task { if await runner.run(Endpoints.SetCount(server: server, count: nil)) != nil { await model.load() } }
+                Task { if await runner.run(Endpoints.SetCount.reset(server: server)) != nil { await model.load() } }
             }
         } message: {
             Text("The next number to post is 1. The best streak is kept.")

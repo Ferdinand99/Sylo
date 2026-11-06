@@ -537,7 +537,7 @@ extension Endpoints {
 
     /// `GET /api/v2/guilds/:id/export`: the module configuration as JSON (a download on the web).
     public struct ExportConfig: APIEndpoint {
-        public typealias Response = JSONValue
+        public typealias Response = RawBytes
         public let server: ServerID
         public init(server: ServerID) { self.server = server }
         public var path: String { "/api/v2/guilds/\(server.pathComponent)/export" }
@@ -731,7 +731,7 @@ public final class MemberDataModel {
     }
 }
 
-/// Fetches the server's configuration and writes it as a JSON file to share.
+/// Fetches the server's configuration and writes it, as the server sent it, to a file to share.
 @MainActor
 @Observable
 public final class ConfigExportModel {
@@ -753,22 +753,24 @@ public final class ConfigExportModel {
         defer { isWorking = false }
         errorMessage = nil
         do {
-            let value = try await session.send(Endpoints.ExportConfig(server: server))
-            fileURL = try Self.write(value, server: server)
+            let bytes = try await session.send(Endpoints.ExportConfig(server: server))
+            SharedFiles.remove(fileURL)
+            fileURL = try Self.write(bytes, server: server)
         } catch {
             let error = NetworkError(error)
             if error != .cancelled, error != .unauthorized { errorMessage = error.detailMessage }
         }
     }
 
-    /// Pretty printed JSON in a temporary file named like the dashboard's download.
-    static func write(_ value: JSONValue, server: ServerID) throws -> URL {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(value)
+    /// Deletes the exported file. Called when the share sheet closes.
+    public func discardFile() {
+        SharedFiles.remove(fileURL)
+        fileURL = nil
+    }
+
+    /// The server's bytes, untouched, in a protected temporary file named like the dashboard's download.
+    static func write(_ bytes: RawBytes, server: ServerID) throws -> URL {
         let safe = String(server.rawValue.map { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" ? $0 : "-" })
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("sylo-\(safe)-config.json")
-        try data.write(to: url, options: .atomic)
-        return url
+        return try SharedFiles.write(bytes.data, fileName: "sylo-\(safe)-config.json")
     }
 }

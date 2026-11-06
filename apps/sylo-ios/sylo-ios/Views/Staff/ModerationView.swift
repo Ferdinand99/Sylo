@@ -85,7 +85,9 @@ struct ModerationView: View {
             MemberReasonEditor(
                 title: "Clear Warnings", reasonTitle: nil, reasonFooter: "",
                 reasonLimit: 0, requiresReason: false, saveTitle: "Clear Warnings",
-                confirmation: String(localized: "Every warning on record for this member is removed, so they count from zero again. This can't be undone."),
+                confirmation: { id in
+                    String(localized: "Every warning on record for member \(id) is removed, so they count from zero again. This can't be undone.")
+                },
                 save: { member, _ in
                     guard let removed = await model.clearWarnings(userId: member) else { return false }
                     notice = removed == 1 ? String(localized: "Removed 1 warning.") : String(localized: "Removed \(removed) warnings.")
@@ -414,7 +416,8 @@ private struct MemberReasonEditor: View {
     let reasonLimit: Int
     let requiresReason: Bool
     let saveTitle: LocalizedStringKey
-    let confirmation: String?
+    /// The sentence to confirm with, from the member's id as typed (digits when it can be read as one).
+    let confirmation: ((String) -> String)?
     let save: (String, String) async -> Bool
     let failure: () -> String?
 
@@ -425,7 +428,7 @@ private struct MemberReasonEditor: View {
         RecordEditor(
             title: title, problem: problem, hasChanges: !member.isEmpty || !reason.isEmpty,
             save: { await save(member, reason) }, failure: failure, saveTitle: saveTitle,
-            confirmation: confirmation
+            confirmation: confirmation?(ModerationInput.userID(from: member) ?? member.trimmingCharacters(in: .whitespacesAndNewlines))
         ) {
             Section {
                 TextField("User ID or @mention", text: $member)

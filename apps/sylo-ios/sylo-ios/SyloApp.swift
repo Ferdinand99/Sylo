@@ -9,6 +9,8 @@ import UserNotifications
     @State private var push: PushCoordinator
 
     init() {
+        // Backups and exports that were being shared when the app was last closed.
+        SharedFiles.clearLeftovers()
         #if DEBUG
         // Screenshot builds: a made-up Sylo, see DemoLaunch.
         if DemoLaunch.isActive {

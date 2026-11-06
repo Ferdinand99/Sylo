@@ -19,6 +19,7 @@ struct SettingsView: View {
     @State private var invites: [BotInvite] = []
     @State private var pendingDisconnect: PlatformConnection?
     @State private var disconnectError: String?
+    @State private var isDisconnecting = false
 
     init(server: ServerURL, session: AppSession, servers: ServersModel) {
         self.server = server
@@ -123,18 +124,22 @@ struct SettingsView: View {
                 presenting: pendingDisconnect
             ) { connection in
                 Button("Disconnect \(connection.label)", role: .destructive) {
+                    isDisconnecting = true
                     Task {
                         let runner = ActionRunner(session: session)
-                        if await runner.run(Endpoints.DisconnectPlatform(platform: connection.platform.rawValue), changesModules: true) != nil {
-                            await account.load()
-                            await servers.load()
+                        if await runner.run(Endpoints.DisconnectPlatform(platform: connection.platform.rawValue), changesModules: false) != nil {
+                            // The server signs every device of the account out when a sign-in is
+                            // disconnected, this one too: end the session here instead of reloading.
+                            dismiss()
+                            await session.signOut()
                         } else {
                             disconnectError = runner.errorMessage
                         }
+                        isDisconnecting = false
                     }
                 }
             } message: { connection in
-                Text("You stop managing your \(connection.label) servers with this account. Your other sign-in stays.")
+                Text(disconnectMessage(for: connection))
             }
             .alert("Couldn't Disconnect", isPresented: isShowingDisconnectError, presenting: disconnectError) { _ in
                 Button("OK") {}
@@ -149,6 +154,15 @@ struct SettingsView: View {
         }
     }
 
+    /// What disconnecting a platform does. The server revokes every app token of the account, so this
+    /// device is signed out too.
+    private func disconnectMessage(for connection: PlatformConnection) -> LocalizedStringKey {
+        if let other = account.connectedPlatforms.first(where: { $0.platform != connection.platform })?.label {
+            return "Every device signed in to the Sylo app, this one too, is signed out. Sign in again with \(other)."
+        }
+        return "Every device signed in to the Sylo app, this one too, is signed out."
+    }
+
     @ViewBuilder
     private var accountSection: some View {
         Section("Account") {
@@ -159,17 +173,26 @@ struct SettingsView: View {
                 LabeledContent(connection.label, value: connection.username ?? "Connected")
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         if connection.canDisconnect {
-                            Button("Disconnect", role: .destructive) { pendingDisconnect = connection }
+                            Button("Disconnect", systemImage: "minus.circle", role: .destructive) { pendingDisconnect = connection }
+                                .disabled(isDisconnecting)
                         }
                     }
                     .contextMenu {
                         if connection.canDisconnect {
-                            Button("Disconnect", systemImage: "link.badge.plus", role: .destructive) { pendingDisconnect = connection }
+                            Button("Disconnect", systemImage: "minus.circle", role: .destructive) { pendingDisconnect = connection }
+                                .disabled(isDisconnecting)
                         }
                     }
                     .accessibilityAction(named: Text("Disconnect")) {
-                        if connection.canDisconnect { pendingDisconnect = connection }
+                        if connection.canDisconnect, !isDisconnecting { pendingDisconnect = connection }
                     }
+            }
+            if isDisconnecting {
+                HStack {
+                    Text("Disconnecting…")
+                    Spacer()
+                    ProgressView()
+                }
             }
             if let message = account.errorMessage {
                 StatusMessage(message, kind: .error)

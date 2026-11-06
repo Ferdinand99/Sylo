@@ -105,40 +105,60 @@ struct ModuleTile: View {
     ]
 }
 
-/// A card without a switch that opens a screen in the app (Embed messages).
+/// A card without a switch that opens a screen in the app (the server tools, Commands, Embed
+/// messages), laid out like a ``ModuleTile``: the icon on top, then the name and what it is for. A
+/// chevron in the corner says it opens a screen.
 struct InAppLinkTile: View {
     let card: OverviewCard
     let open: () -> Void
 
+    @ScaledMetric(relativeTo: .body) private var minHeight: CGFloat = 112
     @ScaledMetric(relativeTo: .body) private var scaledIconWell: CGFloat = 36
     private var iconWell: CGFloat { min(scaledIconWell, 54) }
 
     var body: some View {
         Button(action: open) {
-            HStack(spacing: SyloSpacing.m) {
-                Image(systemName: ModuleSymbol.name(forIcon: card.icon))
-                    .font(.system(size: iconWell * 0.46, weight: .semibold))
-                    .foregroundStyle(Color.syloBrand)
-                    .frame(width: iconWell, height: iconWell)
-                    .background(
-                        Color.syloCyan.opacity(0.14),
-                        in: RoundedRectangle(cornerRadius: SyloRadius.chip, style: .continuous))
-                    .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top) {
+                    Image(systemName: ModuleSymbol.name(forIcon: card.icon))
+                        .font(.system(size: iconWell * 0.46, weight: .semibold))
+                        .foregroundStyle(Color.syloBrand)
+                        .frame(width: iconWell, height: iconWell)
+                        .background(
+                            Color.syloCyan.opacity(0.14),
+                            in: RoundedRectangle(cornerRadius: SyloRadius.chip, style: .continuous))
+                        .accessibilityHidden(true)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.syloMuted)
+                        .padding(.top, 4)
+                        .accessibilityHidden(true)
+                }
+                // Two lines and a little shrinking, so a long name wraps at a space instead of
+                // being broken in the middle of a word.
                 Text(verbatim: card.name)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.syloText)
                     .multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.syloMuted)
-                    .accessibilityHidden(true)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.9)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let description = card.description, !description.isEmpty {
+                    Text(verbatim: description)
+                        .font(.caption)
+                        .foregroundStyle(Color.syloMuted)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(SyloSpacing.m)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
             .syloCard(radius: SyloRadius.row + 4)
         }
         .buttonStyle(.syloPress)
+        .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the screen")
     }
 }

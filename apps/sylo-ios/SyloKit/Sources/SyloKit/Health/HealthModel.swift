@@ -22,10 +22,23 @@ public final class HealthModel {
     /// Why the report or the log could not be loaded.
     public var errorMessage: String?
 
-    private let session: AppSession
+    /// The backup being restored, from the moment the restore is sent until Sylo answers again.
+    /// While it is set the screen blocks every other action, as the dashboard does.
+    public private(set) var restoringFrom: String?
+    /// Why a restore could not be started.
+    public var restoreError: String?
 
-    public init(session: AppSession) {
+    private let session: AppSession
+    private let pollInterval: Duration
+    private let maxPolls: Int
+
+    /// - Parameters:
+    ///   - pollInterval: How long to wait between questions to a restarting Sylo.
+    ///   - maxPolls: How many times to ask before giving up (about five minutes by default).
+    public init(session: AppSession, pollInterval: Duration = .milliseconds(1500), maxPolls: Int = 200) {
         self.session = session
+        self.pollInterval = pollInterval
+        self.maxPolls = maxPolls
     }
 
     /// The report and the log, together.
@@ -64,9 +77,69 @@ public final class HealthModel {
         }
     }
 
+    /// Replaces the database with a backup, then waits until Sylo is back and loads the page:
+    /// ``beginRestore(backup:)`` and ``waitForRestart()`` in one call.
+    public func restore(backup name: String) async {
+        if await beginRestore(backup: name) { await waitForRestart() }
+    }
+
+    /// Asks the server to replace the database with a backup. Sets ``restoringFrom`` from here on, so
+    /// the screen blocks every other action, as the dashboard does, and ``restoreError`` when the
+    /// server refused.
+    /// - Returns: Whether the server accepted the restore. Sylo is restarting then: call ``waitForRestart()``.
+    public func beginRestore(backup name: String) async -> Bool {
+        guard restoringFrom == nil else { return false }
+        restoreError = nil
+        restoringFrom = name
+        do {
+            _ = try await session.send(Endpoints.RestoreBackup(name: name))
+            return true
+        } catch {
+            restoringFrom = nil
+            let error = NetworkError(error)
+            if error != .cancelled, error != .unauthorized { restoreError = error.detailMessage }
+            return false
+        }
+    }
+
+    /// Asks `/api/v2/health` until Sylo answers again (like the dashboard), then loads the page and
+    /// clears ``restoringFrom``. Any answer counts, also a refusal: Sylo is back. A 401 means the
+    /// restored data does not know this device; the session has signed out already.
+    public func waitForRestart() async {
+        guard restoringFrom != nil else { return }
+        defer { restoringFrom = nil }
+        for _ in 0..<maxPolls {
+            do {
+                try await Task.sleep(for: pollInterval)
+            } catch {
+                return
+            }
+            do {
+                _ = try await session.send(Endpoints.Health())
+                await load()
+                return
+            } catch {
+                let error = NetworkError(error)
+                if error == .cancelled || error == .unauthorized { return }
+                if Self.isStillDown(error) { continue }
+                show(error)
+                return
+            }
+        }
+        errorMessage = "Sylo has not answered yet. Pull down to check again in a moment."
+    }
+
+    /// Whether this failure is what a restarting Sylo (or the proxy in front of it) looks like.
+    private static func isStillDown(_ error: NetworkError) -> Bool {
+        switch error {
+        case .timeout, .offline, .unreachable, .transport, .secureConnectionFailed, .notASyloServer, .server: true
+        default: false
+        }
+    }
+
     private func show(_ error: any Error) {
         let error = NetworkError(error)
         if error == .cancelled || error == .unauthorized { return }
-        errorMessage = error == .forbidden ? "Health is only for this Sylo's operators." : error.userMessage
+        errorMessage = error == .forbidden(message: nil) ? "Health is only for this Sylo's operators." : error.userMessage
     }
 }
