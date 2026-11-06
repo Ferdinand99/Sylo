@@ -173,14 +173,14 @@ struct TextArea: View {
         VStack(alignment: .leading, spacing: 4) {
             TextField(title, text: $text, axis: .vertical)
                 .lineLimit(lines)
-            if let limit, text.count > limit * 3 / 4 {
-                Text("\(text.count) of \(limit) characters")
+            if let limit, text.discordLength > limit * 3 / 4 {
+                Text("\(text.discordLength) of \(limit) characters")
                     .font(.caption)
-                    .foregroundStyle(text.count > limit ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(text.discordLength > limit ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
             }
         }
         .onChange(of: text) {
-            if let limit, text.count > limit { text = String(text.prefix(limit)) }
+            if let limit, text.discordLength > limit { text = text.truncatedForDiscord(to: limit) }
         }
     }
 }

@@ -111,11 +111,12 @@ public struct EmbedSpec: Codable, Sendable, Equatable, Identifiable {
             && footerText.isEmpty && !fields.contains { !$0.name.isEmpty && !$0.value.isEmpty }
     }
 
-    /// The characters Discord counts toward the 6000 of a message: title, description, author name,
+    /// The UTF-16 code units Discord counts toward the 6000 of a message: title, description, author name,
     /// footer text and the names and values of the fields that are sent.
     public var characterCount: Int {
-        title.count + description.count + authorName.count + footerText.count
-            + fields.filter { !$0.name.isEmpty || !$0.value.isEmpty }.reduce(0) { $0 + $1.name.count + $1.value.count }
+        title.discordLength + description.discordLength + authorName.discordLength + footerText.discordLength
+            + fields.filter { !$0.name.isEmpty || !$0.value.isEmpty }
+            .reduce(0) { $0 + $1.name.discordLength + $1.value.discordLength }
     }
 
     /// A copy with its own identity, for duplicating an embed in a list.
@@ -162,11 +163,20 @@ public struct EmbedSpec: Codable, Sendable, Equatable, Identifiable {
         return Int(hex, radix: 16)
     }
 
-    /// Whether the text is an `http://` or `https://` link, the only kind the server keeps.
+    /// Whether the text is an `http://` or `https://` link, the only kind the server keeps. The
+    /// server's rule (`isUrl` in src/modules/messageCreator.js) is `/^https?:\/\/\S+$/i`: the
+    /// scheme, then at least one character and no whitespace.
     public static func isWebLink(_ text: String) -> Bool {
         let lower = text.lowercased()
-        guard lower.hasPrefix("http://") || lower.hasPrefix("https://") else { return false }
-        return !text.contains(where: \.isWhitespace) && text.count > 8
+        let rest: Substring
+        if lower.hasPrefix("https://") {
+            rest = lower.dropFirst(8)
+        } else if lower.hasPrefix("http://") {
+            rest = lower.dropFirst(7)
+        } else {
+            return false
+        }
+        return !rest.isEmpty && !rest.contains(where: \.isWhitespace)
     }
 
     // MARK: Coding

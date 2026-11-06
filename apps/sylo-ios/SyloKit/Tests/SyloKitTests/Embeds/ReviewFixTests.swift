@@ -277,3 +277,90 @@ struct RecordReviewFixTests {
         #expect(model.page?.totals.messages == 400)
     }
 }
+
+@Suite("Link button validation and Discord text length")
+struct LinkValidationAndLengthTests {
+    @Test("the web link rule is the server's: http(s)://, then at least one character, no whitespace")
+    func serverRule() {
+        #expect(EmbedSpec.isWebLink("http://a"))
+        #expect(EmbedSpec.isWebLink("HTTPS://Example.com/path?q=1"))
+        #expect(!EmbedSpec.isWebLink("http://"))
+        #expect(!EmbedSpec.isWebLink("https://"))
+        #expect(!EmbedSpec.isWebLink("https://a b"))
+        #expect(!EmbedSpec.isWebLink("www.example.com"))
+        #expect(!EmbedSpec.isWebLink(""))
+    }
+
+    @Test("a link button with a bad link has an error; an empty row has none")
+    func invalidURL() {
+        #expect(LinkButton(label: "Site", url: "example.com").urlProblem == "Enter a full link starting with https://")
+        #expect(LinkButton(label: "Site", url: "").hasInvalidURL)
+        #expect(LinkButton(emoji: "🔗", url: "ftp://x").hasInvalidURL)
+        #expect(LinkButton(url: "nope").hasInvalidURL)
+        #expect(!LinkButton(label: "Site", url: " https://example.com ").hasInvalidURL)
+        #expect(!LinkButton().hasInvalidURL)
+        #expect(LinkButton().urlProblem == nil)
+
+        var draft = ComposedMessageDraft(links: [LinkButton(label: "Ok", url: "https://example.com")])
+        #expect(!draft.hasInvalidLinks)
+        draft.links.append(LinkButton(label: "Bad", url: "example.com"))
+        #expect(draft.hasInvalidLinks)
+    }
+
+    @MainActor
+    @Test("a bad link button blocks Save Draft and Publish")
+    func badLinkBlocksSave() async {
+        let model = ComposedMessageEditorModel(
+            server: "1", session: makeSignedInSession(clients: ComposedMessageModelTests.clients()), id: nil)
+        await model.load()
+        model.channelId = EmbedMessageGuardTests.otherChannel
+        model.draft.content = "Hello"
+        #expect(model.canSaveDraft)
+        #expect(model.canPublish)
+        model.draft.links = [LinkButton(label: "Bad", url: "example.com")]
+        #expect(model.linkProblem != nil)
+        #expect(!model.canSaveDraft)
+        #expect(!model.canPublish)
+        #expect(await model.saveDraft() == false)
+        #expect(model.actionError == model.linkProblem)
+        model.draft.links[0].url = "https://example.com"
+        #expect(model.linkProblem == nil)
+        #expect(model.canSaveDraft)
+    }
+
+    @Test("Discord counts UTF-16 code units, not Characters")
+    func utf16Length() {
+        let thumbs = String(repeating: "👍", count: 10)
+        #expect(thumbs.count == 10)
+        #expect(thumbs.discordLength == 20)
+        #expect(EmbedSpec(title: thumbs).characterCount == 20)
+
+        let embed = EmbedSpec(
+            title: thumbs, description: thumbs, authorName: thumbs, footerText: thumbs,
+            fields: [EmbedSpec.Field(name: thumbs, value: thumbs)])
+        #expect(embed.characterCount == 120)
+        #expect(ComposedMessageDraft(embeds: [embed, embed]).embedCharacterCount == 240)
+
+        // 3000 emoji are 3000 Characters but 6000 units: at the limit. One more is over it.
+        var draft = ComposedMessageDraft(embeds: [EmbedSpec(description: String(repeating: "👍", count: 3000))])
+        #expect(draft.embedCharacterCount == 6000)
+        #expect(draft.embedCharactersOver == 0)
+        draft.embeds[0].description += "a"
+        #expect(draft.embedCharactersOver == 1)
+    }
+
+    @Test("truncating to a Discord limit never splits an emoji")
+    func truncation() {
+        let thumbs = String(repeating: "👍", count: 10)
+        #expect(thumbs.truncatedForDiscord(to: 20) == thumbs)
+        #expect(thumbs.truncatedForDiscord(to: 7) == String(repeating: "👍", count: 3))
+        #expect(thumbs.truncatedForDiscord(to: 1) == "")
+        #expect("abc".truncatedForDiscord(to: 2) == "ab")
+        #expect("abc".truncatedForDiscord(to: 5) == "abc")
+        // A family emoji is one Character of eleven units.
+        let family = "👨‍👩‍👧‍👦"
+        #expect(family.count == 1)
+        #expect(("a" + family).truncatedForDiscord(to: 5) == "a")
+        #expect(("a" + family).truncatedForDiscord(to: 12) == "a" + family)
+    }
+}

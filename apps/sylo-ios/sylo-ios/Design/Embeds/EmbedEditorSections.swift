@@ -15,8 +15,8 @@ struct EmbedEditorSections: View {
         Section {
             TextField("Title", text: $embed.title)
                 .onChange(of: embed.title) {
-                    if embed.title.count > EmbedSpec.maxTitleLength {
-                        embed.title = String(embed.title.prefix(EmbedSpec.maxTitleLength))
+                    if embed.title.discordLength > EmbedSpec.maxTitleLength {
+                        embed.title = embed.title.truncatedForDiscord(to: EmbedSpec.maxTitleLength)
                     }
                 }
             TextArea(
@@ -34,8 +34,8 @@ struct EmbedEditorSections: View {
         Section("Author") {
             TextField("Name", text: $embed.authorName)
                 .onChange(of: embed.authorName) {
-                    if embed.authorName.count > EmbedSpec.maxAuthorNameLength {
-                        embed.authorName = String(embed.authorName.prefix(EmbedSpec.maxAuthorNameLength))
+                    if embed.authorName.discordLength > EmbedSpec.maxAuthorNameLength {
+                        embed.authorName = embed.authorName.truncatedForDiscord(to: EmbedSpec.maxAuthorNameLength)
                     }
                 }
             WebLinkField(title: "Icon link", text: $embed.authorIcon)
@@ -53,8 +53,8 @@ struct EmbedEditorSections: View {
         Section("Footer") {
             TextField("Text", text: $embed.footerText)
                 .onChange(of: embed.footerText) {
-                    if embed.footerText.count > EmbedSpec.maxFooterLength {
-                        embed.footerText = String(embed.footerText.prefix(EmbedSpec.maxFooterLength))
+                    if embed.footerText.discordLength > EmbedSpec.maxFooterLength {
+                        embed.footerText = embed.footerText.truncatedForDiscord(to: EmbedSpec.maxFooterLength)
                     }
                 }
             WebLinkField(title: "Icon link", text: $embed.footerIcon)
@@ -67,8 +67,8 @@ struct EmbedEditorSections: View {
             Section("Field") {
                 TextField("Name", text: $field.name)
                     .onChange(of: field.name) {
-                        if field.name.count > EmbedSpec.Field.maxNameLength {
-                            field.name = String(field.name.prefix(EmbedSpec.Field.maxNameLength))
+                        if field.name.discordLength > EmbedSpec.Field.maxNameLength {
+                            field.name = field.name.truncatedForDiscord(to: EmbedSpec.Field.maxNameLength)
                         }
                     }
                 TextArea(title: "Value", text: $field.value, limit: EmbedSpec.Field.maxValueLength, lines: 2...6)

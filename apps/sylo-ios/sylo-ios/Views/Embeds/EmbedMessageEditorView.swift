@@ -224,12 +224,17 @@ private struct EmbedMessageForm: View {
             Section("Link button") {
                 TextField("Label", text: $link.label)
                     .onChange(of: link.label) {
-                        if link.label.count > LinkButton.maxLabelLength {
-                            link.label = String(link.label.prefix(LinkButton.maxLabelLength))
+                        if link.label.discordLength > LinkButton.maxLabelLength {
+                            link.label = link.label.truncatedForDiscord(to: LinkButton.maxLabelLength)
                         }
                     }
                 TextField("Emoji (optional)", text: $link.emoji)
                 WebLinkField(title: "https://…", text: $link.url)
+                if let problem = link.urlProblem {
+                    Label(problem, systemImage: "exclamationmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(Color.syloBad)
+                }
                 Button("Remove Link Button", role: .destructive) {
                     model.draft.links.removeAll { $0.id == link.id }
                 }

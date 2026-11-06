@@ -55,6 +55,21 @@ public struct LinkButton: Sendable, Equatable, Identifiable {
         let link = self.url.trimmingCharacters(in: .whitespacesAndNewlines)
         return EmbedSpec.isWebLink(link) && (!text.isEmpty || !symbol.isEmpty)
     }
+
+    /// Whether the link is one the server would reject, so the button would be dropped on save.
+    /// A button with nothing typed in it is not a mistake, only an empty row.
+    public var hasInvalidURL: Bool {
+        let link = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if EmbedSpec.isWebLink(link) { return false }
+        let isBlank = link.isEmpty && label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && emoji.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return !isBlank
+    }
+
+    /// The words shown under the link field when it is not valid; nil when it is.
+    public var urlProblem: String? {
+        hasInvalidURL ? "Enter a full link starting with https://" : nil
+    }
 }
 
 /// What the message editor changes: the message text, the embeds and the link buttons.
@@ -79,7 +94,10 @@ public struct ComposedMessageDraft: Sendable, Equatable {
     /// Discord's limit on the text of all embeds in one message together.
     public static let maxEmbedCharacters = 6000
 
-    /// The characters Discord counts across every embed: titles, descriptions, author names, footers
+    /// Whether a link button has a link the server would reject.
+    public var hasInvalidLinks: Bool { links.contains(where: \.hasInvalidURL) }
+
+    /// The UTF-16 code units Discord counts across every embed: titles, descriptions, author names, footers
     /// and the names and values of the fields that are sent.
     public var embedCharacterCount: Int {
         embeds.reduce(0) { $0 + $1.characterCount }
@@ -502,12 +520,18 @@ public final class ComposedMessageEditorModel {
     /// Why Publish cannot be used yet, in words for the person; nil when it can.
     public var publishProblem: String? {
         if channelId.isEmpty { return "Choose a channel before publishing." }
+        if let problem = linkProblem { return problem }
         if draft.isEmpty { return "Add some text or an embed before publishing." }
         let over = draft.embedCharactersOver
         if over > 0 {
             return "The embeds are \(over) characters over Discord's limit of \(ComposedMessageDraft.maxEmbedCharacters). Shorten them before publishing."
         }
         return nil
+    }
+
+    /// Why the message cannot be saved while a link button has a bad link; nil when all are fine.
+    public var linkProblem: String? {
+        draft.hasInvalidLinks ? "Fix the link on the link button: enter a full link starting with https://." : nil
     }
 
     /// Set while the message is posted and a different channel is chosen. The server keeps the
@@ -518,8 +542,9 @@ public final class ComposedMessageEditorModel {
         return "Unpublish first, then pick the new channel."
     }
 
-    /// Whether Save Draft can be used: something changed and the channel change is not blocking.
-    public var canSaveDraft: Bool { hasChanges && channelChangeProblem == nil }
+    /// Whether Save Draft can be used: something changed, and neither the channel change nor a bad
+    /// link button is blocking.
+    public var canSaveDraft: Bool { hasChanges && channelChangeProblem == nil && linkProblem == nil }
 
     /// Whether Publish or Update can be used.
     public var canPublish: Bool { publishProblem == nil && channelChangeProblem == nil }
@@ -567,7 +592,7 @@ public final class ComposedMessageEditorModel {
     /// Saves without posting.
     @discardableResult
     public func saveDraft() async -> Bool {
-        if let problem = channelChangeProblem {
+        if let problem = channelChangeProblem ?? linkProblem {
             actionError = problem
             return false
         }
