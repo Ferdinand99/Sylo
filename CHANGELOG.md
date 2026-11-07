@@ -1,5 +1,46 @@
 # Changelog
 
+## [5.0.0](https://github.com/Ferdinand99/Sylo/compare/v4.10.0...v5.0.0) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* one dashboard: the classic dashboard is removed; every page now lives in the new dashboard, and old links redirect to their new place
+
+### Features
+
+* Auto threads module (beta) opens a thread for each new post in chosen channels ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* clearer dashboard pages: aligned layouts, compact number fields with units, coloured status badges, readable mobile layouts and calmer delete buttons ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* cyan brand colour in the dashboard and on the public pages ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* Events module (beta) with sign-ups, capacity, reminders, a participant role and optional public event pages; events in private channels get a sign-in page instead ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* Fluxer servers can set their own command prefix in Core → Settings; mentions always work ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* insert buttons for placeholders under every message template, with a warning for placeholders a module doesn't know ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* one dashboard: the classic dashboard is removed; every page now lives in the new dashboard, and old links redirect to their new place ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* one date and time format across the dashboard, and setup notes in plain words instead of environment variables ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* push notifications for the Sylo app can go through Postal Pigeon (opt-in with PIGEON_URL); Sylo's own relay stays the default ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* Quote board module (beta): save messages with the message menu or /quote, with an optional public page that never shows quotes from private channels ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* strict content security policy and HSTS on every page, with CSP_REPORT_ONLY=1 as a fallback for self-hosters ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* Suggestions module (beta) with voting, staff decisions with a reason, a log channel and an anonymous mode ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* Temporary roles module (beta): give a role for a set time and Sylo removes it, also after a restart ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* the session secret is generated once and kept in the data folder, so sign-ins and verify/appeal links survive restarts ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* turn a module on or off from its own settings page ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* YouTube alerts arrive within seconds through WebSub when Sylo has a public https address; polling stays as the fallback ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+
+
+### Bug Fixes
+
+* App Store Connect no longer logs an error on every check when TestFlight feedback isn't available ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* auto-moderation immunity roles are saved together with the rest of the settings ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* embed and message editors show all lines of saved text, and embed titles are bold in the preview ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* existing reminders keep their pings after the upgrade ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* hardening of reminders, public pages, data deletion, error reports and outgoing requests ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* malformed or oversized requests no longer raise error alerts ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* on Fluxer, !suggest takes plain text, e.g. !suggest Add a pixel-art channel ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* quotes from private channels stay out of other channels, and the quote board follows thread privacy ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* the public leaderboard shows progress to the next level clearly; the appeal form and its error pages are easier to follow ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* the verify page names the server, follows your theme and enables Verify only once the check has passed ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+* unknown addresses show a Sylo "Page not found" page instead of a bare error ([ad20325](https://github.com/Ferdinand99/Sylo/commit/ad2032511546bac520a9368c18d20fb8d62f9289))
+
 ## [4.10.0](https://github.com/Ferdinand99/Sylo/compare/v4.9.1...v4.10.0) (2026-10-28)
 
 
