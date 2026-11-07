@@ -150,7 +150,7 @@ You don't have to run anything yourself. Sylo is a Discord-verified bot:
 
 Questions and announcements live on the
 [community Discord](https://discord.gg/GAzR9k5hhS). Service status:
-[status.sylobot.com](https://status.sylobot.com/status/default).
+[status.sylobot.com](https://status.sylobot.com/).
 
 ## Self-host
 
