@@ -19,6 +19,7 @@ const ROUTES = new Set([
   'appeal',
   'auth',
   'commands',
+  'events',
   'guilds',
   'lb',
   'leaderboard',
@@ -42,7 +43,12 @@ function bucket(path) {
 export function requestLog(req, res, next) {
   // Capture up front: sub-routers rewrite req.url while they run, so reading the
   // path from the res 'finish' handler can see a stale/stripped value.
-  const path = (req.originalUrl || req.url).split('?', 1)[0];
+  // The GitHub webhook's URL token is a credential: never written to a log. Neither is the address
+  // of an event page: whoever has it can open a public page, and a private page is only a sign-in away.
+  const path = (req.originalUrl || req.url)
+    .split('?', 1)[0]
+    .replace(/^(\/webhooks\/github\/)[^/]+/i, '$1:token')
+    .replace(/^(\/events\/)[^/]+/i, '$1:token');
   if (SKIP.test(path)) return next();
   const method = req.method;
   const started = process.hrtime.bigint();

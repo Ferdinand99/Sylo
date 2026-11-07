@@ -14,7 +14,7 @@ import UserNotifications
         // never flashes the sign-in screen.
         session.start()
         _session = State(initialValue: session)
-        let push = PushCoordinator(session: session)
+        let push = PushCoordinator.live(session: session)
         // Before launch finishes, so the tap on a notification that launched the app arrives.
         UNUserNotificationCenter.current().delegate = push
         _push = State(initialValue: push)
@@ -25,6 +25,8 @@ import UserNotifications
             RootView()
                 .environment(session)
                 .environment(push)
+                // Signed in, out or to another server: Pigeon handles follow the sign-in.
+                .onChange(of: session.phase, initial: true) { Task { await push.sessionChanged() } }
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             guard phase == .active else { return }

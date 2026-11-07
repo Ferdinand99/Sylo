@@ -5,7 +5,8 @@
 /** @param {'discord' | 'fluxer'} platform */
 export function commandText(platform, text, prefix) {
   if (platform === 'discord') return text;
-  return text.replace(/^\/(?=[a-z])/, prefix);
+  // A function, so `$` in the prefix is not read as a replacement pattern (`$$`, `$&`).
+  return text.replace(/^\/(?=[a-z])/, () => prefix);
 }
 
 /**

@@ -67,7 +67,7 @@ At least one platform must be configured.
 | `FLUXER_TOKEN`            | —                               | Optional: bot token for [Fluxer](fluxer.md). Setting it runs Sylo on Fluxer too (experimental) |
 | `FLUXER_CLIENT_ID`        | —                               | Fluxer application id (**required** with `FLUXER_TOKEN`) |
 | `FLUXER_WEB_URL`          | hosted Fluxer                   | Web app origin of a self-hosted Fluxer instance, e.g. `https://chat.example.com` |
-| `COMMAND_PREFIX`          | `!`                             | Chat prefix for commands on Fluxer, which has no slash commands (1–5 characters) |
+| `COMMAND_PREFIX`          | `!`                             | Default chat prefix for commands on Fluxer, which has no slash commands (1–5 characters); each server can set its own in Settings |
 | `APPLE_KEY_ID`            | —                               | Optional: App Store Connect API key id for the owner-only [App Store Connect module](modules/apple-connect.md) |
 | `APPLE_ISSUER_ID`         | —                               | Issuer id of a team API key (leave unset for an individual key) |
 | `APPLE_PRIVATE_KEY`       | —                               | The key's `.p8` file: PEM text, PEM on one line with literal `\n`, or base64 |
@@ -83,13 +83,14 @@ At least one platform must be configured.
 | `FLUXER_OWNER_IDS`        | —                               | Your Fluxer user id(s); the Fluxer counterpart of `OWNER_IDS` |
 | `WEB_PORT`                | `3000`                          | Dashboard HTTP port |
 | `DISCORD_CLIENT_SECRET`   | —                               | Set to require "Log in with Discord" on the dashboard |
-| `SESSION_SECRET`          | random                          | Signs the session cookie; pin it so logins survive restarts |
+| `SESSION_SECRET`          | generated, kept in `<data>/session-secret` | Signs the session cookie and the verify/appeal links. Optional: Sylo makes one and keeps it next to the database, so logins survive restarts. Set it only to use your own value; when set, it wins over the file |
+| `CSP_REPORT_ONLY`         | `0`                             | `1` reports the dashboard's Content-Security-Policy instead of enforcing it. A way back if a custom setup trips the policy; see [Upgrading to 5.0](#upgrading-to-50) |
 | `OWNER_IDS`               | —                               | Your Discord user id(s), comma/space-separated. Gates `/health` to just these accounts when `DISCORD_CLIENT_SECRET` is set — everyone else is blocked, not just non-admins |
 | `DEV_LOG_CHANNEL_ID`      | —                               | A channel id Sylo posts its own errors to — a "dev-log", separate from any per-guild logging/modlog channel. Optional: errors and warnings are stored either way, and the [Sylo app](mobile-app.md#health-and-the-dev-log-operators) shows them and can notify operators |
 | `DASHBOARD_URL`           | derived                         | Public dashboard URL; needed behind a reverse proxy and for verification-captcha / ban-appeal links |
 | `TURNSTILE_SITE_KEY`      | —                               | Cloudflare Turnstile site key — enables the Verification captcha mode |
 | `TURNSTILE_SECRET_KEY`    | —                               | Cloudflare Turnstile secret key (pair with the site key) |
-| `DASHBOARD_ERROR_DSN`     | —                               | Optional: send the dashboard's browser errors (V1 and V2) to your own Sentry or [Keen Kestrel](https://github.com/Ferdinand99/Keen-Kestrel), with this DSN. Unset (default): nothing is sent anywhere. If you set it, your privacy policy should say so |
+| `DASHBOARD_ERROR_DSN`     | —                               | Optional: send the dashboard's browser errors to your own Sentry or [Keen Kestrel](https://github.com/Ferdinand99/Keen-Kestrel), with this DSN. Unset (default): nothing is sent anywhere. If you set it, your privacy policy should say so |
 | `DASHBOARD_VISIT_STATS`   | `false`                         | With a Keen Kestrel `DASHBOARD_ERROR_DSN`: also count dashboard page views with its `k.js` (no cookies, no stored IP addresses) |
 | `BOT_ERROR_DSN`           | —                               | Optional: send the bot's errors (everything it logs as an error) to your own Sentry or Keen Kestrel. Unset (default): nothing is sent |
 | `ERROR_ENVIRONMENT`       | `production`                    | The environment name on the bot's and the dashboard's error reports |
@@ -114,7 +115,7 @@ Both privileged intents default **on**. Several modules need them:
 | Intent | Env var | Modules that need it |
 |---|---|---|
 | Server Members | `INTENT_GUILD_MEMBERS` | logging, roles, verification, welcome, leveling, server-stats, invite-tracker |
-| Message Content | `INTENT_MESSAGE_CONTENT` | logging, autoresponder, counting, automod, starboard |
+| Message Content | `INTENT_MESSAGE_CONTENT` | logging, autoresponder, counting, automod, starboard; the Quote board's `/quote save <message link>` (its "Save quote" menu works without) |
 
 Enable them on the Discord Developer Portal (**Bot → Privileged Gateway
 Intents**). If you don't want those modules, set the env var to `false` and Sylo
@@ -163,7 +164,9 @@ To require a login:
 2. Same page → **Redirects** → add `<DASHBOARD_URL>/auth/discord/callback`
    (e.g. `http://192.168.1.10:3000/auth/discord/callback`, or the public HTTPS
    URL behind a proxy).
-3. Set a long random `SESSION_SECRET`.
+3. Nothing to do for `SESSION_SECRET`: Sylo generates one and keeps it in
+   `<data>/session-secret` (back it up with the data folder). Set `SESSION_SECRET`
+   yourself only if you want to choose the value.
 4. Set `OWNER_IDS` to your own Discord user id — without it, `/health` (status,
    error log, database backup/restore) is reachable by no one, not even you.
 
@@ -227,6 +230,33 @@ private address, such as another container). `X-Forwarded-For` from any other
 address is ignored, so a client that reaches Sylo's port directly cannot choose
 its own IP. For another setup, set `TRUST_PROXY`: `false`, a hop count, or the
 proxy's addresses or subnets (comma-separated, as Express takes them).
+
+### Set `TRUST_PROXY` explicitly
+
+The default (one hop, from a private or loopback peer) is a convenience, and it
+has a limit you should know about. A "private peer" includes the Docker bridge.
+If you publish Sylo's port straight from Docker (`-p 3000:3000`) with no reverse
+proxy in front, every outside client reaches Sylo from the bridge gateway (an
+`172.x` address), which counts as a trusted proxy. Any client can then send its
+own `X-Forwarded-For` header and pick the address Sylo rate limits it under, so
+the per-client limits on sign-in, OAuth, the mobile app token exchange and the
+push relay can be walked around. Nothing else about authentication changes: a
+session or app token is still needed for the dashboard.
+
+Sylo logs a warning at startup when it runs with this default and a public
+`https` `DASHBOARD_URL`. To close the gap, do one of these:
+
+- Set `TRUST_PROXY` to your proxy's address or subnet, for example
+  `TRUST_PROXY=172.18.0.5` or `TRUST_PROXY=loopback`, so only that peer is
+  believed. A hop count (`TRUST_PROXY=1`) is also explicit, but it trusts whatever
+  connects, so it only fits when Sylo is reachable through the proxy alone.
+- Publish the port on the loopback address only when the proxy runs on the same
+  host: `ports: ["127.0.0.1:3000:3000"]` in `docker-compose.yml`.
+- With no proxy at all, set `TRUST_PROXY=false`. Sylo then uses the connection's
+  own address and ignores `X-Forwarded-For`.
+
+The shipped default is not changed, because installs with a reverse proxy in a
+neighbouring container rely on it.
 
 Without a login (open mode), the dashboard only answers on local names and
 addresses (`localhost`, an IP address, a name without dots, `.local`, `.lan`,
@@ -376,7 +406,7 @@ docker compose up -d
 ```bash
 git pull
 npm install
-npm run build:v2   # the dashboard (web-v2/dist); without it Sylo falls back to the classic dashboard
+npm run build:v2   # the dashboard (web-v2/dist); without it /v2 shows only a short note
 # restart the process / container
 ```
 
@@ -388,6 +418,51 @@ checkout` the previous tag, then restore the matching `sylo-premigrate-*` (or a
 dated) snapshot from `data/backups/` over `data/sylo.db`. A newer database can't
 be opened by an older build — the schema check refuses it — so always roll the
 database back together with the code.
+
+### Upgrading to 5.0
+
+Sylo 5.0 removes the classic dashboard. There are no database steps: just upgrade as
+described above.
+
+- **The classic dashboard is gone.** The React dashboard (V2) is the only one. The `/?classic=1`
+  switch, the "Back to classic dashboard" link and the old server-rendered pages no longer exist.
+  The public pages (login, verify, appeal, leaderboard, quotes) look like the dashboard now.
+- **Reminders keep their pings.** A server that already has reminders keeps pinging `@everyone`, `@here` and roles as before; new servers start with pings off and the owner or Manage Server can change it on the Reminders page.
+- **Old bookmarks and Discord links still work.** Old addresses such as `/guilds/<id>/…`,
+  `/account`, `/settings`, `/stats` and `/commands` redirect to the matching page in the dashboard.
+- **From source, run `npm run build:v2`** after `npm install`. The Docker image already contains the
+  build. Without it `/v2` shows only a short plain-text note.
+- **The session secret now lives in a file.** If `SESSION_SECRET` is not set, Sylo creates
+  `<data>/session-secret` on first start (next to the database, for example `data/session-secret`)
+  and keeps using it, so logins survive restarts. Back it up with the data folder; if it is lost,
+  everyone just has to log in again. A `SESSION_SECRET` in the environment still wins over the file.
+  **The `data/` folder must be a volume** (a Docker volume or bind mount, for example
+  `./data:/app/data`), also when you use Postgres: if it lives only inside the container, the secret
+  is lost whenever the container is replaced and everyone is logged out. On Linux, Sylo logs a
+  warning at start-up when it can see that a Postgres install keeps the secret in a folder that is not
+  a mounted volume; setting `SESSION_SECRET` is the other way out.
+- **A strict Content-Security-Policy and HSTS are on.** The dashboard now sends an enforcing
+  `Content-Security-Policy` (scripts, styles and connections from Sylo itself, plus the error-reporting
+  host and Cloudflare Turnstile where you configured them), and `Strict-Transport-Security` when
+  `DASHBOARD_URL` is https. Normally you notice nothing. If a custom setup breaks (for example a proxy
+  that injects its own scripts into the page), set
+  `CSP_REPORT_ONLY=1` and restart: the browser then only logs violations to its console instead of
+  blocking them. Use it to find what is being blocked, not as a permanent setting; the policy is
+  there to protect the logged-in admin session.
+- **YouTube alerts use push when Sylo has a public address.** With `DASHBOARD_URL` set to a public
+  `https` address (not an IP address, `localhost` or a LAN name), Sylo subscribes to YouTube's WebSub
+  hub and announces new videos within seconds. YouTube must be able to reach
+  `<DASHBOARD_URL>/webhooks/youtube/<channel id>`, so the reverse proxy has to forward it and keep the
+  `Host` header. Otherwise Sylo polls every few minutes, as before. Nothing to configure either way.
+  Sylo only accepts the hub's verification request for a subscription it asked for itself in the last
+  10 minutes, and never keeps a lease longer than the 5 days it asked for.
+- **Five command names are now built in: `suggest`, `suggestion`, `quote`, `event` and
+  `temprole`.** A built-in command always wins over a custom command of the same name. If a server
+  made a custom command with one of these names in 4.10, Sylo no longer registers it after the
+  upgrade, logs a warning (one per server and command), and the Custom commands page marks it
+  "Rename needed". Rename the command there and it works again. This is checked against the commands
+  Sylo actually has, so it also covers any built-in added later.
+- **No database steps.** Migrations run on start as always, with the usual pre-migration snapshot.
 
 ### Upgrading to 4.10
 

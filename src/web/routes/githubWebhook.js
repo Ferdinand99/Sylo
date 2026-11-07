@@ -106,4 +106,10 @@ router.post(
   })
 );
 
+// A body over the cap: 413, not the dashboard's generic 500.
+router.use((err, req, res, next) => {
+  if (err?.type === 'entity.too.large') return res.status(413).end();
+  next(err);
+});
+
 export default router;

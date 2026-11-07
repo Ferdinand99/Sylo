@@ -9,13 +9,26 @@ import {
 } from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { isDirty } from '../components/formEqual.js';
 import { useUnsavedChangesGuard } from '../components/useUnsavedChangesGuard.js';
 import EmbedCard, { EmbedToolbar, pickImage, newKey } from '../components/EmbedCard.jsx';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { tokensFor } from '../placeholders.js';
+
+// One line on what each "Add element" option gives you, by preset id; banners share one text.
+const PRESET_HINTS = {
+  'advanced-embed': 'An empty card to fill in yourself.',
+  'welcome-embed': 'A card with a friendly welcome text.',
+  'rules-embed': 'A numbered list of rules to edit.',
+  'invite-embed': 'A card asking members to invite friends.',
+  'mods-embed': 'A card on who to ask for help.',
+  'links-embed': 'A list of your website and social links.',
+};
+const BANNER_HINT = 'A large picture with an optional caption.';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
-const MAX_ITEMS = 10;
 
 function normItem(e = {}) {
   return {
@@ -70,6 +83,7 @@ function formToSpec(form) {
 // A "banner" element is just a big image + caption — everything else in
 // normaliseEmbedSpec (title/author/fields/footer/…) stays blank for it.
 function BannerCard({ item, onChange, toolbar }) {
+  const embedLimits = useModuleLimits('_embed');
   return (
     <div className="v2-embed-preview">
       <EmbedToolbar toolbar={toolbar} />
@@ -85,7 +99,7 @@ function BannerCard({ item, onChange, toolbar }) {
         <input
           className="v2-embed-input"
           placeholder="Caption (optional)"
-          maxLength={4096}
+          maxLength={limitOf(embedLimits, 'description').maxLength}
           value={item.description}
           onChange={(e) => onChange({ ...item, description: e.target.value })}
         />
@@ -96,6 +110,7 @@ function BannerCard({ item, onChange, toolbar }) {
 
 export default function WelcomeChannel() {
   const { guildId } = useParams();
+  const limits = useModuleLimits('welcome-channel');
   const [state, setState] = useState({ loading: true, data: null, error: null });
   const [form, setForm] = useState(null);
   const [channelId, setChannelId] = useState('');
@@ -123,13 +138,16 @@ export default function WelcomeChannel() {
 
   useEffect(() => {
     load();
+    // Reload when the server changes; `load` is re-created every render and reads guildId itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guildId]);
 
   if (state.error) return <LoadError error={state.error} what="Welcome channel settings" />;
   if (state.loading || !form) return <p className="v2-state">Loading…</p>;
 
   const d = state.data;
-  const full = form.items.length >= MAX_ITEMS;
+  const maxItems = limitOf(limits, 'spec.embeds').maxItems ?? Infinity;
+  const full = form.items.length >= maxItems;
 
   const addPreset = (id) => {
     if (full) return;
@@ -142,7 +160,7 @@ export default function WelcomeChannel() {
   const removeItem = (i) => setForm((f) => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
   const duplicateItem = (i) =>
     setForm((f) => {
-      if (f.items.length >= MAX_ITEMS) return f;
+      if (f.items.length >= maxItems) return f;
       const copy = normItem({ ...f.items[i], fields: f.items[i].fields.map((field) => ({ ...field })) });
       const items = [...f.items];
       items.splice(i + 1, 0, copy);
@@ -225,21 +243,16 @@ export default function WelcomeChannel() {
 
   return (
     <form onSubmit={(e) => e.preventDefault()}>
-      <div className="v2-page-head">
-        <h1 className="v2-section-title">Welcome channel</h1>
-        <button type="button" className="v2-btn-ghost" onClick={resetAll}>
-          ↺ Reset to default
-        </button>
-      </div>
+      <h1 className="v2-section-title">Welcome channel</h1>
       <p className="v2-field-hint">
-        Build one rich message for a dedicated <strong>read-only</strong> channel. Placeholders:{' '}
-        <code>{'{server}'}</code>, <code>{'{memberCount}'}</code>.
+        Build one rich message for a dedicated <strong>read-only</strong> channel. Placeholders such as the
+        server name work in the message text and inside the embeds.
       </p>
 
-      <div className="v2-field-row v2-section-gap">
-        <div className="v2-field" style={{ flex: 1, marginBottom: 0 }}>
-          <label>Channel</label>
-          <select value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+      <div className="v2-field-row v2-wc-channel v2-section-gap">
+        <div className="v2-field">
+          <label htmlFor="wc-channel">Channel</label>
+          <select id="wc-channel" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
             <option value="">— select a channel —</option>
             {channels.map((c) => (
               <option key={c.id} value={c.id}>
@@ -254,14 +267,22 @@ export default function WelcomeChannel() {
       </div>
 
       <div className="v2-field">
-        <label>
+        <label htmlFor="wc-content">
           Message text <span className="v2-field-hint">— optional, shown above the embeds</span>
         </label>
         <textarea
+          id="wc-content"
           rows={2}
+          maxLength={limitOf(limits, 'spec.content').maxLength}
           placeholder="Welcome to {server}!"
           value={form.content}
           onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+        />
+        <PlaceholderHint
+          fieldId="wc-content"
+          tokens={tokensFor('welcomeChannel')}
+          value={form.content}
+          onChange={(content) => setForm((f) => ({ ...f, content }))}
         />
       </div>
 
@@ -298,22 +319,30 @@ export default function WelcomeChannel() {
 
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Add element</h2>
-        <div className="v2-field-row" style={{ flexWrap: 'wrap' }}>
+        <p className="v2-field-hint">
+          An <strong>embed</strong> is a card with a title, text and fields; a <strong>banner</strong> is a
+          large picture. {Number.isFinite(maxItems) ? `A message can hold up to ${maxItems} elements. ` : ''}
+          {full ? 'This message is full — remove an element to add another.' : ''}
+        </p>
+        <div className="v2-wc-presets">
           {d.presets.map((p) => (
-            <button
-              type="button"
-              key={p.id}
-              className="v2-btn-ghost"
-              disabled={full}
-              onClick={() => addPreset(p.id)}
-            >
-              {p.label}
-            </button>
+            <div className="v2-wc-preset" key={p.id}>
+              <button type="button" className="v2-btn-ghost" disabled={full} onClick={() => addPreset(p.id)}>
+                {p.label}
+              </button>
+              <span className="v2-field-hint">
+                {PRESET_HINTS[p.id] ?? (p.kind === 'banner' ? BANNER_HINT : '')}
+              </span>
+            </div>
           ))}
         </div>
       </div>
 
-      <div className="v2-composer-actions v2-section-gap">
+      <p className="v2-field-hint v2-section-gap">
+        <strong>Save draft</strong> keeps your work here without posting anything.{' '}
+        <strong>Publish to channel</strong> posts the message, or updates it if it is already posted.
+      </p>
+      <div className="v2-composer-actions v2-section-gap-sm">
         <span className="v2-composer-status" aria-live="polite">
           {dirty ? 'Unsaved changes' : ''}
         </span>
@@ -333,6 +362,14 @@ export default function WelcomeChannel() {
             Remove published message
           </button>
         ) : null}
+      </div>
+      <div className="v2-wc-reset">
+        <button type="button" className="v2-btn-ghost" onClick={resetAll}>
+          Reset to default
+        </button>
+        <span className="v2-field-hint">
+          Clears the editor; nothing changes in the channel until you save or publish.
+        </span>
       </div>
     </form>
   );

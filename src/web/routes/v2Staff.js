@@ -1,12 +1,10 @@
-// V2 JSON API for the staff pages that used to exist only in V1: the ticket
-// inbox, ban-appeal review, per-command limits, and the moderation hub (cases,
-// bans, channel locks, warnings). Same functions and rules as V1's
-// guilds.js / guildTickets.js, answering with JSON instead of redirects.
+// JSON API for the staff pages: the ticket inbox, ban-appeal review, per-command limits, and
+// the moderation hub (cases, bans, channel locks, warnings).
 //
 // Two routers, because they sit behind different guards:
 //   ticketsRouter  mounted at /guilds/:guildId/tickets BEFORE the admin guard in
 //                  v2Api.js — staff-role holders may use tickets without being
-//                  server admins (same rule as V1, see ticketAccess.js).
+//                  server admins (see ticketAccess.js).
 //   staffRouter    mounted at /guilds/:guildId AFTER the admin guard.
 import { clientOfGuild, primaryClient, rawGuildId } from '../../platform/platformOf.js';
 import { Router } from 'express';
@@ -48,6 +46,8 @@ import { lockChannel, unlockChannel, lockPreflight } from '../../bot/lib/channel
 import { formatDuration } from '../../bot/lib/duration.js';
 
 const BAN_DISPLAY_LIMIT = 200;
+// The channels a lockdown covers: the same list as /lockdown and the dashboard's lock-all.
+const LOCKDOWN_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildForum];
 const WEB_MODERATOR = 'web';
 
 const webModeratorId = (req, guildKeyArg) => actingUserId(req, guildKeyArg, WEB_MODERATOR);
@@ -227,6 +227,9 @@ staffRouter.get(
       decisionReason: a.decision_reason,
       ago: timeAgo(a.created_at),
       decidedAgo: a.decided_at ? timeAgo(a.decided_at) : null,
+      // Epoch milliseconds, so the dashboard can write the date in its own format.
+      at: Number(a.created_at),
+      decidedAt: a.decided_at ? Number(a.decided_at) : null,
     }));
     res.json({
       appeals,
@@ -348,6 +351,7 @@ staffRouter.get(
       reason: c.reason,
       detail: c.detail,
       ago: timeAgo(c.created_at),
+      at: Number(c.created_at),
     }));
 
     let bans = [];
@@ -375,6 +379,7 @@ staffRouter.get(
       lockedBy: r.locked_by,
       lockdown: r.lockdown === 1,
       ago: timeAgo(r.locked_at),
+      at: Number(r.locked_at),
     }));
     const tbRows = await guildTempBans(guild.id);
     const tbTags = await resolveUserTags(
@@ -438,7 +443,7 @@ staffRouter.post(
     const moderatorTag = moderatorDisplayName(req);
     let locked = 0;
     for (const channel of guild.channels.cache.values()) {
-      if (channel.type !== ChannelType.GuildText) continue;
+      if (!LOCKDOWN_TYPES.includes(channel.type)) continue;
       if ((await isChannelLocked(guild.id, channel.id)) || lockPreflight(channel)) continue;
       try {
         await lockChannel(channel, { moderatorTag, lockdown: true });

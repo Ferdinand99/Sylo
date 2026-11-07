@@ -1,5 +1,4 @@
-// The server's custom emojis, for the reaction-role emoji picker. Shared by the classic
-// route (GET /guilds/:id/emojis) and the new dashboard's (GET /api/v2/guilds/:id/emojis).
+// The server's custom emojis, for the reaction-role emoji picker (GET /api/v2/guilds/:id/emojis).
 
 /**
  * @param {{ emojis?: { cache?: Map<string, any> } }} guild

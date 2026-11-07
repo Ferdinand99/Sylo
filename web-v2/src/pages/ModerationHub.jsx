@@ -19,10 +19,15 @@ import Automod from '../moduleForms/Automod.jsx';
 import ModerationSettings from '../moduleForms/Moderation.jsx';
 import Logging from '../moduleForms/Logging.jsx';
 import Commands from './Commands.jsx';
+import Badge, { caseTone } from '../components/Badge.jsx';
 import Meta, { plural } from '../components/Meta.jsx';
+import TabRow from '../components/TabRow.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
+import Time from '../components/Time.jsx';
+import { PlatformContext } from '../platformContext.jsx';
+import { usePlatformInfo } from '../usePlatformInfo.js';
 
 const SUB_TABS = [
   ['cases', 'Cases'],
@@ -80,32 +85,40 @@ function WarnPanel({ guildId, run, busy }) {
   return (
     <form className="v2-rule-card" onSubmit={warn}>
       <h2 className="v2-group-title">Warn a member</h2>
-      <div className="v2-field-row v2-wrap-row">
-        <input
-          type="text"
-          aria-label="User ID or mention"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          placeholder="User ID or @mention"
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
-          required
-        />
-        <input
-          type="text"
-          aria-label="Reason"
-          placeholder="Reason"
-          maxLength={400}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
+      <div className="v2-field-row v2-wrap-row v2-warn-fields">
+        <div className="v2-field">
+          <label htmlFor="warn-member">Member</label>
+          <input
+            id="warn-member"
+            type="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="User ID or @mention"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            required
+          />
+        </div>
+        <div className="v2-field">
+          <label htmlFor="warn-reason">
+            Reason <span className="v2-field-hint">— shown to the member</span>
+          </label>
+          <input
+            id="warn-reason"
+            type="text"
+            placeholder="Why they are being warned"
+            maxLength={400}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </div>
       </div>
       <div className="v2-field-row v2-wrap-row v2-section-gap-sm">
         <button type="submit" className="v2-btn-primary" disabled={busy || !reason.trim()}>
           Warn
         </button>
-        <button type="button" className="v2-btn-danger v2-btn-apart" disabled={busy} onClick={clear}>
+        <button type="button" className="v2-btn-danger-ghost v2-btn-apart" disabled={busy} onClick={clear}>
           Clear their warnings
         </button>
       </div>
@@ -132,8 +145,10 @@ function CaseRow({ c, guildId, run, busy }) {
         <h3 className="v2-break">
           <span className="v2-id">#{c.caseNumber}</span>
           {c.user}
-          <span className="v2-case-action">{c.action}</span>
-          {!c.active ? <span className="v2-case-action">deleted</span> : null}
+          <Badge tone={caseTone(c.action)} inline>
+            {c.action}
+          </Badge>
+          {!c.active ? <Badge inline>Deleted</Badge> : null}
         </h3>
         {editing ? (
           <div className="v2-field-row v2-wrap-row">
@@ -159,7 +174,14 @@ function CaseRow({ c, guildId, run, busy }) {
           </div>
         ) : (
           <p className="v2-case-reason v2-break">
-            <Meta items={[c.reason || 'No reason', c.detail, `by ${c.moderator}`, c.ago]} />
+            <Meta
+              items={[
+                c.reason || 'No reason',
+                c.detail,
+                `by ${c.moderator}`,
+                <Time key="t" value={c.at} relative fallback={c.ago} />,
+              ]}
+            />
           </p>
         )}
       </div>
@@ -170,7 +192,7 @@ function CaseRow({ c, guildId, run, busy }) {
           </button>
           <button
             type="button"
-            className={c.active ? 'v2-btn-danger' : 'v2-btn-ghost'}
+            className={c.active ? 'v2-btn-danger-ghost' : 'v2-btn-ghost'}
             disabled={busy}
             onClick={() =>
               run(
@@ -201,7 +223,7 @@ function InfractionsTab() {
     <>
       <WarnPanel guildId={guildId} run={run} busy={busy} />
 
-      <div className="v2-tabs" role="tablist">
+      <TabRow role="tablist" activeKey={tab}>
         {SUB_TABS.map(([key, label]) => (
           <button
             key={key}
@@ -214,7 +236,7 @@ function InfractionsTab() {
             {label}
           </button>
         ))}
-      </div>
+      </TabRow>
 
       {tab === 'cases' ? (
         data.cases.length ? (
@@ -341,7 +363,7 @@ function InfractionsTab() {
                         items={[
                           l.lockdown ? 'part of a lockdown' : 'locked on its own',
                           `by ${l.lockedBy}`,
-                          l.ago,
+                          <Time key="t" value={l.at} relative fallback={l.ago} />,
                         ]}
                       />
                     </p>
@@ -392,11 +414,13 @@ export default function ModerationHub() {
   const Content = TAB_CONTENT[active];
   const cards = (overview?.data?.groups ?? []).flatMap((g) => g.cards);
   const isOff = (moduleId) => moduleId && cards.find((c) => c.id === moduleId)?.enabled === false;
+  // The tabs hold module forms that word commands and capabilities for the server's platform.
+  const { info } = usePlatformInfo(guildId);
 
   return (
-    <>
+    <PlatformContext.Provider value={info}>
       <h1 className="v2-section-title">Moderation</h1>
-      <div className="v2-tabs v2-hub-tabs" role="tablist">
+      <TabRow className="v2-hub-tabs" role="tablist" activeKey={active} panelId="moderation-panel">
         {TABS.map(([key, label, moduleId]) => (
           <button
             key={key}
@@ -404,18 +428,18 @@ export default function ModerationHub() {
             role="tab"
             aria-selected={active === key}
             className={`v2-tab${active === key ? ' is-active' : ''}`}
-            onClick={() => navigate(`/guilds/${guildId}/moderation/${key}`)}
+            onClick={() => navigate(`/guilds/${guildId}/moderation/${key}`, { preventScrollReset: true })}
           >
             {label}
             {isOff(moduleId) ? <span className="v2-tab-off"> (off)</span> : null}
           </button>
         ))}
-      </div>
+      </TabRow>
       {/* Outside the keyed tab content, so the entrance plays on the first
           visit only — not again on a tab or server switch. */}
-      <Reveal className="v2-embedded">
+      <Reveal className="v2-embedded" id="moderation-panel" role="tabpanel">
         <Content key={guildId} />
       </Reveal>
-    </>
+    </PlatformContext.Provider>
   );
 }

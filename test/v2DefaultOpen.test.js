@@ -1,6 +1,5 @@
-// Open mode (no login configured, a synthetic "local admin"): the new dashboard is the default
-// there too, and its API lists servers and saves settings. The only way back to the classic
-// dashboard is /?classic=1, remembered in a cookie because open mode has no session.
+// Open mode (no login configured, a synthetic "local admin"): the dashboard (/v2) is the only one,
+// its API lists servers and saves settings, and the old addresses move to it.
 import { startWebApp } from './helpers/webApp.js';
 import { GID } from './helpers/fakeGuild.js';
 import test from 'node:test';
@@ -17,69 +16,32 @@ test.after(() => app.close());
 
 const html = { accept: 'text/html' };
 const json = { accept: 'application/json', 'content-type': 'application/json' };
-
-// A browser with a cookie jar that does not follow redirects.
-function openBrowser() {
-  const jar = new Map();
-  return async (path, init = {}) => {
-    const cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    const res = await fetch(app.base + path, {
-      redirect: 'manual',
-      ...init,
-      headers: { ...(init.headers ?? {}), cookie },
-    });
-    for (const line of res.headers.getSetCookie?.() ?? []) {
-      const [pair] = line.split(';');
-      const eq = pair.indexOf('=');
-      if (/expires=Thu, 01 Jan 1970/i.test(line)) jar.delete(pair.slice(0, eq));
-      else jar.set(pair.slice(0, eq), pair.slice(eq + 1));
-    }
-    return res;
-  };
-}
+const get = (path, headers = html) => fetch(app.base + path, { redirect: 'manual', headers });
 
 test('open mode: GET / goes to /v2', async () => {
-  const res = await openBrowser()('/', { headers: html });
+  const res = await get('/');
   assert.equal(res.status, 302);
   assert.equal(res.headers.get('location'), '/v2');
 });
 
-test('open mode: the saved dashboard preference does not matter', async () => {
-  const set = await fetch(`${app.base}/api/v2/prefs`, {
-    method: 'POST',
-    headers: json,
-    body: JSON.stringify({ dashboardVersion: 'v1' }),
-  });
-  assert.equal(set.status, 200);
-  const res = await openBrowser()('/', { headers: html });
+test('open mode: ?classic=1 goes to /v2 as well, there is no classic dashboard', async () => {
+  const res = await get('/?classic=1');
   assert.equal(res.headers.get('location'), '/v2');
 });
 
-test('open mode: old addresses open the new dashboard', async () => {
-  const get = openBrowser();
-  const res = await get(`/guilds/${GID}/tickets/3`, { headers: html });
+test('open mode: old addresses open the dashboard', async () => {
+  const res = await get(`/guilds/${GID}/tickets/3`);
+  assert.equal(res.status, 301);
   assert.equal(res.headers.get('location'), `/v2/guilds/${GID}/tickets/3`);
-  assert.equal((await get('/account', { headers: html })).headers.get('location'), '/v2/account');
+  assert.equal((await get('/account')).headers.get('location'), '/v2/account');
 });
 
-test('open mode: /?classic=1 stays classic until /v2 is opened again', async () => {
-  const get = openBrowser();
-  const classic = await get('/?classic=1', { headers: html });
-  assert.match(classic.headers.get('location'), /^\/guilds\/.+\/overview$/);
-  const home = await get('/', { headers: html });
-  assert.match(home.headers.get('location'), /^\/guilds\/.+\/overview$/, 'a later visit stays classic');
-  const page = await get(`/guilds/${GID}/settings`, { headers: html });
-  assert.equal(page.status, 200, 'a classic page is served, not redirected');
-  assert.match(await page.text(), /Sylo 5\.0/, 'with the retirement banner');
-  await get('/v2/', { headers: html });
-  assert.equal((await get('/', { headers: html })).headers.get('location'), '/v2');
-});
-
-test('open mode: without a V2 build / is the classic dashboard', async () => {
+test('open mode: without a V2 build /v2 answers a plain-text 503 that says how to build it', async () => {
   built = false;
   try {
-    const res = await openBrowser()('/', { headers: html });
-    assert.match(res.headers.get('location'), /^\/guilds\/.+\/overview$/);
+    const res = await get('/v2/guilds');
+    assert.equal(res.status, 503);
+    assert.match(await res.text(), /npm run build:v2/);
   } finally {
     built = true;
   }

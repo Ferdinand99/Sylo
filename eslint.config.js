@@ -4,6 +4,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import n from 'eslint-plugin-n';
 import prettier from 'eslint-config-prettier';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 export default [
   {
@@ -70,12 +71,12 @@ export default [
     },
   },
 
-  // Browser-side progressive-enhancement scripts.
+  // Browser-side scripts of the public pages (theme.js).
   {
     files: ['src/web/public/**/*.js'],
     languageOptions: {
       sourceType: 'script',
-      globals: { ...globals.browser, Alpine: 'readonly', htmx: 'readonly' },
+      globals: globals.browser,
     },
     rules: {
       'n/no-unsupported-features/node-builtins': 'off',
@@ -93,6 +94,42 @@ export default [
     rules: {
       'n/no-unsupported-features/node-builtins': 'off',
       'n/no-missing-import': 'off',
+    },
+  },
+
+  // React hooks: calling a hook conditionally breaks the app, so that is an error;
+  // a missing effect dependency is only a warning (useApiData deliberately takes a
+  // deps array, see web-v2/src/useApiData.js).
+  {
+    files: ['web-v2/src/**/*.{js,jsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: {
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+    },
+  },
+
+  // V2's own theme.js is a plain script (loaded from <head>), not a module.
+  {
+    files: ['web-v2/public/**/*.js'],
+    languageOptions: { sourceType: 'script' },
+  },
+
+  // V2 unit tests (Vitest, `globals: true` in web-v2/vitest.config.js).
+  {
+    files: ['web-v2/**/__tests__/**/*.{js,jsx}'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        vi: 'readonly',
+        beforeAll: 'readonly',
+        beforeEach: 'readonly',
+        afterAll: 'readonly',
+        afterEach: 'readonly',
+      },
     },
   },
 

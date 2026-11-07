@@ -16,6 +16,24 @@ import { plural } from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 
+// Plain names for the error sources that are not a module (a module's own name comes from the server).
+const SOURCE_LABELS = {
+  db: 'Database',
+  bot: 'Bot',
+  sylo: 'Sylo',
+  web: 'Dashboard',
+  auth: 'Sign-in',
+  fluxer: 'Fluxer connection',
+  push: 'Push notifications',
+  insights: 'Insights',
+  retention: 'Data retention',
+  stats: 'Game stats',
+  apple: 'App Store Connect',
+  components: 'Buttons and menus',
+};
+/** What to call an error's source: the module's name, a plain name for a system part, else the raw scope. */
+export const sourceLabel = (e) => e.source || SOURCE_LABELS[e.scope] || e.scope || 'Unscoped';
+
 function Sparkline({ history }) {
   if (!history || history.length < 2) return null;
   const w = 240;
@@ -77,8 +95,7 @@ export default function Health() {
   }, []);
 
   // After a restore is triggered, the process exits and restarts — poll
-  // /api/v2/health until it answers again, then reload. Mirrors V1's
-  // restoring.ejs, which does the same thing against GET /health.
+  // /api/v2/health until it answers again, then reload.
   useEffect(() => {
     if (!restoring) return undefined;
     const id = setInterval(() => {
@@ -217,7 +234,7 @@ export default function Health() {
 
       {notice ? <p className="v2-note">{notice}</p> : null}
 
-      <div className="v2-stat-strip">
+      <div className="v2-stat-strip v2-stat-strip-3 v2-stat-strip-stack v2-stat-strip-tight">
         <div className="v2-stat">
           <strong>{d.ready ? 'Online' : 'Offline'}</strong>
           <span>
@@ -240,10 +257,37 @@ export default function Health() {
         </div>
         <div className="v2-stat">
           <strong>{d.uptime}</strong>
-          <span>gateway ping {d.gatewayPing === null ? '—' : `${d.gatewayPing} ms`}</span>
-          <Sparkline history={d.pingHistory} />
+          <span>Uptime</span>
         </div>
       </div>
+      <div className="v2-stat v2-ping-card">
+        <div className="v2-ping-now">
+          <strong>{d.gatewayPing === null ? '—' : `${d.gatewayPing} ms`}</strong>
+          <span>Gateway ping</span>
+        </div>
+        {d.pingHistory?.length >= 2 ? (
+          <div className="v2-ping-graph">
+            <Sparkline history={d.pingHistory} />
+          </div>
+        ) : null}
+      </div>
+
+      {d.sessionSecret === 'generated-ephemeral' ? (
+        <div className="v2-group">
+          <h2 className="v2-group-title">Session secret</h2>
+          <div className="v2-list">
+            <div className="v2-row v2-row-stack">
+              <div className="v2-row-main">
+                <p className="v2-row-warn">
+                  Sylo could not save a session secret in its data folder, so this one is lost at the next
+                  restart. Everyone is logged out then, and verification and appeal links already sent stop
+                  working. Set SESSION_SECRET, or make the data folder writable.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="v2-group">
         <h2 className="v2-group-title">Dev-log channel</h2>
@@ -277,7 +321,9 @@ export default function Health() {
             {d.errors.map((e, i) => (
               <div className="v2-row" key={i}>
                 <div className="v2-row-main">
-                  <h3 className="v2-break">{e.scope || 'Unscoped'}</h3>
+                  <h3 className="v2-break" title={e.scope || undefined}>
+                    {sourceLabel(e)}
+                  </h3>
                   <p className="is-wrap v2-break" title={e.message}>
                     {e.message}
                   </p>
@@ -314,19 +360,21 @@ export default function Health() {
       <div className="v2-stat-strip v2-section-gap">
         <div className="v2-stat">
           <strong>{formatCount(d.stats.openTickets)}</strong>
-          <span>open · {plural(d.stats.ticketsTotal, 'ticket')} all-time</span>
+          <span>Open tickets</span>
+          <span className="v2-stat-caption">{plural(d.stats.ticketsTotal, 'ticket')} all-time</span>
         </div>
         <div className="v2-stat">
           <strong>{formatCount(d.stats.warningsTotal)}</strong>
-          <span>warnings · {formatCount(d.stats.warningsWeek)} in 7 days</span>
+          <span>Warnings</span>
+          <span className="v2-stat-caption">{formatCount(d.stats.warningsWeek)} in the last 7 days</span>
         </div>
         <div className="v2-stat">
           <strong>{formatCount(d.stats.composedTotal)}</strong>
-          <span>composed messages</span>
+          <span>Composed messages</span>
         </div>
         <div className="v2-stat">
           <strong>{formatCount(d.stats.cachedLookups)}</strong>
-          <span>cached stat lookups</span>
+          <span>Game stats cached</span>
         </div>
       </div>
 
@@ -388,9 +436,10 @@ export default function Health() {
             <button type="submit" className="v2-btn-ghost" disabled={busy || !fileName}>
               Import…
             </button>
+            {fileName ? null : <span className="v2-field-hint">Choose a file first.</span>}
           </form>
         </div>
-        <p className="v2-field-hint">
+        <p className="v2-field-hint v2-backup-help">
           Importing stores the file as a snapshot; you then Restore it. Restoring replaces the live database
           and restarts the bot (a <code>prerestore</code> snapshot is taken first).
         </p>
@@ -412,7 +461,7 @@ export default function Health() {
                 <div className="v2-row-actions">
                   <button
                     type="button"
-                    className="v2-btn-danger"
+                    className="v2-btn-danger-ghost"
                     onClick={() => onRestoreBackup(b.name)}
                     disabled={busy}
                   >
@@ -420,7 +469,7 @@ export default function Health() {
                   </button>
                   <button
                     type="button"
-                    className="v2-btn-danger"
+                    className="v2-btn-danger-ghost"
                     onClick={() => onDeleteBackup(b.name)}
                     disabled={busy}
                   >

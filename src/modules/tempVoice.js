@@ -11,19 +11,14 @@
 //     ignoredRoles: [], moderatorRoles: [],
 //     ownerPerms: { manageChannels, managePermissions, prioritySpeaker, moveMembers },
 //     textChannel: { enabled, restrictCommands, pinUsages, restrict } }
-import {
-  allClientsReady,
-  guildByKey,
-  guildKey,
-  guildSupports,
-  platformOfGuild,
-} from '../platform/platformOf.js';
+import { allClientsReady, guildByKey, guildKey, guildSupports } from '../platform/platformOf.js';
 import { createGuildChannel, deleteGuildChannel } from '../platform/channels.js';
-import { config } from '../config.js';
+import { guildCommandPrefix } from '../platform/commandPrefix.js';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { on } from './dispatch.js';
 import { getGuildModule } from '../db/modules.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 import {
   addTempChannel,
   removeTempChannel,
@@ -41,6 +36,17 @@ import {
 } from '../db/tempVoice.js';
 import { sweepMap } from '../lib/sweepMap.js';
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  hubs: { maxItems: 25 },
+  'hubs[].nameTemplate': { maxLength: 95 },
+  'hubs[].userLimit': { min: 0, max: 99 },
+  'hubs[].bitrate': { min: 0, max: 384 }, // kbps, 0 = server default
+  'hubs[].roleList': { maxItems: 25 },
+  'hubs[].ignoredRoles': { maxItems: 25 },
+  'hubs[].moderatorRoles': { maxItems: 25 },
+};
+
 const DEFAULT_NAME = "#{index} - {username}'s Channel";
 const SWEEP_MS = 60 * 1000;
 const CREATE_DEBOUNCE_MS = 3000;
@@ -52,8 +58,8 @@ const clampInt = (v, min, max, dflt) => {
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : dflt;
 };
 const id = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
-const idList = (v) =>
-  [...new Set((Array.isArray(v) ? v : []).filter((x) => /^\d{17,20}$/.test(x)))].slice(0, 25);
+const idList = (v, max) =>
+  [...new Set((Array.isArray(v) ? v : []).filter((x) => /^\d{17,20}$/.test(x)))].slice(0, max);
 const bool = (v) => Boolean(v);
 
 export const KEEPALIVE_OPTIONS = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -68,10 +74,10 @@ export function normaliseTempVoiceConfig(raw = {}) {
         categoryId: id(h.categoryId),
         nameTemplate:
           String(h.nameTemplate ?? '')
-            .slice(0, 95)
+            .slice(0, LIMITS['hubs[].nameTemplate'].maxLength)
             .trim() || DEFAULT_NAME,
-        userLimit: clampInt(h.userLimit, 0, 99, 0),
-        bitrate: clampInt(h.bitrate, 0, 384, 0), // kbps, 0 = server default
+        userLimit: clampInt(h.userLimit, LIMITS['hubs[].userLimit'].min, LIMITS['hubs[].userLimit'].max, 0),
+        bitrate: clampInt(h.bitrate, LIMITS['hubs[].bitrate'].min, LIMITS['hubs[].bitrate'].max, 0),
         keepAliveMinutes: KEEPALIVE_OPTIONS.includes(Math.trunc(Number(h.keepAliveMinutes)))
           ? Math.trunc(Number(h.keepAliveMinutes))
           : 0,
@@ -79,10 +85,10 @@ export function normaliseTempVoiceConfig(raw = {}) {
         syncCategory: bool(h.syncCategory),
         syncChannel: bool(h.syncChannel),
         roleMode: h.roleMode === 'deny' ? 'deny' : 'allow',
-        roleList: idList(h.roleList),
+        roleList: idList(h.roleList, LIMITS['hubs[].roleList'].maxItems),
         useRolesForAccess: bool(h.useRolesForAccess),
-        ignoredRoles: idList(h.ignoredRoles),
-        moderatorRoles: idList(h.moderatorRoles),
+        ignoredRoles: idList(h.ignoredRoles, LIMITS['hubs[].ignoredRoles'].maxItems),
+        moderatorRoles: idList(h.moderatorRoles, LIMITS['hubs[].moderatorRoles'].maxItems),
         ownerPerms: {
           manageChannels: h.ownerPerms?.manageChannels !== false,
           managePermissions: bool(h.ownerPerms?.managePermissions),
@@ -97,7 +103,7 @@ export function normaliseTempVoiceConfig(raw = {}) {
         },
       }))
       .filter((h) => h.hubChannelId)
-      .slice(0, 25),
+      .slice(0, LIMITS.hubs.maxItems),
   };
 }
 
@@ -243,7 +249,7 @@ async function handleJoin(guild, member, hub) {
   }
 
   // Commands are slash commands on Discord and prefix commands elsewhere.
-  const prefix = platformOfGuild(guild) === 'discord' ? '/' : config.commandPrefix;
+  const prefix = await guildCommandPrefix(guild);
   let textChannelId = null;
   if (hub.textChannel.enabled) {
     try {
@@ -406,11 +412,12 @@ export async function sweepTempChannels() {
   }
 }
 
-setInterval(
+every(
+  'temp-voice',
+  SWEEP_MS,
   () => sweepTempChannels().catch((e) => log.error('temp-voice', 'sweep:', e.message)),
-  SWEEP_MS
-).unref();
-setTimeout(() => sweepTempChannels().catch(() => {}), 30_000).unref();
+  { firstDelayMs: 30_000 }
+);
 
 // --- command helpers (used by bot/commands/voice-*.js) ---------------
 

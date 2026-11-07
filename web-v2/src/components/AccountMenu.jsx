@@ -82,7 +82,7 @@ export default function AccountMenu() {
     }
   }
 
-  const label = signedIn ? `Account menu for ${name}` : 'Menu';
+  const label = signedIn ? `Account menu for ${name}` : 'Help and links';
   return (
     <details className="v2-switch v2-acct" ref={detailsRef}>
       <summary aria-label={`${label}${unseen ? ' — new release' : ''}`}>
@@ -91,7 +91,7 @@ export default function AccountMenu() {
             initial(name)
           ) : (
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+              <path d="M5 12h.01M12 12h.01M19 12h.01" strokeLinecap="round" strokeWidth="3" />
             </svg>
           )}
           {unseen ? <span className="v2-acct-dot" /> : null}

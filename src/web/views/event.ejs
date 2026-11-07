@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title><%= event.title %> — <%= guild.name %></title>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/public.css" />
+  <script src="/event-time.js" defer></script>
+</head>
+<body>
+  <main class="lb-wrap">
+    <div class="pub-brand"><img src="/favicon.svg" alt="" width="28" height="28" /><span>Sylo</span></div>
+    <header class="lb-head">
+      <% if (guild.icon) { %><img class="lb-guild-icon" src="<%= guild.icon %>" alt="" /><% } %>
+      <div>
+        <h1 class="page-title"><%= event.title %></h1>
+        <p class="muted"><%= guild.name %> · Event</p>
+      </div>
+    </header>
+
+    <article class="card ev-card">
+      <p class="ev-status"><span class="ev-badge ev-<%= event.status %>"><%= event.statusLabel %></span></p>
+
+      <% if (event.image) { %>
+        <img class="ev-image" src="<%= event.image %>" alt="" loading="lazy" />
+      <% } %>
+
+      <dl class="ev-facts">
+        <div>
+          <dt>When</dt>
+          <dd><time class="ev-time" datetime="<%= event.start.iso %>"><%= event.start.text %></time></dd>
+        </div>
+        <% if (event.end) { %>
+          <div>
+            <dt>Ends</dt>
+            <dd><time class="ev-time" datetime="<%= event.end.iso %>"><%= event.end.text %></time></dd>
+          </div>
+        <% } %>
+        <% if (event.location) { %>
+          <div>
+            <dt>Where</dt>
+            <dd class="ev-text"><%= event.location %></dd>
+          </div>
+        <% } %>
+        <div>
+          <dt>Going</dt>
+          <dd><%= event.going %><% if (event.capacity) { %> of <%= event.capacity %> spot<%= event.capacity === 1 ? '' : 's' %><% if (event.full) { %> · Full<% } %><% } %></dd>
+        </div>
+        <div>
+          <dt>Maybe</dt>
+          <dd><%= event.maybe %></dd>
+        </div>
+      </dl>
+
+      <% if (event.description) { %>
+        <p class="ev-description ev-text"><%= event.description %></p>
+      <% } %>
+    </article>
+
+    <p class="lb-foot muted small">Powered by Sylo</p>
+  </main>
+</body>
+</html>

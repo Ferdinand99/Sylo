@@ -27,7 +27,10 @@ export default function Account() {
   if (loading || !data) return <p className="v2-state">Loading your account…</p>;
   if (data.open) {
     return (
-      <p className="v2-state">The dashboard is running without login, so there is no account to manage.</p>
+      <Reveal>
+        <h1 className="v2-section-title">Account</h1>
+        <p className="v2-state">The dashboard is running without login, so there is no account to manage.</p>
+      </Reveal>
     );
   }
 
@@ -101,7 +104,7 @@ export default function Account() {
                 {p.canDisconnect ? (
                   <button
                     type="button"
-                    className="v2-btn-danger"
+                    className="v2-btn-danger-ghost"
                     disabled={busy === p.platform}
                     onClick={() => disconnect(p.platform, p.label)}
                   >
@@ -138,7 +141,7 @@ export default function Account() {
               <p className="v2-muted">Last used {lastUsed(d.lastUsedAt)}</p>
               <button
                 type="button"
-                className="v2-btn-danger"
+                className="v2-btn-danger-ghost"
                 disabled={busy === d.id}
                 onClick={() => revoke(d)}
               >

@@ -9,6 +9,7 @@
 import { allClientsReady, guildByKey, guildKey } from '../platform/platformOf.js';
 import { on } from './dispatch.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 import { getCounting, advanceCount, resetCount } from '../db/counting.js';
 import {
   addCountingPenalty,
@@ -16,6 +17,37 @@ import {
   dueCountingPenalties,
   getCountingPenalty,
 } from '../db/countingPenalties.js';
+
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  penaltyMinutes: { min: 1, max: 10080 },
+  // the running count an admin can set by hand (POST …/counting/count)
+  count: { min: 0, max: 1e12 },
+};
+
+/** The count to store, or null when it is not a whole number inside the limits. */
+export function validCount(v) {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= LIMITS.count.min && n <= LIMITS.count.max ? n : null;
+}
+
+const idOrEmpty = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
+
+/** Coerce a submitted counting config into the canonical shape. */
+export function normaliseCountingConfig(raw = {}) {
+  const penaltyMinutes = Math.round(Number(raw.penaltyMinutes));
+  return {
+    channelId: idOrEmpty(raw.channelId),
+    allowSameUser: Boolean(raw.allowSameUser),
+    resetOnFail: Boolean(raw.resetOnFail),
+    react: Boolean(raw.react),
+    penaltyRoleId: idOrEmpty(raw.penaltyRoleId),
+    penaltyMinutes:
+      Number.isFinite(penaltyMinutes) && penaltyMinutes >= LIMITS.penaltyMinutes.min
+        ? Math.min(penaltyMinutes, LIMITS.penaltyMinutes.max)
+        : 15,
+  };
+}
 
 const OK = '✅';
 const BAD = '❌';
@@ -167,10 +199,9 @@ export async function releaseCountingPenalty(guild, userId) {
   return true;
 }
 
-const penaltyTimer = setInterval(async () => {
+every('counting', PENALTY_TICK_MS, async () => {
   if (!allClientsReady()) return;
   for (const row of await dueCountingPenalties(Date.now())) {
     restoreBench(row).catch((err) => log.error('module:counting', 'bench restore failed:', err.message));
   }
-}, PENALTY_TICK_MS);
-penaltyTimer.unref();
+});

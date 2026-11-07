@@ -1,3 +1,10 @@
+/** How to copy a member's ID in the platform's own app (Discord, or Fluxer). */
+export function copyIdHint(platform) {
+  return platform === 'fluxer'
+    ? "To copy an ID, turn on developer mode in Fluxer's settings, then right-click the member and choose Copy User ID."
+    : "To copy an ID, turn on Developer Mode in your Discord app's advanced settings, then right-click the member and choose Copy User ID.";
+}
+
 export function slugify(text) {
   return text
     .toLowerCase()
@@ -44,8 +51,7 @@ export function writeTheme(theme) {
   }
 }
 
-// Same key V1's header partial uses — dismissing an announcement in one
-// dashboard dismisses it in the other too, since it's the same browser.
+// Where a dismissed announcement is remembered in this browser.
 const DISMISSED_ANNOUNCEMENT_KEY = 'sylo:dismissedAnnouncement';
 
 export function readDismissedAnnouncement() {
@@ -157,4 +163,52 @@ export function markChangelogSeen() {
     // private mode: the dot just shows again next visit
   }
   window.dispatchEvent(new Event(CHANGELOG_SEEN_EVENT));
+}
+
+/** The title of a repeatable card, taken from what it holds ("#general", "ninja"); the old generic
+ *  word ("Board", "New streamer") while the card is still empty. Long text is cut for the title. */
+export function cardTitle(value, fallback, max = 60) {
+  const s = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return fallback;
+  return s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s;
+}
+
+/** "#general" for a channel id found in `channels` ([{id, name}]); `fallback` when none is picked. */
+export function channelTitle(channels, id, fallback) {
+  const name = id ? channels?.find((c) => c.id === id)?.name : '';
+  return name ? `#${name}` : fallback;
+}
+
+/** "example.com" from a feed URL (without "www."), or `fallback` when it isn't a web address. */
+export function hostOf(url, fallback) {
+  try {
+    const u = new URL(String(url ?? '').trim());
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return fallback;
+    const host = u.hostname.replace(/^www\./, '');
+    return host || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** "= 24 hours" style reading of a number of minutes, for fields that take minutes: the largest unit plus
+ *  one smaller ("90" -> "1 hour 30 minutes", "1500" -> "25 hours", "2880" -> "2 days", "3000" -> "2 days 2 hours").
+ *  Under two days it counts in hours, from two days up in days. A remainder that does not fit
+ *  those two units is not dropped silently: the text starts with "about". Empty under an hour. */
+export function minutesAsText(minutes) {
+  const n = Math.round(Number(minutes));
+  if (!Number.isFinite(n) || n < 60) return '';
+  const unit = (v, one) => `${v} ${one}${v === 1 ? '' : 's'}`;
+  if (n < 2880) {
+    const hours = Math.floor(n / 60);
+    const mins = n % 60;
+    return mins ? `${unit(hours, 'hour')} ${unit(mins, 'minute')}` : unit(hours, 'hour');
+  }
+  const days = Math.floor(n / 1440);
+  const hours = Math.floor((n % 1440) / 60);
+  const exact = n % 60 === 0;
+  const text = hours ? `${unit(days, 'day')} ${unit(hours, 'hour')}` : unit(days, 'day');
+  return exact ? text : `about ${text}`;
 }

@@ -136,7 +136,16 @@ private struct ServerSidebar: View {
                     ForEach(section.servers) { server in
                         HStack {
                             Label {
-                                Text(server.name)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(server.name)
+                                    if let subtitle = server.subtitle() {
+                                        Text(verbatim: subtitle)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
+                                    }
+                                }
                             } icon: {
                                 ServerIcon(url: server.iconURL, name: server.name)
                             }
@@ -193,7 +202,7 @@ private struct TicketCountBadge: View {
             Text(verbatim: "\(unread)")
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.onAccent)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 2)
                 .background(.tint, in: Capsule())

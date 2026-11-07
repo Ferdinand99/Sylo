@@ -1,8 +1,8 @@
 // Ids for the rows of a builder that lives inside a module's config (temp-voice hubs,
 // starboard boards). The normalisers fall back to the row's position for a row without an
 // id, so a row added in the new dashboard after an earlier one was removed could take over
-// that other row's id. The classic builders hand a new row the current time instead; this does
-// the same for a whole list at once, and also re-ids a row whose id is already used above it.
+// that other row's id. A new row gets the current time as its id; this does that for a whole
+// list at once, and also re-ids a row whose id is already used above it.
 
 /**
  * @param {unknown} rows  the rows as submitted

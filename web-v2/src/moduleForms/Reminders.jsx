@@ -7,11 +7,15 @@ import {
   deleteReminder,
   toggleReminder,
   testReminder,
+  setReminderPings,
 } from '../api.js';
 import { notify } from '../notify.js';
+import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
+import { describeTime } from '../formatTime.js';
 
 function msToLocalInput(ms) {
   if (!ms) return '';
@@ -22,7 +26,7 @@ function msToLocalInput(ms) {
 
 function scheduleLabel(r, schedulePresets, weekdays) {
   if (r.mode === 'single') {
-    return r.runAt ? `once, at ${new Date(r.runAt).toLocaleString()}` : 'once — no time set';
+    return r.runAt ? `once, ${describeTime(r.runAt).text}` : 'once — no time set';
   }
   const preset = schedulePresets.find(([mins]) => Number(mins) === r.intervalMinutes);
   const every = preset ? preset[1].toLowerCase() : `every ${r.intervalMinutes}m`;
@@ -50,6 +54,7 @@ function ReminderForm({
   onCancel,
   saving,
 }) {
+  const limits = useModuleLimits('reminders');
   const embed0 = initial.spec?.embeds?.[0] || null;
   const [name, setName] = useState(initial.name);
   const [channelId, setChannelId] = useState(initial.channelId);
@@ -121,7 +126,7 @@ function ReminderForm({
         </label>
         <input
           type="text"
-          maxLength={100}
+          maxLength={limitOf(limits, 'name').maxLength}
           placeholder="my new reminder"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -162,7 +167,7 @@ function ReminderForm({
         {msgType === 'text' ? (
           <textarea
             rows={3}
-            maxLength={2000}
+            maxLength={limitOf(limits, 'content').maxLength}
             placeholder="Hey, I'm a reminder!"
             value={content}
             onChange={(e) => setContent(e.target.value)}
@@ -172,6 +177,7 @@ function ReminderForm({
             spec={embedSpec}
             onChange={setEmbedSpec}
             content
+            limits={{ content: limitOf(limits, 'content') }}
             placeholders={{ content: 'Optional message above the embed…', title: 'Title' }}
           />
         )}
@@ -317,6 +323,8 @@ export default function Reminders() {
 
   useEffect(() => {
     load();
+    // Reload when the server changes; `load` is re-created every render and reads guildId itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guildId]);
 
   if (state.error) return <LoadError error={state.error} what="Reminders" />;
@@ -347,6 +355,15 @@ export default function Reminders() {
       notify(err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onPings(allowPings) {
+    try {
+      await setReminderPings(guildId, allowPings);
+      await load();
+    } catch (err) {
+      notify(err.message);
     }
   }
 
@@ -392,6 +409,24 @@ export default function Reminders() {
       </p>
 
       <div className="v2-group">
+        <h2 className="v2-group-title">Pings</h2>
+        <div className="v2-field-row">
+          <label className="v2-check">
+            <input
+              type="checkbox"
+              checked={d.allowPings === true}
+              onChange={(e) => onPings(e.target.checked)}
+            />
+            Let reminders ping @everyone, @here and roles
+          </label>
+        </div>
+        <p className="v2-field-hint">
+          When off, mentions in a reminder are shown but nobody is notified. It is off for new servers. Only
+          the server owner or someone with Manage Server can change this.
+        </p>
+      </div>
+
+      <div className="v2-group">
         <h2 className="v2-group-title">Your reminders ({d.reminders.length})</h2>
         {d.reminders.length === 0 ? (
           <p className="v2-note">None yet — create one below.</p>
@@ -400,12 +435,19 @@ export default function Reminders() {
             {d.reminders.map((r) => {
               const channel = d.channels.find((c) => c.id === r.channelId);
               return (
-                <div className="v2-row" key={r.id}>
+                <div className="v2-row v2-row-stack" key={r.id}>
                   <div className="v2-row-main">
-                    <h3>{r.name}</h3>
+                    <h3 className="v2-break">
+                      {r.name}
+                      <Badge tone={r.enabled ? 'success' : 'neutral'} inline>
+                        {r.enabled ? 'Active' : 'Paused'}
+                      </Badge>
+                    </h3>
                     <p>
                       #{channel ? channel.name : r.channelId} ·{' '}
-                      {scheduleLabel(r, d.schedulePresets, d.weekdays)}
+                      <span title={r.mode === 'single' && r.runAt ? describeTime(r.runAt).title : undefined}>
+                        {scheduleLabel(r, d.schedulePresets, d.weekdays)}
+                      </span>
                     </p>
                     {editingId === r.id ? (
                       <ReminderForm
@@ -417,21 +459,14 @@ export default function Reminders() {
                     ) : null}
                   </div>
                   {editingId === r.id ? null : (
-                    <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                      <span className={`v2-status-pill ${r.enabled ? 'completed' : 'pending'}`}>
-                        {r.enabled ? 'on' : 'off'}
-                      </span>
+                    <div className="v2-row-actions">
                       <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(r.id)}>
                         Edit
                       </button>
                       <button type="button" className="v2-btn-ghost" onClick={() => onToggle(r.id)}>
                         {r.enabled ? 'Pause' : 'Resume'}
                       </button>
-                      <button
-                        type="button"
-                        className="v2-btn-danger v2-danger-sep"
-                        onClick={() => onDelete(r.id)}
-                      >
+                      <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(r.id)}>
                         Delete
                       </button>
                     </div>

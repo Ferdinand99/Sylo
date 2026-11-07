@@ -1,6 +1,8 @@
 import LoadError from '../components/LoadError.jsx';
+import SetupCallout from '../components/SetupCallout.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 // One channel picker per alert kind; empty means the main channel.
 function ChannelPick({ value, onChange, channels }) {
@@ -25,6 +27,7 @@ const fromForm = (form) => {
 
 // Owner-only: the server refuses everyone else, so this page is only ever reached by the owner.
 export default function AppleConnect() {
+  const limits = useModuleLimits('apple-connect');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('apple-connect', {
     toForm,
     fromForm,
@@ -40,16 +43,20 @@ export default function AppleConnect() {
   return (
     <>
       <h1 className="v2-section-title">App Store Connect</h1>
-      <p className="v2-note">
+      <p className="v2-field-hint">
         Alerts from your Apple Developer account: an app version moving through review, builds and TestFlight,
         new reviews, tester feedback, and certificates about to expire. Checked about every 5 minutes. Only
         the Sylo owner can see this module.
       </p>
       {!data.appleEnabled ? (
-        <p className="v2-warn-text">
-          Set APPLE_KEY_ID and APPLE_PRIVATE_KEY (and APPLE_ISSUER_ID for a team key) on the bot for alerts to
-          fire. You can still configure them here.
-        </p>
+        <SetupCallout
+          what="App Store Connect alerts"
+          keys="an Apple API key"
+          vars={['APPLE_KEY_ID', 'APPLE_PRIVATE_KEY', 'APPLE_ISSUER_ID']}
+          where="the issuer ID is only needed for a team key"
+        >
+          You can set things up now; alerts start once the key is in.
+        </SetupCallout>
       ) : null}
 
       <form onSubmit={save} data-savebar>
@@ -97,6 +104,7 @@ export default function AppleConnect() {
           <textarea
             id="apple-apps"
             rows={2}
+            placeholder="e.g. 1234567890 (one per line). Leave empty for all apps."
             value={form.appsText}
             onChange={(e) => setForm((f) => ({ ...f, appsText: e.target.value }))}
           />
@@ -106,7 +114,7 @@ export default function AppleConnect() {
           Each alert can go to its own channel; leave it on main channel to use the one above.
         </p>
         <div className="v2-field">
-          <div className="v2-field-row">
+          <div className="v2-alert-row">
             <label className="v2-check">
               <input
                 type="checkbox"
@@ -121,7 +129,7 @@ export default function AppleConnect() {
               onChange={(channelId) => setKind('versionState', { channelId })}
             />
           </div>
-          <div className="v2-field-row">
+          <div className="v2-alert-row">
             <label className="v2-check">
               <input
                 type="checkbox"
@@ -136,7 +144,7 @@ export default function AppleConnect() {
               onChange={(channelId) => setKind('build', { channelId })}
             />
           </div>
-          <div className="v2-field-row">
+          <div className="v2-alert-row">
             <label className="v2-check">
               <input
                 type="checkbox"
@@ -151,7 +159,7 @@ export default function AppleConnect() {
               onChange={(channelId) => setKind('betaReview', { channelId })}
             />
           </div>
-          <div className="v2-field-row">
+          <div className="v2-alert-row">
             <label className="v2-check">
               <input
                 type="checkbox"
@@ -166,22 +174,23 @@ export default function AppleConnect() {
               onChange={(channelId) => setKind('feedback', { channelId })}
             />
           </div>
-          <div className="v2-field-row">
-            <label className="v2-check">
+          <div className="v2-alert-row">
+            <label className="v2-check v2-check-inline">
               <input
                 type="checkbox"
                 checked={ev.reviews.enabled}
                 onChange={(e) => setKind('reviews', { enabled: e.target.checked })}
               />
-              New customer reviews — only up to
+              <span>New customer reviews — only up to</span>
               <input
                 type="number"
-                min={1}
-                max={5}
+                className="v2-input-num"
+                min={limitOf(limits, 'events.reviews.maxStars').min}
+                max={limitOf(limits, 'events.reviews.maxStars').max}
                 value={ev.reviews.maxStars}
                 onChange={(e) => setKind('reviews', { maxStars: Number(e.target.value) })}
               />
-              stars
+              <span className="v2-nowrap">stars</span>
             </label>
             <ChannelPick
               channels={data.channels}
@@ -189,28 +198,32 @@ export default function AppleConnect() {
               onChange={(channelId) => setKind('reviews', { channelId })}
             />
           </div>
-          <div className="v2-field-row">
-            <label className="v2-check">
+          <div className="v2-alert-row">
+            <label className="v2-check v2-check-inline">
               <input
                 type="checkbox"
                 checked={ev.expiry.enabled}
                 onChange={(e) => setKind('expiry', { enabled: e.target.checked })}
               />
-              Certificates and profiles expiring — from
+              <span>Certificates and profiles expiring — from</span>
               <input
                 type="number"
-                min={1}
-                max={365}
+                className="v2-input-num"
+                min={limitOf(limits, 'events.expiry.days').min}
+                max={limitOf(limits, 'events.expiry.days').max}
                 value={ev.expiry.days}
                 onChange={(e) => setKind('expiry', { days: Number(e.target.value) })}
               />
-              days before (and at 7 and 1 days; needs a team API key)
+              <span className="v2-nowrap">days before</span>
             </label>
             <ChannelPick
               channels={data.channels}
               value={ev.expiry.channelId}
               onChange={(channelId) => setKind('expiry', { channelId })}
             />
+            <p className="v2-field-hint v2-alert-hint">
+              Also sent at 7 days and 1 day before. Needs a team API key.
+            </p>
           </div>
         </div>
       </form>

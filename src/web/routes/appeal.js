@@ -9,6 +9,7 @@ import { log } from '../../lib/log.js';
 import {
   verifyAppealToken,
   normaliseAppealsConfig,
+  matchAnswers,
   cooldownRemainingMs,
   announceNewAppeal,
 } from '../../modules/appeals.js';
@@ -22,6 +23,7 @@ function render(res, state, extra = {}) {
     state,
     guildName: null,
     questions: [],
+    answers: [],
     token: null,
     guildId: null,
     message: null,
@@ -36,7 +38,7 @@ function render(res, state, extra = {}) {
 
 /**
  * Resolve the token + guild + module and work out which state to show.
- * @returns {{ error?: string, state?: string, message?: string, guild?: any,
+ * @returns {{ error?: string, heading?: string, state?: string, message?: string, guild?: any,
  *   cfg?: any, parsed?: any, verdict?: string, decisionReason?: string,
  *   reappealDays?: number }}
  */
@@ -44,13 +46,16 @@ async function resolve(req) {
   const { guildId } = req.params;
   const parsed = verifyAppealToken(req.query.t ?? req.body?.t);
   if (!parsed || parsed.guildId !== guildId) {
-    return { error: 'This appeal link is invalid or has expired. Contact the server staff for a new one.' };
+    return {
+      heading: "This appeal link isn't valid",
+      error: 'This appeal link is invalid or has expired. Contact the server staff for a new one.',
+    };
   }
   if (!(await isModuleEnabled(guildId, 'appeals'))) {
-    return { error: 'This server is not accepting ban appeals right now.' };
+    return { heading: 'Appeals are closed', error: 'This server is not accepting ban appeals right now.' };
   }
   const guild = guildByKey(guildId);
-  if (!guild) return { error: 'That server could not be found.' };
+  if (!guild) return { heading: 'Server not found', error: 'That server could not be found.' };
   const cfg = normaliseAppealsConfig((await getGuildModule(guildId, 'appeals')).config);
 
   if (await getOpenAppeal(guildId, parsed.userId)) {
@@ -124,7 +129,7 @@ const inviteOf = (r) => r.cfg?.appealServerInvite || null;
 router.get('/:guildId', async (req, res, next) => {
   try {
     const r = await resolve(req);
-    if (r.error) return render(res, 'error', { message: r.error });
+    if (r.error) return render(res, 'error', { heading: r.heading, message: r.error });
     if (r.state !== 'form') {
       return render(res, r.state, {
         message: r.message ?? null,
@@ -151,7 +156,7 @@ router.get('/:guildId', async (req, res, next) => {
 router.post('/:guildId', async (req, res, next) => {
   try {
     const r = await resolve(req);
-    if (r.error) return render(res, 'error', { message: r.error });
+    if (r.error) return render(res, 'error', { heading: r.heading, message: r.error });
     if (r.state !== 'form') {
       return render(res, r.state, {
         message: r.message ?? null,
@@ -166,11 +171,24 @@ router.post('/:guildId', async (req, res, next) => {
 
     const { guild, cfg, parsed } = r;
     const raw = [].concat(req.body.a ?? []);
+    // The form posts its answers by position and says which questions it was showing (`q`), so a
+    // change of the questions while the person was writing is caught instead of mis-filed.
+    const shown = req.body.q === undefined ? null : [].concat(req.body.q).map(String);
+    const matched = matchAnswers(cfg.questions, shown, raw);
+    if (!matched.current) {
+      return render(res, 'form', {
+        guildName: guild.name,
+        questions: cfg.questions,
+        answers: matched.answers,
+        token: req.body.t,
+        guildId: req.params.guildId,
+        serverInvite: cfg.appealServerInvite || null,
+        message: 'The questions changed while you were writing — please check your answers.',
+      });
+    }
     const answers = cfg.questions.map((q, i) => ({
       q,
-      a: String(raw[i] ?? '')
-        .trim()
-        .slice(0, 2000),
+      a: matched.answers[i].trim().slice(0, 2000),
     }));
     if (!answers.some((qa) => qa.a !== '')) {
       return render(res, 'form', {

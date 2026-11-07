@@ -13,11 +13,7 @@ struct AutoReactSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Auto-react", model: model) { $settings, page in
-            Section {
-                Text("Reacts automatically to messages from chosen users or roles. Each rule is independent, and the first rule that matches a message wins.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Reacts automatically to messages from chosen users or roles. Each rule is independent, and the first rule that matches a message wins.")
 
             Section {
                 NumberField(title: "Per-user cooldown", value: $settings.cooldownSeconds,

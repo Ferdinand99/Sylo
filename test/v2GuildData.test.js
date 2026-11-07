@@ -84,14 +84,6 @@ test('the export is a JSON download without owner-only modules for a non-operato
   );
 });
 
-test('the classic export leaves owner-only modules out for a non-operator too', async () => {
-  await setGuildModule(D_GUILD, 'apple-connect', { enabled: true, config: { appId: 'secret-app' } });
-  const admin = await session();
-  const res = await admin.get(`/guilds/${D_GUILD}/export`);
-  assert.equal(res.status, 200);
-  assert.doesNotMatch(await res.text(), /secret-app/);
-});
-
 test('member data: lookup, bad id, and forget needs confirm', async () => {
   const s = await session();
   const empty = await (await s.get(`/api/v2/guilds/${D_GUILD}/member-data`)).json();

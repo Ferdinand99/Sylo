@@ -237,7 +237,7 @@ test('fetchChangelogBlock: fetches raw.githubusercontent.com at the given ref an
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
     requestedUrl = url;
-    return { ok: true, text: async () => '## v2\nnew stuff' };
+    return new Response('## v2\nnew stuff');
   };
   try {
     const block = await fetchChangelogBlock('o/r', 'CHANGELOG.md', 'abc123');
@@ -257,7 +257,7 @@ test('fetchChangelogBlock: a 404 (private repo or wrong path) logs a warning and
 });
 
 test('fetchChangelogBlock: no "## " heading in the file logs a warning and returns null', async () => {
-  await withMockedFetch({ ok: true, text: async () => 'no headings in here' }, async (warnings) => {
+  await withMockedFetch(new Response('no headings in here'), async (warnings) => {
     assert.equal(await fetchChangelogBlock('o/r', 'CHANGELOG.md', 'abc123'), null);
     assert.match(warnings[0].join(' '), /no "## " heading found/);
   });

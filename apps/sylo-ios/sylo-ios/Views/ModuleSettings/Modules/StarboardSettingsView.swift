@@ -13,11 +13,7 @@ struct StarboardSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Starboard", model: model) { $settings, page in
-            Section {
-                Text("When a message gets enough of a reaction, Sylo re-posts it into a highlights channel, like a community pin board. Each board has its own emoji, threshold and rules.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("When a message gets enough of a reaction, Sylo re-posts it into a highlights channel, like a community pin board. Each board has its own emoji, threshold and rules.")
 
             // A board has many settings, so it gets a few sections; each control has its own row.
             ForEach($settings.boards) { $board in

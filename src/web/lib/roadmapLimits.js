@@ -1,6 +1,5 @@
-// Rate limits for roadmap votes and suggestions. One shared set of limiter instances, imported by
-// the classic board (routes/roadmap.js) and the new dashboard's API (routes/v2Api.js), so a person
-// cannot double their effective limit by switching between the two.
+// Rate limits for roadmap votes and suggestions: one shared set of limiter instances, imported by
+// the dashboard's API (routes/v2Api.js).
 import { rateLimit } from '../middleware/rateLimit.js';
 import { sessionUserId } from '../middleware/auth.js';
 

@@ -5,6 +5,8 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import Reveal from '../components/Reveal.jsx';
+import Badge from '../components/Badge.jsx';
+import Meta from '../components/Meta.jsx';
 
 export default function Messages() {
   const { guildId } = useParams();
@@ -65,24 +67,30 @@ export default function Messages() {
       ) : (
         <div className="v2-list">
           {data.items.map((it) => (
-            <div className="v2-row" key={it.id}>
+            <div className="v2-row v2-row-stack" key={it.id}>
               <div className="v2-row-main">
                 <Link className="v2-row-title-link" to={`/guilds/${guildId}/messages/${it.id}`}>
-                  <h3>{it.name}</h3>
+                  <h3>
+                    {it.name}
+                    <Badge tone={it.published ? 'success' : 'neutral'} inline>
+                      {it.published ? 'Published' : 'Draft'}
+                    </Badge>
+                  </h3>
                 </Link>
                 <p>
-                  #{it.channel} · edited {it.when}
+                  <Meta items={[`#${it.channel}`, `edited ${it.when}`]} />
                 </p>
               </div>
-              <div className="v2-field-row">
-                <span className={`v2-toggle${it.published ? ' is-on' : ''}`} aria-hidden="true" />
-                <span className="v2-field-hint">{it.published ? 'published' : 'draft'}</span>
+              <div className="v2-row-actions">
+                <Link className="v2-btn-ghost" to={`/guilds/${guildId}/messages/${it.id}`}>
+                  Edit
+                </Link>
                 {it.published ? (
                   <button type="button" className="v2-btn-ghost" onClick={() => onUnpublish(it.id)}>
                     Unpublish
                   </button>
                 ) : null}
-                <button type="button" className="v2-btn-danger" onClick={() => onDelete(it.id)}>
+                <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(it.id)}>
                   Delete
                 </button>
               </div>

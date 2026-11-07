@@ -154,6 +154,14 @@ export function checkModuleGrants(moduleId, prev, next) {
 }
 
 /**
+ * For a role handed out by something that is not module settings (an event's participant role):
+ * throw a RoleGrantError when the acting person may not hand out any of these roles.
+ */
+export function checkRoleGrants(roleIds) {
+  return checkNewGrants([], roleIds.map(String));
+}
+
+/**
  * "Set XP" hands out the leveling reward roles up to the new level (syncRewards), so the
  * roles it would newly give are checked like any other grant, before the XP is written.
  * Only additions are checked, as for module saves: lowering XP takes away reward roles, which

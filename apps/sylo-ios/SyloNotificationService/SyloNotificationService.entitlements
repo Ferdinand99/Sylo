@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.net.opland.sylo</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<!-- Keep this first and the only entry: the group of the app tokens. Not the Pigeon group, so the extension can never read the manage key. -->
+		<string>$(AppIdentifierPrefix)net.opland.sylo</string>
+	</array>
+</dict>
+</plist>

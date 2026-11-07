@@ -13,7 +13,18 @@ test('Fluxer notes exist only for real modules, and say something', () => {
   const notes = MODULES.map((m) => [m.id, modulePlatformNote('fluxer', m.id)]).filter(([, n]) => n);
   assert.ok(notes.length >= 5, 'the modules whose behaviour differs have a note');
   for (const [id, note] of notes) assert.ok(note.length > 20, id);
-  for (const id of ['automod', 'temp-voice', 'verification', 'giveaways', 'custom-commands']) {
+  for (const id of [
+    'automod',
+    'temp-voice',
+    'verification',
+    'giveaways',
+    'events',
+    'suggestions',
+    'temp-roles',
+    'quote-board',
+    'auto-threads',
+    'custom-commands',
+  ]) {
     assert.ok(modulePlatformNote('fluxer', id), id);
   }
 });

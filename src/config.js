@@ -1,8 +1,11 @@
 // Loads and validates environment configuration for Sylo.
 // All secrets and tunables come from environment variables (see .env.example).
 import 'dotenv/config';
-import { randomBytes } from 'node:crypto';
+import { dirname, resolve } from 'node:path';
+import { resolveSessionSecret } from './lib/sessionSecret.js';
 import { normalisePrivateKey } from './lib/appStoreConnect.js';
+import { checkPigeonUrl } from './lib/pigeonUrl.js';
+import { commandPrefixError } from './lib/commandPrefix.js';
 
 /**
  * Read a required string env var, or exit with a clear message.
@@ -121,10 +124,8 @@ if (shardCountRaw !== 'auto') {
   }
 }
 
-// Hosted-only, opt-in Postgres driver (see docs/roadmap.md — "Postgres
-// migration line"). Unset (the default) — and every self-hosted deployment —
-// keeps today's SQLite path untouched. Currently READ-ONLY: nothing in
-// src/db/ consults it yet; that lands in a follow-up PR.
+// Opt-in Postgres driver (docs/postgres.md). Unset (the default) keeps the SQLite path. When
+// set, every data-access file in src/db/ runs on Postgres, and CI tests both drivers.
 const databaseUrl = optionalOrNull('DATABASE_URL');
 if (databaseUrl && !/^postgres(ql)?:\/\//i.test(databaseUrl)) {
   console.error('[config] DATABASE_URL must start with postgres:// or postgresql://.');
@@ -176,6 +177,9 @@ const turnstileSecretKey = optionalOrNull('TURNSTILE_SECRET_KEY');
 const botErrorDsn = optionalOrNull('BOT_ERROR_DSN');
 const dashboardErrorDsn = optionalOrNull('DASHBOARD_ERROR_DSN');
 const dashboardVisitStats = optionalBool('DASHBOARD_VISIT_STATS', false);
+// CSP_REPORT_ONLY=1: the dashboard's Content-Security-Policy is reported, not enforced (a self-hoster's
+// way back if a custom setup trips it). See src/web/lib/securityHeaders.js.
+const cspReportOnly = optionalBool('CSP_REPORT_ONLY', false);
 const errorEnvironment = optionalOrNull('ERROR_ENVIRONMENT') ?? 'production';
 const itadApiKey = optionalOrNull('ITAD_API_KEY');
 const twitchClientId = optionalOrNull('TWITCH_CLIENT_ID');
@@ -227,20 +231,32 @@ if (pushRelayUrl && !/^https?:\/\/[^\s/]+[^\s]*$/i.test(pushRelayUrl)) {
   console.error('[config] PUSH_RELAY_URL must be an http(s) URL; push through the relay is off.');
   pushRelayUrl = null;
 }
-const kickClientSecret = optionalOrNull('KICK_CLIENT_SECRET');
-// Signs session cookies and short-lived tokens (e.g. verification links), so it
-// must always exist. When unset we generate one; that only matters for
-// persistence when the dashboard login is enabled.
-let sessionSecret = optionalOrNull('SESSION_SECRET');
-if (!sessionSecret) {
-  sessionSecret = randomBytes(32).toString('hex');
-  if (discordClientSecret || fluxerClientSecret) {
-    console.warn(
-      '[config] SESSION_SECRET is not set — generated a random one. ' +
-        'Dashboard sessions will not survive a restart until you pin SESSION_SECRET.'
-    );
+// Postal Pigeon, the Hedgerow push relay (https://pigeon.hedgerow.tools): with PIGEON_URL set, an
+// app that supports it gets notifications with no text in them, through Pigeon. Unset or empty
+// = off. The relay and APNs settings above stay for older app builds.
+let pigeonUrl = null;
+if (optionalOrNull('PIGEON_URL')) {
+  try {
+    pigeonUrl = checkPigeonUrl(process.env.PIGEON_URL);
+  } catch (err) {
+    console.error(`[config] PIGEON_URL is not usable (${err.message}); push through Pigeon is off.`);
   }
 }
+const kickClientSecret = optionalOrNull('KICK_CLIENT_SECRET');
+// Signs session cookies and short-lived tokens (e.g. verification links), so it
+// must always exist. SESSION_SECRET wins; otherwise a generated secret is kept in
+// <data folder>/session-secret so sessions and signed links survive a restart.
+// The data folder is the SQLite DATABASE_PATH folder (it also holds the backups),
+// whether or not Postgres is used. Test runs never write a file (they would drop
+// it into the repo's data/ folder).
+const underTestRunner = process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT);
+const { secret: sessionSecret, source: sessionSecretSource } = resolveSessionSecret({
+  envValue: optionalOrNull('SESSION_SECRET'),
+  dataDir: underTestRunner
+    ? null
+    : dirname(resolve(process.cwd(), optional('DATABASE_PATH', './data/sylo.db'))),
+  warn: (message) => console.warn(`[config] ${message}`),
+});
 
 // Platforms. Each one is optional, but at least one must be configured: a
 // Discord-only install sets DISCORD_TOKEN, a Fluxer-only one FLUXER_TOKEN, and
@@ -257,10 +273,12 @@ const fluxerClientId = fluxerToken ? required('FLUXER_CLIENT_ID') : null;
 const fluxerWebUrl = optionalOrNull('FLUXER_WEB_URL')?.replace(/\/+$/, '') ?? null;
 const fluxerApiUrl = optionalOrNull('FLUXER_API_URL')?.replace(/\/+$/, '') ?? null;
 
-// Fluxer has no slash commands yet, so commands run from chat as <prefix>name.
+// Fluxer has no slash commands yet, so commands run from chat as <prefix>name. This is the
+// default for the whole instance; a server can set its own in the dashboard.
 const commandPrefix = optional('COMMAND_PREFIX', '!');
-if (/\s/.test(commandPrefix) || commandPrefix.length > 5) {
-  console.error('[config] COMMAND_PREFIX must be 1-5 characters with no spaces.');
+const commandPrefixProblem = commandPrefixError(commandPrefix);
+if (commandPrefixProblem) {
+  console.error(`[config] COMMAND_PREFIX: ${commandPrefixProblem}`);
   process.exit(1);
 }
 
@@ -300,6 +318,7 @@ export const config = Object.freeze({
   discordClientSecret,
   fluxerClientSecret,
   sessionSecret,
+  sessionSecretSource,
   ownerIds,
   fluxerOwnerIds,
   devLogChannelId,
@@ -317,6 +336,7 @@ export const config = Object.freeze({
   dashboardErrorDsn,
   dashboardVisitStats,
   errorEnvironment,
+  cspReportOnly,
 
   // IsThereAnyDeal API key — broadens the Free games module beyond Epic. Free
   // key from isthereanydeal.com/apps. When unset, Free games is Epic-only.
@@ -348,6 +368,8 @@ export const config = Object.freeze({
   apnsTopic,
   apnsEnabled: Boolean(apnsKeyId && apnsTeamId && apnsPrivateKey),
   pushRelayUrl,
+  // Postal Pigeon (see above); null = off.
+  pigeonUrl,
   // URLs that server admins type in (RSS feeds, the welcome card background) are fetched by
   // the server, so private, loopback and link-local addresses are refused (src/lib/safeFetch.js).
   // A self-hosted instance that wants feeds from its own network can allow them.

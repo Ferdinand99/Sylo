@@ -99,7 +99,7 @@ export function platformActionKey(req) {
 /**
  * The stricter limit for dashboard actions that call the platform's API: test messages,
  * publishing a message or role menu, locking or unlocking every channel. One shared count per
- * server and person across all of them, and across the classic and the new dashboard, so a
+ * server and person across all of them, so a
  * script cannot use Sylo to hammer Discord or Fluxer (and get the bot rate-limited there).
  */
 export const platformActionLimit = rateLimit({

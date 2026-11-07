@@ -11,11 +11,19 @@ import { useApiData } from './useApiData.js';
 const OverviewContext = createContext(null);
 
 export function OverviewProvider({ guildId, children }) {
-  const state = useApiData(() => (guildId ? getOverview(guildId) : Promise.resolve(null)), [guildId]);
-  return <OverviewContext.Provider value={state}>{children}</OverviewContext.Provider>;
+  // `dataGuildId` is the server `data` belongs to: useApiData keeps the previous server's data
+  // while the new one loads, and a page that acts on a card must not use it for another server.
+  const { dataKey, ...state } = useApiData(
+    () => (guildId ? getOverview(guildId) : Promise.resolve(null)),
+    [guildId],
+    guildId
+  );
+  return (
+    <OverviewContext.Provider value={{ ...state, dataGuildId: dataKey }}>{children}</OverviewContext.Provider>
+  );
 }
 
-/** @returns {{ data: object | null, loading: boolean, error: Error | null, setData: Function }} */
+/** @returns {{ data: object | null, dataGuildId: string | undefined, loading: boolean, error: Error | null, setData: Function }} */
 export function useOverview() {
   return useContext(OverviewContext);
 }

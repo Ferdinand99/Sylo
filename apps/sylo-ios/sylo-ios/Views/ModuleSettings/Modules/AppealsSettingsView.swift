@@ -13,10 +13,9 @@ struct AppealsSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Ban Appeals", model: model) { $settings, page in
+            ModuleIntro("When a member is banned, Sylo DMs them a private link to an appeal form. Their answers show up on the dashboard's Appeals tab, and the decision (with a single-use rejoin invite on accept) is shown on that same link when they reopen it.")
+
             Section {
-                Text("When a member is banned, Sylo DMs them a private link to an appeal form. Their answers show up on the dashboard's Appeals tab, and the decision (with a single-use rejoin invite on accept) is shown on that same link when they reopen it.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
                 if !page.dashboardUrlSet {
                     Label("The Sylo server has no public dashboard URL (DASHBOARD_URL), so appeal links can't be built.",
                           systemImage: "exclamationmark.triangle")

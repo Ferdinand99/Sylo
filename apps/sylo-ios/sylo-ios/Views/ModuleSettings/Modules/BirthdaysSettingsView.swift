@@ -12,11 +12,7 @@ struct BirthdaysSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Birthdays", model: model) { $settings, page in
-            Section {
-                Text("Members save their own date with /birthday set. Sylo checks once a day and posts the message.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Members save their own date with /birthday set. Sylo checks once a day and posts the message.")
 
             Section {
                 ChannelPicker(title: "Announcement channel", selection: $settings.channel, channels: page.channels,

@@ -1,7 +1,7 @@
 # Privacy Policy — Sylo
 
 **Effective date:** 2 September 2026
-**Last updated:** 24 October 2026
+**Last updated:** 2 November 2026
 
 This Privacy Policy explains what data the **Sylo** Discord application and its
 test instance **Sylo - Test** (the "Bot"), the Sylo web dashboard (the
@@ -72,6 +72,10 @@ the public-leaderboard vanity slug.
 - **AFK** — a member's away status, away message and previous nickname.
 - **Birthdays** — the day and month (and optionally year) a member registers.
 - **Giveaways** — the host, the entrants, and the drawn winners.
+- **Events** — the host and, for each event, who pressed Join or Maybe. A server can switch on a page for each event that shows its title, time, place, description, image, capacity and how many pressed Join or Maybe, but no names, no host and no ids. For an event in a channel everyone can read, anyone with the link can open the page. For an event in a private channel, only a person who signs in with the Dashboard login (Discord or Fluxer, the platform the event was posted on), is a member of that server and can see that channel can open it: Sylo checks this against the platform's data on every request and keeps only a plain yes or no, in memory, for a few seconds, and shows a signed-in person who may not open the page the same "not found" page as for a wrong address. A visitor who is not signed in sees a plain sign-in page that shows nothing about the event. An event in an age-restricted channel has no page for anyone. These pages are not cached by browsers or search engines, and nothing about the check is stored beyond the ordinary Dashboard login described in section 3 (a first sign-in creates a dashboard account and a session, which you can delete as described in section 7). The address of each event's page is a random code stored with the event. A visitor's browser contacts only Sylo: Sylo fetches the server icon and the event image from Discord's image servers itself and keeps a copy in memory only, for about ten minutes (a sweep removes expired copies every minute) and hands it out only to a visitor who passes the checks, and the pages carry no visit-count script when they are not found or ask for a sign-in.
+- **Suggestions** — the text of each suggestion, who wrote it (unless they erase it), the staff member who decided it, and each member's 👍 / 👎 vote.
+- **Temporary roles** — which member holds which temporary role, when it ends, the reason, and the staff member who set it.
+- **Quote board** — the text of each saved message (up to 2000 characters), its author's id and display name as they were when it was saved, the channel and message ids, the message date, how many attachments it had (the files are not kept), and who saved it. A server can switch on a public page that shows the text, display name and date of the quotes saved from channels everyone can read, without ids.
 - **Polls** — the poll creator. Votes are Discord reactions and are not stored;
   the row is deleted when the poll ends.
 - **Temporary voice channels** — the owner of a spawned channel and its
@@ -104,7 +108,11 @@ The Dashboard can run with or without login.
   with Fluxer", the Operator receives, via that platform's OAuth2 (`identify` and
   `guilds` scopes), your user ID, username, avatar, and the list of servers you
   are in together with your permission level in each. This is used only to show
-  your name in the Dashboard and to check that you administer a given server.
+  your name in the Dashboard, to check that you administer a given server, and, when
+  you open the page of an event in a private channel (see Events in section 2), to
+  check that you are a member of that server and can see that channel. You do not have
+  to administer anything for that: a first sign-in from an event page creates the same
+  dashboard account as any other sign-in, with an empty list of administered servers.
   The Dashboard keeps a **dashboard account** in its database: for each platform
   you signed in with, your user ID, username, avatar, the IDs of the servers you
   administer (not every server you are in), and when that list was last
@@ -126,11 +134,14 @@ The Dashboard can run with or without login.
   and lets you revoke them.
 - **Sylo app notifications:** if you turn on notifications in the app, the
   device's record also holds its Apple push token (or, on a self-hosted
-  instance, a relay token that stands for it), whether it is a development or
-  production build, and the servers you muted. When a member writes in a
-  ticket on a server whose tickets you may see, the notification (the server's
-  name, the member's name and the first 180 characters of the message) is sent
-  to Apple, which delivers it to your device.
+  instance, a relay token that stands for it; or, with Postal Pigeon, a handle
+  that stands for it), whether it is a development or production build, and
+  the servers you muted. When a member writes in a ticket on a server whose
+  tickets you may see, the notification (the server's name, the member's name
+  and the first 180 characters of the message) is sent to Apple, which delivers
+  it to your device. With Postal Pigeon the notification sent to Apple has no
+  text in it: the text stays on the instance for up to two hours, and the app
+  fetches it from there when the notification arrives.
 - **Error reports and visit counts (the hosted Sylo):** the Dashboard's pages
   send errors that happen in your browser to Keen Kestrel, which the Operator
   runs (section 3a). A report holds the error and where in the Dashboard's code
@@ -175,9 +186,9 @@ for modmail transcripts (section 1).
 | Running the modules a server enables (leveling, AFK, birthdays, counting, invite tracking, temporary voice channels, giveaways, polls, starboard, server statistics/insights) | Operating the features a server's administrators have turned on and its members choose to use |
 | Moderation & safety records (infractions/case log, ban appeals, auto-moderation, config audit log) | The interest of the server and its members in keeping the community safe and keeping an auditable record of moderation decisions |
 | Modmail ticket transcripts | Handling, and being able to review, the contact/support requests a member starts |
-| Dashboard login (Discord or Fluxer OAuth2 identity, the servers you administer, session records) | Authenticating server administrators; taken only when you choose "Log in with Discord" or "Log in with Fluxer" |
+| Dashboard login (Discord or Fluxer OAuth2 identity, the servers you administer, session records) | Authenticating server administrators, and members who open the page of an event in a private channel; taken only when you choose "Log in with Discord" or "Log in with Fluxer" |
 | Sylo app sign-in (device name, sign-in times, hashed token) | Keeping you signed in on a device you chose to sign in on, and letting you see and revoke those devices |
-| Sylo app notifications (push or relay token, muted servers, notification text) | Telling staff about new ticket messages, which they turned on in the app |
+| Sylo app notifications (push token, relay token or Pigeon handle, muted servers, notification text) | Telling staff about new ticket messages, which they turned on in the app |
 | Operational logs | Security, abuse prevention and debugging |
 | Website visit statistics (section 3a) | Knowing how the Website is found and used, without cookies and without keeping IP addresses |
 | Dashboard error reports and visit counts (section 3) | Finding and fixing faults in the Dashboard, and knowing which parts are used |
@@ -223,9 +234,22 @@ instances send none of this unless their operator sets it up.
   destination (a WebDAV server and/or a Discord webhook), which the Operator
   controls.
 - **Apple Push Notification service** — if you turn on notifications in the Sylo
-  app, each notification's text (server name, member name, message preview) and
-  your device's push token are sent to Apple to deliver it, under
-  [Apple's Privacy Policy](https://www.apple.com/legal/privacy/).
+  app, your device's push token is sent to Apple to deliver them, under
+  [Apple's Privacy Policy](https://www.apple.com/legal/privacy/). Through the
+  older relay and direct ways the notification's text (server name, member name,
+  message preview) goes to Apple too; through Postal Pigeon it does not.
+- **Postal Pigeon (Hedgerow's push relay)** — if the instance uses Postal Pigeon
+  (`PIGEON_URL`) and you turn on notifications in the Sylo app, the app gives
+  Pigeon your device's push token and receives a handle for it. Pigeon sees the
+  device's push token, the handle, which instance asked it to send, when, and the
+  network address of each request while it is handled. It sees **no notification
+  text**: the instance only gives it the handle, a random reference and an opaque
+  key (a keyed hash of the device and the ticket, which Pigeon cannot trace back
+  to a server or a ticket) that makes notifications for one ticket replace each
+  other on your phone. Pigeon passes the push to Apple. Pigeon is run by the Hedgerow project
+  ([Postal Pigeon](https://github.com/Ferdinand99/Postal-Pigeon)); it keeps the
+  device's push token sealed and forgets it when the app removes the device, when
+  Apple reports it gone, or after 90 days without use.
 - **The hosted Sylo as a notification relay** — a self-hosted instance cannot
   talk to Apple for the Sylo app itself, so it sends each notification through
   the hosted Sylo (`app.sylobot.com`), which passes it on to Apple and keeps no
@@ -245,8 +269,8 @@ No other third parties receive your data.
 - **`/forget`** — any member can run `/forget confirm:True` in a server to delete
   the data Sylo keys to their Discord account **in that server**: leveling XP
   (including period rows), ticket history (the whole conversation, staff replies
-  included), ban appeals, invite records, AFK status, birthday and giveaway
-  entries. It does **not** remove messages already posted to channels, a
+  included), ban appeals, invite records, AFK status, birthday, giveaway
+  entries, event sign-ups, suggestion votes and temporary-role records (a suggestion you wrote stays on the server's board, without your name; a temporary role you hold stays on you, but Sylo no longer takes it back). It does **not** remove messages already posted to channels, a
   completed giveaway's winner list, or the display name recorded in that server's
   config audit log. **Safety records are kept**: moderation cases (warnings,
   notes, timeouts, kicks, bans), an active temporary ban, honeypot catches and a
@@ -277,10 +301,11 @@ No other third parties receive your data.
   of the account's app sign-ins. A sign-in not used for 90 days expires and is
   deleted automatically. One-time sign-in codes are deleted when used; an unused
   one stops working after 60 seconds and is deleted automatically.
-- **Notification settings** (push or relay token, muted servers) are part of the
-  app sign-in and go with it; turning notifications off in the app removes the
-  token at once, and signing out or revoking the device removes it with the
-  sign-in. Relay registrations at the hosted Sylo are removed when the app turns
+- **Notification settings** (push token, relay token or Pigeon handle, muted
+  servers) are part of the app sign-in and go with it; turning notifications off
+  in the app removes the token at once, and signing out or revoking the device
+  removes it with the sign-in. The text kept for Postal Pigeon notifications is
+  deleted after two hours, and with the sign-in. Relay registrations at the hosted Sylo are removed when the app turns
   notifications off, when Apple reports the device gone, or after 90 days
   without use (after a sign-out the instance no longer has the relay token, so
   that registration can't be used and simply expires).
@@ -301,6 +326,10 @@ For any request the above does not cover, contact the Operator (section 9).
 | AFK status | Until the member returns or is erased | Member sends a message; `/forget`; Bot removed |
 | Birthdays | Until removed | Member or admin removes it; `/forget`; Bot removed |
 | Giveaway entries | Until the giveaway ends, then until erased | `/forget` (entries only — a finished giveaway's winner list is kept); Bot removed |
+| Event sign-ups (Join / Maybe) | Until the member leaves the event or is erased | The member presses Leave; `/forget`; Bot removed (`/forget` also removes you as the host of events you made; the title of a finished event is a server record and stays until the Bot is removed) |
+| Suggestions and votes | The suggestion until staff delete it; a vote until the member takes it back | `/forget` (votes are deleted; your suggestions stay without your id; staff decisions lose the staff id); staff delete a suggestion on the dashboard; Bot removed |
+| Temporary role records | Until the role's end time, or until staff remove it | The record is deleted when the role is taken back; `/forget` (the record is deleted, the role itself stays); Bot removed |
+| Quote board quotes | Until a member or staff remove the quote, or the server removes the module's data | `/quote remove` (author, the member who saved it, or staff); `/forget` (quotes you wrote are deleted; quotes you only saved lose your id); staff remove a quote on the dashboard; Bot removed |
 | Poll creator record | Until the poll ends | Poll ends (row deleted automatically) |
 | Temporary voice channel owner + ban list | Until the channel empties | Channel empties (row deleted automatically); Bot removed |
 | Modmail ticket transcripts | Until erased, or the server's "delete closed tickets after N days" limit (off by default) | `/forget`; admin-assisted erasure; Bot removed; a closed ticket ageing past the server's limit |
@@ -310,6 +339,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | Dashboard session (session record + browser cookie) | 7 days | Logout or expiry (expired records are removed automatically) |
 | Sylo app sign-in (device record, hashed token) | 90 days from the last use | Sign out in the app; revoke on the account page; a sign-in disconnected from the account; 90 days without use |
 | One-time app sign-in code (hashed) | 60 seconds | Used, or expired and deleted automatically |
+| Text of a notification sent through Postal Pigeon | 2 hours | Expires and is deleted automatically; signing out or turning notifications off |
 | Notification relay registration (push token, hashed relay token, instance) | 90 days from the last use | Notifications turned off in the app; Apple reports the device gone; 90 days without use |
 | Website visit statistics (section 3a) | Page views 30 days; hourly and daily totals 400 days | Deleted automatically |
 | Dashboard and bot error reports | 30 days; a grouped error's summary until 90 days after it last happened | Deleted automatically |
@@ -352,6 +382,12 @@ Consider your own legal obligations for the data your instance stores.
 This policy may be updated; the "Last updated" date will change and the revised
 version will be published at the same URL.
 
+- **2 November 2026** — event pages for events in private channels: the Dashboard login
+  is now also used to check that a member may open such a page (sections 2, 3 and 4), so
+  ordinary members, not only server administrators, can have a dashboard account and a
+  session; the check reads the member's data from the platform and keeps only a plain
+  yes or no for a few seconds; and the description of the event pages was extended
+  (section 2).
 - **17 October 2026** — added Sylo app notifications: what is stored for them
   (section 3), Apple and the hosted relay as recipients (section 6), and when
   they are deleted (section 7).

@@ -56,6 +56,22 @@ export async function getGuildModule(guildId, moduleId) {
   return { enabled: mod ? mod.defaultEnabled : false, config: {} };
 }
 
+const enabledConfigsStmt = prepare(
+  'SELECT guild_id, config FROM guild_modules WHERE module_id = ? AND enabled = 1'
+);
+
+/**
+ * The stored config of every guild that has this module switched on (a module that is on by
+ * default and was never saved has no row and is not listed).
+ * @returns {Promise<Array<{ guildId: string, config: object }>>}
+ */
+export async function listEnabledModuleConfigs(moduleId) {
+  return (await enabledConfigsStmt.all(moduleId)).map((r) => ({
+    guildId: r.guild_id,
+    config: safeParse(r.config),
+  }));
+}
+
 /** True if the module is on for the guild. */
 export async function isModuleEnabled(guildId, moduleId) {
   return (await getGuildModule(guildId, moduleId)).enabled;

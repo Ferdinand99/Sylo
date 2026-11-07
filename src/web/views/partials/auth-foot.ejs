@@ -1,7 +1,13 @@
+<%# `publicPage: true` is the footer of the pages a member sees (the same line as the leaderboard,
+    quotes, event, verify and appeal pages); otherwise the dashboard-side footer with the version. %>
+    <% if (typeof publicPage !== 'undefined' && publicPage) { %>
+    <p class="auth-foot muted small">Powered by Sylo</p>
+    <% } else { %>
     <p class="auth-foot muted small">
       Sylo<% if (typeof syloVersion !== 'undefined' && syloVersion) { %> v<%= syloVersion %><% } %>
       &middot; <a href="/v2/commands">Commands</a> &middot; <a href="/v2/roadmap">Roadmap</a>
     </p>
+    <% } %>
   </main>
 </body>
 </html>

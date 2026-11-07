@@ -1,6 +1,6 @@
 // Dashboard actions that call the platform's API (test messages, publishing a message or role
 // menu, locking every channel) get a stricter limit than the dashboard's general one: 10 a
-// minute per server and person, shared by the classic and the new dashboard.
+// minute per server and person.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -31,17 +31,11 @@ async function signedIn() {
         headers: { 'x-csrf-token': token, 'content-type': 'application/json' },
         body: JSON.stringify(body),
       }),
-    form: (path, body = {}) =>
-      b.get(path, {
-        method: 'POST',
-        headers: { 'x-csrf-token': token, 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(body).toString(),
-      }),
   };
 }
 
 test('the 11th platform action within a minute is refused, and only for that server', async () => {
-  const { json, form } = await signedIn();
+  const { json } = await signedIn();
   const testOn = (guildId) => json(`/api/v2/guilds/${guildId}/modules/afk/test`);
   for (let i = 0; i < 10; i += 1) assert.notEqual((await testOn(D_GUILD)).status, 429, `call ${i + 1}`);
 
@@ -50,15 +44,10 @@ test('the 11th platform action within a minute is refused, and only for that ser
   assert.ok((await refused.json()).error, 'a JSON error on /api');
 
   assert.notEqual((await testOn(OTHER_D_GUILD)).status, 429, 'another server is unaffected');
-  assert.equal(
-    (await form(`/guilds/${D_GUILD}/m/afk/test`)).status,
-    429,
-    'the classic dashboard shares the count'
-  );
 });
 
 test('every platform action carries the strict limit', async () => {
-  const { json, form } = await signedIn();
+  const { json } = await signedIn();
   const limitOf = async (res) => res.headers.get('x-ratelimit-limit');
   const g = D_GUILD;
   const strict = {
@@ -71,21 +60,8 @@ test('every platform action carries the strict limit', async () => {
   };
   for (const [name, call] of Object.entries(strict)) assert.equal(await limitOf(await call()), '10', name);
 
-  // A fresh person for the classic routes: the shared count above is nearly used up.
-  const v1 = await signedIn();
-  const classic = {
-    'V1 module test': () => v1.form(`/guilds/${g}/m/welcome/test`),
-    'V1 reminders test': () => v1.form(`/guilds/${g}/m/reminders/r/new`, { action: 'test' }),
-    'V1 message publish': () => v1.form(`/guilds/${g}/messages/new`, { action: 'publish' }),
-    'V1 role-menu publish': () => v1.form(`/guilds/${g}/m/roles/rr`),
-    'V1 lock-all': () => v1.form(`/guilds/${g}/moderation/lock-all`),
-    'V1 unlock-all': () => v1.form(`/guilds/${g}/moderation/unlock-all`),
-  };
-  for (const [name, call] of Object.entries(classic)) assert.equal(await limitOf(await call()), '10', name);
-
   // Saving a draft or a reminder does not touch the platform and keeps the general limit.
   assert.notEqual(await limitOf(await json(`/api/v2/guilds/${g}/messages/new`, { action: 'save' })), '10');
-  assert.notEqual(await limitOf(await form(`/guilds/${g}/m/reminders/r/new`, { action: 'save' })), '10');
 });
 
 test('without an account (open mode) the limit is per server and client address', () => {

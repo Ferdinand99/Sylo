@@ -46,10 +46,48 @@ export async function overrideBlockReason(interaction) {
   return null;
 }
 
+/**
+ * A message menu command ("Save quote"): same per-guild override check and error handling as a
+ * slash command.
+ * @param {import('discord.js').MessageContextMenuCommandInteraction} interaction
+ */
+async function runContextMenu(interaction) {
+  inc('sylo_commands_total', { command: interaction.commandName });
+  const menu = interaction.client.contextMenus?.get(interaction.commandName);
+  if (!menu) {
+    log.warn('bot', `Received unknown menu command: ${interaction.commandName}`);
+    return;
+  }
+  const blocked = await overrideBlockReason(interaction);
+  if (blocked) {
+    await interaction.reply({ content: `⚠️ ${blocked}`, flags: MessageFlags.Ephemeral }).catch(() => {});
+    return;
+  }
+  try {
+    await menu.execute(interaction);
+  } catch (err) {
+    log.error('bot', `Menu command "${interaction.commandName}" threw:`, err);
+    const payload = {
+      content: '⚠️ Something went wrong running that command. Please try again later.',
+      flags: MessageFlags.Ephemeral,
+    };
+    try {
+      if (interaction.deferred || interaction.replied) await interaction.followUp(payload);
+      else await interaction.reply(payload);
+    } catch {
+      // The interaction token may have expired; nothing more we can do.
+    }
+  }
+}
+
 /** @param {import('discord.js').Interaction} interaction */
 export async function execute(interaction) {
   if (interaction.isMessageComponent()) {
     await routeComponent(interaction);
+    return;
+  }
+  if (interaction.isMessageContextMenuCommand?.()) {
+    await runContextMenu(interaction);
     return;
   }
   if (!interaction.isChatInputCommand()) return;

@@ -1,4 +1,5 @@
-import { Link, useRouteError } from 'react-router-dom';
+import { isRouteErrorResponse, Link, useRouteError } from 'react-router-dom';
+import NotFound from './NotFound.jsx';
 
 // Shown in place of a page that threw while rendering. A page loads as its own
 // file on first visit, so after a deploy an open tab can ask for a file that no
@@ -8,6 +9,9 @@ const STALE_CHUNK =
 
 export default function RouteError() {
   const error = useRouteError();
+  // An address the router has no page for (reached only if App.jsx's catch-all did not take it):
+  // not a crash, so no error wording and no Reload.
+  if (isRouteErrorResponse(error) && error.status === 404) return <NotFound />;
   const message = error instanceof Error ? error.message : String(error?.statusText ?? error ?? '');
   const stale = STALE_CHUNK.test(message);
 

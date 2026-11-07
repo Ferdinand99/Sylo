@@ -9,12 +9,16 @@ import {
   regenGithubSecret,
 } from '../api.js';
 import { notify } from '../notify.js';
+import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import Meta from '../components/Meta.jsx';
 
 const BLANK = { repo: '', channelId: '', roleId: '', changelogPath: '', events: ['push', 'release'] };
 
 function WatchForm({ initial, channels, roles, eventTypes, onSave, onCancel, saving }) {
+  const limits = useModuleLimits('github');
   const [repo, setRepo] = useState(initial.repo);
   const [channelId, setChannelId] = useState(initial.channelId);
   const [roleId, setRoleId] = useState(initial.roleId);
@@ -50,7 +54,7 @@ function WatchForm({ initial, channels, roles, eventTypes, onSave, onCancel, sav
       </div>
 
       <div className="v2-field">
-        <label>Post in</label>
+        <label>Announce in</label>
         <select value={channelId} onChange={(e) => setChannelId(e.target.value)} required>
           <option value="">— select a channel —</option>
           {channels.map((c) => (
@@ -91,6 +95,7 @@ function WatchForm({ initial, channels, roles, eventTypes, onSave, onCancel, sav
         </label>
         <input
           type="text"
+          maxLength={limitOf(limits, 'changelogPath').maxLength}
           placeholder="CHANGELOG.md"
           value={changelogPath}
           onChange={(e) => setChangelogPath(e.target.value)}
@@ -153,7 +158,7 @@ function WebhookDetails({ watch, guildId, onRegenerated }) {
         <label>Secret</label>
         <input type="text" readOnly value={watch.secret} onClick={(e) => e.target.select()} />
       </div>
-      <button type="button" className="v2-btn-danger" onClick={regen} disabled={busy}>
+      <button type="button" className="v2-btn-danger-ghost" onClick={regen} disabled={busy}>
         Regenerate secret
       </button>
     </div>
@@ -176,6 +181,8 @@ export default function GithubAlerts() {
 
   useEffect(() => {
     load();
+    // Reload when the server changes; `load` is re-created every render and reads guildId itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guildId]);
 
   if (state.error) return <LoadError error={state.error} what="GitHub alerts settings" />;
@@ -211,9 +218,9 @@ export default function GithubAlerts() {
 
   async function onDelete(id) {
     const ok = await confirmDialog({
-      title: 'Remove this repo watch?',
+      title: 'Delete this repo watch?',
       body: 'Sylo stops posting its activity and the webhook URL stops working.',
-      confirmLabel: 'Remove watch',
+      confirmLabel: 'Delete watch',
     });
     if (!ok) return;
     try {
@@ -254,14 +261,23 @@ export default function GithubAlerts() {
         ) : (
           <div className="v2-list">
             {d.watches.map((w) => (
-              <div className="v2-row" key={w.id}>
+              <div className="v2-row v2-row-stack" key={w.id}>
                 <div className="v2-row-main">
-                  <h3>{w.repo}</h3>
+                  <h3 className="v2-break">
+                    {w.repo}
+                    <Badge tone={w.enabled ? 'success' : 'neutral'} inline>
+                      {w.enabled ? 'Active' : 'Paused'}
+                    </Badge>
+                  </h3>
                   <p>
-                    #{d.channels.find((c) => c.id === w.channelId)?.name ?? w.channelId} · {w.events.length}{' '}
-                    event type{w.events.length === 1 ? '' : 's'}
-                    {w.roleId ? ` · pings @${d.roles.find((r) => r.id === w.roleId)?.name ?? w.roleId}` : ''}
-                    {w.changelogPath ? ` · watching ${w.changelogPath}` : ''}
+                    <Meta
+                      items={[
+                        `#${d.channels.find((c) => c.id === w.channelId)?.name ?? w.channelId}`,
+                        `${w.events.length} event type${w.events.length === 1 ? '' : 's'}`,
+                        w.roleId && `pings @${d.roles.find((r) => r.id === w.roleId)?.name ?? w.roleId}`,
+                        w.changelogPath && `watching ${w.changelogPath}`,
+                      ]}
+                    />
                   </p>
 
                   {editingId === w.id ? (
@@ -294,10 +310,7 @@ export default function GithubAlerts() {
                 </div>
 
                 {editingId === w.id ? null : (
-                  <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                    <span className={`v2-status-pill ${w.enabled ? 'completed' : 'pending'}`}>
-                      {w.enabled ? 'on' : 'off'}
-                    </span>
+                  <div className="v2-row-actions">
                     <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(w.id)}>
                       Edit
                     </button>
@@ -311,12 +324,8 @@ export default function GithubAlerts() {
                     <button type="button" className="v2-btn-ghost" onClick={() => onToggle(w.id)}>
                       {w.enabled ? 'Pause' : 'Resume'}
                     </button>
-                    <button
-                      type="button"
-                      className="v2-btn-danger v2-danger-sep"
-                      onClick={() => onDelete(w.id)}
-                    >
-                      Remove
+                    <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(w.id)}>
+                      Delete
                     </button>
                   </div>
                 )}
@@ -340,7 +349,7 @@ export default function GithubAlerts() {
           />
         </div>
       ) : (
-        <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
+        <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
           + Add repository
         </button>
       )}

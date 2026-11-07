@@ -47,3 +47,34 @@ test('/api/v2/health lists each platform and every bot tag', async () => {
     runtime.clients.fluxer = saved.fluxer;
   }
 });
+
+test('/api/v2/health names the module an error came from', async () => {
+  const saved = runtime.errors.splice(0);
+  runtime.errors.push(
+    { message: 'a', scope: 'module:starboard', at: Date.now() },
+    { message: 'b', scope: 'youtube-alerts', at: Date.now() },
+    { message: 'c', scope: 'db', at: Date.now() }
+  );
+  try {
+    const { accountId } = await signInIdentity({
+      platform: 'discord',
+      platformUserId: '111111111111111111',
+      username: 'u',
+      avatar: null,
+      guildIds: [],
+    });
+    const { token } = await createApiToken(accountId, { deviceName: 'iPhone', ttlMs: 60_000 });
+    const res = await browser().get('/api/v2/health', { headers: { authorization: `Bearer ${token}` } });
+    const body = await res.json();
+    assert.deepEqual(
+      body.errors.map((e) => [e.scope, e.source]),
+      [
+        ['module:starboard', 'Starboard'],
+        ['youtube-alerts', 'YouTube alerts'],
+        ['db', null],
+      ]
+    );
+  } finally {
+    runtime.errors.splice(0, runtime.errors.length, ...saved);
+  }
+});

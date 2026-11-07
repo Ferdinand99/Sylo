@@ -14,11 +14,31 @@ import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { addXp, prunePeriods } from '../db/leveling.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
+import { every, after } from './schedule.js';
 
 export const ANNOUNCE_MODES = ['channel', 'reply', 'dm', 'off'];
 export const XP_RATES = [0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3];
 export const MULTIPLIER_TYPES = ['role', 'channel'];
 const DEFAULT_MESSAGE = 'GG {player}, you just advanced to level {level}!';
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  cooldownSeconds: { min: 0, max: 3600 },
+  announceMessage: { maxLength: 2000 },
+  voiceXpPerMin: { min: 1, max: 60 },
+  multipliers: { maxItems: 25 },
+  'multipliers[].factor': { min: 0.1, max: 5 },
+  rewards: { maxItems: 50 },
+  'rewards[].level': { min: 1, max: 1000 },
+  // the XP an admin can set for one member by hand (POST …/leveling/xp)
+  xp: { min: 0, max: 1e12 },
+};
+
+/** The XP to store for a member, or null when it is not a whole number inside the limits. */
+export function validXp(v) {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= LIMITS.xp.min && n <= LIMITS.xp.max ? n : null;
+}
+
 const XP_MIN = 15;
 const XP_MAX = 25;
 
@@ -28,17 +48,24 @@ const clampInt = (v, min, max, dflt) => {
 };
 const clampFactor = (v) => {
   const n = Math.round(Number(v) * 100) / 100;
-  return Number.isFinite(n) ? Math.max(0.1, Math.min(5, n)) : 1;
+  const f = LIMITS['multipliers[].factor'];
+  return Number.isFinite(n) ? Math.max(f.min, Math.min(f.max, n)) : 1;
 };
 const idList = (v) => [...new Set((Array.isArray(v) ? v : [v]).filter((x) => /^\d{17,20}$/.test(x)))];
 
 export function normaliseLevelingConfig(raw = {}) {
   return {
-    cooldownSeconds: clampInt(raw.cooldownSeconds, 0, 3600, 60),
+    cooldownSeconds: clampInt(
+      raw.cooldownSeconds,
+      LIMITS.cooldownSeconds.min,
+      LIMITS.cooldownSeconds.max,
+      60
+    ),
     xpRate: XP_RATES.includes(Number(raw.xpRate)) ? Number(raw.xpRate) : 1,
     announce: ANNOUNCE_MODES.includes(raw.announce) ? raw.announce : 'channel',
     announceChannel: /^\d{17,20}$/.test(raw.announceChannel ?? '') ? raw.announceChannel : '',
-    announceMessage: String(raw.announceMessage ?? '').slice(0, 2000) || DEFAULT_MESSAGE,
+    announceMessage:
+      String(raw.announceMessage ?? '').slice(0, LIMITS.announceMessage.maxLength) || DEFAULT_MESSAGE,
     noXpChannels: idList(raw.noXpChannels),
     noXpChannelsMode: raw.noXpChannelsMode === 'deny' ? 'deny' : 'allow',
     noXpRoles: idList(raw.noXpRoles),
@@ -47,7 +74,7 @@ export function normaliseLevelingConfig(raw = {}) {
     removeRewardsOnXpLoss: Boolean(raw.removeRewardsOnXpLoss),
     publicLeaderboard: raw.publicLeaderboard !== false,
     voiceXpEnabled: Boolean(raw.voiceXpEnabled),
-    voiceXpPerMin: clampInt(raw.voiceXpPerMin, 1, 60, 10),
+    voiceXpPerMin: clampInt(raw.voiceXpPerMin, LIMITS.voiceXpPerMin.min, LIMITS.voiceXpPerMin.max, 10),
     voiceAfkExcluded: raw.voiceAfkExcluded !== false,
     multipliers: (Array.isArray(raw.multipliers) ? raw.multipliers : [])
       .map((m) => ({
@@ -56,14 +83,18 @@ export function normaliseLevelingConfig(raw = {}) {
         factor: clampFactor(m.factor),
       }))
       .filter((m) => /^\d{17,20}$/.test(m.id))
-      .slice(0, 25),
+      .slice(0, LIMITS.multipliers.maxItems),
     rewards: (Array.isArray(raw.rewards) ? raw.rewards : [])
       .map((r) => ({ level: Math.floor(Number(r.level)), roleId: String(r.roleId ?? '') }))
       .filter(
-        (r) => Number.isInteger(r.level) && r.level >= 1 && r.level <= 1000 && /^\d{17,20}$/.test(r.roleId)
+        (r) =>
+          Number.isInteger(r.level) &&
+          r.level >= LIMITS['rewards[].level'].min &&
+          r.level <= LIMITS['rewards[].level'].max &&
+          /^\d{17,20}$/.test(r.roleId)
       )
       .sort((a, b) => a.level - b.level)
-      .slice(0, 50),
+      .slice(0, LIMITS.rewards.maxItems),
   };
 }
 
@@ -86,10 +117,10 @@ export function resolveMultiplier(config, { roleIds = [], channelId } = {}) {
 
 // Fast-path cooldown gate so spam doesn't hit the DB. key -> last-award ts.
 const cooldowns = new Map();
-setInterval(() => {
+every('leveling', 600_000, () => {
   const cutoff = Date.now() - 3_600_000;
   for (const [k, ts] of cooldowns) if (ts < cutoff) cooldowns.delete(k);
-}, 600_000).unref();
+});
 
 function fillMessage(template, member, level) {
   return String(template || DEFAULT_MESSAGE)
@@ -268,17 +299,16 @@ async function settleAllVoice(now = Date.now()) {
   await prunePeriods();
 }
 
-const voiceTimer = setInterval(() => {
+every('leveling', VOICE_SETTLE_MS, () => {
   settleAllVoice().catch((err) => log.error('module:leveling', 'voice tick failed:', err.message));
-}, VOICE_SETTLE_MS);
-voiceTimer.unref();
+});
 // Seed sessions for members already in voice shortly after boot, so a restart
 // doesn't cost everyone connected a full settle interval of accrual.
-setTimeout(() => {
+after('leveling', 25_000, () => {
   discoverVoiceSessions(Date.now()).catch((err) =>
     log.error('module:leveling', 'initial voice session discovery failed:', err.message)
   );
-}, 25_000).unref();
+});
 
 export const _internals = { voiceSessions, settleAllVoice, settleVoiceSession, discoverVoiceSessions };
 

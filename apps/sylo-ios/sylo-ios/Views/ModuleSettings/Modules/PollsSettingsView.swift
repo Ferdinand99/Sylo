@@ -12,11 +12,7 @@ struct PollsSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Polls", model: model) { $settings, page in
-            Section {
-                Text("Members create polls with /poll and vote by reacting with the letter of their choice. A poll closes on its timer, when it hits its vote cap, or when someone runs /poll-end.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Members create polls with /poll and vote by reacting with the letter of their choice. A poll closes on its timer, when it hits its vote cap, or when someone runs /poll-end.")
 
             Section {
                 Picker("Voters", selection: $settings.voteRoleMode) {

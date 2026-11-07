@@ -1,9 +1,8 @@
 // Multi-select replacement for a native <select multiple> (which needs
 // ctrl/cmd-click to pick more than one — not discoverable, flagged by the
 // user). Selected items render as removable chips; a plain single-select
-// dropdown adds more. Ports V1's chip-picker.ejs/chipPicker Alpine
-// component to React with the same interaction shape.
-export default function ChipPicker({ items, value, onChange, kind = 'role', placeholder }) {
+// dropdown adds more.
+export default function ChipPicker({ items, value, onChange, kind = 'role', placeholder, id }) {
   const selected = value || [];
   const selectedItems = selected.map((id) => items.find((i) => String(i.id) === String(id))).filter(Boolean);
   const available = items.filter((i) => !selected.includes(i.id));
@@ -45,6 +44,7 @@ export default function ChipPicker({ items, value, onChange, kind = 'role', plac
         ))}
       </div>
       <select
+        id={id}
         className="v2-chip-add"
         value=""
         onChange={add}

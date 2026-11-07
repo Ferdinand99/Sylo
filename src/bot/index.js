@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { config } from '../config.js';
 import { setClient } from '../runtime.js';
-import { loadCommands } from './loadCommands.js';
+import { loadCommands, loadContextMenus } from './loadCommands.js';
 import { registerCommands } from './registerCommands.js';
 import { resolveShardOptions } from './lib/shards.js';
 import { log } from '../lib/log.js';
@@ -88,6 +88,8 @@ export async function startBot() {
 
   const commands = await loadCommands();
   client.commands = commands;
+  const contextMenus = await loadContextMenus();
+  client.contextMenus = contextMenus;
   await loadEvents(client);
 
   // Surface library-level errors on the dashboard instead of letting them bubble.
@@ -96,7 +98,7 @@ export async function startBot() {
   client.on('shardReady', (id) => log.info('bot', `shard ${id} connected`));
 
   try {
-    await registerCommands(commands);
+    await registerCommands(commands, contextMenus);
   } catch (err) {
     // Non-fatal: the bot can still run with previously-registered commands.
     log.error('bot', 'Slash command registration failed:', err.message);

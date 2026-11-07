@@ -12,7 +12,3 @@ export function idList(value, max = 100) {
   }
   return out;
 }
-
-/** Reaction-role messages per server, and roles per message (Discord's own button/select cap). */
-export const MAX_REACTION_MESSAGES = 50;
-export const MAX_REACTION_PAIRS = 25;

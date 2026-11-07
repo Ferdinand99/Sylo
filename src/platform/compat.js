@@ -98,6 +98,7 @@ export function withGuildId(client, value) {
  */
 export function installFluxerCompat(sdk, { Collection, voice } = {}) {
   const {
+    CategoryChannel,
     Channel,
     ChannelManager,
     EmbedBuilder,
@@ -252,14 +253,99 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
       return this.guildId ? (this.client.guilds.get(this.guildId) ?? null) : null;
     })
   );
+  // A category's age restriction. Fluxer decides a channel's effective age restriction as: the
+  // channel's own override, else its category's override, else the server's flag. The SDK's
+  // category class has an empty body and drops `nsfw_override`, so a channel under an age-restricted
+  // category could not be told from any other. Keep it on the category, as `nsfwOverride` (null =
+  // inherits), both when the channel is made and when it is updated. A payload without the field
+  // leaves it undefined, which the public-channel test reads as "cannot tell" (modules/quoteBoard.js).
+  const keepCategoryOverride = (channel, data) => {
+    if (channel instanceof CategoryChannel && data && 'nsfw_override' in data) {
+      channel.nsfwOverride = data.nsfw_override ?? null;
+    }
+    return channel;
+  };
+  for (const name of ['from', 'fromOrCreate']) {
+    if (typeof Channel[name] !== 'function') continue;
+    wrap(
+      Channel,
+      name,
+      (native) =>
+        function (client, data) {
+          return keepCategoryOverride(native.call(this, client, data), data);
+        }
+    );
+  }
+  wrap(
+    CategoryChannel.prototype,
+    'applyEditPatch',
+    (native) =>
+      function (data) {
+        native.call(this, data);
+        keepCategoryOverride(this, data);
+      }
+  );
+
+  // What a role may do in a channel, as discord.js works it out for `permissionsFor(role)`: the
+  // role's own permissions, then the @everyone overwrite of the channel, then the role's own.
+  // (The SDK only computes this for a member, through member.permissionsIn.) Administrator is
+  // everything, and Role.permissions already returns every bit for it.
+  const rolePermissionsIn = (channel, role) => {
+    const base = role.permissions;
+    if (base.isAdmin) return base;
+    const overwrites = channel.permissionOverwrites?.toJSON?.() ?? [];
+    let bits = base.bitfield;
+    for (const id of new Set([channel.guildId, role.id])) {
+      const overwrite = overwrites.find((o) => o.type === OverwriteType.Role && o.id === id);
+      if (overwrite) bits = (bits & ~BigInt(overwrite.deny || '0')) | BigInt(overwrite.allow || '0');
+    }
+    return new PermissionsBitField(bits);
+  };
+  // What a member may do in a channel, as discord.js works it out: the permissions of @everyone and
+  // of the member's roles, then the channel's @everyone overwrite, then the overwrites of the
+  // member's roles (every deny and every allow together), then the member's own overwrite.
+  // The SDK's member.permissionsIn applies an overwrite only for a role id in the member's own role
+  // list, and that list does not hold @everyone (its id is the server's id). So a channel closed to
+  // @everyone by an overwrite, with no role to open it again, would still be open to every member:
+  // the page of an event that only some may see would open for anyone in the server. Owner and
+  // Administrator are every permission, as in the SDK (member.permissions gives every bit for both).
+  const memberPermissionsIn = (channel, member) => {
+    try {
+      const base = member.permissions;
+      if (base.isAdmin) return base;
+      const overwrites = channel.permissionOverwrites?.toJSON?.() ?? [];
+      const roleIds = new Set([...member.roles.roleIds].filter((id) => id !== channel.guildId));
+      const change = (bits, matching) => {
+        let allow = 0n;
+        let deny = 0n;
+        for (const o of overwrites.filter(matching)) {
+          allow |= BigInt(o.allow || '0');
+          deny |= BigInt(o.deny || '0');
+        }
+        return (bits & ~deny) | allow;
+      };
+      let bits = base.bitfield;
+      bits = change(bits, (o) => o.type === OverwriteType.Role && o.id === channel.guildId);
+      bits = change(bits, (o) => o.type === OverwriteType.Role && roleIds.has(o.id));
+      bits = change(bits, (o) => o.type === OverwriteType.Member && o.id === member.id);
+      return new PermissionsBitField(bits);
+    } catch {
+      return null; // cannot tell: "no permission"
+    }
+  };
   define(
     GuildChannel.prototype,
     'permissionsFor',
     method(function (target) {
       if (!target) return null;
+      // A member (or the id of one) first, then a role (or the id of one). Anything else is unknown
+      // and answers null, which callers read as "no permission".
       const member =
         typeof target?.permissionsIn === 'function' ? target : this.guild?.members.get(idOf(target));
-      return member ? member.permissionsIn(this) : null;
+      if (member)
+        return member instanceof GuildMember ? memberPermissionsIn(this, member) : member.permissionsIn(this);
+      const role = target instanceof Role ? target : this.guild?.roles?.get?.(idOf(target));
+      return role ? rolePermissionsIn(this, role) : null;
     })
   );
   define(
@@ -274,7 +360,10 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
   // silently never act.
   const botPermsIn = (channel) => {
     const me = channel?.guild?.members.me;
-    return me && channel ? me.permissionsIn(channel) : null;
+    if (!me || !channel) return null;
+    // A real member goes through the same calculation as permissionsFor, so an @everyone overwrite
+    // that denies something counts here too (the SDK's own permissionsIn ignores it).
+    return me instanceof GuildMember ? memberPermissionsIn(channel, me) : me.permissionsIn(channel);
   };
   define(
     GuildChannel.prototype,

@@ -6,7 +6,8 @@ process.env.DISCORD_CLIENT_ID = '123456789012345678';
 process.env.DISCORD_CLIENT_SECRET = 'discord-secret';
 process.env.FLUXER_TOKEN = 'ftoken.test';
 process.env.FLUXER_CLIENT_ID = '223456789012345678';
-process.env.FLUXER_CLIENT_SECRET = 'fluxer-secret';
+// A test file sets SYLO_TEST_NO_FLUXER_LOGIN to run with the Discord login only.
+process.env.FLUXER_CLIENT_SECRET = process.env.SYLO_TEST_NO_FLUXER_LOGIN ? '' : 'fluxer-secret';
 process.env.FLUXER_WEB_URL = 'http://fluxer.test';
 process.env.SESSION_SECRET = 'test-session-secret';
 process.env.OWNER_IDS = '111111111111111111';

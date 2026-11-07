@@ -4,24 +4,34 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ban appeal — Sylo</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/public.css" />
 </head>
 <body>
   <main class="verify-wrap">
+    <div class="pub-brand"><img src="/favicon.svg" alt="" width="28" height="28" /><span>Sylo</span></div>
     <div class="card">
+      <% if (typeof guildName !== 'undefined' && guildName) { %><p class="pub-eyebrow"><%= guildName %></p><% } %>
       <% if (state === 'form') { %>
-        <h1 class="page-title">Appeal your ban<% if (guildName) { %> — <%= guildName %><% } %></h1>
-        <p class="muted">Answer honestly. A moderator will review this. The decision will show up on this page — keep the link.</p>
+        <h1 class="page-title">Appeal your ban</h1>
+        <p class="muted">Answer honestly. A moderator will review this.</p>
+        <p class="pub-callout">Bookmark this page: the decision will appear here.</p>
         <% if (typeof message !== 'undefined' && message) { %>
-          <p class="warn-text"><%= message %></p>
+          <p class="warn-text" role="alert"><%= message %></p>
         <% } %>
         <form method="POST" action="/appeal/<%= guildId %>" class="stack">
           <input type="hidden" name="t" value="<%= token %>" />
+          <%# The server wants at least one answer (any of them), so with several questions none is
+              required on its own; with a single question that one is. %>
+          <% var single = questions.length === 1; %>
+          <p class="muted small" id="appeal-hint"><%= single ? 'Required.' : 'Answer at least one question.' %> Each answer can be up to 2,000 characters.</p>
           <% questions.forEach(function (q, i) { %>
-            <label class="small"><%= q %></label>
-            <textarea name="a" rows="3" maxlength="2000" <%= i === 0 ? 'required' : '' %>></textarea>
+            <%# The questions this form shows, so the server can tell if they changed meanwhile. %>
+            <input type="hidden" name="q" value="<%= q %>" />
+            <label for="appeal-a-<%= i %>"><%= q %><% if (single) { %> <span class="muted small">(required)</span><% } %></label>
+            <textarea id="appeal-a-<%= i %>" name="a" rows="3" maxlength="2000" aria-describedby="appeal-hint"<%= single ? ' required' : '' %>><%= (typeof answers !== 'undefined' && answers[i]) || '' %></textarea>
           <% }) %>
-          <div class="u-mt-3"><button type="submit">Submit appeal</button></div>
+          <div class="u-mt-3"><button type="submit" class="btn">Submit appeal</button></div>
         </form>
         <% if (serverInvite) { %>
           <p class="muted small u-mt-3">📩 Want the decision by DM too? Join <a href="<%= serverInvite %>"><%= serverInvite %></a> so Sylo shares a server with you.</p>
@@ -59,8 +69,8 @@
         <% } %>
 
       <% } else { %>
-        <h1 class="page-title">Something went wrong</h1>
-        <p class="warn-text"><%= message %></p>
+        <h1 class="page-title"><%= typeof heading !== 'undefined' && heading ? heading : 'Something went wrong' %></h1>
+        <p><%= message %></p>
       <% } %>
     </div>
     <p class="lb-foot muted small">Powered by Sylo</p>

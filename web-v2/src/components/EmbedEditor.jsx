@@ -1,16 +1,18 @@
-import { useState } from 'react';
-import EmbedCard, { autoGrow, newKey } from './EmbedCard.jsx';
+import { useRef, useState } from 'react';
+import AppTag from './AppTag.jsx';
+import AutoGrowTextarea from './AutoGrowTextarea.jsx';
+import EmbedCard, { newKey } from './EmbedCard.jsx';
+import { notify } from '../notify.js';
+import { insertAtCursor } from '../placeholders.js';
 import { initial } from '../util.js';
+import { limitOf } from './useModuleLimits.js';
 
-// Shared single-embed editor — the V2 counterpart to V1's Alpine
-// `embedEditor` (src/web/public/alpine-components.js, `partials/embed-editor.ejs`),
-// now built on the same Discord-message-preview card as the Embed messages
-// builder (components/EmbedCard.jsx) instead of a second, plainer look.
-// Same data model and feature flags (content/author/description/fields/thumb/
-// footerIcon/footerKey/defaultColor/vars/placeholders) V1's editor exposed.
+// Shared single-embed editor, built on the same Discord-message-preview card as the Embed
+// messages builder (components/EmbedCard.jsx).
+// Data model and feature flags: content/author/description/fields/thumb/
+// footerIcon/footerKey/defaultColor/vars/placeholders.
 //
-// Owns its own working state, seeded once from the `spec` prop (like V1's
-// `s = cfg.spec` — a starting value, not a controlled prop kept in sync on
+// Owns its own working state, seeded once from the `spec` prop (a starting value, not a controlled prop kept in sync on
 // every keystroke) — `onChange` is called with the fully server-ready
 // serialized object on every edit, the same shape normaliseXxx() functions
 // already expect, so the parent form just stores whatever comes back.
@@ -76,14 +78,37 @@ export default function EmbedEditor({
   vars = [],
   placeholders = {},
   botName = 'Sylo',
+  limits = null,
 }) {
   const opts = { content, author, description, fields, thumb, footerIcon, footerKey, timestamp };
   const [e, setE] = useState(() => initialState(spec, { footerKey, defaultColor }));
-  // Mirrors V1's Alpine `_last` — inserted tokens go into whichever field the
-  // user last focused (title/author/description/footer/content), not a
-  // fixed spot, since every consumer (polls, welcome-channel, …) customises
-  // a different mix of those fields.
-  const [lastFocused, setLastFocused] = useState(content ? 'content' : 'title');
+  // Inserted tokens go into whichever field the user last focused (title/author/description/
+  // footer/content, or the name or value of an extra field), not a fixed spot, since every consumer
+  // (polls, welcome-channel, …) customises a different mix of those fields. That is a field's key
+  // ('title', …) or `{ field: <extra field key>, prop: 'name' | 'value' }`.
+  const lastFocused = useRef(content ? 'content' : 'title');
+  // The text box that field belongs to and where its caret was when it lost focus, so a chip puts
+  // the variable at the caret (not at the end), like PlaceholderHint's chips do.
+  const lastField = useRef({ el: null, start: undefined, end: undefined });
+
+  function focusField(key) {
+    const el = document.activeElement;
+    lastField.current = {
+      el: el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') ? el : null,
+      start: undefined,
+      end: undefined,
+    };
+    lastFocused.current = key;
+  }
+
+  // Focus events bubble in React, so the whole preview sees a field lose focus (clicking a chip
+  // would otherwise lose the caret on browsers that ignore the mousedown guard below).
+  function rememberCaret(ev) {
+    if (ev.target === lastField.current.el) {
+      lastField.current.start = ev.target.selectionStart;
+      lastField.current.end = ev.target.selectionEnd;
+    }
+  }
 
   function set(patch) {
     setE((prev) => {
@@ -93,40 +118,70 @@ export default function EmbedEditor({
     });
   }
 
+  const textOf = (target) =>
+    typeof target === 'string' ? e[target] : e.fields.find((f) => f.key === target.field)?.[target.prop];
+  const setText = (target, value) =>
+    typeof target === 'string'
+      ? set({ [target]: value })
+      : set({ fields: e.fields.map((f) => (f.key === target.field ? { ...f, [target.prop]: value } : f)) });
+
   function insertVar(token) {
-    const current = String(e[lastFocused] ?? '');
-    set({ [lastFocused]: (current + (current ? ' ' : '') + token).trim() });
+    // The extra field was removed since it was last edited: nowhere to put it.
+    const target = lastFocused.current;
+    if (typeof target !== 'string' && textOf(target) === undefined) return;
+    const { el, start: savedStart, end: savedEnd } = lastField.current;
+    const field = el && el.isConnected ? el : null;
+    let start = savedStart;
+    let end = savedEnd;
+    if (field && document.activeElement === field) {
+      start = field.selectionStart;
+      end = field.selectionEnd;
+    }
+    const current = String(textOf(target) ?? '');
+    // A field that was never clicked into has no caret: the token goes at the end, after a space.
+    const hasCaret = field && Number.isInteger(start) && Number.isInteger(end);
+    const next = hasCaret
+      ? insertAtCursor(current, token, start, end)
+      : { value: (current + (current ? ' ' : '') + token).trim(), caret: null };
+    if (field && field.maxLength > 0 && next.value.length > field.maxLength) {
+      notify(`No room for ${token}: the field is full.`);
+      return;
+    }
+    setText(target, next.value);
+    if (next.caret !== null) {
+      lastField.current.start = next.caret;
+      lastField.current.end = next.caret;
+      // The new value is not in the field yet: give the caret back once React has rendered it.
+      requestAnimationFrame(() => {
+        if (!field.isConnected) return;
+        field.focus();
+        field.setSelectionRange(next.caret, next.caret);
+      });
+    }
   }
 
   return (
-    <div className="v2-msg-preview">
+    <div className="v2-msg-preview" onBlur={rememberCaret}>
       <div className="v2-msg-head">
         <div className="v2-msg-avatar" aria-hidden="true">
           {initial(botName)}
         </div>
         <div className="v2-msg-head-text">
           <span className="v2-msg-botname">{botName}</span>
-          <span className="v2-msg-botbadge">BOT</span>
+          <AppTag />
           <span className="v2-msg-time">Today</span>
         </div>
       </div>
 
       {content ? (
-        <textarea
+        <AutoGrowTextarea
           className="v2-msg-content"
           aria-label="Message text"
-          rows={1}
-          maxLength={2000}
+          maxLength={limitOf(limits, 'content').maxLength}
           placeholder={placeholders.content || 'Write your message here!'}
           value={e.content}
-          onChange={(ev) => {
-            autoGrow(ev);
-            set({ content: ev.target.value });
-          }}
-          onFocus={(ev) => {
-            autoGrow(ev);
-            setLastFocused('content');
-          }}
+          onChange={(ev) => set({ content: ev.target.value })}
+          onFocus={() => focusField('content')}
         />
       ) : null}
 
@@ -142,17 +197,27 @@ export default function EmbedEditor({
         timestamp={timestamp}
         fixedBody={fixedBody}
         placeholders={placeholders}
-        onFieldFocus={setLastFocused}
+        onFieldFocus={focusField}
+        limits={limits}
       />
 
       {vars.length ? (
         <div className="v2-embed-vars" role="group" aria-label="Insert a variable">
           Insert:{' '}
           {vars.map((v) => (
-            <button type="button" key={v.token} onClick={() => insertVar(v.token)}>
+            <button
+              type="button"
+              key={v.token}
+              // Keep the focus (and the caret) in the field while the chip is pressed.
+              onMouseDown={(ev) => ev.preventDefault()}
+              onClick={() => insertVar(v.token)}
+            >
               {v.label}
             </button>
           ))}
+          <span className="v2-field-hint v2-embed-vars-hint">
+            Click one to add it at the cursor in the field you last edited.
+          </span>
         </div>
       ) : null}
     </div>

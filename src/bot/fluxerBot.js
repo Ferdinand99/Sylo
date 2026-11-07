@@ -9,7 +9,7 @@ import { config } from '../config.js';
 import { setClientFor } from '../runtime.js';
 import { log } from '../lib/log.js';
 import { loadCommands } from './loadCommands.js';
-import { attachPrefixCommands, isCommandMessage } from './framework/router.js';
+import { attachPrefixCommands, isCommandMessage, prefixFor } from './framework/router.js';
 import { installFluxerCompat } from '../platform/compat.js';
 import { setFluxerInstance } from '../platform/instance.js';
 import { installSendBridge } from '../platform/fluxerSendBridge.js';
@@ -19,6 +19,7 @@ import { fluxerReactionAdd } from '../platform/fluxerEvents.js';
 import { createVoiceTracker } from '../platform/voiceStates.js';
 import { handleReactionAdd } from '../platform/reactionBridge.js';
 import { purgeExpiredComponentActions } from '../db/componentReactions.js';
+import { every } from '../modules/schedule.js';
 
 /**
  * The `instance` client option: which Fluxer instance to talk to. Hosted Fluxer
@@ -94,7 +95,9 @@ export async function startFluxerBot(opts = {}) {
   client.once('ready', () =>
     log.info('fluxer', `Logged in as ${client.user?.username} - serving ${client.guilds.cache.size} guild(s)`)
   );
-  const isCommand = (message) => isCommandMessage(message, { commands, prefix });
+  // The prefix is the server's own when it set one (see prefixFor), else the instance default.
+  const isCommand = async (message) =>
+    isCommandMessage(message, { commands, prefix: await prefixFor(message, prefix) });
   registerFluxerModuleEvents(client, { voice, isCommand });
   registerDmTickets(client, { isCommand }); // a DM to the bot opens a ticket, as on Discord
   attachPrefixCommands(client, { commands, prefix });
@@ -117,9 +120,8 @@ export async function startFluxerBot(opts = {}) {
     throw err;
   }
   // Expired reaction-menu rows (a /help reply lives 15 minutes) are not read after that.
-  setInterval(
-    () => purgeExpiredComponentActions().catch((err) => log.error('fluxer', 'component purge failed:', err)),
-    60 * 60 * 1000
-  ).unref();
+  every('core', 60 * 60 * 1000, () =>
+    purgeExpiredComponentActions().catch((err) => log.error('fluxer', 'component purge failed:', err))
+  );
   return client;
 }

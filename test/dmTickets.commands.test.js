@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { register } from '../src/bot/events/dmTickets.js';
+import { log } from '../src/lib/log.js';
 
 function dm(content) {
   const replies = [];
@@ -31,4 +32,45 @@ test('a DM that is a command is left to the command router', async () => {
   await settle();
   assert.deepEqual(cmd.replies, [], 'no ticket handling for a command');
   assert.equal(chat.replies.length, 1, 'a normal DM is still handled (no server to open a ticket in)');
+});
+
+test('an isCommand that answers later is awaited: a command is left alone, other DMs are handled', async () => {
+  const client = new EventEmitter();
+  register(client, {
+    isCommand: async (m) => {
+      await new Promise((r) => setTimeout(r, 5));
+      return m.content.startsWith('!');
+    },
+  });
+  const cmd = dm('!help');
+  client.emit('messageCreate', cmd.message);
+  const chat = dm('hello, I need help');
+  client.emit('messageCreate', chat.message);
+  await settle();
+  assert.deepEqual(cmd.replies, [], 'no ticket handling for a command');
+  assert.equal(chat.replies.length, 1, 'a normal DM is still handled');
+});
+
+test('an isCommand that rejects is logged and leaves no unhandled rejection', async (t) => {
+  const logged = t.mock.method(log, 'error', () => {});
+  const unhandled = [];
+  const onUnhandled = (err) => unhandled.push(err);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    const client = new EventEmitter();
+    register(client, {
+      isCommand: async () => {
+        throw new Error('lookup failed');
+      },
+    });
+    const chat = dm('hello');
+    client.emit('messageCreate', chat.message);
+    await settle();
+    assert.equal(logged.mock.callCount(), 1);
+    assert.match(String(logged.mock.calls[0].arguments[1]), /DM handler failed/);
+    assert.deepEqual(chat.replies, []);
+    assert.deepEqual(unhandled, []);
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
 });

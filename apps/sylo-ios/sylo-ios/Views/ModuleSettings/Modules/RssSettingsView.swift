@@ -13,11 +13,7 @@ struct RssSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("RSS Alerts", model: model) { $settings, page in
-            Section {
-                Text("Sylo checks each feed every few minutes and posts new items to the chosen channel. Use a raw RSS or Atom URL, or a Reddit, Mastodon or Bluesky handle and Sylo finds its feed. The first check only remembers the current items; new ones after that are posted. Template placeholders: {title} {link} {author} {feed}.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Sylo checks each feed every few minutes and posts new items to the chosen channel. Use a raw RSS or Atom URL, or a Reddit, Mastodon or Bluesky handle and Sylo finds its feed. The first check only remembers the current items; new ones after that are posted. Template placeholders: {title} {link} {author} {feed}.")
 
             // One section per feed, so each control gets its own row.
             ForEach($settings.feeds) { $feed in

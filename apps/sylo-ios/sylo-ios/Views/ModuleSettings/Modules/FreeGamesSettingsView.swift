@@ -12,11 +12,7 @@ struct FreeGamesSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Free Games", model: model) { $settings, page in
-            Section {
-                Text("Sylo checks every hour and posts when a game becomes free to claim, from the Epic Games Store and, when the bot has an IsThereAnyDeal key, Steam, GOG, Fanatical, Humble and more. DLC is left out of announcements; /freegames dlc:true shows free DLC on demand.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Sylo checks every hour and posts when a game becomes free to claim, from the Epic Games Store and, when the bot has an IsThereAnyDeal key, Steam, GOG, Fanatical, Humble and more. DLC is left out of announcements; /freegames dlc:true shows free DLC on demand.")
 
             Section {
                 ChannelPicker(title: "Announcement channel", selection: $settings.channelId, channels: page.channels,

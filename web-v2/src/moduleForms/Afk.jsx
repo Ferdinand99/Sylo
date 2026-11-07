@@ -14,7 +14,7 @@ export default function Afk() {
   return (
     <>
       <h1 className="v2-section-title">AFK</h1>
-      <p className="v2-note">
+      <p className="v2-field-hint">
         Members run <code>{cmd('/afk [reason]')}</code>. Sylo replies to anyone who mentions them, and clears
         the status automatically when they next send a message.
       </p>
@@ -27,7 +27,9 @@ export default function Afk() {
               checked={form.setNickname}
               onChange={(e) => setForm((f) => ({ ...f, setNickname: e.target.checked }))}
             />
-            Prefix their nickname with <code>[AFK]</code> (needs Manage Nicknames)
+            <span>
+              Prefix their nickname with <code>[AFK]</code> (needs Manage Nicknames)
+            </span>
           </label>
           <label className="v2-check">
             <input
@@ -35,7 +37,7 @@ export default function Afk() {
               checked={form.mentionReply}
               onChange={(e) => setForm((f) => ({ ...f, mentionReply: e.target.checked }))}
             />
-            Reply in-channel when an AFK member is mentioned
+            <span>Reply in-channel when an AFK member is mentioned</span>
           </label>
         </div>
 

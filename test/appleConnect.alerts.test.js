@@ -1,7 +1,7 @@
 // Phase 3 of the App Store Connect module: reviews, TestFlight beta review, TestFlight feedback
 // and certificate / profile expiry.
 import './helpers/tmpDb.js';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   expiryPayload,
@@ -423,4 +423,72 @@ test('processGuild: a part that could not be read does not count as a first look
   assert.deepEqual(s.sent, []);
   await processGuild('g-null', cfg(), withApp({ reviews: [review('new', 1), review('old', 1)] }), s);
   assert.equal(s.sent.length, 1);
+});
+
+test('fetchSnapshot: a 404 from the beta feedback endpoints is "no feedback", warned once per app, never an error', async () => {
+  const { runtime } = await import('../src/runtime.js');
+  const { log } = await import('../src/lib/log.js');
+  const { AppStoreConnectError } = await import('../src/lib/appStoreConnect.js');
+  const gone = () => {
+    throw new AppStoreConnectError(
+      "App Store Connect 404: There is no resource of type 'betaFeedbackScreenshotSubmissions' with id '77'",
+      404
+    );
+  };
+  const client = fakeClient({
+    '/v1/apps': { data: [{ id: '77', attributes: { name: 'A' } }] },
+    '/v1/apps/77/appStoreVersions': { data: [] },
+    '/v1/builds': { data: [] },
+    '/v1/apps/77/betaFeedbackScreenshotSubmissions': gone,
+    '/v1/apps/77/betaFeedbackCrashSubmissions': gone,
+  });
+  const before = runtime.errors.length;
+  const warn = mock.method(log, 'warn', () => {});
+  const error = mock.method(log, 'error', () => {});
+  try {
+    for (let poll = 0; poll < 3; poll += 1) {
+      const snap = await fetchSnapshot(client, { appIds: ['77'], want: { feedback: true } });
+      assert.deepEqual(snap.apps[0].feedback, [], 'empty list, not null: feedback was "read"');
+    }
+    assert.equal(error.mock.callCount(), 0, 'no error logged');
+    assert.equal(runtime.errors.length, before, 'nothing added to the error history');
+    assert.equal(warn.mock.callCount(), 1, 'one warning for the app across both endpoints and all polls');
+  } finally {
+    warn.mock.restore();
+    error.mock.restore();
+  }
+});
+
+test('fetchSnapshot: other feedback failures keep their handling (500 warns, 403 errors, null result)', async () => {
+  const { log } = await import('../src/lib/log.js');
+  const { AppStoreConnectError } = await import('../src/lib/appStoreConnect.js');
+  for (const [status, level] of [
+    [500, 'warn'],
+    [403, 'error'],
+  ]) {
+    const fail = () => {
+      throw new AppStoreConnectError(`App Store Connect ${status}: nope`, status);
+    };
+    const client = fakeClient({
+      '/v1/apps': { data: [{ id: '78', attributes: { name: 'A' } }] },
+      '/v1/apps/78/appStoreVersions': { data: [] },
+      '/v1/builds': { data: [] },
+      '/v1/apps/78/betaFeedbackScreenshotSubmissions': fail,
+      '/v1/apps/78/betaFeedbackCrashSubmissions': { data: [{ id: 'c1', attributes: {} }] },
+    });
+    const warn = mock.method(log, 'warn', () => {});
+    const error = mock.method(log, 'error', () => {});
+    try {
+      const snap = await fetchSnapshot(client, { appIds: ['78'], want: { feedback: true } });
+      assert.deepEqual(
+        snap.apps[0].feedback.map((f) => f.id),
+        ['c1']
+      );
+      assert.equal((level === 'warn' ? warn : error).mock.callCount(), 1, `${status} logs at ${level}`);
+      assert.equal((level === 'warn' ? error : warn).mock.callCount(), 0);
+    } finally {
+      warn.mock.restore();
+      error.mock.restore();
+    }
+  }
 });

@@ -3,6 +3,8 @@
 import { allGuilds, clientOfGuild, guildByKey, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { config } from '../config.js';
+import { idList } from '../web/lib/idList.js';
+import { clampRetentionDays } from './lib/retentionDays.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { notifyTicketActivity } from '../lib/push.js';
 import {
@@ -12,6 +14,31 @@ import {
   closeTicket,
   ticketMessages,
 } from '../db/tickets.js';
+
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  greeting: { maxLength: 1500 },
+  closeMessage: { maxLength: 1500 },
+  transcriptRetentionDays: { min: 0, max: 3650 },
+};
+
+/**
+ * Coerce a submitted tickets config into the canonical shape. `staffRoles` is cleaned by the
+ * caller (it needs the guild, to drop @everyone) and comes back as the plain id list.
+ */
+export function normaliseTicketsConfig(raw = {}) {
+  return {
+    greeting: String(raw.greeting ?? '').slice(0, LIMITS.greeting.maxLength),
+    closeMessage: String(raw.closeMessage ?? '').slice(0, LIMITS.closeMessage.maxLength),
+    notifyChannel: /^\d{17,20}$/.test(raw.notifyChannel ?? '') ? raw.notifyChannel : '',
+    staffRoles: idList(raw.staffRoles),
+    transcriptRetentionDays: clampRetentionDays(
+      raw.transcriptRetentionDays,
+      LIMITS.transcriptRetentionDays.max
+    ),
+    showMessageInAlert: Boolean(raw.showMessageInAlert),
+  };
+}
 
 const TICKET_COLOR = 0x4aa3df;
 export const DEFAULT_GREETING =

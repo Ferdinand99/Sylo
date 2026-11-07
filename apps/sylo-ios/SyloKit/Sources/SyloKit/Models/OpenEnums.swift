@@ -43,6 +43,10 @@ public struct ServerFeature: RawRepresentable, Hashable, Sendable, Codable {
     public static let liveAccess = ServerFeature(rawValue: "live-access")
     /// The server can send ticket notifications to the app (`/api/mobile/push`).
     public static let push = ServerFeature(rawValue: "push")
+    /// The server sends notifications through Postal Pigeon (`pigeon` in the info names it): the
+    /// app registers there itself and gives the server only a handle. The push carries no text;
+    /// the app fetches it (`/api/mobile/push/events/:ref`).
+    public static let pushPigeon = ServerFeature(rawValue: "push-pigeon")
     /// The server's release notes are in the app API (`/api/v2/changelog`).
     public static let changelog = ServerFeature(rawValue: "changelog")
 

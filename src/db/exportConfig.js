@@ -8,7 +8,9 @@
 import { prepare } from './driver.js';
 
 const q = {
-  settings: prepare('SELECT modlog_channel_id FROM guild_settings WHERE guild_id = ?'),
+  settings: prepare(
+    'SELECT modlog_channel_id, embed_color, command_prefix FROM guild_settings WHERE guild_id = ?'
+  ),
   modules: prepare('SELECT module_id, enabled, config FROM guild_modules WHERE guild_id = ?'),
   overrides: prepare(
     'SELECT command_name, enabled, allowed_channels, allowed_roles FROM command_overrides WHERE guild_id = ?'

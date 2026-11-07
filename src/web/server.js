@@ -3,18 +3,16 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
-import { isIP } from 'node:net';
-import { isLocalName, isPrivateAddress } from '../lib/safeFetch.js';
+import { isPrivateAddress } from '../lib/safeFetch.js';
+import { isLocalHostname } from '../lib/localHost.js';
 import { LimitError } from '../lib/limits.js';
 import { RoleGrantError } from './middleware/roleGrants.js';
-import { headerJson } from './lib/httpJson.js';
 import { config } from '../config.js';
 import { log } from '../lib/log.js';
-import { mountAuth, requireAuth, requireOwner } from './middleware/auth.js';
+import { mountAuth, requireAuth } from './middleware/auth.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { csrf } from './middleware/csrf.js';
 import { classicRedirect } from './middleware/classicRedirect.js';
-import { platformCommands } from './middleware/platformCommands.js';
 import { ownerOnlyModules } from './middleware/ownerOnlyModules.js';
 import { mobileApiRouter, mobileAuthRouter } from './routes/mobile.js';
 import { createPushRelayRouter } from './routes/pushRelay.js';
@@ -23,22 +21,19 @@ import { requestLog } from './middleware/requestLog.js';
 import healthRouter from './routes/health.js';
 import metricsRouter from './routes/metrics.js';
 import leaderboardRouter, { vanityRouter } from './routes/leaderboard.js';
+import quotesRouter from './routes/quotes.js';
+import eventPageRouter from './routes/events.js';
 import verifyRouter from './routes/verify.js';
 import appealRouter from './routes/appeal.js';
-import dashboardRouter from './routes/dashboard.js';
-import statsRouter from './routes/stats.js';
-import commandsRouter from './routes/commands.js';
-import settingsRouter from './routes/settings.js';
-import guildsRouter from './routes/guilds.js';
-import guildTicketsRouter from './routes/guildTickets.js';
-import guildMessagesRouter from './routes/guildMessages.js';
 import githubWebhookRouter from './routes/githubWebhook.js';
+import youtubeWebhookRouter from './routes/youtubeWebhook.js';
+import { websubBase, websubEnabled } from '../modules/youtubeWebsub.js';
 import v2ApiRouter from './routes/v2Api.js';
-import v2ClientRouter, { v2PublicClientRouter } from './routes/v2Client.js';
+import v2ClientRouter, { v2Build, v2PublicClientRouter } from './routes/v2Client.js';
 import v2PublicRouter from './routes/v2Public.js';
 import telemetryRouter from './routes/telemetry.js';
+import { securityHeaders } from './lib/securityHeaders.js';
 import roadmapRouter from './routes/roadmap.js';
-import accountRouter from './routes/account.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -59,6 +54,27 @@ export function trustProxySetting({ dashboardUrl, trustProxy }) {
   return (addr, i) => i === 0 && isPrivateAddress(addr);
 }
 
+/**
+ * A warning for the default proxy trust, or null. With DASHBOARD_URL set and no TRUST_PROXY, any
+ * client whose connection comes from a private address may choose its own address with
+ * X-Forwarded-For. That is right behind a reverse proxy on this machine or network, but when the
+ * port is published straight from Docker with no proxy, every outside client arrives from the
+ * Docker bridge gateway (a private address) and so can pick its own rate-limit bucket. Said at
+ * startup for a public https DASHBOARD_URL, where a proxy is expected and so is the exposure.
+ * @param {{ dashboardUrl?: string | null, trustProxy?: string | null }} settings
+ * @returns {string | null}
+ */
+export function defaultProxyTrustWarning({ dashboardUrl, trustProxy }) {
+  if (trustProxy != null || !dashboardUrl || websubBase(dashboardUrl) === null) return null;
+  return (
+    'TRUST_PROXY is not set, so X-Forwarded-For is believed from any peer on a private address ' +
+    '(this machine, the local network, the Docker bridge). If Sylo is reachable without a reverse ' +
+    'proxy in front (for example a published Docker port), a client can choose its own address ' +
+    'and slip past the per-client rate limits. Set TRUST_PROXY to your proxy address or a hop ' +
+    'count; see "Behind a reverse proxy" in docs/self-hosting.md.'
+  );
+}
+
 // Hosts open mode answers on (see refuseRemoteHostsInOpenMode).
 
 /** In open mode, is this Host a local name or address? */
@@ -70,8 +86,7 @@ function isLocalHost(hostHeader) {
     .toLowerCase();
   const host = raw.startsWith('[') ? raw.slice(1, raw.indexOf(']')) : raw.replace(/:\d+$/, '');
   if (!host) return false;
-  if (isIP(host)) return true; // an address typed by hand, as on a LAN
-  if (isLocalName(host)) return true;
+  if (isLocalHostname(host)) return true; // an address typed by hand, as on a LAN, or a local name
   try {
     return Boolean(config.dashboardUrl) && new URL(config.dashboardUrl).hostname.toLowerCase() === host;
   } catch {
@@ -104,6 +119,18 @@ function refuseMalformedPaths(req, res, next) {
     return res.status(400).type('text/plain').send('Malformed URL.');
   }
   next();
+}
+
+/**
+ * Where a request went, for logs: the mount path and route pattern ("/webhooks/github/:token"),
+ * never the path the client sent. Mount segments that are not plain words (ids) are masked.
+ */
+export function routeLabel(req) {
+  const mount = String(req.baseUrl ?? '')
+    .split('/')
+    .map((seg) => (seg === '' || /^[a-z][a-z0-9_-]{0,30}$/i.test(seg) ? seg : ':id'))
+    .join('/');
+  return `${mount}${req.route?.path ?? '(unmatched)'}`;
 }
 
 /** Build (but do not start) the Express app. Exposed for testing. */
@@ -139,15 +166,11 @@ export function createApp() {
 
   // First in the chain: per-request debug log + the HTTP request counter.
   app.use(requestLog);
-  // No page may be framed by another site (clickjacking), the browser must not guess content
-  // types, and other sites get only the origin as referrer.
-  app.use((req, res, next) => {
-    res.set('X-Frame-Options', 'DENY');
-    res.set('Content-Security-Policy', "frame-ancestors 'none'");
-    res.set('X-Content-Type-Options', 'nosniff');
-    res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-    next();
-  });
+  // No page may be framed by another site (clickjacking), only the dashboard's own scripts and
+  // styles run (Content-Security-Policy), https is remembered (HSTS, under an https
+  // DASHBOARD_URL), the browser must not guess content types, and other sites get only the
+  // origin as referrer. See lib/securityHeaders.js.
+  app.use(securityHeaders(config));
   app.use(refuseMalformedPaths);
   app.use(refuseRemoteHostsInOpenMode);
 
@@ -157,10 +180,21 @@ export function createApp() {
   // design (GitHub can't carry a dashboard session) — signature verification
   // inside the route is what stands in for auth here.
   app.use('/webhooks/github', githubWebhookRouter);
+  // YouTube's WebSub hub calls back here (verification GET, Atom POST signed per subscription).
+  // Same reasoning as above, and only with a public https DASHBOARD_URL: without one no hub could
+  // reach it and nothing is ever subscribed. It stays behind the open-mode host refusal: the hub
+  // calls the DASHBOARD_URL host, which that refusal lets through.
+  if (websubEnabled()) app.use('/webhooks/youtube', youtubeWebhookRouter);
 
   app.use(express.static(join(here, 'public')));
-  // Error reports and visit counts for both dashboards; does nothing unless configured.
+  // Error reports and visit counts for the dashboard and the public pages; does nothing unless configured.
   app.use('/telemetry.js', telemetryRouter);
+  // Per-client ceiling on everything below. It runs ahead of the body parsers: a request whose
+  // body fails to parse (too large, broken JSON) is answered by the parser's own error, so a
+  // limiter behind them would never count it. Generous for normal clicking, but stops a stuck
+  // script, a flood of junk requests or a compromised session from hammering config saves,
+  // backups or "send as bot". Unauthenticated traffic is capped too, not just signed-in sessions.
+  app.use(rateLimit({ windowMs: 60_000, max: 300 }));
   app.use(express.urlencoded({ extended: false, limit: '256kb' }));
   app.use(express.json({ limit: '256kb' }));
   // Express 5 leaves req.body undefined for a request without a body; handlers read fields.
@@ -186,56 +220,49 @@ export function createApp() {
   }
 
   // Old dashboard addresses (/account, /health, /guilds/<key>/tickets/5 ...) open the matching page
-  // in the new dashboard. Ahead of the public /health route: only a browser visit (Accept: text/html)
-  // moves, the JSON for monitors stays. Skipped for anyone who chose the classic dashboard.
+  // in the dashboard (/v2) with a permanent redirect. Ahead of the public /health route: only a
+  // browser visit (Accept: text/html) moves, the JSON for monitors stays.
   app.use(classicRedirect);
 
-  // Public routes: healthcheck, metrics, the shareable leaderboard, and member
-  // verification.
+  // Public routes: healthcheck, metrics, the shareable leaderboard, the quote and event pages, and
+  // member verification.
   app.use('/health', healthRouter);
   app.use('/metrics', rateLimit({ windowMs: 60_000, max: 30 }), metricsRouter);
   app.use('/leaderboard', rateLimit({ windowMs: 60_000, max: 40 }), leaderboardRouter);
   app.use('/lb', rateLimit({ windowMs: 60_000, max: 40 }), vanityRouter);
+  app.use('/quotes', rateLimit({ windowMs: 60_000, max: 40 }), quotesRouter);
+  app.use('/events', rateLimit({ windowMs: 60_000, max: 40 }), eventPageRouter);
   app.use('/verify', rateLimit({ windowMs: 60_000, max: 20 }), verifyRouter);
   app.use('/appeal', rateLimit({ windowMs: 60_000, max: 15 }), appealRouter);
   app.use('/roadmap', rateLimit({ windowMs: 60_000, max: 60 }), roadmapRouter);
-  // The new dashboard's public data (command list, roadmap): read-only, limited like the classic
-  // public pages. Only /api/v2/public is public; the rest of /api/v2 is mounted after requireAuth.
+  // The dashboard's public data (command list, roadmap): read-only, limited like the other public
+  // pages. Only /api/v2/public is public; the rest of /api/v2 is mounted after requireAuth.
   app.use('/api/v2/public', rateLimit({ windowMs: 60_000, max: 60 }), v2PublicRouter);
 
-  // Per-path ceiling on the authenticated dashboard — generous for normal
-  // clicking, but stops a stuck script or a compromised session from hammering
-  // config saves, backups, or "send as bot". Ahead of requireAuth so
-  // unauthenticated traffic hitting these routes is capped too, not just
-  // signed-in sessions — requireAuth's own redirect is cheap, but it was the
-  // only thing standing between an arbitrary flood and the rest of the stack.
-  app.use(rateLimit({ windowMs: 60_000, max: 300 }));
   // The new dashboard's built files and its two public pages (/v2/commands, /v2/roadmap), which
   // work without a session. Every other /v2 path is mounted after requireAuth, below.
   app.use('/v2', v2PublicClientRouter);
   // Everything below requires a signed-in user when auth is enabled.
   app.use(requireAuth);
-  app.use('/', dashboardRouter);
-  // One lookup cache for the whole instance (any server's lookups): operators only.
-  app.use('/stats', requireOwner, statsRouter);
-  app.use('/commands', commandsRouter);
-  app.use('/account', accountRouter);
-  // Bot-wide identity (name/avatar/banner) and presence — owner only, not any
-  // signed-in guild admin (see requireOwner).
-  app.use('/settings', requireOwner, settingsRouter);
-  // Tickets are mounted first: they have their own (staff-role aware) access
-  // check, so they must not fall through to the admin-only /guilds router.
-  app.use('/guilds/:guildId', ownerOnlyModules);
-  app.use('/guilds/:guildId', platformCommands);
-  app.use('/guilds/:guildId/tickets', guildTicketsRouter);
-  app.use('/guilds/:guildId/messages', guildMessagesRouter);
-  app.use('/guilds', guildsRouter);
-  // V2 dashboard (opt-in, side-by-side with the routes above — see
-  // internal/dashboard-v2-plan.md). Purely additive: neither router touches
-  // or reorders anything mounted before it.
+  app.get('/', (req, res) => res.redirect('/v2'));
   app.use('/api/v2/guilds/:guildId', ownerOnlyModules);
   app.use('/api/v2', v2ApiRouter);
   app.use('/v2', v2ClientRouter);
+
+  // Nothing answered: a page of our own instead of Express's bare "Cannot GET". Code that asks for
+  // JSON (or anything under /api/) gets JSON. Behind requireAuth like the routes above, so a
+  // signed-out visitor is sent to sign in first, as for every other address; whoever sees this
+  // page is signed in (or on an open Sylo), so it has the dashboard footer and way back.
+  app.use((req, res) => {
+    if (req.originalUrl.startsWith('/api/') || !req.accepts('html')) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    res.status(404).render('error', {
+      title: 'Page not found',
+      heading: 'Page not found',
+      message: "There's nothing at this address.",
+    });
+  });
 
   // Central error handler — keep the server up, record the error for the dashboard.
   // Express recognises an error handler by its 4-arg signature, so `_next` must
@@ -243,22 +270,27 @@ export function createApp() {
   app.use((err, req, res, _next) => {
     // The person's own doing, not a server error: a per-server ceiling (src/lib/limits.js) or a
     // role they may not hand out (src/web/middleware/roleGrants.js). The reason reaches them as
-    // JSON, an htmx toast, or an error page.
+    // JSON or an error page.
     if (err instanceof LimitError || err instanceof RoleGrantError) {
       const status = err.status;
       const heading = err instanceof LimitError ? 'Limit reached' : 'Role not allowed';
       if (req.originalUrl.startsWith('/api/') || !req.accepts('html')) {
         return res.status(status).json({ error: err.message });
       }
-      if (req.get('HX-Request')) {
-        return res
-          .status(status)
-          .set('HX-Trigger', headerJson({ toast: { msg: err.message, kind: 'bad' } }))
-          .end();
-      }
       return res.status(status).render('error', { title: heading, heading, message: err.message });
     }
-    log.error('web', `${req.method} ${req.path}`, err);
+    // A request the client got wrong, not a server fault: a body over the cap (413) or one that
+    // does not parse (400), from the body parsers. Anyone can send these, so they must not reach
+    // log.error (dev-log channel, operators' phones, /health): answer and move on.
+    const status = err?.status ?? err?.statusCode;
+    if (err?.expose === true && Number.isInteger(status) && status >= 400 && status < 500) {
+      log.debug('web', `${req.method} ${routeLabel(req)} ${status} ${err.type ?? ''}`.trim());
+      if (res.headersSent) return res.end();
+      return res.status(status).json({ error: status === 413 ? 'Payload too large' : 'Bad request' });
+    }
+    // The route pattern, never the raw path: the path is the caller's to choose (a unique message
+    // per request) and in a webhook URL it holds a secret token.
+    log.error('web', `${req.method} ${routeLabel(req)}`, err);
     res.status(500).json({ error: 'Internal server error' });
   });
 
@@ -272,6 +304,11 @@ export function createApp() {
  */
 export function startWeb(port) {
   const app = createApp();
+  const proxyWarning = defaultProxyTrustWarning(config);
+  if (proxyWarning) log.warn('web', proxyWarning);
+  if (!v2Build.exists()) {
+    log.warn('web', 'The dashboard is not built, so /v2 answers 503: run npm run build:v2.');
+  }
   return new Promise((resolve) => {
     const server = app.listen(port, () => {
       log.info('web', `Dashboard listening on http://localhost:${port}`);

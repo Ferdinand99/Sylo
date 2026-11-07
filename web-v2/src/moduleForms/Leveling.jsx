@@ -2,11 +2,17 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api.js';
 import ChipPicker from '../components/ChipPicker.jsx';
+import HowItWorks from '../components/HowItWorks.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import UnitInput from '../components/UnitInput.jsx';
+import Meta from '../components/Meta.jsx';
+import { tokensFor } from '../placeholders.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -35,6 +41,7 @@ const fromForm = (form) => {
 };
 
 export default function Leveling() {
+  const limits = useModuleLimits('leveling');
   const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm(
     'leveling',
     {
@@ -108,12 +115,19 @@ export default function Leveling() {
     <>
       <h1 className="v2-section-title">Leveling</h1>
       <p className="v2-field-hint">
-        Members earn 15–25 XP per message (once per cooldown), plus optional voice XP, on a MEE6-style curve —
-        scaled by the XP rate and any role/channel multipliers below. The public web leaderboard toggle is on
-        the Leaderboard page. Turn the <code>/rank</code> and <code>/leaderboard</code> commands off, or limit
-        them to certain channels or roles, on the <Link to={`/guilds/${guildId}/commands`}>Commands</Link>{' '}
-        page.
+        Members earn XP by chatting and level up, and you can reward levels with roles.
       </p>
+      <p className="v2-field-hint">
+        Commands: <code>/rank</code> <code>/leaderboard</code>. Turn them off, or limit them to certain
+        channels or roles, on the <Link to={`/guilds/${guildId}/commands`}>Commands</Link> page.
+      </p>
+      <HowItWorks>
+        <p>
+          Members earn 15–25 XP per message (once per cooldown), plus optional voice XP. Each level needs more
+          than the last, scaled by the XP rate and any role or channel multipliers below.
+        </p>
+        <p>The public leaderboard on/off switch is on the Leaderboard page.</p>
+      </HowItWorks>
 
       <form onSubmit={save} data-savebar>
         <div className="v2-group">
@@ -142,26 +156,28 @@ export default function Leveling() {
             </select>
           </div>
           <div className="v2-field">
-            <label>
-              Level-up message{' '}
-              <span className="v2-field-hint">
-                — {'{player}'} {'{level}'} {'{username}'} {'{server}'}
-              </span>
-            </label>
+            <label htmlFor="announceMessage">Level-up message</label>
             <textarea
+              id="announceMessage"
               rows={2}
-              maxLength={2000}
+              maxLength={limitOf(limits, 'announceMessage').maxLength}
               placeholder="GG {player}, you just advanced to level {level}!"
               value={form.announceMessage}
               onChange={(e) => set({ announceMessage: e.target.value })}
             />
+            <PlaceholderHint
+              fieldId="announceMessage"
+              tokens={tokensFor('leveling')}
+              value={form.announceMessage}
+              onChange={(announceMessage) => set({ announceMessage })}
+            />
           </div>
           <div className="v2-field">
-            <label>XP cooldown (seconds)</label>
-            <input
-              type="number"
-              min={0}
-              max={3600}
+            <label>XP cooldown</label>
+            <UnitInput
+              unit="seconds"
+              min={limitOf(limits, 'cooldownSeconds').min}
+              max={limitOf(limits, 'cooldownSeconds').max}
               value={form.cooldownSeconds}
               onChange={(e) => set({ cooldownSeconds: Number(e.target.value) })}
             />
@@ -192,16 +208,27 @@ export default function Leveling() {
           </div>
 
           {form.rewards.map((r) => (
-            <div className="v2-field-row" key={r.key}>
+            <div className="v2-field-row v2-pair-row" key={r.key}>
+              <span className="v2-pair-prefix" aria-hidden="true">
+                Level
+              </span>
               <input
                 type="number"
-                min={1}
-                max={1000}
-                style={{ maxWidth: '90px' }}
+                aria-label="Reward level"
+                min={limitOf(limits, 'rewards[].level').min}
+                max={limitOf(limits, 'rewards[].level').max}
+                className="v2-input-num"
                 value={r.level}
                 onChange={(e) => updateReward(r.key, { level: Number(e.target.value) })}
               />
-              <select value={r.roleId} onChange={(e) => updateReward(r.key, { roleId: e.target.value })}>
+              <span className="v2-pair-arrow" aria-hidden="true">
+                →
+              </span>
+              <select
+                aria-label="Reward role"
+                value={r.roleId}
+                onChange={(e) => updateReward(r.key, { roleId: e.target.value })}
+              >
                 <option value="">— select a role —</option>
                 {data.roles.map((role) => (
                   <option key={role.id} value={role.id}>
@@ -209,12 +236,17 @@ export default function Leveling() {
                   </option>
                 ))}
               </select>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeReward(r.key)}>
-                remove
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeReward(r.key)}>
+                Remove
               </button>
             </div>
           ))}
-          <button type="button" className="v2-btn-ghost" onClick={addReward}>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            onClick={addReward}
+            disabled={form.rewards.length >= (limitOf(limits, 'rewards').maxItems ?? Infinity)}
+          >
             + Add role reward
           </button>
 
@@ -232,18 +264,20 @@ export default function Leveling() {
 
         <div className="v2-group">
           <h2 className="v2-group-title">XP rate</h2>
-          <div className="v2-field-row">
-            {data.xpRates.map((x) => (
-              <label className="v2-check" key={x}>
-                <input
-                  type="radio"
-                  name="xpRate"
-                  checked={form.xpRate === x}
-                  onChange={() => set({ xpRate: x })}
-                />
-                x{x}
-              </label>
-            ))}
+          <div className="v2-field">
+            <label htmlFor="xpRate">Speed everyone levels up at</label>
+            <select
+              id="xpRate"
+              value={String(form.xpRate)}
+              onChange={(e) => set({ xpRate: data.xpRates.find((x) => String(x) === e.target.value) ?? 1 })}
+            >
+              {data.xpRates.map((x) => (
+                <option key={x} value={String(x)}>
+                  {`x${x}`}
+                  {x === 1 ? ' (normal)' : ''}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -261,12 +295,12 @@ export default function Leveling() {
           </div>
           <div className="v2-field">
             <label>
-              XP per active voice-minute <span className="v2-field-hint">— before rate/multipliers</span>
+              Voice XP <span className="v2-field-hint">— before rate/multipliers</span>
             </label>
-            <input
-              type="number"
-              min={1}
-              max={60}
+            <UnitInput
+              unit="XP per active minute"
+              min={limitOf(limits, 'voiceXpPerMin').min}
+              max={limitOf(limits, 'voiceXpPerMin').max}
               value={form.voiceXpPerMin}
               onChange={(e) => set({ voiceXpPerMin: Number(e.target.value) })}
             />
@@ -290,8 +324,9 @@ export default function Leveling() {
             capped at 10×.
           </p>
           {form.multipliers.map((m) => (
-            <div className="v2-field-row" key={m.key}>
+            <div className="v2-field-row v2-pair-row v2-pair-row-multiplier" key={m.key}>
               <select
+                aria-label="Role or channel"
                 value={`${m.type}:${m.id}`}
                 onChange={(e) => {
                   const [type, id] = e.target.value.split(':');
@@ -314,27 +349,36 @@ export default function Leveling() {
                   ))}
                 </optgroup>
               </select>
+              <span className="v2-pair-arrow" aria-hidden="true">
+                ×
+              </span>
               <input
                 type="number"
-                min={0.1}
-                max={5}
+                aria-label="XP factor"
+                min={limitOf(limits, 'multipliers[].factor').min}
+                max={limitOf(limits, 'multipliers[].factor').max}
                 step={0.05}
-                style={{ maxWidth: '100px' }}
+                className="v2-input-num"
                 value={m.factor}
                 onChange={(e) => updateMultiplier(m.key, { factor: Number(e.target.value) })}
               />
-              <button type="button" className="v2-btn-ghost" onClick={() => removeMultiplier(m.key)}>
-                remove
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeMultiplier(m.key)}>
+                Remove
               </button>
             </div>
           ))}
-          <button type="button" className="v2-btn-ghost" onClick={addMultiplier}>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            onClick={addMultiplier}
+            disabled={form.multipliers.length >= (limitOf(limits, 'multipliers').maxItems ?? Infinity)}
+          >
             + Add multiplier
           </button>
         </div>
 
         <div className="v2-group">
-          <h2 className="v2-group-title">No-XP roles</h2>
+          <h2 className="v2-group-title">XP by role</h2>
           <div className="v2-field">
             <label className="v2-check">
               <input
@@ -364,7 +408,7 @@ export default function Leveling() {
         </div>
 
         <div className="v2-group">
-          <h2 className="v2-group-title">No-XP channels</h2>
+          <h2 className="v2-group-title">XP by channel</h2>
           <div className="v2-field">
             <label className="v2-check">
               <input
@@ -400,22 +444,32 @@ export default function Leveling() {
           <p className="v2-note">No XP earned yet.</p>
         ) : (
           <div className="v2-list">
-            {data.board.rows.map((r) => (
+            {data.board.rows.slice(0, 5).map((r) => (
               <div className="v2-row" key={r.rank}>
                 <div className="v2-row-main">
                   <h3>
                     #{r.rank} {r.name}
                   </h3>
                   <p>
-                    Level {r.level} · {r.xp} XP
-                    {r.voiceXp ? ` · ${r.voiceXp} voice XP (${r.voiceMinutes} min)` : ''} · {r.messages}{' '}
-                    messages
+                    <Meta
+                      items={[
+                        `Level ${r.level}`,
+                        `${r.xp} XP`,
+                        r.voiceXp ? `${r.voiceXp} voice XP (${r.voiceMinutes} min)` : false,
+                        `${r.messages} messages`,
+                      ]}
+                    />
                   </p>
                 </div>
               </div>
             ))}
           </div>
         )}
+        {data.board.rows.length > 0 ? (
+          <p className="v2-field-hint">
+            <Link to={`/guilds/${guildId}/leaderboard`}>Full leaderboard →</Link>
+          </p>
+        ) : null}
       </div>
 
       <div className="v2-group">
@@ -423,13 +477,16 @@ export default function Leveling() {
         <form onSubmit={onSetXp} className="v2-field-row">
           <input
             type="text"
+            aria-label="User ID or @mention"
             placeholder="user ID or @mention"
             value={xpUserId}
             onChange={(e) => setXpUserId(e.target.value)}
           />
           <input
             type="number"
-            min={0}
+            aria-label="New XP total"
+            min={limitOf(limits, 'xp').min}
+            max={limitOf(limits, 'xp').max}
             placeholder="xp"
             style={{ maxWidth: '120px' }}
             value={xpValue}

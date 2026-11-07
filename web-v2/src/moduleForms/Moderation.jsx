@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import UnitInput from '../components/UnitInput.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 const ACTION_LABELS = { timeout: 'Timeout', kick: 'Kick', ban: 'Ban' };
 
@@ -34,6 +36,7 @@ const fromForm = (form) => ({
 });
 
 export default function Moderation() {
+  const limits = useModuleLimits('moderation');
   const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm(
     'moderation',
     { toForm, fromForm }
@@ -52,9 +55,9 @@ export default function Moderation() {
     <>
       <h1 className="v2-section-title">Moderation</h1>
       <p className="v2-field-hint">
-        Warning thresholds apply an action automatically once a member reaches a given warning count — the{' '}
+        Warning actions apply a punishment automatically once a member reaches a given warning count — the{' '}
         <strong>strictest</strong> matching rule wins. Warnings and bans themselves are managed on the{' '}
-        <Link to={`/guilds/${guildId}/moderation`}>Moderation</Link> page, not here.
+        <Link to={`/guilds/${guildId}/moderation`}>Infractions tab</Link>, not here.
       </p>
 
       <form onSubmit={save} data-savebar>
@@ -65,11 +68,11 @@ export default function Moderation() {
               checked={form.dmOnPunish}
               onChange={(e) => set({ dmOnPunish: e.target.checked })}
             />
-            DM the user when they are punished
+            DM members when an action is taken against them
           </label>
         </div>
 
-        <h2 className="v2-group-title">Warning thresholds</h2>
+        <h2 className="v2-group-title">Warning actions</h2>
         {form.rules.length === 0 ? (
           <p className="v2-field-hint">No rules yet — warnings alone have no effect.</p>
         ) : null}
@@ -77,8 +80,8 @@ export default function Moderation() {
           <div className="v2-rule-card" key={r.key}>
             <div className="v2-rule-head">
               <span className="v2-field-hint">Rule</span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRule(r.key)}>
-                remove rule
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRule(r.key)}>
+                Remove rule
               </button>
             </div>
             <div className="v2-field-row">
@@ -86,8 +89,9 @@ export default function Moderation() {
                 <label>At warning #</label>
                 <input
                   type="number"
-                  min={1}
-                  max={100}
+                  className="v2-input-num"
+                  min={limitOf(limits, 'warnThresholds[].count').min}
+                  max={limitOf(limits, 'warnThresholds[].count').max}
                   value={r.count}
                   onChange={(e) => updateRule(r.key, { count: Number(e.target.value) })}
                 />
@@ -104,10 +108,10 @@ export default function Moderation() {
               </div>
               {r.action === 'timeout' ? (
                 <div className="v2-field">
-                  <label>Timeout (min)</label>
-                  <input
-                    type="number"
-                    min={1}
+                  <label>Timeout length</label>
+                  <UnitInput
+                    unit="minutes"
+                    min={limitOf(limits, 'warnThresholds[].durationMinutes').min}
                     value={r.durationMinutes}
                     onChange={(e) => updateRule(r.key, { durationMinutes: Number(e.target.value) })}
                   />
@@ -120,21 +124,20 @@ export default function Moderation() {
           + Add rule
         </button>
 
-        <div className="v2-field v2-section-gap-sm">
-          <label htmlFor="infractionRetentionDays">
-            Delete inactive cases after <span className="v2-field-hint">— days; 0 = keep forever</span>
-          </label>
-          <input
+        <div className="v2-field v2-section-gap-md">
+          <label htmlFor="infractionRetentionDays">Delete inactive cases after</label>
+          <UnitInput
             id="infractionRetentionDays"
-            type="number"
-            min={0}
-            max={3650}
+            unit="days"
+            min={limitOf(limits, 'infractionRetentionDays').min}
+            max={limitOf(limits, 'infractionRetentionDays').max}
             value={form.infractionRetentionDays}
             onChange={(e) => set({ infractionRetentionDays: Number(e.target.value) })}
           />
           <p className="v2-field-hint">
-            A daily job removes cases that have been deleted or resolved (an unban / untimeout) once they are
-            older than this. Active warnings and the visible history are never auto-removed.
+            0 keeps them forever. A daily job removes cases that have been deleted or resolved (an unban /
+            untimeout) once they are older than this. Active warnings and the visible history are never
+            auto-removed.
           </p>
         </div>
       </form>

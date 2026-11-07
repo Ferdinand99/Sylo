@@ -16,6 +16,7 @@ import { postToChannel } from './lib/send.js';
 import { settleEndedPost } from './lib/liveAlerts.js';
 import { encodeLiveValue, decodeLiveValue, normaliseOnEnd } from '../lib/liveValue.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
 
 const API = 'https://api.kick.com/public/v1';
 const TOKEN_URL = 'https://id.kick.com/oauth/token';
@@ -28,7 +29,14 @@ export const DEFAULT_MESSAGE = '🟢 **{name}** is live on Kick!';
 // since there is no embed to hold it.
 export const DEFAULT_PLAIN_MESSAGE = '🟢 {name} is live on Kick! {title} — {url}';
 // Kick slugs are lowercase letters, digits, underscores and hyphens.
-const SLUG_RE = /^[a-z0-9_-]{2,25}$/;
+
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  alerts: { maxItems: 50 },
+  'alerts[].slug': { maxLength: 25 },
+  'alerts[].message': { maxLength: 1500 },
+};
+const SLUG_RE = new RegExp(`^[a-z0-9_-]{2,${LIMITS['alerts[].slug'].maxLength}}$`);
 const isId = (v) => /^\d{17,20}$/.test(v ?? '');
 
 export function normaliseKickConfig(raw = {}) {
@@ -44,7 +52,7 @@ export function normaliseKickConfig(raw = {}) {
           .replace(/^@/, ''),
         channelId: isId(a.channelId) ? a.channelId : '',
         roleId: isId(a.roleId) ? a.roleId : '',
-        message: String(a.message ?? '').slice(0, 1500),
+        message: String(a.message ?? '').slice(0, LIMITS['alerts[].message'].maxLength),
         plainText: Boolean(a.plainText),
         onEnd: normaliseOnEnd(a.onEnd),
       }))
@@ -53,7 +61,7 @@ export function normaliseKickConfig(raw = {}) {
         seen.add(a.slug + a.channelId);
         return true;
       })
-      .slice(0, 50),
+      .slice(0, LIMITS.alerts.maxItems),
   };
 }
 
@@ -206,8 +214,11 @@ async function tick() {
   }
 }
 
-const timer = setInterval(() => {
-  tick().catch((err) => log.error('kick-alerts', 'tick failed:', err.message));
-}, POLL_MS);
-timer.unref();
-setTimeout(() => tick().catch(() => {}), 30_000).unref();
+every(
+  'kick-alerts',
+  POLL_MS,
+  () => {
+    tick().catch((err) => log.error('kick-alerts', 'tick failed:', err.message));
+  },
+  { firstDelayMs: 30_000 }
+);

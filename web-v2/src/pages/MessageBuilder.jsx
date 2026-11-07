@@ -6,7 +6,9 @@ import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { isDirty } from '../components/formEqual.js';
 import { useUnsavedChangesGuard, SKIP_UNSAVED_GUARD } from '../components/useUnsavedChangesGuard.js';
-import EmbedCard, { autoGrow, newKey } from '../components/EmbedCard.jsx';
+import AppTag from '../components/AppTag.jsx';
+import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
+import EmbedCard, { newKey } from '../components/EmbedCard.jsx';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 const MAX_EMBEDS = 10;
@@ -175,7 +177,11 @@ export default function MessageBuilder() {
         setMessageId(rec.messageId);
         setSavedSnapshot({ ...sent, channelId: rec.channelId });
         if (isNew) {
-          navigate(`/guilds/${guildId}/messages/${rec.id}`, { replace: true, state: SKIP_UNSAVED_GUARD });
+          navigate(`/guilds/${guildId}/messages/${rec.id}`, {
+            replace: true,
+            preventScrollReset: true,
+            state: SKIP_UNSAVED_GUARD,
+          });
         }
       }
     } catch (err) {
@@ -253,21 +259,17 @@ export default function MessageBuilder() {
           <div className="v2-msg-avatar">S</div>
           <div className="v2-msg-head-text">
             <span className="v2-msg-botname">Sylo</span>
-            <span className="v2-msg-botbadge">BOT</span>
+            <AppTag />
             <span className="v2-msg-time">Today</span>
           </div>
         </div>
-        <textarea
+        <AutoGrowTextarea
           className="v2-msg-content"
-          rows={1}
+          aria-label="Message text"
           maxLength={2000}
           placeholder="Write your message here!"
           value={form.content}
-          onChange={(e) => {
-            autoGrow(e);
-            setForm((f) => ({ ...f, content: e.target.value }));
-          }}
-          onFocus={autoGrow}
+          onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
         />
 
         {form.embeds.map((embed, i) => (

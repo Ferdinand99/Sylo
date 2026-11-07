@@ -44,7 +44,7 @@ export function cleanDescription(raw) {
 
 /**
  * Group a flat `listPublicPosts()` result by status the way every roadmap
- * view (V1 EJS, V2 React, the marketing site's public JSON consumer) wants
+ * view (the dashboard, the marketing site's public JSON consumer) wants
  * it: completed newest-first and capped, planned/started oldest-first.
  */
 export function groupPublicPosts(posts) {

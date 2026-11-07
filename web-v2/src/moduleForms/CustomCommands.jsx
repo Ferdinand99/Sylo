@@ -6,8 +6,12 @@ import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { PlatformContext } from '../platformContext.jsx';
+import Meta, { plural } from '../components/Meta.jsx';
+import { tokensFor } from '../placeholders.js';
 
 const ACTION_TYPES = [
   ['reply', 'Bot responds with a message in the current channel'],
@@ -32,7 +36,9 @@ function blankAction(type) {
   return a;
 }
 
-function ActionBlock({ action, index, count, roles, channels, onChange, onMove, onRemove }) {
+function ActionBlock({ action, index, count, roles, channels, placeholders, onChange, onMove, onRemove }) {
+  const tokens = tokensFor('customCommands', placeholders);
+  const limits = useModuleLimits('custom-commands');
   const set = (patch) => onChange({ ...action, ...patch });
   const updateMessage = (key, patch) =>
     set({ messages: action.messages.map((m) => (m.key === key ? { ...m, ...patch } : m)) });
@@ -57,7 +63,7 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
           >
             ↓
           </button>
-          <button type="button" className="v2-btn-ghost" onClick={onRemove}>
+          <button type="button" className="v2-btn-danger-ghost" onClick={onRemove}>
             Remove
           </button>
         </div>
@@ -118,17 +124,30 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
                     </button>
                   ) : null}
                   {action.messages.length > 1 ? (
-                    <button type="button" className="v2-btn-ghost" onClick={() => removeMessage(m.key)}>
+                    <button
+                      type="button"
+                      className="v2-btn-danger-ghost"
+                      onClick={() => removeMessage(m.key)}
+                    >
                       Remove
                     </button>
                   ) : null}
                 </div>
               </div>
               <textarea
+                id={`cc-msg-${action.key}-${m.key}`}
+                aria-label={`Message ${mi + 1} text`}
                 rows={2}
+                maxLength={limitOf(limits, 'commands[].actions[].messages[].content').maxLength}
                 placeholder="Write your message here… (leave blank for embed-only)"
                 value={m.content}
                 onChange={(e) => updateMessage(m.key, { content: e.target.value })}
+              />
+              <PlaceholderHint
+                fieldId={`cc-msg-${action.key}-${m.key}`}
+                tokens={tokens}
+                value={m.content}
+                onChange={(content) => updateMessage(m.key, { content })}
               />
               {m.embed ? (
                 <div className="u-mt-2">
@@ -137,6 +156,7 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
                     onChange={(embed) => updateMessage(m.key, { embed })}
                     timestamp
                     placeholders={{ title: 'Embed title', description: 'Embed description' }}
+                    vars={tokens.map((t) => ({ token: t.token, label: t.token.replace(/[{}]/g, '') }))}
                   />
                   <button
                     type="button"
@@ -149,7 +169,15 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
               ) : null}
             </div>
           ))}
-          <button type="button" className="v2-btn-ghost" onClick={addMessage}>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            onClick={addMessage}
+            disabled={
+              action.messages.length >=
+              (limitOf(limits, 'commands[].actions[].messages').maxItems ?? Infinity)
+            }
+          >
             + Add a message (the bot picks one at random)
           </button>
         </>
@@ -159,6 +187,7 @@ function ActionBlock({ action, index, count, roles, channels, onChange, onMove, 
 }
 
 function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel, saving }) {
+  const limits = useModuleLimits('custom-commands');
   const { platform, commandPrefix } = useContext(PlatformContext);
   const [name, setName] = useState(initial.name || '');
   const [description, setDescription] = useState(initial.description || '');
@@ -238,8 +267,8 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
           <span className="v2-field-hint">{commandPrefix}</span>
           <input
             type="text"
-            maxLength={32}
-            pattern="[a-z0-9_-]{1,32}"
+            maxLength={limitOf(limits, 'commands[].name').maxLength}
+            pattern={`[a-z0-9_-]{1,${limitOf(limits, 'commands[].name').maxLength ?? ''}}`}
             placeholder="my-command"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -265,7 +294,7 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
         </label>
         <input
           type="text"
-          maxLength={100}
+          maxLength={limitOf(limits, 'commands[].description').maxLength}
           placeholder="What this command does"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -283,21 +312,12 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
             count={actions.length}
             roles={roles}
             channels={channels}
+            placeholders={placeholders}
             onChange={(next) => updateAction(a.key, next)}
             onMove={(dir) => moveAction(a.key, dir)}
             onRemove={() => removeAction(a.key)}
           />
         ))}
-        {placeholders.length ? (
-          <p className="v2-field-hint">
-            Placeholders:{' '}
-            {placeholders.map((p) => (
-              <code key={p} style={{ marginRight: '6px' }}>
-                {p}
-              </code>
-            ))}
-          </p>
-        ) : null}
 
         {picking ? (
           <div className="v2-field-row" style={{ flexWrap: 'wrap' }}>
@@ -311,7 +331,12 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
             </button>
           </div>
         ) : (
-          <button type="button" className="v2-btn-ghost" onClick={() => setPicking(true)}>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            onClick={() => setPicking(true)}
+            disabled={actions.length >= (limitOf(limits, 'commands[].actions').maxItems ?? Infinity)}
+          >
             + Add another action
           </button>
         )}
@@ -337,8 +362,8 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
           <label>Per-user cooldown (seconds)</label>
           <input
             type="number"
-            min={0}
-            max={86400}
+            min={limitOf(limits, 'commands[].cooldownSeconds').min}
+            max={limitOf(limits, 'commands[].cooldownSeconds').max}
             style={{ maxWidth: '120px' }}
             value={cooldownSeconds}
             onChange={(e) => setCooldownSeconds(Number(e.target.value))}
@@ -374,6 +399,8 @@ export default function CustomCommands() {
 
   useEffect(() => {
     load();
+    // Reload when the server changes; `load` is re-created every render and reads guildId itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guildId]);
 
   if (state.error) return <LoadError error={state.error} what="Custom commands" />;
@@ -425,14 +452,26 @@ export default function CustomCommands() {
         ) : (
           <div className="v2-list">
             {d.commands.map((c) => (
-              <div className="v2-row" key={c.id}>
+              <div className="v2-row v2-row-stack" key={c.id}>
                 <div className="v2-row-main">
                   <h3>/{c.name}</h3>
                   <p>
-                    {c.description || 'No description'} · {c.actions.length} action(s)
-                    {c.allowedRoles.length || c.allowedChannels.length ? ' · restricted' : ''}
-                    {c.cooldownSeconds ? ` · ${c.cooldownSeconds}s cooldown` : ''}
+                    <Meta
+                      items={[
+                        c.description || 'No description',
+                        plural(c.actions.length, 'action'),
+                        (c.allowedRoles.length > 0 || c.allowedChannels.length > 0) &&
+                          'limited to certain roles or channels',
+                        c.cooldownSeconds ? `${c.cooldownSeconds}s cooldown` : false,
+                      ]}
+                    />
                   </p>
+                  {c.reserved ? (
+                    <p className="v2-note">
+                      Rename needed: /{c.name} is now a built-in command, so this command is switched off
+                      until you give it another name.
+                    </p>
+                  ) : null}
                   {editingId === c.id ? (
                     <CommandForm
                       initial={c}
@@ -446,15 +485,11 @@ export default function CustomCommands() {
                   ) : null}
                 </div>
                 {editingId === c.id ? null : (
-                  <div className="v2-field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div className="v2-row-actions">
                     <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(c.id)}>
                       Edit
                     </button>
-                    <button
-                      type="button"
-                      className="v2-btn-danger v2-danger-sep"
-                      onClick={() => onDelete(c.id)}
-                    >
+                    <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(c.id)}>
                       Delete
                     </button>
                   </div>

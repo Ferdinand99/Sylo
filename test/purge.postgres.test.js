@@ -51,6 +51,64 @@ test(
       assert.ok(otherAfter.total > 0, 'other guild untouched');
     });
 
+    await t.test(
+      'forgetUser takes the member off polls, giveaways, voice channels and staff columns',
+      async () => {
+        const { createPoll } = await import('../src/db/polls.js');
+        const { createGiveaway } = await import('../src/db/giveaways.js');
+        const { addTempChannel } = await import('../src/db/tempVoice.js');
+        const { scheduleVerificationKick } = await import('../src/db/verificationKicks.js');
+        const { createAppeal, decideAppeal } = await import('../src/db/appeals.js');
+        const { closeTicket } = await import('../src/db/tickets.js');
+        const g = `${G}-owned`;
+        const other = `o-${Date.now()}`;
+
+        await createPoll({
+          messageId: `m-${g}`,
+          guildId: g,
+          channelId: '9',
+          question: 'q?',
+          options: ['a', 'b'],
+          createdBy: U,
+        });
+        await createGiveaway({
+          guildId: g,
+          channelId: '9',
+          prize: 'p',
+          hostId: U,
+          endsAt: Date.now() + 1000,
+        });
+        await addTempChannel({ channelId: `vc-${g}`, guildId: g, hubId: 'hub', ownerId: U });
+        await scheduleVerificationKick({ guildId: g, userId: U, dueAt: Date.now() + 1000 });
+        const ticket = await createTicket(g, other);
+        await closeTicket(ticket.id, U);
+        const appealId = await createAppeal(g, { userId: other, answers: [] });
+        await decideAppeal(g, appealId, { status: 'denied', decidedBy: U, reason: 'no' });
+
+        const before = Object.fromEntries((await describeUserData(g, U)).items.map((i) => [i.key, i.count]));
+        for (const key of [
+          'pollsCreated',
+          'giveawaysHosted',
+          'tempVoiceOwned',
+          'verificationKicks',
+          'ticketsClosed',
+          'appealsDecided',
+        ]) {
+          assert.equal(before[key], 1, key);
+        }
+
+        const result = await forgetUser(g, U);
+        assert.equal(result.pollsCreated, 1);
+        assert.equal(result.giveawaysHosted, 1);
+        assert.equal(result.tempVoiceOwned, 1);
+        assert.equal(result.verificationKicks, 1);
+        assert.equal(result.ticketsClosed, 1);
+        assert.equal(result.appealsDecided, 1);
+        assert.equal((await describeUserData(g, U)).erasable, 0);
+        await purgeGuild(g);
+      }
+    );
+
     await t.test('forgetUser deletes only that member, describeUserData/exportUserData agree', async () => {
       const g = `${G}-forget`;
       const KEEP = `${U}-keep`;

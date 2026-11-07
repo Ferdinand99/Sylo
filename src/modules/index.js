@@ -23,11 +23,17 @@ import './inviteTracker.js';
 import './polls.js';
 import './twitchAlerts.js';
 import './youtubeAlerts.js';
+import './youtubeWebsub.js';
 import './kickAlerts.js';
 import './rss.js';
 import './appleConnect.js';
 import './insights.js';
 import './giveaways.js';
+import './events.js';
+import './suggestions.js';
+import './tempRoles.js';
+import './autoThreads.js';
+import './quoteBoard.js';
 import './messageCreator.js'; // registers the role-button / role-select component handlers
 import './moderation.js'; // no gateway handlers, but runs the temporary-ban expiry loop
 import './birthdays.js'; // no gateway handlers, but runs the daily birthday sweep

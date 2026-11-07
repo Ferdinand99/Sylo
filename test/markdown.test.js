@@ -36,3 +36,10 @@ test('mdToHtml: empty input renders no blocks', () => {
   assert.equal(mdToHtml(''), '');
   assert.equal(mdToHtml(undefined), '');
 });
+
+test('emphasis markers inside a link address are not turned into tags', () => {
+  const html = mdToHtml('[x](http://a/*b*c* and_more_) [y](http://a/_b_)');
+  assert.ok(!/href="[^"]*</.test(html), 'no markup inside an href: ' + html);
+  assert.match(mdToHtml('[x](http://a/*b*c*)'), /href="http:\/\/a\/&#42;b&#42;c&#42;"/);
+  assert.match(mdToHtml('[y](http://a/_b_)'), /href="http:\/\/a\/&#95;b&#95;"/);
+});

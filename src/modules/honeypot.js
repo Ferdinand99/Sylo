@@ -28,6 +28,17 @@ export const HONEYPOT_ACTIONS = ['kick', 'timeout', 'ban'];
 const ACTION_LABELS = { kick: 'Kicks', timeout: 'Timeouts', ban: 'Bans' };
 const MAX_TIMEOUT_MS = 28 * 86_400_000; // Discord's own cap
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  channels: { maxItems: 25 },
+  'channels[].timeoutMinutes': { min: 1, max: 40320 },
+  messages: { maxItems: 25 },
+  'messages[].bait': { maxLength: 500 },
+  'messages[].timeoutMinutes': { min: 1, max: 40320 },
+};
+const CH_TIMEOUT = LIMITS['channels[].timeoutMinutes'];
+const MSG_TIMEOUT = LIMITS['messages[].timeoutMinutes'];
+
 const clampInt = (v, min, max, dflt) => {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : dflt;
@@ -43,23 +54,23 @@ export function normaliseHoneypotConfig(raw = {}) {
       .map((c) => ({
         channelId: isId(c.channelId) ? c.channelId : '',
         action: action(c.action),
-        timeoutMinutes: clampInt(c.timeoutMinutes, 1, 40320, 10),
+        timeoutMinutes: clampInt(c.timeoutMinutes, CH_TIMEOUT.min, CH_TIMEOUT.max, 10),
         deleteMessage: c.deleteMessage !== false,
         triggerCount: clampInt(c.triggerCount, 0, 10_000_000, 0),
       }))
       .filter((c, i, arr) => c.channelId && arr.findIndex((x) => x.channelId === c.channelId) === i)
-      .slice(0, 25),
+      .slice(0, LIMITS.channels.maxItems),
     messages: (Array.isArray(raw.messages) ? raw.messages : [])
       .map((m) => ({
         channelId: isId(m.channelId) ? m.channelId : '',
         messageId: isId(m.messageId) ? m.messageId : '',
-        bait: String(m.bait ?? '').slice(0, 500),
+        bait: String(m.bait ?? '').slice(0, LIMITS['messages[].bait'].maxLength),
         action: action(m.action),
-        timeoutMinutes: clampInt(m.timeoutMinutes, 1, 40320, 10),
+        timeoutMinutes: clampInt(m.timeoutMinutes, MSG_TIMEOUT.min, MSG_TIMEOUT.max, 10),
         triggerCount: clampInt(m.triggerCount, 0, 10_000_000, 0),
       }))
       .filter((m, i, arr) => m.channelId && arr.findIndex((x) => x.channelId === m.channelId) === i)
-      .slice(0, 25),
+      .slice(0, LIMITS.messages.maxItems),
   };
 }
 

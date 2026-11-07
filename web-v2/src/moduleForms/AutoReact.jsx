@@ -1,12 +1,24 @@
+import { useContext } from 'react';
+import { PlatformContext } from '../platformContext.jsx';
+import EmojiPicker from '../components/EmojiPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
+import { cardTitle, channelTitle, copyIdHint } from '../util.js';
 
 const MODE_LABELS = { always: 'React to every message', random: 'React at a random chance' };
-const ROLE_ACTION_LABELS = { add: 'Give them the role', remove: 'Take the role away' };
+const ROLE_ACTION_LABELS = { add: 'Give it to them', remove: 'Take it away from them' };
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
+}
+
+/** The emoji list with `emoji` added at the end, space-separated (the field takes several). */
+export function appendEmoji(text, emoji) {
+  const current = String(text ?? '').trimEnd();
+  return current ? `${current} ${emoji}` : emoji;
 }
 
 function toFormRule(r) {
@@ -21,6 +33,14 @@ function toFormRule(r) {
     roleId: r.roleId || '',
     roleAction: r.roleAction || 'add',
   };
+}
+
+// A rule's title says what it does: "🧟 🔥 in #general", or "Rule 2" while it is still empty.
+function ruleTitle(r, channels, index) {
+  const emojis = cardTitle(r.emojisText, '', 24);
+  const where = channelTitle(channels, r.channelId, '');
+  if (emojis && where) return `${emojis} in ${where}`;
+  return emojis || where || `Rule ${index + 1}`;
 }
 
 function emptyFormRule() {
@@ -48,6 +68,8 @@ const fromForm = (form) => ({
 });
 
 export default function AutoReact() {
+  const { platform } = useContext(PlatformContext);
+  const limits = useModuleLimits('auto-react');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('auto-react', {
     toForm,
     fromForm,
@@ -66,19 +88,19 @@ export default function AutoReact() {
     <>
       <h1 className="v2-section-title">Auto-react</h1>
       <p className="v2-field-hint">
-        Reacts automatically to messages from chosen users or roles. Each rule below is independent — the{' '}
-        <strong>first</strong> rule that matches a message wins. Example: react with 🧟 to anyone with the
-        "Infected" role, and also give the "Infected" role to a few specific people to kick off the game.
+        Reacts automatically to messages from chosen users or roles. Rules are checked top to bottom; the{' '}
+        <strong>first</strong> one that matches is used. Example: react with 🧟 to anyone with the "Infected"
+        role, and also give the "Infected" role to a few specific people to kick off the game.
       </p>
 
       <form onSubmit={save} data-savebar>
         <div className="v2-field">
-          <label htmlFor="cooldownSeconds">Per-user cooldown (seconds)</label>
-          <input
+          <label htmlFor="cooldownSeconds">Per-user cooldown</label>
+          <UnitInput
             id="cooldownSeconds"
-            type="number"
-            min={0}
-            max={300}
+            unit="seconds"
+            min={limitOf(limits, 'cooldownSeconds').min}
+            max={limitOf(limits, 'cooldownSeconds').max}
             value={form.cooldownSeconds}
             onChange={(e) => set({ cooldownSeconds: Number(e.target.value) })}
           />
@@ -110,16 +132,23 @@ export default function AutoReact() {
         </div>
 
         <h2 className="v2-group-title">Rules</h2>
-        {form.rules.map((r) => (
+        {form.rules.map((r, i) => (
           <div className="v2-rule-card" key={r.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">
-                Rule — matches if <strong>either</strong> the users or the role below match
-              </span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeRule(r.key)}>
-                remove rule
+              <span className="v2-rule-title">{ruleTitle(r, data.channels, i)}</span>
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRule(r.key)}>
+                Remove rule
               </button>
             </div>
+            <p className="v2-field-hint v2-rule-lead">
+              Matches if <strong>either</strong> the users or the role below match.
+            </p>
+            {!r.targetUsersText.trim() && !r.targetRoleId ? (
+              <p className="v2-ph-warn v2-ph-warn-block" role="status">
+                <span aria-hidden="true">⚠ </span>
+                This rule has no users and no role yet, so it will be removed when you save.
+              </p>
+            ) : null}
 
             <div className="v2-field">
               <label>
@@ -127,12 +156,13 @@ export default function AutoReact() {
               </label>
               <input
                 type="text"
-                placeholder="e.g. 123456789012345678 @SomeUser"
+                placeholder="e.g. 123456789012345678 or <@123456789012345678>"
                 value={r.targetUsersText}
                 onChange={(e) => updateRule(r.key, { targetUsersText: e.target.value })}
               />
               <p className="v2-field-hint">
-                Paste one or more Discord user IDs or @mentions, separated by spaces or commas.
+                Paste one or more user IDs, separated by spaces or commas. {copyIdHint(platform)} A pasted
+                mention like &lt;@123…&gt; works too; a typed @name is not looked up.
               </p>
             </div>
 
@@ -175,16 +205,22 @@ export default function AutoReact() {
             </div>
 
             <div className="v2-field">
-              <label>Emoji to react with</label>
-              <input
-                type="text"
-                placeholder="🧟 🔥"
-                value={r.emojisText}
-                onChange={(e) => updateRule(r.key, { emojisText: e.target.value })}
-              />
+              <label htmlFor={`emojis-${r.key}`}>Emoji to react with</label>
+              <div className="v2-field-row v2-emoji-row">
+                <input
+                  id={`emojis-${r.key}`}
+                  type="text"
+                  placeholder="🧟 🔥"
+                  value={r.emojisText}
+                  onChange={(e) => updateRule(r.key, { emojisText: e.target.value })}
+                />
+                <EmojiPicker
+                  onPick={(emoji) => updateRule(r.key, { emojisText: appendEmoji(r.emojisText, emoji) })}
+                />
+              </div>
               <p className="v2-field-hint">
-                Paste one or more emoji, separated by spaces or commas — unicode (🧟) or a server custom
-                emoji.
+                Pick one or more with the smiley, or type or paste them, separated by spaces or commas —
+                unicode (🧟) or a server custom emoji.
               </p>
             </div>
 
@@ -198,14 +234,16 @@ export default function AutoReact() {
                     </option>
                   ))}
                 </select>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={r.chance}
-                  onChange={(e) => updateRule(r.key, { chance: Number(e.target.value) })}
-                />
-                <span className="v2-field-hint">% chance — only used when mode is "random chance"</span>
+                {r.mode === 'random' ? (
+                  <UnitInput
+                    unit="% chance"
+                    aria-label="Chance to react"
+                    min={limitOf(limits, 'rules[].chance').min}
+                    max={limitOf(limits, 'rules[].chance').max}
+                    value={r.chance}
+                    onChange={(e) => updateRule(r.key, { chance: Number(e.target.value) })}
+                  />
+                ) : null}
               </div>
             </div>
 
@@ -215,16 +253,10 @@ export default function AutoReact() {
               </label>
               <div className="v2-field-row">
                 <select
-                  value={r.roleAction}
-                  onChange={(e) => updateRule(r.key, { roleAction: e.target.value })}
+                  aria-label="Role to change"
+                  value={r.roleId}
+                  onChange={(e) => updateRule(r.key, { roleId: e.target.value })}
                 >
-                  {data.roleActions.map((a) => (
-                    <option key={a} value={a}>
-                      {ROLE_ACTION_LABELS[a] || a}
-                    </option>
-                  ))}
-                </select>
-                <select value={r.roleId} onChange={(e) => updateRule(r.key, { roleId: e.target.value })}>
                   <option value="">— no role change —</option>
                   {data.roles.map((rl) => (
                     <option key={rl.id} value={rl.id}>
@@ -232,6 +264,22 @@ export default function AutoReact() {
                     </option>
                   ))}
                 </select>
+                {r.roleId ? (
+                  <>
+                    <span aria-hidden="true">→</span>
+                    <select
+                      aria-label="What to do with the role"
+                      value={r.roleAction}
+                      onChange={(e) => updateRule(r.key, { roleAction: e.target.value })}
+                    >
+                      {data.roleActions.map((a) => (
+                        <option key={a} value={a}>
+                          {ROLE_ACTION_LABELS[a] || a}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : null}
               </div>
               <p className="v2-field-hint">
                 Leave as "no role change" to just react without touching roles. Set a role here to also give
@@ -240,7 +288,12 @@ export default function AutoReact() {
             </div>
           </div>
         ))}
-        <button type="button" className="v2-btn-ghost" onClick={addRule}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addRule}
+          disabled={form.rules.length >= (limitOf(limits, 'rules').maxItems ?? Infinity)}
+        >
           + Add rule
         </button>
       </form>

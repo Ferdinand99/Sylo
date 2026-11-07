@@ -1,6 +1,6 @@
-// V2 JSON API for the server-data tools that used to exist only in V1: the config-change
-// audit log, the config export and member data (look up / forget a member). Same functions
-// and rules as V1's guilds.js (shared through lib/guildData.js), answering with JSON.
+// JSON API for the server-data tools: the config-change audit log, the config export and
+// member data (look up / forget a member). Shares its functions and rules through
+// lib/guildData.js.
 //
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set and the
 // caller manages this server.
@@ -17,7 +17,7 @@ import {
 import { listAudit } from '../../db/audit.js';
 import { describeUserData } from '../../db/purge.js';
 
-// Same as V1's audit page: the newest 150 of the 500 kept per server.
+// The audit page shows the newest 150 of the 500 kept per server.
 const AUDIT_SHOWN = 150;
 const AUDIT_KEPT = 500;
 
@@ -55,7 +55,7 @@ router.get(
   })
 );
 
-// The server's configuration as a JSON download — same file as V1's /guilds/:id/export.
+// The server's configuration as a JSON download.
 router.get(
   '/export',
   asyncHandler(async (req, res) => {
@@ -83,8 +83,8 @@ router.get(
   })
 );
 
-// Delete a member's data (moderation cases and other safety records are kept, as in V1 and
-// db/purge.js). Needs `confirm: true` in the body, like V1's confirmation checkbox.
+// Delete a member's data (moderation cases and other safety records are kept, see
+// db/purge.js). Needs `confirm: true` in the body, like the confirmation checkbox.
 router.post(
   '/member-data/forget',
   asyncHandler(async (req, res) => {

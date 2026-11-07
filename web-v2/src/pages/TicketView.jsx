@@ -6,6 +6,9 @@ import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import Badge from '../components/Badge.jsx';
+import CopyButton from '../components/CopyButton.jsx';
+import Time from '../components/Time.jsx';
 
 const POLL_MS = 6000;
 // Within this many px of the bottom counts as "reading the latest" — new
@@ -20,7 +23,13 @@ function Bubble({ m }) {
   return (
     <div className={`v2-bubble is-${m.kind}`}>
       <div className="v2-bubble-meta">
-        <Meta items={[m.who, m.ago, m.kind === 'staff' && !m.delivered && 'not delivered']} />
+        <Meta
+          items={[
+            m.who,
+            <Time key="t" value={m.at} relative fallback={m.ago} />,
+            m.kind === 'staff' && !m.delivered && 'not delivered',
+          ]}
+        />
       </div>
       {m.content ? <div className="v2-bubble-body">{m.content}</div> : null}
       {(m.attachments ?? []).filter(isHttp).map((url) => (
@@ -151,17 +160,32 @@ export default function TicketView() {
   return (
     <>
       <p className="v2-field-hint">
-        <Link to={`/guilds/${guildId}/tickets`}>Back to tickets</Link>
+        <Link to={`/guilds/${guildId}/tickets`}>← Tickets</Link>
       </p>
       <h1 className="v2-section-title v2-ticket-title">
-        Ticket #{ticket.id} <span className="v2-ticket-user">{ticket.user}</span>
+        Ticket #{ticket.id}
+        {/* An unresolved name is the raw ID, which the meta line below already shows with a Copy button. */}
+        {ticket.user && ticket.user !== ticket.userId ? (
+          <>
+            {' '}
+            <span className="v2-ticket-user">{ticket.user}</span>
+          </>
+        ) : null}
       </h1>
       <p className="v2-field-hint">
         <Meta
           items={[
-            ticket.userId,
-            `opened ${ticket.openedAgo}`,
-            status === 'open' ? 'open' : 'closed',
+            ticket.userId && (
+              <span key="id">
+                User ID <code>{ticket.userId}</code> <CopyButton text={ticket.userId} what="user ID" />
+              </span>
+            ),
+            <span key="o">
+              opened <Time value={ticket.openedAt} relative fallback={ticket.openedAgo} />
+            </span>,
+            <Badge key="s" tone={status === 'open' ? 'warning' : 'neutral'}>
+              {status === 'open' ? 'Open' : 'Closed'}
+            </Badge>,
             <a key="t" href={ticketTranscriptUrl(guildId, ticketId)} download>
               Download transcript
             </a>,
@@ -209,8 +233,8 @@ export default function TicketView() {
             </button>
           </div>
           <p className="v2-field-hint" id="ticket-reply-hint">
-            Ctrl+Enter (⌘+Enter on a Mac) sends. Close ticket sends what you wrote as the final reply. With an
-            empty box it sends the default closing notice.
+            Ctrl+Enter (⌘+Enter on a Mac) sends. Close ticket sends your text as the last reply, or the
+            standard closing notice if the box is empty.
           </p>
         </div>
       ) : (

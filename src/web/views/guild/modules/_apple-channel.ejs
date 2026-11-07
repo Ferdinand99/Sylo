@@ -1,7 +1,0 @@
-<%# One channel picker for an alert kind: empty = use the main channel above. %>
-<select name="<%= name %>" class="u-w-field" aria-label="Channel for this alert">
-  <option value="">— main channel —</option>
-  <% channels.forEach(function (c) { %>
-    <option value="<%= c.id %>" <%= c.id === value ? 'selected' : '' %>>#<%= c.name %></option>
-  <% }) %>
-</select>

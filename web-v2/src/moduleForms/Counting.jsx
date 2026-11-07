@@ -4,9 +4,13 @@ import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import Time from '../components/Time.jsx';
+import UnitInput from '../components/UnitInput.jsx';
 
 export default function Counting() {
+  const limits = useModuleLimits('counting');
   const { guildId, data, setData, form, setForm, status, error, dirty, saving, save, reset } =
     useModuleForm('counting');
   const [countInput, setCountInput] = useState('');
@@ -76,10 +80,8 @@ export default function Counting() {
     <>
       <h1 className="v2-section-title">Counting</h1>
       <p className="v2-field-hint">
-        Members count upward in the chosen channel — one number per message. A wrong number{' '}
-        {form.resetOnFail === false
-          ? 'is rejected and deleted.'
-          : 'breaks the streak and it starts over from 1.'}
+        Members count upward in the chosen channel — one number per message. A wrong number is rejected; the
+        reset option below decides whether it also sends the count back to 0.
       </p>
 
       <form onSubmit={save} data-savebar>
@@ -98,36 +100,41 @@ export default function Counting() {
         <div className="v2-field">
           <label className="v2-check">
             <input type="checkbox" checked={form.react} onChange={(e) => set({ react: e.target.checked })} />
-            React with ✅ on a correct count (🎉 on a new record)
+            <span>React to correct counts</span>
           </label>
+          <p className="v2-field-hint v2-check-hint">✅ on a correct count, 🎉 on a new record.</p>
           <label className="v2-check">
             <input
               type="checkbox"
               checked={form.allowSameUser}
               onChange={(e) => set({ allowSameUser: e.target.checked })}
             />
-            Allow the same person to count multiple times in a row (off = counters must alternate)
+            <span>Let the same person count twice in a row</span>
           </label>
+          <p className="v2-field-hint v2-check-hint">When off, counters must take turns.</p>
           <label className="v2-check">
             <input
               type="checkbox"
               checked={form.resetOnFail}
               onChange={(e) => set({ resetOnFail: e.target.checked })}
             />
-            Reset to 0 when someone posts the wrong number
+            <span>Reset to 0 when someone posts the wrong number</span>
           </label>
+          <p className="v2-field-hint v2-check-hint">
+            When off, the wrong number is just rejected and the streak is kept.
+          </p>
         </div>
 
         <div className="v2-field v2-section-gap">
           <label htmlFor="penaltyRoleId">
-            Penalty role <span className="v2-field-hint">— optional</span>
+            Counting access role <span className="v2-field-hint">— optional</span>
           </label>
           <select
             id="penaltyRoleId"
             value={form.penaltyRoleId}
             onChange={(e) => set({ penaltyRoleId: e.target.value })}
           >
-            <option value="">— none (no penalty) —</option>
+            <option value="">— none (nobody loses access) —</option>
             {data.roles.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
@@ -135,38 +142,39 @@ export default function Counting() {
             ))}
           </select>
           <p className="v2-field-hint">
-            When someone breaks the streak, Sylo removes this role from them and gives it back later. Point it
-            at whatever role lets people type in the counting channel. Sylo's own top role must sit above it.
-            This is not a ban or a timeout — only this one role is touched.
+            Removed for a while when someone breaks the count, then given back. Pick the role that lets people
+            type in the counting channel. Sylo's own top role must sit above it. This is not a ban or a
+            timeout — only this one role is touched.
           </p>
         </div>
 
         <div className="v2-field">
-          <label htmlFor="penaltyMinutes">Bench for (minutes)</label>
-          <input
+          <label htmlFor="penaltyMinutes">Remove it for</label>
+          <UnitInput
             id="penaltyMinutes"
-            type="number"
-            min={1}
-            max={10080}
+            unit="minutes"
+            disabled={!form.penaltyRoleId}
+            min={limitOf(limits, 'penaltyMinutes').min}
+            max={limitOf(limits, 'penaltyMinutes').max}
             value={form.penaltyMinutes}
             onChange={(e) => set({ penaltyMinutes: Number(e.target.value) })}
           />
+          {form.penaltyRoleId ? null : (
+            <p className="v2-field-hint">Pick a counting access role above to set this.</p>
+          )}
         </div>
       </form>
 
       {data.penalties.length > 0 ? (
         <div className="v2-group v2-section-gap">
-          <h2 className="v2-group-title">Currently benched</h2>
+          <h2 className="v2-group-title">Currently without access</h2>
           <div className="v2-list">
             {data.penalties.map((p) => (
               <div className="v2-row" key={p.userId}>
                 <div className="v2-row-main">
                   <h3>{p.label}</h3>
                   <p>
-                    {p.roleName} · back at{' '}
-                    {Number.isFinite(p.restoreAt)
-                      ? new Date(p.restoreAt).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
-                      : '—'}
+                    {p.roleName} · back at {Number.isFinite(p.restoreAt) ? <Time value={p.restoreAt} /> : '—'}
                   </p>
                 </div>
                 <div className="v2-field-row">
@@ -195,13 +203,15 @@ export default function Counting() {
           </>
         ) : null}
       </p>
-      <div className="v2-field">
+      <div className="v2-field v2-count-set">
         <label htmlFor="countInput">Set the count to</label>
         <div className="v2-field-row">
           <input
             id="countInput"
             type="number"
-            min={0}
+            className="v2-input-num v2-input-num-wide"
+            min={limitOf(limits, 'count').min}
+            max={limitOf(limits, 'count').max}
             value={countInput}
             aria-invalid={countError ? true : undefined}
             aria-describedby={countError ? 'countInput-error' : undefined}
@@ -215,7 +225,7 @@ export default function Counting() {
           </button>
           <button
             type="button"
-            className="v2-btn-danger v2-danger-push"
+            className="v2-btn-danger-ghost v2-danger-push"
             disabled={countBusy}
             onClick={onResetCount}
           >

@@ -9,6 +9,12 @@ import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { getAppSetting, setAppSetting } from '../db/appSettings.js';
 import { birthdaysOnDay, guildBirthdays } from '../db/birthdays.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
+
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  message: { maxLength: 1000 },
+};
 
 const DEFAULT_MESSAGE = '🎂 Happy birthday {user}! 🎉';
 const LAST_RUN_KEY = 'birthdays:lastRun';
@@ -19,7 +25,7 @@ export function normaliseBirthdaysConfig(raw = {}) {
     message:
       String(raw.message ?? '')
         .trim()
-        .slice(0, 1000) || DEFAULT_MESSAGE,
+        .slice(0, LIMITS.message.maxLength) || DEFAULT_MESSAGE,
     roleId: /^\d{17,20}$/.test(raw.roleId ?? '') ? raw.roleId : '',
     pingRole: Boolean(raw.pingRole),
   };
@@ -139,10 +145,11 @@ export { guildBirthdays };
 // Check hourly; the app-setting guard means only the first check after midnight
 // does any work, and a mid-day restart doesn't re-post.
 const TICK_MS = 60 * 60 * 1000;
-const timer = setInterval(() => {
-  if (allClientsReady()) runBirthdaySweep().catch(() => {});
-}, TICK_MS);
-timer.unref();
-setTimeout(() => {
-  if (allClientsReady()) runBirthdaySweep().catch(() => {});
-}, 15_000).unref();
+every(
+  'birthdays',
+  TICK_MS,
+  () => {
+    if (allClientsReady()) runBirthdaySweep().catch(() => {});
+  },
+  { firstDelayMs: 15_000 }
+);

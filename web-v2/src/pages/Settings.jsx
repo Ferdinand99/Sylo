@@ -13,7 +13,30 @@ const toForm = (data) => ({
   modlogChannelId: data.modlogChannelId,
   embedColor: data.embedColorHex,
   botMasterRoleIds: data.botMasterRoleIds,
+  commandPrefix: data.commandPrefix ?? '',
 });
+
+// The same rules the server enforces (it has the last word; see src/lib/commandPrefix.js).
+// Empty is fine: it means the default.
+function prefixProblem(value, max) {
+  const v = value.trim();
+  if (/\s/.test(v)) return 'The prefix can not contain spaces.';
+  if (v.includes('`')) return 'The prefix can not contain a backtick (`).';
+  if (/\p{C}/u.test(v)) return 'The prefix can not contain invisible or control characters.';
+  if (v.length > max)
+    return `The prefix can be at most ${max} characters. Emoji and some symbols count as two.`;
+  return null;
+}
+
+// What is sent: the prefix trimmed, and nothing at all when the prefix is not allowed. The
+// message is shown as a toast (useModuleForm aborts the save on a throw).
+function settingsBody(form, data) {
+  const commandPrefix = form.commandPrefix.trim();
+  const problem =
+    data.platform === 'fluxer' ? prefixProblem(commandPrefix, data.commandPrefixMaxLength) : null;
+  if (problem) throw new Error(problem);
+  return { ...form, commandPrefix };
+}
 
 export default function Settings() {
   const { guildId, data, form, setForm, load, status, error, dirty, saving, save, reset } = useModuleForm(
@@ -23,8 +46,9 @@ export default function Settings() {
       save: saveGuildSettings,
       select: (d) => d,
       toForm,
-      // The save response isn't the settings shape — keep the form as sent.
-      afterSave: () => undefined,
+      fromForm: settingsBody,
+      // The save response isn't the settings shape — keep the form as sent (the prefix trimmed).
+      afterSave: (_result, sent) => sent,
     }
   );
   const [resettingColor, setResettingColor] = useState(false);
@@ -45,9 +69,10 @@ export default function Settings() {
   async function onResetColor() {
     setResettingColor(true);
     try {
-      await saveGuildSettings(guildId, { ...form, embedColorReset: true });
+      const body = settingsBody(form, data);
+      await saveGuildSettings(guildId, { ...body, embedColorReset: true });
       const fresh = await getGuildSettings(guildId);
-      load({ ...form, embedColor: fresh.embedColorHex });
+      load({ ...body, embedColor: fresh.embedColorHex });
     } catch (err) {
       notify(err.message);
     } finally {
@@ -55,7 +80,7 @@ export default function Settings() {
     }
   }
 
-  // Same file as the classic dashboard's "Export configuration" download.
+  // The "Export configuration" download.
   async function onExport() {
     setExporting(true);
     try {
@@ -97,10 +122,37 @@ export default function Settings() {
           </select>
         </Field>
 
+        {data.platform === 'fluxer' ? (
+          <Field
+            label="Command prefix"
+            labelNote="— optional"
+            hint={
+              <>
+                Fluxer has no slash commands, so members start a command with this, for example{' '}
+                <code>{`${form.commandPrefix.trim() || data.defaultCommandPrefix}help`}</code>. Leave it empty
+                to use the default, <code>{data.defaultCommandPrefix}</code>. Mentioning Sylo (@Sylo help)
+                always works.
+              </>
+            }
+            error={prefixProblem(form.commandPrefix, data.commandPrefixMaxLength)}
+          >
+            <input
+              type="text"
+              className="v2-input-short"
+              value={form.commandPrefix}
+              maxLength={data.commandPrefixMaxLength}
+              placeholder={data.defaultCommandPrefix}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => setForm((f) => ({ ...f, commandPrefix: e.target.value }))}
+            />
+          </Field>
+        ) : null}
+
         <Field
           group
           label="Bot master roles"
-          hint="Roles with Administrator already have dashboard access and don't need to be added here."
+          hint="Members with these roles can open this dashboard and change Sylo's settings for the server, like someone with Manage Server. Roles with Administrator already can."
         >
           <ChipPicker
             kind="role"

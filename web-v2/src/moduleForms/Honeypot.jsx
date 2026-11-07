@@ -2,7 +2,10 @@ import { useMessageLink } from '../platformContext.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import UnitInput from '../components/UnitInput.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { channelTitle } from '../util.js';
 
 const ACTION_LABELS = { kick: 'Kick', timeout: 'Timeout', ban: 'Ban' };
 
@@ -56,6 +59,7 @@ const fromForm = (form) => ({
 
 export default function Honeypot() {
   const messageLink = useMessageLink();
+  const limits = useModuleLimits('honeypot');
   const { guildId, data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm(
     'honeypot',
     { toForm, fromForm }
@@ -93,11 +97,14 @@ export default function Honeypot() {
         {form.channels.map((c) => (
           <div className="v2-rule-card" key={c.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">
-                Channel honeypot{c.triggerCount ? ` · triggered ${c.triggerCount}×` : ''}
+              <span className="v2-rule-title">
+                {channelTitle(data.channels, c.channelId, 'Channel honeypot')}
+                {c.triggerCount ? (
+                  <span className="v2-field-hint"> · triggered {c.triggerCount}×</span>
+                ) : null}
               </span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeChannelRow(c.key)}>
-                remove
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeChannelRow(c.key)}>
+                Remove
               </button>
             </div>
             <div className="v2-field-row">
@@ -129,11 +136,11 @@ export default function Honeypot() {
                 </select>
               </div>
               <div className="v2-field">
-                <label>Timeout (min)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={40320}
+                <label>Timeout length</label>
+                <UnitInput
+                  unit="minutes"
+                  min={limitOf(limits, 'channels[].timeoutMinutes').min}
+                  max={limitOf(limits, 'channels[].timeoutMinutes').max}
                   value={c.timeoutMinutes}
                   onChange={(e) => updateChannelRow(c.key, { timeoutMinutes: Number(e.target.value) })}
                 />
@@ -149,7 +156,12 @@ export default function Honeypot() {
             </label>
           </div>
         ))}
-        <button type="button" className="v2-btn-ghost" onClick={addChannelRow}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addChannelRow}
+          disabled={form.channels.length >= (limitOf(limits, 'channels').maxItems ?? Infinity)}
+        >
           + Add channel honeypot
         </button>
 
@@ -160,14 +172,17 @@ export default function Honeypot() {
         {form.messages.map((m) => (
           <div className="v2-rule-card" key={m.key}>
             <div className="v2-rule-head">
-              <span className="v2-field-hint">
-                Message honeypot
-                {m.triggerCount
-                  ? ` · ${ACTION_LABELS[m.action].toLowerCase()}s so far: ${m.triggerCount}`
-                  : ''}
+              <span className="v2-rule-title">
+                {channelTitle(data.channels, m.channelId, 'Message honeypot')}
+                {m.triggerCount ? (
+                  <span className="v2-field-hint">
+                    {' '}
+                    · {ACTION_LABELS[m.action].toLowerCase()}s so far: {m.triggerCount}
+                  </span>
+                ) : null}
               </span>
-              <button type="button" className="v2-btn-ghost" onClick={() => removeMessageRow(m.key)}>
-                remove
+              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeMessageRow(m.key)}>
+                Remove
               </button>
             </div>
             <div className="v2-field-row">
@@ -199,11 +214,11 @@ export default function Honeypot() {
                 </select>
               </div>
               <div className="v2-field">
-                <label>Timeout (min)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={40320}
+                <label>Timeout length</label>
+                <UnitInput
+                  unit="minutes"
+                  min={limitOf(limits, 'messages[].timeoutMinutes').min}
+                  max={limitOf(limits, 'messages[].timeoutMinutes').max}
                   value={m.timeoutMinutes}
                   onChange={(e) => updateMessageRow(m.key, { timeoutMinutes: Number(e.target.value) })}
                 />
@@ -215,7 +230,7 @@ export default function Honeypot() {
               </label>
               <textarea
                 rows={2}
-                maxLength={500}
+                maxLength={limitOf(limits, 'messages[].bait').maxLength}
                 placeholder="Click here to verify your account."
                 value={m.bait}
                 onChange={(e) => updateMessageRow(m.key, { bait: e.target.value })}
@@ -235,11 +250,16 @@ export default function Honeypot() {
             ) : null}
           </div>
         ))}
-        <button type="button" className="v2-btn-ghost" onClick={addMessageRow}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addMessageRow}
+          disabled={form.messages.length >= (limitOf(limits, 'messages').maxItems ?? Infinity)}
+        >
           + Add message honeypot
         </button>
 
-        <div className="v2-field v2-section-gap-sm">
+        <div className="v2-field v2-section-gap-md">
           <label>Exempt roles</label>
           <ChipPicker
             kind="role"

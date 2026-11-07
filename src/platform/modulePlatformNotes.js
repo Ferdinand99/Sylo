@@ -17,12 +17,22 @@ const FLUXER_NOTES = {
     'Fluxer has no buttons yet, so the verify panel works through a reaction: members react to the message to start verifying.',
   giveaways: () =>
     'Fluxer has no buttons yet: members enter a giveaway by reacting to its message instead of pressing a button.',
+  events: ({ prefix }) =>
+    `Fluxer has no buttons yet: members sign up by reacting to the event post (✅ Join, ❔ Maybe, ❌ Leave). Staff run the commands from chat, for example ${prefix}event create title:"Game night" start:"2026-11-05 19:00". The post also spells out the start time in the creator's time zone. The dashboard works as on Discord.`,
+  suggestions: ({ prefix }) =>
+    `Fluxer has no buttons or threads yet: members vote by reacting to the suggestion (👍 or 👎; reacting again takes the vote back) and no discussion thread is opened. Members and staff use chat commands, for example ${prefix}suggest text:"Add a movie night" and ${prefix}suggestion approve id:12 reason:"Starting next week". The dashboard works as on Discord.`,
+  'temp-roles': ({ prefix }) =>
+    `Fluxer has no slash commands: staff use chat commands, for example ${prefix}temprole add @member @role 7d reason:"Trial period" and ${prefix}temprole list. Roles still expire on their own. The dashboard works as on Discord.`,
+  'quote-board': ({ prefix }) =>
+    `Fluxer has no message menu and no slash commands, so there is no "Save quote" menu: members save a quote with a chat command, for example ${prefix}quote save https://web.fluxer.app/channels/<server>/<channel>/<message> or by replying to the message with ${prefix}quote save. The other commands are ${prefix}quote random, ${prefix}quote search, ${prefix}quote user and ${prefix}quote show. The dashboard and the public page work as on Discord.`,
+  'auto-threads': () =>
+    'Fluxer has no threads yet, so this module does nothing on a Fluxer server: posts stay as they are. The settings can be saved here and start working on a Discord server. Fluxer lists threads for 2026; Sylo will support them then.',
   roles: () =>
     'Role menus show their buttons and dropdown options as reactions, with a short legend in the message. Members react to get or drop a role.',
   tickets: () =>
     'DM tickets work as on Discord. Any button or dropdown in a ticket message is shown as reactions on Fluxer.',
   'custom-commands': ({ prefix }) =>
-    `Fluxer has no slash commands, so a custom command runs from chat as ${prefix}name (extra text fills {args}). The prefix is set with COMMAND_PREFIX. Nothing is registered with Fluxer.`,
+    `Fluxer has no slash commands, so a custom command runs from chat as ${prefix}name (extra text fills {args}). The prefix is set per server in Settings. Nothing is registered with Fluxer.`,
 };
 
 /**
@@ -30,21 +40,22 @@ const FLUXER_NOTES = {
  * @param {string} moduleId
  * @returns {string | null}
  */
-export function modulePlatformNote(platform, moduleId) {
+export function modulePlatformNote(platform, moduleId, prefix = config.commandPrefix) {
   if (platform !== 'fluxer') return null;
-  return FLUXER_NOTES[moduleId]?.({ prefix: config.commandPrefix }) ?? null;
+  return FLUXER_NOTES[moduleId]?.({ prefix }) ?? null;
 }
 
 /**
  * What the dashboard needs to know about a guild's platform.
  * @param {any} guild
+ * @param {string} [prefix]  the Fluxer server's effective prefix (see commandPrefix.js); the instance default when omitted
  * @returns {{ platform: 'discord' | 'fluxer', capabilities: Record<string, boolean>, notes: Record<string, string>, commandPrefix: string, webAppUrl: string }}
  */
-export function platformInfo(guild) {
+export function platformInfo(guild, prefix = config.commandPrefix) {
   const platform = platformOfGuild(guild);
   const notes = {};
   for (const id of Object.keys(FLUXER_NOTES)) {
-    const note = modulePlatformNote(platform, id);
+    const note = modulePlatformNote(platform, id, prefix);
     if (note) notes[id] = note;
   }
   return {
@@ -52,7 +63,7 @@ export function platformInfo(guild) {
     capabilities: { ...CAPABILITIES[platform] },
     notes,
     // How a command is written in help text, and where a message link points.
-    commandPrefix: platform === 'fluxer' ? config.commandPrefix : '/',
+    commandPrefix: platform === 'fluxer' ? prefix : '/',
     webAppUrl: platform === 'fluxer' ? fluxerEndpoints().webapp : 'https://discord.com',
   };
 }

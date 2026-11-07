@@ -37,6 +37,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Emoji text box + picker button: one row at every width (the box shrinks, the button never wraps). */
+.v2-field-row.v2-emoji-row {
+  flex-wrap: nowrap;
+}
+.v2-emoji-row > input {
+  flex: 1;
+  min-width: 0;
+}
+.v2-emoji-row > .v2-emojipicker {
+  flex: none;
+}
+
 /* A plain .v2-field-row that may wrap at any width (buttons + inputs). */
 .v2-field-row.v2-wrap-row {
   flex-wrap: wrap;
@@ -212,13 +224,12 @@
   flex: none;
 }
 .v2-roadmap-admin-actions {
-  flex-direction: column;
-  align-items: stretch;
+  align-items: center;
 }
-@media (max-width: 600px) {
-  .v2-roadmap-admin-actions {
-    flex-direction: row;
-  }
+/* The status select keeps the app's select look (it is wrapped in .v2-field for that). */
+.v2-roadmap-admin-actions > .v2-field {
+  margin: 0;
+  min-width: 11rem;
 }
 
 /* Announcement banner — title + body share the free width; × stays put. */
@@ -233,9 +244,32 @@
 
 /* Audit log — the action key ("settings:server") reads as an identifier. */
 .v2-audit-action {
-  font-family: var(--mono);
-  font-size: var(--fs-sm);
   letter-spacing: 0;
+}
+/* The age sits on the meta line on a phone, in its own column from tablet width up. */
+.v2-audit-ago-inline {
+  display: none;
+  color: var(--text-muted);
+}
+@media (max-width: 600px) {
+  .v2-audit-ago-inline {
+    display: inline;
+  }
+  .v2-row-stack > .v2-row-time {
+    display: none;
+  }
+}
+/* "Settings › Audit log" above a sub-page title. */
+.v2-breadcrumb {
+  margin: 0 0 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.v2-breadcrumb a {
+  color: var(--text-muted);
+}
+.v2-breadcrumb [aria-current='page'] {
+  color: var(--text);
 }
 
 /* Member data — the lookup box takes the free width, the button keeps its own;
@@ -286,6 +320,13 @@
   justify-content: center;
   gap: 8px;
   margin-top: 20px;
+}
+/* Buttons that are links: `.v2-state a` (styles.css) would paint their label in the link colour. */
+.v2-state a.v2-btn-ghost {
+  color: var(--text);
+}
+.v2-state a.v2-btn-primary {
+  color: var(--bg-main);
 }
 
 /* ==========================================================================
@@ -372,6 +413,14 @@
 /* Facts side by side (Meta.jsx) and small leading numbers line up. */
 .v2-meta-item {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* A long fact (a typed reason) may wrap inside itself, but still breaks between facts first. */
+.v2-meta-item.is-long {
+  white-space: normal;
+}
+.v2-meta-sep {
+  color: var(--text-muted);
 }
 .v2-muted {
   color: var(--text-muted);
@@ -464,21 +513,7 @@
   border-color: transparent;
   font-weight: 500;
 }
-.v2-hub-tabs .v2-tab.is-active {
-  background: var(--bg-surface);
-  border-color: var(--border-strong);
-  color: var(--text);
-}
-.v2-case-action {
-  display: inline-block;
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  line-height: 1.5;
-  vertical-align: 0.1em;
-}
+/* The active hub tab looks like the active sub-tab (.v2-tab.is-active in styles.css). */
 
 /* ---------- Tickets: inbox + conversation ---------- */
 .v2-unread-dot {
@@ -493,18 +528,20 @@
   letter-spacing: 0;
 }
 /* Messages-style thread, as in the iPhone ticket mock on sylobot.com:
-   staff (you) on the right in Sylo violet with white text, the member on the left
+   staff (you) on the right in Sylo cyan, the member on the left
    in a neutral grey, system notes as small centred captions. A run from one
    side sits close together, the side switching gets air, and the last
    bubble of a run gets the tail corner (where :has() is supported).
-   #6a58e3 is the same violet as the app's StaffBubble colour and the site
-   mock, in both themes: white text clears AA (5.1:1, and 4.8:1 for the 95%
-   white meta line); the light-theme member grey pairs with a darker meta
-   colour for the same reason. */
+   The bubble uses the brand cyan with near-black text on dark (10:1) and the
+   deeper cyan step with white text on light (6:1); the meta line is a touch
+   softer than the text but still above 4.5:1 on both. The light-theme member
+   grey pairs with a darker meta colour for the same reason. */
 .v2-chat {
   --bubble-in: #262628;
   --bubble-in-meta: var(--text-muted);
-  --bubble-out: #6a58e3;
+  --bubble-out: #38c8f0;
+  --bubble-out-text: #0b0b0d;
+  --bubble-out-meta: rgba(11, 11, 13, 0.8);
   gap: 2px;
   padding: 16px 14px;
   background: var(--bg-surface);
@@ -512,6 +549,9 @@
 :root[data-theme='light'] .v2-chat {
   --bubble-in: #e9e9eb;
   --bubble-in-meta: #636366;
+  --bubble-out: #076787;
+  --bubble-out-text: #fff;
+  --bubble-out-meta: rgba(255, 255, 255, 0.95);
 }
 .v2-bubble {
   max-width: min(78%, 34rem);
@@ -525,20 +565,20 @@
 .v2-bubble.is-staff {
   border: 0;
   background: var(--bubble-out);
-  color: #fff;
+  color: var(--bubble-out-text);
 }
 .v2-bubble-meta {
   color: var(--bubble-in-meta);
   font-size: var(--fs-xs);
   font-weight: 500;
 }
-/* The accent focus ring vanishes on the violet bubble; white reads on it. */
+/* The accent focus ring vanishes on the cyan bubble; the bubble text colour reads on it. */
 .v2-bubble.is-staff:focus-visible,
 .v2-bubble.is-staff :focus-visible {
-  outline-color: #fff;
+  outline-color: var(--bubble-out-text);
 }
 .v2-bubble.is-staff .v2-bubble-meta {
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--bubble-out-meta);
 }
 .v2-bubble-body {
   margin-top: 1px;
@@ -622,7 +662,7 @@
   fill: var(--accent);
 }
 .v2-ins-bar-voice {
-  fill: var(--text-muted);
+  fill: var(--series-2);
 }
 .v2-ins-line-grow,
 .v2-ins-line-join {
@@ -645,7 +685,7 @@
   background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .v2-ins-bar-fill-voice {
-  background: var(--text-muted);
+  background: var(--series-2);
 }
 .v2-ins-bar-val {
   font-size: var(--fs-xs);
@@ -836,4 +876,414 @@
     margin-left: 0;
     flex-basis: 100%;
   }
+}
+
+/* The on/off bar at the top of a module's settings page. */
+.v2-module-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  margin: 0 0 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+.v2-module-status-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+.v2-module-status-name {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+/* A one-line explanation right under a card's title row. */
+.v2-rule-head + .v2-rule-lead {
+  margin: -6px 0 12px;
+}
+/* A hint line sits right above a card or an "+ Add" button (empty state, section intro): give
+   it air instead of gluing the two together. */
+p.v2-field-hint + .v2-btn-ghost,
+p.v2-field-hint + .v2-rule-card {
+  margin-top: 12px;
+}
+
+/* ---------- Overview ---------- */
+/* The ticket and appeal tiles are links: same box, with a hover edge and a focus ring. */
+a.v2-stat.is-link {
+  color: inherit;
+  text-decoration: none;
+}
+a.v2-stat.is-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  a.v2-stat.is-link:hover {
+    border-color: var(--border-strong);
+    background: color-mix(in srgb, var(--text) 3%, var(--bg-surface));
+  }
+}
+/* "Bulk edit" is as tall as the search field next to it. */
+.v2-search-row {
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+.v2-search-row > .v2-btn-ghost {
+  flex: none;
+  white-space: nowrap;
+}
+/* Compact tiles on a phone: a 3-tile strip (.v2-stat-strip-3) keeps its three side by side, never two
+   and one; any other strip (Health's four) goes two by two. */
+@media (max-width: 560px) {
+  .v2-stat-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 28px;
+  }
+  .v2-stat-strip.v2-stat-strip-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .v2-stat-strip .v2-stat {
+    padding: 12px 10px;
+  }
+  .v2-stat-strip .v2-stat strong {
+    font-size: 1.25rem;
+  }
+  .v2-stat-strip .v2-stat span {
+    font-size: var(--fs-xs, 0.75rem);
+    line-height: 1.3;
+  }
+}
+
+/* The sidebar's mark for a newly added module: a small "Beta" word, not a bare dot. */
+.v2-sidebar-beta-pill {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  font-size: 0.65rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  vertical-align: middle;
+}
+
+/* ---------- Infractions: the warn form ---------- */
+.v2-warn-fields {
+  align-items: flex-start;
+}
+.v2-warn-fields .v2-field {
+  flex: 1 1 14rem;
+  min-width: 0;
+  margin: 0;
+}
+
+/* ---------- Auto-moderation ---------- */
+/* Rule text on the left, the action select in a fixed column on the right, so every select lines up. */
+.v2-am-rule-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: center;
+  gap: 8px 16px;
+}
+.v2-am-rule-text p {
+  margin: 2px 0 0;
+}
+@media (max-width: 600px) {
+  .v2-am-rule-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* A rule that is switched off reads as off: its title turns muted (the hint keeps its own contrast, so
+   it stays readable in the light theme; the select stays full strength) and an "Off" badge. */
+.v2-am-rule.is-off .v2-am-rule-text strong {
+  color: var(--text-muted);
+}
+.v2-am-summary {
+  font-weight: 400;
+}
+/* Options that only apply once their parent switch is on. */
+.v2-check-sub {
+  margin-left: 26px;
+}
+.v2-check-sub.is-disabled {
+  opacity: 0.55;
+}
+.v2-check-sub-title {
+  margin-left: 26px;
+}
+
+/* ---------- Counting ---------- */
+/* A hint under a checkbox lines up with the checkbox's text. */
+.v2-check-hint {
+  margin: -2px 0 10px 26px;
+}
+.v2-count-set {
+  margin-top: 16px;
+}
+
+/* ---------- Leveling: "Level [5] → [role]" and "[role] × [2]" rows ---------- */
+.v2-pair-row {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+.v2-pair-row > select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.v2-pair-row > .v2-input-num {
+  flex: none;
+  width: 5rem;
+}
+.v2-pair-prefix,
+.v2-pair-arrow {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+@media (max-width: 600px) {
+  /* Keeps "Level 5 → role  Remove" together on one row; the select shrinks instead of the row breaking. */
+  .v2-pair-row {
+    flex-wrap: nowrap;
+  }
+  .v2-pair-row > .v2-btn-danger-ghost {
+    flex: none;
+    padding-inline: 10px;
+  }
+  /* A multiplier has a long select: it takes the first row, "× 2 Remove" sits under it. */
+  .v2-pair-row-multiplier {
+    flex-wrap: wrap;
+  }
+  .v2-pair-row-multiplier > select {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---------- Starboard ---------- */
+/* An option that only applies while the one above it is on: indented under it. */
+.v2-check-child {
+  margin-left: 26px;
+}
+.v2-check-child:has(> input:disabled) {
+  opacity: 0.6;
+}
+.v2-advanced {
+  margin-top: 6px;
+}
+
+/* ---------- Suggestions ---------- */
+/* "Show" and "Order" stay side by side, also on a phone. */
+.v2-sug-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+.v2-sug-filters .v2-field {
+  min-width: 0;
+}
+.v2-row-actions > select {
+  width: auto;
+  min-width: 9rem;
+  /* Outside a <form>/.v2-field, so the app's select look is repeated here (see styles.css). */
+  background-color: var(--bg-surface-2);
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 10px 6px;
+  border: 1px solid var(--border-field);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 9px 36px 9px 12px;
+  font: inherit;
+  font-size: var(--fs-md);
+  -webkit-appearance: none;
+  appearance: none;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-ui) ease,
+    box-shadow var(--dur-ui) ease;
+}
+.v2-row-actions > select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.v2-row-actions > select:disabled {
+  cursor: not-allowed;
+}
+@media (forced-colors: active) {
+  .v2-row-actions > select {
+    -webkit-appearance: auto;
+    appearance: auto;
+    background-image: none;
+    padding-right: 12px;
+  }
+}
+
+/* ---------- Health ---------- */
+/* A second, quieter line under a tile's label ("3 tickets all-time"). */
+.v2-stat .v2-stat-caption {
+  margin-top: 2px;
+  opacity: 0.85;
+}
+/* The three top tiles are one value and one label each, so they are the same compact height; the
+   gateway ping, which needs room for its graph, is a card of its own right under them. */
+.v2-stat-strip.v2-stat-strip-tight {
+  margin-bottom: 12px;
+}
+/* On a phone the strip's own gap is 8px: the ping card below keeps to it. */
+@media (max-width: 560px) {
+  .v2-stat-strip.v2-stat-strip-tight {
+    margin-bottom: 8px;
+  }
+}
+.v2-ping-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  margin-bottom: 36px;
+  padding: 14px 20px;
+}
+/* On a phone: the same inner padding as the tiles above and the same 28px section gap as them. */
+@media (max-width: 560px) {
+  .v2-stat.v2-ping-card {
+    margin-bottom: 28px;
+    padding: 12px 10px;
+  }
+}
+.v2-ping-now {
+  flex: none;
+  min-width: 0;
+}
+.v2-ping-now strong {
+  font-size: 1.25rem;
+}
+.v2-ping-graph {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.v2-ping-graph .v2-sparkline {
+  max-width: 360px;
+  margin-top: 0;
+}
+/* Three tiles that would wrap two-and-one stack in a single column on a narrow phone. */
+@media (max-width: 420px) {
+  .v2-stat-strip.v2-stat-strip-stack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.v2-backup-help {
+  margin-bottom: 20px;
+}
+
+/* Roadmap: a vote count that cannot be clicked (voting off, or not logged in) is plain text. */
+.v2-roadmap-vote.is-static {
+  border-color: transparent;
+  background: transparent;
+  cursor: default;
+}
+
+/* ---------- Bot Personalizer ---------- */
+/* Identity, Presence and Announcement are three separate forms: a hairline and room between them. */
+.v2-group-title.v2-section-divided {
+  margin-top: 40px;
+  padding-top: 28px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ---------- Welcome channel ---------- */
+/* Channel select and the "Create" button side by side; stacked on a narrow screen. */
+.v2-wc-channel {
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+.v2-wc-channel > .v2-field {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .v2-wc-channel > .v2-btn-ghost {
+    width: 100%;
+  }
+}
+.v2-wc-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 12px 16px;
+  margin-top: 12px;
+}
+.v2-wc-preset {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.v2-wc-preset .v2-field-hint {
+  margin: 0;
+}
+.v2-wc-reset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+.v2-wc-reset .v2-field-hint {
+  margin: 0;
+}
+
+/* Overview: the one instruction line above the stat tiles needs room before them. */
+.v2-overview-hint {
+  margin-bottom: 14px;
+}
+
+/* ---------- Ban appeals: question rows ---------- */
+/* A question grows with its text; its move/remove buttons sit beside it, or under it on a phone. */
+.v2-question-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px 8px;
+  margin-bottom: 8px;
+}
+.v2-question-row > textarea {
+  flex: 1 1 220px;
+  width: auto;
+  min-width: 0;
+}
+/* The buttons sit in a box as tall as a one-line textarea (1 line + 9px padding + 1px border each side)
+   and are centred in it: centred on a one-line row, level with the first line on a tall one. */
+.v2-question-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  height: calc(1lh + 20px);
+  font-size: var(--fs-md);
+}
+@media (pointer: coarse) {
+  .v2-question-actions {
+    font-size: 16px;
+  }
+}
+.v2-question-actions .v2-btn-ghost {
+  min-width: 36px;
+  padding: 6px 10px;
 }

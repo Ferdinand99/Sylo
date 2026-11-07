@@ -1,7 +1,7 @@
 // The read-only part of the new dashboard's API that needs no login: the slash-command reference
 // and the roadmap. Mounted at /api/v2/public in server.js, BEFORE requireAuth (the rest of
-// /api/v2 sits behind it), with its own rate limit like the classic public pages. Each answer
-// carries only what the classic public pages show (see lib/roadmapView.js and
+// /api/v2 sits behind it), with its own rate limit. Each answer
+// carries only what the public pages show (see lib/roadmapView.js and
 // lib/commandReference.js); nothing here may return user ids, guilds or settings.
 import { Router } from 'express';
 import { config } from '../../config.js';

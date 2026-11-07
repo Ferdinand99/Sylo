@@ -254,6 +254,51 @@ struct APIClientTests {
         task.cancel()
         session.invalidateAndCancel()
     }
+
+    // MARK: Limits and retries
+
+    #if !canImport(FoundationNetworking)
+    private func limited(_ bytes: Int?, retryDelays: [Duration]? = nil) throws -> URLSessionAPIClient {
+        URLSessionAPIClient(
+            server: try ServerURL("https://example.com"), session: MockURLProtocol.session(),
+            retryDelays: retryDelays ?? [.zero, .zero], maxResponseBytes: bytes, token: { "sylo_secret" })
+    }
+
+    @Test("An answer over the limit is refused, one within it is read")
+    func responseLimit() async throws {
+        mock.reset([.json(200, Fixtures.ok)])
+        let response = try await limited(100).send(ProbeGet())
+        #expect(response == OKResponse(ok: true))
+
+        mock.reset([.json(200, #"{"ok":true,"padding":"\#(String(repeating: "x", count: 500))"}"#)])
+        await #expect(throws: NetworkError.notASyloServer) { try await limited(100).send(ProbeGet()) }
+
+        // Without a limit it is read as before.
+        mock.reset([.json(200, #"{"ok":true,"padding":"\#(String(repeating: "x", count: 500))"}"#)])
+        _ = try await limited(nil).send(ProbeGet())
+    }
+    #endif
+
+    @Test("A GET is tried once when no retries are asked for, and again when they are")
+    func retries() async throws {
+        mock.reset([.json(503, "{}")])
+        await #expect(throws: NetworkError.server(status: 503)) {
+            try await URLSessionAPIClient(
+                server: try ServerURL("https://example.com"), session: MockURLProtocol.session(), retryDelays: [],
+                token: { "sylo_secret" }
+            ).send(ProbeGet())
+        }
+        #expect(mock.requests.count == 1)
+
+        mock.reset([.json(503, "{}")])
+        await #expect(throws: NetworkError.server(status: 503)) {
+            try await URLSessionAPIClient(
+                server: try ServerURL("https://example.com"), session: MockURLProtocol.session(),
+                retryDelays: [.zero, .zero], token: { "sylo_secret" }
+            ).send(ProbeGet())
+        }
+        #expect(mock.requests.count == 3)
+    }
 }
 
 private final class Box<Value>: @unchecked Sendable {

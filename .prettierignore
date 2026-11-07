@@ -5,7 +5,6 @@ package-lock.json
 .github
 docker-compose.yml
 src/web/public/vendor
-src/web/public/styles.css
 src/web/views
 *.md
 apps

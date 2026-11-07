@@ -7,7 +7,8 @@ extension AppSession {
     static func live() -> AppSession {
         let device = UIDevice.current
         return AppSession(
-            tokens: KeychainTokenStore(service: Bundle.main.bundleIdentifier ?? "net.opland.sylo"),
+            // The same Keychain items the notification extension reads (shared access group).
+            tokens: SyloAppStorage.makeTokenStore(),
             preference: UserDefaultsServerPreference(),
             // UIDevice.name is generic since iOS 16, so name the model: "iPhone — Sylo app".
             deviceName: SignInRequest.deviceName(model: device.model, systemName: device.systemName),

@@ -284,3 +284,35 @@ test('the relay refuses new registrations past its hourly ceiling', async () => 
   assert.equal((await post('/register', body(), root)).status, 200);
   assert.equal((await post('/register', body(), root)).status, 429);
 });
+
+// A few addresses at their own cap must not use up the shared hourly budget: every real sign-in
+// from another address still gets through.
+test('registration: one client has its own hourly cap, and a few clients cannot use up the shared budget', async () => {
+  const capped = express();
+  capped.set('trust proxy', true);
+  capped.use(express.json());
+  capped.use(
+    '/api/push-relay/v1',
+    createPushRelayRouter({
+      apns,
+      limits: { register: 1000, newPerHour: 25, perIpPerHour: 12, sharedPerIp: 5 },
+    })
+  );
+  const root = await listen(capped);
+  const from = (ip) =>
+    fetch(`${root}/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+      body: JSON.stringify({ deviceToken: device(), environment: 'production', instance: INSTANCE }),
+    });
+
+  for (const ip of ['198.51.100.1', '198.51.100.2', '198.51.100.3', '198.51.100.4']) {
+    for (let i = 0; i < 12; i += 1) assert.equal((await from(ip)).status, 200, `${ip} #${i}`);
+    const over = await from(ip);
+    assert.equal(over.status, 429, `${ip} is refused past its own cap`);
+    assert.ok(over.headers.get('retry-after'));
+  }
+  // Four clients at their cap used 4 x 5 of the shared 25: a fifth, new client is served.
+  assert.equal((await from('198.51.100.5')).status, 200);
+  assert.equal((await from('203.0.113.9')).status, 200);
+});

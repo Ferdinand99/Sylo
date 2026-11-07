@@ -50,7 +50,7 @@ function fmt(n) {
   return n < 0 ? null : n.toLocaleString('en-US');
 }
 
-/** OSRS combat level from a skill-level lookup. Classic formula. */
+/** OSRS combat level from a skill-level lookup. Standard formula. */
 function osrsCombat(lvl) {
   const base = 0.25 * (lvl('defence') + lvl('hitpoints') + Math.floor(lvl('prayer') / 2));
   const melee = 0.325 * (lvl('attack') + lvl('strength'));

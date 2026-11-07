@@ -9,10 +9,12 @@ import { log } from '../lib/log.js';
 
 /**
  * @param {import('discord.js').Collection<string, { data: import('discord.js').SlashCommandBuilder }>} commands
+ * @param {import('discord.js').Collection<string, { data: import('discord.js').ContextMenuCommandBuilder }>} [contextMenus]
+ *   the message menu commands, registered in the same call
  * @returns {Promise<number>} the number of commands registered
  */
-export async function registerCommands(commands) {
-  const body = [...commands.values()].map((c) => c.data.toJSON());
+export async function registerCommands(commands, contextMenus = new Map()) {
+  const body = [...commands.values(), ...contextMenus.values()].map((c) => c.data.toJSON());
   const rest = new REST({ version: '10' }).setToken(config.discordToken);
   const clientId = config.discordClientId;
 

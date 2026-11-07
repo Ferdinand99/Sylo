@@ -97,9 +97,12 @@ let routers = 0;
 
 /**
  * @param {{ apns: { send: Function }, now?: () => number,
- *   limits?: { register?: number, send?: number, unregister?: number, newPerHour?: number } }} opts
+ *   limits?: { register?: number, send?: number, unregister?: number, newPerHour?: number,
+ *     perIpPerHour?: number, sharedPerIp?: number } }} opts
  *   `limits`: requests per minute per IP for each endpoint; `newPerHour`, new registrations an
- *   hour from all clients together.
+ *   hour from all clients together; `perIpPerHour`, new registrations an hour from one client
+ *   (refused past it); `sharedPerIp`, how many of one client's registrations an hour count
+ *   against the shared `newPerHour` budget (see below).
  */
 export function createPushRelayRouter({ apns, now = Date.now, limits = {} }) {
   const router = Router();
@@ -112,9 +115,10 @@ export function createPushRelayRouter({ apns, now = Date.now, limits = {} }) {
   // relay, and losing the counts on a restart only gives an hour's grace once.
   const perRegistration = new Map();
   const perDevice = new Map();
+  const registrationsByClient = new Map(); // client key -> times of its new registrations
   setInterval(() => {
     const since = now() - HOUR_MS;
-    for (const map of [perRegistration, perDevice]) {
+    for (const map of [perRegistration, perDevice, registrationsByClient]) {
       for (const [key, times] of map) if (!times.some((t) => t > since)) map.delete(key);
     }
   }, 10 * 60_000).unref();
@@ -135,15 +139,35 @@ export function createPushRelayRouter({ apns, now = Date.now, limits = {} }) {
   }
 
   // /register needs no account, so random device tokens could fill the table from many
-  // addresses. Real sign-ins are far fewer: cap new registrations an hour across all clients.
+  // addresses. Real sign-ins are far fewer, so two caps apply to new registrations an hour:
+  //  - one client (IPv4 address or IPv6 /64) gets `perIpPerHour` and is refused past it;
+  //  - all clients together get `newPerHour`. Only a client's first `sharedPerIp` registrations
+  //    an hour count against that shared budget, so a few addresses at their own cap use up at
+  //    most `sharedPerIp` each of it and cannot lock every real sign-in out for the hour.
   const newPerHour = limits.newPerHour ?? 5000;
+  const perIpPerHour = limits.perIpPerHour ?? 60;
+  const sharedPerIp = limits.sharedPerIp ?? 10;
+  const MAX_CLIENTS = 50_000;
   const recentRegistrations = [];
+  let warnedAt = 0;
 
   router.post('/register', perIp('register', limits.register ?? 30), async (req, res, next) => {
     try {
       const t = now();
       while (recentRegistrations.length && recentRegistrations[0] <= t - HOUR_MS) recentRegistrations.shift();
-      if (recentRegistrations.length >= newPerHour) {
+      const client = clientKey(req);
+      const mine = recentIn(registrationsByClient, client, t);
+      if (mine.length >= perIpPerHour) {
+        registrationsByClient.set(client, mine);
+        res.setHeader('Retry-After', String(Math.ceil((mine[0] + HOUR_MS - t) / 1000)));
+        return res.status(429).json({ error: 'rate_limited' });
+      }
+      const countsShared = mine.length < sharedPerIp;
+      if (countsShared && recentRegistrations.length >= newPerHour) {
+        if (t - warnedAt >= HOUR_MS) {
+          warnedAt = t;
+          log.warn('push', `relay: the shared hourly budget of ${newPerHour} new registrations is used up`);
+        }
         res.setHeader('Retry-After', String(Math.ceil((recentRegistrations[0] + HOUR_MS - t) / 1000)));
         return res.status(429).json({ error: 'rate_limited' });
       }
@@ -157,7 +181,12 @@ export function createPushRelayRouter({ apns, now = Date.now, limits = {} }) {
       ) {
         return invalid(res);
       }
-      recentRegistrations.push(t);
+      if (countsShared) recentRegistrations.push(t);
+      if (!registrationsByClient.has(client) && registrationsByClient.size >= MAX_CLIENTS) {
+        registrationsByClient.delete(registrationsByClient.keys().next().value);
+      }
+      mine.push(t);
+      registrationsByClient.set(client, mine);
       const relayToken = await createRelayRegistration({
         deviceToken: body.deviceToken.toLowerCase(),
         environment: body.environment,

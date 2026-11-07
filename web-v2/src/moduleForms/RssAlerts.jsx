@@ -1,9 +1,14 @@
+import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
+import HowItWorks from '../components/HowItWorks.jsx';
+import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
+import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { cardTitle, hostOf } from '../util.js';
+import { tokensFor } from '../placeholders.js';
 
-// Per-type ref field label/placeholder — mirrors V1's client-side HINTS map
-// (rss.ejs's inline script) exactly, same wording.
+// Per-type ref field label/placeholder.
 const HINTS = {
   url: ['Feed URL', 'https://example.com/feed.xml'],
   reddit: ['Subreddit or user', 'r/programming or u/spez'],
@@ -44,6 +49,7 @@ const fromForm = (form) => ({
 });
 
 export default function RssAlerts() {
+  const limits = useModuleLimits('rss');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('rss', {
     toForm,
     fromForm,
@@ -61,12 +67,16 @@ export default function RssAlerts() {
     <>
       <h1 className="v2-section-title">RSS alerts</h1>
       <p className="v2-field-hint">
-        Sylo checks each feed every few minutes and posts new items to the chosen channel. Pick a source: a
-        raw RSS 2.0 / Atom URL, or a Reddit, Mastodon or Bluesky handle — Sylo turns the handle into that
-        platform's feed for you. Template placeholders: <code>{'{title}'}</code> <code>{'{link}'}</code>{' '}
-        <code>{'{author}'}</code> <code>{'{feed}'}</code>. The first check only remembers the current items;
-        new ones after that are posted (up to 15 feeds).
+        Sylo checks each feed every few minutes and posts new items to the chosen channel. The source can be
+        an RSS or Atom link, or a Reddit, Mastodon or Bluesky handle.
       </p>
+      <HowItWorks>
+        <p>Sylo turns a handle into that platform's feed for you.</p>
+        <p>
+          The first check only remembers the items that are already there; anything new after that is posted.
+          You can add up to 15 feeds.
+        </p>
+      </HowItWorks>
 
       <form onSubmit={save} data-savebar>
         {form.feeds.map((row) => {
@@ -74,9 +84,11 @@ export default function RssAlerts() {
           return (
             <div className="v2-rule-card" key={row.key}>
               <div className="v2-rule-head">
-                <span className="v2-field-hint">Feed</span>
-                <button type="button" className="v2-btn-ghost" onClick={() => removeRow(row.key)}>
-                  remove
+                <span className="v2-rule-title">
+                  {(row.type === 'url' ? hostOf(row.ref, '') : '') || cardTitle(row.ref, 'Feed')}
+                </span>
+                <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRow(row.key)}>
+                  Remove
                 </button>
               </div>
 
@@ -95,7 +107,7 @@ export default function RssAlerts() {
                   <label>{hint[0]}</label>
                   <input
                     type="text"
-                    maxLength={500}
+                    maxLength={limitOf(limits, 'feeds[].ref').maxLength}
                     placeholder={hint[1]}
                     value={row.ref}
                     onChange={(e) => updateRow(row.key, { ref: e.target.value })}
@@ -105,8 +117,9 @@ export default function RssAlerts() {
 
               <div className="v2-field-row">
                 <div className="v2-field">
-                  <label>Post in</label>
+                  <label htmlFor={`rss-to-${row.key}`}>Announce in</label>
                   <select
+                    id={`rss-to-${row.key}`}
                     value={row.channelId}
                     onChange={(e) => updateRow(row.key, { channelId: e.target.value })}
                   >
@@ -134,21 +147,33 @@ export default function RssAlerts() {
               </div>
 
               <div className="v2-field">
-                <label>
-                  Message template <span className="v2-field-hint">— blank uses the default</span>
+                <label htmlFor={`rss-msg-${row.key}`}>
+                  Message <span className="v2-field-hint">— blank uses the default</span>
                 </label>
-                <textarea
+                <AutoGrowTextarea
+                  id={`rss-msg-${row.key}`}
                   rows={2}
-                  maxLength={1000}
+                  maxLength={limitOf(limits, 'feeds[].template').maxLength}
                   placeholder={data.defaultTemplate}
                   value={row.template}
                   onChange={(e) => updateRow(row.key, { template: e.target.value })}
+                />
+                <PlaceholderHint
+                  fieldId={`rss-msg-${row.key}`}
+                  tokens={tokensFor('rss')}
+                  value={row.template}
+                  onChange={(template) => updateRow(row.key, { template })}
                 />
               </div>
             </div>
           );
         })}
-        <button type="button" className="v2-btn-ghost" onClick={addRow}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={addRow}
+          disabled={form.feeds.length >= (limitOf(limits, 'feeds').maxItems ?? Infinity)}
+        >
           + Add feed
         </button>
       </form>

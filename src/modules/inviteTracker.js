@@ -18,10 +18,15 @@ import {
 
 const isId = (v) => /^\d{17,20}$/.test(v ?? '');
 
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  graceHours: { min: 0, max: 168 },
+};
+
 // 0–168 hours; 0 turns the guard off, so only a missing or unreadable value falls back to 24.
 function graceHours(v) {
   const n = v === '' || v == null ? NaN : Math.floor(Number(v));
-  return Number.isFinite(n) ? Math.max(0, Math.min(168, n)) : 24;
+  return Number.isFinite(n) ? Math.max(LIMITS.graceHours.min, Math.min(LIMITS.graceHours.max, n)) : 24;
 }
 
 export function normaliseInviteTrackerConfig(raw = {}) {

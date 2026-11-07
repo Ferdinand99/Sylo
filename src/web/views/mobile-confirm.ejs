@@ -10,10 +10,10 @@
     Only continue if you started this from the Sylo app yourself. You can sign the device out
     again at any time from your account page.
   </p>
-  <form method="POST" action="/auth/mobile/confirm" hx-boost="false" class="auth-actions">
+  <form method="POST" action="/auth/mobile/confirm" class="auth-actions">
     <input type="hidden" name="nonce" value="<%= nonce %>" />
     <button type="submit" class="btn">Allow</button>
-    <a class="btn btn-ghost" href="<%= cancelUrl %>" hx-boost="false">Cancel</a>
+    <a class="btn btn-ghost" href="<%= cancelUrl %>">Cancel</a>
   </form>
 </section>
 

@@ -1,8 +1,6 @@
-// Registry of module ids with a V2 settings form. Overview links a module's
-// row here when it has an entry, and to V1's own config page (each card's
-// `href` from the overview API) otherwise. Every module has one today; add an
-// entry here (and its backend routes in v2Api.js) for a new module. Each form
-// is its own file, loaded the first time its page opens.
+// Registry of module ids with a settings form. Every module has one; add an entry here (and
+// its backend routes in v2Api.js) for a new module. Each form is its own file, loaded the
+// first time its page opens.
 import { lazy } from 'react';
 
 const Afk = lazy(() => import('./Afk.jsx'));
@@ -16,6 +14,11 @@ const Logging = lazy(() => import('./Logging.jsx'));
 const Tickets = lazy(() => import('./Tickets.jsx'));
 const Appeals = lazy(() => import('./Appeals.jsx'));
 const Giveaways = lazy(() => import('./Giveaways.jsx'));
+const Events = lazy(() => import('./Events.jsx'));
+const Suggestions = lazy(() => import('./Suggestions.jsx'));
+const TempRoles = lazy(() => import('./TempRoles.jsx'));
+const QuoteBoard = lazy(() => import('./QuoteBoard.jsx'));
+const AutoThreads = lazy(() => import('./AutoThreads.jsx'));
 const Moderation = lazy(() => import('./Moderation.jsx'));
 const Automod = lazy(() => import('./Automod.jsx'));
 const Sticky = lazy(() => import('./Sticky.jsx'));
@@ -75,6 +78,11 @@ export const MODULE_FORMS = {
   tickets: Tickets,
   appeals: Appeals,
   giveaways: Giveaways,
+  events: Events,
+  suggestions: Suggestions,
+  'temp-roles': TempRoles,
+  'quote-board': QuoteBoard,
+  'auto-threads': AutoThreads,
 };
 
 // Overview/Sidebar cards with a real V2 page that isn't the standard
@@ -91,10 +99,6 @@ export const SPECIAL_V2_PATHS = {
   // The Commands overview card — V2's page is the Moderation hub's Commands tab.
   commands: (guildId) => `/guilds/${guildId}/moderation/commands`,
 };
-
-export function hasV2Page(card) {
-  return Boolean(MODULE_FORMS[card.id]) || Boolean(SPECIAL_V2_PATHS[card.id]);
-}
 
 export function v2Href(card, guildId) {
   return SPECIAL_V2_PATHS[card.id] ? SPECIAL_V2_PATHS[card.id](guildId) : `/guilds/${guildId}/m/${card.id}`;

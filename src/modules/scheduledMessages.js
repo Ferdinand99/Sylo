@@ -3,7 +3,7 @@
 // weekday filter. Not event-driven: a polling loop (started on import) checks
 // for due reminders.
 import { allClientsReady, guildByKey } from '../platform/platformOf.js';
-import { isModuleEnabled } from '../db/modules.js';
+import { getGuildModule } from '../db/modules.js';
 import {
   dueScheduled,
   advanceReminder,
@@ -14,6 +14,8 @@ import {
 import { buildPayload } from './messageCreator.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
+import { every } from './schedule.js';
+import { normaliseEmbedSpec } from './welcomeChannel.js';
 
 export const SCHEDULE_PRESETS = [
   ['1', 'Every minute'],
@@ -41,16 +43,84 @@ export const WEEKDAYS = [
   [6, 'Sat'],
 ];
 
-export const MIN_INTERVAL_MINUTES = 1;
-export const MAX_INTERVAL_MINUTES = 40320; // 4 weeks
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  name: { maxLength: 100 },
+  content: { maxLength: 2000 },
+  intervalMinutes: { min: 1, max: 40320 }, // up to 4 weeks
+};
+export const MIN_INTERVAL_MINUTES = LIMITS.intervalMinutes.min;
+export const MAX_INTERVAL_MINUTES = LIMITS.intervalMinutes.max;
+
+function toMs(v) {
+  const t = new Date(String(v ?? '')).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * Coerce a reminder as the dashboard sends it (create, edit and test) into the shape the database
+ * stores. Not a settings object: reminders are rows of their own table.
+ */
+export function normaliseReminderConfig(body = {}) {
+  const channelId = /^\d{17,20}$/.test(body.channelId ?? '') ? body.channelId : '';
+  let embed = null;
+  let content = body.content;
+  // Embed mode's "text above the embed" lives on the EmbedEditor's own spec
+  // (content:true), not the plain-text textarea used in text mode.
+  if (body.msgType === 'embed' && body.embedSpec && typeof body.embedSpec === 'object') {
+    embed = normaliseEmbedSpec(body.embedSpec);
+    content = body.embedSpec.content;
+  }
+  const spec = {
+    content: String(content ?? '').slice(0, LIMITS.content.maxLength),
+    embeds: embed ? [embed] : [],
+  };
+  const mode = body.mode === 'single' ? 'single' : 'multiple';
+  const intervalMinutes = Math.min(
+    MAX_INTERVAL_MINUTES,
+    Math.max(MIN_INTERVAL_MINUTES, Math.floor(Number(body.intervalMinutes)) || 60)
+  );
+  const days = (Array.isArray(body.days) ? body.days : []).map(Number).filter((n) => n >= 0 && n <= 6);
+  return {
+    name:
+      String(body.name ?? '')
+        .trim()
+        .slice(0, LIMITS.name.maxLength) || 'Untitled reminder',
+    channelId,
+    spec,
+    mode,
+    intervalMinutes,
+    days: days.length ? days : [0, 1, 2, 3, 4, 5, 6],
+    startAt: body.enableStart ? toMs(body.startAt) : null,
+    endAt: body.enableEnd ? toMs(body.endAt) : null,
+    runAt: mode === 'single' ? toMs(body.runAt) : null,
+  };
+}
 const TICK_MS = 20_000;
 
 const MODULE_ID = 'reminders';
 
-function payloadFor(reminder) {
+/**
+ * Does this server let its reminders ping? Once the server owner or someone with Manage Server
+ * has chosen (Reminders page), that choice stands: a bot master may use the whole dashboard, but
+ * must not be able to make Sylo ping @everyone, @here or any role with Sylo's own rights.
+ *
+ * A config that never recorded a choice predates the setting. If that server already has
+ * reminders they keep pinging as they did, so the setting is on; a server without reminders gets
+ * it off (the first reminder it creates writes the choice, see rememberPingChoice).
+ * @param {object} [moduleConfig] the 'reminders' module config
+ * @param {number} reminderCount how many reminders the server has
+ */
+export function remindersMayPing(moduleConfig, reminderCount = 0) {
+  const chosen = moduleConfig?.allowPings;
+  return typeof chosen === 'boolean' ? chosen : reminderCount > 0;
+}
+
+/** The message a reminder posts. Without pings allowed, mentions in the text are shown but silent. */
+export function reminderPayload(reminder, allowPings = false) {
   const { payload, empty } = buildPayload(reminder.spec || { content: reminder.content ?? '' });
   if (empty) return null;
-  payload.allowedMentions = { parse: ['roles', 'everyone'] };
+  payload.allowedMentions = allowPings ? { parse: ['roles', 'everyone'] } : { parse: [] };
   return payload;
 }
 
@@ -59,13 +129,16 @@ async function tick() {
   const now = Date.now();
 
   for (const r of await dueScheduled(now)) {
-    const enabled = await isModuleEnabled(r.guild_id, MODULE_ID);
+    const mod = await getGuildModule(r.guild_id, MODULE_ID);
+    const enabled = mod.enabled;
+    // A due reminder exists, so a config without a recorded choice (one from before the setting) pings.
+    const allowPings = remindersMayPing(mod.config, 1);
     const inGuild = Boolean(guildByKey(r.guild_id));
 
     if (r.mode === 'single') {
       await markSingleFired(r.id, now); // claim it first so a crash can't double-fire
       if (enabled && inGuild) {
-        const payload = payloadFor(r);
+        const payload = reminderPayload(r, allowPings);
         if (payload) await sendToChannel(r.guild_id, r.channel_id, payload);
       }
       continue;
@@ -86,12 +159,11 @@ async function tick() {
     if (r.start_at && now < r.start_at) continue;
     if (!r.dayList.includes(new Date(now).getDay())) continue; // not a chosen weekday
 
-    const payload = payloadFor(r);
+    const payload = reminderPayload(r, allowPings);
     if (payload) await sendToChannel(r.guild_id, r.channel_id, payload);
   }
 }
 
-const timer = setInterval(() => {
+every('reminders', TICK_MS, () => {
   tick().catch((err) => log.error('module:reminders', 'tick failed:', err.message));
-}, TICK_MS);
-timer.unref();
+});

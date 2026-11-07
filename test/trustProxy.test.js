@@ -5,7 +5,7 @@ import './helpers/tmpDb.js';
 import './helpers/openMode.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { trustProxySetting } from '../src/web/server.js';
+import { defaultProxyTrustWarning, trustProxySetting } from '../src/web/server.js';
 
 test('without DASHBOARD_URL nothing is trusted', () => {
   assert.equal(trustProxySetting({ dashboardUrl: null, trustProxy: null }), false);
@@ -23,4 +23,24 @@ test('TRUST_PROXY overrides it', () => {
   assert.equal(trustProxySetting({ dashboardUrl: 'https://x', trustProxy: 'false' }), false);
   assert.equal(trustProxySetting({ dashboardUrl: null, trustProxy: '2' }), 2);
   assert.equal(trustProxySetting({ dashboardUrl: null, trustProxy: '10.0.0.0/8' }), '10.0.0.0/8');
+});
+
+test('a peer on a Docker bridge address is trusted by default, an explicit TRUST_PROXY narrows it', () => {
+  // The risk the startup warning is about: the gateway a published Docker port arrives from.
+  const byDefault = trustProxySetting({ dashboardUrl: 'https://sylo.example.com', trustProxy: null });
+  assert.equal(byDefault('172.17.0.1', 0), true, 'any private peer may set X-Forwarded-For');
+  // An explicit proxy address is a string Express matches against the peer only.
+  assert.equal(trustProxySetting({ dashboardUrl: 'https://x', trustProxy: '172.18.0.5' }), '172.18.0.5');
+});
+
+test('the default proxy trust warns for a public https DASHBOARD_URL, and only then', () => {
+  const warn = (dashboardUrl, trustProxy = null) => defaultProxyTrustWarning({ dashboardUrl, trustProxy });
+  assert.match(warn('https://sylo.example.com'), /TRUST_PROXY is not set/);
+  assert.ok(warn('https://sylo.example.com').includes('docs/self-hosting.md'));
+  assert.equal(warn('https://sylo.example.com', '172.18.0.5'), null, 'set explicitly');
+  assert.equal(warn('https://sylo.example.com', 'false'), null, 'set explicitly');
+  assert.equal(warn(null), null, 'no DASHBOARD_URL: nothing is trusted');
+  assert.equal(warn('http://sylo.example.com'), null, 'not https');
+  assert.equal(warn('https://localhost:3000'), null, 'not public');
+  assert.equal(warn('https://192.168.1.5'), null, 'not public');
 });

@@ -19,6 +19,7 @@ import {
   setApiTokenPushMuted,
   pushRecipientTokens,
 } from '../src/db/apiTokens.js';
+import { markApiTokenPigeonProven } from '../src/db/apiTokens.js';
 import {
   createRelayRegistration,
   findRelayRegistration,
@@ -45,6 +46,8 @@ test('a new token has no push set up and no muted servers', async () => {
     enabled: false,
     deviceToken: null,
     relayToken: null,
+    pigeonHandle: null,
+    pigeonProvenAt: null,
     environment: null,
     origin: null,
     mutedServers: [],
@@ -135,6 +138,107 @@ test('pushRecipientTokens lists live tokens with push set up, never revoked or e
   assert.equal(row.accountId, on.accountId);
   assert.equal(row.deviceToken, device('d'));
   assert.deepEqual(row.mutedServers, []);
+});
+
+// --- Postal Pigeon handles ---------------------------------------------------------------
+
+const handle = (c = 'a') => `hrh_${c.repeat(40)}`;
+
+test('setApiTokenPush stores a Pigeon handle, and each setup replaces the others', async () => {
+  const { id } = await token();
+  await setApiTokenPush(id, { pigeonHandle: handle('a'), environment: 'production', origin: ORIGIN });
+  let push = await apiTokenPush(id);
+  assert.equal(push.enabled, true);
+  assert.equal(push.pigeonHandle, handle('a'));
+  assert.equal(push.pigeonProvenAt, null, 'not accepted by Pigeon yet');
+  assert.equal(push.deviceToken, null);
+  assert.equal(push.relayToken, null);
+
+  await setApiTokenPush(id, { deviceToken: device('a'), environment: 'production', origin: ORIGIN });
+  push = await apiTokenPush(id);
+  assert.equal(push.pigeonHandle, null, 'registering the older way drops the handle');
+  assert.equal(push.deviceToken, device('a'));
+
+  await setApiTokenPush(id, { pigeonHandle: handle('b'), environment: 'production', origin: ORIGIN });
+  push = await apiTokenPush(id);
+  assert.equal(push.deviceToken, null, 'and a handle drops the device token');
+  assert.equal(push.pigeonHandle, handle('b'));
+
+  await setApiTokenPush(id, { relayToken: 'relay-p', environment: 'production', origin: ORIGIN });
+  assert.equal((await apiTokenPush(id)).pigeonHandle, null);
+});
+
+test('a handle is proven once Pigeon accepted it; the same handle stays proven, a new one does not', async () => {
+  const { id } = await token();
+  await setApiTokenPush(id, { pigeonHandle: handle('c'), environment: 'production', origin: ORIGIN });
+  await markApiTokenPigeonProven(id, 'hrh_not-this-one', 1000);
+  assert.equal((await apiTokenPush(id)).pigeonProvenAt, null, 'only for the handle it has');
+  await markApiTokenPigeonProven(id, handle('c'), 1234);
+  assert.equal((await apiTokenPush(id)).pigeonProvenAt, 1234);
+  await markApiTokenPigeonProven(id, handle('c'), 9999);
+  assert.equal((await apiTokenPush(id)).pigeonProvenAt, 1234, 'the first time stays');
+
+  // The app registers again on every launch: the same handle keeps its mark.
+  await setApiTokenPush(id, { pigeonHandle: handle('c'), environment: 'production', origin: ORIGIN });
+  assert.equal((await apiTokenPush(id)).pigeonProvenAt, 1234);
+  await setApiTokenPush(id, { pigeonHandle: handle('d'), environment: 'production', origin: ORIGIN });
+  assert.equal((await apiTokenPush(id)).pigeonProvenAt, null, 'a new handle starts unproven');
+});
+
+test('a handle lives on one row: registering it elsewhere takes it off the other', async () => {
+  const first = await token();
+  const second = await token();
+  await setApiTokenPush(first.id, { pigeonHandle: handle('e'), environment: 'production', origin: ORIGIN });
+  await markApiTokenPigeonProven(first.id, handle('e'));
+  await setApiTokenPush(second.id, { pigeonHandle: handle('e'), environment: 'production', origin: ORIGIN });
+  assert.equal((await apiTokenPush(first.id)).enabled, false);
+  assert.equal((await apiTokenPush(first.id)).pigeonProvenAt, null);
+  const now = await apiTokenPush(second.id);
+  assert.equal(now.pigeonHandle, handle('e'));
+  assert.equal(now.pigeonProvenAt, null, 'the mark does not move with it');
+});
+
+test('clearApiTokenPush clears the handle; with an expected handle only while it is still the one', async () => {
+  const { id } = await token();
+  await setApiTokenPush(id, { pigeonHandle: handle('f'), environment: 'production', origin: ORIGIN });
+  await markApiTokenPigeonProven(id, handle('f'));
+  await clearApiTokenPush(id, { pigeonHandle: handle('old') });
+  assert.equal(
+    (await apiTokenPush(id)).pigeonHandle,
+    handle('f'),
+    'an old handle going away is not this one'
+  );
+  await clearApiTokenPush(id, { deviceToken: device('z') });
+  assert.equal((await apiTokenPush(id)).pigeonHandle, handle('f'), 'nor is a device token going away');
+  await clearApiTokenPush(id, { pigeonHandle: handle('f') });
+  const push = await apiTokenPush(id);
+  assert.equal(push.enabled, false);
+  assert.equal(push.pigeonHandle, null);
+  assert.equal(push.pigeonProvenAt, null);
+  assert.equal(push.origin, null);
+
+  await setApiTokenPush(id, { pigeonHandle: handle('g'), environment: 'production', origin: ORIGIN });
+  await clearApiTokenPush(id);
+  assert.equal((await apiTokenPush(id)).pigeonHandle, null);
+});
+
+test('a device token going away leaves a Pigeon handle alone, and the other way round', async () => {
+  const { id } = await token();
+  await setApiTokenPush(id, { deviceToken: device('h'), environment: 'production', origin: ORIGIN });
+  await clearApiTokenPush(id, { pigeonHandle: handle('h') });
+  assert.equal((await apiTokenPush(id)).deviceToken, device('h'));
+});
+
+test('pushRecipientTokens lists a token that has only a Pigeon handle, with its proven mark', async () => {
+  const { id, accountId } = await token();
+  await setApiTokenPush(id, { pigeonHandle: handle('i'), environment: 'development', origin: ORIGIN });
+  let row = (await pushRecipientTokens()).find((r) => r.id === id);
+  assert.equal(row.accountId, accountId);
+  assert.equal(row.pigeonHandle, handle('i'));
+  assert.equal(row.pigeonProvenAt, null);
+  await markApiTokenPigeonProven(id, handle('i'), 4321);
+  row = (await pushRecipientTokens()).find((r) => r.id === id);
+  assert.equal(row.pigeonProvenAt, 4321);
 });
 
 // --- relay registrations -----------------------------------------------------------------

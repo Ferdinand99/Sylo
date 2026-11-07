@@ -12,11 +12,7 @@ struct ServerStatsSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Server Statistics", model: model) { $settings, page in
-            Section {
-                Text("Pick a voice channel (make one and lock it so nobody can join) and Sylo renames it to show a live count. Put {count} in the name, such as \"Members: {count}\". Sylo needs Manage Channels on each one.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Pick a voice channel (make one and lock it so nobody can join) and Sylo renames it to show a live count. Put {count} in the name, such as \"Members: {count}\". Sylo needs Manage Channels on each one.")
 
             // One section per stat channel, so each control gets its own row.
             ForEach($settings.channels) { $stat in

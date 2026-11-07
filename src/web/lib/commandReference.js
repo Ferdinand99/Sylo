@@ -1,5 +1,5 @@
-// The slash-command reference: the loaded command collection flattened into rows. Shared by the
-// classic /commands page and the new dashboard's public command list, so both show the same data.
+// The slash-command reference: the loaded command collection flattened into rows, for the
+// dashboard's public command list.
 import { ApplicationCommandOptionType as OptType, PermissionsBitField } from 'discord.js';
 
 /** Decode a default_member_permissions bitfield string into readable flag names. */

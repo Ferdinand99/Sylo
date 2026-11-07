@@ -156,21 +156,3 @@ test('V2: the server owner may set any XP', async () => {
     guild.ownerId = 'x';
   }
 });
-
-test('V1: the classic form is refused the same way and changes nothing', async () => {
-  await rewards([{ level: 5, roleId: HIGH.id }]);
-  const { v1 } = await signedIn(10, ['ManageGuild']);
-  const res = await v1({ userId: TARGET, xp: '100000' });
-  assert.equal(res.status, 403);
-  assert.match(await res.text(), /Legend is above/);
-  assert.equal((await getMember(D_GUILD, TARGET)).xp, 0);
-});
-
-test('V1: an allowed XP change still redirects with lvl-set', async () => {
-  await rewards([{ level: 5, roleId: LOW.id }]);
-  const { v1 } = await signedIn(10, ['ManageGuild']);
-  const res = await v1({ userId: TARGET, xp: '100000' });
-  assert.equal(res.status, 302);
-  assert.match(res.headers.get('location'), /msg=lvl-set$/);
-  assert.equal((await getMember(D_GUILD, TARGET)).xp, 100000);
-});

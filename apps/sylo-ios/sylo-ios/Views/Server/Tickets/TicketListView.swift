@@ -66,6 +66,7 @@ struct TicketListView: View {
                 }
             }
             .listStyle(.plain)
+            .tabBarClearance()
             .overlay {
                 if list.open.isEmpty, list.closed.isEmpty {
                     ContentUnavailableView(
@@ -166,34 +167,6 @@ private struct TicketRow: View {
     private var preview: String {
         let text = ticket.preview.isEmpty ? String(localized: "Attachment") : ticket.preview
         return ticket.previewKind == .staff ? String(localized: "Staff: \(text)") : text
-    }
-}
-
-/// Times the way Messages words them.
-enum MessageTime {
-    /// "14:05" today, "Yesterday", the weekday this week, else a short date.
-    static func listLabel(for date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
-        if calendar.isDateInToday(date) {
-            return date.formatted(date: .omitted, time: .shortened)
-        }
-        if calendar.isDateInYesterday(date) {
-            return String(localized: "Yesterday")
-        }
-        if let days = calendar.dateComponents([.day], from: date, to: now).day, days < 7 {
-            return date.formatted(.dateTime.weekday(.wide))
-        }
-        return date.formatted(date: .numeric, time: .omitted)
-    }
-
-    /// The label above a group of messages: "Today 14:05", "Yesterday 09:12", "Monday 18:30", or a date and time.
-    static func separatorLabel(for date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
-        let time = date.formatted(date: .omitted, time: .shortened)
-        if calendar.isDateInToday(date) { return String(localized: "Today \(time)") }
-        if calendar.isDateInYesterday(date) { return String(localized: "Yesterday \(time)") }
-        if let days = calendar.dateComponents([.day], from: date, to: now).day, days < 7 {
-            return "\(date.formatted(.dateTime.weekday(.wide))) \(time)"
-        }
-        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 

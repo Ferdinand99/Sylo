@@ -72,12 +72,11 @@ test('same-origin guard runs even in open mode', () => {
   assert.equal(mk({ method: 'POST', session: undefined }).nexted, true);
 });
 
-test('GET with a session: mints a token, exposes it, passes through', () => {
+test('GET with a session: mints a token and passes through', () => {
   const session = {};
-  const { res, nexted } = mk({ method: 'GET', session });
+  const { nexted } = mk({ method: 'GET', session });
   assert.equal(nexted, true);
   assert.ok(session.csrf && session.csrf.length >= 32);
-  assert.equal(res.locals.csrfToken, session.csrf);
 });
 
 test('POST without a token is rejected 403', () => {
@@ -88,15 +87,15 @@ test('POST without a token is rejected 403', () => {
   assert.match(res.body, /CSRF/i);
 });
 
-test('POST with a matching header or body field passes', () => {
+test('POST with a matching header passes; the old _csrf body field no longer does', () => {
   const session = { csrf: 'b'.repeat(48) };
   assert.equal(mk({ method: 'POST', session, headers: { 'x-csrf-token': session.csrf } }).nexted, true);
-  assert.equal(mk({ method: 'POST', session, body: { _csrf: session.csrf } }).nexted, true);
+  assert.equal(mk({ method: 'POST', session, body: { _csrf: session.csrf } }).nexted, false);
 });
 
 test('POST with a wrong token is rejected', () => {
   const session = { csrf: 'c'.repeat(48) };
-  assert.equal(mk({ method: 'POST', session, body: { _csrf: 'nope' } }).nexted, false);
+  assert.equal(mk({ method: 'POST', session, headers: { 'x-csrf-token': 'nope' } }).nexted, false);
 });
 
 test('the signed-token flows (/verify, /appeal, /auth) are exempt', () => {

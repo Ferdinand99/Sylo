@@ -69,11 +69,18 @@ async function lookUpProfiles(guild, userIds) {
   return out;
 }
 
-function notFound(res, message) {
+// One answer for every reason there is no page (a malformed id, a server Sylo is not in, leveling
+// off, the page switched off, an unused vanity link), so the response does not tell which server
+// ids Sylo is in or which of them use leveling. The quote page does the same.
+const NOT_FOUND = 'There is no public leaderboard at this address.';
+
+function notFound(res) {
   return res.status(404).render('error', {
     title: 'Leaderboard unavailable',
     heading: 'No leaderboard here',
-    message,
+    message: NOT_FOUND,
+    backHref: null,
+    publicPage: true,
   });
 }
 
@@ -85,13 +92,11 @@ function notFound(res, message) {
 async function renderLeaderboard(req, res, next, guildId, canonical) {
   try {
     const guild = guildByKey(guildId);
-    if (!guild) return notFound(res, 'Sylo is not in that server.');
+    if (!guild) return notFound(res);
 
     const { enabled, config } = await getGuildModule(guildId, 'leveling');
-    if (!enabled) return notFound(res, 'This server does not have leveling enabled.');
-    if (config.publicLeaderboard === false) {
-      return notFound(res, 'This server has turned its public leaderboard off.');
-    }
+    if (!enabled) return notFound(res);
+    if (config.publicLeaderboard === false) return notFound(res);
 
     const period = ['week', 'month'].includes(req.query.period) ? req.query.period : 'all';
     const periodKey = period === 'all' ? null : periodKeys()[period];
@@ -118,14 +123,15 @@ async function renderLeaderboard(req, res, next, guildId, canonical) {
           name: name || 'Unknown member',
           avatar,
           left: !member && !name,
-          level: periodKey ? null : r.level,
+          // The level the xp works out to (levelProgress), the same one the bar is measured against.
+          level: periodKey ? null : p.level,
           xp: r.xp,
           voiceXp: r.voice_xp ?? 0,
           voiceMinutes: r.voice_minutes ?? 0, // only on all-time rows
           messages: r.messages,
           into: p ? p.into : 0,
           need: p ? p.need : 0,
-          pct: p ? Math.round(p.pct * 100) : 0,
+          pct: p ? Math.floor(p.pct * 100) : 0,
         };
       })
     );
@@ -148,7 +154,7 @@ async function renderLeaderboard(req, res, next, guildId, canonical) {
 const router = Router();
 router.get('/:guildId', (req, res, next) => {
   const { guildId } = req.params;
-  if (!isPlatformGuildId(guildId)) return notFound(res, 'Unknown server.');
+  if (!isPlatformGuildId(guildId)) return notFound(res);
   return renderLeaderboard(req, res, next, guildId);
 });
 
@@ -157,7 +163,7 @@ export const vanityRouter = Router();
 vanityRouter.get('/:slug', async (req, res, next) => {
   try {
     const guildId = await guildForVanity(req.params.slug);
-    if (!guildId) return notFound(res, 'That leaderboard link is not in use.');
+    if (!guildId) return notFound(res);
     return renderLeaderboard(req, res, next, guildId, `/leaderboard/${guildId}`);
   } catch (err) {
     next(err);

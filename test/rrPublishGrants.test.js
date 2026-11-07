@@ -134,19 +134,3 @@ test('V2: an allowed role-menu save is still published', async () => {
   assert.equal(res.status, 200);
   assert.equal(log.sent.length, 1);
 });
-
-test('V1: a refused role-menu save posts nothing to the channel', async () => {
-  const { v1 } = await signedIn();
-  const res = await v1({ channelId: CHANNEL, rr_style: 'buttons', rr_role: HIGH.id, rr_label: 'Pick me' });
-  assert.equal(res.status, 403);
-  assert.match(await res.text(), /Council is above/);
-  assert.deepEqual(log.sent, []);
-});
-
-test('V1: an allowed role-menu save still publishes and redirects with saved', async () => {
-  const { v1 } = await signedIn();
-  const res = await v1({ channelId: CHANNEL, rr_style: 'buttons', rr_role: LOW.id, rr_label: 'Pick me' });
-  assert.equal(res.status, 302);
-  assert.match(res.headers.get('location'), /msg=saved$/);
-  assert.equal(log.sent.length, 1);
-});

@@ -277,3 +277,160 @@ test("invitedOthers lists join times, not the other members' ids", async () => {
   assert.equal(dump.data.invitedOthers.length, 1);
   assert.equal('user_id' in dump.data.invitedOthers[0], false);
 });
+
+// --- the columns that hold a person's id, beyond the member's own rows -------------------------
+
+const G2 = '555555555555555555';
+const U2 = '666666666666666666';
+const STAFF = '777777777777777777';
+
+function seedOwned(guildId, userId) {
+  const now = Date.now();
+  db.prepare(
+    'INSERT INTO polls (message_id, guild_id, channel_id, question, options, created_by, created_at) VALUES (?,?,?,?,?,?,?)'
+  ).run('m-' + guildId, guildId, '9', 'q?', '["a","b"]', userId, now);
+  db.prepare(
+    'INSERT INTO giveaways (guild_id, channel_id, prize, host_id, ends_at, created_at) VALUES (?,?,?,?,?,?)'
+  ).run(guildId, '9', 'prize', userId, now + 1000, now);
+  db.prepare(
+    'INSERT INTO temp_voice_channels (channel_id, guild_id, hub_id, owner_id, created_at) VALUES (?,?,?,?,?)'
+  ).run('vc-' + guildId, guildId, 'hub', userId, now);
+  db.prepare('INSERT OR REPLACE INTO verification_kicks (guild_id, user_id, due_at) VALUES (?,?,?)').run(
+    guildId,
+    userId,
+    now + 1000
+  );
+  // Staff side: this person closed someone else's ticket and decided someone else's appeal.
+  db.prepare(
+    'INSERT INTO tickets (guild_id, user_id, status, created_at, last_at, closed_at, closed_by) VALUES (?,?,?,?,?,?,?)'
+  ).run(guildId, STAFF, 'closed', now, now, now, userId);
+  db.prepare(
+    'INSERT INTO appeals (guild_id, user_id, status, decided_by, created_at) VALUES (?,?,?,?,?)'
+  ).run(guildId, STAFF, 'denied', userId, now);
+}
+
+test('forgetUser also takes the member off polls, giveaways, voice channels and the staff-side columns', async () => {
+  seedOwned(G2, U2);
+  db.prepare(
+    'INSERT INTO infractions (guild_id, case_number, user_id, moderator_id, action, reason, created_at) VALUES (?,?,?,?,?,?,?)'
+  ).run(G2, 1, STAFF, U2, 'warn', 'x', Date.now());
+
+  const before = Object.fromEntries((await describeUserData(G2, U2)).items.map((i) => [i.key, i.count]));
+  for (const key of [
+    'pollsCreated',
+    'giveawaysHosted',
+    'tempVoiceOwned',
+    'verificationKicks',
+    'ticketsClosed',
+    'appealsDecided',
+    'moderatorCases',
+  ]) {
+    assert.equal(before[key], 1, key);
+  }
+
+  const result = await forgetUser(G2, U2);
+  assert.equal(result.pollsCreated, 1);
+  assert.equal(result.giveawaysHosted, 1);
+  assert.equal(result.tempVoiceOwned, 1);
+  assert.equal(result.verificationKicks, 1);
+  assert.equal(result.ticketsClosed, 1);
+  assert.equal(result.appealsDecided, 1);
+
+  // The poll, giveaway, channel, ticket and appeal stay; the person comes off them.
+  assert.equal(db.prepare('SELECT created_by FROM polls WHERE guild_id = ?').get(G2).created_by, '');
+  assert.equal(db.prepare('SELECT host_id FROM giveaways WHERE guild_id = ?').get(G2).host_id, '');
+  assert.equal(
+    db.prepare('SELECT owner_id FROM temp_voice_channels WHERE guild_id = ?').get(G2).owner_id,
+    ''
+  );
+  assert.equal(countFor('verification_kicks', G2), 0);
+  assert.equal(db.prepare('SELECT closed_by FROM tickets WHERE guild_id = ?').get(G2).closed_by, null);
+  assert.equal(db.prepare('SELECT decided_by FROM appeals WHERE guild_id = ?').get(G2).decided_by, null);
+  // The moderation case is a safety record: it stays, with its moderator.
+  assert.equal(
+    db.prepare('SELECT moderator_id FROM infractions WHERE guild_id = ?').get(G2).moderator_id,
+    U2
+  );
+
+  const after = await describeUserData(G2, U2);
+  assert.equal(after.erasable, 0);
+  assert.equal(after.items.find((i) => i.key === 'moderatorCases').kept, true);
+  const exported = await exportUserData(G2, U2);
+  assert.deepEqual(exported.data.pollsCreated, []);
+  assert.deepEqual(Object.keys(exported.data).sort(), after.items.map((i) => i.key).sort());
+});
+
+// Every column that holds a user id is either erased by forgetUser, kept on purpose, or belongs to
+// the signed-in dashboard account (removed by the account delete). A new column that holds a user
+// id fails here until someone decides which, so it cannot quietly escape /forget and /mydata.
+const USER_ID_COLUMNS = {
+  // handled: erased or anonymised by forgetUser, and listed by describeUserData / exportUserData
+  'tickets.user_id': 'handled',
+  'tickets.closed_by': 'handled',
+  'ticket_messages.author_id': 'handled',
+  'counting.last_user_id': 'handled',
+  'leveling.user_id': 'handled',
+  'leveling_periods.user_id': 'handled',
+  'afk.user_id': 'handled',
+  'birthdays.user_id': 'handled',
+  'appeals.user_id': 'handled',
+  'appeals.decided_by': 'handled',
+  'temp_voice_channels.owner_id': 'handled',
+  'invite_counts.user_id': 'handled',
+  'invite_joins.user_id': 'handled',
+  'invite_joins.inviter_id': 'handled',
+  'invite_personal.user_id': 'handled',
+  'polls.created_by': 'handled',
+  'giveaways.host_id': 'handled',
+  'giveaway_entries.user_id': 'handled',
+  'verification_kicks.user_id': 'handled',
+  'guild_event_participants.user_id': 'handled',
+  'guild_events.host_id': 'handled',
+  'guild_suggestions.author_id': 'handled',
+  'guild_suggestions.decided_by': 'handled',
+  'guild_suggestion_votes.user_id': 'handled',
+  'guild_temp_roles.user_id': 'handled',
+  'guild_temp_roles.added_by': 'handled',
+  'guild_quotes.author_id': 'handled',
+  'guild_quotes.saved_by': 'handled',
+  // kept on purpose: safety records, and the staff side of them
+  'infractions.user_id': 'kept: moderation case',
+  'infractions.moderator_id': 'kept: moderation case (listed by describeUserData)',
+  'temp_bans.user_id': 'kept: safety record',
+  'honeypot_catches.user_id': 'kept: safety record',
+  'counting_penalties.user_id': 'kept: safety record',
+  'config_audit.actor': 'kept: a display name in the server config log, not an id',
+  // the dashboard account, not a server member: removed by the account delete
+  'user_prefs.user_id': 'account',
+  'roadmap_posts.created_by': 'account',
+  'roadmap_votes.user_id': 'account',
+  'bot_audit.actor': 'account (the operator)',
+  'account_identities.platform_user_id': 'account',
+};
+
+test('every column that holds a user id is handled by forgetUser, kept on purpose, or account data', () => {
+  const tables = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+    .all()
+    .map((r) => r.name);
+  const found = [];
+  for (const t of tables) {
+    for (const c of db.prepare(`PRAGMA table_info(${t})`).all()) {
+      if (
+        /(user|author|host|owner|saved|decided|closed|moderator|added|inviter)_(id|by)$|^created_by$|^actor$/.test(
+          c.name
+        )
+      ) {
+        found.push(`${t}.${c.name}`);
+      }
+    }
+  }
+  const undecided = found.filter((f) => !(f in USER_ID_COLUMNS));
+  assert.deepEqual(
+    undecided,
+    [],
+    `these columns hold a user id but are not covered by forgetUser (src/db/purge.js) nor listed here: ${undecided.join(', ')}`
+  );
+  const stale = Object.keys(USER_ID_COLUMNS).filter((f) => !found.includes(f));
+  assert.deepEqual(stale, [], `listed here but no longer in the schema: ${stale.join(', ')}`);
+});

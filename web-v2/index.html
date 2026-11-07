@@ -4,26 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <!-- Browser chrome / status bar colour = the topbar background (--bg-main).
-         Dark is the default; the inline script below and Shell.jsx switch it
+         Dark is the default; /v2/theme.js (public/theme.js) and Shell.jsx switch it
          for the light theme. -->
     <meta name="theme-color" content="#0b0b0d" />
     <title>Sylo — Dashboard</title>
     <!-- The Sylo starling, served by the dashboard at / (src/web/public). -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
-    <script>
-      // Set data-theme before the stylesheet/React load, so a saved "light"
-      // choice doesn't flash dark-then-light on every page load. Mirrors
-      // util.js's readTheme() — duplicated here (not imported) because this
-      // has to run before any module script.
-      try {
-        var t = localStorage.getItem('sylo:v2:theme');
-        if (t === 'light') {
-          document.documentElement.setAttribute('data-theme', 'light');
-          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#f5f5f7');
-        }
-      } catch (e) {}
-    </script>
+    <script src="/v2/theme.js"></script>
     <!-- Error reports and visit counts (src/web/routes/telemetry.js); a no-op unless configured. -->
     <script src="/telemetry.js" async></script>
   </head>

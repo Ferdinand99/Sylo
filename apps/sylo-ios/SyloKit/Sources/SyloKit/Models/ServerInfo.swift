@@ -21,6 +21,10 @@ public struct ServerInfo: Decodable, Sendable, Equatable {
     /// The notification relay the server sends through, when it has no APNs key of its own. The
     /// app registers there itself, so the server never sees the device token.
     public let pushRelay: URL?
+    /// Postal Pigeon, the notification service the server sends through when it announces
+    /// `push-pigeon`. The app registers there itself, so the server gets a handle and never the
+    /// device token; only the official one is used (``PigeonRelay``).
+    public let pigeon: URL?
 
     /// Whether the answer came from a Sylo at all.
     public var isSylo: Bool { name == "Sylo" }
@@ -31,7 +35,7 @@ public struct ServerInfo: Decodable, Sendable, Equatable {
         name: String = "Sylo", version: String? = nil, apiVersion: Int = supportedAPIVersion,
         isLoginEnabled: Bool = true, loginProviders: [Platform] = [.discord],
         platforms: [Platform] = [.discord], features: [ServerFeature] = [.appLogin, .liveAccess],
-        pushRelay: URL? = nil
+        pushRelay: URL? = nil, pigeon: URL? = nil
     ) {
         self.name = name
         self.version = version
@@ -41,10 +45,11 @@ public struct ServerInfo: Decodable, Sendable, Equatable {
         self.platforms = platforms
         self.features = features
         self.pushRelay = pushRelay
+        self.pigeon = pigeon
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, version, apiVersion, login, loginProviders, platforms, features, pushRelay
+        case name, version, apiVersion, login, loginProviders, platforms, features, pushRelay, pigeon
     }
 
     public init(from decoder: any Decoder) throws {
@@ -59,5 +64,7 @@ public struct ServerInfo: Decodable, Sendable, Equatable {
         // Lenient: anything but a non-empty string reads as no relay.
         let relay = try? c.decodeIfPresent(String.self, forKey: .pushRelay)
         pushRelay = relay.flatMap { $0.isEmpty ? nil : URL(string: $0) }
+        let pigeon = try? c.decodeIfPresent(String.self, forKey: .pigeon)
+        self.pigeon = pigeon.flatMap { $0.isEmpty ? nil : URL(string: $0) }
     }
 }

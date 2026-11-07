@@ -25,6 +25,8 @@ import { settleEndedPost } from './lib/liveAlerts.js';
 import { normaliseOnEnd } from '../lib/liveValue.js';
 import { parseFeed as parseGenericFeed, grab, decodeEntities } from '../bot/lib/feed.js';
 import { log } from '../lib/log.js';
+import { readTextCapped } from '../lib/safeFetch.js';
+import { every } from './schedule.js';
 
 const FEED = 'https://www.youtube.com/feeds/videos.xml?channel_id=';
 const COLOR = 0xff0000;
@@ -43,8 +45,19 @@ const UA = 'Mozilla/5.0 (compatible; Sylo-Discord-Bot/1.0; +https://github.com/F
 const PAGE_MAX_SCAN = 3_000_000;
 const grabPage = (re, html) => grab(re, html, PAGE_MAX_SCAN);
 
+// YouTube pages and feeds are read up to this many bytes: a page that size is already far past
+// what the ids and titles are taken from, and an unbounded body must not be read into memory.
+const MAX_PAGE_BYTES = 3 * 1024 * 1024;
+
 export const DEFAULT_VIDEO_MESSAGE = '📺 **{name}** posted a new video: **{title}**\n{url}';
 export const DEFAULT_LIVE_MESSAGE = '🔴 **{name}** is live on YouTube: **{title}**\n{url}';
+/** Setting limits, served to the dashboard (modules/limits.js). */
+export const LIMITS = {
+  alerts: { maxItems: 50 },
+  'alerts[].name': { maxLength: 100 },
+  'alerts[].videoMessage': { maxLength: 1500 },
+  'alerts[].liveMessage': { maxLength: 1500 },
+};
 const UC_RE = /^UC[\w-]{20,}$/;
 const isId = (v) => /^\d{17,20}$/.test(v ?? '');
 
@@ -55,14 +68,14 @@ export function normaliseYoutubeConfig(raw = {}) {
       .map((a, i) => ({
         id: a.id ? String(a.id) : String(i),
         ytChannelId: UC_RE.test(a.ytChannelId ?? '') ? a.ytChannelId : '',
-        name: String(a.name ?? '').slice(0, 100),
+        name: String(a.name ?? '').slice(0, LIMITS['alerts[].name'].maxLength),
         discordChannelId: isId(a.discordChannelId) ? a.discordChannelId : '',
         roleId: isId(a.roleId) ? a.roleId : '',
         onVideo: a.onVideo !== false,
         onLive: Boolean(a.onLive),
         onEnd: normaliseOnEnd(a.onEnd),
-        videoMessage: String(a.videoMessage ?? '').slice(0, 1500),
-        liveMessage: String(a.liveMessage ?? '').slice(0, 1500),
+        videoMessage: String(a.videoMessage ?? '').slice(0, LIMITS['alerts[].videoMessage'].maxLength),
+        liveMessage: String(a.liveMessage ?? '').slice(0, LIMITS['alerts[].liveMessage'].maxLength),
       }))
       .filter((a) => {
         if (!a.ytChannelId || !a.discordChannelId) return false;
@@ -78,7 +91,7 @@ export function normaliseYoutubeConfig(raw = {}) {
 
 /** @returns {Promise<{ channelId: string, name: string } | null>} */
 /** Alerts per server; a save also looks up at most this many channels on youtube.com. */
-export const MAX_YOUTUBE_ALERTS = 50;
+export const MAX_YOUTUBE_ALERTS = LIMITS.alerts.maxItems;
 
 export async function resolveYtChannel(input) {
   const raw = String(input ?? '').trim();
@@ -125,7 +138,7 @@ export async function resolveYtChannel(input) {
       log.warn('youtube-alerts', `resolve ${path}: HTTP ${res.status}`);
       return null;
     }
-    const html = await res.text();
+    const html = await readTextCapped(res, MAX_PAGE_BYTES);
     const channelId =
       grabPage(/"channelId":"(UC[\w-]{20,})"/, html) ||
       grabPage(/<meta itemprop="(?:identifier|channelId)" content="(UC[\w-]{20,})">/, html) ||
@@ -141,7 +154,7 @@ export async function resolveYtChannel(input) {
       grabPage(/"channelMetadataRenderer":\{"title":"([^"]+)"/, html) ||
       grabPage(/<meta property="og:title" content="([^"]+)">/, html) ||
       '';
-    return { channelId, name: decodeEntities(name).slice(0, 100) };
+    return { channelId, name: decodeEntities(name).slice(0, LIMITS['alerts[].name'].maxLength) };
   } catch (err) {
     log.warn('youtube-alerts', `resolve ${path}: ${err.message}`);
     return null;
@@ -178,7 +191,7 @@ async function fetchFeed(ytChannelId) {
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`YT feed ${res.status}`);
-  return parseFeed(await res.text());
+  return parseFeed(await readTextCapped(res, MAX_PAGE_BYTES));
 }
 
 // --- live check ------------------------------------------------------
@@ -198,7 +211,7 @@ export async function checkLive(ytChannelId) {
       log.warn('youtube-alerts', `live check ${ytChannelId}: HTTP ${res.status}`);
       return { live: false };
     }
-    const html = await res.text();
+    const html = await readTextCapped(res, MAX_PAGE_BYTES);
     const isLive = /"isLive":true/.test(html) || /"isLiveNow":true/.test(html);
     if (!isLive) return { live: false };
     const videoId =
@@ -247,6 +260,42 @@ function payload(alert, { name, title, url, thumb }, kind) {
   };
 }
 
+// --- announce a video (poll and WebSub push share this) -----------------
+
+// Videos being announced right now, so a poll and a push that reach the same video at the same
+// moment cannot both pass the "seen?" check before either has marked it.
+const announcing = new Set();
+
+/**
+ * Announce one feed entry for one alert, unless it was announced before. The one path every new
+ * video takes, from the poll (runAlert) and from a WebSub push (modules/youtubeWebsub.js), so the
+ * posted_keys dedup covers both. Marked seen only once the send succeeded, so a failed delivery
+ * retries on the next poll instead of being dropped.
+ * @param {string} guildId
+ * @param {{ ytChannelId: string, discordChannelId: string, name?: string }} alert
+ * @param {{ videoId: string, title: string, url: string, thumb?: string, author?: string }} entry  from parseFeed()
+ * @returns {Promise<boolean>} whether a message was sent now
+ */
+export async function announceVideo(guildId, alert, entry) {
+  const c = alert.ytChannelId;
+  const key = `${guildId}|${c}|${entry.videoId}`;
+  if (announcing.has(key)) return false;
+  announcing.add(key);
+  try {
+    if (await isVideoSeen(guildId, c, entry.videoId)) return false;
+    const name = alert.name || entry.author || 'A channel';
+    const sent = await sendToChannel(
+      guildId,
+      alert.discordChannelId,
+      payload(alert, { name, title: entry.title, url: entry.url, thumb: entry.thumb }, 'video')
+    );
+    if (sent) await markVideoSeen(guildId, c, entry.videoId);
+    return sent;
+  } finally {
+    announcing.delete(key);
+  }
+}
+
 // --- poll loop -----------------------------------------------------
 
 async function tick() {
@@ -280,14 +329,7 @@ export async function runAlert(guildId, alert) {
       // deleted channel, a transient API error, …) retries on the next poll
       // instead of being silently and permanently dropped.
       for (const e of [...entries].reverse()) {
-        if (await isVideoSeen(guildId, c, e.videoId)) continue;
-        const name = alert.name || e.author || 'A channel';
-        const sent = await sendToChannel(
-          guildId,
-          alert.discordChannelId,
-          payload(alert, { name, title: e.title, url: e.url, thumb: e.thumb }, 'video')
-        );
-        if (sent) await markVideoSeen(guildId, c, e.videoId);
+        await announceVideo(guildId, alert, e);
       }
     }
   }
@@ -332,8 +374,11 @@ export async function runAlert(guildId, alert) {
   }
 }
 
-const timer = setInterval(() => {
-  tick().catch((err) => log.error('youtube-alerts', 'tick failed:', err.message));
-}, POLL_MS);
-timer.unref();
-setTimeout(() => tick().catch(() => {}), 40_000).unref();
+every(
+  'youtube-alerts',
+  POLL_MS,
+  () => {
+    tick().catch((err) => log.error('youtube-alerts', 'tick failed:', err.message));
+  },
+  { firstDelayMs: 40_000 }
+);

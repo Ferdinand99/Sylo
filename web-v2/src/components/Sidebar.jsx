@@ -1,10 +1,9 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useOverview } from '../OverviewContext.jsx';
-import { hasV2Page, v2Href } from '../moduleForms/index.js';
+import { v2Href } from '../moduleForms/index.js';
 
-// Small inline icon set — kept self-contained rather than porting V1's full
-// sprite (src/web/views/partials/header.ejs) just for the sidebar.
+// Small inline icon set for the sidebar.
 const ICONS = {
   grid: (
     <>
@@ -145,7 +144,7 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
     { key: 'command-list', label: 'Command list', icon: 'terminal', path: '/commands' },
     { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', path: '/roadmap' },
     { key: 'health', label: 'Health', icon: 'pulse', path: '/health' },
-    { key: 'stats', label: 'Stats', icon: 'chart', path: '/stats' },
+    { key: 'stats', label: 'Stats cache', icon: 'chart', path: '/stats' },
   ].map((it) => ({ ...it, href: it.guild ? (guildBase ? `${guildBase}${it.path}` : null) : it.path }));
 
   // Only modules actually turned on for this server, grouped the same way
@@ -209,9 +208,8 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
               <div className="v2-sidebar-group" key={g.title}>
                 <div className="v2-sidebar-group-title">{g.title}</div>
                 {g.cards.map((card) => {
-                  const isV2 = hasV2Page(card);
-                  const href = isV2 ? v2Href(card, activeGuildId) : card.href;
-                  return isV2 ? (
+                  const href = v2Href(card, activeGuildId);
+                  return (
                     <Link
                       key={card.id}
                       to={href}
@@ -221,27 +219,11 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
                     >
                       {card.name}{' '}
                       {card.beta ? (
-                        <span className="v2-sidebar-beta-mark" title="New module — behavior may still change">
-                          ●
+                        <span className="v2-sidebar-beta-pill" title="New module — behavior may still change">
+                          Beta
                         </span>
                       ) : null}
                     </Link>
-                  ) : (
-                    <a
-                      key={card.id}
-                      href={href}
-                      className="v2-sidebar-sublink"
-                      onClick={onClose}
-                      title="Opens the classic V1 dashboard — no V2 page yet"
-                    >
-                      {card.name} <span className="v2-sidebar-classic-mark">↗</span>
-                      {card.beta ? (
-                        <span className="v2-sidebar-beta-mark" title="New module — behavior may still change">
-                          {' '}
-                          ●
-                        </span>
-                      ) : null}
-                    </a>
                   );
                 })}
               </div>

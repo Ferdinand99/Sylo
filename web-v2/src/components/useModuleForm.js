@@ -80,7 +80,7 @@ export function useModuleForm(moduleId, options = {}) {
     [guildId, moduleId, ...deps]
   );
   const state = useFormState(null);
-  const { form, load } = state;
+  const { form, load, commit, setForm: setFormState } = state;
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   // The server the current form was built from. useApiData keeps the previous
@@ -122,7 +122,7 @@ export function useModuleForm(moduleId, options = {}) {
         let next;
         if (after) next = after(result, body, data);
         else if (result && result.config !== undefined) next = to(result.config, data);
-        if (next === undefined) state.commit(form);
+        if (next === undefined) commit(form);
         else load(next);
         saved?.(result);
         return true;
@@ -134,10 +134,10 @@ export function useModuleForm(moduleId, options = {}) {
         setSaving(false);
       }
     },
-    [form, data, guildId, loadedFor, moduleId, saveFn, load, state.commit]
+    [form, data, guildId, loadedFor, moduleId, saveFn, load, commit]
   );
 
-  const set = useCallback((patch) => state.setForm((f) => ({ ...f, ...patch })), [state.setForm]);
+  const set = useCallback((patch) => setFormState((f) => ({ ...f, ...patch })), [setFormState]);
 
   let status = 'ready';
   if (error) status = 'error';

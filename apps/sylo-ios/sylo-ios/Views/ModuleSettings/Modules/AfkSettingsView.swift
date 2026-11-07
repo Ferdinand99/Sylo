@@ -12,11 +12,7 @@ struct AfkSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("AFK", model: model) { $settings, page in
-            Section {
-                Text("Members run /afk [reason]. Sylo replies to anyone who mentions them, and clears the status automatically when they next send a message.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            ModuleIntro("Members run /afk [reason]. Sylo replies to anyone who mentions them, and clears the status automatically when they next send a message.")
 
             Section {
                 Toggle("Add [AFK] to their nickname", isOn: $settings.setNickname)

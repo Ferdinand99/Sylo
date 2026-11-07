@@ -1,5 +1,5 @@
 /* V2 dashboard — design tokens mirror sylobot.com (site/styles.css): true
-   neutral greys, hairline borders, one violet accent for links, focus and
+   neutral greys, hairline borders, one cyan accent (the logo's #38c8f0) for links, focus and
    small highlights, Apple-style status colours. V2's own token names are
    kept so every rule below picks the values up unchanged.
    Dark is the default (matches sylobot.com and docs.sylobot.com, both
@@ -22,10 +22,13 @@
   --text-muted: #a1a1a6;
   /* Decorative only — fails AA as text. */
   --text-faint: #6e6e73;
-  --accent: #8b7dff;
+  --accent: #38c8f0;
   /* Links used a separate sky blue; now they use the accent. Kept as an
      alias (resolves per theme) so existing var(--accent-2) uses still work. */
   --accent-2: var(--accent);
+  /* A second data colour for charts with two series (the accent is the first); not grey, so a series
+     never reads as "disabled". */
+  --series-2: #b794f6;
   --success: #30d158;
   --warn: #ffd60a;
   --danger: #ff453a;
@@ -71,6 +74,12 @@
      needs a firmer edge (#d2d2d7 is 1.5:1 on white) or the near-white field
      fill vanishes into a white card. */
   --border-field: var(--border-subtle);
+  /* Edge of something you press or that shows which one is selected: ghost buttons, the active
+     tab and sidebar item. Firmer than --border-strong, which stays for quiet dividers. */
+  --border-control: rgba(255, 255, 255, 0.24);
+  /* Box of a checkbox / radio: about 3:1 against the surface (WCAG 1.4.11), so an empty one
+     reads as a control you can use and not as a disabled grey square. */
+  --border-check: rgba(255, 255, 255, 0.45);
   /* Native select chevron, in --text-muted (an SVG background can't follow
      currentColor, so each theme carries its own). */
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a1a1a6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -84,12 +93,16 @@
   --border-strong: rgba(0, 0, 0, 0.14);
   --swatch-border: rgba(0, 0, 0, 0.15);
   --border-field: #d2d2d7;
+  --border-control: rgba(0, 0, 0, 0.32);
+  --border-check: rgba(0, 0, 0, 0.45);
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --text: #1d1d1f;
   --text-muted: #6e6e73;
   --text-faint: #86868b;
-  /* #6e5ce6 is 4.45:1 on #f5f5f7; one step darker clears AA everywhere. */
-  --accent: #6a58e3;
+  /* The logo cyan is too light on white; this step is 5.9:1 on #f5f5f7 and
+     still 5:1 as text on a 16% accent tint, so it clears AA everywhere. */
+  --accent: #076787;
+  --series-2: #6b3fb0;
   --success: #1e7f36;
   --warn: #b25000;
   --danger: #d70015;
@@ -315,7 +328,8 @@ a {
   flex: none;
   display: block;
 }
-.v2-classic-link {
+/* A pill-shaped link in the top bar (the public pages' "Log in"). */
+.v2-pill-link {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-muted);
@@ -329,22 +343,27 @@ a {
     color var(--dur-ui) ease,
     border-color var(--dur-ui) ease;
 }
-/* Shell.jsx renders both labels; only one shows at a time. */
-.v2-classic-short {
-  display: none;
-}
-.v2-classic-link:hover {
+.v2-pill-link:hover {
   text-decoration: none;
 }
 @media (hover: hover) and (pointer: fine) {
-  .v2-classic-link:hover {
+  .v2-pill-link:hover {
     color: var(--text);
     border-color: var(--border-strong);
   }
 }
-.v2-classic-link:active {
+.v2-pill-link:active {
   color: var(--text);
   border-color: var(--border-strong);
+}
+
+/* Pushes the theme toggle and the account menu to the right edge of the top bar. In the public
+   top bar the "Log in" link does that instead (below). */
+.v2-topbar .v2-theme-toggle {
+  margin-left: auto;
+}
+.v2-pill-link + .v2-theme-toggle {
+  margin-left: 0;
 }
 
 .v2-theme-toggle {
@@ -565,9 +584,8 @@ a {
   margin: 0;
 }
 
-/* Body layout: persistent sidebar (every page, not just guild ones — matches
-   V1 always showing its top nav regardless of whether a server is picked)
-   plus the content column. */
+/* Body layout: persistent sidebar (every page, not just guild ones, whether or
+   not a server is picked) plus the content column. */
 .v2-body {
   flex: 1;
   display: flex;
@@ -656,7 +674,7 @@ a {
 .v2-sidebar-sublink.is-active {
   color: var(--text);
   background: var(--bg-surface);
-  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  box-shadow: inset 0 0 0 1px var(--border-control);
 }
 .v2-sidebar-link.is-active .v2-sidebar-icon {
   color: var(--accent);
@@ -764,21 +782,8 @@ a {
   }
 }
 
-/* "Back to classic dashboard" → "Classic" once the topbar gets tight. */
-@media (max-width: 700px) {
-  .v2-classic-full {
-    display: none;
-  }
-  .v2-classic-short {
-    display: inline;
-  }
-  .v2-classic-link {
-    padding: 6px 12px;
-  }
-}
-
 /* Phones: the server switcher drops to its own full-width row so the first
-   row (menu, brand, Classic, theme) never squeezes; page gutters go to 16px. */
+   row (menu, brand, theme) never squeezes; page gutters go to 16px. */
 @media (max-width: 560px) {
   .v2-topbar {
     padding-left: max(16px, env(safe-area-inset-left, 0px));
@@ -828,6 +833,10 @@ a {
 }
 .v2-section-gap-sm {
   margin-top: 10px;
+}
+/* Below an "+ Add …" button: clear air before the next label or heading. */
+.v2-section-gap-md {
+  margin-top: 24px;
 }
 .v2-hero p {
   margin: 0;
@@ -943,9 +952,6 @@ a {
 /* The Overview page's search bar gains a "Select" button alongside it for
    bulk enable/disable — the input gives up its own bottom margin to the
    row wrapper so the button stays vertically centered with it. */
-.v2-search-row {
-  margin-bottom: 16px;
-}
 .v2-search-row .v2-search {
   flex: 1;
   margin-bottom: 0;
@@ -975,7 +981,25 @@ a {
   letter-spacing: -0.01em;
   color: var(--text);
   margin: 0 0 10px;
-  padding: 0 4px;
+  padding: 0;
+}
+/* Space above a heading that follows something, so it never sits glued to the list or form
+   above it. The first heading of a page or card has nothing before it and keeps no gap. */
+* + .v2-group-title {
+  margin-top: 28px;
+}
+/* .v2-section-gap(-sm) sit earlier in this file than .v2-group-title's margin shorthand, which
+   used to reset them; on a heading they win again. */
+.v2-group-title.v2-section-gap {
+  margin-top: 32px;
+}
+.v2-group-title.v2-section-gap-sm {
+  margin-top: 10px;
+}
+/* A page shown inside a hub tab hides its own title (.v2-embedded), so its first heading is
+   the first thing under the tabs. */
+.v2-embedded > .v2-section-title + .v2-group-title {
+  margin-top: 0;
 }
 
 .v2-list {
@@ -983,6 +1007,20 @@ a {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   overflow: hidden;
+}
+/* Whatever follows a list ("+ Add" button, a note, the next list) gets a standard gap instead of
+   touching it. :where() keeps this at zero specificity, so a heading's own top margin, a
+   .v2-section-gap or any other margin on the next element still wins. */
+:where(.v2-list + *) {
+  margin-top: 12px;
+}
+.v2-list + .v2-field-hint {
+  margin-top: 10px;
+}
+/* A note's own margin shorthand would beat the zero-specificity gap above. */
+.v2-list + .v2-note,
+.v2-list + .v2-state {
+  margin-top: 12px;
 }
 
 .v2-row {
@@ -1082,9 +1120,7 @@ a.v2-row:active {
     white-space: normal;
   }
 }
-/* Small inline tags in the site's pill style: hairline, sentence case.
-   (The content is already "Classic" / "Beta".) */
-.v2-classic-tag,
+/* Small inline tags in the site's pill style: hairline, sentence case. */
 .v2-beta-tag {
   display: inline-flex;
   align-items: center;
@@ -1101,8 +1137,7 @@ a.v2-row:active {
   white-space: nowrap;
 }
 /* Newly-added modules — registry.js's `beta` flag — get this wherever
-   they're listed: same pill as .v2-classic-tag plus an amber dot, so the
-   two read as distinct signals at a glance. */
+   they're listed: the pill plus an amber dot. */
 .v2-beta-tag {
   color: var(--text);
 }
@@ -1113,13 +1148,6 @@ a.v2-row:active {
   flex: none;
   border-radius: 50%;
   background: var(--warn);
-}
-.v2-sidebar-classic-mark {
-  opacity: 0.55;
-}
-.v2-sidebar-beta-mark {
-  color: var(--warn);
-  opacity: 0.85;
 }
 .v2-row-arrow {
   color: var(--text-muted);
@@ -1143,9 +1171,20 @@ a.v2-row:active {
   gap: 12px;
   margin-bottom: 12px;
 }
+/* The card's title, taken from what it holds ("#general", a streamer's name). */
+.v2-rule-title {
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.v2-rule-title .v2-field-hint {
+  font-weight: 400;
+}
 
 /* Embed message builder (MessageBuilder.jsx) — a compact image-picker button
-   (a prompt() for the URL, same as V1's, rather than a full upload UI) and a
+   (a prompt() for the URL, rather than a full upload UI) and a
    name field styled to read as a page title, not a form field. */
 .v2-mb-name {
   background: none;
@@ -1577,20 +1616,36 @@ a.v2-row:active {
 .v2-embed-preview .v2-embed-input::placeholder {
   color: var(--text-muted);
 }
-.v2-embed-title {
-  font-weight: 700;
-  font-size: 1rem;
+/* components/AutoGrowTextarea.jsx sets the height itself, so there is nothing to scroll or drag. */
+.v2-autogrow {
+  overflow: hidden;
+  resize: none;
 }
-.v2-embed-desc {
+/* Where the browser can size a textarea to its text by itself, it does (the script then leaves
+   the height alone). The width stays what the field's own class says. */
+@supports (field-sizing: content) {
+  .v2-autogrow {
+    field-sizing: content;
+  }
+}
+/* Same specificity as the `font: inherit` reset above (and later in the file), so the
+   per-field sizes below win; without the .v2-embed-preview prefix they lost to it
+   and the title looked like body text. */
+.v2-embed-preview .v2-embed-title {
+  font-weight: 700;
+  font-size: var(--fs-lg);
+  line-height: 1.3;
+}
+.v2-embed-preview .v2-embed-desc {
   font-size: 0.88rem;
   line-height: 1.4;
   overflow: hidden;
 }
-.v2-embed-author {
+.v2-embed-preview .v2-embed-author {
   font-size: 0.82rem;
   font-weight: 600;
 }
-.v2-embed-footer {
+.v2-embed-preview .v2-embed-footer {
   font-size: 0.75rem;
   color: var(--text-muted);
 }
@@ -1604,12 +1659,13 @@ a.v2-row:active {
 .v2-embed-field-block {
   position: relative;
 }
-.v2-embed-field-name {
+.v2-embed-preview .v2-embed-field-name {
   font-weight: 700;
   font-size: 0.82rem;
 }
-.v2-embed-field-value {
+.v2-embed-preview .v2-embed-field-value {
   font-size: 0.82rem;
+  line-height: 1.4;
 }
 /* Hidden with opacity (not display:none) so it stays in the tab order —
    tabbing onto it makes the block :focus-within, which shows it. */
@@ -1774,7 +1830,7 @@ a.v2-row:active {
   cursor: not-allowed;
 }
 
-/* Toggle switch — replaces V1's pill button. Used both as a read-only
+/* Toggle switch — a pill switch. Used both as a read-only
    <span> (Overview's module rows) and a real <button> (Leaderboard's public
    switch), hence the padding/font reset. Size, colours, knob and motion
    live in forms.css (Switch). */
@@ -1813,12 +1869,44 @@ button.v2-toggle:disabled {
   margin: 0 0 16px;
 }
 
+/* One row that scrolls sideways when the tabs don't fit (components/TabRow.jsx keeps the active
+   tab in view and fades the edges that have more behind them); it never wraps onto a second
+   row. */
 .v2-tabs {
   display: flex;
+  flex-wrap: nowrap;
   gap: 4px;
   margin-bottom: 10px;
+  position: relative;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.v2-tabs::-webkit-scrollbar {
+  display: none;
+}
+.v2-tabs.fade-start {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px);
+  mask-image: linear-gradient(to right, transparent 0, #000 28px);
+}
+.v2-tabs.fade-end {
+  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 28px);
+  mask-image: linear-gradient(to left, transparent 0, #000 28px);
+}
+.v2-tabs.fade-start.fade-end {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);
 }
 .v2-tab {
+  flex: none;
+  white-space: nowrap;
   background: none;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-pill);
@@ -1845,6 +1933,10 @@ button.v2-toggle:disabled {
   color: var(--text);
   border-color: var(--border-strong);
 }
+/* Inside the scrolling row an outside outline would be clipped. */
+.v2-tab:focus-visible {
+  outline-offset: -2px;
+}
 @media (pointer: coarse) {
   .v2-tab {
     display: inline-flex;
@@ -1855,7 +1947,8 @@ button.v2-toggle:disabled {
 }
 /* --text on a soft accent tint — the accent is a highlight here, never the
    text colour, so it stays readable in both themes. */
-.v2-tab.is-active {
+.v2-tab.is-active,
+.v2-hub-tabs .v2-tab.is-active {
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
@@ -1891,7 +1984,8 @@ button.v2-toggle:disabled {
    — no accent fill, no glow; the accent is kept for links and focus. */
 .v2-btn-primary,
 .v2-btn-ghost,
-.v2-btn-danger {
+.v2-btn-danger,
+.v2-btn-danger-ghost {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1925,25 +2019,29 @@ button.v2-toggle:disabled {
 }
 .v2-btn-primary:hover,
 .v2-btn-ghost:hover,
-.v2-btn-danger:hover {
+.v2-btn-danger:hover,
+.v2-btn-danger-ghost:hover {
   text-decoration: none;
 }
 .v2-btn-primary:active:not(:disabled),
 .v2-btn-ghost:active:not(:disabled),
-.v2-btn-danger:active:not(:disabled) {
+.v2-btn-danger:active:not(:disabled),
+.v2-btn-danger-ghost:active:not(:disabled) {
   transform: scale(0.97);
 }
 /* Disabled: a calm recessed pill with muted text rather than a faded copy
    of the filled button (opacity over white or red read as a muddy grey). */
 .v2-btn-primary:disabled,
 .v2-btn-ghost:disabled,
-.v2-btn-danger:disabled {
+.v2-btn-danger:disabled,
+.v2-btn-danger-ghost:disabled {
   background: var(--bg-surface-2);
   border-color: var(--border-subtle);
   color: var(--text-muted);
   cursor: not-allowed;
 }
-.v2-btn-ghost:disabled {
+.v2-btn-ghost:disabled,
+.v2-btn-danger-ghost:disabled {
   background: transparent;
 }
 .v2-btn-primary {
@@ -1953,8 +2051,16 @@ button.v2-toggle:disabled {
 }
 .v2-btn-ghost {
   background: transparent;
-  border-color: var(--border-strong);
+  border-color: var(--border-control);
   color: var(--text);
+}
+/* Destructive action on a row or inside a form ("Delete", "Remove"): red text and edge, no fill,
+   so a page full of rows isn't a column of red buttons. The solid red .v2-btn-danger is for the
+   one button that actually carries out the deletion (confirm dialogs, the Leveling danger zone). */
+.v2-btn-danger-ghost {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  color: var(--danger);
 }
 /* Solid, like a destructive iOS button. --danger-fill, not --danger: the
    bright dark-theme red is too light behind white text. */
@@ -1973,9 +2079,22 @@ button.v2-toggle:disabled {
   .v2-btn-danger:hover:not(:disabled) {
     background: color-mix(in srgb, var(--danger-fill) 88%, #000);
   }
+  .v2-btn-danger-ghost:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    border-color: var(--danger);
+  }
 }
 .v2-btn-ghost:active:not(:disabled) {
   background: var(--bg-surface);
+}
+.v2-btn-danger-ghost:active:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+/* A small button that sits in a line of text ("Copy" after an ID). */
+.v2-btn-compact {
+  min-height: 26px;
+  padding: 2px 10px;
+  font-size: 0.78rem;
 }
 /* A page title with an action button on the same line (e.g. "+ New…") —
    used where a page needs one, most don't. */
@@ -2002,17 +2121,115 @@ button.v2-toggle:disabled {
   color: var(--text);
   margin-bottom: 6px;
 }
+/* A checkbox or radio with its text (<label className="v2-check">). Works anywhere, not only in
+   .v2-field. The box sits level with the first line of text, which may wrap onto more lines.
+   Put the text, and anything inline in it (<code>, <strong>), in ONE <span>: a flex container
+   makes every direct child its own column. */
+.v2-check,
 .v2-field label.v2-check {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   color: var(--text);
   font-size: 0.88rem;
   font-weight: 400;
+  line-height: 1.45;
   margin-bottom: 10px;
+  cursor: pointer;
 }
-.v2-check input {
+.v2-check input[type='checkbox'],
+.v2-check input[type='radio'] {
+  margin-top: 1px;
+}
+/* The same, but for text with an input in the middle ("only up to [5] stars"). */
+.v2-check.v2-check-inline {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.v2-check.v2-check-inline input[type='checkbox'] {
+  margin-top: 0;
+}
+/* The "stack inputs in a field" gap above must not push an input that sits inside the label text. */
+.v2-check.v2-check-inline input {
+  margin-top: 0;
+}
+/* Checkboxes and radios drawn by us: the native empty box is a flat grey square in the dark theme
+   and a faint one in the light theme, and looks disabled either way. */
+input[type='checkbox'],
+input[type='radio'] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
   flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  background: transparent;
+  border: 1.5px solid var(--border-check);
+  border-radius: 5px;
+  cursor: pointer;
+  vertical-align: middle;
+  transition:
+    background-color var(--dur-press) ease,
+    border-color var(--dur-press) ease;
+}
+input[type='radio'] {
+  border-radius: 50%;
+}
+input[type='checkbox']::after {
+  content: '';
+  width: 5px;
+  height: 9px;
+  margin-top: -2px;
+  border: solid var(--bg-main);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform var(--dur-press) var(--ease-out);
+}
+input[type='radio']::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: scale(0);
+  transition: transform var(--dur-press) var(--ease-out);
+}
+input[type='checkbox']:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+input[type='checkbox']:checked::after {
+  transform: rotate(45deg) scale(1);
+}
+input[type='radio']:checked {
+  border-color: var(--accent);
+}
+input[type='radio']:checked::after {
+  transform: scale(1);
+}
+@media (hover: hover) and (pointer: fine) {
+  input[type='checkbox']:not(:checked, :disabled):hover,
+  input[type='radio']:not(:checked, :disabled):hover {
+    border-color: var(--accent);
+  }
+}
+input[type='checkbox']:disabled,
+input[type='radio']:disabled {
+  cursor: not-allowed;
+}
+/* High contrast: the system's own boxes follow the forced colours. */
+@media (forced-colors: active) {
+  input[type='checkbox'],
+  input[type='radio'] {
+    -webkit-appearance: auto;
+    appearance: auto;
+  }
+  input[type='checkbox']::after,
+  input[type='radio']::after {
+    content: none;
+  }
 }
 .v2-check-grid {
   display: grid;
@@ -2040,6 +2257,37 @@ button.v2-toggle:disabled {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
+/* A number that is a handful of digits ("5", "90"): a narrow field instead of one that spans the
+   whole form. Use it on an <input type="number"> inside a .v2-field; put the unit after it with
+   .v2-input-unit (components/UnitInput.jsx does both). Wins over the full-width default of form
+   fields, which has no specificity. */
+.v2-input-num {
+  width: 100%;
+  max-width: 8rem;
+  min-width: 5rem;
+  font-variant-numeric: tabular-nums;
+}
+/* A short text value of a few characters (a command prefix): narrow like .v2-input-num. */
+.v2-input-short {
+  width: 100%;
+  max-width: 8rem;
+  min-width: 5rem;
+}
+.v2-input-num.v2-input-num-wide {
+  max-width: 10rem;
+}
+/* [ 90 ] days — the field and its unit on one line; the unit never wraps away from the box. */
+.v2-input-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+.v2-input-unit-label {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
 /* Auto-moderation (Automod.jsx) — one row per check (mode select + an
    optional collapsible params panel), lighter than .v2-rule-card since
    most rows have no extra fields at all. */
@@ -2053,12 +2301,6 @@ button.v2-toggle:disabled {
 .v2-am-rule:last-child {
   border-bottom: none;
 }
-.v2-am-rule-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
 .v2-am-params {
   margin-top: 10px;
 }
@@ -2071,11 +2313,6 @@ button.v2-toggle:disabled {
 .v2-am-params .v2-field-row {
   margin-top: 8px;
 }
-.v2-warn-text {
-  color: var(--warn);
-  font-size: 0.82rem;
-  margin: 6px 0 0;
-}
 /* Scoped to any form, not just .v2-field, so a card of raw inputs (e.g.
    .v2-rule-card's embed fields) gets the same look without every single
    input needing its own .v2-field wrapper (and that wrapper's label-sized
@@ -2086,6 +2323,7 @@ button.v2-toggle:disabled {
 :where(form, .v2-field)
   :where(
     input[type='text'],
+    input[type='search'],
     input[type='url'],
     input[type='number'],
     input[type='time'],
@@ -2168,8 +2406,7 @@ textarea:disabled {
 }
 /* ChipPicker.jsx — replaces a native <select multiple> (needs ctrl/cmd-
    click to pick more than one, not discoverable) with removable chips
-   plus a single-select "add" dropdown. Ports V1's .role-picker/.role-chip
-   (styles.css) to V2's tokens. */
+   plus a single-select "add" dropdown. */
 .v2-chip-picker {
   display: flex;
   flex-direction: column;
@@ -2236,6 +2473,37 @@ textarea:disabled {
   align-items: center;
   gap: 10px;
 }
+/* Never breaks inside ("days before", "stars"). */
+.v2-nowrap {
+  white-space: nowrap;
+}
+/* App Store Connect alerts: the alert (checkbox + label) on the left, its channel on the right, so
+   every channel select lines up. One column on a phone. */
+.v2-alert-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 16rem);
+  align-items: center;
+  gap: 4px 16px;
+  margin-bottom: 10px;
+}
+.v2-alert-row > .v2-check {
+  margin-bottom: 0;
+}
+.v2-alert-row > .v2-alert-hint {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+@media (max-width: 600px) {
+  .v2-alert-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* A button right after a text box ("Search", "Update", "Select") is exactly as tall as the box,
+   whatever the box's font and padding come to. A wrapped button on a line of its own keeps its own
+   height. */
+.v2-field-row:has(> input) > :is(.v2-btn-primary, .v2-btn-ghost, .v2-btn-danger, .v2-btn-danger-ghost) {
+  align-self: stretch;
+}
 .v2-color-input {
   width: 40px;
   height: 34px;
@@ -2270,10 +2538,6 @@ textarea:disabled {
   border-top: 1px solid var(--border-subtle);
 }
 
-.v2-placeholders code {
-  margin-right: 6px;
-}
-
 .v2-card-preview {
   max-width: 480px;
   width: 100%;
@@ -2282,8 +2546,7 @@ textarea:disabled {
   display: block;
 }
 
-/* Insights.jsx — ports V1's hand-rolled SVG bar/line charts (ins-* in
-   V1's styles.css) onto V2's tokens rather than pulling in a charting
+/* Insights.jsx — hand-rolled SVG bar/line charts (ins-*) on V2's tokens rather than pulling in a charting
    library for six small sparkline-style charts. */
 .v2-ins-range {
   display: flex;
@@ -2334,25 +2597,44 @@ textarea:disabled {
   border-color: var(--text);
   color: var(--bg-main);
 }
-/* Status badges (roadmap, on/off, appeals) — static, not clickable. The
-   site's pill: hairline border, a small dot carries the status colour, the
-   label stays --text so it's readable in both themes. Uppercase because
-   some labels arrive lowercase ("on", "planned"). */
+/* Badges (components/Badge.jsx): infraction types, appeal and publish status, on/off — static,
+   not clickable. Sentence case everywhere (the component fixes the casing of labels that arrive
+   lowercase). A small dot and a faint tint carry the meaning, the label stays --text so it is
+   readable in both themes and never relies on colour alone:
+     .is-danger (ban, denied)   .is-warning (warn, timeout, pending)
+     .is-success (accepted, published, on)   .is-neutral / no tone (everything else).
+   */
 .v2-status-pill {
   --status-tone: var(--text-muted);
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid color-mix(in srgb, var(--status-tone) 40%, var(--border-strong));
+  background: color-mix(in srgb, var(--status-tone) 9%, transparent);
   border-radius: var(--radius-pill);
   padding: 2px 10px;
   color: var(--text);
-  font-size: 0.6875rem;
-  font-weight: 600;
+  font-size: 0.75rem;
+  font-weight: 500;
   line-height: 1.5;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   white-space: nowrap;
+}
+.v2-status-pill.is-danger {
+  --status-tone: var(--danger);
+}
+.v2-status-pill.is-warning {
+  --status-tone: var(--warn);
+}
+.v2-status-pill.is-success {
+  --status-tone: var(--success);
+}
+.v2-status-pill.is-neutral {
+  --status-tone: var(--text-muted);
+}
+/* A badge beside a row title, after the name. */
+.v2-status-pill.v2-badge-inline {
+  margin-left: 8px;
+  vertical-align: 0.1em;
 }
 .v2-status-pill::before {
   content: '';
@@ -2361,18 +2643,6 @@ textarea:disabled {
   flex: none;
   border-radius: 50%;
   background: var(--status-tone);
-}
-.v2-status-pill.planned {
-  --status-tone: var(--accent);
-}
-.v2-status-pill.started {
-  --status-tone: var(--warn);
-}
-.v2-status-pill.completed {
-  --status-tone: var(--success);
-}
-.v2-status-pill.pending {
-  color: var(--text-muted);
 }
 .v2-roadmap-vote {
   display: flex;
@@ -2416,9 +2686,6 @@ textarea:disabled {
   border-radius: 4px;
   padding: 1px 5px;
   font-size: 0.85em;
-}
-.v2-ins-refresh {
-  margin-left: auto;
 }
 .v2-ins-tiles {
   display: flex;
@@ -2658,8 +2925,7 @@ textarea:disabled {
 }
 
 /* components/Announcement.jsx: bot-wide notice from Bot Personalizer. A
-   tinted surface per severity, same convention V1 uses (.banner.ok/.bad),
-   so the severity reads at a glance — plus a dot in the severity colour.
+   tinted surface per severity, so the severity reads at a glance — plus a dot in the severity colour.
    The text itself stays --text / --text-muted: the old severity-coloured
    text dropped under 4.5:1 on its own tint in the light theme. */
 .v2-announcement {
@@ -2727,10 +2993,6 @@ textarea:disabled {
   }
 }
 
-/* components/Meta.jsx: facts side by side with space between, no separator character. */
-.v2-meta-item + .v2-meta-item {
-  margin-left: 0.9em;
-}
 /* Small muted number in front of a title ("#12 Prize"). */
 .v2-id {
   margin-right: 0.5em;
@@ -2825,15 +3087,6 @@ textarea:disabled {
 .v2-case-row.is-deleted {
   opacity: 0.55;
 }
-.v2-case-action {
-  margin-left: 8px;
-  padding: 1px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-pill);
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  font-weight: 500;
-}
 .v2-case-reason {
   white-space: normal;
   overflow: visible;
@@ -2843,9 +3096,6 @@ textarea:disabled {
 /* Pages shown inside another page (the Moderation tabs): their own title is the tab. */
 .v2-embedded > .v2-section-title {
   display: none;
-}
-.v2-hub-tabs {
-  flex-wrap: wrap;
 }
 .v2-tab-off {
   color: var(--text-muted);
@@ -2949,6 +3199,7 @@ textarea:disabled {
   .v2-btn-primary:active:not(:disabled),
   .v2-btn-ghost:active:not(:disabled),
   .v2-btn-danger:active:not(:disabled),
+  .v2-btn-danger-ghost:active:not(:disabled),
   .v2-theme-toggle:active,
   .v2-colorpicker-dot:active,
   .v2-colorpicker-dot:hover {
@@ -3114,4 +3365,17 @@ textarea:disabled {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.85rem;
+}
+
+/* Text for screen readers only (live regions, the hidden part of a label). */
+.v2-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

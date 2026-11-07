@@ -74,7 +74,7 @@ for local testing.
 | `FLUXER_CLIENT_ID`      | n/a                      | Application id. **Required** when `FLUXER_TOKEN` is set.                                                                                                                                                                                            |
 | `FLUXER_WEB_URL`        | hosted Fluxer            | The web app origin of the Fluxer instance, for example `https://chat.example.com`. Leave unset for hosted Fluxer. For a self-hosted instance Sylo reads the API, gateway and CDN addresses from `<FLUXER_WEB_URL>/.well-known/fluxer`.                |
 | `FLUXER_API_URL`        | from `.well-known`       | Overrides only the API origin. You rarely need this.                                                                                                                                                                                                |
-| `COMMAND_PREFIX`        | `!`                      | The chat prefix for commands on Fluxer (see [Using commands](#using-commands)). 1 to 5 characters, no spaces.                                                                                                                                       |
+| `COMMAND_PREFIX`        | `!`                      | The default chat prefix for commands on Fluxer (see [Using commands](#using-commands)). 1 to 5 characters, no spaces. Each server can set its own in Settings.                                                                                      |
 | `FLUXER_CLIENT_SECRET`  | n/a                      | The application's client secret. Setting it adds **Log in with Fluxer** to the dashboard.                                                                                                                                                           |
 | `FLUXER_OWNER_IDS`      | n/a                      | Your Fluxer user id(s), comma or space separated. The Fluxer counterpart of `OWNER_IDS`: these accounts can open `/health` and the other bot-wide pages. `OWNER_IDS` holds Discord ids only, so an id on one platform never grants access on the other. |
 
@@ -139,7 +139,7 @@ To require a login on Fluxer:
    `https://sylo.example.com/auth/fluxer/callback`, or
    `http://localhost:3000/auth/fluxer/callback` locally. It has to match
    `DASHBOARD_URL` exactly, including `https` behind a reverse proxy.
-3. Set a long random `SESSION_SECRET`.
+3. `SESSION_SECRET` is optional: Sylo keeps its own in `<data>/session-secret` unless you set one.
 4. Put your own Fluxer user id in `FLUXER_OWNER_IDS`. Without it nobody can open
    `/health`.
 
@@ -178,9 +178,19 @@ command code as Discord:
 @Sylo ping
 ```
 
-Both forms work: the prefix (`!` by default, set with `COMMAND_PREFIX`) or a
-mention of the bot. `!help` lists the commands, and a wrong argument answers with
-the correct usage.
+Both forms work: the prefix (`!` by default) or a mention of the bot. `!help`
+lists the commands, and a wrong argument answers with the correct usage.
+
+### Changing the prefix
+
+`COMMAND_PREFIX` sets the default prefix for the whole Sylo. Each Fluxer server can
+use its own instead: open the server's **Settings** page in the dashboard and fill in
+**Command prefix** (1 to 5 characters, no spaces). Leave it empty to use the default. A prefix is case-sensitive (`A!` is not `a!`); the
+command name after it is not.
+The change applies at once, and Sylo writes it to the audit log. The help texts, the
+usage hints and the dashboard show the server's prefix. A mention (`@Sylo help`)
+works on every server whatever its prefix is, and so does the default prefix in a
+direct message to the bot.
 
 ### Arguments
 
@@ -193,7 +203,9 @@ its `/` version takes.
 - **Free text.** The **last** text option takes the rest of the line, so a multi-word
   reason needs no quotes. An earlier text option takes one word. That is why
   `!ban @user 1m spam` reads `1m` as the reason; write `duration:1m` for a
-  temporary ban: `!ban @user spam duration:1m`.
+  temporary ban: `!ban @user spam duration:1m`. `!suggest` is the exception: its text
+  comes first and takes the rest of the line, so `!suggest Add a pixel-art channel`
+  works; add the optional title by name at the end: `!suggest Add a pixel-art channel title:Pixel art`.
 - **People, channels and roles** can be a mention or an id.
 
 ### Permissions
@@ -220,10 +232,11 @@ does not register anything with Fluxer for these.
 | On Discord                          | On Fluxer                                                                                                                                                                                                                                    |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Slash commands                      | Chat commands with a prefix or a mention (above).                                                                                                                                                                                            |
-| Buttons and select menus            | Shown as **reactions**, with a short legend in the message such as "React with ✅ to verify". Panels posted by modules (verification, giveaways, reaction roles) stay active; the reactions on a command's own reply expire after 15 minutes. |
+| Buttons and select menus            | Shown as **reactions**, with a short legend in the message such as "React with ✅ to verify". Panels posted by modules (verification, giveaways, events, suggestions, reaction roles) stay active; the reactions on a command's own reply expire after 15 minutes. |
 | Private (ephemeral) replies         | Sent as a normal message that Sylo deletes after about 15 seconds, together with the command message.                                                                                                                                        |
 | Native AutoMod rules                | Not available. Sylo's own automod scanner does the enforcement on Fluxer (word lists, invites, mentions, spam and so on). It also recognises Fluxer invite links.                                                                            |
-| Threads and auto-threads            | Not available yet. Lock and lockdown skip the thread permissions.                                                                                                                                                                            |
+| Message menu **Save quote**         | Not available. The **Quote board** module saves a quote with `!quote save <message link>`, or `!quote save` as a reply to the message. |
+| Threads and auto-threads            | Not available yet. The **Auto threads** module does nothing on Fluxer. Lock and lockdown skip the thread permissions.                                                                                                                                                                            |
 | Moving members between voice        | Not usable from a bot. **Temporary voice channels** are still created, but the member gets a DM with a link to join, and a channel nobody joins within two minutes is removed.                                                              |
 | Timestamps such as `<t:...:R>`      | Rendered in message text, but not in embed footers, titles or field names. Sylo shows a fixed UTC time (for example "Ends 12 Oct 2026, 19:55 UTC") there instead.                                                                            |
 | `discord.gg` invite links           | The instance's own invite links (for hosted Fluxer `fluxer.gg/<code>`), in `!invites`, ban appeal rejoin links and the invite tracker.                                                                                                      |
@@ -246,7 +259,7 @@ Two things to know about modules that reach outside Fluxer:
 
 Discord servers keep their plain numeric id everywhere (database rows, dashboard
 URLs, API). Fluxer servers are written `fluxer:<id>`, for example
-`/guilds/fluxer:1554951170231894016/overview`. You only meet this in dashboard
+`/v2/guilds/fluxer:1554951170231894016`. You only meet this in dashboard
 addresses, the API and the database. It is what keeps a Discord and a Fluxer server
 with the same number apart.
 
@@ -289,7 +302,7 @@ codebase to keep up with and no separate releases.
 | Symptom                                               | Check                                                                                                                                                                                                           |
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | No `fluxer  Logged in` line at start-up               | `FLUXER_TOKEN` and `FLUXER_CLIENT_ID` both set? Self-hosted instance: is `FLUXER_WEB_URL` reachable from the Sylo container, and does `<origin>/.well-known/fluxer` answer?                                      |
-| The bot connects, commands do nothing                 | Use the prefix (`!ping`) or a mention (`@Sylo ping`), not `/`. If you changed `COMMAND_PREFIX`, use the new one. The bot needs permission to read and send messages in that channel.                            |
+| The bot connects, commands do nothing                 | Use the prefix (`!ping`) or a mention (`@Sylo ping`), not `/`. If you changed `COMMAND_PREFIX` or the server's **Command prefix** setting, use the new one. The bot needs permission to read and send messages in that channel.                            |
 | "You don't have permission to use this command"       | The command needs the same permission as on Discord, or a per-server override blocks it. Check the dashboard's Commands page.                                                                                   |
 | Login with Fluxer fails or loops                      | The redirect URL on the application must be exactly `<DASHBOARD_URL>/auth/fluxer/callback`. Behind a proxy set `DASHBOARD_URL` to the public https address.                                                     |
 | Logged in, but my Fluxer server is missing            | You need to own the server, or have Administrator or Manage Server there, and the bot has to be in it. Sign out and in again to refresh the list (it is refreshed automatically about every 10 minutes).             |
