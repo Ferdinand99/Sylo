@@ -1,4 +1,5 @@
-// DM → ticket bridge. A DM to the bot opens (or appends to) a ticket. When the
+// DM → ticket bridge. A DM to the bot opens (or appends to) a ticket, unless the member is answering
+// a DM questionnaire (bot/lib/dmQuestionnaire.js), which takes their DMs first. When the
 // user shares several ticket-enabled servers and has no open ticket, the bot
 // asks which server with a select menu.
 import { guildKey, guildByKey } from '../../platform/platformOf.js';
@@ -6,6 +7,7 @@ import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
 import { ticketGuildsForUser, ingestUserDM } from '../../modules/tickets.js';
 import { getOpenTicket } from '../../db/tickets.js';
 import { registerComponent } from '../lib/components.js';
+import { handleQuestionnaireMessage } from '../lib/dmQuestionnaire.js';
 import { log } from '../../lib/log.js';
 import { sweepMap } from '../../lib/sweepMap.js';
 
@@ -33,6 +35,10 @@ async function handleDM(message) {
       return;
     }
   }
+
+  // A member in the middle of a DM questionnaire (Introductions, later applications) is answering
+  // it: this message is an answer, and must never open or extend a modmail ticket.
+  if (await handleQuestionnaireMessage(message)) return;
 
   const payload = {
     content: message.content ?? '',
