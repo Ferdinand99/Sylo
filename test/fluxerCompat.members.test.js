@@ -198,6 +198,31 @@ test('MessageManager.delete takes an id or a message', async () => {
   assert.deepEqual(deleted, ['m1', 'm2']);
 });
 
+test('MessageManager.edit (the SDK has none) takes an id or a message, and fetches the id first', async () => {
+  assert.equal(typeof methodOf(sdk.MessageManager, 'edit'), 'function');
+  const edited = [];
+  const fetched = [];
+  const manager = {
+    fetch: async (id) => {
+      fetched.push(id);
+      return { id, edit: async (payload) => edited.push([id, payload]) };
+    },
+  };
+  await methodOf(sdk.MessageManager, 'edit').call(manager, 'm1', { content: 'a' });
+  await methodOf(sdk.MessageManager, 'edit').call(
+    manager,
+    { id: 'm2', edit: async (p) => edited.push(['m2', p]) },
+    {
+      content: 'b',
+    }
+  );
+  assert.deepEqual(fetched, ['m1'], 'a message object is not fetched again');
+  assert.deepEqual(edited, [
+    ['m1', { content: 'a' }],
+    ['m2', { content: 'b' }],
+  ]);
+});
+
 test('MessageReaction.partial / fetch / remove / users', async () => {
   assert.equal(getterOf(sdk.MessageReaction, 'partial').call({}), false);
   const reaction = { emojiIdentifier: '⭐', message: null, fetchMessage: async () => message };
