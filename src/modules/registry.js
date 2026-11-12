@@ -372,6 +372,17 @@ export const MODULES = [
     beta: true,
   },
   {
+    id: 'introductions',
+    name: 'Introductions',
+    description:
+      'Members answer a few questions in DM and Sylo posts a server membership card for them in the introductions channel.',
+    icon: '🪪',
+    requiredIntents: ['GuildMembers'],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
     id: 'game-stats',
     name: 'Game stats',
     description:

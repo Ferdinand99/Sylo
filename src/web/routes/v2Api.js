@@ -46,6 +46,8 @@ import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
 import tempRolesRouter from './v2TempRoles.js';
 import quotesRouter from './v2Quotes.js';
+import introRouter from './v2Intro.js';
+import { cancelIntroductionSessions } from '../../modules/introductions.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { buildReactionPairs } from '../lib/reactionPairs.js';
 import { guildCustomEmojis } from '../lib/guildEmojis.js';
@@ -434,6 +436,8 @@ router.use('/guilds/:guildId', suggestionsRouter);
 router.use('/guilds/:guildId', tempRolesRouter);
 // Quote board: settings, searchable list, remove (v2Quotes.js).
 router.use('/guilds/:guildId', quotesRouter);
+// Introductions: settings, publish the prompt message (v2Intro.js).
+router.use('/guilds/:guildId', introRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
@@ -478,6 +482,7 @@ router.post(
     const enabled = Boolean(req.body.enabled);
     for (const id of ids) {
       await setGuildModule(req.guild.id, id, { enabled });
+      if (id === 'introductions' && !enabled) cancelIntroductionSessions(req.guild.id);
       if (id === 'events') {
         refreshPagePosts(req.guild.id).catch((err) =>
           log.warn('events', 'could not update the event posts after a bulk toggle:', err.message)
@@ -519,6 +524,8 @@ router.post(
     if (!mod) return res.status(404).json({ error: 'Unknown module' });
     const enabled = Boolean(req.body?.enabled);
     await setGuildModule(req.guild.id, mod.id, { enabled });
+    // Members in the middle of the questions are told it stopped.
+    if (mod.id === 'introductions' && !enabled) cancelIntroductionSessions(req.guild.id);
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: `module:${mod.id}`,

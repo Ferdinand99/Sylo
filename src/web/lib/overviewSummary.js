@@ -20,6 +20,7 @@ import { upcomingEvents } from '../../db/events.js';
 import { openSuggestionCount, suggestionCount } from '../../db/suggestions.js';
 import { nextTempRoleExpiry, tempRoleCount } from '../../db/tempRoles.js';
 import { quoteCount } from '../../db/quotes.js';
+import { introductionCount } from '../../db/introductions.js';
 import { recentLookups } from '../../db/cache.js';
 import { dailySeries } from '../../db/insights.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
@@ -54,6 +55,7 @@ const LAYOUT = [
       'leveling',
       'starboard',
       'quote-board',
+      'introductions',
       'sticky',
       'birthdays',
     ],
@@ -287,6 +289,14 @@ async function moduleLines(id, guild, cfg) {
       return [
         saved ? on('Saved quotes', String(saved)) : neutral('Saved quotes', '0'),
         cfg.publicPage === true ? on('Public page', 'on') : off('Public page', 'off'),
+      ];
+    }
+    case 'introductions': {
+      const ch = channelName(guild, cfg.channelId);
+      const cards = await introductionCount(guild.id);
+      return [
+        ch ? on('Channel', `#${ch}`) : off('Channel', 'not set'),
+        cards ? on('Introductions', String(cards)) : neutral('Introductions', '0'),
       ];
     }
     case 'auto-threads': {

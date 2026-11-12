@@ -1205,6 +1205,24 @@ export const MIGRATIONS = [
       ALTER TABLE guild_suggestions ADD COLUMN log_message_id TEXT;
     `);
   },
+
+  // Introductions (src/db/introductions.js, which bootstraps the same table on Postgres): a
+  // member's questionnaire answers and the card message they were posted in.
+  (database) => {
+    database.exec(`
+      CREATE TABLE introductions (
+        guild_id   TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        message_id TEXT,
+        answers    TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE INDEX idx_introductions_message ON introductions (guild_id, message_id);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

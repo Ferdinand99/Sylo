@@ -24,7 +24,12 @@ attach a generated **welcome image**.
   autoroles](roles.md) module.
 
 Placeholders: `{user}` `{user.tag}` `{user.name}` `{user.id}` `{server}`
-`{memberCount}`.
+`{memberCount}` `{intro}`.
+
+`{intro}` is a mention of the introductions channel when the
+[Introductions](introductions.md) module is on and has a channel, for example
+"Say hello in {intro}!". When Introductions is off, or has no channel yet, it is
+empty text.
 
 ## Notes
 

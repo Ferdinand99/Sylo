@@ -32,6 +32,22 @@ test('the Quote board card counts the saved quotes and shows the public page swi
   assert.equal(card.lines.find((l) => l.label === 'Public page').value, 'on');
 });
 
+test('the Introductions card shows the channel and counts the introductions', async () => {
+  const { saveIntroduction } = await import('../src/db/introductions.js');
+  const find = async () =>
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards).find((c) => c.id === 'introductions');
+  const empty = await find();
+  assert.ok(empty, 'a card for the Introductions module');
+  assert.equal(empty.lines.find((l) => l.label === 'Channel').value, 'not set');
+  assert.equal(empty.lines.find((l) => l.label === 'Introductions').value, '0');
+
+  await saveIntroduction({ guildId: G, userId: 'u1', channelId: '1', messageId: 'm1', answers: {} });
+  await saveIntroduction({ guildId: G, userId: 'u2', channelId: '1', messageId: 'm2', answers: {} });
+  const card = await find();
+  assert.equal(card.lines.find((l) => l.label === 'Introductions').value, '2');
+  assert.equal(card.icon, 'id-card');
+});
+
 test('buildOverview returns health + grouped cards covering every module', async () => {
   await setGuildModule(G, 'automod', { enabled: true, config: { rules: { invites: { enabled: true } } } });
 

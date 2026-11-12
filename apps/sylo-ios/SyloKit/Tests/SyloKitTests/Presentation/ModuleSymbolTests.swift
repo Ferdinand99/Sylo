@@ -9,7 +9,7 @@ struct ModuleSymbolTests {
         "megaphone", "smile", "hash", "trending-up", "star", "pin", "command", "user-plus", "bar-chart",
         "message-circle", "zap", "moon", "activity", "mic", "gamepad", "bell", "gift", "twitch",
         "youtube", "kick", "rss", "trash-2", "github", "gear", "message-square",
-        "calendar", "lightbulb", "hourglass", "threads", "quote",
+        "calendar", "lightbulb", "hourglass", "threads", "quote", "id-card",
     ]
 
     @Test("each icon the server uses has its own symbol", arguments: serverIcons)

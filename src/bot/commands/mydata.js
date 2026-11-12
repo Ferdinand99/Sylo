@@ -63,6 +63,7 @@ const render = {
   tempRoleAdders: (r) => plural(r.length, 'temporary role'),
   quotes: (r) => plural(r.length, 'quote'),
   quotesSaved: (r) => plural(r.length, 'quote'),
+  introductions: () => 'your introduction answers',
   inviteCounts: (r) => `${r[0].regular} regular · ${r[0].bonus} bonus · ${r[0].leaves} left`,
   inviteJoins: (r) => (r[0].inviter_id ? `invited by <@${r[0].inviter_id}>` : `joined via ${r[0].source}`),
   invitedOthers: (r) => plural(r.length, 'member'),

@@ -57,6 +57,7 @@ import './events.js';
 import './suggestions.js';
 import './tempRoles.js';
 import './quotes.js';
+import './introductions.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -102,6 +103,7 @@ export const GUILD_TABLES = [
   'guild_temp_roles',
   'guild_quotes',
   'guild_quote_counters',
+  'introductions',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -177,6 +179,12 @@ const userStmts = {
   // touched). A quote someone else wrote stays on the board; only the saver's name comes off it.
   quotesAuthored: prepare('DELETE FROM guild_quotes WHERE guild_id = ? AND author_id = ?'),
   quotesSaved: prepare('UPDATE guild_quotes SET saved_by = NULL WHERE guild_id = ? AND saved_by = ?'),
+  // Their introduction: the answers and the row that points at the card message. The message itself
+  // is deleted by the callers that hold the guild (forgetIntroductionCard in modules/introductions.js).
+  introductions: prepare('DELETE FROM introductions WHERE guild_id = ? AND user_id = ?'),
+  introductionsClear: prepare(
+    "UPDATE introductions SET answers = '{}', updated_at = ? WHERE guild_id = ? AND user_id = ?"
+  ),
   inviteCounts: prepare('DELETE FROM invite_counts WHERE guild_id = ? AND user_id = ?'),
   inviteJoins: prepare('DELETE FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
   inviteJoinsAsInviter: prepare(
@@ -209,9 +217,11 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
  */
-export async function forgetUser(guildId, userId) {
+// `keepIntroduction`: leave the introduction row (the card message could not be deleted, so the row
+// is what lets it be removed later).
+export async function forgetUser(guildId, userId, { keepIntroduction = false } = {}) {
   const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
   const leveling =
     (await userStmts.leveling.run(guildId, userId)).changes +
@@ -232,6 +242,10 @@ export async function forgetUser(guildId, userId) {
   const tempRoleAdders = (await userStmts.tempRoleAdder.run(guildId, userId)).changes;
   const quotes = (await userStmts.quotesAuthored.run(guildId, userId)).changes;
   const quotesSaved = (await userStmts.quotesSaved.run(guildId, userId)).changes;
+  // With keepIntroduction the row stays (it holds the ids a later delete needs), without the answers.
+  let introductions = 0;
+  if (keepIntroduction) await userStmts.introductionsClear.run(Date.now(), guildId, userId);
+  else introductions = (await userStmts.introductions.run(guildId, userId)).changes;
   const invites =
     (await userStmts.inviteCounts.run(guildId, userId)).changes +
     (await userStmts.inviteJoins.run(guildId, userId)).changes +
@@ -261,6 +275,7 @@ export async function forgetUser(guildId, userId) {
     tempRoleAdders,
     quotes,
     quotesSaved,
+    introductions,
     invites,
     pollsCreated,
     giveawaysHosted,
@@ -504,6 +519,13 @@ const USER_DATA_SOURCES = [
     countSql: 'SELECT COUNT(*) AS n FROM guild_quotes WHERE guild_id = ? AND saved_by = ?',
     rowsSql:
       'SELECT number, channel_id, message_id, saved_at FROM guild_quotes WHERE guild_id = ? AND saved_by = ? ORDER BY number',
+  },
+  {
+    key: 'introductions',
+    label: 'Introduction (your answers; /forget also deletes the card)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM introductions WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM introductions WHERE guild_id = ? AND user_id = ?',
   },
   {
     key: 'inviteCounts',

@@ -37,6 +37,7 @@ import { LIMITS as starboard } from './starboard.js';
 import { LIMITS as sticky } from './sticky.js';
 import { LIMITS as suggestions } from './suggestions.js';
 import { LIMITS as quoteBoard } from './quoteBoard.js';
+import { LIMITS as introductions } from './introductions.js';
 import { LIMITS as tempRoles } from './tempRoles.js';
 import { LIMITS as tempVoice } from './tempVoice.js';
 import { LIMITS as tickets } from './tickets.js';
@@ -63,6 +64,7 @@ export const MODULE_LIMITS = Object.freeze({
   giveaways,
   github: githubAlerts,
   honeypot,
+  introductions,
   'invite-tracker': inviteTracker,
   'kick-alerts': kickAlerts,
   leveling,
