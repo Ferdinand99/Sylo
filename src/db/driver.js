@@ -235,3 +235,103 @@ export function prepare(sqlText, opts) {
   }
   return preparePg(sqlText, opts);
 }
+
+// --- transactions -------------------------------------------------------------------------------
+//
+// Most of Sylo needs no transaction (see the notes in purge.js and leveling.js: single upserts and
+// idempotent sequences are enough). Money is the exception: a balance change and its ledger row
+// must land together or not at all, and several accounts can change in one step (a payment). So
+// `transaction(fn)` runs `fn` against one connection inside BEGIN/COMMIT on either driver:
+//
+//   const out = await transaction(async (tx) => {
+//     const row = await tx.get('SELECT cash FROM accounts WHERE id = ?', id);
+//     await tx.run('UPDATE accounts SET cash = ? WHERE id = ?', row.cash - 5, id);
+//     return row;
+//   });
+//
+// `tx.get/all/run(sql, ...args)` work like the prepared statements above (positional `?` only);
+// `tx.insertId(sql, ...args)` runs an INSERT into a table with a surrogate `id` and returns it.
+// A throw rolls everything back and is rethrown.
+//
+// Postgres: `sql.begin` reserves a pooled connection for the callback. Concurrent transactions that
+// touch the same row wait for each other at the row lock (a plain UPDATE takes it).
+//
+// SQLite: one connection serves the whole process, and better-sqlite3 is synchronous, so the
+// statements themselves never overlap. What can overlap is the awaits between them, so transactions
+// are queued one after another (a second BEGIN on the same connection would throw), and `fn` must
+// only await `tx` calls: awaiting real I/O inside it would let unrelated code run its statements
+// inside this transaction.
+
+/** @type {Promise<unknown>} */
+let sqliteQueue = Promise.resolve();
+const sqliteStatements = new Map();
+
+function sqliteStatement(sqlText) {
+  let stmt = sqliteStatements.get(sqlText);
+  if (!stmt) {
+    stmt = db.prepare(sqlText);
+    sqliteStatements.set(sqlText, stmt);
+  }
+  return stmt;
+}
+
+const sqliteTx = {
+  get: async (sqlText, ...args) => sqliteStatement(sqlText).get(...args),
+  all: async (sqlText, ...args) => sqliteStatement(sqlText).all(...args),
+  run: async (sqlText, ...args) => {
+    const { changes } = sqliteStatement(sqlText).run(...args);
+    return { changes };
+  },
+  insertId: async (sqlText, ...args) => Number(sqliteStatement(sqlText).run(...args).lastInsertRowid),
+};
+
+function sqliteTransaction(fn) {
+  const result = sqliteQueue.then(async () => {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const out = await fn(sqliteTx);
+      db.exec('COMMIT');
+      return out;
+    } catch (err) {
+      try {
+        db.exec('ROLLBACK');
+      } catch {
+        // already rolled back by SQLite itself
+      }
+      throw err;
+    }
+  });
+  sqliteQueue = result.catch(() => {});
+  return result;
+}
+
+function pgTx(tx) {
+  const translated = new Map();
+  const exec = (sqlText, args, suffix = '') => {
+    let t = translated.get(sqlText);
+    if (!t) {
+      t = translate(sqlText);
+      translated.set(sqlText, t);
+    }
+    return tx.unsafe(t.text + suffix, toParams(t, args));
+  };
+  return {
+    get: async (sqlText, ...args) => (await exec(sqlText, args))[0],
+    all: async (sqlText, ...args) => Array.from(await exec(sqlText, args)),
+    run: async (sqlText, ...args) => ({ changes: (await exec(sqlText, args)).count }),
+    insertId: async (sqlText, ...args) => (await exec(sqlText, args, ' RETURNING id'))[0].id,
+  };
+}
+
+/**
+ * Run `fn` in one database transaction. See the notes above for what `tx` offers and the one rule
+ * for SQLite (only await `tx` calls inside `fn`).
+ * @template T
+ * @param {(tx: { get: (sql: string, ...args: any[]) => Promise<any>, all: (sql: string, ...args: any[]) => Promise<any[]>, run: (sql: string, ...args: any[]) => Promise<{ changes: number }>, insertId: (sql: string, ...args: any[]) => Promise<number> }) => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+export async function transaction(fn) {
+  if (!config.databaseUrl) return sqliteTransaction(fn);
+  const sql = await getSql();
+  return sql.begin(async (tx) => fn(pgTx(tx)));
+}

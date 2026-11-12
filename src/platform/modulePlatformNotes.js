@@ -27,6 +27,8 @@ const FLUXER_NOTES = {
     `Fluxer has no message menu and no slash commands, so there is no "Save quote" menu: members save a quote with a chat command, for example ${prefix}quote save https://web.fluxer.app/channels/<server>/<channel>/<message> or by replying to the message with ${prefix}quote save. The other commands are ${prefix}quote random, ${prefix}quote search, ${prefix}quote user and ${prefix}quote show. The dashboard and the public page work as on Discord.`,
   introductions: ({ prefix }) =>
     `Fluxer has no slash commands, no private replies and no buttons yet, so members start with a chat command: ${prefix}intro create (also ${prefix}intro view [@member] and ${prefix}intro remove). Sylo answers "Check your DMs" in the channel and removes that message after a few seconds, then asks the questions in DM. The Post and Start over choices under the preview in DM, and the "Create my intro" button of the prompt message, are shown as reactions. The dashboard works as on Discord.`,
+  economy: ({ prefix }) =>
+    `Fluxer has no slash commands or buttons yet: members use chat commands, for example ${prefix}balance, ${prefix}daily, ${prefix}work, ${prefix}pay @member 100, ${prefix}deposit all and ${prefix}economy-leaderboard (turn the pages with the ⬅️ and ➡️ reactions). Staff use ${prefix}eco add @member 500 reason:"Event prize". A rob result is posted in the channel as on Discord, and the victim gets the same DM. The dashboard works as on Discord.`,
   'auto-threads': () =>
     'Fluxer has no threads yet, so this module does nothing on a Fluxer server: posts stay as they are. The settings can be saved here and start working on a Discord server. Fluxer lists threads for 2026; Sylo will support them then.',
   roles: () =>

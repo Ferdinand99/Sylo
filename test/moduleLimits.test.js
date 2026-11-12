@@ -33,6 +33,11 @@ import {
   normaliseQuoteText,
 } from '../src/modules/quoteBoard.js';
 import { normaliseIntroductionsConfig } from '../src/modules/introductions.js';
+import {
+  clampAmount,
+  normaliseEconomyConfig,
+  normaliseReason as normaliseEconomyReason,
+} from '../src/modules/economy.js';
 import { normaliseHoneypotConfig } from '../src/modules/honeypot.js';
 import { normaliseInviteTrackerConfig } from '../src/modules/inviteTracker.js';
 import { normaliseKickConfig } from '../src/modules/kickAlerts.js';
@@ -201,6 +206,20 @@ const cases = {
     }),
     base: {},
     value: { saveRoles: (n) => items(n, roleId), staffRoles: (n) => items(n, roleId) },
+  },
+  economy: {
+    // the settings, the staff reason and the amount staff enter
+    normalise: (raw) => ({
+      reason: normaliseEconomyReason(raw.reason),
+      amount: clampAmount(raw.amount),
+      ...normaliseEconomyConfig(raw),
+    }),
+    // minimums of 1, so the maximums of a pair can sit at their own minimum
+    base: { messageMin: 1, workMin: 1, robMinPercent: 1, reason: 'x', amount: 5 },
+    value: {
+      ignoredChannels: (n) => items(n, roleId),
+      ignoredRoles: (n) => items(n, roleId),
+    },
   },
   introductions: {
     normalise: normaliseIntroductionsConfig,

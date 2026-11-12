@@ -29,7 +29,7 @@ export async function execute(interaction) {
       flags: MessageFlags.Ephemeral,
       content:
         `This permanently deletes your **XP / level**, **ticket history**, **ban appeals**, ` +
-        `**invite records**, **AFK status**, **saved birthday**, **introduction** (answers and card) and **giveaway entries** in **${interaction.guild.name}**. ` +
+        `**invite records**, **AFK status**, **saved birthday**, **introduction** (answers and card), **economy account and transactions** and **giveaway entries** in **${interaction.guild.name}**. ` +
         `Messages already posted to channels, a completed giveaway's winner list, and the server's ` +
         `config-change log are not affected, and Sylo will still store new data going forward. ` +
         `Moderation cases (warnings, kicks, bans, notes) and other safety records are kept: they protect the server.` +
@@ -64,6 +64,11 @@ export async function execute(interaction) {
       { name: 'Temporary role records', value: String(r.tempRoles), inline: true },
       { name: 'Quotes of their messages', value: String(r.quotes), inline: true },
       { name: 'Saved-by name removed from quotes', value: String(r.quotesSaved), inline: true },
+      {
+        name: 'Economy',
+        value: `${r.economyAccounts} account, ${r.economyTransactions} transactions`,
+        inline: true,
+      },
       {
         name: 'Introduction',
         value: card.ok

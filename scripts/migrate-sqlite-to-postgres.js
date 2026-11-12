@@ -71,6 +71,7 @@ import '../src/db/suggestions.js';
 import '../src/db/tempRoles.js';
 import '../src/db/quotes.js';
 import '../src/db/introductions.js';
+import '../src/db/economy.js';
 import '../src/db/leaderboardVanity.js';
 import '../src/db/tempBans.js';
 import '../src/db/channelLocks.js';

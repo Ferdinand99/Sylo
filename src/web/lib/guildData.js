@@ -76,6 +76,11 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
       { name: 'Quotes of their messages', value: String(r.quotes), inline: true },
       { name: 'Saved-by name removed from quotes', value: String(r.quotesSaved), inline: true },
       {
+        name: 'Economy',
+        value: `${r.economyAccounts} account, ${r.economyTransactions} transactions`,
+        inline: true,
+      },
+      {
         name: 'Introduction',
         value: card.ok ? String(r.introductions) : 'Not deleted: the card message could not be removed.',
         inline: true,

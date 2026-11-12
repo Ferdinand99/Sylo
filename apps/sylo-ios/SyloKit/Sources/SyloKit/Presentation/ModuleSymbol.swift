@@ -46,6 +46,7 @@ public enum ModuleSymbol {
         "threads": "bubble.left.and.bubble.right",
         "quote": "quote.bubble",
         "id-card": "person.text.rectangle",
+        "coins": "dollarsign.circle",
         "twitch": "play.tv",
         "youtube": "play.rectangle",
         "kick": "play.circle",

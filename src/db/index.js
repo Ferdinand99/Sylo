@@ -1223,6 +1223,45 @@ export const MIGRATIONS = [
       CREATE INDEX idx_introductions_message ON introductions (guild_id, message_id);
     `);
   },
+
+  // Economy (src/db/economy.js, which bootstraps the same tables on Postgres): one account per
+  // member per server, and the append-only ledger every balance change is written to. Amounts are
+  // whole numbers; a member's cash + bank is capped (modules/lib/economyConfig.js).
+  (database) => {
+    database.exec(`
+      CREATE TABLE economy_accounts (
+        guild_id             TEXT NOT NULL,
+        user_id              TEXT NOT NULL,
+        cash                 INTEGER NOT NULL DEFAULT 0,
+        bank                 INTEGER NOT NULL DEFAULT 0,
+        daily_streak         INTEGER NOT NULL DEFAULT 0,
+        last_daily_at        INTEGER NOT NULL DEFAULT 0,
+        last_work_at         INTEGER NOT NULL DEFAULT 0,
+        last_rob_at          INTEGER NOT NULL DEFAULT 0,
+        last_robbed_at       INTEGER NOT NULL DEFAULT 0,
+        last_message_earn_at INTEGER NOT NULL DEFAULT 0,
+        created_at           INTEGER NOT NULL,
+        updated_at           INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE INDEX idx_economy_accounts_total ON economy_accounts (guild_id, (cash + bank) DESC);
+      CREATE TABLE economy_transactions (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id        TEXT NOT NULL,
+        user_id         TEXT NOT NULL,
+        kind            TEXT NOT NULL,
+        amount          INTEGER NOT NULL,
+        cash_after      INTEGER NOT NULL,
+        bank_after      INTEGER NOT NULL,
+        counterparty_id TEXT,
+        actor_id        TEXT,
+        reason          TEXT NOT NULL DEFAULT '',
+        created_at      INTEGER NOT NULL
+      );
+      CREATE INDEX idx_economy_transactions_user ON economy_transactions (guild_id, user_id, id DESC);
+      CREATE INDEX idx_economy_transactions_created ON economy_transactions (guild_id, created_at);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

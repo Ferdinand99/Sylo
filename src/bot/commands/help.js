@@ -33,6 +33,10 @@ const overviewDescription = (prefix) =>
 export const GROUPS = [
   { name: 'General', commands: ['help', 'about', 'version', 'ping', 'stats'] },
   { name: 'Leveling', commands: ['rank', 'leaderboard'] },
+  {
+    name: 'Economy',
+    commands: ['balance', 'daily', 'work', 'deposit', 'withdraw', 'pay', 'rob', 'economy-leaderboard', 'eco'],
+  },
   { name: 'Community', commands: ['afk', 'birthday', 'quote', 'intro'] },
   { name: 'Roles', commands: ['temprole'] },
   {
