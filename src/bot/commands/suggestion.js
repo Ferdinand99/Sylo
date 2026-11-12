@@ -69,14 +69,22 @@ export async function execute(interaction) {
   const row = await getSuggestionByNumber(interaction.guildId, number);
   if (!row) return eph(interaction, `There is no suggestion #${number} in this server.`);
 
+  // A decision makes several platform calls and may wait for a "move back" running on the same
+  // server: answer within Discord's three seconds first, then edit the answer.
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const reply = (content) => interaction.editReply({ content, allowedMentions: { parse: [] } });
   const result = await decide(row, action, {
     reason: interaction.options.getString('reason') ?? '',
     by: interaction.user.id,
   });
-  if (!result.ok) return eph(interaction, result.error);
+  if (!result.ok) return reply(result.error);
   const label = STATUS_META[result.status].label.toLowerCase();
-  const extras = [result.moved ? 'moved to the log channel' : null, result.dm ? 'author notified' : null]
+  const extras = [
+    result.moved ? 'moved to the log channel' : null,
+    result.copied ? 'copy in the log channel' : null,
+    result.dm ? 'author notified' : null,
+  ]
     .filter(Boolean)
     .join(', ');
-  return eph(interaction, `Suggestion **#${number}** is now ${label}${extras ? ` (${extras})` : ''}.`);
+  return reply(`Suggestion **#${number}** is now ${label}${extras ? ` (${extras})` : ''}.`);
 }

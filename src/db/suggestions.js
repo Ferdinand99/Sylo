@@ -5,6 +5,9 @@
 //   author_id  NULL after the author used /forget: the text stays, the person does not
 //   anonymous  1 when the post was made without showing the author
 //   vote       1 (up) or -1 (down); taking a vote back deletes the row
+//   log_channel_id, log_message_id
+//              where the copy in the log channel is (logMode 'copy'), or NULL when there is none.
+//              channel_id / message_id stay the suggestion's own post.
 import { prepare, registerPostgresBootstrap, registerPostgresMigration } from './driver.js';
 
 registerPostgresBootstrap(`
@@ -22,8 +25,12 @@ registerPostgresBootstrap(`
     reason      TEXT NOT NULL DEFAULT '',
     decided_by  TEXT,
     decided_at  BIGINT,
-    created_at  BIGINT NOT NULL
+    created_at  BIGINT NOT NULL,
+    log_channel_id TEXT,
+    log_message_id TEXT
   );
+  ALTER TABLE guild_suggestions ADD COLUMN IF NOT EXISTS log_channel_id TEXT;
+  ALTER TABLE guild_suggestions ADD COLUMN IF NOT EXISTS log_message_id TEXT;
   CREATE UNIQUE INDEX IF NOT EXISTS idx_guild_suggestions_number ON guild_suggestions (guild_id, number);
   CREATE INDEX IF NOT EXISTS idx_guild_suggestions_author ON guild_suggestions (guild_id, author_id);
   CREATE TABLE IF NOT EXISTS guild_suggestion_votes (
@@ -46,6 +53,14 @@ registerPostgresMigration(
   `INSERT INTO guild_suggestion_counters (guild_id, last_number)
      SELECT guild_id, MAX(number) FROM guild_suggestions GROUP BY guild_id
      ON CONFLICT (guild_id) DO NOTHING;`
+);
+
+// Mirrors SQLite migration 64: where the copy in the log channel is. The bootstrap above already
+// adds the columns to a table that exists; this keeps the version record in step with SQLite.
+registerPostgresMigration(
+  64,
+  `ALTER TABLE guild_suggestions ADD COLUMN IF NOT EXISTS log_channel_id TEXT;
+   ALTER TABLE guild_suggestions ADD COLUMN IF NOT EXISTS log_message_id TEXT;`
 );
 
 export const STATUSES = ['open', 'considering', 'approved', 'denied', 'implemented'];
@@ -71,6 +86,11 @@ const s = {
   delCounter: prepare('DELETE FROM guild_suggestion_counters WHERE guild_id = ?'),
   numberOf: prepare('SELECT number FROM guild_suggestions WHERE id = ?'),
   setMessage: prepare('UPDATE guild_suggestions SET channel_id = ?, message_id = ? WHERE id = ?'),
+  setLog: prepare('UPDATE guild_suggestions SET log_channel_id = ?, log_message_id = ? WHERE id = ?'),
+  outside: prepare(
+    `SELECT s.*, ${VOTES} FROM guild_suggestions s WHERE s.guild_id = ? AND s.channel_id <> ? ORDER BY s.number ASC`
+  ),
+  countOutside: prepare('SELECT COUNT(*) AS n FROM guild_suggestions WHERE guild_id = ? AND channel_id <> ?'),
   get: prepare(`SELECT s.*, ${VOTES} FROM guild_suggestions s WHERE s.id = ?`),
   getByNumber: prepare(`SELECT s.*, ${VOTES} FROM guild_suggestions s WHERE s.guild_id = ? AND s.number = ?`),
   countGuild: prepare('SELECT COUNT(*) AS n FROM guild_suggestions WHERE guild_id = ?'),
@@ -177,6 +197,9 @@ export async function createSuggestion(e) {
 /** Remember where the post is (also used when it moves to the log channel). */
 export const setSuggestionMessage = async (id, channelId, messageId) =>
   s.setMessage.run(channelId, messageId, id);
+/** Remember where the copy in the log channel is; both null when there is none. */
+export const setSuggestionLog = async (id, channelId = null, messageId = null) =>
+  s.setLog.run(channelId, messageId, id);
 export const getSuggestion = async (id) => hydrate(await s.get.get(id));
 export const getSuggestionByNumber = async (guildId, number) =>
   hydrate(await s.getByNumber.get(guildId, number));
@@ -209,6 +232,17 @@ export async function listSuggestions(guildId, { status = 'all', sort = 'new', l
       : await listStmt(st, order).all(guildId, st, limit);
   return rows.map(hydrate);
 }
+
+/**
+ * Suggestions of a server whose own post is not in `channelId`, oldest first, all of them.
+ * (After an earlier move to the log channel the post sits there.)
+ */
+export async function listSuggestionsOutside(guildId, channelId) {
+  return (await s.outside.all(guildId, channelId)).map(hydrate);
+}
+/** How many suggestions of a server have their own post outside `channelId`. */
+export const countSuggestionsOutside = async (guildId, channelId) =>
+  Number((await s.countOutside.get(guildId, channelId))?.n) || 0;
 
 /** Save a staff decision. */
 export const decideSuggestion = async (

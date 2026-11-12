@@ -137,6 +137,17 @@ test('the Suggestions card counts open and stored suggestions', async () => {
   const card = await find();
   assert.equal(card.lines.find((l) => l.label === 'Open suggestions').value, '1');
   assert.equal(card.lines.find((l) => l.label === 'Stored').value, '2');
+  assert.equal(card.lines.find((l) => l.label === 'Log channel').value, 'not set');
+
+  const LOG = '100000000000000002';
+  await setGuildModule(G, 'suggestions', { enabled: true, config: { logChannel: LOG } });
+  assert.equal(
+    (await find()).lines.find((l) => l.label === 'Log channel').value,
+    'move',
+    'a config from before the setting keeps moving'
+  );
+  await setGuildModule(G, 'suggestions', { enabled: true, config: { logChannel: LOG, logMode: 'copy' } });
+  assert.equal((await find()).lines.find((l) => l.label === 'Log channel').value, 'copy');
 });
 
 test('the Temporary roles card counts active roles and shows the next expiry', async () => {

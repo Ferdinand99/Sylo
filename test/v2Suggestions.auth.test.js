@@ -17,6 +17,8 @@ const ROUTES = (g) => [
   ['POST', `/guilds/${g}/modules/suggestions/config`],
   ['POST', `/guilds/${g}/modules/suggestions/1/decision`],
   ['POST', `/guilds/${g}/modules/suggestions/1/delete`],
+  ['POST', `/guilds/${g}/modules/suggestions/1/move-back`],
+  ['POST', `/guilds/${g}/modules/suggestions/move-all-back`],
 ];
 
 test('signed out: every Suggestions route is refused', async () => {
@@ -68,6 +70,14 @@ test('the admin of the server gets in, and a POST needs the CSRF token', async (
 
   assert.equal((await post({})).status, 403, 'no token');
   assert.equal((await post({ 'x-csrf-token': 'not-the-token' })).status, 403, 'wrong token');
+  for (const path of ['1/move-back', 'move-all-back']) {
+    const res = await b.get(`/api/v2/guilds/${D_GUILD}/modules/suggestions/${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: '{}',
+    });
+    assert.equal(res.status, 403, `${path} without a token`);
+  }
   const ok = await post({ 'x-csrf-token': token });
   assert.equal(ok.status, 404, 'with the token it reaches the route, which finds no such suggestion');
   assert.match((await ok.json()).error, /No such suggestion/);

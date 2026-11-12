@@ -2,8 +2,11 @@
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import Database from 'better-sqlite3';
+import { MIGRATIONS, SCHEMA_VERSION } from '../src/db/index.js';
 import {
   clearGuildSuggestions,
+  countSuggestionsOutside,
   createSuggestion,
   decideSuggestion,
   deleteSuggestion,
@@ -13,9 +16,11 @@ import {
   getSuggestionVote,
   lastSuggestionAtOf,
   listSuggestions,
+  listSuggestionsOutside,
   openSuggestionCount,
   openSuggestionCountOf,
   removeSuggestionVote,
+  setSuggestionLog,
   setSuggestionMessage,
   setSuggestionVote,
   suggestionCount,
@@ -236,4 +241,89 @@ test('purgeGuild and clearGuildSuggestions remove suggestions and votes; the tab
   await clearGuildSuggestions('900000000000000438');
   assert.equal(await getSuggestion(keep.id), null);
   assert.equal(await getSuggestionVote(keep.id, 'u1'), 0);
+});
+
+test('the log copy: no location by default, set, replaced and cleared, per suggestion', async () => {
+  const g = '900000000000000440';
+  const a = await make({ guildId: g });
+  const b = await make({ guildId: g });
+  const row = await getSuggestion(a.id);
+  assert.equal(row.log_channel_id, null);
+  assert.equal(row.log_message_id, null);
+
+  await setSuggestionMessage(a.id, '100000000000000009', '333');
+  await setSuggestionLog(a.id, '100000000000000002', '444');
+  const set = await getSuggestion(a.id);
+  assert.equal(set.log_channel_id, '100000000000000002');
+  assert.equal(set.log_message_id, '444');
+  assert.equal(set.channel_id, '100000000000000009', 'the suggestion own post is not touched');
+  assert.equal(set.message_id, '333');
+  assert.equal((await getSuggestion(b.id)).log_message_id, null, 'another suggestion is not touched');
+
+  await setSuggestionLog(a.id, '100000000000000002', '555');
+  assert.equal((await getSuggestion(a.id)).log_message_id, '555');
+  await setSuggestionLog(a.id);
+  const cleared = await getSuggestion(a.id);
+  assert.equal(cleared.log_channel_id, null);
+  assert.equal(cleared.log_message_id, null);
+  assert.equal(cleared.message_id, '333');
+});
+
+test('suggestions outside a channel: counted and listed oldest first, with the votes, for one server only', async () => {
+  const g = '900000000000000441';
+  const home = '100000000000000001';
+  const away = '100000000000000002';
+  const a = await make({ guildId: g, channelId: away, body: 'a' });
+  await make({ guildId: g, channelId: home, body: 'b' });
+  const c = await make({ guildId: g, channelId: away, body: 'c' });
+  await make({ guildId: H, channelId: away, body: 'other server' });
+  await setSuggestionVote(c.id, 'u1', 1);
+  await setSuggestionVote(c.id, 'u2', -1);
+  await setSuggestionVote(c.id, 'u3', 1);
+
+  assert.equal(await countSuggestionsOutside(g, home), 2);
+  assert.equal(await countSuggestionsOutside(g, away), 1);
+  assert.equal(await countSuggestionsOutside('900000000000000499', home), 0);
+  const rows = await listSuggestionsOutside(g, home);
+  assert.deepEqual(
+    rows.map((r) => r.body),
+    ['a', 'c'],
+    'oldest first'
+  );
+  assert.deepEqual([rows[1].up, rows[1].down], [2, 1]);
+  assert.equal(typeof rows[0].number, 'number');
+  assert.equal(rows[0].id, a.id);
+  assert.deepEqual(
+    await listSuggestionsOutside(g, 'nowhere').then((r) => r.length),
+    3,
+    'everything is outside'
+  );
+});
+
+test('migration 64 adds the log copy columns, keeps the rows and leaves them empty', () => {
+  assert.equal(SCHEMA_VERSION, MIGRATIONS.length);
+  assert.ok(MIGRATIONS.length >= 64);
+  const d = new Database(':memory:');
+  for (const migration of MIGRATIONS.slice(0, 63)) migration(d);
+  const columns = () =>
+    d
+      .prepare('PRAGMA table_info(guild_suggestions)')
+      .all()
+      .map((c) => c.name);
+  assert.ok(!columns().includes('log_channel_id'), 'no column before migration 64');
+  d.prepare(
+    'INSERT INTO guild_suggestions (guild_id, number, channel_id, message_id, body, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run('g1', 1, 'c', 'm', 'An old idea', 'approved', 1000);
+
+  MIGRATIONS[63](d);
+
+  assert.ok(columns().includes('log_channel_id'));
+  assert.ok(columns().includes('log_message_id'));
+  const row = d.prepare('SELECT * FROM guild_suggestions').get();
+  assert.equal(row.body, 'An old idea');
+  assert.equal(row.status, 'approved');
+  assert.equal(row.message_id, 'm');
+  assert.equal(row.log_channel_id, null);
+  assert.equal(row.log_message_id, null);
+  d.close();
 });

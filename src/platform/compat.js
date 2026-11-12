@@ -691,6 +691,16 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
       return msg.delete();
     })
   );
+  // channel.messages.edit(id, payload): the SDK has no such method. Fetch the message and edit it,
+  // so the send bridge still swaps the reactions that stand in for buttons.
+  define(
+    MessageManager.prototype,
+    'edit',
+    method(async function (message, payload) {
+      const msg = typeof message === 'string' ? await this.fetch(message) : message;
+      return msg.edit(payload);
+    })
+  );
   define(
     Message.prototype,
     'inGuild',

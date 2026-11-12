@@ -20,6 +20,7 @@ import {
   putTempRole,
   tempRoleCount,
 } from '../db/tempRoles.js';
+import { isNotFound } from '../platform/messageErrors.js';
 import { LIMITS as CEILINGS, checkLimit } from '../lib/limits.js';
 import { log } from '../lib/log.js';
 import { formatDuration } from '../bot/lib/duration.js';
@@ -154,8 +155,8 @@ async function memberOf(guild, userId) {
   return guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
 }
 
-/** The platform says the member or role no longer exists. */
-const isGone = (err) => err?.status === 404 || err?.code === 10007 || err?.code === 10011;
+/** The platform says the member or role no longer exists (Discord 10007 / 10011, a 404 on either platform). */
+const isGone = (err) => isNotFound(err, [10007, 10011]);
 
 /** One create or replace at a time per server, so the ceiling cannot be passed by two at once. */
 const chains = new Map();

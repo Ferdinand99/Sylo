@@ -133,5 +133,57 @@ test(
       await purge.purgeGuild(H);
       assert.equal(await db.getSuggestion(elsewhere.id), null);
     });
+
+    await t.test('the log copy location is stored and cleared; listing outside a channel', async () => {
+      const g = `${G}-log`;
+      const home = '1';
+      const a = await make({ guildId: g, channelId: '2', body: 'a' });
+      await make({ guildId: g, channelId: home, body: 'b' });
+      const c = await make({ guildId: g, channelId: '2', body: 'c' });
+      assert.equal((await db.getSuggestion(a.id)).log_message_id, null);
+
+      await db.setSuggestionLog(a.id, '7', '99');
+      const set = await db.getSuggestion(a.id);
+      assert.equal(set.log_channel_id, '7');
+      assert.equal(set.log_message_id, '99');
+      assert.equal(set.channel_id, '2');
+      await db.setSuggestionLog(a.id);
+      assert.equal((await db.getSuggestion(a.id)).log_message_id, null);
+
+      await db.setSuggestionVote(c.id, 'u1', 1);
+      assert.equal(await db.countSuggestionsOutside(g, home), 2);
+      assert.equal(typeof (await db.countSuggestionsOutside(g, home)), 'number');
+      const rows = await db.listSuggestionsOutside(g, home);
+      assert.deepEqual(
+        rows.map((r) => r.body),
+        ['a', 'c']
+      );
+      assert.equal(rows[1].up, 1);
+      assert.equal(typeof rows[0].number, 'number');
+      await db.clearGuildSuggestions(g);
+    });
+
+    await t.test('the table has exactly the columns SQLite has (log copy included)', async () => {
+      const { default: Database } = await import('better-sqlite3');
+      const { MIGRATIONS } = await import('../src/db/index.js');
+      const { prepare } = await import('../src/db/driver.js');
+      const lite = new Database(':memory:');
+      for (const migration of MIGRATIONS) migration(lite);
+      const sqliteCols = lite
+        .prepare('PRAGMA table_info(guild_suggestions)')
+        .all()
+        .map((c) => c.name)
+        .sort();
+      lite.close();
+      const pgCols = (
+        await prepare(
+          "SELECT column_name FROM information_schema.columns WHERE table_name = 'guild_suggestions'"
+        ).all()
+      )
+        .map((c) => c.column_name)
+        .sort();
+      assert.ok(sqliteCols.includes('log_message_id'));
+      assert.deepEqual(pgCols, sqliteCols);
+    });
   }
 );

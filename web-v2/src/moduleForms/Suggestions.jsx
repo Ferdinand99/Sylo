@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCmd } from '../platformContext.jsx';
-import { decideSuggestion, deleteSuggestion, getSuggestions } from '../api.js';
+import {
+  decideSuggestion,
+  deleteSuggestion,
+  getSuggestions,
+  moveAllSuggestionsBack,
+  moveSuggestionBack,
+} from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -45,7 +51,7 @@ const ACTIONS = [
   ['consider', 'considering', 'Considering'],
 ];
 
-function Item({ item, busy, limits, onDecide, onDelete }) {
+function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
   const [action, setAction] = useState(null);
   const [pick, setPick] = useState('');
   const [reason, setReason] = useState('');
@@ -144,6 +150,17 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
           >
             Set…
           </button>
+          {item.canMoveBack ? (
+            <button
+              type="button"
+              className="v2-btn-ghost"
+              disabled={busy}
+              title="Post it again in the suggestions channel"
+              onClick={() => onMoveBack(item)}
+            >
+              Move back
+            </button>
+          ) : null}
           <button
             type="button"
             className="v2-btn-danger-ghost"
@@ -161,11 +178,17 @@ function Item({ item, busy, limits, onDecide, onDelete }) {
 export default function Suggestions() {
   const cmd = useCmd();
   const limits = useModuleLimits('suggestions');
-  const { guildId, data, setData, form, set, status, error, dirty, saving, save, reset } =
-    useModuleForm('suggestions');
+  // Saving can change which suggestions count as "outside" (a new suggestions channel): the list is
+  // fetched again after a save, so the banner and the Move back buttons are right without a reload.
+  const [savedTick, setSavedTick] = useState(0);
+  const { guildId, data, setData, form, set, status, error, dirty, saving, save, reset } = useModuleForm(
+    'suggestions',
+    { onSaved: () => setSavedTick((n) => n + 1) }
+  );
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('new');
   const [busy, setBusy] = useState(false);
+  const handledSave = useRef(0);
   // The filter the list on screen was fetched with; the config answer comes with the default one.
   const shown = useRef('all/new');
 
@@ -174,19 +197,31 @@ export default function Suggestions() {
     shown.current = `${filter}/${sort}`;
     let live = true;
     getSuggestions(guildId, { status: filter, sort })
-      .then(({ suggestions }) => live && setData((d) => ({ ...d, suggestions })))
+      .then(({ suggestions, outside }) => live && setData((d) => ({ ...d, suggestions, outside })))
       .catch((err) => notify(err.message));
     return () => {
       live = false;
     };
   }, [guildId, filter, sort, setData]);
 
+  useEffect(() => {
+    if (handledSave.current === savedTick) return undefined;
+    handledSave.current = savedTick;
+    let live = true;
+    getSuggestions(guildId, { status: filter, sort })
+      .then(({ suggestions, outside }) => live && setData((d) => ({ ...d, suggestions, outside })))
+      .catch((err) => notify(err.message));
+    return () => {
+      live = false;
+    };
+  }, [savedTick, guildId, filter, sort, setData]);
+
   if (status === 'error') return <LoadError error={error} what="Suggestions" />;
   if (status === 'loading') return <p className="v2-state">Loading…</p>;
 
   async function refetch() {
-    const { suggestions } = await getSuggestions(guildId, { status: filter, sort });
-    setData((d) => ({ ...d, suggestions }));
+    const { suggestions, outside } = await getSuggestions(guildId, { status: filter, sort });
+    setData((d) => ({ ...d, suggestions, outside }));
   }
 
   async function onDecide(item, action, reason) {
@@ -199,6 +234,64 @@ export default function Suggestions() {
       notify(err.message);
       return false;
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onMoveBack(item) {
+    setBusy(true);
+    try {
+      await moveSuggestionBack(guildId, item.number);
+      await refetch();
+      notify(`Suggestion #${item.number} is back in the suggestions channel.`, 'info');
+    } catch (err) {
+      notify(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onMoveAllBack() {
+    const ok = await confirmDialog({
+      title: `Move ${data.outside} ${data.outside === 1 ? 'suggestion' : 'suggestions'} back?`,
+      body: 'Sylo posts each one again in the suggestions channel, oldest first, and removes the old post (with a log channel in "copy" mode, a decided suggestion keeps the old post as its log copy). It stops at the first problem, for example a missing permission. This can take a while.',
+      confirmLabel: 'Move all back',
+    });
+    if (!ok) return;
+    setBusy(true);
+    let total = 0;
+    let after = 0;
+    const failed = [];
+    const skippedText = () =>
+      failed.length
+        ? ` ${failed.length} could not be moved and stay where they are: ${failed
+            .map((f) => `#${f.number}`)
+            .join(', ')}. ${failed[0].error}`
+        : '';
+    try {
+      // The server moves a batch at a time; ask again (after the last one it looked at) until
+      // nothing is left or it stops.
+      for (;;) {
+        const result = await moveAllSuggestionsBack(guildId, after);
+        total += result.moved;
+        failed.push(...(result.failed ?? []));
+        if (result.error) {
+          notify(`${result.error} ${total} moved back, ${result.remaining} left.${skippedText()}`);
+          break;
+        }
+        if (!result.remaining || !(result.next > after)) {
+          notify(
+            `${total} ${total === 1 ? 'suggestion' : 'suggestions'} moved back.${skippedText()}`,
+            failed.length ? 'error' : 'info'
+          );
+          break;
+        }
+        after = result.next;
+      }
+    } catch (err) {
+      notify(`${err.message} ${total} moved back before that.`);
+    } finally {
+      await refetch().catch((err) => notify(err.message));
       setBusy(false);
     }
   }
@@ -254,7 +347,7 @@ export default function Suggestions() {
             value={form.logChannel}
             onChange={(e) => set({ logChannel: e.target.value })}
           >
-            <option value="">— decided suggestions stay where they are —</option>
+            <option value="">— decided suggestions only change status where they are —</option>
             {data.channels.map((c) => (
               <option key={c.id} value={c.id}>
                 #{c.name}
@@ -262,8 +355,36 @@ export default function Suggestions() {
             ))}
           </select>
           <p className="v2-field-hint">
-            A suggestion that is approved, denied or implemented is reposted here and the original is deleted.
+            Where a suggestion that is approved, denied or implemented is also posted. Pick how below.
           </p>
+          <fieldset className="v2-field" disabled={!form.logChannel}>
+            <legend className="v2-field-hint">When a suggestion is decided</legend>
+            <label className="v2-check">
+              <input
+                type="radio"
+                name="logMode"
+                checked={form.logMode === 'copy'}
+                onChange={() => set({ logMode: 'copy' })}
+              />
+              Copy to the log channel and keep the original
+            </label>
+            <label className="v2-check">
+              <input
+                type="radio"
+                name="logMode"
+                checked={form.logMode === 'move'}
+                onChange={() => set({ logMode: 'move' })}
+              />
+              Move to the log channel (delete the original)
+            </label>
+          </fieldset>
+          {form.logChannel ? (
+            <p className="v2-field-hint">
+              {form.logMode === 'move'
+                ? 'The original is deleted and the suggestion lives in the log channel from then on.'
+                : 'The original stays in the suggestions channel and shows its status. The copy in the log channel is updated if the status changes again and removed if the suggestion is reopened.'}
+            </p>
+          ) : null}
         </div>
 
         <div className="v2-field">
@@ -336,6 +457,17 @@ export default function Suggestions() {
 
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Suggestions ({data.suggestions.length})</h2>
+        {data.outside > 0 ? (
+          <div className="v2-field-row">
+            <p className="v2-field-hint">
+              {data.outside} {data.outside === 1 ? 'suggestion is' : 'suggestions are'} not in the suggestions
+              channel (for example after an earlier move to the log channel).
+            </p>
+            <button type="button" className="v2-btn-ghost" disabled={busy} onClick={onMoveAllBack}>
+              Move all back
+            </button>
+          </div>
+        ) : null}
         <div className="v2-field-row v2-sug-filters">
           <div className="v2-field">
             <label htmlFor="sug-filter">Show</label>
@@ -364,6 +496,7 @@ export default function Suggestions() {
               busy={busy}
               limits={limits}
               onDecide={onDecide}
+              onMoveBack={onMoveBack}
               onDelete={onDelete}
             />
           ))}
