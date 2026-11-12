@@ -140,7 +140,15 @@ test('SQLite: a database that already ran the branch up to migration 69 is backf
 // What this branch added to the 5.0 schema (tables and columns; their indexes go with them).
 const BACK_TO_5_0 = `
   DROP TABLE IF EXISTS economy_accounts, economy_transactions, economy_cooldowns, economy_items,
-    economy_inventory, introductions, giveaway_prizes;
+    economy_inventory, introductions, giveaway_prizes, applications_forms, applications_submissions,
+    applications_cooldowns;
+  -- An earlier shape of one new table (only its first columns), so the upgrade has to add the rest before
+  -- the indexes that use them: a bootstrap that indexes a column the old table lacks would not boot.
+  CREATE TABLE applications_submissions (
+    id BIGSERIAL PRIMARY KEY, guild_id TEXT NOT NULL, form_id BIGINT NOT NULL, user_id TEXT NOT NULL,
+    created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL
+  );
+  INSERT INTO applications_submissions (guild_id, form_id, user_id, created_at, updated_at) VALUES ('g', 1, 'u', 1, 1);
   ALTER TABLE giveaways DROP COLUMN IF EXISTS entry_fee, DROP COLUMN IF EXISTS prize_amount,
     DROP COLUMN IF EXISTS cancelled, DROP COLUMN IF EXISTS prizes_paid,
     DROP COLUMN IF EXISTS drawn_at, DROP COLUMN IF EXISTS sweep_at;
@@ -232,6 +240,9 @@ test(
         ],
         'a drawn giveaway counts as paid, a running one does not'
       );
+      // Applications: the tables are new, so the upgrade made them (checked by the shape compare above).
+      const made = await b`SELECT to_regclass('public.applications_submissions') AS t`;
+      assert.ok(made[0].t, 'the applications tables exist after the upgrade');
       const [{ top }] = await b`SELECT MAX(version) AS top FROM schema_migrations`;
       assert.ok(Number(top) > RELEASE_5_0_MIGRATIONS, 'the registered migrations were recorded');
 

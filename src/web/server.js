@@ -253,6 +253,15 @@ export function createApp() {
     if (!/^(fluxer:)?\d{1,25}$/.test(req.params.guildId)) return res.redirect('/v2');
     return res.redirect(`/v2/shop/${encodeURIComponent(req.params.guildId)}`);
   });
+  // The same for the web form of an application: /apply/<server>/<form> opens the page of the dashboard.
+  app.get('/apply/:guildId/:formId', (req, res) => {
+    if (!/^(fluxer:)?\d{1,25}$/.test(req.params.guildId) || !/^\d{1,15}$/.test(req.params.formId)) {
+      return res.redirect('/v2');
+    }
+    return res.redirect(
+      `/v2/apply/${encodeURIComponent(req.params.guildId)}/${encodeURIComponent(req.params.formId)}`
+    );
+  });
   app.use('/api/v2/guilds/:guildId', ownerOnlyModules);
   app.use('/api/v2', v2ApiRouter);
   app.use('/v2', v2ClientRouter);
