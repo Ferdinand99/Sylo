@@ -4,10 +4,12 @@
 // Lock order of every economy transaction (documented at the top of modules/lib/economy.js): the member
 // accounts in user id order, then the ledger, then (inside the `after` hook) the giveaway row, the item
 // row, the member's inventory, giveaway entries and prizes, and temporary-role records.
+//
+// It runs in a database of its own: the cooldown prune it includes is global (it would delete the records
+// of other test files that share the CI database), and the test must not share rows or locks with them.
 import './helpers/isolateSqlite.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { closePostgres } from '../src/db/driver.js';
 
 const url = process.env.DATABASE_URL;
 const ROUNDS = Number(process.env.STRESS_ROUNDS) || 40;
@@ -16,6 +18,15 @@ test(
   '/forget in parallel with money, purchases, giveaway fees and the sweeps never deadlocks',
   { skip: !url && 'DATABASE_URL not set (sqlite-only run)' },
   async (t) => {
+    const postgres = (await import('postgres')).default;
+    const admin = postgres(url);
+    const dbName = `sylo_stress_${process.pid}_${Date.now()}`;
+    await admin.unsafe(`CREATE DATABASE "${dbName}"`);
+    const own = new URL(url);
+    own.pathname = `/${dbName}`;
+    // the app reads DATABASE_URL when its config module loads, so this comes before every import of it
+    process.env.DATABASE_URL = own.toString();
+    const { closePostgres } = await import('../src/db/driver.js');
     const eco = await import('../src/modules/lib/economy.js');
     const shopDb = await import('../src/db/economyShop.js');
     const store = await import('../src/db/economy.js');
@@ -31,6 +42,8 @@ test(
     t.after(async () => {
       dropFakeShop();
       await closePostgres();
+      await admin.unsafe(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`);
+      await admin.end({ timeout: 1 });
     });
 
     const config = normaliseEconomyConfig({});
