@@ -11,6 +11,18 @@
 //                                                  counterparty_id, actor_id, reason, created_at
 //   economy_cooldowns      guild_id + user_id      the cooldown tombstone /forget leaves (see eraseMember)
 //
+// LOCK ORDER (the global order of every transaction that touches a member's economy rows; the money API in
+// src/modules/lib/economy.js has the same text):
+//   1. economy_accounts: ALL the accounts of the call, up front, one at a time in user id order (each is made
+//      if missing, locked and read before the next one). No other table is touched before this.
+//   2. economy_transactions: the member's ledger rows (appended; /forget locks every row naming the member
+//      in id order with SELECT ... FOR UPDATE before it changes any)
+//   3. inside a transaction's `after` hook: the giveaway row, the item row (economy_items), the member's
+//      inventory rows, giveaway entries and prizes, temporary-role records
+//   4. economy_cooldowns: written by /forget after the account, read without a lock when an account is made
+// A statement outside a transaction (a sweep, a prune, a claim) holds one lock at a time. The prunes use FOR
+// UPDATE SKIP LOCKED, so they never wait on a row while holding others.
+//
 // `guild_id` is the server key (a Discord id, or "fluxer:<id>"), like every other table, so the
 // guild-leave purge and /forget find the rows. All amounts are whole numbers; BIGINT on Postgres
 // (the driver reads it back as a Number: every value stays below the 1,000,000,000 cap).
