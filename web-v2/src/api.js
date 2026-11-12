@@ -2,10 +2,14 @@
 // Discord/Fluxer login is sent automatically — no separate API auth. The access checks answer /api/ requests with JSON (401 when signed
 // out); a redirect or non-JSON answer is still handled, for safety.
 export class ApiError extends Error {
-  constructor(message, { status, notAuthenticated = false } = {}) {
+  constructor(message, { status, notAuthenticated = false, body } = {}) {
     super(message);
     this.status = status;
     this.notAuthenticated = notAuthenticated;
+    // What a refusal carries besides its message (the web form: per-question messages, a fresh view).
+    this.reason = body?.reason;
+    this.errors = body?.errors;
+    this.view = body?.view;
   }
 }
 
@@ -69,6 +73,7 @@ export async function apiFetch(path, options = {}, retried = false) {
     throw new ApiError(data?.error || `Request failed (HTTP ${res.status})`, {
       status: res.status,
       notAuthenticated: res.status === 401,
+      body: data,
     });
   }
   return data;
@@ -186,6 +191,41 @@ export const getShopActivity = (guildId, { userId = '', itemId = '', page = 1 } 
 export const getWebShop = (guildId) => apiFetch(`/api/v2/shop/${gid(guildId)}`);
 export const buyWebShopItem = (guildId, itemId, price, version) =>
   postJson(`/api/v2/shop/${gid(guildId)}/buy`, { itemId, price, version });
+// Applications, staff side: forms, the panel, submissions, a member's history, the export.
+const appsBase = (guildId) => `/api/v2/guilds/${gid(guildId)}/applications`;
+export const saveApplicationForm = (guildId, id, body) =>
+  postJson(id ? `${appsBase(guildId)}/forms/${id}` : `${appsBase(guildId)}/forms`, body);
+export const deleteApplicationForm = (guildId, id) => postJson(`${appsBase(guildId)}/forms/${id}/delete`, {});
+export const reorderApplicationForms = (guildId, ids) =>
+  postJson(`${appsBase(guildId)}/forms/reorder`, { ids });
+export const publishApplicationsPanel = (guildId, body) =>
+  postJson(`${appsBase(guildId)}/panel/publish`, body);
+export const unpublishApplicationsPanel = (guildId) => postJson(`${appsBase(guildId)}/panel/unpublish`, {});
+export const getApplicationSubmissions = (
+  guildId,
+  { formId = '', status = '', userId = '', page = 1 } = {}
+) =>
+  apiFetch(
+    `${appsBase(guildId)}/submissions?formId=${encodeURIComponent(formId)}&status=${encodeURIComponent(status)}&userId=${encodeURIComponent(userId)}&page=${Number(page) || 1}`
+  );
+export const getApplicationSubmission = (guildId, id) => apiFetch(`${appsBase(guildId)}/submissions/${id}`);
+export const decideApplication = (guildId, id, action, reason) =>
+  postJson(`${appsBase(guildId)}/submissions/${id}/decide`, { action, reason });
+export const retryApplicationRoles = (guildId, id) =>
+  postJson(`${appsBase(guildId)}/submissions/${id}/retry-roles`, {});
+export const deleteApplicationSubmission = (guildId, id) =>
+  postJson(`${appsBase(guildId)}/submissions/${id}/delete`, {});
+export const getApplicantHistory = (guildId, userId) =>
+  apiFetch(`${appsBase(guildId)}/members/${encodeURIComponent(userId)}`);
+// A download link (the browser sends the session cookie): answers of one form, optionally one status.
+export const applicationsExportUrl = (guildId, { formId, status = '', format = 'csv' }) =>
+  `${appsBase(guildId)}/export?formId=${encodeURIComponent(formId)}&status=${encodeURIComponent(status)}&format=${encodeURIComponent(format)}`;
+// The member-facing web form (/v2/apply/<server>/<form>).
+const applyBase = (guildId, formId) => `/api/v2/apply/${gid(guildId)}/${Number(formId) || 0}`;
+export const getWebApply = (guildId, formId) => apiFetch(applyBase(guildId, formId));
+export const submitWebApply = (guildId, formId, answers, version) =>
+  postJson(`${applyBase(guildId, formId)}/submit`, { answers, version });
+export const withdrawWebApply = (guildId, formId) => postJson(`${applyBase(guildId, formId)}/withdraw`, {});
 export const resetEconomy = (guildId, confirm) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/economy/reset`, { confirm });
 export const setInviteBonus = (guildId, userId, bonus) =>
