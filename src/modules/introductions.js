@@ -122,7 +122,9 @@ export function cut(value, max) {
   if (text.length <= max) return text;
   let out = text.slice(0, Math.max(0, max - 1));
   if (/[\uD800-\uDBFF]$/.test(out)) out = out.slice(0, -1);
-  const trailing = /\\+$/.exec(out)?.[0].length ?? 0;
+  // count the backslashes at the end with a loop: `/\\+$/` costs the square of a long run of them
+  let trailing = 0;
+  while (trailing < out.length && out[out.length - 1 - trailing] === '\\') trailing += 1;
   if (trailing % 2 === 1) out = out.slice(0, -1);
   return `${out}…`;
 }
