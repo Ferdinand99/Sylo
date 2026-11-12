@@ -178,11 +178,17 @@ function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
 export default function Suggestions() {
   const cmd = useCmd();
   const limits = useModuleLimits('suggestions');
-  const { guildId, data, setData, form, set, status, error, dirty, saving, save, reset } =
-    useModuleForm('suggestions');
+  // Saving can change which suggestions count as "outside" (a new suggestions channel): the list is
+  // fetched again after a save, so the banner and the Move back buttons are right without a reload.
+  const [savedTick, setSavedTick] = useState(0);
+  const { guildId, data, setData, form, set, status, error, dirty, saving, save, reset } = useModuleForm(
+    'suggestions',
+    { onSaved: () => setSavedTick((n) => n + 1) }
+  );
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('new');
   const [busy, setBusy] = useState(false);
+  const handledSave = useRef(0);
   // The filter the list on screen was fetched with; the config answer comes with the default one.
   const shown = useRef('all/new');
 
@@ -197,6 +203,18 @@ export default function Suggestions() {
       live = false;
     };
   }, [guildId, filter, sort, setData]);
+
+  useEffect(() => {
+    if (handledSave.current === savedTick) return undefined;
+    handledSave.current = savedTick;
+    let live = true;
+    getSuggestions(guildId, { status: filter, sort })
+      .then(({ suggestions, outside }) => live && setData((d) => ({ ...d, suggestions, outside })))
+      .catch((err) => notify(err.message));
+    return () => {
+      live = false;
+    };
+  }, [savedTick, guildId, filter, sort, setData]);
 
   if (status === 'error') return <LoadError error={error} what="Suggestions" />;
   if (status === 'loading') return <p className="v2-state">Loading…</p>;

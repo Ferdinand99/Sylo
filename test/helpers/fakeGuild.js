@@ -74,7 +74,7 @@ function fakeChannel(sink, { id, name, type, position }) {
       sink.messages.push({ channel: id, payload });
       return { id: 'msg-' + sink.messages.length, edit: async () => {}, delete: async () => {} };
     },
-    messages: { fetch: async () => null },
+    messages: { fetch: async () => null, edit: async () => ({}), delete: async () => {} },
   };
   return chan;
 }

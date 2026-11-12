@@ -51,6 +51,9 @@ const settle = async () => {
 // Nothing queued by a vote may run later against a different test's fake guild.
 await stopSchedules();
 
+const unknownMessage = () => Object.assign(new Error('Unknown Message'), { code: 10008, status: 404 });
+const transient = () => Object.assign(new Error('Service Unavailable'), { status: 503 });
+
 function world({ dmClosed = [], platform = 'discord' } = {}) {
   seq += 1;
   const rawId = String(900000000000000200n + BigInt(seq));
@@ -86,7 +89,20 @@ function world({ dmClosed = [], platform = 'discord' } = {}) {
         out.sent.push({ channel: id, id: message.id, payload: p });
         return message;
       },
-      messages: { fetch: async (mid) => store.get(mid) ?? null },
+      // Edit and delete by id, as Discord does: an unknown id is the platform's "Unknown Message".
+      messages: {
+        fetch: async (mid) => store.get(mid) ?? null,
+        edit: async (mid, payload) => {
+          const message = store.get(mid);
+          if (!message) throw unknownMessage();
+          return message.edit(payload);
+        },
+        delete: async (mid) => {
+          const message = store.get(mid);
+          if (!message) throw unknownMessage();
+          return message.delete();
+        },
+      },
     };
     return channel;
   };
@@ -863,6 +879,70 @@ test('copy mode: a later status change edits the copy in place, a missing copy i
   assert.equal((await getSuggestionByNumber(GID, 1)).log_message_id, w.sent[2].id);
 });
 
+test('copy mode: a copy the platform reports as gone (10008) is replaced by a new one', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  await say('Idea');
+  await decideAs('approve', 1);
+  const copy = w.sent[1];
+  const real = w.channels.get(LOG).messages.edit;
+  w.channels.get(LOG).messages.edit = async (mid, payload) => {
+    if (mid === copy.id) throw unknownMessage(); // deleted on the platform, still in our fake store
+    return real(mid, payload);
+  };
+  await decideAs('implement', 1);
+  assert.equal(w.sent.length, 3, 'a new copy');
+  assert.equal((await getSuggestionByNumber(GID, 1)).log_message_id, w.sent[2].id);
+  assert.match(statusOf(w.sent[2].payload), /Implemented/);
+});
+
+test('copy mode: a failed edit that is not "gone" keeps the copy and its pointer and posts no second one', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  await say('Idea');
+  await decideAs('approve', 1);
+  const copy = w.sent[1];
+  const real = w.channels.get(LOG).messages.edit;
+  w.channels.get(LOG).messages.edit = async () => {
+    throw transient();
+  };
+  const i = await decideAs('implement', 1);
+  assert.match(i.text(), /is now implemented/);
+  assert.equal(w.sent.length, 2, 'no duplicate copy');
+  const row = await getSuggestionByNumber(GID, 1);
+  assert.equal(row.status, 'implemented', 'the decision counts');
+  assert.equal(row.log_message_id, copy.id, 'the pointer is kept');
+  assert.equal(row.log_channel_id, LOG);
+
+  // the platform is back: the next change updates the same copy
+  w.channels.get(LOG).messages.edit = real;
+  await decideAs('approve', 1);
+  assert.equal(w.sent.length, 2);
+  assert.match(statusOf(w.edits.filter((e) => e.id === copy.id).at(-1).payload), /Approved/);
+});
+
+test('copy mode: a copy that cannot be deleted right now keeps its pointer, and a later change deletes it', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  await say('Idea');
+  await decideAs('approve', 1);
+  const copy = w.sent[1];
+  const real = w.channels.get(LOG).messages.delete;
+  w.channels.get(LOG).messages.delete = async () => {
+    throw transient();
+  };
+  await decideAs('consider', 1);
+  const row = await getSuggestionByNumber(GID, 1);
+  assert.equal(row.status, 'considering');
+  assert.equal(row.log_message_id, copy.id, 'not forgotten: it is still in the log channel');
+  assert.equal(w.deletes.length, 0);
+
+  w.channels.get(LOG).messages.delete = real;
+  await decideAs('consider', 1, 'again');
+  assert.deepEqual(w.deletes, [{ channel: LOG, id: copy.id }]);
+  assert.equal((await getSuggestionByNumber(GID, 1)).log_message_id, null);
+});
+
 test('copy mode: going back to considering deletes the copy and the post gets its buttons back', async () => {
   fresh();
   await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
@@ -1013,6 +1093,65 @@ test('move back in copy mode: posts it again with the same data, and the old log
   assert.equal(row.message_id, posted.id);
   assert.equal(row.log_channel_id, LOG);
   assert.equal(row.log_message_id, msg.id);
+});
+
+test('move back keeps an adopted old post as the copy without editing it, and a transient error adds no duplicate', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  const { id, msg } = await movedSuggestion();
+  w.channels.get(LOG).messages.edit = async () => {
+    throw transient(); // would have been a duplicate copy before: the adopted post is not touched
+  };
+  w.sent.length = 0;
+  assert.equal((await moveSuggestionBack(id)).ok, true);
+  assert.equal(w.sent.length, 1, 'only the new post');
+  assert.equal(w.edits.length, 0, 'no edit of the adopted copy');
+  assert.equal((await getSuggestion(id)).log_message_id, msg.id);
+});
+
+test('move back that cannot remove the old post takes the new one back and changes nothing', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'move' });
+  const { id, msg } = await movedSuggestion();
+  w.channels.get(LOG).messages.delete = async () => {
+    throw transient();
+  };
+  const r = await moveSuggestionBack(id);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /could not remove the old post/);
+  const row = await getSuggestion(id);
+  assert.equal(row.channel_id, LOG);
+  assert.equal(row.message_id, msg.id);
+  assert.ok(
+    w.deletes.some((d) => d.channel === CH),
+    'the post that was just made is removed again'
+  );
+});
+
+test('a decision made while a move back runs is not lost on the new post', async () => {
+  fresh();
+  await enable({ channel: CH });
+  const { id, number } = await movedSuggestion();
+  const real = w.channels.get(CH).send;
+  let release;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  w.channels.get(CH).send = async (p) => {
+    await held; // the move back has built its payload from "approved" and waits here
+    return real(p);
+  };
+  const moving = moveSuggestionBack(id);
+  await settle();
+  const deciding = decideAs('implement', number);
+  await settle();
+  release();
+  await moving;
+  await deciding;
+  const row = await getSuggestion(id);
+  assert.equal(row.status, 'implemented');
+  const mine = w.edits.filter((e) => e.id === row.message_id);
+  assert.match(statusOf(mine.at(-1).payload), /Implemented/, 'the post in the channel shows the decision');
 });
 
 test('move back in move mode deletes the old post and leaves no copy', async () => {
@@ -1169,6 +1308,29 @@ test('move all stops at the first error, names the suggestion and leaves the res
   // fixed: the next run takes the rest
   w.channels.get(CH).send = real;
   assert.deepEqual(await moveAllSuggestionsBack(GID), { ok: true, moved: 2, remaining: 0 });
+});
+
+test('move all skips a suggestion that was deleted meanwhile and goes on', async () => {
+  fresh();
+  await enable({ channel: CH });
+  const a = await movedSuggestion();
+  const b = await movedSuggestion();
+  const c = await movedSuggestion();
+  const real = w.channels.get(CH).send;
+  w.channels.get(CH).send = async (p) => {
+    // while the first one is being posted, staff delete the second on the dashboard
+    if (!w.channels.get(CH).raced) {
+      w.channels.get(CH).raced = true;
+      await removeSuggestion(await getSuggestion(b.id));
+    }
+    return real(p);
+  };
+  const r = await moveAllSuggestionsBack(GID);
+  assert.equal(r.ok, true);
+  assert.equal(r.moved, 2);
+  assert.equal((await getSuggestion(a.id)).channel_id, CH);
+  assert.equal(await getSuggestion(b.id), null);
+  assert.equal((await getSuggestion(c.id)).channel_id, CH);
 });
 
 test('move all works in batches and says how many are left', async () => {

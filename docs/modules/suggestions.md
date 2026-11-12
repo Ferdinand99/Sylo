@@ -15,6 +15,10 @@ status and sort by newest or most votes, and the staff actions (including
 
 - **View Channel**, **Send Messages**, **Embed Links** in the suggestions channel
   (and in the log channel, if you set one).
+- **Read Message History** in both channels. On Discord Sylo edits and deletes its own
+  posts by id, but on Fluxer it looks a message up before it deletes it. If a lookup or
+  an edit fails for any reason other than "the message no longer exists", Sylo keeps the
+  copy it has and does not post another one.
 - For threads on Discord: **Create Public Threads**. Without it the suggestion is
   posted without a thread.
 - For "turn messages into suggestions": **Manage Messages** (to delete the
@@ -37,7 +41,11 @@ status and sort by newest or most votes, and the staff actions (including
     the log channel and deletes the original. The discussion thread stays where it was.
 
   A server that had a log channel before this setting existed keeps **Move**, so
-  nothing changes until you pick the other one.
+  nothing changes until you pick the other one. The dashboard always saves your choice.
+  An older client that does not know the setting (for example an older version of the
+  Sylo app) keeps the stored choice when it saves; if it adds a log channel to a server
+  that has no stored choice yet, the server gets **Move**, because that client cannot
+  show the choice. Open the dashboard to switch it to **Copy**.
 - **Anonymous suggestions** - new posts do not show who wrote them. The setting is
   fixed when a suggestion is posted, so changing it later does not change old posts.
   Staff still see the author on the dashboard page.
@@ -115,7 +123,7 @@ the settings.
   one stays where it was.
 - The old post in the log channel becomes the copy in **Copy** mode (for a decided
   suggestion). In **Move** mode, or with no log channel, it is deleted.
-- Move all back works in batches and stops at the first problem, for example a missing
+- Move all back works in batches of 10 and stops at the first problem, for example a missing
   permission in the suggestions channel, and tells you which suggestion it stopped at.
   Run it again after you fixed the problem; the ones already moved are not touched.
 - Anyone who may use the dashboard's staff actions (Manage Server) can do this. Sending
