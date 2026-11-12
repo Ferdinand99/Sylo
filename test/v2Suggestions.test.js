@@ -42,6 +42,7 @@ test('GET config: the defaults, the channel and role lists, no suggestions yet',
   assert.deepEqual(data.config, {
     channel: '',
     logChannel: '',
+    logMode: 'copy',
     anonymous: false,
     dmAuthor: true,
     messagesToSuggestions: false,
@@ -51,12 +52,14 @@ test('GET config: the defaults, the channel and role lists, no suggestions yet',
   assert.ok(data.channels.some((c) => c.id === CH.general));
   assert.ok(data.roles.some((r) => r.id === ROLE.member));
   assert.deepEqual(data.suggestions, []);
+  assert.equal(data.outside, 0);
 });
 
 test('POST config stores the normalised settings and writes an audit row', async () => {
   const res = await api.post('/modules/suggestions/config', {
     channel: CH.announce,
     logChannel: CH.bots,
+    logMode: 'move',
     anonymous: true,
     dmAuthor: false,
     messagesToSuggestions: true,
@@ -68,6 +71,7 @@ test('POST config stores the normalised settings and writes an audit row', async
   assert.deepEqual(stored, {
     channel: CH.announce,
     logChannel: CH.bots,
+    logMode: 'move',
     anonymous: true,
     dmAuthor: false,
     messagesToSuggestions: true,
@@ -76,8 +80,28 @@ test('POST config stores the normalised settings and writes an audit row', async
   });
   assert.deepEqual((await json(await api.get('/modules/suggestions/config'))).config, stored);
   const audit = (await auditRows(GID, 'module:suggestions'))[0];
-  assert.equal(audit.detail, 'settings saved');
+  assert.equal(audit.detail, 'settings saved, log mode: move', 'a changed log mode is named');
   assert.equal(audit.actor, 'Dashboard');
+  await api.post('/modules/suggestions/config', {});
+});
+
+test('POST config: a client that does not send the log mode keeps the stored one', async () => {
+  await api.post('/modules/suggestions/config', {
+    channel: CH.announce,
+    logChannel: CH.bots,
+    logMode: 'copy',
+  });
+  await api.post('/modules/suggestions/config', { channel: CH.announce, logChannel: CH.bots });
+  assert.equal((await getGuildModule(GID, 'suggestions')).config.logMode, 'copy', 'not reset to move');
+  const audit = (await auditRows(GID, 'module:suggestions'))[0];
+  assert.equal(audit.detail, 'settings saved');
+
+  // an old stored config with a log channel and no mode means move; an unknown value is normalised
+  await setGuildModule(GID, 'suggestions', { enabled: true, config: { logChannel: CH.bots } });
+  const read = (await json(await api.get('/modules/suggestions/config'))).config;
+  assert.equal(read.logMode, 'move');
+  await api.post('/modules/suggestions/config', { logChannel: CH.bots, logMode: 'sideways' });
+  assert.equal((await getGuildModule(GID, 'suggestions')).config.logMode, 'move');
   await api.post('/modules/suggestions/config', {});
 });
 
@@ -215,6 +239,100 @@ test('with a log channel a final decision reposts the suggestion there', async (
   );
   assert.equal(stay.moved, false);
   assert.equal(app.sink.messages.length, 0);
+  await setGuildModule(GID, 'suggestions', { enabled: true, config: {} });
+});
+
+test('with a log channel in copy mode a final decision posts a copy and keeps the original', async () => {
+  await setGuildModule(GID, 'suggestions', {
+    enabled: true,
+    config: { channel: CH.general, logChannel: CH.bots, logMode: 'copy' },
+  });
+  const { id, number } = await make({ body: 'Copy me' });
+  await setSuggestionMessage(id, CH.general, 'original-message');
+  app.sink.messages.length = 0;
+  const res = await json(await api.post(`/modules/suggestions/${number}/decision`, { action: 'approve' }));
+  assert.equal(res.moved, false);
+  assert.equal(res.copied, true);
+  assert.equal(res.suggestion.channelId, CH.general, 'the original stays');
+  assert.equal(res.suggestion.canMoveBack, false);
+  assert.equal(app.sink.messages.length, 1);
+  assert.equal(app.sink.messages[0].channel, CH.bots);
+  const row = await getSuggestionByNumber(GID, number);
+  assert.equal(row.channel_id, CH.general);
+  assert.equal(row.message_id, 'original-message');
+  assert.equal(row.log_channel_id, CH.bots);
+  assert.ok(row.log_message_id);
+  await setGuildModule(GID, 'suggestions', { enabled: true, config: {} });
+});
+
+test('the list marks suggestions outside the suggestions channel, counts them for the server, and moves them back', async () => {
+  await setGuildModule(GID, 'suggestions', {
+    enabled: true,
+    config: { channel: CH.general, logChannel: CH.bots, logMode: 'copy' },
+  });
+  const home = await make({ body: 'At home' });
+  const away1 = await make({ body: 'Away one' });
+  const away2 = await make({ body: 'Away two' });
+  await setSuggestionMessage(home.id, CH.general, 'm-home');
+  await setSuggestionMessage(away1.id, CH.bots, 'm-away1');
+  await setSuggestionMessage(away2.id, CH.bots, 'm-away2');
+
+  const list = await json(await api.get('/modules/suggestions/list?status=all'));
+  const flag = (n) => list.suggestions.find((s) => s.number === n).canMoveBack;
+  assert.equal(flag(home.number), false);
+  assert.equal(flag(away1.number), true);
+  assert.ok(list.outside >= 2, 'the count covers the server, not only the shown list');
+  const outsideBefore = list.outside;
+
+  app.sink.messages.length = 0;
+  const one = await api.post(`/modules/suggestions/${away1.number}/move-back`);
+  assert.equal(one.status, 200);
+  const body = await json(one);
+  assert.equal(body.suggestion.channelId, CH.general);
+  assert.equal(body.suggestion.canMoveBack, false);
+  assert.equal(app.sink.messages.length, 1);
+  assert.equal(app.sink.messages[0].channel, CH.general);
+  assert.equal((await getSuggestionByNumber(GID, away1.number)).channel_id, CH.general);
+  assert.ok(
+    (await auditRows(GID, 'module:suggestions')).some((a) => a.detail === `moved back #${away1.number}`)
+  );
+  // already home now: refused, nothing sent
+  app.sink.messages.length = 0;
+  const again = await api.post(`/modules/suggestions/${away1.number}/move-back`);
+  assert.equal(again.status, 400);
+  assert.match((await json(again)).error, /already in the suggestions channel/);
+  assert.equal(app.sink.messages.length, 0);
+
+  const all = await json(await api.post('/modules/suggestions/move-all-back', {}));
+  assert.equal(all.error, undefined);
+  assert.equal(all.moved, outsideBefore - 1);
+  assert.equal(all.remaining, 0);
+  assert.equal((await getSuggestionByNumber(GID, away2.number)).channel_id, CH.general);
+  assert.equal((await json(await api.get('/modules/suggestions/list'))).outside, 0);
+  assert.ok(
+    (await auditRows(GID, 'module:suggestions')).some((a) => /^moved back \d+ suggestions?$/.test(a.detail))
+  );
+  await setGuildModule(GID, 'suggestions', { enabled: true, config: {} });
+});
+
+test('move back needs the module on, an existing suggestion and a suggestions channel; move all says so', async () => {
+  await setGuildModule(GID, 'suggestions', { enabled: false });
+  const off = await api.post('/modules/suggestions/1/move-back');
+  assert.equal(off.status, 400);
+  assert.match((await json(off)).error, /Turn the Suggestions module on/);
+  assert.equal((await api.post('/modules/suggestions/move-all-back', {})).status, 400);
+
+  await setGuildModule(GID, 'suggestions', { enabled: true, config: { logChannel: CH.bots } });
+  assert.equal((await api.post('/modules/suggestions/999/move-back')).status, 404);
+  const { id, number } = await make({ body: 'Elsewhere' });
+  await setSuggestionMessage(id, CH.bots, 'm-else');
+  const noChannel = await api.post(`/modules/suggestions/${number}/move-back`);
+  assert.equal(noChannel.status, 400);
+  assert.match((await json(noChannel)).error, /Set the suggestions channel/);
+  const all = await json(await api.post('/modules/suggestions/move-all-back', {}));
+  assert.match(all.error, /Set the suggestions channel/);
+  assert.equal(all.moved, 0);
+  assert.equal((await getSuggestionByNumber(GID, number)).channel_id, CH.bots, 'nothing moved');
   await setGuildModule(GID, 'suggestions', { enabled: true, config: {} });
 });
 

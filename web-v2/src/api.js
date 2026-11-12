@@ -2,10 +2,14 @@
 // Discord/Fluxer login is sent automatically — no separate API auth. The access checks answer /api/ requests with JSON (401 when signed
 // out); a redirect or non-JSON answer is still handled, for safety.
 export class ApiError extends Error {
-  constructor(message, { status, notAuthenticated = false } = {}) {
+  constructor(message, { status, notAuthenticated = false, body } = {}) {
     super(message);
     this.status = status;
     this.notAuthenticated = notAuthenticated;
+    // What a refusal carries besides its message (the web form: per-question messages, a fresh view).
+    this.reason = body?.reason;
+    this.errors = body?.errors;
+    this.view = body?.view;
   }
 }
 
@@ -69,6 +73,7 @@ export async function apiFetch(path, options = {}, retried = false) {
     throw new ApiError(data?.error || `Request failed (HTTP ${res.status})`, {
       status: res.status,
       notAuthenticated: res.status === 401,
+      body: data,
     });
   }
   return data;
@@ -110,6 +115,8 @@ export const releaseCountingPenalty = (guildId, userId) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/counting/penalty/release`, { userId });
 export const endGiveaway = (guildId, id) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/giveaways/${id}/end`, {});
+export const cancelGiveaway = (guildId, id) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/giveaways/${id}/cancel`, {});
 export const rerollGiveaway = (guildId, id, count) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/giveaways/${id}/reroll`, { count });
 export const createEvent = (guildId, body) =>
@@ -126,10 +133,20 @@ export const decideSuggestion = (guildId, number, action, reason) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/decision`, { action, reason });
 export const deleteSuggestion = (guildId, number) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/delete`, {});
+export const moveSuggestionBack = (guildId, number) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/move-back`, {});
+// Moves one batch (oldest first) after suggestion number `after` and answers
+// { moved, remaining, failed, next, error? }; ask again with after = next while remaining > 0.
+export const moveAllSuggestionsBack = (guildId, after = 0) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/move-all-back`, { after });
 export const getQuotes = (guildId, { q = '' } = {}) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/quote-board/list?q=${encodeURIComponent(q)}`);
 export const deleteQuote = (guildId, number) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/quote-board/${number}/delete`, {});
+export const publishIntroPrompt = (guildId, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/introductions/prompt/publish`, body);
+export const unpublishIntroPrompt = (guildId) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/introductions/prompt/unpublish`, {});
 export const getTempRoles = (guildId, { q = '', roleId = '' } = {}) =>
   apiFetch(
     `/api/v2/guilds/${gid(guildId)}/modules/temp-roles/list?q=${encodeURIComponent(q)}&roleId=${encodeURIComponent(roleId)}`
@@ -140,6 +157,77 @@ export const addTempRole = (guildId, body) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/temp-roles/add`, body);
 export const removeTempRole = (guildId, body) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/temp-roles/remove`, body);
+export const getEconomyMembers = (guildId, { q = '', sort = 'total', dir = 'desc', page = 1 } = {}) =>
+  apiFetch(
+    `/api/v2/guilds/${gid(guildId)}/modules/economy/members?q=${encodeURIComponent(q)}&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}&page=${Number(page) || 1}`
+  );
+export const getEconomyMember = (guildId, userId) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/economy/members/${encodeURIComponent(userId)}`);
+// action: add | remove | set | reset-user (the same four as /eco); resolves to the member's new state.
+export const adjustEconomyMember = (guildId, userId, body) =>
+  postJson(
+    `/api/v2/guilds/${gid(guildId)}/modules/economy/members/${encodeURIComponent(userId)}/adjust`,
+    body
+  );
+// The shop, staff side: items, a member's inventory, the activity log.
+const shopBase = (guildId) => `/api/v2/guilds/${gid(guildId)}/modules/economy`;
+export const getShopItems = (guildId) => apiFetch(`${shopBase(guildId)}/shop/items`);
+export const createShopItem = (guildId, body) => postJson(`${shopBase(guildId)}/shop/items`, body);
+export const updateShopItem = (guildId, id, body) => postJson(`${shopBase(guildId)}/shop/items/${id}`, body);
+export const setShopItemEnabled = (guildId, id, enabled) =>
+  postJson(`${shopBase(guildId)}/shop/items/${id}/enabled`, { enabled });
+export const reorderShopItems = (guildId, ids) => postJson(`${shopBase(guildId)}/shop/items/order`, { ids });
+export const deleteShopItem = (guildId, id) => postJson(`${shopBase(guildId)}/shop/items/${id}/delete`, {});
+export const grantShopItem = (guildId, userId, body) =>
+  postJson(`${shopBase(guildId)}/members/${encodeURIComponent(userId)}/inventory/grant`, body);
+// action: revoke | refund | fulfil (body: { reason } or { note, fulfilled })
+export const actOnInventoryRow = (guildId, userId, rowId, action, body = {}) =>
+  postJson(`${shopBase(guildId)}/members/${encodeURIComponent(userId)}/inventory/${rowId}/${action}`, body);
+export const getShopActivity = (guildId, { userId = '', itemId = '', page = 1 } = {}) =>
+  apiFetch(
+    `${shopBase(guildId)}/shop/activity?userId=${encodeURIComponent(userId)}&itemId=${encodeURIComponent(itemId)}&page=${Number(page) || 1}`
+  );
+// The member-facing web shop (/v2/shop/<server>).
+export const getWebShop = (guildId) => apiFetch(`/api/v2/shop/${gid(guildId)}`);
+export const buyWebShopItem = (guildId, itemId, price, version) =>
+  postJson(`/api/v2/shop/${gid(guildId)}/buy`, { itemId, price, version });
+// Applications, staff side: forms, the panel, submissions, a member's history, the export.
+const appsBase = (guildId) => `/api/v2/guilds/${gid(guildId)}/applications`;
+export const saveApplicationForm = (guildId, id, body) =>
+  postJson(id ? `${appsBase(guildId)}/forms/${id}` : `${appsBase(guildId)}/forms`, body);
+export const deleteApplicationForm = (guildId, id) => postJson(`${appsBase(guildId)}/forms/${id}/delete`, {});
+export const reorderApplicationForms = (guildId, ids) =>
+  postJson(`${appsBase(guildId)}/forms/reorder`, { ids });
+export const publishApplicationsPanel = (guildId, body) =>
+  postJson(`${appsBase(guildId)}/panel/publish`, body);
+export const unpublishApplicationsPanel = (guildId) => postJson(`${appsBase(guildId)}/panel/unpublish`, {});
+export const getApplicationSubmissions = (
+  guildId,
+  { formId = '', status = '', userId = '', page = 1 } = {}
+) =>
+  apiFetch(
+    `${appsBase(guildId)}/submissions?formId=${encodeURIComponent(formId)}&status=${encodeURIComponent(status)}&userId=${encodeURIComponent(userId)}&page=${Number(page) || 1}`
+  );
+export const getApplicationSubmission = (guildId, id) => apiFetch(`${appsBase(guildId)}/submissions/${id}`);
+export const decideApplication = (guildId, id, action, reason) =>
+  postJson(`${appsBase(guildId)}/submissions/${id}/decide`, { action, reason });
+export const retryApplicationRoles = (guildId, id) =>
+  postJson(`${appsBase(guildId)}/submissions/${id}/retry-roles`, {});
+export const deleteApplicationSubmission = (guildId, id) =>
+  postJson(`${appsBase(guildId)}/submissions/${id}/delete`, {});
+export const getApplicantHistory = (guildId, userId) =>
+  apiFetch(`${appsBase(guildId)}/members/${encodeURIComponent(userId)}`);
+// A download link (the browser sends the session cookie): answers of one form, optionally one status.
+export const applicationsExportUrl = (guildId, { formId, status = '', format = 'csv' }) =>
+  `${appsBase(guildId)}/export?formId=${encodeURIComponent(formId)}&status=${encodeURIComponent(status)}&format=${encodeURIComponent(format)}`;
+// The member-facing web form (/v2/apply/<server>/<form>).
+const applyBase = (guildId, formId) => `/api/v2/apply/${gid(guildId)}/${Number(formId) || 0}`;
+export const getWebApply = (guildId, formId) => apiFetch(applyBase(guildId, formId));
+export const submitWebApply = (guildId, formId, answers, version) =>
+  postJson(`${applyBase(guildId, formId)}/submit`, { answers, version });
+export const withdrawWebApply = (guildId, formId) => postJson(`${applyBase(guildId, formId)}/withdraw`, {});
+export const resetEconomy = (guildId, confirm) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/economy/reset`, { confirm });
 export const setInviteBonus = (guildId, userId, bonus) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/invite-tracker/bonus`, { userId, bonus });
 

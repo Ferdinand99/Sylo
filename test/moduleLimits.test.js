@@ -16,7 +16,7 @@ import { normaliseAutoThreadsConfig } from '../src/modules/autoThreads.js';
 import { normaliseAutomodConfig } from '../src/modules/automod.js';
 import { normaliseAutoresponder } from '../src/modules/autoresponder.js';
 import { normaliseCountingConfig, validCount } from '../src/modules/counting.js';
-import { clampWinners } from '../src/modules/giveaways.js';
+import { clampEntryFee, clampPrizeAmount, clampWinners } from '../src/modules/giveaways.js';
 import { normaliseEventFields, normaliseEventsConfig } from '../src/modules/events.js';
 import {
   normaliseReason,
@@ -32,6 +32,14 @@ import {
   normaliseQuoteQuery,
   normaliseQuoteText,
 } from '../src/modules/quoteBoard.js';
+import { normaliseIntroductionsConfig } from '../src/modules/introductions.js';
+import { normaliseApplicationsConfig, normaliseForm } from '../src/modules/applications.js';
+import {
+  clampAmount,
+  normaliseEconomyConfig,
+  normaliseItem,
+  normaliseReason as normaliseEconomyReason,
+} from '../src/modules/economy.js';
 import { normaliseHoneypotConfig } from '../src/modules/honeypot.js';
 import { normaliseInviteTrackerConfig } from '../src/modules/inviteTracker.js';
 import { normaliseKickConfig } from '../src/modules/kickAlerts.js';
@@ -160,8 +168,17 @@ const cases = {
     over: { count: { check: (out) => out.count === null } },
   },
   giveaways: {
-    normalise: (raw) => ({ winners: clampWinners(raw.winners) }),
-    base: { winners: 1 },
+    normalise: (raw) => ({
+      winners: clampWinners(raw.winners),
+      entryFee: clampEntryFee(raw.entryFee),
+      prizeAmount: clampPrizeAmount(raw.prizeAmount),
+    }),
+    base: { winners: 1, entryFee: 1, prizeAmount: 1 },
+    // 0 (or less) means "no fee" and "no currency prize": it is dropped, not raised to the minimum
+    under: {
+      entryFee: { check: (out) => out.entryFee === 0 },
+      prizeAmount: { check: (out) => out.prizeAmount === 0 },
+    },
   },
   events: {
     // the per-event fields and the settings' staff role list; 0 capacity means "no limit"
@@ -200,6 +217,84 @@ const cases = {
     }),
     base: {},
     value: { saveRoles: (n) => items(n, roleId), staffRoles: (n) => items(n, roleId) },
+  },
+  economy: {
+    // the settings, the staff reason and the amount staff enter
+    normalise: (raw) => {
+      const item = normaliseItem({
+        name: raw.itemName,
+        description: raw.itemDescription,
+        emoji: raw.itemEmoji,
+        type: 'temp_role',
+        roleId: roleId(1),
+        durationHours: raw.itemDurationHours,
+        price: raw.itemPrice,
+        stock: raw.itemStock,
+        perMemberLimit: raw.itemPerMemberLimit,
+        requiredRoles: raw.itemRequiredRoles,
+      });
+      return {
+        reason: normaliseEconomyReason(raw.reason),
+        amount: clampAmount(raw.amount),
+        ...normaliseEconomyConfig(raw),
+        // the shop item's fields, under the names of their limits
+        itemName: item.name,
+        itemDescription: item.description,
+        itemEmoji: item.emoji,
+        itemPrice: item.price,
+        itemStock: item.stock,
+        itemDurationHours: item.durationMs / 3_600_000,
+        itemPerMemberLimit: item.perMemberLimit,
+        itemRequiredRoles: item.requiredRoles,
+      };
+    },
+    // minimums of 1, so the maximums of a pair can sit at their own minimum
+    base: {
+      messageMin: 1,
+      workMin: 1,
+      robMinPercent: 1,
+      reason: 'x',
+      amount: 5,
+      itemName: 'x',
+      itemPrice: 5,
+      itemDurationHours: 24,
+    },
+    value: {
+      ignoredChannels: (n) => items(n, roleId),
+      ignoredRoles: (n) => items(n, roleId),
+      itemRequiredRoles: (n) => items(n, roleId),
+    },
+  },
+  introductions: {
+    normalise: normaliseIntroductionsConfig,
+    base: { questions: [{ label: 'x' }], roleGroups: [{ name: 'g', roleIds: [roleId(1)] }] },
+    value: {
+      questions: (n) => items(n, (i) => ({ label: `q${i}` })),
+      roleGroups: (n) => items(n, (i) => ({ name: `g${i}`, roleIds: [roleId(1)] })),
+      'roleGroups[].roleIds': (n) => items(n, roleId),
+    },
+  },
+  applications: {
+    // the module's own settings and one form, together
+    normalise: (raw) => ({ ...normaliseApplicationsConfig(raw), ...normaliseForm(raw) }),
+    base: {
+      name: 'x',
+      questions: [{ type: 'choice', long: true, label: 'x', options: [{ label: 'a' }] }],
+      messages: {},
+    },
+    value: {
+      questions: (n) => items(n, (i) => ({ type: 'text', label: `q${i}` })),
+      'questions[].options': (n) => items(n, (i) => ({ label: `o${i}` })),
+      requiredRoleIds: (n) => items(n, roleId),
+      restrictedRoleIds: (n) => items(n, roleId),
+      managerRoleIds: (n) => items(n, roleId),
+      pingRoleIds: (n) => items(n, roleId),
+      removeOnSubmitRoleIds: (n) => items(n, roleId),
+      acceptAddRoleIds: (n) => items(n, roleId),
+      acceptRemoveRoleIds: (n) => items(n, roleId),
+      denyAddRoleIds: (n) => items(n, roleId),
+      denyRemoveRoleIds: (n) => items(n, roleId),
+    },
   },
   honeypot: {
     normalise: normaliseHoneypotConfig,

@@ -13,7 +13,8 @@ import { usageLines } from './usage.js';
 import { handleCustomSlash } from '../lib/customCommandSync.js';
 import { moderationOutcome } from '../../modules/lib/messageModeration.js';
 import { effectiveCommandPrefix } from '../../platform/commandPrefix.js';
-import { guildKeyOf } from '../../platform/platformOf.js';
+import { guildKeyOf, platformOfClient } from '../../platform/platformOf.js';
+import { hasActiveQuestionnaire } from '../lib/dmQuestionnaire.js';
 import { log } from '../../lib/log.js';
 import { inc } from '../../lib/metrics.js';
 
@@ -93,6 +94,8 @@ export async function handleMessage(
   { commands, prefix: defaultPrefix, botId = message.client?.user?.id }
 ) {
   if (message.author?.bot || typeof message.content !== 'string') return;
+  // A DM written in the middle of a DM questionnaire is an answer, even when it looks like a command.
+  if (!message.guild && hasActiveQuestionnaire(platformOfClient(message.client), message.author?.id)) return;
   const prefix = await prefixFor(message, defaultPrefix);
   const split = splitCommand(message.content, prefix, botId);
   if (!split) return;

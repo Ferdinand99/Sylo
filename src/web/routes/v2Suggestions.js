@@ -1,5 +1,5 @@
-// JSON API for the Suggestions page of the dashboard: the module's settings, a filterable list, and
-// the staff decisions and delete. Shares its rules with /suggestion (modules/suggestions.js).
+// JSON API for the Suggestions page of the dashboard: the module's settings, a filterable list, the
+// staff decisions, "move back to the suggestions channel" (one, or all) and delete. Shares its rules with /suggestion (modules/suggestions.js).
 //
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set, the caller
 // manages this server and the state-changing calls have passed the CSRF check.
@@ -10,11 +10,20 @@ import { assignableRoles } from '../lib/guildContext.js';
 import { guildTextChannels } from '../lib/discord.js';
 import { recordAudit } from '../../db/audit.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
-import { STATUSES, getSuggestionByNumber, listSuggestions } from '../../db/suggestions.js';
+import { platformActionLimit } from '../middleware/rateLimit.js';
+import {
+  STATUSES,
+  countSuggestionsOutside,
+  getSuggestionByNumber,
+  listSuggestions,
+} from '../../db/suggestions.js';
 import {
   ACTIONS,
   STATUS_META,
+  canMoveBack,
   decide,
+  moveAllSuggestionsBack,
+  moveSuggestionBack,
   normaliseReason,
   normaliseSuggestionsConfig,
   removeSuggestion,
@@ -29,7 +38,7 @@ const actor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(re
 const fail = (res, message, status = 400) => res.status(status).json({ error: message });
 
 /** What the list shows. Staff see who wrote an anonymous suggestion; members do not. */
-function view(row, guild) {
+function view(row, guild, cfg) {
   const member = row.author_id ? guild.members?.cache?.get?.(row.author_id) : null;
   return {
     id: row.id,
@@ -47,6 +56,8 @@ function view(row, guild) {
     decidedAt: row.decided_at,
     createdAt: row.created_at,
     channelId: row.channel_id,
+    // The post sits outside the suggestions channel (an earlier move to the log channel): it can be moved back.
+    canMoveBack: canMoveBack(row, cfg),
   };
 }
 
@@ -56,11 +67,18 @@ function filterOf(query = {}) {
   return { status, sort: query.sort === 'top' ? 'top' : 'new' };
 }
 
-const listOf = async (guild, query) =>
-  (await listSuggestions(guild.id, { ...filterOf(query), limit: LIST_SHOWN })).map((r) => view(r, guild));
-
 const settingsOf = async (guildId) =>
   normaliseSuggestionsConfig((await getGuildModule(guildId, 'suggestions')).config);
+
+/** The list, and how many suggestions in the whole server could be moved back (the list is cut). */
+async function listOf(guild, query) {
+  const cfg = await settingsOf(guild.id);
+  const rows = await listSuggestions(guild.id, { ...filterOf(query), limit: LIST_SHOWN });
+  return {
+    suggestions: rows.map((r) => view(r, guild, cfg)),
+    outside: cfg.channel ? await countSuggestionsOutside(guild.id, cfg.channel) : 0,
+  };
+}
 
 router.get(
   '/modules/suggestions/config',
@@ -69,7 +87,7 @@ router.get(
       config: await settingsOf(req.guild.id),
       channels: guildTextChannels(req.guild),
       roles: assignableRoles(req.guild),
-      suggestions: await listOf(req.guild, {}),
+      ...(await listOf(req.guild, {})),
     });
   })
 );
@@ -77,12 +95,21 @@ router.get(
 router.post(
   '/modules/suggestions/config',
   asyncHandler(async (req, res) => {
-    const config = normaliseSuggestionsConfig(req.body);
+    const before = await settingsOf(req.guild.id);
+    // A client that does not know the log mode (an older app) keeps what is stored, not the default.
+    const stored = (await getGuildModule(req.guild.id, 'suggestions')).config;
+    const config = normaliseSuggestionsConfig({
+      ...req.body,
+      logMode: req.body?.logMode ?? stored?.logMode,
+    });
     await setGuildModule(req.guild.id, 'suggestions', { config });
     await recordAudit(req.guild.id, {
       actor: actor(req),
       action: 'module:suggestions',
-      detail: 'settings saved',
+      detail:
+        config.logChannel && config.logMode !== before.logMode
+          ? `settings saved, log mode: ${config.logMode}`
+          : 'settings saved',
     });
     res.json({ config });
   })
@@ -91,7 +118,7 @@ router.post(
 router.get(
   '/modules/suggestions/list',
   asyncHandler(async (req, res) => {
-    res.json({ suggestions: await listOf(req.guild, req.query) });
+    res.json(await listOf(req.guild, req.query));
   })
 );
 
@@ -125,7 +152,62 @@ router.post(
       detail: `${STATUS_META[result.status].label.toLowerCase()} #${row.number}`,
     });
     const fresh = await getSuggestionByNumber(req.guild.id, row.number);
-    return res.json({ suggestion: view(fresh, req.guild), moved: result.moved, dm: result.dm });
+    return res.json({
+      suggestion: view(fresh, req.guild, await settingsOf(req.guild.id)),
+      moved: result.moved,
+      copied: result.copied,
+      dm: result.dm,
+    });
+  })
+);
+
+// "Move back": the post goes into the suggestions channel again. These two send messages, so they
+// share the stricter limit of the routes that publish to the platform.
+router.post(
+  '/modules/suggestions/move-all-back',
+  platformActionLimit,
+  asyncHandler(async (req, res) => {
+    if (!(await getGuildModule(req.guild.id, 'suggestions')).enabled) {
+      return fail(res, 'Turn the Suggestions module on first.');
+    }
+    const after = Number.isInteger(req.body?.after) && req.body.after > 0 ? req.body.after : 0;
+    const result = await moveAllSuggestionsBack(req.guild.id, { after });
+    if (result.moved) {
+      await recordAudit(req.guild.id, {
+        actor: actor(req),
+        action: 'module:suggestions',
+        detail: `moved back ${result.moved} suggestion${result.moved === 1 ? '' : 's'}`,
+      });
+    }
+    // A stop is an answer, not a failure of the request: the caller needs the counts.
+    return res.json({
+      moved: result.moved,
+      remaining: result.remaining,
+      failed: result.failed,
+      next: result.next,
+      ...(result.ok ? {} : { error: result.error }),
+    });
+  })
+);
+
+router.post(
+  '/modules/suggestions/:number/move-back',
+  platformActionLimit,
+  asyncHandler(async (req, res) => {
+    const row = await found(req, res);
+    if (!row) return undefined;
+    if (!(await getGuildModule(req.guild.id, 'suggestions')).enabled) {
+      return fail(res, 'Turn the Suggestions module on first.');
+    }
+    const result = await moveSuggestionBack(row.id);
+    if (!result.ok) return fail(res, result.error);
+    await recordAudit(req.guild.id, {
+      actor: actor(req),
+      action: 'module:suggestions',
+      detail: `moved back #${row.number}`,
+    });
+    const fresh = await getSuggestionByNumber(req.guild.id, row.number);
+    return res.json({ suggestion: view(fresh, req.guild, await settingsOf(req.guild.id)) });
   })
 );
 

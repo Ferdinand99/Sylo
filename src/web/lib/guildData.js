@@ -5,6 +5,9 @@ import { clientOfGuild } from '../../platform/platformOf.js';
 import { getModule } from '../../modules/registry.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
 import { forgetUser } from '../../db/purge.js';
+import { forgetIntroductionCard } from '../../modules/introductions.js';
+import { forgetApplicationPosts } from '../../modules/applications.js';
+import { endShopRolesForForget } from '../../modules/lib/shop.js';
 import { recordAudit } from '../../db/audit.js';
 
 /** What a member-data deletion leaves alone; shown in the DM and on the dashboard pages. */
@@ -44,7 +47,17 @@ export async function exportGuildConfigFor(guildId, { owner }) {
  * @returns {Promise<{ result: Awaited<ReturnType<typeof forgetUser>>, dmDelivered: boolean }>}
  */
 export async function forgetMember(guild, userId, { reason = '', actor }) {
-  const r = await forgetUser(guild.id, userId);
+  // The card message is found through the row forgetUser deletes, so it goes first. If it cannot be
+  // deleted, the row stays, so the card can still be removed later.
+  const card = await forgetIntroductionCard(guild, userId);
+  // Roles the shop gave them come off before the records that explain them are deleted.
+  const shopRoles = await endShopRolesForForget(guild, userId);
+  const apps = await forgetApplicationPosts(guild, userId);
+  const r = await forgetUser(guild.id, userId, {
+    keepIntroduction: !card.ok,
+    keepApplicationIds: apps.failedIds,
+    keepTempRoles: shopRoles.failed,
+  });
 
   const dm = new EmbedBuilder()
     .setColor(0x58d68d)
@@ -69,8 +82,26 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
       { name: 'Suggestion votes', value: String(r.suggestionVotes), inline: true },
       { name: 'Suggestions (made anonymous)', value: String(r.suggestions), inline: true },
       { name: 'Temporary role records', value: String(r.tempRoles), inline: true },
+      { name: 'Shop roles taken off', value: `${shopRoles.removed} of ${shopRoles.roles}`, inline: true },
       { name: 'Quotes of their messages', value: String(r.quotes), inline: true },
       { name: 'Saved-by name removed from quotes', value: String(r.quotesSaved), inline: true },
+      {
+        name: 'Economy',
+        value: `${r.economyAccounts} account, ${r.economyTransactions} transactions, ${r.economyInventory} shop items`,
+        inline: true,
+      },
+      {
+        name: 'Applications',
+        value: apps.ok
+          ? String(r.applications)
+          : `${r.applications} deleted, ${apps.failedIds.length} post(s) could not be deleted`,
+        inline: true,
+      },
+      {
+        name: 'Introduction',
+        value: card.ok ? String(r.introductions) : 'Not deleted: the card message could not be removed.',
+        inline: true,
+      },
       { name: 'Invite records', value: String(r.invites), inline: true },
       { name: 'Not affected', value: MEMBER_DATA_UNAFFECTED }
     )

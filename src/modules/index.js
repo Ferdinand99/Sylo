@@ -34,6 +34,9 @@ import './suggestions.js';
 import './tempRoles.js';
 import './autoThreads.js';
 import './quoteBoard.js';
+import './introductions.js';
+import './applications.js';
+import './economy.js';
 import './messageCreator.js'; // registers the role-button / role-select component handlers
 import './moderation.js'; // no gateway handlers, but runs the temporary-ban expiry loop
 import './birthdays.js'; // no gateway handlers, but runs the daily birthday sweep

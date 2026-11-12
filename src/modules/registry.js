@@ -372,6 +372,39 @@ export const MODULES = [
     beta: true,
   },
   {
+    id: 'introductions',
+    name: 'Introductions',
+    description:
+      'Members answer a few questions in DM and Sylo posts a server membership card for them in the introductions channel.',
+    icon: '🪪',
+    requiredIntents: ['GuildMembers'],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
+    id: 'applications',
+    name: 'Applications',
+    description:
+      'Forms members fill in, in DM or on the web, for staff to accept or deny: roles, requirements, a post for each submission and messages to the applicant.',
+    icon: '📋',
+    requiredIntents: ['GuildMembers'],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
+    id: 'economy',
+    name: 'Economy',
+    description:
+      'A currency members earn by chatting and in voice, keep in cash or a bank, send to each other and compete for on a leaderboard. Staff can add or remove money.',
+    icon: '🪙',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
     id: 'game-stats',
     name: 'Game stats',
     description:

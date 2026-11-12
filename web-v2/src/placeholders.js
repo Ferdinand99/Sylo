@@ -13,6 +13,7 @@ export const PLACEHOLDER_SETS = {
     t('{user.id}', "The member's ID"),
     t('{server}', 'The server name'),
     t('{memberCount}', 'How many members the server has'),
+    t('{intro}', 'Mentions the introductions channel (empty when Introductions is off)'),
   ],
   welcomeChannel: [
     t('{server}', 'The server name'),
@@ -30,6 +31,17 @@ export const PLACEHOLDER_SETS = {
   birthdays: [
     t('{user}', 'Mentions the member'),
     t('{age}', 'Their age (blank unless they gave a birth year)'),
+  ],
+  introductions: [
+    t('{user}', 'Mentions the member'),
+    t('{user.name}', "The member's display name"),
+    t('{server}', 'The server name'),
+  ],
+  applications: [
+    t('{user}', "The member's name"),
+    t('{server}', 'The server name'),
+    t('{form}', 'The name of the form'),
+    t('{reason}', 'The reason staff gave (a short note when there is none)'),
   ],
   tickets: [t('{server}', 'The server name')],
   autoresponder: [

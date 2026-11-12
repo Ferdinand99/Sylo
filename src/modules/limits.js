@@ -20,6 +20,7 @@ import { LIMITS as birthdays } from './birthdays.js';
 import { LIMITS as channelCleanup } from './channelCleanup.js';
 import { LIMITS as counting } from './counting.js';
 import { LIMITS as customCommands } from './customCommands.js';
+import { LIMITS as economy } from './economy.js';
 import { LIMITS as events } from './events.js';
 import { LIMITS as giveaways } from './giveaways.js';
 import { LIMITS as githubAlerts } from './githubAlerts.js';
@@ -37,6 +38,8 @@ import { LIMITS as starboard } from './starboard.js';
 import { LIMITS as sticky } from './sticky.js';
 import { LIMITS as suggestions } from './suggestions.js';
 import { LIMITS as quoteBoard } from './quoteBoard.js';
+import { LIMITS as introductions } from './introductions.js';
+import { LIMITS as applications } from './applications.js';
 import { LIMITS as tempRoles } from './tempRoles.js';
 import { LIMITS as tempVoice } from './tempVoice.js';
 import { LIMITS as tickets } from './tickets.js';
@@ -59,10 +62,13 @@ export const MODULE_LIMITS = Object.freeze({
   'channel-cleanup': channelCleanup,
   counting,
   'custom-commands': customCommands,
+  economy,
   events,
   giveaways,
   github: githubAlerts,
   honeypot,
+  introductions,
+  applications,
   'invite-tracker': inviteTracker,
   'kick-alerts': kickAlerts,
   leveling,

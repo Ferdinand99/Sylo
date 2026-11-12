@@ -13,6 +13,7 @@ export const LIMITS = Object.freeze({
   openSuggestionsPerMember: 10,
   tempRoles: 2000,
   quotes: 10000,
+  shopItems: 100,
 });
 
 export class LimitError extends Error {

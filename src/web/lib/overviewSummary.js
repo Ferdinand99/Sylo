@@ -20,11 +20,16 @@ import { upcomingEvents } from '../../db/events.js';
 import { openSuggestionCount, suggestionCount } from '../../db/suggestions.js';
 import { nextTempRoleExpiry, tempRoleCount } from '../../db/tempRoles.js';
 import { quoteCount } from '../../db/quotes.js';
+import { introductionCount } from '../../db/introductions.js';
+import { formCount, pendingCount } from '../../db/applications.js';
 import { recentLookups } from '../../db/cache.js';
 import { dailySeries } from '../../db/insights.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
+import { accountCount } from '../../db/economy.js';
+import { normaliseEconomyConfig } from '../../modules/lib/economyConfig.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
+import { normaliseSuggestionsConfig } from '../../modules/suggestions.js';
 import { moduleIcon } from './moduleIcons.js';
 
 // Permissions Sylo relies on for its core moderation / role / logging features.
@@ -51,8 +56,11 @@ const LAYOUT = [
       'temp-roles',
       'counting',
       'leveling',
+      'economy',
       'starboard',
       'quote-board',
+      'introductions',
+      'applications',
       'sticky',
       'birthdays',
     ],
@@ -288,6 +296,22 @@ async function moduleLines(id, guild, cfg) {
         cfg.publicPage === true ? on('Public page', 'on') : off('Public page', 'off'),
       ];
     }
+    case 'introductions': {
+      const ch = channelName(guild, cfg.channelId);
+      const cards = await introductionCount(guild.id);
+      return [
+        ch ? on('Channel', `#${ch}`) : off('Channel', 'not set'),
+        cards ? on('Introductions', String(cards)) : neutral('Introductions', '0'),
+      ];
+    }
+    case 'applications': {
+      const forms = await formCount(guild.id);
+      const pending = await pendingCount(guild.id);
+      return [
+        forms ? on('Forms', String(forms)) : off('Forms', 'none'),
+        pending ? on('Waiting for a decision', String(pending)) : neutral('Waiting for a decision', '0'),
+      ];
+    }
     case 'auto-threads': {
       const rules = Array.isArray(cfg.rules) ? cfg.rules.length : 0;
       return [
@@ -403,10 +427,12 @@ async function moduleLines(id, guild, cfg) {
     case 'suggestions': {
       const open = await openSuggestionCount(guild.id);
       const total = await suggestionCount(guild.id);
+      const { logChannel, logMode } = normaliseSuggestionsConfig(cfg);
       return [
         open ? on('Open suggestions', String(open)) : neutral('Open suggestions', '0'),
         neutral('Stored', String(total)),
         cfg.channel ? on('Channel', 'set') : off('Channel', 'not set'),
+        logChannel ? on('Log channel', logMode) : off('Log channel', 'not set'),
       ];
     }
     case 'polls': {
@@ -499,6 +525,14 @@ async function moduleLines(id, guild, cfg) {
         neutral('Announce', announce),
         rewards ? on('Reward roles', String(rewards)) : off('Reward roles', 'none'),
         neutral('Ranked members', String(await levelingMemberCount(guild.id))),
+      ];
+    }
+    case 'economy': {
+      const eco = normaliseEconomyConfig(cfg);
+      return [
+        neutral('Currency', `${eco.currencyEmoji} ${eco.currencyName}`),
+        neutral('Accounts', String(await accountCount(guild.id))),
+        eco.robEnabled ? on('Robbing', 'on') : off('Robbing', 'off'),
       ];
     }
     case 'automod': {

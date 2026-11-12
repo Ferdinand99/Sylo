@@ -383,6 +383,7 @@ const USER_ID_COLUMNS = {
   'polls.created_by': 'handled',
   'giveaways.host_id': 'handled',
   'giveaway_entries.user_id': 'handled',
+  'giveaway_prizes.user_id': 'handled',
   'verification_kicks.user_id': 'handled',
   'guild_event_participants.user_id': 'handled',
   'guild_events.host_id': 'handled',
@@ -391,6 +392,18 @@ const USER_ID_COLUMNS = {
   'guild_suggestion_votes.user_id': 'handled',
   'guild_temp_roles.user_id': 'handled',
   'guild_temp_roles.added_by': 'handled',
+  'introductions.user_id': 'handled',
+  'applications_submissions.user_id': 'handled',
+  'applications_submissions.decided_by': 'handled',
+  'applications_cooldowns.user_id':
+    'kept: cooldown after a denial, so /forget cannot skip it (listed by describeUserData)',
+  'economy_accounts.user_id': 'handled',
+  'economy_transactions.user_id': 'handled',
+  'economy_transactions.counterparty_id': 'handled',
+  'economy_transactions.actor_id': 'handled',
+  'economy_inventory.user_id': 'handled',
+  'economy_cooldowns.user_id':
+    'kept: 7-day cooldown record, so /forget cannot reset cooldowns (listed by describeUserData)',
   'guild_quotes.author_id': 'handled',
   'guild_quotes.saved_by': 'handled',
   // kept on purpose: safety records, and the staff side of them
@@ -417,7 +430,7 @@ test('every column that holds a user id is handled by forgetUser, kept on purpos
   for (const t of tables) {
     for (const c of db.prepare(`PRAGMA table_info(${t})`).all()) {
       if (
-        /(user|author|host|owner|saved|decided|closed|moderator|added|inviter)_(id|by)$|^created_by$|^actor$/.test(
+        /(user|author|host|owner|saved|decided|closed|moderator|added|inviter|counterparty|actor)_(id|by)$|^created_by$|^actor$/.test(
           c.name
         )
       ) {

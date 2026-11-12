@@ -1,7 +1,7 @@
 // Giveaways storage: a row per giveaway, a row per entrant. Ended giveaways are
 // kept (so /giveaway reroll and the dashboard history work) until the guild is
 // purged.
-import { prepare, registerPostgresBootstrap } from './driver.js';
+import { prepare, registerPostgresBootstrap, registerPostgresMigration } from './driver.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS giveaways (
@@ -16,22 +16,56 @@ registerPostgresBootstrap(`
     ends_at          BIGINT NOT NULL,
     ended            INTEGER NOT NULL DEFAULT 0,
     won_ids          TEXT NOT NULL DEFAULT '[]',
-    created_at       BIGINT NOT NULL
+    created_at       BIGINT NOT NULL,
+    entry_fee        BIGINT NOT NULL DEFAULT 0,
+    prize_amount     BIGINT NOT NULL DEFAULT 0,
+    cancelled        INTEGER NOT NULL DEFAULT 0
   );
+  -- A table made by an older version lacks these columns: add them BEFORE any index that uses them
+  -- (the bootstrap runs before the registered migrations, so migration 69 would be too late).
+  ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS entry_fee BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS prize_amount BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS cancelled INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS drawn_at BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS sweep_at BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS prizes_paid INTEGER NOT NULL DEFAULT 0;
   CREATE INDEX IF NOT EXISTS idx_giveaways_guild ON giveaways (guild_id, ended, ends_at);
+  CREATE INDEX IF NOT EXISTS idx_giveaways_refunds ON giveaways (id) WHERE cancelled = 1 AND entry_fee > 0;
+  CREATE INDEX IF NOT EXISTS idx_giveaways_prizes ON giveaways (id) WHERE ended = 1 AND cancelled = 0 AND prize_amount > 0 AND prizes_paid = 0;
   CREATE TABLE IF NOT EXISTS giveaway_entries (
     giveaway_id INTEGER NOT NULL,
     user_id     TEXT NOT NULL,
     entered_at  BIGINT NOT NULL,
     PRIMARY KEY (giveaway_id, user_id)
   );
+  ALTER TABLE giveaway_entries ADD COLUMN IF NOT EXISTS refunded INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE IF NOT EXISTS giveaway_prizes (
+    giveaway_id INTEGER NOT NULL,
+    user_id     TEXT NOT NULL,
+    amount      BIGINT NOT NULL,
+    paid_at     BIGINT NOT NULL,
+    PRIMARY KEY (giveaway_id, user_id)
+  );
 `);
+
+// Existing Postgres databases: the three Economy columns (SQLite migration 69, src/db/index.js).
+registerPostgresMigration(
+  69,
+  `ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS entry_fee BIGINT NOT NULL DEFAULT 0;
+   ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS prize_amount BIGINT NOT NULL DEFAULT 0;
+   ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS cancelled INTEGER NOT NULL DEFAULT 0;`
+);
+
+// Mirrors the data step of SQLite migration 70: giveaways drawn under the earlier code paid their
+// prizes without a giveaway_prizes row, so they count as paid. (The columns come from the bootstrap
+// above; this runs once, which is why it is a migration and not part of the bootstrap.)
+registerPostgresMigration(70, 'UPDATE giveaways SET prizes_paid = 1 WHERE ended = 1;');
 
 const s = {
   create: prepare(
     `
-    INSERT INTO giveaways (guild_id, channel_id, prize, winners, host_id, required_role_id, ends_at, created_at)
-    VALUES (@guildId, @channelId, @prize, @winners, @hostId, @requiredRoleId, @endsAt, @createdAt)
+    INSERT INTO giveaways (guild_id, channel_id, prize, winners, host_id, required_role_id, ends_at, created_at, entry_fee, prize_amount)
+    VALUES (@guildId, @channelId, @prize, @winners, @hostId, @requiredRoleId, @endsAt, @createdAt, @entryFee, @prizeAmount)
   `,
     { returningId: true }
   ),
@@ -44,9 +78,30 @@ const s = {
     'SELECT * FROM giveaways WHERE guild_id = ? AND ended = 1 ORDER BY ends_at DESC LIMIT ?'
   ),
   due: prepare('SELECT * FROM giveaways WHERE ended = 0 AND ends_at <= ?'),
-  markEnded: prepare('UPDATE giveaways SET ended = 1, won_ids = ? WHERE id = ?'),
+  // One statement: a giveaway is ended AND cancelled together, or neither. Also the row lock that
+  // serialises a cancel with the entry and leave transactions (see modules/giveaways.js).
+  claimCancel: prepare(
+    "UPDATE giveaways SET ended = 1, cancelled = 1, won_ids = '[]' WHERE id = ? AND ended = 0"
+  ),
+  markEnded: prepare('UPDATE giveaways SET ended = 1, won_ids = ?, drawn_at = ? WHERE id = ?'),
   claimEnd: prepare('UPDATE giveaways SET ended = 1 WHERE id = ? AND ended = 0'),
-  setWinners: prepare('UPDATE giveaways SET won_ids = ? WHERE id = ?'),
+  // A reroll has new winners to pay: the prizes are not all paid until the sweep or the draw says so.
+  setWinners: prepare('UPDATE giveaways SET won_ids = ?, prizes_paid = 0, drawn_at = ? WHERE id = ?'),
+  setPrizesPaid: prepare('UPDATE giveaways SET prizes_paid = 1 WHERE id = ?'),
+  setSweepAt: prepare('UPDATE giveaways SET sweep_at = ? WHERE id = ?'),
+  unpaidPrizes: prepare(
+    `SELECT * FROM giveaways
+     WHERE ended = 1 AND cancelled = 0 AND prize_amount > 0 AND prizes_paid = 0 AND drawn_at > ?
+       AND sweep_at < ?
+     ORDER BY sweep_at, id LIMIT ?`
+  ),
+  unrefundedCancelled: prepare(
+    `SELECT * FROM giveaways g
+     WHERE cancelled = 1 AND entry_fee > 0 AND sweep_at < ?
+       AND EXISTS (SELECT 1 FROM giveaway_entries e WHERE e.giveaway_id = g.id AND e.refunded = 0)
+     ORDER BY sweep_at, id LIMIT ?`
+  ),
+  unrefundedEntrants: prepare('SELECT user_id FROM giveaway_entries WHERE giveaway_id = ? AND refunded = 0'),
   delGuild: prepare('DELETE FROM giveaways WHERE guild_id = ?'),
 
   // `INSERT OR IGNORE` (SQLite-only) rewritten to the standard `ON CONFLICT
@@ -61,6 +116,9 @@ const s = {
   entryIds: prepare('SELECT user_id FROM giveaway_entries WHERE giveaway_id = ?'),
   delGuildEntries: prepare(
     'DELETE FROM giveaway_entries WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)'
+  ),
+  delGuildPrizes: prepare(
+    'DELETE FROM giveaway_prizes WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)'
   ),
 };
 
@@ -78,6 +136,10 @@ const hydrate = (row) => {
     ends_at: Number(row.ends_at),
     created_at: Number(row.created_at),
     ended: row.ended === 1,
+    entry_fee: Number(row.entry_fee) || 0,
+    prize_amount: Number(row.prize_amount) || 0,
+    cancelled: Number(row.cancelled) === 1,
+    prizesPaid: Number(row.prizes_paid) === 1,
     wonIds: Array.isArray(won) ? won : [],
   };
 };
@@ -93,6 +155,8 @@ export async function createGiveaway(g) {
     requiredRoleId: g.requiredRoleId || null,
     endsAt: g.endsAt,
     createdAt: g.createdAt ?? Date.now(),
+    entryFee: Math.max(0, Math.trunc(g.entryFee || 0)),
+    prizeAmount: Math.max(0, Math.trunc(g.prizeAmount || 0)),
   });
   return { id: Number(info.lastInsertRowid) };
 }
@@ -105,10 +169,24 @@ export const activeGiveaways = async (guildId) => (await s.active.all(guildId)).
 export const endedGiveaways = async (guildId, limit = 10) =>
   (await s.recentEnded.all(guildId, limit)).map(hydrate);
 export const dueGiveaways = async (now) => (await s.due.all(now)).map(hydrate);
-export const markGiveawayEnded = async (id, wonIds) => s.markEnded.run(JSON.stringify(wonIds ?? []), id);
+/** End and cancel a running giveaway in one statement: true only for the caller that did it. */
+export const claimGiveawayCancel = async (id) => (await s.claimCancel.run(id)).changes === 1;
+export const markGiveawayPrizesPaid = async (id) => s.setPrizesPaid.run(id);
+/** Ended giveaways with a currency prize that is not all paid yet (a crash after the draw), last drawn after `since`. */
+export const giveawaysWithUnpaidPrizes = async (since, limit = 20, now = Date.now()) =>
+  (await s.unpaidPrizes.all(since, now, limit)).map(hydrate);
+/** Cancelled giveaways with an entry fee that still hold an unrefunded entry. */
+export const cancelledWithUnrefunded = async (limit = 20, now = Date.now()) =>
+  (await s.unrefundedCancelled.all(now, limit)).map(hydrate);
+/** The sweep could not finish this giveaway's money: look at it again after `until`, others first. */
+export const deferGiveawaySweep = async (id, until) => s.setSweepAt.run(until, id);
+export const unrefundedEntrantIds = async (id) => (await s.unrefundedEntrants.all(id)).map((r) => r.user_id);
+export const markGiveawayEnded = async (id, wonIds) =>
+  s.markEnded.run(JSON.stringify(wonIds ?? []), Date.now(), id);
 /** Mark a giveaway ended unless it already is: true only for the one caller that may draw it. */
 export const claimGiveawayEnd = async (id) => (await s.claimEnd.run(id)).changes === 1;
-export const setGiveawayWinners = async (id, wonIds) => s.setWinners.run(JSON.stringify(wonIds ?? []), id);
+export const setGiveawayWinners = async (id, wonIds) =>
+  s.setWinners.run(JSON.stringify(wonIds ?? []), Date.now(), id);
 
 export const addGiveawayEntry = async (id, userId) => s.addEntry.run(id, userId, Date.now());
 export const removeGiveawayEntry = async (id, userId) => s.removeEntry.run(id, userId);
@@ -118,5 +196,6 @@ export const giveawayEntrantIds = async (id) => (await s.entryIds.all(id)).map((
 
 export async function clearGuildGiveaways(guildId) {
   await s.delGuildEntries.run(guildId);
+  await s.delGuildPrizes.run(guildId);
   await s.delGuild.run(guildId);
 }

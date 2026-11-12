@@ -86,6 +86,16 @@ export async function execute(interaction) {
     await routeComponent(interaction);
     return;
   }
+  // Suggestions while a member types an option that has autocomplete (/buy <item>).
+  if (interaction.isAutocomplete?.()) {
+    const command = interaction.client.commands.get(interaction.commandName);
+    if (typeof command?.autocomplete === 'function') {
+      await command
+        .autocomplete(interaction)
+        .catch((err) => log.warn('bot', `autocomplete failed: ${err.message}`));
+    }
+    return;
+  }
   if (interaction.isMessageContextMenuCommand?.()) {
     await runContextMenu(interaction);
     return;

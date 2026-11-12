@@ -34,6 +34,7 @@ test('the settings default to: DM the author on, anonymous off, message option o
   assert.deepEqual(normaliseSuggestionsConfig({}), {
     channel: '',
     logChannel: '',
+    logMode: 'copy',
     anonymous: false,
     dmAuthor: true,
     messagesToSuggestions: false,
@@ -41,6 +42,22 @@ test('the settings default to: DM the author on, anonymous off, message option o
     staffRoles: [],
   });
   assert.deepEqual(normaliseSuggestionsConfig(undefined), normaliseSuggestionsConfig({}));
+});
+
+test('log mode: a config with a log channel and no mode keeps moving, a new one copies', () => {
+  const LOG = '100000000000000002';
+  assert.equal(normaliseSuggestionsConfig({ logChannel: LOG }).logMode, 'move', 'saved before the setting');
+  assert.equal(normaliseSuggestionsConfig({}).logMode, 'copy', 'a new config');
+  assert.equal(normaliseSuggestionsConfig({ channel: CH }).logMode, 'copy', 'no log channel yet');
+  assert.equal(normaliseSuggestionsConfig({ logChannel: 'junk' }).logMode, 'copy', 'junk is no log channel');
+  assert.equal(normaliseSuggestionsConfig({ logChannel: LOG, logMode: 'copy' }).logMode, 'copy');
+  assert.equal(normaliseSuggestionsConfig({ logChannel: LOG, logMode: 'move' }).logMode, 'move');
+  assert.equal(normaliseSuggestionsConfig({ logMode: 'move' }).logMode, 'move', 'a stored choice wins');
+  assert.equal(normaliseSuggestionsConfig({ logChannel: LOG, logMode: 'nonsense' }).logMode, 'move');
+  assert.equal(normaliseSuggestionsConfig({ logMode: 'nonsense' }).logMode, 'copy');
+  // normalising twice changes nothing
+  const once = normaliseSuggestionsConfig({ logChannel: LOG });
+  assert.deepEqual(normaliseSuggestionsConfig(once), once);
 });
 
 test('the settings keep valid values and drop junk', () => {
@@ -56,6 +73,7 @@ test('the settings keep valid values and drop junk', () => {
   assert.deepEqual(cfg, {
     channel: CH,
     logChannel: '',
+    logMode: 'copy',
     anonymous: true,
     dmAuthor: false,
     messagesToSuggestions: true,

@@ -8,12 +8,17 @@ that only goes up, so deleting the newest suggestion does not hand its number to
 next one.
 
 **Dashboard:** `/v2/guilds/<id>/m/suggestions` - settings, a list you can filter by
-status and sort by newest or most votes, and the staff actions.
+status and sort by newest or most votes, and the staff actions (including
+[Move back](#move-back-to-the-suggestions-channel)).
 
 ## Needs
 
 - **View Channel**, **Send Messages**, **Embed Links** in the suggestions channel
   (and in the log channel, if you set one).
+- **Read Message History** in both channels. On Discord Sylo edits and deletes its own
+  posts by id, but on Fluxer it looks a message up before it deletes it. If a lookup or
+  an edit fails for any reason other than "the message no longer exists", Sylo keeps the
+  copy it has and does not post another one.
 - For threads on Discord: **Create Public Threads**. Without it the suggestion is
   posted without a thread.
 - For "turn messages into suggestions": **Manage Messages** (to delete the
@@ -24,9 +29,23 @@ status and sort by newest or most votes, and the staff actions.
 
 - **Suggestions channel** - where suggestions are posted. Empty means the channel
   `/suggest` was used in. Also the channel watched by the message option below.
-- **Log channel** - optional. When a suggestion is approved, denied or marked
-  implemented, Sylo reposts it here and deletes the original. The discussion thread
-  stays where it was.
+- **Log channel** - optional. Where a suggestion that is approved, denied or marked
+  implemented is also posted. What happens to the original depends on the next
+  setting.
+- **When a suggestion is decided** (only used with a log channel):
+  - **Copy to the log channel and keep the original** (the default for new setups) -
+    the suggestion stays in the suggestions channel and shows its status, reason and
+    final votes, as it does without a log channel. Sylo also posts a copy in the log
+    channel.
+  - **Move to the log channel (delete the original)** - Sylo reposts the suggestion in
+    the log channel and deletes the original. The discussion thread stays where it was.
+
+  A server that had a log channel before this setting existed keeps **Move**, so
+  nothing changes until you pick the other one. The dashboard always saves your choice.
+  An older client that does not know the setting (for example an older version of the
+  Sylo app) keeps the stored choice when it saves; if it adds a log channel to a server
+  that has no stored choice yet, the server gets **Move**, because that client cannot
+  show the choice. Open the dashboard to switch it to **Copy**.
 - **Anonymous suggestions** - new posts do not show who wrote them. The setting is
   fixed when a suggestion is posted, so changing it later does not change old posts.
   Staff still see the author on the dashboard page.
@@ -74,16 +93,52 @@ may decide again later (for example approved, then implemented); the latest
 decision and reason win. The author's DM says which suggestion it was, its new
 status and the reason.
 
-If a suggestion is posted in the log channel and the post cannot be created there
-(missing permissions), the suggestion stays where it was and the decision still
-counts.
+If the post or the copy cannot be created in the log channel (missing permissions),
+the suggestion stays where it was and the decision still counts.
+
+### The copy in the log channel
+
+In **Copy** mode Sylo remembers where the copy is:
+
+- Only a decided suggestion (approved, denied or implemented) has a copy.
+- When the status changes again (for example approved, then implemented), the copy is
+  edited in place. If someone deleted the copy, Sylo posts a new one.
+- If the suggestion goes back to open or considering, the copy is deleted.
+- Deleting the suggestion on the dashboard deletes its post and its copy.
+- Changing the log channel or switching to Move or to no log channel: the next decision
+  on a suggestion removes the old copy of that suggestion. Copies of suggestions nobody
+  decides on again stay as they are.
+
+### Move back to the suggestions channel
+
+Suggestions that Sylo moved to the log channel earlier (before the Copy mode, or in Move
+mode) stay there. On the dashboard, every suggestion whose post is not in the
+suggestions channel has a **Move back** button, and **Move all back** (with a
+confirmation) does it for all of them, oldest first. It needs a suggestions channel in
+the settings.
+
+- Sylo posts the suggestion again in the suggestions channel with its number, status,
+  reason and vote counts, and the suggestion points at the new post. Voting works there
+  again if the suggestion is still open. No new discussion thread is opened; the old
+  one stays where it was.
+- The old post in the log channel becomes the copy in **Copy** mode (for a decided
+  suggestion). In **Move** mode, or with no log channel, it is deleted.
+- Move all back works in batches of 10, oldest first. A suggestion whose old post Sylo
+  cannot reach is skipped and listed when the run ends; it stays where it is. On Discord, a
+  missing **Read Message History** permission in the old channel causes such a skip. A
+  temporary error, or a problem with the suggestions channel such as a missing permission,
+  stops the run and tells you which suggestion it stopped at. Run it again after you fixed
+  the problem; the ones already moved are not touched.
+- Anyone who may use the dashboard's staff actions (Manage Server) can do this. Sending
+  the posts counts against the same limit as other dashboard actions that send messages
+  (10 per minute per server).
 
 ## Limits
 
 - 1000 characters of text, 100 of title, 500 of reason.
 - At most **5000** stored suggestions per server. Past that, new suggestions are
   refused until staff delete old ones on the dashboard (Delete removes the
-  suggestion, its votes and its post).
+  suggestion, its votes, its post and its copy in the log channel).
 - At most **10** open suggestions (open or considering) per member at a time.
 - A per-member cooldown, 60 seconds by default.
 

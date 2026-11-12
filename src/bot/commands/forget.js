@@ -3,6 +3,9 @@
 // records, AFK status, giveaway entries).
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { forgetUser } from '../../db/purge.js';
+import { forgetIntroductionCard } from '../../modules/introductions.js';
+import { forgetApplicationPosts } from '../../modules/applications.js';
+import { endShopRolesForForget } from '../../modules/lib/shop.js';
 
 export const data = new SlashCommandBuilder()
   .setName('forget')
@@ -28,7 +31,10 @@ export async function execute(interaction) {
       flags: MessageFlags.Ephemeral,
       content:
         `This permanently deletes your **XP / level**, **ticket history**, **ban appeals**, ` +
-        `**invite records**, **AFK status**, **saved birthday** and **giveaway entries** in **${interaction.guild.name}**. ` +
+        `**invite records**, **AFK status**, **saved birthday**, **introduction** (answers and card), **applications** (answers and posts), **economy account, transactions and shop items** and **giveaway entries** in **${interaction.guild.name}**. ` +
+        `Roles you bought in the shop (temporary or permanent) are taken off you first, because the shop records that keep them are deleted. ` +
+        `The economy keeps a short record (7 days) of your daily, work and rob cooldowns and that you already got the starting balance, so /forget cannot be used to reset them. ` +
+        `A cooldown after a denied application stays until it has run out, for the same reason. The same goes for giveaway prizes: a record of which giveaway paid you (the giveaway and your id, no amount) stays so a prize cannot be paid twice. ` +
         `Messages already posted to channels, a completed giveaway's winner list, and the server's ` +
         `config-change log are not affected, and Sylo will still store new data going forward. ` +
         `Moderation cases (warnings, kicks, bans, notes) and other safety records are kept: they protect the server.` +
@@ -36,7 +42,17 @@ export async function execute(interaction) {
     });
   }
 
-  const r = await forgetUser(interaction.guildId, interaction.user.id);
+  // The card message first: it is found through the member's stored row, which forgetUser deletes.
+  const card = await forgetIntroductionCard(interaction.guild, interaction.user.id);
+  // Roles the shop gave them come off before the records that explain them are deleted.
+  const shopRoles = await endShopRolesForForget(interaction.guild, interaction.user.id);
+  // Their applications' posts too (the posts are found through the rows).
+  const apps = await forgetApplicationPosts(interaction.guild, interaction.user.id);
+  const r = await forgetUser(interaction.guildId, interaction.user.id, {
+    keepIntroduction: !card.ok,
+    keepApplicationIds: apps.failedIds,
+    keepTempRoles: shopRoles.failed,
+  });
   const embed = new EmbedBuilder()
     .setColor(0x58d68d)
     .setTitle('Your data was deleted')
@@ -60,7 +76,33 @@ export async function execute(interaction) {
       { name: 'Suggestions (made anonymous)', value: String(r.suggestions), inline: true },
       { name: 'Temporary role records', value: String(r.tempRoles), inline: true },
       { name: 'Quotes of their messages', value: String(r.quotes), inline: true },
-      { name: 'Saved-by name removed from quotes', value: String(r.quotesSaved), inline: true }
+      { name: 'Saved-by name removed from quotes', value: String(r.quotesSaved), inline: true },
+      {
+        name: 'Economy',
+        value: `${r.economyAccounts} account, ${r.economyTransactions} transactions, ${r.economyInventory} shop items`,
+        inline: true,
+      },
+      {
+        name: 'Shop roles taken off',
+        value: shopRoles.failed.length
+          ? `${shopRoles.removed} of ${shopRoles.roles}. Sylo could not take off ${shopRoles.failed.length}: ask staff to remove them.`
+          : `${shopRoles.removed} of ${shopRoles.roles}`,
+        inline: true,
+      },
+      {
+        name: 'Applications',
+        value: apps.ok
+          ? String(r.applications)
+          : `${r.applications} deleted. ${apps.failedIds.length} post${apps.failedIds.length === 1 ? '' : 's'} could not be deleted: the answers are erased and staff can remove the post.`,
+        inline: true,
+      },
+      {
+        name: 'Introduction',
+        value: card.ok
+          ? String(r.introductions)
+          : 'Not deleted: the card message could not be removed. Run /intro remove, or ask staff.',
+        inline: true,
+      }
     );
   if (r.keptCases > 0) {
     embed.addFields({

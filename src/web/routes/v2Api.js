@@ -46,6 +46,14 @@ import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
 import tempRolesRouter from './v2TempRoles.js';
 import quotesRouter from './v2Quotes.js';
+import introRouter from './v2Intro.js';
+import applicationsRouter from './v2Applications.js';
+import applyMemberRouter from './v2Apply.js';
+import economyRouter from './v2Economy.js';
+import shopRouter from './v2Shop.js';
+import shopMemberRouter from './v2ShopMember.js';
+import { cancelIntroductionSessions } from '../../modules/introductions.js';
+import { cancelApplicationSessions } from '../../modules/applications.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { buildReactionPairs } from '../lib/reactionPairs.js';
 import { guildCustomEmojis } from '../lib/guildEmojis.js';
@@ -185,7 +193,12 @@ import {
 } from '../../db/insights.js';
 import { flushGuild as flushGuildInsights } from '../../modules/insights.js';
 import { recentLookups } from '../../db/cache.js';
-import { normaliseGiveawaysConfig, endGiveaway, clampWinners } from '../../modules/giveaways.js';
+import {
+  normaliseGiveawaysConfig,
+  cancelGiveaway,
+  endGiveaway,
+  clampWinners,
+} from '../../modules/giveaways.js';
 import {
   listComposed,
   getComposed,
@@ -420,6 +433,11 @@ function loadGuildJson(req, res, next) {
 }
 // Tickets go before the admin guard: members with a configured staff role may use
 // them without being server admins (ticketsRouter does its own access check).
+// The web shop (/shop/<server>): for the signed-in members of a server, not only admins, so it
+// sits before the admin guard below and does its own access check (v2ShopMember.js).
+router.use('/shop/:guildId', shopMemberRouter);
+// The web form of an application (/apply/<server>/<form>): the same kind of page, the same access rule.
+router.use('/apply/:guildId', applyMemberRouter);
 router.use('/guilds/:guildId/tickets', ticketsRouter);
 router.use('/guilds/:guildId', requireGuildAdmin, loadGuildJson, guardRoleGrants);
 // Appeals review, command limits and the moderation hub (v2Staff.js).
@@ -434,6 +452,14 @@ router.use('/guilds/:guildId', suggestionsRouter);
 router.use('/guilds/:guildId', tempRolesRouter);
 // Quote board: settings, searchable list, remove (v2Quotes.js).
 router.use('/guilds/:guildId', quotesRouter);
+// Introductions: settings, publish the prompt message (v2Intro.js).
+router.use('/guilds/:guildId', introRouter);
+// Economy: settings, members and their ledger, staff changes, reset (v2Economy.js).
+router.use('/guilds/:guildId', economyRouter);
+// Economy shop: items, a member's inventory, the activity log (v2Shop.js).
+router.use('/guilds/:guildId', shopRouter);
+// Applications: settings, forms, the panel, submissions, export (v2Applications.js).
+router.use('/guilds/:guildId', applicationsRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
@@ -478,6 +504,8 @@ router.post(
     const enabled = Boolean(req.body.enabled);
     for (const id of ids) {
       await setGuildModule(req.guild.id, id, { enabled });
+      if (id === 'introductions' && !enabled) cancelIntroductionSessions(req.guild.id);
+      if (id === 'applications' && !enabled) cancelApplicationSessions(req.guild.id);
       if (id === 'events') {
         refreshPagePosts(req.guild.id).catch((err) =>
           log.warn('events', 'could not update the event posts after a bulk toggle:', err.message)
@@ -519,6 +547,9 @@ router.post(
     if (!mod) return res.status(404).json({ error: 'Unknown module' });
     const enabled = Boolean(req.body?.enabled);
     await setGuildModule(req.guild.id, mod.id, { enabled });
+    // Members in the middle of the questions are told it stopped.
+    if (mod.id === 'introductions' && !enabled) cancelIntroductionSessions(req.guild.id);
+    if (mod.id === 'applications' && !enabled) cancelApplicationSessions(req.guild.id);
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: `module:${mod.id}`,
@@ -1712,6 +1743,9 @@ async function giveawaysList(guild) {
       wonNames: (g.wonIds ?? []).map((id) => winnerTags.get(id) ?? id),
       channel: channels.find((c) => c.id === g.channel_id)?.name ?? g.channel_id,
       requiredRoleId: g.required_role_id,
+      entryFee: g.entry_fee,
+      prizeAmount: g.prize_amount,
+      cancelled: g.cancelled,
     }))
   );
 }
@@ -1754,6 +1788,25 @@ router.post(
       detail: `ended #${id}`,
     });
     res.json({ giveaways: await giveawaysList(req.guild) });
+  })
+);
+
+// Cancel a running giveaway: nobody wins and every entry fee is given back (modules/giveaways.js).
+router.post(
+  '/guilds/:guildId/modules/giveaways/:id/cancel',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const g = await getGiveawayInGuild(id, req.guild.id);
+    // A cancelled giveaway may be cancelled again: that finishes the refunds that are still open.
+    if (!g || (g.ended && !g.cancelled)) return res.status(400).json({ error: 'Not an active giveaway' });
+    const out = await cancelGiveaway(id);
+    if (!out.ok) return res.status(400).json({ error: 'Not an active giveaway' });
+    await recordAudit(req.guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'module:giveaways',
+      detail: `cancelled #${id}${out.refunded ? ` (${out.refunded} entry fee(s) given back)` : ''}`,
+    });
+    res.json({ giveaways: await giveawaysList(req.guild), refunded: out.refunded, failed: out.failed });
   })
 );
 
