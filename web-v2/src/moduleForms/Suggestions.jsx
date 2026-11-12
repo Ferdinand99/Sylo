@@ -254,7 +254,7 @@ export default function Suggestions() {
   async function onMoveAllBack() {
     const ok = await confirmDialog({
       title: `Move ${data.outside} ${data.outside === 1 ? 'suggestion' : 'suggestions'} back?`,
-      body: 'Sylo posts each one again in the suggestions channel, oldest first, and removes the old post (with a log channel in "copy" mode, a decided suggestion keeps the old post as its log copy). It stops at the first problem, for example a missing permission. This can take a while.',
+      body: 'Sylo posts each one again in the suggestions channel, oldest first, and removes the old post (with a log channel in "copy" mode, a decided suggestion keeps the old post as its log copy). A suggestion whose old post Sylo cannot reach is skipped and listed afterwards (on Discord, a missing Read Message History permission in the old channel causes this). A temporary error stops the run. This can take a while.',
       confirmLabel: 'Move all back',
     });
     if (!ok) return;
