@@ -15,8 +15,13 @@
 //   });
 //   // started = { ok: true } | { ok: false, reason: 'busy' | 'dm_closed' | 'no_questions' }
 //
-// A question is { id, label, prompt?, required?, maxLength?, validate? }. `validate(answer)` may
-// return a text (the answer is refused, the text is shown and the question asked again) or null.
+// A question is { id, label, prompt?, required?, maxLength?, validate?, normalise?, show?, hint?, exact? }.
+// `validate(answer)` may return a text (the answer is refused, the text is shown and the question
+// asked again) or null. `normalise(text)` turns what the member typed into the stored answer (option
+// numbers into option ids, "y" into "yes") and may return { error } to refuse it; it does not run on a
+// kept answer, which is stored already. `show(answer)` writes a stored answer as "Current:" in words.
+// `hint` replaces the line "Up to N characters."; `exact` turns the length check off (the answer is a
+// stored form, not typed text).
 //
 // The DM handler (bot/events/dmTickets.js) offers every direct message to
 // handleQuestionnaireMessage() first: while a member has a session, what they write is an answer
@@ -56,6 +61,8 @@ const sessions = new Map();
 
 /**
  * @typedef {{ id: string, label: string, prompt?: string, required?: boolean, maxLength?: number,
+ *   hint?: string, exact?: boolean, show?: (answer: string) => string,
+ *   normalise?: (text: string) => string | { error: string },
  *   validate?: (answer: string) => Promise<string | null | undefined> | string | null | undefined }} Question
  * @typedef {Object} Session
  * @property {string} key
@@ -129,12 +136,13 @@ function promptFor(session) {
   ];
   if (q.prompt) lines.push(q.prompt);
   const limit = cap(q.maxLength, 1024);
-  const rules = [`Up to ${limit} characters.`];
+  const rules = [q.hint ?? `Up to ${limit} characters.`];
   if (!q.required) rules.push('Type `skip` to leave it empty.');
   rules.push('Type `cancel` to stop.');
   lines.push(rules.join(' '));
   const current = prefill[q.id];
-  if (current) lines.push(`Current:\n${quoted(current)}\nType \`keep\` to keep it.`);
+  if (current)
+    lines.push(`Current:\n${quoted(q.show ? q.show(current) : current)}\nType \`keep\` to keep it.`);
   return lines.join('\n');
 }
 
@@ -374,7 +382,7 @@ async function handleAnswer(session, message) {
       );
       return;
     }
-    value = cutAtGrapheme(value, limit);
+    if (!q.exact) value = cutAtGrapheme(value, limit);
   } else {
     if (!text) {
       await reply(session, 'Please answer with text.');
@@ -388,7 +396,21 @@ async function handleAnswer(session, message) {
       );
       return;
     }
-    if (value.length > limit) {
+    if (q.normalise) {
+      let parsed;
+      try {
+        parsed = q.normalise(value);
+      } catch (err) {
+        log.error('questionnaire', `normalise failed for question ${q.id}: ${err.message}`);
+        parsed = { error: 'Could not read that answer, please try again.' };
+      }
+      if (parsed && typeof parsed === 'object') {
+        await reply(session, parsed.error || 'That answer is not valid. Please try again.');
+        return;
+      }
+      value = String(parsed ?? '');
+    }
+    if (!q.exact && value.length > limit) {
       await reply(
         session,
         `That is ${value.length} characters, and the limit is ${limit}. Shorten it and send it again.`

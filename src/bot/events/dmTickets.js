@@ -50,11 +50,10 @@ async function lateQuestionnaireAnswer(message) {
     return false;
   }
   // The command is named for the platform the DM arrived on (Fluxer has no slash commands).
-  const again =
-    platformOfClient(message.client) === 'fluxer' ? `${config.commandPrefix}intro create` : '/intro create';
+  const prefix = platformOfClient(message.client) === 'fluxer' ? config.commandPrefix : '/';
   await message
     .reply(
-      `That looks like an answer to a questionnaire that has ended (it timed out, or Sylo restarted), so I did not send it to staff. Start it again from the server, for example with ${again}.`
+      `That looks like an answer to a questionnaire that has ended (it timed out, or Sylo restarted), so I did not send it to staff. Start it again from the server, for example with ${prefix}intro create. For an application, use ${prefix}apply start.`
     )
     .catch(() => {});
   return true;
