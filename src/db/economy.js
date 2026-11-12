@@ -14,7 +14,11 @@
 // `guild_id` is the server key (a Discord id, or "fluxer:<id>"), like every other table, so the
 // guild-leave purge and /forget find the rows. All amounts are whole numbers; BIGINT on Postgres
 // (the driver reads it back as a Number: every value stays below the 1,000,000,000 cap).
+import { config } from '../config.js';
 import { prepare, registerPostgresBootstrap, transaction } from './driver.js';
+
+// Postgres only: SQLite runs a transaction start to end without interleaving, so it needs no row locks.
+const postgres = Boolean(config.databaseUrl);
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS economy_accounts (
@@ -101,7 +105,14 @@ const ledgerStmt = prepare(
 const ledgerCountStmt = prepare(
   'SELECT COUNT(*) AS n FROM economy_transactions WHERE guild_id = ? AND user_id = ?'
 );
-const pruneStmt = prepare('DELETE FROM economy_transactions WHERE created_at < ?');
+// SKIP LOCKED: a row an erasure (or anything else) holds is left for the next prune instead of waited for,
+// so the prune never waits on a row while it holds others (a /forget locks the rows it needs in id order).
+const pruneStmt = prepare(
+  postgres
+    ? `DELETE FROM economy_transactions WHERE id IN
+         (SELECT id FROM economy_transactions WHERE created_at < ? ORDER BY id FOR UPDATE SKIP LOCKED)`
+    : 'DELETE FROM economy_transactions WHERE created_at < ?'
+);
 const pruneCooldownsStmt = prepare('DELETE FROM economy_cooldowns WHERE expires_at < ?');
 
 // COUNT(*) comes back as a string from postgres.js: coerce so both drivers agree.
@@ -169,6 +180,12 @@ export async function pruneCooldowns(now = Date.now()) {
  *
  * Everything happens in one transaction, with the account row locked first (like every money call),
  * so a payout that commits meanwhile cannot slip between the read and the delete.
+ *
+ * Lock order (see modules/lib/economy.js): the account, then EVERY ledger row that names the member
+ * (their own, and the ones where they are the counterparty or the actor) locked together in id order,
+ * and only then the changes. Two members erased at the same moment, who paid each other, would otherwise
+ * each delete their own rows and then wait for rows the other one holds ("deadlock detected" in the
+ * stress test); locking in id order makes one of them wait for the other instead.
  * @param {number} [now] epoch ms, overridable for tests
  */
 export async function eraseMember(guildId, userId, now = Date.now()) {
@@ -178,6 +195,17 @@ export async function eraseMember(guildId, userId, now = Date.now()) {
       guildId,
       userId
     );
+    if (postgres) {
+      yield tx.run(
+        `SELECT id FROM economy_transactions
+         WHERE guild_id = ? AND (user_id = ? OR counterparty_id = ? OR actor_id = ?)
+         ORDER BY id FOR UPDATE`,
+        guildId,
+        userId,
+        userId,
+        userId
+      );
+    }
     const existing = yield tx.get(
       'SELECT * FROM economy_accounts WHERE guild_id = ? AND user_id = ?',
       guildId,

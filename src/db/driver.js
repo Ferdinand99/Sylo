@@ -16,6 +16,7 @@
 // incremental-migration mechanism this enables.
 import { config } from '../config.js';
 import { db, SCHEMA_VERSION } from './index.js';
+import { splitStatements } from './splitSql.js';
 
 const bootstrapStatements = [];
 const postgresMigrations = [];
@@ -103,8 +104,11 @@ async function getSql() {
       });
       await client`SELECT pg_advisory_lock(${BOOTSTRAP_LOCK_KEY})`;
       try {
+        // One statement per query: a text with several statements is one implicit transaction that
+        // keeps every lock until its last statement, which deadlocked against other processes that
+        // were already writing to the same tables (see splitSql.js).
         for (const ddl of bootstrapStatements) {
-          await client.unsafe(ddl);
+          for (const statement of splitStatements(ddl)) await client.unsafe(statement);
         }
         await runPostgresMigrations(client);
       } finally {

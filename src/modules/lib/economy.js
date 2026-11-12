@@ -21,6 +21,20 @@
 //     end without returning to the event loop, so nothing interleaves; Postgres: the row lock; see
 //     db/driver.js `transaction`, whose body is a generator for that reason)
 //
+// LOCK ORDER (every transaction that touches a member's economy rows takes its locks in this order, so
+// two of them can never wait for each other in a circle; test/economy.forgetStress.postgres.test.js
+// runs them against each other many times over):
+//   1. the member accounts (economy_accounts), in user id order        (openAccounts, eraseMember)
+//   2. the member's ledger rows (economy_transactions)                  (appended / deleted after the accounts)
+//   3. inside an `after` hook, in this order: the giveaway row, the item row (economy_items), the
+//      member's inventory rows, giveaway entries and prizes, temporary-role records
+//   4. the cooldown record (economy_cooldowns): written by /forget after the account, read (not locked) when
+//      an account is opened, deleted by the prune on its own
+// Statements that run outside a transaction (the sweeps, claims, the rest of /forget) hold one lock at a
+// time and never wait while holding another. The Postgres bootstrap (db/driver.js) is the same: one
+// statement per query, because a multi-statement text is ONE transaction that keeps every lock until its
+// last statement, and that once deadlocked against /forget in another process.
+//
 // Ledger rows: `amount` is the change of cash + bank, signed. The exceptions are `deposit` and
 // `withdraw`, where cash + bank does not change: their amount is the size of the move (positive).
 // `cash_after` and `bank_after` are the balances right after that change.
