@@ -24,7 +24,8 @@
 // LOCK ORDER (every transaction that touches a member's economy rows takes its locks in this order, so
 // two of them can never wait for each other in a circle; test/economy.forgetStress.postgres.test.js
 // runs them against each other many times over):
-//   1. the member accounts (economy_accounts), in user id order        (openAccounts, eraseMember)
+//   1. the member accounts (economy_accounts): ALL of them up front, one at a time in user id order, each
+//      made if missing, locked and read before the next (openAccounts, eraseMember); nothing else before
 //   2. the member's ledger rows (economy_transactions)                  (appended / deleted after the accounts)
 //   3. inside an `after` hook, in this order: the giveaway row, the item row (economy_items), the
 //      member's inventory rows, giveaway entries and prizes, temporary-role records
@@ -122,15 +123,28 @@ const LEDGER_INSERT = `
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
+/** An account that was there a moment ago is gone (a /forget committed); the transaction starts again. */
+class AccountVanished extends Error {
+  name = 'AccountVanished';
+}
+
 /**
- * Create the missing accounts (with the starting balance, written to the ledger as `start`),
- * then take every row lock in user id order. Returns the accounts as the plan sees them.
+ * Open every account of a call, ONE AT A TIME IN USER ID ORDER, and for each one in this order: create
+ * it if it is missing (with the starting balance, written to the ledger as `start`), take its row lock,
+ * read it. Creating and locking an account in the same step, in the same sorted order everywhere, is the
+ * whole point: a transaction that first inserted the accounts it was missing and only then locked the
+ * ones that existed (or that made an account again after a /forget while it held a later one) could hold
+ * a high id and wait for a low one, while another transaction did the opposite: "deadlock detected" on
+ * `UPDATE economy_accounts SET updated_at = updated_at`. Returns the accounts as the plan sees them.
+ *
+ * `economy_accounts` is the FIRST table every economy transaction touches (see LOCK ORDER above).
+ * @throws {AccountVanished} when a row that was just created is gone again (the caller restarts)
  */
-function* openAccounts(tx, guildId, userIds, config, now, create) {
+export function* openAccounts(tx, guildId, userIds, config, now, create) {
   const given = [];
-  // Insert the accounts that do not exist yet; the ones that got a starting balance are noted.
-  const insertMissing = function* (ids) {
-    for (const userId of ids) {
+  const accounts = new Map();
+  for (const userId of userIds) {
+    if (create) {
       // A member who ran /forget a short while ago has a cooldown tombstone: the new account keeps
       // their cooldowns and gets no starting balance again (see eraseMember in db/economy.js).
       const tomb = yield tx.get(
@@ -156,42 +170,24 @@ function* openAccounts(tx, guildId, userIds, config, now, create) {
       );
       if (changes === 1 && start > 0) given.push(userId);
     }
-  };
-  const accounts = new Map();
-  // Lock the rows, then read them. A plain UPDATE takes the row lock on Postgres; on SQLite
-  // BEGIN IMMEDIATE already holds the database. Done for every account before any is read, in
-  // the same order everywhere.
-  const lockAndRead = function* (ids) {
-    for (const userId of ids) {
-      yield tx.run(
-        'UPDATE economy_accounts SET updated_at = updated_at WHERE guild_id = ? AND user_id = ?',
-        guildId,
-        userId
-      );
-    }
-    for (const userId of ids) {
-      const row = yield tx.get(
-        'SELECT * FROM economy_accounts WHERE guild_id = ? AND user_id = ?',
-        guildId,
-        userId
-      );
-      // Without `create`, an account that does not exist (erased by /forget a moment ago) is simply
-      // not part of the call.
-      if (row) accounts.set(userId, row);
-    }
-  };
-  if (create) yield* insertMissing(userIds);
-  yield* lockAndRead(userIds);
-  // On Postgres a /forget can commit between the insert (which found the row and did nothing) and
-  // the lock. The account is then gone: make it again (the tombstone is in place, so no second
-  // starting balance) and lock it. A few rounds are plenty; every round needs a new /forget.
-  for (let round = 0; create && round < 3; round++) {
-    const missing = userIds.filter((id) => !accounts.has(id));
-    if (missing.length === 0) break;
-    yield* insertMissing(missing);
-    yield* lockAndRead(missing);
+    // A plain UPDATE takes the row lock on Postgres; on SQLite BEGIN IMMEDIATE already holds the database.
+    yield tx.run(
+      'UPDATE economy_accounts SET updated_at = updated_at WHERE guild_id = ? AND user_id = ?',
+      guildId,
+      userId
+    );
+    const row = yield tx.get(
+      'SELECT * FROM economy_accounts WHERE guild_id = ? AND user_id = ?',
+      guildId,
+      userId
+    );
+    if (row) accounts.set(userId, row);
+    // On Postgres a /forget can commit between the insert (which found the row and did nothing) and the
+    // lock. The transaction starts again from the top (its locks are released with the rollback): making
+    // the account here, while holding a later one, would break the order. Without `create`, an account
+    // that does not exist is simply not part of the call.
+    else if (create) throw new AccountVanished(userId);
   }
-  if (create && userIds.some((id) => !accounts.has(id))) throw new Error('an economy account kept vanishing');
   for (const userId of given) {
     yield tx.insertId(
       LEDGER_INSERT,
@@ -338,6 +334,22 @@ export async function transact(guildId, userIds, plan, opts = {}) {
   const now = opts.now ?? Date.now();
   const config = await settingsFor(guildId, opts.config);
   const ids = [...new Set(userIds)].sort();
+  // A /forget that commits while this call is opening its accounts makes one vanish: start again (the
+  // transaction was rolled back, so nothing is left half done). Every attempt needs a new /forget.
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await runTransact(guildId, ids, plan, opts, now, config);
+    } catch (err) {
+      if (err instanceof AccountVanished && attempt < 4) continue;
+      if (err instanceof AccountVanished)
+        throw new Error('an economy account kept vanishing', { cause: err });
+      throw err;
+    }
+  }
+}
+
+/** One attempt of {@link transact}: the transaction itself. */
+async function runTransact(guildId, ids, plan, opts, now, config) {
   try {
     return await transaction(function* (tx) {
       const rows = yield* openAccounts(tx, guildId, ids, config, now, opts.createMissing !== false);

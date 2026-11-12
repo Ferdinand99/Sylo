@@ -70,14 +70,18 @@ test(
       })
     ).id;
 
+    // D and E have no account at the start of a round: they are made by the first call that names them,
+    // which is what races with /forget (an account that vanishes while a call is opening it).
     const ids = ['8310000000000001', '8310000000000002', '8310000000000003'];
+    const fresh = ['8310000000000004', '8310000000000005'];
     const members = new Map();
-    for (const id of ids) {
+    for (const id of [...ids, ...fresh]) {
       const m = fakeMember(id);
       guild.members.cache.set(id, m);
       members.set(id, m);
     }
     const [A, B, C] = ids;
+    const [D, E] = fresh;
 
     const failures = [];
     for (let round = 0; round < ROUNDS; round++) {
@@ -102,6 +106,15 @@ test(
         tempRoles.sweep(Date.now() + 3 * 86_400_000),
         store.pruneCooldowns(Date.now() + 8 * 86_400_000),
         purge.forgetUser(G, B),
+        eco.transfer(G, A, D, 1, { config }),
+        eco.transfer(G, D, B, 1, { config }),
+        eco.transfer(G, B, E, 1, { config }),
+        eco.transfer(G, E, A, 1, { config }),
+        eco.credit(G, D, 3, { kind: 'daily', config }),
+        eco.credit(G, E, 3, { kind: 'work', config }),
+        eco.transfer(G, C, D, 1, { config }),
+        purge.forgetUser(G, D),
+        purge.forgetUser(G, C),
       ];
       for (const r of await Promise.allSettled(jobs)) {
         if (r.status === 'rejected') {
@@ -118,6 +131,8 @@ test(
       await purge.forgetUser(G, A);
       await purge.forgetUser(G, B);
       await purge.forgetUser(G, C);
+      await purge.forgetUser(G, D);
+      await purge.forgetUser(G, E);
       for (const m of members.values()) m.roles.cache.clear();
     }
     assert.deepEqual(failures, [], 'no job failed, and none was a deadlock (40P01)');
