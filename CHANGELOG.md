@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.1.0](https://github.com/Ferdinand99/Sylo/compare/v5.0.0...v5.1.0) (2026-11-12)
+
+
+### Features
+
+* Sylo 5.1 – introductions, economy and applications ([#311](https://github.com/Ferdinand99/Sylo/issues/311)) ([36be91b](https://github.com/Ferdinand99/Sylo/commit/36be91b3763978ca019b6751108f3f428445cf76))
+
 ## [5.0.0](https://github.com/Ferdinand99/Sylo/compare/v4.10.0...v5.0.0) (2026-11-07)
 
 
