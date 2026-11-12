@@ -1,11 +1,11 @@
 // /balance [user] — cash, bank, total and leaderboard rank.
-import { EmbedBuilder, InteractionContextType, SlashCommandBuilder } from 'discord.js';
+import { EmbedBuilder, InteractionContextType, MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { balanceOf, formatMoney } from '../../modules/economy.js';
 import { economyGate, reply } from '../lib/economyCmd.js';
 
 export const data = new SlashCommandBuilder()
   .setName('balance')
-  .setDescription("Show your cash and bank balance (or another member's).")
+  .setDescription("Show your balance (or another member's total and rank).")
   .setContexts(InteractionContextType.Guild)
   .addUserOption((o) => o.setName('user').setDescription('Whose balance to show'));
 
@@ -20,14 +20,27 @@ export async function execute(interaction) {
   const member = asked ? interaction.options.getMember?.('user') : interaction.member;
   const name = member?.displayName ?? user.globalName ?? user.username;
   const b = await balanceOf(interaction.guildId, user.id);
+  const own = user.id === interaction.user.id;
+  // Your own balance shows everything, and only you see it (on Discord). Someone else's shows the
+  // total and the rank, like the public leaderboard: the cash is what /rob can take.
   const embed = new EmbedBuilder()
     .setColor(0xf1c40f)
     .setTitle(`Balance of ${name}`)
     .addFields(
-      { name: 'Cash', value: formatMoney(b.cash, config), inline: true },
-      ...(config.bankEnabled ? [{ name: 'Bank', value: formatMoney(b.bank, config), inline: true }] : []),
+      ...(own
+        ? [
+            { name: 'Cash', value: formatMoney(b.cash, config), inline: true },
+            ...(config.bankEnabled
+              ? [{ name: 'Bank', value: formatMoney(b.bank, config), inline: true }]
+              : []),
+          ]
+        : []),
       { name: 'Total', value: formatMoney(b.total, config), inline: true },
       { name: 'Rank', value: b.rank ? `#${b.rank}` : 'Not ranked yet', inline: true }
     );
-  return interaction.reply({ embeds: [embed], allowedMentions: { parse: [] } });
+  return interaction.reply({
+    embeds: [embed],
+    allowedMentions: { parse: [] },
+    ...(own && { flags: MessageFlags.Ephemeral }),
+  });
 }

@@ -41,8 +41,10 @@ const seq = (...values) => {
 
 test('the tax is the configured percentage of the amount, rounded down', () => {
   assert.equal(taxOn(100, 5), 5);
-  assert.equal(taxOn(99, 5), 4);
-  assert.equal(taxOn(10, 5), 0);
+  assert.equal(taxOn(99, 5), 5, 'rounded up');
+  assert.equal(taxOn(10, 5), 1, 'a taxed payment always pays at least 1');
+  assert.equal(taxOn(1, 1), 1);
+  assert.equal(taxOn(9, 10), 1);
   assert.equal(taxOn(1000, 0), 0);
   assert.equal(taxOn(1000, 50), 500);
 });
@@ -84,9 +86,9 @@ test('/pay refuses yourself, bots, a switched-off command, bad amounts and too l
   assert.equal((await pay({ amount: 0 })).reason, 'invalid_amount');
   assert.equal((await pay({ amount: -3 })).reason, 'invalid_amount');
   assert.equal((await pay({ amount: 1.5 })).reason, 'invalid_amount');
-  const short = await pay({ amount: 95 }); // 95 + 9 tax = 104 > 100
+  const short = await pay({ amount: 95 }); // 95 + 10 tax (9.5 rounded up) = 105 > 100
   assert.equal(short.reason, 'insufficient');
-  assert.equal(short.needed, 104);
+  assert.equal(short.needed, 105);
   assert.deepEqual(await bal(ROBBER), { cash: 100, bank: 0 });
   assert.equal(await bal(VICTIM), null, 'a refused payment does not even open the recipient account');
 });
@@ -120,6 +122,12 @@ const rob = (over = {}) =>
     random: seq(0, 0),
     ...over,
   });
+/** A robber who can pay the smallest fine, and a victim worth robbing, in server `g`. */
+const funded = async (g, robber = ROBBER, victim = VICTIM, victimCash = 100_000, robberCash = 100) => {
+  await credit(g, victim, victimCash, { kind: 'staff_add', config: cfg() });
+  await credit(g, robber, robberCash, { kind: 'staff_add', config: cfg() });
+};
+const robIn = (g, over = {}) => rob({ guildId: g, ...over });
 
 test('robbing is off by default', async () => {
   assert.equal(normaliseEconomyConfig({}).robEnabled, false);
@@ -136,13 +144,51 @@ test('you cannot rob yourself or a bot', async () => {
 });
 
 test('a victim who joined less than 24 hours ago is safe', async () => {
-  await fund(VICTIM, 1000);
+  await funded(G, ROBBER, VICTIM, 1000, 1000);
   const fresh = await rob({ victimJoinedAt: T0 - 23 * HOUR });
   assert.deepEqual([fresh.ok, fresh.reason, fresh.retryAt], [false, 'new_member', T0 + HOUR]);
   assert.equal((await rob({ victimJoinedAt: T0 - 24 * HOUR })).ok, true, 'exactly 24 hours is enough');
 });
 
+test('when the join time cannot be read the rob is refused, not let through', async () => {
+  await funded(G, ROBBER, VICTIM, 1000, 1000);
+  for (const unknown of [null, undefined, 0, NaN, 'yesterday']) {
+    const out = await rob({ victimJoinedAt: unknown });
+    assert.deepEqual([out.ok, out.reason], [false, 'join_unknown'], String(unknown));
+  }
+  assert.deepEqual(await bal(VICTIM), { cash: 1000, bank: 0 });
+  // with the protection switched off the join time does not matter
+  const open = await rob({ victimJoinedAt: null, config: cfg({ robEnabled: true, robNewMemberHours: 0 }) });
+  assert.equal(open.ok, true);
+});
+
+test('the robber must hold at least the smallest fine in cash to attempt a rob', async () => {
+  await fund(VICTIM, 1000);
+  const none = await rob();
+  assert.deepEqual([none.ok, none.reason], [false, 'robber_poor']);
+  await fund(ROBBER, 24);
+  assert.equal((await rob()).reason, 'robber_poor', '24 is below the smallest fine of 25');
+  // money in the bank does not count: it could not be taken for the fine
+  await doDeposit({ guildId: G, userId: ROBBER, amount: 'all', config: cfg() });
+  assert.equal((await rob()).reason, 'robber_poor');
+  assert.deepEqual(await bal(ROBBER), { cash: 0, bank: 24 });
+  await fund(ROBBER, 25);
+  assert.equal((await rob()).ok, true, 'exactly the smallest fine is enough');
+  assert.match(
+    refusalText({ reason: 'robber_poor', needed: 25 }, cfg()),
+    /You need at least .*25.* cash to attempt a rob/
+  );
+});
+
+test('a robber with no cash cannot count on a free failure: the attempt is refused and nothing is written', async () => {
+  await fund(VICTIM, 1000);
+  assert.equal((await rob({ random: seq(0.99) })).reason, 'robber_poor');
+  assert.equal(await bal(ROBBER), null, 'no account was opened either');
+  assert.equal(rows(VICTIM).length, 1);
+});
+
 test('the victim must hold the minimum cash (bank money does not count)', async () => {
+  await fund(ROBBER, 100);
   await fund(VICTIM, 99);
   assert.equal((await rob()).reason, 'victim_poor');
   await fund(VICTIM, 1);
@@ -152,7 +198,7 @@ test('the victim must hold the minimum cash (bank money does not count)', async 
 });
 
 test('the robber has a 4 hour cooldown, started by a success and by a failure', async () => {
-  await fund(VICTIM, 100_000);
+  await funded(G);
   const first = await rob({ random: seq(0, 0) }); // success
   assert.equal(first.success, true);
   const early = await rob({ now: T0 + 4 * HOUR - 1, random: seq(0, 0) });
@@ -160,22 +206,16 @@ test('the robber has a 4 hour cooldown, started by a success and by a failure', 
 
   // a failure starts it too
   const G2 = `${G}9`;
-  await credit(G2, VICTIM, 100_000, { kind: 'staff_add', config: cfg() });
-  const args = {
-    guildId: G2,
-    robberId: ROBBER,
-    victimId: VICTIM,
-    victimJoinedAt: 0,
-    config: cfg({ robEnabled: true }),
-  };
-  assert.equal((await doRob({ ...args, now: T0, random: seq(0.99) })).success, false);
-  assert.equal((await doRob({ ...args, now: T0 + HOUR, random: seq(0) })).reason, 'cooldown');
-  assert.equal((await doRob({ ...args, now: T0 + 4 * HOUR, random: seq(0, 0) })).ok, true);
+  await funded(G2);
+  assert.equal((await robIn(G2, { now: T0, random: seq(0.99) })).success, false);
+  assert.equal((await robIn(G2, { now: T0 + HOUR, random: seq(0) })).reason, 'cooldown');
+  assert.equal((await robIn(G2, { now: T0 + 4 * HOUR, random: seq(0, 0) })).ok, true);
 });
 
 test('after a successful robbery the victim is protected for an hour; a failed one does not protect', async () => {
   const other = '800000000000000003';
-  await fund(VICTIM, 100_000);
+  await funded(G);
+  await fund(other, 100);
   assert.equal((await rob({ random: seq(0, 0) })).success, true);
   const again = await rob({ robberId: other, now: T0 + 59 * 60_000, random: seq(0, 0) });
   assert.deepEqual([again.ok, again.reason, again.retryAt], [false, 'victim_protected', T0 + HOUR]);
@@ -183,16 +223,10 @@ test('after a successful robbery the victim is protected for an hour; a failed o
 
   // a failed attempt leaves no protection behind
   const G2 = `${G}8`;
-  await credit(G2, VICTIM, 100_000, { kind: 'staff_add', config: cfg() });
-  const args = {
-    guildId: G2,
-    victimId: VICTIM,
-    victimJoinedAt: 0,
-    config: cfg({ robEnabled: true }),
-    now: T0,
-  };
-  assert.equal((await doRob({ ...args, robberId: ROBBER, random: seq(0.99) })).success, false);
-  assert.equal((await doRob({ ...args, robberId: other, random: seq(0, 0) })).success, true);
+  await funded(G2);
+  await credit(G2, other, 100, { kind: 'staff_add', config: cfg() });
+  assert.equal((await robIn(G2, { random: seq(0.99) })).success, false);
+  assert.equal((await robIn(G2, { robberId: other, random: seq(0, 0) })).success, true);
 });
 
 // --- rob: the maths ----------------------------------------------------------------------------------------
@@ -223,6 +257,7 @@ test('a success steals a share of the victim cash between min and max percent', 
 
 test('the highest roll still within the chance steals up to the maximum percent', async () => {
   await fund(VICTIM, 1000);
+  await fund(ROBBER, 25);
   // 0.3999 * 100 = 39.99 < 40 -> success; 0.999999 -> 30%
   const high = await rob({ random: seq(0.3999, 0.999999) });
   assert.deepEqual([high.success, high.amount], [true, 300]);
@@ -240,46 +275,34 @@ test('a roll at or past the chance fails: the robber pays the fine to the victim
   assert.deepEqual(rows(VICTIM).at(-1), { kind: 'rob_fine_in', amount: 100, counterparty_id: ROBBER });
 });
 
-test('the fine is at least 25, and never more than the robber holds', async () => {
+test('the fine is at least 25 and is always paid from cash, never from the bank', async () => {
   await fund(VICTIM, 1000);
   await fund(ROBBER, 100); // 10% = 10 -> 25
   assert.equal((await rob({ random: seq(0.9) })).amount, 25);
   assert.deepEqual(await bal(ROBBER), { cash: 75, bank: 0 });
 
+  // cash 30 with 500 in the bank: the fine is the smallest, 25, from cash; the bank is not touched
   const G2 = `${G}7`;
   await credit(G2, VICTIM, 1000, { kind: 'staff_add', config: cfg() });
-  await credit(G2, ROBBER, 10, { kind: 'staff_add', config: cfg() });
-  const poor = await doRob({
-    guildId: G2,
-    robberId: ROBBER,
-    victimId: VICTIM,
-    victimJoinedAt: 0,
-    config: cfg({ robEnabled: true }),
-    now: T0,
-    random: seq(0.9),
-  });
-  assert.equal(poor.amount, 10, 'only what they have');
+  await credit(G2, ROBBER, 530, { kind: 'staff_add', config: cfg() });
+  await doDeposit({ guildId: G2, userId: ROBBER, amount: 500, config: cfg() });
+  const out = await robIn(G2, { random: seq(0.9) });
+  assert.equal(out.amount, 25);
+  const robber = await getAccount(G2, ROBBER);
+  assert.deepEqual([Number(robber.cash), Number(robber.bank)], [5, 500]);
+});
 
-  const G3 = `${G}6`;
-  await credit(G3, VICTIM, 1000, { kind: 'staff_add', config: cfg() });
-  const broke = await doRob({
-    guildId: G3,
-    robberId: ROBBER,
-    victimId: VICTIM,
-    victimJoinedAt: 0,
-    config: cfg({ robEnabled: true }),
-    now: T0,
-    random: seq(0.9),
-  });
-  assert.deepEqual([broke.success, broke.amount], [false, 0]);
-  assert.equal(
-    rowsIn(G3, VICTIM).filter((r) => r.kind === 'rob_fine_in').length,
-    0,
-    'no money moved, no rows'
-  );
+test('with a smallest fine of 0 the robber still needs 1 cash, so a failure costs something', async () => {
+  const c = cfg({ robEnabled: true, robFineMin: 0, robFinePercent: 50 });
+  await fund(VICTIM, 1000);
+  assert.equal((await rob({ config: c, random: seq(0.9) })).reason, 'robber_poor');
+  await fund(ROBBER, 1);
+  const out = await rob({ config: c, random: seq(0.9) });
+  assert.deepEqual([out.success, out.amount], [false, 1]);
 });
 
 test('only cash can be stolen, and the share is of the victim cash at that moment', async () => {
+  await fund(ROBBER, 100);
   await fund(VICTIM, 1000);
   await doDeposit({ guildId: G, userId: VICTIM, amount: 800, config: cfg() }); // cash 200, bank 800
   const out = await rob({ random: seq(0, 0.999999) }); // 30% of 200
@@ -318,6 +341,7 @@ test('every rob value is configurable within bounds, and the bounds hold', async
     robCooldownHours: 1,
   });
   await fund(VICTIM, 50);
+  await fund(ROBBER, 100);
   const out = await rob({ config: custom, random: seq(0, 0) });
   assert.equal(out.amount, 10, '20% of 50');
 });
@@ -333,6 +357,8 @@ test('a robbery that would take the robber over the cap takes only what fits', a
 test('two robberies of the same victim at once: only one gets through', async () => {
   const other = '800000000000000003';
   await fund(VICTIM, 10_000);
+  await fund(ROBBER, 100);
+  await fund(other, 100);
   const results = await Promise.all([
     rob({ random: seq(0, 0) }),
     rob({ robberId: other, random: seq(0, 0) }),
@@ -346,5 +372,6 @@ test('refusal sentences are plain and mention when to try again', () => {
   assert.match(refusalText({ reason: 'cooldown', retryAt: T0 }, config), /try again <t:1700000000:R>/);
   assert.match(refusalText({ reason: 'rob_off' }, config), /turned off/);
   assert.match(refusalText({ reason: 'insufficient', needed: 104 }, config), /104/);
+  assert.match(refusalText({ reason: 'join_unknown' }, config), /can't verify how long they've been here/);
   assert.match(refusalText({ reason: 'something-new' }, config), /did not work/);
 });

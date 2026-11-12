@@ -44,6 +44,7 @@ function interaction({
   manageGuild = false,
   inGuild = true,
   target,
+  member = undefined,
 } = {}) {
   const replies = [];
   const dms = [];
@@ -69,7 +70,10 @@ function interaction({
     memberPermissions: { has: () => manageGuild },
     options: {
       getUser: (name) => users[name] ?? null,
-      getMember: () => ({ displayName: 'Victim', joinedTimestamp: Date.now() - 7 * 86_400_000 }),
+      getMember: () =>
+        member === undefined
+          ? { displayName: 'Victim', joinedTimestamp: Date.now() - 7 * 86_400_000 }
+          : member,
       getInteger: (name) => options[name] ?? null,
       getString: (name) => options[name] ?? null,
       getSubcommand: () => sub,
@@ -93,11 +97,27 @@ test('every economy command says so when it is not in a server or the module is 
   }
 });
 
-test('/balance shows cash, bank, total and rank', async () => {
+test('/balance of someone else shows only the total and the rank, publicly', async () => {
+  await enable();
+  await credit(G, V, 777, { kind: 'daily', config });
+  const i = interaction({ options: { user: V } });
+  await balance.execute(i);
+  assert.deepEqual(
+    i.replies[0].embeds[0].data.fields.map((f) => [f.name, f.value]),
+    [
+      ['Total', '🪙 777 coins'],
+      ['Rank', '#1'],
+    ]
+  );
+  assert.equal(i.replies[0].flags, undefined, 'the reply is public, with nothing robbable in it');
+});
+
+test('/balance shows cash, bank, total and rank, and only you see it', async () => {
   await enable();
   await credit(G, U, 1234, { kind: 'daily', config });
   const i = interaction();
   await balance.execute(i);
+  assert.equal(i.replies[0].flags, MessageFlags.Ephemeral);
   const fields = i.replies[0].embeds[0].data.fields;
   assert.deepEqual(
     fields.map((f) => [f.name, f.value]),
@@ -213,6 +233,19 @@ test('/pay refuses yourself, bots and too little money, privately', async () => 
   assert.equal(poor.replies[0].flags, MessageFlags.Ephemeral);
 });
 
+test('/pay refuses someone who is not a member of the server, and moves nothing', async () => {
+  await enable();
+  await credit(G, U, 100, { kind: 'daily', config });
+  const gone = interaction({ options: { user: V, amount: 10 }, member: null });
+  gone.guild.members.fetch = async () => {
+    throw new Error('Unknown Member');
+  };
+  await pay.execute(gone);
+  assert.match(said(gone), /not in this server/);
+  assert.equal(await cash(U), 100);
+  assert.equal(await getAccount(G, V), null, 'no account was made for them');
+});
+
 test('/rob is refused while robbing is off (the default)', async () => {
   await enable();
   const i = interaction({ options: { user: V } });
@@ -223,6 +256,7 @@ test('/rob is refused while robbing is off (the default)', async () => {
 test('/rob posts the result in the channel and DMs the victim of a success', async () => {
   await enable({ robEnabled: true, robChancePercent: 99, robMinPercent: 10, robMaxPercent: 10 });
   await credit(G, V, 1000, { kind: 'daily', config });
+  await credit(G, U, 50, { kind: 'daily', config });
   const realRandom = Math.random;
   Math.random = () => 0; // success, and the lowest share
   try {
@@ -233,7 +267,7 @@ test('/rob posts the result in the channel and DMs the victim of a success', asy
     assert.equal(i.dms.length, 1);
     assert.match(i.dms[0].content, /You were robbed in \*\*Test Server\*\*.*🪙 100 coins/);
     assert.equal(await cash(V), 900);
-    assert.equal(await cash(U), 100);
+    assert.equal(await cash(U), 150);
   } finally {
     Math.random = realRandom;
   }
@@ -260,6 +294,10 @@ test('/rob failure is announced with the fine and sends no DM', async () => {
 
 test('/rob guards speak plainly: a new member, a poor victim, a bot, a member who left', async () => {
   await enable({ robEnabled: true });
+  const broke = interaction({ options: { user: V } });
+  await rob.execute(broke);
+  assert.match(said(broke), /You need at least 🪙 25 coins cash to attempt a rob/);
+  await credit(G, U, 100, { kind: 'daily', config });
   const poor = interaction({ options: { user: V } });
   await rob.execute(poor);
   assert.match(said(poor), /Not worth it/);
@@ -273,6 +311,38 @@ test('/rob guards speak plainly: a new member, a poor victim, a bot, a member wh
   };
   await rob.execute(gone);
   assert.match(said(gone), /not in this server/);
+});
+
+test('/rob reads the join time of a Fluxer member (joinedAt, a Date) and keeps new members safe', async () => {
+  await enable({ robEnabled: true });
+  await credit(G, V, 1000, { kind: 'daily', config });
+  await credit(G, U, 100, { kind: 'daily', config });
+  const hoursAgo = (h) => new Date(Date.now() - h * 3_600_000);
+  // a Fluxer-shaped member: no joinedTimestamp, only joinedAt
+  const fresh = interaction({ options: { user: V }, member: { joinedAt: hoursAgo(2) } });
+  await rob.execute(fresh);
+  assert.match(said(fresh), /joined too recently/);
+  assert.equal(await cash(V), 1000);
+
+  const old = interaction({ options: { user: V }, member: { joinedAt: hoursAgo(72) } });
+  const realRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    await rob.execute(old);
+  } finally {
+    Math.random = realRandom;
+  }
+  assert.match(said(old), /got away with/);
+});
+
+test('/rob refuses when the join time cannot be read at all', async () => {
+  await enable({ robEnabled: true });
+  await credit(G, V, 1000, { kind: 'daily', config });
+  await credit(G, U, 100, { kind: 'daily', config });
+  const unknown = interaction({ options: { user: V }, member: { displayName: 'No dates' } });
+  await rob.execute(unknown);
+  assert.match(said(unknown), /can't verify how long they've been here/);
+  assert.equal(await cash(V), 1000);
 });
 
 test('/eco needs Manage Server, and changes money with a reason', async () => {

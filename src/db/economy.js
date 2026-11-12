@@ -9,6 +9,7 @@
 //   economy_accounts       guild_id + user_id      cash, bank, daily_streak, last_*_at (epoch ms; 0 = never)
 //   economy_transactions   id (surrogate)          kind, amount (signed), cash_after, bank_after,
 //                                                  counterparty_id, actor_id, reason, created_at
+//   economy_cooldowns      guild_id + user_id      the cooldown tombstone /forget leaves (see eraseMember)
 //
 // `guild_id` is the server key (a Discord id, or "fluxer:<id>"), like every other table, so the
 // guild-leave purge and /forget find the rows. All amounts are whole numbers; BIGINT on Postgres
@@ -47,10 +48,29 @@ registerPostgresBootstrap(`
   );
   CREATE INDEX IF NOT EXISTS idx_economy_transactions_user ON economy_transactions (guild_id, user_id, id DESC);
   CREATE INDEX IF NOT EXISTS idx_economy_transactions_created ON economy_transactions (guild_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_economy_transactions_created_at ON economy_transactions (created_at);
+  CREATE TABLE IF NOT EXISTS economy_cooldowns (
+    guild_id      TEXT NOT NULL,
+    user_id       TEXT NOT NULL,
+    last_daily_at BIGINT NOT NULL DEFAULT 0,
+    last_work_at  BIGINT NOT NULL DEFAULT 0,
+    last_rob_at   BIGINT NOT NULL DEFAULT 0,
+    start_given   INTEGER NOT NULL DEFAULT 1,
+    expires_at    BIGINT NOT NULL,
+    PRIMARY KEY (guild_id, user_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_economy_cooldowns_expires ON economy_cooldowns (expires_at);
 `);
 
 /** How long ledger rows are kept. Balances are not affected by the prune. */
 export const LEDGER_RETENTION_DAYS = 180;
+
+/**
+ * How long /forget keeps a member's cooldown tombstone. The longest cooldown any setting allows is
+ * 168 hours (the rob cooldown; daily is 24 hours, work at most 24), so 7 days from the moment of
+ * forgetting always outlasts every cooldown that was running.
+ */
+export const TOMBSTONE_DAYS = 7;
 
 /** The ways the member list can be sorted, each with a fixed ORDER BY (never built from input). */
 const ORDERS = {
@@ -83,6 +103,17 @@ const ledgerCountStmt = prepare(
   'SELECT COUNT(*) AS n FROM economy_transactions WHERE guild_id = ? AND user_id = ?'
 );
 const pruneStmt = prepare('DELETE FROM economy_transactions WHERE created_at < ?');
+const pruneCooldownsStmt = prepare('DELETE FROM economy_cooldowns WHERE expires_at < ?');
+const tombstoneStmt = prepare(`
+  INSERT INTO economy_cooldowns (guild_id, user_id, last_daily_at, last_work_at, last_rob_at, start_given, expires_at)
+  VALUES (?, ?, ?, ?, ?, 1, ?)
+  ON CONFLICT (guild_id, user_id) DO UPDATE SET
+    last_daily_at = excluded.last_daily_at,
+    last_work_at  = excluded.last_work_at,
+    last_rob_at   = excluded.last_rob_at,
+    start_given   = 1,
+    expires_at    = excluded.expires_at
+`);
 
 const forget = {
   account: prepare('DELETE FROM economy_accounts WHERE guild_id = ? AND user_id = ?'),
@@ -137,11 +168,38 @@ export async function pruneTransactions(now = Date.now()) {
 }
 
 /**
+ * Delete cooldown tombstones that have run out (called by the daily prune).
+ * @param {number} [now] epoch ms, overridable for tests
+ * @returns {Promise<number>} rows removed
+ */
+export async function pruneCooldowns(now = Date.now()) {
+  return (await pruneCooldownsStmt.run(now)).changes;
+}
+
+/**
  * Erase a member (/forget): their account and their own ledger rows go; where they are named on
  * someone else's row (as the other side of a payment or robbery, or as the staff member who made
  * an adjustment) the name comes off and the row stays.
+ *
+ * One small record stays for {@link TOMBSTONE_DAYS} days: the server, the member id, the times of
+ * their last daily, work and rob, and that the starting balance was given. Without it /forget would
+ * be a way to reset every cooldown and collect the starting balance again, over and over. A new
+ * account made inside that window gets no starting balance and keeps the cooldowns (see
+ * modules/lib/economy.js). The daily prune deletes the record once it has run out.
+ * @param {number} [now] epoch ms, overridable for tests
  */
-export async function eraseMember(guildId, userId) {
+export async function eraseMember(guildId, userId, now = Date.now()) {
+  const existing = await getStmt.get(guildId, userId);
+  if (existing) {
+    await tombstoneStmt.run(
+      guildId,
+      userId,
+      Number(existing.last_daily_at),
+      Number(existing.last_work_at),
+      Number(existing.last_rob_at),
+      now + TOMBSTONE_DAYS * 86_400_000
+    );
+  }
   const account = (await forget.account.run(guildId, userId)).changes;
   const transactions = (await forget.ledger.run(guildId, userId)).changes;
   const counterparty = (await forget.counterparty.run(guildId, userId)).changes;

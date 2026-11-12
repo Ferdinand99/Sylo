@@ -5,6 +5,8 @@ import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../src/db/index.js';
+import { recordAudit, listAudit } from '../src/db/audit.js';
+import { eraseMember } from '../src/db/economy.js';
 import { getAccount, listTransactions } from '../src/db/economy.js';
 import {
   KINDS,
@@ -290,7 +292,7 @@ test('transact: a refusal changes nothing, and `after` runs in the same transact
   await assert.rejects(
     transact(g, [A], () => ({ changes: [{ userId: A, cash: -40, kind: 'staff_remove' }] }), {
       config,
-      after: async () => {
+      after: () => {
         throw new Error('inventory insert failed');
       },
     }),
@@ -305,9 +307,9 @@ test('transact: a refusal changes nothing, and `after` runs in the same transact
     () => ({ changes: [{ userId: A, cash: -40, kind: 'staff_remove' }], result: 7 }),
     {
       config,
-      after: async (tx, outcome) => {
+      after: function* (tx, outcome) {
         assert.equal(outcome.ledger.length, 1);
-        await tx.run('UPDATE economy_accounts SET daily_streak = 9 WHERE guild_id = ? AND user_id = ?', g, A);
+        yield tx.run('UPDATE economy_accounts SET daily_streak = 9 WHERE guild_id = ? AND user_id = ?', g, A);
       },
     }
   );
@@ -367,4 +369,89 @@ test('the leaderboard reads see exactly what the API wrote', async () => {
   const g = guild();
   await credit(g, A, 10, { kind: 'daily', config });
   assert.equal((await listTransactions(g, A, 10)).length, 1);
+});
+
+test('a refused or rolled-back money transaction never undoes an unrelated write made at the same time', async () => {
+  // On SQLite the transaction runs start to end without returning to the event loop, so other
+  // code's statements cannot land inside it (and then be rolled back with it).
+  const g = guild();
+  await credit(g, A, 10, { kind: 'daily', config });
+  const chatter = async () => {
+    for (let i = 0; i < 40; i++) {
+      await recordAudit(g, { actor: 'x', action: 'noise', detail: String(i) });
+    }
+  };
+  const refusals = async () => {
+    for (let i = 0; i < 40; i++) {
+      assert.equal((await debit(g, A, 999, { kind: 'staff_remove', config })).reason, 'insufficient');
+      await transact(g, [A], () => ({ refuse: { reason: 'nope' } }), { config });
+      await assert.rejects(
+        transact(g, [A], () => ({ changes: [{ userId: A, cash: -1, kind: 'staff_remove' }] }), {
+          config,
+          after: () => {
+            throw new Error('rolled back');
+          },
+        }),
+        /rolled back/
+      );
+    }
+  };
+  await Promise.all([chatter(), refusals(), chatter()]);
+  const audit = (await listAudit(g, 500)).filter((r) => r.action === 'noise');
+  assert.equal(audit.length, 80, 'every audit row written meanwhile survived');
+  assert.deepEqual(await balances(g, A), { cash: 10, bank: 0 });
+  assert.equal(ledger(g, A).length, 1);
+});
+
+test('after /forget a new account keeps the cooldowns and gets no starting balance again', async () => {
+  const g = guild();
+  const cfg = normaliseEconomyConfig({ startingBalance: 100 });
+  const now = Date.now();
+  await credit(g, A, 5, { kind: 'daily', config: cfg });
+  db.prepare(
+    'UPDATE economy_accounts SET last_daily_at = ?, last_work_at = ?, last_rob_at = ? WHERE guild_id = ? AND user_id = ?'
+  ).run(now - 1000, now - 2000, now - 3000, g, A);
+  await eraseMember(g, A, now);
+  assert.equal(await getAccount(g, A), null);
+  await credit(g, A, 7, { kind: 'daily', config: cfg, now: now + 5000 });
+  const row = await getAccount(g, A);
+  assert.equal(Number(row.cash), 7, 'no starting balance the second time');
+  assert.deepEqual(
+    [Number(row.last_daily_at), Number(row.last_work_at), Number(row.last_rob_at)],
+    [now - 1000, now - 2000, now - 3000]
+  );
+  assert.equal(
+    ledger(g, A).filter((r) => r.kind === 'start').length,
+    0,
+    'and no start row: the first account was erased with its rows'
+  );
+});
+
+test('the tombstone runs out after 7 days: then a new account is a new member', async () => {
+  const g = guild();
+  const cfg = normaliseEconomyConfig({ startingBalance: 100 });
+  const now = Date.now();
+  await credit(g, A, 5, { kind: 'daily', config: cfg });
+  await eraseMember(g, A, now);
+  const later = now + 7 * 86_400_000 + 1;
+  await credit(g, A, 1, { kind: 'daily', config: cfg, now: later });
+  assert.equal(Number((await getAccount(g, A)).cash), 101, 'the starting balance again, cooldowns clear');
+});
+
+test('resetGuild handles more accounts than one chunk and writes a row for each that held money', async () => {
+  const g = guild();
+  const ids = Array.from({ length: 450 }, (_, i) => `8300000000000${String(i).padStart(5, '0')}`);
+  for (const id of ids) await credit(g, id, 10, { kind: 'daily', config });
+  await credit(g, '830000000000099999', 0 + 1, { kind: 'daily', config });
+  await resetAccount(g, '830000000000099999', { config }); // already fresh: nothing to record
+  const out = await resetGuild(g, { actorId: B, config });
+  assert.deepEqual(out, { ok: true, accounts: 451 });
+  const cash = db.prepare('SELECT SUM(cash) AS c FROM economy_accounts WHERE guild_id = ?').get(g).c;
+  assert.equal(cash, 0);
+  const resets = db
+    .prepare(
+      "SELECT COUNT(*) AS c, SUM(amount) AS s FROM economy_transactions WHERE guild_id = ? AND kind = 'reset' AND actor_id = ?"
+    )
+    .get(g, B);
+  assert.deepEqual([resets.c, resets.s], [450, -4500]);
 });

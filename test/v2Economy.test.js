@@ -293,3 +293,57 @@ test('resetting the whole economy needs the typed word, then resets every accoun
   ]);
   assert.equal((await auditRows(GID, 'economy:reset')).length, 1);
 });
+
+test('staff can clean up after someone who left (they have an account) but never open one for a non-member', async () => {
+  await enable();
+  const GONE = '700000000000000077';
+  const realFetch = app.guild.members.fetch;
+  app.guild.members.fetch = async () => {
+    throw new Error('Unknown Member');
+  };
+  try {
+    const adjust = (body) => api.post(`/modules/economy/members/${GONE}/adjust`, body);
+    const refused = await adjust({ action: 'add', amount: 5 });
+    assert.equal(refused.status, 400);
+    assert.match((await json(refused)).error, /not in this server and has no account/);
+    assert.equal(await getAccount(GID, GONE), null, 'no account was opened');
+
+    await give(GONE, 100); // they had an account before they left
+    const res = await adjust({ action: 'remove', amount: 40, reason: 'cleaning up' });
+    assert.equal(res.status, 200);
+    assert.equal((await json(res)).account.cash, 60);
+    assert.equal((await adjust({ action: 'reset-user' })).status, 200);
+  } finally {
+    app.guild.members.fetch = realFetch;
+  }
+});
+
+test('with a log channel, staff changes count against the limit for actions that post (10 a minute)', async () => {
+  const channel = app.guild.channels.cache.get('100000000000000002');
+  const original = channel.send;
+  channel.send = async () => ({ id: 'm' });
+  try {
+    await enable({ logChannelId: channel.id });
+    const statuses = [];
+    for (let i = 0; i < 12; i++) {
+      statuses.push(
+        (await api.post(`/modules/economy/members/${U}/adjust`, { action: 'add', amount: 1 })).status
+      );
+    }
+    // (an earlier test in this file already used one of the ten)
+    assert.equal(statuses[0], 200, 'the first go through: ' + statuses);
+    assert.deepEqual(statuses.slice(-2), [429, 429], 'and the 11th and 12th do not: ' + statuses);
+    assert.equal(
+      (await api.post('/modules/economy/reset', { confirm: 'RESET' })).status,
+      429,
+      'the reset shares the count'
+    );
+  } finally {
+    channel.send = original;
+  }
+});
+
+test('the settings say whether the shortest-message rule can be applied on this host', async () => {
+  const body = await json(await api.get('/modules/economy/config'));
+  assert.equal(typeof body.messageLengthChecked, 'boolean');
+});

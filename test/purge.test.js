@@ -396,6 +396,8 @@ const USER_ID_COLUMNS = {
   'economy_transactions.user_id': 'handled',
   'economy_transactions.counterparty_id': 'handled',
   'economy_transactions.actor_id': 'handled',
+  'economy_cooldowns.user_id':
+    'kept: 7-day cooldown record, so /forget cannot reset cooldowns (listed by describeUserData)',
   'guild_quotes.author_id': 'handled',
   'guild_quotes.saved_by': 'handled',
   // kept on purpose: safety records, and the staff side of them

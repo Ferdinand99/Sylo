@@ -241,29 +241,33 @@ export function prepare(sqlText, opts) {
 // Most of Sylo needs no transaction (see the notes in purge.js and leveling.js: single upserts and
 // idempotent sequences are enough). Money is the exception: a balance change and its ledger row
 // must land together or not at all, and several accounts can change in one step (a payment). So
-// `transaction(fn)` runs `fn` against one connection inside BEGIN/COMMIT on either driver:
+// `transaction(body)` runs `body` inside BEGIN/COMMIT on either driver. `body` is a GENERATOR
+// function, and every statement is `yield`ed:
 //
-//   const out = await transaction(async (tx) => {
-//     const row = await tx.get('SELECT cash FROM accounts WHERE id = ?', id);
-//     await tx.run('UPDATE accounts SET cash = ? WHERE id = ?', row.cash - 5, id);
+//   const out = await transaction(function* (tx) {
+//     const row = yield tx.get('SELECT cash FROM accounts WHERE id = ?', id);
+//     yield tx.run('UPDATE accounts SET cash = ? WHERE id = ?', row.cash - 5, id);
 //     return row;
 //   });
 //
 // `tx.get/all/run(sql, ...args)` work like the prepared statements above (positional `?` only);
 // `tx.insertId(sql, ...args)` runs an INSERT into a table with a surrogate `id` and returns it.
-// A throw rolls everything back and is rethrown.
+// A throw inside `body` rolls everything back and is rethrown. Use `yield*` to call another
+// generator (a helper, a hook). `body` must not await anything of its own.
 //
-// Postgres: `sql.begin` reserves a pooled connection for the callback. Concurrent transactions that
-// touch the same row wait for each other at the row lock (a plain UPDATE takes it).
+// Why a generator: the same code has to be atomic on both drivers.
 //
-// SQLite: one connection serves the whole process, and better-sqlite3 is synchronous, so the
-// statements themselves never overlap. What can overlap is the awaits between them, so transactions
-// are queued one after another (a second BEGIN on the same connection would throw), and `fn` must
-// only await `tx` calls: awaiting real I/O inside it would let unrelated code run its statements
-// inside this transaction.
+// SQLite: better-sqlite3 is synchronous and the process has one connection, so the whole body runs
+// to its end inside `db.transaction(...).immediate()` without ever returning to the event loop:
+// `yield tx.get(...)` just hands back the row, and nothing else (another module's write, a timer)
+// can run in the middle. A transaction that is refused or rolled back therefore can never undo
+// someone else's statement. (An `async` body would yield to the microtask queue at each `await`
+// and let unrelated code run its statements inside the open transaction.)
+//
+// Postgres: `sql.begin` reserves a pooled connection for the body; each yielded query is awaited.
+// Concurrent transactions that touch the same row wait for each other at the row lock (a plain
+// UPDATE takes it).
 
-/** @type {Promise<unknown>} */
-let sqliteQueue = Promise.resolve();
 const sqliteStatements = new Map();
 
 function sqliteStatement(sqlText) {
@@ -275,34 +279,23 @@ function sqliteStatement(sqlText) {
   return stmt;
 }
 
+// Synchronous: the values come back as they are, and `yield` passes them straight through.
 const sqliteTx = {
-  get: async (sqlText, ...args) => sqliteStatement(sqlText).get(...args),
-  all: async (sqlText, ...args) => sqliteStatement(sqlText).all(...args),
-  run: async (sqlText, ...args) => {
-    const { changes } = sqliteStatement(sqlText).run(...args);
-    return { changes };
-  },
-  insertId: async (sqlText, ...args) => Number(sqliteStatement(sqlText).run(...args).lastInsertRowid),
+  get: (sqlText, ...args) => sqliteStatement(sqlText).get(...args),
+  all: (sqlText, ...args) => sqliteStatement(sqlText).all(...args),
+  run: (sqlText, ...args) => ({ changes: sqliteStatement(sqlText).run(...args).changes }),
+  insertId: (sqlText, ...args) => Number(sqliteStatement(sqlText).run(...args).lastInsertRowid),
 };
 
-function sqliteTransaction(fn) {
-  const result = sqliteQueue.then(async () => {
-    db.exec('BEGIN IMMEDIATE');
-    try {
-      const out = await fn(sqliteTx);
-      db.exec('COMMIT');
-      return out;
-    } catch (err) {
-      try {
-        db.exec('ROLLBACK');
-      } catch {
-        // already rolled back by SQLite itself
-      }
-      throw err;
-    }
-  });
-  sqliteQueue = result.catch(() => {});
-  return result;
+function runSqliteTransaction(body) {
+  return db
+    .transaction(() => {
+      const it = body(sqliteTx);
+      let step = it.next();
+      while (!step.done) step = it.next(step.value);
+      return step.value;
+    })
+    .immediate();
 }
 
 function pgTx(tx) {
@@ -316,22 +309,38 @@ function pgTx(tx) {
     return tx.unsafe(t.text + suffix, toParams(t, args));
   };
   return {
-    get: async (sqlText, ...args) => (await exec(sqlText, args))[0],
-    all: async (sqlText, ...args) => Array.from(await exec(sqlText, args)),
-    run: async (sqlText, ...args) => ({ changes: (await exec(sqlText, args)).count }),
-    insertId: async (sqlText, ...args) => (await exec(sqlText, args, ' RETURNING id'))[0].id,
+    get: (sqlText, ...args) => exec(sqlText, args).then((rows) => rows[0]),
+    all: (sqlText, ...args) => exec(sqlText, args).then((rows) => Array.from(rows)),
+    run: (sqlText, ...args) => exec(sqlText, args).then((rows) => ({ changes: rows.count })),
+    insertId: (sqlText, ...args) => exec(sqlText, args, ' RETURNING id').then((rows) => rows[0].id),
   };
 }
 
+async function runPgTransaction(body) {
+  const sql = await getSql();
+  return sql.begin(async (tx) => {
+    const it = body(pgTx(tx));
+    let step = it.next();
+    while (!step.done) {
+      let value;
+      try {
+        value = await step.value;
+      } catch (err) {
+        step = it.throw(err);
+        continue;
+      }
+      step = it.next(value);
+    }
+    return step.value;
+  });
+}
+
 /**
- * Run `fn` in one database transaction. See the notes above for what `tx` offers and the one rule
- * for SQLite (only await `tx` calls inside `fn`).
+ * Run `body` in one database transaction. See the notes above for what `tx` offers.
  * @template T
- * @param {(tx: { get: (sql: string, ...args: any[]) => Promise<any>, all: (sql: string, ...args: any[]) => Promise<any[]>, run: (sql: string, ...args: any[]) => Promise<{ changes: number }>, insertId: (sql: string, ...args: any[]) => Promise<number> }) => Promise<T>} fn
+ * @param {(tx: { get: (sql: string, ...args: any[]) => any, all: (sql: string, ...args: any[]) => any, run: (sql: string, ...args: any[]) => any, insertId: (sql: string, ...args: any[]) => any }) => Generator<any, T, any>} body
  * @returns {Promise<T>}
  */
-export async function transaction(fn) {
-  if (!config.databaseUrl) return sqliteTransaction(fn);
-  const sql = await getSql();
-  return sql.begin(async (tx) => fn(pgTx(tx)));
+export async function transaction(body) {
+  return config.databaseUrl ? runPgTransaction(body) : runSqliteTransaction(body);
 }

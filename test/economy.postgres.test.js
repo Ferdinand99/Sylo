@@ -84,7 +84,7 @@ test(
       await assert.rejects(
         eco.transact(G, [A], () => ({ changes: [{ userId: A, cash: -1, kind: 'staff_remove' }] }), {
           config,
-          after: async () => {
+          after: () => {
             throw new Error('boom');
           },
         }),
@@ -143,6 +143,63 @@ test(
       const reset = (await store.listTransactions(H, B, 5))[0];
       assert.deepEqual([reset.kind, reset.amount, reset.actor_id], ['reset', -30, B]);
     });
+
+    await t.test(
+      '/forget keeps a cooldown tombstone: no second starting balance, cooldowns kept, pruned later',
+      async () => {
+        const K = `${G}-tomb`;
+        const cfg = normaliseEconomyConfig({ startingBalance: 100 });
+        const now = Date.now();
+        await eco.credit(K, A, 5, { kind: 'daily', config: cfg });
+        await eco.transact(
+          K,
+          [A],
+          () => ({ stamps: { [A]: { last_daily_at: now - 10, last_rob_at: now - 30 } } }),
+          { config: cfg }
+        );
+        await purge.forgetUser(K, A);
+        assert.equal(await store.getAccount(K, A), null);
+        await eco.credit(K, A, 1, { kind: 'daily', config: cfg });
+        const row = await store.getAccount(K, A);
+        assert.equal(row.cash, 1, 'no starting balance the second time');
+        assert.deepEqual([row.last_daily_at, row.last_rob_at], [now - 10, now - 30]);
+        assert.equal(
+          (await store.pruneCooldowns(Date.now() + 8 * 86_400_000)) >= 1,
+          true,
+          'run out after 7 days'
+        );
+        await purge.purgeGuild(K);
+      }
+    );
+
+    await t.test(
+      'a refused transaction rolls back cleanly and a generator body can fail half way',
+      async () => {
+        const R = `${G}-roll`;
+        await eco.credit(R, A, 10, { kind: 'daily', config });
+        const refused = await eco.debit(R, A, 99, { kind: 'staff_remove', config });
+        assert.equal(refused.reason, 'insufficient');
+        assert.deepEqual(await bal(R, A), { cash: 10, bank: 0 });
+        await purge.purgeGuild(R);
+      }
+    );
+
+    await t.test(
+      'resetGuild goes through the same locking as payments and writes a row per account',
+      async () => {
+        const S = `${G}-reset`;
+        await eco.credit(S, A, 10, { kind: 'daily', config });
+        await eco.credit(S, B, 20, { kind: 'daily', config });
+        const jobs = [eco.resetGuild(S, { actorId: A, config })];
+        for (let i = 0; i < 10; i++)
+          jobs.push(eco.transfer(S, A, B, 1, { config }), eco.transfer(S, B, A, 1, { config }));
+        const results = await Promise.all(jobs);
+        assert.equal(results[0].ok, true);
+        const total = (await bal(S, A)).cash + (await bal(S, B)).cash;
+        assert.ok(total <= 30, 'no money appeared');
+        await purge.purgeGuild(S);
+      }
+    );
 
     await t.test('listing, rank, count, prune, forget and the guild purge run on Postgres', async () => {
       const page = await store.listAccounts(G, { sort: 'cash', dir: 'asc', limit: 3, offset: 0 });

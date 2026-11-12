@@ -143,6 +143,7 @@ beforeEach(() => {
     channels: [{ id: '555555555555555551', name: 'staff-log' }],
     roles: [{ id: '666666666666666661', name: 'Muted' }],
     maxBalance: 1_000_000_000,
+    messageLengthChecked: true,
   });
   getEconomyMembers.mockResolvedValue(page([row(ALICE, 'Alice', 100, 50), row(BOB, 'Bob', 30, 0)]));
   getEconomyMember.mockResolvedValue(detail());
@@ -167,6 +168,24 @@ describe('Economy settings', () => {
     await waitFor(() => expect(screen.getByLabelText('Name').maxLength).toBe(20));
     expect(screen.getByLabelText('Chance to succeed').max).toBe('99');
     expect(screen.getByLabelText('Payment tax').max).toBe('50');
+  });
+
+  it('says so when the host cannot apply the shortest-message rule (no Message Content intent), and not otherwise', async () => {
+    const { unmount } = renderAtGuild(<Economy />, GUILD);
+    await screen.findByLabelText('Shortest message that counts');
+    expect(screen.queryByText('The shortest-message rule is not applied')).toBeNull();
+    unmount();
+
+    getModuleConfig.mockResolvedValue({
+      config,
+      channels: [],
+      roles: [],
+      maxBalance: 1_000_000_000,
+      messageLengthChecked: false,
+    });
+    renderAtGuild(<Economy />, GUILD);
+    expect(await screen.findByText('The shortest-message rule is not applied')).toBeTruthy();
+    expect(screen.getByText(/does not have the Message Content intent/)).toBeTruthy();
   });
 
   it('warns that robbing is off by default and has it unchecked', async () => {

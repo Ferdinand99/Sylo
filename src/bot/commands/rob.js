@@ -28,7 +28,8 @@ export async function execute(interaction) {
     robberId: interaction.user.id,
     victimId: target.id,
     victimIsBot: target.bot === true,
-    victimJoinedAt: member.joinedTimestamp ?? null,
+    // Discord members have joinedTimestamp; Fluxer members have joinedAt (a Date).
+    victimJoinedAt: member.joinedTimestamp ?? member.joinedAt?.getTime?.() ?? null,
     config,
   });
   if (!out.ok) return reply(interaction, refusalText(out, config));

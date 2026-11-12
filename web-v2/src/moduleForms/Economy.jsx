@@ -183,6 +183,13 @@ function Settings({ guildId, m, limits }) {
               {...props}
             />
           </div>
+          {data.messageLengthChecked === false ? (
+            <Callout tone="info" title="The shortest-message rule is not applied">
+              This Sylo does not have the Message Content intent, so Discord does not tell it how long a
+              message is. Chat still pays, but every message counts whatever its length. Everything else works
+              as usual.
+            </Callout>
+          ) : null}
           <div className="v2-field" role="group" aria-labelledby="ignoredChannels-label">
             <label id="ignoredChannels-label">Channels that pay nothing</label>
             <ChipPicker

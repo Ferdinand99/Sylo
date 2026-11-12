@@ -17,8 +17,9 @@
 //     marked `clamp`, otherwise refused)
 //   - one transaction per call; accounts are locked in a fixed order (by user id), so two payments
 //     between the same members in opposite directions cannot deadlock
-//   - concurrent calls on the same account never lose an update (SQLite: transactions run one after
-//     another; Postgres: the row lock; see db/driver.js `transaction`)
+//   - concurrent calls on the same account never lose an update (SQLite: a transaction runs start to
+//     end without returning to the event loop, so nothing interleaves; Postgres: the row lock; see
+//     db/driver.js `transaction`, whose body is a generator for that reason)
 //
 // Ledger rows: `amount` is the change of cash + bank, signed. The exceptions are `deposit` and
 // `withdraw`, where cash + bank does not change: their amount is the size of the move (positive).
@@ -27,7 +28,7 @@
 // Every function resolves to `{ ok: true, ... }` or `{ ok: false, reason, ... }`. A refusal changes
 // no balance and writes no ledger row. It never throws for a rule (only for a database failure).
 import '../../db/economy.js';
-import { transaction } from '../../db/driver.js';
+import { prepare, transaction } from '../../db/driver.js';
 import { getGuildModule } from '../../db/modules.js';
 import { LIMITS, MAX_BALANCE, normaliseEconomyConfig } from './economyConfig.js';
 
@@ -104,26 +105,38 @@ const LEDGER_INSERT = `
  * Create the missing accounts (with the starting balance, written to the ledger as `start`),
  * then take every row lock in user id order. Returns the accounts as the plan sees them.
  */
-async function openAccounts(tx, guildId, userIds, config, now) {
-  const created = [];
+function* openAccounts(tx, guildId, userIds, config, now) {
+  const given = [];
   for (const userId of userIds) {
-    const start = config.startingBalance;
-    const { changes } = await tx.run(
-      `INSERT INTO economy_accounts (guild_id, user_id, cash, bank, created_at, updated_at)
-       VALUES (?, ?, ?, 0, ?, ?)
+    // A member who ran /forget a short while ago has a cooldown tombstone: the new account keeps
+    // their cooldowns and gets no starting balance again (see eraseMember in db/economy.js).
+    const tomb = yield tx.get(
+      'SELECT * FROM economy_cooldowns WHERE guild_id = ? AND user_id = ? AND expires_at > ?',
+      guildId,
+      userId,
+      now
+    );
+    const start = tomb ? 0 : config.startingBalance;
+    const { changes } = yield tx.run(
+      `INSERT INTO economy_accounts
+         (guild_id, user_id, cash, bank, last_daily_at, last_work_at, last_rob_at, created_at, updated_at)
+       VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)
        ON CONFLICT (guild_id, user_id) DO NOTHING`,
       guildId,
       userId,
       start,
+      Number(tomb?.last_daily_at ?? 0),
+      Number(tomb?.last_work_at ?? 0),
+      Number(tomb?.last_rob_at ?? 0),
       now,
       now
     );
-    if (changes === 1) created.push(userId);
+    if (changes === 1 && start > 0) given.push(userId);
   }
   // A plain UPDATE takes the row lock on Postgres; on SQLite BEGIN IMMEDIATE already holds the
   // database. Done for every account before any is read, in the same order everywhere.
   for (const userId of userIds) {
-    await tx.run(
+    yield tx.run(
       'UPDATE economy_accounts SET updated_at = updated_at WHERE guild_id = ? AND user_id = ?',
       guildId,
       userId
@@ -131,29 +144,27 @@ async function openAccounts(tx, guildId, userIds, config, now) {
   }
   const accounts = new Map();
   for (const userId of userIds) {
-    const row = await tx.get(
+    const row = yield tx.get(
       'SELECT * FROM economy_accounts WHERE guild_id = ? AND user_id = ?',
       guildId,
       userId
     );
     accounts.set(userId, row);
   }
-  for (const userId of created) {
-    if (config.startingBalance > 0) {
-      await tx.insertId(
-        LEDGER_INSERT,
-        guildId,
-        userId,
-        'start',
-        config.startingBalance,
-        config.startingBalance,
-        0,
-        null,
-        null,
-        'Starting balance',
-        now
-      );
-    }
+  for (const userId of given) {
+    yield tx.insertId(
+      LEDGER_INSERT,
+      guildId,
+      userId,
+      'start',
+      config.startingBalance,
+      config.startingBalance,
+      0,
+      null,
+      null,
+      'Starting balance',
+      now
+    );
   }
   return accounts;
 }
@@ -168,7 +179,7 @@ function ledgerAmount(kind, cashDelta, bankDelta) {
  * Apply one change to the working balances and write its ledger row. Throws a Refusal when it
  * would break a rule, which rolls the whole transaction back.
  */
-async function applyChange(tx, guildId, balances, change, now, ledger) {
+function* applyChange(tx, guildId, balances, change, now, ledger) {
   const { userId, kind } = change;
   if (!KINDS.has(kind)) throw new Error(`unknown ledger kind "${kind}"`);
   const bal = balances.get(userId);
@@ -188,7 +199,7 @@ async function applyChange(tx, guildId, balances, change, now, ledger) {
   if (cash < 0 || bank < 0) throw new Refusal('insufficient', { userId });
   if (cashDelta + bankDelta > 0 && cash + bank > MAX_BALANCE) throw new Refusal('cap', { userId });
 
-  const moved = await tx.run(
+  const moved = yield tx.run(
     `UPDATE economy_accounts SET cash = ?, bank = ?, updated_at = ?
      WHERE guild_id = ? AND user_id = ? AND cash = ? AND bank = ?`,
     cash,
@@ -206,7 +217,7 @@ async function applyChange(tx, guildId, balances, change, now, ledger) {
 
   const amount = ledgerAmount(kind, cashDelta, bankDelta);
   const reason = String(change.reason ?? '').slice(0, LIMITS.reason.maxLength);
-  const id = await tx.insertId(
+  const id = yield tx.insertId(
     LEDGER_INSERT,
     guildId,
     userId,
@@ -258,9 +269,11 @@ async function applyChange(tx, guildId, balances, change, now, ledger) {
  * @param {string} guildId  the server key
  * @param {string[]} userIds  every account the plan reads or changes
  * @param {(accounts: Map<string, any>) => { refuse?: object, changes?: object[], stamps?: object, result?: any }} plan
- * @param {{ now?: number, config?: object, after?: (tx: any, outcome: object) => Promise<void> }} [opts]
+ * @param {{ now?: number, config?: object, after?: (tx: any, outcome: object) => Generator }} [opts]
  *   `after` runs inside the same transaction once the changes are applied (part B inserts the
- *   inventory row of a purchase there); a throw rolls the money back too. Await only `tx` calls.
+ *   inventory row of a purchase there); a throw rolls the money back too. It is a generator
+ *   function, like the body of `transaction()` in db/driver.js: `function* (tx, outcome) { yield
+ *   tx.run(...); }`. It must not await anything or call another money function.
  * @returns {Promise<{ ok: true, ledger: object[], applied: object[], accounts: Map<string, any>, result?: any } | { ok: false, reason: string, accounts?: Map<string, any> }>}
  */
 export async function transact(guildId, userIds, plan, opts = {}) {
@@ -268,8 +281,8 @@ export async function transact(guildId, userIds, plan, opts = {}) {
   const config = await settingsFor(guildId, opts.config);
   const ids = [...new Set(userIds)].sort();
   try {
-    return await transaction(async (tx) => {
-      const rows = await openAccounts(tx, guildId, ids, config, now);
+    return await transaction(function* (tx) {
+      const rows = yield* openAccounts(tx, guildId, ids, config, now);
       const before = new Map([...rows].map(([id, row]) => [id, view(row)]));
       const decision = plan(before);
       // A refusal rolls the transaction back, so it leaves nothing behind, not even the empty
@@ -282,7 +295,7 @@ export async function transact(guildId, userIds, plan, opts = {}) {
         const cols = Object.keys(stamps);
         if (cols.some((c) => !STAMP_COLUMNS.has(c))) throw new Error('bad stamp column');
         if (!cols.length) continue;
-        await tx.run(
+        yield tx.run(
           `UPDATE economy_accounts SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_at = ? WHERE guild_id = ? AND user_id = ?`,
           ...cols.map((c) => stamps[c]),
           now,
@@ -293,7 +306,7 @@ export async function transact(guildId, userIds, plan, opts = {}) {
       const ledger = [];
       const applied = [];
       for (const change of decision?.changes ?? []) {
-        applied.push(await applyChange(tx, guildId, balances, change, now, ledger));
+        applied.push(yield* applyChange(tx, guildId, balances, change, now, ledger));
       }
       const after = new Map(
         [...balances].map(([id, b]) => [
@@ -302,7 +315,7 @@ export async function transact(guildId, userIds, plan, opts = {}) {
         ])
       );
       const outcome = { ok: true, ledger, applied, accounts: after, result: decision?.result };
-      if (opts.after) await opts.after(tx, outcome);
+      if (opts.after) yield* opts.after(tx, outcome);
       return outcome;
     });
   } catch (err) {
@@ -514,40 +527,46 @@ export async function resetAccount(guildId, userId, opts = {}) {
   return { ok: true, before: out.result.before, account: out.accounts.get(userId), ledger: out.ledger };
 }
 
+/** How many accounts one transaction of {@link resetGuild} handles. */
+const RESET_CHUNK = 200;
+const listIdsStmt = prepare('SELECT user_id FROM economy_accounts WHERE guild_id = ? ORDER BY user_id');
+
 /**
- * Reset every account of a server to a fresh one (see {@link resetAccount}), in one transaction.
- * Writes one `reset` ledger row per account (amount = the change of cash + bank), so staff can
- * still see what each member had when it happened.
+ * Reset every account of a server to a fresh one (see {@link resetAccount}). The accounts that
+ * exist when it starts are reset in chunks of 200, one transaction per chunk, each through the
+ * same locking as every other money call (accounts locked in user id order, so it cannot deadlock
+ * with a payment). Each account that held anything gets one `reset` ledger row (amount = the
+ * change of cash + bank), so staff can still see what each member had; an account that was
+ * already fresh has nothing to record. An account opened while the reset runs is either part of
+ * a chunk (reset, with its row) or left alone, never reset silently. If the process stops half
+ * way, run it again: the accounts already reset have nothing left to change.
  * @returns {Promise<{ ok: true, accounts: number }>}
  */
 export async function resetGuild(guildId, opts = {}) {
-  const now = opts.now ?? Date.now();
   const config = await settingsFor(guildId, opts.config);
   const reason = String(opts.reason ?? 'Economy reset').slice(0, LIMITS.reason.maxLength);
-  return transaction(async (tx) => {
-    // Lock every row first, so the ledger amounts below are what the reset really removes.
-    await tx.run('UPDATE economy_accounts SET updated_at = updated_at WHERE guild_id = ?', guildId);
-    const { changes } = await tx.run(
-      `INSERT INTO economy_transactions
-         (guild_id, user_id, kind, amount, cash_after, bank_after, counterparty_id, actor_id, reason, created_at)
-       SELECT guild_id, user_id, 'reset', CAST(? AS BIGINT) - (cash + bank), CAST(? AS BIGINT), 0, NULL,
-         CAST(? AS TEXT), CAST(? AS TEXT), CAST(? AS BIGINT)
-       FROM economy_accounts WHERE guild_id = ?`,
-      config.startingBalance,
-      config.startingBalance,
-      opts.actorId ?? null,
-      reason,
-      now,
-      guildId
+  const ids = (await listIdsStmt.all(guildId)).map((r) => r.user_id);
+  for (let at = 0; at < ids.length; at += RESET_CHUNK) {
+    const chunk = ids.slice(at, at + RESET_CHUNK);
+    await transact(
+      guildId,
+      chunk,
+      (accounts) => ({
+        stamps: Object.fromEntries(chunk.map((id) => [id, ZERO_STAMPS])),
+        changes: chunk.map((userId) => {
+          const acc = accounts.get(userId);
+          return {
+            userId,
+            kind: 'reset',
+            cash: config.startingBalance - acc.cash,
+            bank: -acc.bank,
+            actorId: opts.actorId ?? null,
+            reason,
+          };
+        }),
+      }),
+      { now: opts.now, config }
     );
-    await tx.run(
-      `UPDATE economy_accounts SET cash = ?, bank = 0, daily_streak = 0, last_daily_at = 0, last_work_at = 0,
-         last_rob_at = 0, last_robbed_at = 0, last_message_earn_at = 0, updated_at = ?
-       WHERE guild_id = ?`,
-      config.startingBalance,
-      now,
-      guildId
-    );
-    return { ok: true, accounts: changes };
-  });
+  }
+  return { ok: true, accounts: ids.length };
 }

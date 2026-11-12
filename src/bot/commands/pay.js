@@ -17,6 +17,13 @@ export async function execute(interaction) {
   const config = await economyGate(interaction);
   if (!config) return undefined;
   const target = interaction.options.getUser('user', true);
+  // Only a member of this server can be paid: money sent to someone who left would be lost.
+  if (target.id !== interaction.user.id && !target.bot) {
+    const member =
+      interaction.options.getMember?.('user') ??
+      (await interaction.guild.members.fetch(target.id).catch(() => null));
+    if (!member) return reply(interaction, 'That member is not in this server.');
+  }
   const out = await doPay({
     guildId: interaction.guildId,
     fromId: interaction.user.id,

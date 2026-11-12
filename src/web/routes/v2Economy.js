@@ -8,7 +8,10 @@
 // manages this server and the state-changing calls have passed the CSRF check.
 import { Router } from 'express';
 import { actingUserId, currentUser } from '../middleware/auth.js';
+import { platformActionLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { config as appConfig } from '../../config.js';
+import { platformOfGuild } from '../../platform/platformOf.js';
 import { assignableRoles } from '../lib/guildContext.js';
 import { guildTextChannels, resolveUserTags } from '../lib/discord.js';
 import { recordAudit } from '../../db/audit.js';
@@ -37,6 +40,22 @@ const LEDGER_SHOWN = 50;
 const SEARCH_SHOWN = 10;
 /** The staff actions the page offers; the same four as /eco. */
 const ACTIONS = ['add', 'remove', 'set', 'reset-user'];
+
+/**
+ * A staff change posts to the log channel, which is a platform call, so it counts against the
+ * stricter limit for dashboard actions that post (10 a minute per server and person). Without a log
+ * channel nothing is posted and the ordinary limits are enough. Checked synchronously: the
+ * limiter either calls next() or answers 429 at once.
+ * @returns {boolean} false when it already answered 429
+ */
+function withinPostLimit(req, res, config) {
+  if (!config.logChannelId) return true;
+  let allowed = false;
+  platformActionLimit(req, res, () => {
+    allowed = true;
+  });
+  return allowed;
+}
 
 const actor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`);
 const fail = (res, message, status = 400) => res.status(status).json({ error: message });
@@ -95,6 +114,9 @@ router.get(
       channels: guildTextChannels(req.guild),
       roles: assignableRoles(req.guild),
       maxBalance: MAX_BALANCE,
+      // Discord sends no message text without the Message Content intent, so the minimum length
+      // cannot be applied there. The form says so.
+      messageLengthChecked: appConfig.intentMessageContent || platformOfGuild(req.guild) === 'fluxer',
     });
   })
 );
@@ -206,6 +228,12 @@ router.post(
     }
     const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
     if (member?.user?.bot) return fail(res, 'Bots do not have an account.');
+    // Members, and people who left but still have an account (so staff can clean up after them).
+    // Never a new account for someone who is not in the server.
+    if (!member && !(await getAccount(guild.id, userId))) {
+      return fail(res, 'That person is not in this server and has no account.');
+    }
+    if (!withinPostLimit(req, res, config)) return undefined;
 
     const by = actingUserId(req, guild.id, null);
     const out = await staffAdjust({
@@ -242,6 +270,7 @@ router.post(
   asyncHandler(async (req, res) => {
     if (req.body?.confirm !== 'RESET') return fail(res, 'Type RESET to confirm.');
     const { config } = await economySettings(req.guild.id);
+    if (!withinPostLimit(req, res, config)) return undefined;
     const out = await resetEconomy({
       guildId: req.guild.id,
       actorId: actingUserId(req, req.guild.id, null),

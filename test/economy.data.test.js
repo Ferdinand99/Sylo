@@ -5,10 +5,17 @@ import './helpers/tmpDb.js';
 import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../src/db/index.js';
-import { LEDGER_RETENTION_DAYS, getAccount, listTransactions, pruneTransactions } from '../src/db/economy.js';
+import {
+  LEDGER_RETENTION_DAYS,
+  TOMBSTONE_DAYS,
+  getAccount,
+  listTransactions,
+  pruneCooldowns,
+  pruneTransactions,
+} from '../src/db/economy.js';
 import { GUILD_TABLES, describeUserData, exportUserData, forgetUser, purgeGuild } from '../src/db/purge.js';
 import { credit, deposit, transfer } from '../src/modules/lib/economy.js';
-import { staffAdjust } from '../src/modules/economy.js';
+import { claimDaily, staffAdjust } from '../src/modules/economy.js';
 import { normaliseEconomyConfig } from '../src/modules/lib/economyConfig.js';
 
 let n = 0;
@@ -181,6 +188,101 @@ test('the ledger keeps 180 days: older rows are pruned, newer stay, balances are
   const a = await getAccount(G, U);
   assert.equal(Number(a.cash) + Number(a.bank), 500 - 100 - 5 + 7, 'pruning rows never changes a balance');
   assert.equal(await pruneTransactions(now), 0, 'a second prune finds nothing');
+});
+
+test('/forget leaves a small cooldown tombstone, and a new account keeps the cooldowns and gets no second starting balance', async () => {
+  const cfg = normaliseEconomyConfig({ startingBalance: 100 });
+  const now = Date.now();
+  await credit(G, U, 50, { kind: 'daily', config: cfg });
+  db.prepare(
+    'UPDATE economy_accounts SET last_daily_at = ?, last_work_at = ?, last_rob_at = ?, daily_streak = 4 WHERE guild_id = ? AND user_id = ?'
+  ).run(now - 10, now - 20, now - 30, G, U);
+  await forgetUser(G, U);
+  const tomb = db.prepare('SELECT * FROM economy_cooldowns WHERE guild_id = ? AND user_id = ?').get(G, U);
+  assert.deepEqual(
+    [tomb.last_daily_at, tomb.last_work_at, tomb.last_rob_at, tomb.start_given],
+    [now - 10, now - 20, now - 30, 1]
+  );
+  assert.ok(tomb.expires_at > now + (TOMBSTONE_DAYS * 86_400_000 - 60_000), 'lasts 7 days');
+  assert.deepEqual(
+    Object.keys(tomb).sort(),
+    ['expires_at', 'guild_id', 'last_daily_at', 'last_rob_at', 'last_work_at', 'start_given', 'user_id'],
+    'nothing else is kept: no balance, no streak'
+  );
+  assert.equal(await getAccount(G, U), null);
+  assert.equal(count('economy_transactions', 'AND user_id = ?', U), 0);
+
+  // the member comes back: no starting balance, the cooldowns are still running
+  await credit(G, U, 1, { kind: 'daily', config: cfg, now: now + 1000 });
+  const row = await getAccount(G, U);
+  assert.equal(Number(row.cash), 1, 'no starting balance again');
+  const daily = await claimDaily({ guildId: G, userId: U, config: cfg, now: now + 2000 });
+  assert.deepEqual([daily.ok, daily.reason], [false, 'cooldown']);
+  assert.equal(count('economy_transactions', "AND user_id = ? AND kind = 'start'", U), 0);
+  assert.deepEqual(
+    [Number(row.last_daily_at), Number(row.last_work_at), Number(row.last_rob_at)],
+    [now - 10, now - 20, now - 30]
+  );
+});
+
+test('forgetting twice in a row keeps one tombstone, and the export lists it as kept', async () => {
+  await credit(G, U, 5, { kind: 'daily', config });
+  await forgetUser(G, U);
+  await credit(G, U, 5, { kind: 'daily', config });
+  await forgetUser(G, U);
+  assert.equal(count('economy_cooldowns', 'AND user_id = ?', U), 1);
+  const dump = await exportUserData(G, U);
+  assert.equal(dump.data.economyCooldowns.length, 1);
+  const item = (await describeUserData(G, U)).items.find((i) => i.key === 'economyCooldowns');
+  assert.deepEqual([item.count, item.kept], [1, true]);
+  // a member who never had an account leaves no tombstone
+  await forgetUser(G, '800000000000000555');
+  assert.equal(count('economy_cooldowns', 'AND user_id = ?', '800000000000000555'), 0);
+});
+
+test('the daily prune deletes tombstones that have run out and keeps the others', async () => {
+  const now = Date.now();
+  await credit(G, U, 5, { kind: 'daily', config });
+  await credit(G, V, 5, { kind: 'daily', config });
+  await forgetUser(G, U);
+  await forgetUser(G, V);
+  db.prepare('UPDATE economy_cooldowns SET expires_at = ? WHERE guild_id = ? AND user_id = ?').run(
+    now - 1,
+    G,
+    U
+  );
+  assert.equal(await pruneCooldowns(now), 1);
+  assert.equal(count('economy_cooldowns', 'AND user_id = ?', U), 0);
+  assert.equal(count('economy_cooldowns', 'AND user_id = ?', V), 1);
+  assert.equal(await pruneCooldowns(now), 0);
+  // and the guild purge removes the rest
+  await purgeGuild(G);
+  assert.equal(count('economy_cooldowns'), 0);
+});
+
+test('the cooldown tombstone has its own table in the schema and the guild purge list', () => {
+  assert.ok(GUILD_TABLES.includes('economy_cooldowns'));
+  const cols = db
+    .prepare('PRAGMA table_info(economy_cooldowns)')
+    .all()
+    .map((c) => c.name);
+  assert.deepEqual(cols, [
+    'guild_id',
+    'user_id',
+    'last_daily_at',
+    'last_work_at',
+    'last_rob_at',
+    'start_given',
+    'expires_at',
+  ]);
+  const index = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'economy_transactions'")
+    .all()
+    .map((r) => r.name);
+  assert.ok(
+    index.includes('idx_economy_transactions_created_at'),
+    'the prune has an index on the time alone'
+  );
 });
 
 test('retention is 180 days', () => {

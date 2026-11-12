@@ -108,6 +108,7 @@ export const GUILD_TABLES = [
   'introductions',
   'economy_accounts',
   'economy_transactions',
+  'economy_cooldowns',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -549,6 +550,14 @@ const USER_DATA_SOURCES = [
     order: 'gu',
     countSql: 'SELECT COUNT(*) AS n FROM economy_transactions WHERE guild_id = ? AND user_id = ?',
     rowsSql: 'SELECT * FROM economy_transactions WHERE guild_id = ? AND user_id = ? ORDER BY id',
+  },
+  {
+    key: 'economyCooldowns',
+    label: 'Economy cooldown record (kept by /forget for 7 days, so it cannot reset cooldowns)',
+    order: 'gu',
+    kept: true,
+    countSql: 'SELECT COUNT(*) AS n FROM economy_cooldowns WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM economy_cooldowns WHERE guild_id = ? AND user_id = ?',
   },
   {
     key: 'economyCounterparty',

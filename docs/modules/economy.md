@@ -11,9 +11,10 @@ Each server has its own balances. Amounts are whole numbers; nobody can hold mor
 
 ## Needs
 
-- The **Message Content** intent (`INTENT_MESSAGE_CONTENT`, see
+- Optional: the **Message Content** intent (`INTENT_MESSAGE_CONTENT`, see
   [privileged intents](../self-hosting.md#privileged-intents)). Sylo reads only the length of a
-  message, to apply the minimum length, and never stores or logs the text.
+  message, to apply the minimum length, and never stores or logs the text. Without the intent the
+  module still works, but every message counts whatever its length; the settings page says so.
 - For the optional staff log channel: **View Channel**, **Send Messages** and **Embed Links** there.
 - Members must allow DMs from server members to get the DM that tells them they were robbed.
 
@@ -21,12 +22,12 @@ Each server has its own balances. Amounts are whole numbers; nobody can hold mor
 
 | Command                                   |                                                                                               |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `/balance [user]`                         | Cash, bank, total and rank.                                                                   |
+| `/balance [user]`                         | Your cash, bank, total and rank (only you see it on Discord); for another member, their total and rank. |
 | `/daily`                                  | The daily reward, once every 24 hours, bigger for each day in a row.                          |
 | `/work`                                   | A random pay with a short line, once per cooldown.                                            |
 | `/deposit <amount or all>`                | Put cash in the bank.                                                                         |
 | `/withdraw <amount or all>`               | Take money out of the bank.                                                                   |
-| `/pay <user> <amount>`                    | Send cash to another member (not yourself, not a bot).                                        |
+| `/pay <user> <amount>`                    | Send cash to another member of the server (not yourself, not a bot).                          |
 | `/rob <user>`                             | Try to steal another member's cash. Only when robbing is on.                                  |
 | `/economy-leaderboard`                    | The richest members by cash + bank, ten to a page, with your own rank.                        |
 | `/eco add`, `remove`, `set`, `reset-user` | Staff with **Manage Server**: change a member's money, or start them over.                    |
@@ -56,7 +57,7 @@ Amounts are shown with thousands separators, the currency emoji and name: "🪙 
 
 - **Bank** (on by default) — cash can be stolen, the bank cannot. `/deposit` and `/withdraw` move money.
 - **Payments** (on by default) — `/pay` sends cash. An optional **tax** (0 to 50 percent, default 0) is
-  charged to the sender on top of the amount, rounded down, and removed from the economy: the
+  charged to the sender on top of the amount, rounded up (a taxed payment pays at least 1), and removed from the economy: the
   recipient always gets exactly the amount. The sender needs the amount plus the tax in cash. A
   payment that would take the recipient over the cap is refused.
 
@@ -66,10 +67,12 @@ Amounts are shown with thousands separators, the currency emoji and name: "🪙 
 
 - The chance to succeed is **40 percent**. A success takes **10 to 30 percent** of the victim's cash
   (at least 1) for the robber. A failure makes the robber pay the victim a **fine** of 10 percent of the
-  robber's own cash, at least 25 (never more than they hold).
+  robber's own cash, at least 25. To attempt a rob the robber must hold at least that smallest fine in
+  cash, so the fine can always be paid from cash (the bank is never touched).
 - The robber then waits **4 hours**, success or not.
 - The victim must hold at least **100** in cash. Members who joined less than **24 hours** ago, and bots,
-  cannot be robbed. After a successful robbery the victim is safe for **1 hour**.
+  cannot be robbed; if Sylo cannot tell when a member joined, the rob is refused. After a successful
+  robbery the victim is safe for **1 hour**.
 - The result is posted in the channel, and the victim of a success gets a DM.
 
 Every value above can be changed in the settings, inside sane limits.
@@ -108,3 +111,9 @@ and total only, never the cash. Turn it off in the settings and the page disappe
 `/mydata` lists a member's economy account and ledger rows, and `/forget` deletes them. Where a member is
 named on someone else's row, the name is removed and the row stays. Staff can also reset a member. See the
 [privacy policy](../privacy-policy.md).
+
+`/forget` keeps one small record for **7 days**: the server, the member id, the times of the member's last
+`/daily`, `/work` and `/rob`, and that the starting balance was already given. It exists only so that
+`/forget` cannot be used to reset cooldowns and collect the starting balance again. A new account made in
+that time gets no starting balance and keeps those cooldowns. The daily clean-up deletes the record when
+the 7 days are over.

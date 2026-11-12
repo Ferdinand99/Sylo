@@ -1262,6 +1262,26 @@ export const MIGRATIONS = [
       CREATE INDEX idx_economy_transactions_created ON economy_transactions (guild_id, created_at);
     `);
   },
+
+  // Economy, second part (src/db/economy.js): an index on the ledger's time alone, for the daily
+  // retention prune that spans every server, and the short cooldown tombstone /forget leaves behind
+  // (see eraseMember: it stops /forget from being a way to reset cooldowns and the starting balance).
+  (database) => {
+    database.exec(`
+      CREATE INDEX idx_economy_transactions_created_at ON economy_transactions (created_at);
+      CREATE TABLE economy_cooldowns (
+        guild_id      TEXT NOT NULL,
+        user_id       TEXT NOT NULL,
+        last_daily_at INTEGER NOT NULL DEFAULT 0,
+        last_work_at  INTEGER NOT NULL DEFAULT 0,
+        last_rob_at   INTEGER NOT NULL DEFAULT 0,
+        start_given   INTEGER NOT NULL DEFAULT 1,
+        expires_at    INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE INDEX idx_economy_cooldowns_expires ON economy_cooldowns (expires_at);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

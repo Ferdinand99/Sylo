@@ -17,6 +17,7 @@ import {
   accountCount,
   getAccount,
   listAccounts,
+  pruneCooldowns,
   pruneTransactions,
   rankOfTotal,
   topAccounts,
@@ -45,7 +46,8 @@ import {
   normaliseEconomyConfig,
   normaliseReason,
 } from './lib/economyConfig.js';
-import { allClientsReady, allGuilds, guildKey } from '../platform/platformOf.js';
+import { allClientsReady, allGuilds, guildKey, platformOfClient } from '../platform/platformOf.js';
+import { config as appConfig } from '../config.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
 
@@ -89,8 +91,10 @@ every('economy', 600_000, () => {
 
 /**
  * Pay a member for a chat message, if the rules allow it.
- * @param {{ guildId: string, userId: string, length: number, channelId: string, roleIds?: string[],
- *   config: object, now?: number, random?: () => number }} input  `length` is the message's length
+ * @param {{ guildId: string, userId: string, length: number | null, channelId: string, roleIds?: string[],
+ *   config: object, now?: number, random?: () => number }} input  `length` is the message's length,
+ *   or null when it cannot be known (Discord without the Message Content intent): then the minimum
+ *   length is not checked, and nothing else changes
  * @returns {Promise<{ ok: true, amount: number } | { ok: false, reason: string }>}
  */
 export async function earnFromMessage({
@@ -106,7 +110,7 @@ export async function earnFromMessage({
   if (!config.messageEnabled) return { ok: false, reason: 'off' };
   if (config.ignoredChannels.includes(channelId)) return { ok: false, reason: 'ignored_channel' };
   if (roleIds.some((id) => config.ignoredRoles.includes(id))) return { ok: false, reason: 'ignored_role' };
-  if (length < config.messageMinLength) return { ok: false, reason: 'too_short' };
+  if (length !== null && length < config.messageMinLength) return { ok: false, reason: 'too_short' };
 
   const key = `${guildId}:${userId}`;
   const cooldownMs = config.messageCooldownSeconds * 1000;
@@ -131,13 +135,18 @@ export async function earnFromMessage({
   return { ok: true, amount: out.applied[0]?.applied ?? 0 };
 }
 
+/** Whether the platform gives us the text of a message (Discord needs the Message Content intent). */
+const contentVisible = (message) =>
+  appConfig.intentMessageContent || platformOfClient(message.client) === 'fluxer';
+
 on('economy', 'messageCreate', async (message, rawConfig, guildId) => {
   if (!message.member || message.author?.bot) return;
   const config = normaliseEconomyConfig(rawConfig);
   await earnFromMessage({
     guildId,
     userId: message.author.id,
-    length: String(message.content ?? '').trim().length,
+    // Without the Message Content intent Discord sends no text, so the length is unknown.
+    length: contentVisible(message) ? String(message.content ?? '').trim().length : null,
     channelId: message.channelId,
     roleIds: [...(message.member.roles?.cache?.keys?.() ?? [])],
     config,
@@ -239,6 +248,7 @@ every(
   async () => {
     const removed = await pruneTransactions();
     if (removed) log.info('economy', `pruned ${removed} ledger row(s) older than 180 days`);
+    await pruneCooldowns();
   },
   { firstDelayMs: 10 * MINUTE_MS }
 );
@@ -322,8 +332,11 @@ export async function doWithdraw({ guildId, userId, amount, config, now }) {
   return withdraw(guildId, userId, amount, { now, config });
 }
 
-/** The tax on a payment: the configured percentage of the amount, rounded down. */
-export const taxOn = (amount, percent) => Math.floor((amount * percent) / 100);
+/**
+ * The tax on a payment: the configured percentage of the amount, rounded up, so any taxed payment
+ * pays at least 1 (small payments cannot be used to avoid it). No tax at 0 percent.
+ */
+export const taxOn = (amount, percent) => (percent > 0 ? Math.floor((amount * percent + 99) / 100) : 0);
 
 /**
  * /pay. Refused: `pay_off`, `self`, `bot`, `invalid_amount`, `insufficient` (the sender needs the
@@ -349,7 +362,8 @@ export async function doPay({ guildId, fromId, toId, toIsBot = false, amount, co
  *
  * Success: the victim loses a share of their cash (min..max percent, at least 1) and the robber
  * gains it. Failure: the robber pays a fine to the victim (a percentage of their own cash, at
- * least the minimum, never more than they hold). Either way the robber's cooldown starts; only a
+ * least the minimum). To attempt a rob the robber must hold at least the smallest fine in cash,
+ * so the fine can always be paid from cash. Either way the robber's cooldown starts; only a
  * success protects the victim for a while.
  * @param {{ guildId: string, robberId: string, victimId: string, victimIsBot?: boolean,
  *   victimJoinedAt?: number | null, config: object, now?: number, random?: () => number }} input
@@ -368,8 +382,17 @@ export async function doRob({
   if (!config.robEnabled) return { ok: false, reason: 'rob_off' };
   if (robberId === victimId) return { ok: false, reason: 'self' };
   if (victimIsBot) return { ok: false, reason: 'bot' };
-  if (victimJoinedAt && now - victimJoinedAt < config.robNewMemberHours * HOUR_MS) {
-    return { ok: false, reason: 'new_member', retryAt: victimJoinedAt + config.robNewMemberHours * HOUR_MS };
+  // New members are safe for a while. If their join time cannot be read, the guard cannot be
+  // checked, so the attempt is refused (it fails closed) rather than skipped.
+  if (config.robNewMemberHours > 0) {
+    if (!Number.isFinite(victimJoinedAt) || victimJoinedAt <= 0) return { ok: false, reason: 'join_unknown' };
+    if (now - victimJoinedAt < config.robNewMemberHours * HOUR_MS) {
+      return {
+        ok: false,
+        reason: 'new_member',
+        retryAt: victimJoinedAt + config.robNewMemberHours * HOUR_MS,
+      };
+    }
   }
   const cooldownMs = config.robCooldownHours * HOUR_MS;
   const protectionMs = config.robProtectionMinutes * MINUTE_MS;
@@ -383,6 +406,10 @@ export async function doRob({
       if (robber.lastRobAt > 0 && now - robber.lastRobAt < cooldownMs) {
         return { refuse: { reason: 'cooldown', retryAt: robber.lastRobAt + cooldownMs } };
       }
+      // The robber must be able to pay the fine from cash, so a failed rob always costs something:
+      // at least the smallest fine (and 1, when that is set to 0).
+      const needed = Math.max(1, config.robFineMin);
+      if (robber.cash < needed) return { refuse: { reason: 'robber_poor', needed } };
       if (victim.cash < Math.max(1, config.robVictimMinCash)) return { refuse: { reason: 'victim_poor' } };
       if (victim.lastRobbedAt > 0 && now - victim.lastRobbedAt < protectionMs) {
         return { refuse: { reason: 'victim_protected', retryAt: victim.lastRobbedAt + protectionMs } };
@@ -403,9 +430,11 @@ export async function doRob({
           result: { success: true, amount: stolen },
         };
       }
+      // The fine is payable from cash (checked above); it is cut only to what fits under the
+      // victim's cap.
       const room = Math.max(0, MAX_BALANCE - victim.total);
       const fine = Math.min(
-        Math.max(config.robFineMin, Math.floor((robber.cash * config.robFinePercent) / 100)),
+        Math.max(config.robFineMin, 1, Math.floor((robber.cash * config.robFinePercent) / 100)),
         robber.cash,
         room
       );
@@ -423,7 +452,14 @@ export async function doRob({
     },
     { now, config }
   );
-  if (!out.ok) return { ok: false, reason: out.reason, ...(out.retryAt && { retryAt: out.retryAt }) };
+  if (!out.ok) {
+    return {
+      ok: false,
+      reason: out.reason,
+      ...(out.retryAt && { retryAt: out.retryAt }),
+      ...(out.needed && { needed: out.needed }),
+    };
+  }
   return {
     ok: true,
     success: out.result.success,
@@ -596,6 +632,10 @@ export function refusalText(result, config) {
       return `They cannot hold more than ${formatMoney(MAX_BALANCE, config)}.`;
     case 'cap':
       return `A balance cannot go above ${formatMoney(MAX_BALANCE, config)}.`;
+    case 'join_unknown':
+      return "I can't verify how long they've been here, so I can't let you rob them.";
+    case 'robber_poor':
+      return `You need at least ${formatMoney(result.needed, config)} cash to attempt a rob.`;
     case 'new_member':
       return `That member joined too recently to be robbed: try again ${at(result.retryAt)}.`;
     case 'victim_poor':

@@ -94,6 +94,20 @@ test('a message shorter than the minimum length pays nothing and does not start 
   assert.equal((await earnFromMessage({ ...args, length: 3 })).ok, true);
 });
 
+test('when the message length is unknown (no Message Content intent) the minimum length is skipped and the rest still applies', async () => {
+  const config = cfg({ messageMinLength: 50, ignoredChannels: [CH] });
+  const args = { guildId: G, userId: U, length: null, config, now: lastAt };
+  assert.equal((await earnFromMessage({ ...args, channelId: '900000000000000009' })).ok, true);
+  assert.equal(
+    (await earnFromMessage({ ...args, channelId: CH, now: lastAt + 120_000 })).reason,
+    'ignored_channel'
+  );
+  assert.equal(
+    (await earnFromMessage({ ...args, channelId: '900000000000000009', now: lastAt + 10_000 })).reason,
+    'cooldown'
+  );
+});
+
 test('ignored channels and ignored roles pay nothing; the switch turns message earning off', async () => {
   const config = cfg({ ignoredChannels: [CH], ignoredRoles: [ROLE] });
   const args = { guildId: G, userId: U, length: 10, config, now: lastAt };
