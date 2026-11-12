@@ -7,7 +7,7 @@ import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { MessageFlags } from 'discord.js';
 import { getAccount } from '../src/db/economy.js';
-import { createItem, listInventory } from '../src/db/economyShop.js';
+import { createItem, getItem, listInventory, updateItem } from '../src/db/economyShop.js';
 import { setGuildModule } from '../src/db/modules.js';
 import { runtime } from '../src/runtime.js';
 import { parseArgs } from '../src/bot/framework/parser.js';
@@ -179,6 +179,30 @@ test('/shop pages ten items at a time and the buttons turn the page', async () =
   assert.match(updates[1].embeds[0].data.footer.text, /Page 3 of 3/);
 });
 
+/** What the component router needs for a press of a confirm button (the interaction is deferred, then edited). */
+function press(m, customId) {
+  const edits = [];
+  return {
+    edits,
+    guildId: G,
+    guild: ctx.guild,
+    member: m,
+    user: m.user,
+    customId,
+    isRepliable: () => true,
+    deferred: false,
+    deferUpdate: async function () {
+      this.deferred = true;
+    },
+    editReply: async function (p) {
+      assert.equal(this.deferred, true, 'the answer is deferred before the purchase runs');
+      edits.push(p);
+    },
+    reply: async (p) => edits.push({ replied: p }),
+    update: async (p) => edits.push(p),
+  };
+}
+
 test('picking an item in the menu asks first; the confirm button buys; cancel does not', async () => {
   const m = await member(U);
   const id = await mk({ name: 'Shout-out', price: 100 });
@@ -193,9 +217,10 @@ test('picking an item in the menu asks first; the confirm button buys; cancel do
   assert.match(replies[0].content, /Buy \*\*Shout-out\*\* for 🪙 100 coins\?/);
   assert.equal(replies[0].flags, MessageFlags.Ephemeral);
   const confirm = replies[0].components[0].toJSON().components;
+  // the button carries the price the member saw
   assert.deepEqual(
     confirm.map((c) => c.custom_id),
-    [`shop:buy:${id}`, 'shop:no']
+    [`shop:buy:${id}:100`, 'shop:no']
   );
   assert.equal(await cash(U), 500, 'nothing is charged for picking');
 
@@ -204,13 +229,14 @@ test('picking an item in the menu asks first; the confirm button buys; cancel do
   assert.equal(updates[0].content, 'Cancelled.');
   assert.equal(await cash(U), 500);
 
-  await routeComponent({ ...base, customId: `shop:buy:${id}`, update: async (p) => updates.push(p) });
+  const bought = press(m, `shop:buy:${id}:100`);
+  await routeComponent(bought);
   assert.match(
-    updates[1].content,
+    bought.edits[0].content,
     /You bought \*\*Shout-out\*\* for 🪙 100 coins\. Staff were told.*400 coins left/
   );
   assert.equal(await cash(U), 400);
-  assert.deepEqual(updates[1].components, []);
+  assert.deepEqual(bought.edits[0].components, []);
 
   // an item that is gone by the time the member presses
   const gone = [];
@@ -223,37 +249,74 @@ test('picking an item in the menu asks first; the confirm button buys; cancel do
   assert.match(gone[0].content, /no longer for sale/);
 });
 
-test('/buy buys by exact name, by number and by a part of the name, and explains refusals privately', async () => {
+test('the confirm button buys at the price that was shown: a price that changed meanwhile charges nothing', async () => {
+  const m = await member(U);
+  const id = await mk({ name: 'Shout-out', price: 100 });
+  const asked = [];
+  await routeComponent({
+    guildId: G,
+    guild: ctx.guild,
+    member: m,
+    user: m.user,
+    customId: 'shop:pick',
+    values: [String(id)],
+    reply: async (p) => asked.push(p),
+  });
+  const button = asked[0].components[0].toJSON().components[0].custom_id;
+  // staff raise the price while the question is on screen
+  await updateItem(G, id, normaliseItem({ name: 'Shout-out', price: 5000, type: 'custom' }));
+  const pressed = press(m, button);
+  await routeComponent(pressed);
+  assert.match(pressed.edits[0].content, /The price changed to 🪙 5,000 coins\. Check and try again\./);
+  assert.equal(await cash(U), 500, 'nothing was charged');
+  assert.equal((await getItem(G, id)).sold, 0);
+  // an old button without a price never buys
+  const old = press(m, `shop:buy:${id}`);
+  await routeComponent(old);
+  assert.match(old.edits[0].content, /price changed/);
+  assert.equal(await cash(U), 500);
+});
+
+test('/buy finds an item by exact name, by number and by a part of the name, and asks with the price', async () => {
   const m = await member(U, 1000);
   await mk({ name: 'Shout-out', price: 100 });
   await mk({ name: 'Millionaire', price: 200 });
   await mk({ name: 'Mini shout', price: 10 });
 
-  const byName = interaction(m, { options: { item: 'millionaire' } });
-  await buy.execute(byName);
-  assert.match(said(byName), /You bought \*\*Millionaire\*\* for 🪙 200 coins/);
+  const asks = async (text) => {
+    const i = interaction(m, { options: { item: text } });
+    await buy.execute(i);
+    return i;
+  };
+  const byName = await asks('millionaire');
+  assert.match(said(byName), /Buy \*\*Millionaire\*\* for 🪙 200 coins\?/);
   assert.equal(byName.replies[0].flags, MessageFlags.Ephemeral);
-  const byNumber = interaction(m, { options: { item: '1' } });
-  await buy.execute(byNumber);
-  assert.match(said(byNumber), /You bought \*\*Shout-out\*\*/);
-  const partial = interaction(m, { options: { item: 'mini' } });
-  await buy.execute(partial);
-  assert.match(said(partial), /You bought \*\*Mini shout\*\*/);
-  assert.equal(await cash(U), 1000 - 200 - 100 - 10);
+  const confirmId = buttons(byName.replies[0])[0].custom_id;
+  assert.match(confirmId, /^shop:buy:\d+:200$/, 'the question carries the price');
+  assert.match(said(await asks('1')), /Buy \*\*Shout-out\*\* for 🪙 100/);
+  assert.match(said(await asks('mini')), /Buy \*\*Mini shout\*\* for 🪙 10/);
+  assert.equal(await cash(U), 1000, '/buy itself charges nothing: the button does');
 
-  const many = interaction(m, { options: { item: 'shout' } });
-  await buy.execute(many);
-  assert.match(said(many), /More than one item matches: \*\*Shout-out\*\*, \*\*Mini shout\*\*/);
-  const none = interaction(m, { options: { item: 'nothing' } });
-  await buy.execute(none);
-  assert.match(said(none), /There is no such item/);
+  // the button buys it, deferring first
+  const pressed = press(m, confirmId);
+  await routeComponent(pressed);
+  assert.match(pressed.edits[0].content, /You bought \*\*Millionaire\*\* for 🪙 200 coins/);
+  assert.equal(await cash(U), 800);
+
+  assert.match(
+    said(await asks('shout')),
+    /More than one item matches: \*\*Shout-out\*\*, \*\*Mini shout\*\*/
+  );
+  assert.match(said(await asks('nothing')), /There is no such item/);
   const poor = await member(V, 5);
-  const broke = interaction(poor, { options: { item: 'millionaire' } });
-  await buy.execute(broke);
-  assert.match(said(broke), /do not have enough cash: it costs .*200/);
+  const ask = interaction(poor, { options: { item: 'millionaire' } });
+  await buy.execute(ask);
+  const broke = press(poor, buttons(ask.replies[0])[0].custom_id);
+  await routeComponent(broke);
+  assert.match(broke.edits[0].content, /do not have enough cash: it costs .*200/);
 });
 
-test('/buy of a role item the bot cannot hand out says why, before charging', async () => {
+test('/buy of a role item the bot cannot hand out says why, before asking', async () => {
   ctx = fakeShopGuild(G, { roles: [fakeRole(ROLE_A, 'Millionaire')], canManageRoles: false });
   const m = await member(U);
   await mk({ name: 'Role', type: 'role', roleId: ROLE_A });
@@ -261,6 +324,32 @@ test('/buy of a role item the bot cannot hand out says why, before charging', as
   await buy.execute(i);
   assert.match(said(i), /Manage Roles.*Nothing was charged/);
   assert.equal(await cash(U), 500);
+});
+
+test('while an economy reset runs, a shop command answers at once instead of waiting', async () => {
+  const m = await member(U);
+  await mk({ name: 'Shout-out', price: 100 });
+  const { resetGuild } = await import('../src/modules/lib/economy.js');
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  // a reset that is held open inside its first chunk
+  const running = resetGuild(G, { config, beforeChunk: () => gate });
+  await new Promise((r) => setTimeout(r, 20));
+  for (const mod of [shop, buy, inventory]) {
+    const i = interaction(m, { options: { item: 'shout' } });
+    await mod.execute(i);
+    assert.match(said(i), /Economy reset in progress, try again shortly\./, mod.data.name);
+  }
+  const pressed = press(m, 'shop:buy:1:100');
+  await routeComponent(pressed);
+  assert.match(JSON.stringify(pressed.edits), /Economy reset in progress/);
+  release();
+  await running;
+  const after = interaction(m, { options: { item: 'shout' } });
+  await buy.execute(after);
+  assert.match(said(after), /Buy \*\*Shout-out\*\*/);
 });
 
 test('/buy suggests the names of items for sale while typing', async () => {
@@ -292,12 +381,12 @@ test('/inventory: your own is complete and private; another member shows only na
     price: 100,
   });
   void temp;
-  const { purchase } = await import('../src/modules/lib/shop.js');
+  const { buyNow } = await import('./helpers/fakeShop.js');
   for (const name of ['Shout-out', 'Millionaire']) {
     const id = (await (await import('../src/db/economyShop.js')).listItems(G)).find(
       (x) => x.name === name
     ).id;
-    assert.equal((await purchase({ guild: ctx.guild, member: a, itemId: id, config })).ok, true);
+    assert.equal((await buyNow({ guild: ctx.guild, member: a, itemId: id, config })).ok, true);
   }
   const own = interaction(a);
   await inventory.execute(own);

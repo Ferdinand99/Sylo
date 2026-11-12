@@ -21,11 +21,22 @@ registerPostgresBootstrap(`
     prize_amount     BIGINT NOT NULL DEFAULT 0,
     cancelled        INTEGER NOT NULL DEFAULT 0
   );
+  ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS prizes_paid INTEGER NOT NULL DEFAULT 0;
   CREATE INDEX IF NOT EXISTS idx_giveaways_guild ON giveaways (guild_id, ended, ends_at);
+  CREATE INDEX IF NOT EXISTS idx_giveaways_refunds ON giveaways (id) WHERE cancelled = 1 AND entry_fee > 0;
+  CREATE INDEX IF NOT EXISTS idx_giveaways_prizes ON giveaways (id) WHERE ended = 1 AND cancelled = 0 AND prize_amount > 0 AND prizes_paid = 0;
   CREATE TABLE IF NOT EXISTS giveaway_entries (
     giveaway_id INTEGER NOT NULL,
     user_id     TEXT NOT NULL,
     entered_at  BIGINT NOT NULL,
+    PRIMARY KEY (giveaway_id, user_id)
+  );
+  ALTER TABLE giveaway_entries ADD COLUMN IF NOT EXISTS refunded INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE IF NOT EXISTS giveaway_prizes (
+    giveaway_id INTEGER NOT NULL,
+    user_id     TEXT NOT NULL,
+    amount      BIGINT NOT NULL,
+    paid_at     BIGINT NOT NULL,
     PRIMARY KEY (giveaway_id, user_id)
   );
 `);
@@ -55,10 +66,28 @@ const s = {
     'SELECT * FROM giveaways WHERE guild_id = ? AND ended = 1 ORDER BY ends_at DESC LIMIT ?'
   ),
   due: prepare('SELECT * FROM giveaways WHERE ended = 0 AND ends_at <= ?'),
-  markCancelled: prepare('UPDATE giveaways SET ended = 1, cancelled = 1, won_ids = ? WHERE id = ?'),
+  // One statement: a giveaway is ended AND cancelled together, or neither. Also the row lock that
+  // serialises a cancel with the entry and leave transactions (see modules/giveaways.js).
+  claimCancel: prepare(
+    "UPDATE giveaways SET ended = 1, cancelled = 1, won_ids = '[]' WHERE id = ? AND ended = 0"
+  ),
   markEnded: prepare('UPDATE giveaways SET ended = 1, won_ids = ? WHERE id = ?'),
   claimEnd: prepare('UPDATE giveaways SET ended = 1 WHERE id = ? AND ended = 0'),
-  setWinners: prepare('UPDATE giveaways SET won_ids = ? WHERE id = ?'),
+  // A reroll has new winners to pay: the prizes are not all paid until the sweep or the draw says so.
+  setWinners: prepare('UPDATE giveaways SET won_ids = ?, prizes_paid = 0 WHERE id = ?'),
+  setPrizesPaid: prepare('UPDATE giveaways SET prizes_paid = 1 WHERE id = ?'),
+  unpaidPrizes: prepare(
+    `SELECT * FROM giveaways
+     WHERE ended = 1 AND cancelled = 0 AND prize_amount > 0 AND prizes_paid = 0 AND ends_at > ?
+     ORDER BY id LIMIT ?`
+  ),
+  unrefundedCancelled: prepare(
+    `SELECT * FROM giveaways g
+     WHERE cancelled = 1 AND entry_fee > 0
+       AND EXISTS (SELECT 1 FROM giveaway_entries e WHERE e.giveaway_id = g.id AND e.refunded = 0)
+     ORDER BY id LIMIT ?`
+  ),
+  unrefundedEntrants: prepare('SELECT user_id FROM giveaway_entries WHERE giveaway_id = ? AND refunded = 0'),
   delGuild: prepare('DELETE FROM giveaways WHERE guild_id = ?'),
 
   // `INSERT OR IGNORE` (SQLite-only) rewritten to the standard `ON CONFLICT
@@ -73,6 +102,9 @@ const s = {
   entryIds: prepare('SELECT user_id FROM giveaway_entries WHERE giveaway_id = ?'),
   delGuildEntries: prepare(
     'DELETE FROM giveaway_entries WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)'
+  ),
+  delGuildPrizes: prepare(
+    'DELETE FROM giveaway_prizes WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)'
   ),
 };
 
@@ -93,6 +125,7 @@ const hydrate = (row) => {
     entry_fee: Number(row.entry_fee) || 0,
     prize_amount: Number(row.prize_amount) || 0,
     cancelled: Number(row.cancelled) === 1,
+    prizesPaid: Number(row.prizes_paid) === 1,
     wonIds: Array.isArray(won) ? won : [],
   };
 };
@@ -122,7 +155,16 @@ export const activeGiveaways = async (guildId) => (await s.active.all(guildId)).
 export const endedGiveaways = async (guildId, limit = 10) =>
   (await s.recentEnded.all(guildId, limit)).map(hydrate);
 export const dueGiveaways = async (now) => (await s.due.all(now)).map(hydrate);
-export const markGiveawayCancelled = async (id) => s.markCancelled.run('[]', id);
+/** End and cancel a running giveaway in one statement: true only for the caller that did it. */
+export const claimGiveawayCancel = async (id) => (await s.claimCancel.run(id)).changes === 1;
+export const markGiveawayPrizesPaid = async (id) => s.setPrizesPaid.run(id);
+/** Ended giveaways with a currency prize that is not all paid yet (a crash after the draw), recent first-in. */
+export const giveawaysWithUnpaidPrizes = async (since, limit = 20) =>
+  (await s.unpaidPrizes.all(since, limit)).map(hydrate);
+/** Cancelled giveaways with an entry fee that still hold an unrefunded entry. */
+export const cancelledWithUnrefunded = async (limit = 20) =>
+  (await s.unrefundedCancelled.all(limit)).map(hydrate);
+export const unrefundedEntrantIds = async (id) => (await s.unrefundedEntrants.all(id)).map((r) => r.user_id);
 export const markGiveawayEnded = async (id, wonIds) => s.markEnded.run(JSON.stringify(wonIds ?? []), id);
 /** Mark a giveaway ended unless it already is: true only for the one caller that may draw it. */
 export const claimGiveawayEnd = async (id) => (await s.claimEnd.run(id)).changes === 1;
@@ -136,5 +178,6 @@ export const giveawayEntrantIds = async (id) => (await s.entryIds.all(id)).map((
 
 export async function clearGuildGiveaways(guildId) {
   await s.delGuildEntries.run(guildId);
+  await s.delGuildPrizes.run(guildId);
   await s.delGuild.run(guildId);
 }

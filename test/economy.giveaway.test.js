@@ -7,19 +7,26 @@ import { MessageFlags } from 'discord.js';
 import { db } from '../src/db/index.js';
 import { getAccount } from '../src/db/economy.js';
 import {
+  addGiveawayEntry,
+  cancelledWithUnrefunded,
+  claimGiveawayCancel,
   createGiveaway,
   getGiveaway,
-  giveawayEntrantIds,
   giveawayEntryCount,
+  giveawaysWithUnpaidPrizes,
   hasGiveawayEntry,
-  addGiveawayEntry,
+  markGiveawayEnded,
+  unrefundedEntrantIds,
 } from '../src/db/giveaways.js';
 import { setGuildModule } from '../src/db/modules.js';
 import { routeComponent } from '../src/bot/lib/components.js';
 import * as giveawayCommand from '../src/bot/commands/giveaway.js';
 import {
   cancelGiveaway,
+  completeGiveawayMoney,
   endGiveaway,
+  payPrize,
+  toggleEntryWithFee,
   buildGiveawayPayload,
   clampEntryFee,
   clampPrizeAmount,
@@ -170,11 +177,13 @@ test('cancelling refunds every entrant, ends the giveaway without a draw and clo
   assert.equal(await cash(b.id), 500);
   const g = await getGiveaway(id);
   assert.deepEqual([g.ended, g.cancelled, g.wonIds], [true, true, []]);
-  assert.equal(await giveawayEntryCount(id), 0, 'every entry was removed with its refund');
+  // the entries stay, each marked refunded, so a second run can tell what is left to do
+  assert.deepEqual(await unrefundedEntrantIds(id), [], 'every entry is marked refunded');
+  assert.equal(await giveawayEntryCount(id), 2);
   assert.equal(ledger(a.id).at(-1).kind, 'refund');
   assert.match(ledger(a.id).at(-1).reason, /cancelled/);
   const again = await cancelGiveaway(id);
-  assert.deepEqual([again.ok, again.reason], [false, 'already-ended']);
+  assert.deepEqual([again.ok, again.refunded, again.failed, again.resumed], [true, 0, 0, true]);
   assert.equal(await cash(a.id), 500, 'no second refund');
   assert.match(buildGiveawayPayload(g, { entryCount: 0 }).embeds[0].data.description, /cancelled/);
 });
@@ -293,9 +302,131 @@ test('/giveaway cancel gives the fees back and refuses an ended giveaway', async
   await giveawayCommand.execute(interaction(id));
   assert.match(replies[0].content, /Cancelled .*1 entry fee\(s\) were given back/);
   assert.equal(await cash(m.id), 500);
+  // run again on a cancelled giveaway: it finishes what is open (nothing), and says so
   await giveawayCommand.execute(interaction(id));
-  assert.match(replies[1].content, /already ended/);
+  assert.match(replies[1].content, /already cancelled/);
+  assert.equal(await cash(m.id), 500, 'no second refund');
+  // a giveaway that was drawn cannot be cancelled
+  const drawn = await start();
+  await addGiveawayEntry(drawn, m.id);
+  await endGiveaway(drawn);
+  await giveawayCommand.execute(interaction(drawn));
+  assert.match(replies[2].content, /already ended/);
   await giveawayCommand.execute(interaction(999999));
-  assert.match(replies[2].content, /No giveaway/);
-  assert.deepEqual(await giveawayEntrantIds(id), []);
+  assert.match(replies[3].content, /No giveaway/);
+  assert.deepEqual(await unrefundedEntrantIds(id), []);
+});
+
+test('a cancel that was cut off is finished by running it again, and by the sweep, each fee once', async () => {
+  const a = await member(50);
+  const b = await member(51);
+  const c = await member(52);
+  const id = await start({ entryFee: 50 });
+  for (const m of [a, b, c]) await press(id, m);
+  // the process stopped right after the giveaway was ended and cancelled, before any refund
+  assert.equal(await claimGiveawayCancel(id), true);
+  assert.equal(await cash(a.id), 450);
+  assert.deepEqual((await unrefundedEntrantIds(id)).sort(), [a.id, b.id, c.id].sort());
+
+  // the sweep and two more runs at the same moment: every entry is refunded exactly once
+  await Promise.all([completeGiveawayMoney(), cancelGiveaway(id), cancelGiveaway(id)]);
+  for (const m of [a, b, c]) {
+    assert.equal(await cash(m.id), 500, 'refunded');
+    assert.equal(ledger(m.id).filter((r) => r.kind === 'refund').length, 1, 'once');
+  }
+  assert.deepEqual(await unrefundedEntrantIds(id), []);
+  assert.equal(await cancelledWithUnrefunded().then((r) => r.filter((g) => g.id === id).length), 0);
+
+  // a cancel on a giveaway that was not cancelled but drawn still refuses
+  const drawn = await start({ entryFee: 50 });
+  await press(drawn, a);
+  await endGiveaway(drawn);
+  assert.deepEqual((await cancelGiveaway(drawn)).reason, 'already-ended');
+});
+
+test('an entrant who was charged is in the draw or refunded: no entry or leave after the draw, and a winner is never refunded', async () => {
+  const a = await member(60);
+  const id = await start({ entryFee: 50 });
+  await press(id, a);
+  const drawn = await endGiveaway(id);
+  assert.deepEqual(drawn.winners, [a.id]);
+  // pressing again after the draw is refused, and the winner's fee stays paid
+  assert.match((await press(id, a)).content, /has ended/);
+  assert.equal(await cash(a.id), 450);
+  const late = await toggleEntryWithFee(await getGiveaway(id), a.id);
+  assert.deepEqual(late, { ok: false, reason: 'ended' });
+  assert.equal(ledger(a.id).filter((r) => r.kind === 'refund').length, 0);
+  // and nobody can start paying for a giveaway that was cancelled
+  const other = await start({ entryFee: 50 });
+  await cancelGiveaway(other);
+  assert.deepEqual(await toggleEntryWithFee(await getGiveaway(other), a.id), { ok: false, reason: 'ended' });
+  assert.equal(await cash(a.id), 450);
+});
+
+test('a currency prize is paid once per giveaway and member: a second payout, a crash and a second reroll never pay twice', async () => {
+  const a = await member(70);
+  const b = await member(71);
+  const id = await start({ winners: 1, prizeAmount: 100 });
+  for (const m of [a, b]) await addGiveawayEntry(id, m.id);
+  const g = await getGiveaway(id);
+  const first = await payPrize(g, a.id, config);
+  const second = await payPrize(g, a.id, config);
+  assert.deepEqual([first.ok, second.ok, second.reason], [true, false, 'already_paid']);
+  assert.equal(await cash(a.id), 600);
+  assert.equal(ledger(a.id).filter((r) => r.kind === 'giveaway_prize').length, 1);
+
+  // the draw, then two rerolls: the pool is only two members, so the first winner is drawn again
+  const drew = await endGiveaway(id);
+  const rerolled = await endGiveaway(id, { rerollCount: 1 });
+  const rerolled2 = await endGiveaway(id, { rerollCount: 1 });
+  assert.equal(drew.winners.length + rerolled.winners.length + rerolled2.winners.length, 3);
+  for (const m of [a, b]) {
+    assert.ok((await cash(m.id)) <= 600, 'nobody was paid twice');
+    assert.equal(ledger(m.id).filter((r) => r.kind === 'giveaway_prize').length <= 1, true);
+  }
+  const prizes = db.prepare('SELECT user_id FROM giveaway_prizes WHERE giveaway_id = ?').all(id);
+  assert.equal(new Set(prizes.map((r) => r.user_id)).size, prizes.length);
+});
+
+test('a prize lost to a crash after the draw is paid by the sweep, once', async () => {
+  const a = await member(80);
+  const b = await member(81);
+  const id = await start({ winners: 2, prizeAmount: 200 });
+  for (const m of [a, b]) await addGiveawayEntry(id, m.id);
+  // the process stopped after the winners were stored and before anybody was paid
+  await markGiveawayEnded(id, [a.id, b.id]);
+  assert.equal(await cash(a.id), 500);
+  assert.equal(
+    (await giveawaysWithUnpaidPrizes(0)).some((x) => x.id === id),
+    true
+  );
+  await completeGiveawayMoney();
+  assert.equal(await cash(a.id), 700);
+  assert.equal(await cash(b.id), 700);
+  assert.equal((await getGiveaway(id)).prizesPaid, true);
+  await completeGiveawayMoney();
+  assert.equal(await cash(a.id), 700, 'nothing is paid again');
+  assert.equal(
+    (await giveawaysWithUnpaidPrizes(0)).some((x) => x.id === id),
+    false
+  );
+});
+
+test('while an economy reset runs, entering a giveaway with a fee answers at once and charges nothing', async () => {
+  const m = await member(90);
+  const id = await start({ entryFee: 50 });
+  const { resetGuild } = await import('../src/modules/lib/economy.js');
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const running = resetGuild(G, { config, beforeChunk: () => gate });
+  await new Promise((r) => setTimeout(r, 20));
+  const told = await press(id, m);
+  assert.match(told.content, /Economy reset in progress, try again shortly\./);
+  assert.equal(await hasGiveawayEntry(id, m.id), false);
+  release();
+  await running;
+  // the reset put the account back to nothing, so it is the ordinary answer again
+  assert.match((await press(id, m)).content, /in cash to enter/);
 });

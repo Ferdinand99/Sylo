@@ -67,7 +67,14 @@ export default function Giveaways() {
     try {
       const out = await cancelGiveaway(guildId, g.id);
       setData((d) => ({ ...d, giveaways: out.giveaways }));
-      if (g.entryFee > 0) notify(`${out.refunded} entry fee(s) were given back.`, 'info');
+      if (g.entryFee > 0) {
+        notify(
+          out.failed
+            ? `${out.refunded} entry fee(s) were given back. ${out.failed} could not be just now: Sylo tries those again within a minute.`
+            : `${out.refunded} entry fee(s) were given back.`,
+          'info'
+        );
+      }
     } catch (err) {
       notify(err.message);
     } finally {

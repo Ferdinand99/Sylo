@@ -1788,7 +1788,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
     const g = await getGiveawayInGuild(id, req.guild.id);
-    if (!g || g.ended) return res.status(400).json({ error: 'Not an active giveaway' });
+    // A cancelled giveaway may be cancelled again: that finishes the refunds that are still open.
+    if (!g || (g.ended && !g.cancelled)) return res.status(400).json({ error: 'Not an active giveaway' });
     const out = await cancelGiveaway(id);
     if (!out.ok) return res.status(400).json({ error: 'Not an active giveaway' });
     await recordAudit(req.guild.id, {

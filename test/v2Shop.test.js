@@ -5,7 +5,7 @@
 import { startWebApp } from './helpers/webApp.js';
 import { v2Open, auditRows } from './helpers/v2Open.js';
 import { GID, ROLE } from './helpers/fakeGuild.js';
-import { fakeMember } from './helpers/fakeShop.js';
+import { buyNow, fakeMember } from './helpers/fakeShop.js';
 import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../src/db/index.js';
@@ -16,7 +16,6 @@ import { getTempRole } from '../src/db/tempRoles.js';
 import { purgeGuild } from '../src/db/purge.js';
 import { credit } from '../src/modules/lib/economy.js';
 import { normaliseItem } from '../src/modules/lib/economyConfig.js';
-import { purchase } from '../src/modules/lib/shop.js';
 
 let app;
 let api;
@@ -146,8 +145,8 @@ test('sales counts and revenue show on the item, and refunds take them back', as
   await give(500);
   const guild = app.guild;
   const m = members[U];
-  await purchase({ guild, member: m, itemId: id, config: {} });
-  await purchase({ guild, member: m, itemId: id, config: {} });
+  await buyNow({ guild, member: m, itemId: id, config: {} });
+  await buyNow({ guild, member: m, itemId: id, config: {} });
   const item = (await json(await api.get('/modules/economy/shop/items'))).items[0];
   assert.deepEqual([item.sold, item.left, item.purchases, item.revenue], [2, 8, 2, 80]);
 });
@@ -212,7 +211,7 @@ test('a temporary role granted and revoked from the dashboard ends its record', 
 test('a refund gives the money back through the money API, revokes the item and cannot be repeated', async () => {
   const id = (await json(await add({ type: 'role', roleId, price: 150, stock: 4 }))).id;
   await give(400);
-  const bought = await purchase({ guild: app.guild, member: members[U], itemId: id, config: {} });
+  const bought = await buyNow({ guild: app.guild, member: members[U], itemId: id, config: {} });
   assert.equal(bought.ok, true);
   assert.equal(await cash(U), 250);
   const row = (await json(await api.get(`/modules/economy/members/${U}/inventory`))).inventory[0];
@@ -237,7 +236,7 @@ test('a refund gives the money back through the money API, revokes the item and 
 test('custom items are marked fulfilled and reopened, with a note from staff', async () => {
   const id = (await json(await add({ name: 'Shout-out' }))).id;
   await give(500);
-  await purchase({ guild: app.guild, member: members[U], itemId: id, config: {} });
+  await buyNow({ guild: app.guild, member: members[U], itemId: id, config: {} });
   const rowId = (await json(await api.get(`/modules/economy/members/${U}/inventory`))).inventory[0].id;
   const done = await json(
     await api.post(`/modules/economy/members/${U}/inventory/${rowId}/fulfil`, { note: 'done on stream' })
@@ -258,7 +257,7 @@ test('custom items are marked fulfilled and reopened, with a note from staff', a
 test('what a member sees as the item: an inventory row of a deleted item says "item removed"', async () => {
   const id = (await json(await add({ name: 'Gone soon' }))).id;
   await give(500);
-  await purchase({ guild: app.guild, member: members[U], itemId: id, config: {} });
+  await buyNow({ guild: app.guild, member: members[U], itemId: id, config: {} });
   await api.post(`/modules/economy/shop/items/${id}/delete`, {});
   const row = (await json(await api.get(`/modules/economy/members/${U}/inventory`))).inventory[0];
   assert.deepEqual([row.itemName, row.itemRemoved], ['Gone soon', true]);
@@ -269,10 +268,8 @@ test('the activity log lists purchases, filtered by member and by item, a page a
   const y = (await json(await add({ name: 'Y', price: 5 }))).id;
   await give(500, U);
   await give(500, V);
-  for (let i = 0; i < 14; i++)
-    await purchase({ guild: app.guild, member: members[U], itemId: x, config: {} });
-  for (let i = 0; i < 12; i++)
-    await purchase({ guild: app.guild, member: members[V], itemId: y, config: {} });
+  for (let i = 0; i < 14; i++) await buyNow({ guild: app.guild, member: members[U], itemId: x, config: {} });
+  for (let i = 0; i < 12; i++) await buyNow({ guild: app.guild, member: members[V], itemId: y, config: {} });
   const page1 = await json(await api.get('/modules/economy/shop/activity'));
   assert.deepEqual([page1.rows.length, page1.total, page1.pages, page1.page], [25, 26, 2, 1]);
   assert.equal(page1.rows[0].itemName, 'Y', 'newest first');

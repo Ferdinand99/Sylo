@@ -14,14 +14,32 @@
 // `pending` and becomes `active` once the role is on. If the platform refuses, the same code path
 // undoes the purchase: the money goes back through the money API (`refund`), the stock and the
 // temp-role record are restored in one transaction, and the buyer is told. A restart between the two
-// steps is mopped up by the sweep at the bottom, which refunds rows stuck as `pending`.
+// steps is mopped up by the sweep at the bottom, which settles rows stuck as `pending` once their
+// lease has run out: the role is on, so the row is confirmed; the role is not, so it is refunded.
+// A grant that is still running (in this process, or inside its lease) is never touched by the sweep,
+// and a refund or revoke of a pending row waits for the grant, so nobody keeps a role after a revoke.
+//
+// A purchase says which price the member saw (`expectedPrice`); if the price is another one now,
+// nothing is charged and the member is told the new price.
+//
+// An inventory row of a temporary role remembers how much time it added to the role's record
+// (`added_ms`): a refund or revoke takes off only that, so time staff gave by hand stays. When the
+// temp-role code drops a record (it ran out, was taken off) the rows become `expired`.
 //
 // Items are the staff's text; nothing a member types ever goes into an item, a ledger reason or a
 // fulfilment note.
 import { EmbedBuilder } from 'discord.js';
 import { abort, transact } from './economy.js';
 import { formatMoney } from './economyConfig.js';
-import { activateRow, getInventoryRow, getItem, stalePending } from '../../db/economyShop.js';
+import {
+  activateRow,
+  getInventoryRow,
+  getItem,
+  liveRoleRows,
+  liveRowsForRole,
+  stalePending,
+} from '../../db/economyShop.js';
+import { isNotFound } from '../../platform/messageErrors.js';
 import {
   TEMP_ROLE_CEILING,
   announceShopTempRole,
@@ -41,9 +59,48 @@ import { every } from '../schedule.js';
 
 const INSERT_ROW = `
   INSERT INTO economy_inventory
-    (guild_id, user_id, item_id, item_name, item_type, role_id, price_paid, source, status, created_at, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (guild_id, user_id, item_id, item_name, item_type, role_id, price_paid, source, status, added_ms, lease_until, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
+
+/** A role grant that is not confirmed within this long after its purchase is mopped up by the sweep. */
+export const GRANT_LEASE_MS = 5 * 60_000;
+/** A refund or revoke waits at most this long for the grant of the same row that is running. */
+const GRANT_WAIT_MS = 30_000;
+
+// Role grants running in this process, by inventory row id: the sweep skips them, and a refund,
+// revoke or /forget of the same row waits for them.
+const inflight = new Map();
+
+/** Run a role grant as "in flight" for its row. */
+async function trackGrant(rowId, run) {
+  let done;
+  inflight.set(
+    rowId,
+    new Promise((resolve) => {
+      done = resolve;
+    })
+  );
+  try {
+    return await run();
+  } finally {
+    inflight.delete(rowId);
+    done();
+  }
+}
+
+/** Wait for the grant of a row that is running, for a limited time. */
+async function waitForGrant(rowId) {
+  const running = inflight.get(rowId);
+  if (!running) return;
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(resolve, GRANT_WAIT_MS);
+    timer.unref?.();
+  });
+  await Promise.race([running, timeout]);
+  clearTimeout(timer);
+}
 
 /** True when the member holds one of the item's required roles (or it has none). */
 export function requirementsMet(item, roleIds) {
@@ -110,7 +167,9 @@ export function shopRefusalText(result, config) {
     case 'sold_out':
       return 'That item is sold out.';
     case 'price_changed':
-      return 'The price just changed. Look at the shop again.';
+      return result.price != null
+        ? `The price changed to ${formatMoney(result.price, config)}. Check and try again.`
+        : 'The price changed. Check and try again.';
     case 'limit':
       return 'You already have as many of that item as you may buy.';
     case 'requirements':
@@ -131,6 +190,8 @@ export function shopRefusalText(result, config) {
       }`;
     case 'not_active':
       return 'That item is no longer active.';
+    case 'grant_ended':
+      return 'That purchase was ended before the role arrived. Ask staff if you paid.';
     case 'not_found':
       return 'There is no such inventory entry.';
     case 'member_gone':
@@ -153,18 +214,22 @@ export function shopRefusalText(result, config) {
  *
  * Then, for a role item, the role goes on in the platform; if that fails the purchase is refunded.
  * For a custom item, a notice goes to the shop channel when one is set.
- * @param {{ guild: any, member: any, itemId: number, config: object, now?: number }} args
+ * `expectedPrice` is the price the member saw (the confirmation, the web page). When the item costs
+ * something else now, nothing is charged: `price_changed` with the current price.
+ * @param {{ guild: any, member: any, itemId: number, expectedPrice: number, config: object, now?: number }} args
  * @returns {Promise<{ ok: true, row: object, item: object, account: object, expiresAt?: number, extended?: boolean }
  *   | { ok: false, reason: string, [k: string]: any }>}
  */
-export async function purchase({ guild, member, itemId, config, now = Date.now() }) {
+export async function purchase({ guild, member, itemId, expectedPrice, config, now = Date.now() }) {
   const guildId = guildKey(guild);
   const userId = member.id;
   const item = await getItem(guildId, itemId);
   const problem = buyProblem(guild, member, item);
   if (problem) return { ok: false, ...problem };
+  // The member agreed to a price: never charge another one.
+  if (item.price !== expectedPrice) return { ok: false, reason: 'price_changed', price: item.price };
 
-  const box = { rowId: null, previous: null, expiresAt: null, extended: false };
+  const box = { rowId: null, previous: null, expiresAt: null, extended: false, added: 0 };
   const out = await transact(
     guildId,
     [userId],
@@ -197,7 +262,7 @@ export async function purchase({ guild, member, itemId, config, now = Date.now()
           );
           if (!cur) abort('item_gone');
           if (Number(cur.enabled) !== 1) abort('item_paused');
-          if (Number(cur.price) !== item.price) abort('price_changed');
+          if (Number(cur.price) !== item.price) abort('price_changed', { price: Number(cur.price) });
           abort('sold_out');
         }
         if (item.perMemberLimit !== null) {
@@ -210,11 +275,19 @@ export async function purchase({ guild, member, itemId, config, now = Date.now()
           );
           if (Number(have.n) >= item.perMemberLimit) abort('limit');
         }
+        // A permanent role is bought once: two buys at the same moment both passed the check before
+        // the transaction, and the member's account lock makes them take turns here, so the second
+        // sees the first one's row and is refused (and so is not charged).
+        if (item.type === 'role') yield* refuseIfRoleHeld(tx, guildId, userId, item.roleId);
         if (item.type === 'temp_role') {
           const existing = yield* readTempRoleRow(tx, guildId, userId, item.roleId);
           if (!existing && (yield* countTempRoleRows(tx, guildId)) >= TEMP_ROLE_CEILING)
             abort('temp_role_limit');
           box.expiresAt = extendedExpiry(existing?.expires_at ?? null, now, item.durationMs);
+          box.added = Math.max(
+            0,
+            box.expiresAt - (existing && existing.expires_at > now ? existing.expires_at : now)
+          );
           box.extended = Boolean(existing && existing.expires_at > now);
           box.previous = existing
             ? {
@@ -245,6 +318,8 @@ export async function purchase({ guild, member, itemId, config, now = Date.now()
           item.price,
           'purchase',
           item.type === 'custom' ? 'active' : 'pending',
+          box.added,
+          now + GRANT_LEASE_MS,
           now,
           now
         );
@@ -253,13 +328,28 @@ export async function purchase({ guild, member, itemId, config, now = Date.now()
   );
   if (!out.ok) return out;
 
-  const row = await getInventoryRow(guildId, box.rowId);
   const account = out.accounts.get(userId);
   if (item.type === 'custom') {
+    const row = await getInventoryRow(guildId, box.rowId);
     await notifyStaff({ guildId, config, item, member, row });
     return { ok: true, row, item, account };
   }
-  return finishRoleGrant({ guild, member, item, row, account, box, config, now, refundOnFailure: true });
+  return trackGrant(box.rowId, async () => {
+    const row = await getInventoryRow(guildId, box.rowId);
+    return finishRoleGrant({ guild, member, item, row, account, box, config, now, refundOnFailure: true });
+  });
+}
+
+/** Inside a transaction: refuse (`already_has_role`) when the member holds a permanent role item for this role. */
+function* refuseIfRoleHeld(tx, guildId, userId, roleId) {
+  const held = yield tx.get(
+    `SELECT COUNT(*) AS n FROM economy_inventory
+     WHERE guild_id = ? AND user_id = ? AND role_id = ? AND item_type = 'role' AND status IN ('active', 'pending')`,
+    guildId,
+    userId,
+    roleId
+  );
+  if (Number(held.n) > 0) abort('already_has_role');
 }
 
 /**
@@ -273,7 +363,7 @@ async function finishRoleGrant({ guild, member, item, row, account, box, config,
     ? await giveRoleOnPlatform(guild, member, role, `Shop: ${item.name}`)
     : 'That role no longer exists.';
   if (problem) {
-    const undone = await endRow({
+    const undone = await endRowNow({
       guild,
       rowId: row.id,
       mode: refundOnFailure ? 'refund' : 'revoke',
@@ -291,7 +381,14 @@ async function finishRoleGrant({ guild, member, item, row, account, box, config,
       account: undone.account ?? account,
     };
   }
-  await activateRow(guildId, row.id, now);
+  // The row may have been ended while the role was on its way (a revoke or a refund of a pending
+  // row, or the sweep): then the role must not stay on the member.
+  if (!(await activateRow(guildId, row.id, now))) {
+    if ((await liveRowsForRole(guildId, row.userId, item.roleId, row.id)) === 0) {
+      await takeRoleOnPlatform(guild, row.userId, item.roleId, 'Shop: the purchase was ended');
+    }
+    return { ok: false, reason: 'grant_ended', account };
+  }
   if (item.type === 'temp_role') {
     await announceShopTempRole({
       guild,
@@ -344,7 +441,7 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
     if (item.type === 'role' && member.roles.cache.has(item.roleId))
       return { ok: false, reason: 'already_has_role' };
   }
-  const box = { rowId: null, previous: null, expiresAt: null, extended: false };
+  const box = { rowId: null, previous: null, expiresAt: null, extended: false, added: 0 };
   const out = await transact(
     guildId,
     [userId],
@@ -364,11 +461,16 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
       now,
       config,
       after: function* (tx) {
+        if (item.type === 'role') yield* refuseIfRoleHeld(tx, guildId, userId, item.roleId);
         if (item.type === 'temp_role') {
           const existing = yield* readTempRoleRow(tx, guildId, userId, item.roleId);
           if (!existing && (yield* countTempRoleRows(tx, guildId)) >= TEMP_ROLE_CEILING)
             abort('temp_role_limit');
           box.expiresAt = extendedExpiry(existing?.expires_at ?? null, now, item.durationMs);
+          box.added = Math.max(
+            0,
+            box.expiresAt - (existing && existing.expires_at > now ? existing.expires_at : now)
+          );
           box.extended = Boolean(existing && existing.expires_at > now);
           box.previous = existing
             ? {
@@ -399,6 +501,8 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
           0,
           'grant',
           item.type === 'custom' ? 'active' : 'pending',
+          box.added,
+          now + GRANT_LEASE_MS,
           now,
           now
         );
@@ -406,10 +510,14 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
     }
   );
   if (!out.ok) return out;
-  const row = await getInventoryRow(guildId, box.rowId);
   const account = out.accounts.get(userId);
-  if (item.type === 'custom') return { ok: true, row, item, account };
-  return finishRoleGrant({ guild, member, item, row, account, box, config, now, refundOnFailure: false });
+  if (item.type === 'custom') {
+    return { ok: true, row: await getInventoryRow(guildId, box.rowId), item, account };
+  }
+  return trackGrant(box.rowId, async () => {
+    const row = await getInventoryRow(guildId, box.rowId);
+    return finishRoleGrant({ guild, member, item, row, account, box, config, now, refundOnFailure: false });
+  });
 }
 
 // --- refund and revoke -------------------------------------------------------------------------------------
@@ -426,7 +534,13 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
  * platform step (the caller knows the role was never given).
  * @returns {Promise<{ ok: true, row: object, refunded: boolean, account: object, warning?: string } | { ok: false, reason: string }>}
  */
-export async function endRow({
+export async function endRow(args) {
+  // A grant that is running for this row finishes first, so the role it puts on can be taken off.
+  await waitForGrant(args.rowId);
+  return endRowNow(args);
+}
+
+async function endRowNow({
   guild,
   rowId,
   mode,
@@ -499,17 +613,23 @@ export async function endRow({
               });
             }
           } else {
-            const other = yield tx.get(
-              `SELECT COUNT(*) AS n FROM economy_inventory
-               WHERE guild_id = ? AND user_id = ? AND role_id = ? AND item_type = 'temp_role' AND id <> ? AND status IN ('active', 'pending')`,
-              guildId,
-              row.userId,
-              row.roleId,
-              rowId
-            );
-            if (Number(other.n) === 0) {
-              yield* deleteTempRoleRow(tx, guildId, row.userId, row.roleId);
+            // Take off the time this row added, never more (time staff gave by hand stays) and never
+            // past now. When nothing is left the record goes and the role comes off.
+            const rec = yield* readTempRoleRow(tx, guildId, row.userId, row.roleId);
+            const left = rec ? rec.expires_at - row.addedMs : 0;
+            if (!rec || left <= now) {
+              if (rec) yield* deleteTempRoleRow(tx, guildId, row.userId, row.roleId);
               box.dropRole = true;
+            } else {
+              yield* writeTempRoleRow(tx, {
+                guildId,
+                userId: row.userId,
+                roleId: row.roleId,
+                expiresAt: left,
+                addedBy: rec.added_by,
+                reason: rec.reason,
+                createdAt: rec.created_at,
+              });
             }
           }
         } else if (row.itemType === 'role' && row.roleId) {
@@ -549,24 +669,32 @@ export async function endRow({
 
 // --- recovery ------------------------------------------------------------------------------------------------
 
-/** A role item whose role was never confirmed after this long is mopped up. */
-export const PENDING_GRACE_MS = 2 * 60_000;
-
 /**
- * Rows still `pending` after the grace time (the process stopped between the commit and the platform
- * call): when the member has the role the row becomes active, otherwise the purchase is refunded.
+ * Rows still `pending` when their lease has run out (the process stopped between the commit and the
+ * platform call, or the grant never came back). A row whose grant is still running here is left alone.
+ * Before anything is refunded the member is looked at: with the role on, the row is confirmed; a
+ * member who cannot be looked up right now (a hiccup, not "gone") is tried again next time; a member
+ * who is gone or lacks the role gets the purchase refunded (and a role that is still on comes off).
  * @returns {Promise<number>} how many rows were settled
  */
 export async function recoverPending(now = Date.now(), { config } = {}) {
   if (!allClientsReady()) return 0;
   let settled = 0;
-  for (const row of await stalePending(now - PENDING_GRACE_MS, 50)) {
+  for (const row of await stalePending(now, 50)) {
+    if (inflight.has(row.id)) continue;
     const guild = guildByKey(row.guildId);
     if (!guild) continue;
     try {
-      const member =
-        guild.members.cache.get(row.userId) ?? (await guild.members.fetch(row.userId).catch(() => null));
-      if (member?.roles.cache.has(row.roleId) && row.itemType !== 'custom') {
+      let member = guild.members.cache.get(row.userId) ?? null;
+      if (!member) {
+        try {
+          member = await guild.members.fetch(row.userId);
+        } catch (err) {
+          if (!isNotFound(err, [10007])) continue; // not known to be gone: try again next time
+          member = null;
+        }
+      }
+      if (member && row.itemType !== 'custom' && member.roles.cache.has(row.roleId)) {
         await activateRow(row.guildId, row.id, now);
       } else {
         await endRow({
@@ -576,7 +704,6 @@ export async function recoverPending(now = Date.now(), { config } = {}) {
           reason: 'The role was never confirmed',
           config,
           now,
-          platform: false,
         });
       }
       settled += 1;
@@ -588,3 +715,27 @@ export async function recoverPending(now = Date.now(), { config } = {}) {
 }
 
 every('economy', 60_000, () => recoverPending());
+
+// --- /forget ------------------------------------------------------------------------------------------------
+
+/**
+ * /forget: before the member's records are deleted, the roles the shop gave them come off (a bought
+ * temporary role would otherwise outlive its record and stay for good). Waits for a grant that is
+ * running. A role Sylo cannot take off is reported in `failed`; for a temporary one the caller keeps
+ * its record so the expiry sweep still takes the role back.
+ * @returns {Promise<{ roles: number, removed: number, failed: string[] }>}
+ */
+export async function endShopRolesForForget(guild, userId) {
+  const guildId = guildKey(guild);
+  const rows = await liveRoleRows(guildId, userId);
+  for (const r of rows) await waitForGrant(r.id);
+  const roles = [...new Set(rows.map((r) => r.roleId))];
+  let removed = 0;
+  const failed = [];
+  for (const roleId of roles) {
+    const out = await takeRoleOnPlatform(guild, userId, roleId, 'Shop: the member erased their data');
+    if (out.roleRemoved) removed += 1;
+    if (out.warning) failed.push(roleId);
+  }
+  return { roles: roles.length, removed, failed };
+}

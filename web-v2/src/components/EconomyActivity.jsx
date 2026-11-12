@@ -4,7 +4,13 @@ import LoadError from './LoadError.jsx';
 import Meta from './Meta.jsx';
 import Time from './Time.jsx';
 
-const STATUS = { pending: 'being set up', active: 'active', revoked: 'revoked', refunded: 'refunded' };
+const STATUS = {
+  pending: 'being set up',
+  active: 'active',
+  revoked: 'revoked',
+  refunded: 'refunded',
+  expired: 'expired',
+};
 
 /** The Activity tab: the recent purchases of the shop, filterable by member and by item. */
 export default function EconomyActivity({ guildId, currency }) {

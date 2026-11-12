@@ -1339,6 +1339,30 @@ export const MIGRATIONS = [
       ALTER TABLE giveaways ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0;
     `);
   },
+
+  // Economy, part B fix round: what a shop purchase added to a temporary role (so a refund takes off
+  // only that), a lease for a role grant that is still running (so the sweep leaves it alone), a
+  // marker per refunded giveaway entry, a marker for paid currency prizes and one row per prize paid
+  // (so a prize is never paid twice). The Postgres side is the bootstrap in src/db/economyShop.js and
+  // src/db/giveaways.js (every statement there can run again).
+  (database) => {
+    database.exec(`
+      ALTER TABLE economy_inventory ADD COLUMN added_ms INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE economy_inventory ADD COLUMN lease_until INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX idx_economy_inventory_pending ON economy_inventory (lease_until) WHERE status = 'pending';
+      ALTER TABLE giveaway_entries ADD COLUMN refunded INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE giveaways ADD COLUMN prizes_paid INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX idx_giveaways_refunds ON giveaways (id) WHERE cancelled = 1 AND entry_fee > 0;
+      CREATE INDEX idx_giveaways_prizes ON giveaways (id) WHERE ended = 1 AND cancelled = 0 AND prize_amount > 0 AND prizes_paid = 0;
+      CREATE TABLE giveaway_prizes (
+        giveaway_id INTEGER NOT NULL,
+        user_id     TEXT NOT NULL,
+        amount      INTEGER NOT NULL,
+        paid_at     INTEGER NOT NULL,
+        PRIMARY KEY (giveaway_id, user_id)
+      );
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

@@ -6,6 +6,7 @@ import { getModule } from '../../modules/registry.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
 import { forgetUser } from '../../db/purge.js';
 import { forgetIntroductionCard } from '../../modules/introductions.js';
+import { endShopRolesForForget } from '../../modules/lib/shop.js';
 import { recordAudit } from '../../db/audit.js';
 
 /** What a member-data deletion leaves alone; shown in the DM and on the dashboard pages. */
@@ -48,7 +49,12 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
   // The card message is found through the row forgetUser deletes, so it goes first. If it cannot be
   // deleted, the row stays, so the card can still be removed later.
   const card = await forgetIntroductionCard(guild, userId);
-  const r = await forgetUser(guild.id, userId, { keepIntroduction: !card.ok });
+  // Roles the shop gave them come off before the records that explain them are deleted.
+  const shopRoles = await endShopRolesForForget(guild, userId);
+  const r = await forgetUser(guild.id, userId, {
+    keepIntroduction: !card.ok,
+    keepTempRoles: shopRoles.failed,
+  });
 
   const dm = new EmbedBuilder()
     .setColor(0x58d68d)
@@ -73,6 +79,7 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
       { name: 'Suggestion votes', value: String(r.suggestionVotes), inline: true },
       { name: 'Suggestions (made anonymous)', value: String(r.suggestions), inline: true },
       { name: 'Temporary role records', value: String(r.tempRoles), inline: true },
+      { name: 'Shop roles taken off', value: `${shopRoles.removed} of ${shopRoles.roles}`, inline: true },
       { name: 'Quotes of their messages', value: String(r.quotes), inline: true },
       { name: 'Saved-by name removed from quotes', value: String(r.quotesSaved), inline: true },
       {

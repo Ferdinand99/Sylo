@@ -4,6 +4,7 @@
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { forgetUser } from '../../db/purge.js';
 import { forgetIntroductionCard } from '../../modules/introductions.js';
+import { endShopRolesForForget } from '../../modules/lib/shop.js';
 
 export const data = new SlashCommandBuilder()
   .setName('forget')
@@ -30,6 +31,7 @@ export async function execute(interaction) {
       content:
         `This permanently deletes your **XP / level**, **ticket history**, **ban appeals**, ` +
         `**invite records**, **AFK status**, **saved birthday**, **introduction** (answers and card), **economy account, transactions and shop items** and **giveaway entries** in **${interaction.guild.name}**. ` +
+        `Roles you bought in the shop (temporary or permanent) are taken off you first, because the shop records that keep them are deleted. ` +
         `The economy keeps a short record (7 days) of your daily, work and rob cooldowns and that you already got the starting balance, so /forget cannot be used to reset them. ` +
         `Messages already posted to channels, a completed giveaway's winner list, and the server's ` +
         `config-change log are not affected, and Sylo will still store new data going forward. ` +
@@ -40,7 +42,12 @@ export async function execute(interaction) {
 
   // The card message first: it is found through the member's stored row, which forgetUser deletes.
   const card = await forgetIntroductionCard(interaction.guild, interaction.user.id);
-  const r = await forgetUser(interaction.guildId, interaction.user.id, { keepIntroduction: !card.ok });
+  // Roles the shop gave them come off before the records that explain them are deleted.
+  const shopRoles = await endShopRolesForForget(interaction.guild, interaction.user.id);
+  const r = await forgetUser(interaction.guildId, interaction.user.id, {
+    keepIntroduction: !card.ok,
+    keepTempRoles: shopRoles.failed,
+  });
   const embed = new EmbedBuilder()
     .setColor(0x58d68d)
     .setTitle('Your data was deleted')
@@ -68,6 +75,13 @@ export async function execute(interaction) {
       {
         name: 'Economy',
         value: `${r.economyAccounts} account, ${r.economyTransactions} transactions, ${r.economyInventory} shop items`,
+        inline: true,
+      },
+      {
+        name: 'Shop roles taken off',
+        value: shopRoles.failed.length
+          ? `${shopRoles.removed} of ${shopRoles.roles}. Sylo could not take off ${shopRoles.failed.length}: ask staff to remove them.`
+          : `${shopRoles.removed} of ${shopRoles.roles}`,
         inline: true,
       },
       {

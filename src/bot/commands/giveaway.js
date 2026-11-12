@@ -178,12 +178,18 @@ export async function execute(interaction) {
     const id = interaction.options.getInteger('id', true);
     const g = await getGiveawayInGuild(id, interaction.guildId);
     if (!g) return eph(interaction, `No giveaway **#${id}** in this server.`);
-    if (g.ended) return eph(interaction, `Giveaway **#${id}** has already ended.`);
+    // A giveaway that was drawn cannot be cancelled; one that is already cancelled can be run again to
+    // finish its refunds (the sweep does that too, within a minute).
+    if (g.ended && !g.cancelled) return eph(interaction, `Giveaway **#${id}** has already ended.`);
     const r = await cancelGiveaway(id);
     if (!r.ok) return eph(interaction, `Giveaway **#${id}** could not be cancelled.`);
+    const fees =
+      g.entry_fee > 0
+        ? ` ${r.refunded} entry fee(s) were given back${r.failed ? `, ${r.failed} could not be just now: Sylo tries those again within a minute, or run this command again` : ''}.`
+        : '';
     return eph(
       interaction,
-      `Cancelled **#${id}**.${g.entry_fee > 0 ? ` ${r.refunded} entry fee(s) were given back${r.failed ? `, ${r.failed} could not be (run it again or check the ledger)` : ''}.` : ''}`
+      `${r.resumed ? `**#${id}** was already cancelled.` : `Cancelled **#${id}**.`}${fees}`
     );
   }
 

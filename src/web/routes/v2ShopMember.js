@@ -152,7 +152,15 @@ router.post(
       try {
         res.set({ 'Cache-Control': 'private, no-store' });
         const itemId = /^\d{1,15}$/.test(String(req.body?.itemId ?? '')) ? Number(req.body.itemId) : 0;
-        const out = await purchase({ guild: open.guild, member: open.member, itemId, config: open.config });
+        // The price the page showed and the member confirmed; a missing or odd one never matches.
+        const expectedPrice = /^\d{1,15}$/.test(String(req.body?.price ?? '')) ? Number(req.body.price) : NaN;
+        const out = await purchase({
+          guild: open.guild,
+          member: open.member,
+          itemId,
+          expectedPrice,
+          config: open.config,
+        });
         if (!out.ok) {
           return res.status(400).json({
             error: plain(shopRefusalText(out, open.config), open.guild),

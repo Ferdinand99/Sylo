@@ -49,6 +49,7 @@ const render = {
   birthdays: (r) =>
     `${r[0].day} ${MONTHS[r[0].month - 1] ?? `month ${r[0].month}`}${r[0].year ? ` ${r[0].year}` : ''}`,
   giveawayEntries: (r) => plural(r.length, 'entry', 'entries'),
+  giveawayPrizes: (r) => plural(r.length, 'prize', 'prizes'),
   suggestionVotes: (r) => plural(r.length, 'vote'),
   suggestions: (r) => plural(r.length, 'suggestion'),
   suggestionDecisions: (r) => plural(r.length, 'decision'),

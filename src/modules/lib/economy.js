@@ -592,6 +592,15 @@ const listIdsStmt = prepare('SELECT user_id FROM economy_accounts WHERE guild_id
 // process runs the bot, so this in-memory hold is enough; the row locks still guard every account.
 const resetsRunning = new Map();
 
+/**
+ * True while a reset of this server is running. A command checks it first and answers "try again
+ * shortly" at once instead of waiting for the reset inside Discord's 3 second window.
+ */
+export const isResetRunning = (guildId) => resetsRunning.has(guildId);
+
+/** What a member is told while the economy of their server is being reset. */
+export const RESET_TEXT = 'Economy reset in progress, try again shortly.';
+
 async function waitForReset(guildId) {
   while (resetsRunning.has(guildId)) await resetsRunning.get(guildId);
 }

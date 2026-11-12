@@ -20,7 +20,7 @@ await startOAuthApp();
 const { runtime } = await import('../src/runtime.js');
 const { db } = await import('../src/db/index.js');
 const { setGuildModule } = await import('../src/db/modules.js');
-const { createItem, getItem } = await import('../src/db/economyShop.js');
+const { createItem, getItem, updateItem } = await import('../src/db/economyShop.js');
 const { getAccount } = await import('../src/db/economy.js');
 const { credit } = await import('../src/modules/lib/economy.js');
 const { normaliseItem } = await import('../src/modules/lib/economyConfig.js');
@@ -54,6 +54,8 @@ const memberOf = (guild, id, roles = []) => {
   guild.members.cache.set(id, m);
   return m;
 };
+// What the page sends: the item and the price it showed.
+const pay = async (key, id) => ({ itemId: id, price: (await getItem(key, Number(id) || 0))?.price ?? 1 });
 const enableShop = (key, config = {}) =>
   setGuildModule(key, 'economy', { enabled: true, config: { webShop: true, ...config } });
 const mk = (key, over) =>
@@ -134,7 +136,7 @@ test('a member sees their balance, the items for sale (not the paused ones) and 
   assert.deepEqual(page.inventory, []);
 
   // the same function as /buy: ledger, stock, inventory
-  const buy = await me.post(`/shop/${D_GUILD}/buy`, { itemId: cheap });
+  const buy = await me.post(`/shop/${D_GUILD}/buy`, await pay(D_GUILD, cheap));
   assert.equal(buy.status, 200);
   const out = await view(buy);
   assert.deepEqual(
@@ -174,7 +176,7 @@ test('the requirements are checked on the server, not trusted from the page', as
     [999999, /no longer in the shop/],
     ['junk', /no longer in the shop/],
   ]) {
-    const res = await me.post(`/shop/${D_GUILD}/buy`, { itemId: id });
+    const res = await me.post(`/shop/${D_GUILD}/buy`, await pay(D_GUILD, id));
     assert.equal(res.status, 400);
     const body = await view(res);
     assert.match(body.error, text);
@@ -183,7 +185,7 @@ test('the requirements are checked on the server, not trusted from the page', as
   assert.equal(await cashOf(D_GUILD, ME), before, 'nothing was charged');
   // and with the role it works
   memberOf(dGuild, ME, [fakeRole(ROLE_NEEDED, 'Supporter')]);
-  assert.equal((await me.post(`/shop/${D_GUILD}/buy`, { itemId: vip })).status, 200);
+  assert.equal((await me.post(`/shop/${D_GUILD}/buy`, await pay(D_GUILD, vip))).status, 200);
 });
 
 test('too little cash is refused with the price', async () => {
@@ -192,9 +194,37 @@ test('too little cash is refused with the price', async () => {
   memberOf(dGuild, ME);
   await credit(D_GUILD, ME, 10, { kind: 'staff_add' });
   const id = await mk(D_GUILD, { price: 100 });
-  const res = await me.post(`/shop/${D_GUILD}/buy`, { itemId: id });
+  const res = await me.post(`/shop/${D_GUILD}/buy`, await pay(D_GUILD, id));
   assert.equal(res.status, 400);
   assert.match((await view(res)).error, /not have enough cash: it costs .*100/);
+
+  // (the same session) a price that changed after the page was shown is refused with the new price
+  {
+    await credit(D_GUILD, ME, 990, { kind: 'staff_add' }); // 10 + 990
+    const id = await mk(D_GUILD, { price: 100 });
+    const shown = await pay(D_GUILD, id); // the page showed 100, the member confirmed it
+    await updateItem(D_GUILD, id, normaliseItem({ name: 'Shout-out', price: 900, type: 'custom' }));
+    const res = await me.post(`/shop/${D_GUILD}/buy`, shown);
+    assert.equal(res.status, 400);
+    const body = await view(res);
+    assert.equal(body.reason, 'price_changed');
+    assert.match(body.error, /The price changed to .*900.*Check and try again/);
+    assert.equal(
+      body.view.items.find((i) => i.id === id).price,
+      900,
+      'the refusal carries the page as it is now'
+    );
+    assert.equal(await cashOf(D_GUILD, ME), 1000, 'nothing was charged');
+    assert.equal((await getItem(D_GUILD, id)).sold, 0);
+    // a request that names no price never buys
+    const unseen = await me.post(`/shop/${D_GUILD}/buy`, { itemId: id });
+    assert.equal(unseen.status, 400);
+    assert.equal((await view(unseen)).reason, 'price_changed');
+    assert.equal(await cashOf(D_GUILD, ME), 1000);
+    // with the price now shown it buys
+    assert.equal((await me.post(`/shop/${D_GUILD}/buy`, { itemId: id, price: 900 })).status, 200);
+    assert.equal(await cashOf(D_GUILD, ME), 100);
+  }
 });
 
 test('a role item is given in the platform, and a temporary role shows when it ends', async () => {
@@ -209,7 +239,7 @@ test('a role item is given in the platform, and a temporary role shows when it e
     durationHours: 24,
     price: 100,
   });
-  const res = await me.post(`/shop/${D_GUILD}/buy`, { itemId: id });
+  const res = await me.post(`/shop/${D_GUILD}/buy`, await pay(D_GUILD, id));
   assert.equal(res.status, 200);
   const out = await view(res);
   assert.deepEqual(m.adds, [ROLE_GIVEN]);
@@ -229,7 +259,7 @@ test('buying needs the CSRF token, and a stranger cannot buy', async () => {
   const noToken = await b.get(`/api/v2/shop/${D_GUILD}/buy`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ itemId: id }),
+    body: JSON.stringify(await pay(D_GUILD, id)),
   });
   assert.equal(noToken.status, 403);
   assert.equal(await cashOf(D_GUILD, ME), 500);
@@ -237,14 +267,14 @@ test('buying needs the CSRF token, and a stranger cannot buy', async () => {
   const ok = await b.get(`/api/v2/shop/${D_GUILD}/buy`, {
     method: 'POST',
     headers: { ...headers, 'x-csrf-token': token },
-    body: JSON.stringify({ itemId: id }),
+    body: JSON.stringify(await pay(D_GUILD, id)),
   });
   assert.equal(ok.status, 200);
   assert.equal(await cashOf(D_GUILD, ME), 490);
 
   // someone else, signed in but not a member of this server
   const other = await session({ discordId: '300000000000000888' });
-  assert.equal((await other.post(`/shop/${D_GUILD}/buy`, { itemId: id })).status, 404);
+  assert.equal((await other.post(`/shop/${D_GUILD}/buy`, await pay(D_GUILD, id))).status, 404);
   assert.equal((await getItem(D_GUILD, id)).sold, 1, 'only the member bought');
 });
 
@@ -279,7 +309,11 @@ test('a Fluxer server works with the Fluxer login, and a Discord login is not lo
   const page = await (await b.get(url, { headers })).json();
   assert.equal(page.guild.id, FKEY);
   assert.equal(page.balance.cash, 300);
-  const bought = await b.get(`${url}/buy`, { method: 'POST', headers, body: JSON.stringify({ itemId: id }) });
+  const bought = await b.get(`${url}/buy`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(await pay(FKEY, id)),
+  });
   assert.equal(bought.status, 200);
   assert.equal(await cashOf(FKEY, FME), 225);
 

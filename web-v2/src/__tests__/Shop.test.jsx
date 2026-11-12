@@ -136,7 +136,7 @@ describe('the web shop page', () => {
     });
     renderAtGuild(<Shop />, GUILD);
     fireEvent.click(await screen.findByRole('button', { name: 'Buy' }));
-    await waitFor(() => expect(api.buyWebShopItem).toHaveBeenCalledWith(GUILD, 1));
+    await waitFor(() => expect(api.buyWebShopItem).toHaveBeenCalledWith(GUILD, 1, 100));
     expect(confirmDialog).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Buy 🎤 Shout-out?',

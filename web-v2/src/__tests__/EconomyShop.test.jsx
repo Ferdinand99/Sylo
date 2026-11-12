@@ -341,6 +341,7 @@ describe('Economy: a member inventory', () => {
         pricePaid: 0,
       }),
       invRow({ id: 9, itemName: 'Old', status: 'refunded', itemRemoved: true }),
+      invRow({ id: 10, itemName: 'Lapsed', itemType: 'temp_role', roleId: ROLE, status: 'expired' }),
     ]);
     const rowOf = (name) => screen.getByRole('heading', { name, level: 3 }).closest('.v2-row');
     const shout = rowOf('Shout-out');
@@ -356,6 +357,11 @@ describe('Economy: a member inventory', () => {
     // an ended row has no revoke or refund
     expect(within(old).queryByRole('button', { name: 'Refund' })).toBeNull();
     expect(within(old).queryByRole('button', { name: 'Revoke' })).toBeNull();
+    // a temporary role that ran out is shown as expired and cannot be revoked or refunded
+    const lapsed = rowOf('Lapsed');
+    expect(lapsed.textContent).toContain('expired');
+    expect(within(lapsed).queryByRole('button', { name: 'Revoke' })).toBeNull();
+    expect(within(lapsed).queryByRole('button', { name: 'Refund' })).toBeNull();
   });
 
   it('gives an item for free with a reason', async () => {

@@ -383,6 +383,7 @@ const USER_ID_COLUMNS = {
   'polls.created_by': 'handled',
   'giveaways.host_id': 'handled',
   'giveaway_entries.user_id': 'handled',
+  'giveaway_prizes.user_id': 'handled',
   'verification_kicks.user_id': 'handled',
   'guild_event_participants.user_id': 'handled',
   'guild_events.host_id': 'handled',

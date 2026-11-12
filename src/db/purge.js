@@ -122,6 +122,9 @@ const ticketMsgStmt = prepare(
 const giveawayEntryStmt = prepare(
   'DELETE FROM giveaway_entries WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)'
 );
+const giveawayPrizeStmt = prepare(
+  'DELETE FROM giveaway_prizes WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)'
+);
 const eventParticipantStmt = prepare(
   'DELETE FROM guild_event_participants WHERE event_id IN (SELECT id FROM guild_events WHERE guild_id = ?)'
 );
@@ -134,6 +137,7 @@ const suggestionVoteStmt = prepare(
 export async function purgeGuild(guildId) {
   await ticketMsgStmt.run(guildId); // before `tickets`, which the subquery reads
   await giveawayEntryStmt.run(guildId); // before `giveaways`, which the subquery reads
+  await giveawayPrizeStmt.run(guildId);
   await eventParticipantStmt.run(guildId); // before `guild_events`, which the subquery reads
   await suggestionVoteStmt.run(guildId); // before `guild_suggestions`, which the subquery reads
   for (const stmt of simpleStmts) await stmt.run(guildId);
@@ -159,6 +163,11 @@ const userStmts = {
   birthdays: prepare('DELETE FROM birthdays WHERE guild_id = ? AND user_id = ?'),
   giveawayEntries: prepare(`
     DELETE FROM giveaway_entries
+    WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)
+      AND user_id = ?
+  `),
+  giveawayPrizes: prepare(`
+    DELETE FROM giveaway_prizes
     WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)
       AND user_id = ?
   `),
@@ -229,8 +238,10 @@ const userStmts = {
  * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
  */
 // `keepIntroduction`: leave the introduction row (the card message could not be deleted, so the row
-// is what lets it be removed later).
-export async function forgetUser(guildId, userId, { keepIntroduction = false } = {}) {
+// is what lets it be removed later). `keepTempRoles`: role ids whose temporary-role record stays
+// because Sylo could not take the role off (the callers take a bought role off first, see
+// endShopRolesForForget in modules/lib/shop.js): the expiry sweep still removes it on time.
+export async function forgetUser(guildId, userId, { keepIntroduction = false, keepTempRoles = [] } = {}) {
   const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
   const leveling =
     (await userStmts.leveling.run(guildId, userId)).changes +
@@ -242,12 +253,20 @@ export async function forgetUser(guildId, userId, { keepIntroduction = false } =
   const afk = (await userStmts.afk.run(guildId, userId)).changes;
   const birthdays = (await userStmts.birthdays.run(guildId, userId)).changes;
   const giveawayEntries = (await userStmts.giveawayEntries.run(guildId, userId)).changes;
+  await userStmts.giveawayPrizes.run(guildId, userId);
   const eventSignups = (await userStmts.eventParticipants.run(guildId, userId)).changes;
   const eventsHosted = (await userStmts.eventHost.run(guildId, userId)).changes;
   const suggestionVotes = (await userStmts.suggestionVotes.run(guildId, userId)).changes;
   const suggestions = (await userStmts.suggestionAuthor.run(guildId, userId)).changes;
   const suggestionDecisions = (await userStmts.suggestionDecider.run(guildId, userId)).changes;
-  const tempRoles = (await userStmts.tempRoles.run(guildId, userId)).changes;
+  const keep = keepTempRoles.map(String);
+  const tempRoles = keep.length
+    ? (
+        await prepare(
+          `DELETE FROM guild_temp_roles WHERE guild_id = ? AND user_id = ? AND role_id NOT IN (${keep.map(() => '?').join(', ')})`
+        ).run(guildId, userId, ...keep)
+      ).changes
+    : (await userStmts.tempRoles.run(guildId, userId)).changes;
   const tempRoleAdders = (await userStmts.tempRoleAdder.run(guildId, userId)).changes;
   const quotes = (await userStmts.quotesAuthored.run(guildId, userId)).changes;
   const quotesSaved = (await userStmts.quotesSaved.run(guildId, userId)).changes;
@@ -418,6 +437,15 @@ const USER_DATA_SOURCES = [
       'SELECT COUNT(*) AS n FROM giveaway_entries WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)',
     rowsSql:
       'SELECT * FROM giveaway_entries WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?) ORDER BY entered_at',
+  },
+  {
+    key: 'giveawayPrizes',
+    label: 'Giveaway currency prizes paid to you',
+    order: 'ug',
+    countSql:
+      'SELECT COUNT(*) AS n FROM giveaway_prizes WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)',
+    rowsSql:
+      'SELECT * FROM giveaway_prizes WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?) ORDER BY paid_at',
   },
   {
     key: 'eventSignups',

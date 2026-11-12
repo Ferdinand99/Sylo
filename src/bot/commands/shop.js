@@ -19,7 +19,9 @@ import { getItem, listItems } from '../../db/economyShop.js';
 import { economySettings } from '../../modules/economy.js';
 import { guildKey, guildSupports } from '../../platform/platformOf.js';
 import { registerComponent } from '../lib/components.js';
-import { economyGate } from '../lib/economyCmd.js';
+import { RESET_TEXT, economyGate } from '../lib/economyCmd.js';
+import { ReactionInteraction } from '../framework/ReactionInteraction.js';
+import { isResetRunning } from '../../modules/lib/economy.js';
 import { purchaseText } from '../lib/shopText.js';
 
 const PAGE_SIZE = 10;
@@ -141,6 +143,29 @@ export async function execute(interaction) {
 const eph = (interaction, content, extra = {}) =>
   interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] }, ...extra });
 
+/**
+ * The question before a purchase: the item and the price the member sees. The ✅ button carries that
+ * price (`shop:buy:<item>:<price>`), and purchase() refuses when the item costs something else by
+ * then. Shared by /buy and the menu.
+ */
+export function confirmPayload(item, config) {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`${PREFIX}buy:${item.id}:${item.price}`)
+      .setEmoji('✅')
+      .setLabel(`Buy for ${item.price.toLocaleString('en-US')}`)
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`${PREFIX}no`)
+      .setEmoji('❌')
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Secondary)
+  );
+  return {
+    content: `Buy **${itemLabel(item)}** for ${formatMoney(item.price, config)}?`,
+    components: [row],
+  };
+}
 registerComponent('economy', PREFIX, async (interaction) => {
   const parts = interaction.customId.split(':');
   const { enabled, config } = await economySettings(interaction.guildId);
@@ -164,35 +189,26 @@ registerComponent('economy', PREFIX, async (interaction) => {
   if (parts[1] === 'pick') {
     const item = await getItem(guildId, Number(interaction.values?.[0]));
     if (!item || !item.enabled) return eph(interaction, 'That item is no longer for sale.');
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`${PREFIX}buy:${item.id}`)
-        .setEmoji('✅')
-        .setLabel(`Buy for ${item.price.toLocaleString('en-US')}`)
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`${PREFIX}no`)
-        .setEmoji('❌')
-        .setLabel('Cancel')
-        .setStyle(ButtonStyle.Secondary)
-    );
-    return eph(interaction, `Buy **${itemLabel(item)}** for ${formatMoney(item.price, config)}?`, {
-      components: [row],
-    });
+    return eph(interaction, '', confirmPayload(item, config));
   }
 
   if (parts[1] === 'buy') {
+    if (isResetRunning(guildId)) return eph(interaction, RESET_TEXT);
+    // A purchase can take longer than Discord waits for an answer (it may give a role): answer first.
+    await interaction.deferUpdate();
     const out = await purchase({
       guild: interaction.guild,
       member: interaction.member,
       itemId: Number(parts[2]),
+      // The price on the button is the price the member saw; an old button without one never matches.
+      expectedPrice: /^\d{1,15}$/.test(String(parts[3])) ? Number(parts[3]) : NaN,
       config,
     });
-    return interaction.update({
-      content: purchaseText(out, config),
-      components: [],
-      allowedMentions: { parse: [] },
-    });
+    const done = { content: purchaseText(out, config), components: [], allowedMentions: { parse: [] } };
+    // On Fluxer the panel is a message with reactions: update it. On Discord edit the deferred reply.
+    return interaction instanceof ReactionInteraction
+      ? interaction.update(done)
+      : interaction.editReply(done);
   }
 
   // 'no' and anything else: close the question

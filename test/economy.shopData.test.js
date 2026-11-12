@@ -8,8 +8,7 @@ import { createItem, listInventory, listItems, markFulfilled } from '../src/db/e
 import { GUILD_TABLES, describeUserData, exportUserData, forgetUser, purgeGuild } from '../src/db/purge.js';
 import { credit } from '../src/modules/lib/economy.js';
 import { normaliseEconomyConfig, normaliseItem } from '../src/modules/lib/economyConfig.js';
-import { purchase } from '../src/modules/lib/shop.js';
-import { dropFakeShop, fakeMember, fakeShopGuild } from './helpers/fakeShop.js';
+import { buyNow, dropFakeShop, fakeMember, fakeShopGuild } from './helpers/fakeShop.js';
 
 let n = 0;
 let G;
@@ -29,8 +28,8 @@ async function seed() {
   ctx.guild.members.cache.set(U, m);
   await credit(G, U, 1000, { kind: 'staff_add', config });
   const id = await createItem(G, normaliseItem({ name: 'Shout-out', price: 100, type: 'custom' }));
-  await purchase({ guild: ctx.guild, member: m, itemId: id, config });
-  await purchase({ guild: ctx.guild, member: m, itemId: id, config });
+  await buyNow({ guild: ctx.guild, member: m, itemId: id, config });
+  await buyNow({ guild: ctx.guild, member: m, itemId: id, config });
   const rows = await listInventory(G, U);
   await markFulfilled(G, rows[0].id, STAFF, 'done');
   return { m, id, rows };
@@ -79,9 +78,13 @@ test('the migration made both tables with the documented columns, and both are i
     'note',
     'created_at',
     'updated_at',
+    'added_ms',
+    'lease_until',
   ]);
   assert.ok(GUILD_TABLES.includes('economy_items') && GUILD_TABLES.includes('economy_inventory'));
-  assert.deepEqual(cols('giveaways').slice(-3), ['entry_fee', 'prize_amount', 'cancelled']);
+  assert.deepEqual(cols('giveaways').slice(-4), ['entry_fee', 'prize_amount', 'cancelled', 'prizes_paid']);
+  assert.equal(cols('giveaway_entries').at(-1), 'refunded');
+  assert.deepEqual(cols('giveaway_prizes'), ['giveaway_id', 'user_id', 'amount', 'paid_at']);
 });
 
 test('/forget deletes the member inventory and nothing of other members, and the item stays', async () => {
@@ -89,7 +92,7 @@ test('/forget deletes the member inventory and nothing of other members, and the
   const other = fakeMember('8200000000000003');
   ctx.guild.members.cache.set(other.id, other);
   await credit(G, other.id, 500, { kind: 'staff_add', config });
-  await purchase({ guild: ctx.guild, member: other, itemId: id, config });
+  await buyNow({ guild: ctx.guild, member: other, itemId: id, config });
   const out = await forgetUser(G, U);
   assert.equal(out.economyInventory, 2);
   assert.equal(count('economy_inventory', 'AND user_id = ?', U), 0);
@@ -142,4 +145,93 @@ test('the guild purge removes the items and every inventory row of the server on
   assert.equal(count('economy_items'), 0);
   assert.equal(count('economy_inventory'), 0);
   assert.equal((await listItems(other)).length, 1);
+});
+
+// --- /forget ends the roles the shop gave -----------------------------------------------------------------
+
+test('/forget takes bought roles off before it deletes the records, and the confirmation says so', async () => {
+  const { execute } = await import('../src/bot/commands/forget.js');
+  const { getTempRole } = await import('../src/db/tempRoles.js');
+  const ROLE_T = '700000000000000101';
+  const ROLE_P = '700000000000000102';
+  const g = fakeShopGuild(G, {
+    roles: [
+      { id: ROLE_T, name: 'Temp', position: 1, managed: false, editable: true },
+      { id: ROLE_P, name: 'Perm', position: 1, managed: false, editable: true },
+    ],
+  });
+  ctx = g;
+  const m = fakeMember(U);
+  g.guild.members.cache.set(U, m);
+  await credit(G, U, 1000, { kind: 'staff_add', config });
+  const temp = await createItem(
+    G,
+    normaliseItem({ name: 'Temp', type: 'temp_role', roleId: ROLE_T, durationHours: 24, price: 100 })
+  );
+  const perm = await createItem(G, normaliseItem({ name: 'Perm', type: 'role', roleId: ROLE_P, price: 100 }));
+  await buyNow({ guild: g.guild, member: m, itemId: temp, config });
+  await buyNow({ guild: g.guild, member: m, itemId: perm, config });
+  assert.deepEqual([m.roles.cache.has(ROLE_T), m.roles.cache.has(ROLE_P)], [true, true]);
+  assert.ok(await getTempRole(G, U, ROLE_T));
+
+  const replies = [];
+  const run = (confirm) =>
+    execute({
+      inGuild: () => true,
+      guild: { ...g.guild, name: 'Shop Test' },
+      guildId: G,
+      user: m.user,
+      options: { getBoolean: () => confirm },
+      reply: async (p) => replies.push(p),
+    });
+  await run(null);
+  assert.match(
+    replies[0].content,
+    /Roles you bought in the shop \(temporary or permanent\) are taken off you first/
+  );
+  assert.equal(m.roles.cache.has(ROLE_T), true, 'asking does not delete');
+
+  await run(true);
+  assert.deepEqual(
+    [m.roles.cache.has(ROLE_T), m.roles.cache.has(ROLE_P)],
+    [false, false],
+    'the roles are off'
+  );
+  assert.equal(await getTempRole(G, U, ROLE_T), null, 'the record is deleted');
+  assert.equal((await listInventory(G, U)).length, 0);
+  const field = replies[1].embeds[0].data.fields.find((f) => f.name === 'Shop roles taken off');
+  assert.equal(field.value, '2 of 2');
+});
+
+test('/forget keeps the record of a temporary role Sylo could not take off, so the expiry still removes it', async () => {
+  const { execute } = await import('../src/bot/commands/forget.js');
+  const { getTempRole } = await import('../src/db/tempRoles.js');
+  const ROLE_T = '700000000000000101';
+  const g = fakeShopGuild(G, {
+    roles: [{ id: ROLE_T, name: 'Temp', position: 1, managed: false, editable: true }],
+  });
+  ctx = g;
+  const m = fakeMember(U);
+  g.guild.members.cache.set(U, m);
+  await credit(G, U, 1000, { kind: 'staff_add', config });
+  const temp = await createItem(
+    G,
+    normaliseItem({ name: 'Temp', type: 'temp_role', roleId: ROLE_T, durationHours: 24, price: 100 })
+  );
+  await buyNow({ guild: g.guild, member: m, itemId: temp, config });
+  g.guild.members.me.permissions.has = () => false; // Sylo lost Manage Roles meanwhile
+  const replies = [];
+  await execute({
+    inGuild: () => true,
+    guild: g.guild,
+    guildId: G,
+    user: m.user,
+    options: { getBoolean: () => true },
+    reply: async (p) => replies.push(p),
+  });
+  assert.equal(m.roles.cache.has(ROLE_T), true, 'could not be taken off');
+  assert.ok(await getTempRole(G, U, ROLE_T), 'so the record stays and the sweep takes it back on time');
+  assert.equal((await listInventory(G, U)).length, 0, 'the inventory is gone');
+  const field = replies[0].embeds[0].data.fields.find((f) => f.name === 'Shop roles taken off');
+  assert.match(field.value, /could not take off 1/);
 });

@@ -3,6 +3,10 @@
 // modules/economy.js; this file only talks to the member.
 import { MessageFlags } from 'discord.js';
 import { economySettings } from '../../modules/economy.js';
+import { RESET_TEXT, isResetRunning } from '../../modules/lib/economy.js';
+import { guildKey } from '../../platform/platformOf.js';
+
+export { RESET_TEXT };
 
 /** A reply only the member sees (public and short-lived on Fluxer). Never pings anyone. */
 export const reply = (interaction, content, extra = {}) =>
@@ -24,6 +28,11 @@ export async function economyGate(interaction) {
   const { enabled, config } = await economySettings(interaction.guildId);
   if (!enabled) {
     await reply(interaction, 'The Economy module is off in this server.');
+    return null;
+  }
+  // A reset holds the server's money calls; answer now rather than hang until it ends.
+  if (isResetRunning(guildKey(interaction.guild))) {
+    await reply(interaction, RESET_TEXT);
     return null;
   }
   return config;

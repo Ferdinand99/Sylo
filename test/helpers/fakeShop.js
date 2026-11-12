@@ -91,3 +91,15 @@ export function fakeShopGuild(id, { roles = [], members = [], canManageRoles = t
 export const dropFakeShop = () => {
   runtime.client = null;
 };
+
+/**
+ * purchase() for a test that is not about the price the buyer saw: it expects the item's price as it
+ * is right now. (The imports are dynamic so a test can load its database helper first.)
+ */
+export async function buyNow(args) {
+  const { purchase } = await import('../../src/modules/lib/shop.js');
+  const { getItem } = await import('../../src/db/economyShop.js');
+  const { guildKey } = await import('../../src/platform/platformOf.js');
+  const item = await getItem(guildKey(args.guild), args.itemId);
+  return purchase({ expectedPrice: item?.price, ...args });
+}

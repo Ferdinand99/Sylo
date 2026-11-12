@@ -6,7 +6,13 @@ import Time from './Time.jsx';
 import { confirmDialog } from './ConfirmDialog.jsx';
 import { limitOf, useModuleLimits } from './useModuleLimits.js';
 
-const STATUS = { pending: 'being set up', active: 'active', revoked: 'revoked', refunded: 'refunded' };
+const STATUS = {
+  pending: 'being set up',
+  active: 'active',
+  revoked: 'revoked',
+  refunded: 'refunded',
+  expired: 'expired',
+};
 
 /**
  * One member's inventory on the Members tab: what they own, and the staff actions: give an item for

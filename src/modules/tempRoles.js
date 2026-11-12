@@ -10,6 +10,7 @@
 // config shape: { staffRoles, dmMember, defaultDuration }
 import { EmbedBuilder } from 'discord.js';
 import { getGuildModule } from '../db/modules.js';
+import { expireShopTempRows, expireShopTempRowsOfUser } from '../db/economyShop.js';
 import { allClientsReady, clientOfGuild, guildByKey, guildKey, rawGuildId } from '../platform/platformOf.js';
 import {
   deleteTempRole,
@@ -352,6 +353,7 @@ export async function removeTempRole({ guild, userId, roleId, by = null, reason 
     }
   }
   await deleteTempRole(guildId, userId, roleId);
+  await expireShopTempRows(guildId, userId, roleId).catch(() => {});
 
   await postModLog(
     guild,
@@ -393,7 +395,12 @@ async function settle(row, now) {
   if (!guild) return; // that platform is not connected right now: try again later
   const fresh = await getTempRole(row.guild_id, row.user_id, row.role_id);
   if (!fresh || fresh.expires_at > now) return; // taken back or extended meanwhile
-  const drop = () => deleteTempRoleAt(row.guild_id, row.user_id, row.role_id, fresh.expires_at);
+  // A record that is dropped ends the shop purchases that held the role (their inventory rows become 'expired').
+  const drop = async () => {
+    const gone = await deleteTempRoleAt(row.guild_id, row.user_id, row.role_id, fresh.expires_at);
+    if (gone) await expireShopTempRows(row.guild_id, row.user_id, row.role_id).catch(() => {});
+    return gone;
+  };
 
   const role = guild.roles.cache.get(row.role_id);
   if (!role) return void (await drop()); // the role was deleted
@@ -454,14 +461,20 @@ every('temp-roles', SWEEP_MS, () => sweep());
 on('temp-roles', 'guildMemberUpdate', async ({ old: before, new: after }, _config, guildId) => {
   if (!before?.roles?.cache || !after?.roles?.cache || before === after) return;
   for (const id of before.roles.cache.keys()) {
-    if (!after.roles.cache.has(id)) await deleteTempRole(guildId, after.id, id);
+    if (!after.roles.cache.has(id)) {
+      await deleteTempRole(guildId, after.id, id);
+      await expireShopTempRows(guildId, after.id, id).catch(() => {});
+    }
   }
 });
 
 // A member who left has nothing to take back.
 on('temp-roles', 'guildMemberRemove', async (member, _config, guildId) => {
   const userId = member.id ?? member.user?.id;
-  if (userId) await deleteTempRolesOfUser(guildId, userId);
+  if (userId) {
+    await deleteTempRolesOfUser(guildId, userId);
+    await expireShopTempRowsOfUser(guildId, userId).catch(() => {});
+  }
 });
 
 // --- for the Economy shop ------------------------------------------------------------------------------

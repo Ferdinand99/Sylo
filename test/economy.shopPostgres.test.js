@@ -22,7 +22,7 @@ test(
     const purge = await import('../src/db/purge.js');
     const modules = await import('../src/db/modules.js');
     const { normaliseEconomyConfig, normaliseItem } = await import('../src/modules/lib/economyConfig.js');
-    const { fakeMember, fakeRole, fakeShopGuild, dropFakeShop, ROLE_A } =
+    const { buyNow, fakeMember, fakeRole, fakeShopGuild, dropFakeShop, ROLE_A } =
       await import('./helpers/fakeShop.js');
     t.after(async () => {
       dropFakeShop();
@@ -41,7 +41,7 @@ test(
     const cash = async (m) => Number((await store.getAccount(G, m.id))?.cash ?? 0);
     const item = (over) =>
       shopDb.createItem(G, normaliseItem({ name: 'Thing', price: 100, type: 'custom', ...over }));
-    const buy = (m, id) => shop.purchase({ guild, member: m, itemId: id, config });
+    const buy = (m, id) => buyNow({ guild, member: m, itemId: id, config });
 
     await t.test('items round-trip with numbers as numbers and the role list as an array', async () => {
       const id = await item({
@@ -197,6 +197,133 @@ test(
         const out = await gw.endGiveaway(drawn);
         assert.deepEqual(out.winners, [a.id]);
         assert.equal(await cash(a), 1090);
+      }
+    );
+
+    await t.test('the fix-round columns, tables and indexes exist', async () => {
+      const { prepare } = await import('../src/db/driver.js');
+      const cols = async (table) =>
+        (
+          await prepare('SELECT column_name FROM information_schema.columns WHERE table_name = ?').all(table)
+        ).map((r) => r.column_name);
+      assert.ok((await cols('economy_inventory')).includes('added_ms'));
+      assert.ok((await cols('economy_inventory')).includes('lease_until'));
+      assert.ok((await cols('giveaway_entries')).includes('refunded'));
+      assert.ok((await cols('giveaways')).includes('prizes_paid'));
+      assert.deepEqual((await cols('giveaway_prizes')).sort(), [
+        'amount',
+        'giveaway_id',
+        'paid_at',
+        'user_id',
+      ]);
+      const idx = (
+        await prepare('SELECT indexname FROM pg_indexes WHERE tablename = ?').all('economy_inventory')
+      ).map((r) => r.indexname);
+      assert.ok(idx.includes('idx_economy_inventory_pending'));
+    });
+
+    await t.test(
+      'a changed price is refused, and parallel buys of a permanent role charge once',
+      async () => {
+        const m = await member(30);
+        const id = await item({ price: 100 });
+        assert.equal(
+          (await shop.purchase({ guild, member: m, itemId: id, expectedPrice: 99, config })).reason,
+          'price_changed'
+        );
+        assert.equal(await cash(m), 1000);
+        const role = await item({ name: 'Legend', type: 'role', roleId: ROLE_A, price: 100 });
+        const results = await Promise.all([buy(m, role), buy(m, role), buy(m, role), buy(m, role)]);
+        assert.equal(results.filter((r) => r.ok).length, 1);
+        assert.equal(await cash(m), 900, 'charged once');
+        assert.equal((await shopDb.getItem(G, role)).sold, 1);
+      }
+    );
+
+    await t.test(
+      'a temporary role that expired is marked, and a refund takes off only its own time',
+      async () => {
+        const tm = await member(31);
+        const tid = await item({
+          type: 'temp_role',
+          roleId: ROLE_A,
+          durationHours: 24,
+          price: 100,
+          perMemberLimit: 1,
+        });
+        const bought = await buy(tm, tid);
+        assert.equal(bought.ok, true);
+        const row = (await shopDb.listInventory(G, tm.id))[0];
+        assert.equal(row.addedMs, 86_400_000);
+        assert.equal(await shopDb.expireShopTempRows(G, tm.id, ROLE_A), 1);
+        assert.equal((await shopDb.getInventoryRow(G, row.id)).status, 'expired');
+        assert.equal((await buy(tm, tid)).ok, true, 'an expired purchase does not count against the limit');
+        assert.equal((await shopDb.stalePending(Date.now() + 1, 5)).length, 0);
+      }
+    );
+
+    await t.test(
+      'giveaway money: entries racing a cancel, a prize paid in parallel, and the sweep',
+      async () => {
+        await modules.setGuildModule(G, 'giveaways', { enabled: true, config: {} });
+        await modules.setGuildModule(G, 'economy', { enabled: true, config: {} });
+        const mk = (over) =>
+          giveawayDb.createGiveaway({
+            guildId: G,
+            channelId: '700000000000000201',
+            prize: 'p',
+            winners: 12,
+            hostId: 'h',
+            endsAt: Date.now() + 3_600_000,
+            ...over,
+          });
+
+        // twelve members enter while the giveaway is cancelled: every one that was charged is refunded
+        const { id: cid } = await mk({ entryFee: 40 });
+        const racers = [];
+        for (let i = 0; i < 12; i++) racers.push(await member(200 + i));
+        const g = await giveawayDb.getGiveaway(cid);
+        await Promise.all([
+          ...racers.map((m) => gw.toggleEntryWithFee(g, m.id)),
+          gw.cancelGiveaway(cid),
+          gw.cancelGiveaway(cid),
+          gw.completeGiveawayMoney(),
+        ]);
+        await gw.cancelGiveaway(cid); // finish what the race left
+        for (const m of racers)
+          assert.equal(await cash(m), 1000, 'charged members were refunded, the others never paid');
+        assert.deepEqual(await giveawayDb.unrefundedEntrantIds(cid), []);
+
+        // twelve members enter while the draw runs: a charged member is in the draw, a winner pays
+        const { id: did } = await mk({ entryFee: 40 });
+        const runners = [];
+        for (let i = 0; i < 12; i++) runners.push(await member(220 + i));
+        const dg = await giveawayDb.getGiveaway(did);
+        await Promise.all([...runners.map((m) => gw.toggleEntryWithFee(dg, m.id)), gw.endGiveaway(did)]);
+        const drawn = await giveawayDb.getGiveaway(did);
+        const entered = new Set(await giveawayDb.giveawayEntrantIds(did));
+        for (const m of runners) {
+          const paid = (await cash(m)) === 960;
+          assert.equal(paid, entered.has(m.id), 'charged exactly when the entry exists');
+        }
+        for (const w of drawn.wonIds) assert.equal(entered.has(w), true, 'a winner was never refunded');
+
+        // one prize, five payouts at the same moment: paid once
+        const { id: pid } = await mk({ prizeAmount: 70 });
+        const pg = await giveawayDb.getGiveaway(pid);
+        const winner = await member(240);
+        const outs = await Promise.all([1, 2, 3, 4, 5].map(() => gw.payPrize(pg, winner.id, config)));
+        assert.equal(outs.filter((o) => o.ok).length, 1);
+        assert.equal(await cash(winner), 1070);
+
+        // a crash after the draw: the sweep pays
+        const { id: sid } = await mk({ prizeAmount: 30, winners: 1 });
+        const late = await member(241);
+        await giveawayDb.markGiveawayEnded(sid, [late.id]);
+        await gw.completeGiveawayMoney();
+        await gw.completeGiveawayMoney();
+        assert.equal(await cash(late), 1030);
+        assert.equal((await giveawayDb.getGiveaway(sid)).prizesPaid, true);
       }
     );
 

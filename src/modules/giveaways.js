@@ -8,7 +8,16 @@
 // given back when they leave before the draw or when the giveaway is cancelled) and pay a CURRENCY
 // PRIZE to every winner at the draw. Both go through the money API (modules/lib/economy.js): the fee
 // and the entry row, and the refund and the removal of the row, are each one transaction, so a member
-// is charged exactly once and never has an entry they did not pay for.
+// is charged exactly once and never has an entry they did not pay for. Those transactions lock the
+// giveaway row first (the same row the draw and a cancel update to end it), so an entry or a leave
+// either lands before the draw (and is drawn or refunded) or is refused after it: an entrant who was
+// charged is in the draw or refunded, and a winner is never refunded.
+//
+// A cancel refunds every entry once (a per-entry `refunded` marker) and can be run again, by staff or
+// by the sweep at the bottom, until nothing is left. A currency prize is paid at most once per giveaway
+// and member (the `giveaway_prizes` row is written in the payout's own transaction); a payout lost to a
+// crash after the draw is completed by the same sweep. A reroll pays only newly drawn winners who have
+// not been paid; nothing is taken back from earlier winners, so a staff reroll can pay extra prizes.
 import { allClientsReady, clientOfGuild, guildByKey } from '../platform/platformOf.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { registerComponent } from '../bot/lib/components.js';
@@ -20,7 +29,11 @@ import {
   claimGiveawayEnd,
   setGiveawayWinners,
   addGiveawayEntry,
-  markGiveawayCancelled,
+  claimGiveawayCancel,
+  markGiveawayPrizesPaid,
+  giveawaysWithUnpaidPrizes,
+  cancelledWithUnrefunded,
+  unrefundedEntrantIds,
   removeGiveawayEntry,
   hasGiveawayEntry,
   giveawayEntryCount,
@@ -28,7 +41,7 @@ import {
 } from '../db/giveaways.js';
 import { log } from '../lib/log.js';
 import { every, after } from './schedule.js';
-import { abort, credit, transact } from './lib/economy.js';
+import { RESET_TEXT, abort, isResetRunning, transact } from './lib/economy.js';
 import { MAX_BALANCE, formatMoney, normaliseEconomyConfig } from './lib/economyConfig.js';
 
 export const MIN_MS = 60_000; // 1 minute
@@ -187,21 +200,13 @@ export async function endGiveaway(id, opts = {}) {
   if (opts.rerollCount) await setGiveawayWinners(id, winners);
   else await markGiveawayEnded(id, winners);
 
-  // The currency prize: each (new) winner is paid through the money API.
+  // The currency prize: each winner is paid through the money API, once per giveaway and member.
   const economy = normaliseEconomyConfig((await getGuildModule(g.guild_id, 'economy')).config);
-  let paid = 0;
+  let paidNow = [];
   if (g.prize_amount > 0) {
-    for (const w of winners) {
-      const out = await credit(g.guild_id, w, g.prize_amount, {
-        kind: 'giveaway_prize',
-        reason: `Giveaway #${id}`,
-        config: economy,
-      }).catch((err) => {
-        log.error('giveaways', `could not pay the prize of #${id} to ${w}:`, err.message);
-        return { ok: false };
-      });
-      if (out.ok && out.applied > 0) paid += 1;
-    }
+    const result = await payPrizes(g, winners, economy);
+    paidNow = result.paidNow;
+    if (result.complete) await markGiveawayPrizesPaid(id);
   }
 
   const fresh = await getGiveaway(id);
@@ -224,7 +229,7 @@ export async function endGiveaway(id, opts = {}) {
     const pinging = !opts.rerollCount && cfg.ping !== 'none';
     const lead = pinging ? (cfg.ping === 'everyone' ? '@everyone ' : '@here ') : '';
     const body = winners.length
-      ? `${lead}🎉 Congratulations ${winners.map((w) => `<@${w}>`).join(', ')} — you won **${g.prize}**${g.prize_amount > 0 && paid ? ` and ${formatMoney(g.prize_amount, economy)} each` : ''}!`
+      ? `${lead}🎉 Congratulations ${winners.map((w) => `<@${w}>`).join(', ')} — you won **${g.prize}**${prizeText(g, economy, winners, paidNow)}!`
       : `Nobody entered **${g.prize}**, so there is no winner.`;
     await channel
       .send({
@@ -245,6 +250,71 @@ export async function endGiveaway(id, opts = {}) {
   }
 
   return { ok: true, winners };
+}
+
+/** " and 🪙 5 each" for a currency prize that was paid to every winner now, a shorter form otherwise. */
+function prizeText(g, economy, winners, paidNow) {
+  if (!(g.prize_amount > 0) || paidNow.length === 0) return '';
+  const money = formatMoney(g.prize_amount, economy);
+  if (paidNow.length === winners.length) return ` and ${money} each`;
+  return ` (${money} paid to ${paidNow.map((w) => `<@${w}>`).join(', ')})`;
+}
+
+/**
+ * Pay one winner the currency prize of a giveaway: the credit and the `giveaway_prizes` row are one
+ * transaction, and that row's key (giveaway, member) makes a second payout a refusal (`already_paid`)
+ * that changes nothing. Safe to call again after a crash.
+ */
+export async function payPrize(g, userId, config) {
+  return transact(
+    g.guild_id,
+    [userId],
+    () => ({
+      changes: [
+        {
+          userId,
+          cash: g.prize_amount,
+          kind: 'giveaway_prize',
+          clamp: true,
+          reason: `Giveaway #${g.id}`,
+        },
+      ],
+    }),
+    {
+      config,
+      after: function* (tx) {
+        const added = yield tx.run(
+          'INSERT INTO giveaway_prizes (giveaway_id, user_id, amount, paid_at) VALUES (?, ?, ?, ?) ON CONFLICT (giveaway_id, user_id) DO NOTHING',
+          g.id,
+          userId,
+          g.prize_amount,
+          Date.now()
+        );
+        if (added.changes !== 1) abort('already_paid');
+      },
+    }
+  );
+}
+
+/**
+ * Pay the prize to each winner who has not been paid. `complete` is true when nobody is left unpaid
+ * (a payout that failed is tried again by the sweep).
+ * @returns {Promise<{ paidNow: string[], complete: boolean }>}
+ */
+async function payPrizes(g, winners, config) {
+  const paidNow = [];
+  let complete = true;
+  for (const w of winners) {
+    try {
+      const out = await payPrize(g, w, config);
+      if (out.ok) paidNow.push(w);
+      else if (out.reason !== 'already_paid') complete = false;
+    } catch (err) {
+      complete = false;
+      log.error('giveaways', `could not pay the prize of #${g.id} to ${w}:`, err.message);
+    }
+  }
+  return { paidNow, complete };
 }
 
 // --- entry button -----------------------------------------------------
@@ -282,6 +352,10 @@ async function handleEnter(interaction, id) {
 
   let joined;
   if (g.entry_fee > 0) {
+    // A reset of the economy holds the money calls: say so now instead of waiting past Discord's 3 seconds.
+    if (isResetRunning(g.guild_id)) {
+      return interaction.reply({ content: RESET_TEXT, flags: MessageFlags.Ephemeral });
+    }
     // An entry fee: charged with the entry, given back with the leave, each in one transaction.
     const result = await toggleEntryWithFee(g, interaction.user.id);
     if (!result.ok) {
@@ -353,8 +427,10 @@ export async function toggleEntryWithFee(g, userId) {
         now,
         config,
         after: function* (tx) {
-          const row = yield tx.get('SELECT ended FROM giveaways WHERE id = ?', g.id);
-          if (!row || Number(row.ended) === 1) abort('ended');
+          // Lock the giveaway row and check it is still running, in one statement: the draw and a
+          // cancel end it with an update of the same row, so they take turns with this entry.
+          const lock = yield tx.run('UPDATE giveaways SET ended = ended WHERE id = ? AND ended = 0', g.id);
+          if (lock.changes !== 1) abort('ended');
           const added = yield tx.run(
             'INSERT INTO giveaway_entries (giveaway_id, user_id, entered_at) VALUES (?, ?, ?) ON CONFLICT (giveaway_id, user_id) DO NOTHING',
             g.id,
@@ -378,8 +454,8 @@ export async function toggleEntryWithFee(g, userId) {
       now,
       config,
       after: function* (tx) {
-        const row = yield tx.get('SELECT ended FROM giveaways WHERE id = ?', g.id);
-        if (!row || Number(row.ended) === 1) abort('ended');
+        const lock = yield tx.run('UPDATE giveaways SET ended = ended WHERE id = ? AND ended = 0', g.id);
+        if (lock.changes !== 1) abort('ended');
         const gone = yield tx.run(
           'DELETE FROM giveaway_entries WHERE giveaway_id = ? AND user_id = ?',
           g.id,
@@ -393,61 +469,74 @@ export async function toggleEntryWithFee(g, userId) {
 }
 
 /**
- * Cancel a running giveaway: nobody wins, and everybody who paid an entry fee gets it back (one
- * refund transaction per entrant, which also removes the entry).
- * @returns {Promise<{ ok: boolean, reason?: string, refunded?: number, failed?: number }>}
+ * Refund the entries of a cancelled giveaway that have not been refunded yet. Each is one transaction
+ * that sets the entry's `refunded` marker and gives the fee back (kind `refund`), so an entry is
+ * refunded once however often this runs and whoever runs it (staff again, the sweep).
+ * @returns {Promise<{ refunded: number, failed: number }>}
+ */
+async function refundCancelledEntries(g) {
+  let refunded = 0;
+  let failed = 0;
+  if (!(g.entry_fee > 0)) return { refunded, failed };
+  const config = normaliseEconomyConfig((await getGuildModule(g.guild_id, 'economy')).config);
+  for (const userId of await unrefundedEntrantIds(g.id)) {
+    try {
+      const out = await transact(
+        g.guild_id,
+        [userId],
+        () => ({
+          changes: [
+            {
+              userId,
+              cash: g.entry_fee,
+              kind: 'refund',
+              clamp: true,
+              record: true,
+              reason: `Giveaway #${g.id} cancelled`,
+            },
+          ],
+        }),
+        {
+          config,
+          after: function* (tx) {
+            const marked = yield tx.run(
+              'UPDATE giveaway_entries SET refunded = 1 WHERE giveaway_id = ? AND user_id = ? AND refunded = 0',
+              g.id,
+              userId
+            );
+            if (marked.changes !== 1) abort('already_refunded');
+          },
+        }
+      );
+      if (out.ok) refunded += 1;
+      else if (out.reason !== 'already_refunded') failed += 1;
+    } catch (err) {
+      failed += 1;
+      log.error('giveaways', `could not refund the entry of ${userId} in #${g.id}:`, err.message);
+    }
+  }
+  return { refunded, failed };
+}
+
+/**
+ * Cancel a running giveaway: nobody wins, and everybody who paid an entry fee gets it back. It can be
+ * run again on a giveaway that is already cancelled: that finishes the refunds that are still open
+ * (`resumed: true`), so "run it again" always works when some failed. A giveaway that was drawn
+ * cannot be cancelled.
+ * @returns {Promise<{ ok: boolean, reason?: string, refunded?: number, failed?: number, resumed?: boolean }>}
  */
 export async function cancelGiveaway(id) {
   const g = await getGiveaway(id);
   if (!g) return { ok: false, reason: 'not-found' };
-  if (!(await claimGiveawayEnd(id))) return { ok: false, reason: 'already-ended' };
-  await markGiveawayCancelled(id);
-  let refunded = 0;
-  let failed = 0;
-  if (g.entry_fee > 0) {
-    const config = normaliseEconomyConfig((await getGuildModule(g.guild_id, 'economy')).config);
-    for (const userId of await giveawayEntrantIds(id)) {
-      try {
-        const out = await transact(
-          g.guild_id,
-          [userId],
-          () => ({
-            changes: [
-              {
-                userId,
-                cash: g.entry_fee,
-                kind: 'refund',
-                clamp: true,
-                record: true,
-                reason: `Giveaway #${id} cancelled`,
-              },
-            ],
-          }),
-          {
-            config,
-            after: function* (tx) {
-              const gone = yield tx.run(
-                'DELETE FROM giveaway_entries WHERE giveaway_id = ? AND user_id = ?',
-                id,
-                userId
-              );
-              if (gone.changes !== 1) abort('not_in');
-            },
-          }
-        );
-        if (out.ok) refunded += 1;
-        else if (out.reason !== 'not_in') failed += 1;
-      } catch (err) {
-        failed += 1;
-        log.error('giveaways', `could not refund the entry of ${userId} in #${id}:`, err.message);
-      }
-    }
-  }
+  // One statement ends and cancels it, and takes the row lock the entry transactions wait on.
+  const claimed = await claimGiveawayCancel(id);
+  if (!claimed && !g.cancelled) return { ok: false, reason: 'already-ended' };
+  const { refunded, failed } = await refundCancelledEntries(g);
   const guild = guildByKey(g.guild_id);
   const channel = guild
     ? (guild.channels.cache.get(g.channel_id) ?? (await guild.channels.fetch(g.channel_id).catch(() => null)))
     : null;
-  if (channel?.isTextBased?.() && g.message_id) {
+  if (claimed && channel?.isTextBased?.() && g.message_id) {
     const fresh = await getGiveaway(id);
     const msg = await channel.messages.fetch(g.message_id).catch(() => null);
     if (msg)
@@ -455,8 +544,24 @@ export async function cancelGiveaway(id) {
         .edit(buildGiveawayPayload(fresh, { entryCount: await giveawayEntryCount(id) }))
         .catch(() => {});
   }
-  return { ok: true, refunded, failed };
+  return { ok: true, refunded, failed, resumed: !claimed };
 }
+
+/**
+ * The money work a crash can leave open, finished by the sweep: refunds of cancelled giveaways, and
+ * currency prizes of recent draws. Both are safe to repeat (a marker per entry, a row per prize).
+ */
+export async function completeGiveawayMoney(now = Date.now()) {
+  for (const g of await cancelledWithUnrefunded(20)) await refundCancelledEntries(g);
+  for (const g of await giveawaysWithUnpaidPrizes(now - PRIZE_SWEEP_WINDOW_MS, 20)) {
+    const economy = normaliseEconomyConfig((await getGuildModule(g.guild_id, 'economy')).config);
+    const { complete } = await payPrizes(g, g.wonIds, economy);
+    if (complete) await markGiveawayPrizesPaid(g.id);
+  }
+}
+
+/** How far back the sweep looks for draws whose prizes were not all paid. */
+const PRIZE_SWEEP_WINDOW_MS = 7 * 86_400_000;
 
 registerComponent('giveaways', 'gaw:enter:', (interaction) =>
   handleEnter(interaction, Number(interaction.customId.slice('gaw:enter:'.length)))
@@ -478,3 +583,6 @@ async function tick() {
 every('giveaways', TICK_MS, () => {
   tick().catch((err) => log.error('giveaways', 'tick failed:', err.message));
 });
+every('giveaways', 60_000, () =>
+  completeGiveawayMoney().catch((err) => log.error('giveaways', 'money sweep failed:', err.message))
+);

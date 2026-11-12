@@ -16,10 +16,19 @@ import {
   markFulfilled,
   updateItem,
 } from '../src/db/economyShop.js';
-import { getTempRole } from '../src/db/tempRoles.js';
+import { getTempRole, putTempRole } from '../src/db/tempRoles.js';
+import { sweep as tempRoleSweep } from '../src/modules/tempRoles.js';
 import { abort, credit, transact } from '../src/modules/lib/economy.js';
 import { normaliseEconomyConfig, normaliseItem } from '../src/modules/lib/economyConfig.js';
-import { endRow, grantItem, pickItem, purchase, recoverPending } from '../src/modules/lib/shop.js';
+import {
+  endRow,
+  endShopRolesForForget,
+  grantItem,
+  pickItem,
+  purchase,
+  recoverPending,
+  shopRefusalText,
+} from '../src/modules/lib/shop.js';
 import {
   dropFakeShop,
   fakeMember,
@@ -56,8 +65,16 @@ async function buyer(i, cash = 1000, roles = []) {
 }
 const item = (over = {}) =>
   createItem(G, normaliseItem({ name: 'Shout-out', price: 100, type: 'custom', ...over }));
-const buy = (member, itemId, over = {}) =>
-  purchase({ guild: ctx.guild, member, itemId, config: cfg(), ...over });
+// By default the buyer saw the price the item has now; a test of the price check passes `expectedPrice`.
+const buy = async (member, itemId, over = {}) =>
+  purchase({
+    guild: ctx.guild,
+    member,
+    itemId,
+    expectedPrice: (await getItem(G, itemId))?.price,
+    config: cfg(),
+    ...over,
+  });
 const cash = async (m) => Number((await getAccount(G, m.id))?.cash ?? 0);
 const ledger = (m) =>
   db
@@ -471,8 +488,8 @@ test('a purchase stuck as pending (a restart between the commit and the role) is
   await buy(a, id);
   await buy(b, id);
   // both rows go back to pending, as if the process had stopped before the platform call finished
-  db.prepare("UPDATE economy_inventory SET status = 'pending', created_at = ? WHERE guild_id = ?").run(
-    Date.now() - 10 * 60_000,
+  db.prepare("UPDATE economy_inventory SET status = 'pending', lease_until = ? WHERE guild_id = ?").run(
+    Date.now() - 60_000,
     G
   );
   a.roles.cache.delete(ROLE_B); // a never got the role; b did
@@ -526,4 +543,271 @@ test('item fields are clamped: name 60, description 300, price at least 1, durat
   assert.equal(normaliseItem({ type: 'bogus' }).type, 'custom');
   assert.equal(normaliseItem({ type: 'custom', roleId: ROLE_A }).roleId, null, 'a custom item has no role');
   assert.equal(normaliseItem({ type: 'role', roleId: 'nope' }).roleId, null);
+});
+
+// --- fix round: the price the member saw, expired temp roles, time added, forget, leases ----------------
+
+const DAY = 24 * HOUR;
+const tempItem = (over = {}) =>
+  item({ type: 'temp_role', roleId: ROLE_A, durationHours: 24, price: 100, ...over });
+const record = async (m, roleId = ROLE_A) => getTempRole(G, m.id, roleId);
+
+test('purchase() charges only the price the buyer saw: a changed price is refused with the new one', async () => {
+  const m = await buyer(60);
+  const id = await item({ price: 100 });
+  // the buyer saw 100; staff raise it to 5000
+  await updateItem(G, id, normaliseItem({ name: 'Shout-out', price: 5000, type: 'custom' }));
+  const out = await buy(m, id, { expectedPrice: 100 });
+  assert.deepEqual([out.ok, out.reason, out.price], [false, 'price_changed', 5000]);
+  assert.equal(await cash(m), 1000, 'nothing was charged');
+  assert.equal((await getItem(G, id)).sold, 0);
+  assert.deepEqual(await ledger(m), [{ kind: 'staff_add', amount: 1000, cash_after: 1000, reason: '' }]);
+  assert.match(shopRefusalText(out, cfg()), /The price changed to 🪙 5,000 coins\. Check and try again\./);
+  // the price after the change works, a price that was never given does not
+  assert.equal((await buy(m, id, { expectedPrice: 5000 })).reason, 'insufficient');
+  assert.equal((await buy(m, id, { expectedPrice: undefined })).reason, 'price_changed');
+  assert.equal((await buy(m, id, { expectedPrice: NaN })).reason, 'price_changed');
+  await updateItem(G, id, normaliseItem({ name: 'Shout-out', price: 40, type: 'custom' }));
+  const ok = await buy(m, id, { expectedPrice: 40 });
+  assert.equal(ok.ok, true);
+  assert.equal(await cash(m), 960);
+});
+
+test('a temporary role that ran out is marked expired: it does not count against the limit, is not revoked or refunded, and a new purchase can be ended', async () => {
+  const m = await buyer(61);
+  const id = await tempItem({ perMemberLimit: 1, durationHours: 168 });
+  assert.equal((await buy(m, id)).ok, true);
+  assert.equal((await buy(m, id)).reason, 'limit');
+  const [first] = await listInventory(G, m.id);
+  // a week and a bit later the temp-role sweep takes the role back
+  await tempRoleSweep(Date.now() + 8 * DAY);
+  assert.equal(m.roles.cache.has(ROLE_A), false, 'the role came off');
+  assert.equal(await record(m), null);
+  assert.equal((await getInventoryRow(G, first.id)).status, 'expired');
+  assert.deepEqual(await endRow({ guild: ctx.guild, rowId: first.id, mode: 'refund', config: cfg() }), {
+    ok: false,
+    reason: 'not_active',
+  });
+  assert.equal(await cash(m), 900, 'an expired purchase is not refunded');
+
+  // the limit counts only what runs: it can be bought again, and ending THAT one removes the role
+  const again = await buy(m, id);
+  assert.equal(again.ok, true);
+  assert.equal(m.roles.cache.has(ROLE_A), true);
+  const done = await endRow({ guild: ctx.guild, rowId: again.row.id, mode: 'refund', config: cfg() });
+  assert.deepEqual([done.ok, done.refunded], [true, true]);
+  assert.equal(m.roles.cache.has(ROLE_A), false, 'the refund took the role off');
+  assert.equal(await record(m), null);
+  assert.equal(await cash(m), 900);
+});
+
+test('a role that was taken off by hand ends the temporary purchase too', async () => {
+  const m = await buyer(62);
+  const id = await tempItem();
+  const bought = await buy(m, id);
+  const { expireShopTempRows } = await import('../src/db/economyShop.js');
+  assert.equal(await expireShopTempRows(G, m.id, ROLE_A), 1);
+  assert.equal((await getInventoryRow(G, bought.row.id)).status, 'expired');
+  assert.equal(await expireShopTempRows(G, m.id, ROLE_A), 0, 'nothing left to end');
+});
+
+test('a refund or revoke takes off only the time its own purchase added, and never past now', async () => {
+  const m = await buyer(63);
+  const id = await tempItem({ durationHours: 24 });
+  const one = await buy(m, id);
+  const two = await buy(m, id);
+  const t0 = (await record(m)).expires_at;
+  assert.equal((await getInventoryRow(G, two.row.id)).addedMs, DAY);
+  // refund the second purchase: one day goes, one day stays, the role stays
+  assert.equal(
+    (await endRow({ guild: ctx.guild, rowId: two.row.id, mode: 'refund', config: cfg() })).ok,
+    true
+  );
+  assert.equal((await record(m)).expires_at, t0 - DAY);
+  assert.equal(m.roles.cache.has(ROLE_A), true);
+  // revoke the first: nothing is left, the role comes off
+  assert.equal(
+    (await endRow({ guild: ctx.guild, rowId: one.row.id, mode: 'revoke', config: cfg() })).ok,
+    true
+  );
+  assert.equal(await record(m), null);
+  assert.equal(m.roles.cache.has(ROLE_A), false);
+
+  // time staff gave by hand stays
+  const n2 = await buyer(64);
+  await putTempRole({
+    guildId: G,
+    userId: n2.id,
+    roleId: ROLE_A,
+    expiresAt: Date.now() + 10 * DAY,
+    addedBy: 'staff',
+    reason: 'gift',
+  });
+  n2.roles.cache.set(ROLE_A, roleA);
+  const bought = await buy(n2, id);
+  const staffExpiry = Date.now() + 10 * DAY;
+  assert.ok(
+    Math.abs((await record(n2)).expires_at - (staffExpiry + DAY)) < 5000,
+    'a day was added to the staff time'
+  );
+  await endRow({ guild: ctx.guild, rowId: bought.row.id, mode: 'refund', config: cfg() });
+  const left = await record(n2);
+  assert.ok(Math.abs(left.expires_at - staffExpiry) < 5000, 'only the purchased day went');
+  assert.equal(n2.roles.cache.has(ROLE_A), true);
+
+  // never past now: a record that has less left than the row added is ended and the role comes off
+  const n3 = await buyer(65);
+  const short = await buy(n3, id);
+  await putTempRole({
+    guildId: G,
+    userId: n3.id,
+    roleId: ROLE_A,
+    expiresAt: Date.now() + HOUR,
+    addedBy: null,
+    reason: 'x',
+  });
+  await endRow({ guild: ctx.guild, rowId: short.row.id, mode: 'revoke', config: cfg() });
+  assert.equal(await record(n3), null);
+  assert.equal(n3.roles.cache.has(ROLE_A), false);
+});
+
+test('two parallel buys of a permanent role charge once', async () => {
+  const m = await buyer(66);
+  const id = await item({ type: 'role', roleId: ROLE_B, price: 100 });
+  const results = await Promise.all([buy(m, id), buy(m, id), buy(m, id)]);
+  assert.equal(results.filter((r) => r.ok).length, 1);
+  assert.ok(results.filter((r) => !r.ok).every((r) => r.reason === 'already_has_role'));
+  assert.equal(await cash(m), 900, 'charged once');
+  assert.equal((await getItem(G, id)).sold, 1);
+  assert.equal((await listInventory(G, m.id)).length, 1);
+  assert.equal(m.adds.filter((r) => r === ROLE_B).length, 1);
+});
+
+/** A member whose role grant waits until `release()` is called. */
+function slowMember(m) {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const add = m.roles.add;
+  let started;
+  const begun = new Promise((resolve) => {
+    started = resolve;
+  });
+  m.roles.add = async (role) => {
+    started();
+    await gate;
+    return add(role);
+  };
+  return { release, begun };
+}
+
+test('the sweep leaves a role grant that is still running alone, and a revoke waits for it', async () => {
+  const m = await buyer(67);
+  const id = await item({ type: 'role', roleId: ROLE_B, price: 100 });
+  const slow = slowMember(m);
+  const buying = buy(m, id);
+  await slow.begun;
+  // the row is pending, and even with its lease long over the grant that is running is not touched
+  const [row] = await listInventory(G, m.id);
+  assert.equal(row.status, 'pending');
+  db.prepare('UPDATE economy_inventory SET lease_until = 0 WHERE id = ?').run(row.id);
+  assert.equal(await recoverPending(Date.now() + 60 * 60_000), 0);
+  assert.equal(await cash(m), 900, 'not refunded');
+
+  // staff revoke it while the grant is running: the revoke waits, so the role cannot be left behind
+  const revoking = endRow({ guild: ctx.guild, rowId: row.id, mode: 'revoke', config: cfg() });
+  slow.release();
+  const [bought, revoked] = await Promise.all([buying, revoking]);
+  assert.equal(bought.ok, true);
+  assert.equal(revoked.ok, true);
+  assert.equal((await getInventoryRow(G, row.id)).status, 'revoked');
+  assert.equal(m.roles.cache.has(ROLE_B), false, 'the member does not keep the role after a revoke');
+});
+
+test('a grant that lands after its row was ended takes the role off again', async () => {
+  const m = await buyer(68);
+  const id = await item({ type: 'role', roleId: ROLE_B, price: 100 });
+  const slow = slowMember(m);
+  const buying = buy(m, id);
+  await slow.begun;
+  const [row] = await listInventory(G, m.id);
+  // the row is ended behind the grant's back (as the sweep of another process could)
+  db.prepare("UPDATE economy_inventory SET status = 'revoked' WHERE id = ?").run(row.id);
+  slow.release();
+  const out = await buying;
+  assert.deepEqual([out.ok, out.reason], [false, 'grant_ended']);
+  assert.equal(m.roles.cache.has(ROLE_B), false, 'the role did not stay');
+  assert.match(shopRefusalText(out, cfg()), /ended before the role arrived/);
+});
+
+test('the sweep refunds only a member who is gone or lacks the role, confirms one who has it, and waits when it cannot look', async () => {
+  const a = await buyer(69);
+  const b = await buyer(70);
+  const c = await buyer(71);
+  const id = await item({ type: 'role', roleId: ROLE_B, price: 100, stock: 9 });
+  for (const m of [a, b, c]) await buy(m, id);
+  const stale = () =>
+    db
+      .prepare("UPDATE economy_inventory SET status = 'pending', lease_until = ? WHERE guild_id = ?")
+      .run(Date.now() - 1000, G);
+  stale();
+  // a is not in the cache and the lookup fails with something that is not "gone": try again later
+  ctx.guild.members.cache.delete(a.id);
+  const realFetch = ctx.guild.members.fetch;
+  ctx.guild.members.fetch = async (uid) => {
+    if (uid === a.id) throw Object.assign(new Error('Service Unavailable'), { status: 503 });
+    return realFetch(uid);
+  };
+  c.roles.cache.delete(ROLE_B); // c never got the role
+  assert.equal(await recoverPending(Date.now()), 2, 'b is confirmed, c is refunded');
+  const status = async (m) => (await listInventory(G, m.id))[0].status;
+  assert.deepEqual([await status(a), await status(b), await status(c)], ['pending', 'active', 'refunded']);
+  assert.equal(await cash(a), 900, 'not refunded while it could not be looked at');
+  // now a is known to be gone (a 404): refunded
+  ctx.guild.members.fetch = realFetch;
+  assert.equal(await recoverPending(Date.now()), 1);
+  assert.equal(await status(a), 'refunded');
+  assert.equal(await cash(a), 1000);
+});
+
+test('a lease keeps a fresh pending row from the sweep', async () => {
+  const m = await buyer(72);
+  const id = await item({ type: 'role', roleId: ROLE_B, price: 100 });
+  await buy(m, id);
+  db.prepare("UPDATE economy_inventory SET status = 'pending', lease_until = ? WHERE guild_id = ?").run(
+    Date.now() + 60_000,
+    G
+  );
+  m.roles.cache.delete(ROLE_B);
+  assert.equal(await recoverPending(Date.now()), 0, 'inside its lease');
+  assert.equal(await recoverPending(Date.now() + 120_000), 1, 'after it');
+  assert.equal(await cash(m), 1000);
+});
+
+test('the pending sweep has an index, and /forget takes the roles the shop gave off first', async () => {
+  const plan = db
+    .prepare(
+      "EXPLAIN QUERY PLAN SELECT * FROM economy_inventory WHERE status = 'pending' AND lease_until < 5 ORDER BY lease_until, id LIMIT 50"
+    )
+    .all()
+    .map((r) => r.detail)
+    .join(' ');
+  assert.match(plan, /idx_economy_inventory_pending/);
+
+  const m = await buyer(73);
+  const temp = await tempItem();
+  const perm = await item({ name: 'Legend', type: 'role', roleId: ROLE_B, price: 50 });
+  await buy(m, temp);
+  await buy(m, perm);
+  assert.deepEqual([m.roles.cache.has(ROLE_A), m.roles.cache.has(ROLE_B)], [true, true]);
+  const out = await endShopRolesForForget(ctx.guild, m.id);
+  assert.deepEqual([out.roles, out.removed, out.failed], [2, 2, []]);
+  assert.deepEqual([m.roles.cache.has(ROLE_A), m.roles.cache.has(ROLE_B)], [false, false]);
+  // a member with nothing from the shop: nothing to do
+  assert.deepEqual(await endShopRolesForForget(ctx.guild, (await buyer(74)).id), {
+    roles: 0,
+    removed: 0,
+    failed: [],
+  });
 });

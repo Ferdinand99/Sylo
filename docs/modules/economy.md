@@ -31,7 +31,7 @@ Each server has its own balances. Amounts are whole numbers; nobody can hold mor
 | `/rob <user>`                             | Try to steal another member's cash. Only when robbing is on.                                  |
 | `/economy-leaderboard`                    | The richest members by cash + bank, ten to a page, with your own rank.                        |
 | `/shop` | The shop: ten items a page, with buttons to turn the pages, a menu to buy (with a confirmation) and a link to the web shop. |
-| `/buy <item>` | Buy an item by name or by its number in `/shop` (Discord suggests names as you type). |
+| `/buy <item>` | Find an item by name or by its number in `/shop` (Discord suggests names as you type) and ask to confirm it, with its price. |
 | `/inventory [user]` | What you own (only you see it on Discord); for another member, only the names of what they hold. |
 | `/eco add`, `remove`, `set`, `reset-user` | Staff with **Manage Server**: change a member's money, or start them over.                    |
 
@@ -94,7 +94,8 @@ their latest 50 ledger rows, and offers every action `/eco` has:
 
 **Reset the whole economy** (Settings tab, _Danger zone_) needs the word `RESET` typed. Every account goes
 back to a new start, and the ledger gets one **reset** row per member, so what each member had stays
-visible for 180 days.
+visible for 180 days. While a reset runs, the economy commands, `/shop` and the buy buttons answer "Economy
+reset in progress, try again shortly." at once.
 
 ## The shop
 
@@ -115,11 +116,22 @@ Before any money moves Sylo checks that the item is for sale, in stock, that the
 that Sylo itself can hand out the role (Manage Roles, and the role is below Sylo's highest role). If not, the
 member is told and nothing is charged.
 
+**A member is only ever charged the price they saw.** `/buy`, the shop menu and the web shop all show the price
+and ask to confirm, and the confirmation carries that price. If staff changed the price meanwhile, nothing is
+charged and the member is told the new price ("The price changed to X. Check and try again.").
+
 **Buying is one transaction:** the price is debited (ledger kind `purchase`), the stock goes down by one, the
-member's limit is checked and the inventory row is added. 20 buyers of the last 5 items get exactly 5. Only then
-is a role put on the member. **If Sylo cannot give the role, the purchase is refunded** (a `refund` row, the
-stock and the earlier role time are put back) and the member is told. If Sylo stops in between, a sweep within a
-few minutes refunds the purchase (or confirms it when the member has the role).
+member's limit is checked and the inventory row is added. 20 buyers of the last 5 items get exactly 5, and
+a permanent role cannot be bought twice (two buys at once charge once). Only then is a role put on the member.
+**If Sylo cannot give the role, the purchase is refunded** (a `refund` row, the stock and the earlier role time
+are put back) and the member is told. If Sylo stops in between, a sweep settles the purchase once its
+five-minute lease has run out: the member has the role, so it is confirmed; the member lacks it or is gone, so it
+is refunded. A role that is still being given is never touched by the sweep, and a revoke or refund waits for
+it, so nobody keeps a role after a revoke. A member the sweep cannot look up right now is tried again later.
+
+A temporary role that **runs out** (or is taken off by hand or by staff, or the member leaves) turns its purchase
+into **expired**: it stops counting against the limit per member, is not listed as owned, and cannot be revoked or
+refunded (there is nothing to end). The member can buy it again.
 
 Deleting an item keeps what members already own: their inventory shows it as "item removed", and a role they
 hold stays until it is revoked or runs out.
@@ -129,13 +141,16 @@ hold stays until it is revoked or runs out.
 Open a member and pick **Inventory**: see what they own, **give an item for free** (ledger kind `grant`, amount
 0, no stock used), **revoke** an item (a temporary role ends, a permanent role comes off, ledger kind `revoke`, no
 money back), **refund** a purchase (the price goes back through the money API, ledger kind `refund`, the stock
-returns and the item is revoked) and mark a custom item **fulfilled**. If a member holds the same temporary
-role from two purchases, the role stays until the last of them is revoked.
+returns and the item is revoked) and mark a custom item **fulfilled**. A revoke or refund always looks at the
+member and takes the role off when they still have it. Each purchase of a temporary role remembers **how much
+time it added**: refunding or revoking one takes off only that time (never more than is left), so if the member
+bought it twice the role stays for the other purchase, and time staff added by hand with `/temprole` stays. When
+nothing is left the role comes off.
 
 ### Activity tab
 
 Recent purchases, newest first, filtered by member (paste an ID) and by item, with the status of each (active,
-revoked, refunded) and whether a custom item is waiting for staff.
+revoked, refunded, expired) and whether a custom item is waiting for staff.
 
 ### The web shop
 
@@ -172,6 +187,9 @@ and total only, never the cash. Turn it off in the settings and the page disappe
 ## Your members' data
 
 `/mydata` lists a member's economy account, ledger rows and shop inventory, and `/forget` deletes them
+(first it takes off the roles the shop gave the member, temporary and permanent, because the records that
+explain them are deleted; a role Sylo cannot take off is reported, and for a temporary one its record stays so
+the expiry still removes it)
 (the shop's items are the server's, not the member's). Where a member is
 named on someone else's row, the name is removed and the row stays. Staff can also reset a member. See the
 [privacy policy](../privacy-policy.md).

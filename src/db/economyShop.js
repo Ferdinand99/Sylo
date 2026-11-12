@@ -6,7 +6,10 @@
 //   economy_inventory   id, guild_id, user_id, item_id, item_name / item_type / role_id (a copy of the
 //                       item, so a row still reads right after the item was deleted), price_paid,
 //                       source ('purchase' | 'grant'), status ('pending' | 'active' | 'revoked' |
-//                       'refunded'), fulfilled_at / fulfilled_by / note (custom items: staff text)
+//                       'refunded' | 'expired'), fulfilled_at / fulfilled_by / note (custom items:
+//                       staff text), added_ms (the time a temporary role purchase added to the
+//                       role's record), lease_until (a pending row's role grant may still be running
+//                       until then; the sweep leaves it alone)
 //
 // Money and stock NEVER change through this file while a purchase, refund, grant or revoke runs:
 // those are transactions in modules/lib/shop.js (through the money API and its `after` hook). This
@@ -52,12 +55,15 @@ registerPostgresBootstrap(`
     created_at   BIGINT NOT NULL,
     updated_at   BIGINT NOT NULL
   );
+  ALTER TABLE economy_inventory ADD COLUMN IF NOT EXISTS added_ms BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE economy_inventory ADD COLUMN IF NOT EXISTS lease_until BIGINT NOT NULL DEFAULT 0;
+  CREATE INDEX IF NOT EXISTS idx_economy_inventory_pending ON economy_inventory (lease_until) WHERE status = 'pending';
   CREATE INDEX IF NOT EXISTS idx_economy_inventory_user ON economy_inventory (guild_id, user_id, id DESC);
   CREATE INDEX IF NOT EXISTS idx_economy_inventory_item ON economy_inventory (guild_id, item_id);
   CREATE INDEX IF NOT EXISTS idx_economy_inventory_created ON economy_inventory (guild_id, created_at);
 `);
 
-export const INVENTORY_STATUSES = ['pending', 'active', 'revoked', 'refunded'];
+export const INVENTORY_STATUSES = ['pending', 'active', 'revoked', 'refunded', 'expired'];
 
 const ITEM_COLUMNS = `id, guild_id, name, description, emoji, type, role_id, duration_ms, price, stock, sold,
   required_roles, per_member_limit, enabled, sort_order, created_at, updated_at`;
@@ -97,16 +103,33 @@ const s = {
      WHERE guild_id = ? AND id = ? AND item_type = 'custom' AND status = 'active' AND fulfilled_at IS NOT NULL`
   ),
   stale: prepare(
-    `SELECT * FROM economy_inventory WHERE status = 'pending' AND created_at < ? ORDER BY id LIMIT ?`
+    `SELECT * FROM economy_inventory WHERE status = 'pending' AND lease_until < ? ORDER BY lease_until, id LIMIT ?`
   ),
   itemStats: prepare(
     `SELECT item_id, COUNT(*) AS purchases, COALESCE(SUM(price_paid), 0) AS revenue
      FROM economy_inventory
-     WHERE guild_id = ? AND source = 'purchase' AND status IN ('active', 'pending', 'revoked')
+     WHERE guild_id = ? AND source = 'purchase' AND status IN ('active', 'pending', 'revoked', 'expired')
      GROUP BY item_id`
   ),
   inventoryOfItem: prepare(
     `SELECT COUNT(*) AS n FROM economy_inventory WHERE guild_id = ? AND item_id = ? AND status IN ('active', 'pending')`
+  ),
+
+  expireTemp: prepare(
+    `UPDATE economy_inventory SET status = 'expired', updated_at = ?
+     WHERE guild_id = ? AND user_id = ? AND role_id = ? AND item_type = 'temp_role' AND status = 'active'`
+  ),
+  expireTempOfUser: prepare(
+    `UPDATE economy_inventory SET status = 'expired', updated_at = ?
+     WHERE guild_id = ? AND user_id = ? AND item_type = 'temp_role' AND status = 'active'`
+  ),
+  liveForRole: prepare(
+    `SELECT COUNT(*) AS n FROM economy_inventory
+     WHERE guild_id = ? AND user_id = ? AND role_id = ? AND id <> ? AND status IN ('active', 'pending')`
+  ),
+  liveOfUser: prepare(
+    `SELECT * FROM economy_inventory
+     WHERE guild_id = ? AND user_id = ? AND item_type <> 'custom' AND role_id IS NOT NULL AND status IN ('active', 'pending')`
   ),
 
   eraseUser: prepare('DELETE FROM economy_inventory WHERE guild_id = ? AND user_id = ?'),
@@ -163,6 +186,8 @@ export function hydrateRow(row) {
     fulfilledAt: row.fulfilled_at == null ? null : Number(row.fulfilled_at),
     fulfilledBy: row.fulfilled_by ?? null,
     note: row.note,
+    addedMs: Number(row.added_ms) || 0,
+    leaseUntil: Number(row.lease_until) || 0,
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
   };
@@ -286,9 +311,34 @@ export async function listActivity(
   return { rows: rows.map(hydrateRow), total };
 }
 
-/** Rows still waiting for their role grant after `olderThan` ms epoch (a restart interrupted them). */
+/** Rows still waiting for their role grant whose lease ran out before `olderThan` (a restart interrupted them). */
 export async function stalePending(olderThan, limit = 50) {
   return (await s.stale.all(olderThan, limit)).map(hydrateRow);
+}
+
+/**
+ * A temporary role is over (it ran out, was taken off by hand or by staff, or the member left): the
+ * member's shop rows for that role stop being active. Called by the temp-role code (modules/tempRoles.js)
+ * wherever it drops a record; the shop's own refund and revoke set their own status.
+ * @returns {Promise<number>} how many rows
+ */
+export async function expireShopTempRows(guildId, userId, roleId, now = Date.now()) {
+  return (await s.expireTemp.run(now, guildId, userId, roleId)).changes;
+}
+
+/** Every temporary-role row of a member ends (the member left, or all their records are dropped). */
+export async function expireShopTempRowsOfUser(guildId, userId, now = Date.now()) {
+  return (await s.expireTempOfUser.run(now, guildId, userId)).changes;
+}
+
+/** How many OTHER live (active or pending) rows of the member hold this role. */
+export async function liveRowsForRole(guildId, userId, roleId, exceptId = 0) {
+  return Number((await s.liveForRole.get(guildId, userId, roleId, exceptId))?.n) || 0;
+}
+
+/** The member's live role rows (temporary and permanent): what /forget takes off. */
+export async function liveRoleRows(guildId, userId) {
+  return (await s.liveOfUser.all(guildId, userId)).map(hydrateRow);
 }
 
 // --- custom items: fulfilment ---------------------------------------------------------------------------
