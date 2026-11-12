@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.1.1](https://github.com/Ferdinand99/Sylo/compare/v5.1.0...v5.1.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* list every 5.1 change on the What's new page ([#316](https://github.com/Ferdinand99/Sylo/issues/316)) ([bd20e40](https://github.com/Ferdinand99/Sylo/commit/bd20e408016c6c3c535fffdaf32b50c9ff4a4558))
+
 ## [5.1.0](https://github.com/Ferdinand99/Sylo/compare/v5.0.0...v5.1.0) (2026-11-12)
 
 
