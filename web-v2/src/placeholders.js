@@ -37,6 +37,12 @@ export const PLACEHOLDER_SETS = {
     t('{user.name}', "The member's display name"),
     t('{server}', 'The server name'),
   ],
+  applications: [
+    t('{user}', "The member's name"),
+    t('{server}', 'The server name'),
+    t('{form}', 'The name of the form'),
+    t('{reason}', 'The reason staff gave (a short note when there is none)'),
+  ],
   tickets: [t('{server}', 'The server name')],
   autoresponder: [
     t('{user}', 'Mentions the member'),

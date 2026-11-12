@@ -1381,6 +1381,67 @@ export const MIGRATIONS = [
       ALTER TABLE giveaways ADD COLUMN sweep_at INTEGER NOT NULL DEFAULT 0;
     `);
   },
+
+  // Applications (src/db/applications.js, which bootstraps the same tables on Postgres): the forms, the
+  // submissions and the cooldown after a denial. The partial unique index is what allows one pending
+  // submission per form and member, whatever the code does.
+  (database) => {
+    database.exec(`
+      CREATE TABLE applications_forms (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id   TEXT NOT NULL,
+        name       TEXT NOT NULL,
+        enabled    INTEGER NOT NULL DEFAULT 1,
+        fill_mode  TEXT NOT NULL DEFAULT 'both',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        config     TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_applications_forms_guild ON applications_forms (guild_id, sort_order, id);
+      CREATE TABLE applications_submissions (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id        TEXT NOT NULL,
+        form_id         INTEGER NOT NULL,
+        form_name       TEXT NOT NULL DEFAULT '',
+        pending_role_id TEXT,
+        user_id         TEXT NOT NULL,
+        status          TEXT NOT NULL DEFAULT 'pending',
+        source          TEXT NOT NULL DEFAULT 'dm',
+        questions       TEXT NOT NULL DEFAULT '[]',
+        answers         TEXT NOT NULL DEFAULT '{}',
+        channel_id      TEXT,
+        message_id      TEXT,
+        copy_channel_id TEXT,
+        copy_message_id TEXT,
+        thread_id       TEXT,
+        decided_by      TEXT,
+        reason          TEXT NOT NULL DEFAULT '',
+        decided_at      INTEGER,
+        roles_pending   TEXT NOT NULL DEFAULT '[]',
+        dm_note         TEXT NOT NULL DEFAULT '',
+        history         TEXT NOT NULL DEFAULT '[]',
+        cleared         INTEGER NOT NULL DEFAULT 0,
+        created_at      INTEGER NOT NULL,
+        updated_at      INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_applications_one_pending
+        ON applications_submissions (guild_id, form_id, user_id) WHERE status = 'pending';
+      CREATE INDEX idx_applications_sub_status ON applications_submissions (guild_id, status, id DESC);
+      CREATE INDEX idx_applications_sub_user ON applications_submissions (guild_id, user_id, id DESC);
+      CREATE INDEX idx_applications_sub_form ON applications_submissions (guild_id, form_id, status);
+      CREATE INDEX idx_applications_sub_message ON applications_submissions (guild_id, message_id);
+      CREATE INDEX idx_applications_sub_decided ON applications_submissions (decided_at) WHERE status <> 'pending';
+      CREATE TABLE applications_cooldowns (
+        guild_id TEXT NOT NULL,
+        form_id  INTEGER NOT NULL,
+        user_id  TEXT NOT NULL,
+        until_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, form_id, user_id)
+      );
+      CREATE INDEX idx_applications_cooldowns_until ON applications_cooldowns (until_at);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

@@ -393,6 +393,10 @@ const USER_ID_COLUMNS = {
   'guild_temp_roles.user_id': 'handled',
   'guild_temp_roles.added_by': 'handled',
   'introductions.user_id': 'handled',
+  'applications_submissions.user_id': 'handled',
+  'applications_submissions.decided_by': 'handled',
+  'applications_cooldowns.user_id':
+    'kept: cooldown after a denial, so /forget cannot skip it (listed by describeUserData)',
   'economy_accounts.user_id': 'handled',
   'economy_transactions.user_id': 'handled',
   'economy_transactions.counterparty_id': 'handled',

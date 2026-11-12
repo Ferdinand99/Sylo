@@ -35,6 +35,7 @@ export const MODULE_ICONS = {
   'auto-threads': 'threads',
   'quote-board': 'quote',
   introductions: 'id-card',
+  applications: 'clipboard',
   economy: 'coins',
   'game-stats': 'target',
   'twitch-alerts': 'twitch',

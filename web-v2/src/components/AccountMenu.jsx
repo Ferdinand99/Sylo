@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { getAccount, getCsrfToken } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
+import { clearAllDrafts } from '../applicationAnswers.js';
 import { CHANGELOG_SEEN_EVENT, hasUnseenChangelog, initial } from '../util.js';
 
 const SUPPORT_URL = 'https://discord.gg/GAzR9k5hhS';
@@ -63,6 +64,8 @@ export default function AccountMenu() {
   // fresh token covers a sign-in in another tab, which rotates it.
   async function signOut() {
     setSigningOut(true);
+    // Unfinished application drafts stay in the browser: not for the next person to sign in.
+    clearAllDrafts();
     try {
       const token = await getCsrfToken({ fresh: true });
       if (!token) throw new Error('no csrf token');

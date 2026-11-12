@@ -34,6 +34,8 @@ const AuditLog = lazy(() => import('./pages/AuditLog.jsx'));
 const Changelog = lazy(() => import('./pages/Changelog.jsx'));
 const MemberData = lazy(() => import('./pages/MemberData.jsx'));
 const Shop = lazy(() => import('./pages/Shop.jsx'));
+const Apply = lazy(() => import('./pages/Apply.jsx'));
+const ApplicationDetail = lazy(() => import('./pages/ApplicationDetail.jsx'));
 
 // Old addresses for pages that are now tabs on the Moderation page.
 function ToModerationTab({ tab }) {
@@ -53,6 +55,10 @@ const router = createBrowserRouter(
       <Route path="shop/:guildId" element={<MemberShell />} errorElement={<RouteError />}>
         <Route index element={<Shop />} />
       </Route>
+      {/* So is the web form of an application. */}
+      <Route path="apply/:guildId/:formId" element={<MemberShell />} errorElement={<RouteError />}>
+        <Route index element={<Apply />} />
+      </Route>
       <Route element={<Shell />} errorElement={<RouteError />}>
         <Route errorElement={<RouteError />}>
           <Route index element={<GuildPicker />} />
@@ -62,6 +68,7 @@ const router = createBrowserRouter(
           <Route path="guilds/:guildId/audit" element={<AuditLog />} />
           <Route path="guilds/:guildId/member-data" element={<MemberData />} />
           <Route path="guilds/:guildId/m/:moduleId" element={<ModulePage />} />
+          <Route path="guilds/:guildId/applications/:submissionId" element={<ApplicationDetail />} />
           <Route path="guilds/:guildId/messages" element={<Messages />} />
           <Route path="guilds/:guildId/messages/:id" element={<MessageBuilder />} />
           <Route path="guilds/:guildId/insights" element={<Insights />} />

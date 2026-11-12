@@ -42,6 +42,7 @@ platform gaps (native AutoMod rules, threads, moving members between voice).
 | [Suggestions](suggestions.md) | Member suggestions with 👍 / 👎 voting, staff decisions and a log channel (beta) | off | — |
 | [Quote board](quote-board.md) | Save memorable messages (message menu or `/quote save`), show them with `/quote`, optional public page (beta) | off | — |
 | [Introductions](introductions.md) | Members answer a few questions in DM and Sylo posts a membership card in the introductions channel (beta) | off | Server Members |
+| [Applications](applications.md) | Forms members fill in, in DM or on the web, for staff to accept or deny, with requirements, roles and messages (beta) | off | Server Members |
 | [Economy](economy.md) | A currency members earn by chatting and in voice, keep in cash or a bank, pay each other and compete for; optional robbing; staff tools (beta) | off | Message Content |
 | [AFK](afk.md) | Members mark themselves away; Sylo replies to mentions | off | — |
 | [Temporary voice channels](temp-voice.md) | Join-to-create voice hubs controlled with `/voice-*` | off | — |

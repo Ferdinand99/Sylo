@@ -9,6 +9,7 @@ import { ticketGuildsForUser, ingestUserDM } from '../../modules/tickets.js';
 import { getOpenTicket } from '../../db/tickets.js';
 import { registerComponent } from '../lib/components.js';
 import { handleQuestionnaireMessage, looksLikeQuestionnairePrompt } from '../lib/dmQuestionnaire.js';
+import { lateAnswerWindowMs } from '../../modules/applications.js';
 import { log } from '../../lib/log.js';
 import { sweepMap } from '../../lib/sweepMap.js';
 
@@ -45,16 +46,17 @@ async function lateQuestionnaireAnswer(message) {
       .filter((m) => m.author?.id === message.client?.user?.id)
       .sort((a, b) => (b.createdTimestamp ?? 0) - (a.createdTimestamp ?? 0))[0];
     if (!mine || !looksLikeQuestionnairePrompt(mine.content)) return false;
-    if (Date.now() - (mine.createdTimestamp ?? Date.now()) > STALE_PROMPT_MS) return false;
+    // An application form may allow hours to answer, so the window is the longest of the member's servers.
+    const window = await lateAnswerWindowMs(message.client, message.author?.id, STALE_PROMPT_MS);
+    if (Date.now() - (mine.createdTimestamp ?? Date.now()) > window) return false;
   } catch {
     return false;
   }
   // The command is named for the platform the DM arrived on (Fluxer has no slash commands).
-  const again =
-    platformOfClient(message.client) === 'fluxer' ? `${config.commandPrefix}intro create` : '/intro create';
+  const prefix = platformOfClient(message.client) === 'fluxer' ? config.commandPrefix : '/';
   await message
     .reply(
-      `That looks like an answer to a questionnaire that has ended (it timed out, or Sylo restarted), so I did not send it to staff. Start it again from the server, for example with ${again}.`
+      `That looks like an answer to a questionnaire that has ended (it timed out, or Sylo restarted), so I did not send it to staff. Start it again from the server, for example with ${prefix}intro create. For an application, use ${prefix}apply start.`
     )
     .catch(() => {});
   return true;

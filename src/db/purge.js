@@ -60,6 +60,7 @@ import './suggestions.js';
 import './tempRoles.js';
 import './quotes.js';
 import './introductions.js';
+import './applications.js';
 import './economy.js';
 import './economyShop.js';
 
@@ -108,6 +109,9 @@ export const GUILD_TABLES = [
   'guild_quotes',
   'guild_quote_counters',
   'introductions',
+  'applications_forms',
+  'applications_submissions',
+  'applications_cooldowns',
   'economy_accounts',
   'economy_transactions',
   'economy_cooldowns',
@@ -203,6 +207,13 @@ const userStmts = {
   // Their introduction: the answers and the row that points at the card message. The message itself
   // is deleted by the callers that hold the guild (forgetIntroductionCard in modules/introductions.js).
   introductions: prepare('DELETE FROM introductions WHERE guild_id = ? AND user_id = ?'),
+  // Their applications: the answers and the row. The posts are deleted first by the callers that hold
+  // the guild (forgetApplicationPosts in modules/applications.js). The cooldown after a denial is kept on
+  // purpose, like the economy's: otherwise /forget would be a way around it.
+  applications: prepare('DELETE FROM applications_submissions WHERE guild_id = ? AND user_id = ?'),
+  applicationsDecider: prepare(
+    'UPDATE applications_submissions SET decided_by = NULL WHERE guild_id = ? AND decided_by = ?'
+  ),
   introductionsClear: prepare(
     "UPDATE introductions SET answers = '{}', updated_at = ? WHERE guild_id = ? AND user_id = ?"
   ),
@@ -238,13 +249,19 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, applications: number, applicationsDecided: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
  */
 // `keepIntroduction`: leave the introduction row (the card message could not be deleted, so the row
 // is what lets it be removed later). `keepTempRoles`: role ids whose temporary-role record stays
 // because Sylo could not take the role off (the callers take a bought role off first, see
 // endShopRolesForForget in modules/lib/shop.js): the expiry sweep still removes it on time.
-export async function forgetUser(guildId, userId, { keepIntroduction = false, keepTempRoles = [] } = {}) {
+// `keepApplicationIds`: submissions whose post could not be deleted. Their rows stay without the answers
+// (the ids are what lets the post be deleted later); every other submission of the member is deleted.
+export async function forgetUser(
+  guildId,
+  userId,
+  { keepIntroduction = false, keepTempRoles = [], keepApplicationIds = [] } = {}
+) {
   const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
   const leveling =
     (await userStmts.leveling.run(guildId, userId)).changes +
@@ -277,6 +294,22 @@ export async function forgetUser(guildId, userId, { keepIntroduction = false, ke
   let introductions = 0;
   if (keepIntroduction) await userStmts.introductionsClear.run(Date.now(), guildId, userId);
   else introductions = (await userStmts.introductions.run(guildId, userId)).changes;
+  const keepApps = keepApplicationIds.map(Number).filter(Number.isInteger);
+  let applications;
+  if (keepApps.length) {
+    const marks = keepApps.map(() => '?').join(', ');
+    await prepare(
+      `UPDATE applications_submissions SET answers = '{}', questions = '[]', cleared = 1, updated_at = ? WHERE guild_id = ? AND user_id = ? AND id IN (${marks})`
+    ).run(Date.now(), guildId, userId, ...keepApps);
+    applications = (
+      await prepare(
+        `DELETE FROM applications_submissions WHERE guild_id = ? AND user_id = ? AND id NOT IN (${marks})`
+      ).run(guildId, userId, ...keepApps)
+    ).changes;
+  } else {
+    applications = (await userStmts.applications.run(guildId, userId)).changes;
+  }
+  const applicationsDecided = (await userStmts.applicationsDecider.run(guildId, userId)).changes;
   // Their economy account and ledger rows; where they are named on someone else's row, the name comes off.
   const economy = await eraseMember(guildId, userId);
   const inventory = await eraseInventory(guildId, userId);
@@ -310,6 +343,8 @@ export async function forgetUser(guildId, userId, { keepIntroduction = false, ke
     quotes,
     quotesSaved,
     introductions,
+    applications,
+    applicationsDecided,
     economyAccounts: economy.account,
     economyTransactions: economy.transactions,
     economyNames: economy.counterparty + economy.actor,
@@ -574,6 +609,31 @@ const USER_DATA_SOURCES = [
     order: 'gu',
     countSql: 'SELECT COUNT(*) AS n FROM introductions WHERE guild_id = ? AND user_id = ?',
     rowsSql: 'SELECT * FROM introductions WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'applications',
+    label: 'Applications (your answers; /forget also deletes their posts)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM applications_submissions WHERE guild_id = ? AND user_id = ?',
+    rowsSql:
+      'SELECT id, form_id, form_name, status, source, questions, answers, reason, decided_at, history, created_at FROM applications_submissions WHERE guild_id = ? AND user_id = ? ORDER BY id',
+  },
+  {
+    key: 'applicationsDecided',
+    label: 'Applications you decided as staff (/forget drops your name)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM applications_submissions WHERE guild_id = ? AND decided_by = ?',
+    rowsSql:
+      'SELECT id, form_name, status, decided_at FROM applications_submissions WHERE guild_id = ? AND decided_by = ? ORDER BY id',
+  },
+  {
+    key: 'applicationsCooldowns',
+    label:
+      'Application cooldown after a denial (kept by /forget until it has run out, so it cannot be skipped)',
+    order: 'gu',
+    kept: true,
+    countSql: 'SELECT COUNT(*) AS n FROM applications_cooldowns WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM applications_cooldowns WHERE guild_id = ? AND user_id = ?',
   },
   {
     key: 'economyAccount',

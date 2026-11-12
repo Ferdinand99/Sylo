@@ -21,6 +21,7 @@ import { openSuggestionCount, suggestionCount } from '../../db/suggestions.js';
 import { nextTempRoleExpiry, tempRoleCount } from '../../db/tempRoles.js';
 import { quoteCount } from '../../db/quotes.js';
 import { introductionCount } from '../../db/introductions.js';
+import { formCount, pendingCount } from '../../db/applications.js';
 import { recentLookups } from '../../db/cache.js';
 import { dailySeries } from '../../db/insights.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
@@ -59,6 +60,7 @@ const LAYOUT = [
       'starboard',
       'quote-board',
       'introductions',
+      'applications',
       'sticky',
       'birthdays',
     ],
@@ -300,6 +302,14 @@ async function moduleLines(id, guild, cfg) {
       return [
         ch ? on('Channel', `#${ch}`) : off('Channel', 'not set'),
         cards ? on('Introductions', String(cards)) : neutral('Introductions', '0'),
+      ];
+    }
+    case 'applications': {
+      const forms = await formCount(guild.id);
+      const pending = await pendingCount(guild.id);
+      return [
+        forms ? on('Forms', String(forms)) : off('Forms', 'none'),
+        pending ? on('Waiting for a decision', String(pending)) : neutral('Waiting for a decision', '0'),
       ];
     }
     case 'auto-threads': {

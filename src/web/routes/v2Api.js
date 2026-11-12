@@ -47,10 +47,13 @@ import suggestionsRouter from './v2Suggestions.js';
 import tempRolesRouter from './v2TempRoles.js';
 import quotesRouter from './v2Quotes.js';
 import introRouter from './v2Intro.js';
+import applicationsRouter from './v2Applications.js';
+import applyMemberRouter from './v2Apply.js';
 import economyRouter from './v2Economy.js';
 import shopRouter from './v2Shop.js';
 import shopMemberRouter from './v2ShopMember.js';
 import { cancelIntroductionSessions } from '../../modules/introductions.js';
+import { cancelApplicationSessions } from '../../modules/applications.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { buildReactionPairs } from '../lib/reactionPairs.js';
 import { guildCustomEmojis } from '../lib/guildEmojis.js';
@@ -433,6 +436,8 @@ function loadGuildJson(req, res, next) {
 // The web shop (/shop/<server>): for the signed-in members of a server, not only admins, so it
 // sits before the admin guard below and does its own access check (v2ShopMember.js).
 router.use('/shop/:guildId', shopMemberRouter);
+// The web form of an application (/apply/<server>/<form>): the same kind of page, the same access rule.
+router.use('/apply/:guildId', applyMemberRouter);
 router.use('/guilds/:guildId/tickets', ticketsRouter);
 router.use('/guilds/:guildId', requireGuildAdmin, loadGuildJson, guardRoleGrants);
 // Appeals review, command limits and the moderation hub (v2Staff.js).
@@ -453,6 +458,8 @@ router.use('/guilds/:guildId', introRouter);
 router.use('/guilds/:guildId', economyRouter);
 // Economy shop: items, a member's inventory, the activity log (v2Shop.js).
 router.use('/guilds/:guildId', shopRouter);
+// Applications: settings, forms, the panel, submissions, export (v2Applications.js).
+router.use('/guilds/:guildId', applicationsRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
@@ -498,6 +505,7 @@ router.post(
     for (const id of ids) {
       await setGuildModule(req.guild.id, id, { enabled });
       if (id === 'introductions' && !enabled) cancelIntroductionSessions(req.guild.id);
+      if (id === 'applications' && !enabled) cancelApplicationSessions(req.guild.id);
       if (id === 'events') {
         refreshPagePosts(req.guild.id).catch((err) =>
           log.warn('events', 'could not update the event posts after a bulk toggle:', err.message)
@@ -541,6 +549,7 @@ router.post(
     await setGuildModule(req.guild.id, mod.id, { enabled });
     // Members in the middle of the questions are told it stopped.
     if (mod.id === 'introductions' && !enabled) cancelIntroductionSessions(req.guild.id);
+    if (mod.id === 'applications' && !enabled) cancelApplicationSessions(req.guild.id);
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: `module:${mod.id}`,

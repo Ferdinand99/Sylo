@@ -33,6 +33,7 @@ import {
   normaliseQuoteText,
 } from '../src/modules/quoteBoard.js';
 import { normaliseIntroductionsConfig } from '../src/modules/introductions.js';
+import { normaliseApplicationsConfig, normaliseForm } from '../src/modules/applications.js';
 import {
   clampAmount,
   normaliseEconomyConfig,
@@ -271,6 +272,28 @@ const cases = {
       questions: (n) => items(n, (i) => ({ label: `q${i}` })),
       roleGroups: (n) => items(n, (i) => ({ name: `g${i}`, roleIds: [roleId(1)] })),
       'roleGroups[].roleIds': (n) => items(n, roleId),
+    },
+  },
+  applications: {
+    // the module's own settings and one form, together
+    normalise: (raw) => ({ ...normaliseApplicationsConfig(raw), ...normaliseForm(raw) }),
+    base: {
+      name: 'x',
+      questions: [{ type: 'choice', long: true, label: 'x', options: [{ label: 'a' }] }],
+      messages: {},
+    },
+    value: {
+      questions: (n) => items(n, (i) => ({ type: 'text', label: `q${i}` })),
+      'questions[].options': (n) => items(n, (i) => ({ label: `o${i}` })),
+      requiredRoleIds: (n) => items(n, roleId),
+      restrictedRoleIds: (n) => items(n, roleId),
+      managerRoleIds: (n) => items(n, roleId),
+      pingRoleIds: (n) => items(n, roleId),
+      removeOnSubmitRoleIds: (n) => items(n, roleId),
+      acceptAddRoleIds: (n) => items(n, roleId),
+      acceptRemoveRoleIds: (n) => items(n, roleId),
+      denyAddRoleIds: (n) => items(n, roleId),
+      denyRemoveRoleIds: (n) => items(n, roleId),
     },
   },
   honeypot: {

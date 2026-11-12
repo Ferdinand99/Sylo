@@ -6,6 +6,7 @@ import { getModule } from '../../modules/registry.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
 import { forgetUser } from '../../db/purge.js';
 import { forgetIntroductionCard } from '../../modules/introductions.js';
+import { forgetApplicationPosts } from '../../modules/applications.js';
 import { endShopRolesForForget } from '../../modules/lib/shop.js';
 import { recordAudit } from '../../db/audit.js';
 
@@ -51,8 +52,10 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
   const card = await forgetIntroductionCard(guild, userId);
   // Roles the shop gave them come off before the records that explain them are deleted.
   const shopRoles = await endShopRolesForForget(guild, userId);
+  const apps = await forgetApplicationPosts(guild, userId);
   const r = await forgetUser(guild.id, userId, {
     keepIntroduction: !card.ok,
+    keepApplicationIds: apps.failedIds,
     keepTempRoles: shopRoles.failed,
   });
 
@@ -85,6 +88,13 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
       {
         name: 'Economy',
         value: `${r.economyAccounts} account, ${r.economyTransactions} transactions, ${r.economyInventory} shop items`,
+        inline: true,
+      },
+      {
+        name: 'Applications',
+        value: apps.ok
+          ? String(r.applications)
+          : `${r.applications} deleted, ${apps.failedIds.length} post(s) could not be deleted`,
         inline: true,
       },
       {

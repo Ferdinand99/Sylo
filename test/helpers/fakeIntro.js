@@ -29,7 +29,7 @@ export const ROLE = {
 const role = (id, name, position, extra = {}) => ({ id, name, position, color: 0, managed: false, ...extra });
 
 /** Messages of one channel; `fetch` rejects for an unknown id, like discord.js does. */
-function fakeChannel(id, name, { canSend = true } = {}) {
+export function fakeChannel(id, name, { canSend = true } = {}) {
   const store = new Map();
   let n = 0;
   const log = { sent: [], edits: [], deleted: [] };
