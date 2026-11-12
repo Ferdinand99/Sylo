@@ -5,7 +5,21 @@
 
 ### Features
 
-* Sylo 5.1 – introductions, economy and applications ([#311](https://github.com/Ferdinand99/Sylo/issues/311)) ([36be91b](https://github.com/Ferdinand99/Sylo/commit/36be91b3763978ca019b6751108f3f428445cf76))
+* Introductions module: members answer a few questions in DMs and get a membership card in the intro channel, with role groups (for example Country or Age) that stay up to date, and an {intro} placeholder for the welcome message
+* Economy module (beta): a server currency earned by chatting, voice time, /daily and /work, with cash and a bank, /pay, an optional /rob (off by default) and /economy-leaderboard
+* Economy shop: temporary roles, permanent roles and custom items with /shop, /buy and /inventory, plus a members-only web shop on the dashboard
+* Economy in the dashboard: balances, inventories, refunds and a purchase log, with a ledger of every change and a short cooldown record kept after /forget
+* Giveaways can charge an entry fee and pay a currency prize when the Economy module is on
+* Applications module: Appy-style forms answered in DMs or on the web (chosen per form), with requirements, accept and deny, roles, custom messages, panels and CSV/JSON export
+* Suggestions: decided suggestions can stay in their channel with a copy in the log channel, and moved suggestions can be moved back from the dashboard
+* Postgres driver 4.1
+
+
+### Bug Fixes
+
+* edits and deletes on Fluxer work by message id, and a message that is gone is recognised the same way on Discord and Fluxer
+* temporary roles notice a member or role that no longer exists on Fluxer
+* the Postgres start-up runs one statement at a time, so a restart can no longer deadlock with running queries
 
 ## [5.0.0](https://github.com/Ferdinand99/Sylo/compare/v4.10.0...v5.0.0) (2026-11-07)
 
