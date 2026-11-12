@@ -1281,6 +1281,64 @@ export const MIGRATIONS = [
       CREATE INDEX idx_economy_cooldowns_expires ON economy_cooldowns (expires_at);
     `);
   },
+
+  // Economy shop (src/db/economyShop.js, which bootstraps the same tables on Postgres): the items
+  // staff sell, and what members own. An inventory row keeps a copy of the item's name, type and role,
+  // so it still reads right after the item is deleted.
+  (database) => {
+    database.exec(`
+      CREATE TABLE economy_items (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id         TEXT NOT NULL,
+        name             TEXT NOT NULL,
+        description      TEXT NOT NULL DEFAULT '',
+        emoji            TEXT NOT NULL DEFAULT '',
+        type             TEXT NOT NULL,
+        role_id          TEXT,
+        duration_ms      INTEGER,
+        price            INTEGER NOT NULL,
+        stock            INTEGER,
+        sold             INTEGER NOT NULL DEFAULT 0,
+        required_roles   TEXT NOT NULL DEFAULT '[]',
+        per_member_limit INTEGER,
+        enabled          INTEGER NOT NULL DEFAULT 1,
+        sort_order       INTEGER NOT NULL DEFAULT 0,
+        created_at       INTEGER NOT NULL,
+        updated_at       INTEGER NOT NULL
+      );
+      CREATE INDEX idx_economy_items_guild ON economy_items (guild_id, sort_order, id);
+      CREATE TABLE economy_inventory (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id     TEXT NOT NULL,
+        user_id      TEXT NOT NULL,
+        item_id      INTEGER NOT NULL,
+        item_name    TEXT NOT NULL,
+        item_type    TEXT NOT NULL,
+        role_id      TEXT,
+        price_paid   INTEGER NOT NULL DEFAULT 0,
+        source       TEXT NOT NULL,
+        status       TEXT NOT NULL,
+        fulfilled_at INTEGER,
+        fulfilled_by TEXT,
+        note         TEXT NOT NULL DEFAULT '',
+        created_at   INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL
+      );
+      CREATE INDEX idx_economy_inventory_user ON economy_inventory (guild_id, user_id, id DESC);
+      CREATE INDEX idx_economy_inventory_item ON economy_inventory (guild_id, item_id);
+      CREATE INDEX idx_economy_inventory_created ON economy_inventory (guild_id, created_at);
+    `);
+  },
+
+  // Giveaways with the Economy module (src/db/giveaways.js has the Postgres side, migration 69 there):
+  // an entry fee, a currency prize for every winner, and whether the giveaway was cancelled.
+  (database) => {
+    database.exec(`
+      ALTER TABLE giveaways ADD COLUMN entry_fee INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE giveaways ADD COLUMN prize_amount INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE giveaways ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0;
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

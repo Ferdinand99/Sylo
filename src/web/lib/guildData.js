@@ -77,7 +77,7 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
       { name: 'Saved-by name removed from quotes', value: String(r.quotesSaved), inline: true },
       {
         name: 'Economy',
-        value: `${r.economyAccounts} account, ${r.economyTransactions} transactions`,
+        value: `${r.economyAccounts} account, ${r.economyTransactions} transactions, ${r.economyInventory} shop items`,
         inline: true,
       },
       {

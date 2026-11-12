@@ -46,13 +46,14 @@ import {
   normaliseEconomyConfig,
   normaliseReason,
 } from './lib/economyConfig.js';
+import './lib/shop.js'; // its sweep for purchases stuck half way
 import { allClientsReady, allGuilds, guildKey, platformOfClient } from '../platform/platformOf.js';
 import { config as appConfig } from '../config.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
 
 export { LIMITS, MAX_BALANCE, formatMoney, formatNumber, normaliseEconomyConfig, normaliseReason };
-export { clampAmount } from './lib/economyConfig.js';
+export { clampAmount, itemProblem, normaliseItem } from './lib/economyConfig.js';
 export { DAILY_STREAK_CAP, WORK_LINES };
 
 const HOUR_MS = 3_600_000;

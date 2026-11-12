@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { D_GUILD, OTHER_D_GUILD, startOAuthApp } from './helpers/oauthApp.js';
 import { SNOWFLAKE, anonymous, session } from './helpers/v2Guarded.js';
+import { browser, profiles, setProfiles, signIn } from './helpers/oauthApp.js';
 
 await startOAuthApp();
 
@@ -17,12 +18,24 @@ const WRITES = (g) => [
   [`/guilds/${g}/modules/economy/config`, { currencyName: 'hijacked' }],
   [`/guilds/${g}/modules/economy/members/${SNOWFLAKE}/adjust`, { action: 'add', amount: 5 }],
   [`/guilds/${g}/modules/economy/reset`, { confirm: 'RESET' }],
+  [`/guilds/${g}/modules/economy/shop/items`, { name: 'hijacked', price: 1, type: 'custom' }],
+  [`/guilds/${g}/modules/economy/shop/items/order`, { ids: [1] }],
+  [`/guilds/${g}/modules/economy/shop/items/1`, { name: 'hijacked', price: 1, type: 'custom' }],
+  [`/guilds/${g}/modules/economy/shop/items/1/enabled`, { enabled: false }],
+  [`/guilds/${g}/modules/economy/shop/items/1/delete`, {}],
+  [`/guilds/${g}/modules/economy/members/${SNOWFLAKE}/inventory/grant`, { itemId: 1 }],
+  [`/guilds/${g}/modules/economy/members/${SNOWFLAKE}/inventory/1/revoke`, {}],
+  [`/guilds/${g}/modules/economy/members/${SNOWFLAKE}/inventory/1/refund`, {}],
+  [`/guilds/${g}/modules/economy/members/${SNOWFLAKE}/inventory/1/fulfil`, { note: 'x' }],
 ];
 const READS = (g) => [
   `/guilds/${g}/modules/economy/config`,
   `/guilds/${g}/modules/economy/members`,
   `/guilds/${g}/modules/economy/members?q=a`,
   `/guilds/${g}/modules/economy/members/${SNOWFLAKE}`,
+  `/guilds/${g}/modules/economy/members/${SNOWFLAKE}/inventory`,
+  `/guilds/${g}/modules/economy/shop/items`,
+  `/guilds/${g}/modules/economy/shop/activity`,
 ];
 
 async function assertUntouched(note) {
@@ -65,6 +78,19 @@ test('signed out: every economy route answers with an error and stores nothing',
     assert.ok([401, 403].includes(res.status), `GET ${path} -> ${res.status}`);
   }
   await assertUntouched('signed out');
+});
+
+test('every state-changing economy and shop route refuses a request without the CSRF token', async () => {
+  setProfiles({});
+  const b = browser();
+  await signIn(b, 'discord');
+  const headers = { accept: 'application/json', 'content-type': 'application/json' }; // no x-csrf-token
+  for (const [path, body] of WRITES(D_GUILD)) {
+    const res = await b.get(`/api/v2${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
+    assert.equal(res.status, 403, `POST ${path} without a token`);
+  }
+  assert.equal(profiles.discord.id.length > 0, true);
+  await assertUntouched('no csrf token');
 });
 
 test('a server admin can use the routes: the member list answers, and a change is stored', async () => {

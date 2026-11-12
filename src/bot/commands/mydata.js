@@ -66,6 +66,7 @@ const render = {
   introductions: () => 'your introduction answers',
   economyAccount: (r) => `${r[0].cash} cash · ${r[0].bank} bank · ${r[0].daily_streak} day streak`,
   economyTransactions: (r) => plural(r.length, 'transaction'),
+  economyInventory: (r) => plural(r.length, 'shop item'),
   inviteCounts: (r) => `${r[0].regular} regular · ${r[0].bonus} bonus · ${r[0].leaves} left`,
   inviteJoins: (r) => (r[0].inviter_id ? `invited by <@${r[0].inviter_id}>` : `joined via ${r[0].source}`),
   invitedOthers: (r) => plural(r.length, 'member'),

@@ -12,6 +12,7 @@
 import { prepare } from './driver.js';
 import { clearCommandPrefixCache } from './guildSettings.js';
 import { eraseMember } from './economy.js';
+import { eraseInventory } from './economyShop.js';
 
 // This file owns no table of its own — every DELETE below targets a table
 // bootstrapped by its owning file. But `registerPostgresBootstrap()` only
@@ -60,6 +61,7 @@ import './tempRoles.js';
 import './quotes.js';
 import './introductions.js';
 import './economy.js';
+import './economyShop.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -109,6 +111,8 @@ export const GUILD_TABLES = [
   'economy_accounts',
   'economy_transactions',
   'economy_cooldowns',
+  'economy_items',
+  'economy_inventory',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -222,7 +226,7 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, economyAccounts: number, economyTransactions: number, economyNames: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
  */
 // `keepIntroduction`: leave the introduction row (the card message could not be deleted, so the row
 // is what lets it be removed later).
@@ -253,6 +257,7 @@ export async function forgetUser(guildId, userId, { keepIntroduction = false } =
   else introductions = (await userStmts.introductions.run(guildId, userId)).changes;
   // Their economy account and ledger rows; where they are named on someone else's row, the name comes off.
   const economy = await eraseMember(guildId, userId);
+  const inventory = await eraseInventory(guildId, userId);
   const invites =
     (await userStmts.inviteCounts.run(guildId, userId)).changes +
     (await userStmts.inviteJoins.run(guildId, userId)).changes +
@@ -286,6 +291,8 @@ export async function forgetUser(guildId, userId, { keepIntroduction = false } =
     economyAccounts: economy.account,
     economyTransactions: economy.transactions,
     economyNames: economy.counterparty + economy.actor,
+    economyInventory: inventory.rows,
+    economyFulfilled: inventory.fulfilled,
     invites,
     pollsCreated,
     giveawaysHosted,
@@ -558,6 +565,21 @@ const USER_DATA_SOURCES = [
     kept: true,
     countSql: 'SELECT COUNT(*) AS n FROM economy_cooldowns WHERE guild_id = ? AND user_id = ?',
     rowsSql: 'SELECT * FROM economy_cooldowns WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'economyInventory',
+    label: 'Shop inventory (items you bought or were given)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM economy_inventory WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM economy_inventory WHERE guild_id = ? AND user_id = ? ORDER BY id',
+  },
+  {
+    key: 'economyFulfilled',
+    label: 'Shop items you marked fulfilled as staff (/forget drops your name)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM economy_inventory WHERE guild_id = ? AND fulfilled_by = ?',
+    rowsSql:
+      'SELECT item_name, fulfilled_at FROM economy_inventory WHERE guild_id = ? AND fulfilled_by = ? ORDER BY id',
   },
   {
     key: 'economyCounterparty',

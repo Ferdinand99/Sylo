@@ -1,4 +1,6 @@
-// /giveaway start|end|reroll|list — run prize giveaways with an Enter button.
+// /giveaway start|end|cancel|reroll|list — run prize giveaways with an Enter button. With the Economy
+// module on, `start` can set an entry fee and a currency prize, and `cancel` ends a giveaway without a
+// draw and gives every entry fee back.
 import {
   SlashCommandBuilder,
   PermissionFlagsBits,
@@ -14,7 +16,15 @@ import {
   activeGiveaways,
   giveawayEntryCount,
 } from '../../db/giveaways.js';
-import { buildGiveawayPayload, endGiveaway, MIN_MS, MAX_MS, MAX_WINNERS } from '../../modules/giveaways.js';
+import {
+  LIMITS,
+  MIN_MS,
+  MAX_MS,
+  MAX_WINNERS,
+  buildGiveawayPayload,
+  cancelGiveaway,
+  endGiveaway,
+} from '../../modules/giveaways.js';
 import { parseDuration, formatDuration } from '../lib/duration.js';
 
 export const data = new SlashCommandBuilder()
@@ -45,11 +55,33 @@ export const data = new SlashCommandBuilder()
       .addRoleOption((o) =>
         o.setName('required_role').setDescription('Only members with this role may enter')
       )
+      .addIntegerOption((o) =>
+        o
+          .setName('entry_fee')
+          .setDescription('Currency each entrant pays (Economy module; given back if they leave)')
+          .setMinValue(LIMITS.entryFee.min)
+          .setMaxValue(LIMITS.entryFee.max)
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName('prize_amount')
+          .setDescription('Currency every winner is paid (Economy module)')
+          .setMinValue(LIMITS.prizeAmount.min)
+          .setMaxValue(LIMITS.prizeAmount.max)
+      )
   )
   .addSubcommand((s) =>
     s
       .setName('end')
       .setDescription('End a giveaway now and draw the winners.')
+      .addIntegerOption((o) =>
+        o.setName('id').setDescription('Giveaway id (see /giveaway list)').setRequired(true)
+      )
+  )
+  .addSubcommand((s) =>
+    s
+      .setName('cancel')
+      .setDescription('Cancel a giveaway: no draw, and entry fees are given back.')
       .addIntegerOption((o) =>
         o.setName('id').setDescription('Giveaway id (see /giveaway list)').setRequired(true)
       )
@@ -86,6 +118,11 @@ export async function execute(interaction) {
     }
     const winners = interaction.options.getInteger('winners') ?? 1;
     const role = interaction.options.getRole('required_role');
+    const entryFee = interaction.options.getInteger('entry_fee') ?? 0;
+    const prizeAmount = interaction.options.getInteger('prize_amount') ?? 0;
+    if ((entryFee || prizeAmount) && !(await isModuleEnabled(interaction.guildId, 'economy'))) {
+      return eph(interaction, 'An entry fee or a currency prize needs the Economy module. Turn it on first.');
+    }
     const endsAt = Date.now() + ms;
 
     const { id } = await createGiveaway({
@@ -96,6 +133,8 @@ export async function execute(interaction) {
       hostId: interaction.user.id,
       requiredRoleId: role?.id ?? null,
       endsAt,
+      entryFee,
+      prizeAmount,
     });
 
     const row = {
@@ -107,6 +146,9 @@ export async function execute(interaction) {
       ends_at: endsAt,
       created_at: Date.now(),
       ended: false,
+      entry_fee: entryFee,
+      prize_amount: prizeAmount,
+      cancelled: false,
       wonIds: [],
     };
     await interaction.reply(buildGiveawayPayload(row, { entryCount: 0 }));
@@ -129,6 +171,19 @@ export async function execute(interaction) {
       r.winners?.length
         ? `Ended **#${id}** — winner(s): ${r.winners.map((w) => `<@${w}>`).join(', ')}`
         : `Ended **#${id}** — no valid entries.`
+    );
+  }
+
+  if (sub === 'cancel') {
+    const id = interaction.options.getInteger('id', true);
+    const g = await getGiveawayInGuild(id, interaction.guildId);
+    if (!g) return eph(interaction, `No giveaway **#${id}** in this server.`);
+    if (g.ended) return eph(interaction, `Giveaway **#${id}** has already ended.`);
+    const r = await cancelGiveaway(id);
+    if (!r.ok) return eph(interaction, `Giveaway **#${id}** could not be cancelled.`);
+    return eph(
+      interaction,
+      `Cancelled **#${id}**.${g.entry_fee > 0 ? ` ${r.refunded} entry fee(s) were given back${r.failed ? `, ${r.failed} could not be (run it again or check the ledger)` : ''}.` : ''}`
     );
   }
 

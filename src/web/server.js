@@ -247,6 +247,12 @@ export function createApp() {
   // Everything below requires a signed-in user when auth is enabled.
   app.use(requireAuth);
   app.get('/', (req, res) => res.redirect('/v2'));
+  // The web shop's own address, /shop/<server>, opens the shop page of the dashboard. Behind the login
+  // like everything here; the page asks the API, which answers one 404 to anyone who may not use it.
+  app.get('/shop/:guildId', (req, res) => {
+    if (!/^(fluxer:)?\d{1,25}$/.test(req.params.guildId)) return res.redirect('/v2');
+    return res.redirect(`/v2/shop/${encodeURIComponent(req.params.guildId)}`);
+  });
   app.use('/api/v2/guilds/:guildId', ownerOnlyModules);
   app.use('/api/v2', v2ApiRouter);
   app.use('/v2', v2ClientRouter);

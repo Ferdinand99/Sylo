@@ -1,7 +1,7 @@
 // Giveaways storage: a row per giveaway, a row per entrant. Ended giveaways are
 // kept (so /giveaway reroll and the dashboard history work) until the guild is
 // purged.
-import { prepare, registerPostgresBootstrap } from './driver.js';
+import { prepare, registerPostgresBootstrap, registerPostgresMigration } from './driver.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS giveaways (
@@ -16,7 +16,10 @@ registerPostgresBootstrap(`
     ends_at          BIGINT NOT NULL,
     ended            INTEGER NOT NULL DEFAULT 0,
     won_ids          TEXT NOT NULL DEFAULT '[]',
-    created_at       BIGINT NOT NULL
+    created_at       BIGINT NOT NULL,
+    entry_fee        BIGINT NOT NULL DEFAULT 0,
+    prize_amount     BIGINT NOT NULL DEFAULT 0,
+    cancelled        INTEGER NOT NULL DEFAULT 0
   );
   CREATE INDEX IF NOT EXISTS idx_giveaways_guild ON giveaways (guild_id, ended, ends_at);
   CREATE TABLE IF NOT EXISTS giveaway_entries (
@@ -27,11 +30,19 @@ registerPostgresBootstrap(`
   );
 `);
 
+// Existing Postgres databases: the three Economy columns (SQLite migration 69, src/db/index.js).
+registerPostgresMigration(
+  69,
+  `ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS entry_fee BIGINT NOT NULL DEFAULT 0;
+   ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS prize_amount BIGINT NOT NULL DEFAULT 0;
+   ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS cancelled INTEGER NOT NULL DEFAULT 0;`
+);
+
 const s = {
   create: prepare(
     `
-    INSERT INTO giveaways (guild_id, channel_id, prize, winners, host_id, required_role_id, ends_at, created_at)
-    VALUES (@guildId, @channelId, @prize, @winners, @hostId, @requiredRoleId, @endsAt, @createdAt)
+    INSERT INTO giveaways (guild_id, channel_id, prize, winners, host_id, required_role_id, ends_at, created_at, entry_fee, prize_amount)
+    VALUES (@guildId, @channelId, @prize, @winners, @hostId, @requiredRoleId, @endsAt, @createdAt, @entryFee, @prizeAmount)
   `,
     { returningId: true }
   ),
@@ -44,6 +55,7 @@ const s = {
     'SELECT * FROM giveaways WHERE guild_id = ? AND ended = 1 ORDER BY ends_at DESC LIMIT ?'
   ),
   due: prepare('SELECT * FROM giveaways WHERE ended = 0 AND ends_at <= ?'),
+  markCancelled: prepare('UPDATE giveaways SET ended = 1, cancelled = 1, won_ids = ? WHERE id = ?'),
   markEnded: prepare('UPDATE giveaways SET ended = 1, won_ids = ? WHERE id = ?'),
   claimEnd: prepare('UPDATE giveaways SET ended = 1 WHERE id = ? AND ended = 0'),
   setWinners: prepare('UPDATE giveaways SET won_ids = ? WHERE id = ?'),
@@ -78,6 +90,9 @@ const hydrate = (row) => {
     ends_at: Number(row.ends_at),
     created_at: Number(row.created_at),
     ended: row.ended === 1,
+    entry_fee: Number(row.entry_fee) || 0,
+    prize_amount: Number(row.prize_amount) || 0,
+    cancelled: Number(row.cancelled) === 1,
     wonIds: Array.isArray(won) ? won : [],
   };
 };
@@ -93,6 +108,8 @@ export async function createGiveaway(g) {
     requiredRoleId: g.requiredRoleId || null,
     endsAt: g.endsAt,
     createdAt: g.createdAt ?? Date.now(),
+    entryFee: Math.max(0, Math.trunc(g.entryFee || 0)),
+    prizeAmount: Math.max(0, Math.trunc(g.prizeAmount || 0)),
   });
   return { id: Number(info.lastInsertRowid) };
 }
@@ -105,6 +122,7 @@ export const activeGiveaways = async (guildId) => (await s.active.all(guildId)).
 export const endedGiveaways = async (guildId, limit = 10) =>
   (await s.recentEnded.all(guildId, limit)).map(hydrate);
 export const dueGiveaways = async (now) => (await s.due.all(now)).map(hydrate);
+export const markGiveawayCancelled = async (id) => s.markCancelled.run('[]', id);
 export const markGiveawayEnded = async (id, wonIds) => s.markEnded.run(JSON.stringify(wonIds ?? []), id);
 /** Mark a giveaway ended unless it already is: true only for the one caller that may draw it. */
 export const claimGiveawayEnd = async (id) => (await s.claimEnd.run(id)).changes === 1;

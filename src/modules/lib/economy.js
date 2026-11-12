@@ -52,6 +52,13 @@ export const KINDS = new Set([
   'staff_remove',
   'staff_set',
   'reset',
+  // part B: the shop and giveaways
+  'purchase', // a member bought an item (negative amount)
+  'refund', // money given back: a failed grant, a refunded purchase, a giveaway entry taken back
+  'grant', // an item given for free (amount 0: only records that it happened)
+  'revoke', // an item taken away by staff (amount 0)
+  'giveaway_entry', // the entry fee of a giveaway (negative amount)
+  'giveaway_prize', // a currency prize of a giveaway (positive amount)
 ]);
 
 /** Add a ledger kind (part B: purchases, refunds, ...). */
@@ -194,26 +201,31 @@ function* applyChange(tx, guildId, balances, change, now, ledger) {
     const room = Math.max(0, MAX_BALANCE - (bal.cash + bal.bank));
     cashDelta = Math.min(cashDelta, room - bankDelta);
   }
-  if (cashDelta === 0 && bankDelta === 0) return { userId, kind, applied: 0, clamped: Boolean(change.clamp) };
+  const noChange = cashDelta === 0 && bankDelta === 0;
+  // A change with nothing to move writes no row, unless it asks to be recorded (`record: true`: a
+  // `grant` or `revoke`, which are events with an amount of 0).
+  if (noChange && !change.record) return { userId, kind, applied: 0, clamped: Boolean(change.clamp) };
 
   const cash = bal.cash + cashDelta;
   const bank = bal.bank + bankDelta;
   if (cash < 0 || bank < 0) throw new Refusal('insufficient', { userId });
   if (cashDelta + bankDelta > 0 && cash + bank > MAX_BALANCE) throw new Refusal('cap', { userId });
 
-  const moved = yield tx.run(
-    `UPDATE economy_accounts SET cash = ?, bank = ?, updated_at = ?
-     WHERE guild_id = ? AND user_id = ? AND cash = ? AND bank = ?`,
-    cash,
-    bank,
-    now,
-    guildId,
-    userId,
-    bal.cash,
-    bal.bank
-  );
-  // Cannot happen under the lock; if it ever did, roll back rather than lose an update.
-  if (moved.changes !== 1) throw new Refusal('conflict', { userId });
+  if (!noChange) {
+    const moved = yield tx.run(
+      `UPDATE economy_accounts SET cash = ?, bank = ?, updated_at = ?
+       WHERE guild_id = ? AND user_id = ? AND cash = ? AND bank = ?`,
+      cash,
+      bank,
+      now,
+      guildId,
+      userId,
+      bal.cash,
+      bal.bank
+    );
+    // Cannot happen under the lock; if it ever did, roll back rather than lose an update.
+    if (moved.changes !== 1) throw new Refusal('conflict', { userId });
+  }
   bal.cash = cash;
   bal.bank = bank;
 
@@ -336,6 +348,18 @@ export async function transact(guildId, userIds, plan, opts = {}) {
     if (err instanceof Refusal) return { ok: false, reason: err.reason, ...err.extra };
     throw err;
   }
+}
+
+/**
+ * Stop a transaction from inside an `after` hook: everything done so far in it is rolled back and
+ * the money call resolves to `{ ok: false, reason, ...extra }`. For a rule the hook has to check on
+ * rows it reads itself (stock, a purchase limit).
+ * @param {string} reason
+ * @param {object} [extra]
+ * @returns {never}
+ */
+export function abort(reason, extra = {}) {
+  throw new Refusal(reason, extra);
 }
 
 /** The settings a call works with: the ones the caller passed (normalised again, so a partial object is safe) or the server's. */

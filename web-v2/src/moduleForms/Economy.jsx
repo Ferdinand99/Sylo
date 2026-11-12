@@ -3,6 +3,9 @@ import { useCmd } from '../platformContext.jsx';
 import { adjustEconomyMember, getEconomyMember, getEconomyMembers, resetEconomy } from '../api.js';
 import { notify } from '../notify.js';
 import Callout from '../components/Callout.jsx';
+import EconomyActivity from '../components/EconomyActivity.jsx';
+import EconomyInventory from '../components/EconomyInventory.jsx';
+import EconomyShopAdmin from '../components/EconomyShopAdmin.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import LoadError from '../components/LoadError.jsx';
@@ -15,15 +18,20 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
-// The Economy page has tabs: Settings, and Members (the member list, with one member's balances,
-// ledger and staff changes). Part B adds a Shop tab here and an Inventory panel to MEMBER_PANELS.
+// The Economy page has tabs: Settings; Members (the member list, with one member's balances, ledger,
+// inventory and staff changes); Shop (the items); Activity (recent purchases).
 const TABS = [
   ['settings', 'Settings'],
   ['members', 'Members'],
+  ['shop', 'Shop'],
+  ['activity', 'Activity'],
 ];
 
-// The panels of one member's page. Part B adds Inventory.
-const MEMBER_PANELS = [['ledger', 'Transactions']];
+// The panels of one member's page.
+const MEMBER_PANELS = [
+  ['ledger', 'Transactions'],
+  ['inventory', 'Inventory'],
+];
 
 const SORTS = [
   ['total', 'Total'],
@@ -366,6 +374,42 @@ function Settings({ guildId, m, limits }) {
         </div>
 
         <div className="v2-group">
+          <h2 className="v2-group-title">Shop</h2>
+          <p className="v2-field-hint">
+            Items are added on the Shop tab. Members buy with {cmd('/shop')} and {cmd('/buy')}.
+          </p>
+          <Check
+            id="webShop"
+            label="Web shop page"
+            field="webShop"
+            hint={`Signed-in members of this server can browse and buy at ${window.location.origin}/shop/${guildId}. Nobody else can see it. Off by default.`}
+            form={form}
+            set={set}
+          />
+          <div className="v2-field">
+            <label htmlFor="shopChannelId">
+              Channel for custom items <span className="v2-field-hint">— optional</span>
+            </label>
+            <select
+              id="shopChannelId"
+              value={form.shopChannelId}
+              onChange={(e) => set({ shopChannelId: e.target.value })}
+            >
+              <option value="">— none —</option>
+              {data.channels.map((c) => (
+                <option key={c.id} value={c.id}>
+                  #{c.name}
+                </option>
+              ))}
+            </select>
+            <p className="v2-field-hint">
+              When a member buys a custom item, Sylo posts here so staff can fulfil it, then mark it fulfilled
+              on the Members tab.
+            </p>
+          </div>
+        </div>
+
+        <div className="v2-group">
           <h2 className="v2-group-title">Leaderboard and log</h2>
           <Check
             id="publicLeaderboard"
@@ -542,6 +586,22 @@ function MemberPanel({ guildId, userId, config, onChanged }) {
             </button>
           ))}
         </TabRow>
+      ) : null}
+
+      {panel === 'inventory' ? (
+        <EconomyInventory
+          guildId={guildId}
+          userId={userId}
+          inventory={detail.inventory ?? []}
+          currency={{ emoji: config.currencyEmoji, name: config.currencyName }}
+          onChange={(inventory) => {
+            setDetail((d) => ({ ...d, inventory }));
+            getEconomyMember(guildId, userId)
+              .then(setDetail)
+              .catch(() => {});
+            onChanged();
+          }}
+        />
       ) : null}
 
       {panel === 'ledger' ? (
@@ -787,6 +847,18 @@ export default function Economy() {
 
       {tab === 'settings' ? <Settings guildId={m.guildId} m={m} limits={limits} /> : null}
       {tab === 'members' ? <Members guildId={m.guildId} config={m.baseline} /> : null}
+      {tab === 'shop' ? (
+        <EconomyShopAdmin
+          guildId={m.guildId}
+          currency={{ emoji: m.baseline.currencyEmoji, name: m.baseline.currencyName }}
+        />
+      ) : null}
+      {tab === 'activity' ? (
+        <EconomyActivity
+          guildId={m.guildId}
+          currency={{ emoji: m.baseline.currencyEmoji, name: m.baseline.currencyName }}
+        />
+      ) : null}
 
       <SaveBar dirty={m.dirty} saving={m.saving} onSave={m.save} onReset={m.reset} />
     </>

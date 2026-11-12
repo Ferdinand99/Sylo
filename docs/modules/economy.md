@@ -7,7 +7,7 @@ remove, set and reset money. Robbing other members is available, and **off by de
 Each server has its own balances. Amounts are whole numbers; nobody can hold more than
 **1,000,000,000** in cash and bank together. The module is free, like all of Sylo.
 
-**Dashboard:** `/v2/guilds/<id>/m/economy`, with two tabs: **Settings** and **Members**.
+**Dashboard:** `/v2/guilds/<id>/m/economy`, with four tabs: **Settings**, **Members**, **Shop** and **Activity**.
 
 ## Needs
 
@@ -30,6 +30,9 @@ Each server has its own balances. Amounts are whole numbers; nobody can hold mor
 | `/pay <user> <amount>`                    | Send cash to another member of the server (not yourself, not a bot).                          |
 | `/rob <user>`                             | Try to steal another member's cash. Only when robbing is on.                                  |
 | `/economy-leaderboard`                    | The richest members by cash + bank, ten to a page, with your own rank.                        |
+| `/shop` | The shop: ten items a page, with buttons to turn the pages, a menu to buy (with a confirmation) and a link to the web shop. |
+| `/buy <item>` | Buy an item by name or by its number in `/shop` (Discord suggests names as you type). |
+| `/inventory [user]` | What you own (only you see it on Discord); for another member, only the names of what they hold. |
 | `/eco add`, `remove`, `set`, `reset-user` | Staff with **Manage Server**: change a member's money, or start them over.                    |
 
 `/leaderboard` is the Leveling module's, so the economy leaderboard is `/economy-leaderboard`. On
@@ -93,10 +96,70 @@ their latest 50 ledger rows, and offers every action `/eco` has:
 back to a new start, and the ledger gets one **reset** row per member, so what each member had stays
 visible for 180 days.
 
+## The shop
+
+Staff build the shop on the **Shop** tab; nothing needs a Discord command. An item has a name (up to 60
+characters), a description (up to 300), an optional emoji, a **price** (1 or more), a **stock** (unlimited, or a
+number), optional **required roles** (a member needs any one of them), an optional **limit per member**, a
+paused/for-sale switch and a place in the list (move it up or down). There are three kinds:
+
+- **Temporary role** — a role for a time from 1 hour to 365 days. The time is kept like any other
+  temporary role (see [Temporary roles](temp-roles.md)): Sylo takes the role back when it is up and writes the
+  mod-log entries. **Buying it again while it runs adds the new time to what is left** (never more than 365
+  days from now).
+- **Permanent role** — the role is handed out when it is bought. A member who already has the role cannot buy it.
+- **Custom item** — goes into the member's inventory, and Sylo posts "X bought Y" in the shop channel (a setting)
+  so staff can do what was promised, then mark it **fulfilled** on the member's Inventory panel.
+
+Before any money moves Sylo checks that the item is for sale, in stock, that the member has a required role, and
+that Sylo itself can hand out the role (Manage Roles, and the role is below Sylo's highest role). If not, the
+member is told and nothing is charged.
+
+**Buying is one transaction:** the price is debited (ledger kind `purchase`), the stock goes down by one, the
+member's limit is checked and the inventory row is added. 20 buyers of the last 5 items get exactly 5. Only then
+is a role put on the member. **If Sylo cannot give the role, the purchase is refunded** (a `refund` row, the
+stock and the earlier role time are put back) and the member is told. If Sylo stops in between, a sweep within a
+few minutes refunds the purchase (or confirms it when the member has the role).
+
+Deleting an item keeps what members already own: their inventory shows it as "item removed", and a role they
+hold stays until it is revoked or runs out.
+
+### Inventory (Members tab)
+
+Open a member and pick **Inventory**: see what they own, **give an item for free** (ledger kind `grant`, amount
+0, no stock used), **revoke** an item (a temporary role ends, a permanent role comes off, ledger kind `revoke`, no
+money back), **refund** a purchase (the price goes back through the money API, ledger kind `refund`, the stock
+returns and the item is revoked) and mark a custom item **fulfilled**. If a member holds the same temporary
+role from two purchases, the role stays until the last of them is revoked.
+
+### Activity tab
+
+Recent purchases, newest first, filtered by member (paste an ID) and by item, with the status of each (active,
+revoked, refunded) and whether a custom item is waiting for staff.
+
+### The web shop
+
+Switch **Web shop page** on in the settings (it is off by default) and signed-in members of the server can open
+`/shop/<server id>` on the dashboard address: their balance, the items (with price, stock and whether they meet
+the requirements), what they own and a **Buy** button with a confirmation. It uses the same purchase code as
+`/buy`, so every rule above holds, and the server checks the requirements again. Nothing about it is public:
+anyone who is not signed in is sent to the login, and anyone else who may not use it (not a member of that
+server, the module or the web shop is off, no such server) gets the same "Nothing here" page. Fluxer servers work
+the same way for people who sign in with the Fluxer login, and on Fluxer a Discord login is never looked up.
+
+## Giveaways
+
+With the Economy module on, `/giveaway start` takes two more options (see [Giveaways](giveaways.md)): an
+**entry fee** (taken when a member enters, given back if they leave before the draw or the giveaway is cancelled)
+and a **currency prize** (paid to every winner at the draw, and to the new winners of a reroll). `/giveaway
+cancel` ends a giveaway without a draw and gives every entry fee back.
+
 ## The ledger
 
-Every change of a balance writes one row: the kind (message, voice, daily, work, payments, tax,
-robbery, fine, deposit, withdraw, staff add, remove or set, reset, and the starting balance), the amount,
+Every change of a balance writes one row: the kind (`start`, `message`, `voice`, `daily`, `work`, `pay_out`,
+`pay_in`, `tax`, `rob_win`, `rob_loss`, `rob_fine_out`, `rob_fine_in`, `deposit`, `withdraw`, `staff_add`,
+`staff_remove`, `staff_set`, `reset`, and from the shop and giveaways `purchase`, `refund`, `grant`, `revoke`,
+`giveaway_entry`, `giveaway_prize`), the amount (a `grant` and a `revoke` are events with an amount of 0),
 the balances afterwards, the other member or the staff member, a reason and the time. Rows are kept for
 **180 days** and pruned daily; balances are not affected by the pruning.
 
@@ -108,7 +171,8 @@ and total only, never the cash. Turn it off in the settings and the page disappe
 
 ## Your members' data
 
-`/mydata` lists a member's economy account and ledger rows, and `/forget` deletes them. Where a member is
+`/mydata` lists a member's economy account, ledger rows and shop inventory, and `/forget` deletes them
+(the shop's items are the server's, not the member's). Where a member is
 named on someone else's row, the name is removed and the row stays. Staff can also reset a member. See the
 [privacy policy](../privacy-policy.md).
 

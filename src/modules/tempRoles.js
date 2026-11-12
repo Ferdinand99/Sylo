@@ -463,3 +463,150 @@ on('temp-roles', 'guildMemberRemove', async (member, _config, guildId) => {
   const userId = member.id ?? member.user?.id;
   if (userId) await deleteTempRolesOfUser(guildId, userId);
 });
+
+// --- for the Economy shop ------------------------------------------------------------------------------
+//
+// A shop item that sells a temporary role keeps its time in the same guild_temp_roles rows as
+// /temprole, so the sweep above takes the role back on time. The purchase writes the row inside the
+// money transaction (a generator, see modules/lib/shop.js) and the role is added on the platform right
+// after it commits. These helpers are the parts of the code above that the shop needs apart.
+
+/**
+ * The expiry for a temporary role that is given again: while the member still has it running, the
+ * new time is added to what is left (buying it twice gives both periods); otherwise it starts now.
+ * Never more than 365 days from now.
+ * @param {number | null} currentExpiresAt  the running record's expiry, or null
+ * @param {number} now
+ * @param {number} durationMs
+ */
+export function extendedExpiry(currentExpiresAt, now, durationMs) {
+  const base = currentExpiresAt != null && currentExpiresAt > now ? currentExpiresAt : now;
+  return Math.min(base + durationMs, now + MAX_DURATION_MS);
+}
+
+/** Read a temporary-role record inside a transaction() body: `const row = yield* readTempRoleRow(tx, ...)`. */
+export function* readTempRoleRow(tx, guildId, userId, roleId) {
+  const row = yield tx.get(
+    'SELECT * FROM guild_temp_roles WHERE guild_id = ? AND user_id = ? AND role_id = ?',
+    guildId,
+    userId,
+    roleId
+  );
+  return row ? { ...row, expires_at: Number(row.expires_at), created_at: Number(row.created_at) } : null;
+}
+
+/** Create or replace a temporary-role record inside a transaction() body (same upsert as putTempRole). */
+export function* writeTempRoleRow(tx, e) {
+  yield tx.run(
+    `INSERT INTO guild_temp_roles (guild_id, user_id, role_id, expires_at, added_by, reason, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (guild_id, user_id, role_id) DO UPDATE SET
+       expires_at = excluded.expires_at,
+       added_by = excluded.added_by,
+       reason = excluded.reason,
+       created_at = excluded.created_at`,
+    e.guildId,
+    e.userId,
+    e.roleId,
+    e.expiresAt,
+    e.addedBy ?? null,
+    normaliseReason(e.reason ?? ''),
+    e.createdAt ?? Date.now()
+  );
+}
+
+/** Delete a temporary-role record inside a transaction() body. */
+export function* deleteTempRoleRow(tx, guildId, userId, roleId) {
+  yield tx.run(
+    'DELETE FROM guild_temp_roles WHERE guild_id = ? AND user_id = ? AND role_id = ?',
+    guildId,
+    userId,
+    roleId
+  );
+}
+
+/** How many temporary-role records a server has, inside a transaction() body (for the ceiling). */
+export function* countTempRoleRows(tx, guildId) {
+  const row = yield tx.get('SELECT COUNT(*) AS n FROM guild_temp_roles WHERE guild_id = ?', guildId);
+  return Number(row?.n) || 0;
+}
+
+/** The per-server ceiling of temporary roles (the same one /temprole checks). */
+export const TEMP_ROLE_CEILING = CEILINGS.tempRoles;
+
+/**
+ * Put a role on a member on the platform (the part of a grant that is not a database row).
+ * @returns {Promise<string | null>} null when it worked, else a sentence saying why not
+ */
+export async function giveRoleOnPlatform(guild, member, role, what) {
+  const refusal = botRefusal(guild, role);
+  if (refusal) return refusal;
+  if (member.roles.cache.has(role.id)) return null;
+  try {
+    await member.roles.add(role, auditReason(what, ''));
+    return null;
+  } catch (err) {
+    log.warn('temp-roles', `could not give ${role.id} to ${member.id}:`, err.message);
+    return 'Sylo could not give that role. Check that Sylo has Manage Roles and its role sits above it.';
+  }
+}
+
+/**
+ * Take a role off a member on the platform (no database row is touched). A role the member no longer
+ * has, or a member who left, is fine.
+ * @returns {Promise<{ roleRemoved: boolean, warning?: string }>}
+ */
+export async function takeRoleOnPlatform(guild, userId, roleId, what) {
+  const role = guild.roles.cache.get(roleId) ?? null;
+  if (!role) return { roleRemoved: false };
+  const member = await memberOf(guild, userId);
+  if (!member?.roles.cache.has(roleId)) return { roleRemoved: false };
+  const refusal = botRefusal(guild, role);
+  if (refusal) return { roleRemoved: false, warning: `${refusal} The role is still on the member.` };
+  try {
+    await member.roles.remove(role, auditReason(what, ''));
+    return { roleRemoved: true };
+  } catch (err) {
+    if (isGone(err)) return { roleRemoved: false };
+    log.warn('temp-roles', `could not remove ${roleId} from ${userId}:`, err.message);
+    return {
+      roleRemoved: false,
+      warning: 'Sylo could not take the role away. The role is still on the member.',
+    };
+  }
+}
+
+/** Write the mod-log entry (and the optional DM) for a temporary role bought or given by the shop. */
+export async function announceShopTempRole({
+  guild,
+  member,
+  role,
+  expiresAt,
+  extended,
+  by = null,
+  reason = '',
+}) {
+  const row = {
+    guild_id: guildKey(guild),
+    user_id: member.id,
+    role_id: role.id,
+    reason: normaliseReason(reason),
+  };
+  await postModLog(
+    guild,
+    logEmbed('add', extended ? 'Temporary role extended (shop)' : 'Temporary role added (shop)', {
+      row,
+      role,
+      by,
+      extra: [{ name: 'Until', value: `<t:${unix(expiresAt)}:f>`, inline: true }],
+    })
+  );
+  const cfg = normaliseTempRolesConfig((await getGuildModule(guildKey(guild), 'temp-roles')).config);
+  if (cfg.dmMember) {
+    await sendDm(
+      guild,
+      member.id,
+      `You have the role **${role.name}** in **${guild.name}** until <t:${unix(expiresAt)}:f>.`
+    );
+  }
+}

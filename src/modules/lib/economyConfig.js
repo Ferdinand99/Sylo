@@ -12,7 +12,8 @@
 //     bankEnabled, payEnabled, payTaxPercent,
 //     robEnabled, robChancePercent, robMinPercent, robMaxPercent, robFinePercent, robFineMin,
 //     robCooldownHours, robVictimMinCash, robNewMemberHours, robProtectionMinutes,
-//     startingBalance, publicLeaderboard, logChannelId }
+//     startingBalance, publicLeaderboard, logChannelId,
+//     webShop, shopChannelId }
 import { idList } from '../../web/lib/idList.js';
 
 /** No member can hold more than this in cash + bank together, so every number stays safe. */
@@ -53,10 +54,22 @@ export const LIMITS = {
   robNewMemberHours: { min: 0, max: 720 },
   robProtectionMinutes: { min: 0, max: 1440 },
   startingBalance: { min: 0, max: 1_000_000 },
+  // The shop (see modules/lib/shop.js normaliseItem)
+  itemName: { maxLength: 60 },
+  itemDescription: { maxLength: 300 },
+  itemEmoji: { maxLength: 64 },
+  itemPrice: { min: 1, max: MAX_BALANCE },
+  itemStock: { min: 0, max: 1_000_000 },
+  itemDurationHours: { min: 1, max: 8760 },
+  itemPerMemberLimit: { min: 1, max: 1000 },
+  itemRequiredRoles: { maxItems: 10 },
   // What staff can enter in the dashboard or /eco for one member in one go.
   amount: { min: 0, max: MAX_BALANCE },
   reason: { maxLength: 200 },
 };
+
+/** The shop's three kinds of item. */
+export const ITEM_TYPES = ['temp_role', 'role', 'custom'];
 
 export const DEFAULT_CURRENCY_NAME = 'coins';
 export const DEFAULT_CURRENCY_EMOJI = '🪙';
@@ -77,6 +90,42 @@ const cleanText = (v, max) =>
     .slice(0, max);
 
 const isId = (v) => /^\d{17,20}$/.test(String(v ?? ''));
+
+/**
+ * One shop item from a request body, with every value clamped (the dashboard sends hours, the
+ * database keeps milliseconds). Never throws; use {@link itemProblem} for what is still missing.
+ * `stock` is null for unlimited. The role only counts for the two role types.
+ */
+export function normaliseItem(raw = {}) {
+  const clamp = (v, field, dflt) => {
+    const { min, max } = LIMITS[field];
+    const n = Math.floor(Number(v));
+    return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : dflt;
+  };
+  const blank = (v) => v === null || v === undefined || v === '' || v === 'unlimited';
+  const type = ITEM_TYPES.includes(raw.type) ? raw.type : 'custom';
+  const roleType = type !== 'custom';
+  return {
+    name: cleanText(raw.name, LIMITS.itemName.maxLength),
+    description: cleanText(raw.description, LIMITS.itemDescription.maxLength),
+    emoji: cleanText(raw.emoji, LIMITS.itemEmoji.maxLength),
+    type,
+    roleId: roleType && isId(raw.roleId) ? String(raw.roleId) : null,
+    durationMs: type === 'temp_role' ? clamp(raw.durationHours, 'itemDurationHours', 24) * 3_600_000 : null,
+    price: clamp(raw.price, 'itemPrice', 1),
+    stock: blank(raw.stock) ? null : clamp(raw.stock, 'itemStock', 0),
+    requiredRoles: idList(raw.requiredRoles, LIMITS.itemRequiredRoles.maxItems),
+    perMemberLimit: blank(raw.perMemberLimit) ? null : clamp(raw.perMemberLimit, 'itemPerMemberLimit', 1),
+    enabled: raw.enabled !== false,
+  };
+}
+
+/** What is still wrong with an item that has been through {@link normaliseItem}, or null. */
+export function itemProblem(item) {
+  if (!item.name) return 'Give the item a name.';
+  if (item.type !== 'custom' && !item.roleId) return 'Pick the role this item gives.';
+  return null;
+}
 
 /** The reason staff give for a change: one line of text, cut to its limit. */
 export const normaliseReason = (v) => cleanText(v, LIMITS.reason.maxLength);
@@ -124,6 +173,10 @@ export function normaliseEconomyConfig(raw = {}) {
     startingBalance: clampInt(raw.startingBalance, 'startingBalance', 0),
     publicLeaderboard: raw.publicLeaderboard !== false,
     logChannelId: isId(raw.logChannelId) ? String(raw.logChannelId) : '',
+    // The web shop page (/shop/<server>) is off until staff switch it on. Custom items post their
+    // "please fulfil this" notice in shopChannelId, when one is set.
+    webShop: raw.webShop === true,
+    shopChannelId: isId(raw.shopChannelId) ? String(raw.shopChannelId) : '',
   };
 }
 

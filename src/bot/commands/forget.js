@@ -29,7 +29,7 @@ export async function execute(interaction) {
       flags: MessageFlags.Ephemeral,
       content:
         `This permanently deletes your **XP / level**, **ticket history**, **ban appeals**, ` +
-        `**invite records**, **AFK status**, **saved birthday**, **introduction** (answers and card), **economy account and transactions** and **giveaway entries** in **${interaction.guild.name}**. ` +
+        `**invite records**, **AFK status**, **saved birthday**, **introduction** (answers and card), **economy account, transactions and shop items** and **giveaway entries** in **${interaction.guild.name}**. ` +
         `The economy keeps a short record (7 days) of your daily, work and rob cooldowns and that you already got the starting balance, so /forget cannot be used to reset them. ` +
         `Messages already posted to channels, a completed giveaway's winner list, and the server's ` +
         `config-change log are not affected, and Sylo will still store new data going forward. ` +
@@ -67,7 +67,7 @@ export async function execute(interaction) {
       { name: 'Saved-by name removed from quotes', value: String(r.quotesSaved), inline: true },
       {
         name: 'Economy',
-        value: `${r.economyAccounts} account, ${r.economyTransactions} transactions`,
+        value: `${r.economyAccounts} account, ${r.economyTransactions} transactions, ${r.economyInventory} shop items`,
         inline: true,
       },
       {

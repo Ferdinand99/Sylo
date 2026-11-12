@@ -18,6 +18,7 @@ import { recordAudit } from '../../db/audit.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { ACCOUNT_SORTS, getAccount, listTransactions, transactionCount } from '../../db/economy.js';
 import { clientOfGuild } from '../../platform/platformOf.js';
+import { inventoryPayload } from './v2Shop.js';
 import {
   LIMITS,
   MAX_BALANCE,
@@ -91,6 +92,7 @@ async function memberDetail(guild, userId) {
     member: personOf(guild, tags, userId),
     account: accountView(row),
     transactionCount: await transactionCount(guild.id, userId),
+    inventory: await inventoryPayload(guild, userId),
     transactions: ledger.map((t) => ({
       id: Number(t.id),
       kind: t.kind,
