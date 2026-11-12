@@ -72,6 +72,7 @@ const buy = async (member, itemId, over = {}) =>
     member,
     itemId,
     expectedPrice: (await getItem(G, itemId))?.price,
+    expectedVersion: (await getItem(G, itemId))?.updatedAt,
     config: cfg(),
     ...over,
   });
@@ -766,7 +767,7 @@ test('the sweep refunds only a member who is gone or lacks the role, confirms on
   assert.equal(await cash(a), 900, 'not refunded while it could not be looked at');
   // now a is known to be gone (a 404): refunded
   ctx.guild.members.fetch = realFetch;
-  assert.equal(await recoverPending(Date.now()), 1);
+  assert.equal(await recoverPending(Date.now() + 10 * 60_000), 1);
   assert.equal(await status(a), 'refunded');
   assert.equal(await cash(a), 1000);
 });
@@ -810,4 +811,74 @@ test('the pending sweep has an index, and /forget takes the roles the shop gave 
     removed: 0,
     failed: [],
   });
+});
+
+// --- fix round 2: item version, unknown added time, a sweep that is not stalled -------------------------
+
+test('an item that was edited after the buyer saw it is refused (not only a price change); a sale is not an edit', async () => {
+  const m = await buyer(80);
+  const other = await buyer(81);
+  const id = await tempItem({ durationHours: 24 });
+  const seen = (await getItem(G, id)).updatedAt;
+  // another member buys: a sale, not an edit, so the version the first buyer saw is still the version
+  assert.equal((await buy(other, id)).ok, true);
+  assert.equal((await getItem(G, id)).updatedAt, seen);
+  // staff change the duration, the price stays: the version changes
+  await updateItem(
+    G,
+    id,
+    normaliseItem({ name: 'Shout-out', type: 'temp_role', roleId: ROLE_A, durationHours: 1, price: 100 })
+  );
+  const out = await buy(m, id, { expectedVersion: seen });
+  assert.deepEqual([out.ok, out.reason], [false, 'item_changed']);
+  assert.equal(await cash(m), 1000, 'nothing was charged');
+  assert.match(shopRefusalText(out, cfg()), /This item changed, check it and try again[.]/);
+  assert.equal((await buy(m, id, { expectedVersion: undefined })).reason, 'item_changed');
+  assert.equal((await buy(m, id)).ok, true, 'with the version as it is now it buys');
+});
+
+test('a purchase from before the added time was recorded (added_ms 0) ends the whole temporary-role record', async () => {
+  const m = await buyer(82);
+  const id = await tempItem({ durationHours: 24 });
+  await buy(m, id);
+  const two = await buy(m, id);
+  db.prepare('UPDATE economy_inventory SET added_ms = 0 WHERE id = ?').run(two.row.id);
+  assert.equal(
+    (await endRow({ guild: ctx.guild, rowId: two.row.id, mode: 'refund', config: cfg() })).ok,
+    true
+  );
+  assert.equal(await record(m), null, 'the whole record ended');
+  assert.equal(m.roles.cache.has(ROLE_A), false);
+});
+
+test('rows the sweep skips are pushed back, so more skipped rows than the batch do not hide the one behind them', async () => {
+  const skipped = [];
+  const id = await item({ type: 'role', roleId: ROLE_B, price: 100, stock: 30 });
+  for (let i = 0; i < 5; i++) skipped.push(await buyer(90 + i));
+  const good = await buyer(95);
+  for (const m of [...skipped, good]) await buy(m, id);
+  db.prepare("UPDATE economy_inventory SET status = 'pending', lease_until = 1000 WHERE guild_id = ?").run(G);
+  // the five cannot be looked up now (a 503, not "gone"); the last one never got its role
+  for (const m of skipped) ctx.guild.members.cache.delete(m.id);
+  const realFetch = ctx.guild.members.fetch;
+  const failing = new Set(skipped.map((m) => m.id));
+  ctx.guild.members.fetch = async (uid) => {
+    if (failing.has(uid)) throw Object.assign(new Error('Service Unavailable'), { status: 503 });
+    return realFetch(uid);
+  };
+  good.roles.cache.delete(ROLE_B);
+  const now = Date.now();
+  // batches of 3: the first sees three skipped rows and settles nothing
+  assert.equal(await recoverPending(now, { limit: 3 }), 0);
+  const leases = db
+    .prepare("SELECT lease_until FROM economy_inventory WHERE status = 'pending' AND guild_id = ?")
+    .all(G);
+  assert.equal(leases.filter((r) => r.lease_until > now).length, 3, 'those three were pushed back');
+  // the next batch reaches the other two and the refundable one behind them
+  assert.equal(await recoverPending(now, { limit: 3 }), 1);
+  const goodRow = (await listInventory(G, good.id))[0];
+  assert.equal(goodRow.status, 'refunded');
+  assert.equal(await cash(good), 1000);
+  // the skipped ones stay pending (nothing was refunded for a member who could not be looked at)
+  for (const m of skipped) assert.equal((await listInventory(G, m.id))[0].status, 'pending');
 });

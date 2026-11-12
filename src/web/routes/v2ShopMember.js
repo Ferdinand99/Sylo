@@ -116,6 +116,7 @@ async function shopView({ guild, key, member, config }) {
         emoji: i.emoji,
         type: i.type,
         price: i.price,
+        version: i.updatedAt,
         durationHours: i.durationMs == null ? null : Math.round(i.durationMs / 3_600_000),
         left: i.stock === null ? null : Math.max(0, i.stock - i.sold),
         requiredRoles: i.requiredRoles.map((id) => ({
@@ -154,11 +155,15 @@ router.post(
         const itemId = /^\d{1,15}$/.test(String(req.body?.itemId ?? '')) ? Number(req.body.itemId) : 0;
         // The price the page showed and the member confirmed; a missing or odd one never matches.
         const expectedPrice = /^\d{1,15}$/.test(String(req.body?.price ?? '')) ? Number(req.body.price) : NaN;
+        const expectedVersion = /^\d{1,16}$/.test(String(req.body?.version ?? ''))
+          ? Number(req.body.version)
+          : NaN;
         const out = await purchase({
           guild: open.guild,
           member: open.member,
           itemId,
           expectedPrice,
+          expectedVersion,
           config: open.config,
         });
         if (!out.ok) {

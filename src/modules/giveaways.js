@@ -560,7 +560,7 @@ export async function completeGiveawayMoney(now = Date.now()) {
   }
 }
 
-/** How far back the sweep looks for draws whose prizes were not all paid. */
+/** How far back (from the last draw or reroll) the sweep looks for draws whose prizes were not all paid. */
 const PRIZE_SWEEP_WINDOW_MS = 7 * 86_400_000;
 
 registerComponent('giveaways', 'gaw:enter:', (interaction) =>

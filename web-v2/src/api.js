@@ -184,8 +184,8 @@ export const getShopActivity = (guildId, { userId = '', itemId = '', page = 1 } 
   );
 // The member-facing web shop (/v2/shop/<server>).
 export const getWebShop = (guildId) => apiFetch(`/api/v2/shop/${gid(guildId)}`);
-export const buyWebShopItem = (guildId, itemId, price) =>
-  postJson(`/api/v2/shop/${gid(guildId)}/buy`, { itemId, price });
+export const buyWebShopItem = (guildId, itemId, price, version) =>
+  postJson(`/api/v2/shop/${gid(guildId)}/buy`, { itemId, price, version });
 export const resetEconomy = (guildId, confirm) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/economy/reset`, { confirm });
 export const setInviteBonus = (guildId, userId, bonus) =>

@@ -101,5 +101,5 @@ export async function buyNow(args) {
   const { getItem } = await import('../../src/db/economyShop.js');
   const { guildKey } = await import('../../src/platform/platformOf.js');
   const item = await getItem(guildKey(args.guild), args.itemId);
-  return purchase({ expectedPrice: item?.price, ...args });
+  return purchase({ expectedPrice: item?.price, expectedVersion: item?.updatedAt, ...args });
 }

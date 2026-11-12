@@ -1343,7 +1343,9 @@ export const MIGRATIONS = [
   // Economy, part B fix round: what a shop purchase added to a temporary role (so a refund takes off
   // only that), a lease for a role grant that is still running (so the sweep leaves it alone), a
   // marker per refunded giveaway entry, a marker for paid currency prizes and one row per prize paid
-  // (so a prize is never paid twice). The Postgres side is the bootstrap in src/db/economyShop.js and
+  // (so a prize is never paid twice), and when a giveaway was last drawn. Rows made before this
+  // migration: giveaways that ended count as paid; an inventory row with added_ms = 0 means "the time it
+  // added is unknown" (a refund or revoke then ends the whole record, as it did before). The Postgres side is the bootstrap in src/db/economyShop.js and
   // src/db/giveaways.js (every statement there can run again).
   (database) => {
     database.exec(`
@@ -1352,6 +1354,10 @@ export const MIGRATIONS = [
       CREATE INDEX idx_economy_inventory_pending ON economy_inventory (lease_until) WHERE status = 'pending';
       ALTER TABLE giveaway_entries ADD COLUMN refunded INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE giveaways ADD COLUMN prizes_paid INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE giveaways ADD COLUMN drawn_at INTEGER NOT NULL DEFAULT 0;
+      -- Giveaways that were already drawn under the earlier code paid their prizes without a
+      -- giveaway_prizes row: they count as paid, or the sweep would pay every winner again.
+      UPDATE giveaways SET prizes_paid = 1 WHERE ended = 1;
       CREATE INDEX idx_giveaways_refunds ON giveaways (id) WHERE cancelled = 1 AND entry_fee > 0;
       CREATE INDEX idx_giveaways_prizes ON giveaways (id) WHERE ended = 1 AND cancelled = 0 AND prize_amount > 0 AND prizes_paid = 0;
       CREATE TABLE giveaway_prizes (

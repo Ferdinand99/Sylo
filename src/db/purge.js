@@ -166,8 +166,11 @@ const userStmts = {
     WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)
       AND user_id = ?
   `),
+  // Kept on purpose, like the economy cooldown record: the row (giveaway id and member id, nothing
+  // else) is what stops a prize being paid a second time to a member who ran /forget. The amount and
+  // the time come off. The rows go with the giveaway when the server is purged.
   giveawayPrizes: prepare(`
-    DELETE FROM giveaway_prizes
+    UPDATE giveaway_prizes SET amount = 0, paid_at = 0
     WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)
       AND user_id = ?
   `),

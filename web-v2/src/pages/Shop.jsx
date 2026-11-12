@@ -62,8 +62,8 @@ export default function Shop() {
     if (!ok) return;
     setBusy(item.id);
     try {
-      // the price on the confirmation is the price sent: the server refuses when it is another one by now
-      const out = await buyWebShopItem(guildId, item.id, item.price);
+      // the price and version on the confirmation are what is sent: the server refuses when the item changed by now
+      const out = await buyWebShopItem(guildId, item.id, item.price, item.version);
       setData(out.view);
       notify(`You bought ${item.name}.`, 'info');
     } catch (err) {

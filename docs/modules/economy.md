@@ -116,9 +116,11 @@ Before any money moves Sylo checks that the item is for sale, in stock, that the
 that Sylo itself can hand out the role (Manage Roles, and the role is below Sylo's highest role). If not, the
 member is told and nothing is charged.
 
-**A member is only ever charged the price they saw.** `/buy`, the shop menu and the web shop all show the price
-and ask to confirm, and the confirmation carries that price. If staff changed the price meanwhile, nothing is
-charged and the member is told the new price ("The price changed to X. Check and try again.").
+**A member is only ever charged the item they saw, at the price they saw.** `/buy`, the shop menu and the web
+shop all show the price and ask to confirm, and the confirmation carries that price and the item's version. If
+staff changed the price meanwhile, nothing is charged and the member is told the new price ("The price changed
+to X. Check and try again."); any other edit (the role, the time, the kind, the name, the stock) gives "This item
+changed, check it and try again." A sale does not count as a change.
 
 **Buying is one transaction:** the price is debited (ledger kind `purchase`), the stock goes down by one, the
 member's limit is checked and the inventory row is added. 20 buyers of the last 5 items get exactly 5, and
@@ -145,7 +147,10 @@ returns and the item is revoked) and mark a custom item **fulfilled**. A revoke 
 member and takes the role off when they still have it. Each purchase of a temporary role remembers **how much
 time it added**: refunding or revoking one takes off only that time (never more than is left), so if the member
 bought it twice the role stays for the other purchase, and time staff added by hand with `/temprole` stays. When
-nothing is left the role comes off.
+nothing is left the role comes off. A purchase from before this was recorded (its added time is unknown) ends
+the whole temporary-role record. A refund takes off the full time the purchase added, even if part of it was
+already used: if a member bought a role twice and the first period is mostly over, refunding the first also
+removes that much of the second period. Staff can give time back with `/temprole`.
 
 ### Activity tab
 

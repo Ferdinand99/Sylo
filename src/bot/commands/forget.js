@@ -33,6 +33,7 @@ export async function execute(interaction) {
         `**invite records**, **AFK status**, **saved birthday**, **introduction** (answers and card), **economy account, transactions and shop items** and **giveaway entries** in **${interaction.guild.name}**. ` +
         `Roles you bought in the shop (temporary or permanent) are taken off you first, because the shop records that keep them are deleted. ` +
         `The economy keeps a short record (7 days) of your daily, work and rob cooldowns and that you already got the starting balance, so /forget cannot be used to reset them. ` +
+        `The same goes for giveaway prizes: a record of which giveaway paid you (the giveaway and your id, no amount) stays so a prize cannot be paid twice. ` +
         `Messages already posted to channels, a completed giveaway's winner list, and the server's ` +
         `config-change log are not affected, and Sylo will still store new data going forward. ` +
         `Moderation cases (warnings, kicks, bans, notes) and other safety records are kept: they protect the server.` +

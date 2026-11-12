@@ -228,7 +228,16 @@ test(
         const m = await member(30);
         const id = await item({ price: 100 });
         assert.equal(
-          (await shop.purchase({ guild, member: m, itemId: id, expectedPrice: 99, config })).reason,
+          (
+            await shop.purchase({
+              guild,
+              member: m,
+              itemId: id,
+              expectedPrice: 99,
+              expectedVersion: 1,
+              config,
+            })
+          ).reason,
           'price_changed'
         );
         assert.equal(await cash(m), 1000);

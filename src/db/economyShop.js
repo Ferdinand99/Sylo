@@ -82,10 +82,13 @@ const s = {
   maxOrder: prepare('SELECT MAX(sort_order) AS m FROM economy_items WHERE guild_id = ?'),
   updateItem: prepare(
     `UPDATE economy_items SET name = ?, description = ?, emoji = ?, type = ?, role_id = ?, duration_ms = ?,
-       price = ?, stock = ?, required_roles = ?, per_member_limit = ?, enabled = ?, updated_at = ?
+       price = ?, stock = ?, required_roles = ?, per_member_limit = ?, enabled = ?,
+       updated_at = CASE WHEN updated_at >= ? THEN updated_at + 1 ELSE ? END
      WHERE guild_id = ? AND id = ?`
   ),
-  setEnabled: prepare('UPDATE economy_items SET enabled = ?, updated_at = ? WHERE guild_id = ? AND id = ?'),
+  setEnabled: prepare(
+    `UPDATE economy_items SET enabled = ?, updated_at = CASE WHEN updated_at >= ? THEN updated_at + 1 ELSE ? END WHERE guild_id = ? AND id = ?`
+  ),
   setOrder: prepare('UPDATE economy_items SET sort_order = ? WHERE guild_id = ? AND id = ?'),
   deleteItem: prepare('DELETE FROM economy_items WHERE guild_id = ? AND id = ?'),
 
@@ -222,7 +225,11 @@ export const getItem = async (guildId, id) => hydrateItem(await s.getItem.get(gu
 export const listItems = async (guildId) => (await s.listItems.all(guildId)).map(hydrateItem);
 export const itemCount = async (guildId) => Number((await s.countItems.get(guildId))?.n) || 0;
 
-/** Replace the fields of an item (never its stock sold count). @returns {Promise<boolean>} found */
+/**
+ * Replace the fields of an item (never its stock sold count). Every edit gives the item a new, larger
+ * `updated_at`, even two within the same millisecond: it is the version a buyer's confirmation carries.
+ * @returns {Promise<boolean>} found
+ */
 export async function updateItem(guildId, id, v, now = Date.now()) {
   const info = await s.updateItem.run(
     v.name,
@@ -237,6 +244,7 @@ export async function updateItem(guildId, id, v, now = Date.now()) {
     v.perMemberLimit,
     v.enabled ? 1 : 0,
     now,
+    now,
     guildId,
     id
   );
@@ -244,7 +252,7 @@ export async function updateItem(guildId, id, v, now = Date.now()) {
 }
 
 export async function setItemEnabled(guildId, id, enabled, now = Date.now()) {
-  return (await s.setEnabled.run(enabled ? 1 : 0, now, guildId, id)).changes > 0;
+  return (await s.setEnabled.run(enabled ? 1 : 0, now, now, guildId, id)).changes > 0;
 }
 
 /** Put the items in the given order (ids not listed keep their relative order after the listed ones). */
@@ -342,6 +350,17 @@ export async function liveRoleRows(guildId, userId) {
 }
 
 // --- custom items: fulfilment ---------------------------------------------------------------------------
+
+/** Push a pending row's lease forward (the sweep skipped it): it is looked at again after `until`. */
+export async function deferPendingLease(guildId, id, until) {
+  return (
+    (
+      await prepare(
+        "UPDATE economy_inventory SET lease_until = ? WHERE guild_id = ? AND id = ? AND status = 'pending'"
+      ).run(until, guildId, id)
+    ).changes > 0
+  );
+}
 
 /** A role item whose role is on the member: `pending` becomes `active`. */
 export async function activateRow(guildId, id, now = Date.now()) {

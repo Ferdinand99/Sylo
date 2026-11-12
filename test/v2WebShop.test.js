@@ -55,7 +55,10 @@ const memberOf = (guild, id, roles = []) => {
   return m;
 };
 // What the page sends: the item and the price it showed.
-const pay = async (key, id) => ({ itemId: id, price: (await getItem(key, Number(id) || 0))?.price ?? 1 });
+const pay = async (key, id) => {
+  const item = await getItem(key, Number(id) || 0);
+  return { itemId: id, price: item?.price ?? 1, version: item?.updatedAt ?? 1 };
+};
 const enableShop = (key, config = {}) =>
   setGuildModule(key, 'economy', { enabled: true, config: { webShop: true, ...config } });
 const mk = (key, over) =>
@@ -222,7 +225,7 @@ test('too little cash is refused with the price', async () => {
     assert.equal((await view(unseen)).reason, 'price_changed');
     assert.equal(await cashOf(D_GUILD, ME), 1000);
     // with the price now shown it buys
-    assert.equal((await me.post(`/shop/${D_GUILD}/buy`, { itemId: id, price: 900 })).status, 200);
+    assert.equal((await me.post(`/shop/${D_GUILD}/buy`, await pay(D_GUILD, id))).status, 200);
     assert.equal(await cashOf(D_GUILD, ME), 100);
   }
 });

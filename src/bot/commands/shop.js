@@ -145,13 +145,13 @@ const eph = (interaction, content, extra = {}) =>
 
 /**
  * The question before a purchase: the item and the price the member sees. The ✅ button carries that
- * price (`shop:buy:<item>:<price>`), and purchase() refuses when the item costs something else by
- * then. Shared by /buy and the menu.
+ * price and the item's version (`shop:buy:<item>:<price>:<version>`), and purchase() refuses when the
+ * item costs something else, or was edited in any way, by then. Shared by /buy and the menu.
  */
 export function confirmPayload(item, config) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`${PREFIX}buy:${item.id}:${item.price}`)
+      .setCustomId(`${PREFIX}buy:${item.id}:${item.price}:${item.updatedAt}`)
       .setEmoji('✅')
       .setLabel(`Buy for ${item.price.toLocaleString('en-US')}`)
       .setStyle(ButtonStyle.Success),
@@ -200,8 +200,9 @@ registerComponent('economy', PREFIX, async (interaction) => {
       guild: interaction.guild,
       member: interaction.member,
       itemId: Number(parts[2]),
-      // The price on the button is the price the member saw; an old button without one never matches.
+      // The price and version on the button are what the member saw; an old button without them never matches.
       expectedPrice: /^\d{1,15}$/.test(String(parts[3])) ? Number(parts[3]) : NaN,
+      expectedVersion: /^\d{1,16}$/.test(String(parts[4])) ? Number(parts[4]) : NaN,
       config,
     });
     const done = { content: purchaseText(out, config), components: [], allowedMentions: { parse: [] } };

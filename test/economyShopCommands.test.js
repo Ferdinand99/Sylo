@@ -220,7 +220,7 @@ test('picking an item in the menu asks first; the confirm button buys; cancel do
   // the button carries the price the member saw
   assert.deepEqual(
     confirm.map((c) => c.custom_id),
-    [`shop:buy:${id}:100`, 'shop:no']
+    [`shop:buy:${id}:100:${(await getItem(G, id)).updatedAt}`, 'shop:no']
   );
   assert.equal(await cash(U), 500, 'nothing is charged for picking');
 
@@ -229,7 +229,7 @@ test('picking an item in the menu asks first; the confirm button buys; cancel do
   assert.equal(updates[0].content, 'Cancelled.');
   assert.equal(await cash(U), 500);
 
-  const bought = press(m, `shop:buy:${id}:100`);
+  const bought = press(m, `shop:buy:${id}:100:${(await getItem(G, id)).updatedAt}`);
   await routeComponent(bought);
   assert.match(
     bought.edits[0].content,
@@ -292,7 +292,7 @@ test('/buy finds an item by exact name, by number and by a part of the name, and
   assert.match(said(byName), /Buy \*\*Millionaire\*\* for 🪙 200 coins\?/);
   assert.equal(byName.replies[0].flags, MessageFlags.Ephemeral);
   const confirmId = buttons(byName.replies[0])[0].custom_id;
-  assert.match(confirmId, /^shop:buy:\d+:200$/, 'the question carries the price');
+  assert.match(confirmId, /^shop:buy:\d+:200:\d+$/, 'the question carries the price and version');
   assert.match(said(await asks('1')), /Buy \*\*Shout-out\*\* for 🪙 100/);
   assert.match(said(await asks('mini')), /Buy \*\*Mini shout\*\* for 🪙 10/);
   assert.equal(await cash(U), 1000, '/buy itself charges nothing: the button does');

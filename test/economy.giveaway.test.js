@@ -430,3 +430,44 @@ test('while an economy reset runs, entering a giveaway with a fee answers at onc
   // the reset put the account back to nothing, so it is the ordinary answer again
   assert.match((await press(id, m)).content, /in cash to enter/);
 });
+
+test('the prize sweep counts from the last draw, not from the scheduled end', async () => {
+  const a = await member(100);
+  // scheduled to end a month ago, drawn (or rerolled) just now
+  const id = await start({ winners: 1, prizeAmount: 100, endsAt: Date.now() - 30 * 86_400_000 });
+  await addGiveawayEntry(id, a.id);
+  await markGiveawayEnded(id, [a.id]);
+  assert.equal(
+    (await giveawaysWithUnpaidPrizes(Date.now() - 7 * 86_400_000)).some((g) => g.id === id),
+    true
+  );
+  await completeGiveawayMoney();
+  assert.equal(await cash(a.id), 600);
+  // a draw from ten days ago is outside the window
+  const old = await start({ winners: 1, prizeAmount: 100 });
+  await markGiveawayEnded(old, [a.id]);
+  db.prepare('UPDATE giveaways SET drawn_at = ? WHERE id = ?').run(Date.now() - 10 * 86_400_000, old);
+  assert.equal(
+    (await giveawaysWithUnpaidPrizes(Date.now() - 7 * 86_400_000)).some((g) => g.id === old),
+    false
+  );
+});
+
+test('/forget keeps the prize record (giveaway and member only), so the member is not paid twice', async () => {
+  const { forgetUser } = await import('../src/db/purge.js');
+  const a = await member(101);
+  const id = await start({ winners: 1, prizeAmount: 100 });
+  const g = await getGiveaway(id);
+  assert.equal((await payPrize(g, a.id, config)).ok, true);
+  await forgetUser(G, a.id);
+  const row = db.prepare('SELECT * FROM giveaway_prizes WHERE giveaway_id = ? AND user_id = ?').get(id, a.id);
+  assert.deepEqual(
+    { ...row },
+    { giveaway_id: id, user_id: a.id, amount: 0, paid_at: 0 },
+    'only the ids stay'
+  );
+  // a sweep or a reroll that names them again pays nothing
+  const again = await payPrize(g, a.id, config);
+  assert.deepEqual([again.ok, again.reason], [false, 'already_paid']);
+  assert.equal(await cash(a.id), 0, 'the new account holds nothing');
+});

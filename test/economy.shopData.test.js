@@ -82,7 +82,13 @@ test('the migration made both tables with the documented columns, and both are i
     'lease_until',
   ]);
   assert.ok(GUILD_TABLES.includes('economy_items') && GUILD_TABLES.includes('economy_inventory'));
-  assert.deepEqual(cols('giveaways').slice(-4), ['entry_fee', 'prize_amount', 'cancelled', 'prizes_paid']);
+  assert.deepEqual(cols('giveaways').slice(-5), [
+    'entry_fee',
+    'prize_amount',
+    'cancelled',
+    'prizes_paid',
+    'drawn_at',
+  ]);
   assert.equal(cols('giveaway_entries').at(-1), 'refunded');
   assert.deepEqual(cols('giveaway_prizes'), ['giveaway_id', 'user_id', 'amount', 'paid_at']);
 });

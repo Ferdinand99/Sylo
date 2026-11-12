@@ -19,8 +19,10 @@
 // A grant that is still running (in this process, or inside its lease) is never touched by the sweep,
 // and a refund or revoke of a pending row waits for the grant, so nobody keeps a role after a revoke.
 //
-// A purchase says which price the member saw (`expectedPrice`); if the price is another one now,
-// nothing is charged and the member is told the new price.
+// A purchase says which price and which version of the item the member saw (`expectedPrice`,
+// `expectedVersion` = the item's `updated_at`, which every staff edit changes and a sale does not): if
+// the price is another one now, or the item was changed in any way (role, duration, type, ...), nothing
+// is charged and the member is told to look again.
 //
 // An inventory row of a temporary role remembers how much time it added to the role's record
 // (`added_ms`): a refund or revoke takes off only that, so time staff gave by hand stays. When the
@@ -33,6 +35,7 @@ import { abort, transact } from './economy.js';
 import { formatMoney } from './economyConfig.js';
 import {
   activateRow,
+  deferPendingLease,
   getInventoryRow,
   getItem,
   liveRoleRows,
@@ -166,6 +169,8 @@ export function shopRefusalText(result, config) {
       return 'That item is not for sale right now.';
     case 'sold_out':
       return 'That item is sold out.';
+    case 'item_changed':
+      return 'This item changed, check it and try again.';
     case 'price_changed':
       return result.price != null
         ? `The price changed to ${formatMoney(result.price, config)}. Check and try again.`
@@ -214,13 +219,22 @@ export function shopRefusalText(result, config) {
  *
  * Then, for a role item, the role goes on in the platform; if that fails the purchase is refunded.
  * For a custom item, a notice goes to the shop channel when one is set.
- * `expectedPrice` is the price the member saw (the confirmation, the web page). When the item costs
- * something else now, nothing is charged: `price_changed` with the current price.
- * @param {{ guild: any, member: any, itemId: number, expectedPrice: number, config: object, now?: number }} args
+ * `expectedPrice` and `expectedVersion` (the item's `updatedAt`) are what the member saw (the
+ * confirmation, the web page). When the item costs something else now: `price_changed` with the
+ * current price; when it was changed in any other way: `item_changed`. Nothing is charged either way.
+ * @param {{ guild: any, member: any, itemId: number, expectedPrice: number, expectedVersion: number, config: object, now?: number }} args
  * @returns {Promise<{ ok: true, row: object, item: object, account: object, expiresAt?: number, extended?: boolean }
  *   | { ok: false, reason: string, [k: string]: any }>}
  */
-export async function purchase({ guild, member, itemId, expectedPrice, config, now = Date.now() }) {
+export async function purchase({
+  guild,
+  member,
+  itemId,
+  expectedPrice,
+  expectedVersion,
+  config,
+  now = Date.now(),
+}) {
   const guildId = guildKey(guild);
   const userId = member.id;
   const item = await getItem(guildId, itemId);
@@ -228,6 +242,7 @@ export async function purchase({ guild, member, itemId, expectedPrice, config, n
   if (problem) return { ok: false, ...problem };
   // The member agreed to a price: never charge another one.
   if (item.price !== expectedPrice) return { ok: false, reason: 'price_changed', price: item.price };
+  if (item.updatedAt !== expectedVersion) return { ok: false, reason: 'item_changed' };
 
   const box = { rowId: null, previous: null, expiresAt: null, extended: false, added: 0 };
   const out = await transact(
@@ -245,24 +260,27 @@ export async function purchase({ guild, member, itemId, expectedPrice, config, n
       now,
       config,
       after: function* (tx) {
-        // Stock and price in one conditional update: a buyer who is too late (or saw an old price) changes nothing.
+        // Stock, price and version in one conditional update: a buyer who is too late (or saw an old
+        // item) changes nothing. A sale does not touch updated_at: it is the version staff edits change.
         const took = yield tx.run(
-          `UPDATE economy_items SET sold = sold + 1, updated_at = ?
-           WHERE guild_id = ? AND id = ? AND price = ? AND enabled = 1 AND (stock IS NULL OR sold < stock)`,
-          now,
+          `UPDATE economy_items SET sold = sold + 1
+           WHERE guild_id = ? AND id = ? AND price = ? AND updated_at = ? AND enabled = 1
+             AND (stock IS NULL OR sold < stock)`,
           guildId,
           item.id,
-          item.price
+          item.price,
+          item.updatedAt
         );
         if (took.changes !== 1) {
           const cur = yield tx.get(
-            'SELECT price, enabled FROM economy_items WHERE guild_id = ? AND id = ?',
+            'SELECT price, enabled, updated_at FROM economy_items WHERE guild_id = ? AND id = ?',
             guildId,
             item.id
           );
           if (!cur) abort('item_gone');
           if (Number(cur.enabled) !== 1) abort('item_paused');
           if (Number(cur.price) !== item.price) abort('price_changed', { price: Number(cur.price) });
+          if (Number(cur.updated_at) !== item.updatedAt) abort('item_changed');
           abort('sold_out');
         }
         if (item.perMemberLimit !== null) {
@@ -615,9 +633,10 @@ async function endRowNow({
           } else {
             // Take off the time this row added, never more (time staff gave by hand stays) and never
             // past now. When nothing is left the record goes and the role comes off.
+            // A row with added_ms = 0 predates the column ("unknown"): the whole record ends.
             const rec = yield* readTempRoleRow(tx, guildId, row.userId, row.roleId);
             const left = rec ? rec.expires_at - row.addedMs : 0;
-            if (!rec || left <= now) {
+            if (!rec || row.addedMs <= 0 || left <= now) {
               if (rec) yield* deleteTempRoleRow(tx, guildId, row.userId, row.roleId);
               box.dropRole = true;
             } else {
@@ -675,22 +694,36 @@ async function endRowNow({
  * Before anything is refunded the member is looked at: with the role on, the row is confirmed; a
  * member who cannot be looked up right now (a hiccup, not "gone") is tried again next time; a member
  * who is gone or lacks the role gets the purchase refunded (and a role that is still on comes off).
+ * A row that is skipped (a grant still running, a platform that is not connected, a lookup that failed)
+ * gets its lease pushed forward, so it does not sit at the front of the batch and hide the rows behind it.
+ * @param {number} [now]
+ * @param {{ config?: object, limit?: number }} [opts]  `limit`: rows looked at per call (default 50)
  * @returns {Promise<number>} how many rows were settled
  */
-export async function recoverPending(now = Date.now(), { config } = {}) {
+export async function recoverPending(now = Date.now(), { config, limit = 50 } = {}) {
   if (!allClientsReady()) return 0;
   let settled = 0;
-  for (const row of await stalePending(now, 50)) {
-    if (inflight.has(row.id)) continue;
+  const later = (row) => deferPendingLease(row.guildId, row.id, now + GRANT_LEASE_MS);
+  for (const row of await stalePending(now, limit)) {
+    if (inflight.has(row.id)) {
+      await later(row);
+      continue;
+    }
     const guild = guildByKey(row.guildId);
-    if (!guild) continue;
+    if (!guild) {
+      await later(row);
+      continue;
+    }
     try {
       let member = guild.members.cache.get(row.userId) ?? null;
       if (!member) {
         try {
           member = await guild.members.fetch(row.userId);
         } catch (err) {
-          if (!isNotFound(err, [10007])) continue; // not known to be gone: try again next time
+          if (!isNotFound(err, [10007])) {
+            await later(row); // not known to be gone: try again later
+            continue;
+          }
           member = null;
         }
       }

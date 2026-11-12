@@ -29,6 +29,7 @@ const item = (over = {}) => ({
   emoji: '🎤',
   type: 'custom',
   price: 100,
+  version: 1700000000000,
   durationHours: null,
   left: 3,
   requiredRoles: [],
@@ -136,7 +137,7 @@ describe('the web shop page', () => {
     });
     renderAtGuild(<Shop />, GUILD);
     fireEvent.click(await screen.findByRole('button', { name: 'Buy' }));
-    await waitFor(() => expect(api.buyWebShopItem).toHaveBeenCalledWith(GUILD, 1, 100));
+    await waitFor(() => expect(api.buyWebShopItem).toHaveBeenCalledWith(GUILD, 1, 100, 1700000000000));
     expect(confirmDialog).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Buy 🎤 Shout-out?',

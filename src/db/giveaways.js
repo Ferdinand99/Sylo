@@ -21,6 +21,12 @@ registerPostgresBootstrap(`
     prize_amount     BIGINT NOT NULL DEFAULT 0,
     cancelled        INTEGER NOT NULL DEFAULT 0
   );
+  -- A table made by an older version lacks these columns: add them BEFORE any index that uses them
+  -- (the bootstrap runs before the registered migrations, so migration 69 would be too late).
+  ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS entry_fee BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS prize_amount BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS cancelled INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS drawn_at BIGINT NOT NULL DEFAULT 0;
   ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS prizes_paid INTEGER NOT NULL DEFAULT 0;
   CREATE INDEX IF NOT EXISTS idx_giveaways_guild ON giveaways (guild_id, ended, ends_at);
   CREATE INDEX IF NOT EXISTS idx_giveaways_refunds ON giveaways (id) WHERE cancelled = 1 AND entry_fee > 0;
@@ -49,6 +55,11 @@ registerPostgresMigration(
    ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS cancelled INTEGER NOT NULL DEFAULT 0;`
 );
 
+// Mirrors the data step of SQLite migration 70: giveaways drawn under the earlier code paid their
+// prizes without a giveaway_prizes row, so they count as paid. (The columns come from the bootstrap
+// above; this runs once, which is why it is a migration and not part of the bootstrap.)
+registerPostgresMigration(70, 'UPDATE giveaways SET prizes_paid = 1 WHERE ended = 1;');
+
 const s = {
   create: prepare(
     `
@@ -71,14 +82,14 @@ const s = {
   claimCancel: prepare(
     "UPDATE giveaways SET ended = 1, cancelled = 1, won_ids = '[]' WHERE id = ? AND ended = 0"
   ),
-  markEnded: prepare('UPDATE giveaways SET ended = 1, won_ids = ? WHERE id = ?'),
+  markEnded: prepare('UPDATE giveaways SET ended = 1, won_ids = ?, drawn_at = ? WHERE id = ?'),
   claimEnd: prepare('UPDATE giveaways SET ended = 1 WHERE id = ? AND ended = 0'),
   // A reroll has new winners to pay: the prizes are not all paid until the sweep or the draw says so.
-  setWinners: prepare('UPDATE giveaways SET won_ids = ?, prizes_paid = 0 WHERE id = ?'),
+  setWinners: prepare('UPDATE giveaways SET won_ids = ?, prizes_paid = 0, drawn_at = ? WHERE id = ?'),
   setPrizesPaid: prepare('UPDATE giveaways SET prizes_paid = 1 WHERE id = ?'),
   unpaidPrizes: prepare(
     `SELECT * FROM giveaways
-     WHERE ended = 1 AND cancelled = 0 AND prize_amount > 0 AND prizes_paid = 0 AND ends_at > ?
+     WHERE ended = 1 AND cancelled = 0 AND prize_amount > 0 AND prizes_paid = 0 AND drawn_at > ?
      ORDER BY id LIMIT ?`
   ),
   unrefundedCancelled: prepare(
@@ -158,17 +169,19 @@ export const dueGiveaways = async (now) => (await s.due.all(now)).map(hydrate);
 /** End and cancel a running giveaway in one statement: true only for the caller that did it. */
 export const claimGiveawayCancel = async (id) => (await s.claimCancel.run(id)).changes === 1;
 export const markGiveawayPrizesPaid = async (id) => s.setPrizesPaid.run(id);
-/** Ended giveaways with a currency prize that is not all paid yet (a crash after the draw), recent first-in. */
+/** Ended giveaways with a currency prize that is not all paid yet (a crash after the draw), last drawn after `since`. */
 export const giveawaysWithUnpaidPrizes = async (since, limit = 20) =>
   (await s.unpaidPrizes.all(since, limit)).map(hydrate);
 /** Cancelled giveaways with an entry fee that still hold an unrefunded entry. */
 export const cancelledWithUnrefunded = async (limit = 20) =>
   (await s.unrefundedCancelled.all(limit)).map(hydrate);
 export const unrefundedEntrantIds = async (id) => (await s.unrefundedEntrants.all(id)).map((r) => r.user_id);
-export const markGiveawayEnded = async (id, wonIds) => s.markEnded.run(JSON.stringify(wonIds ?? []), id);
+export const markGiveawayEnded = async (id, wonIds) =>
+  s.markEnded.run(JSON.stringify(wonIds ?? []), Date.now(), id);
 /** Mark a giveaway ended unless it already is: true only for the one caller that may draw it. */
 export const claimGiveawayEnd = async (id) => (await s.claimEnd.run(id)).changes === 1;
-export const setGiveawayWinners = async (id, wonIds) => s.setWinners.run(JSON.stringify(wonIds ?? []), id);
+export const setGiveawayWinners = async (id, wonIds) =>
+  s.setWinners.run(JSON.stringify(wonIds ?? []), Date.now(), id);
 
 export const addGiveawayEntry = async (id, userId) => s.addEntry.run(id, userId, Date.now());
 export const removeGiveawayEntry = async (id, userId) => s.removeEntry.run(id, userId);
