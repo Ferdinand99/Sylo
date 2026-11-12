@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   answerProblem,
   answerProblems,
+  clearAllDrafts,
   clearDraft,
   emptyAnswers,
   isEmptyAnswer,
@@ -56,12 +57,24 @@ describe('answers in the browser', () => {
     beforeEach(() => window.localStorage.clear());
 
     it('are kept in this browser, loaded back, and cleared', () => {
-      expect(loadDraft('g', 1)).toBeNull();
-      saveDraft('g', 1, 5, { t: 'half an ans' });
-      expect(loadDraft('g', 1)).toEqual({ version: 5, answers: { t: 'half an ans' } });
-      expect(loadDraft('g', 2)).toBeNull();
-      clearDraft('g', 1);
-      expect(loadDraft('g', 1)).toBeNull();
+      expect(loadDraft('g', 'u1', 1)).toBeNull();
+      saveDraft('g', 'u1', 1, 5, { t: 'half an ans' });
+      expect(loadDraft('g', 'u1', 1)).toEqual({ version: 5, answers: { t: 'half an ans' } });
+      expect(loadDraft('g', 'u1', 2)).toBeNull();
+      clearDraft('g', 'u1', 1);
+      expect(loadDraft('g', 'u1', 1)).toBeNull();
+    });
+
+    it('belong to a person: someone else on the same browser never gets them, and signing out clears them all', () => {
+      saveDraft('g', 'u1', 1, 5, { t: 'private' });
+      saveDraft('g', 'u2', 1, 5, { t: 'other person' });
+      expect(loadDraft('g', 'u2', 1).answers.t).toBe('other person');
+      expect(loadDraft('g', 'u3', 1)).toBeNull();
+      window.localStorage.setItem('something-else', 'stays');
+      clearAllDrafts();
+      expect(loadDraft('g', 'u1', 1)).toBeNull();
+      expect(loadDraft('g', 'u2', 1)).toBeNull();
+      expect(window.localStorage.getItem('something-else')).toBe('stays');
     });
 
     it('survive blocked storage without breaking the page', () => {
@@ -73,9 +86,10 @@ describe('answers in the browser', () => {
         },
       });
       try {
-        expect(() => saveDraft('g', 1, 1, {})).not.toThrow();
-        expect(loadDraft('g', 1)).toBeNull();
-        expect(() => clearDraft('g', 1)).not.toThrow();
+        expect(() => saveDraft('g', 'u1', 1, 1, {})).not.toThrow();
+        expect(loadDraft('g', 'u1', 1)).toBeNull();
+        expect(() => clearDraft('g', 'u1', 1)).not.toThrow();
+        expect(() => clearAllDrafts()).not.toThrow();
       } finally {
         Object.defineProperty(window, 'localStorage', { configurable: true, value: real });
       }

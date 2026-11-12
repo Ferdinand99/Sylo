@@ -45,13 +45,13 @@ import {
   pendingOfUser,
   pendingSubmission,
   pruneCooldowns,
-  setCooldownUntil,
   setSubmissionCopy,
   setSubmissionDmNote,
   setSubmissionPost,
   setSubmissionRoles,
   setSubmissionThread,
   submissionByMessage,
+  touchSubmission,
 } from '../db/applications.js';
 import {
   clientOfGuild,
@@ -104,11 +104,18 @@ export {
 
 const DAY_MS = 86_400_000;
 const NO_MENTIONS = { parse: [] };
-const sessionScope = (key) => `applications:${key}`;
+// A session carries the server and the form it belongs to, so one form can be ended without the others.
+const sessionScope = (key, formId) => `applications:${key}:${formId}`;
+const serverScope = (key) => `applications:${key}:`;
 
 /** End every running application questionnaire of a server (the module was switched off there). */
 export function cancelApplicationSessions(key) {
-  return cancelQuestionnairesOf(sessionScope(key), 'module off');
+  return cancelQuestionnairesOf(serverScope(key), 'module off', { prefix: true });
+}
+
+/** End the running questionnaires of one form (it was closed or deleted), and only those. */
+export function cancelFormSessions(key, formId) {
+  return cancelQuestionnairesOf(sessionScope(key, formId), 'form closed');
 }
 
 // --- forms and settings -----------------------------------------------------------------------------------
@@ -135,6 +142,22 @@ export async function loadForm(key, id) {
 export async function loadForms(key) {
   return (await listFormRows(key)).map(hydrateForm);
 }
+/**
+ * How far back a question of a questionnaire still counts as "the one this answer is for" (the DM handler
+ * uses it after a restart): the longest form timeout among the servers the member is in, at most 24 hours,
+ * and at least `base`.
+ */
+export async function lateAnswerWindowMs(client, userId, base) {
+  let longest = base;
+  for (const guild of client?.guilds?.cache?.values?.() ?? []) {
+    if (!guild.members?.cache?.has?.(userId)) continue;
+    for (const row of await listFormRows(guildKey(guild))) {
+      longest = Math.max(longest, hydrateForm(row).timeoutMinutes * 60_000);
+    }
+  }
+  return Math.min(longest, 24 * 3_600_000);
+}
+
 export async function applicationsConfig(key) {
   return normaliseApplicationsConfig((await getGuildModule(key, 'applications')).config);
 }
@@ -226,31 +249,47 @@ function mergeOps(...lists) {
 const addOps = (roleIds) => roleIds.filter(Boolean).map((roleId) => ({ op: 'add', roleId }));
 const removeOps = (roleIds) => roleIds.filter(Boolean).map((roleId) => ({ op: 'remove', roleId }));
 
-/** The roles a role question's answer gives, when `grant` says now. */
+/**
+ * The roles a role question's answer gives, when `grant` says now. The answer was given to the
+ * questions as they were asked (the snapshot), but what a role question may give is the form as it is
+ * now: a role that staff took out of the question, or a question they set to give nothing, is not given
+ * (and is reported in `skipped`), also for an application made before that change. A form that no longer
+ * exists gives nothing.
+ * @returns {{ ids: string[], skipped: string[] }}
+ */
 function questionGrants(form, questions, answers, when) {
-  const out = [];
-  for (const q of questions ?? form?.questions ?? []) {
+  const ids = [];
+  const skipped = [];
+  for (const q of questions ?? []) {
     if (q.type !== 'role' || q.grant !== when) continue;
-    out.push(...idsOfAnswer(answers?.[q.id]).filter((id) => q.options.some((o) => o.id === id)));
+    const current = form?.questions?.find((x) => x.id === q.id);
+    const allowed = new Set(
+      current?.type === 'role' && current.grant === when ? current.options.map((o) => o.id) : []
+    );
+    for (const id of idsOfAnswer(answers?.[q.id])) {
+      if (!q.options.some((o) => o.id === id)) continue;
+      (allowed.has(id) ? ids : skipped).push(id);
+    }
   }
-  return out;
+  return { ids, skipped };
 }
 
 function submitOps(form, sub) {
   return mergeOps(
     addOps([form.pendingRoleId]),
     removeOps(form.removeOnSubmitRoleIds),
-    addOps(questionGrants(form, sub.questions, sub.answers, 'submit'))
+    addOps(questionGrants(form, sub.questions, sub.answers, 'submit').ids)
   );
 }
 
-function decisionOps(form, sub, status) {
+/** What a decision changes in roles. `grants` are the role question's roles that may still be given. */
+function decisionOps(form, status, grants = []) {
   if (status === 'accepted') {
     return mergeOps(
       removeOps([form.pendingRoleId]),
       removeOps(form.acceptRemoveRoleIds),
       addOps(form.acceptAddRoleIds),
-      addOps(questionGrants(form, sub.questions, sub.answers, 'accept'))
+      addOps(grants)
     );
   }
   if (status === 'denied') {
@@ -261,6 +300,32 @@ function decisionOps(form, sub, status) {
     );
   }
   return mergeOps(removeOps([form.pendingRoleId])); // withdrawn
+}
+
+/**
+ * The role changes when a pending application ends. The pending role comes off whatever the form
+ * looks like now (the row remembers which role it was, so a deleted form cannot leave it behind); the
+ * form's own changes follow when it still exists. Waiting changes from earlier are replaced.
+ */
+function endingOps(form, sub, status, grants) {
+  return mergeOps(
+    sub.rolesPending,
+    removeOps([sub.pendingRoleId]),
+    form ? decisionOps(form, status, grants) : []
+  );
+}
+
+/** Take the pending role off a member whose pending application ends without a decision (deleted, forgotten). */
+async function dropPendingRole(guild, sub) {
+  if (sub.status !== 'pending' || !sub.pendingRoleId) return;
+  const result = await applyRoleOps(
+    guild,
+    sub.userId,
+    removeOps([sub.pendingRoleId]),
+    `Application #${sub.id} removed`
+  );
+  if (result.failed.length)
+    log.warn('module:applications', `could not take off a pending role (application #${sub.id})`);
 }
 
 /**
@@ -451,17 +516,25 @@ async function settlePost(guild, key, sub, form) {
           await editHere();
           await setSubmissionCopy(key, sub.id, channel.id, sent.id);
         } else {
-          const oldChannel = sub.channelId;
-          const oldMessage = sub.messageId;
-          await setSubmissionPost(key, sub.id, channel.id, sent.id);
-          if (oldMessage) {
-            const state = await actOnMessage(guild, oldChannel, oldMessage, 'delete');
-            if (state !== 'ok' && state !== 'gone') {
-              // Could not delete the old post: at least take the buttons off it.
-              await actOnMessage(guild, oldChannel, oldMessage, 'edit', payload);
-              warnings.push('The old post could not be deleted.');
-            }
+          // The old post is deleted BEFORE the row points at the new one: while the old post is still
+          // there, the row must keep pointing at it, or nothing could ever delete its answers.
+          const state = sub.messageId
+            ? await actOnMessage(guild, sub.channelId, sub.messageId, 'delete')
+            : 'gone';
+          if (state === 'ok' || state === 'gone') {
+            await setSubmissionPost(key, sub.id, channel.id, sent.id);
+            return warnings;
           }
+          // The old post stays (a transient error or no access): take the new one back, keep the row on
+          // the old one, and show the decision on it in place. If the new one cannot be taken back,
+          // the row keeps its id as the copy, so /forget and the retention still find it.
+          const undone = await actOnMessage(guild, channel.id, sent.id, 'delete');
+          if (undone !== 'ok' && undone !== 'gone') await setSubmissionCopy(key, sub.id, channel.id, sent.id);
+          warnings.push(
+            'Sylo could not delete the old post, so the application stays in its channel and was not moved.'
+          );
+          await editHere();
+          return warnings;
         }
         return warnings;
       }
@@ -527,6 +600,9 @@ const RATE_MS = 30_000;
 /** @type {Map<string, number>} */
 const rates = new Map();
 sweepMap(rates, (at, now) => now - at > RATE_MS);
+/** When a member last submitted on the web, by server and member. */
+const webSubmits = new Map();
+sweepMap(webSubmits, (at, now) => now - at > RATE_MS);
 
 /** Seconds until this member may start again, or 0 (and the attempt is counted). */
 export function startRateLeft(platform, userId, now = Date.now()) {
@@ -586,7 +662,7 @@ export async function startDm({ guild, user, form }) {
     restartLabel: 'Start over',
     normalise: cleanAnswer,
     timeoutMs: form.timeoutMinutes * 60_000,
-    scope: sessionScope(key),
+    scope: sessionScope(key, form.id),
     onComplete: async (answers) => {
       const done = await submitApplication({
         guild,
@@ -646,6 +722,9 @@ export async function beginApplication({ guild, user, form }) {
   if (form.fillMode === 'both' && url) {
     return {
       ok: true,
+      // Where private replies are short-lived (Fluxer), this one holds a choice and a link: it stays for
+      // as long as the DM questionnaire would run (see keepReplyFor).
+      holdMs: form.timeoutMinutes * 60_000,
       content: `How do you want to apply for **${form.name}**?`,
       components: [
         new ActionRowBuilder().addComponents(
@@ -661,6 +740,16 @@ export async function beginApplication({ guild, user, form }) {
   }
   const started = await startDm({ guild, user, form });
   return { ok: started.ok, content: started.message };
+}
+
+/**
+ * On a platform with no private replies (Fluxer) a reply is deleted after about 15 seconds. A reply that
+ * holds a choice and a link must stay longer: call this with the result's `holdMs` before replying.
+ */
+export function keepReplyFor(interaction, holdMs) {
+  if (holdMs && typeof interaction?._privateTtlMs === 'number') {
+    interaction._privateTtlMs = Math.max(interaction._privateTtlMs, holdMs);
+  }
 }
 
 /** Find a form by number, exact name or a unique start of the name, among those a member can use. */
@@ -742,6 +831,15 @@ export async function submitApplication({ guild, userId, formId, questions, answ
     if (!checked.ok) {
       return { ok: false, error: 'Some answers are not valid.', reason: 'invalid', errors: checked.errors };
     }
+    // The web form is held to the same pace as starting in DM (one start per 30 seconds): without this, a
+    // member could submit, withdraw and submit again, and every round posts and pings the staff channel.
+    if (source === 'web') {
+      const last = webSubmits.get(`${key}|${userId}`);
+      if (last && Date.now() - last < RATE_MS) {
+        const wait = Math.ceil((RATE_MS - (Date.now() - last)) / 1000);
+        return { ok: false, error: `Please wait ${wait} seconds before you submit again.`, reason: 'rate' };
+      }
+    }
 
     let id;
     try {
@@ -749,6 +847,7 @@ export async function submitApplication({ guild, userId, formId, questions, answ
         guildId: key,
         formId: form.id,
         formName: form.name,
+        pendingRoleId: form.pendingRoleId,
         userId,
         source,
         questions: asked,
@@ -786,7 +885,21 @@ export async function submitApplication({ guild, userId, formId, questions, answ
       await deleteSubmission(key, id);
       return { ok: false, error: failure, reason: 'post_failed' };
     }
-    await setSubmissionPost(key, id, channel.id, message.id);
+    // The post gets its pointer under the lock of decisions, because staff may already have decided: the
+    // row may be decided (then the post is settled now) or may already point at a post the decision made
+    // (then this one is not needed).
+    await withLock(`decide|${key}|${id}`, async () => {
+      const current = await getSubmission(key, id);
+      if (current?.messageId) {
+        await actOnMessage(guild, channel.id, message.id, 'delete');
+        return;
+      }
+      await setSubmissionPost(key, id, channel.id, message.id);
+      if (current && current.status !== 'pending') {
+        await settlePost(guild, key, { ...current, channelId: channel.id, messageId: message.id }, form);
+      }
+    });
+    if (source === 'web') webSubmits.set(`${key}|${userId}`, Date.now());
 
     if (form.staffThread && guildSupports(guild, 'threads') && typeof message.startThread === 'function') {
       // A nicety: no permission, or a channel type without threads, must not undo the submission.
@@ -796,20 +909,29 @@ export async function submitApplication({ guild, userId, formId, questions, answ
       if (thread?.id) await setSubmissionThread(key, id, thread.id);
     }
 
-    // Roles for the submit step. A failure leaves the submission standing, with a warning on the post.
-    const sub = await getSubmission(key, id);
-    const ops = submitOps(form, sub);
-    if (ops.length) {
+    // Roles for the submit step, under the lock of decisions on this application: staff may already have
+    // pressed Accept on the post. A decision that is there wins, and then the waiting role is not given.
+    // A failure leaves the submission standing, with a warning on the post.
+    await withLock(`decide|${key}|${id}`, async () => {
+      const sub = await getSubmission(key, id);
+      if (!sub) return;
+      if (sub.status !== 'pending') {
+        // Decided before the post had its pointer: the post still shows Accept and Deny, so it is refreshed.
+        await refreshPost(guild, key, sub);
+        return;
+      }
+      const ops = submitOps(form, sub);
+      if (!ops.length) return;
       const result = await applyRoleOps(guild, userId, ops, `Application #${id} submitted`);
       if (result.failed.length) {
         const history = [
           ...sub.history,
           { at: Date.now(), by: null, action: 'roles_failed', note: 'submit' },
-        ];
+        ].slice(-60);
         await setSubmissionRoles(key, id, result.failed, history);
         await refreshPost(guild, key, await getSubmission(key, id));
       }
-    }
+    });
 
     const text = completedText(guild, form, member, member?.user);
     // On the web the member is not in a DM, so the confirmation is sent as one; in a DM it is the answer.
@@ -867,33 +989,52 @@ export async function decideSubmission({
       ...sub.history,
       { at: Date.now(), by, action: status, note: cleanReason ? 'with a reason' : '' },
     ].slice(-60);
-    // The decision itself: one conditional update, so only one caller can win.
-    if (!(await claimDecision(key, id, { status, by, reason: cleanReason, history }))) {
+    // The decision itself: one conditional update, so only one caller can win. The cooldown after a denial
+    // is written in the same transaction, before any platform work, so there is no moment when the
+    // application is denied and the member may apply again.
+    const cooldown =
+      status === 'denied' && form?.cooldownHours > 0
+        ? { formId: form.id, userId: sub.userId, until: Date.now() + form.cooldownHours * 3_600_000 }
+        : null;
+    if (!(await claimDecision(key, id, { status, by, reason: cleanReason, history, cooldown }))) {
       return { ok: false, error: `Application #${id} was already decided.`, code: 'already' };
     }
     const decided = await getSubmission(key, id);
     const warnings = [];
 
-    // Roles: this step's changes replace earlier ones that are still waiting for the same role.
-    if (form && !memberGone) {
-      const ops = mergeOps(decided.rolesPending, decisionOps(form, decided, status));
+    // Roles. A role question gives only what the form allows now, and only what Sylo can still manage.
+    // The pending role comes off even when the form is gone. This step's changes replace earlier ones
+    // that are still waiting for the same role.
+    if (!memberGone) {
+      const wanted =
+        status === 'accepted'
+          ? questionGrants(form, decided.questions, decided.answers, 'accept')
+          : { ids: [], skipped: [] };
+      const refused = wanted.ids.filter((rid) => botRefusal(guild, guild.roles?.cache?.get?.(rid)));
+      const skipped = [...wanted.skipped, ...refused];
+      const granted = wanted.ids.filter((rid) => !refused.includes(rid));
+      const ops = endingOps(form, decided, status, granted);
       const result = await applyRoleOps(guild, decided.userId, ops, `Application #${id} ${status}`);
       const next = result.failed;
-      if (next.length || decided.rolesPending.length) {
-        const more = next.length ? [{ at: Date.now(), by: null, action: 'roles_failed', note: status }] : [];
+      const more = [];
+      if (next.length) more.push({ at: Date.now(), by: null, action: 'roles_failed', note: status });
+      if (skipped.length)
+        more.push({ at: Date.now(), by: null, action: 'roles_skipped', note: `${skipped.length}` });
+      if (next.length || skipped.length || decided.rolesPending.length) {
         await setSubmissionRoles(key, id, next, [...decided.history, ...more]);
       }
       if (next.length) warnings.push('Some roles could not be changed. Retry from the dashboard.');
+      if (skipped.length) {
+        warnings.push(
+          `Skipped ${skipped.length} role${skipped.length === 1 ? '' : 's'} the form no longer gives or Sylo cannot manage.`
+        );
+      }
     } else if (decided.rolesPending.length) {
       await setSubmissionRoles(key, id, [], decided.history);
     }
 
     const fresh = await getSubmission(key, id);
     warnings.push(...(await settlePost(guild, key, fresh, form)));
-
-    if (status === 'denied' && form?.cooldownHours > 0) {
-      await setCooldownUntil(key, form.id, decided.userId, Date.now() + form.cooldownHours * 3_600_000);
-    }
 
     let dm = false;
     if (!memberGone && form) {
@@ -939,9 +1080,19 @@ export async function retryRoles({ guild, id }) {
  * comes off.
  * @returns {Promise<{ ok: true, id: number } | { ok: false, error: string }>}
  */
-export async function withdrawSubmission({ guild, userId, formId = null }) {
+export async function withdrawSubmission({ guild, userId, formId = null, formText = '' }) {
   const key = guildKey(guild);
-  const pending = (await pendingOfUser(key, userId)).filter((s) => !formId || s.formId === Number(formId));
+  // A member can always take back their own pending application: it is found among theirs, whatever the
+  // form's state is now (closed, DM or web only, even deleted).
+  const wanted = String(formText ?? '')
+    .trim()
+    .toLowerCase();
+  const pending = (await pendingOfUser(key, userId)).filter((s) => {
+    if (formId && s.formId !== Number(formId)) return false;
+    if (!wanted) return true;
+    if (/^\d+$/.test(wanted)) return s.formId === Number(wanted) || s.id === Number(wanted);
+    return s.formName.toLowerCase() === wanted || s.formName.toLowerCase().startsWith(wanted);
+  });
   if (pending.length === 0) return { ok: false, error: 'You have no pending application.' };
   if (pending.length > 1) {
     return {
@@ -962,11 +1113,13 @@ export async function withdrawSubmission({ guild, userId, formId = null }) {
       return { ok: false, error: 'That application was decided in the meantime.' };
     }
     const fresh = await getSubmission(key, id);
-    if (form) {
-      const ops = mergeOps(fresh.rolesPending, decisionOps(form, fresh, 'withdrawn'));
-      const result = await applyRoleOps(guild, userId, ops, `Application #${id} withdrawn`);
-      await setSubmissionRoles(key, id, result.failed, fresh.history);
-    }
+    const result = await applyRoleOps(
+      guild,
+      userId,
+      endingOps(form, fresh, 'withdrawn', []),
+      `Application #${id} withdrawn`
+    );
+    await setSubmissionRoles(key, id, result.failed, fresh.history);
     await refreshPost(guild, key, await getSubmission(key, id));
     return { ok: true, id };
   });
@@ -1140,6 +1293,7 @@ async function handlePanel(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const form = await loadForm(key, Number(raw));
   const result = await beginApplication({ guild, user: interaction.user, form });
+  keepReplyFor(interaction, result.holdMs);
   return interaction.editReply({
     content: result.content,
     ...(result.components && { components: result.components }),
@@ -1157,7 +1311,7 @@ on('applications', 'guildMemberRemove', async (member, _config, key) => {
   // Someone who left has nothing to submit: end a questionnaire they have running for this server.
   cancelQuestionnaire(userId, 'left', {
     platform: platformOfGuild(guild),
-    scope: sessionScope(key),
+    scopePrefix: serverScope(key),
     notify: false,
   });
   for (const sub of await pendingOfUser(key, userId)) {
@@ -1226,6 +1380,8 @@ export async function forgetApplicationPosts(guild, userId) {
   const failedIds = [];
   try {
     for (const sub of await allSubmissionsOfUser(key, userId)) {
+      // A pending application that goes away must not leave its waiting role on the member.
+      await dropPendingRole(guild, sub);
       if ((await deletePosts(guild, sub)) === 'failed') failedIds.push(sub.id);
     }
   } catch (err) {
@@ -1240,6 +1396,7 @@ export async function deleteSubmissionWithPosts(guild, id) {
   const key = guildKey(guild);
   const sub = await getSubmission(key, id);
   if (!sub) return { ok: false, error: 'No such application.' };
+  await dropPendingRole(guild, sub);
   if ((await deletePosts(guild, sub)) === 'failed') {
     // Still public: erase the answers now and keep the ids for a later delete.
     await clearSubmissionAnswers(key, id);
@@ -1272,7 +1429,9 @@ export async function sweepApplications(now = Date.now()) {
       if ((await deletePosts(guild, sub)) === 'ok') {
         await deleteSubmission(guildId, sub.id);
         deleted += 1;
-      } else if (!sub.cleared) {
+      } else {
+        // The post cannot be deleted now: the answers go (as for /forget), the ids stay for a later try, and
+        // the row leaves this batch (decidedBeforeInGuild skips cleared rows), so it cannot hold up the rest.
         await clearSubmissionAnswers(guildId, sub.id);
         cleared += 1;
       }
@@ -1285,6 +1444,8 @@ export async function sweepApplications(now = Date.now()) {
     if ((await deletePosts(guild, sub)) === 'ok') {
       await deleteSubmission(sub.guildId, sub.id);
       deleted += 1;
+    } else {
+      await touchSubmission(sub.guildId, sub.id); // to the back of the line
     }
   }
   const cooldowns = await pruneCooldowns(now);
@@ -1298,4 +1459,5 @@ export { displayAnswer, getSubmission, getCooldownUntil };
 export const _resetApplications = () => {
   chains.clear();
   rates.clear();
+  webSubmits.clear();
 };

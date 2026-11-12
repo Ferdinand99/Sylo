@@ -35,7 +35,7 @@ import {
   PLACEHOLDERS,
   PANEL_DEFAULT_TEXT,
   applicationsConfig,
-  cancelApplicationSessions,
+  cancelFormSessions,
   decideSubmission,
   deleteSubmissionWithPosts,
   getSubmission,
@@ -196,6 +196,12 @@ function readForm(req, res) {
     res.status(400).json({ error: 'Give the form a name.' });
     return null;
   }
+  // A required choice or role question with no options could never be answered.
+  const stuck = form.questions.find((q) => q.unanswerable);
+  if (stuck) {
+    res.status(400).json({ error: `The question "${stuck.label}" is required but has no options.` });
+    return null;
+  }
   if (form.enabled) {
     const problem = formSetupProblem(form);
     if (problem) {
@@ -258,7 +264,7 @@ router.post(
       fillMode: form.fillMode,
       config: form,
     });
-    if (!form.enabled) cancelApplicationSessions(key);
+    if (!form.enabled) cancelFormSessions(key, prev.id);
     await recordAudit(key, {
       actor: actor(req),
       action: 'module:applications',
@@ -275,7 +281,7 @@ router.post(
     const form = await getForm(key, req.params.id);
     if (!form) return res.status(404).json({ error: 'No such form.' });
     await deleteForm(key, form.id);
-    cancelApplicationSessions(key);
+    cancelFormSessions(key, form.id);
     await recordAudit(key, {
       actor: actor(req),
       action: 'module:applications',

@@ -8,8 +8,10 @@
 import { InteractionContextType, MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { isModuleEnabled } from '../../db/modules.js';
 import { guildKey, platformOfGuild } from '../../platform/platformOf.js';
+import { pendingOfUser } from '../../db/applications.js';
 import {
   beginApplication,
+  keepReplyFor,
   loadForms,
   pickForm,
   startRateLeft,
@@ -45,11 +47,23 @@ export const data = new SlashCommandBuilder()
       )
   );
 
-/** Discord's suggestions while typing: the open forms whose name contains the text. */
+/**
+ * Discord's suggestions while typing: for start, the open forms whose name contains the text; for withdraw,
+ * the forms the member has a pending application for (whatever state the form is in now).
+ */
 export async function autocomplete(interaction) {
   const key = interaction.guildId;
-  if (!key || !(await isModuleEnabled(key, 'applications'))) return interaction.respond([]);
+  if (!key) return interaction.respond([]);
   const text = String(interaction.options.getFocused() ?? '').toLowerCase();
+  if (interaction.options.getSubcommand?.() === 'withdraw') {
+    const mine = (await pendingOfUser(key, interaction.user.id)).filter(
+      (s) => !text || s.formName.toLowerCase().includes(text)
+    );
+    return interaction.respond(
+      mine.slice(0, 25).map((s) => ({ name: s.formName.slice(0, 100), value: String(s.formId) }))
+    );
+  }
+  if (!(await isModuleEnabled(key, 'applications'))) return interaction.respond([]);
   const forms = (await loadForms(key)).filter(
     (f) => f.enabled && (!text || f.name.toLowerCase().includes(text))
   );
@@ -81,6 +95,7 @@ async function start(interaction, forms) {
     user: interaction.user,
     form: picked.form,
   });
+  keepReplyFor(interaction, result.holdMs);
   return interaction.editReply({
     content: result.content,
     ...(result.components && { components: result.components }),
@@ -88,27 +103,24 @@ async function start(interaction, forms) {
   });
 }
 
-async function withdraw(interaction, forms) {
-  const text = interaction.options.getString('form');
-  let formId = null;
-  if (text) {
-    const picked = pickForm(forms, text);
-    if (!picked.form) return eph(interaction, 'There is no form with that name.');
-    formId = picked.form.id;
-  }
-  const result = await withdrawSubmission({ guild: interaction.guild, userId: interaction.user.id, formId });
+// A member can always take back their own pending application, by the name of its form: whatever the
+// form's state is now, and also with the module off.
+async function withdraw(interaction) {
+  const result = await withdrawSubmission({
+    guild: interaction.guild,
+    userId: interaction.user.id,
+    formText: interaction.options.getString('form'),
+  });
   return eph(interaction, result.ok ? `Your application #${result.id} was withdrawn.` : result.error);
 }
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
   if (!interaction.guild) return eph(interaction, 'Use this in a server.');
+  if (interaction.options.getSubcommand() === 'withdraw') return withdraw(interaction);
   const key = guildKey(interaction.guild);
   if (!(await isModuleEnabled(key, 'applications'))) {
     return eph(interaction, 'The Applications module is off in this server.');
   }
-  const forms = await loadForms(key);
-  return interaction.options.getSubcommand() === 'withdraw'
-    ? withdraw(interaction, forms)
-    : start(interaction, forms);
+  return start(interaction, await loadForms(key));
 }

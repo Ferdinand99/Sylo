@@ -22,7 +22,7 @@
 // guild-leave purge and /forget find it. The tables are created here for Postgres (SQLite: migration 72).
 // Only one submission per form and member may be pending: a partial unique index makes the database
 // itself refuse a second one, whatever the code does.
-import { prepare, registerPostgresBootstrap } from './driver.js';
+import { prepare, registerPostgresBootstrap, transaction } from './driver.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS applications_forms (
@@ -46,6 +46,7 @@ registerPostgresBootstrap(`
     guild_id        TEXT NOT NULL,
     form_id         BIGINT NOT NULL,
     form_name       TEXT NOT NULL DEFAULT '',
+    pending_role_id TEXT,
     user_id         TEXT NOT NULL,
     status          TEXT NOT NULL DEFAULT 'pending',
     source          TEXT NOT NULL DEFAULT 'dm',
@@ -67,6 +68,7 @@ registerPostgresBootstrap(`
     updated_at      BIGINT NOT NULL
   );
   ALTER TABLE applications_submissions ADD COLUMN IF NOT EXISTS form_name TEXT NOT NULL DEFAULT '';
+  ALTER TABLE applications_submissions ADD COLUMN IF NOT EXISTS pending_role_id TEXT;
   ALTER TABLE applications_submissions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
   ALTER TABLE applications_submissions ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'dm';
   ALTER TABLE applications_submissions ADD COLUMN IF NOT EXISTS questions TEXT NOT NULL DEFAULT '[]';
@@ -135,6 +137,7 @@ export const submissionOf = (row) =>
     guildId: row.guild_id,
     formId: Number(row.form_id),
     formName: row.form_name,
+    pendingRoleId: row.pending_role_id ?? null,
     userId: row.user_id,
     status: row.status,
     source: row.source,
@@ -179,8 +182,8 @@ const s = {
 
   insertSubmission: prepare(
     `INSERT INTO applications_submissions
-       (guild_id, form_id, form_name, user_id, status, source, questions, answers, history, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
+       (guild_id, form_id, form_name, pending_role_id, user_id, status, source, questions, answers, history, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
     { returningId: true }
   ),
   getSubmission: prepare('SELECT * FROM applications_submissions WHERE guild_id = ? AND id = ?'),
@@ -200,10 +203,6 @@ const s = {
   allOfUser: prepare('SELECT * FROM applications_submissions WHERE guild_id = ? AND user_id = ? ORDER BY id'),
   pendingCount: prepare(
     "SELECT COUNT(*) AS n FROM applications_submissions WHERE guild_id = ? AND status = 'pending'"
-  ),
-  claim: prepare(
-    `UPDATE applications_submissions SET status = ?, decided_by = ?, reason = ?, decided_at = ?, history = ?, updated_at = ?
-     WHERE guild_id = ? AND id = ? AND status = 'pending'`
   ),
   setPost: prepare(
     'UPDATE applications_submissions SET channel_id = ?, message_id = ?, updated_at = ? WHERE guild_id = ? AND id = ?'
@@ -227,14 +226,20 @@ const s = {
     "UPDATE applications_submissions SET answers = '{}', questions = '[]', cleared = 1, updated_at = ? WHERE guild_id = ? AND id = ?"
   ),
   deleteSubmission: prepare('DELETE FROM applications_submissions WHERE guild_id = ? AND id = ?'),
+  // Rows whose answers were erased (cleared) are not here: they wait for their post in clearedRows, so a
+  // row whose post keeps failing cannot hold up the newer ones.
   decidedBeforeInGuild: prepare(
-    `SELECT * FROM applications_submissions WHERE guild_id = ? AND status <> 'pending' AND decided_at IS NOT NULL AND decided_at < ?
+    `SELECT * FROM applications_submissions WHERE guild_id = ? AND cleared = 0 AND status <> 'pending' AND decided_at IS NOT NULL AND decided_at < ?
      ORDER BY decided_at, id LIMIT ?`
   ),
   guildsDecidedBefore: prepare(
-    `SELECT DISTINCT guild_id FROM applications_submissions WHERE status <> 'pending' AND decided_at IS NOT NULL AND decided_at < ?`
+    `SELECT DISTINCT guild_id FROM applications_submissions WHERE cleared = 0 AND status <> 'pending' AND decided_at IS NOT NULL AND decided_at < ?`
   ),
-  clearedRows: prepare('SELECT * FROM applications_submissions WHERE cleared = 1 ORDER BY id LIMIT ?'),
+  // The one tried longest ago first; a row that fails again is touched and goes to the back.
+  clearedRows: prepare(
+    'SELECT * FROM applications_submissions WHERE cleared = 1 ORDER BY updated_at, id LIMIT ?'
+  ),
+  touch: prepare('UPDATE applications_submissions SET updated_at = ? WHERE guild_id = ? AND id = ?'),
 
   getCooldown: prepare(
     'SELECT until_at FROM applications_cooldowns WHERE guild_id = ? AND form_id = ? AND user_id = ?'
@@ -318,13 +323,23 @@ export const isUniqueViolation = (err) =>
  * pending for this form.
  * @returns {Promise<number>} the id
  */
-export async function insertSubmission({ guildId, formId, formName, userId, source, questions, answers }) {
+export async function insertSubmission({
+  guildId,
+  formId,
+  formName,
+  pendingRoleId = null,
+  userId,
+  source,
+  questions,
+  answers,
+}) {
   const now = Date.now();
   const history = [{ at: now, by: userId, action: 'submitted', note: source }];
   const out = await s.insertSubmission.run(
     guildId,
     Number(formId),
     formName,
+    pendingRoleId || null,
     userId,
     source,
     JSON.stringify(questions),
@@ -395,24 +410,37 @@ export async function exportSubmissions({ guildId, formId, status }) {
   return rows.map(submissionOf);
 }
 
+const CLAIM_SQL = `UPDATE applications_submissions SET status = ?, decided_by = ?, reason = ?, decided_at = ?, history = ?, updated_at = ?
+  WHERE guild_id = ? AND id = ? AND status = 'pending'`;
+const COOLDOWN_SQL = `INSERT INTO applications_cooldowns (guild_id, form_id, user_id, until_at) VALUES (?, ?, ?, ?)
+  ON CONFLICT (guild_id, form_id, user_id) DO UPDATE SET until_at = excluded.until_at`;
+
 /**
  * Decide a pending submission, once: the update only matches a row that is still pending, so two
- * deciders at the same time (a double click, two staff) get one winner.
+ * deciders at the same time (a double click, two staff) get one winner. A cooldown that goes with the
+ * decision ({ formId, userId, until }) is written in the same transaction, so there is no moment when
+ * the application is denied and the member may apply again.
  * @returns {Promise<boolean>} whether this call decided it
  */
-export async function claimDecision(guildId, id, { status, by, reason, history }) {
+export async function claimDecision(guildId, id, { status, by, reason, history, cooldown = null }) {
   const now = Date.now();
-  const out = await s.claim.run(
-    status,
-    by ?? null,
-    reason ?? '',
-    now,
-    JSON.stringify(history),
-    now,
-    guildId,
-    Number(id)
-  );
-  return out.changes === 1;
+  return transaction(function* (tx) {
+    const out = yield tx.run(
+      CLAIM_SQL,
+      status,
+      by ?? null,
+      reason ?? '',
+      now,
+      JSON.stringify(history),
+      now,
+      guildId,
+      Number(id)
+    );
+    if (out.changes !== 1) return false;
+    if (cooldown)
+      yield tx.run(COOLDOWN_SQL, guildId, Number(cooldown.formId), cooldown.userId, cooldown.until);
+    return true;
+  });
 }
 
 export const setSubmissionPost = (guildId, id, channelId, messageId) =>
@@ -445,6 +473,8 @@ export const decidedBeforeInGuild = async (guildId, cutoff, limit = 200) =>
 export const guildsWithDecidedBefore = async (cutoff) =>
   (await s.guildsDecidedBefore.all(cutoff)).map((r) => r.guild_id);
 /** Rows whose answers were erased but whose posts may still need deleting. */
+/** Move a row to the back of the line for the retention sweep. */
+export const touchSubmission = (guildId, id) => s.touch.run(Date.now(), guildId, Number(id));
 export const clearedSubmissions = async (limit = 200) => (await s.clearedRows.all(limit)).map(submissionOf);
 
 // --- cooldowns ------------------------------------------------------------------------------------

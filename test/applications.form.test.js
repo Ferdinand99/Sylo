@@ -456,16 +456,27 @@ test('answers cannot make the post ping or format: they are escaped, and the hea
 // --- the export -------------------------------------------------------------------------------------------------------
 
 test('the export holds the answers only, and a cell that would run as a formula is made text', () => {
-  assert.equal(csvCell('=SUM(A1)'), "'=SUM(A1)");
-  assert.equal(csvCell('+1'), "'+1");
-  assert.equal(csvCell('@a'), "'@a");
+  // every cell is quoted, and a formula gets a leading ' (also after leading separators or spaces)
+  assert.equal(csvCell('=SUM(A1)'), `"'=SUM(A1)"`);
+  assert.equal(csvCell('+1'), `"'+1"`);
+  assert.equal(csvCell('-1'), `"'-1"`);
+  assert.equal(csvCell('@a'), `"'@a"`);
+  assert.equal(csvCell('\tx'), `"'\tx"`);
+  assert.equal(csvCell('\rx'), `"'\rx"`);
+  assert.equal(csvCell(';=1+1'), `"';=1+1"`);
+  assert.equal(csvCell(',=1+1'), `"',=1+1"`);
+  assert.equal(csvCell('  =1+1'), `"'  =1+1"`);
+  assert.equal(csvCell('plain'), '"plain"');
   assert.equal(csvCell('a,"b"'), '"a,""b"""');
+  // a ";" (the list separator of Excel in many countries) or "," inside a quoted cell cannot split it
+  assert.equal(csvCell('x;=1+1;'), '"x;=1+1;"');
+  assert.equal(csvCell('x,=1+1,'), '"x,=1+1,"');
   const subs = [
     sub({ answers: { q_text: '=cmd()', q_pick: 'blue' }, reason: 'secret reason', decidedBy: '999' }),
   ];
   const csv = exportCsv(subs);
-  assert.match(csv, /^Submission,Applicant,Status,Submitted,Why\?,Colour\r\n/);
-  assert.ok(csv.includes("'=cmd()"));
+  assert.match(csv, /^"Submission","Applicant","Status","Submitted","Why\?","Colour"\r\n/);
+  assert.ok(csv.includes(`"'=cmd()"`));
   assert.ok(csv.includes('Blue'));
   const json = exportJson(subs);
   assert.ok(!json.includes('secret reason') && !json.includes('999'), 'no reviewer, no reason');

@@ -33,7 +33,8 @@ Each form has:
 - the [requirements](#requirements), the channels, the [roles](#roles), four [messages](#messages-to-the-applicant)
   and what happens when a member leaves.
 
-Questions have a label, an optional help text and a **required** switch. The types are:
+Questions have a label, an optional help text and a **required** switch (a required choice or role question needs at least one option; it cannot be saved without). The
+types are:
 
 | Type | The member |
 |---|---|
@@ -76,9 +77,10 @@ While a questionnaire runs, the member's DMs to Sylo are answers. They do **not*
 The page is in the dashboard's look and works only for **signed-in members of that server**. Anyone else
 (signed out is sent to the login first; signed in but not a member, a server or form that does not
 exist, a form that is off, a DM-only form, the module off) gets the same "Nothing here" page. The
-answers are checked on the server with exactly the same code as in DM, with CSRF protection and a limit on
-how often a person can submit. A **draft is saved in the browser only** (never on the server) and is removed when the form
-is submitted. If staff change the form while it is open, the member is told and nothing is lost.
+answers are checked on the server with exactly the same code as in DM, with CSRF protection and the same pace as
+starting in DM: one submit per 30 seconds per person, so submit, withdraw and submit again does not post and ping the
+staff channel again and again. Withdrawing has a limit too. A **draft is saved in the browser only** (never on the
+server), for the signed-in person and the form, and is removed when the form is submitted or the person signs out. If staff change the form while it is open, the member is told and nothing is lost.
 
 ## Requirements
 
@@ -108,10 +110,14 @@ nothing an applicant wrote can ping anyone.
 - **Who may decide.** Members with **Manage Server**, or one of the form's **manager roles**. Every way to decide
   checks this.
 - **Accepted and denied channels.** When a form has them, the post is **moved** there (a new post is
-  sent and the old one deleted by its id) or **copied** (the original stays and shows the result), as you choose.
+  sent, then the old one deleted by its id) or **copied** (the original stays and shows the result), as you choose.
+  If the old post cannot be deleted, nothing moves: the new post is taken back, the application stays on the old
+  post (which shows the decision) and the dashboard says so, so a post with answers is never left behind without
+  anything that points to it.
 - **Staff thread.** Optionally a thread on each post (Discord only; Fluxer has no threads yet).
-- **Withdraw.** The applicant can withdraw a pending application with `/apply withdraw` or on the web
-  page. The post stays, marked withdrawn.
+- **Withdraw.** The applicant can withdraw a pending application with `/apply withdraw [form]` or on the web
+  page, **whatever state the form is in now** (closed, DM only, deleted, or the module off). The post stays, marked
+  withdrawn, and the waiting role comes off.
 - **A member who leaves** while pending: per form, keep the application, or deny it automatically with the
   reason "Left the server" (the applicant is not messaged).
 
@@ -119,7 +125,11 @@ nothing an applicant wrote can ping anyone.
 
 All optional, per form: a **role while waiting** (given on submit and taken off on the decision), roles **taken
 away on submit**, roles **given or taken away on accept**, roles **given or taken away on deny**, and the roles a
-role question gives. If a role change fails, **the decision still stands**, the post shows a warning, and the
+role question gives. A role question gives only what the form allows **when the application is decided**: a role that
+staff took out of the question since, or a question set to give nothing, is skipped (and noted), also for an
+application made before the change, and Sylo checks again that it can manage the role. The waiting role comes off
+whenever a pending application ends, also when staff delete it, when `/forget` removes it or when its form was deleted.
+If a role change fails, **the decision still stands**, the post shows a warning, and the
 dashboard can **retry** the roles. Nothing is applied twice, and a change that failed earlier is replaced by
 the decision (a waiting role that could not be given is not given after the application was decided).
 
@@ -135,7 +145,8 @@ pass. Leave one empty to send nothing. A DM that fails is noted on the applicati
 - **Applications**: a list filtered by form, status and member, a page for each application (answers, history, source,
   accept or deny with a reason, retry the roles, delete), and the history of one member.
 - **Export**: one form, optionally one status, as **CSV or JSON**: the answers only, with the member id,
-  status and date (no reviewer, reason or history). A cell that a spreadsheet would run as a formula is made text. The download
+  status and date (no reviewer, reason or history). Every cell is quoted, and a cell that a spreadsheet would run as a formula (it starts with `=`, `+`, `-`, `@`, a tab or a
+  line break, also after spaces or separators) gets a leading `'`. The download
   is for staff only and is written to the audit log (who, which form, how many; never the answers).
 - **Panel and settings**: publish, republish or remove the panel message, and the retention.
 
@@ -149,7 +160,8 @@ Answers are personal data. They are never written to the logs.
   so `/forget` cannot be used to skip it.
 - **`/mydata`** and the dashboard's member data include the member's applications.
 - **Retention.** Accepted, denied and withdrawn applications are deleted, with their posts, after a number of
-  days you set (default **180**, at least **7**). Pending applications are never deleted by this.
+  days you set (default **180**, at least **7**). Pending applications are never deleted by this. A post that cannot be
+  deleted costs its application the answers at once (only the ids stay), and Sylo tries again every day.
 - Removing the server's data deletes the forms, applications and cooldowns.
 
 ## On Fluxer

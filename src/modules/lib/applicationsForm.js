@@ -122,7 +122,12 @@ function normaliseQuestion(item, seenIds) {
   );
   const options = normaliseOptions(item?.options, type);
   const multiple = item?.multiple === true;
-  const required = item?.required === true;
+  // A required choice or role question with no options could never be answered. Saving one is refused
+  // (formProblems reads `unanswerable`); one that is stored already counts as optional, so members are
+  // not stuck at it.
+  const unanswerable =
+    item?.required === true && (type === 'choice' || type === 'role') && options.length === 0;
+  const required = item?.required === true && !unanswerable;
   const count = options.length;
   const maxChoices = multiple
     ? Math.min(count, Math.max(1, clampInt(item?.maxChoices, { min: 1, max: MAX_OPTIONS }, count || 1)))
@@ -136,6 +141,7 @@ function normaliseQuestion(item, seenIds) {
     label,
     help: clip(String(item?.help ?? '').trim(), LIMITS['questions[].help'].maxLength),
     required,
+    unanswerable,
     long,
     minLength,
     maxLength,
@@ -640,11 +646,16 @@ export function buildSubmissionEmbeds({
 
 // --- the export ----------------------------------------------------------------------------------------------
 
-/** A cell that a spreadsheet would run as a formula is made text. */
+/**
+ * A cell as CSV. Every cell is quoted, so a "," or a ";" (the separator of Excel in many countries) inside
+ * an answer can never split it into cells of its own. A cell that a spreadsheet would run as a formula (it
+ * starts with = + - @, a tab or a line break, also after leading spaces or separators) is made text with a
+ * leading '.
+ */
 export const csvCell = (value) => {
   let text = String(value ?? '');
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  if (/^[ ;,]*[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
 };
 
 /** The columns of an export: every question that appears in any of the snapshots, in order. */

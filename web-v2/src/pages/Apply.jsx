@@ -37,6 +37,7 @@ export default function Apply() {
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+  const [withdrawn, setWithdrawn] = useState(false);
   const loadedFor = useRef(null);
 
   // Once the form is here: start from the draft of this browser, if there is one.
@@ -44,7 +45,7 @@ export default function Apply() {
     if (!data || data.problem || data.pending || loadedFor.current === `${data.form.id}:${data.form.version}`)
       return;
     loadedFor.current = `${data.form.id}:${data.form.version}`;
-    const draft = loadDraft(guildId, formId);
+    const draft = loadDraft(guildId, data.viewer, formId);
     setAnswers(draft ? restoreDraft(data.questions, draft) : emptyAnswers(data.questions));
     setNote(
       draft && draft.version !== data.form.version
@@ -57,7 +58,7 @@ export default function Apply() {
 
   // Save the draft as it changes (in this browser only).
   useEffect(() => {
-    if (data && answers && !data.problem) saveDraft(guildId, formId, data.form.version, answers);
+    if (data && answers && !data.problem) saveDraft(guildId, data.viewer, formId, data.form.version, answers);
   }, [answers, data, guildId, formId]);
 
   if (error) {
@@ -84,7 +85,7 @@ export default function Apply() {
     setBusy(true);
     try {
       const out = await submitWebApply(guildId, formId, answers, data.form.version);
-      clearDraft(guildId, formId);
+      clearDraft(guildId, data.viewer, formId);
       loadedFor.current = null;
       setData(out.view);
       setAnswers(null);
@@ -108,7 +109,9 @@ export default function Apply() {
     setBusy(true);
     try {
       const out = await withdrawWebApply(guildId, formId);
-      setData(out.view);
+      // a closed form has no page to go back to
+      if (out.view) setData(out.view);
+      else setWithdrawn(true);
       notify('Your application was withdrawn.', 'info');
     } catch (err) {
       notify(err.message);
@@ -117,6 +120,7 @@ export default function Apply() {
     }
   }
 
+  if (withdrawn) return <p className="v2-state">Your application was withdrawn.</p>;
   const { form, pending, problem } = data;
   return (
     <>

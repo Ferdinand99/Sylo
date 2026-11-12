@@ -172,21 +172,23 @@ function endSession(session) {
  * the member leaves the server or erases their data. Calls the session's onCancel with `reason`.
  * @param {string} userId
  * @param {string} [reason]
- * @param {{ platform?: 'discord' | 'fluxer', scope?: string, notify?: boolean }} [opts]  without a
- *   platform, every platform's session of that user id ends; `scope` limits it to sessions started
- *   with that scope; `notify: false` skips the DM that tells the member
+ * @param {{ platform?: 'discord' | 'fluxer', scope?: string, scopePrefix?: string, notify?: boolean }} [opts]
+ *   without a platform, every platform's session of that user id ends; `scope` limits it to sessions
+ *   started with that scope, `scopePrefix` to those whose scope starts with it; `notify: false` skips
+ *   the DM that tells the member
  * @returns {boolean} whether there was a session
  */
 export function cancelQuestionnaire(
   userId,
   reason = 'cancel',
-  { platform = null, scope = null, notify = true } = {}
+  { platform = null, scope = null, scopePrefix = null, notify = true } = {}
 ) {
   return stopSessions(
     (session) =>
       session.user.id === userId &&
       (!platform || session.platform === platform) &&
-      (!scope || session.scope === scope),
+      (!scope || session.scope === scope) &&
+      (!scopePrefix || String(session.scope ?? '').startsWith(scopePrefix)),
     reason,
     notify
   );
@@ -197,11 +199,15 @@ export function cancelQuestionnaire(
  * per server), for example when its module is switched off for that server.
  * @param {string} scope
  * @param {string} [reason]
- * @param {{ notify?: boolean }} [opts]
+ * @param {{ notify?: boolean, prefix?: boolean }} [opts]  `prefix`: every session whose scope starts with it
  * @returns {boolean} whether there was a session
  */
-export function cancelQuestionnairesOf(scope, reason = 'cancel', { notify = true } = {}) {
-  return stopSessions((session) => session.scope === scope, reason, notify);
+export function cancelQuestionnairesOf(scope, reason = 'cancel', { notify = true, prefix = false } = {}) {
+  return stopSessions(
+    (session) => (prefix ? String(session.scope ?? '').startsWith(scope) : session.scope === scope),
+    reason,
+    notify
+  );
 }
 
 function stopSessions(matches, reason, notify) {

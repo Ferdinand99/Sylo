@@ -25,7 +25,7 @@ const { insertForm, getSubmission, listSubmissions, pendingSubmission, updateFor
 const { normaliseForm, dmQuestionOf, normaliseQuestions } =
   await import('../src/modules/lib/applicationsForm.js');
 const { purgeGuild } = await import('../src/db/purge.js');
-const { decideSubmission } = await import('../src/modules/applications.js');
+const { decideSubmission, _resetApplications } = await import('../src/modules/applications.js');
 
 const dGuild = runtime.clients.discord.guilds.cache.get(D_GUILD);
 const fGuild = runtime.clients.fluxer.guilds.cache.get(F_GUILD);
@@ -56,6 +56,7 @@ for (const g of [dGuild, fGuild]) {
 }
 
 beforeEach(async () => {
+  _resetApplications(); // the pace between two web submits is tested on its own
   await purgeGuild(D_GUILD);
   await purgeGuild(FKEY);
   for (const channel of channels.values()) {
@@ -382,10 +383,12 @@ test('the web form can be withdrawn, and the member can apply again after a deci
     'nothing left to withdraw'
   );
 
+  _resetApplications(); // the pace between two submits is its own test
   const second = await (
     await me.post(`${path(D_GUILD, formId)}/submit`, { version: await version(), answers: GOOD })
   ).json();
   await decideSubmission({ guild: dGuild, id: second.id, action: 'accept', actor: { dashboard: true } });
+  _resetApplications();
   assert.equal(
     (await me.post(`${path(D_GUILD, formId)}/submit`, { version: await version(), answers: GOOD })).status,
     200

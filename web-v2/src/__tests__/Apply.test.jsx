@@ -23,6 +23,8 @@ const { notify } = await import('../notify.js');
 
 const GUILD = '123456789012345678';
 const FORM = 7;
+const VIEWER = '700000000000000010';
+const KEY = `sylo-apply-draft:${GUILD}:${VIEWER}:${FORM}`;
 
 const base = {
   long: false,
@@ -75,6 +77,7 @@ const questions = [
 ];
 const view = (over = {}) => ({
   guild: { name: 'Hedgerow', id: GUILD },
+  viewer: VIEWER,
   form: {
     id: FORM,
     name: 'Staff',
@@ -150,7 +153,7 @@ describe('the web form of an application', () => {
     );
     expect(await screen.findByText(/Waiting for a decision/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Submit application' })).toBeNull();
-    expect(window.localStorage.getItem(`sylo-apply-draft:${GUILD}:${FORM}`)).toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
   });
 
   it('keeps a draft in this browser only: it is saved as the member types, restored later, and never sent', async () => {
@@ -158,9 +161,7 @@ describe('the web form of an application', () => {
     fireEvent.change(await screen.findByLabelText(/Why do you want to join/), {
       target: { value: 'half an answer' },
     });
-    await waitFor(() =>
-      expect(window.localStorage.getItem(`sylo-apply-draft:${GUILD}:${FORM}`)).toContain('half an answer')
-    );
+    await waitFor(() => expect(window.localStorage.getItem(KEY)).toContain('half an answer'));
     expect(api.submitWebApply).not.toHaveBeenCalled();
     first.unmount();
     renderPage();
@@ -187,7 +188,7 @@ describe('the web form of an application', () => {
 
   it("keeps the member's answers when the form was changed, and says so", async () => {
     window.localStorage.setItem(
-      `sylo-apply-draft:${GUILD}:${FORM}`,
+      KEY,
       JSON.stringify({
         version: 100,
         answers: { q_text: 'typed before', q_pick: [], q_multi: [], q_yes: '' },
@@ -236,5 +237,34 @@ describe('the web form of an application', () => {
     api.getWebApply.mockRejectedValue(new ApiError('Not signed in', { status: 401, notAuthenticated: true }));
     renderPage();
     expect(await screen.findByRole('link', { name: 'sign in again' })).toBeTruthy();
+  });
+  it("does not restore another person's draft from the same browser", async () => {
+    window.localStorage.setItem(
+      `sylo-apply-draft:${GUILD}:700000000000000099:${FORM}`,
+      JSON.stringify({
+        version: 100,
+        answers: { q_text: 'someone else wrote this', q_pick: [], q_multi: [], q_yes: '' },
+      })
+    );
+    renderPage();
+    expect((await screen.findByLabelText(/Why do you want to join/)).value).toBe('');
+    expect(screen.queryByText(/draft from this browser was restored/)).toBeNull();
+  });
+
+  it('says so when a closed form is withdrawn and there is no page left to go back to', async () => {
+    api.getWebApply.mockResolvedValue(
+      view({
+        pending: { id: 4, createdAt: 1700000000000 },
+        problem: {
+          reason: 'form_closed',
+          text: 'This form is not taking applications now. You can still withdraw yours.',
+        },
+        questions: [],
+      })
+    );
+    api.withdrawWebApply.mockResolvedValue({ ok: true, id: 4, view: null });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Withdraw my application' }));
+    expect(await screen.findByText('Your application was withdrawn.')).toBeTruthy();
   });
 });

@@ -1404,6 +1404,7 @@ export const MIGRATIONS = [
         guild_id        TEXT NOT NULL,
         form_id         INTEGER NOT NULL,
         form_name       TEXT NOT NULL DEFAULT '',
+        pending_role_id TEXT,
         user_id         TEXT NOT NULL,
         status          TEXT NOT NULL DEFAULT 'pending',
         source          TEXT NOT NULL DEFAULT 'dm',

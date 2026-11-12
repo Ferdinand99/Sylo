@@ -42,13 +42,26 @@ const submitLimit = rateLimit({
   keyFn: (req) => `apply-submit|${req.params?.guildId ?? ''}|${req.account?.id ?? clientKey(req)}`,
 });
 
+/** Withdrawing posts to the platform too (it edits the post), so it is limited like submitting. */
+const withdrawLimit = rateLimit({
+  windowMs: 60_000,
+  max: 6,
+  message: 'Too many tries: wait a minute and try again.',
+  keyFn: (req) => `apply-withdraw|${req.params?.guildId ?? ''}|${req.account?.id ?? clientKey(req)}`,
+});
+
 const notFound = (res) => {
   res.set({ 'Cache-Control': 'private, no-store', 'X-Robots-Tag': 'noindex, nofollow, noarchive' });
   return res.status(404).json({ error: 'Not found' });
 };
 
-/** Who this request may be, or null for the one not-found answer: `{ guild, key, member, form }`. */
-async function openForm(req) {
+/**
+ * Who this request may be, or null for the one not-found answer: `{ guild, key, member, form }`.
+ * `lenient` (the page, and withdrawing): a member who has a pending application for the form may also
+ * open it when the form is closed, DM only, deleted or the module is off, with `limited: true` and no form
+ * to fill in: they can always see and take back their own application.
+ */
+async function openForm(req, { lenient = false } = {}) {
   if (!appConfig.authEnabled) return null;
   // Only the browser's own session counts, never an app (Bearer) token.
   if (!req.account || req.viaToken) return null;
@@ -60,17 +73,21 @@ async function openForm(req) {
   const platform = splitPlatformGuildId(key)?.platform ?? 'discord';
   const identity = identityFor(req.account, platform);
   if (!identity) return null;
-  if (!(await isModuleEnabled(key, 'applications'))) return null;
+  const strict = await isModuleEnabled(key, 'applications');
 
   const form = await loadForm(key, Number(req.params.formId));
   // A form that is off, or filled in on Discord only, has no web form.
-  if (!form || !form.enabled || !allowsVia(form, 'web')) return null;
+  const usable = strict && form && form.enabled && allowsVia(form, 'web');
+  if (!usable && !lenient) return null;
 
   const member =
     guild.members.cache.get(identity.platformUserId) ??
     (await guild.members.fetch(identity.platformUserId).catch(() => null));
   if (!member || member.user?.bot) return null;
-  return { guild, key: guildKey(guild), member, form };
+  if (usable) return { guild, key: guildKey(guild), member, form };
+  const own = await pendingSubmission(key, Number(req.params.formId), member.id);
+  if (!own) return null;
+  return { guild, key: guildKey(guild), member, form: form ?? null, own, limited: true };
 }
 
 /** The questions as the page needs them (never what a role question grants). */
@@ -90,11 +107,26 @@ const publicQuestion = (q) => ({
 });
 
 /** The page's data: the form and its questions, or why this member cannot fill it in now. */
-async function formView({ guild, key, member, form }) {
+async function formView({ guild, key, member, form, own, limited }) {
+  if (limited) {
+    return {
+      guild: { name: guild.name, id: key },
+      viewer: member.id,
+      form: { id: own.formId, name: own.formName, description: '', version: 0, intro: '' },
+      pending: { id: own.id, createdAt: own.createdAt },
+      problem: {
+        reason: 'form_closed',
+        text: 'This form is not taking applications now. You can still withdraw yours.',
+      },
+      questions: [],
+    };
+  }
   const problem = await startProblem({ guild, key, member, userId: member.id, form, via: 'web' });
   const pending = await pendingSubmission(key, form.id, member.id);
   const base = {
     guild: { name: guild.name, id: key },
+    // whose draft the page may restore (drafts are kept in the browser, per person)
+    viewer: member.id,
     form: {
       id: form.id,
       name: form.name,
@@ -112,9 +144,9 @@ async function formView({ guild, key, member, form }) {
   return { ...base, problem: null, questions: withRoleNames(form.questions, guild).map(publicQuestion) };
 }
 
-const guard = (handler) =>
+const guard = (handler, opts) =>
   asyncHandler(async (req, res) => {
-    const open = await openForm(req);
+    const open = await openForm(req, opts);
     if (!open) return notFound(res);
     res.set({ 'Cache-Control': 'private, no-store' });
     return handler(req, res, open);
@@ -122,9 +154,12 @@ const guard = (handler) =>
 
 router.get(
   '/:formId',
-  guard(async (req, res, open) => {
-    res.json(await formView(open));
-  })
+  guard(
+    async (req, res, open) => {
+      res.json(await formView(open));
+    },
+    { lenient: true }
+  )
 );
 
 router.post(
@@ -167,10 +202,26 @@ router.post(
 
 router.post(
   '/:formId/withdraw',
-  guard(async (req, res, open) => {
-    const out = await withdrawSubmission({ guild: open.guild, userId: open.member.id, formId: open.form.id });
-    if (!out.ok) return res.status(400).json({ error: out.error, view: await formView(open) });
-    return res.json({ ok: true, id: out.id, view: await formView(open) });
+  asyncHandler(async (req, res, next) => {
+    // Anyone with a pending application of their own may withdraw it, whatever state the form is in.
+    const open = await openForm(req, { lenient: true });
+    if (!open) return notFound(res);
+    return withdrawLimit(req, res, async () => {
+      try {
+        res.set({ 'Cache-Control': 'private, no-store' });
+        const out = await withdrawSubmission({
+          guild: open.guild,
+          userId: open.member.id,
+          formId: Number(req.params.formId),
+        });
+        const again = (await openForm(req, { lenient: true })) ?? null;
+        const view = again ? await formView(again) : null;
+        if (!out.ok) return res.status(400).json({ error: out.error, view });
+        return res.json({ ok: true, id: out.id, view });
+      } catch (err) {
+        return next(err);
+      }
+    });
   })
 );
 

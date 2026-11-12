@@ -298,7 +298,7 @@ test('the export is the answers only, as CSV or JSON, a formula cell is made tex
   assert.match(csv.headers.get('content-disposition'), /attachment; filename="applications-form-\d+\.csv"/);
   assert.equal(csv.headers.get('cache-control'), 'private, no-store');
   const body = await csv.text();
-  assert.match(body, /Submission,Applicant,Status,Submitted,Why do you want to join\?,Pick one/);
+  assert.match(body, /"Submission","Applicant","Status","Submitted","Why do you want to join\?","Pick one"/);
   assert.ok(body.includes("'=HYPERLINK("), 'a cell that would run as a formula is made text');
   assert.ok(!body.includes(',=HYPERLINK') && !body.includes('"=HYPERLINK'), 'and is never left as a formula');
   assert.ok(!body.includes('Not this time'), 'no reasons or reviewers');
@@ -317,4 +317,35 @@ test('the export is the answers only, as CSV or JSON, a formula cell is made tex
     'the answers are never in the log'
   );
   assert.equal((await api.get('/applications/export?formId=99999&format=csv')).status, 404);
+});
+
+test('a required choice or role question with no options cannot be saved, open or not', async () => {
+  // room for the one that is saved at the end
+  const [oldest] = await listForms(GID);
+  await api.post(`/applications/forms/${oldest.id}/delete`, {});
+  for (const type of ['choice', 'role']) {
+    for (const enabled of [true, false]) {
+      const res = await api.post('/applications/forms', {
+        ...FORM,
+        name: `No options ${type}`,
+        enabled,
+        questions: [{ label: 'Pick one', type, required: true, options: [] }],
+      });
+      assert.equal(res.status, 400, `${type} ${enabled}`);
+      assert.match((await json(res)).error, /"Pick one" is required but has no options/);
+    }
+  }
+  // optional is fine, and so is a required one that has options
+  const ok = await api.post('/applications/forms', {
+    ...FORM,
+    name: 'Fine',
+    enabled: false,
+    questions: [
+      { label: 'Optional', type: 'choice', required: false, options: [] },
+      { label: 'Required', type: 'choice', required: true, options: [{ label: 'a' }] },
+    ],
+  });
+  assert.equal(ok.status, 200);
+  const saved = (await json(ok)).form;
+  await api.post(`/applications/forms/${saved.id}/delete`, {});
 });

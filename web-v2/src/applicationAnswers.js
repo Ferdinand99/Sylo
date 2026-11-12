@@ -41,12 +41,15 @@ export function answerProblems(questions, answers) {
   return out;
 }
 
-const draftKey = (guildId, formId) => `sylo-apply-draft:${guildId}:${formId}`;
+// A draft belongs to a person (their id in that server), a server and a form, so on a shared computer
+// the next person to sign in never sees it.
+const DRAFT_PREFIX = 'sylo-apply-draft:';
+const draftKey = (guildId, viewer, formId) => `${DRAFT_PREFIX}${guildId}:${viewer}:${formId}`;
 
 /** A draft saved in this browser, or null. Drafts never leave the browser; storage may be blocked. */
-export function loadDraft(guildId, formId) {
+export function loadDraft(guildId, viewer, formId) {
   try {
-    const raw = window.localStorage.getItem(draftKey(guildId, formId));
+    const raw = window.localStorage.getItem(draftKey(guildId, viewer, formId));
     const parsed = raw ? JSON.parse(raw) : null;
     return parsed && typeof parsed === 'object' && parsed.answers ? parsed : null;
   } catch {
@@ -54,19 +57,30 @@ export function loadDraft(guildId, formId) {
   }
 }
 
-export function saveDraft(guildId, formId, version, answers) {
+export function saveDraft(guildId, viewer, formId, version, answers) {
   try {
-    window.localStorage.setItem(draftKey(guildId, formId), JSON.stringify({ version, answers }));
+    window.localStorage.setItem(draftKey(guildId, viewer, formId), JSON.stringify({ version, answers }));
   } catch {
     // storage blocked or full: the draft is a convenience
   }
 }
 
-export function clearDraft(guildId, formId) {
+export function clearDraft(guildId, viewer, formId) {
   try {
-    window.localStorage.removeItem(draftKey(guildId, formId));
+    window.localStorage.removeItem(draftKey(guildId, viewer, formId));
   } catch {
     // nothing to clear
+  }
+}
+
+/** Remove every draft of this browser (signing out). */
+export function clearAllDrafts() {
+  try {
+    const keys = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) keys.push(window.localStorage.key(i));
+    for (const key of keys) if (key?.startsWith(DRAFT_PREFIX)) window.localStorage.removeItem(key);
+  } catch {
+    // storage blocked: there is nothing stored to clear
   }
 }
 
