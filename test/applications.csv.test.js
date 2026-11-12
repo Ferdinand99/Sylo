@@ -59,6 +59,7 @@ const ANSWERS = [
   ',+1',
   'one; -2',
   'x;@SUM(A1);',
+  'hello\n=1+1;x',
   'plain, text; with = signs and - dashes, +too',
   '=1+1',
   'x;=WEBSERVICE(CHAR(104)&"y");',

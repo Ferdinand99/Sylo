@@ -654,10 +654,11 @@ export function buildSubmissionEmbeds({
  */
 export const csvCell = (value) => {
   let text = String(value ?? '');
-  if (/^[ ;,]*[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  // Quotes alone do not hold in every reader: some leave quote mode early and then split at ";", "," or a
-  // tab inside the cell. So a formula after such a character in the middle of a cell is made text too.
-  text = text.replace(/([;,\t\r])( *)(?=[=+\-@])/g, "$1$2'");
+  if (/^[ ;,\n]*[=+\-@\t\r\n]/.test(text)) text = `'${text}`;
+  // Quotes alone do not hold in every reader: some leave quote mode early and then split at ";", "," a
+  // tab or a line break inside the cell. So a formula after such a character in the middle of a cell is
+  // made text too.
+  text = text.replace(/([;,\t\r\n])( *)(?=[=+\-@])/g, "$1$2'");
   return `"${text.replace(/"/g, '""')}"`;
 };
 
