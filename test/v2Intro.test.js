@@ -12,6 +12,7 @@ let app;
 let api;
 const posted = new Map(); // message id -> the fake message of #general
 let nextId = 800000000000000001n;
+let failMessageCalls = false; // edit and delete by id fail with a server error
 
 test.before(async () => {
   app = await startWebApp();
@@ -37,6 +38,16 @@ test.before(async () => {
       return message;
     };
     channel.messages = {
+      edit: async (id, payload) => {
+        if (failMessageCalls) throw Object.assign(new Error('Internal Server Error'), { status: 500 });
+        if (!posted.has(id)) throw Object.assign(new Error('Unknown Message'), { status: 404, code: 10008 });
+        await posted.get(id).edit(payload);
+      },
+      delete: async (id) => {
+        if (failMessageCalls) throw Object.assign(new Error('Internal Server Error'), { status: 500 });
+        if (!posted.has(id)) throw Object.assign(new Error('Unknown Message'), { status: 404, code: 10008 });
+        await posted.get(id).delete();
+      },
       fetch: async (id) => {
         if (!posted.has(id)) throw new Error('Unknown Message');
         return posted.get(id);
@@ -184,4 +195,28 @@ test('publishing the prompt to another channel deletes the old prompt', async ()
   assert.equal(posted.size, 1);
   await api.post('/modules/introductions/prompt/unpublish');
   assert.equal(posted.size, 0);
+});
+
+test('a failing delete keeps the stored prompt id and says so; a failing move leaves a warning', async () => {
+  const first = await json(
+    await api.post('/modules/introductions/prompt/publish', { channelId: CH.general, promptText: 'Hi' })
+  );
+  const id = first.config.promptMessageId;
+  failMessageCalls = true;
+  const refused = await api.post('/modules/introductions/prompt/unpublish');
+  assert.equal(refused.status, 502);
+  assert.match((await json(refused)).error, /could not delete the prompt message/);
+  assert.equal((await getGuildModule(GID, 'introductions')).config.promptMessageId, id, 'the id is kept');
+  assert.equal(posted.has(id), true);
+
+  const moved = await json(
+    await api.post('/modules/introductions/prompt/publish', { channelId: CH.bots, promptText: 'Hi' })
+  );
+  assert.match(moved.warning, /old one was not removed/);
+  assert.equal(posted.size, 2, 'the old one is still there, and the user was told');
+  failMessageCalls = false;
+  // a prompt that is gone is not an error
+  posted.delete(moved.config.promptMessageId);
+  assert.equal((await api.post('/modules/introductions/prompt/unpublish')).status, 200);
+  posted.clear();
 });

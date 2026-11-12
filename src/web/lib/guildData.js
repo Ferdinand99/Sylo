@@ -45,8 +45,10 @@ export async function exportGuildConfigFor(guildId, { owner }) {
  * @returns {Promise<{ result: Awaited<ReturnType<typeof forgetUser>>, dmDelivered: boolean }>}
  */
 export async function forgetMember(guild, userId, { reason = '', actor }) {
-  await forgetIntroductionCard(guild, userId); // the card message is found through the row forgetUser deletes
-  const r = await forgetUser(guild.id, userId);
+  // The card message is found through the row forgetUser deletes, so it goes first. If it cannot be
+  // deleted, the row stays, so the card can still be removed later.
+  const card = await forgetIntroductionCard(guild, userId);
+  const r = await forgetUser(guild.id, userId, { keepIntroduction: !card.ok });
 
   const dm = new EmbedBuilder()
     .setColor(0x58d68d)
@@ -73,7 +75,11 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
       { name: 'Temporary role records', value: String(r.tempRoles), inline: true },
       { name: 'Quotes of their messages', value: String(r.quotes), inline: true },
       { name: 'Saved-by name removed from quotes', value: String(r.quotesSaved), inline: true },
-      { name: 'Introduction', value: String(r.introductions), inline: true },
+      {
+        name: 'Introduction',
+        value: card.ok ? String(r.introductions) : 'Not deleted: the card message could not be removed.',
+        inline: true,
+      },
       { name: 'Invite records', value: String(r.invites), inline: true },
       { name: 'Not affected', value: MEMBER_DATA_UNAFFECTED }
     )

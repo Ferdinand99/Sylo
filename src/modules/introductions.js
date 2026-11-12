@@ -33,6 +33,7 @@ import { registerComponent } from '../bot/lib/components.js';
 import { idList } from '../web/lib/idList.js';
 import { sweepMap } from '../lib/sweepMap.js';
 import { log } from '../lib/log.js';
+import { isMessageGone, isPermissionDenied } from '../platform/messageErrors.js';
 import { jumpUrl } from './quoteBoard.js';
 
 /** Setting limits, served to the dashboard (modules/limits.js). */
@@ -386,16 +387,42 @@ async function fetchMember(guild, userId) {
   return guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
 }
 
+/**
+ * The text channel, or null when it does not exist (any more). Any other failure (a timeout, a
+ * rate limit, no access) throws: it must not be mistaken for "gone".
+ */
 async function textChannel(guild, channelId) {
   if (!channelId) return null;
   const channel =
-    guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId).catch(() => null));
+    guild.channels.cache.get(channelId) ??
+    (await guild.channels.fetch(channelId).catch((err) => {
+      if (isMessageGone(err)) return null;
+      throw err;
+    }));
   return channel?.isTextBased?.() ? channel : null;
 }
 
+/**
+ * Edit or delete a message by its id, without fetching it first (a fetch needs more permission and
+ * fails for reasons that say nothing about the message). 'gone' only when the platform says the
+ * message or its channel does not exist; every other failure throws.
+ * @returns {Promise<'ok' | 'gone'>}
+ */
+async function byId(channel, action, messageId, payload) {
+  try {
+    if (action === 'edit') await channel.messages.edit(messageId, payload);
+    else await channel.messages.delete(messageId);
+    return 'ok';
+  } catch (err) {
+    if (isMessageGone(err)) return 'gone';
+    throw err;
+  }
+}
+
+const NEEDED_IN_CHANNEL = ['ViewChannel', 'ReadMessageHistory', 'SendMessages', 'EmbedLinks'];
 const missingPermission = (guild, channel) => {
   const me = guild.members.me;
-  return me && !channel.permissionsFor(me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks']);
+  return me && !channel.permissionsFor(me)?.has(NEEDED_IN_CHANNEL);
 };
 
 /** One change per member at a time: a post, an edit and a refresh must not interleave. */
@@ -469,16 +496,22 @@ export async function postIntroduction({ guild, userId, answers }) {
 
     if (existing?.message_id) {
       const old = await textChannel(guild, existing.channel_id);
-      const message = old ? await old.messages.fetch(existing.message_id).catch(() => null) : null;
-      if (message) {
+      let state = 'gone';
+      if (old) {
         try {
-          await message.edit(payload);
-        } catch {
+          state = await byId(old, 'edit', existing.message_id, payload);
+        } catch (err) {
+          // Not "gone": keep the row and the card, and post nothing, so there is never a second card.
+          log.warn('module:introductions', `could not edit a card: ${err.message}`);
           return {
             ok: false,
-            error: 'I could not edit your card. Ask a server admin to check my permissions.',
+            error: isPermissionDenied(err)
+              ? 'I could not edit your card. Ask a server admin to check my permissions in that channel.'
+              : 'I could not edit your card right now. Please try again in a moment.',
           };
         }
+      }
+      if (state === 'ok') {
         await saveIntroduction({
           guildId: key,
           userId,
@@ -519,38 +552,55 @@ export async function postIntroduction({ guild, userId, answers }) {
   });
 }
 
-/** Delete a card message, best-effort. */
+/**
+ * Delete a card message. Resolves when the message is deleted or the platform says it is gone;
+ * throws for any other reason (the card is then still public, and the row must stay).
+ */
 async function deleteCardMessage(guild, row) {
   if (!row?.message_id) return;
   const channel = await textChannel(guild, row.channel_id);
-  const message = channel ? await channel.messages.fetch(row.message_id).catch(() => null) : null;
-  if (message) await message.delete().catch(() => {});
+  if (channel) await byId(channel, 'delete', row.message_id);
 }
 
-/** Remove a member's card and answers. @returns {Promise<boolean>} whether there was anything */
+/**
+ * Remove a member's card and answers. The row is deleted only after the card message is deleted
+ * (or is gone), so a failed delete leaves something that can be removed later.
+ * @returns {Promise<'removed' | 'none' | 'failed'>}
+ */
 export async function removeIntroduction(guild, userId) {
   const key = guildKey(guild);
   return withLock(`${key}|${userId}`, async () => {
     const row = await getIntroduction(key, userId);
-    if (!row) return false;
-    // The row goes first: the message-delete event this causes then finds nothing to clear.
+    if (!row) return 'none';
+    try {
+      await deleteCardMessage(guild, row);
+    } catch (err) {
+      log.warn('module:introductions', `could not delete a card message: ${err.message}`);
+      return 'failed';
+    }
     await deleteIntroduction(key, userId);
     lastLook.delete(`${key}|${userId}`);
-    await deleteCardMessage(guild, row);
-    return true;
+    return 'removed';
   });
 }
 
 /**
  * Delete the card message of a member before /forget deletes their row (the message is found
- * through the row). Never throws: erasing the data must not fail because of a missing channel.
+ * through the row). Never throws. When the message could not be deleted the caller must keep the
+ * row (forgetUser's keepIntroduction), so the card can still be removed later.
+ * @returns {Promise<{ ok: boolean }>}
  */
 export async function forgetIntroductionCard(guild, userId) {
-  try {
-    await deleteCardMessage(guild, await getIntroduction(guildKey(guild), userId));
-  } catch (err) {
-    log.warn('module:introductions', `could not delete a card message: ${err.message}`);
-  }
+  const key = guildKey(guild);
+  return withLock(`${key}|${userId}`, async () => {
+    try {
+      await deleteCardMessage(guild, await getIntroduction(key, userId));
+      return { ok: true };
+    } catch (err) {
+      log.warn('module:introductions', `could not delete a card message: ${err.message}`);
+      return { ok: false };
+    }
+  });
 }
 
 /** The card of a member as it would be posted now, from their stored answers; null if they have none. */
@@ -649,7 +699,10 @@ export async function publishPrompt(guild, cfg) {
   const channel = await textChannel(guild, cfg.channelId);
   if (!channel) return { ok: false, error: 'Pick the introductions channel first.' };
   if (missingPermission(guild, channel)) {
-    return { ok: false, error: 'Sylo needs View Channel, Send Messages and Embed Links in that channel.' };
+    return {
+      ok: false,
+      error: 'Sylo needs View Channel, Read Message History, Send Messages and Embed Links in that channel.',
+    };
   }
   const payload = {
     content: cfg.promptText || DEFAULT_PROMPT_TEXT,
@@ -666,10 +719,10 @@ export async function publishPrompt(guild, cfg) {
   };
   try {
     if (cfg.promptMessageId && cfg.promptChannelId === channel.id) {
-      const old = await channel.messages.fetch(cfg.promptMessageId).catch(() => null);
-      if (old) {
-        await old.edit(payload);
-        return { ok: true, channelId: channel.id, messageId: old.id };
+      // Edited by id. Only "gone" posts a new prompt; any other error is reported, so there is
+      // never a second prompt next to the first.
+      if ((await byId(channel, 'edit', cfg.promptMessageId, payload)) === 'ok') {
+        return { ok: true, channelId: channel.id, messageId: cfg.promptMessageId };
       }
     }
     const sent = await channel.send(payload);
@@ -680,12 +733,26 @@ export async function publishPrompt(guild, cfg) {
   }
 }
 
-/** Delete the published prompt message, best-effort. */
+/**
+ * Delete the published prompt message. Ok when it is deleted or already gone; not ok (with a reason)
+ * for any other failure, and then the caller keeps the stored id.
+ * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
+ */
 export async function unpublishPrompt(guild, cfg) {
-  if (!cfg.promptMessageId) return;
-  const channel = await textChannel(guild, cfg.promptChannelId);
-  const message = channel ? await channel.messages.fetch(cfg.promptMessageId).catch(() => null) : null;
-  if (message) await message.delete().catch(() => {});
+  if (!cfg.promptMessageId) return { ok: true };
+  try {
+    const channel = await textChannel(guild, cfg.promptChannelId);
+    if (channel) await byId(channel, 'delete', cfg.promptMessageId);
+    return { ok: true };
+  } catch (err) {
+    log.warn('module:introductions', `could not delete the prompt message: ${err.message}`);
+    return {
+      ok: false,
+      error: isPermissionDenied(err)
+        ? 'Sylo could not delete the prompt message: it needs Manage Messages in that channel.'
+        : 'Sylo could not delete the prompt message right now. Try again in a moment.',
+    };
+  }
 }
 
 registerComponent('introductions', CREATE_BUTTON_ID, async (interaction) => {
@@ -726,10 +793,9 @@ export async function refreshIntroduction(key, userId) {
     const look = JSON.stringify(payload.embeds.map((e) => e.toJSON()));
     if (lastLook.get(`${key}|${userId}`) === look) return;
     const channel = await textChannel(guild, row.channel_id);
-    const message = channel ? await channel.messages.fetch(row.message_id).catch(() => null) : null;
-    if (!message) return; // gone: the message-delete event forgets it
-    await message.edit(payload);
-    rememberLook(key, userId, payload);
+    if (!channel) return; // gone: the message-delete event forgets it
+    // Any error other than "gone" throws, and scheduleRefresh logs it; the card stays as it is.
+    if ((await byId(channel, 'edit', row.message_id, payload)) === 'ok') rememberLook(key, userId, payload);
   });
 }
 

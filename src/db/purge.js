@@ -216,7 +216,9 @@ const userStmts = {
  * the dashboard. `keptCases` says how many cases stayed.
  * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
  */
-export async function forgetUser(guildId, userId) {
+// `keepIntroduction`: leave the introduction row (the card message could not be deleted, so the row
+// is what lets it be removed later).
+export async function forgetUser(guildId, userId, { keepIntroduction = false } = {}) {
   const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
   const leveling =
     (await userStmts.leveling.run(guildId, userId)).changes +
@@ -237,7 +239,7 @@ export async function forgetUser(guildId, userId) {
   const tempRoleAdders = (await userStmts.tempRoleAdder.run(guildId, userId)).changes;
   const quotes = (await userStmts.quotesAuthored.run(guildId, userId)).changes;
   const quotesSaved = (await userStmts.quotesSaved.run(guildId, userId)).changes;
-  const introductions = (await userStmts.introductions.run(guildId, userId)).changes;
+  const introductions = keepIntroduction ? 0 : (await userStmts.introductions.run(guildId, userId)).changes;
   const invites =
     (await userStmts.inviteCounts.run(guildId, userId)).changes +
     (await userStmts.inviteJoins.run(guildId, userId)).changes +

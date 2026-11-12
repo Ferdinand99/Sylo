@@ -4,6 +4,13 @@
 import { PermissionsBitField } from 'discord.js';
 import { runtime } from '../../src/runtime.js';
 
+/** The error discord.js throws for a message or channel that does not exist. */
+export const unknownMessage = () => Object.assign(new Error('Unknown Message'), { status: 404, code: 10008 });
+/** An error that says nothing about the message: a server error. */
+export const serverError = () => Object.assign(new Error('Internal Server Error'), { status: 500 });
+/** A permission error. */
+export const missingAccess = () => Object.assign(new Error('Missing Access'), { status: 403, code: 50001 });
+
 export const GID = '900000000000000321';
 export const INTRO_CH = '100000000000000501';
 export const OTHER_CH = '100000000000000502';
@@ -26,6 +33,7 @@ function fakeChannel(id, name, { canSend = true } = {}) {
   const store = new Map();
   let n = 0;
   const log = { sent: [], edits: [], deleted: [] };
+  // Set `channel.failWith` to make edit and delete by id fail with that error.
   const wrap = (payload) => {
     const message = {
       id: `${id.slice(0, 6)}${String(++n).padStart(12, '0')}`,
@@ -46,13 +54,18 @@ function fakeChannel(id, name, { canSend = true } = {}) {
     };
     return message;
   };
-  return {
+  const channel = {
     id,
     name,
     log,
     store,
     isTextBased: () => true,
-    permissionsFor: () => ({ has: () => canSend }),
+    permissionsFor: () => ({
+      has: (needed) => {
+        channel.asked = needed;
+        return canSend;
+      },
+    }),
     send: async (payload) => {
       const message = wrap(payload);
       store.set(message.id, message);
@@ -60,6 +73,18 @@ function fakeChannel(id, name, { canSend = true } = {}) {
       return message;
     },
     messages: {
+      edit: async (messageId, payload) => {
+        if (channel.failWith) throw channel.failWith;
+        const found = store.get(messageId);
+        if (!found) throw unknownMessage();
+        await found.edit(payload);
+      },
+      delete: async (messageId) => {
+        if (channel.failWith) throw channel.failWith;
+        const found = store.get(messageId);
+        if (!found) throw unknownMessage();
+        await found.delete();
+      },
       fetch: async (messageId) => {
         const found = store.get(messageId);
         if (!found) throw new Error('Unknown Message');
@@ -67,6 +92,7 @@ function fakeChannel(id, name, { canSend = true } = {}) {
       },
     },
   };
+  return channel;
 }
 
 /** A member of the fake server. `roles` are role ids. */

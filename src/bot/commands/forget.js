@@ -38,8 +38,8 @@ export async function execute(interaction) {
   }
 
   // The card message first: it is found through the member's stored row, which forgetUser deletes.
-  await forgetIntroductionCard(interaction.guild, interaction.user.id);
-  const r = await forgetUser(interaction.guildId, interaction.user.id);
+  const card = await forgetIntroductionCard(interaction.guild, interaction.user.id);
+  const r = await forgetUser(interaction.guildId, interaction.user.id, { keepIntroduction: !card.ok });
   const embed = new EmbedBuilder()
     .setColor(0x58d68d)
     .setTitle('Your data was deleted')
@@ -64,7 +64,13 @@ export async function execute(interaction) {
       { name: 'Temporary role records', value: String(r.tempRoles), inline: true },
       { name: 'Quotes of their messages', value: String(r.quotes), inline: true },
       { name: 'Saved-by name removed from quotes', value: String(r.quotesSaved), inline: true },
-      { name: 'Introduction', value: String(r.introductions), inline: true }
+      {
+        name: 'Introduction',
+        value: card.ok
+          ? String(r.introductions)
+          : 'Not deleted: the card message could not be removed. Run /intro remove, or ask staff.',
+        inline: true,
+      }
     );
   if (r.keptCases > 0) {
     embed.addFields({

@@ -75,8 +75,11 @@ router.post(
     const result = await publishPrompt(req.guild, draft);
     if (!result.ok) return res.status(400).json({ error: result.error });
     // Published to another channel: the old prompt (and its button) must not stay behind.
+    let warning = '';
     if (prev.promptMessageId && prev.promptChannelId !== result.channelId) {
-      await unpublishPrompt(req.guild, prev);
+      const removed = await unpublishPrompt(req.guild, prev);
+      if (!removed.ok)
+        warning = `The new prompt is published, but the old one was not removed. ${removed.error}`;
     }
     const config = { ...draft, promptChannelId: result.channelId, promptMessageId: result.messageId };
     await setGuildModule(req.guild.id, 'introductions', { config });
@@ -85,7 +88,7 @@ router.post(
       action: 'module:introductions',
       detail: 'published the prompt message',
     });
-    res.json({ config });
+    res.json({ config, ...(warning && { warning }) });
   })
 );
 
@@ -93,7 +96,9 @@ router.post(
   '/modules/introductions/prompt/unpublish',
   asyncHandler(async (req, res) => {
     const prev = await savedConfig(req.guild.id);
-    await unpublishPrompt(req.guild, prev);
+    // The stored id stays when the message could not be deleted, so it can be tried again.
+    const removed = await unpublishPrompt(req.guild, prev);
+    if (!removed.ok) return res.status(502).json({ error: removed.error });
     const config = { ...prev, promptChannelId: '', promptMessageId: '' };
     await setGuildModule(req.guild.id, 'introductions', { config });
     await recordAudit(req.guild.id, {

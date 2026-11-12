@@ -9,7 +9,8 @@ same flow works on Discord and Fluxer, and it uses no modals.
 
 ## Needs
 
-- **Send Messages**, **Embed Links** and **View Channel** in the introductions channel. To pin
+- **View Channel**, **Read Message History**, **Send Messages** and **Embed Links** in the introductions
+  channel. To pin
   the optional prompt message, Sylo also needs **Manage Messages** (or Pin Messages) there;
   without it the prompt is posted unpinned.
 - The **Server Members** intent (`INTENT_GUILD_MEMBERS`, on by default; see
@@ -91,6 +92,12 @@ the introductions channel.
   the answers, so `/intro create` can post it again.
 - When a member **leaves**, their card and answers are deleted (unless you turned that off).
 - `/forget` deletes a member's answers **and** the card message.
+- Sylo edits and deletes a card by its message id. Only when the platform says the message no longer
+  exists does Sylo treat the card as deleted and post a new one. For any other error (a timeout, a
+  server error, missing permissions) it keeps the answers and the link to the card, posts nothing
+  twice, and tells the member or staff that it failed. The answers are removed (by `/intro remove`,
+  `/forget` or when the member leaves) only after the card message is deleted or gone, so a card is
+  never left public with nothing pointing at it.
 
 ## Safety
 

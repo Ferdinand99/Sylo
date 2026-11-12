@@ -102,8 +102,12 @@ export default function Introductions() {
   async function onPublish() {
     setBusy(true);
     try {
-      await publishIntroPrompt(guildId, { channelId: form.channelId, promptText: form.promptText });
+      const result = await publishIntroPrompt(guildId, {
+        channelId: form.channelId,
+        promptText: form.promptText,
+      });
       setPublished(true);
+      if (result?.warning) notify(result.warning);
       notify(isPublished ? 'Prompt message updated.' : 'Prompt message published and pinned.', 'info');
     } catch (err) {
       notify(err.message);

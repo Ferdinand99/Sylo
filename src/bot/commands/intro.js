@@ -76,7 +76,13 @@ async function remove(interaction) {
     return eph(interaction, "Only staff with Manage Messages can delete someone else's introduction.");
   }
   const removed = await removeIntroduction(interaction.guild, own ? interaction.user.id : target.id);
-  if (!removed) {
+  if (removed === 'failed') {
+    return eph(
+      interaction,
+      'I could not delete the card message, so nothing was removed. Try again in a moment, or ask a server admin to check my permissions in the introductions channel.'
+    );
+  }
+  if (removed === 'none') {
     return eph(interaction, own ? 'You have no introduction to remove.' : 'That member has no introduction.');
   }
   return eph(

@@ -501,10 +501,10 @@ test('removing deletes the card message and the row; a second time there is noth
   await enable();
   fakeMember(env.guild, U);
   const first = await postIntroduction({ guild: env.guild, userId: U, answers: {} });
-  assert.equal(await removeIntroduction(env.guild, U), true);
+  assert.equal(await removeIntroduction(env.guild, U), 'removed');
   assert.equal(await getIntroduction(GID, U), null);
   assert.equal(env.channel.store.has(first.messageId), false);
-  assert.equal(await removeIntroduction(env.guild, U), false);
+  assert.equal(await removeIntroduction(env.guild, U), 'none');
 });
 
 test('a role change refreshes the card, once, about 30 seconds later', async (t) => {
