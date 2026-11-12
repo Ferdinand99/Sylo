@@ -75,7 +75,11 @@ export async function execute(interaction) {
   });
   if (!result.ok) return eph(interaction, result.error);
   const label = STATUS_META[result.status].label.toLowerCase();
-  const extras = [result.moved ? 'moved to the log channel' : null, result.dm ? 'author notified' : null]
+  const extras = [
+    result.moved ? 'moved to the log channel' : null,
+    result.copied ? 'copy in the log channel' : null,
+    result.dm ? 'author notified' : null,
+  ]
     .filter(Boolean)
     .join(', ');
   return eph(interaction, `Suggestion **#${number}** is now ${label}${extras ? ` (${extras})` : ''}.`);

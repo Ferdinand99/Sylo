@@ -29,6 +29,8 @@ import { execute as suggestion } from '../src/bot/commands/suggestion.js';
 import {
   createSuggestion,
   decide,
+  moveAllSuggestionsBack,
+  moveSuggestionBack,
   parseSuggestionInput,
   refreshSuggestionMessage,
   removeSuggestion,
@@ -806,6 +808,387 @@ test('after /forget the suggestion keeps its text and number but the next refres
   await refreshSuggestionMessage(id);
   assert.equal(fieldsOf(w.edits.at(-1).payload)['Suggested by'], undefined);
   assert.equal(w.edits.at(-1).payload.embeds[0].toJSON().description, 'Keep this board');
+});
+
+// --- log mode: copy ---------------------------------------------------------------------------
+
+const statusOf = (payload) => fieldsOf(payload).Status;
+
+test('copy mode keeps the original, shows its status there and posts a copy in the log channel', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  await say('Idea');
+  const original = w.sent[0];
+
+  const i = await decideAs('approve', 1, 'Yes');
+  assert.match(i.text(), /copy in the log channel/);
+  assert.doesNotMatch(i.text(), /moved/);
+  assert.equal(w.deletes.length, 0, 'nothing is deleted');
+  const edit = w.edits.find((e) => e.id === original.id);
+  assert.equal(statusOf(edit.payload), `✅ Approved by <@${STAFF}>`, 'the original shows its status');
+  assert.equal(edit.payload.components.length, 0);
+
+  const copy = w.sent[1];
+  assert.equal(copy.channel, LOG);
+  assert.equal(fieldsOf(copy.payload)['Reason from staff'], 'Yes');
+  assert.equal(copy.payload.components.length, 0);
+
+  const row = await getSuggestionByNumber(GID, 1);
+  assert.equal(row.channel_id, CH, 'the suggestion still lives in its channel');
+  assert.equal(row.message_id, original.id);
+  assert.equal(row.log_channel_id, LOG);
+  assert.equal(row.log_message_id, copy.id);
+});
+
+test('copy mode: a later status change edits the copy in place, a missing copy is posted again', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  await say('Idea');
+  await decideAs('approve', 1);
+  const copy = w.sent[1];
+
+  await decideAs('implement', 1, 'Shipped');
+  assert.equal(w.sent.length, 2, 'no second copy');
+  const onCopy = w.edits.filter((e) => e.id === copy.id);
+  assert.equal(onCopy.length, 1);
+  assert.equal(statusOf(onCopy[0].payload), `🚀 Implemented by <@${STAFF}>`);
+  assert.equal(fieldsOf(onCopy[0].payload)['Reason from staff'], 'Shipped');
+  assert.equal((await getSuggestionByNumber(GID, 1)).log_message_id, copy.id);
+
+  // staff deleted the copy: the next change posts a new one
+  w.channels.get(LOG).store.delete(copy.id);
+  await decideAs('approve', 1);
+  assert.equal(w.sent.length, 3);
+  assert.equal(w.sent[2].channel, LOG);
+  assert.equal((await getSuggestionByNumber(GID, 1)).log_message_id, w.sent[2].id);
+});
+
+test('copy mode: going back to considering deletes the copy and the post gets its buttons back', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  await say('Idea');
+  const original = w.sent[0];
+  await decideAs('deny', 1);
+  const copy = w.sent[1];
+
+  await decideAs('consider', 1);
+  assert.deepEqual(w.deletes, [{ channel: LOG, id: copy.id }]);
+  const row = await getSuggestionByNumber(GID, 1);
+  assert.equal(row.log_channel_id, null);
+  assert.equal(row.log_message_id, null);
+  const last = w.edits.filter((e) => e.id === original.id).at(-1);
+  assert.match(statusOf(last.payload), /Considering/);
+  assert.equal(last.payload.components.length, 1, 'voting is open again');
+
+  // a considering suggestion never gets a copy
+  assert.equal(w.sent.length, 2);
+});
+
+test('copy mode without a log channel is the plain "update in place" behaviour', async () => {
+  fresh();
+  await enable({ channel: CH, logMode: 'copy' });
+  await say('Idea');
+  await decideAs('approve', 1);
+  assert.equal(w.sent.length, 1);
+  assert.equal(w.deletes.length, 0);
+  const row = await getSuggestionByNumber(GID, 1);
+  assert.equal(row.log_message_id, null);
+});
+
+test('copy mode: a log channel that cannot be posted in leaves the decision and the original alone', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  await say('Idea');
+  w.channels.get(LOG).send = async () => {
+    throw new Error('Missing Access');
+  };
+  const i = await decideAs('approve', 1);
+  assert.match(i.text(), /is now approved/);
+  assert.doesNotMatch(i.text(), /copy in the log channel/);
+  const row = await getSuggestionByNumber(GID, 1);
+  assert.equal(row.status, 'approved');
+  assert.equal(row.log_message_id, null);
+  assert.equal(w.deletes.length, 0);
+});
+
+test('copy mode: a post that already sits in the log channel gets no second copy', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  const { id } = await seed({ channelId: LOG });
+  const msg = await w.channels.get(LOG).send({ embeds: [] });
+  await setSuggestionMessage(id, LOG, msg.id);
+  await decide(await getSuggestion(id), 'approve', { by: STAFF });
+  assert.equal(w.sent.length, 1, 'only the seeded post');
+  assert.equal(w.edits.at(-1).id, msg.id, 'it is edited where it is');
+  assert.equal((await getSuggestion(id)).log_message_id, null);
+});
+
+test('copy mode: switching to move mode drops the old copy on the next decision', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  await say('Idea');
+  await decideAs('approve', 1);
+  const copy = w.sent.find((m) => m.channel === LOG);
+
+  await enable({ channel: CH, logChannel: LOG, logMode: 'move' });
+  await decideAs('implement', 1);
+  assert.ok(
+    w.deletes.some((d) => d.id === copy.id),
+    'the copy is deleted'
+  );
+  assert.ok(
+    w.deletes.some((d) => d.channel === CH),
+    'and the original is moved'
+  );
+  const row = await getSuggestionByNumber(GID, 1);
+  assert.equal(row.channel_id, LOG);
+  assert.equal(row.log_message_id, null);
+});
+
+test('removeSuggestion deletes the log copy too', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  await say('Idea');
+  await decideAs('approve', 1);
+  const copy = w.sent[1];
+  await removeSuggestion(await getSuggestionByNumber(GID, 1));
+  assert.ok(w.deletes.some((d) => d.channel === LOG && d.id === copy.id));
+  assert.ok(w.deletes.some((d) => d.channel === CH));
+});
+
+test('move mode: a log channel and no stored mode is exactly the old behaviour', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG }); // a config from before the setting
+  await say('Idea');
+  const original = w.sent[0];
+  const i = await decideAs('approve', 1);
+  assert.match(i.text(), /moved to the log channel/);
+  assert.doesNotMatch(i.text(), /copy/);
+  assert.deepEqual(w.deletes, [{ channel: CH, id: original.id }]);
+  const row = await getSuggestionByNumber(GID, 1);
+  assert.equal(row.channel_id, LOG);
+  assert.equal(row.log_message_id, null);
+});
+
+// --- move back to the suggestions channel -----------------------------------------------------
+
+/** A suggestion whose post sits in the log channel, like one moved there before copy mode. */
+async function movedSuggestion({ status = 'approved', votes = [] } = {}) {
+  const { id, number } = await seed({ channelId: LOG, body: `Moved idea ${seq}` });
+  const msg = await w.channels.get(LOG).send({ embeds: [] });
+  await setSuggestionMessage(id, LOG, msg.id);
+  if (status !== 'open') await decideSuggestion(id, { status, reason: 'Because', decidedBy: STAFF });
+  for (const [user, vote] of votes) await setSuggestionVote(id, user, vote);
+  return { id, number, msg };
+}
+
+const titleOf = (payload) => payload.embeds[0].toJSON().title;
+
+test('move back in copy mode: posts it again with the same data, and the old log post becomes the copy', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  const { id, number, msg } = await movedSuggestion({
+    votes: [
+      [U[1], 1],
+      [U[2], 1],
+      [U[0], -1],
+    ],
+  });
+  w.sent.length = 0;
+
+  const r = await moveSuggestionBack(id);
+  assert.deepEqual(r, { ok: true, number });
+  assert.equal(w.sent.length, 1, 'one new post, no second copy');
+  const posted = w.sent[0];
+  assert.equal(posted.channel, CH);
+  assert.equal(titleOf(posted.payload), `💡 Suggestion #${number}`);
+  const f = fieldsOf(posted.payload);
+  assert.equal(f.Status, `✅ Approved by <@${STAFF}>`);
+  assert.equal(f['Reason from staff'], 'Because');
+  assert.equal(f['Final votes'], '👍 2 · 👎 1');
+  assert.equal(w.deletes.length, 0, 'the old post is kept');
+
+  const row = await getSuggestion(id);
+  assert.equal(row.channel_id, CH);
+  assert.equal(row.message_id, posted.id);
+  assert.equal(row.log_channel_id, LOG);
+  assert.equal(row.log_message_id, msg.id);
+});
+
+test('move back in move mode deletes the old post and leaves no copy', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'move' });
+  const { id, msg } = await movedSuggestion();
+  const r = await moveSuggestionBack(id);
+  assert.equal(r.ok, true);
+  assert.deepEqual(w.deletes, [{ channel: LOG, id: msg.id }]);
+  const row = await getSuggestion(id);
+  assert.equal(row.channel_id, CH);
+  assert.equal(row.log_message_id, null);
+});
+
+test('move back with no log channel set deletes the old post', async () => {
+  fresh();
+  await enable({ channel: CH });
+  const { id, msg } = await movedSuggestion();
+  assert.equal((await moveSuggestionBack(id)).ok, true);
+  assert.deepEqual(w.deletes, [{ channel: LOG, id: msg.id }]);
+  assert.equal((await getSuggestion(id)).channel_id, CH);
+  assert.equal(w.sent.filter((m) => m.channel === CH).length, 1);
+});
+
+test('move back of an open suggestion brings the voting buttons along; in copy mode it gets no copy', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  const { id, msg } = await movedSuggestion({ status: 'open', votes: [[U[1], 1]] });
+  w.sent.length = 0;
+  assert.equal((await moveSuggestionBack(id)).ok, true);
+  assert.equal(w.sent.length, 1);
+  const buttons = w.sent[0].payload.components[0].toJSON().components;
+  assert.deepEqual(
+    buttons.map((b) => b.label),
+    ['👍 1', '👎 0']
+  );
+  assert.deepEqual(
+    w.deletes,
+    [{ channel: LOG, id: msg.id }],
+    'an open suggestion has no copy: the old post goes'
+  );
+  assert.equal((await getSuggestion(id)).log_message_id, null);
+  // and the button works against the new post
+  assert.match(await press('up', id, U[2]), /You voted/);
+});
+
+test('move back works on Fluxer, with the platform key', async () => {
+  fresh({ platform: 'fluxer' });
+  await enable({ channel: CH, logChannel: LOG, logMode: 'move' });
+  const { id, msg } = await movedSuggestion();
+  assert.match((await getSuggestion(id)).guild_id, /^fluxer:/);
+  const r = await moveSuggestionBack(id);
+  assert.equal(r.ok, true);
+  assert.equal(w.sent.at(-1).channel, CH);
+  assert.deepEqual(w.deletes, [{ channel: LOG, id: msg.id }]);
+});
+
+test('move back refuses when there is nothing to do: already in place, no suggestions channel, no such suggestion', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG });
+  const inPlace = await seed();
+  const r1 = await moveSuggestionBack(inPlace.id);
+  assert.equal(r1.ok, false);
+  assert.match(r1.error, /already in the suggestions channel/);
+  assert.equal(w.sent.length, 0);
+
+  const { id } = await movedSuggestion();
+  w.sent.length = 0;
+  await enable({ logChannel: LOG });
+  const r2 = await moveSuggestionBack(id);
+  assert.equal(r2.ok, false);
+  assert.match(r2.error, /Set the suggestions channel/);
+  assert.equal(w.sent.length, 0);
+  assert.equal((await getSuggestion(id)).channel_id, LOG, 'nothing changed');
+
+  assert.equal((await moveSuggestionBack(987654)).ok, false);
+});
+
+test('move back explains a permission problem and changes nothing', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  const { id, msg } = await movedSuggestion();
+  w.channels.get(CH).send = async () => {
+    throw new Error('Missing Permissions');
+  };
+  const r = await moveSuggestionBack(id);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /View Channel, Send Messages and Embed Links/);
+  assert.equal(r.stop, true);
+  const row = await getSuggestion(id);
+  assert.equal(row.channel_id, LOG);
+  assert.equal(row.message_id, msg.id);
+  assert.equal(w.deletes.length, 0);
+});
+
+test('move all goes oldest first and moves only what is outside the suggestions channel', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'copy' });
+  const inPlace = await seed({ body: 'Already home' }); // #1, in the channel
+  const a = await movedSuggestion(); // #2
+  const b = await movedSuggestion({ status: 'denied' }); // #3
+  const c = await movedSuggestion({ status: 'open' }); // #4
+  w.sent.length = 0;
+
+  const r = await moveAllSuggestionsBack(GID);
+  assert.deepEqual(r, { ok: true, moved: 3, remaining: 0 });
+  assert.deepEqual(
+    w.sent.map((m) => titleOf(m.payload)),
+    [`💡 Suggestion #${a.number}`, `💡 Suggestion #${b.number}`, `💡 Suggestion #${c.number}`],
+    'oldest first'
+  );
+  assert.ok(w.sent.every((m) => m.channel === CH));
+  assert.equal((await getSuggestion(inPlace.id)).channel_id, CH);
+  for (const x of [a, b, c]) assert.equal((await getSuggestion(x.id)).channel_id, CH);
+  assert.equal(
+    (await getSuggestion(a.id)).log_message_id,
+    a.msg.id,
+    'decided ones keep the old post as the copy'
+  );
+  assert.equal((await getSuggestion(c.id)).log_message_id, null);
+
+  // nothing left: a second run does nothing
+  assert.deepEqual(await moveAllSuggestionsBack(GID), { ok: true, moved: 0, remaining: 0 });
+});
+
+test('move all stops at the first error, names the suggestion and leaves the rest where they are', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'move' });
+  const a = await movedSuggestion();
+  const b = await movedSuggestion();
+  const c = await movedSuggestion();
+  const real = w.channels.get(CH).send;
+  let calls = 0;
+  w.channels.get(CH).send = async (p) => {
+    calls += 1;
+    if (calls === 2) throw new Error('Missing Permissions');
+    return real(p);
+  };
+
+  const r = await moveAllSuggestionsBack(GID);
+  assert.equal(r.ok, false);
+  assert.equal(r.moved, 1);
+  assert.equal(r.remaining, 2);
+  assert.equal(r.number, b.number);
+  assert.match(
+    r.error,
+    new RegExp(`^Stopped at #${b.number}: .*View Channel, Send Messages and Embed Links`)
+  );
+  assert.equal(calls, 2, 'it did not try the third');
+  assert.equal((await getSuggestion(a.id)).channel_id, CH);
+  assert.equal((await getSuggestion(b.id)).channel_id, LOG);
+  assert.equal((await getSuggestion(c.id)).channel_id, LOG);
+
+  // fixed: the next run takes the rest
+  w.channels.get(CH).send = real;
+  assert.deepEqual(await moveAllSuggestionsBack(GID), { ok: true, moved: 2, remaining: 0 });
+});
+
+test('move all works in batches and says how many are left', async () => {
+  fresh();
+  await enable({ channel: CH });
+  await movedSuggestion();
+  await movedSuggestion();
+  await movedSuggestion();
+  assert.deepEqual(await moveAllSuggestionsBack(GID, { limit: 2 }), { ok: true, moved: 2, remaining: 1 });
+  assert.deepEqual(await moveAllSuggestionsBack(GID, { limit: 2 }), { ok: true, moved: 1, remaining: 0 });
+});
+
+test('move all without a suggestions channel does nothing and says why', async () => {
+  fresh();
+  await enable({ logChannel: LOG });
+  await movedSuggestion();
+  const r = await moveAllSuggestionsBack(GID);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Set the suggestions channel/);
+  assert.equal(r.moved, 0);
 });
 
 // --- Fluxer -----------------------------------------------------------------------------------

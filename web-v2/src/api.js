@@ -126,6 +126,11 @@ export const decideSuggestion = (guildId, number, action, reason) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/decision`, { action, reason });
 export const deleteSuggestion = (guildId, number) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/delete`, {});
+export const moveSuggestionBack = (guildId, number) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/${number}/move-back`, {});
+// Moves one batch (oldest first) and answers { moved, remaining, error? }; ask again while remaining > 0.
+export const moveAllSuggestionsBack = (guildId) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/move-all-back`, {});
 export const getQuotes = (guildId, { q = '' } = {}) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/quote-board/list?q=${encodeURIComponent(q)}`);
 export const deleteQuote = (guildId, number) =>

@@ -1194,6 +1194,17 @@ export const MIGRATIONS = [
   (database) => {
     database.exec('ALTER TABLE guild_settings ADD COLUMN command_prefix TEXT;');
   },
+
+  // Suggestions: where the copy in the log channel is (log mode "copy" keeps the original in the
+  // suggestions channel and posts a copy in the log channel). NULL = no copy.
+  // Postgres: the ADD COLUMN IF NOT EXISTS in the bootstrap and registerPostgresMigration(64, ...)
+  // in src/db/suggestions.js.
+  (database) => {
+    database.exec(`
+      ALTER TABLE guild_suggestions ADD COLUMN log_channel_id TEXT;
+      ALTER TABLE guild_suggestions ADD COLUMN log_message_id TEXT;
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

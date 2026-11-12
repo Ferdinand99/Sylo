@@ -25,6 +25,7 @@ import { dailySeries } from '../../db/insights.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
+import { normaliseSuggestionsConfig } from '../../modules/suggestions.js';
 import { moduleIcon } from './moduleIcons.js';
 
 // Permissions Sylo relies on for its core moderation / role / logging features.
@@ -403,10 +404,12 @@ async function moduleLines(id, guild, cfg) {
     case 'suggestions': {
       const open = await openSuggestionCount(guild.id);
       const total = await suggestionCount(guild.id);
+      const { logChannel, logMode } = normaliseSuggestionsConfig(cfg);
       return [
         open ? on('Open suggestions', String(open)) : neutral('Open suggestions', '0'),
         neutral('Stored', String(total)),
         cfg.channel ? on('Channel', 'set') : off('Channel', 'not set'),
+        logChannel ? on('Log channel', logMode) : off('Log channel', 'not set'),
       ];
     }
     case 'polls': {
