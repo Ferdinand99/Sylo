@@ -17,31 +17,32 @@ test.before(async () => {
   app = await startWebApp();
   api = v2Open(app, GID);
   // #general keeps what is sent to it, with the message methods the prompt uses.
-  const channel = app.guild.channels.cache.get(CH.general);
-  channel.send = async (payload) => {
-    const message = {
-      id: String(nextId++),
-      payload,
-      pinned: false,
-      edits: 0,
-      edit: async (next) => {
-        message.payload = next;
-        message.edits += 1;
-      },
-      delete: async () => posted.delete(message.id),
-      pin: async () => {
-        message.pinned = true;
+  for (const channel of [app.guild.channels.cache.get(CH.general), app.guild.channels.cache.get(CH.bots)]) {
+    channel.send = async (payload) => {
+      const message = {
+        id: String(nextId++),
+        payload,
+        pinned: false,
+        edits: 0,
+        edit: async (next) => {
+          message.payload = next;
+          message.edits += 1;
+        },
+        delete: async () => posted.delete(message.id),
+        pin: async () => {
+          message.pinned = true;
+        },
+      };
+      posted.set(message.id, message);
+      return message;
+    };
+    channel.messages = {
+      fetch: async (id) => {
+        if (!posted.has(id)) throw new Error('Unknown Message');
+        return posted.get(id);
       },
     };
-    posted.set(message.id, message);
-    return message;
-  };
-  channel.messages = {
-    fetch: async (id) => {
-      if (!posted.has(id)) throw new Error('Unknown Message');
-      return posted.get(id);
-    },
-  };
+  }
 });
 test.after(() => app.close());
 
@@ -165,4 +166,22 @@ test('the module can be switched on and off like any other', async () => {
   const on = await api.post('/modules/introductions', { enabled: true });
   assert.equal(on.status, 200);
   assert.equal((await getGuildModule(GID, 'introductions')).enabled, true);
+});
+
+test('publishing the prompt to another channel deletes the old prompt', async () => {
+  const first = await json(
+    await api.post('/modules/introductions/prompt/publish', { channelId: CH.general, promptText: 'Hi' })
+  );
+  const oldId = first.config.promptMessageId;
+  assert.ok(posted.has(oldId));
+  const moved = await json(
+    await api.post('/modules/introductions/prompt/publish', { channelId: CH.bots, promptText: 'Hi' })
+  );
+  assert.equal(moved.config.promptChannelId, CH.bots);
+  assert.notEqual(moved.config.promptMessageId, oldId);
+  assert.equal(posted.has(oldId), false, 'the old prompt and its button are gone');
+  assert.equal(posted.has(moved.config.promptMessageId), true);
+  assert.equal(posted.size, 1);
+  await api.post('/modules/introductions/prompt/unpublish');
+  assert.equal(posted.size, 0);
 });

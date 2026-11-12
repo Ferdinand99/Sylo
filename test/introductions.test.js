@@ -440,7 +440,7 @@ test('answers longer than the question allows are cut when stored', async () => 
   await enable({ questions: [{ id: 'about', label: 'About', maxLength: 5 }] });
   fakeMember(env.guild, U);
   await postIntroduction({ guild: env.guild, userId: U, answers: { about: '@everyone abcdefgh' } });
-  assert.deepEqual(answersOf(await getIntroduction(GID, U)), { about: 'abcde' });
+  assert.deepEqual(answersOf(await getIntroduction(GID, U)), { about: 'abcd…' });
 });
 
 test('view returns the card built from the stored answers, or null', async () => {

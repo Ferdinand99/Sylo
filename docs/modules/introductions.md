@@ -37,6 +37,12 @@ While a questionnaire runs, the member's DMs to Sylo are answers. They do **not*
 [modmail ticket](tickets.md). When the questionnaire ends (done, cancelled or timed out), DMs
 work as before.
 
+If posting fails (the channel was removed, Sylo lost a permission, or the module was switched off), the
+member is told, and the answers are kept: the preview comes back so they can press **Post** again.
+Sylo keeps sessions in memory, so a restart ends them. A message that arrives right after one of
+Sylo's own questions, with no session left, is not sent to staff as a ticket: Sylo tells the member
+that the questionnaire has ended and to start it again.
+
 If Sylo cannot DM the member, the reply says: "Open your DMs from server members and try again."
 `/intro create` and the button can be used once every **30 seconds** per member.
 

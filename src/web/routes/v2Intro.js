@@ -74,6 +74,10 @@ router.post(
     });
     const result = await publishPrompt(req.guild, draft);
     if (!result.ok) return res.status(400).json({ error: result.error });
+    // Published to another channel: the old prompt (and its button) must not stay behind.
+    if (prev.promptMessageId && prev.promptChannelId !== result.channelId) {
+      await unpublishPrompt(req.guild, prev);
+    }
     const config = { ...draft, promptChannelId: result.channelId, promptMessageId: result.messageId };
     await setGuildModule(req.guild.id, 'introductions', { config });
     await recordAudit(req.guild.id, {

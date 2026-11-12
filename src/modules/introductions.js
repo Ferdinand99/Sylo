@@ -252,7 +252,7 @@ function groupRoles(group, memberRoles) {
   return memberRoles
     .filter((r) => ids.has(r.id))
     .sort((a, b) => b.position - a.position)
-    .map((r) => escapeMarkdown(r.name));
+    .map((r) => String(r.name));
 }
 
 /** The colour of the member's highest role that has one, or null. */
@@ -276,15 +276,27 @@ export function buildIntroCard({ guild, member, cfg, answers, defaultColor }) {
   const groups = cfg.roleGroups.map((group) => ({ group, names: groupRoles(group, roles) }));
   const grouped = new Set(cfg.roleGroups.flatMap((g) => g.roleIds));
 
-  const fill = (template) =>
-    template
-      .replaceAll('{user.name}', escapeMarkdown(name))
-      .replaceAll('{user}', `<@${member.id}>`)
-      .replaceAll('{server}', escapeMarkdown(guild.name))
-      .replace(/\{rolegroup:([^}]*)\}/gi, (_, wanted) => {
+  // Placeholders are filled in one pass, so a value (a display name such as "{server}") is never
+  // expanded again. The description is markdown: names are escaped and {user} is a mention. The
+  // footer is plain text (an embed footer shows neither markdown nor mentions): names as they are,
+  // and {user} is the display name.
+  const fill = (template, { plain = false } = {}) => {
+    const text = (value) => (plain ? String(value) : escapeMarkdown(value));
+    return template.replace(/\{(?:(user\.name|user|server)|rolegroup:([^}]*))\}/gi, (_, simple, wanted) => {
+      if (wanted !== undefined) {
         const found = groups.find((g) => g.group.name.toLowerCase() === wanted.trim().toLowerCase());
-        return found ? found.names.join(', ') || NO_ROLES : '';
-      });
+        return found ? text(found.names.join(', ') || NO_ROLES) : '';
+      }
+      switch (simple.toLowerCase()) {
+        case 'user.name':
+          return text(name);
+        case 'user':
+          return plain ? name : `<@${member.id}>`;
+        default:
+          return text(guild.name);
+      }
+    });
+  };
 
   const fields = [];
   for (const q of cfg.questions) {
@@ -296,7 +308,7 @@ export function buildIntroCard({ guild, member, cfg, answers, defaultColor }) {
     if (!names.length && group.hideWhenEmpty) continue;
     fields.push({
       name: escapeMarkdown(group.name),
-      value: cut(names.join(', ') || NO_ROLES, 1024),
+      value: cut(escapeMarkdown(names.join(', ') || NO_ROLES), 1024),
       inline: true,
     });
   }
@@ -319,7 +331,7 @@ export function buildIntroCard({ guild, member, cfg, answers, defaultColor }) {
       256
     ),
     description: cfg.description ? cut(fill(cfg.description), 4096) : '',
-    footer: cfg.footer ? cut(fill(cfg.footer), 2048) : '',
+    footer: cfg.footer ? cut(fill(cfg.footer, { plain: true }), 2048) : '',
   };
   fitEmbed(card, fields);
 
@@ -421,7 +433,7 @@ function cleanAnswers(cfg, answers) {
   const out = {};
   for (const q of cfg.questions) {
     const text = cleanAnswer(answers?.[q.id]);
-    if (text) out[q.id] = text.slice(0, q.maxLength);
+    if (text) out[q.id] = cut(text, q.maxLength);
   }
   return out;
 }
@@ -441,6 +453,10 @@ async function cardPayload(guild, member, cfg, answers) {
 export async function postIntroduction({ guild, userId, answers }) {
   const key = guildKey(guild);
   return withLock(`${key}|${userId}`, async () => {
+    // The module may have been switched off while the member was answering.
+    if (!(await isModuleEnabled(key, 'introductions'))) {
+      return { ok: false, error: 'Introductions are off in this server.' };
+    }
     const cfg = await introConfig(key);
     if (!cfg.channelId)
       return { ok: false, error: 'The introductions channel is not set up yet. Ask a server admin.' };
@@ -602,7 +618,12 @@ export async function beginIntroduction({ guild, user }) {
     review: async (answers) => cardPayload(guild, member, cfg, cleanAnswers(cfg, answers)),
     confirmLabel: 'Post',
     restartLabel: 'Start over',
-    onComplete: async (answers) => (await finish(answers)).message,
+    normalise: cleanAnswer,
+    onComplete: async (answers) => {
+      const done = await finish(answers);
+      // A failure keeps the member's answers: the questionnaire offers Post again.
+      return done.ok ? done.message : { ok: false, message: done.message };
+    },
   });
   if (started.ok) return { ok: true, message: 'Check your DMs.' };
   if (started.reason === 'busy') {

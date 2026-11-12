@@ -7,7 +7,7 @@ import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
 import { ticketGuildsForUser, ingestUserDM } from '../../modules/tickets.js';
 import { getOpenTicket } from '../../db/tickets.js';
 import { registerComponent } from '../lib/components.js';
-import { handleQuestionnaireMessage } from '../lib/dmQuestionnaire.js';
+import { handleQuestionnaireMessage, looksLikeQuestionnairePrompt } from '../lib/dmQuestionnaire.js';
 import { log } from '../../lib/log.js';
 import { sweepMap } from '../../lib/sweepMap.js';
 
@@ -26,20 +26,34 @@ function takeStash(userId) {
   return p;
 }
 
-async function handleDM(message) {
-  if (message.guild || message.author.bot) return;
-  if (message.partial) {
-    try {
-      await message.fetch();
-    } catch {
-      return;
-    }
+// How far back a question of a questionnaire still counts as "the one this answer is for".
+const STALE_PROMPT_MS = 30 * 60 * 1000;
+
+/**
+ * Sessions of a DM questionnaire live in memory, so after a restart a member's next answer finds
+ * none. If the message just before this one is Sylo's own question (or preview), this is a late
+ * answer: say so instead of sending personal answers to staff as a modmail ticket. Best effort: a
+ * channel whose history cannot be read gets the normal ticket path.
+ * @returns {Promise<boolean>} true when the message was dealt with
+ */
+async function lateQuestionnaireAnswer(message) {
+  try {
+    const recent = await message.channel?.messages?.fetch?.({ limit: 5, before: message.id });
+    const mine = [...(recent?.values?.() ?? [])].find((m) => m.author?.id === message.client?.user?.id);
+    if (!mine || !looksLikeQuestionnairePrompt(mine.content)) return false;
+    if (Date.now() - (mine.createdTimestamp ?? Date.now()) > STALE_PROMPT_MS) return false;
+  } catch {
+    return false;
   }
+  await message
+    .reply(
+      'That looks like an answer to a questionnaire that has ended (it timed out, or Sylo restarted), so I did not send it to staff. Start the questionnaire again from the server, for example with the /intro create command.'
+    )
+    .catch(() => {});
+  return true;
+}
 
-  // A member in the middle of a DM questionnaire (Introductions, later applications) is answering
-  // it: this message is an answer, and must never open or extend a modmail ticket.
-  if (await handleQuestionnaireMessage(message)) return;
-
+async function handleDM(message) {
   const payload = {
     content: message.content ?? '',
     attachments: [...message.attachments.values()].map((a) => a.url),
@@ -116,8 +130,21 @@ registerComponent('tickets', SELECT_ID, handleSelect);
 export function register(client, { isCommand = () => false } = {}) {
   client.on(Events.MessageCreate, async (message) => {
     try {
+      if (message.guild || message.author?.bot) return;
+      if (message.partial) {
+        try {
+          await message.fetch();
+        } catch {
+          return;
+        }
+      }
+      // A member in the middle of a DM questionnaire (Introductions, later applications) is answering
+      // it: this message is an answer, and must never open or extend a modmail ticket. This comes
+      // before the command check, so an answer that starts with the Fluxer prefix is still an answer.
+      if (await handleQuestionnaireMessage(message)) return;
       // `!help` in a DM is a command for the router (Fluxer), not a ticket message.
       if (await isCommand(message)) return;
+      if (await lateQuestionnaireAnswer(message)) return;
       await handleDM(message);
     } catch (err) {
       log.error('tickets', 'DM handler failed:', err);

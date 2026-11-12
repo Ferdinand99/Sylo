@@ -340,17 +340,3 @@ test('a button of an old session is refused', async () => {
   assert.match(log.updates[0].content, /no longer active/);
   assert.equal(hasActiveQuestionnaire('discord', USER), true, 'the real session is untouched');
 });
-
-test('a failing onComplete is reported to the member, not thrown', async () => {
-  const dm = dmOf();
-  await reviewSession(dm, {
-    onComplete: async () => {
-      throw new Error('boom');
-    },
-  });
-  const [ok] = buttonIds(dm.sent.at(-1));
-  const { interaction, log } = press(dm, ok);
-  await routeComponent(interaction);
-  assert.match(log.edits.at(-1).content, /Something went wrong/);
-  assert.equal(hasActiveQuestionnaire('discord', USER), false);
-});

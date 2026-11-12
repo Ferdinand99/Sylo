@@ -4,11 +4,17 @@
 //   const started = await startQuestionnaire({
 //     user, platform, questions, prefill,
 //     review: (answers) => ({ embeds: [...] }),     // optional preview with Confirm / Start over
+//     normalise: (text) => text.trim(),             // optional: clean every typed answer first
 //     onComplete: async (answers) => 'Posted!',     // runs when the member confirms (or, with no
-//                                                   // review, after the last answer)
-//     onCancel: async (reason) => {},               // 'cancel' | 'timeout'
+//                                                   // review, after the last answer). Return a text
+//                                                   // to show, or { ok: false, message } / throw
+//                                                   // to report a failure (see below).
+//     onCancel: async (reason) => {},               // 'cancel' | 'timeout' | what cancelQuestionnaire got
 //   });
 //   // started = { ok: true } | { ok: false, reason: 'busy' | 'dm_closed' | 'no_questions' }
+//
+// A question is { id, label, prompt?, required?, maxLength?, validate? }. `validate(answer)` may
+// return a text (the answer is refused, the text is shown and the question asked again) or null.
 //
 // The DM handler (bot/events/dmTickets.js) offers every direct message to
 // handleQuestionnaireMessage() first: while a member has a session, what they write is an answer
@@ -17,10 +23,15 @@
 // Rules the engine keeps:
 //   - one session per member at a time, across every server of a platform
 //   - a session ends after 10 minutes without an answer
-//   - an answer longer than the question's maxLength is refused and asked again
-//   - `skip` leaves an optional question empty, `keep` keeps the answer shown as "Current:",
-//     `cancel` stops
-//   - sessions live in memory: a restart simply cancels them
+//   - an answer longer than the question's maxLength, or empty once normalised, is refused and asked
+//     again
+//   - `skip` leaves an optional question empty, `keep` keeps the answer shown as "Current:" (cut to
+//     the current limit), `cancel` stops
+//   - when onComplete fails, the session comes back with the answers kept (the preview again, or the
+//     last question) so the member can try again
+//   - cancelQuestionnaire() ends a session from outside (module switched off, member left ...)
+//   - sessions live in memory: a restart simply cancels them (dmTickets.js tells the member when a
+//     late answer arrives, see looksLikeQuestionnairePrompt)
 //
 // Buttons: on Discord they are real buttons. On Fluxer the component bridge turns them into
 // reactions (platform/components.js), so the engine builds ordinary discord.js buttons and gives
@@ -42,7 +53,8 @@ const CURRENT_SHOWN = 300;
 const sessions = new Map();
 
 /**
- * @typedef {{ id: string, label: string, prompt?: string, required?: boolean, maxLength?: number }} Question
+ * @typedef {{ id: string, label: string, prompt?: string, required?: boolean, maxLength?: number,
+ *   validate?: (answer: string) => Promise<string | null | undefined> | string | null | undefined }} Question
  * @typedef {Object} Session
  * @property {string} key
  * @property {string} token         tells a button of this session from a stale one
@@ -61,6 +73,15 @@ const keyOf = (platform, userId) => `${platform}:${userId}`;
 /** Is this member in a questionnaire right now? */
 export const hasActiveQuestionnaire = (platform, userId) => sessions.has(keyOf(platform, userId));
 
+/**
+ * Does this message text look like something the questionnaire sent (a question or the preview)?
+ * After a restart a session is gone, so the DM handler uses this on the message before a late
+ * answer to tell the member, instead of sending the answer to modmail.
+ */
+export const looksLikeQuestionnairePrompt = (content) =>
+  /(^|\n)\*\*Question \d+ of \d+ · /.test(String(content ?? '')) ||
+  /(^|\n)Happy with this\? Choose \*\*/.test(String(content ?? ''));
+
 /** Tests only: drop every session and its timer. */
 export function _resetQuestionnaires() {
   for (const session of sessions.values()) clearTimeout(session.timer);
@@ -68,6 +89,22 @@ export function _resetQuestionnaires() {
 }
 
 const cap = (n, fallback) => (Number.isInteger(n) && n > 0 ? n : fallback);
+
+/**
+ * Cut to at most `max` UTF-16 units, ending in "…", on a grapheme boundary (never in the middle of
+ * an emoji or an accented letter).
+ */
+export function cutAtGrapheme(text, max) {
+  const value = String(text ?? '');
+  if (value.length <= max) return value;
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+  let out = '';
+  for (const { segment } of segmenter.segment(value)) {
+    if (out.length + segment.length > max - 1) break;
+    out += segment;
+  }
+  return `${out}…`;
+}
 
 /** Send to the member's DM: the channel once known, else the user. */
 function deliver(session, payload) {
@@ -120,6 +157,33 @@ function endSession(session) {
   if (sessions.get(session.key) === session) sessions.delete(session.key);
 }
 
+/**
+ * End a member's session from outside, for example when the module it belongs to is switched off,
+ * the member leaves the server or erases their data. Calls the session's onCancel with `reason`.
+ * @param {string} userId
+ * @param {string} [reason]
+ * @param {{ platform?: 'discord' | 'fluxer', notify?: boolean }} [opts]  without a platform, every
+ *   platform's session of that user id ends; `notify: false` skips the DM that tells the member
+ * @returns {boolean} whether there was a session
+ */
+export function cancelQuestionnaire(userId, reason = 'cancel', { platform = null, notify = true } = {}) {
+  let found = false;
+  for (const session of [...sessions.values()]) {
+    if (session.user.id !== userId || (platform && session.platform !== platform)) continue;
+    found = true;
+    endSession(session);
+    void Promise.resolve(session.onCancel?.(reason)).catch((err) =>
+      log.error('questionnaire', 'onCancel failed:', err.message)
+    );
+    if (notify) {
+      deliver(session, { content: 'This questionnaire was stopped, so nothing was changed.' }).catch(
+        () => {}
+      );
+    }
+  }
+  return found;
+}
+
 function buttons(session) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -144,10 +208,11 @@ function buttons(session) {
  * @param {Record<string, string>} [opts.prefill]  current answers, offered with `keep`
  * @param {string} [opts.header]  text before the first question
  * @param {(answers: Record<string, string>) => any} [opts.review]  a message payload previewing the result
+ * @param {(text: string) => string} [opts.normalise]  cleans every typed answer (and a kept one) first
  * @param {string} [opts.confirmLabel]
  * @param {string} [opts.restartLabel]
- * @param {(answers: Record<string, string>) => Promise<string | void> | string | void} opts.onComplete
- * @param {(reason: 'cancel' | 'timeout') => any} [opts.onCancel]
+ * @param {(answers: Record<string, string>) => Promise<string | { ok: false, message?: string } | void> | string | void} opts.onComplete
+ * @param {(reason: string) => any} [opts.onCancel]
  * @param {number} [opts.timeoutMs]
  * @returns {Promise<{ ok: true } | { ok: false, reason: 'busy' | 'dm_closed' | 'no_questions' }>}
  */
@@ -158,6 +223,7 @@ export async function startQuestionnaire({
   prefill = {},
   header = '',
   review = null,
+  normalise = null,
   confirmLabel = 'Post',
   restartLabel = 'Start over',
   onComplete,
@@ -182,6 +248,7 @@ export async function startQuestionnaire({
     channel: null,
     ended: false,
     review,
+    normalise,
     confirmLabel,
     restartLabel,
     onComplete,
@@ -242,8 +309,11 @@ async function handleAnswer(session, message) {
     await reply(session, 'Use the buttons (or reactions) under the preview, or type `cancel` to stop.');
     return;
   }
+  // Working on the confirmation: nothing to answer.
+  if (session.state !== 'asking') return;
 
   const q = session.questions[session.index];
+  const limit = cap(q.maxLength, 1024);
   if (word === 'skip') {
     if (q.required) {
       await reply(session, 'That question is required, so it cannot be skipped.');
@@ -253,25 +323,64 @@ async function handleAnswer(session, message) {
     await advance(session);
     return;
   }
+
+  let value;
   if (word === 'keep' && session.prefill[q.id]) {
-    session.answers[q.id] = session.prefill[q.id];
-    await advance(session);
+    // The old answer must still fit the question as it is now.
+    value = session.normalise ? session.normalise(session.prefill[q.id]) : session.prefill[q.id];
+    if (!value && q.required) {
+      await reply(
+        session,
+        'The earlier answer is empty now, and this question is required. Please write one.'
+      );
+      return;
+    }
+    value = cutAtGrapheme(value, limit);
+  } else {
+    if (!text) {
+      await reply(session, 'Please answer with text.');
+      return;
+    }
+    value = session.normalise ? session.normalise(text) : text;
+    if (!value) {
+      await reply(
+        session,
+        'Nothing was left of that answer once mentions and invisible characters were removed. Please write it again.'
+      );
+      return;
+    }
+    if (value.length > limit) {
+      await reply(
+        session,
+        `That is ${value.length} characters, and the limit is ${limit}. Shorten it and send it again.`
+      );
+      return;
+    }
+  }
+  const refusal = value ? await q.validate?.(value) : null;
+  if (refusal) {
+    await reply(session, refusal);
     return;
   }
-  if (!text) {
-    await reply(session, 'Please answer with text.');
-    return;
-  }
-  const limit = cap(q.maxLength, 1024);
-  if (text.length > limit) {
-    await reply(
-      session,
-      `That is ${text.length} characters, and the limit is ${limit}. Shorten it and send it again.`
-    );
-    return;
-  }
-  session.answers[q.id] = text;
+  session.answers[q.id] = value;
   await advance(session);
+}
+
+/** Send the preview and wait for the member's choice. */
+async function showReview(session) {
+  const preview = await session.review({ ...session.answers });
+  await deliver(session, {
+    ...preview,
+    content: [
+      preview?.content,
+      `Happy with this? Choose **${session.confirmLabel}** or **${session.restartLabel}**.`,
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    components: [buttons(session)],
+  });
+  // Only once it is on screen: with no preview, there is nothing to press.
+  session.state = 'review';
 }
 
 /** Move to the next question, or to the end. */
@@ -285,33 +394,81 @@ async function advance(session) {
     await complete(session, null);
     return;
   }
-  session.state = 'review';
-  const preview = await session.review({ ...session.answers });
-  await deliver(session, {
-    ...preview,
-    content: [
-      preview?.content,
-      `Happy with this? Choose **${session.confirmLabel}** or **${session.restartLabel}**.`,
-    ]
-      .filter(Boolean)
-      .join('\n'),
-    components: [buttons(session)],
-  });
+  try {
+    await showReview(session);
+  } catch (err) {
+    // Back to the last question, so the member can send that answer again (or cancel).
+    log.error('questionnaire', 'could not show the preview:', err.message);
+    reopenLastQuestion(session);
+    await reply(session, 'I could not show the preview. Send your last answer again, or type `cancel`.');
+  }
 }
 
-/** Run onComplete and tell the member the result. `editable` is the preview message, when there is one. */
+/** Back to the last question, with its answer removed. */
+function reopenLastQuestion(session) {
+  session.index = session.questions.length - 1;
+  delete session.answers[session.questions[session.index].id];
+  session.state = 'asking';
+}
+
+/**
+ * Run onComplete and tell the member the result. `editable` is the preview message, when there is
+ * one. A failure (a throw, or { ok: false }) brings the session back with the answers kept.
+ */
 async function complete(session, editable) {
+  // The session stays registered while onComplete runs, so a DM that arrives meanwhile is still
+  // swallowed (and ignored) rather than going to modmail.
   session.state = 'done';
-  endSession(session);
-  const say = (content) =>
-    editable ? editable.edit({ content, embeds: [], components: [] }) : deliver(session, { content });
+  armTimer(session, session.timeoutMs); // a safety net if onComplete never returns
+  const say = async (content) => {
+    if (editable) {
+      try {
+        await editable.edit({ content, embeds: [], components: [] });
+        return;
+      } catch {
+        // the message cannot be edited any more: say it as a new message
+      }
+    }
+    await deliver(session, { content });
+  };
+  let failure = null;
+  let result;
   try {
-    const result = await session.onComplete({ ...session.answers });
-    await say(typeof result === 'string' && result ? result : 'Done.');
+    result = await session.onComplete({ ...session.answers });
   } catch (err) {
     log.error('questionnaire', 'onComplete failed:', err.message);
-    await say('Something went wrong, so nothing was changed. Please try again in a moment.').catch(() => {});
+    failure = 'Something went wrong, so nothing was changed.';
   }
+  if (!failure && result && typeof result === 'object' && result.ok === false) {
+    failure = result.message || 'Something went wrong, so nothing was changed.';
+  }
+  if (!failure) {
+    endSession(session);
+    await say(typeof result === 'string' && result ? result : 'Done.').catch(() => {});
+    return;
+  }
+
+  // Failed: keep the answers and give the member another try.
+  if (session.ended) {
+    // cancelled meanwhile
+    await say(`${failure} Start again when you like.`).catch(() => {});
+    return;
+  }
+  session.token = randomBytes(6).toString('hex');
+  armTimer(session, session.timeoutMs);
+  if (session.review) {
+    await say(`${failure} Your answers are kept.`).catch(() => {});
+    try {
+      await showReview(session);
+    } catch (err) {
+      log.error('questionnaire', 'could not show the preview again:', err.message);
+      reopenLastQuestion(session);
+      await reply(session, 'Send your last answer again to try once more, or type `cancel`.');
+    }
+    return;
+  }
+  reopenLastQuestion(session);
+  await say(`${failure} Send your last answer again to try once more, or type \`cancel\`.`).catch(() => {});
 }
 
 // --- the buttons under the preview -------------------------------------------------------------
@@ -336,15 +493,24 @@ async function handleButton(interaction) {
     session.index = 0;
     session.state = 'asking';
     armTimer(session, session.timeoutMs);
-    await interaction.update({ content: 'Starting over.', embeds: [], components: [] });
+    await interaction
+      .update({ content: 'Starting over.', embeds: [], components: [] })
+      .catch((err) => log.warn('questionnaire', `could not update the preview: ${err.message}`));
     await deliver(session, { content: promptFor(session) });
     return;
   }
 
   if (action === 'ok') {
     session.state = 'done'; // a second press while this one runs finds no review
-    await interaction.update({ content: 'Working on it…', embeds: [], components: [] });
-    await complete(session, interaction.message);
+    // If the preview cannot be updated (an expired interaction), the result still follows as a message.
+    const updated = await interaction
+      .update({ content: 'Working on it…', embeds: [], components: [] })
+      .then(() => true)
+      .catch((err) => {
+        log.warn('questionnaire', `could not update the preview: ${err.message}`);
+        return false;
+      });
+    await complete(session, updated ? interaction.message : null);
   }
 }
 
