@@ -47,6 +47,7 @@ import suggestionsRouter from './v2Suggestions.js';
 import tempRolesRouter from './v2TempRoles.js';
 import quotesRouter from './v2Quotes.js';
 import introRouter from './v2Intro.js';
+import economyRouter from './v2Economy.js';
 import { cancelIntroductionSessions } from '../../modules/introductions.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { buildReactionPairs } from '../lib/reactionPairs.js';
@@ -438,6 +439,8 @@ router.use('/guilds/:guildId', tempRolesRouter);
 router.use('/guilds/:guildId', quotesRouter);
 // Introductions: settings, publish the prompt message (v2Intro.js).
 router.use('/guilds/:guildId', introRouter);
+// Economy: settings, members and their ledger, staff changes, reset (v2Economy.js).
+router.use('/guilds/:guildId', economyRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).

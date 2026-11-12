@@ -22,6 +22,7 @@ import healthRouter from './routes/health.js';
 import metricsRouter from './routes/metrics.js';
 import leaderboardRouter, { vanityRouter } from './routes/leaderboard.js';
 import quotesRouter from './routes/quotes.js';
+import economyBoardRouter from './routes/economyBoard.js';
 import eventPageRouter from './routes/events.js';
 import verifyRouter from './routes/verify.js';
 import appealRouter from './routes/appeal.js';
@@ -231,6 +232,7 @@ export function createApp() {
   app.use('/leaderboard', rateLimit({ windowMs: 60_000, max: 40 }), leaderboardRouter);
   app.use('/lb', rateLimit({ windowMs: 60_000, max: 40 }), vanityRouter);
   app.use('/quotes', rateLimit({ windowMs: 60_000, max: 40 }), quotesRouter);
+  app.use('/economy', rateLimit({ windowMs: 60_000, max: 40 }), economyBoardRouter);
   app.use('/events', rateLimit({ windowMs: 60_000, max: 40 }), eventPageRouter);
   app.use('/verify', rateLimit({ windowMs: 60_000, max: 20 }), verifyRouter);
   app.use('/appeal', rateLimit({ windowMs: 60_000, max: 15 }), appealRouter);

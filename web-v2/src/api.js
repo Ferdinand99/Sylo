@@ -150,6 +150,20 @@ export const addTempRole = (guildId, body) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/temp-roles/add`, body);
 export const removeTempRole = (guildId, body) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/temp-roles/remove`, body);
+export const getEconomyMembers = (guildId, { q = '', sort = 'total', dir = 'desc', page = 1 } = {}) =>
+  apiFetch(
+    `/api/v2/guilds/${gid(guildId)}/modules/economy/members?q=${encodeURIComponent(q)}&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}&page=${Number(page) || 1}`
+  );
+export const getEconomyMember = (guildId, userId) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/economy/members/${encodeURIComponent(userId)}`);
+// action: add | remove | set | reset-user (the same four as /eco); resolves to the member's new state.
+export const adjustEconomyMember = (guildId, userId, body) =>
+  postJson(
+    `/api/v2/guilds/${gid(guildId)}/modules/economy/members/${encodeURIComponent(userId)}/adjust`,
+    body
+  );
+export const resetEconomy = (guildId, confirm) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/economy/reset`, { confirm });
 export const setInviteBonus = (guildId, userId, bonus) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/invite-tracker/bonus`, { userId, bonus });
 

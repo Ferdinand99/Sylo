@@ -26,7 +26,7 @@ const MAX_CACHED_PAGES = 2000;
 const profileCache = new Map(); // "guild|user ids" -> { at, profiles: Promise<Map> }
 
 /** @returns {Promise<Map<string, { name: string|null, avatar: string|null, member: boolean }>>} */
-function pageProfiles(guild, userIds) {
+export function pageProfiles(guild, userIds) {
   const key = `${guild.id}|${userIds.join(',')}`;
   const hit = profileCache.get(key);
   if (hit && Date.now() - hit.at < PROFILE_TTL_MS) return hit.profiles;
@@ -74,7 +74,7 @@ async function lookUpProfiles(guild, userIds) {
 // ids Sylo is in or which of them use leveling. The quote page does the same.
 const NOT_FOUND = 'There is no public leaderboard at this address.';
 
-function notFound(res) {
+export function notFound(res) {
   return res.status(404).render('error', {
     title: 'Leaderboard unavailable',
     heading: 'No leaderboard here',
