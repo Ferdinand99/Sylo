@@ -531,6 +531,20 @@ async function moveBackLocked(id) {
 
   const target = await channelOf(guild, cfg.channel);
   if (!target?.isTextBased?.()) return fail('Sylo cannot find the suggestions channel.', { stop: true });
+
+  // Look at the old post before anything is posted: if Sylo has no access to it for good, the move
+  // cannot finish (the old post could not be removed), so skip it without a post that would only
+  // be taken back. "Gone" is fine (nothing to remove); a lookup that fails for any other reason
+  // goes on, and a refused delete later takes the new post back.
+  const old = { channelId: row.channel_id, messageId: row.message_id };
+  const oldState = await probeMessage(guild, old.channelId, old.messageId, `the old post of #${row.number}`);
+  if (oldState === 'denied') {
+    return fail(`Sylo has no access to the old post of #${row.number}, so it was not moved.`, {
+      skip: true,
+      report: true,
+    });
+  }
+
   let sent;
   try {
     sent = await target.send(buildSuggestionPayload(row, row));
@@ -542,7 +556,6 @@ async function moveBackLocked(id) {
     );
   }
 
-  const old = { channelId: row.channel_id, messageId: row.message_id };
   // The old post: in "copy" mode a decided one in the log channel is the log copy from now on, if it
   // is still there. In every other case it goes.
   let keepAsCopy = Boolean(
@@ -553,10 +566,7 @@ async function moveBackLocked(id) {
     old.channelId === cfg.logChannel &&
     !row.log_message_id
   );
-  if (
-    keepAsCopy &&
-    (await probeMessage(guild, old.channelId, old.messageId, `the old post of #${row.number}`)) === 'gone'
-  ) {
+  if (keepAsCopy && oldState === 'gone') {
     keepAsCopy = false; // deleted meanwhile: a fresh copy is posted below
   }
   if (!keepAsCopy) {
@@ -602,7 +612,7 @@ export async function moveSuggestionBack(id) {
 
 /**
  * Move the server's suggestions that sit outside the suggestions channel back into it, oldest
- * first, at most `limit` moved per call, starting after number `after`. Stops at the first error
+ * first, at most `limit` handled (moved, skipped or reported) per call, starting after number `after`. Stops at the first error
  * that may hit every suggestion and says which one it was. A suggestion that cannot be moved for
  * good (no access to its old post) is skipped and listed in `failed`. `next` is the number to pass
  * as `after` for the next call.
@@ -622,12 +632,14 @@ export async function moveAllSuggestionsBack(guildId, { limit = MOVE_ALL_BATCH, 
   }
   const rows = (await listSuggestionsOutside(guildId, cfg.channel)).filter((r) => r.number > after);
   let moved = 0;
+  let handled = 0; // moved, skipped or reported: every one counts against the batch
   let next = after;
   const failed = [];
   let i = 0;
-  for (; i < rows.length && moved < limit; i += 1) {
+  for (; i < rows.length && handled < limit; i += 1) {
     const row = rows[i];
     const result = await moveSuggestionBack(row.id);
+    handled += 1;
     if (result.ok) {
       moved += 1;
     } else if (result.report) {
