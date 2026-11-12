@@ -123,9 +123,12 @@ the settings.
   one stays where it was.
 - The old post in the log channel becomes the copy in **Copy** mode (for a decided
   suggestion). In **Move** mode, or with no log channel, it is deleted.
-- Move all back works in batches of 10 and stops at the first problem, for example a missing
-  permission in the suggestions channel, and tells you which suggestion it stopped at.
-  Run it again after you fixed the problem; the ones already moved are not touched.
+- Move all back works in batches of 10, oldest first. A suggestion whose old post Sylo
+  cannot reach is skipped and listed when the run ends; it stays where it is. On Discord, a
+  missing **Read Message History** permission in the old channel causes such a skip. A
+  temporary error, or a problem with the suggestions channel such as a missing permission,
+  stops the run and tells you which suggestion it stopped at. Run it again after you fixed
+  the problem; the ones already moved are not touched.
 - Anyone who may use the dashboard's staff actions (Manage Server) can do this. Sending
   the posts counts against the same limit as other dashboard actions that send messages
   (10 per minute per server).
