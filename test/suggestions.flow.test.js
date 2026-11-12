@@ -1441,6 +1441,84 @@ test('move all skips a suggestion whose old post it has no access to, reports it
   );
 });
 
+test('move all: 30 old posts out of reach take 3 batches, post nothing, and report every one', async () => {
+  fresh();
+  await enable({ channel: CH, logChannel: LOG, logMode: 'move' });
+  const all = [];
+  for (let n = 0; n < 30; n += 1) all.push(await movedSuggestion());
+  const real = w.channels.get(LOG).messages.fetch;
+  w.channels.get(LOG).messages.fetch = async (mid) => {
+    if (all.some((x) => x.msg.id === mid)) throw denied();
+    return real(mid);
+  };
+  w.sent.length = 0;
+
+  let after = 0;
+  const batches = [];
+  const failed = [];
+  for (;;) {
+    const r = await moveAllSuggestionsBack(GID, { after });
+    assert.equal(r.ok, true);
+    batches.push(summary(r));
+    failed.push(...r.failed);
+    if (!r.remaining) break;
+    assert.ok(r.next > after, 'the cursor moves on');
+    after = r.next;
+  }
+  assert.deepEqual(batches, [
+    { ok: true, moved: 0, remaining: 20 },
+    { ok: true, moved: 0, remaining: 10 },
+    { ok: true, moved: 0, remaining: 0 },
+  ]);
+  assert.equal(failed.length, 30);
+  assert.equal(new Set(failed.map((f) => f.number)).size, 30, 'each one once');
+  assert.equal(w.sent.length, 0, 'not a single post was made, so none had to be taken back');
+  assert.equal(w.deletes.length, 0);
+  assert.equal((await getSuggestion(all[0].id)).channel_id, LOG);
+});
+
+test('move all: batches with moved, skipped and failed suggestions in between keep a correct cursor', async () => {
+  fresh();
+  await enable({ channel: CH });
+  const rows = [];
+  for (let n = 0; n < 12; n += 1) rows.push(await movedSuggestion());
+  const blocked = new Set([rows[2].msg.id, rows[6].msg.id]); // #3 and #7
+  const real = w.channels.get(LOG).messages.fetch;
+  w.channels.get(LOG).messages.fetch = async (mid) => {
+    if (blocked.has(mid)) throw denied();
+    return real(mid);
+  };
+  w.sent.length = 0;
+
+  const first = await moveAllSuggestionsBack(GID, { limit: 5 });
+  assert.deepEqual(summary(first), { ok: true, moved: 4, remaining: 7 });
+  assert.deepEqual(
+    first.failed.map((f) => f.number),
+    [3]
+  );
+  assert.equal(first.next, 5);
+
+  const second = await moveAllSuggestionsBack(GID, { limit: 5, after: first.next });
+  assert.deepEqual(summary(second), { ok: true, moved: 4, remaining: 2 });
+  assert.deepEqual(
+    second.failed.map((f) => f.number),
+    [7]
+  );
+  assert.equal(second.next, 10);
+
+  const third = await moveAllSuggestionsBack(GID, { limit: 5, after: second.next });
+  assert.deepEqual(summary(third), { ok: true, moved: 2, remaining: 0 });
+  assert.deepEqual(third.failed, []);
+
+  assert.deepEqual(
+    w.sent.map((m) => titleOf(m.payload)),
+    [1, 2, 4, 5, 6, 8, 9, 10, 11, 12].map((n) => `💡 Suggestion #${n}`),
+    'every other suggestion was moved exactly once, in order'
+  );
+  assert.equal((await getSuggestion(rows[2].id)).channel_id, LOG);
+  assert.equal((await getSuggestion(rows[6].id)).channel_id, LOG);
+});
+
 test('move all still stops when removing an old post fails in a way that may pass', async () => {
   fresh();
   await enable({ channel: CH, logChannel: LOG, logMode: 'move' });
