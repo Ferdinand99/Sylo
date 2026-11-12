@@ -372,13 +372,48 @@ export function displayAnswer(q, stored) {
 // --- the DM side ---------------------------------------------------------------------------------------
 
 /** "1, 3" or "1 3" -> option ids, or an error. */
-function idsFromNumbers(q, text) {
-  const t = String(text).trim();
-  if (!/^\d+(?:\s*[,\s]\s*\d+)*$/.test(t)) {
-    return { error: 'Answer with the numbers of the options, for example 2 or 1,3.' };
+const WRONG_NUMBERS = { error: 'Answer with the numbers of the options, for example 2 or 1,3.' };
+
+/**
+ * Read "1", "1 3", "1,3" or "1 , 3" as a list of numbers, or null. One pass over the characters (no regular
+ * expression with nested quantifiers: this reads what a member typed, so it must stay linear). Between two
+ * numbers there is white space, or one comma with white space around it; a leading or trailing comma, or
+ * two commas in a row, is not a list.
+ * @returns {number[] | null}
+ */
+export function parseNumberList(text) {
+  const out = [];
+  let digits = '';
+  let space = false; // white space since the last number
+  let commas = 0; // commas since the last number
+  for (const c of String(text).trim()) {
+    if (c >= '0' && c <= '9') {
+      if (digits === '' && out.length > 0 && !space && commas !== 1) return null;
+      digits += c;
+      continue;
+    }
+    if (digits !== '') {
+      out.push(Number(digits));
+      digits = '';
+      space = false;
+      commas = 0;
+    }
+    if (c === ',') {
+      commas += 1;
+      if (commas > 1 || out.length === 0) return null;
+    } else if (c.trim() === '') space = true;
+    else return null;
   }
+  if (digits === '') return null; // nothing, or ended on a comma
+  out.push(Number(digits));
+  return out;
+}
+
+function idsFromNumbers(q, text) {
+  const numbers = parseNumberList(text);
+  if (!numbers) return WRONG_NUMBERS;
   const picked = [];
-  for (const n of t.match(/\d+/g).map(Number)) {
+  for (const n of numbers) {
     if (n < 1 || n > q.options.length)
       return { error: `There is no option ${n}. Pick from 1 to ${q.options.length}.` };
     picked.push(q.options[n - 1].id);
@@ -443,8 +478,24 @@ export function dmQuestionOf(q) {
 export function fillTemplate(template, values) {
   return String(template ?? '')
     .replace(/\{(user|server|form|reason)\}/gi, (_, key) => String(values?.[key.toLowerCase()] ?? ''))
-    .replace(/[ \t]+$/gm, '')
+    .split('\n')
+    .map(trimLineEnd)
+    .join('\n')
     .trim();
+}
+
+/** Remove spaces and tabs at the end of a line (a loop: a long run of them must not cost more than its length). */
+function trimLineEnd(line) {
+  let end = line.length;
+  while (end > 0 && (line[end - 1] === ' ' || line[end - 1] === '\t')) end -= 1;
+  return end === line.length ? line : line.slice(0, end);
+}
+
+/** How many backslashes end the text. */
+export function trailingBackslashes(text) {
+  let n = 0;
+  while (n < text.length && text[text.length - 1 - n] === '\\') n += 1;
+  return n;
 }
 
 // --- requirements ----------------------------------------------------------------------------------------
@@ -549,8 +600,7 @@ export function chunkText(text, max = FIELD_VALUE_MAX) {
     // never inside a surrogate pair or after an odd backslash
     let piece = rest.slice(0, at);
     if (/[\uD800-\uDBFF]$/.test(piece)) piece = piece.slice(0, -1);
-    const trailing = /\\+$/.exec(piece)?.[0].length ?? 0;
-    if (trailing % 2 === 1) piece = piece.slice(0, -1);
+    if (trailingBackslashes(piece) % 2 === 1) piece = piece.slice(0, -1);
     out.push(piece);
     rest = rest.slice(piece.length).replace(/^[ \n]/, '');
   }
