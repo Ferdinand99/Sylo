@@ -28,7 +28,7 @@
 // Every function resolves to `{ ok: true, ... }` or `{ ok: false, reason, ... }`. A refusal changes
 // no balance and writes no ledger row. It never throws for a rule (only for a database failure).
 import '../../db/economy.js';
-import { prepare, transaction } from '../../db/driver.js';
+import { isGeneratorFunction, prepare, transaction } from '../../db/driver.js';
 import { getGuildModule } from '../../db/modules.js';
 import { LIMITS, MAX_BALANCE, normaliseEconomyConfig } from './economyConfig.js';
 
@@ -105,9 +105,9 @@ const LEDGER_INSERT = `
  * Create the missing accounts (with the starting balance, written to the ledger as `start`),
  * then take every row lock in user id order. Returns the accounts as the plan sees them.
  */
-function* openAccounts(tx, guildId, userIds, config, now) {
+function* openAccounts(tx, guildId, userIds, config, now, create) {
   const given = [];
-  for (const userId of userIds) {
+  for (const userId of create ? userIds : []) {
     // A member who ran /forget a short while ago has a cooldown tombstone: the new account keeps
     // their cooldowns and gets no starting balance again (see eraseMember in db/economy.js).
     const tomb = yield tx.get(
@@ -149,7 +149,9 @@ function* openAccounts(tx, guildId, userIds, config, now) {
       guildId,
       userId
     );
-    accounts.set(userId, row);
+    // Without `create`, an account that does not exist (erased by /forget a moment ago) is simply
+    // not part of the call.
+    if (row) accounts.set(userId, row);
   }
   for (const userId of given) {
     yield tx.insertId(
@@ -269,20 +271,32 @@ function* applyChange(tx, guildId, balances, change, now, ledger) {
  * @param {string} guildId  the server key
  * @param {string[]} userIds  every account the plan reads or changes
  * @param {(accounts: Map<string, any>) => { refuse?: object, changes?: object[], stamps?: object, result?: any }} plan
- * @param {{ now?: number, config?: object, after?: (tx: any, outcome: object) => Generator }} [opts]
+ * @param {{ now?: number, config?: object, createMissing?: boolean, after?: (tx: any, outcome: object) => Generator }} [opts]
+ *   `createMissing: false` leaves an account that does not exist out of the call (the plan sees only
+ *   the accounts that exist) instead of opening it; `resetGuild` uses it so a member who just ran
+ *   /forget is not re-created.
  *   `after` runs inside the same transaction once the changes are applied (part B inserts the
  *   inventory row of a purchase there); a throw rolls the money back too. It is a generator
- *   function, like the body of `transaction()` in db/driver.js: `function* (tx, outcome) { yield
- *   tx.run(...); }`. It must not await anything or call another money function.
+ *   function (anything else throws a TypeError before the transaction starts), like the body of
+ *   `transaction()` in db/driver.js: `function* (tx, outcome) { yield tx.run(...); }`. It must only
+ *   `yield` results of `tx`: it must not await, run a prepare() statement (that throws) or call
+ *   another money function.
  * @returns {Promise<{ ok: true, ledger: object[], applied: object[], accounts: Map<string, any>, result?: any } | { ok: false, reason: string, accounts?: Map<string, any> }>}
  */
 export async function transact(guildId, userIds, plan, opts = {}) {
+  if (opts.after !== undefined && !isGeneratorFunction(opts.after)) {
+    throw new TypeError(
+      'transact(): `after` must be a generator function, function* (tx, outcome) { yield tx.run(...) }'
+    );
+  }
+  // A reset of this server is running: money calls start after it (it holds the guild).
+  if (!opts.insideReset) await waitForReset(guildId);
   const now = opts.now ?? Date.now();
   const config = await settingsFor(guildId, opts.config);
   const ids = [...new Set(userIds)].sort();
   try {
     return await transaction(function* (tx) {
-      const rows = yield* openAccounts(tx, guildId, ids, config, now);
+      const rows = yield* openAccounts(tx, guildId, ids, config, now, opts.createMissing !== false);
       const before = new Map([...rows].map(([id, row]) => [id, view(row)]));
       const decision = plan(before);
       // A refusal rolls the transaction back, so it leaves nothing behind, not even the empty
@@ -531,42 +545,83 @@ export async function resetAccount(guildId, userId, opts = {}) {
 const RESET_CHUNK = 200;
 const listIdsStmt = prepare('SELECT user_id FROM economy_accounts WHERE guild_id = ? ORDER BY user_id');
 
+// Servers with a reset running: guild key -> a promise that settles when it ends. Money calls for
+// that server wait for it (transact), a second reset of the same server queues behind it. One
+// process runs the bot, so this in-memory hold is enough; the row locks still guard every account.
+const resetsRunning = new Map();
+
+async function waitForReset(guildId) {
+  while (resetsRunning.has(guildId)) await resetsRunning.get(guildId);
+}
+
 /**
- * Reset every account of a server to a fresh one (see {@link resetAccount}). The accounts that
- * exist when it starts are reset in chunks of 200, one transaction per chunk, each through the
- * same locking as every other money call (accounts locked in user id order, so it cannot deadlock
- * with a payment). Each account that held anything gets one `reset` ledger row (amount = the
- * change of cash + bank), so staff can still see what each member had; an account that was
- * already fresh has nothing to record. An account opened while the reset runs is either part of
- * a chunk (reset, with its row) or left alone, never reset silently. If the process stops half
- * way, run it again: the accounts already reset have nothing left to change.
- * @returns {Promise<{ ok: true, accounts: number }>}
+ * Reset every account of a server to a fresh one (see {@link resetAccount}). The server is held for
+ * the duration: money calls for it start after the reset ends. The accounts that exist when it starts
+ * are reset in chunks of 200, one transaction per chunk, each through the same locking as every
+ * other money call (user id order, so it cannot deadlock with a payment). Each account that held
+ * anything gets one `reset` ledger row (amount = the change of cash + bank); an account that was
+ * already fresh has nothing to record. An account that disappears meanwhile (a member ran /forget)
+ * is skipped, never re-created.
+ *
+ * It does not throw for a failing chunk: it stops there and says how far it got, so the caller can
+ * still audit and log it. Run it again to finish: the accounts already reset have nothing left to
+ * change.
+ * @param {string} guildId
+ * @param {{ actorId?: string | null, reason?: string, now?: number, config?: object,
+ *   beforeChunk?: (index: number) => unknown }} [opts]  `beforeChunk` is a seam for tests: it runs
+ *   before each chunk (a throw there fails that chunk like a database error would)
+ * @returns {Promise<{ ok: boolean, accounts: number, total: number, error?: string }>}
+ *   `accounts` were reset out of `total` listed
  */
 export async function resetGuild(guildId, opts = {}) {
-  const config = await settingsFor(guildId, opts.config);
-  const reason = String(opts.reason ?? 'Economy reset').slice(0, LIMITS.reason.maxLength);
-  const ids = (await listIdsStmt.all(guildId)).map((r) => r.user_id);
-  for (let at = 0; at < ids.length; at += RESET_CHUNK) {
-    const chunk = ids.slice(at, at + RESET_CHUNK);
-    await transact(
-      guildId,
-      chunk,
-      (accounts) => ({
-        stamps: Object.fromEntries(chunk.map((id) => [id, ZERO_STAMPS])),
-        changes: chunk.map((userId) => {
-          const acc = accounts.get(userId);
-          return {
-            userId,
-            kind: 'reset',
-            cash: config.startingBalance - acc.cash,
-            bank: -acc.bank,
-            actorId: opts.actorId ?? null,
-            reason,
-          };
-        }),
-      }),
-      { now: opts.now, config }
-    );
+  while (resetsRunning.has(guildId)) await resetsRunning.get(guildId);
+  let release;
+  resetsRunning.set(
+    guildId,
+    new Promise((resolve) => {
+      release = resolve;
+    })
+  );
+  try {
+    const config = await settingsFor(guildId, opts.config);
+    const reason = String(opts.reason ?? 'Economy reset').slice(0, LIMITS.reason.maxLength);
+    const ids = (await listIdsStmt.all(guildId)).map((r) => r.user_id);
+    let done = 0;
+    for (let at = 0; at < ids.length; at += RESET_CHUNK) {
+      const chunk = ids.slice(at, at + RESET_CHUNK);
+      try {
+        await opts.beforeChunk?.(at / RESET_CHUNK);
+        const out = await transact(
+          guildId,
+          chunk,
+          (accounts) => {
+            const present = [...accounts.keys()];
+            return {
+              stamps: Object.fromEntries(present.map((id) => [id, ZERO_STAMPS])),
+              changes: present.map((userId) => {
+                const acc = accounts.get(userId);
+                return {
+                  userId,
+                  kind: 'reset',
+                  cash: config.startingBalance - acc.cash,
+                  bank: -acc.bank,
+                  actorId: opts.actorId ?? null,
+                  reason,
+                };
+              }),
+            };
+          },
+          { now: opts.now, config, createMissing: false, insideReset: true }
+        );
+        if (!out.ok) return { ok: false, accounts: done, total: ids.length, error: `refused: ${out.reason}` };
+        done += out.accounts.size;
+      } catch (err) {
+        return { ok: false, accounts: done, total: ids.length, error: err?.message ?? String(err) };
+      }
+    }
+    return { ok: true, accounts: done, total: ids.length };
+  } finally {
+    resetsRunning.delete(guildId);
+    release();
   }
-  return { ok: true, accounts: ids.length };
 }

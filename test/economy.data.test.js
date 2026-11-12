@@ -199,14 +199,11 @@ test('/forget leaves a small cooldown tombstone, and a new account keeps the coo
   ).run(now - 10, now - 20, now - 30, G, U);
   await forgetUser(G, U);
   const tomb = db.prepare('SELECT * FROM economy_cooldowns WHERE guild_id = ? AND user_id = ?').get(G, U);
-  assert.deepEqual(
-    [tomb.last_daily_at, tomb.last_work_at, tomb.last_rob_at, tomb.start_given],
-    [now - 10, now - 20, now - 30, 1]
-  );
+  assert.deepEqual([tomb.last_daily_at, tomb.last_work_at, tomb.last_rob_at], [now - 10, now - 20, now - 30]);
   assert.ok(tomb.expires_at > now + (TOMBSTONE_DAYS * 86_400_000 - 60_000), 'lasts 7 days');
   assert.deepEqual(
     Object.keys(tomb).sort(),
-    ['expires_at', 'guild_id', 'last_daily_at', 'last_rob_at', 'last_work_at', 'start_given', 'user_id'],
+    ['expires_at', 'guild_id', 'last_daily_at', 'last_rob_at', 'last_work_at', 'user_id'],
     'nothing else is kept: no balance, no streak'
   );
   assert.equal(await getAccount(G, U), null);
@@ -272,7 +269,6 @@ test('the cooldown tombstone has its own table in the schema and the guild purge
     'last_daily_at',
     'last_work_at',
     'last_rob_at',
-    'start_given',
     'expires_at',
   ]);
   const index = db

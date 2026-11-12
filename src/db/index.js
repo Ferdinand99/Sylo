@@ -1275,7 +1275,6 @@ export const MIGRATIONS = [
         last_daily_at INTEGER NOT NULL DEFAULT 0,
         last_work_at  INTEGER NOT NULL DEFAULT 0,
         last_rob_at   INTEGER NOT NULL DEFAULT 0,
-        start_given   INTEGER NOT NULL DEFAULT 1,
         expires_at    INTEGER NOT NULL,
         PRIMARY KEY (guild_id, user_id)
       );

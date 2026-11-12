@@ -277,11 +277,21 @@ router.post(
       config,
       guild: req.guild,
     });
+    // Audited whether it finished or stopped half way: a partial reset must leave a trace.
     await recordAudit(req.guild.id, {
       actor: actor(req),
       action: 'economy:reset',
-      detail: `reset ${out.accounts} account(s)`,
+      detail: out.ok
+        ? `reset ${out.accounts} account(s)`
+        : `partial reset: ${out.accounts} of ${out.total}, rerun to finish (${out.error})`,
     });
+    if (!out.ok) {
+      return fail(
+        res,
+        `Only part of the economy was reset: ${out.accounts} of ${out.total} accounts. Run it again to finish.`,
+        500
+      );
+    }
     res.json({ ok: true, accounts: out.accounts });
   })
 );

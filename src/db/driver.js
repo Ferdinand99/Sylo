@@ -227,10 +227,23 @@ function preparePg(sqlText, { returningId } = {}) {
 export function prepare(sqlText, opts) {
   if (!config.databaseUrl) {
     const stmt = db.prepare(sqlText);
+    // The statement still runs at the moment of the call (an async arrow runs synchronously up to its
+    // first await), and a failing statement still rejects the promise, as before. The guard throws
+    // at once: see assertOutsideTransaction.
+    const call = async (fn) => fn();
     return {
-      get: async (...args) => stmt.get(...args),
-      all: async (...args) => stmt.all(...args),
-      run: async (...args) => stmt.run(...args),
+      get: (...args) => {
+        assertOutsideTransaction();
+        return call(() => stmt.get(...args));
+      },
+      all: (...args) => {
+        assertOutsideTransaction();
+        return call(() => stmt.all(...args));
+      },
+      run: (...args) => {
+        assertOutsideTransaction();
+        return call(() => stmt.run(...args));
+      },
     };
   }
   return preparePg(sqlText, opts);
@@ -253,7 +266,9 @@ export function prepare(sqlText, opts) {
 // `tx.get/all/run(sql, ...args)` work like the prepared statements above (positional `?` only);
 // `tx.insertId(sql, ...args)` runs an INSERT into a table with a surrogate `id` and returns it.
 // A throw inside `body` rolls everything back and is rethrown. Use `yield*` to call another
-// generator (a helper, a hook). `body` must not await anything of its own.
+// generator (a helper, a hook). `body` must be a plain `function*` and must not await anything of
+// its own: an async function, an async generator or any other function throws a TypeError at once, a
+// yielded promise throws on SQLite, and a prepare() statement made while the body runs throws on SQLite.
 //
 // Why a generator: the same code has to be atomic on both drivers.
 //
@@ -267,6 +282,32 @@ export function prepare(sqlText, opts) {
 // Postgres: `sql.begin` reserves a pooled connection for the body; each yielded query is awaited.
 // Concurrent transactions that touch the same row wait for each other at the row lock (a plain
 // UPDATE takes it).
+
+// While a transaction() body runs on SQLite, the process has one open transaction on its one
+// connection and nothing else can run, so a statement made through prepare() at that moment can only
+// come from inside the body: from a hook that forgot to `yield` through `tx`. On Postgres the same
+// call would run on another connection, outside the transaction and not rolled back with it. SQLite
+// refuses it the same way, so the mistake shows up in tests on either driver.
+function assertOutsideTransaction() {
+  if (db.inTransaction) {
+    throw new Error(
+      'a prepare() statement was run inside a transaction() body: use the tx passed to the body (yield tx.run(...))'
+    );
+  }
+}
+
+const GeneratorFunction = Object.getPrototypeOf(function* () {}).constructor;
+
+/** True for a plain `function*` (not an async generator, an async function or a normal function). */
+export const isGeneratorFunction = (fn) => fn instanceof GeneratorFunction;
+
+function assertSyncGeneratorBody(body) {
+  if (!isGeneratorFunction(body)) {
+    throw new TypeError(
+      'transaction() needs a generator function (function* (tx) { ... yield tx.run(...) }), not an async function or a plain function'
+    );
+  }
+}
 
 const sqliteStatements = new Map();
 
@@ -292,7 +333,15 @@ function runSqliteTransaction(body) {
     .transaction(() => {
       const it = body(sqliteTx);
       let step = it.next();
-      while (!step.done) step = it.next(step.value);
+      while (!step.done) {
+        // A promise here would be handed back as a promise on SQLite but awaited on Postgres.
+        if (typeof step.value?.then === 'function') {
+          throw new TypeError(
+            'a transaction() body yielded a promise: yield only tx.get/all/run/insertId results'
+          );
+        }
+        step = it.next(step.value);
+      }
       return step.value;
     })
     .immediate();
@@ -342,5 +391,6 @@ async function runPgTransaction(body) {
  * @returns {Promise<T>}
  */
 export async function transaction(body) {
+  assertSyncGeneratorBody(body);
   return config.databaseUrl ? runPgTransaction(body) : runSqliteTransaction(body);
 }

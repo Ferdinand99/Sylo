@@ -113,7 +113,7 @@ named on someone else's row, the name is removed and the row stays. Staff can al
 [privacy policy](../privacy-policy.md).
 
 `/forget` keeps one small record for **7 days**: the server, the member id, the times of the member's last
-`/daily`, `/work` and `/rob`, and that the starting balance was already given. It exists only so that
+`/daily`, `/work` and `/rob` (that the record exists also shows the starting balance was already given). It exists only so that
 `/forget` cannot be used to reset cooldowns and collect the starting balance again. A new account made in
-that time gets no starting balance and keeps those cooldowns. The daily clean-up deletes the record when
+that time gets no starting balance and keeps those cooldowns. A clean-up that runs every hour deletes the record when
 the 7 days are over.

@@ -84,7 +84,8 @@ test(
       await assert.rejects(
         eco.transact(G, [A], () => ({ changes: [{ userId: A, cash: -1, kind: 'staff_remove' }] }), {
           config,
-          after: () => {
+          after: function* (tx) {
+            yield tx.get('SELECT 1 AS one');
             throw new Error('boom');
           },
         }),
@@ -200,6 +201,65 @@ test(
         await purge.purgeGuild(S);
       }
     );
+
+    await t.test(
+      'the runner refuses a wrong body or hook up front, and a prepare() inside a body is not allowed on either driver',
+      async () => {
+        const { transaction } = await import('../src/db/driver.js');
+        await assert.rejects(
+          transaction(async () => 1),
+          /generator function/
+        );
+        await assert.rejects(
+          transaction(async function* () {}),
+          /generator function/
+        );
+        const X = `${G}-hook`;
+        await assert.rejects(
+          eco.transact(X, [A], () => ({ changes: [{ userId: A, cash: 5, kind: 'daily' }] }), {
+            config,
+            after: async () => {},
+          }),
+          /must be a generator function/
+        );
+        assert.equal(await store.getAccount(X, A), null);
+      }
+    );
+
+    await t.test(
+      'a partial reset reports how far it got; /forget during a reset is not undone; money waits for it',
+      async () => {
+        const Z = `${G}-partial`;
+        const ids = Array.from({ length: 450 }, (_, i) => `pgz-${String(i).padStart(4, '0')}`);
+        for (const id of ids) await eco.credit(Z, id, 10, { kind: 'daily', config });
+        const failing = await eco.resetGuild(Z, {
+          config,
+          beforeChunk: async (i) => {
+            if (i === 1) await purge.forgetUser(Z, ids[449]);
+            if (i === 2) throw new Error('connection lost');
+          },
+        });
+        assert.deepEqual(
+          [failing.ok, failing.accounts, failing.total, failing.error],
+          [false, 399 + 1, 450, 'connection lost']
+        );
+        assert.equal(await store.getAccount(Z, ids[449]), null, 'the member who left was not re-created');
+        const again = await eco.resetGuild(Z, { config });
+        assert.deepEqual([again.ok, again.accounts], [true, 449]);
+        await purge.purgeGuild(Z);
+      }
+    );
+
+    await t.test('forgetting while money moves keeps the tombstone consistent', async () => {
+      const Y = `${G}-race`;
+      await eco.credit(Y, A, 50, { kind: 'daily', config });
+      const jobs = [purge.forgetUser(Y, A)];
+      for (let i = 0; i < 5; i++) jobs.push(eco.credit(Y, A, 1, { kind: 'daily', config }));
+      await Promise.all(jobs);
+      const tomb = await store.pruneCooldowns(0); // nothing has run out
+      assert.equal(tomb, 0);
+      await purge.purgeGuild(Y);
+    });
 
     await t.test('listing, rank, count, prune, forget and the guild purge run on Postgres', async () => {
       const page = await store.listAccounts(G, { sort: 'cash', dir: 'asc', limit: 3, offset: 0 });

@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import { db } from '../src/db/index.js';
 import { recordAudit, listAudit } from '../src/db/audit.js';
 import { eraseMember } from '../src/db/economy.js';
+import { forgetUser } from '../src/db/purge.js';
+import { prepare, transaction } from '../src/db/driver.js';
 import { getAccount, listTransactions } from '../src/db/economy.js';
 import {
   KINDS,
@@ -292,7 +294,8 @@ test('transact: a refusal changes nothing, and `after` runs in the same transact
   await assert.rejects(
     transact(g, [A], () => ({ changes: [{ userId: A, cash: -40, kind: 'staff_remove' }] }), {
       config,
-      after: () => {
+      after: function* (tx) {
+        yield tx.get('SELECT 1 AS one');
         throw new Error('inventory insert failed');
       },
     }),
@@ -355,7 +358,7 @@ test('resetGuild resets every account of one server only, with one reset row per
   await deposit(g, B, 50, { config });
   await credit(other, A, 999, { kind: 'daily', config });
   const out = await resetGuild(g, { actorId: B, config });
-  assert.deepEqual(out, { ok: true, accounts: 2 });
+  assert.deepEqual(out, { ok: true, accounts: 2, total: 2 });
   assert.deepEqual(await balances(g, A), { cash: 0, bank: 0 });
   assert.deepEqual(await balances(g, B), { cash: 0, bank: 0 });
   assert.deepEqual(await balances(other, A), { cash: 999, bank: 0 }, 'another server is untouched');
@@ -388,7 +391,8 @@ test('a refused or rolled-back money transaction never undoes an unrelated write
       await assert.rejects(
         transact(g, [A], () => ({ changes: [{ userId: A, cash: -1, kind: 'staff_remove' }] }), {
           config,
-          after: () => {
+          after: function* (tx) {
+            yield tx.get('SELECT 1 AS one');
             throw new Error('rolled back');
           },
         }),
@@ -445,7 +449,7 @@ test('resetGuild handles more accounts than one chunk and writes a row for each 
   await credit(g, '830000000000099999', 0 + 1, { kind: 'daily', config });
   await resetAccount(g, '830000000000099999', { config }); // already fresh: nothing to record
   const out = await resetGuild(g, { actorId: B, config });
-  assert.deepEqual(out, { ok: true, accounts: 451 });
+  assert.deepEqual(out, { ok: true, accounts: 451, total: 451 });
   const cash = db.prepare('SELECT SUM(cash) AS c FROM economy_accounts WHERE guild_id = ?').get(g).c;
   assert.equal(cash, 0);
   const resets = db
@@ -454,4 +458,186 @@ test('resetGuild handles more accounts than one chunk and writes a row for each 
     )
     .get(g, B);
   assert.deepEqual([resets.c, resets.s], [450, -4500]);
+});
+
+// --- the transaction runner and the hook ---------------------------------------------------------------
+
+test('transaction() accepts only a plain generator function, and says so at once', async () => {
+  await assert.rejects(
+    transaction(async () => 1),
+    /generator function/
+  );
+  await assert.rejects(
+    transaction(() => 1),
+    /generator function/
+  );
+  await assert.rejects(
+    transaction(async function* () {
+      yield 1;
+    }),
+    /generator function/
+  );
+  await assert.rejects(transaction(undefined), /generator function/);
+  assert.equal(
+    await transaction(function* (tx) {
+      yield tx.get('SELECT 42 AS answer');
+      return 42;
+    }),
+    42,
+    'a plain generator works'
+  );
+});
+
+test('a body that yields a promise is refused on SQLite (it would be awaited on Postgres)', async () => {
+  await assert.rejects(
+    transaction(function* () {
+      yield Promise.resolve(1);
+    }),
+    /yielded a promise/
+  );
+});
+
+test('a prepare() statement made inside a transaction body throws instead of running outside it', async () => {
+  const g = guild();
+  const stray = prepare('SELECT COUNT(*) AS n FROM economy_accounts WHERE guild_id = ?');
+  await assert.rejects(
+    transaction(function* (tx) {
+      yield tx.run(
+        'INSERT INTO economy_cooldowns (guild_id, user_id, last_daily_at, last_work_at, last_rob_at, expires_at) VALUES (?, ?, 0, 0, 0, 1)',
+        g,
+        A
+      );
+      yield stray.get(g); // not through tx
+    }),
+    /prepare\(\) statement was run inside a transaction/
+  );
+  const left = db.prepare('SELECT COUNT(*) AS n FROM economy_cooldowns WHERE guild_id = ?').get(g).n;
+  assert.equal(left, 0, 'and the body was rolled back');
+  assert.equal((await stray.get(g)).n, 0, 'the same statement works outside a transaction');
+});
+
+test('transact() needs a generator function as its after hook, and refuses before it starts', async () => {
+  const g = guild();
+  for (const bad of [() => {}, async () => {}, async function* () {}, 'no']) {
+    await assert.rejects(
+      transact(g, [A], () => ({ changes: [{ userId: A, cash: 5, kind: 'daily' }] }), { config, after: bad }),
+      /after.* must be a generator function/
+    );
+  }
+  assert.equal(await getAccount(g, A), null, 'nothing was opened');
+});
+
+test('an after hook that runs a prepare() statement is refused and the money is rolled back', async () => {
+  const g = guild();
+  await credit(g, A, 10, { kind: 'daily', config });
+  const stray = prepare('SELECT 1 AS one');
+  await assert.rejects(
+    transact(g, [A], () => ({ changes: [{ userId: A, cash: -3, kind: 'staff_remove' }] }), {
+      config,
+      after: function* () {
+        yield stray.get();
+      },
+    }),
+    /prepare\(\) statement was run inside a transaction/
+  );
+  assert.deepEqual(await balances(g, A), { cash: 10, bank: 0 });
+});
+
+// --- /forget and the reset -------------------------------------------------------------------------------
+
+test('eraseMember reads, writes the tombstone and deletes in one transaction', async () => {
+  const g = guild();
+  const now = Date.now();
+  await credit(g, A, 5, { kind: 'daily', config });
+  db.prepare('UPDATE economy_accounts SET last_daily_at = ? WHERE guild_id = ? AND user_id = ?').run(
+    now - 5,
+    g,
+    A
+  );
+  const out = await eraseMember(g, A, now);
+  assert.equal(out.account, 1);
+  const tomb = db.prepare('SELECT * FROM economy_cooldowns WHERE guild_id = ? AND user_id = ?').get(g, A);
+  assert.equal(tomb.last_daily_at, now - 5);
+  assert.equal(await getAccount(g, A), null);
+});
+
+test('a partial reset says how far it got, stops, and finishes when run again', async () => {
+  const g = guild();
+  const ids = Array.from({ length: 450 }, (_, i) => `8400000000000${String(i).padStart(5, '0')}`);
+  for (const id of ids) await credit(g, id, 10, { kind: 'daily', config });
+  const failing = await resetGuild(g, {
+    actorId: B,
+    config,
+    beforeChunk: (i) => {
+      if (i === 1) throw new Error('database went away');
+    },
+  });
+  assert.deepEqual(failing, { ok: false, accounts: 200, total: 450, error: 'database went away' });
+  const left = db
+    .prepare('SELECT COUNT(*) AS n FROM economy_accounts WHERE guild_id = ? AND cash > 0')
+    .get(g).n;
+  assert.equal(left, 250, 'the first chunk is reset, the rest untouched');
+  const again = await resetGuild(g, { actorId: B, config });
+  assert.deepEqual(again, { ok: true, accounts: 450, total: 450 });
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS n FROM economy_accounts WHERE guild_id = ? AND cash > 0').get(g).n,
+    0
+  );
+  const rows = db
+    .prepare("SELECT COUNT(*) AS n FROM economy_transactions WHERE guild_id = ? AND kind = 'reset'")
+    .get(g).n;
+  assert.equal(rows, 450, 'one row per account that held money, none twice');
+});
+
+test('a member who runs /forget during a reset is not re-created by it', async () => {
+  const g = guild();
+  const ids = Array.from({ length: 450 }, (_, i) => `8500000000000${String(i).padStart(5, '0')}`);
+  for (const id of ids) await credit(g, id, 10, { kind: 'daily', config });
+  const late = ids[449]; // in the last chunk, not reset yet when chunk 1 starts
+  const out = await resetGuild(g, {
+    config,
+    beforeChunk: async (i) => {
+      if (i === 1) await forgetUser(g, late);
+    },
+  });
+  assert.equal(out.ok, true);
+  assert.equal(out.accounts, 449, 'the erased member was skipped');
+  assert.equal(await getAccount(g, late), null, 'and no account was made for them again');
+});
+
+test('money calls for a server wait while its reset runs, and then go through', async () => {
+  const g = guild();
+  const ids = Array.from({ length: 250 }, (_, i) => `8600000000000${String(i).padStart(5, '0')}`);
+  for (const id of ids) await credit(g, id, 10, { kind: 'daily', config });
+  let release;
+  const gate = new Promise((r) => (release = r));
+  let inFlight = false;
+  const reset = resetGuild(g, {
+    config,
+    beforeChunk: async (i) => {
+      if (i === 1) await gate;
+    },
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  const late = credit(g, ids[0], 5, { kind: 'daily', config }).then((r) => {
+    inFlight = true;
+    return r;
+  });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(inFlight, false, 'the credit is held back while the reset is between chunks');
+  release();
+  const [done, credited] = await Promise.all([reset, late]);
+  assert.equal(done.ok, true);
+  assert.equal(credited.ok, true);
+  assert.deepEqual(
+    await balances(g, ids[0]),
+    { cash: 5, bank: 0 },
+    'it landed after the reset, not under it'
+  );
+  const other = `${g}9`;
+  assert.equal(
+    (await credit(other, A, 1, { kind: 'daily', config })).ok,
+    true,
+    'another server is never held'
+  );
 });

@@ -14,7 +14,7 @@
 // `guild_id` is the server key (a Discord id, or "fluxer:<id>"), like every other table, so the
 // guild-leave purge and /forget find the rows. All amounts are whole numbers; BIGINT on Postgres
 // (the driver reads it back as a Number: every value stays below the 1,000,000,000 cap).
-import { prepare, registerPostgresBootstrap } from './driver.js';
+import { prepare, registerPostgresBootstrap, transaction } from './driver.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS economy_accounts (
@@ -55,7 +55,6 @@ registerPostgresBootstrap(`
     last_daily_at BIGINT NOT NULL DEFAULT 0,
     last_work_at  BIGINT NOT NULL DEFAULT 0,
     last_rob_at   BIGINT NOT NULL DEFAULT 0,
-    start_given   INTEGER NOT NULL DEFAULT 1,
     expires_at    BIGINT NOT NULL,
     PRIMARY KEY (guild_id, user_id)
   );
@@ -104,25 +103,6 @@ const ledgerCountStmt = prepare(
 );
 const pruneStmt = prepare('DELETE FROM economy_transactions WHERE created_at < ?');
 const pruneCooldownsStmt = prepare('DELETE FROM economy_cooldowns WHERE expires_at < ?');
-const tombstoneStmt = prepare(`
-  INSERT INTO economy_cooldowns (guild_id, user_id, last_daily_at, last_work_at, last_rob_at, start_given, expires_at)
-  VALUES (?, ?, ?, ?, ?, 1, ?)
-  ON CONFLICT (guild_id, user_id) DO UPDATE SET
-    last_daily_at = excluded.last_daily_at,
-    last_work_at  = excluded.last_work_at,
-    last_rob_at   = excluded.last_rob_at,
-    start_given   = 1,
-    expires_at    = excluded.expires_at
-`);
-
-const forget = {
-  account: prepare('DELETE FROM economy_accounts WHERE guild_id = ? AND user_id = ?'),
-  ledger: prepare('DELETE FROM economy_transactions WHERE guild_id = ? AND user_id = ?'),
-  counterparty: prepare(
-    'UPDATE economy_transactions SET counterparty_id = NULL WHERE guild_id = ? AND counterparty_id = ?'
-  ),
-  actor: prepare('UPDATE economy_transactions SET actor_id = NULL WHERE guild_id = ? AND actor_id = ?'),
-};
 
 // COUNT(*) comes back as a string from postgres.js: coerce so both drivers agree.
 const num = (row) => Number(row?.n) || 0;
@@ -181,28 +161,65 @@ export async function pruneCooldowns(now = Date.now()) {
  * someone else's row (as the other side of a payment or robbery, or as the staff member who made
  * an adjustment) the name comes off and the row stays.
  *
- * One small record stays for {@link TOMBSTONE_DAYS} days: the server, the member id, the times of
- * their last daily, work and rob, and that the starting balance was given. Without it /forget would
- * be a way to reset every cooldown and collect the starting balance again, over and over. A new
- * account made inside that window gets no starting balance and keeps the cooldowns (see
- * modules/lib/economy.js). The daily prune deletes the record once it has run out.
+ * One small record stays for {@link TOMBSTONE_DAYS} days: the server, the member id and the times of
+ * their last daily, work and rob. That it exists also says the starting balance was already given.
+ * Without it /forget would be a way to reset every cooldown and collect the starting balance again,
+ * over and over. A new account made inside that window gets no starting balance and keeps the
+ * cooldowns (see modules/lib/economy.js). The hourly prune deletes the record once it has run out.
+ *
+ * Everything happens in one transaction, with the account row locked first (like every money call),
+ * so a payout that commits meanwhile cannot slip between the read and the delete.
  * @param {number} [now] epoch ms, overridable for tests
  */
 export async function eraseMember(guildId, userId, now = Date.now()) {
-  const existing = await getStmt.get(guildId, userId);
-  if (existing) {
-    await tombstoneStmt.run(
+  return transaction(function* (tx) {
+    yield tx.run(
+      'UPDATE economy_accounts SET updated_at = updated_at WHERE guild_id = ? AND user_id = ?',
       guildId,
-      userId,
-      Number(existing.last_daily_at),
-      Number(existing.last_work_at),
-      Number(existing.last_rob_at),
-      now + TOMBSTONE_DAYS * 86_400_000
+      userId
     );
-  }
-  const account = (await forget.account.run(guildId, userId)).changes;
-  const transactions = (await forget.ledger.run(guildId, userId)).changes;
-  const counterparty = (await forget.counterparty.run(guildId, userId)).changes;
-  const actor = (await forget.actor.run(guildId, userId)).changes;
-  return { account, transactions, counterparty, actor };
+    const existing = yield tx.get(
+      'SELECT * FROM economy_accounts WHERE guild_id = ? AND user_id = ?',
+      guildId,
+      userId
+    );
+    if (existing) {
+      yield tx.run(
+        `INSERT INTO economy_cooldowns (guild_id, user_id, last_daily_at, last_work_at, last_rob_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (guild_id, user_id) DO UPDATE SET
+           last_daily_at = excluded.last_daily_at,
+           last_work_at  = excluded.last_work_at,
+           last_rob_at   = excluded.last_rob_at,
+           expires_at    = excluded.expires_at`,
+        guildId,
+        userId,
+        Number(existing.last_daily_at),
+        Number(existing.last_work_at),
+        Number(existing.last_rob_at),
+        now + TOMBSTONE_DAYS * 86_400_000
+      );
+    }
+    const account = (yield tx.run(
+      'DELETE FROM economy_accounts WHERE guild_id = ? AND user_id = ?',
+      guildId,
+      userId
+    )).changes;
+    const transactions = (yield tx.run(
+      'DELETE FROM economy_transactions WHERE guild_id = ? AND user_id = ?',
+      guildId,
+      userId
+    )).changes;
+    const counterparty = (yield tx.run(
+      'UPDATE economy_transactions SET counterparty_id = NULL WHERE guild_id = ? AND counterparty_id = ?',
+      guildId,
+      userId
+    )).changes;
+    const actor = (yield tx.run(
+      'UPDATE economy_transactions SET actor_id = NULL WHERE guild_id = ? AND actor_id = ?',
+      guildId,
+      userId
+    )).changes;
+    return { account, transactions, counterparty, actor };
+  });
 }

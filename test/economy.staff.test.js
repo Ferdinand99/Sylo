@@ -161,7 +161,7 @@ test('resetEconomy resets every account of the server and logs it once', async (
   await credit(G, U, 100, { kind: 'staff_add', config });
   await credit(G, V, 200, { kind: 'staff_add', config });
   const out = await resetEconomy({ guildId: G, actorId: STAFF, config });
-  assert.deepEqual(out, { ok: true, accounts: 2 });
+  assert.deepEqual(out, { ok: true, accounts: 2, total: 2 });
   assert.equal(Number((await getAccount(G, U)).cash), 0);
   assert.equal(Number((await getAccount(G, V)).cash), 0);
   assert.equal(ledger(U).at(-1).kind, 'reset');
@@ -250,4 +250,21 @@ test('the member page sorts by total, cash or bank in either direction', async (
   );
   const paged = await memberPage(G, { sort: 'total', page: 2, perPage: 2 });
   assert.deepEqual([paged.page, paged.pages, paged.total, paged.rows.map((r) => r.userId)], [2, 2, 3, [W]]);
+});
+
+test('a partial resetEconomy is still logged, with how far it got', async () => {
+  const config = cfg({ logChannelId: LOG_CH });
+  for (let i = 0; i < 250; i++)
+    await credit(G, `8700000000000${String(i).padStart(5, '0')}`, 5, { kind: 'staff_add', config });
+  const out = await resetEconomy({
+    guildId: G,
+    actorId: STAFF,
+    config,
+    beforeChunk: (i) => {
+      if (i === 1) throw new Error('boom');
+    },
+  });
+  assert.deepEqual([out.ok, out.accounts, out.total], [false, 200, 250]);
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].embeds[0].data.description, /Partial reset: 200 of 250, run it again to finish/);
 });

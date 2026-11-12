@@ -248,10 +248,12 @@ every(
   async () => {
     const removed = await pruneTransactions();
     if (removed) log.info('economy', `pruned ${removed} ledger row(s) older than 180 days`);
-    await pruneCooldowns();
   },
   { firstDelayMs: 10 * MINUTE_MS }
 );
+
+// The /forget cooldown records last 7 days; deleting them every hour keeps that promise to within an hour.
+every('economy', HOUR_MS, () => pruneCooldowns());
 
 // --- /daily and /work ------------------------------------------------------------------------------
 
@@ -567,13 +569,16 @@ export async function staffAdjust({ guildId, actorId, userId, action, amount, re
 }
 
 /** Reset the whole server's economy (the dashboard's danger zone). */
-export async function resetEconomy({ guildId, actorId, config, guild }) {
-  const out = await resetGuild(guildId, { actorId, reason: 'Economy reset', config });
+export async function resetEconomy({ guildId, actorId, config, guild, beforeChunk }) {
+  const out = await resetGuild(guildId, { actorId, reason: 'Economy reset', config, beforeChunk });
+  const who = actorId ? `<@${actorId}>` : 'The dashboard';
   await logStaffAction({
     guildId,
     config,
     guild,
-    line: `${actorId ? `<@${actorId}>` : 'The dashboard'} reset the economy: ${formatNumber(out.accounts)} account(s) went back to a new start.`,
+    line: out.ok
+      ? `${who} reset the economy: ${formatNumber(out.accounts)} account(s) went back to a new start.`
+      : `${who} tried to reset the economy. Partial reset: ${formatNumber(out.accounts)} of ${formatNumber(out.total)}, run it again to finish.`,
     reason: '',
   });
   return out;
