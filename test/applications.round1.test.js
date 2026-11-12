@@ -520,3 +520,78 @@ test('the window is at least 30 minutes with no forms, and never more than 24 ho
   assert.match((await lateAnswer(23 * 60)).join('\n'), /questionnaire that has ended/);
   assert.doesNotMatch((await lateAnswer(25 * 60)).join('\n'), /questionnaire that has ended/);
 });
+
+// --- fix round 2 ----------------------------------------------------------------------------------------------------------------
+
+test('a messageDelete for the old post during a move cannot wipe the pointer to the new post', async () => {
+  const { dispatch } = await import('../src/modules/dispatch.js');
+  const formId = await makeForm({ acceptedChannelId: CH.accepted });
+  const sub = await submit(formId);
+  // (the fake channels number their messages alike: make the new post's id differ from the old one)
+  await env.channels.accepted.send({ content: 'earlier post' });
+  const realDelete = env.channels.pending.messages.delete;
+  let deleted = 0;
+  env.channels.pending.messages.delete = async (id) => {
+    await realDelete(id);
+    deleted += 1;
+    // the platform reports the deletion at about the same time as the REST answer
+    await dispatch('messageDelete', GID, { id });
+  };
+  await accept(sub.id);
+  assert.equal(deleted, 1);
+  const after = await getSubmission(GID, sub.id);
+  assert.equal(after.channelId, CH.accepted, 'the row points at the moved post');
+  assert.ok(env.channels.accepted.store.has(after.messageId), 'which exists');
+
+  // the pointer is only cleared while it still holds the id that was deleted
+  const { clearSubmissionPost, clearSubmissionCopy } = await import('../src/db/applications.js');
+  assert.equal(await clearSubmissionPost(GID, sub.id, sub.messageId), 0, 'the old id no longer matches');
+  assert.equal((await getSubmission(GID, sub.id)).messageId, after.messageId);
+  assert.equal(await clearSubmissionCopy(GID, sub.id, after.messageId), 0, 'it is not the copy');
+  assert.equal(await clearSubmissionPost(GID, sub.id, after.messageId), 1, 'the id it holds is cleared');
+  assert.equal((await getSubmission(GID, sub.id)).messageId, null);
+});
+
+test("a refresh that finds a post gone clears only that post's pointer", async () => {
+  const formId = await makeForm({ pendingRoleId: APP_ROLE.waiting });
+  const sub = await submit(formId);
+  // the post is deleted; meanwhile the row is pointed at another post (as a move does)
+  env.channels.pending.store.delete(sub.messageId);
+  const { setSubmissionPost } = await import('../src/db/applications.js');
+  const realEdit = env.channels.pending.messages.edit;
+  env.channels.pending.messages.edit = async (id, payload) => {
+    try {
+      return await realEdit(id, payload);
+    } finally {
+      await setSubmissionPost(GID, sub.id, CH.accepted, 'moved-meanwhile');
+    }
+  };
+  await accept(sub.id); // edits the old post in place: gone
+  assert.equal((await getSubmission(GID, sub.id)).messageId, 'moved-meanwhile', 'the newer pointer survives');
+});
+
+test('in copy mode a second settling refreshes the copy in place and never posts another one', async () => {
+  const formId = await makeForm({
+    pendingRoleId: APP_ROLE.waiting,
+    acceptedChannelId: CH.accepted,
+    decidedPost: 'copy',
+  });
+  const realSend = env.channels.pending.send;
+  env.channels.pending.send = async (payload) => {
+    const message = await realSend(payload);
+    const row = await pendingSubmission(GID, formId, U);
+    await accept(row.id); // before the submit has stored its post: the decision posts the copy
+    return message;
+  };
+  const out = await submitFor(env, member, formId);
+  assert.equal(out.ok, true);
+  const after = await getSubmission(GID, out.id);
+  assert.equal(env.channels.accepted.store.size, 1, 'one copy, not two');
+  assert.ok(env.channels.accepted.store.has(after.copyMessageId), 'and the row points at it');
+  assert.ok(env.channels.pending.store.has(after.messageId));
+  assert.deepEqual(
+    env.channels.pending.store.get(after.messageId).payload.components,
+    [],
+    'the original shows the decision'
+  );
+});

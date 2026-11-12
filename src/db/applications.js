@@ -210,6 +210,14 @@ const s = {
   setCopy: prepare(
     'UPDATE applications_submissions SET copy_channel_id = ?, copy_message_id = ?, updated_at = ? WHERE guild_id = ? AND id = ?'
   ),
+  // Clear a pointer only while it still holds this id: a post that was deleted (by staff, or by Sylo while
+  // moving it) must not wipe the pointer to the post that replaced it.
+  clearPost: prepare(
+    'UPDATE applications_submissions SET channel_id = NULL, message_id = NULL, updated_at = ? WHERE guild_id = ? AND id = ? AND message_id = ?'
+  ),
+  clearCopy: prepare(
+    'UPDATE applications_submissions SET copy_channel_id = NULL, copy_message_id = NULL, updated_at = ? WHERE guild_id = ? AND id = ? AND copy_message_id = ?'
+  ),
   setThread: prepare(
     'UPDATE applications_submissions SET thread_id = ?, updated_at = ? WHERE guild_id = ? AND id = ?'
   ),
@@ -447,6 +455,12 @@ export const setSubmissionPost = (guildId, id, channelId, messageId) =>
   s.setPost.run(channelId ?? null, messageId ?? null, Date.now(), guildId, Number(id));
 export const setSubmissionCopy = (guildId, id, channelId, messageId) =>
   s.setCopy.run(channelId ?? null, messageId ?? null, Date.now(), guildId, Number(id));
+/** Forget the post, but only if the row still points at `messageId`. @returns {Promise<number>} rows changed */
+export const clearSubmissionPost = async (guildId, id, messageId) =>
+  (await s.clearPost.run(Date.now(), guildId, Number(id), messageId)).changes;
+/** The same for the copy. */
+export const clearSubmissionCopy = async (guildId, id, messageId) =>
+  (await s.clearCopy.run(Date.now(), guildId, Number(id), messageId)).changes;
 export const setSubmissionThread = (guildId, id, threadId) =>
   s.setThread.run(threadId ?? null, Date.now(), guildId, Number(id));
 export const setSubmissionRoles = (guildId, id, rolesPending, history) =>

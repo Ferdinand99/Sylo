@@ -463,14 +463,14 @@ test('the export holds the answers only, and a cell that would run as a formula 
   assert.equal(csvCell('@a'), `"'@a"`);
   assert.equal(csvCell('\tx'), `"'\tx"`);
   assert.equal(csvCell('\rx'), `"'\rx"`);
-  assert.equal(csvCell(';=1+1'), `"';=1+1"`);
-  assert.equal(csvCell(',=1+1'), `"',=1+1"`);
+  assert.equal(csvCell(';=1+1'), `"';'=1+1"`);
+  assert.equal(csvCell(',=1+1'), `"','=1+1"`);
   assert.equal(csvCell('  =1+1'), `"'  =1+1"`);
   assert.equal(csvCell('plain'), '"plain"');
   assert.equal(csvCell('a,"b"'), '"a,""b"""');
-  // a ";" (the list separator of Excel in many countries) or "," inside a quoted cell cannot split it
-  assert.equal(csvCell('x;=1+1;'), '"x;=1+1;"');
-  assert.equal(csvCell('x,=1+1,'), '"x,=1+1,"');
+  // a formula after ";", "," or a tab in the middle of a cell is made text too (see applications.csv.test.js)
+  assert.equal(csvCell('x;=1+1;'), `"x;'=1+1;"`);
+  assert.equal(csvCell('x,=1+1,'), `"x,'=1+1,"`);
   const subs = [
     sub({ answers: { q_text: '=cmd()', q_pick: 'blue' }, reason: 'secret reason', decidedBy: '999' }),
   ];

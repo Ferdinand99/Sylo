@@ -45,6 +45,8 @@ import {
   pendingOfUser,
   pendingSubmission,
   pruneCooldowns,
+  clearSubmissionCopy,
+  clearSubmissionPost,
   setSubmissionCopy,
   setSubmissionDmNote,
   setSubmissionPost,
@@ -469,14 +471,14 @@ async function refreshPost(guild, key, sub) {
   let state = 'gone';
   if (sub.messageId) {
     state = await actOnMessage(guild, sub.channelId, sub.messageId, 'edit', { ...payload, content: '' });
-    if (state === 'gone') await setSubmissionPost(key, sub.id, null, null);
+    if (state === 'gone') await clearSubmissionPost(key, sub.id, sub.messageId);
   }
   if (sub.copyMessageId) {
     const copy = await actOnMessage(guild, sub.copyChannelId, sub.copyMessageId, 'edit', {
       ...payload,
       content: '',
     });
-    if (copy === 'gone') await setSubmissionCopy(key, sub.id, null, null);
+    if (copy === 'gone') await clearSubmissionCopy(key, sub.id, sub.copyMessageId);
   }
   return state;
 }
@@ -499,9 +501,15 @@ async function settlePost(guild, key, sub, form) {
   const editHere = async () => {
     if (!sub.messageId) return;
     const state = await actOnMessage(guild, sub.channelId, sub.messageId, 'edit', payload);
-    if (state === 'gone') await setSubmissionPost(key, sub.id, null, null);
+    if (state === 'gone') await clearSubmissionPost(key, sub.id, sub.messageId);
     else if (state !== 'ok') warnings.push('Sylo could not update the post.');
   };
+  // Copy mode and a copy exists already (an earlier settling posted it): refresh it in place, never post a
+  // second one that would replace the pointer to the first.
+  if (target && sub.copyMessageId && (form?.decidedPost ?? 'move') === 'copy') {
+    await refreshPost(guild, key, sub);
+    return warnings;
+  }
   if (target && target !== sub.channelId) {
     const channel = await textChannel(guild, target);
     if (channel && !missingPermission(guild, channel)) {
@@ -1334,8 +1342,9 @@ on('applications', 'guildMemberRemove', async (member, _config, key) => {
 async function forgetPostPointer(key, messageId) {
   const row = await submissionByMessage(key, messageId);
   if (!row) return;
-  if (row.messageId === messageId) await setSubmissionPost(key, row.id, null, null);
-  if (row.copyMessageId === messageId) await setSubmissionCopy(key, row.id, null, null);
+  // Only while the row still points at that id: a move may have pointed it at a new post meanwhile.
+  if (row.messageId === messageId) await clearSubmissionPost(key, row.id, messageId);
+  if (row.copyMessageId === messageId) await clearSubmissionCopy(key, row.id, messageId);
 }
 on('applications', 'messageDelete', (message, _config, key) => forgetPostPointer(key, message.id));
 on('applications', 'messageDeleteBulk', async ({ messages }, _config, key) => {
