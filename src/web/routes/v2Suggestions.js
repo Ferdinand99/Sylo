@@ -170,7 +170,8 @@ router.post(
     if (!(await getGuildModule(req.guild.id, 'suggestions')).enabled) {
       return fail(res, 'Turn the Suggestions module on first.');
     }
-    const result = await moveAllSuggestionsBack(req.guild.id);
+    const after = Number.isInteger(req.body?.after) && req.body.after > 0 ? req.body.after : 0;
+    const result = await moveAllSuggestionsBack(req.guild.id, { after });
     if (result.moved) {
       await recordAudit(req.guild.id, {
         actor: actor(req),
@@ -182,6 +183,8 @@ router.post(
     return res.json({
       moved: result.moved,
       remaining: result.remaining,
+      failed: result.failed,
+      next: result.next,
       ...(result.ok ? {} : { error: result.error }),
     });
   })

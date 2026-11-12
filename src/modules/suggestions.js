@@ -28,6 +28,7 @@ import {
   suggestionCount,
 } from '../db/suggestions.js';
 import { LIMITS as CEILINGS, checkLimit } from '../lib/limits.js';
+import { isMessageGone, isPermissionDenied } from '../platform/messageErrors.js';
 import { log } from '../lib/log.js';
 import { idList } from '../web/lib/idList.js';
 import { on } from './dispatch.js';
@@ -187,17 +188,14 @@ async function channelOf(guild, channelId) {
   return guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId).catch(() => null));
 }
 
-/** The platform says the message or its channel no longer exists (Discord 10008 / 10003, a 404 on Fluxer). */
-const isGone = (err) => err?.status === 404 || err?.code === 10008 || err?.code === 10003;
-
 /**
- * Edit or delete a message we posted, by id. Answers 'ok', 'gone' (the platform says it does not
- * exist) or 'error' (anything else: a timeout, a 5xx, a missing permission). Only 'gone' may be
- * read as "the message is not there": on 'error' callers keep their pointer and post nothing new.
- * Editing and deleting by id needs no lookup first, and Discord lets the bot do both to its own
- * posts without Read Message History.
- * @param {'edit' | 'delete'} action
- * @returns {Promise<'ok' | 'gone' | 'error'>}
+ * Edit, delete or look up a message we posted, by id. Answers 'ok', 'gone' (the platform says it
+ * does not exist), 'denied' (no access or permission, for good) or 'error' (anything else: a
+ * timeout, a 5xx). Only 'gone' may be read as "the message is not there": on 'error' callers keep
+ * their pointer and post nothing new. Editing and deleting by id needs no lookup first, and
+ * Discord lets the bot do both to its own posts without Read Message History.
+ * @param {'edit' | 'delete' | 'fetch'} action
+ * @returns {Promise<'ok' | 'gone' | 'denied' | 'error'>}
  */
 async function actOnMessage(guild, channelId, messageId, action, payload, what = 'message') {
   if (!channelId || !messageId) return 'gone';
@@ -205,20 +203,21 @@ async function actOnMessage(guild, channelId, messageId, action, payload, what =
   try {
     channel ??= await guild.channels.fetch(channelId);
   } catch (err) {
-    if (isGone(err)) return 'gone';
+    if (isMessageGone(err)) return 'gone';
     log.warn('suggestions', `could not look up the channel of ${what}:`, err.message);
-    return 'error';
+    return isPermissionDenied(err) ? 'denied' : 'error';
   }
   if (!channel) return 'gone';
-  if (!channel.isTextBased?.()) return 'error';
+  if (!channel.isTextBased?.()) return 'denied';
   try {
     if (action === 'edit') await channel.messages.edit(messageId, payload);
-    else await channel.messages.delete(messageId);
+    else if (action === 'delete') await channel.messages.delete(messageId);
+    else if (!(await channel.messages.fetch(messageId))) return 'gone';
     return 'ok';
   } catch (err) {
-    if (isGone(err)) return 'gone';
+    if (isMessageGone(err)) return 'gone';
     log.warn('suggestions', `could not ${action} ${what}:`, err.message);
-    return 'error';
+    return isPermissionDenied(err) ? 'denied' : 'error';
   }
 }
 
@@ -226,6 +225,8 @@ const editMessage = (guild, channelId, messageId, payload, what) =>
   actOnMessage(guild, channelId, messageId, 'edit', payload, what);
 const deleteMessage = (guild, channelId, messageId, what) =>
   actOnMessage(guild, channelId, messageId, 'delete', undefined, what);
+const probeMessage = (guild, channelId, messageId, what) =>
+  actOnMessage(guild, channelId, messageId, 'fetch', undefined, what);
 
 const pendingRefresh = new Map();
 
@@ -382,12 +383,13 @@ async function moveToLog(row, guild, logChannelId) {
 }
 
 /**
- * Delete the copy in the log channel and forget where it was. The pointer is only cleared when the
- * copy is deleted or confirmed gone; when that cannot be checked it stays, so a later call can
- * still remove the copy.
- * @returns {Promise<boolean>} whether no copy is left
+ * Delete the copy in the log channel and forget where it was. The pointer is cleared when the copy
+ * is deleted, confirmed gone, or out of reach for good (no access). After a failure that may pass
+ * (a timeout, a 5xx) it stays, so a later call can still remove the copy, unless `force` says the
+ * copy is in a retired channel and must not hold up the new one.
+ * @returns {Promise<boolean>} whether the pointer is cleared
  */
-async function dropLogCopy(row, guild) {
+async function dropLogCopy(row, guild, { force = false } = {}) {
   if (!row.log_message_id) return true;
   const state = await deleteMessage(
     guild,
@@ -395,7 +397,7 @@ async function dropLogCopy(row, guild) {
     row.log_message_id,
     `the log copy of #${row.number}`
   );
-  if (state === 'error') return false;
+  if (state === 'error' && !force) return false;
   await setSuggestionLog(row.id);
   return true;
 }
@@ -437,9 +439,10 @@ function syncLogCopy(id, guild, cfg, { adopted = false } = {}) {
       // 'error': could not tell, so keep the copy and its pointer and do not post a second one.
       if (state !== 'gone') return true;
       // The platform says the copy is gone: post a new one below.
-    } else if (!(await dropLogCopy(row, guild))) {
-      // A copy in another channel than the log channel set now, and it could not be removed yet.
-      return false;
+    } else {
+      // A copy in another channel than the log channel set now: remove it if possible, but an
+      // orphan in a retired channel is the smaller harm, so it does not stop the new copy.
+      await dropLogCopy(row, guild, { force: true });
     }
     const target = await channelOf(guild, cfg.logChannel);
     try {
@@ -540,23 +543,36 @@ async function moveBackLocked(id) {
   }
 
   const old = { channelId: row.channel_id, messageId: row.message_id };
-  // The old post: in "copy" mode a decided one in the log channel is the log copy from now on. In
-  // every other case it goes.
-  const keepAsCopy =
+  // The old post: in "copy" mode a decided one in the log channel is the log copy from now on, if it
+  // is still there. In every other case it goes.
+  let keepAsCopy = Boolean(
     cfg.logChannel &&
     cfg.logMode === 'copy' &&
     FINAL.has(row.status) &&
     old.messageId &&
     old.channelId === cfg.logChannel &&
-    !row.log_message_id;
+    !row.log_message_id
+  );
+  if (
+    keepAsCopy &&
+    (await probeMessage(guild, old.channelId, old.messageId, `the old post of #${row.number}`)) === 'gone'
+  ) {
+    keepAsCopy = false; // deleted meanwhile: a fresh copy is posted below
+  }
   if (!keepAsCopy) {
     const state = await deleteMessage(guild, old.channelId, old.messageId, `the old post of #${row.number}`);
-    if (state === 'error') {
+    if (state === 'error' || state === 'denied') {
       // Could not remove it: take the new post back so the suggestion has one post, as before.
       await deleteMessage(guild, cfg.channel, sent.id, `the new post of #${row.number}`);
-      return fail(`Sylo could not remove the old post of #${row.number}, so it was not moved. Try again.`, {
-        stop: true,
-      });
+      return state === 'denied'
+        ? // For good (Sylo has no access to the old post): "move all" skips this one and reports it.
+          fail(`Sylo has no access to the old post of #${row.number}, so it was not moved.`, {
+            skip: true,
+            report: true,
+          })
+        : fail(`Sylo could not remove the old post of #${row.number}, so it was not moved. Try again.`, {
+            stop: true,
+          });
     }
   }
   await setSuggestionMessage(row.id, cfg.channel, sent.id);
@@ -573,8 +589,9 @@ async function moveBackLocked(id) {
  * Post a suggestion again in the suggestions channel (same embed: number, status, reason and the
  * vote counts) and point it at the new post. The caller has checked who may do this.
  * @param {number} id  the suggestion's id
- * @returns {Promise<{ ok: true, number: number } | { ok: false, error: string, stop?: boolean, skip?: boolean }>}
- *   `stop` marks an error that would hit every suggestion (no permission, no channel).
+ * @returns {Promise<{ ok: true, number: number } | { ok: false, error: string, stop?: boolean, skip?: boolean, report?: boolean }>}
+ *   `stop` marks an error that may hit every suggestion (no permission, no channel, a timeout).
+ *   `skip` means this one cannot be moved but the next may be; `report` says it should be listed.
  */
 export async function moveSuggestionBack(id) {
   const row = await getSuggestion(id);
@@ -585,40 +602,50 @@ export async function moveSuggestionBack(id) {
 
 /**
  * Move the server's suggestions that sit outside the suggestions channel back into it, oldest
- * first, at most `limit` per call. Stops at the first error and says which suggestion it was.
+ * first, at most `limit` moved per call, starting after number `after`. Stops at the first error
+ * that may hit every suggestion and says which one it was. A suggestion that cannot be moved for
+ * good (no access to its old post) is skipped and listed in `failed`. `next` is the number to pass
+ * as `after` for the next call.
  * @param {string} guildId  the server's key
- * @returns {Promise<{ ok: true, moved: number, remaining: number } | { ok: false, error: string, moved: number, remaining: number, number?: number }>}
+ * @returns {Promise<{ ok: true, moved: number, remaining: number, failed: { number: number, error: string }[], next: number } | { ok: false, error: string, moved: number, remaining: number, failed: { number: number, error: string }[], next: number, number?: number }>}
  */
-export async function moveAllSuggestionsBack(guildId, { limit = MOVE_ALL_BATCH } = {}) {
+export async function moveAllSuggestionsBack(guildId, { limit = MOVE_ALL_BATCH, after = 0 } = {}) {
   const cfg = normaliseSuggestionsConfig((await getGuildModule(guildId, 'suggestions')).config);
   if (!cfg.channel) {
     return {
       ...fail('Set the suggestions channel first: without it there is nowhere to move them back to.'),
       moved: 0,
       remaining: 0,
+      failed: [],
+      next: after,
     };
   }
-  const rows = await listSuggestionsOutside(guildId, cfg.channel);
+  const rows = (await listSuggestionsOutside(guildId, cfg.channel)).filter((r) => r.number > after);
   let moved = 0;
-  let skipped = 0;
-  for (const row of rows) {
-    if (moved >= limit) break;
+  let next = after;
+  const failed = [];
+  let i = 0;
+  for (; i < rows.length && moved < limit; i += 1) {
+    const row = rows[i];
     const result = await moveSuggestionBack(row.id);
     if (result.ok) {
       moved += 1;
-    } else if (result.skip) {
-      skipped += 1;
-    } else {
+    } else if (result.report) {
+      failed.push({ number: row.number, error: result.error });
+    } else if (!result.skip) {
       return {
         ok: false,
         error: `Stopped at #${row.number}: ${result.error}`,
         moved,
-        remaining: rows.length - moved - skipped,
+        remaining: rows.length - i,
+        failed,
+        next,
         number: row.number,
       };
     }
+    next = row.number;
   }
-  return { ok: true, moved, remaining: rows.length - moved - skipped };
+  return { ok: true, moved, remaining: rows.length - i, failed, next };
 }
 
 /** Delete a suggestion, its votes and (best effort) its post and its copy in the log channel. */

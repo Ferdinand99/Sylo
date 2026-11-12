@@ -260,19 +260,33 @@ export default function Suggestions() {
     if (!ok) return;
     setBusy(true);
     let total = 0;
+    let after = 0;
+    const failed = [];
+    const skippedText = () =>
+      failed.length
+        ? ` ${failed.length} could not be moved and stay where they are: ${failed
+            .map((f) => `#${f.number}`)
+            .join(', ')}. ${failed[0].error}`
+        : '';
     try {
-      // The server moves a batch at a time; ask again until nothing is left or it stops.
+      // The server moves a batch at a time; ask again (after the last one it looked at) until
+      // nothing is left or it stops.
       for (;;) {
-        const result = await moveAllSuggestionsBack(guildId);
+        const result = await moveAllSuggestionsBack(guildId, after);
         total += result.moved;
+        failed.push(...(result.failed ?? []));
         if (result.error) {
-          notify(`${result.error} ${total} moved back, ${result.remaining} left.`);
+          notify(`${result.error} ${total} moved back, ${result.remaining} left.${skippedText()}`);
           break;
         }
-        if (!result.remaining || !result.moved) {
-          notify(`${total} ${total === 1 ? 'suggestion' : 'suggestions'} moved back.`, 'info');
+        if (!result.remaining || !(result.next > after)) {
+          notify(
+            `${total} ${total === 1 ? 'suggestion' : 'suggestions'} moved back.${skippedText()}`,
+            failed.length ? 'error' : 'info'
+          );
           break;
         }
+        after = result.next;
       }
     } catch (err) {
       notify(`${err.message} ${total} moved back before that.`);
