@@ -41,6 +41,9 @@ const s = {
     'UPDATE introductions SET message_id = NULL, updated_at = ? WHERE guild_id = ? AND user_id = ?'
   ),
   del: prepare('DELETE FROM introductions WHERE guild_id = ? AND user_id = ?'),
+  clearAnswers: prepare(
+    "UPDATE introductions SET answers = '{}', updated_at = ? WHERE guild_id = ? AND user_id = ?"
+  ),
   count: prepare('SELECT COUNT(*) AS n FROM introductions WHERE guild_id = ?'),
 };
 
@@ -76,6 +79,13 @@ export async function saveIntroduction({ guildId, userId, channelId, messageId =
 /** Forget the card message (it was deleted); the answers stay. */
 export const clearIntroductionMessage = async (guildId, userId) =>
   (await s.clearMessage.run(Date.now(), guildId, userId)).changes;
+
+/**
+ * Erase the answers but keep the row: the channel and message ids are what lets a card that could
+ * not be deleted be deleted later.
+ */
+export const clearIntroductionAnswers = async (guildId, userId) =>
+  (await s.clearAnswers.run(Date.now(), guildId, userId)).changes;
 
 /** Delete a member's introduction. @returns {Promise<number>} rows removed */
 export const deleteIntroduction = async (guildId, userId) => (await s.del.run(guildId, userId)).changes;

@@ -2,7 +2,8 @@
 // a DM questionnaire (bot/lib/dmQuestionnaire.js), which takes their DMs first. When the
 // user shares several ticket-enabled servers and has no open ticket, the bot
 // asks which server with a select menu.
-import { guildKey, guildByKey } from '../../platform/platformOf.js';
+import { guildKey, guildByKey, platformOfClient } from '../../platform/platformOf.js';
+import { config } from '../../config.js';
 import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
 import { ticketGuildsForUser, ingestUserDM } from '../../modules/tickets.js';
 import { getOpenTicket } from '../../db/tickets.js';
@@ -39,15 +40,21 @@ const STALE_PROMPT_MS = 30 * 60 * 1000;
 async function lateQuestionnaireAnswer(message) {
   try {
     const recent = await message.channel?.messages?.fetch?.({ limit: 5, before: message.id });
-    const mine = [...(recent?.values?.() ?? [])].find((m) => m.author?.id === message.client?.user?.id);
+    // The newest message of Sylo's own, whatever order the platform returns them in.
+    const mine = [...(recent?.values?.() ?? [])]
+      .filter((m) => m.author?.id === message.client?.user?.id)
+      .sort((a, b) => (b.createdTimestamp ?? 0) - (a.createdTimestamp ?? 0))[0];
     if (!mine || !looksLikeQuestionnairePrompt(mine.content)) return false;
     if (Date.now() - (mine.createdTimestamp ?? Date.now()) > STALE_PROMPT_MS) return false;
   } catch {
     return false;
   }
+  // The command is named for the platform the DM arrived on (Fluxer has no slash commands).
+  const again =
+    platformOfClient(message.client) === 'fluxer' ? `${config.commandPrefix}intro create` : '/intro create';
   await message
     .reply(
-      'That looks like an answer to a questionnaire that has ended (it timed out, or Sylo restarted), so I did not send it to staff. Start the questionnaire again from the server, for example with the /intro create command.'
+      `That looks like an answer to a questionnaire that has ended (it timed out, or Sylo restarted), so I did not send it to staff. Start it again from the server, for example with ${again}.`
     )
     .catch(() => {});
   return true;

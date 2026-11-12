@@ -8,7 +8,9 @@
 //     onComplete: async (answers) => 'Posted!',     // runs when the member confirms (or, with no
 //                                                   // review, after the last answer). Return a text
 //                                                   // to show, or { ok: false, message } / throw
-//                                                   // to report a failure (see below).
+//                                                   // to report a failure (see below). Add
+//                                                   // final: true when trying again cannot help:
+//                                                   // the session then ends.
 //     onCancel: async (reason) => {},               // 'cancel' | 'timeout' | what cancelQuestionnaire got
 //   });
 //   // started = { ok: true } | { ok: false, reason: 'busy' | 'dm_closed' | 'no_questions' }
@@ -162,14 +164,43 @@ function endSession(session) {
  * the member leaves the server or erases their data. Calls the session's onCancel with `reason`.
  * @param {string} userId
  * @param {string} [reason]
- * @param {{ platform?: 'discord' | 'fluxer', notify?: boolean }} [opts]  without a platform, every
- *   platform's session of that user id ends; `notify: false` skips the DM that tells the member
+ * @param {{ platform?: 'discord' | 'fluxer', scope?: string, notify?: boolean }} [opts]  without a
+ *   platform, every platform's session of that user id ends; `scope` limits it to sessions started
+ *   with that scope; `notify: false` skips the DM that tells the member
  * @returns {boolean} whether there was a session
  */
-export function cancelQuestionnaire(userId, reason = 'cancel', { platform = null, notify = true } = {}) {
+export function cancelQuestionnaire(
+  userId,
+  reason = 'cancel',
+  { platform = null, scope = null, notify = true } = {}
+) {
+  return stopSessions(
+    (session) =>
+      session.user.id === userId &&
+      (!platform || session.platform === platform) &&
+      (!scope || session.scope === scope),
+    reason,
+    notify
+  );
+}
+
+/**
+ * End every session that was started with this `scope` (a string the feature chose, for example one
+ * per server), for example when its module is switched off for that server.
+ * @param {string} scope
+ * @param {string} [reason]
+ * @param {{ notify?: boolean }} [opts]
+ * @returns {boolean} whether there was a session
+ */
+export function cancelQuestionnairesOf(scope, reason = 'cancel', { notify = true } = {}) {
+  return stopSessions((session) => session.scope === scope, reason, notify);
+}
+
+function stopSessions(matches, reason, notify) {
   let found = false;
   for (const session of [...sessions.values()]) {
-    if (session.user.id !== userId || (platform && session.platform !== platform)) continue;
+    // Not one that is being completed: its onComplete is already running and cannot be taken back.
+    if (!matches(session) || session.state === 'done') continue;
     found = true;
     endSession(session);
     void Promise.resolve(session.onCancel?.(reason)).catch((err) =>
@@ -214,6 +245,7 @@ function buttons(session) {
  * @param {(answers: Record<string, string>) => Promise<string | { ok: false, message?: string } | void> | string | void} opts.onComplete
  * @param {(reason: string) => any} [opts.onCancel]
  * @param {number} [opts.timeoutMs]
+ * @param {string} [opts.scope]  a label for cancelQuestionnairesOf()
  * @returns {Promise<{ ok: true } | { ok: false, reason: 'busy' | 'dm_closed' | 'no_questions' }>}
  */
 export async function startQuestionnaire({
@@ -229,6 +261,7 @@ export async function startQuestionnaire({
   onComplete,
   onCancel = null,
   timeoutMs = SESSION_TIMEOUT_MS,
+  scope = null,
 }) {
   if (!Array.isArray(questions) || questions.length === 0) return { ok: false, reason: 'no_questions' };
   const key = keyOf(platform, user.id);
@@ -254,6 +287,7 @@ export async function startQuestionnaire({
     onComplete,
     onCancel,
     timeoutMs,
+    scope,
     queue: Promise.resolve(),
     timer: null,
   };
@@ -297,6 +331,11 @@ async function handleAnswer(session, message) {
   const text = String(message.content ?? '').trim();
   const word = text.toLowerCase();
 
+  if (word === 'cancel' && session.state === 'done') {
+    // onComplete is running: whatever it does (a post, a save) cannot be taken back from here.
+    await reply(session, 'That is already being completed, so it is too late to cancel.');
+    return;
+  }
   if (word === 'cancel') {
     endSession(session);
     await Promise.resolve(session.onCancel?.('cancel')).catch((err) =>
@@ -357,7 +396,15 @@ async function handleAnswer(session, message) {
       return;
     }
   }
-  const refusal = value ? await q.validate?.(value) : null;
+  let refusal;
+  try {
+    refusal = value ? await q.validate?.(value) : null;
+  } catch (err) {
+    // The answer itself is never logged.
+    log.error('questionnaire', `validate failed for question ${q.id}: ${err.message}`);
+    await reply(session, 'Could not check that answer, please try again.');
+    return;
+  }
   if (refusal) {
     await reply(session, refusal);
     return;
@@ -445,6 +492,12 @@ async function complete(session, editable) {
   if (!failure) {
     endSession(session);
     await say(typeof result === 'string' && result ? result : 'Done.').catch(() => {});
+    return;
+  }
+  // A failure that trying again cannot fix (the member left, the module is off): end the session.
+  if (result && typeof result === 'object' && result.final === true) {
+    endSession(session);
+    await say(failure).catch(() => {});
     return;
   }
 

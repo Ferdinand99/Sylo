@@ -182,6 +182,9 @@ const userStmts = {
   // Their introduction: the answers and the row that points at the card message. The message itself
   // is deleted by the callers that hold the guild (forgetIntroductionCard in modules/introductions.js).
   introductions: prepare('DELETE FROM introductions WHERE guild_id = ? AND user_id = ?'),
+  introductionsClear: prepare(
+    "UPDATE introductions SET answers = '{}', updated_at = ? WHERE guild_id = ? AND user_id = ?"
+  ),
   inviteCounts: prepare('DELETE FROM invite_counts WHERE guild_id = ? AND user_id = ?'),
   inviteJoins: prepare('DELETE FROM invite_joins WHERE guild_id = ? AND user_id = ?'),
   inviteJoinsAsInviter: prepare(
@@ -239,7 +242,10 @@ export async function forgetUser(guildId, userId, { keepIntroduction = false } =
   const tempRoleAdders = (await userStmts.tempRoleAdder.run(guildId, userId)).changes;
   const quotes = (await userStmts.quotesAuthored.run(guildId, userId)).changes;
   const quotesSaved = (await userStmts.quotesSaved.run(guildId, userId)).changes;
-  const introductions = keepIntroduction ? 0 : (await userStmts.introductions.run(guildId, userId)).changes;
+  // With keepIntroduction the row stays (it holds the ids a later delete needs), without the answers.
+  let introductions = 0;
+  if (keepIntroduction) await userStmts.introductionsClear.run(Date.now(), guildId, userId);
+  else introductions = (await userStmts.introductions.run(guildId, userId)).changes;
   const invites =
     (await userStmts.inviteCounts.run(guildId, userId)).changes +
     (await userStmts.inviteJoins.run(guildId, userId)).changes +

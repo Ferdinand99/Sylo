@@ -220,3 +220,32 @@ test('a failing delete keeps the stored prompt id and says so; a failing move le
   assert.equal((await api.post('/modules/introductions/prompt/unpublish')).status, 200);
   posted.clear();
 });
+
+test('switching the module off from the dashboard ends the running questionnaires of that server', async () => {
+  const { startQuestionnaire, hasActiveQuestionnaire, _resetQuestionnaires } =
+    await import('../src/bot/lib/dmQuestionnaire.js');
+  const dms = [];
+  const user = { id: '700000000000000070', send: async (payload) => dms.push(payload) };
+  await startQuestionnaire({
+    user,
+    questions: [{ id: 'a', label: 'A', required: true, maxLength: 10 }],
+    scope: `introductions:${GID}`,
+    onComplete: async () => {},
+  });
+  assert.equal(hasActiveQuestionnaire('discord', user.id), true);
+  assert.equal((await api.post('/modules/introductions', { enabled: false })).status, 200);
+  assert.equal(hasActiveQuestionnaire('discord', user.id), false);
+  assert.match(dms.at(-1).content, /questionnaire was stopped/);
+
+  await startQuestionnaire({
+    user,
+    questions: [{ id: 'a', label: 'A', required: true, maxLength: 10 }],
+    scope: `introductions:${GID}`,
+    onComplete: async () => {},
+  });
+  await api.post('/modules/introductions', { enabled: true });
+  assert.equal(hasActiveQuestionnaire('discord', user.id), true, 'switching it on stops nothing');
+  assert.equal((await api.post('/modules/bulk', { ids: ['introductions'], enabled: false })).status, 200);
+  assert.equal(hasActiveQuestionnaire('discord', user.id), false, 'the bulk switch too');
+  _resetQuestionnaires();
+});

@@ -21,6 +21,7 @@ import { getGuildModule, isModuleEnabled } from '../db/modules.js';
 import { guildEmbedColor } from '../db/guildSettings.js';
 import {
   answersOf,
+  clearIntroductionAnswers,
   clearIntroductionMessage,
   deleteIntroduction,
   getIntroduction,
@@ -28,7 +29,11 @@ import {
   saveIntroduction,
 } from '../db/introductions.js';
 import { guildByKey, guildKey, platformOfGuild, rawGuildId } from '../platform/platformOf.js';
-import { startQuestionnaire } from '../bot/lib/dmQuestionnaire.js';
+import {
+  cancelQuestionnaire,
+  cancelQuestionnairesOf,
+  startQuestionnaire,
+} from '../bot/lib/dmQuestionnaire.js';
 import { registerComponent } from '../bot/lib/components.js';
 import { idList } from '../web/lib/idList.js';
 import { sweepMap } from '../lib/sweepMap.js';
@@ -49,6 +54,14 @@ export const LIMITS = {
   footer: { maxLength: 200 },
   promptText: { maxLength: 500 },
 };
+
+/** The label the questionnaire sessions of one server carry, so they can be ended together. */
+const sessionScope = (key) => `introductions:${key}`;
+
+/** End every running introduction questionnaire of a server (the module was switched off there). */
+export function cancelIntroductionSessions(key) {
+  return cancelQuestionnairesOf(sessionScope(key), 'module off');
+}
 
 export const INTRO_PLACEHOLDERS = ['{user}', '{user.name}', '{server}', '{rolegroup:<name>}'];
 
@@ -482,13 +495,15 @@ export async function postIntroduction({ guild, userId, answers }) {
   return withLock(`${key}|${userId}`, async () => {
     // The module may have been switched off while the member was answering.
     if (!(await isModuleEnabled(key, 'introductions'))) {
-      return { ok: false, error: 'Introductions are off in this server.' };
+      return { ok: false, error: 'Introductions are off in this server.', final: true };
     }
     const cfg = await introConfig(key);
     if (!cfg.channelId)
       return { ok: false, error: 'The introductions channel is not set up yet. Ask a server admin.' };
     const member = await fetchMember(guild, userId);
-    if (!member) return { ok: false, error: 'I could not find you in that server any more.' };
+    if (!member) {
+      return { ok: false, error: 'I could not find you in that server any more.', final: true };
+    }
 
     const clean = cleanAnswers(cfg, answers);
     const payload = await cardPayload(guild, member, cfg, clean);
@@ -576,6 +591,10 @@ export async function removeIntroduction(guild, userId) {
       await deleteCardMessage(guild, row);
     } catch (err) {
       log.warn('module:introductions', `could not delete a card message: ${err.message}`);
+      // The card is still public and Sylo cannot reach it now. The row stays (it is the only way to
+      // delete the card later), but without the member's answers.
+      await clearIntroductionAnswers(key, userId);
+      lastLook.delete(`${key}|${userId}`);
       return 'failed';
     }
     await deleteIntroduction(key, userId);
@@ -646,7 +665,7 @@ export async function beginIntroduction({ guild, user }) {
   const existing = await getIntroduction(key, user.id);
   const finish = async (answers) => {
     const result = await postIntroduction({ guild, userId: user.id, answers });
-    if (!result.ok) return { ok: false, message: result.error };
+    if (!result.ok) return { ok: false, message: result.error, final: result.final === true };
     const link = jumpUrl(key, result.channelId, result.messageId);
     return {
       ok: true,
@@ -669,10 +688,12 @@ export async function beginIntroduction({ guild, user }) {
     confirmLabel: 'Post',
     restartLabel: 'Start over',
     normalise: cleanAnswer,
+    scope: sessionScope(key),
     onComplete: async (answers) => {
       const done = await finish(answers);
       // A failure keeps the member's answers: the questionnaire offers Post again.
-      return done.ok ? done.message : { ok: false, message: done.message };
+      // (final: the member left or the module is off, so offering Post again would be pointless)
+      return done.ok ? done.message : { ok: false, message: done.message, final: done.final };
     },
   });
   if (started.ok) return { ok: true, message: 'Check your DMs.' };
@@ -696,7 +717,13 @@ export async function beginIntroduction({ guild, user }) {
  * @returns {Promise<{ ok: true, channelId: string, messageId: string } | { ok: false, error: string }>}
  */
 export async function publishPrompt(guild, cfg) {
-  const channel = await textChannel(guild, cfg.channelId);
+  let channel;
+  try {
+    channel = await textChannel(guild, cfg.channelId);
+  } catch (err) {
+    log.warn('module:introductions', `could not look up the channel: ${err.message}`);
+    return { ok: false, error: 'Sylo could not look up that channel right now. Try again in a moment.' };
+  }
   if (!channel) return { ok: false, error: 'Pick the introductions channel first.' };
   if (missingPermission(guild, channel)) {
     return {
@@ -824,8 +851,13 @@ on('introductions', 'guildMemberUpdate', async ({ old: before, new: after }, _co
 
 on('introductions', 'guildMemberRemove', async (member, config, key) => {
   const userId = member.id ?? member.user?.id;
-  if (!userId || normaliseIntroductionsConfig(config).deleteOnLeave === false) return;
+  if (!userId) return;
   const guild = guildByKey(key);
+  // Someone who left has no card to make: end a questionnaire they have running for this server.
+  if (guild) {
+    cancelQuestionnaire(userId, 'left', { platform: platformOfGuild(guild), scope: sessionScope(key) });
+  }
+  if (normaliseIntroductionsConfig(config).deleteOnLeave === false) return;
   if (guild) await removeIntroduction(guild, userId);
 });
 
