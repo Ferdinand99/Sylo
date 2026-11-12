@@ -114,52 +114,70 @@ const LEDGER_INSERT = `
  */
 function* openAccounts(tx, guildId, userIds, config, now, create) {
   const given = [];
-  for (const userId of create ? userIds : []) {
-    // A member who ran /forget a short while ago has a cooldown tombstone: the new account keeps
-    // their cooldowns and gets no starting balance again (see eraseMember in db/economy.js).
-    const tomb = yield tx.get(
-      'SELECT * FROM economy_cooldowns WHERE guild_id = ? AND user_id = ? AND expires_at > ?',
-      guildId,
-      userId,
-      now
-    );
-    const start = tomb ? 0 : config.startingBalance;
-    const { changes } = yield tx.run(
-      `INSERT INTO economy_accounts
-         (guild_id, user_id, cash, bank, last_daily_at, last_work_at, last_rob_at, created_at, updated_at)
-       VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)
-       ON CONFLICT (guild_id, user_id) DO NOTHING`,
-      guildId,
-      userId,
-      start,
-      Number(tomb?.last_daily_at ?? 0),
-      Number(tomb?.last_work_at ?? 0),
-      Number(tomb?.last_rob_at ?? 0),
-      now,
-      now
-    );
-    if (changes === 1 && start > 0) given.push(userId);
-  }
-  // A plain UPDATE takes the row lock on Postgres; on SQLite BEGIN IMMEDIATE already holds the
-  // database. Done for every account before any is read, in the same order everywhere.
-  for (const userId of userIds) {
-    yield tx.run(
-      'UPDATE economy_accounts SET updated_at = updated_at WHERE guild_id = ? AND user_id = ?',
-      guildId,
-      userId
-    );
-  }
+  // Insert the accounts that do not exist yet; the ones that got a starting balance are noted.
+  const insertMissing = function* (ids) {
+    for (const userId of ids) {
+      // A member who ran /forget a short while ago has a cooldown tombstone: the new account keeps
+      // their cooldowns and gets no starting balance again (see eraseMember in db/economy.js).
+      const tomb = yield tx.get(
+        'SELECT * FROM economy_cooldowns WHERE guild_id = ? AND user_id = ? AND expires_at > ?',
+        guildId,
+        userId,
+        now
+      );
+      const start = tomb ? 0 : config.startingBalance;
+      const { changes } = yield tx.run(
+        `INSERT INTO economy_accounts
+           (guild_id, user_id, cash, bank, last_daily_at, last_work_at, last_rob_at, created_at, updated_at)
+         VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)
+         ON CONFLICT (guild_id, user_id) DO NOTHING`,
+        guildId,
+        userId,
+        start,
+        Number(tomb?.last_daily_at ?? 0),
+        Number(tomb?.last_work_at ?? 0),
+        Number(tomb?.last_rob_at ?? 0),
+        now,
+        now
+      );
+      if (changes === 1 && start > 0) given.push(userId);
+    }
+  };
   const accounts = new Map();
-  for (const userId of userIds) {
-    const row = yield tx.get(
-      'SELECT * FROM economy_accounts WHERE guild_id = ? AND user_id = ?',
-      guildId,
-      userId
-    );
-    // Without `create`, an account that does not exist (erased by /forget a moment ago) is simply
-    // not part of the call.
-    if (row) accounts.set(userId, row);
+  // Lock the rows, then read them. A plain UPDATE takes the row lock on Postgres; on SQLite
+  // BEGIN IMMEDIATE already holds the database. Done for every account before any is read, in
+  // the same order everywhere.
+  const lockAndRead = function* (ids) {
+    for (const userId of ids) {
+      yield tx.run(
+        'UPDATE economy_accounts SET updated_at = updated_at WHERE guild_id = ? AND user_id = ?',
+        guildId,
+        userId
+      );
+    }
+    for (const userId of ids) {
+      const row = yield tx.get(
+        'SELECT * FROM economy_accounts WHERE guild_id = ? AND user_id = ?',
+        guildId,
+        userId
+      );
+      // Without `create`, an account that does not exist (erased by /forget a moment ago) is simply
+      // not part of the call.
+      if (row) accounts.set(userId, row);
+    }
+  };
+  if (create) yield* insertMissing(userIds);
+  yield* lockAndRead(userIds);
+  // On Postgres a /forget can commit between the insert (which found the row and did nothing) and
+  // the lock. The account is then gone: make it again (the tombstone is in place, so no second
+  // starting balance) and lock it. A few rounds are plenty; every round needs a new /forget.
+  for (let round = 0; create && round < 3; round++) {
+    const missing = userIds.filter((id) => !accounts.has(id));
+    if (missing.length === 0) break;
+    yield* insertMissing(missing);
+    yield* lockAndRead(missing);
   }
+  if (create && userIds.some((id) => !accounts.has(id))) throw new Error('an economy account kept vanishing');
   for (const userId of given) {
     yield tx.insertId(
       LEDGER_INSERT,
