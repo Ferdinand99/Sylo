@@ -16,7 +16,7 @@
 // incremental-migration mechanism this enables.
 import { config } from '../config.js';
 import { db, SCHEMA_VERSION } from './index.js';
-import { splitStatements } from './splitSql.js';
+import { idempotentTarget, splitStatements } from './splitSql.js';
 
 const bootstrapStatements = [];
 const postgresMigrations = [];
@@ -108,7 +108,10 @@ async function getSql() {
         // keeps every lock until its last statement, which deadlocked against other processes that
         // were already writing to the same tables (see splitSql.js).
         for (const ddl of bootstrapStatements) {
-          for (const statement of splitStatements(ddl)) await client.unsafe(statement);
+          for (const statement of splitStatements(ddl)) {
+            if (await alreadyThere(client, statement)) continue;
+            await client.unsafe(statement);
+          }
         }
         await runPostgresMigrations(client);
       } finally {
@@ -122,6 +125,29 @@ async function getSql() {
   }
   sqlClient = await readyPromise;
   return sqlClient;
+}
+
+/**
+ * True when a bootstrap statement would change nothing because its column or index exists. A read of the
+ * catalog takes no table lock; the statement itself would (ACCESS EXCLUSIVE for the ALTER, SHARE for
+ * the index, even when it then does nothing), and lining up for those locks while other processes write
+ * is how the bootstrap used to deadlock with them. The statement stays in the text for a database that
+ * lacks the column or index.
+ */
+async function alreadyThere(client, statement) {
+  const target = idempotentTarget(statement);
+  if (!target) return false;
+  const rows =
+    target.kind === 'column'
+      ? await client.unsafe(
+          'SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2',
+          [target.table, target.column]
+        )
+      : await client.unsafe(
+          'SELECT 1 FROM pg_indexes WHERE schemaname = current_schema() AND indexname = $1',
+          [target.name]
+        );
+  return rows.length > 0;
 }
 
 // Runs after the `IF NOT EXISTS` bootstrap above, inside the same advisory

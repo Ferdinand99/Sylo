@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { closePostgres } from '../src/db/driver.js';
 
 const url = process.env.DATABASE_URL;
-const ROUNDS = 40;
+const ROUNDS = Number(process.env.STRESS_ROUNDS) || 40;
 
 test(
   '/forget in parallel with money, purchases, giveaway fees and the sweeps never deadlocks',
@@ -92,7 +92,13 @@ test(
       ];
       for (const r of await Promise.allSettled(jobs)) {
         if (r.status === 'rejected') {
-          failures.push(`round ${round}: ${r.reason?.code ?? ''} ${r.reason?.message}`);
+          // the statement and the lock detail, so a deadlock can be read from the CI log
+          const why = r.reason ?? {};
+          failures.push(
+            `round ${round}: ${why.code ?? ''} ${why.message} | ${String(why.query ?? '')
+              .replace(/\s+/g, ' ')
+              .slice(0, 160)} | ${String(why.detail ?? '').replace(/\s+/g, ' ')}`
+          );
         }
       }
       // each round starts from nothing for these members

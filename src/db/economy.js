@@ -113,7 +113,13 @@ const pruneStmt = prepare(
          (SELECT id FROM economy_transactions WHERE created_at < ? ORDER BY id FOR UPDATE SKIP LOCKED)`
     : 'DELETE FROM economy_transactions WHERE created_at < ?'
 );
-const pruneCooldownsStmt = prepare('DELETE FROM economy_cooldowns WHERE expires_at < ?');
+// Like the ledger prune: a row somebody holds (a /forget writing its record) is left for the next run.
+const pruneCooldownsStmt = prepare(
+  postgres
+    ? `DELETE FROM economy_cooldowns WHERE (guild_id, user_id) IN
+         (SELECT guild_id, user_id FROM economy_cooldowns WHERE expires_at < ? ORDER BY guild_id, user_id FOR UPDATE SKIP LOCKED)`
+    : 'DELETE FROM economy_cooldowns WHERE expires_at < ?'
+);
 
 // COUNT(*) comes back as a string from postgres.js: coerce so both drivers agree.
 const num = (row) => Number(row?.n) || 0;
