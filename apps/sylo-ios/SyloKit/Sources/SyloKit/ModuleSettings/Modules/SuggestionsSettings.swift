@@ -37,11 +37,22 @@ public struct SuggestionsPage: ModuleSettingsPage {
     }
 }
 
+/// What happens to a decided suggestion when there is a log channel.
+public enum SuggestionsLogMode: String, Codable, Sendable, CaseIterable {
+    /// The original stays in the suggestions channel and a copy goes to the log channel.
+    case copy
+    /// The post moves to the log channel and the original is deleted.
+    case move
+}
+
 public struct SuggestionsSettings: Codable, Sendable, Equatable {
     /// Where suggestions are posted; "" = the channel the command is used in.
     public var channel: String
-    /// A decided suggestion is reposted here and the original deleted; "" = it stays.
+    /// A decided suggestion goes here (see ``logMode``); "" = it stays where it is.
     public var logChannel: String
+    /// Copy or move to the log channel. Always sent when saving: the server keeps what it has
+    /// stored when it is left out, but the app says it outright.
+    public var logMode: SuggestionsLogMode
     /// New posts do not show who wrote them.
     public var anonymous: Bool
     /// DM the author when staff decide.
@@ -53,10 +64,14 @@ public struct SuggestionsSettings: Codable, Sendable, Equatable {
     /// May decide without Manage Server.
     public var staffRoles: [String]
 
-    public init(channel: String = "", logChannel: String = "", anonymous: Bool = false, dmAuthor: Bool = true,
-                messagesToSuggestions: Bool = false, cooldownSeconds: Int = 60, staffRoles: [String] = []) {
+    /// - Parameter logMode: nil picks what the server picks for settings saved without one: move
+    ///   when there is a log channel (so nothing changes silently), else copy.
+    public init(channel: String = "", logChannel: String = "", logMode: SuggestionsLogMode? = nil,
+                anonymous: Bool = false, dmAuthor: Bool = true, messagesToSuggestions: Bool = false,
+                cooldownSeconds: Int = 60, staffRoles: [String] = []) {
         self.channel = channel
         self.logChannel = logChannel
+        self.logMode = logMode ?? Self.defaultLogMode(logChannel: logChannel)
         self.anonymous = anonymous
         self.dmAuthor = dmAuthor
         self.messagesToSuggestions = messagesToSuggestions
@@ -68,14 +83,22 @@ public struct SuggestionsSettings: Codable, Sendable, Equatable {
     public static let cooldownRange = 0...3600
     public static let maxStaffRoles = 25
 
+    private static func defaultLogMode(logChannel: String) -> SuggestionsLogMode {
+        logChannel.isEmpty ? .copy : .move
+    }
+
     private enum CodingKeys: String, CodingKey {
-        case channel, logChannel, anonymous, dmAuthor, messagesToSuggestions, cooldownSeconds, staffRoles
+        case channel, logChannel, logMode, anonymous, dmAuthor, messagesToSuggestions, cooldownSeconds, staffRoles
     }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         channel = try c.decode(forKey: .channel, or: "")
         logChannel = try c.decode(forKey: .logChannel, or: "")
+        // A server from before 5.1 sends none, and an unknown value is not an error either: both
+        // read the way the server reads them.
+        let storedMode = try? c.decodeIfPresent(String.self, forKey: .logMode)
+        logMode = storedMode.flatMap(SuggestionsLogMode.init(rawValue:)) ?? Self.defaultLogMode(logChannel: logChannel)
         anonymous = try c.decode(forKey: .anonymous, or: false)
         dmAuthor = try c.decode(forKey: .dmAuthor, or: true)
         messagesToSuggestions = try c.decode(forKey: .messagesToSuggestions, or: false)

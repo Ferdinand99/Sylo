@@ -29,8 +29,13 @@ struct SuggestionsSettingsView: View {
             Section {
                 ChannelPicker(title: "Log channel", selection: $settings.logChannel, channels: page.channels,
                               noneTitle: "Decided ones stay")
+                Picker("When decided", selection: $settings.logMode) {
+                    Text("Copy, keep the original").tag(SuggestionsLogMode.copy)
+                    Text("Move, delete the original").tag(SuggestionsLogMode.move)
+                }
+                .disabled(settings.logChannel.isEmpty)
             } footer: {
-                Text("A suggestion that is approved, denied or implemented is reposted here and the original is deleted.")
+                Text(Self.logModeFooter(settings))
             }
 
             Section {
@@ -78,6 +83,19 @@ struct SuggestionsSettingsView: View {
                 footer: "Set a status, add a reason or delete a suggestion in the web dashboard.")
         }
         .task { await note.load() }
+    }
+
+    /// What the log channel does with a decided suggestion, in the dashboard's words.
+    private static func logModeFooter(_ settings: SuggestionsSettings) -> LocalizedStringKey {
+        if settings.logChannel.isEmpty {
+            return "Pick a log channel to have decided suggestions posted there too."
+        }
+        switch settings.logMode {
+        case .copy:
+            return "The original stays in the suggestions channel and shows its status. The copy in the log channel is updated if the status changes again and removed if the suggestion is reopened."
+        case .move:
+            return "The original is deleted and the suggestion lives in the log channel from then on."
+        }
     }
 }
 
