@@ -1,7 +1,7 @@
 // Welcome & leave module. config shape:
 //   { joinChannel, joinMessage, leaveChannel, leaveMessage, dmMessage, useEmbed,
 //     card, cardBackground }
-// Placeholders: {user} {user.tag} {user.name} {user.id} {server} {memberCount}
+// Placeholders: {user} {user.tag} {user.name} {user.id} {server} {memberCount} {intro}
 import { guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { on } from './dispatch.js';
@@ -9,6 +9,7 @@ import { sendToChannel } from './lib/send.js';
 import { guildEmbedColor } from '../db/guildSettings.js';
 import { renderWelcomeCard, welcomeCardAvailable } from '../bot/lib/welcomeCard.js';
 import { log } from '../lib/log.js';
+import { introChannelMention } from './introductions.js';
 
 export const WELCOME_PLACEHOLDERS = [
   '{user}',
@@ -17,6 +18,7 @@ export const WELCOME_PLACEHOLDERS = [
   '{user.id}',
   '{server}',
   '{memberCount}',
+  '{intro}',
 ];
 
 /** Setting limits, served to the dashboard (modules/limits.js). */
@@ -55,7 +57,11 @@ export function normaliseWelcomeConfig(raw = {}) {
   };
 }
 
-function fill(template, member) {
+/**
+ * `intro` is what {intro} stands for: a mention of the introductions channel while that module is on
+ * and has a channel, else empty text (see introChannelMention).
+ */
+function fill(template, member, intro = '') {
   if (!template) return '';
   return template
     .replaceAll('{user.tag}', member.user.tag)
@@ -63,7 +69,8 @@ function fill(template, member) {
     .replaceAll('{user.id}', member.id)
     .replaceAll('{user}', `<@${member.id}>`)
     .replaceAll('{server}', member.guild.name)
-    .replaceAll('{memberCount}', String(member.guild.memberCount));
+    .replaceAll('{memberCount}', String(member.guild.memberCount))
+    .replaceAll('{intro}', intro);
 }
 
 /** Build the welcome-card attachment for a joining member, or null. */
@@ -107,24 +114,26 @@ async function payloadFor(text, member, useEmbed, card) {
 }
 
 on('welcome', 'guildMemberAdd', async (member, config, guildId) => {
+  const intro = await introChannelMention(guildId);
   if (config.joinChannel && config.joinMessage) {
     const card = await buildCard(member, config);
     await sendToChannel(
       guildId,
       config.joinChannel,
-      await payloadFor(fill(config.joinMessage, member), member, config.useEmbed, card)
+      await payloadFor(fill(config.joinMessage, member, intro), member, config.useEmbed, card)
     );
   }
   if (config.dmMessage) {
-    await member.send({ content: fill(config.dmMessage, member) }).catch(() => {});
+    await member.send({ content: fill(config.dmMessage, member, intro) }).catch(() => {});
   }
 });
 
 on('welcome', 'guildMemberRemove', async (member, config, guildId) => {
   if (!config.leaveChannel || !config.leaveMessage) return;
+  const intro = await introChannelMention(guildId);
   return sendToChannel(
     guildId,
     config.leaveChannel,
-    await payloadFor(fill(config.leaveMessage, member), member, config.useEmbed, null)
+    await payloadFor(fill(config.leaveMessage, member, intro), member, config.useEmbed, null)
   );
 });

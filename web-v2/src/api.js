@@ -130,6 +130,10 @@ export const getQuotes = (guildId, { q = '' } = {}) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/quote-board/list?q=${encodeURIComponent(q)}`);
 export const deleteQuote = (guildId, number) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/quote-board/${number}/delete`, {});
+export const publishIntroPrompt = (guildId, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/introductions/prompt/publish`, body);
+export const unpublishIntroPrompt = (guildId) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/introductions/prompt/unpublish`, {});
 export const getTempRoles = (guildId, { q = '', roleId = '' } = {}) =>
   apiFetch(
     `/api/v2/guilds/${gid(guildId)}/modules/temp-roles/list?q=${encodeURIComponent(q)}&roleId=${encodeURIComponent(roleId)}`

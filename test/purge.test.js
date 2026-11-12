@@ -391,6 +391,7 @@ const USER_ID_COLUMNS = {
   'guild_suggestion_votes.user_id': 'handled',
   'guild_temp_roles.user_id': 'handled',
   'guild_temp_roles.added_by': 'handled',
+  'introductions.user_id': 'handled',
   'guild_quotes.author_id': 'handled',
   'guild_quotes.saved_by': 'handled',
   // kept on purpose: safety records, and the staff side of them

@@ -41,6 +41,7 @@ platform gaps (native AutoMod rules, threads, moving members between voice).
 | [Temporary roles](temp-roles.md) | Give a role for a set time with `/temprole`; Sylo takes it back and logs it (beta) | off | — |
 | [Suggestions](suggestions.md) | Member suggestions with 👍 / 👎 voting, staff decisions and a log channel (beta) | off | — |
 | [Quote board](quote-board.md) | Save memorable messages (message menu or `/quote save`), show them with `/quote`, optional public page (beta) | off | — |
+| [Introductions](introductions.md) | Members answer a few questions in DM and Sylo posts a membership card in the introductions channel (beta) | off | Server Members |
 | [AFK](afk.md) | Members mark themselves away; Sylo replies to mentions | off | — |
 | [Temporary voice channels](temp-voice.md) | Join-to-create voice hubs controlled with `/voice-*` | off | — |
 | [Server statistics](server-stats.md) | Voice channels named with live member/role/boost counts | off | Server Members |

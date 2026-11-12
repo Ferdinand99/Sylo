@@ -5,6 +5,7 @@ import { clientOfGuild } from '../../platform/platformOf.js';
 import { getModule } from '../../modules/registry.js';
 import { exportGuildConfig } from '../../db/exportConfig.js';
 import { forgetUser } from '../../db/purge.js';
+import { forgetIntroductionCard } from '../../modules/introductions.js';
 import { recordAudit } from '../../db/audit.js';
 
 /** What a member-data deletion leaves alone; shown in the DM and on the dashboard pages. */
@@ -44,6 +45,7 @@ export async function exportGuildConfigFor(guildId, { owner }) {
  * @returns {Promise<{ result: Awaited<ReturnType<typeof forgetUser>>, dmDelivered: boolean }>}
  */
 export async function forgetMember(guild, userId, { reason = '', actor }) {
+  await forgetIntroductionCard(guild, userId); // the card message is found through the row forgetUser deletes
   const r = await forgetUser(guild.id, userId);
 
   const dm = new EmbedBuilder()
@@ -71,6 +73,7 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
       { name: 'Temporary role records', value: String(r.tempRoles), inline: true },
       { name: 'Quotes of their messages', value: String(r.quotes), inline: true },
       { name: 'Saved-by name removed from quotes', value: String(r.quotesSaved), inline: true },
+      { name: 'Introduction', value: String(r.introductions), inline: true },
       { name: 'Invite records', value: String(r.invites), inline: true },
       { name: 'Not affected', value: MEMBER_DATA_UNAFFECTED }
     )

@@ -45,6 +45,7 @@ public enum ModuleSymbol {
         "hourglass": "hourglass",
         "threads": "bubble.left.and.bubble.right",
         "quote": "quote.bubble",
+        "id-card": "person.text.rectangle",
         "twitch": "play.tv",
         "youtube": "play.rectangle",
         "kick": "play.circle",

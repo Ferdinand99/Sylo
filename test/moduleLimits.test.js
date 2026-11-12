@@ -32,6 +32,7 @@ import {
   normaliseQuoteQuery,
   normaliseQuoteText,
 } from '../src/modules/quoteBoard.js';
+import { normaliseIntroductionsConfig } from '../src/modules/introductions.js';
 import { normaliseHoneypotConfig } from '../src/modules/honeypot.js';
 import { normaliseInviteTrackerConfig } from '../src/modules/inviteTracker.js';
 import { normaliseKickConfig } from '../src/modules/kickAlerts.js';
@@ -200,6 +201,15 @@ const cases = {
     }),
     base: {},
     value: { saveRoles: (n) => items(n, roleId), staffRoles: (n) => items(n, roleId) },
+  },
+  introductions: {
+    normalise: normaliseIntroductionsConfig,
+    base: { questions: [{ label: 'x' }], roleGroups: [{ name: 'g', roleIds: [roleId(1)] }] },
+    value: {
+      questions: (n) => items(n, (i) => ({ label: `q${i}` })),
+      roleGroups: (n) => items(n, (i) => ({ name: `g${i}`, roleIds: [roleId(1)] })),
+      'roleGroups[].roleIds': (n) => items(n, roleId),
+    },
   },
   honeypot: {
     normalise: normaliseHoneypotConfig,

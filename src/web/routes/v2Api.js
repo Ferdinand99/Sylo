@@ -46,6 +46,7 @@ import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
 import tempRolesRouter from './v2TempRoles.js';
 import quotesRouter from './v2Quotes.js';
+import introRouter from './v2Intro.js';
 import { getGuild, baseContext, assignableRoles } from '../lib/guildContext.js';
 import { buildReactionPairs } from '../lib/reactionPairs.js';
 import { guildCustomEmojis } from '../lib/guildEmojis.js';
@@ -434,6 +435,8 @@ router.use('/guilds/:guildId', suggestionsRouter);
 router.use('/guilds/:guildId', tempRolesRouter);
 // Quote board: settings, searchable list, remove (v2Quotes.js).
 router.use('/guilds/:guildId', quotesRouter);
+// Introductions: settings, publish the prompt message (v2Intro.js).
+router.use('/guilds/:guildId', introRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
