@@ -19,6 +19,22 @@ import { MIGRATIONS } from '../src/db/index.js';
 
 const BOOT = fileURLToPath(new URL('./helpers/bootDb.mjs', import.meta.url));
 const RELEASE_5_0_MIGRATIONS = 63;
+// The giveaways columns of the 5.0 release: after BACK_TO_5_0 the table must have exactly these, so a column
+// added later and forgotten in the drop list is caught here and not skipped silently.
+const GIVEAWAYS_5_0 = [
+  'channel_id',
+  'created_at',
+  'ended',
+  'ends_at',
+  'guild_id',
+  'host_id',
+  'id',
+  'message_id',
+  'prize',
+  'required_role_id',
+  'winners',
+  'won_ids',
+];
 const url = process.env.DATABASE_URL;
 
 function boot(env) {
@@ -87,12 +103,16 @@ test('SQLite: a database that already ran the branch up to migration 69 is backf
     const insert = db.prepare(
       "INSERT INTO giveaways (guild_id, channel_id, prize, winners, host_id, ends_at, ended, won_ids, created_at, prize_amount) VALUES ('g', 'c', 'p', 1, 'h', 1, ?, '[]', 1, 50)"
     );
+    db.exec(
+      "INSERT INTO economy_inventory (guild_id, user_id, item_id, item_name, item_type, role_id, price_paid, source, status, created_at, updated_at) VALUES ('g', 'u', 1, 'x', 'temp_role', 'r', 10, 'purchase', 'active', 1, 1), ('g', 'u', 2, 'y', 'custom', NULL, 10, 'purchase', 'active', 1, 1)"
+    );
     insert.run(1); // already drawn under the earlier code: its prizes were paid without a giveaway_prizes row
     insert.run(0); // still running
     db.close();
     boot({ DATABASE_PATH: old });
     const after = new Database(old, { readonly: true });
     const paid = after.prepare('SELECT ended, prizes_paid FROM giveaways ORDER BY id').all();
+    const added = after.prepare('SELECT item_type, added_ms FROM economy_inventory ORDER BY id').all();
     after.close();
     assert.deepEqual(
       paid.map((r) => ({ ...r })),
@@ -101,6 +121,14 @@ test('SQLite: a database that already ran the branch up to migration 69 is backf
         { ended: 0, prizes_paid: 0 },
       ],
       'a drawn giveaway counts as paid, so the sweep does not pay its winners again'
+    );
+    assert.deepEqual(
+      added.map((r) => ({ ...r })),
+      [
+        { item_type: 'temp_role', added_ms: -1 },
+        { item_type: 'custom', added_ms: 0 },
+      ],
+      'a temporary-role purchase from before the column has an unknown added time'
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -114,7 +142,8 @@ const BACK_TO_5_0 = `
   DROP TABLE IF EXISTS economy_accounts, economy_transactions, economy_cooldowns, economy_items,
     economy_inventory, introductions, giveaway_prizes;
   ALTER TABLE giveaways DROP COLUMN IF EXISTS entry_fee, DROP COLUMN IF EXISTS prize_amount,
-    DROP COLUMN IF EXISTS cancelled, DROP COLUMN IF EXISTS prizes_paid;
+    DROP COLUMN IF EXISTS cancelled, DROP COLUMN IF EXISTS prizes_paid,
+    DROP COLUMN IF EXISTS drawn_at, DROP COLUMN IF EXISTS sweep_at;
   ALTER TABLE giveaway_entries DROP COLUMN IF EXISTS refunded;
   ALTER TABLE guild_suggestions DROP COLUMN IF EXISTS log_channel_id,
     DROP COLUMN IF EXISTS log_message_id;
@@ -171,6 +200,13 @@ test(
     const gone =
       await old`SELECT to_regclass('public.economy_items') AS t, to_regclass('public.introductions') AS i`;
     assert.deepEqual([gone[0].t, gone[0].i], [null, null], 'the 5.0 shape has none of the new tables');
+    const giveawayColumns =
+      await old`SELECT column_name FROM information_schema.columns WHERE table_name = 'giveaways' ORDER BY column_name`;
+    assert.deepEqual(
+      Array.from(giveawayColumns, (r) => r.column_name),
+      GIVEAWAYS_5_0,
+      'the giveaways table is back to its 5.0 columns'
+    );
     // two giveaways as 5.0 stored them: one already drawn, one running
     for (const ended of [1, 0]) {
       await old`INSERT INTO giveaways (guild_id, channel_id, prize, winners, host_id, ends_at, ended, won_ids, created_at)
@@ -198,6 +234,20 @@ test(
       );
       const [{ top }] = await b`SELECT MAX(version) AS top FROM schema_migrations`;
       assert.ok(Number(top) > RELEASE_5_0_MIGRATIONS, 'the registered migrations were recorded');
+
+      // migration 71 (the unknown added time) runs once on a database below it
+      await b`INSERT INTO economy_inventory (guild_id, user_id, item_id, item_name, item_type, role_id, price_paid, source, status, created_at, updated_at)
+        VALUES ('g', 'u', 1, 'x', 'temp_role', 'r', 0, 'purchase', 'active', 1, 1), ('g', 'u', 2, 'y', 'custom', NULL, 0, 'purchase', 'active', 1, 1)`;
+      await b`DELETE FROM schema_migrations WHERE version = 71`;
+      pgBoot(oldDb);
+      const added = await b`SELECT item_type, added_ms FROM economy_inventory ORDER BY id`;
+      assert.deepEqual(
+        Array.from(added, (r) => [r.item_type, Number(r.added_ms)]),
+        [
+          ['temp_role', -1],
+          ['custom', 0],
+        ]
+      );
     } finally {
       await a.end({ timeout: 1 });
       await b.end({ timeout: 1 });

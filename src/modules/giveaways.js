@@ -33,6 +33,7 @@ import {
   markGiveawayPrizesPaid,
   giveawaysWithUnpaidPrizes,
   cancelledWithUnrefunded,
+  deferGiveawaySweep,
   unrefundedEntrantIds,
   removeGiveawayEntry,
   hasGiveawayEntry,
@@ -551,14 +552,34 @@ export async function cancelGiveaway(id) {
  * The money work a crash can leave open, finished by the sweep: refunds of cancelled giveaways, and
  * currency prizes of recent draws. Both are safe to repeat (a marker per entry, a row per prize).
  */
-export async function completeGiveawayMoney(now = Date.now()) {
-  for (const g of await cancelledWithUnrefunded(20)) await refundCancelledEntries(g);
-  for (const g of await giveawaysWithUnpaidPrizes(now - PRIZE_SWEEP_WINDOW_MS, 20)) {
-    const economy = normaliseEconomyConfig((await getGuildModule(g.guild_id, 'economy')).config);
-    const { complete } = await payPrizes(g, g.wonIds, economy);
-    if (complete) await markGiveawayPrizesPaid(g.id);
+export async function completeGiveawayMoney(now = Date.now(), { limit = 20 } = {}) {
+  // A giveaway that cannot be finished is put back (sweep_at), so it does not stay at the head of the
+  // batch and keep the others from being looked at.
+  const retryAt = now + SWEEP_RETRY_MS;
+  for (const g of await cancelledWithUnrefunded(limit, now)) {
+    try {
+      const { failed } = await refundCancelledEntries(g);
+      if (failed > 0) await deferGiveawaySweep(g.id, retryAt);
+    } catch (err) {
+      log.error('giveaways', `could not refund #${g.id}:`, err.message);
+      await deferGiveawaySweep(g.id, retryAt);
+    }
+  }
+  for (const g of await giveawaysWithUnpaidPrizes(now - PRIZE_SWEEP_WINDOW_MS, limit, now)) {
+    try {
+      const economy = normaliseEconomyConfig((await getGuildModule(g.guild_id, 'economy')).config);
+      const { complete } = await payPrizes(g, g.wonIds, economy);
+      if (complete) await markGiveawayPrizesPaid(g.id);
+      else await deferGiveawaySweep(g.id, retryAt);
+    } catch (err) {
+      log.error('giveaways', `could not pay the prizes of #${g.id}:`, err.message);
+      await deferGiveawaySweep(g.id, retryAt);
+    }
   }
 }
+
+/** A giveaway whose money the sweep could not finish is looked at again after this long. */
+const SWEEP_RETRY_MS = 5 * 60_000;
 
 /** How far back (from the last draw or reroll) the sweep looks for draws whose prizes were not all paid. */
 const PRIZE_SWEEP_WINDOW_MS = 7 * 86_400_000;

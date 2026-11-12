@@ -27,6 +27,7 @@ registerPostgresBootstrap(`
   ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS prize_amount BIGINT NOT NULL DEFAULT 0;
   ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS cancelled INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS drawn_at BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS sweep_at BIGINT NOT NULL DEFAULT 0;
   ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS prizes_paid INTEGER NOT NULL DEFAULT 0;
   CREATE INDEX IF NOT EXISTS idx_giveaways_guild ON giveaways (guild_id, ended, ends_at);
   CREATE INDEX IF NOT EXISTS idx_giveaways_refunds ON giveaways (id) WHERE cancelled = 1 AND entry_fee > 0;
@@ -87,16 +88,18 @@ const s = {
   // A reroll has new winners to pay: the prizes are not all paid until the sweep or the draw says so.
   setWinners: prepare('UPDATE giveaways SET won_ids = ?, prizes_paid = 0, drawn_at = ? WHERE id = ?'),
   setPrizesPaid: prepare('UPDATE giveaways SET prizes_paid = 1 WHERE id = ?'),
+  setSweepAt: prepare('UPDATE giveaways SET sweep_at = ? WHERE id = ?'),
   unpaidPrizes: prepare(
     `SELECT * FROM giveaways
      WHERE ended = 1 AND cancelled = 0 AND prize_amount > 0 AND prizes_paid = 0 AND drawn_at > ?
-     ORDER BY id LIMIT ?`
+       AND sweep_at < ?
+     ORDER BY sweep_at, id LIMIT ?`
   ),
   unrefundedCancelled: prepare(
     `SELECT * FROM giveaways g
-     WHERE cancelled = 1 AND entry_fee > 0
+     WHERE cancelled = 1 AND entry_fee > 0 AND sweep_at < ?
        AND EXISTS (SELECT 1 FROM giveaway_entries e WHERE e.giveaway_id = g.id AND e.refunded = 0)
-     ORDER BY id LIMIT ?`
+     ORDER BY sweep_at, id LIMIT ?`
   ),
   unrefundedEntrants: prepare('SELECT user_id FROM giveaway_entries WHERE giveaway_id = ? AND refunded = 0'),
   delGuild: prepare('DELETE FROM giveaways WHERE guild_id = ?'),
@@ -170,11 +173,13 @@ export const dueGiveaways = async (now) => (await s.due.all(now)).map(hydrate);
 export const claimGiveawayCancel = async (id) => (await s.claimCancel.run(id)).changes === 1;
 export const markGiveawayPrizesPaid = async (id) => s.setPrizesPaid.run(id);
 /** Ended giveaways with a currency prize that is not all paid yet (a crash after the draw), last drawn after `since`. */
-export const giveawaysWithUnpaidPrizes = async (since, limit = 20) =>
-  (await s.unpaidPrizes.all(since, limit)).map(hydrate);
+export const giveawaysWithUnpaidPrizes = async (since, limit = 20, now = Date.now()) =>
+  (await s.unpaidPrizes.all(since, now, limit)).map(hydrate);
 /** Cancelled giveaways with an entry fee that still hold an unrefunded entry. */
-export const cancelledWithUnrefunded = async (limit = 20) =>
-  (await s.unrefundedCancelled.all(limit)).map(hydrate);
+export const cancelledWithUnrefunded = async (limit = 20, now = Date.now()) =>
+  (await s.unrefundedCancelled.all(now, limit)).map(hydrate);
+/** The sweep could not finish this giveaway's money: look at it again after `until`, others first. */
+export const deferGiveawaySweep = async (id, until) => s.setSweepAt.run(until, id);
 export const unrefundedEntrantIds = async (id) => (await s.unrefundedEntrants.all(id)).map((r) => r.user_id);
 export const markGiveawayEnded = async (id, wonIds) =>
   s.markEnded.run(JSON.stringify(wonIds ?? []), Date.now(), id);

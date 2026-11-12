@@ -633,10 +633,11 @@ async function endRowNow({
           } else {
             // Take off the time this row added, never more (time staff gave by hand stays) and never
             // past now. When nothing is left the record goes and the role comes off.
-            // A row with added_ms = 0 predates the column ("unknown"): the whole record ends.
+            // added_ms = -1 means the time the purchase added is unknown (it predates the column): the whole
+            // record ends. 0 is a real value (a purchase capped at 365 days added nothing): nothing comes off.
             const rec = yield* readTempRoleRow(tx, guildId, row.userId, row.roleId);
             const left = rec ? rec.expires_at - row.addedMs : 0;
-            if (!rec || row.addedMs <= 0 || left <= now) {
+            if (!rec || row.addedMs < 0 || left <= now) {
               if (rec) yield* deleteTempRoleRow(tx, guildId, row.userId, row.roleId);
               box.dropRole = true;
             } else {

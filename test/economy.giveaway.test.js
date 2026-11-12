@@ -471,3 +471,37 @@ test('/forget keeps the prize record (giveaway and member only), so the member i
   assert.deepEqual([again.ok, again.reason], [false, 'already_paid']);
   assert.equal(await cash(a.id), 0, 'the new account holds nothing');
 });
+
+test('a giveaway whose refund keeps failing is put back, so more failing giveaways than the batch do not hide the rest', async () => {
+  // a trigger makes every refund of this member fail
+  db.exec(
+    "CREATE TRIGGER IF NOT EXISTS poison_refund BEFORE UPDATE ON giveaway_entries WHEN NEW.user_id = 'poison' BEGIN SELECT RAISE(ABORT, 'boom'); END"
+  );
+  const bad = [];
+  for (let i = 0; i < 3; i++) {
+    const id = await start({ entryFee: 50 });
+    db.prepare('INSERT INTO giveaway_entries (giveaway_id, user_id, entered_at) VALUES (?, ?, ?)').run(
+      id,
+      'poison',
+      1
+    );
+    assert.equal(await claimGiveawayCancel(id), true);
+    bad.push(id);
+  }
+  const a = await member(110);
+  const good = await start({ entryFee: 50 });
+  await press(good, a);
+  assert.equal(await claimGiveawayCancel(good), true);
+  const now = Date.now();
+  // batches of 3: the first sees only the failing ones and pushes them back
+  await completeGiveawayMoney(now, { limit: 3 });
+  assert.equal(await cash(a.id), 450, 'not reached yet');
+  for (const id of bad) assert.ok((await getGiveaway(id)).sweep_at > now, 'put back');
+  await completeGiveawayMoney(now, { limit: 3 });
+  assert.equal(await cash(a.id), 500, 'the good one was refunded');
+  assert.deepEqual(await unrefundedEntrantIds(good), []);
+  db.exec('DROP TRIGGER poison_refund');
+  // once the wait is over the failing ones are tried again, and now succeed
+  await completeGiveawayMoney(now + 10 * 60_000);
+  for (const id of bad) assert.deepEqual(await unrefundedEntrantIds(id), []);
+});

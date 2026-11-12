@@ -148,7 +148,7 @@ member and takes the role off when they still have it. Each purchase of a tempor
 time it added**: refunding or revoking one takes off only that time (never more than is left), so if the member
 bought it twice the role stays for the other purchase, and time staff added by hand with `/temprole` stays. When
 nothing is left the role comes off. A purchase from before this was recorded (its added time is unknown) ends
-the whole temporary-role record. A refund takes off the full time the purchase added, even if part of it was
+the whole temporary-role record (a purchase that added nothing because the role was already at the 365-day limit leaves it alone). A refund takes off the full time the purchase added, even if part of it was
 already used: if a member bought a role twice and the first period is mostly over, refunding the first also
 removes that much of the second period. Staff can give time back with `/temprole`.
 

@@ -1369,6 +1369,18 @@ export const MIGRATIONS = [
       );
     `);
   },
+
+  // Economy, part B, last fixes: added_ms = -1 means "the time this purchase added is unknown" (every
+  // temporary-role row that exists now was made before the column was filled in), 0 is a real value; and
+  // a giveaway whose refund or prize payout fails is put back (sweep_at) so it does not block the others.
+  // The Postgres side: the bootstrap in src/db/giveaways.js and registerPostgresMigration(71, ...) in
+  // src/db/economyShop.js.
+  (database) => {
+    database.exec(`
+      UPDATE economy_inventory SET added_ms = -1 WHERE item_type = 'temp_role';
+      ALTER TABLE giveaways ADD COLUMN sweep_at INTEGER NOT NULL DEFAULT 0;
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

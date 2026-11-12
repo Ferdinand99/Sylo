@@ -837,12 +837,12 @@ test('an item that was edited after the buyer saw it is refused (not only a pric
   assert.equal((await buy(m, id)).ok, true, 'with the version as it is now it buys');
 });
 
-test('a purchase from before the added time was recorded (added_ms 0) ends the whole temporary-role record', async () => {
+test('a purchase from before the added time was recorded (added_ms -1) ends the whole temporary-role record', async () => {
   const m = await buyer(82);
   const id = await tempItem({ durationHours: 24 });
   await buy(m, id);
   const two = await buy(m, id);
-  db.prepare('UPDATE economy_inventory SET added_ms = 0 WHERE id = ?').run(two.row.id);
+  db.prepare('UPDATE economy_inventory SET added_ms = -1 WHERE id = ?').run(two.row.id);
   assert.equal(
     (await endRow({ guild: ctx.guild, rowId: two.row.id, mode: 'refund', config: cfg() })).ok,
     true
@@ -881,4 +881,17 @@ test('rows the sweep skips are pushed back, so more skipped rows than the batch 
   assert.equal(await cash(good), 1000);
   // the skipped ones stay pending (nothing was refunded for a member who could not be looked at)
   for (const m of skipped) assert.equal((await listInventory(G, m.id))[0].status, 'pending');
+});
+
+test('a purchase that added no time (added_ms 0, capped at 365 days) leaves the record and the role alone', async () => {
+  const m = await buyer(83);
+  const id = await tempItem({ durationHours: 24 });
+  await buy(m, id);
+  const two = await buy(m, id);
+  const before = (await record(m)).expires_at;
+  db.prepare('UPDATE economy_inventory SET added_ms = 0 WHERE id = ?').run(two.row.id);
+  const out = await endRow({ guild: ctx.guild, rowId: two.row.id, mode: 'refund', config: cfg() });
+  assert.deepEqual([out.ok, out.refunded], [true, true]);
+  assert.equal((await record(m)).expires_at, before, 'no time came off');
+  assert.equal(m.roles.cache.has(ROLE_A), true);
 });

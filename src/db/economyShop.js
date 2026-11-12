@@ -15,7 +15,7 @@
 // those are transactions in modules/lib/shop.js (through the money API and its `after` hook). This
 // file holds the plain reads, the staff's editing of the item list, and the erasure of a member.
 // `guild_id` is the server key; the tables are created here for Postgres (SQLite: migration 68).
-import { prepare, registerPostgresBootstrap } from './driver.js';
+import { prepare, registerPostgresBootstrap, registerPostgresMigration } from './driver.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS economy_items (
@@ -62,6 +62,10 @@ registerPostgresBootstrap(`
   CREATE INDEX IF NOT EXISTS idx_economy_inventory_item ON economy_inventory (guild_id, item_id);
   CREATE INDEX IF NOT EXISTS idx_economy_inventory_created ON economy_inventory (guild_id, created_at);
 `);
+
+// Mirrors the data step of SQLite migration 71: every temporary-role row that exists before it has an
+// unknown added time (-1); from then on 0 means "added nothing". Runs once, so it is a migration.
+registerPostgresMigration(71, "UPDATE economy_inventory SET added_ms = -1 WHERE item_type = 'temp_role';");
 
 export const INVENTORY_STATUSES = ['pending', 'active', 'revoked', 'refunded', 'expired'];
 
@@ -189,7 +193,7 @@ export function hydrateRow(row) {
     fulfilledAt: row.fulfilled_at == null ? null : Number(row.fulfilled_at),
     fulfilledBy: row.fulfilled_by ?? null,
     note: row.note,
-    addedMs: Number(row.added_ms) || 0,
+    addedMs: Number.isFinite(Number(row.added_ms)) ? Number(row.added_ms) : 0,
     leaseUntil: Number(row.lease_until) || 0,
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
