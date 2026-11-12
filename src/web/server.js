@@ -22,6 +22,7 @@ import healthRouter from './routes/health.js';
 import metricsRouter from './routes/metrics.js';
 import leaderboardRouter, { vanityRouter } from './routes/leaderboard.js';
 import quotesRouter from './routes/quotes.js';
+import economyBoardRouter from './routes/economyBoard.js';
 import eventPageRouter from './routes/events.js';
 import verifyRouter from './routes/verify.js';
 import appealRouter from './routes/appeal.js';
@@ -231,6 +232,7 @@ export function createApp() {
   app.use('/leaderboard', rateLimit({ windowMs: 60_000, max: 40 }), leaderboardRouter);
   app.use('/lb', rateLimit({ windowMs: 60_000, max: 40 }), vanityRouter);
   app.use('/quotes', rateLimit({ windowMs: 60_000, max: 40 }), quotesRouter);
+  app.use('/economy', rateLimit({ windowMs: 60_000, max: 40 }), economyBoardRouter);
   app.use('/events', rateLimit({ windowMs: 60_000, max: 40 }), eventPageRouter);
   app.use('/verify', rateLimit({ windowMs: 60_000, max: 20 }), verifyRouter);
   app.use('/appeal', rateLimit({ windowMs: 60_000, max: 15 }), appealRouter);
@@ -245,6 +247,12 @@ export function createApp() {
   // Everything below requires a signed-in user when auth is enabled.
   app.use(requireAuth);
   app.get('/', (req, res) => res.redirect('/v2'));
+  // The web shop's own address, /shop/<server>, opens the shop page of the dashboard. Behind the login
+  // like everything here; the page asks the API, which answers one 404 to anyone who may not use it.
+  app.get('/shop/:guildId', (req, res) => {
+    if (!/^(fluxer:)?\d{1,25}$/.test(req.params.guildId)) return res.redirect('/v2');
+    return res.redirect(`/v2/shop/${encodeURIComponent(req.params.guildId)}`);
+  });
   app.use('/api/v2/guilds/:guildId', ownerOnlyModules);
   app.use('/api/v2', v2ApiRouter);
   app.use('/v2', v2ClientRouter);

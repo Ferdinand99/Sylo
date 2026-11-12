@@ -19,6 +19,7 @@ const Suggestions = lazy(() => import('./Suggestions.jsx'));
 const TempRoles = lazy(() => import('./TempRoles.jsx'));
 const QuoteBoard = lazy(() => import('./QuoteBoard.jsx'));
 const Introductions = lazy(() => import('./Introductions.jsx'));
+const Economy = lazy(() => import('./Economy.jsx'));
 const AutoThreads = lazy(() => import('./AutoThreads.jsx'));
 const Moderation = lazy(() => import('./Moderation.jsx'));
 const Automod = lazy(() => import('./Automod.jsx'));
@@ -84,6 +85,7 @@ export const MODULE_FORMS = {
   'temp-roles': TempRoles,
   'quote-board': QuoteBoard,
   introductions: Introductions,
+  economy: Economy,
   'auto-threads': AutoThreads,
 };
 

@@ -48,6 +48,28 @@ test('the Introductions card shows the channel and counts the introductions', as
   assert.equal(card.icon, 'id-card');
 });
 
+test('the Economy card shows the currency, counts the accounts and says whether robbing is on', async () => {
+  const { credit } = await import('../src/modules/lib/economy.js');
+  const find = async () =>
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards).find((c) => c.id === 'economy');
+  const empty = await find();
+  assert.ok(empty, 'a card for the Economy module');
+  assert.equal(empty.lines.find((l) => l.label === 'Accounts').value, '0');
+  assert.equal(empty.lines.find((l) => l.label === 'Robbing').value, 'off');
+  assert.equal(empty.lines.find((l) => l.label === 'Currency').value, '🪙 coins');
+
+  await setGuildModule(G, 'economy', {
+    enabled: true,
+    config: { currencyName: 'gold', currencyEmoji: '💰', robEnabled: true },
+  });
+  await credit(G, 'u1', 5, { kind: 'daily' });
+  const card = await find();
+  assert.equal(card.lines.find((l) => l.label === 'Accounts').value, '1');
+  assert.equal(card.lines.find((l) => l.label === 'Robbing').value, 'on');
+  assert.equal(card.lines.find((l) => l.label === 'Currency').value, '💰 gold');
+  assert.equal(card.icon, 'coins');
+});
+
 test('buildOverview returns health + grouped cards covering every module', async () => {
   await setGuildModule(G, 'automod', { enabled: true, config: { rules: { invites: { enabled: true } } } });
 

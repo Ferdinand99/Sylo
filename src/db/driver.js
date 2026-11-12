@@ -227,11 +227,170 @@ function preparePg(sqlText, { returningId } = {}) {
 export function prepare(sqlText, opts) {
   if (!config.databaseUrl) {
     const stmt = db.prepare(sqlText);
+    // The statement still runs at the moment of the call (an async arrow runs synchronously up to its
+    // first await), and a failing statement still rejects the promise, as before. The guard throws
+    // at once: see assertOutsideTransaction.
+    const call = async (fn) => fn();
     return {
-      get: async (...args) => stmt.get(...args),
-      all: async (...args) => stmt.all(...args),
-      run: async (...args) => stmt.run(...args),
+      get: (...args) => {
+        assertOutsideTransaction();
+        return call(() => stmt.get(...args));
+      },
+      all: (...args) => {
+        assertOutsideTransaction();
+        return call(() => stmt.all(...args));
+      },
+      run: (...args) => {
+        assertOutsideTransaction();
+        return call(() => stmt.run(...args));
+      },
     };
   }
   return preparePg(sqlText, opts);
+}
+
+// --- transactions -------------------------------------------------------------------------------
+//
+// Most of Sylo needs no transaction (see the notes in purge.js and leveling.js: single upserts and
+// idempotent sequences are enough). Money is the exception: a balance change and its ledger row
+// must land together or not at all, and several accounts can change in one step (a payment). So
+// `transaction(body)` runs `body` inside BEGIN/COMMIT on either driver. `body` is a GENERATOR
+// function, and every statement is `yield`ed:
+//
+//   const out = await transaction(function* (tx) {
+//     const row = yield tx.get('SELECT cash FROM accounts WHERE id = ?', id);
+//     yield tx.run('UPDATE accounts SET cash = ? WHERE id = ?', row.cash - 5, id);
+//     return row;
+//   });
+//
+// `tx.get/all/run(sql, ...args)` work like the prepared statements above (positional `?` only);
+// `tx.insertId(sql, ...args)` runs an INSERT into a table with a surrogate `id` and returns it.
+// A throw inside `body` rolls everything back and is rethrown. Use `yield*` to call another
+// generator (a helper, a hook). `body` must be a plain `function*` and must not await anything of
+// its own: an async function, an async generator or any other function throws a TypeError at once, a
+// yielded promise throws on SQLite, and a prepare() statement made while the body runs throws on SQLite.
+//
+// Why a generator: the same code has to be atomic on both drivers.
+//
+// SQLite: better-sqlite3 is synchronous and the process has one connection, so the whole body runs
+// to its end inside `db.transaction(...).immediate()` without ever returning to the event loop:
+// `yield tx.get(...)` just hands back the row, and nothing else (another module's write, a timer)
+// can run in the middle. A transaction that is refused or rolled back therefore can never undo
+// someone else's statement. (An `async` body would yield to the microtask queue at each `await`
+// and let unrelated code run its statements inside the open transaction.)
+//
+// Postgres: `sql.begin` reserves a pooled connection for the body; each yielded query is awaited.
+// Concurrent transactions that touch the same row wait for each other at the row lock (a plain
+// UPDATE takes it).
+
+// While a transaction() body runs on SQLite, the process has one open transaction on its one
+// connection and nothing else can run, so a statement made through prepare() at that moment can only
+// come from inside the body: from a hook that forgot to `yield` through `tx`. On Postgres the same
+// call would run on another connection, outside the transaction and not rolled back with it. SQLite
+// refuses it the same way, so the mistake shows up in tests on either driver.
+function assertOutsideTransaction() {
+  if (db.inTransaction) {
+    throw new Error(
+      'a prepare() statement was run inside a transaction() body: use the tx passed to the body (yield tx.run(...))'
+    );
+  }
+}
+
+const GeneratorFunction = Object.getPrototypeOf(function* () {}).constructor;
+
+/** True for a plain `function*` (not an async generator, an async function or a normal function). */
+export const isGeneratorFunction = (fn) => fn instanceof GeneratorFunction;
+
+function assertSyncGeneratorBody(body) {
+  if (!isGeneratorFunction(body)) {
+    throw new TypeError(
+      'transaction() needs a generator function (function* (tx) { ... yield tx.run(...) }), not an async function or a plain function'
+    );
+  }
+}
+
+const sqliteStatements = new Map();
+
+function sqliteStatement(sqlText) {
+  let stmt = sqliteStatements.get(sqlText);
+  if (!stmt) {
+    stmt = db.prepare(sqlText);
+    sqliteStatements.set(sqlText, stmt);
+  }
+  return stmt;
+}
+
+// Synchronous: the values come back as they are, and `yield` passes them straight through.
+const sqliteTx = {
+  get: (sqlText, ...args) => sqliteStatement(sqlText).get(...args),
+  all: (sqlText, ...args) => sqliteStatement(sqlText).all(...args),
+  run: (sqlText, ...args) => ({ changes: sqliteStatement(sqlText).run(...args).changes }),
+  insertId: (sqlText, ...args) => Number(sqliteStatement(sqlText).run(...args).lastInsertRowid),
+};
+
+function runSqliteTransaction(body) {
+  return db
+    .transaction(() => {
+      const it = body(sqliteTx);
+      let step = it.next();
+      while (!step.done) {
+        // A promise here would be handed back as a promise on SQLite but awaited on Postgres.
+        if (typeof step.value?.then === 'function') {
+          throw new TypeError(
+            'a transaction() body yielded a promise: yield only tx.get/all/run/insertId results'
+          );
+        }
+        step = it.next(step.value);
+      }
+      return step.value;
+    })
+    .immediate();
+}
+
+function pgTx(tx) {
+  const translated = new Map();
+  const exec = (sqlText, args, suffix = '') => {
+    let t = translated.get(sqlText);
+    if (!t) {
+      t = translate(sqlText);
+      translated.set(sqlText, t);
+    }
+    return tx.unsafe(t.text + suffix, toParams(t, args));
+  };
+  return {
+    get: (sqlText, ...args) => exec(sqlText, args).then((rows) => rows[0]),
+    all: (sqlText, ...args) => exec(sqlText, args).then((rows) => Array.from(rows)),
+    run: (sqlText, ...args) => exec(sqlText, args).then((rows) => ({ changes: rows.count })),
+    insertId: (sqlText, ...args) => exec(sqlText, args, ' RETURNING id').then((rows) => rows[0].id),
+  };
+}
+
+async function runPgTransaction(body) {
+  const sql = await getSql();
+  return sql.begin(async (tx) => {
+    const it = body(pgTx(tx));
+    let step = it.next();
+    while (!step.done) {
+      let value;
+      try {
+        value = await step.value;
+      } catch (err) {
+        step = it.throw(err);
+        continue;
+      }
+      step = it.next(value);
+    }
+    return step.value;
+  });
+}
+
+/**
+ * Run `body` in one database transaction. See the notes above for what `tx` offers.
+ * @template T
+ * @param {(tx: { get: (sql: string, ...args: any[]) => any, all: (sql: string, ...args: any[]) => any, run: (sql: string, ...args: any[]) => any, insertId: (sql: string, ...args: any[]) => any }) => Generator<any, T, any>} body
+ * @returns {Promise<T>}
+ */
+export async function transaction(body) {
+  assertSyncGeneratorBody(body);
+  return config.databaseUrl ? runPgTransaction(body) : runSqliteTransaction(body);
 }

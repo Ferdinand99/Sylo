@@ -1223,6 +1223,164 @@ export const MIGRATIONS = [
       CREATE INDEX idx_introductions_message ON introductions (guild_id, message_id);
     `);
   },
+
+  // Economy (src/db/economy.js, which bootstraps the same tables on Postgres): one account per
+  // member per server, and the append-only ledger every balance change is written to. Amounts are
+  // whole numbers; a member's cash + bank is capped (modules/lib/economyConfig.js).
+  (database) => {
+    database.exec(`
+      CREATE TABLE economy_accounts (
+        guild_id             TEXT NOT NULL,
+        user_id              TEXT NOT NULL,
+        cash                 INTEGER NOT NULL DEFAULT 0,
+        bank                 INTEGER NOT NULL DEFAULT 0,
+        daily_streak         INTEGER NOT NULL DEFAULT 0,
+        last_daily_at        INTEGER NOT NULL DEFAULT 0,
+        last_work_at         INTEGER NOT NULL DEFAULT 0,
+        last_rob_at          INTEGER NOT NULL DEFAULT 0,
+        last_robbed_at       INTEGER NOT NULL DEFAULT 0,
+        last_message_earn_at INTEGER NOT NULL DEFAULT 0,
+        created_at           INTEGER NOT NULL,
+        updated_at           INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE INDEX idx_economy_accounts_total ON economy_accounts (guild_id, (cash + bank) DESC);
+      CREATE TABLE economy_transactions (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id        TEXT NOT NULL,
+        user_id         TEXT NOT NULL,
+        kind            TEXT NOT NULL,
+        amount          INTEGER NOT NULL,
+        cash_after      INTEGER NOT NULL,
+        bank_after      INTEGER NOT NULL,
+        counterparty_id TEXT,
+        actor_id        TEXT,
+        reason          TEXT NOT NULL DEFAULT '',
+        created_at      INTEGER NOT NULL
+      );
+      CREATE INDEX idx_economy_transactions_user ON economy_transactions (guild_id, user_id, id DESC);
+      CREATE INDEX idx_economy_transactions_created ON economy_transactions (guild_id, created_at);
+    `);
+  },
+
+  // Economy, second part (src/db/economy.js): an index on the ledger's time alone, for the daily
+  // retention prune that spans every server, and the short cooldown tombstone /forget leaves behind
+  // (see eraseMember: it stops /forget from being a way to reset cooldowns and the starting balance).
+  (database) => {
+    database.exec(`
+      CREATE INDEX idx_economy_transactions_created_at ON economy_transactions (created_at);
+      CREATE TABLE economy_cooldowns (
+        guild_id      TEXT NOT NULL,
+        user_id       TEXT NOT NULL,
+        last_daily_at INTEGER NOT NULL DEFAULT 0,
+        last_work_at  INTEGER NOT NULL DEFAULT 0,
+        last_rob_at   INTEGER NOT NULL DEFAULT 0,
+        expires_at    INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE INDEX idx_economy_cooldowns_expires ON economy_cooldowns (expires_at);
+    `);
+  },
+
+  // Economy shop (src/db/economyShop.js, which bootstraps the same tables on Postgres): the items
+  // staff sell, and what members own. An inventory row keeps a copy of the item's name, type and role,
+  // so it still reads right after the item is deleted.
+  (database) => {
+    database.exec(`
+      CREATE TABLE economy_items (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id         TEXT NOT NULL,
+        name             TEXT NOT NULL,
+        description      TEXT NOT NULL DEFAULT '',
+        emoji            TEXT NOT NULL DEFAULT '',
+        type             TEXT NOT NULL,
+        role_id          TEXT,
+        duration_ms      INTEGER,
+        price            INTEGER NOT NULL,
+        stock            INTEGER,
+        sold             INTEGER NOT NULL DEFAULT 0,
+        required_roles   TEXT NOT NULL DEFAULT '[]',
+        per_member_limit INTEGER,
+        enabled          INTEGER NOT NULL DEFAULT 1,
+        sort_order       INTEGER NOT NULL DEFAULT 0,
+        created_at       INTEGER NOT NULL,
+        updated_at       INTEGER NOT NULL
+      );
+      CREATE INDEX idx_economy_items_guild ON economy_items (guild_id, sort_order, id);
+      CREATE TABLE economy_inventory (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id     TEXT NOT NULL,
+        user_id      TEXT NOT NULL,
+        item_id      INTEGER NOT NULL,
+        item_name    TEXT NOT NULL,
+        item_type    TEXT NOT NULL,
+        role_id      TEXT,
+        price_paid   INTEGER NOT NULL DEFAULT 0,
+        source       TEXT NOT NULL,
+        status       TEXT NOT NULL,
+        fulfilled_at INTEGER,
+        fulfilled_by TEXT,
+        note         TEXT NOT NULL DEFAULT '',
+        created_at   INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL
+      );
+      CREATE INDEX idx_economy_inventory_user ON economy_inventory (guild_id, user_id, id DESC);
+      CREATE INDEX idx_economy_inventory_item ON economy_inventory (guild_id, item_id);
+      CREATE INDEX idx_economy_inventory_created ON economy_inventory (guild_id, created_at);
+    `);
+  },
+
+  // Giveaways with the Economy module (src/db/giveaways.js has the Postgres side, migration 69 there):
+  // an entry fee, a currency prize for every winner, and whether the giveaway was cancelled.
+  (database) => {
+    database.exec(`
+      ALTER TABLE giveaways ADD COLUMN entry_fee INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE giveaways ADD COLUMN prize_amount INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE giveaways ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0;
+    `);
+  },
+
+  // Economy, part B fix round: what a shop purchase added to a temporary role (so a refund takes off
+  // only that), a lease for a role grant that is still running (so the sweep leaves it alone), a
+  // marker per refunded giveaway entry, a marker for paid currency prizes and one row per prize paid
+  // (so a prize is never paid twice), and when a giveaway was last drawn. Rows made before this
+  // migration: giveaways that ended count as paid; an inventory row with added_ms = 0 means "the time it
+  // added is unknown" (a refund or revoke then ends the whole record, as it did before). The Postgres side is the bootstrap in src/db/economyShop.js and
+  // src/db/giveaways.js (every statement there can run again).
+  (database) => {
+    database.exec(`
+      ALTER TABLE economy_inventory ADD COLUMN added_ms INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE economy_inventory ADD COLUMN lease_until INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX idx_economy_inventory_pending ON economy_inventory (lease_until) WHERE status = 'pending';
+      ALTER TABLE giveaway_entries ADD COLUMN refunded INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE giveaways ADD COLUMN prizes_paid INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE giveaways ADD COLUMN drawn_at INTEGER NOT NULL DEFAULT 0;
+      -- Giveaways that were already drawn under the earlier code paid their prizes without a
+      -- giveaway_prizes row: they count as paid, or the sweep would pay every winner again.
+      UPDATE giveaways SET prizes_paid = 1 WHERE ended = 1;
+      CREATE INDEX idx_giveaways_refunds ON giveaways (id) WHERE cancelled = 1 AND entry_fee > 0;
+      CREATE INDEX idx_giveaways_prizes ON giveaways (id) WHERE ended = 1 AND cancelled = 0 AND prize_amount > 0 AND prizes_paid = 0;
+      CREATE TABLE giveaway_prizes (
+        giveaway_id INTEGER NOT NULL,
+        user_id     TEXT NOT NULL,
+        amount      INTEGER NOT NULL,
+        paid_at     INTEGER NOT NULL,
+        PRIMARY KEY (giveaway_id, user_id)
+      );
+    `);
+  },
+
+  // Economy, part B, last fixes: added_ms = -1 means "the time this purchase added is unknown" (every
+  // temporary-role row that exists now was made before the column was filled in), 0 is a real value; and
+  // a giveaway whose refund or prize payout fails is put back (sweep_at) so it does not block the others.
+  // The Postgres side: the bootstrap in src/db/giveaways.js and registerPostgresMigration(71, ...) in
+  // src/db/economyShop.js.
+  (database) => {
+    database.exec(`
+      UPDATE economy_inventory SET added_ms = -1 WHERE item_type = 'temp_role';
+      ALTER TABLE giveaways ADD COLUMN sweep_at INTEGER NOT NULL DEFAULT 0;
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

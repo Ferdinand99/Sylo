@@ -383,6 +383,17 @@ export const MODULES = [
     beta: true,
   },
   {
+    id: 'economy',
+    name: 'Economy',
+    description:
+      'A currency members earn by chatting and in voice, keep in cash or a bank, send to each other and compete for on a leaderboard. Staff can add or remove money.',
+    icon: '🪙',
+    requiredIntents: [],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
     id: 'game-stats',
     name: 'Game stats',
     description:

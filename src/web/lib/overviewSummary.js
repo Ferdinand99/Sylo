@@ -24,6 +24,8 @@ import { introductionCount } from '../../db/introductions.js';
 import { recentLookups } from '../../db/cache.js';
 import { dailySeries } from '../../db/insights.js';
 import { memberCount as levelingMemberCount } from '../../db/leveling.js';
+import { accountCount } from '../../db/economy.js';
+import { normaliseEconomyConfig } from '../../modules/lib/economyConfig.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
 import { normaliseSuggestionsConfig } from '../../modules/suggestions.js';
@@ -53,6 +55,7 @@ const LAYOUT = [
       'temp-roles',
       'counting',
       'leveling',
+      'economy',
       'starboard',
       'quote-board',
       'introductions',
@@ -512,6 +515,14 @@ async function moduleLines(id, guild, cfg) {
         neutral('Announce', announce),
         rewards ? on('Reward roles', String(rewards)) : off('Reward roles', 'none'),
         neutral('Ranked members', String(await levelingMemberCount(guild.id))),
+      ];
+    }
+    case 'economy': {
+      const eco = normaliseEconomyConfig(cfg);
+      return [
+        neutral('Currency', `${eco.currencyEmoji} ${eco.currencyName}`),
+        neutral('Accounts', String(await accountCount(guild.id))),
+        eco.robEnabled ? on('Robbing', 'on') : off('Robbing', 'off'),
       ];
     }
     case 'automod': {

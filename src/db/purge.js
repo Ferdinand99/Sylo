@@ -11,6 +11,8 @@
 // plain sequence of awaited statements instead of a transaction.
 import { prepare } from './driver.js';
 import { clearCommandPrefixCache } from './guildSettings.js';
+import { eraseMember } from './economy.js';
+import { eraseInventory } from './economyShop.js';
 
 // This file owns no table of its own — every DELETE below targets a table
 // bootstrapped by its owning file. But `registerPostgresBootstrap()` only
@@ -58,6 +60,8 @@ import './suggestions.js';
 import './tempRoles.js';
 import './quotes.js';
 import './introductions.js';
+import './economy.js';
+import './economyShop.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -104,6 +108,11 @@ export const GUILD_TABLES = [
   'guild_quotes',
   'guild_quote_counters',
   'introductions',
+  'economy_accounts',
+  'economy_transactions',
+  'economy_cooldowns',
+  'economy_items',
+  'economy_inventory',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -112,6 +121,9 @@ const ticketMsgStmt = prepare(
 );
 const giveawayEntryStmt = prepare(
   'DELETE FROM giveaway_entries WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)'
+);
+const giveawayPrizeStmt = prepare(
+  'DELETE FROM giveaway_prizes WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)'
 );
 const eventParticipantStmt = prepare(
   'DELETE FROM guild_event_participants WHERE event_id IN (SELECT id FROM guild_events WHERE guild_id = ?)'
@@ -125,6 +137,7 @@ const suggestionVoteStmt = prepare(
 export async function purgeGuild(guildId) {
   await ticketMsgStmt.run(guildId); // before `tickets`, which the subquery reads
   await giveawayEntryStmt.run(guildId); // before `giveaways`, which the subquery reads
+  await giveawayPrizeStmt.run(guildId);
   await eventParticipantStmt.run(guildId); // before `guild_events`, which the subquery reads
   await suggestionVoteStmt.run(guildId); // before `guild_suggestions`, which the subquery reads
   for (const stmt of simpleStmts) await stmt.run(guildId);
@@ -150,6 +163,14 @@ const userStmts = {
   birthdays: prepare('DELETE FROM birthdays WHERE guild_id = ? AND user_id = ?'),
   giveawayEntries: prepare(`
     DELETE FROM giveaway_entries
+    WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)
+      AND user_id = ?
+  `),
+  // Kept on purpose, like the economy cooldown record: the row (giveaway id and member id, nothing
+  // else) is what stops a prize being paid a second time to a member who ran /forget. The amount and
+  // the time come off. The rows go with the giveaway when the server is purged.
+  giveawayPrizes: prepare(`
+    UPDATE giveaway_prizes SET amount = 0, paid_at = 0
     WHERE giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)
       AND user_id = ?
   `),
@@ -217,11 +238,13 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
  */
 // `keepIntroduction`: leave the introduction row (the card message could not be deleted, so the row
-// is what lets it be removed later).
-export async function forgetUser(guildId, userId, { keepIntroduction = false } = {}) {
+// is what lets it be removed later). `keepTempRoles`: role ids whose temporary-role record stays
+// because Sylo could not take the role off (the callers take a bought role off first, see
+// endShopRolesForForget in modules/lib/shop.js): the expiry sweep still removes it on time.
+export async function forgetUser(guildId, userId, { keepIntroduction = false, keepTempRoles = [] } = {}) {
   const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
   const leveling =
     (await userStmts.leveling.run(guildId, userId)).changes +
@@ -233,12 +256,20 @@ export async function forgetUser(guildId, userId, { keepIntroduction = false } =
   const afk = (await userStmts.afk.run(guildId, userId)).changes;
   const birthdays = (await userStmts.birthdays.run(guildId, userId)).changes;
   const giveawayEntries = (await userStmts.giveawayEntries.run(guildId, userId)).changes;
+  await userStmts.giveawayPrizes.run(guildId, userId);
   const eventSignups = (await userStmts.eventParticipants.run(guildId, userId)).changes;
   const eventsHosted = (await userStmts.eventHost.run(guildId, userId)).changes;
   const suggestionVotes = (await userStmts.suggestionVotes.run(guildId, userId)).changes;
   const suggestions = (await userStmts.suggestionAuthor.run(guildId, userId)).changes;
   const suggestionDecisions = (await userStmts.suggestionDecider.run(guildId, userId)).changes;
-  const tempRoles = (await userStmts.tempRoles.run(guildId, userId)).changes;
+  const keep = keepTempRoles.map(String);
+  const tempRoles = keep.length
+    ? (
+        await prepare(
+          `DELETE FROM guild_temp_roles WHERE guild_id = ? AND user_id = ? AND role_id NOT IN (${keep.map(() => '?').join(', ')})`
+        ).run(guildId, userId, ...keep)
+      ).changes
+    : (await userStmts.tempRoles.run(guildId, userId)).changes;
   const tempRoleAdders = (await userStmts.tempRoleAdder.run(guildId, userId)).changes;
   const quotes = (await userStmts.quotesAuthored.run(guildId, userId)).changes;
   const quotesSaved = (await userStmts.quotesSaved.run(guildId, userId)).changes;
@@ -246,6 +277,9 @@ export async function forgetUser(guildId, userId, { keepIntroduction = false } =
   let introductions = 0;
   if (keepIntroduction) await userStmts.introductionsClear.run(Date.now(), guildId, userId);
   else introductions = (await userStmts.introductions.run(guildId, userId)).changes;
+  // Their economy account and ledger rows; where they are named on someone else's row, the name comes off.
+  const economy = await eraseMember(guildId, userId);
+  const inventory = await eraseInventory(guildId, userId);
   const invites =
     (await userStmts.inviteCounts.run(guildId, userId)).changes +
     (await userStmts.inviteJoins.run(guildId, userId)).changes +
@@ -276,6 +310,11 @@ export async function forgetUser(guildId, userId, { keepIntroduction = false } =
     quotes,
     quotesSaved,
     introductions,
+    economyAccounts: economy.account,
+    economyTransactions: economy.transactions,
+    economyNames: economy.counterparty + economy.actor,
+    economyInventory: inventory.rows,
+    economyFulfilled: inventory.fulfilled,
     invites,
     pollsCreated,
     giveawaysHosted,
@@ -403,6 +442,15 @@ const USER_DATA_SOURCES = [
       'SELECT * FROM giveaway_entries WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?) ORDER BY entered_at',
   },
   {
+    key: 'giveawayPrizes',
+    label: 'Giveaway currency prizes paid to you',
+    order: 'ug',
+    countSql:
+      'SELECT COUNT(*) AS n FROM giveaway_prizes WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?)',
+    rowsSql:
+      'SELECT * FROM giveaway_prizes WHERE user_id = ? AND giveaway_id IN (SELECT id FROM giveaways WHERE guild_id = ?) ORDER BY paid_at',
+  },
+  {
     key: 'eventSignups',
     label: 'Event sign-ups (Join / Maybe)',
     order: 'ug',
@@ -526,6 +574,60 @@ const USER_DATA_SOURCES = [
     order: 'gu',
     countSql: 'SELECT COUNT(*) AS n FROM introductions WHERE guild_id = ? AND user_id = ?',
     rowsSql: 'SELECT * FROM introductions WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'economyAccount',
+    label: 'Economy account (cash, bank, daily streak)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM economy_accounts WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM economy_accounts WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'economyTransactions',
+    label: 'Economy transactions (the last 180 days)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM economy_transactions WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM economy_transactions WHERE guild_id = ? AND user_id = ? ORDER BY id',
+  },
+  {
+    key: 'economyCooldowns',
+    label: 'Economy cooldown record (kept by /forget for 7 days, so it cannot reset cooldowns)',
+    order: 'gu',
+    kept: true,
+    countSql: 'SELECT COUNT(*) AS n FROM economy_cooldowns WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM economy_cooldowns WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'economyInventory',
+    label: 'Shop inventory (items you bought or were given)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM economy_inventory WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT * FROM economy_inventory WHERE guild_id = ? AND user_id = ? ORDER BY id',
+  },
+  {
+    key: 'economyFulfilled',
+    label: 'Shop items you marked fulfilled as staff (/forget drops your name)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM economy_inventory WHERE guild_id = ? AND fulfilled_by = ?',
+    rowsSql:
+      'SELECT item_name, fulfilled_at FROM economy_inventory WHERE guild_id = ? AND fulfilled_by = ? ORDER BY id',
+  },
+  {
+    key: 'economyCounterparty',
+    label: "Other members' economy transactions that name you (/forget drops your name from them)",
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM economy_transactions WHERE guild_id = ? AND counterparty_id = ?',
+    // What and when, not who or how much: the other member's balance is their data.
+    rowsSql:
+      'SELECT kind, created_at FROM economy_transactions WHERE guild_id = ? AND counterparty_id = ? ORDER BY id',
+  },
+  {
+    key: 'economyActions',
+    label: 'Economy changes you made as staff (/forget drops your name)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM economy_transactions WHERE guild_id = ? AND actor_id = ?',
+    rowsSql:
+      'SELECT kind, created_at FROM economy_transactions WHERE guild_id = ? AND actor_id = ? ORDER BY id',
   },
   {
     key: 'inviteCounts',
