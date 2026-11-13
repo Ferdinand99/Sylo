@@ -201,20 +201,26 @@ public final class AccountModel {
         }
     }
 
-    private static func connectMessage(for error: NetworkError) -> String {
+    /// The words for what the connect calls answer: by the server's machine code when it sent one
+    /// (`invalid_platform`, `already_connected` from the start call; `invalid_result`,
+    /// `identity_linked`, `already_linked` from the complete call), else by the status. A code the
+    /// app does not know is never shown as it came.
+    static func connectMessage(for error: NetworkError) -> String {
+        switch error.serverCode {
+        case ConnectWire.invalidPlatformJSON: return "This Sylo server doesn't have that platform set up."
+        case ConnectWire.alreadyConnectedJSON: return "This account already has a login on that platform."
+        case ConnectWire.invalidResultJSON: return "The sign-in result wasn't accepted, or it had expired. Try again."
+        case ConnectWire.identityLinkedJSON: return "That login already belongs to another Sylo account."
+        case ConnectWire.alreadyLinkedJSON:
+            return "A login on that platform was added to this account in the meantime. Refresh and check."
+        default: break
+        }
         switch error {
-        case .notFound: "This Sylo server can't connect a platform from the app. Use its web dashboard."
-        // 409: `already_connected` (the account has that platform), or `identity_linked` /
-        // `already_linked` from the complete call. The error text of a 409 does not reach the app,
-        // so the message covers all of them.
+        case .notFound: return "This Sylo server can't connect a platform from the app. Use its web dashboard."
         case .http(status: 409):
-            "That login can't be added: this account already has one on that platform, or it belongs to another Sylo account."
-        case .badRequest(let message?) where message == ConnectWire.invalidResultJSON:
-            "The sign-in result wasn't accepted, or it had expired. Try again."
-        case .badRequest(let message?) where message == ConnectWire.invalidPlatformJSON:
-            "This Sylo server doesn't have that platform set up."
-        case .badRequest: "This Sylo server can't connect that platform."
-        default: error.userMessage
+            return "That login can't be added: it belongs to another Sylo account, or this account already has one on that platform."
+        case .badRequest: return "This Sylo server can't connect that platform."
+        default: return error.userMessage
         }
     }
 

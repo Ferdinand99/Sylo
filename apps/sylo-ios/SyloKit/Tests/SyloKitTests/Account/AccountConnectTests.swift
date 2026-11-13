@@ -112,7 +112,7 @@ struct AccountConnectTests {
 @Suite("Account connect model")
 struct AccountConnectModelTests {
     static let conflictText =
-        "That login can't be added: this account already has one on that platform, or it belongs to another Sylo account."
+        "That login can't be added: it belongs to another Sylo account, or this account already has one on that platform."
     nonisolated static let connectInfo = ServerInfo(features: [.appLogin, .liveAccess, .appConnect])
 
     /// Answers the account, and starts connects with `start`; disconnects with `disconnect`.
@@ -222,6 +222,26 @@ struct AccountConnectModelTests {
         #expect(model.platformError == "That took too long. Try again.")
         #expect(!clients.calls.contains { $0.endpoint is Endpoints.CompleteConnect })
         #expect(accountLoads(clients) == 1)
+    }
+
+    @Test("Each 409 code of the connect calls has its own message; an unknown code is never shown raw")
+    func conflictCodes() async {
+        let texts = [
+            ("already_connected", "This account already has a login on that platform."),
+            ("identity_linked", "That login already belongs to another Sylo account."),
+            ("already_linked", "A login on that platform was added to this account in the meantime. Refresh and check."),
+        ]
+        for (code, text) in texts {
+            let error = NetworkError.http(status: HTTPStatus(409, message: code))
+            #expect(AccountModel.connectMessage(for: error) == text)
+        }
+        #expect(texts.map(\.1).count == Set(texts.map(\.1)).count)
+        // No code: the general conflict text. A code the app does not know: the same, not the code.
+        let general = AccountModel.connectMessage(for: NetworkError.http(status: 409))
+        #expect(general == AccountModel.connectMessage(for: NetworkError.http(status: HTTPStatus(409, message: "brand_new_code"))))
+        #expect(!general.contains("brand_new_code"))
+        let unknown400 = AccountModel.connectMessage(for: NetworkError.badRequest(message: "brand_new_code"))
+        #expect(unknown400 == "This Sylo server can't connect that platform.")
     }
 
     @Test("A 409 from the complete call is said in words, and the account is not read again")

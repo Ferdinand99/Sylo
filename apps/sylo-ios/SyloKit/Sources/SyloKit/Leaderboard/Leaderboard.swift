@@ -269,8 +269,8 @@ public final class LeaderboardModel {
 
     /// The server answers a refused short link with `invalid` or `taken`.
     static func vanityMessage(for error: NetworkError) -> String {
-        guard case .badRequest(let message) = error else { return error.userMessage }
-        switch message {
+        guard case .badRequest = error else { return error.userMessage }
+        switch error.serverCode {
         case "taken": return "That link is already used by another server. Pick another one."
         case "invalid": return "Use 3 to 32 letters, numbers or hyphens. It can't start or end with a hyphen."
         default: return error.userMessage

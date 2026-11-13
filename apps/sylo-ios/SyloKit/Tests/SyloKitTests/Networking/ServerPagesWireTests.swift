@@ -203,13 +203,17 @@ extension APIClientTests {
     func connectJSONErrors() async throws {
         let start = Endpoints.StartConnect(platform: .fluxer)
         #expect(try await failure(start, status: 400, body: #"{"error":"invalid_platform"}"#) == NetworkError.badRequest(message: "invalid_platform"))
-        #expect(try await failure(start, status: 409, body: #"{"error":"already_connected"}"#) == NetworkError.http(status: 409))
+        let alreadyConnected = try #require(try await failure(start, status: 409, body: #"{"error":"already_connected"}"#))
+        #expect(alreadyConnected == NetworkError.http(status: 409))
+        #expect(alreadyConnected.serverCode == "already_connected")
         #expect(try await failure(start, status: 401, body: #"{"error":"Not signed in, or the token is no longer valid."}"#) == NetworkError.unauthorized)
 
         let complete = Endpoints.CompleteConnect(result: "r")
         #expect(try await failure(complete, status: 400, body: #"{"error":"invalid_result"}"#) == NetworkError.badRequest(message: "invalid_result"))
-        #expect(try await failure(complete, status: 409, body: #"{"error":"identity_linked"}"#) == NetworkError.http(status: 409))
-        #expect(try await failure(complete, status: 409, body: #"{"error":"already_linked"}"#) == NetworkError.http(status: 409))
+        let identityLinked = try #require(try await failure(complete, status: 409, body: #"{"error":"identity_linked"}"#))
+        #expect(identityLinked.serverCode == "identity_linked")
+        let alreadyLinked = try #require(try await failure(complete, status: 409, body: #"{"error":"already_linked"}"#))
+        #expect(alreadyLinked.serverCode == "already_linked")
         #expect(try await failure(complete, status: 401, body: #"{"error":"Not signed in, or the token is no longer valid."}"#) == NetworkError.unauthorized)
     }
 
@@ -219,7 +223,7 @@ extension APIClientTests {
         let cases: [(NetworkError, String)] = [
             (.badRequest(message: "invalid_platform"), "This Sylo server doesn't have that platform set up."),
             (.badRequest(message: "invalid_result"), "The sign-in result wasn't accepted, or it had expired. Try again."),
-            (.http(status: 409), "That login can't be added: this account already has one on that platform, or it belongs to another Sylo account."),
+            (.http(status: 409), "That login can't be added: it belongs to another Sylo account, or this account already has one on that platform."),
         ]
         for (error, text) in cases {
             let model = AccountModel(session: makeSignedInSession(clients: StubClients { endpoint in

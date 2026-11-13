@@ -12,6 +12,9 @@ struct OverviewView: View {
 
     @Environment(AppSession.self) private var session
     @State private var searchText = ""
+    /// Select mode: pick modules, then switch them all on or off with one call.
+    @State private var isSelecting = false
+    @State private var picked: Set<String> = []
 
     var body: some View {
         content
@@ -22,6 +25,13 @@ struct OverviewView: View {
             }
             .alert(
                 "Couldn't Change Module", isPresented: isShowingToggleError, presenting: model.toggleError
+            ) { _ in
+                Button("OK") {}
+            } message: { message in
+                Text(message)
+            }
+            .alert(
+                "Some Modules Didn’t Change", isPresented: isShowingBulkNotice, presenting: model.bulkNotice
             ) { _ in
                 Button("OK") {}
             } message: { message in
@@ -42,10 +52,20 @@ struct OverviewView: View {
                 Section {
                     OverviewHeader(summary: summary, overview: overview)
                 }
+                if !isSelecting, !isSearching {
+                    ServerToolsSection(server: summary.id) { startSelecting() }
+                }
                 ForEach(shownGroups(overview)) { group in
                     Section(group.title) {
                         ForEach(group.cards) { card in
-                            if card.hasToggle, ModuleScreens.hasScreen(card.id) {
+                            if isSelecting {
+                                // Only modules with a switch can be picked.
+                                if card.hasToggle, card.moduleID != nil {
+                                    ModuleSelectionRow(card: card, isSelected: picked.contains(card.id)) {
+                                        togglePicked(card.id)
+                                    }
+                                }
+                            } else if card.hasToggle, ModuleScreens.hasScreen(card.id) {
                                 NavigationLink(value: ModuleRoute(moduleID: card.id)) {
                                     moduleRow(card)
                                 }
@@ -63,6 +83,13 @@ struct OverviewView: View {
                 }
             }
             .tabBarClearance()
+            .safeAreaInset(edge: .bottom) {
+                if isSelecting {
+                    ModuleSelectionBar(
+                        count: picked.count, isBusy: model.isBulkSwitching, cancel: stopSelecting,
+                        turnOn: { applyBulk(enabled: true) }, turnOff: { applyBulk(enabled: false) })
+                }
+            }
             .searchable(text: $searchText, prompt: "Search modules")
             .overlay {
                 if isSearching, shownGroups(overview).isEmpty {
@@ -85,6 +112,29 @@ struct OverviewView: View {
         }
     }
 
+    private func startSelecting() {
+        picked = []
+        isSelecting = true
+    }
+
+    private func stopSelecting() {
+        isSelecting = false
+        picked = []
+    }
+
+    private func togglePicked(_ id: String) {
+        if picked.contains(id) { picked.remove(id) } else { picked.insert(id) }
+    }
+
+    /// Switches the picked modules in one call, then leaves select mode unless it went wrong.
+    private func applyBulk(enabled: Bool) {
+        guard let task = model.setModules(Array(picked), enabled: enabled) else { return }
+        Task {
+            await task.value
+            if model.toggleError == nil { stopSelecting() }
+        }
+    }
+
     private var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     /// The groups to list: the search applied, and the "Settings" card (its own tab) left out, so
@@ -103,6 +153,12 @@ struct OverviewView: View {
         ModuleRow(card: card, isPending: model.isPending(card.id)) { enabled in
             model.setModule(card.id, enabled: enabled)
         }
+    }
+
+    private var isShowingBulkNotice: Binding<Bool> {
+        Binding(
+            get: { model.bulkNotice != nil },
+            set: { if !$0 { model.bulkNotice = nil } })
     }
 
     private var isShowingToggleError: Binding<Bool> {

@@ -176,6 +176,13 @@ struct LeaderboardModelTests {
         #expect(offline.vanityError == NetworkError.offline.userMessage)
     }
 
+    @Test("A code the app does not know is not shown as it came")
+    func unknownVanityCode() {
+        let message = LeaderboardModel.vanityMessage(for: NetworkError.badRequest(message: "brand_new_code"))
+        #expect(!message.contains("brand_new_code"))
+        #expect(message == NetworkError.badRequest(message: "brand_new_code").userMessage)
+    }
+
     @Test("The old error goes away when the next save starts")
     func vanityErrorClears() async {
         let clients = Self.clients(vanity: { _ in throw NetworkError.badRequest(message: "taken") })

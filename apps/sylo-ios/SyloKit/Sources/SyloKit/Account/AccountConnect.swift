@@ -32,7 +32,10 @@ enum ConnectWire {
     /// and `409 already_connected`, the complete call `400 invalid_result` and `409 identity_linked`
     /// or `already_linked`.
     static let invalidPlatformJSON = "invalid_platform"
+    static let alreadyConnectedJSON = "already_connected"
     static let invalidResultJSON = "invalid_result"
+    static let identityLinkedJSON = "identity_linked"
+    static let alreadyLinkedJSON = "already_linked"
 }
 
 extension ServerFeature {
