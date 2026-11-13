@@ -1,0 +1,206 @@
+// The view-model of the overview and the sidebar: what each module card says about itself in one line,
+// which colour it gets, what needs attention, and how the sidebar is grouped. Pure functions, so the
+// wording and the grouping are tested without rendering anything.
+import { plural } from './components/Meta.jsx';
+import { v2Href } from './moduleForms/index.js';
+
+const hrefOf = (id, guildId) => v2Href({ id }, guildId);
+
+const lineText = (l) => (l.value === 'on' || l.value === 'yes' ? l.label : `${l.label}: ${l.value}`);
+
+/**
+ * One line that says how a module is set up, from the lines the server already sends for its card:
+ * "Log channel: #server-log · Events tracked: 8 of 12", "Not set up", "Off".
+ * @param {{ hasToggle?: boolean, enabled?: boolean|null, status?: string, lines?: Array<{label: string, value: string, state: string}>, description?: string }} card
+ */
+export function cardSummary(card) {
+  const lines = Array.isArray(card.lines) ? card.lines : [];
+  const on = lines.filter((l) => l.state === 'on');
+  if (!card.hasToggle) return on.length ? on.slice(0, 2).map(lineText).join(' · ') : (card.description ?? '');
+  if (card.status === 'blocked') return 'Blocked: the bot needs a permission first';
+  if (!card.enabled) return on.length ? `Off · ${lineText(on[0])}` : 'Off';
+  if (lines.length > 0 && lines.every((l) => l.state === 'off')) return 'Not set up';
+  const shown = on.length ? on : lines.filter((l) => l.state === 'neutral');
+  return shown.slice(0, 2).map(lineText).join(' · ') || 'On';
+}
+
+/**
+ * The colour of a module row: 'ok' (green: on and set up), 'warn' (amber: on but it needs something, or
+ * blocked), 'off' (grey: switched off) or 'link' (a page with no switch).
+ * @param {object} card
+ * @param {Set<string>} [problemIds]  ids of modules the server reports as misconfigured
+ */
+export function cardTone(card, problemIds = new Set()) {
+  if (!card.hasToggle) return 'link';
+  if (!card.enabled) return 'off';
+  if (card.status === 'blocked' || problemIds.has(card.id)) return 'warn';
+  const lines = card.lines ?? [];
+  if (lines.length > 0 && lines.every((l) => l.state === 'off')) return 'warn';
+  return 'ok';
+}
+
+/** The short word shown next to the dot of a module row. */
+export const TONE_LABEL = { ok: 'On', warn: 'Needs setup', off: 'Off', link: '' };
+
+/**
+ * The "Needs attention" list: waiting work first (open tickets, appeals, applications, suggestions),
+ * then modules that are on but not set up, then modules the bot cannot run, then missing permissions.
+ * Each item has the page where it is fixed (`href`, relative to the dashboard base), except missing
+ * permissions, which are given to the bot's role in Discord itself.
+ * @returns {Array<{ key: string, kind: 'waiting'|'setup'|'blocked'|'permissions', title: string, detail: string, href: string|null }>}
+ */
+export function attentionItems(data, guildId) {
+  if (!data) return [];
+  const a = data.attention ?? {};
+  const waiting = a.waiting ?? {};
+  const items = [];
+  const tickets = Number(data.openTickets ?? waiting.tickets ?? 0);
+  const appeals = Number(data.openAppeals ?? waiting.appeals ?? 0);
+  const applications = Number(waiting.applications ?? 0);
+  const suggestions = Number(waiting.suggestions ?? 0);
+  const work = (key, n, one, many, href) => {
+    if (n > 0)
+      items.push({ key, kind: 'waiting', title: plural(n, one, many), detail: 'Waiting for a person', href });
+  };
+  work('tickets', tickets, 'open ticket', 'open tickets', `/guilds/${guildId}/tickets`);
+  work('appeals', appeals, 'open ban appeal', 'open ban appeals', `/guilds/${guildId}/appeals`);
+  work(
+    'applications',
+    applications,
+    'application waiting',
+    'applications waiting',
+    `/guilds/${guildId}/m/applications`
+  );
+  work('suggestions', suggestions, 'open suggestion', 'open suggestions', `/guilds/${guildId}/m/suggestions`);
+
+  const cards = (data.groups ?? []).flatMap((g) => g.cards ?? []);
+  const byId = new Map(cards.map((c) => [c.id, c]));
+  for (const p of a.problems ?? []) {
+    // The card tells the current state: a module switched off since the data was built is not a problem.
+    if (byId.get(p.id) && byId.get(p.id).enabled === false) continue;
+    items.push({
+      key: `setup-${p.id}`,
+      kind: 'setup',
+      title: `${p.name} is on but not set up`,
+      detail: p.issues.join('. '),
+      href: hrefOf(p.id, guildId),
+    });
+  }
+  for (const c of cards) {
+    if (c.hasToggle && c.enabled && c.status === 'blocked') {
+      items.push({
+        key: `blocked-${c.id}`,
+        kind: 'blocked',
+        title: `${c.name} cannot run`,
+        detail: 'The bot lacks a permission that only the bot owner can allow.',
+        href: hrefOf(c.id, guildId),
+      });
+    }
+  }
+  if ((a.missingPermissions ?? []).length) {
+    items.push({
+      key: 'permissions',
+      kind: 'permissions',
+      title: `Sylo is missing ${plural(a.missingPermissions.length, 'permission', 'permissions')}`,
+      detail: `Give Sylo's role in Discord: ${a.missingPermissions.join(', ')}.`,
+      href: null,
+    });
+  }
+  return items;
+}
+
+/** Ids of the modules the server reports as on but misconfigured. */
+export const problemIdsOf = (data) => new Set((data?.attention?.problems ?? []).map((p) => p.id));
+
+// Cards that have their own place in the sidebar, outside the Modules group.
+const MOVED_TO_SERVER = new Set(['general', 'commands']);
+const MOVED_TO_MODERATION = new Set(['moderation']);
+// Inbox entries that open the same page as the module's own card; the card is then not listed twice.
+const INBOX_SAME_PAGE = new Set(['applications', 'suggestions']);
+// Inbox entries whose queue is another page than the module's settings: the settings keep an entry.
+const SETTINGS_SUFFIX = new Set(['tickets', 'appeals']);
+
+/**
+ * The sidebar as groups. `guildId` is null before a server is picked (links are then null and shown
+ * disabled). `operator` is whether the server marks the viewer as the bot owner (OWNER_IDS): the bot
+ * pages (Health, Roadmap admin, Stats cache) only exist for them.
+ */
+export function navModel({ guildId, data, operator }) {
+  const g = (path) => (guildId ? `/guilds/${guildId}${path}` : null);
+  const waiting = data?.attention?.waiting ?? {};
+  const count = (n) => (Number(n) > 0 ? Number(n) : 0);
+  const inbox = [
+    {
+      key: 'tickets',
+      label: 'Tickets',
+      icon: 'inbox',
+      href: g('/tickets'),
+      prefix: true,
+      count: count(data?.openTickets ?? waiting.tickets),
+    },
+    {
+      key: 'appeals',
+      label: 'Appeals',
+      icon: 'flag',
+      href: g('/appeals'),
+      prefix: true,
+      count: count(data?.openAppeals ?? waiting.appeals),
+    },
+    {
+      key: 'applications',
+      label: 'Applications',
+      icon: 'clipboard',
+      href: g('/m/applications'),
+      prefix: true,
+      count: count(waiting.applications),
+    },
+    {
+      key: 'suggestions',
+      label: 'Suggestions',
+      icon: 'lightbulb',
+      href: g('/m/suggestions'),
+      prefix: true,
+      count: count(waiting.suggestions),
+    },
+  ];
+  const people = [
+    { key: 'moderation', label: 'Moderation hub', icon: 'shield', href: g('/moderation'), prefix: true },
+    { key: 'member-data', label: 'Member data', icon: 'database', href: g('/member-data') },
+    { key: 'leaderboard', label: 'Leaderboard', icon: 'trophy', href: g('/leaderboard') },
+    { key: 'audit', label: 'Audit log', icon: 'history', href: g('/audit') },
+  ];
+  const modules = (data?.groups ?? [])
+    .map((grp) => ({
+      title: grp.title,
+      cards: grp.cards
+        .filter((c) => !c.hasToggle || c.enabled)
+        .filter(
+          (c) => !MOVED_TO_SERVER.has(c.id) && !MOVED_TO_MODERATION.has(c.id) && !INBOX_SAME_PAGE.has(c.id)
+        )
+        .map((c) => ({
+          id: c.id,
+          name: SETTINGS_SUFFIX.has(c.id) ? `${c.name} settings` : c.name,
+          href: guildId ? hrefOf(c.id, guildId) : null,
+          beta: Boolean(c.beta),
+        })),
+    }))
+    .filter((grp) => grp.cards.length > 0);
+  const server = [
+    { key: 'settings', label: 'Server settings', icon: 'gear', href: g('/settings') },
+    { key: 'commands', label: 'Commands', icon: 'terminal', href: g('/moderation/commands') },
+    { key: 'personalizer', label: 'Bot personalizer', icon: 'id', href: '/settings' },
+  ];
+  const more = [
+    { key: 'command-list', label: 'Command list', icon: 'list', href: '/commands' },
+    { key: 'roadmap', label: 'Roadmap', icon: 'megaphone', href: '/roadmap' },
+    { key: 'changelog', label: "What's new", icon: 'sparkles', href: '/changelog' },
+  ];
+  const bot = operator
+    ? [
+        { key: 'health', label: 'Health', icon: 'pulse', href: '/health' },
+        { key: 'roadmap-admin', label: 'Roadmap admin', icon: 'megaphone', href: '/roadmap/admin' },
+        { key: 'stats', label: 'Game stats cache', icon: 'chart', href: '/stats' },
+      ]
+    : [];
+  return { inbox, people, modules, server, more, bot };
+}

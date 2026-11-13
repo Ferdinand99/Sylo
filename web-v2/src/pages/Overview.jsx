@@ -10,6 +10,10 @@ import { plural } from '../components/Meta.jsx';
 import { formatCount, initial } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 import BlockedNote from '../components/BlockedNote.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { Icon } from '../components/icons.jsx';
+import { attentionItems, cardSummary, cardTone, problemIdsOf, TONE_LABEL } from '../overviewModel.js';
+import { readCollapsed, toggled, writeCollapsed } from '../collapsedGroups.js';
 
 // A newly-added module gets this next to its name until it's had enough
 // real-world use to drop registry.js's `beta` flag.
@@ -21,67 +25,101 @@ function BetaTag() {
   );
 }
 
-// The module's name links to its settings page.
-function ModuleTitle({ card, guildId }) {
+// The panel at the top: what is waiting for a person and what is switched on but not set up. Each item
+// goes to the page where it is dealt with; with nothing to do the panel says so in one calm line.
+function NeedsAttention({ items }) {
+  if (!items.length) {
+    return (
+      <p className="v2-attention is-clear" role="status">
+        <Icon name="shield-check" className="v2-attention-clear-icon" />
+        Nothing needs your attention right now.
+      </p>
+    );
+  }
   return (
-    <Link className="v2-row-title-link" to={v2Href(card, guildId)}>
-      <h3>
-        {card.name} {card.beta ? <BetaTag /> : null}
-      </h3>
-    </Link>
+    <section className="v2-attention" aria-labelledby="v2-attention-title">
+      <h2 id="v2-attention-title" className="v2-attention-title">
+        Needs attention <span className="v2-attention-count">{items.length}</span>
+      </h2>
+      <ul className="v2-attention-list">
+        {items.map((item) => (
+          <li key={item.key} className={`v2-attention-item is-${item.kind}`}>
+            <span className="v2-attention-dot" aria-hidden="true" />
+            <div className="v2-attention-text">
+              <strong>{item.title}</strong>
+              <span>{item.detail}</span>
+            </div>
+            {item.href ? (
+              <Link
+                className="v2-attention-go"
+                to={item.href}
+                aria-label={`${item.kind === 'waiting' ? 'Open' : 'Fix'} ${item.title}`}
+              >
+                {item.kind === 'waiting' ? 'Open' : 'Fix'}
+              </Link>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
-function ModuleRow({ card, guildId, onToggle, selecting, picked, onPick }) {
-  if (!card.hasToggle) {
-    const rowContent = (
-      <>
-        <div className="v2-row-main">
+// One module as a card that opens its page. The title link is stretched over the whole card; the switch
+// (or the bulk-edit checkbox) sits above it as the secondary control.
+function ModuleRow({ card, guildId, tone, onToggle, selecting, picked, onPick }) {
+  const href = v2Href(card, guildId);
+  const blocked = card.missingIntents.length > 0;
+  const summary = cardSummary(card);
+  return (
+    <div className={`v2-modrow is-${tone}`}>
+      <span className="v2-modrow-icon" aria-hidden="true">
+        <Icon name={card.icon} className="v2-modrow-svg" />
+      </span>
+      <div className="v2-modrow-main">
+        <Link className="v2-row-title-link v2-modrow-link" to={href}>
           <h3>
             {card.name} {card.beta ? <BetaTag /> : null}
           </h3>
-          <p title={card.description}>{card.description}</p>
-        </div>
-        <span className="v2-row-arrow" aria-hidden="true">
-          →
-        </span>
-      </>
-    );
-    return (
-      <Link className="v2-row" to={v2Href(card, guildId)}>
-        {rowContent}
-      </Link>
-    );
-  }
-
-  const blocked = card.missingIntents.length > 0;
-
-  return (
-    <div className="v2-row">
-      <div className="v2-row-main">
-        <ModuleTitle card={card} guildId={guildId} />
-        <p title={card.description}>{card.description}</p>
-        {blocked ? (
+        </Link>
+        <p className="v2-modrow-summary" title={card.description}>
+          {summary}
+        </p>
+        {blocked && card.hasToggle ? (
           <p className="v2-row-warn">
             <BlockedNote intents={card.missingIntents} />
           </p>
         ) : null}
       </div>
-      {selecting ? (
-        <input
-          type="checkbox"
-          className="v2-row-pick"
-          aria-label={`Select ${card.name}`}
-          checked={picked}
-          onChange={(e) => onPick(card.id, e.target.checked)}
-        />
+      {card.hasToggle ? (
+        <>
+          <span className={`v2-modrow-status is-${tone}`}>
+            <span className="v2-modrow-dot" aria-hidden="true" />
+            {TONE_LABEL[tone]}
+          </span>
+          {selecting ? (
+            <input
+              type="checkbox"
+              className="v2-row-pick v2-modrow-control"
+              aria-label={`Select ${card.name}`}
+              checked={picked}
+              onChange={(e) => onPick(card.id, e.target.checked)}
+            />
+          ) : (
+            <span className="v2-modrow-control">
+              <Switch
+                checked={card.enabled}
+                onChange={(on) => onToggle(card, on)}
+                label={card.name}
+                disabled={blocked}
+              />
+            </span>
+          )}
+        </>
       ) : (
-        <Switch
-          checked={card.enabled}
-          onChange={(on) => onToggle(card.id, on)}
-          label={card.name}
-          disabled={blocked}
-        />
+        <span className="v2-row-arrow" aria-hidden="true">
+          →
+        </span>
       )}
     </div>
   );
@@ -98,6 +136,7 @@ export default function Overview() {
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [collapsed, setCollapsed] = useState(readCollapsed);
   const { data: shared, dataGuildId, error, setData } = useOverview();
   // Not the previous server's modules while this one's load.
   const data = dataGuildId === guildId ? shared : null;
@@ -115,14 +154,28 @@ export default function Overview() {
       }))
       .filter((g) => g.cards.length);
   }, [data, query]);
+  const attention = useMemo(() => attentionItems(data, guildId), [data, guildId]);
+  const problemIds = useMemo(() => problemIdsOf(data), [data]);
 
   if (error) return <LoadError error={error} what="this server" />;
   if (!data) return <p className="v2-state">Loading…</p>;
 
   // Optimistic: the switch flips at once, and flips back (with the error as
   // a toast) if the save fails — no disabled/dimmed flash while it saves.
-  async function onToggle(moduleId, enabled) {
+  // Switching a module off asks first: it stops working for the whole server.
+  async function onToggle(card, enabled) {
+    const moduleId = card.id;
     if (toggling.current.has(moduleId)) return;
+    if (!enabled) {
+      const ok = await confirmDialog({
+        title: `Switch off ${card.name}?`,
+        body: 'It stops working in this server at once. Its settings are kept, so you can switch it on again later.',
+        confirmLabel: 'Switch off',
+        cancelLabel: 'Keep it on',
+        tone: 'danger',
+      });
+      if (!ok) return;
+    }
     toggling.current.add(moduleId);
     const apply = (on) =>
       setData((d) => ({
@@ -156,8 +209,25 @@ export default function Overview() {
       return next;
     });
   }
+  function toggleGroup(title) {
+    setCollapsed((prev) => {
+      const next = toggled(prev, title);
+      writeCollapsed(next);
+      return next;
+    });
+  }
   async function applyBulk(enabled) {
     if (!picked.size || bulkBusy) return;
+    if (!enabled) {
+      const ok = await confirmDialog({
+        title: `Switch off ${plural(picked.size, 'module')}?`,
+        body: 'They stop working in this server at once. Their settings are kept.',
+        confirmLabel: 'Switch off',
+        cancelLabel: 'Keep them on',
+        tone: 'danger',
+      });
+      if (!ok) return;
+    }
     setBulkBusy(true);
     try {
       const ids = [...picked];
@@ -181,6 +251,7 @@ export default function Overview() {
   const { guild, groups, openTickets, openAppeals } = data;
   const toggleCards = groups.flatMap((g) => g.cards).filter((c) => c.hasToggle);
   const enabledCount = toggleCards.filter((c) => c.enabled).length;
+  const searching = query.trim() !== '';
 
   return (
     <Reveal>
@@ -197,6 +268,8 @@ export default function Overview() {
           <p>{plural(guild.memberCount, 'member')}</p>
         </div>
       </div>
+
+      <NeedsAttention items={attention} />
 
       <p className="v2-field-hint v2-overview-hint">
         Switch a module on or off here, or open it to change its settings.
@@ -255,24 +328,47 @@ export default function Overview() {
         </div>
       ) : null}
 
-      {filteredGroups.map((g) => (
-        <section key={g.title} className="v2-group">
-          <h2 className="v2-group-title">{g.title}</h2>
-          <div className="v2-list">
-            {g.cards.map((card) => (
-              <ModuleRow
-                key={card.id}
-                card={card}
-                guildId={guildId}
-                onToggle={onToggle}
-                selecting={selecting}
-                picked={picked.has(card.id)}
-                onPick={onPick}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
+      {filteredGroups.map((g) => {
+        // A search shows every match, so a folded category opens while one is typed.
+        const folded = collapsed.has(g.title) && !searching;
+        const switches = g.cards.filter((c) => c.hasToggle);
+        const listId = `v2-group-${g.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+        return (
+          <section key={g.title} className={`v2-group v2-group-fold${folded ? ' is-folded' : ''}`}>
+            <h2 className="v2-group-title">
+              <button
+                type="button"
+                className="v2-group-toggle"
+                aria-expanded={!folded}
+                aria-controls={listId}
+                onClick={() => toggleGroup(g.title)}
+              >
+                <Icon name="chevron" className="v2-group-chevron" />
+                <span>{g.title}</span>
+                {switches.length ? (
+                  <span className="v2-group-count">
+                    {switches.filter((c) => c.enabled).length} of {switches.length} on
+                  </span>
+                ) : null}
+              </button>
+            </h2>
+            <div className="v2-list v2-modlist" id={listId} hidden={folded}>
+              {g.cards.map((card) => (
+                <ModuleRow
+                  key={card.id}
+                  card={card}
+                  guildId={guildId}
+                  tone={cardTone(card, problemIds)}
+                  onToggle={onToggle}
+                  selecting={selecting}
+                  picked={picked.has(card.id)}
+                  onPick={onPick}
+                />
+              ))}
+            </div>
+          </section>
+        );
+      })}
       {query && !filteredGroups.length ? (
         <p className="v2-state is-instant">No modules match "{query}".</p>
       ) : null}

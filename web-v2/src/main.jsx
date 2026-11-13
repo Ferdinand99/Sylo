@@ -7,6 +7,7 @@ import '@fontsource-variable/inter/opsz.css';
 import './styles.css';
 import './forms.css';
 import './pages.css';
+import './dashux.css';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

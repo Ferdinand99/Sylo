@@ -34,6 +34,7 @@ vi.mock('../moduleForms/index.js', () => ({ v2Href: (card, guildId) => `/guilds/
 vi.mock('../OverviewContext.jsx', () => ({ useOverview: vi.fn() }));
 const api = await import('../api.js');
 const { useOverview } = await import('../OverviewContext.jsx');
+const { confirmDialog } = await import('../components/ConfirmDialog.jsx');
 
 const GUILD = '123456789012345678';
 const ROLE = '555555555555555551';
@@ -77,6 +78,91 @@ describe('Overview', () => {
     const appeals = screen.getByText('open appeal').closest('a');
     expect(tickets.getAttribute('href')).toBe(`/guilds/${GUILD}/tickets`);
     expect(appeals.getAttribute('href')).toBe(`/guilds/${GUILD}/appeals`);
+  });
+
+  const ISSUE = {
+    problems: [{ id: 'afk', name: 'AFK', issues: ['The channel is not set'] }],
+    missingPermissions: [],
+    waiting: { tickets: 2, appeals: 1, applications: 3, suggestions: 0 },
+  };
+
+  it('lists what needs attention at the top, each item with a link to fix it', async () => {
+    mockOverview({ attention: ISSUE });
+    renderAtGuild(<Overview />, GUILD);
+    const panel = (await screen.findByRole('heading', { name: /Needs attention/ })).closest('section');
+    expect(within(panel).getByText('2 open tickets', { selector: 'strong' })).toBeTruthy();
+    expect(within(panel).getByText('3 applications waiting', { selector: 'strong' })).toBeTruthy();
+    expect(within(panel).getByText('AFK is on but not set up', { selector: 'strong' })).toBeTruthy();
+    expect(within(panel).getByText('The channel is not set')).toBeTruthy();
+    const fix = within(panel).getByRole('link', { name: /Fix AFK is on but not set up/ });
+    expect(fix.getAttribute('href')).toBe(`/guilds/${GUILD}/m/afk`);
+    const open = within(panel).getByRole('link', { name: /Open 3 applications waiting/ });
+    expect(open.getAttribute('href')).toBe(`/guilds/${GUILD}/m/applications`);
+  });
+
+  it('says so when nothing needs attention', async () => {
+    mockOverview({ openTickets: 0, openAppeals: 0 });
+    renderAtGuild(<Overview />, GUILD);
+    expect(await screen.findByText('Nothing needs your attention right now.')).toBeTruthy();
+  });
+
+  it('shows a one-line summary and the status on each module card, and the card opens the module', async () => {
+    mockOverview({
+      groups: [
+        {
+          title: 'Utility',
+          cards: [card({ lines: [{ label: 'Channel', value: '#general', state: 'on' }], icon: 'moon' })],
+        },
+      ],
+    });
+    renderAtGuild(<Overview />, GUILD);
+    expect(await screen.findByText('Channel: #general')).toBeTruthy();
+    expect(screen.getByText('On')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'AFK' }).getAttribute('href')).toBe(`/guilds/${GUILD}/m/afk`);
+  });
+
+  it('asks before switching a module off, and does nothing when the answer is no', async () => {
+    const setData = vi.fn();
+    mockOverview();
+    useOverview.mockReturnValue({ ...useOverview(), setData });
+    confirmDialog.mockResolvedValue(false);
+    renderAtGuild(<Overview />, GUILD);
+    fireEvent.click(await screen.findByRole('switch', { name: 'AFK' }));
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalled());
+    expect(confirmDialog.mock.calls[0][0].title).toBe('Switch off AFK?');
+    expect(api.setModuleEnabled).not.toHaveBeenCalled();
+    expect(setData).not.toHaveBeenCalled();
+  });
+
+  it('switches the module off when the answer is yes', async () => {
+    mockOverview();
+    api.setModuleEnabled.mockResolvedValue({});
+    confirmDialog.mockResolvedValue(true);
+    renderAtGuild(<Overview />, GUILD);
+    fireEvent.click(await screen.findByRole('switch', { name: 'AFK' }));
+    await waitFor(() => expect(api.setModuleEnabled).toHaveBeenCalledWith(GUILD, 'afk', false));
+  });
+
+  it('switches a module on without asking', async () => {
+    mockOverview({ groups: [{ title: 'Utility', cards: [card({ enabled: false })] }] });
+    api.setModuleEnabled.mockResolvedValue({});
+    renderAtGuild(<Overview />, GUILD);
+    fireEvent.click(await screen.findByRole('switch', { name: 'AFK' }));
+    await waitFor(() => expect(api.setModuleEnabled).toHaveBeenCalledWith(GUILD, 'afk', true));
+    expect(confirmDialog).not.toHaveBeenCalled();
+  });
+
+  it('folds a category, remembers it, and opens it again while searching', async () => {
+    mockOverview();
+    renderAtGuild(<Overview />, GUILD);
+    const head = await screen.findByRole('button', { name: /Utility/ });
+    expect(head.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(head);
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(JSON.parse(localStorage.getItem('sylo:v2:overview-collapsed'))).toEqual(['Utility']);
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search modules' }), { target: { value: 'afk' } });
+    expect(screen.getByRole('button', { name: /Utility/ }).getAttribute('aria-expanded')).toBe('true');
+    localStorage.removeItem('sylo:v2:overview-collapsed');
   });
 
   it('calls the bulk switch "Bulk edit" and gives one instruction instead of the old note', async () => {
