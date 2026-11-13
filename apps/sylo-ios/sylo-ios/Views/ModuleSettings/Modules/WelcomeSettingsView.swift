@@ -17,7 +17,9 @@ struct WelcomeSettingsView: View {
     }
 
     private func triggerRolesBinding(_ settings: Binding<WelcomeSettings>) -> Binding<[String]> {
-        Binding(get: { settings.wrappedValue.triggerRoleIds ?? [] }, set: { settings.wrappedValue.triggerRoleIds = $0 })
+        Binding(
+            get: { settings.wrappedValue.triggerRoleSelection },
+            set: { settings.wrappedValue.setTriggerRoleSelection($0) })
     }
 
     private func joinToggleTitle(_ settings: WelcomeSettings) -> LocalizedStringKey {
@@ -56,7 +58,7 @@ struct WelcomeSettingsView: View {
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
-                    if settings.trigger == .role, settings.triggerRoleIds != nil {
+                    if settings.trigger == .role {
                         MultiPicker(title: "Roles", selection: triggerRolesBinding($settings), options: page.roles,
                                     prefix: "@", limit: WelcomeSettings.maxTriggerRoles)
                     }

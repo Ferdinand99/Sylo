@@ -112,11 +112,22 @@ public struct WelcomeSettings: Codable, Sendable, Equatable {
     /// Whether the server knows the "when to welcome" setting (Sylo 5.2 and later).
     public var supportsTrigger: Bool { trigger != nil }
 
+    /// The trigger roles as the screen shows them. A server that sent `trigger` but no
+    /// `triggerRoleIds` has no roles picked yet.
+    public var triggerRoleSelection: [String] { triggerRoleIds ?? [] }
+
+    /// Sets the trigger roles from the picker. When the server did not send `triggerRoleIds` and
+    /// nothing is picked, the key stays absent, so it is only sent once the person picked a role
+    /// (or when the server sent it).
+    public mutating func setTriggerRoleSelection(_ ids: [String]) {
+        if ids.isEmpty, triggerRoleIds == nil { return }
+        triggerRoleIds = ids
+    }
+
     /// Role mode with no role picked: the settings save, but no welcome is ever sent. Same warning
-    /// as the dashboard. Only when the server sent the role list, so a server that did not is
-    /// never blamed for it.
+    /// as the dashboard. A missing `triggerRoleIds` counts as no role picked.
     public var hasNoTriggerRole: Bool {
-        trigger == .role && triggerRoleIds?.isEmpty == true
+        trigger == .role && triggerRoleSelection.isEmpty
     }
 
     private enum CodingKeys: String, CodingKey {

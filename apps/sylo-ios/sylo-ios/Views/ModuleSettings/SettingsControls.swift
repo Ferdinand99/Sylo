@@ -85,7 +85,14 @@ private struct MultiPickerList<Option: NamedOption>: View {
     let prefix: String
     let limit: Int?
 
-    private var isFull: Bool { limit.map { selection.count >= $0 } ?? false }
+    /// Counts only roles (or channels) that still exist; see ``SelectionLimit``.
+    private var isFull: Bool {
+        SelectionLimit.isFull(selection: selection, existing: options.map(\.id), limit: limit)
+    }
+
+    private func isDisabled(_ option: Option) -> Bool {
+        isFull && !selection.contains(option.id)
+    }
 
     var body: some View {
         List {
@@ -96,7 +103,7 @@ private struct MultiPickerList<Option: NamedOption>: View {
                     } label: {
                         HStack {
                             Text(verbatim: prefix + option.name)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(isDisabled(option) ? .secondary : .primary)
                             Spacer()
                             if selection.contains(option.id) {
                                 Image(systemName: "checkmark")
@@ -106,7 +113,7 @@ private struct MultiPickerList<Option: NamedOption>: View {
                         }
                     }
                     .accessibilityAddTraits(selection.contains(option.id) ? .isSelected : [])
-                    .disabled(isFull && !selection.contains(option.id))
+                    .disabled(isDisabled(option))
                 }
             } footer: {
                 if let limit {

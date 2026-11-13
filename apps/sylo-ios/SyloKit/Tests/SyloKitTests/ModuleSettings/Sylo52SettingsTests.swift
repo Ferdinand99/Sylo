@@ -105,14 +105,66 @@ struct WelcomeTriggerTests {
         #expect(WelcomeSettings(trigger: .role, triggerRoleIds: []).hasNoTriggerRole)
         #expect(!WelcomeSettings(trigger: .role, triggerRoleIds: ["1"]).hasNoTriggerRole)
         #expect(!WelcomeSettings(trigger: .join, triggerRoleIds: []).hasNoTriggerRole)
-        // A server that sent no role list is not blamed for an empty one.
-        #expect(!WelcomeSettings(trigger: .role, triggerRoleIds: nil).hasNoTriggerRole)
+        // A server that sent `trigger` but no role list: nothing picked yet, so the warning shows.
+        #expect(WelcomeSettings(trigger: .role, triggerRoleIds: nil).hasNoTriggerRole)
+        #expect(!WelcomeSettings(trigger: .join, triggerRoleIds: nil).hasNoTriggerRole)
+        // A server before 5.2 sent no trigger at all: never blamed.
         #expect(!WelcomeSettings().hasNoTriggerRole)
+    }
+
+    @Test("a received empty trigger role list is posted back as an empty list")
+    func emptyRoleListRoundTrip() throws {
+        let page = try JSONDecoder().decode(
+            WelcomePage.self, from: Data(#"{"config":{"trigger":"role","triggerRoleIds":[]}}"#.utf8))
+        #expect(page.settings.triggerRoleIds == [])
+        let data = try JSONEncoder().encode(page.settings)
+        let body = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(body["trigger"] as? String == "role")
+        let ids = try #require(body["triggerRoleIds"] as? [Any])
+        #expect(ids.isEmpty)
+    }
+
+    @Test("without a received role list the key is only sent once a role is picked")
+    func absentRoleListStaysAbsent() throws {
+        var s = try JSONDecoder().decode(
+            WelcomePage.self, from: Data(#"{"config":{"trigger":"role"}}"#.utf8)).settings
+        #expect(s.triggerRoleIds == nil)
+        #expect(s.triggerRoleSelection == [])
+        // Nothing picked: the picker writing an empty list adds no key.
+        s.setTriggerRoleSelection([])
+        #expect(s.triggerRoleIds == nil)
+        #expect(try keys(of: s) == Self.keys51.union(["trigger"]))
+        // A role picked: now it is sent.
+        s.setTriggerRoleSelection(["1"])
+        #expect(s.triggerRoleIds == ["1"])
+        #expect(try keys(of: s) == Self.keys51.union(["trigger", "triggerRoleIds"]))
+        // Unpicked again: it was edited, so the empty list is sent.
+        s.setTriggerRoleSelection([])
+        #expect(s.triggerRoleIds == [])
     }
 
     @Test("the server keeps at most ten trigger roles")
     func limit() {
         #expect(WelcomeSettings.maxTriggerRoles == 10)
+    }
+
+    @Test("the picker is full at ten roles that exist; ids the server dropped do not count")
+    func pickerLimit() {
+        let existing = (1...12).map { "r\($0)" }
+        let ten = Array(existing.prefix(10))
+        let max = WelcomeSettings.maxTriggerRoles
+        #expect(SelectionLimit.isFull(selection: ten, existing: existing, limit: max))
+        #expect(!SelectionLimit.isFull(selection: Array(ten.prefix(9)), existing: existing, limit: max))
+        #expect(!SelectionLimit.isFull(selection: [], existing: existing, limit: max))
+        // Nine real roles and one deleted: room for one more.
+        let withStale = Array(ten.prefix(9)) + ["deleted"]
+        #expect(!SelectionLimit.isFull(selection: withStale, existing: existing, limit: max))
+        // Ten real roles and a deleted one: full.
+        #expect(SelectionLimit.isFull(selection: ten + ["deleted"], existing: existing, limit: max))
+        // Only deleted ids: nothing used.
+        #expect(!SelectionLimit.isFull(selection: ["a", "b"], existing: existing, limit: 1))
+        // No limit is never full.
+        #expect(!SelectionLimit.isFull(selection: existing, existing: existing, limit: nil))
     }
 
     @Test("an unknown trigger reads as joining, as the server does; odd types and nulls do not fail the page")

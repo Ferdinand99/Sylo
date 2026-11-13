@@ -29,6 +29,18 @@ public protocol NamedOption: Identifiable, Hashable, Sendable {
     var name: String { get }
 }
 
+/// The "pick up to N" rule of a multi-select, kept apart from the view so it can be tested.
+public enum SelectionLimit {
+    /// Whether no more entries can be picked. Only picked ids that still exist count: an id the
+    /// server no longer has stays in the saved value until the person removes it, but does not use
+    /// up a place (the server drops it on save). No limit is never full.
+    public static func isFull(selection: [String], existing: [String], limit: Int?) -> Bool {
+        guard let limit else { return false }
+        let known = Set(existing)
+        return selection.filter(known.contains).count >= limit
+    }
+}
+
 /// A channel the bot can use, from a settings page (`{id, name}`).
 public struct ChannelOption: Decodable, NamedOption {
     public let id: String
