@@ -157,6 +157,28 @@ public struct HealthReport: Decodable, Sendable, Equatable {
     }
 }
 
+extension HealthReport {
+    /// ``uptime`` in seconds: the server writes it as "3d 04h 12m" or, under an hour, "05m 12s" (with
+    /// whole minutes only once it is an hour or more). Nil when it is missing or in another shape.
+    public var uptimeSeconds: Int? {
+        guard let uptime else { return nil }
+        var total = 0
+        var parts = 0
+        for token in uptime.split(separator: " ") {
+            guard let unit = token.last, let value = Int(token.dropLast()), value >= 0 else { return nil }
+            switch unit {
+            case "d": total += value * 86_400
+            case "h": total += value * 3_600
+            case "m": total += value * 60
+            case "s": total += value
+            default: return nil
+            }
+            parts += 1
+        }
+        return parts > 0 ? total : nil
+    }
+}
+
 /// How serious a dev-log event is.
 public enum DevLogLevel: String, Sendable, Hashable, Codable {
     case error

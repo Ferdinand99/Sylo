@@ -98,6 +98,23 @@ final class StubClients: @unchecked Sendable {
                 throw NetworkError(error)
             }
         }
+
+        /// A download reports the steps it was given (the same ones as an upload), may wait to be
+        /// cancelled, then is answered like ``download(_:)``.
+        func download<E: APIEndpoint>(
+            _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+        ) async throws -> DownloadedFile where E.Response == EmptyResponse {
+            let behaviour = owner.uploadBehaviour
+            for step in behaviour.steps { progress?(step.sent, step.total) }
+            if behaviour.holds {
+                do {
+                    try await Task.sleep(for: .seconds(60))
+                } catch {
+                    throw NetworkError.cancelled
+                }
+            }
+            return try await download(endpoint)
+        }
     }
 }
 

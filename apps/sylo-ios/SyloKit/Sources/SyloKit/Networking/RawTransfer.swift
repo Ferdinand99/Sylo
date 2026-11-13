@@ -74,6 +74,7 @@ public struct DownloadedFile: Sendable, Equatable {
         let url = try makeDestination(filename: name)
         do {
             try data.write(to: url)
+            protect(url)
         } catch {
             try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
             throw error
@@ -105,10 +106,29 @@ public struct DownloadedFile: Sendable, Equatable {
         return "download"
     }
 
+    /// What a downloaded file is created with. An export or a backup holds personal data, so on a phone
+    /// the file is readable only while the device is unlocked or while it is already open (Quick Look
+    /// keeps it open), not from the first unlock on as the default would allow. Nil where there is no
+    /// data protection (the Mac the tests run on).
+    static var fileAttributes: [FileAttributeKey: Any]? {
+        #if os(iOS) || os(tvOS) || os(watchOS) || os(visionOS)
+        return [.protectionKey: FileProtectionType.completeUnlessOpen]
+        #else
+        return nil
+        #endif
+    }
+
+    /// Gives a file that was written without ``fileAttributes`` the same protection.
+    static func protect(_ url: URL) {
+        guard let attributes = fileAttributes else { return }
+        try? FileManager.default.setAttributes(attributes, ofItemAtPath: url.path)
+    }
+
     /// A new, empty folder for one file, and the path of the file in it.
     static func makeDestination(filename: String, in directory: URL? = nil) throws -> URL {
         let folder = (directory ?? root).appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: folder, withIntermediateDirectories: true, attributes: fileAttributes)
         return folder.appendingPathComponent(filename, isDirectory: false)
     }
 

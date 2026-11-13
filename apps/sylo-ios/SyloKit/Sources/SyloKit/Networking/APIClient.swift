@@ -26,9 +26,23 @@ public protocol APIClient: Sendable {
     func upload<E: APIEndpoint>(
         _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
     ) async throws -> E.Response
+
+    /// ``download(_:)`` that also reports `progress(bytesReceived, bytesExpected)` (0 when the server did
+    /// not say how long the file is) on a background queue, for a download that takes a while (a backup).
+    /// Cancelling the task stops the transfer and deletes what was written. A client that does not report
+    /// progress answers like ``download(_:)``.
+    func download<E: APIEndpoint>(
+        _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws -> DownloadedFile where E.Response == EmptyResponse
 }
 
 extension APIClient {
+    public func download<E: APIEndpoint>(
+        _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws -> DownloadedFile where E.Response == EmptyResponse {
+        try await download(endpoint)
+    }
+
     public func upload<E: APIEndpoint>(
         _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
     ) async throws -> E.Response {
@@ -185,9 +199,19 @@ public final class URLSessionAPIClient: APIClient {
     }
 
     public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile where E.Response == EmptyResponse {
+        try await download(endpoint, progress: nil)
+    }
+
+    public func download<E: APIEndpoint>(
+        _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws -> DownloadedFile where E.Response == EmptyResponse {
         let request = try await makeRequest(for: endpoint, accept: "*/*")
         let ceiling = endpoint.isLargeDownload ? Swift.max(maxDownloadBytes, Self.largeDownloadBytes) : maxDownloadBytes
         let limit = Swift.min(endpoint.maxDownloadBytes ?? ceiling, ceiling)
+        #if !canImport(FoundationNetworking)
+        // A backup is hundreds of MB: read in chunks with progress and cancel, not byte by byte.
+        if endpoint.isLargeDownload { return try await fetchChunked(request, limit: limit, progress: progress) }
+        #endif
         var attempt = 0
         while true {
             do {
@@ -205,6 +229,23 @@ public final class URLSessionAPIClient: APIClient {
         }
     }
 
+
+    #if !canImport(FoundationNetworking)
+    /// A big download (a backup) in the chunks `URLSession` delivers, on a session of its own so the
+    /// transfer has a delegate: written to disk as it arrives, progress reported, cancelled with the task,
+    /// and stopped at `limit`. Nothing is kept when it fails.
+    private func fetchChunked(
+        _ request: URLRequest, limit: Int, progress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws -> DownloadedFile {
+        let downloader = ChunkedDownload(limit: Int64(limit), directory: downloadDirectory, progress: progress)
+        let dedicated = URLSession(configuration: session.configuration, delegate: downloader, delegateQueue: nil)
+        defer { dedicated.finishTasksAndInvalidate() }
+        switch await downloader.run(on: dedicated, request: request) {
+        case .success(let file): return file
+        case .failure(let error): throw error
+        }
+    }
+    #endif
     // MARK: - Downloads
 
     /// How much of an error answer is read for its message.
@@ -241,7 +282,7 @@ public final class URLSessionAPIClient: APIClient {
         let destination = try DownloadedFile.makeDestination(filename: filename, in: downloadDirectory)
         let folder = destination.deletingLastPathComponent()
         do {
-            guard FileManager.default.createFile(atPath: destination.path, contents: nil) else {
+            guard FileManager.default.createFile(atPath: destination.path, contents: nil, attributes: DownloadedFile.fileAttributes) else {
                 throw NetworkError.transport(code: CocoaError.fileWriteUnknown.rawValue)
             }
             let handle = try FileHandle(forWritingTo: destination)
@@ -276,14 +317,14 @@ public final class URLSessionAPIClient: APIClient {
     }
 
     /// Throws what a non-success status means; returns for a success.
-    private static func checkDownloadStatus(_ http: HTTPURLResponse, errorBody: Data) throws {
+    static func checkDownloadStatus(_ http: HTTPURLResponse, errorBody: Data) throws {
         guard !(200..<300).contains(http.statusCode) else { return }
         let isJSON = Self.isJSON(errorBody, contentType: Self.header("Content-Type", in: http))
         throw NetworkError.from(status: http.statusCode, body: errorBody, isJSON: isJSON)
     }
 
     /// The file name (from `Content-Disposition`, else by type) and the media type of a download.
-    private static func descriptor(of http: HTTPURLResponse) -> (filename: String, mimeType: String) {
+    static func descriptor(of http: HTTPURLResponse) -> (filename: String, mimeType: String) {
         var mime = "application/octet-stream"
         if let type = Self.header("Content-Type", in: http) {
             let bare = type.split(separator: ";").first.map { $0.trimmingCharacters(in: .whitespaces).lowercased() } ?? ""
@@ -378,7 +419,7 @@ public final class URLSessionAPIClient: APIClient {
     }
     #endif
 
-    private static func header(_ name: String, in response: HTTPURLResponse) -> String? {
+    static func header(_ name: String, in response: HTTPURLResponse) -> String? {
         for (key, value) in response.allHeaderFields {
             if let key = key as? String, key.caseInsensitiveCompare(name) == .orderedSame {
                 return value as? String

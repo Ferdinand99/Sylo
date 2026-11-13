@@ -15,6 +15,8 @@ struct BackupsView: View {
     /// The file the person chose, kept open (it is outside the app) until the import is over.
     @State private var picked: PickedBackupFile?
     @State private var pickError: String?
+    /// Keeps the upload going for a little while if the app is sent to the background.
+    @State private var background = BackgroundActivity()
 
     init(session: AppSession) {
         self.session = session
@@ -58,9 +60,19 @@ struct BackupsView: View {
                 Task { await model.load() }
             }
         }
+        .onChange(of: importer.isUploading) { _, isUploading in
+            if isUploading {
+                background.begin("Backup import") { importer.cancel() }
+            } else {
+                background.end()
+            }
+        }
+        // Another account signed in: the chosen file was for the earlier one.
+        .onChange(of: session.generation) { picked = nil }
         .onDisappear {
             // Leaving the screen stops an upload in flight; nothing is kept on the server.
             importer.cancel()
+            background.end()
         }
     }
 
@@ -272,11 +284,19 @@ private struct RestoringView: View {
 private struct BackupDetailView: View {
     let backup: HealthReport.Backup
     let model: BackupsModel
-    let session: AppSession
 
     @Environment(\.dismiss) private var dismiss
+    @State private var download: FileDownloadModel
+    /// The downloaded file while Quick Look shows it.
+    @State private var previewed: DownloadedFile?
     @State private var isConfirmingRestore = false
     @State private var isConfirmingDelete = false
+
+    init(backup: HealthReport.Backup, model: BackupsModel, session: AppSession) {
+        self.backup = backup
+        self.model = model
+        _download = State(initialValue: FileDownloadModel(session: session))
+    }
 
     var body: some View {
         Form {
@@ -292,13 +312,7 @@ private struct BackupDetailView: View {
             if let message = model.actionError {
                 Section { StatusMessage(message, kind: .error) }
             }
-            Section {
-                DownloadFileButton(
-                    "Download Backup", systemImage: "square.and.arrow.down",
-                    endpoint: Endpoints.DownloadBackup(name: backup.name), session: session)
-            } footer: {
-                Text("A backup holds the personal data of every server on this Sylo. It opens in Quick Look, where you can read or share it. The temporary copy is deleted when you close it, when you sign out and when the app starts.")
-            }
+            downloadSection
             Section {
                 Button("Restore\u{2026}", role: .destructive) { isConfirmingRestore = true }
                     .disabled(model.isWorking)
@@ -321,9 +335,50 @@ private struct BackupDetailView: View {
                 if await model.delete(backup.name, typed: typed) { dismiss() }
             }
         }
+        .onDisappear { download.cancel() }
         // The list shows the restore from here on.
         .onChange(of: model.restoring) { _, restoring in
             if restoring != nil { dismiss() }
         }
+    }
+
+    /// Download with progress and Cancel, then Quick Look (which has Share). Leaving the screen stops it.
+    private var downloadSection: some View {
+        Section {
+            if download.isDownloading {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let fraction = download.fraction {
+                        ProgressView(value: fraction) {
+                            Text("Downloading")
+                        } currentValueLabel: {
+                            Text(verbatim: "\(Self.size(download.bytesReceived)) of \(Self.size(download.bytesExpected))")
+                        }
+                    } else {
+                        ProgressView {
+                            Text(verbatim: "Downloading \(Self.size(download.bytesReceived))")
+                        }
+                    }
+                    Button("Cancel Download", role: .destructive) { download.cancel() }
+                }
+            } else {
+                Button {
+                    Task {
+                        if await download.download(Endpoints.DownloadBackup(name: backup.name)) { previewed = download.file }
+                    }
+                } label: {
+                    Label("Download Backup", systemImage: "square.and.arrow.down")
+                }
+                .fileQuickLook($previewed) { download.clear() }
+            }
+            if let message = download.errorMessage {
+                StatusMessage(message, kind: .error)
+            }
+        } footer: {
+            Text("A backup holds the personal data of every server on this Sylo. It opens in Quick Look, where you can read or share it. The temporary copy is deleted when you close it, when you sign out and when the app starts.")
+        }
+    }
+
+    private static func size(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }

@@ -228,10 +228,18 @@ public final class AppSession {
     /// the same 401 handling as ``send(_:)``. Use an endpoint whose `Response` is ``EmptyResponse``
     /// (see ``Endpoints/Resource``).
     public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile where E.Response == EmptyResponse {
+        try await download(endpoint, progress: nil)
+    }
+
+    /// ``download(_:)`` that reports `progress(bytesReceived, bytesExpected)` from a background queue
+    /// (see ``APIClient/download(_:progress:)``). Cancelling the calling task stops the transfer.
+    public func download<E: APIEndpoint>(
+        _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws -> DownloadedFile where E.Response == EmptyResponse {
         guard let client else { throw NetworkError.unauthorized }
         let generation = self.generation
         do {
-            let file = try await client.download(endpoint)
+            let file = try await client.download(endpoint, progress: progress)
             // Exports can hold personal data: whatever is still on disk at sign-out is deleted then.
             if generation == self.generation {
                 if issuedFiles.count >= 32 {

@@ -296,6 +296,10 @@ public final class PersonalizerModel {
     public var isPresenceDirty: Bool { presence != savedPresence }
     public var isAnnouncementDirty: Bool { announcement != savedAnnouncement }
 
+    /// Whether any of the three forms holds edits that were not saved. Reading the screen again would
+    /// overwrite them, so the screen asks first.
+    public var hasUnsavedChanges: Bool { isIdentityDirty || isPresenceDirty || isAnnouncementDirty }
+
     /// Whether Publish can run: the dashboard lets a blank title clear the announcement, the app asks for
     /// the Clear button (with its confirmation) instead.
     public var canPublish: Bool {

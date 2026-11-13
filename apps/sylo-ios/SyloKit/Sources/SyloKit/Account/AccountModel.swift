@@ -63,6 +63,13 @@ public final class AccountModel {
         account?.isOperator == true && accountGeneration == session.generation
     }
 
+    /// Whether the account page was read for the sign-in that is live now. False before the first read
+    /// and again as soon as the sign-in changes, until the next read; a screen that depends on who is
+    /// signed in shows a loading state, not a verdict, while this is false.
+    public var hasLoadedForSignIn: Bool {
+        account != nil && accountGeneration == session.generation
+    }
+
     /// The operator-only screens the app offers: all of them for an operator, none for anyone else (they
     /// are hidden, not disabled).
     public var operatorFeatures: [OperatorFeature] {

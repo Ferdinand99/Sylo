@@ -164,13 +164,16 @@ public final class BackupsModel {
     @discardableResult
     public func restore(_ name: String, typed: String) async -> Bool {
         guard confirmed(.restore(backup: name), typed) else { return false }
+        // Where the old process stands, to tell it from a restarted one afterwards.
+        let before = await uptimeBeforeRestore()
+        let logBaseline = await newestErrorID()
         let started = await change { generation in
             _ = try await self.session.send(Endpoints.RestoreBackup(name: name))
             guard self.session.generation == generation else { return }
             self.restoring = name
         }
         guard started, restoring == name else { return started }
-        await waitUntilBack(from: name)
+        await waitForRestart(from: name, before: before, logBaseline: logBaseline)
         return true
     }
 
@@ -203,13 +206,23 @@ public final class BackupsModel {
         return true
     }
 
-    /// Asks the server whether it is up again, like the dashboard does, until it answers or the wait is
-    /// over. A refused token ends it too: the restore went back to a database that does not know this
-    /// sign-in, and the session has already signed the app out.
-    private func waitUntilBack(from name: String) async {
+    /// Waits until the server has really restarted, like the dashboard does with its poll, but without
+    /// believing the first answer: while the restore runs (the snapshot of the current database, a
+    /// `pg_restore`) the old process still answers `GET /health`, and if the snapshot fails the server
+    /// never restarts at all. Success needs evidence of a restart:
+    /// - the uptime is lower than the old process's could be (both known), or
+    /// - when an uptime is missing, a poll failed the way a restarting server fails (refused, timed out,
+    ///   a proxy's 5xx) before it answered again.
+    ///
+    /// Otherwise it keeps asking until `giveUpAfter`, stops early when the dev log says the snapshot
+    /// failed, and ends with a message that says the restore could not be confirmed. A refused token
+    /// ends the wait too: the restore went back to a database that does not know this sign-in, and the
+    /// session has already signed the app out.
+    private func waitForRestart(from name: String, before: UptimeReading?, logBaseline: Int?) async {
         let generation = session.generation
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: giveUpAfter)
+        var sawDown = false
         do {
             try await Task.sleep(for: firstPoll)
             while clock.now < deadline {
@@ -217,13 +230,23 @@ public final class BackupsModel {
                 do {
                     let loaded = try await session.send(Endpoints.Health())
                     guard session.generation == generation else { restoring = nil; return }
-                    report = loaded
-                    restoring = nil
-                    notice = "Restored from \(name). Sylo is back."
-                    return
+                    let elapsed = before.map { clock.now - $0.at } ?? .zero
+                    if Self.hasRestarted(loaded, before: before?.seconds, elapsed: elapsed, sawDown: sawDown) {
+                        report = loaded
+                        restoring = nil
+                        notice = "Restored from \(name). Sylo is back."
+                        return
+                    }
+                    // Still the old process: say so at once when the server gave up on the restore.
+                    if await snapshotFailed(after: logBaseline) {
+                        restoring = nil
+                        actionError = "The server could not take a snapshot of the current database first, so it did not restore anything. Check the dev log."
+                        return
+                    }
                 } catch {
-                    if NetworkError(error) == .unauthorized { restoring = nil; return }
-                    // Down while it restarts: ask again.
+                    let error = NetworkError(error)
+                    if error == .unauthorized { restoring = nil; return }
+                    if Self.looksLikeARestart(error) { sawDown = true }
                 }
                 try await Task.sleep(for: pollEvery)
             }
@@ -233,7 +256,58 @@ public final class BackupsModel {
             return
         }
         restoring = nil
-        actionError = "Sylo did not come back after the restore. Check the server."
+        actionError = sawDown
+            ? "Couldn't confirm the restore: Sylo went away but did not come back with a restarted process. Check Health and the dev log."
+            : "Couldn't confirm the restore: Sylo never restarted, so the restore may not have run. Check Health and the dev log."
+    }
+
+    /// An answer is from a restarted process when its uptime is lower than the old process's could be by
+    /// now. With either uptime missing, a failed poll before the answer counts instead. A server that was
+    /// young when the restore began (under three minutes) cannot be told apart by uptime, so a failed poll
+    /// counts there too.
+    static func hasRestarted(_ report: HealthReport, before: Int?, elapsed: Duration, sawDown: Bool) -> Bool {
+        guard let before, let now = report.uptimeSeconds else { return sawDown }
+        let expectedIfUnchanged = before + Int(elapsed.components.seconds)
+        // Uptimes over an hour have a one-minute granularity.
+        if now + 60 < expectedIfUnchanged { return true }
+        return sawDown && expectedIfUnchanged < 180
+    }
+
+    /// Whether a failed poll is how a restarting server fails, and not the phone losing its connection.
+    static func looksLikeARestart(_ error: NetworkError) -> Bool {
+        switch error {
+        case .unreachable, .timeout, .server: true
+        default: false
+        }
+    }
+
+    /// Where the old process stood before the restore: its uptime, and when that was read.
+    struct UptimeReading {
+        let seconds: Int
+        let at: ContinuousClock.Instant
+    }
+
+    private func uptimeBeforeRestore() async -> UptimeReading? {
+        guard let fresh = try? await session.send(Endpoints.Health()), let seconds = fresh.uptimeSeconds else { return nil }
+        return UptimeReading(seconds: seconds, at: ContinuousClock().now)
+    }
+
+    /// The newest error in the dev log now, 0 for an empty log, nil when the log cannot be read (then a
+    /// failed snapshot cannot be told from the log).
+    private func newestErrorID() async -> Int? {
+        guard let page = try? await session.send(Endpoints.DevLog(errorsOnly: true, limit: 20)) else { return nil }
+        return page.entries.map(\.id).max() ?? 0
+    }
+
+    /// Whether the dev log has a new error saying the snapshot before the restore failed (the server
+    /// then returns without restoring or restarting).
+    private func snapshotFailed(after baseline: Int?) async -> Bool {
+        guard let baseline, let page = try? await session.send(Endpoints.DevLog(errorsOnly: true, limit: 20)) else {
+            return false
+        }
+        return page.entries.contains {
+            $0.id > baseline && $0.message.localizedCaseInsensitiveContains("pre-restore snapshot failed")
+        }
     }
 
     private func describe(_ error: any Error) -> String? {
@@ -299,6 +373,7 @@ public final class BackupImportModel {
         bytesSent = 0
         bytesTotal = 0
         let generation = session.generation
+        watchSignIn(generation: generation, attempt: mine)
         task = Task { [weak self] in
             await self?.send(fileURL, attempt: mine, generation: generation)
         }
@@ -329,28 +404,62 @@ public final class BackupImportModel {
 
     private func send(_ fileURL: URL, attempt mine: Int, generation: Int) async {
         let endpoint = Endpoints.ImportBackup(fileURL: fileURL)
+        // The callbacks come from a background queue: one hop at a time, newest value, never backwards.
+        let relay = ProgressRelay { [weak self] sent, total in
+            self?.progress(sent, total, attempt: mine)
+        }
         let outcome: Phase
         do {
-            let answer = try await session.upload(endpoint) { [weak self] sent, total in
-                Task { @MainActor in self?.progress(sent, total, attempt: mine) }
-            }
+            let answer = try await session.upload(endpoint) { sent, total in relay.report(sent, total) }
             outcome = .imported(answer.name)
         } catch {
             let error = NetworkError(error)
             if error == .cancelled || error == .unauthorized {
-                if attempt == mine, phase == .uploading { phase = .idle }
+                if attempt == mine, phase == .uploading { leaveUploading() }
                 return
             }
             outcome = .failed(Self.message(for: error))
         }
-        guard attempt == mine, session.generation == generation else { return }
+        guard attempt == mine else { return }
+        // Another sign-in took over meanwhile: the answer is not for this account, and nothing is shown.
+        guard session.generation == generation else {
+            leaveUploading()
+            return
+        }
         phase = outcome
     }
 
     private func progress(_ sent: Int64, _ total: Int64, attempt mine: Int) {
-        guard attempt == mine, phase == .uploading else { return }
+        guard attempt == mine, phase == .uploading, sent >= bytesSent else { return }
         bytesSent = sent
         bytesTotal = total
+    }
+
+    /// Watches for the sign-in changing while the file goes out (a sign-out, another account, a refused
+    /// token): the upload belongs to the account that started it, so it is stopped.
+    private func watchSignIn(generation: Int, attempt mine: Int) {
+        withObservationTracking {
+            _ = session.generation
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self, self.attempt == mine, self.isUploading else { return }
+                if self.session.generation != generation {
+                    self.attempt += 1
+                    self.task?.cancel()
+                    self.task = nil
+                    self.leaveUploading()
+                } else {
+                    self.watchSignIn(generation: generation, attempt: mine)
+                }
+            }
+        }
+    }
+
+    /// Back to idle with nothing left over from the upload.
+    private func leaveUploading() {
+        phase = .idle
+        bytesSent = 0
+        bytesTotal = 0
     }
 
     static func message(for error: NetworkError) -> String {

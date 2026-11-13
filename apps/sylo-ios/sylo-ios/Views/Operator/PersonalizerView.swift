@@ -38,6 +38,9 @@ struct PersonalizerView: View {
 private struct PersonalizerForm: View {
     @Bindable var model: PersonalizerModel
     @State private var isConfirmingClear = false
+    @State private var isConfirmingIdentity = false
+    @State private var isConfirmingCritical = false
+    @State private var isConfirmingReload = false
 
     var body: some View {
         Form {
@@ -53,7 +56,29 @@ private struct PersonalizerForm: View {
             announcementSection
         }
         .scrollDismissesKeyboard(.interactively)
-        .refreshable { await model.load() }
+        .refreshable {
+            // Reading the bot again would replace what was typed and not saved: ask first.
+            if model.hasUnsavedChanges {
+                isConfirmingReload = true
+            } else {
+                await model.load()
+            }
+        }
+        .confirmationDialog("Discard your changes?", isPresented: $isConfirmingReload, titleVisibility: .visible) {
+            Button("Discard and Reload", role: .destructive) { Task { await model.load() } }
+        } message: {
+            Text("Reading the bot again replaces what you typed and have not saved.")
+        }
+        .confirmationDialog("Change the bot's identity?", isPresented: $isConfirmingIdentity, titleVisibility: .visible) {
+            Button("Save Identity") { Task { await model.saveIdentity() } }
+        } message: {
+            Text("This changes Sylo's name and pictures on every server it is in. The platform allows only about 2 name changes an hour.")
+        }
+        .confirmationDialog("Publish a critical announcement?", isPresented: $isConfirmingCritical, titleVisibility: .visible) {
+            Button("Publish") { Task { await model.publishAnnouncement() } }
+        } message: {
+            Text("A critical announcement has no dismiss button. It stays on every page of the dashboard and in the app, for everyone signed in, until you clear it.")
+        }
         .typedConfirmation(.clearAnnouncement, isPresented: $isConfirmingClear) { typed in
             Task { await model.clearAnnouncement(typed: typed) }
         }
@@ -103,7 +128,7 @@ private struct PersonalizerForm: View {
             Toggle("Reset avatar to the default instead", isOn: $model.identity.resetAvatar)
             LinkTextField(title: "Banner Link", text: $model.identity.bannerURL)
             Button {
-                Task { await model.saveIdentity() }
+                isConfirmingIdentity = true
             } label: {
                 SaveRow(title: "Save Identity", isSaving: model.isSaving, isDirty: model.isIdentityDirty)
             }
@@ -167,7 +192,11 @@ private struct PersonalizerForm: View {
                 }
             }
             Button {
-                Task { await model.publishAnnouncement() }
+                if model.announcement.severity == "critical" {
+                    isConfirmingCritical = true
+                } else {
+                    Task { await model.publishAnnouncement() }
+                }
             } label: {
                 SaveRow(title: "Publish Announcement", isSaving: model.isSaving, isDirty: model.isAnnouncementDirty,
                         dirtyText: "Unpublished changes")

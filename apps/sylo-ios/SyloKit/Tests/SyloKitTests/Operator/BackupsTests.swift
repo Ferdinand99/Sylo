@@ -291,7 +291,8 @@ struct BackupsModelTests {
         await model.load()
         _ = await model.restore("sylo-1.db", typed: "sylo-1.db")
         #expect(model.restoring == nil)
-        #expect(model.actionError == "Sylo did not come back after the restore. Check the server.")
+        #expect(model.actionError == "Couldn't confirm the restore: Sylo went away but did not come back with a restarted process. Check Health and the dev log.")
+        #expect(model.notice == nil)
     }
 
     @Test("A person who is not an operator gets the refusal, and no list")

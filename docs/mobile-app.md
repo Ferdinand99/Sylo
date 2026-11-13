@@ -388,7 +388,12 @@ its account is an operator.
   one, or import a file. Delete, restore and import ask for a typed word. A
   restore replaces the live database with the backup and restarts the bot, so
   every server's data goes back to that snapshot, and the app is signed out when
-  the backup is older than its sign-in. An import is stored as a snapshot only.
+  the backup is older than its sign-in. The app does not trust the first answer from
+  `GET /api/v2/health` after a restore, because the old process keeps answering until
+  the restore is done (and for good if the snapshot of the current database fails): it
+  says the restore is done only after a restart is seen (a lower `uptime`, or a failed
+  poll when there is no uptime), and otherwise says it could not confirm it. An import
+  is stored as a snapshot only.
   The import is sent as raw `application/octet-stream` (a JSON body is cut at
   256 kB) of up to 128 MB, read from the file as it goes.
 - **Bot Personalizer**: the bot's name and pictures, its presence, and the
