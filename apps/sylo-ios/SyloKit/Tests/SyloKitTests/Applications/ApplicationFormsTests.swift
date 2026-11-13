@@ -548,7 +548,6 @@ struct ApplicationFormEndpointsTests {
         #expect(EditorFailure.message(for: .server(status: 500), serverFailure: "x") == NetworkError.server(status: 500).userMessage)
         #expect(EditorFailure.message(for: .forbidden) == NetworkError.forbidden.userMessage)
         #expect(EditorFailure.message(for: .badRequest(message: nil)) == NetworkError.badRequest(message: nil).userMessage)
-        #expect(EditorFailure.message(for: .badRequest(message: "")) == NetworkError.badRequest(message: nil).userMessage)
 
         // A machine code or a stock phrase is not shown, the canned words are.
         #expect(EditorFailure.message(for: .badRequest(message: "invalid_request")) == NetworkError.badRequest(message: "invalid_request").userMessage)

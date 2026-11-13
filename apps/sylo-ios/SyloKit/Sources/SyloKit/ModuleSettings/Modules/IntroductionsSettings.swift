@@ -174,7 +174,7 @@ public struct IntroductionsSettings: Codable, Sendable, Equatable {
         if unreadableEntries > 0 {
             return unreadableEntries == 1
                 ? "The server sent a question or role group this version of the app cannot read, so saving here would delete it. Update the app to edit these settings."
-                : "The server sent (unreadableEntries) questions or role groups this version of the app cannot read, so saving here would delete them. Update the app to edit these settings."
+                : "The server sent \(unreadableEntries) questions or role groups this version of the app cannot read, so saving here would delete them. Update the app to edit these settings."
         }
         if (questions ?? []).contains(where: { $0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
             return "Give every question a label."
