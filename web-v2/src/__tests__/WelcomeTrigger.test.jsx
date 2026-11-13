@@ -126,7 +126,7 @@ describe('Welcome: when to welcome', () => {
     fireEvent.focusIn(document.getElementById('dmMessage'));
     expect(screen.getAllByRole('button', { name: 'Insert {role}' })).toHaveLength(1);
     fireEvent.focusIn(document.getElementById('leaveMessage'));
-    expect(screen.queryByRole('button', { name: 'Insert {role}' })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Insert {role}' })).toBeNull());
     expect(screen.getAllByRole('button', { name: 'Insert {user}' })).toHaveLength(1);
   });
 });

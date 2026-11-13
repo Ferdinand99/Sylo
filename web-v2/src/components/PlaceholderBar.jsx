@@ -56,13 +56,16 @@ export default function PlaceholderBar({ fields }) {
     return () => observer.disconnect();
   }, []);
 
+  // The listeners are added once and read the current field ids when an event comes, so a render that
+  // changes the fields never leaves a gap in which a focus would be missed.
+  const idsRef = useRef(new Set());
+  idsRef.current = new Set(fields.map((f) => f.id));
   useEffect(() => {
-    const ids = new Set(fields.map((f) => f.id));
     const onFocus = (e) => {
-      if (ids.has(e.target.id)) setTargetId(e.target.id);
+      if (idsRef.current.has(e.target.id)) setTargetId(e.target.id);
     };
     const onBlur = (e) => {
-      if (ids.has(e.target.id)) {
+      if (idsRef.current.has(e.target.id)) {
         lastSelection.current.set(e.target.id, {
           start: e.target.selectionStart,
           end: e.target.selectionEnd,
@@ -75,7 +78,7 @@ export default function PlaceholderBar({ fields }) {
       document.removeEventListener('focusin', onFocus);
       document.removeEventListener('focusout', onBlur);
     };
-  }, [fields]);
+  }, []);
 
   const target = fields.find((f) => f.id === targetId) ?? fields[0];
   if (!target) return null;
