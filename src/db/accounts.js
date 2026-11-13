@@ -90,6 +90,7 @@ const s = {
   deleteAccountSessions: prepare('DELETE FROM sessions WHERE account_id = ?'),
   deleteAccountIdentities: prepare('DELETE FROM account_identities WHERE account_id = ?'),
   deleteAccountCodes: prepare('DELETE FROM mobile_codes WHERE account_id = ?'),
+  deleteAccountConnectCodes: prepare('DELETE FROM mobile_connect_codes WHERE account_id = ?'),
   deleteAccount: prepare('DELETE FROM accounts WHERE id = ?'),
   deletePrefs: prepare('DELETE FROM user_prefs WHERE user_id = ?'),
   deleteVotes: prepare('DELETE FROM roadmap_votes WHERE user_id = ?'),
@@ -202,6 +203,7 @@ export async function deleteAccount(accountId) {
   const people = (await identitiesOf(accountId)).map((i) => i.platformUserId);
   await revokeAccountTokens(accountId);
   await s.deleteAccountCodes.run(accountId);
+  await s.deleteAccountConnectCodes.run(accountId);
   for (const id of [...people, accountId]) {
     await s.deletePrefs.run(id);
     await s.deleteVotes.run(id);

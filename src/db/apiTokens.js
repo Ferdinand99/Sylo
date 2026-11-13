@@ -37,6 +37,13 @@ registerPostgresBootstrap(`
     challenge  TEXT NOT NULL,
     expires_at BIGINT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS mobile_connect_codes (
+    code_hash  TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    platform   TEXT NOT NULL,
+    expires_at BIGINT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_mobile_connect_codes_account ON mobile_connect_codes (account_id);
 `);
 // Push notifications (internal/push-notifications-plan.md); mirrors SQLite migration 49.
 registerPostgresMigration(
@@ -104,6 +111,16 @@ const s = {
     'DELETE FROM mobile_codes WHERE code_hash = ? RETURNING account_id, challenge, expires_at'
   ),
   purgeCodes: prepare('DELETE FROM mobile_codes WHERE expires_at <= ?'),
+  insertConnectCode: prepare(
+    'INSERT INTO mobile_connect_codes (code_hash, account_id, platform, expires_at) VALUES (?, ?, ?, ?)'
+  ),
+  // One code per account at a time: asking again replaces the earlier one.
+  dropConnectCodes: prepare('DELETE FROM mobile_connect_codes WHERE account_id = ?'),
+  // Single use under concurrent redeems, as takeCode.
+  takeConnectCode: prepare(
+    'DELETE FROM mobile_connect_codes WHERE code_hash = ? RETURNING account_id, platform, expires_at'
+  ),
+  purgeConnectCodes: prepare('DELETE FROM mobile_connect_codes WHERE expires_at <= ?'),
   tokenById: prepare('SELECT * FROM api_tokens WHERE id = ?'),
   // The device's handle keeps its "proven" mark while it stays the same handle.
   setPush: prepare(`
@@ -286,7 +303,38 @@ export async function revokeAccountTokens(accountId) {
 export async function purgeExpiredApiTokens() {
   const now = Date.now();
   await s.purgeCodes.run(now);
+  await s.purgeConnectCodes.run(now);
   return deleted(await s.purgeTokens.all(now));
+}
+
+// --- connecting a platform from the app -------------------------------------------------
+
+/**
+ * A single-use code that lets the app's browser sheet add a login on `platform` to this account
+ * (GET /auth/mobile/connect). It is made for a signed-in app token and carries the account, so it
+ * can never add anything to anyone else's. Unlike a sign-in code it has no PKCE challenge: it
+ * signs nobody in, it only names the account the next login is added to, and the browser page asks
+ * before it does.
+ * @returns {Promise<{ code: string, expiresAt: number }>}
+ */
+export async function createConnectCode(accountId, platform, { ttlMs = CODE_TTL_MS } = {}) {
+  const code = secret();
+  const expiresAt = Date.now() + ttlMs;
+  await s.dropConnectCodes.run(accountId);
+  await s.insertConnectCode.run(sha256(code), accountId, String(platform), expiresAt);
+  return { code, expiresAt };
+}
+
+/**
+ * Take a connect code: the account and platform it was made for, or null when it is unknown, used
+ * or expired. The code is gone after the first attempt, so it cannot be guessed at.
+ * @returns {Promise<{ accountId: string, platform: string } | null>}
+ */
+export async function redeemConnectCode(code) {
+  if (typeof code !== 'string' || !code) return null;
+  const row = await s.takeConnectCode.get(sha256(code));
+  if (!row || Number(row.expires_at) <= Date.now()) return null;
+  return { accountId: row.account_id, platform: row.platform };
 }
 
 // --- push notifications ----------------------------------------------------------------

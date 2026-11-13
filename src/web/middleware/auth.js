@@ -41,6 +41,8 @@ import { log } from '../../lib/log.js';
 export { adminGuildIdsFromOAuth };
 
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+/** How long the app's "add a login" round-trip may take, from its confirmation page to the callback. */
+export const MOBILE_CONNECT_TTL_MS = 10 * 60 * 1000;
 
 /**
  * `returnTo` is always set from `req.originalUrl` — attacker-controlled in a
@@ -413,16 +415,56 @@ function loginError(req, res, message, status = 400) {
   });
 }
 
-/** Start an OAuth round-trip. `connect` adds the identity to the signed-in account instead of signing in. */
-function beginOAuth(req, res, provider, { connect }) {
+/**
+ * Start an OAuth round-trip. `connect` adds the identity to the signed-in account instead of
+ * signing in. `mobileConnect` is the Sylo app adding a login to its account (routes/mobile.js,
+ * GET /auth/mobile/connect): the identity goes to that account, no session is made, and the
+ * callback ends at the app. Any other round-trip clears a leftover app flow, so a later plain
+ * login can never be taken for one.
+ */
+export function beginOAuth(req, res, provider, { connect, mobileConnect = null }) {
   if (!provider.enabled()) return res.redirect('/');
   const state = randomUUID();
   req.session.oauthState = state;
   req.session.oauthPlatform = provider.platform;
   req.session.connect = connect ? provider.platform : undefined;
+  req.session.mobileConnect = mobileConnect ?? undefined;
   // Connecting is started from the account page, so that is where it should end.
   if (connect) req.session.returnTo = '/v2/account';
   res.redirect(provider.authorizeUrl(redirectUri(req, provider), state));
+}
+
+/** Where the app's browser sheet ends: the fixed app scheme, a platform Sylo knows and a fixed error code. */
+export const connectedUrl = (platform, error) =>
+  `sylo://connected?${new URLSearchParams({ platform, ...(error ? { error } : {}) })}`;
+
+/**
+ * The app's "add a login" flow this browser is in, if this callback is its round-trip for this
+ * platform; `expired` when it took too long. Taking it ends it: one flow, one login.
+ */
+function takeMobileConnect(req, provider) {
+  const flow = req.session.mobileConnect;
+  req.session.mobileConnect = undefined;
+  if (!flow || flow.platform !== provider.platform) return null;
+  return { ...flow, expired: Date.now() - flow.at > MOBILE_CONNECT_TTL_MS };
+}
+
+/**
+ * Finish the app's round-trip: the identity is added to the account the app's code named, whoever
+ * this browser is signed in as, and the browser gets no session at all.
+ */
+async function completeMobileConnect(res, provider, flow, identity) {
+  const fail = (error) => res.redirect(connectedUrl(provider.platform, error));
+  // An account always has a login; none means it was deleted since the code was made.
+  if ((await identitiesOf(flow.accountId)).length === 0) return fail('account_gone');
+  try {
+    await linkIdentity(flow.accountId, identity);
+  } catch (err) {
+    if (err instanceof IdentityLinkedError) return fail('identity_linked');
+    if (err instanceof PlatformAlreadyLinkedError) return fail('platform_already_linked');
+    throw err;
+  }
+  res.redirect(connectedUrl(provider.platform));
 }
 
 /** Finish an OAuth round-trip: sign in (or link) the identity and start a fresh session. */
@@ -528,6 +570,31 @@ export function mountAuth(app) {
         const expected = req.session.oauthState;
         const startedOn = req.session.oauthPlatform;
         req.session.oauthState = undefined;
+        const mobile = takeMobileConnect(req, provider);
+        if (mobile) {
+          // The app's sheet never gets the dashboard's error page: it always ends at the app.
+          req.session.oauthPlatform = undefined;
+          const invalid = error || !code || !state || state !== expected || startedOn !== provider.platform;
+          if (invalid) {
+            return res.redirect(
+              connectedUrl(
+                provider.platform,
+                error === 'access_denied' ? 'access_denied' : 'invalid_response'
+              )
+            );
+          }
+          if (mobile.expired) return res.redirect(connectedUrl(provider.platform, 'expired'));
+          let identity;
+          try {
+            identity = await provider.fetchIdentity(
+              await provider.exchange(String(code), redirectUri(req, provider))
+            );
+          } catch (err) {
+            log.error('auth', `${provider.label} connect from the app failed:`, err.message);
+            return res.redirect(connectedUrl(provider.platform, 'provider_error'));
+          }
+          return await completeMobileConnect(res, provider, mobile, identity);
+        }
         if (error || !code || !state || state !== expected || startedOn !== provider.platform) {
           return loginError(
             req,

@@ -13,6 +13,7 @@ reviewing it.
 - [What a self-hosted instance needs](#what-a-self-hosted-instance-needs)
 - [Behind a proxy with its own login](#behind-a-proxy-with-its-own-login)
 - [How sign-in works](#how-sign-in-works)
+- [Adding the other login](#adding-the-other-login)
 - [Endpoints](#endpoints)
 - [Tokens and signed-in devices](#tokens-and-signed-in-devices)
 - [Permissions](#permissions)
@@ -135,6 +136,43 @@ authorization-code flow with PKCE (RFC 7636, S256 only).
 
 ---
 
+## Adding the other login
+
+An account holds one Discord and one Fluxer login. On a Sylo that has both set up
+(`app-connect` in the [features](#endpoints)), the app can add the one the account
+lacks, so a Discord account can also sign in with Fluxer, or the other way round.
+Disconnecting needs nothing new: the account page does it.
+
+1. The app asks for a code. It needs its token, and only for a platform the account
+   does not have yet:
+
+   ```http
+   POST /api/mobile/connect/fluxer
+   Authorization: Bearer sylo_…
+   ```
+
+   ```json
+   { "code": "…", "expiresAt": 1799999999999 }
+   ```
+
+   `400 { "error": "invalid_platform" }` for a platform that is unknown or not set
+   up here, `409 { "error": "already_connected" }` when the account has it.
+2. The app opens `GET /auth/mobile/connect?code=…` in the browser sheet, on the same
+   address. The page asks "Add Fluxer to your Sylo account?" and names the account.
+3. **Continue** leads to the other platform's login. When the person has logged in
+   there, Sylo adds that login to the account the code was made for.
+4. The sheet ends at `sylo://connected?platform=fluxer`. If the login was not added it
+   ends at `sylo://connected?platform=fluxer&error=…`, with one of `access_denied`
+   (cancelled), `invalid_response`, `expired` (took more than ten minutes),
+   `provider_error`, `identity_linked` (that login already belongs to another account),
+   `platform_already_linked` or `account_gone`.
+
+The browser is not signed in to Sylo at any point: nothing here starts, replaces or
+extends a web session. The app then reads the account again (`GET /api/mobile/info` and
+the usual calls) to see both platforms.
+
+---
+
 ## Endpoints
 
 | Method and path | Auth | Answer |
@@ -145,6 +183,9 @@ authorization-code flow with PKCE (RFC 7636, S256 only).
 | `POST /auth/mobile/confirm` | Browser session + nonce | Redirect to `sylo://auth?code=…&state=…` |
 | `POST /api/mobile/token` | Code + verifier | `{ token, expiresAt, account }`, or `400 invalid_grant` |
 | `DELETE /api/mobile/token` | Bearer token | `204`, or `401` without a valid token |
+| `POST /api/mobile/connect/:platform` | Bearer token | `{ code, expiresAt }`: a one-time code to add that platform's login ([Adding the other login](#adding-the-other-login)); `400`, `401`, `403` or `409` |
+| `GET /auth/mobile/connect?code=…` | None (browser) | The confirmation page; the link is used up when it is opened |
+| `GET /auth/mobile/connect/continue?nonce=…` | Browser session + nonce | Redirect to the other platform's login |
 | `/api/v2/*` | Bearer token | The dashboard's JSON API |
 | `GET /api/v2/changelog?limit=N` | Bearer token or session | `{ version, releases: [{ version, date, url, sections: [{ title, kind, items: [{ scope, text, refs }] }] }] }`, newest first; the same release notes as the dashboard's What's new page |
 | `GET /api/v2/guilds/:id/members?q=` | Bearer token or session, Manage Server | `{ members: [{ id, name, username }] }`: the server's members by name (those Sylo has cached) or one pasted id (looked up live), never a bot, at most 25. 100 searches per minute per account and server |
@@ -161,7 +202,7 @@ in there:
 | `login` | Whether sign-in is available (false in open mode) |
 | `loginProviders` | The configured logins, for example `["discord", "fluxer"]`; empty when `login` is false |
 | `platforms` | The platforms the bot runs on, for example `["discord"]` |
-| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger` and `member-search`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
+| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger`, `member-search` and `app-connect`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
 
 The feature strings:
 
@@ -171,6 +212,7 @@ The feature strings:
 - `collectibles`: the Economy shop's collectible items, their picture upload and the inventory.
 - `welcome-trigger`: the Welcome module's `trigger` setting (a member joins, or first gets a role).
 - `member-search`: `GET /api/v2/guilds/:id/members?q=`.
+- `app-connect`: [adding the other login](#adding-the-other-login). Only where sign-in is on and both Discord and Fluxer logins are set up.
 - `push`, `push-pigeon`: this instance can send notifications to signed-in apps.
 
 An older Sylo without this endpoint answers `404`, and the app says the server
@@ -187,7 +229,8 @@ redirect or an HTML page:
 | `403` | `{ "error": "Restricted to Sylo's operators." }` |
 
 The usual per-IP rate limits apply. On top of them, per minute: 60 calls to
-`/api/mobile/info`, 30 to the `/auth/mobile` pages and 20 code exchanges.
+`/api/mobile/info`, 30 to the `/auth/mobile` pages and 20 code exchanges. Adding a login
+allows 10 codes per token and 10 visits to its two pages per client.
 Actions that post to the platform (test messages, publishing a message or role
 menu, locking or unlocking every channel) share a limit of 10 per minute per
 server and account, answered with `429` and an `{ "error" }`.
@@ -388,6 +431,17 @@ else.
   a link that signs in as you in your browser and delivers the code to an app on
   their side. Allow is a POST with a per-flow nonce, and the app rejects a
   callback whose `state` it did not send.
+- **Adding a login is a code, a question and a fixed address.** The connect code is
+  256 random bits, lives 60 seconds, is stored
+  as a hash and is deleted when first presented. It is made only for a bearer
+  token, never for a browser session, and it names one account and one platform;
+  asking again replaces the earlier one. Without the confirmation page, a link
+  from someone else could add *your* Fluxer or Discord login to *their* account,
+  so the page names the account and the next step is a link with a per-flow
+  nonce. The login goes to the account the code was made for whoever the browser
+  is signed in as, the browser is never signed in or given a session, and the
+  only places it is sent are the platform's own login and `sylo://connected`,
+  with a platform and an error word that Sylo chose, never one from the request.
 - **Tokens only work on `/api/` paths.** The HTML dashboard stays cookie-only,
   and a request that presents a token is judged by the token alone (a bad token
   never falls back to a cookie).

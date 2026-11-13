@@ -1487,6 +1487,20 @@ export const MIGRATIONS = [
       CREATE INDEX idx_collectible_images_guild ON collectible_images (guild_id);
     `);
   },
+
+  // One-time codes for connecting a second platform from the Sylo app (src/db/apiTokens.js, which
+  // bootstraps the same table on Postgres). Only the code's hash is stored.
+  (database) => {
+    database.exec(`
+      CREATE TABLE mobile_connect_codes (
+        code_hash  TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        platform   TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_mobile_connect_codes_account ON mobile_connect_codes (account_id);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

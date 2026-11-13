@@ -38,6 +38,7 @@ test('GET /api/mobile/info describes a server with login on, without a cookie or
   assert.ok(info.features.includes('collectibles'), 'collectible pictures and the inventory');
   assert.ok(info.features.includes('welcome-trigger'), 'the Welcome trigger');
   assert.ok(info.features.includes('member-search'), 'GET /api/v2/guilds/:id/members');
+  assert.ok(info.features.includes('app-connect'), 'both logins are set up, so one can be added');
   assert.ok(info.features.every((f) => typeof f === 'string'));
 });
 
@@ -92,4 +93,5 @@ test('GET /api/mobile/info answers in open mode and says login is unavailable', 
   assert.ok(!info.features.includes('push'), 'no app sign-in, so no push either');
   assert.ok(info.features.includes('changelog'), 'the changelog does not need a sign-in in open mode');
   assert.ok(info.features.includes('member-search'), 'features describe the build, not the login');
+  assert.ok(!info.features.includes('app-connect'), 'no accounts to add a login to');
 });

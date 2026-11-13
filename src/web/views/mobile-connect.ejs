@@ -1,0 +1,23 @@
+<%- include('partials/auth-head', { title: 'Sylo — Add a login' }) %>
+
+<section class="card auth-card">
+  <h1 class="auth-title">Add <%= platformLabel %> to your Sylo account?</h1>
+  <p>
+    The <%= platformLabel %> login you pick next will be added to the Sylo account
+    <strong><%= name %></strong> (<%= platforms.join(' and ') %>). After that you can sign in to Sylo
+    with either one, and the servers you manage on both show up in one place.
+  </p>
+  <p class="muted small">
+    Only continue if you started this from the Sylo app yourself. You can disconnect a login again
+    from your account page.
+  </p>
+  <%# A link, not a form: the next step redirects to the platform's login, which the page's
+      form-action rule would not allow after a form post. The nonce is what a link on another site
+      cannot know. %>
+  <div class="auth-actions">
+    <a class="btn" href="/auth/mobile/connect/continue?nonce=<%= encodeURIComponent(nonce) %>">Continue to <%= platformLabel %></a>
+    <a class="btn btn-ghost" href="<%= cancelUrl %>">Cancel</a>
+  </div>
+</section>
+
+<%- include('partials/auth-foot') %>
