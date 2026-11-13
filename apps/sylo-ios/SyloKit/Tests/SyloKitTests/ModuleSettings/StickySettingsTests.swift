@@ -92,20 +92,47 @@ struct StickySettingsTests {
         #expect(sticky.embed == nil)
         #expect(!sticky.repostOnBots)
         #expect(sticky.cooldownSeconds == 0)
-        let embed = StickyEmbed()
+        // A new embed sends Discord's blurple until a colour is picked, like the web form.
+        let embed = EmbedDraft()
         #expect(embed.title.isEmpty)
-        #expect(embed.color == "#5865f2")
+        #expect(embed.color.isEmpty)
+        #expect(embed.resolvedColor() == "#5865f2")
         #expect(embed.fields.isEmpty)
-        let field = StickyEmbed.Field()
+        let field = EmbedDraft.Field()
         #expect(field.name.isEmpty)
         #expect(!field.inline)
     }
 
-    @Test("the embed colour converts between hex and RGB, an empty one reading as the default")
-    func colour() {
-        var embed = StickyEmbed(color: "")
-        #expect(embed.rgb == StickyEmbed(color: "#5865f2").rgb)
-        embed.setRGB(red: 1, green: 0, blue: 0.5)
-        #expect(embed.color == "#ff0080")
+    @Test("opening a sticky and saving it changes nothing, and the embed keeps keys the editor does not know")
+    func roundTrip() throws {
+        let json = #"""
+        {"config":{"stickies":[{"channelId":"1","content":"x","repostOnBots":false,"cooldownSeconds":0,
+         "embed":{"kind":"embed","color":"","title":"T","futureKey":{"a":[1,2]},"fields":[]}}]}}
+        """#
+        let page = try JSONDecoder().decode(StickyPage.self, from: Data(json.utf8))
+        let embed = try #require(page.settings.stickies.first?.embed)
+        // A stored "default colour" stays empty in the editor's state, so nothing looks edited.
+        #expect(embed.color.isEmpty)
+        #expect(embed.extra["futureKey"] != nil)
+
+        let data = try JSONEncoder().encode(page.settings)
+        let body = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let sent = try #require(((body["stickies"] as? [[String: Any]])?.first?["embed"]) as? [String: Any])
+        #expect(sent["futureKey"] != nil)
+        // What goes out is the colour the embed shows.
+        #expect(sent["color"] as? String == "#5865f2")
+        let again = try JSONDecoder().decode(StickySettings.self, from: data)
+        #expect(again.stickies.first?.embed?.title == "T")
+    }
+
+    @Test("a sticky without an embed sends null, and one with an embed edited in the shared editor sends it")
+    func nullAndEmbed() throws {
+        var sticky = StickySettings.Sticky(channelId: "1", content: "x")
+        var object = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(sticky)) as? [String: Any])
+        #expect(object["embed"] is NSNull)
+        sticky.embed = EmbedDraft(title: "Hi")
+        object = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(sticky)) as? [String: Any])
+        #expect((object["embed"] as? [String: Any])?["title"] as? String == "Hi")
     }
 }
