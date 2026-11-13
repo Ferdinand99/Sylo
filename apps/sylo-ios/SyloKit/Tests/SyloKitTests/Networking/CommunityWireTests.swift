@@ -104,7 +104,8 @@ extension APIClientTests {
         #expect(json == ["action": "approve", "reason": "Yes"])
         #expect(requests[2].url.absoluteString
             == "https://example.com/sylo/api/v2/guilds/1/modules/suggestions/move-all-back")
-        let after = try #require(try JSONSerialization.jsonObject(with: try #require(requests[2].body)) as? [String: Int])
+        let afterBody = try #require(requests[2].body)
+        let after = try #require(try JSONSerialization.jsonObject(with: afterBody) as? [String: Int])
         #expect(after == ["after": 4])
     }
 
@@ -147,7 +148,8 @@ extension APIClientTests {
             "https://example.com/sylo/api/v2/guilds/1/modules/giveaways/12/cancel",
             "https://example.com/sylo/api/v2/guilds/1/modules/giveaways/9/reroll",
         ])
-        let count = try #require(try JSONSerialization.jsonObject(with: try #require(requests[2].body)) as? [String: Int])
+        let countBody = try #require(requests[2].body)
+        let count = try #require(try JSONSerialization.jsonObject(with: countBody) as? [String: Int])
         #expect(count == ["count": 3])
     }
 }
