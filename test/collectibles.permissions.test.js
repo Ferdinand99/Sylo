@@ -31,6 +31,7 @@ async function uploader({ guilds, withToken = true } = {}) {
   await signIn(b, 'discord');
   const token = (await (await b.get('/api/v2/csrf')).json()).token;
   return {
+    get: (path) => b.get(path),
     put: (guild, id, form, extra = {}) =>
       b.get(`/api/v2/guilds/${guild}/modules/economy/shop/items/${id}/image`, {
         method: 'POST',
@@ -130,6 +131,26 @@ test('an admin with the token can upload, and the audit log says so', async () =
   const audit = (await listAudit(D_GUILD, 50)).filter((r) => r.action === 'economy:shop');
   assert.ok(audit.some((r) => /changed the picture of item/.test(r.detail)));
   assert.equal((await listItems(D_GUILD)).length, 1);
+
+  // /c starts no session and sets no cookie, for a signed-in browser, a browser with no cookies at all (the
+  // case where a session would be started and its cookie sent), and for an address that is not a picture.
+  const address = `/c/${item.imageId}.webp`;
+  const fresh = browser();
+  for (const [who, b] of [
+    ['signed in', admin],
+    ['with no cookies', fresh],
+  ]) {
+    for (const path of [address, `/c/${'0'.repeat(32)}.webp`, '/c/nonsense']) {
+      const res = await b.get(path);
+      assert.equal(res.headers.getSetCookie().length, 0, `${who}: ${path} set a cookie`);
+      assert.ok([200, 404].includes(res.status), `${who}: ${path} -> ${res.status}`);
+    }
+  }
+  assert.equal((await fresh.get(address)).status, 200, 'the picture needs no login');
+  // the same browser, asking for a page of the site, does get its session cookie (the check above is not vacuous)
+  const page = await fresh.get('/api/v2/csrf');
+  assert.ok(page.headers.getSetCookie().length > 0, 'a request that starts a session sets a cookie');
+
   await admin.remove(D_GUILD, itemId);
   assert.deepEqual(await stored(D_GUILD), []);
 });

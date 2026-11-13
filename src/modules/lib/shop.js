@@ -638,6 +638,14 @@ async function endRowNow({
       now,
       config,
       after: function* (tx) {
+        // Lock order: the item first (a no-op update; nothing when the item is gone), then the row, then
+        // a picture (db/collectibleImages.js). The same order as an upload or an edit of the item, so a
+        // refund and an edit of the same item cannot deadlock.
+        yield tx.run(
+          'UPDATE economy_items SET sold = sold WHERE guild_id = ? AND id = ?',
+          guildId,
+          row.itemId
+        );
         const ended = yield tx.run(
           `UPDATE economy_inventory SET status = ?, updated_at = ?
            WHERE guild_id = ? AND id = ? AND status IN ('active', 'pending')`,

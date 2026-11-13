@@ -265,6 +265,94 @@ test(
       }
     );
 
+    // Concurrent staff actions on Postgres: one lock order (item, rows, picture) means no deadlock, and the
+    // check-then-delete of a picture cannot be fooled by the other side's uncommitted change.
+    await t.test('two refunds of the last two copies at once leave no picture behind', async () => {
+      for (let round = 0; round < 6; round += 1) {
+        const a = await member(40 + round * 2);
+        const b = await member(41 + round * 2);
+        const id = await badge({ name: `Last two ${round}`, price: 5 });
+        const first = await buy(a, id);
+        const second = await buy(b, id);
+        assert.equal(first.ok && second.ok, true);
+        await shopDb.deleteItem(G, id);
+        assert.equal((await stored()).length, 1, 'both copies hold it');
+        const ended = await Promise.all([
+          shop.endRow({ guild, rowId: first.row.id, mode: 'refund', config }),
+          shop.endRow({ guild, rowId: second.row.id, mode: 'revoke', config }),
+        ]);
+        assert.ok(ended.every((r) => r.ok));
+        assert.deepEqual(await stored(), [], `round ${round}: no orphan`);
+      }
+    });
+
+    await t.test('/forget and a refund at the same moment leave no picture behind', async () => {
+      for (let round = 0; round < 4; round += 1) {
+        const a = await member(60 + round * 2);
+        const b = await member(61 + round * 2);
+        const id = await badge({ name: `Forget ${round}`, price: 5 });
+        const first = await buy(a, id);
+        await buy(b, id);
+        await shopDb.deleteItem(G, id);
+        await Promise.all([
+          shop.endRow({ guild, rowId: first.row.id, mode: 'refund', config }),
+          shopDb.eraseInventory(G, b.id),
+        ]);
+        assert.deepEqual(await stored(), [], `round ${round}: no orphan`);
+      }
+    });
+
+    await t.test(
+      'deleting an item (or changing its kind) while a picture is uploaded leaves no orphan',
+      async () => {
+        for (let round = 0; round < 6; round += 1) {
+          const id = await badge({ name: `Race ${round}`, price: 5 });
+          const results = await Promise.all([
+            shopDb.deleteItem(G, id),
+            images.attachImage(G, id, { mime: 'image/webp', data: randomBytes(150 + round) }),
+          ]);
+          assert.equal(results[0], true);
+          assert.deepEqual(await stored(), [], `delete round ${round}: no orphan`);
+
+          const other = await badge({ name: `Kind ${round}`, price: 5 });
+          await Promise.all([
+            shopDb.updateItem(G, other, normaliseItem({ name: 'Kind', price: 5, type: 'custom' })),
+            images.attachImage(G, other, { mime: 'image/webp', data: randomBytes(150 + round) }),
+          ]);
+          const after = await shopDb.getItem(G, other);
+          const held = (await stored()).length;
+          // the picture is either attached to a collectible that is still one, or there is none at all
+          assert.equal(held, after.imageId ? 1 : 0, `kind round ${round}: the picture is the item's or gone`);
+          await shopDb.deleteItem(G, other);
+          assert.deepEqual(await stored(), []);
+        }
+      }
+    );
+
+    await t.test('a replaced picture or an edit racing a refund does not deadlock', async () => {
+      for (let round = 0; round < 6; round += 1) {
+        const m = await member(80 + round);
+        const id = await badge({ name: `Mixed ${round}`, price: 5, rarity: 'rare' });
+        const copy = await buy(m, id);
+        const out = await Promise.all([
+          images.attachImage(G, id, { mime: 'image/webp', data: randomBytes(200 + round) }),
+          shop.endRow({ guild, rowId: copy.row.id, mode: 'refund', config }),
+          shopDb.updateItem(
+            G,
+            id,
+            normaliseItem({ name: 'Mixed', price: 5, type: 'collectible', rarity: 'epic' })
+          ),
+        ]);
+        assert.equal(out[0].ok, true);
+        assert.equal(out[1].ok, true);
+        assert.equal(out[2], true);
+        assert.equal((await images.readImage((await shopDb.getItem(G, id)).imageId)) !== null, true);
+        assert.equal((await stored()).length, 1, 'only the item holds a picture now');
+        await shopDb.deleteItem(G, id);
+        assert.deepEqual(await stored(), []);
+      }
+    });
+
     await t.test('the quota is checked in the upload transaction', async () => {
       const ids = [];
       for (let i = 0; i < 3; i += 1) {

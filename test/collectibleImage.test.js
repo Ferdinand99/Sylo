@@ -9,6 +9,7 @@ import { Readable } from 'node:stream';
 import {
   ImageError,
   MAX_CONCURRENT_DECODES,
+  MAX_WAITING_DECODES,
   MAX_UPLOAD_BYTES,
   STORED_MIME,
   _decodeQueue,
@@ -169,6 +170,66 @@ test('at most two pictures are decoded at a time; the others wait, and give up w
   assert.equal(all.length, 5);
   assert.ok(Math.max(...seen, 0) <= MAX_CONCURRENT_DECODES);
   assert.deepEqual(_decodeQueue(), { running: 0, waiting: 0 });
+});
+
+test('the queue holds at most 10 waiters and 2 per server, and a decode that takes too long gives its place back', async () => {
+  const small = await makePicture(8, 8);
+  const hold = [];
+  const hanging = () => new Promise((_, reject) => hold.push(reject));
+  const settled = (promise) =>
+    promise.then(
+      () => 'ok',
+      (err) => err
+    );
+  const options = (owner) => ({
+    loadImage: hanging,
+    owner,
+    queueTimeoutMs: 60_000,
+    decodeTimeoutMs: 60_000,
+  });
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+  const all = [settled(processImage(small, options('run'))), settled(processImage(small, options('run')))];
+  await tick();
+  assert.deepEqual(_decodeQueue(), { running: 2, waiting: 0 });
+  // one server may have two waiting; its third is told at once
+  all.push(settled(processImage(small, options('A'))), settled(processImage(small, options('A'))));
+  await tick();
+  assert.equal(_decodeQueue().waiting, 2);
+  const third = await settled(processImage(small, options('A')));
+  assert.ok(third instanceof ImageError && third.status === 503 && /busy/.test(third.message));
+  assert.equal(_decodeQueue().waiting, 2, 'the third did not join the queue');
+  // other servers fill the queue to ten, and the eleventh is told at once
+  for (const owner of ['B', 'C', 'D', 'E']) {
+    all.push(settled(processImage(small, options(owner))), settled(processImage(small, options(owner))));
+  }
+  await tick();
+  assert.equal(_decodeQueue().waiting, MAX_WAITING_DECODES);
+  const eleventh = await settled(processImage(small, options('F')));
+  assert.ok(eleventh instanceof ImageError && eleventh.status === 503);
+  assert.equal(_decodeQueue().waiting, MAX_WAITING_DECODES);
+
+  // let every decode fail, one after another, until everyone is done
+  for (let i = 0; i < 40 && (_decodeQueue().running || _decodeQueue().waiting); i += 1) {
+    hold.splice(0).forEach((reject) => reject(new Error('stop')));
+    await tick();
+  }
+  const results = await Promise.all(all);
+  assert.equal(results.length, 12);
+  assert.ok(
+    results.every((r) => r instanceof ImageError),
+    'each one ended, none was lost'
+  );
+  assert.deepEqual(_decodeQueue(), { running: 0, waiting: 0 });
+
+  // a decode that never ends is cut off, refused, and its place is free again
+  const slow = await settled(
+    processImage(small, { loadImage: () => new Promise(() => {}), decodeTimeoutMs: 30 })
+  );
+  assert.ok(slow instanceof ImageError && slow.status === 503 && /took too long/.test(slow.message));
+  assert.deepEqual(_decodeQueue(), { running: 0, waiting: 0 });
+  const after = await processImage(small);
+  assert.equal(sniffImage(after.data), 'webp', 'the next upload works');
 });
 
 test('a refused picture gives its place back', async () => {

@@ -15,6 +15,10 @@
 // item, ending a copy (revoke, refund), erasing a member. So there is never a picture nothing refers to, and
 // never a reference to a picture that is gone.
 //
+// Lock order, on Postgres, in every transaction that touches these rows: the item row first (a no-op update
+// of economy_items), then the inventory rows, then the picture row (releaseImageTx). One order everywhere, so
+// two staff actions on the same item cannot deadlock, and two that each let go of a picture take turns.
+//
 // A server may store at most MAX_IMAGES_PER_GUILD pictures and MAX_IMAGE_BYTES_PER_GUILD bytes of them (the
 // check is part of the upload's transaction). The picture is kept out of every item and inventory read: it is
 // only read by `readImage`, by its id.
@@ -79,6 +83,11 @@ const RELEASE_SQL = `DELETE FROM collectible_images
  */
 export function* releaseImageTx(tx, guildId, imageId) {
   if (!imageId) return false;
+  // Lock the picture's row first, as a statement of its own (a no-op on SQLite). Two transactions that each
+  // drop a reference to the same picture then take turns here, and the second one's check below runs after the
+  // first one committed, so it sees that reference gone: the last one to let go deletes the picture. Without
+  // the lock each would still see the other's reference and both would keep it.
+  yield tx.run('UPDATE collectible_images SET bytes = bytes WHERE guild_id = ? AND id = ?', guildId, imageId);
   const out = yield tx.run(RELEASE_SQL, guildId, imageId, guildId, imageId, guildId, imageId);
   return out.changes > 0;
 }

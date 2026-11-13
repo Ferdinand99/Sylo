@@ -13,6 +13,7 @@ import {
   SVG,
   makePicture,
   pngClaiming,
+  putPicture,
   storedPictures,
   upload,
 } from './helpers/collectibleFixtures.js';
@@ -80,6 +81,8 @@ const raw = (path) =>
   });
 const uploaded = async (id, n) =>
   idOf((await json(await put(id, upload(await makePicture(n, n))))).items.find((i) => i.id === id).imagePath);
+/** A stored picture for an item without going through the upload route (which is limited to 40 a minute). */
+const stash = (id, n) => putPicture(GID, id, n).then((imageId) => imageId);
 const ids = async () => (await storedPictures(GID)).map((r) => r.id);
 const addMoney = (amount = 500) => credit(GID, U, amount, { kind: 'staff_add', config });
 
@@ -148,7 +151,7 @@ test('an upload is stored in the database as a WebP of at most 512x512 and serve
 
 test('/c starts no session: an answer carries no cookie, a hit or a miss', async () => {
   const id = await addItem();
-  const imageId = await uploaded(id, 24);
+  const imageId = await stash(id, 24);
   for (const path of [`/c/${imageId}.webp`, `/c/${'0'.repeat(32)}.webp`, '/c/nonsense']) {
     const res = await raw(path);
     assert.equal(res.headers['set-cookie'], undefined, `${path} set a cookie`);
@@ -267,7 +270,7 @@ test('two uploads at once leave exactly one picture, the one the item has', asyn
 
 test('/c answers an unknown id, a wrong shape and every other address with the same plain 404', async () => {
   const id = await addItem();
-  const imageId = await uploaded(id, 16);
+  const imageId = await stash(id, 16);
   const paths = [
     `/c/${'0'.repeat(32)}.webp`,
     `/c/${imageId.toUpperCase()}.webp`,
@@ -346,7 +349,7 @@ test('the quota is per server: another server is not counted', async () => {
 
 test('removing the picture of an item keeps it for the members who own the item', async () => {
   const id = await addItem({ rarity: 'rare', stock: 5 });
-  const imageId = await uploaded(id, 40);
+  const imageId = await stash(id, 40);
   await addMoney();
   const bought = await buyNow({
     guild: app.guild,
@@ -372,7 +375,7 @@ test('removing the picture of an item keeps it for the members who own the item'
 
 test('a collectible that becomes another kind lets go of its picture', async () => {
   const id = await addItem();
-  const imageId = await uploaded(id, 24);
+  const imageId = await stash(id, 24);
   assert.deepEqual(await ids(), [imageId]);
   const changed = await api.post(`/modules/economy/shop/items/${id}`, {
     name: 'Now custom',
@@ -385,7 +388,7 @@ test('a collectible that becomes another kind lets go of its picture', async () 
   assert.equal((await get(`/c/${imageId}.webp`)).status, 404);
   // with an owner, the owner keeps theirs
   const other = await addItem({ name: 'Other' });
-  const kept = await uploaded(other, 28);
+  const kept = await stash(other, 28);
   await addMoney();
   await buyNow({ guild: app.guild, member: app.guild.members.cache.get(U), itemId: other, config });
   await api.post(`/modules/economy/shop/items/${other}`, { name: 'Other', price: 100, type: 'custom' });
@@ -394,7 +397,7 @@ test('a collectible that becomes another kind lets go of its picture', async () 
 
 test('deleting an item keeps its picture while members own it, then it goes with the last owner', async () => {
   const id = await addItem({ rarity: 'rare', stock: 5 });
-  const imageId = await uploaded(id, 40);
+  const imageId = await stash(id, 40);
   const path = `/c/${imageId}.webp`;
   await addMoney();
   const bought = await buyNow({
@@ -425,17 +428,34 @@ test('deleting an item keeps its picture while members own it, then it goes with
   assert.equal(revoke.status, 200);
   assert.deepEqual(await ids(), [], 'the last owner is gone, so is the picture');
   assert.equal((await get(path)).status, 404);
+  // the ended copy shows no picture (it would be a broken image), the page shows the word "collectible"
+  const ended = (await json(await api.get(`/modules/economy/members/${U}/inventory`))).inventory[0];
+  assert.deepEqual([ended.status, ended.itemType, ended.imagePath], ['revoked', 'collectible', null]);
+});
+
+test('a refunded copy shows no picture either, in the member panel and in the activity log', async () => {
+  const id = await addItem({ price: 50 });
+  await stash(id, 16);
+  await addMoney(100);
+  await buyNow({ guild: app.guild, member: app.guild.members.cache.get(U), itemId: id, config });
+  const row = (await json(await api.get(`/modules/economy/members/${U}/inventory`))).inventory[0];
+  assert.match(row.imagePath, /^\/c\/[0-9a-f]{32}\.webp$/, 'an active copy shows it');
+  await api.post(`/modules/economy/members/${U}/inventory/${row.id}/refund`, {});
+  const after = (await json(await api.get(`/modules/economy/members/${U}/inventory`))).inventory[0];
+  assert.deepEqual([after.status, after.imagePath], ['refunded', null]);
+  const log = await json(await api.get('/modules/economy/shop/activity?all=1'));
+  assert.ok(log.rows.every((r) => r.status === 'active' || r.imagePath === null));
 });
 
 test('deleting a collectible nobody owns deletes its picture; a refund of the last copy of a deleted item does too', async () => {
   const lonely = await addItem();
-  await uploaded(lonely, 16);
+  await stash(lonely, 16);
   assert.equal((await ids()).length, 1);
   await api.post(`/modules/economy/shop/items/${lonely}/delete`, {});
   assert.deepEqual(await ids(), []);
 
   const id = await addItem({ price: 50 });
-  await uploaded(id, 16);
+  await stash(id, 16);
   await addMoney(100);
   await buyNow({ guild: app.guild, member: app.guild.members.cache.get(U), itemId: id, config });
   await api.post(`/modules/economy/shop/items/${id}/delete`, {});
@@ -448,8 +468,8 @@ test('deleting a collectible nobody owns deletes its picture; a refund of the la
 test('the server purge removes the pictures of the server', async () => {
   const a = await addItem({ name: 'A' });
   const b = await addItem({ name: 'B' });
-  await uploaded(a, 16);
-  await uploaded(b, 24);
+  await stash(a, 16);
+  await stash(b, 24);
   assert.equal((await ids()).length, 2);
   await purgeGuild(GID);
   assert.deepEqual(await ids(), []);
@@ -457,7 +477,7 @@ test('the server purge removes the pictures of the server', async () => {
 
 test('a picture is read by its id only, and an id of the wrong shape is never looked up', async () => {
   const id = await addItem();
-  const imageId = await uploaded(id, 16);
+  const imageId = await stash(id, 16);
   assert.equal((await readImage(imageId)).mime, 'image/webp');
   for (const bad of [null, undefined, 42, '', imageId.toUpperCase(), `${imageId}0`, `${imageId}' OR 1=1`]) {
     assert.equal(await readImage(bad), null);

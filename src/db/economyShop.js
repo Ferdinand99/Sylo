@@ -254,8 +254,14 @@ export const itemCount = async (guildId) => Number((await s.countItems.get(guild
  */
 export async function updateItem(guildId, id, v, now = Date.now()) {
   return transaction(function* (tx) {
+    // Lock the item first, then read its picture: an upload that finished a moment ago has moved it already.
+    const lock = yield tx.run(
+      'UPDATE economy_items SET sold = sold WHERE guild_id = ? AND id = ?',
+      guildId,
+      id
+    );
+    if (lock.changes < 1) return false;
     const cur = yield tx.get('SELECT image_id FROM economy_items WHERE guild_id = ? AND id = ?', guildId, id);
-    if (!cur) return false;
     const info = yield tx.run(
       UPDATE_ITEM_SQL,
       v.name,
@@ -313,12 +319,18 @@ export async function reorderItems(guildId, orderedIds) {
  */
 export async function deleteItem(guildId, id) {
   return transaction(function* (tx) {
+    // Lock the item first, then read its picture: an upload that finished a moment ago has moved it already.
+    const lock = yield tx.run(
+      'UPDATE economy_items SET sold = sold WHERE guild_id = ? AND id = ?',
+      guildId,
+      id
+    );
+    if (lock.changes < 1) return false;
     const item = yield tx.get(
       'SELECT image_id FROM economy_items WHERE guild_id = ? AND id = ?',
       guildId,
       id
     );
-    if (!item) return false;
     const gone = yield tx.run('DELETE FROM economy_items WHERE guild_id = ? AND id = ?', guildId, id);
     if (gone.changes < 1) return false;
     yield* releaseImageTx(tx, guildId, item.image_id);

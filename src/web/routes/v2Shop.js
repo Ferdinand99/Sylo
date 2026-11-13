@@ -110,8 +110,13 @@ export async function rowView(guild, row, items) {
     itemType: row.itemType,
     itemRemoved: !item,
     roleId: row.roleId,
-    // the picture and rarity this copy carries (kept in step with the item, and kept when the item is removed)
-    imagePath: row.itemType === 'collectible' ? imagePathOf(row.imageId) : null,
+    // the picture and rarity this copy carries (kept in step with the item, and kept when the item is removed).
+    // A refunded or revoked copy no longer holds its picture, which may be gone: no picture then (the page
+    // shows the word "collectible" instead of a broken image).
+    imagePath:
+      row.itemType === 'collectible' && (row.status === 'active' || row.status === 'pending')
+        ? imagePathOf(row.imageId)
+        : null,
     rarity: row.itemType === 'collectible' ? row.rarity : null,
     pricePaid: row.pricePaid,
     source: row.source,
@@ -301,7 +306,7 @@ router.post(
     const id = Number(req.params.id);
     let picture;
     try {
-      picture = await processImage(await readUpload(req));
+      picture = await processImage(await readUpload(req), { owner: guildId });
     } catch (err) {
       if (err instanceof ImageError) return fail(res, err.message, err.status);
       throw err;

@@ -6,9 +6,11 @@
 //      content type the browser sent: only PNG, JPEG and WebP pass. SVG, HTML and everything else is refused;
 //   3. the pixel size is read from the header before anything is decoded: a source of more than 16 million
 //      pixels (or a side over 8192) is refused, so a tiny file cannot claim 30000x30000;
-//   4. at most two pictures are decoded at the same time, the others wait their turn for a few seconds and are
-//      then told the server is busy (decoding and scaling a big picture takes real work, and a request must
-//      not be able to start dozens of them at once);
+//   4. at most two pictures are decoded at the same time. The others wait their turn for a few seconds and are
+//      then told the server is busy; at most ten may wait in all, and at most two for the same server (more are
+//      told at once), so one server cannot fill the queue for the others. A decode that takes too long gives its
+//      place back (decoding and scaling a big picture takes real work, and a request must not be able to start
+//      dozens of them at once, or to hold a place for good);
 //   5. the picture is decoded by @napi-rs/canvas and drawn onto a new canvas of at most 512x512 (the aspect
 //      ratio kept, never enlarged), and that canvas is encoded as a WebP (quality 85).
 // The bytes that are stored are the new WebP, so metadata, appended data and anything that was not a real
@@ -31,6 +33,11 @@ const MAX_SOURCE_PIXELS = 16_000_000;
 /** How many pictures are decoded at the same time, and how long another one waits for its turn. */
 export const MAX_CONCURRENT_DECODES = 2;
 export const DECODE_QUEUE_TIMEOUT_MS = 8000;
+/** At most this many wait for a place in all, and this many for one server. */
+export const MAX_WAITING_DECODES = 10;
+export const MAX_WAITING_PER_OWNER = 2;
+/** A decode (load, scale, encode) that takes longer than this gives its place back and is refused. */
+export const DECODE_TIMEOUT_MS = 15_000;
 
 /** A refusal with a sentence for the person who uploaded and the HTTP status to answer with. */
 export class ImageError extends Error {
@@ -68,8 +75,14 @@ async function canvas() {
 let running = 0;
 const waiting = [];
 
-/** Wait for one of the decode places. Resolves with a function that gives the place back. */
-function takePlace(timeoutMs) {
+const busy = () => new ImageError('The server is busy processing pictures. Try again in a moment.', 503);
+
+/**
+ * Wait for one of the decode places. Resolves with a function that gives the place back. `owner` is who is
+ * asking (the server): when the queue is full, or the owner already has its share of it waiting, the answer is
+ * "busy" at once.
+ */
+function takePlace(timeoutMs, owner) {
   // A place that has been taken; giving it back (once) hands it to the next one waiting.
   const placeTaken = () => {
     let given = false;
@@ -88,12 +101,16 @@ function takePlace(timeoutMs) {
     running += 1;
     return Promise.resolve(placeTaken());
   }
+  if (waiting.length >= MAX_WAITING_DECODES) return Promise.reject(busy());
+  if (owner != null && waiting.filter((w) => w.owner === owner).length >= MAX_WAITING_PER_OWNER) {
+    return Promise.reject(busy());
+  }
   return new Promise((resolve, reject) => {
-    const entry = { resolve, timer: null };
+    const entry = { resolve, timer: null, owner };
     entry.timer = setTimeout(() => {
       const at = waiting.indexOf(entry);
       if (at >= 0) waiting.splice(at, 1);
-      reject(new ImageError('The server is busy processing pictures. Try again in a moment.', 503));
+      reject(busy());
     }, timeoutMs);
     entry.timer.unref?.();
     waiting.push(entry);
@@ -106,11 +123,20 @@ export const _decodeQueue = () => ({ running, waiting: waiting.length });
 /**
  * Check and re-encode an uploaded file.
  * @param {Buffer} buf  the bytes of the file
- * @param {{ queueTimeoutMs?: number }} [opts]
+ * @param {{ queueTimeoutMs?: number, owner?: string, decodeTimeoutMs?: number, loadImage?: Function }} [opts]
+ *   `owner`: who asks (the server id), for the share of the queue. `loadImage` replaces the decoder (tests only).
  * @returns {Promise<{ data: Buffer, mime: string, width: number, height: number, kind: string }>}
  * @throws {ImageError}
  */
-export async function processImage(buf, { queueTimeoutMs = DECODE_QUEUE_TIMEOUT_MS } = {}) {
+export async function processImage(
+  buf,
+  {
+    queueTimeoutMs = DECODE_QUEUE_TIMEOUT_MS,
+    owner = null,
+    decodeTimeoutMs = DECODE_TIMEOUT_MS,
+    loadImage = null,
+  } = {}
+) {
   if (!Buffer.isBuffer(buf) || buf.length === 0) throw new ImageError('Choose an image to upload.');
   if (buf.length > MAX_UPLOAD_BYTES) throw new ImageError('The image is larger than 2 MB.', 413);
   const kind = sniffImage(buf);
@@ -132,32 +158,45 @@ export async function processImage(buf, { queueTimeoutMs = DECODE_QUEUE_TIMEOUT_
   const mod = await canvas();
   if (!mod) throw new ImageError('This server cannot process images right now.', 503);
 
-  const giveBack = await takePlace(queueTimeoutMs);
+  const giveBack = await takePlace(queueTimeoutMs, owner);
+  let timer;
   try {
-    let img;
-    try {
-      img = await mod.loadImage(buf);
-    } catch {
-      throw new ImageError('That file is not a valid image.');
-    }
-    const w = Number(img?.width);
-    const h = Number(img?.height);
-    if (!(w >= 1 && h >= 1) || w * h > MAX_SOURCE_PIXELS)
-      throw new ImageError('That file is not a valid image.');
+    const decode = (async () => {
+      let img;
+      try {
+        img = await (loadImage ?? mod.loadImage)(buf);
+      } catch {
+        throw new ImageError('That file is not a valid image.');
+      }
+      const w = Number(img?.width);
+      const h = Number(img?.height);
+      if (!(w >= 1 && h >= 1) || w * h > MAX_SOURCE_PIXELS)
+        throw new ImageError('That file is not a valid image.');
 
-    const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
-    const width = Math.max(1, Math.round(w * scale));
-    const height = Math.max(1, Math.round(h * scale));
-    const surface = mod.createCanvas(width, height);
-    const ctx = surface.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, 0, 0, width, height);
-    const data = await surface.encode('webp', WEBP_QUALITY);
-    if (sniffImage(data) !== 'webp')
-      throw new ImageError('This server cannot process images right now.', 503);
-    return { data, mime: STORED_MIME, width, height, kind };
+      const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
+      const width = Math.max(1, Math.round(w * scale));
+      const height = Math.max(1, Math.round(h * scale));
+      const surface = mod.createCanvas(width, height);
+      const ctx = surface.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, width, height);
+      const data = await surface.encode('webp', WEBP_QUALITY);
+      if (sniffImage(data) !== 'webp')
+        throw new ImageError('This server cannot process images right now.', 503);
+      return { data, mime: STORED_MIME, width, height, kind };
+    })();
+    // If the timeout wins, the decode may still finish later: its result (or error) is dropped.
+    decode.catch(() => {});
+    const tooLong = new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new ImageError('Processing that picture took too long. Try a smaller image.', 503)),
+        decodeTimeoutMs
+      );
+    });
+    return await Promise.race([decode, tooLong]);
   } finally {
+    clearTimeout(timer);
     giveBack();
   }
 }
