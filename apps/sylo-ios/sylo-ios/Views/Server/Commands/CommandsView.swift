@@ -20,12 +20,27 @@ struct CommandsView: View {
             if let message = model.errorMessage, model.hasLoaded {
                 Section { StatusMessage(message, kind: .error) }
             }
+            // In the Moderation tab the search is a field of this list: a search bar in the
+            // navigation bar would also compete with the Modules tab's.
+            if isEmbedded {
+                Section {
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                        TextField("Search commands", text: $model.searchText)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .submitLabel(.search)
+                    }
+                }
+            }
             Section {
                 ForEach(model.shown) { command in
                     NavigationLink {
                         CommandLimitsView(model: model, name: command.name)
                     } label: {
-                        CommandRow(command: command)
+                        CommandRow(command: command, title: model.displayName(command.name))
                     }
                 }
             } footer: {
@@ -40,10 +55,7 @@ struct CommandsView: View {
                 }
             }
         }
-        .modifier(CommandsChrome(isEmbedded: isEmbedded))
-        .searchable(text: $model.searchText, prompt: "Search commands")
-        .autocorrectionDisabled()
-        .textInputAutocapitalization(.never)
+        .modifier(CommandsChrome(isEmbedded: isEmbedded, searchText: $model.searchText))
         .overlay {
             if !model.hasLoaded {
                 if let message = model.errorMessage {
@@ -69,12 +81,18 @@ struct CommandsView: View {
 
 private struct CommandsChrome: ViewModifier {
     let isEmbedded: Bool
+    @Binding var searchText: String
 
     func body(content: Content) -> some View {
         if isEmbedded {
             content.tabBarClearance()
         } else {
-            content.navigationTitle("Commands").navigationBarTitleDisplayMode(.inline)
+            content
+                .navigationTitle("Commands")
+                .navigationBarTitleDisplayMode(.inline)
+                .searchable(text: $searchText, prompt: "Search commands")
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
         }
     }
 }
@@ -82,11 +100,13 @@ private struct CommandsChrome: ViewModifier {
 /// A command: name and description, and in a quieter line whether it is off or limited.
 private struct CommandRow: View {
     let command: ManagedCommand
+    /// The name as members type it (`/ban`, or with the Fluxer prefix).
+    let title: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline) {
-                Text(verbatim: command.name)
+                Text(verbatim: title)
                     .font(.headline.monospaced())
                     .lineLimit(1)
                 Spacer(minLength: 8)

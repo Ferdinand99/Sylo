@@ -132,6 +132,9 @@ public final class CommandsModel {
     public private(set) var commands: [ManagedCommand] = []
     public private(set) var channels: [ChannelOption] = []
     public private(set) var roles: [RoleOption] = []
+    /// What goes before a command's name: `/` on Discord, the server's prefix on Fluxer. Empty when
+    /// the server's settings could not be read, so a name is never shown with the wrong prefix.
+    public private(set) var commandPrefix = "/"
     public private(set) var hasLoaded = false
     public private(set) var isLoading = false
     public var searchText = ""
@@ -156,11 +159,23 @@ public final class CommandsModel {
 
     public func command(named name: String) -> ManagedCommand? { commands.first { $0.name == name } }
 
+    /// The command as members type it: `/ban`, or `!ban` on a Fluxer server with the prefix `!`.
+    public func displayName(_ name: String) -> String { commandPrefix + name }
+
+    /// The prefix from the server settings: Discord (or an older Sylo that does not say) is `/`,
+    /// Fluxer is the server's own prefix or the default.
+    static func prefix(from page: GuildSettingsPage) -> String {
+        guard page.platform == .fluxer else { return "/" }
+        return page.effectiveCommandPrefix
+    }
+
     public func load() async {
         isLoading = true
         defer { isLoading = false }
+        async let settings = try? session.send(Endpoints.LoadGuildSettings(server: server))
         do {
             let page = try await session.send(Endpoints.LoadCommands(server: server))
+            commandPrefix = await settings.map(Self.prefix(from:)) ?? ""
             commands = page.commands
             channels = page.channels
             roles = page.roles

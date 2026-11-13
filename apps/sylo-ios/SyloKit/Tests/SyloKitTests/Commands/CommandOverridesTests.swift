@@ -106,8 +106,11 @@ struct CommandEndpointsTests {
 @MainActor
 @Suite("Commands model")
 struct CommandsModelTests {
-    private func stub() -> StubClients {
+    private func stub(settings: @escaping @Sendable () throws -> GuildSettingsPage = {
+        GuildSettingsPage(settings: GuildSettings(), platform: .discord)
+    }) -> StubClients {
         StubClients { endpoint in
+            if endpoint is Endpoints.LoadGuildSettings { return try settings() }
             if let call = endpoint as? Endpoints.SaveCommand {
                 return SavedCommand(command: ManagedCommand(
                     name: call.name, enabled: call.enabled, allowedChannels: call.channels, allowedRoles: call.roles))
@@ -179,5 +182,38 @@ struct CommandsModelTests {
         await model.load()
         #expect(model.commands.count == 2)
         #expect(model.errorMessage == "You need Manage Server.")
+    }
+
+    @Test("a command is shown with a slash on Discord, and with the server's prefix on Fluxer")
+    func prefixes() async {
+        let discord = CommandsModel(server: "9", session: makeSignedInSession(clients: stub()))
+        #expect(discord.displayName("ban") == "/ban")
+        await discord.load()
+        #expect(discord.displayName("ban") == "/ban")
+
+        let fluxer = CommandsModel(server: "fluxer:9", session: makeSignedInSession(clients: stub {
+            GuildSettingsPage(
+                settings: GuildSettings(commandPrefix: ""), platform: .fluxer, defaultCommandPrefix: "!",
+                effectiveCommandPrefix: "?")
+        }))
+        await fluxer.load()
+        #expect(fluxer.displayName("ban") == "?ban")
+    }
+
+    @Test("an older Sylo that does not say its platform is Discord, and unreadable settings show the bare name")
+    func prefixFallbacks() async {
+        let older = CommandsModel(server: "9", session: makeSignedInSession(clients: stub {
+            GuildSettingsPage(settings: GuildSettings(), platform: nil)
+        }))
+        await older.load()
+        #expect(older.displayName("ban") == "/ban")
+
+        let broken = CommandsModel(server: "9", session: makeSignedInSession(clients: stub {
+            throw NetworkError.forbidden(message: "No.")
+        }))
+        await broken.load()
+        // The commands still load; only the prefix is unknown.
+        #expect(broken.hasLoaded)
+        #expect(broken.displayName("ban") == "ban")
     }
 }

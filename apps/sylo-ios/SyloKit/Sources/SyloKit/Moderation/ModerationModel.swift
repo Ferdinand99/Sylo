@@ -14,6 +14,9 @@ public final class ModerationModel {
     /// The longest case reason the server keeps, in characters.
     public static let maxCaseReasonLength = 1000
 
+    /// What is shown when an action starts while another is still running.
+    public static let busyMessage = "Another action is still running. Wait a moment, then try again."
+
     public let server: ServerID
     public private(set) var overview: ModerationOverview?
     public private(set) var isLoading = false
@@ -119,7 +122,10 @@ public final class ModerationModel {
     // MARK: Plumbing
 
     private func perform<E: APIEndpoint>(_ endpoint: E, notice makeNotice: (E.Response) -> String) async -> Bool {
-        guard !isWorking else { return false }
+        guard !isWorking else {
+            actionError = Self.busyMessage
+            return false
+        }
         isWorking = true
         defer { isWorking = false }
         actionError = nil

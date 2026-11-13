@@ -70,6 +70,8 @@ struct WarnSheet: View {
                 }
             }
             .onAppear { model.actionError = nil }
+            // Cancelled or swiped away after a refusal: the refusal is not shown again behind it.
+            .onDisappear { model.actionError = nil }
             .confirmationDialog(
                 "Warn \(member?.name ?? "")?", isPresented: $isConfirmingWarn, titleVisibility: .visible
             ) {

@@ -59,7 +59,7 @@ struct CommandLimitsView: View {
                     description: Text("This command is no longer in the list."))
             }
         }
-        .navigationTitle(name)
+        .navigationTitle(model.displayName(name))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(hasChanges)
         .toolbar {

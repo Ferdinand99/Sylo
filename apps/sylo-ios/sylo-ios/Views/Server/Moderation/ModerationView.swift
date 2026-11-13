@@ -143,8 +143,10 @@ struct ModerationView: View {
                         caseState.toggling = moderationCase
                     }
                     .tint(moderationCase.active ? .red : .green)
+                    .disabled(model.isWorking)
                     Button("Edit Reason", systemImage: "pencil") { caseState.editing = moderationCase }
                         .tint(.blue)
+                        .disabled(model.isWorking)
                 }
             }
         } header: {
@@ -171,6 +173,7 @@ struct ModerationView: View {
                             banToLift = PendingUnban(userId: ban.id, name: ban.name)
                         }
                         .tint(.green)
+                        .disabled(model.isWorking)
                     }
             }
         } header: {
@@ -192,6 +195,7 @@ struct ModerationView: View {
                             banToLift = PendingUnban(userId: ban.userId, name: ban.name)
                         }
                         .tint(.green)
+                        .disabled(model.isWorking)
                     }
             }
         } header: {
@@ -223,6 +227,7 @@ struct ModerationView: View {
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button("Unlock", systemImage: "lock.open") { lockToLift = lock }
                             .tint(.green)
+                            .disabled(model.isWorking)
                     }
             }
         } header: {

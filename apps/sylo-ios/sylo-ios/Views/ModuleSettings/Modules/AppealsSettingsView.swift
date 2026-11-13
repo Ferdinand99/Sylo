@@ -21,7 +21,7 @@ struct AppealsSettingsView: View {
 
             Section {
                 NavigationLink {
-                    AppealsReviewView(server: server, session: session)
+                    AppealsReviewView(server: server, session: session, showsSettingsLink: false)
                 } label: {
                     Label("Review Appeals", systemImage: "tray.full")
                 }

@@ -219,4 +219,59 @@ struct AppealsReviewModelTests {
         #expect(await model.decide(Self.appeal(7), .deny, reason: "") == false)
         #expect(model.actionError == "Choose accept or deny.")
     }
+
+    @Test("the badge is told again after every decision, with the count the reload found")
+    func badgeAfterDecision() async {
+        let stub = StubClients { endpoint in
+            if endpoint is Endpoints.DecideAppeal { return AppealDecisionResult(status: .denied) }
+            return AppealsReview(appeals: [Self.appeal(8)])
+        }
+        let model = AppealsReviewModel(server: "9", session: makeSignedInSession(clients: stub))
+        var counts: [Int] = []
+        model.onOpenCount = { counts.append($0) }
+        await model.load()
+        await model.decide(Self.appeal(7), .deny, reason: "")
+        #expect(counts == [1, 1])
+    }
+}
+
+@MainActor
+@Suite("Open appeals badge")
+struct OpenAppealsModelTests {
+    @Test("the first look reads the open count")
+    func refreshes() async throws {
+        let stub = StubClients { _ in AppealsReview(appeals: [Appeal(id: 1), Appeal(id: 2, status: .denied)]) }
+        let model = OpenAppealsModel(server: "9", session: makeSignedInSession(clients: stub))
+        #expect(model.count == nil)
+        await model.refresh()
+        #expect(model.count == 1)
+        #expect(stub.calls.last?.endpoint is Endpoints.LoadAppeals)
+    }
+
+    @Test("a failed look leaves the count as it was")
+    func failure() async {
+        let stub = StubClients { _ in throw NetworkError.forbidden }
+        let model = OpenAppealsModel(server: "9", session: makeSignedInSession(clients: stub))
+        model.update(4)
+        await model.refresh()
+        #expect(model.count == 4)
+    }
+
+    @Test("a newer count is not overwritten by a slower, older answer")
+    func newestWins() async throws {
+        let gate = DispatchSemaphore(value: 0)
+        let stub = StubClients { _ in
+            gate.wait()
+            return AppealsReview(appeals: [Appeal(id: 1), Appeal(id: 2), Appeal(id: 3)])
+        }
+        let model = OpenAppealsModel(server: "9", session: makeSignedInSession(clients: stub))
+        let look = Task { await model.refresh() }
+        for _ in 0..<1000 where stub.calls.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(!stub.calls.isEmpty)
+        // The overview (or a decision) reports 2 while the first look is still on its way.
+        model.update(2)
+        gate.signal()
+        await look.value
+        #expect(model.count == 2)
+    }
 }

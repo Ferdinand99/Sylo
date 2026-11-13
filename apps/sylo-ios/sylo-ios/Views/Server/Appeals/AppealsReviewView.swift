@@ -7,22 +7,23 @@ import SyloKit
 struct AppealsReviewView: View {
     @State private var model: AppealsReviewModel
     @State private var isVisible = false
+    /// Shared with the Moderation tab's badge; absent in a preview.
+    @Environment(OpenAppealsModel.self) private var openAppeals: OpenAppealsModel?
 
     private let server: ServerID
     private let session: AppSession
     /// Embedded in a tab: leaves the title to the tab and clears the floating tab bar.
     private let isEmbedded: Bool
+    /// Whether to offer the Ban Appeals settings. False when the settings opened this screen:
+    /// they link here, and this screen does not push them again.
+    private let showsSettingsLink: Bool
 
-    init(
-        server: ServerID, session: AppSession, isEmbedded: Bool = false,
-        onOpenCount: (@MainActor (Int) -> Void)? = nil
-    ) {
+    init(server: ServerID, session: AppSession, isEmbedded: Bool = false, showsSettingsLink: Bool = true) {
         self.server = server
         self.session = session
         self.isEmbedded = isEmbedded
-        let model = AppealsReviewModel(server: server, session: session)
-        model.onOpenCount = onOpenCount
-        _model = State(initialValue: model)
+        self.showsSettingsLink = showsSettingsLink
+        _model = State(initialValue: AppealsReviewModel(server: server, session: session))
     }
 
     var body: some View {
@@ -41,11 +42,13 @@ struct AppealsReviewView: View {
                         }
                     }
                 }
-                Section {
-                    NavigationLink {
-                        AppealsSettingsView(server: server, session: session)
-                    } label: {
-                        Label("Appeal Settings", systemImage: "slider.horizontal.3")
+                if showsSettingsLink {
+                    Section {
+                        NavigationLink {
+                            AppealsSettingsView(server: server, session: session)
+                        } label: {
+                            Label("Appeal Settings", systemImage: "slider.horizontal.3")
+                        }
                     }
                 }
                 openSection
@@ -68,7 +71,12 @@ struct AppealsReviewView: View {
                 }
             }
         }
-        .task { await model.load() }
+        .task {
+            // Every load and decision tells the badge how many appeals are open.
+            let badge = openAppeals
+            model.onOpenCount = { badge?.update($0) }
+            await model.load()
+        }
         .refreshable { await model.load() }
         .onAppear { isVisible = true }
         .onDisappear { isVisible = false }

@@ -213,6 +213,8 @@ private struct CaseReasonSheet: View {
                 }
             }
             .onAppear { model.actionError = nil }
+            // Cancelled or swiped away after a refusal: the refusal is not shown again behind it.
+            .onDisappear { model.actionError = nil }
         }
         .presentationDetents([.medium, .large])
     }

@@ -17,8 +17,9 @@ struct ServerView: View {
     @State private var tickets: TicketsModel
     @State private var settings: GuildSettingsModel
     @State private var isConfirmingDiscard = false
-    /// The open appeals as the appeals screen last saw them; the overview's count until then.
-    @State private var openAppeals: Int?
+    /// The open appeals for the Moderation tab's badge: the newest of what the server screen, the
+    /// overview and the appeals screen (wherever it was opened from) have seen.
+    @State private var openAppeals: OpenAppealsModel
 
     enum ServerTab: Hashable {
         case modules, tickets, moderation, settings
@@ -30,6 +31,7 @@ struct ServerView: View {
         _overview = State(initialValue: OverviewModel(server: summary.id, session: session))
         _tickets = State(initialValue: TicketsModel(server: summary.id, session: session))
         _settings = State(initialValue: GuildSettingsModel(server: summary.id, session: session))
+        _openAppeals = State(initialValue: OpenAppealsModel(server: summary.id, session: session))
     }
 
     var body: some View {
@@ -41,9 +43,9 @@ struct ServerView: View {
                 .tabItem { Label("Tickets", systemImage: "bubble.left.and.bubble.right") }
                 .badge(tickets.unreadCount)
                 .tag(ServerTab.tickets)
-            ModerationTabView(server: summary.id, session: session) { openAppeals = $0 }
+            ModerationTabView(server: summary.id, session: session)
                 .tabItem { Label("Moderation", systemImage: "shield") }
-                .badge(openAppeals ?? overview.overview?.openAppeals ?? 0)
+                .badge(openAppeals.count ?? 0)
                 .tag(ServerTab.moderation)
             GuildSettingsForm(model: settings)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
@@ -72,8 +74,14 @@ struct ServerView: View {
             Text(message)
         }
         .sensoryFeedback(.success, trigger: settings.saveCount)
-        // The Tickets badge is right before the tab is ever opened.
+        .environment(openAppeals)
+        // A newer overview count replaces an older one.
+        .onChange(of: overview.overview?.openAppeals) { _, count in
+            if let count { openAppeals.update(count) }
+        }
+        // The Tickets and Moderation badges are right before either tab is ever opened.
         .task { await tickets.load() }
+        .task { await openAppeals.refresh() }
     }
 
     private var title: String {
