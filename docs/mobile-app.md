@@ -10,6 +10,7 @@ reviewing it.
 > [on the App Store](https://apps.apple.com/app/sylo-server-manager/id6824036901). The server side described here is part of Sylo; it does nothing
 > until an app signs in.
 
+- [What the app covers](#what-the-app-covers)
 - [What a self-hosted instance needs](#what-a-self-hosted-instance-needs)
 - [Behind a proxy with its own login](#behind-a-proxy-with-its-own-login)
 - [How sign-in works](#how-sign-in-works)
@@ -19,6 +20,35 @@ reviewing it.
 - [Notifications](#notifications)
 - [Health and the dev log (operators)](#health-and-the-dev-log-operators)
 - [Security notes](#security-notes)
+
+---
+
+## What the app covers
+
+Everything a server administrator can do in the dashboard, the app can do too,
+and the app has no "manage this in the web dashboard" links. That covers:
+
+- every module's settings, including the ones with lists to manage (reaction
+  roles, custom commands, reminders, events, giveaways, applications and their
+  forms, introductions, the economy with its shop, balances, inventories and
+  activity, and the rest);
+- moderation (cases, bans, warnings, timeouts, channel locks), tickets, appeals,
+  and the audit log;
+- embed messages and the command list per server;
+- the server's general settings, the configuration export, and a member's data
+  (look up, export, erase);
+- Insights, the leaderboard, the roadmap, the changelog, and the account page
+  (connected platforms, signed-in devices, delete account).
+
+What stays on the web is what is not a server administrator's job: the
+operator's backups (create, restore, import, download) and the roadmap admin,
+both for the people who run the instance only, and the public pages (the web
+shop, the application forms, event and quote pages) that members open in a
+browser. The app can copy or open the address of a public page; it never needs
+the dashboard to finish a task.
+
+The app works against older Sylo servers too: it hides what a server does not
+offer and never sends a field the server did not send.
 
 ---
 
@@ -347,7 +377,7 @@ else.
 - **Health**, under Settings: whether the bot is up, its version, uptime,
   gateway ping, servers and members, the database and the latest backups, and
   the dev log. It is read only; backups are made, restored and downloaded from
-  the web dashboard.
+  the web dashboard (they are the operator's, and stay there).
 - **The dev log**: Sylo's own errors and warnings, stored in the database for
   30 days (the newest 500). It works with or without a dev-log channel
   (`DEV_LOG_CHANNEL_ID`); the channel still gets errors only.
