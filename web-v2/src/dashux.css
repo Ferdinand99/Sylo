@@ -411,3 +411,197 @@
   background: color-mix(in srgb, var(--danger) 16%, transparent);
   color: var(--danger);
 }
+
+/* ---- Live preview of a message next to its form ------------------------------------------------------------ */
+/* A page with a preview column is wider than a plain settings page: the form keeps its usual width and the
+   preview sits in the empty space on the right. */
+.v2-page:has(.v2-with-preview) {
+  max-width: 1280px;
+}
+.v2-with-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 28px;
+  align-items: start;
+}
+.v2-with-preview-main {
+  min-width: 0;
+  max-width: 860px;
+}
+.v2-preview-col {
+  position: sticky;
+  top: calc(var(--topbar-h) + 20px);
+  max-height: calc(100vh - var(--topbar-h) - 40px);
+  overflow-y: auto;
+  padding-top: 4px;
+}
+.v2-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.v2-preview-title {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.v2-preview-foot {
+  margin: 0;
+}
+.v2-preview-toggle {
+  margin: 0 0 16px;
+}
+.v2-preview-inline {
+  margin: 0 0 20px;
+  padding: 14px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+.v2-msg-readonly {
+  padding: 14px;
+}
+.v2-msg-readonly .v2-msg-text,
+.v2-msg-readonly .v2-msg-empty {
+  margin: 8px 0 0 48px;
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.v2-msg-readonly .v2-msg-empty {
+  color: var(--text-muted);
+}
+.v2-msg-readonly code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  font-family: var(--mono);
+  font-size: 0.85em;
+}
+.v2-msg-mention {
+  padding: 0 3px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--text);
+  font-weight: 500;
+}
+.v2-msg-mention.is-missing {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+.v2-embed-readonly {
+  margin: 8px 0 0 48px;
+  max-width: none;
+}
+.v2-embed-readonly .v2-embed-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.v2-embed-readonly p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.v2-embed-readonly .v2-embed-author {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.v2-embed-readonly .v2-embed-title {
+  font-weight: 700;
+}
+.v2-embed-readonly .v2-embed-desc {
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.v2-embed-readonly .v2-embed-footer {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.v2-embed-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 4px;
+}
+.v2-embed-field {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 100%;
+  min-width: 0;
+  font-size: var(--fs-sm);
+}
+.v2-embed-field.is-inline {
+  flex: 1 1 40%;
+}
+.v2-embed-field span {
+  color: var(--text-muted);
+}
+@media (max-width: 560px) {
+  .v2-msg-readonly .v2-msg-text,
+  .v2-msg-readonly .v2-msg-empty,
+  .v2-embed-readonly {
+    margin-left: 0;
+  }
+}
+
+/* ---- Jump list on long pages, shared placeholder row ---------------------------------------------------- */
+.v2-section-index {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin: 4px 0 18px;
+}
+.v2-section-index-label {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.v2-section-index ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.v2-section-index-pill {
+  padding: 4px 12px;
+  background: none;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-section-index-pill:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+}
+@media (pointer: coarse) {
+  .v2-section-index-pill {
+    min-height: 44px;
+    padding: 0 16px;
+  }
+}
+.v2-group-title[id] {
+  scroll-margin-top: calc(var(--topbar-h) + 16px);
+}
+.v2-group-title[id]:focus {
+  outline: none;
+}
+.v2-ph-bar {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}

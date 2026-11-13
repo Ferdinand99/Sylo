@@ -4,6 +4,7 @@ import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import PreviewLayout from '../components/PreviewLayout.jsx';
 import UnitInput from '../components/UnitInput.jsx';
 import { cardTitle, channelTitle } from '../util.js';
 
@@ -118,178 +119,194 @@ export default function Starboard() {
       };
     });
 
+  const previews = form.boards.slice(0, 1).map((b) => ({
+    key: b.key,
+    title: `Post on ${b.name || 'the starboard'}`,
+    content: `${(b.emojiText || '⭐').split(/\s+/)[0]} **${b.threshold || 3}** · #screenshots`,
+    embed: {
+      authorName: 'Mara',
+      description: 'Look at this pixel art I made over the weekend!',
+      footer: 'ID 1100000000000000',
+    },
+    note: 'A "Jump to message" button is added under it.',
+  }));
   return (
-    <>
-      <h1 className="v2-section-title">Starboard</h1>
-      <p className="v2-field-hint">
-        When a message gets enough of a reaction, Sylo re-posts it into a highlights channel — like a
-        community pin board. Each board has its own emoji, threshold and rules.
-      </p>
+    <PreviewLayout previews={previews} lookup={{ channels: d.channels ?? [], roles: d.roles ?? [] }}>
+      <>
+        <h1 className="v2-section-title">Starboard</h1>
+        <p className="v2-field-hint">
+          When a message gets enough of a reaction, Sylo re-posts it into a highlights channel — like a
+          community pin board. Each board has its own emoji, threshold and rules.
+        </p>
 
-      <form onSubmit={save} data-savebar>
-        {form.boards.map((b) => (
-          <div className="v2-rule-card" key={b.key}>
-            <div className="v2-rule-head">
-              <span className="v2-rule-title">
-                {cardTitle(b.name, '') || channelTitle(d.channels, b.channelId, 'Board')}
-              </span>
-              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeBoard(b.key)}>
-                Remove
-              </button>
-            </div>
-
-            <div className="v2-field-row">
-              <div className="v2-field">
-                <label>
-                  Name <span className="v2-field-hint">— shown on the dashboard only</span>
-                </label>
-                <input
-                  type="text"
-                  maxLength={limitOf(limits, 'boards[].name').maxLength}
-                  placeholder="Starboard"
-                  value={b.name}
-                  onChange={(e) => updateBoard(b.key, { name: e.target.value })}
-                />
+        <form onSubmit={save} data-savebar>
+          {form.boards.map((b) => (
+            <div className="v2-rule-card" key={b.key}>
+              <div className="v2-rule-head">
+                <span className="v2-rule-title">
+                  {cardTitle(b.name, '') || channelTitle(d.channels, b.channelId, 'Board')}
+                </span>
+                <button type="button" className="v2-btn-danger-ghost" onClick={() => removeBoard(b.key)}>
+                  Remove
+                </button>
               </div>
-              <div className="v2-field">
-                <label>Starboard channel</label>
-                <select
-                  value={b.channelId}
-                  onChange={(e) => updateBoard(b.key, { channelId: e.target.value })}
-                >
-                  <option value="">— select a channel —</option>
-                  {d.channels.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      #{c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
 
-            <div className="v2-field">
-              <label>Emoji(s)</label>
-              <input
-                type="text"
-                placeholder="⭐"
-                value={b.emojiText}
-                onChange={(e) => updateBoard(b.key, { emojiText: e.target.value })}
-              />
-              <p className="v2-field-hint">
-                Space-separated. Paste custom emojis directly. First emoji is the one shown on the post.
-              </p>
-            </div>
-
-            <div className="v2-field-row">
-              <div className="v2-field">
-                <label>Reactions needed</label>
-                <UnitInput
-                  unit="reactions"
-                  min={limitOf(limits, 'boards[].threshold').min}
-                  max={limitOf(limits, 'boards[].threshold').max}
-                  value={b.threshold}
-                  onChange={(e) => updateBoard(b.key, { threshold: Number(e.target.value) })}
-                />
-              </div>
-            </div>
-            <div className="v2-field">
-              <label className="v2-check">
-                <input
-                  type="checkbox"
-                  checked={b.multiPerUser}
-                  onChange={(e) => updateBoard(b.key, { multiPerUser: e.target.checked })}
-                />
-                Count every matching emoji from a user, not just one
-              </label>
-            </div>
-
-            <details className="v2-am-params v2-advanced">
-              <summary>
-                Advanced
-                <span className="v2-am-summary"> · behaviour, anti-abuse and restrictions</span>
-              </summary>
-
-              <h3 className="v2-field-hint u-mt-2">Behaviour</h3>
-              <CheckList
-                checks={CHECKS_BEHAVIOUR}
-                board={b}
-                onChange={(patch) => updateBoard(b.key, patch)}
-              />
-
-              <h3 className="v2-field-hint u-mt-2">Anti-abuse</h3>
-              <CheckList
-                checks={CHECKS_ANTIABUSE}
-                board={b}
-                onChange={(patch) => updateBoard(b.key, patch)}
-              />
               <div className="v2-field-row">
                 <div className="v2-field">
                   <label>
-                    Ignore messages younger than <span className="v2-field-hint">— 0 = no limit</span>
+                    Name <span className="v2-field-hint">— shown on the dashboard only</span>
                   </label>
-                  <UnitInput
-                    unit="minutes"
-                    min={limitOf(limits, 'boards[].minAgeMinutes').min}
-                    max={limitOf(limits, 'boards[].minAgeMinutes').max}
-                    value={b.minAgeMinutes}
-                    onChange={(e) => updateBoard(b.key, { minAgeMinutes: Number(e.target.value) })}
+                  <input
+                    type="text"
+                    maxLength={limitOf(limits, 'boards[].name').maxLength}
+                    placeholder="Starboard"
+                    value={b.name}
+                    onChange={(e) => updateBoard(b.key, { name: e.target.value })}
                   />
                 </div>
                 <div className="v2-field">
-                  <label>
-                    Ignore messages older than <span className="v2-field-hint">— 0 = no limit</span>
-                  </label>
-                  <UnitInput
-                    unit="minutes"
-                    wide
-                    min={limitOf(limits, 'boards[].maxAgeMinutes').min}
-                    max={limitOf(limits, 'boards[].maxAgeMinutes').max}
-                    value={b.maxAgeMinutes}
-                    onChange={(e) => updateBoard(b.key, { maxAgeMinutes: Number(e.target.value) })}
-                  />
+                  <label>Starboard channel</label>
+                  <select
+                    value={b.channelId}
+                    onChange={(e) => updateBoard(b.key, { channelId: e.target.value })}
+                  >
+                    <option value="">— select a channel —</option>
+                    {d.channels.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        #{c.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              <h3 className="v2-field-hint u-mt-2">Restrictions</h3>
               <div className="v2-field">
-                <label>Whose reactions count</label>
-                <select value={b.roleMode} onChange={(e) => updateBoard(b.key, { roleMode: e.target.value })}>
-                  <option value="allow">Everyone except the roles below</option>
-                  <option value="deny">Only members with a role below</option>
-                </select>
+                <label>Emoji(s)</label>
+                <input
+                  type="text"
+                  placeholder="⭐"
+                  value={b.emojiText}
+                  onChange={(e) => updateBoard(b.key, { emojiText: e.target.value })}
+                />
+                <p className="v2-field-hint">
+                  Space-separated. Paste custom emojis directly. First emoji is the one shown on the post.
+                </p>
               </div>
-              <ChipPicker
-                kind="role"
-                items={d.roles}
-                value={b.roleList}
-                onChange={(roleList) => updateBoard(b.key, { roleList })}
-              />
 
-              <div className="v2-field u-mt-2">
-                <label>Which channels this board watches</label>
-                <select
-                  value={b.channelMode}
-                  onChange={(e) => updateBoard(b.key, { channelMode: e.target.value })}
-                >
-                  <option value="allow">Every channel except the ones below</option>
-                  <option value="deny">Only the channels below</option>
-                </select>
+              <div className="v2-field-row">
+                <div className="v2-field">
+                  <label>Reactions needed</label>
+                  <UnitInput
+                    unit="reactions"
+                    min={limitOf(limits, 'boards[].threshold').min}
+                    max={limitOf(limits, 'boards[].threshold').max}
+                    value={b.threshold}
+                    onChange={(e) => updateBoard(b.key, { threshold: Number(e.target.value) })}
+                  />
+                </div>
               </div>
-              <ChipPicker
-                kind="channel"
-                items={d.channels}
-                value={b.channelList}
-                onChange={(channelList) => updateBoard(b.key, { channelList })}
-              />
-            </details>
-          </div>
-        ))}
-        <button type="button" className="v2-btn-ghost" onClick={addBoard}>
-          + Add board
-        </button>
-      </form>
-      <SendTestButton moduleId="starboard" disabled={dirty} />
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
-    </>
+              <div className="v2-field">
+                <label className="v2-check">
+                  <input
+                    type="checkbox"
+                    checked={b.multiPerUser}
+                    onChange={(e) => updateBoard(b.key, { multiPerUser: e.target.checked })}
+                  />
+                  Count every matching emoji from a user, not just one
+                </label>
+              </div>
+
+              <details className="v2-am-params v2-advanced">
+                <summary>
+                  Advanced
+                  <span className="v2-am-summary"> · behaviour, anti-abuse and restrictions</span>
+                </summary>
+
+                <h3 className="v2-field-hint u-mt-2">Behaviour</h3>
+                <CheckList
+                  checks={CHECKS_BEHAVIOUR}
+                  board={b}
+                  onChange={(patch) => updateBoard(b.key, patch)}
+                />
+
+                <h3 className="v2-field-hint u-mt-2">Anti-abuse</h3>
+                <CheckList
+                  checks={CHECKS_ANTIABUSE}
+                  board={b}
+                  onChange={(patch) => updateBoard(b.key, patch)}
+                />
+                <div className="v2-field-row">
+                  <div className="v2-field">
+                    <label>
+                      Ignore messages younger than <span className="v2-field-hint">— 0 = no limit</span>
+                    </label>
+                    <UnitInput
+                      unit="minutes"
+                      min={limitOf(limits, 'boards[].minAgeMinutes').min}
+                      max={limitOf(limits, 'boards[].minAgeMinutes').max}
+                      value={b.minAgeMinutes}
+                      onChange={(e) => updateBoard(b.key, { minAgeMinutes: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="v2-field">
+                    <label>
+                      Ignore messages older than <span className="v2-field-hint">— 0 = no limit</span>
+                    </label>
+                    <UnitInput
+                      unit="minutes"
+                      wide
+                      min={limitOf(limits, 'boards[].maxAgeMinutes').min}
+                      max={limitOf(limits, 'boards[].maxAgeMinutes').max}
+                      value={b.maxAgeMinutes}
+                      onChange={(e) => updateBoard(b.key, { maxAgeMinutes: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+
+                <h3 className="v2-field-hint u-mt-2">Restrictions</h3>
+                <div className="v2-field">
+                  <label>Whose reactions count</label>
+                  <select
+                    value={b.roleMode}
+                    onChange={(e) => updateBoard(b.key, { roleMode: e.target.value })}
+                  >
+                    <option value="allow">Everyone except the roles below</option>
+                    <option value="deny">Only members with a role below</option>
+                  </select>
+                </div>
+                <ChipPicker
+                  kind="role"
+                  items={d.roles}
+                  value={b.roleList}
+                  onChange={(roleList) => updateBoard(b.key, { roleList })}
+                />
+
+                <div className="v2-field u-mt-2">
+                  <label>Which channels this board watches</label>
+                  <select
+                    value={b.channelMode}
+                    onChange={(e) => updateBoard(b.key, { channelMode: e.target.value })}
+                  >
+                    <option value="allow">Every channel except the ones below</option>
+                    <option value="deny">Only the channels below</option>
+                  </select>
+                </div>
+                <ChipPicker
+                  kind="channel"
+                  items={d.channels}
+                  value={b.channelList}
+                  onChange={(channelList) => updateBoard(b.key, { channelList })}
+                />
+              </details>
+            </div>
+          ))}
+          <button type="button" className="v2-btn-ghost" onClick={addBoard}>
+            + Add board
+          </button>
+        </form>
+        <SendTestButton moduleId="starboard" disabled={dirty} />
+        <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
+      </>
+    </PreviewLayout>
   );
 }

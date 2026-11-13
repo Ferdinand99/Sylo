@@ -116,11 +116,17 @@ describe('Welcome: when to welcome', () => {
     expect(screen.getByLabelText('Add a role').disabled).toBe(true);
   });
 
-  it('offers {role} under the welcome message and the DM, but not under the leave message', async () => {
+  it('offers {role} for the welcome message and the DM, but not for the leave message', async () => {
     api.getModuleConfig.mockResolvedValue(data({ dmEnabled: true, leaveEnabled: true }));
     renderAtGuild(<Welcome />, GUILD);
     await screen.findByLabelText('When a member joins');
-    expect(screen.getAllByRole('button', { name: 'Insert {role}' })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'Insert {user}' })).toHaveLength(3);
+    // One row of placeholders for the whole form, aimed at the message edited last.
+    fireEvent.focusIn(document.getElementById('joinMessage'));
+    expect(screen.getAllByRole('button', { name: 'Insert {role}' })).toHaveLength(1);
+    fireEvent.focusIn(document.getElementById('dmMessage'));
+    expect(screen.getAllByRole('button', { name: 'Insert {role}' })).toHaveLength(1);
+    fireEvent.focusIn(document.getElementById('leaveMessage'));
+    expect(screen.queryByRole('button', { name: 'Insert {role}' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Insert {user}' })).toHaveLength(1);
   });
 });

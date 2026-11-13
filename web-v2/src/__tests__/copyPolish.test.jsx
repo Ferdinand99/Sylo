@@ -86,11 +86,13 @@ describe('Welcome', () => {
     getModuleConfig.mockResolvedValue(welcomeData());
     renderAtGuild(<Welcome />, GUILD);
     const join = await screen.findByLabelText('Message', { selector: '#joinMessage' });
-    expect(screen.getAllByRole('button', { name: 'Insert {memberCount}' })).toHaveLength(3);
+    // One row of placeholder chips for the whole form, not one under every message.
+    expect(screen.getAllByRole('button', { name: 'Insert {memberCount}' })).toHaveLength(1);
 
     join.focus();
+    fireEvent.focusIn(join);
     join.setSelectionRange(8, 8); // after "Welcome "
-    fireEvent.click(screen.getAllByRole('button', { name: 'Insert {user.name}' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Insert {user.name}' }));
     expect(join.value).toBe('Welcome {user.name}{user} to {server}!');
   });
 

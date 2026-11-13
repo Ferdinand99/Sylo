@@ -1,0 +1,103 @@
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import PreviewLayout from '../components/PreviewLayout.jsx';
+import MessagePreview from '../components/MessagePreview.jsx';
+
+const CH = '100000000000000021';
+const ROLE = '200000000000000031';
+const lookup = { channels: [{ id: CH, name: 'general' }], roles: [{ id: ROLE, name: 'Verified' }] };
+
+function stubMedia(matches) {
+  window.matchMedia = vi.fn().mockImplementation(() => ({
+    matches,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+}
+afterEach(() => {
+  delete window.matchMedia;
+});
+
+const wrap = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
+
+describe('MessagePreview', () => {
+  it('fills placeholders with sample data and shows mentions as names', () => {
+    wrap(<MessagePreview content={`Welcome {user} to **{server}**, say hi in <#${CH}>`} lookup={lookup} />);
+    const text = screen.getByText((_, el) => el?.className === 'v2-msg-text');
+    expect(text.textContent).toBe('Welcome @Mara to Your server, say hi in #general');
+    expect(text.querySelector('strong').textContent).toBe('Your server');
+    expect(text.textContent).not.toContain(CH);
+    expect(screen.getByText('Sylo')).toBeTruthy();
+  });
+
+  it('draws an embed with its description and fields', () => {
+    wrap(
+      <MessagePreview
+        embed={{
+          title: 'Mara',
+          description: 'Hello {user.name}',
+          fields: [{ name: 'Craft', value: 'Pixel art', inline: true }],
+          footer: 'Say hi',
+        }}
+      />
+    );
+    expect(screen.getByText('Hello Mara')).toBeTruthy();
+    expect(screen.getByText('Craft')).toBeTruthy();
+    expect(screen.getByText('Say hi')).toBeTruthy();
+  });
+
+  it('says so when there is nothing to send', () => {
+    wrap(<MessagePreview content="  " />);
+    expect(screen.getByText('Nothing to send yet.')).toBeTruthy();
+  });
+});
+
+describe('PreviewLayout', () => {
+  const previews = [
+    { key: 'join', title: 'Welcome message', content: 'Hi {user}' },
+    { key: 'leave', title: 'Leave message', content: 'Bye', hidden: true },
+  ];
+
+  it('puts the previews in a column next to the form on a wide screen, leaving out hidden ones', () => {
+    stubMedia(true);
+    wrap(
+      <PreviewLayout previews={previews} lookup={lookup}>
+        <p>the form</p>
+      </PreviewLayout>
+    );
+    const aside = screen.getByRole('complementary', { name: 'Preview' });
+    expect(within(aside).getByText('Welcome message')).toBeTruthy();
+    expect(aside.textContent).toContain('Hi @Mara');
+    expect(within(aside).queryByText('Leave message')).toBeNull();
+    expect(screen.getByText('the form')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Show preview' })).toBeNull();
+  });
+
+  it('folds the preview behind a button on a narrow screen', () => {
+    stubMedia(false);
+    wrap(
+      <PreviewLayout previews={previews} lookup={lookup}>
+        <p>the form</p>
+      </PreviewLayout>
+    );
+    expect(screen.queryByRole('complementary')).toBeNull();
+    const button = screen.getByRole('button', { name: 'Show preview' });
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(button);
+    expect(screen.getByRole('complementary', { name: 'Preview' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Hide preview' })).toBeTruthy();
+  });
+
+  it('renders just the form when every preview is hidden', () => {
+    stubMedia(true);
+    wrap(
+      <PreviewLayout previews={[{ key: 'a', title: 'A', content: 'x', hidden: true }]} lookup={lookup}>
+        <p>the form</p>
+      </PreviewLayout>
+    );
+    expect(screen.getByText('the form')).toBeTruthy();
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(screen.queryByRole('button', { name: /preview/i })).toBeNull();
+  });
+});

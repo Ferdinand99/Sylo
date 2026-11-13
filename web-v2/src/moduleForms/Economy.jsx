@@ -12,6 +12,7 @@ import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import TabRow from '../components/TabRow.jsx';
+import SectionIndex from '../components/SectionIndex.jsx';
 import Time from '../components/Time.jsx';
 import UnitInput from '../components/UnitInput.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
@@ -122,9 +123,23 @@ function Settings({ guildId, m, limits }) {
 
   return (
     <>
+      <SectionIndex
+        sections={[
+          ['eco-currency', 'Currency'],
+          ['eco-chat', 'Chat'],
+          ['eco-voice', 'Voice'],
+          ['eco-daily', 'Daily and work'],
+          ['eco-bank', 'Bank and payments'],
+          ['eco-rob', 'Robbing'],
+          ['eco-shop', 'Shop'],
+          ['eco-board', 'Leaderboard and log'],
+        ]}
+      />
       <form onSubmit={m.save} data-savebar>
         <div className="v2-group">
-          <h2 className="v2-group-title">Currency</h2>
+          <h2 className="v2-group-title" id="eco-currency">
+            Currency
+          </h2>
           <div className="v2-field-row">
             <div className="v2-field">
               <label htmlFor="currencyName">Name</label>
@@ -149,7 +164,8 @@ function Settings({ guildId, m, limits }) {
                 onChange={(e) => set({ currencyEmoji: e.target.value })}
               />
               <p className="v2-field-hint">
-                Shown before every amount. A server emoji looks like {'<:name:id>'}.
+                Shown before every amount. Use a normal emoji, or copy a server emoji from Discord's emoji
+                picker and paste it here.
               </p>
             </div>
           </div>
@@ -163,7 +179,9 @@ function Settings({ guildId, m, limits }) {
         </div>
 
         <div className="v2-group">
-          <h2 className="v2-group-title">Earning from chat</h2>
+          <h2 className="v2-group-title" id="eco-chat">
+            Earning from chat
+          </h2>
           <Check
             id="messageEnabled"
             label="Members earn money by chatting"
@@ -171,55 +189,61 @@ function Settings({ guildId, m, limits }) {
             form={form}
             set={set}
           />
-          <div className="v2-field-row">
-            <Num id="messageMin" label="At least" field="messageMin" {...props} />
-            <Num id="messageMax" label="At most" field="messageMax" {...props} />
-          </div>
-          <div className="v2-field-row">
-            <Num
-              id="messageCooldownSeconds"
-              label="Cooldown"
-              field="messageCooldownSeconds"
-              unit="seconds"
-              {...props}
-            />
-            <Num
-              id="messageMinLength"
-              label="Shortest message that counts"
-              field="messageMinLength"
-              unit="characters"
-              {...props}
-            />
-          </div>
-          {data.messageLengthChecked === false ? (
-            <Callout tone="info" title="The shortest-message rule is not applied">
-              This Sylo does not have the Message Content intent, so Discord does not tell it how long a
-              message is. Chat still pays, but every message counts whatever its length. Everything else works
-              as usual.
-            </Callout>
+          {form.messageEnabled ? (
+            <>
+              <div className="v2-field-row">
+                <Num id="messageMin" label="At least" field="messageMin" {...props} />
+                <Num id="messageMax" label="At most" field="messageMax" {...props} />
+              </div>
+              <div className="v2-field-row">
+                <Num
+                  id="messageCooldownSeconds"
+                  label="Cooldown"
+                  field="messageCooldownSeconds"
+                  unit="seconds"
+                  {...props}
+                />
+                <Num
+                  id="messageMinLength"
+                  label="Shortest message that counts"
+                  field="messageMinLength"
+                  unit="characters"
+                  {...props}
+                />
+              </div>
+              {data.messageLengthChecked === false ? (
+                <Callout tone="info" title="The shortest-message rule is not applied">
+                  This Sylo does not have the Message Content intent, so Discord does not tell it how long a
+                  message is. Chat still pays, but every message counts whatever its length. Everything else
+                  works as usual.
+                </Callout>
+              ) : null}
+              <div className="v2-field" role="group" aria-labelledby="ignoredChannels-label">
+                <label id="ignoredChannels-label">Channels that pay nothing</label>
+                <ChipPicker
+                  kind="channel"
+                  items={data.channels}
+                  value={form.ignoredChannels}
+                  onChange={(ignoredChannels) => set({ ignoredChannels })}
+                />
+              </div>
+              <div className="v2-field" role="group" aria-labelledby="ignoredRoles-label">
+                <label id="ignoredRoles-label">Roles that earn nothing from chat</label>
+                <ChipPicker
+                  kind="role"
+                  items={data.roles}
+                  value={form.ignoredRoles}
+                  onChange={(ignoredRoles) => set({ ignoredRoles })}
+                />
+              </div>
+            </>
           ) : null}
-          <div className="v2-field" role="group" aria-labelledby="ignoredChannels-label">
-            <label id="ignoredChannels-label">Channels that pay nothing</label>
-            <ChipPicker
-              kind="channel"
-              items={data.channels}
-              value={form.ignoredChannels}
-              onChange={(ignoredChannels) => set({ ignoredChannels })}
-            />
-          </div>
-          <div className="v2-field" role="group" aria-labelledby="ignoredRoles-label">
-            <label id="ignoredRoles-label">Roles that earn nothing from chat</label>
-            <ChipPicker
-              kind="role"
-              items={data.roles}
-              value={form.ignoredRoles}
-              onChange={(ignoredRoles) => set({ ignoredRoles })}
-            />
-          </div>
         </div>
 
         <div className="v2-group">
-          <h2 className="v2-group-title">Earning from voice</h2>
+          <h2 className="v2-group-title" id="eco-voice">
+            Earning from voice
+          </h2>
           <Check
             id="voiceEnabled"
             label="Members earn money by being in voice"
@@ -228,11 +252,15 @@ function Settings({ guildId, m, limits }) {
             form={form}
             set={set}
           />
-          <Num id="voiceAmount" label="Paid for every 5 minutes in voice" field="voiceAmount" {...props} />
+          {form.voiceEnabled ? (
+            <Num id="voiceAmount" label="Paid for every 5 minutes in voice" field="voiceAmount" {...props} />
+          ) : null}
         </div>
 
         <div className="v2-group">
-          <h2 className="v2-group-title">Daily and work</h2>
+          <h2 className="v2-group-title" id="eco-daily">
+            Daily and work
+          </h2>
           <div className="v2-field-row">
             <Num
               id="dailyBase"
@@ -264,7 +292,9 @@ function Settings({ guildId, m, limits }) {
         </div>
 
         <div className="v2-group">
-          <h2 className="v2-group-title">Bank and payments</h2>
+          <h2 className="v2-group-title" id="eco-bank">
+            Bank and payments
+          </h2>
           <Check
             id="bankEnabled"
             label="The bank is on"
@@ -281,18 +311,22 @@ function Settings({ guildId, m, limits }) {
             form={form}
             set={set}
           />
-          <Num
-            id="payTaxPercent"
-            label="Payment tax"
-            field="payTaxPercent"
-            unit="%"
-            hint="Charged to the sender on top of the amount, rounded down, and removed from the economy. 0 means no tax."
-            {...props}
-          />
+          {form.payEnabled ? (
+            <Num
+              id="payTaxPercent"
+              label="Payment tax"
+              field="payTaxPercent"
+              unit="%"
+              hint="Charged to the sender on top of the amount, rounded down, and removed from the economy. 0 means no tax."
+              {...props}
+            />
+          ) : null}
         </div>
 
         <div className="v2-group">
-          <h2 className="v2-group-title">Robbing</h2>
+          <h2 className="v2-group-title" id="eco-rob">
+            Robbing
+          </h2>
           <Callout tone="warning" title="Robbing is off by default">
             With robbing on, members can steal cash from each other with {cmd('/rob')}, and a robbed member
             loses real money. It can feel unfair in some communities. Only cash can be stolen, never the bank,
@@ -305,76 +339,82 @@ function Settings({ guildId, m, limits }) {
             form={form}
             set={set}
           />
-          <div className="v2-field-row">
-            <Num
-              id="robChancePercent"
-              label="Chance to succeed"
-              field="robChancePercent"
-              unit="%"
-              {...props}
-            />
-            <Num
-              id="robCooldownHours"
-              label="Cooldown for the robber"
-              field="robCooldownHours"
-              unit="hours"
-              {...props}
-            />
-          </div>
-          <div className="v2-field-row">
-            <Num
-              id="robMinPercent"
-              label="Steals at least"
-              field="robMinPercent"
-              unit="% of their cash"
-              {...props}
-            />
-            <Num
-              id="robMaxPercent"
-              label="Steals at most"
-              field="robMaxPercent"
-              unit="% of their cash"
-              {...props}
-            />
-          </div>
-          <div className="v2-field-row">
-            <Num
-              id="robFinePercent"
-              label="Fine if caught"
-              field="robFinePercent"
-              unit="% of the robber's cash"
-              hint="Paid to the victim."
-              {...props}
-            />
-            <Num id="robFineMin" label="Smallest fine" field="robFineMin" {...props} />
-          </div>
-          <div className="v2-field-row">
-            <Num
-              id="robVictimMinCash"
-              label="Victim must hold at least"
-              field="robVictimMinCash"
-              hint="In cash."
-              {...props}
-            />
-            <Num
-              id="robNewMemberHours"
-              label="New members are safe for"
-              field="robNewMemberHours"
-              unit="hours"
-              {...props}
-            />
-          </div>
-          <Num
-            id="robProtectionMinutes"
-            label="After a successful robbery, the victim is safe for"
-            field="robProtectionMinutes"
-            unit="minutes"
-            {...props}
-          />
+          {form.robEnabled ? (
+            <>
+              <div className="v2-field-row">
+                <Num
+                  id="robChancePercent"
+                  label="Chance to succeed"
+                  field="robChancePercent"
+                  unit="%"
+                  {...props}
+                />
+                <Num
+                  id="robCooldownHours"
+                  label="Cooldown for the robber"
+                  field="robCooldownHours"
+                  unit="hours"
+                  {...props}
+                />
+              </div>
+              <div className="v2-field-row">
+                <Num
+                  id="robMinPercent"
+                  label="Steals at least"
+                  field="robMinPercent"
+                  unit="% of their cash"
+                  {...props}
+                />
+                <Num
+                  id="robMaxPercent"
+                  label="Steals at most"
+                  field="robMaxPercent"
+                  unit="% of their cash"
+                  {...props}
+                />
+              </div>
+              <div className="v2-field-row">
+                <Num
+                  id="robFinePercent"
+                  label="Fine if caught"
+                  field="robFinePercent"
+                  unit="% of the robber's cash"
+                  hint="Paid to the victim."
+                  {...props}
+                />
+                <Num id="robFineMin" label="Smallest fine" field="robFineMin" {...props} />
+              </div>
+              <div className="v2-field-row">
+                <Num
+                  id="robVictimMinCash"
+                  label="Victim must hold at least"
+                  field="robVictimMinCash"
+                  hint="In cash."
+                  {...props}
+                />
+                <Num
+                  id="robNewMemberHours"
+                  label="New members are safe for"
+                  field="robNewMemberHours"
+                  unit="hours"
+                  {...props}
+                />
+              </div>
+              <Num
+                id="robProtectionMinutes"
+                label="After a successful robbery, the victim is safe for"
+                field="robProtectionMinutes"
+                unit="minutes"
+                {...props}
+              />
+            </>
+          ) : null}
         </div>
 
         <div className="v2-group">
-          <h2 className="v2-group-title">Shop</h2>
+          <h2 className="v2-group-title" id="eco-shop">
+            Shop
+          </h2>
           <p className="v2-field-hint">
             Items are added on the Shop tab. Members buy with {cmd('/shop')} and {cmd('/buy')}.
           </p>
@@ -440,7 +480,9 @@ function Settings({ guildId, m, limits }) {
         </div>
 
         <div className="v2-group">
-          <h2 className="v2-group-title">Leaderboard and log</h2>
+          <h2 className="v2-group-title" id="eco-board">
+            Leaderboard and log
+          </h2>
           <Check
             id="publicLeaderboard"
             label="Public leaderboard page"

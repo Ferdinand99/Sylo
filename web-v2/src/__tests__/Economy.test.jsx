@@ -166,6 +166,9 @@ describe('Economy settings', () => {
     expect(screen.getByLabelText('Work pays at most').value).toBe('150');
     expect(screen.getByLabelText('Payment tax').value).toBe('0');
     await waitFor(() => expect(screen.getByLabelText('Name').maxLength).toBe(20));
+    // Robbing is off by default, so its settings stay folded away until it is switched on.
+    expect(screen.queryByLabelText('Chance to succeed')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Members can rob each other'));
     expect(screen.getByLabelText('Chance to succeed').max).toBe('99');
     expect(screen.getByLabelText('Payment tax').max).toBe('50');
   });

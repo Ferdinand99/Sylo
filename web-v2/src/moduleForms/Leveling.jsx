@@ -5,6 +5,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
+import PreviewLayout from '../components/PreviewLayout.jsx';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -112,405 +113,417 @@ export default function Leveling() {
     }
   }
 
+  const previews = [
+    {
+      key: 'levelup',
+      title: 'Level-up message',
+      hidden: form.announce === 'off',
+      content: form.announceMessage,
+      samples: { '{level}': '12' },
+    },
+  ];
   return (
-    <>
-      <h1 className="v2-section-title">Leveling</h1>
-      <p className="v2-field-hint">
-        Members earn XP by chatting and level up, and you can reward levels with roles.
-      </p>
-      <p className="v2-field-hint">
-        Commands: <code>/rank</code> <code>/leaderboard</code>. Turn them off, or limit them to certain
-        channels or roles, on the <Link to={`/guilds/${guildId}/commands`}>Commands</Link> page.
-      </p>
-      <HowItWorks>
-        <p>
-          Members earn 15–25 XP per message (once per cooldown), plus optional voice XP. Each level needs more
-          than the last, scaled by the XP rate and any role or channel multipliers below.
+    <PreviewLayout previews={previews} lookup={{ channels: data.channels ?? [], roles: data.roles ?? [] }}>
+      <>
+        <h1 className="v2-section-title">Leveling</h1>
+        <p className="v2-field-hint">
+          Members earn XP by chatting and level up, and you can reward levels with roles.
         </p>
-        <p>The public leaderboard on/off switch is on the Leaderboard page.</p>
-      </HowItWorks>
+        <p className="v2-field-hint">
+          Commands: <code>/rank</code> <code>/leaderboard</code>. Turn them off, or limit them to certain
+          channels or roles, on the <Link to={`/guilds/${guildId}/commands`}>Commands</Link> page.
+        </p>
+        <HowItWorks>
+          <p>
+            Members earn 15–25 XP per message (once per cooldown), plus optional voice XP. Each level needs
+            more than the last, scaled by the XP rate and any role or channel multipliers below.
+          </p>
+          <p>The public leaderboard on/off switch is on the Leaderboard page.</p>
+        </HowItWorks>
 
-      <form onSubmit={save} data-savebar>
-        <div className="v2-group">
-          <h2 className="v2-group-title">Leveling up</h2>
-          <div className="v2-field">
-            <label>Level-up announcement</label>
-            <select value={form.announce} onChange={(e) => set({ announce: e.target.value })}>
-              {data.announceModes.map((m) => (
-                <option key={m} value={m}>
-                  {ANNOUNCE_LABELS[m] || m}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="v2-field">
-            <label>
-              Announcement channel <span className="v2-field-hint">— blank = wherever they levelled up</span>
-            </label>
-            <select value={form.announceChannel} onChange={(e) => set({ announceChannel: e.target.value })}>
-              <option value="">— current channel —</option>
-              {data.channels.map((c) => (
-                <option key={c.id} value={c.id}>
-                  #{c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="v2-field">
-            <label htmlFor="announceMessage">Level-up message</label>
-            <MentionTextarea
-              channels={data.channels}
-              roles={data.roles}
-              id="announceMessage"
-              rows={2}
-              maxLength={limitOf(limits, 'announceMessage').maxLength}
-              placeholder="GG {player}, you just advanced to level {level}!"
-              value={form.announceMessage}
-              onChange={(e) => set({ announceMessage: e.target.value })}
-            />
-            <PlaceholderHint
-              fieldId="announceMessage"
-              tokens={tokensFor('leveling')}
-              value={form.announceMessage}
-              onChange={(announceMessage) => set({ announceMessage })}
-            />
-          </div>
-          <div className="v2-field">
-            <label>XP cooldown</label>
-            <UnitInput
-              unit="seconds"
-              min={limitOf(limits, 'cooldownSeconds').min}
-              max={limitOf(limits, 'cooldownSeconds').max}
-              value={form.cooldownSeconds}
-              onChange={(e) => set({ cooldownSeconds: Number(e.target.value) })}
-            />
-          </div>
-        </div>
-
-        <div className="v2-group">
-          <h2 className="v2-group-title">Role rewards</h2>
-          <div className="v2-field">
-            <label className="v2-check">
-              <input
-                type="radio"
-                name="stackRewards"
-                checked={form.stackRewards}
-                onChange={() => set({ stackRewards: true })}
-              />
-              Stack previous rewards — a member can hold several reward roles at once
-            </label>
-            <label className="v2-check">
-              <input
-                type="radio"
-                name="stackRewards"
-                checked={!form.stackRewards}
-                onChange={() => set({ stackRewards: false })}
-              />
-              Remove previous rewards — a member only keeps the highest reward role
-            </label>
-          </div>
-
-          {form.rewards.map((r) => (
-            <div className="v2-field-row v2-pair-row" key={r.key}>
-              <span className="v2-pair-prefix" aria-hidden="true">
-                Level
-              </span>
-              <input
-                type="number"
-                aria-label="Reward level"
-                min={limitOf(limits, 'rewards[].level').min}
-                max={limitOf(limits, 'rewards[].level').max}
-                className="v2-input-num"
-                value={r.level}
-                onChange={(e) => updateReward(r.key, { level: Number(e.target.value) })}
-              />
-              <span className="v2-pair-arrow" aria-hidden="true">
-                →
-              </span>
-              <select
-                aria-label="Reward role"
-                value={r.roleId}
-                onChange={(e) => updateReward(r.key, { roleId: e.target.value })}
-              >
-                <option value="">— select a role —</option>
-                {data.roles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
+        <form onSubmit={save} data-savebar>
+          <div className="v2-group">
+            <h2 className="v2-group-title">Leveling up</h2>
+            <div className="v2-field">
+              <label>Level-up announcement</label>
+              <select value={form.announce} onChange={(e) => set({ announce: e.target.value })}>
+                {data.announceModes.map((m) => (
+                  <option key={m} value={m}>
+                    {ANNOUNCE_LABELS[m] || m}
                   </option>
                 ))}
               </select>
-              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeReward(r.key)}>
-                Remove
-              </button>
             </div>
-          ))}
-          <button
-            type="button"
-            className="v2-btn-ghost"
-            onClick={addReward}
-            disabled={form.rewards.length >= (limitOf(limits, 'rewards').maxItems ?? Infinity)}
-          >
-            + Add role reward
-          </button>
-
-          <div className="v2-field v2-section-gap">
-            <label className="v2-check">
-              <input
-                type="checkbox"
-                checked={form.removeRewardsOnXpLoss}
-                onChange={(e) => set({ removeRewardsOnXpLoss: e.target.checked })}
-              />
-              Remove a reward role when a member drops below its level
-            </label>
-          </div>
-        </div>
-
-        <div className="v2-group">
-          <h2 className="v2-group-title">XP rate</h2>
-          <div className="v2-field">
-            <label htmlFor="xpRate">Speed everyone levels up at</label>
-            <select
-              id="xpRate"
-              value={String(form.xpRate)}
-              onChange={(e) => set({ xpRate: data.xpRates.find((x) => String(x) === e.target.value) ?? 1 })}
-            >
-              {data.xpRates.map((x) => (
-                <option key={x} value={String(x)}>
-                  {`x${x}`}
-                  {x === 1 ? ' (normal)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="v2-group">
-          <h2 className="v2-group-title">Voice XP</h2>
-          <div className="v2-field">
-            <label className="v2-check">
-              <input
-                type="checkbox"
-                checked={form.voiceXpEnabled}
-                onChange={(e) => set({ voiceXpEnabled: e.target.checked })}
-              />
-              Give XP for time in voice
-            </label>
-          </div>
-          <div className="v2-field">
-            <label>
-              Voice XP <span className="v2-field-hint">— before rate/multipliers</span>
-            </label>
-            <UnitInput
-              unit="XP per active minute"
-              min={limitOf(limits, 'voiceXpPerMin').min}
-              max={limitOf(limits, 'voiceXpPerMin').max}
-              value={form.voiceXpPerMin}
-              onChange={(e) => set({ voiceXpPerMin: Number(e.target.value) })}
-            />
-          </div>
-          <div className="v2-field">
-            <label className="v2-check">
-              <input
-                type="checkbox"
-                checked={form.voiceAfkExcluded}
-                onChange={(e) => set({ voiceAfkExcluded: e.target.checked })}
-              />
-              Only when actually active — 2+ non-bot members, not deafened, not the AFK channel
-            </label>
-          </div>
-        </div>
-
-        <div className="v2-group">
-          <h2 className="v2-group-title">XP multipliers</h2>
-          <p className="v2-field-hint">
-            The highest matching role factor is multiplied by the channel factor; both default to 1×, result
-            capped at 10×.
-          </p>
-          {form.multipliers.map((m) => (
-            <div className="v2-field-row v2-pair-row v2-pair-row-multiplier" key={m.key}>
-              <select
-                aria-label="Role or channel"
-                value={`${m.type}:${m.id}`}
-                onChange={(e) => {
-                  const [type, id] = e.target.value.split(':');
-                  updateMultiplier(m.key, { type, id });
-                }}
-              >
-                <option value="role:">— select a role or channel —</option>
-                <optgroup label="Roles">
-                  {data.roles.map((r) => (
-                    <option key={r.id} value={`role:${r.id}`}>
-                      @{r.name}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Channels">
-                  {data.channels.map((c) => (
-                    <option key={c.id} value={`channel:${c.id}`}>
-                      #{c.name}
-                    </option>
-                  ))}
-                </optgroup>
+            <div className="v2-field">
+              <label>
+                Announcement channel{' '}
+                <span className="v2-field-hint">— blank = wherever they levelled up</span>
+              </label>
+              <select value={form.announceChannel} onChange={(e) => set({ announceChannel: e.target.value })}>
+                <option value="">— current channel —</option>
+                {data.channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    #{c.name}
+                  </option>
+                ))}
               </select>
-              <span className="v2-pair-arrow" aria-hidden="true">
-                ×
-              </span>
-              <input
-                type="number"
-                aria-label="XP factor"
-                min={limitOf(limits, 'multipliers[].factor').min}
-                max={limitOf(limits, 'multipliers[].factor').max}
-                step={0.05}
-                className="v2-input-num"
-                value={m.factor}
-                onChange={(e) => updateMultiplier(m.key, { factor: Number(e.target.value) })}
-              />
-              <button type="button" className="v2-btn-danger-ghost" onClick={() => removeMultiplier(m.key)}>
-                Remove
-              </button>
             </div>
-          ))}
-          <button
-            type="button"
-            className="v2-btn-ghost"
-            onClick={addMultiplier}
-            disabled={form.multipliers.length >= (limitOf(limits, 'multipliers').maxItems ?? Infinity)}
-          >
-            + Add multiplier
-          </button>
-        </div>
-
-        <div className="v2-group">
-          <h2 className="v2-group-title">XP by role</h2>
-          <div className="v2-field">
-            <label className="v2-check">
-              <input
-                type="radio"
-                name="noXpRolesMode"
-                checked={form.noXpRolesMode === 'allow'}
-                onChange={() => set({ noXpRolesMode: 'allow' })}
+            <div className="v2-field">
+              <label htmlFor="announceMessage">Level-up message</label>
+              <MentionTextarea
+                channels={data.channels}
+                roles={data.roles}
+                id="announceMessage"
+                rows={2}
+                maxLength={limitOf(limits, 'announceMessage').maxLength}
+                placeholder="GG {player}, you just advanced to level {level}!"
+                value={form.announceMessage}
+                onChange={(e) => set({ announceMessage: e.target.value })}
               />
-              Allow all roles to gain XP, except the ones below
-            </label>
-            <label className="v2-check">
-              <input
-                type="radio"
-                name="noXpRolesMode"
-                checked={form.noXpRolesMode === 'deny'}
-                onChange={() => set({ noXpRolesMode: 'deny' })}
+              <PlaceholderHint
+                fieldId="announceMessage"
+                tokens={tokensFor('leveling')}
+                value={form.announceMessage}
+                onChange={(announceMessage) => set({ announceMessage })}
               />
-              Deny all roles from gaining XP, except the ones below
-            </label>
+            </div>
+            <div className="v2-field">
+              <label>XP cooldown</label>
+              <UnitInput
+                unit="seconds"
+                min={limitOf(limits, 'cooldownSeconds').min}
+                max={limitOf(limits, 'cooldownSeconds').max}
+                value={form.cooldownSeconds}
+                onChange={(e) => set({ cooldownSeconds: Number(e.target.value) })}
+              />
+            </div>
           </div>
-          <ChipPicker
-            kind="role"
-            items={data.roles}
-            value={form.noXpRoles}
-            onChange={(noXpRoles) => set({ noXpRoles })}
-          />
-        </div>
 
-        <div className="v2-group">
-          <h2 className="v2-group-title">XP by channel</h2>
-          <div className="v2-field">
-            <label className="v2-check">
-              <input
-                type="radio"
-                name="noXpChannelsMode"
-                checked={form.noXpChannelsMode === 'allow'}
-                onChange={() => set({ noXpChannelsMode: 'allow' })}
-              />
-              Allow all channels to gain XP, except the ones below
-            </label>
-            <label className="v2-check">
-              <input
-                type="radio"
-                name="noXpChannelsMode"
-                checked={form.noXpChannelsMode === 'deny'}
-                onChange={() => set({ noXpChannelsMode: 'deny' })}
-              />
-              Deny all channels from gaining XP, except the ones below
-            </label>
-          </div>
-          <ChipPicker
-            kind="channel"
-            items={data.channels}
-            value={form.noXpChannels}
-            onChange={(noXpChannels) => set({ noXpChannels })}
-          />
-        </div>
-      </form>
+          <div className="v2-group">
+            <h2 className="v2-group-title">Role rewards</h2>
+            <div className="v2-field">
+              <label className="v2-check">
+                <input
+                  type="radio"
+                  name="stackRewards"
+                  checked={form.stackRewards}
+                  onChange={() => set({ stackRewards: true })}
+                />
+                Stack previous rewards — a member can hold several reward roles at once
+              </label>
+              <label className="v2-check">
+                <input
+                  type="radio"
+                  name="stackRewards"
+                  checked={!form.stackRewards}
+                  onChange={() => set({ stackRewards: false })}
+                />
+                Remove previous rewards — a member only keeps the highest reward role
+              </label>
+            </div>
 
-      <div className="v2-group">
-        <h2 className="v2-group-title">Leaderboard preview ({data.board.total} tracked)</h2>
-        {data.board.rows.length === 0 ? (
-          <p className="v2-note">No XP earned yet.</p>
-        ) : (
-          <div className="v2-list">
-            {data.board.rows.slice(0, 5).map((r) => (
-              <div className="v2-row" key={r.rank}>
-                <div className="v2-row-main">
-                  <h3>
-                    #{r.rank} {r.name}
-                  </h3>
-                  <p>
-                    <Meta
-                      items={[
-                        `Level ${r.level}`,
-                        `${r.xp} XP`,
-                        r.voiceXp ? `${r.voiceXp} voice XP (${r.voiceMinutes} min)` : false,
-                        `${r.messages} messages`,
-                      ]}
-                    />
-                  </p>
-                </div>
+            {form.rewards.map((r) => (
+              <div className="v2-field-row v2-pair-row" key={r.key}>
+                <span className="v2-pair-prefix" aria-hidden="true">
+                  Level
+                </span>
+                <input
+                  type="number"
+                  aria-label="Reward level"
+                  min={limitOf(limits, 'rewards[].level').min}
+                  max={limitOf(limits, 'rewards[].level').max}
+                  className="v2-input-num"
+                  value={r.level}
+                  onChange={(e) => updateReward(r.key, { level: Number(e.target.value) })}
+                />
+                <span className="v2-pair-arrow" aria-hidden="true">
+                  →
+                </span>
+                <select
+                  aria-label="Reward role"
+                  value={r.roleId}
+                  onChange={(e) => updateReward(r.key, { roleId: e.target.value })}
+                >
+                  <option value="">— select a role —</option>
+                  {data.roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="v2-btn-danger-ghost" onClick={() => removeReward(r.key)}>
+                  Remove
+                </button>
               </div>
             ))}
+            <button
+              type="button"
+              className="v2-btn-ghost"
+              onClick={addReward}
+              disabled={form.rewards.length >= (limitOf(limits, 'rewards').maxItems ?? Infinity)}
+            >
+              + Add role reward
+            </button>
+
+            <div className="v2-field v2-section-gap">
+              <label className="v2-check">
+                <input
+                  type="checkbox"
+                  checked={form.removeRewardsOnXpLoss}
+                  onChange={(e) => set({ removeRewardsOnXpLoss: e.target.checked })}
+                />
+                Remove a reward role when a member drops below its level
+              </label>
+            </div>
           </div>
-        )}
-        {data.board.rows.length > 0 ? (
-          <p className="v2-field-hint">
-            <Link to={`/guilds/${guildId}/leaderboard`}>Full leaderboard →</Link>
-          </p>
-        ) : null}
-      </div>
 
-      <div className="v2-group">
-        <h2 className="v2-group-title">Set XP for a user</h2>
-        <form onSubmit={onSetXp} className="v2-field-row">
-          <input
-            type="text"
-            aria-label="User ID or @mention"
-            placeholder="user ID or @mention"
-            value={xpUserId}
-            onChange={(e) => setXpUserId(e.target.value)}
-          />
-          <input
-            type="number"
-            aria-label="New XP total"
-            min={limitOf(limits, 'xp').min}
-            max={limitOf(limits, 'xp').max}
-            placeholder="xp"
-            style={{ maxWidth: '120px' }}
-            value={xpValue}
-            onChange={(e) => setXpValue(e.target.value)}
-          />
-          <button type="submit" className="v2-btn-ghost" disabled={xpBusy}>
-            Update
-          </button>
+          <div className="v2-group">
+            <h2 className="v2-group-title">XP rate</h2>
+            <div className="v2-field">
+              <label htmlFor="xpRate">Speed everyone levels up at</label>
+              <select
+                id="xpRate"
+                value={String(form.xpRate)}
+                onChange={(e) => set({ xpRate: data.xpRates.find((x) => String(x) === e.target.value) ?? 1 })}
+              >
+                {data.xpRates.map((x) => (
+                  <option key={x} value={String(x)}>
+                    {`x${x}`}
+                    {x === 1 ? ' (normal)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="v2-group">
+            <h2 className="v2-group-title">Voice XP</h2>
+            <div className="v2-field">
+              <label className="v2-check">
+                <input
+                  type="checkbox"
+                  checked={form.voiceXpEnabled}
+                  onChange={(e) => set({ voiceXpEnabled: e.target.checked })}
+                />
+                Give XP for time in voice
+              </label>
+            </div>
+            <div className="v2-field">
+              <label>
+                Voice XP <span className="v2-field-hint">— before rate/multipliers</span>
+              </label>
+              <UnitInput
+                unit="XP per active minute"
+                min={limitOf(limits, 'voiceXpPerMin').min}
+                max={limitOf(limits, 'voiceXpPerMin').max}
+                value={form.voiceXpPerMin}
+                onChange={(e) => set({ voiceXpPerMin: Number(e.target.value) })}
+              />
+            </div>
+            <div className="v2-field">
+              <label className="v2-check">
+                <input
+                  type="checkbox"
+                  checked={form.voiceAfkExcluded}
+                  onChange={(e) => set({ voiceAfkExcluded: e.target.checked })}
+                />
+                Only when actually active — 2+ non-bot members, not deafened, not the AFK channel
+              </label>
+            </div>
+          </div>
+
+          <div className="v2-group">
+            <h2 className="v2-group-title">XP multipliers</h2>
+            <p className="v2-field-hint">
+              The highest matching role factor is multiplied by the channel factor; both default to 1×, result
+              capped at 10×.
+            </p>
+            {form.multipliers.map((m) => (
+              <div className="v2-field-row v2-pair-row v2-pair-row-multiplier" key={m.key}>
+                <select
+                  aria-label="Role or channel"
+                  value={`${m.type}:${m.id}`}
+                  onChange={(e) => {
+                    const [type, id] = e.target.value.split(':');
+                    updateMultiplier(m.key, { type, id });
+                  }}
+                >
+                  <option value="role:">— select a role or channel —</option>
+                  <optgroup label="Roles">
+                    {data.roles.map((r) => (
+                      <option key={r.id} value={`role:${r.id}`}>
+                        @{r.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Channels">
+                    {data.channels.map((c) => (
+                      <option key={c.id} value={`channel:${c.id}`}>
+                        #{c.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+                <span className="v2-pair-arrow" aria-hidden="true">
+                  ×
+                </span>
+                <input
+                  type="number"
+                  aria-label="XP factor"
+                  min={limitOf(limits, 'multipliers[].factor').min}
+                  max={limitOf(limits, 'multipliers[].factor').max}
+                  step={0.05}
+                  className="v2-input-num"
+                  value={m.factor}
+                  onChange={(e) => updateMultiplier(m.key, { factor: Number(e.target.value) })}
+                />
+                <button type="button" className="v2-btn-danger-ghost" onClick={() => removeMultiplier(m.key)}>
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="v2-btn-ghost"
+              onClick={addMultiplier}
+              disabled={form.multipliers.length >= (limitOf(limits, 'multipliers').maxItems ?? Infinity)}
+            >
+              + Add multiplier
+            </button>
+          </div>
+
+          <div className="v2-group">
+            <h2 className="v2-group-title">XP by role</h2>
+            <div className="v2-field">
+              <label className="v2-check">
+                <input
+                  type="radio"
+                  name="noXpRolesMode"
+                  checked={form.noXpRolesMode === 'allow'}
+                  onChange={() => set({ noXpRolesMode: 'allow' })}
+                />
+                Allow all roles to gain XP, except the ones below
+              </label>
+              <label className="v2-check">
+                <input
+                  type="radio"
+                  name="noXpRolesMode"
+                  checked={form.noXpRolesMode === 'deny'}
+                  onChange={() => set({ noXpRolesMode: 'deny' })}
+                />
+                Deny all roles from gaining XP, except the ones below
+              </label>
+            </div>
+            <ChipPicker
+              kind="role"
+              items={data.roles}
+              value={form.noXpRoles}
+              onChange={(noXpRoles) => set({ noXpRoles })}
+            />
+          </div>
+
+          <div className="v2-group">
+            <h2 className="v2-group-title">XP by channel</h2>
+            <div className="v2-field">
+              <label className="v2-check">
+                <input
+                  type="radio"
+                  name="noXpChannelsMode"
+                  checked={form.noXpChannelsMode === 'allow'}
+                  onChange={() => set({ noXpChannelsMode: 'allow' })}
+                />
+                Allow all channels to gain XP, except the ones below
+              </label>
+              <label className="v2-check">
+                <input
+                  type="radio"
+                  name="noXpChannelsMode"
+                  checked={form.noXpChannelsMode === 'deny'}
+                  onChange={() => set({ noXpChannelsMode: 'deny' })}
+                />
+                Deny all channels from gaining XP, except the ones below
+              </label>
+            </div>
+            <ChipPicker
+              kind="channel"
+              items={data.channels}
+              value={form.noXpChannels}
+              onChange={(noXpChannels) => set({ noXpChannels })}
+            />
+          </div>
         </form>
-      </div>
 
-      <div className="v2-danger-zone">
-        <p className="v2-danger-zone-text">
-          <strong>Reset all leveling data</strong>
-          <span>Wipes every member's XP, level and message count on this server.</span>
-        </p>
-        <button type="button" className="v2-btn-danger" onClick={onResetAll} disabled={xpBusy}>
-          Reset all…
-        </button>
-      </div>
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
-    </>
+        <div className="v2-group">
+          <h2 className="v2-group-title">Leaderboard preview ({data.board.total} tracked)</h2>
+          {data.board.rows.length === 0 ? (
+            <p className="v2-note">No XP earned yet.</p>
+          ) : (
+            <div className="v2-list">
+              {data.board.rows.slice(0, 5).map((r) => (
+                <div className="v2-row" key={r.rank}>
+                  <div className="v2-row-main">
+                    <h3>
+                      #{r.rank} {r.name}
+                    </h3>
+                    <p>
+                      <Meta
+                        items={[
+                          `Level ${r.level}`,
+                          `${r.xp} XP`,
+                          r.voiceXp ? `${r.voiceXp} voice XP (${r.voiceMinutes} min)` : false,
+                          `${r.messages} messages`,
+                        ]}
+                      />
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {data.board.rows.length > 0 ? (
+            <p className="v2-field-hint">
+              <Link to={`/guilds/${guildId}/leaderboard`}>Full leaderboard →</Link>
+            </p>
+          ) : null}
+        </div>
+
+        <div className="v2-group">
+          <h2 className="v2-group-title">Set XP for a user</h2>
+          <form onSubmit={onSetXp} className="v2-field-row">
+            <input
+              type="text"
+              aria-label="User ID or @mention"
+              placeholder="user ID or @mention"
+              value={xpUserId}
+              onChange={(e) => setXpUserId(e.target.value)}
+            />
+            <input
+              type="number"
+              aria-label="New XP total"
+              min={limitOf(limits, 'xp').min}
+              max={limitOf(limits, 'xp').max}
+              placeholder="xp"
+              style={{ maxWidth: '120px' }}
+              value={xpValue}
+              onChange={(e) => setXpValue(e.target.value)}
+            />
+            <button type="submit" className="v2-btn-ghost" disabled={xpBusy}>
+              Update
+            </button>
+          </form>
+        </div>
+
+        <div className="v2-danger-zone">
+          <p className="v2-danger-zone-text">
+            <strong>Reset all leveling data</strong>
+            <span>Wipes every member's XP, level and message count on this server.</span>
+          </p>
+          <button type="button" className="v2-btn-danger" onClick={onResetAll} disabled={xpBusy}>
+            Reset all…
+          </button>
+        </div>
+        <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
+      </>
+    </PreviewLayout>
   );
 }
