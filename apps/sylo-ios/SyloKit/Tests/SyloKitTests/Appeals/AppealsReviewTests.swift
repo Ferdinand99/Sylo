@@ -259,18 +259,17 @@ struct OpenAppealsModelTests {
 
     @Test("a newer count is not overwritten by a slower, older answer")
     func newestWins() async throws {
-        let gate = DispatchSemaphore(value: 0)
-        let stub = StubClients { _ in
-            gate.wait()
-            return AppealsReview(appeals: [Appeal(id: 1), Appeal(id: 2), Appeal(id: 3)])
+        let gate = TestGate()
+        let session = makeGatedAnswerSession(gate: gate) { _ in
+            AppealsReview(appeals: [Appeal(id: 1), Appeal(id: 2), Appeal(id: 3)])
         }
-        let model = OpenAppealsModel(server: "9", session: makeSignedInSession(clients: stub))
+        let model = OpenAppealsModel(server: "9", session: session)
         let look = Task { await model.refresh() }
-        for _ in 0..<1000 where stub.calls.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
-        #expect(!stub.calls.isEmpty)
+        await waitForArrival(gate)
+        #expect(gate.arrivals == 1)
         // The overview (or a decision) reports 2 while the first look is still on its way.
         model.update(2)
-        gate.signal()
+        gate.open()
         await look.value
         #expect(model.count == 2)
     }

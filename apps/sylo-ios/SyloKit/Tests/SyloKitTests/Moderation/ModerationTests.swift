@@ -340,34 +340,23 @@ struct ModerationModelTests {
         #expect(model.actionError == nil)
     }
 
-    private func waitForCalls(_ clients: StubClients, _ count: Int) async throws {
-        for _ in 0..<1000 where clients.calls.count < count {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        #expect(clients.calls.count >= count)
-    }
-
     @Test("an action started while another runs says so, and sends nothing")
     func busy() async throws {
-        let gate = DispatchSemaphore(value: 0)
-        let stub = StubClients { endpoint in
-            if endpoint is Endpoints.UnbanMember {
-                gate.wait()
-                return OKResponse()
-            }
-            return ModerationOverview()
+        let gate = TestGate()
+        let session = makeGatedAnswerSession(gate: gate) { endpoint in
+            endpoint is Endpoints.UnbanMember ? OKResponse() as Any : ModerationOverview() as Any
         }
-        let model = ModerationModel(server: "9", session: makeSignedInSession(clients: stub))
+        let model = ModerationModel(server: "9", session: session)
         let first = Task { await model.unban(userId: "820000000000000001", name: "troll") }
-        try await waitForCalls(stub, 1)
+        await waitForArrival(gate)
         #expect(model.isWorking)
 
         let second = await model.lockAllChannels()
         #expect(!second)
         #expect(model.actionError == ModerationModel.busyMessage)
-        #expect(stub.calls.count == 1)
+        #expect(gate.arrivals == 1)
 
-        gate.signal()
+        gate.open()
         #expect(await first.value)
         #expect(!model.isWorking)
     }
