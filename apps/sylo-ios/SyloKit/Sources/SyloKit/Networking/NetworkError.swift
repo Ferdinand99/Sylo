@@ -107,7 +107,7 @@ public enum NetworkError: Error, Sendable, Equatable {
     public var userMessage: String {
         // The server's own words say more than ours; `invalid_grant` is a code, not words.
         if let text = serverMessage, !text.isEmpty, text != "invalid_grant" { return text }
-        switch self {
+        return switch self {
         case .unauthorized: "You've been signed out. Sign in again to continue."
         case .forbidden: "You don't have access to this. Ask the server's owner if you think you should."
         case .notFound: "That's no longer there. Refresh and try again."
