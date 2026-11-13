@@ -1,9 +1,9 @@
 import Foundation
 import Observation
 
-// The Economy member lookup, read only (src/web/routes/v2Economy.js: `/modules/economy/members` and
-// `/modules/economy/members/:userId`). Staff can see who holds what and a member's latest
-// transactions. Changing a balance, the shop and the reset stay in the web dashboard.
+// The Economy member lookup (src/web/routes/v2Economy.js: `/modules/economy/members` and
+// `/modules/economy/members/:userId`). Staff can see who holds what, a member's latest transactions
+// and their inventory, and change a member's money (see Economy/EconomyAdmin.swift).
 
 /// Someone as the economy pages name them.
 public struct EconomyPerson: Decodable, Sendable, Hashable {
@@ -219,16 +219,19 @@ public struct EconomyMemberDetail: Decodable, Sendable, Equatable {
     /// How many transactions the member has in all (the list shows the latest 50).
     public let transactionCount: Int
     public let transactions: [EconomyTransaction]
+    /// What the member owns, newest first (up to 100).
+    public let inventory: [InventoryRow]
 
     public init(member: EconomyPerson? = nil, account: EconomyAccount = EconomyAccount(), transactionCount: Int? = nil,
-                transactions: [EconomyTransaction] = []) {
+                transactions: [EconomyTransaction] = [], inventory: [InventoryRow] = []) {
         self.member = member
         self.account = account
         self.transactionCount = transactionCount ?? transactions.count
         self.transactions = transactions
+        self.inventory = inventory
     }
 
-    private enum CodingKeys: String, CodingKey { case member, account, transactionCount, transactions }
+    private enum CodingKeys: String, CodingKey { case member, account, transactionCount, transactions, inventory }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -237,7 +240,8 @@ public struct EconomyMemberDetail: Decodable, Sendable, Equatable {
             member: try c.decodeIfPresent(EconomyPerson.self, forKey: .member),
             account: try c.decode(forKey: .account, or: EconomyAccount(hasAccount: false)),
             transactionCount: try c.decodeIfPresent(Int.self, forKey: .transactionCount),
-            transactions: transactions)
+            transactions: transactions,
+            inventory: try c.decodeLossyArray(of: InventoryRow.self, forKey: .inventory))
     }
 }
 
@@ -385,15 +389,25 @@ public final class EconomyMembersModel {
     }
 }
 
-/// One member's balances and latest transactions.
+/// One member's balances and latest transactions, and the staff changes to their money.
 @MainActor
 @Observable
 public final class EconomyMemberModel {
+    /// The longest reason the server keeps, in characters.
+    public static let maxReasonLength = 200
+
     public let server: ServerID
     public let userID: String
     public private(set) var detail: EconomyMemberDetail?
     public private(set) var isLoading = false
+    public private(set) var isChanging = false
     public var errorMessage: String?
+    /// Why a change did not go through.
+    public var actionError: String?
+    /// What the last change did, in the server's words ("Now 450 coins in cash ...").
+    public private(set) var notice: String?
+    /// Goes up with every change that went through, for a haptic.
+    public private(set) var changeCount = 0
 
     private let session: AppSession
 
@@ -412,6 +426,43 @@ public final class EconomyMemberModel {
         } catch {
             let error = NetworkError(error)
             if error != .cancelled, error != .unauthorized { errorMessage = error.userMessage }
+        }
+    }
+
+    /// What is wrong with an amount for this action, in words, or nil when it can be sent.
+    public static func amountProblem(_ amount: Int, for action: EconomyAdjustAction) -> String? {
+        guard action.needsAmount, !action.amountRange.contains(amount) else { return nil }
+        let range = action.amountRange
+        return "Enter a whole number from \(range.lowerBound.formatted()) to \(range.upperBound.formatted())."
+    }
+
+    /// Adds, removes or sets the member's money, or resets the member. The reason is trimmed and kept in
+    /// the ledger; empty sends none. The member's detail is replaced with the server's answer.
+    /// - Returns: Whether the change went through. On failure ``actionError`` says why.
+    @discardableResult
+    public func adjust(_ action: EconomyAdjustAction, amount: Int, reason: String) async -> Bool {
+        guard !isChanging else { return false }
+        actionError = nil
+        if let problem = Self.amountProblem(amount, for: action) {
+            actionError = problem
+            return false
+        }
+        isChanging = true
+        defer { isChanging = false }
+        let text = String(reason.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxReasonLength))
+        do {
+            let result = try await session.send(
+                Endpoints.AdjustEconomyMember(server: server, userID: userID, action: action, amount: amount, reason: text))
+            detail = result.detail
+            var message = result.summary
+            if result.clamped { message += " The most a member can hold was reached, so less than asked was added." }
+            notice = message.isEmpty ? nil : message
+            changeCount += 1
+            return true
+        } catch {
+            let error = NetworkError(error)
+            if error != .cancelled, error != .unauthorized { actionError = error.userMessage }
+            return false
         }
     }
 }
