@@ -36,12 +36,15 @@ public struct ApplicationsPage: ModuleSettingsPage {
     public let placeholders: [String]
     /// Whether the platform has threads (the staff thread option). nil when the server did not say.
     public let supportsThreads: Bool?
+    /// Where the web form of a form is, with `<form>` for its number; nil when this Sylo has no public
+    /// web address.
+    public let webAddress: String?
 
     public init(settings: ApplicationsSettings, forms: [ApplicationForm] = [], channels: [ChannelOption] = [],
                 roles: [RoleOption] = [], pending: Int = 0, maxForms: Int = 10, defaultRetentionDays: Int = 180,
                 defaultPanelText: String = "", shortTextMax: Int = 1024,
                 defaultMessages: ApplicationFormMessages = ApplicationFormMessages(), placeholders: [String] = [],
-                supportsThreads: Bool? = nil) {
+                supportsThreads: Bool? = nil, webAddress: String? = nil) {
         self.settings = settings
         self.forms = forms
         self.channels = channels
@@ -54,6 +57,14 @@ public struct ApplicationsPage: ModuleSettingsPage {
         self.defaultMessages = defaultMessages
         self.placeholders = placeholders
         self.supportsThreads = supportsThreads
+        self.webAddress = webAddress
+    }
+
+    /// The address members open to fill `form` in on the web, or nil when this Sylo has no public
+    /// address or the form is not saved yet.
+    public func webAddress(for form: ApplicationForm) -> String? {
+        guard let webAddress, !webAddress.isEmpty, let id = form.id else { return nil }
+        return webAddress.replacingOccurrences(of: "<form>", with: String(id))
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -61,6 +72,7 @@ public struct ApplicationsPage: ModuleSettingsPage {
         case forms, channels, roles, pending, maxForms, defaultRetentionDays, defaultPanelText
         case shortTextMax, defaultMessages, placeholders
         case supportsThreads = "threads"
+        case webAddress
     }
 
     public init(from decoder: any Decoder) throws {
@@ -77,6 +89,7 @@ public struct ApplicationsPage: ModuleSettingsPage {
         defaultMessages = try c.decode(forKey: .defaultMessages, or: ApplicationFormMessages())
         placeholders = try c.decode(forKey: .placeholders, or: [])
         supportsThreads = try c.decodeIfPresent(Bool.self, forKey: .supportsThreads)
+        webAddress = try c.decodeIfPresent(String.self, forKey: .webAddress)
     }
 }
 
@@ -105,10 +118,18 @@ public struct ApplicationsSettings: Codable, Sendable, Equatable {
     /// Whether the panel message is out in a channel.
     public var isPanelPublished: Bool { !panelMessageId.isEmpty }
 
-    /// Two settings are the same when the person's edits are: where the panel is published is the
-    /// server's to track, so publishing it is not an unsaved change.
+    /// Two settings are the same when what a save would send is the same. That leaves out only where
+    /// the panel is published, which is the server's to track, so publishing it is not an unsaved
+    /// change. Comparing the encoded body, not a list of fields, means a field added later counts as an
+    /// edit without anyone having to remember this.
     public static func == (lhs: ApplicationsSettings, rhs: ApplicationsSettings) -> Bool {
-        lhs.retentionDays == rhs.retentionDays && lhs.panelText == rhs.panelText
+        lhs.sentBody == rhs.sentBody
+    }
+
+    private var sentBody: Data? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try? encoder.encode(self)
     }
 
     private enum CodingKeys: String, CodingKey { case retentionDays, panelText, panelChannelId, panelMessageId }

@@ -287,14 +287,18 @@ struct ApplicationFormsTests {
 
     @Test("picking roles for a role question keeps the options that stay and names the new ones")
     func roleOptions() {
-        let roles = [RoleOption(id: "1", name: "Builder"), RoleOption(id: "2", name: "Admin"), RoleOption(id: "3", name: "Mod")]
-        var question = ApplicationQuestion(type: .role, label: "Roles", options: [.init(id: "1", label: "Old name")])
-        question.setRoleOptions(["1", "2"], roles: roles)
-        #expect(question.roleIds == ["1", "2"])
+        let one = "111111111111111111"
+        let two = "111111111111111112"
+        let three = "111111111111111113"
+        let nine = "111111111111111119"
+        let roles = [RoleOption(id: one, name: "Builder"), RoleOption(id: two, name: "Admin"), RoleOption(id: three, name: "Mod")]
+        var question = ApplicationQuestion(type: .role, label: "Roles", options: [.init(id: one, label: "Old name")])
+        question.setRoleOptions([one, two], roles: roles)
+        #expect(question.roleIds == [one, two])
         #expect(question.options.map(\.label) == ["Old name", "Admin"])
-        question.setRoleOptions(["3", "9"], roles: roles)
-        #expect(question.options == [.init(id: "3", label: "Mod"), .init(id: "9", label: "")])
-        question.setRoleOptions((0..<14).map { String($0 + 100) }, roles: roles)
+        question.setRoleOptions([three, nine], roles: roles)
+        #expect(question.options == [.init(id: three, label: "Mod"), .init(id: nine, label: "")])
+        question.setRoleOptions((0..<14).map { "11111111111111\(1000 + $0)" }, roles: roles)
         #expect(question.options.count == 10)
     }
 
@@ -338,7 +342,9 @@ struct ApplicationFormsTests {
         #expect(ApplicationQuestion(type: .role, label: "R", required: true).isUnanswerable)
         #expect(!ApplicationQuestion(type: .role, label: "R", required: false).isUnanswerable)
         #expect(!ApplicationQuestion(type: .text, label: "T", required: true).isUnanswerable)
-        #expect(!ApplicationQuestion(type: .role, label: "R", required: true, options: [.init(id: "1", label: "")]).isUnanswerable)
+        #expect(!ApplicationQuestion(type: .role, label: "R", required: true, options: [.init(id: "111111111111111111", label: "")]).isUnanswerable)
+        // A choice option's id is not a role: the server keeps only role ids on a role question.
+        #expect(ApplicationQuestion(type: .role, label: "R", required: true, options: [.init(id: "oa1b2c3d4", label: "Yes")]).isUnanswerable)
     }
 
     @Test("a new form starts closed with the server's message texts")
@@ -534,6 +540,12 @@ struct ApplicationFormEndpointsTests {
         #expect(EditorFailure.message(for: .server(status: 502)) == NetworkError.server(status: 502).userMessage)
         #expect(EditorFailure.message(for: .server(status: 500), serverFailure: "x") == NetworkError.server(status: 500).userMessage)
         #expect(EditorFailure.message(for: .forbidden) == NetworkError.forbidden.userMessage)
+        #expect(EditorFailure.message(for: .forbidden, forbidden: "Not that role.") == "Not that role.")
+        // The server's own text always wins over a fallback.
+        #expect(EditorFailure.message(for: .badRequest(message: "Server says no."), serverFailure: "x", forbidden: "y") == "Server says no.")
+        #expect(EditorFailure.serverText(of: .badRequest(message: "Server says no.")) == "Server says no.")
+        #expect(EditorFailure.serverText(of: .forbidden) == nil)
+        #expect(EditorFailure.serverText(of: .badRequest(message: "invalid_request")) == nil)
     }
 }
 
@@ -683,6 +695,11 @@ struct ApplicationFormModelsTests {
         let model = ApplicationsPanelModel(server: "9", session: makeSignedInSession(clients: clients))
         #expect(await model.unpublish() == nil)
         #expect(model.errorMessage?.contains("Manage Messages") == true)
+
+        // A 502 while publishing is not a failed delete.
+        clients.setHandler { _ in throw NetworkError.server(status: 502) }
+        #expect(await model.publish(channelId: "222222222222222222", text: "") == nil)
+        #expect(model.errorMessage == NetworkError.server(status: 502).userMessage)
 
         clients.setHandler { _ in
             ApplicationsPanelResult(settings: ApplicationsSettings(panelChannelId: "", panelMessageId: ""))

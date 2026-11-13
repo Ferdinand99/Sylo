@@ -86,13 +86,18 @@ public struct IntroductionsSettings: Codable, Sendable, Equatable {
     /// The prompt message's id (bot-managed, read only, not sent); "" = not published.
     public let promptMessageId: String
 
-    /// Two settings are the same when the person's edits are: where the prompt is published is the
-    /// server's to track, so publishing it is not an unsaved change.
+    /// Two settings are the same when what a save would send is the same. That leaves out only where
+    /// the prompt is published, which is the server's to track, so publishing it is not an unsaved
+    /// change. Comparing the encoded body, not a list of fields, means a field added later counts as an
+    /// edit without anyone having to remember this.
     public static func == (lhs: IntroductionsSettings, rhs: IntroductionsSettings) -> Bool {
-        lhs.channelId == rhs.channelId && lhs.questions == rhs.questions && lhs.roleGroups == rhs.roleGroups
-            && lhs.showRoles == rhs.showRoles && lhs.colorMode == rhs.colorMode && lhs.color == rhs.color
-            && lhs.description == rhs.description && lhs.footer == rhs.footer
-            && lhs.deleteOnLeave == rhs.deleteOnLeave && lhs.promptText == rhs.promptText
+        lhs.sentBody == rhs.sentBody
+    }
+
+    private var sentBody: Data? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try? encoder.encode(self)
     }
 
     public init(channelId: String = "", questions: [IntroductionsQuestion]? = [],
@@ -267,6 +272,8 @@ public struct IntroductionsQuestion: Codable, Sendable, Equatable, Identifiable 
     public var maxLength: Int
     /// Shown side by side with the next one on the card.
     public var inline: Bool
+    /// Fields of the question this version of the app does not model, sent back as they came.
+    public var extras: [String: PassthroughJSON]
 
     /// The limits the server enforces.
     public static let maxLabelLength = 45
@@ -279,16 +286,30 @@ public struct IntroductionsQuestion: Codable, Sendable, Equatable, Identifiable 
     }
 
     public init(id: String, label: String, prompt: String = "", required: Bool = false, maxLength: Int = 500,
-                inline: Bool = false) {
+                inline: Bool = false, extras: [String: PassthroughJSON] = [:]) {
         self.id = id
         self.label = label
         self.prompt = prompt
         self.required = required
         self.maxLength = maxLength
         self.inline = inline
+        self.extras = extras
     }
 
-    private enum CodingKeys: String, CodingKey { case id, label, prompt, required, maxLength, inline }
+    private enum CodingKeys: String, CodingKey, CaseIterable { case id, label, prompt, required, maxLength, inline }
+    private static let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
+
+    public func encode(to encoder: any Encoder) throws {
+        var extra = encoder.container(keyedBy: PassthroughKey.self)
+        try Passthrough.write(extras, excluding: Self.knownKeys, to: &extra)
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(label, forKey: .label)
+        try c.encode(prompt, forKey: .prompt)
+        try c.encode(required, forKey: .required)
+        try c.encode(maxLength, forKey: .maxLength)
+        try c.encode(inline, forKey: .inline)
+    }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -298,7 +319,8 @@ public struct IntroductionsQuestion: Codable, Sendable, Equatable, Identifiable 
             prompt: try c.decode(forKey: .prompt, or: ""),
             required: try c.decode(forKey: .required, or: false),
             maxLength: try c.decode(forKey: .maxLength, or: 500),
-            inline: try c.decode(forKey: .inline, or: false))
+            inline: try c.decode(forKey: .inline, or: false),
+            extras: try Passthrough.read(decoder, excluding: Self.knownKeys))
     }
 }
 
@@ -311,19 +333,25 @@ public struct IntroductionsRoleGroup: Codable, Sendable, Equatable, Identifiable
     /// Tells groups apart while a name is being typed (the name is the group's identity on the
     /// server, but changes with every key). Never sent, never part of what makes two groups equal.
     public let key: String
+    /// Fields of the group this version of the app does not model, sent back as they came.
+    public var extras: [String: PassthroughJSON]
 
     public var id: String { key }
 
     public init(name: String = "", roleIds: [String] = [], hideWhenEmpty: Bool = false,
-                key: String = UUID().uuidString) {
+                key: String = UUID().uuidString, extras: [String: PassthroughJSON] = [:]) {
         self.name = name
         self.roleIds = roleIds
         self.hideWhenEmpty = hideWhenEmpty
         self.key = key
+        self.extras = extras
     }
 
+    /// Equal when what is sent is equal, so the local key never matters.
     public static func == (lhs: IntroductionsRoleGroup, rhs: IntroductionsRoleGroup) -> Bool {
-        lhs.name == rhs.name && lhs.roleIds == rhs.roleIds && lhs.hideWhenEmpty == rhs.hideWhenEmpty
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return (try? encoder.encode(lhs)) == (try? encoder.encode(rhs))
     }
 
     public static let maxNameLength = 45
@@ -335,17 +363,21 @@ public struct IntroductionsRoleGroup: Codable, Sendable, Equatable, Identifiable
             .split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
-    private enum CodingKeys: String, CodingKey { case name, roleIds, hideWhenEmpty }
+    private enum CodingKeys: String, CodingKey, CaseIterable { case name, roleIds, hideWhenEmpty }
+    private static let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             name: try c.decode(String.self, forKey: .name),
             roleIds: try c.decode(forKey: .roleIds, or: []),
-            hideWhenEmpty: try c.decode(forKey: .hideWhenEmpty, or: false))
+            hideWhenEmpty: try c.decode(forKey: .hideWhenEmpty, or: false),
+            extras: try Passthrough.read(decoder, excluding: Self.knownKeys))
     }
 
     public func encode(to encoder: any Encoder) throws {
+        var extra = encoder.container(keyedBy: PassthroughKey.self)
+        try Passthrough.write(extras, excluding: Self.knownKeys, to: &extra)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(name, forKey: .name)
         try c.encode(roleIds, forKey: .roleIds)

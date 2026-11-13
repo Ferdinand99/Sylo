@@ -104,17 +104,21 @@ public final class IntroPromptModel {
             errorMessage = "Pick the introductions channel first."
             return nil
         }
-        return await run(Endpoints.PublishIntroPrompt(server: server, channelId: channelId, promptText: text))
+        return await run(
+            Endpoints.PublishIntroPrompt(server: server, channelId: channelId, promptText: text), serverFailure: nil)
     }
 
     /// Deletes the prompt message.
     @discardableResult
     public func unpublish() async -> IntroductionsSettings? {
         guard !isBusy else { return nil }
-        return await run(Endpoints.UnpublishIntroPrompt(server: server))
+        return await run(
+            Endpoints.UnpublishIntroPrompt(server: server),
+            serverFailure: "Sylo could not delete the prompt message. It needs Manage Messages in that channel.")
     }
 
-    private func run<E: APIEndpoint>(_ endpoint: E) async -> IntroductionsSettings?
+    /// - Parameter serverFailure: What to say for a 502 (only removing the message can fail that way).
+    private func run<E: APIEndpoint>(_ endpoint: E, serverFailure: String?) async -> IntroductionsSettings?
     where E.Response == IntroPromptResult {
         isBusy = true
         defer { isBusy = false }
@@ -128,9 +132,7 @@ public final class IntroPromptModel {
         } catch {
             let error = NetworkError(error)
             if error != .cancelled, error != .unauthorized {
-                errorMessage = EditorFailure.message(
-                    for: error,
-                    serverFailure: "Sylo could not delete the prompt message. It needs Manage Messages in that channel.")
+                errorMessage = EditorFailure.message(for: error, serverFailure: serverFailure)
             }
             return nil
         }

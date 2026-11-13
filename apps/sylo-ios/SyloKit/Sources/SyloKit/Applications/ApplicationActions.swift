@@ -319,17 +319,21 @@ public final class ApplicationsPanelModel {
             errorMessage = "Pick the channel for the panel first."
             return nil
         }
-        return await run(Endpoints.PublishApplicationsPanel(server: server, channelId: channelId, text: text))
+        return await run(Endpoints.PublishApplicationsPanel(server: server, channelId: channelId, text: text),
+                         serverFailure: nil)
     }
 
     /// Deletes the panel message.
     @discardableResult
     public func unpublish() async -> ApplicationsSettings? {
         guard !isBusy else { return nil }
-        return await run(Endpoints.UnpublishApplicationsPanel(server: server))
+        return await run(
+            Endpoints.UnpublishApplicationsPanel(server: server),
+            serverFailure: "Sylo could not delete the panel message. It needs Manage Messages in that channel.")
     }
 
-    private func run<E: APIEndpoint>(_ endpoint: E) async -> ApplicationsSettings?
+    /// - Parameter serverFailure: What to say for a 502 (only removing the message can fail that way).
+    private func run<E: APIEndpoint>(_ endpoint: E, serverFailure: String?) async -> ApplicationsSettings?
     where E.Response == ApplicationsPanelResult {
         isBusy = true
         defer { isBusy = false }
@@ -343,9 +347,7 @@ public final class ApplicationsPanelModel {
         } catch {
             let error = NetworkError(error)
             if error != .cancelled, error != .unauthorized {
-                errorMessage = EditorFailure.message(
-                    for: error,
-                    serverFailure: "Sylo could not delete the panel message. It needs Manage Messages in that channel.")
+                errorMessage = EditorFailure.message(for: error, serverFailure: serverFailure)
             }
             return nil
         }

@@ -189,25 +189,34 @@ public enum ApplicationOnLeave: Hashable, Sendable, RawRepresentable, Codable {
 public struct ApplicationQuestionOption: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var label: String
+    /// Fields of the option this version of the app does not model, sent back as they came.
+    public var extras: [String: PassthroughJSON]
 
-    public init(id: String = ApplicationQuestionOption.newID(), label: String = "") {
+    public init(id: String = ApplicationQuestionOption.newID(), label: String = "",
+                extras: [String: PassthroughJSON] = [:]) {
         self.id = id
         self.label = label
+        self.extras = extras
     }
 
     /// A fresh id for a choice option. The server keeps any id of 1 to 24 letters, digits, `_` and
     /// `-` that is unique in the question, and makes its own when not.
     public static func newID() -> String { "o" + UUID().uuidString.prefix(8).lowercased() }
 
-    private enum CodingKeys: String, CodingKey { case id, label }
+    private enum CodingKeys: String, CodingKey, CaseIterable { case id, label }
+    static let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
-        self.init(id: id.isEmpty ? Self.newID() : id, label: try c.decode(forKey: .label, or: ""))
+        self.init(
+            id: id.isEmpty ? Self.newID() : id, label: try c.decode(forKey: .label, or: ""),
+            extras: try Passthrough.read(decoder, excluding: Self.knownKeys))
     }
 
     public func encode(to encoder: any Encoder) throws {
+        var extra = encoder.container(keyedBy: PassthroughKey.self)
+        try Passthrough.write(extras, excluding: Self.knownKeys, to: &extra)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
         try c.encode(label, forKey: .label)
@@ -218,7 +227,14 @@ public struct ApplicationQuestionOption: Codable, Sendable, Hashable, Identifiab
 public struct ApplicationQuestion: Codable, Sendable, Equatable, Identifiable {
     /// Answers are stored by this id. A question added in the app gets one here; the server keeps it.
     public var id: String
-    public var type: ApplicationQuestionType
+    /// Changing between a choice and a role question clears the options: a choice option is text, a role
+    /// option is a role, and the server keeps only role ids on a role question.
+    public var type: ApplicationQuestionType {
+        didSet {
+            let switched = (oldValue == .choice && type == .role) || (oldValue == .role && type == .choice)
+            if switched { options = [] }
+        }
+    }
     public var label: String
     /// Smaller text under the question; "" for none.
     public var help: String
@@ -234,12 +250,15 @@ public struct ApplicationQuestion: Codable, Sendable, Equatable, Identifiable {
     public var maxChoices: Int
     /// A role question: when the picked roles are given.
     public var grant: ApplicationGrantWhen
+    /// Fields of the question this version of the app does not model (a setting of a newer question
+    /// type, say), sent back as they came so a save does not reset them.
+    public var extras: [String: PassthroughJSON]
 
     public init(
         id: String = ApplicationQuestion.newID(), type: ApplicationQuestionType = .text, label: String = "",
         help: String = "", required: Bool = false, long: Bool = false, minLength: Int = 0, maxLength: Int = 300,
         options: [ApplicationQuestionOption] = [], multiple: Bool = false, minChoices: Int = 0, maxChoices: Int = 1,
-        grant: ApplicationGrantWhen = .never
+        grant: ApplicationGrantWhen = .never, extras: [String: PassthroughJSON] = [:]
     ) {
         self.id = id
         self.type = type
@@ -254,6 +273,7 @@ public struct ApplicationQuestion: Codable, Sendable, Equatable, Identifiable {
         self.minChoices = minChoices
         self.maxChoices = maxChoices
         self.grant = grant
+        self.extras = extras
     }
 
     /// The limits the server enforces (applicationsForm.js, LIMITS).
@@ -277,13 +297,17 @@ public struct ApplicationQuestion: Codable, Sendable, Equatable, Identifiable {
     /// to save one instead of losing it silently.
     public var hasNoLabel: Bool { label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
-    /// The options the server keeps: a choice needs a label, a role needs an id.
+    /// The options the server keeps: a choice needs a label, a role needs a role id (17 to 20 digits).
     public var usableOptionCount: Int {
         switch type {
         case .choice: options.filter { !$0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
-        case .role: options.filter { !$0.id.isEmpty }.count
+        case .role: options.filter { Self.isRoleID($0.id) }.count
         default: 0
         }
+    }
+
+    static func isRoleID(_ id: String) -> Bool {
+        (17...20).contains(id.utf8.count) && id.utf8.allSatisfy { $0 >= 48 && $0 <= 57 }
     }
 
     /// A required choice or role question with nothing to choose from could never be answered, and
@@ -316,10 +340,12 @@ public struct ApplicationQuestion: Codable, Sendable, Equatable, Identifiable {
         FormListOrder.move(&options, fromOffsets: source, toOffset: destination)
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case id, type, label, help, required, long, minLength, maxLength, options, multiple, minChoices
         case maxChoices, grant
     }
+    /// The keys the app models, and `unanswerable`, which the server only reports.
+    static let knownKeys = Set(CodingKeys.allCases.map(\.rawValue)).union(["unanswerable"])
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -333,15 +359,20 @@ public struct ApplicationQuestion: Codable, Sendable, Equatable, Identifiable {
             long: try c.decode(forKey: .long, or: false),
             minLength: try c.decode(forKey: .minLength, or: 0),
             maxLength: try c.decode(forKey: .maxLength, or: 300),
-            options: try c.decodeLossyArray(of: ApplicationQuestionOption.self, forKey: .options),
+            // Strict: an option that cannot be read makes the whole question unreadable, which stops the
+            // form from being saved, instead of dropping the option.
+            options: try c.decode(forKey: .options, or: []),
             multiple: try c.decode(forKey: .multiple, or: false),
             minChoices: try c.decode(forKey: .minChoices, or: 0),
             maxChoices: try c.decode(forKey: .maxChoices, or: 1),
-            grant: try c.decode(forKey: .grant, or: .never))
+            grant: try c.decode(forKey: .grant, or: .never),
+            extras: try Passthrough.read(decoder, excluding: Self.knownKeys))
     }
 
-    /// Every field `normaliseQuestion` reads.
+    /// Every field `normaliseQuestion` reads, and the fields the app does not model.
     public func encode(to encoder: any Encoder) throws {
+        var extra = encoder.container(keyedBy: PassthroughKey.self)
+        try Passthrough.write(extras, excluding: Self.knownKeys, to: &extra)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
         try c.encode(type, forKey: .type)
@@ -437,6 +468,12 @@ public struct ApplicationForm: Codable, Sendable, Equatable, Identifiable {
     public let setupProblem: String?
     /// What is wrong with the roles the form hands out (Sylo cannot manage one); nil when fine. Read only.
     public let rolesProblem: String?
+    /// How many questions the server sent that this version of the app cannot read. A save replaces the
+    /// whole question list, so such a form is not saved here (see ``saveProblem``): it would delete them.
+    public let unreadableQuestions: Int
+    /// Fields of the form this version of the app does not model, sent back as they came so a save does
+    /// not reset them.
+    public var extras: [String: PassthroughJSON]
 
     public init(
         id: Int? = nil, name: String = "", description: String = "", enabled: Bool = false,
@@ -450,7 +487,8 @@ public struct ApplicationForm: Codable, Sendable, Equatable, Identifiable {
         acceptAddRoleIds: [String] = [], acceptRemoveRoleIds: [String] = [], denyAddRoleIds: [String] = [],
         denyRemoveRoleIds: [String] = [], onLeave: ApplicationOnLeave = .keep,
         messages: ApplicationFormMessages = ApplicationFormMessages(), version: Double? = nil,
-        setupProblem: String? = nil, rolesProblem: String? = nil
+        setupProblem: String? = nil, rolesProblem: String? = nil, unreadableQuestions: Int = 0,
+        extras: [String: PassthroughJSON] = [:]
     ) {
         self.id = id
         self.name = name
@@ -484,6 +522,8 @@ public struct ApplicationForm: Codable, Sendable, Equatable, Identifiable {
         self.version = version
         self.setupProblem = setupProblem
         self.rolesProblem = rolesProblem
+        self.unreadableQuestions = unreadableQuestions
+        self.extras = extras
     }
 
     /// A form to start from: closed, with the server's own message texts.
@@ -538,6 +578,11 @@ public struct ApplicationForm: Codable, Sendable, Equatable, Identifiable {
     /// role question with nothing to choose, and an open form that is not ready. It drops a question
     /// without a label without a word, which this refuses too so nothing is lost silently.
     public var saveProblem: String? {
+        if unreadableQuestions > 0 {
+            return unreadableQuestions == 1
+                ? "This form has a question this version of the app cannot read, so saving it here would delete it. Update the app to edit this form."
+                : "This form has \(unreadableQuestions) questions this version of the app cannot read, so saving it here would delete them. Update the app to edit this form."
+        }
         if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Give the form a name." }
         if questions.contains(where: \.hasNoLabel) { return "Give every question some text." }
         if let stuck = questions.first(where: \.isUnanswerable) {
@@ -551,7 +596,7 @@ public struct ApplicationForm: Codable, Sendable, Equatable, Identifiable {
 
     // MARK: Coding
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case id, name, description, enabled, fillMode, timeoutMinutes, questions
         case requiredRoleIds, requiredRolesMode, restrictedRoleIds, restrictedRolesMode
         case minAccountDays, minServerDays, cooldownHours
@@ -563,6 +608,15 @@ public struct ApplicationForm: Codable, Sendable, Equatable, Identifiable {
 
     private enum ProblemKeys: String, CodingKey { case setup, roles }
 
+    /// The keys the app models, and the ones the server only reports (the web editor drops these too).
+    static let knownKeys = Set(CodingKeys.allCases.map(\.rawValue)).union(["createdAt", "guildId", "sortOrder", "updatedAt"])
+
+    /// One question of the list, read on its own so one that fails does not take the rest with it.
+    private struct QuestionSlot: Decodable {
+        let question: ApplicationQuestion?
+        init(from decoder: any Decoder) throws { question = try? ApplicationQuestion(from: decoder) }
+    }
+
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         var setup: String?
@@ -571,6 +625,7 @@ public struct ApplicationForm: Codable, Sendable, Equatable, Identifiable {
             setup = try? problems.decodeIfPresent(String.self, forKey: .setup)
             roles = try? problems.decodeIfPresent(String.self, forKey: .roles)
         }
+        let slots = try c.decodeIfPresent([QuestionSlot].self, forKey: .questions) ?? []
         self.init(
             id: try c.decode(Int.self, forKey: .id),
             name: try c.decode(forKey: .name, or: ""),
@@ -578,7 +633,7 @@ public struct ApplicationForm: Codable, Sendable, Equatable, Identifiable {
             enabled: try c.decode(forKey: .enabled, or: false),
             fillMode: try c.decode(forKey: .fillMode, or: .both),
             timeoutMinutes: try c.decode(forKey: .timeoutMinutes, or: 30),
-            questions: try c.decodeLossyArray(of: ApplicationQuestion.self, forKey: .questions),
+            questions: slots.compactMap(\.question),
             requiredRoleIds: try c.decode(forKey: .requiredRoleIds, or: []),
             requiredRolesMode: try c.decode(forKey: .requiredRolesMode, or: .all),
             restrictedRoleIds: try c.decode(forKey: .restrictedRoleIds, or: []),
@@ -603,12 +658,16 @@ public struct ApplicationForm: Codable, Sendable, Equatable, Identifiable {
             messages: try c.decode(forKey: .messages, or: ApplicationFormMessages()),
             version: try c.decodeIfPresent(Double.self, forKey: .version),
             setupProblem: setup?.isEmpty == false ? setup : nil,
-            rolesProblem: roles?.isEmpty == false ? roles : nil)
+            rolesProblem: roles?.isEmpty == false ? roles : nil,
+            unreadableQuestions: slots.filter { $0.question == nil }.count,
+            extras: try Passthrough.read(decoder, excluding: Self.knownKeys))
     }
 
-    /// Every field `normaliseForm` reads, and nothing it does not: not the id (it is in the path), the
-    /// version or the problems.
+    /// Every field `normaliseForm` reads and the fields the app does not model, but not the id (it is in
+    /// the path), the version or the problems.
     public func encode(to encoder: any Encoder) throws {
+        var extra = encoder.container(keyedBy: PassthroughKey.self)
+        try Passthrough.write(extras, excluding: Self.knownKeys, to: &extra)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(name, forKey: .name)
         try c.encode(description, forKey: .description)
@@ -728,7 +787,12 @@ public final class ApplicationFormEditorModel {
             return true
         } catch {
             let error = NetworkError(error)
-            if error != .cancelled, error != .unauthorized { errorMessage = EditorFailure.message(for: error) }
+            if error != .cancelled, error != .unauthorized {
+                // A 403 here is the server refusing a role the person may not hand out, not "no access".
+                errorMessage = EditorFailure.message(
+                    for: error,
+                    forbidden: "You can't give or take one of the roles on this form. Pick roles below your own highest role, or ask someone with Manage Roles.")
+            }
             return false
         }
     }
@@ -803,16 +867,29 @@ public final class ApplicationFormOrderModel {
 
 // MARK: - Error words
 
-/// The sentence for a failed staff action. The server explains a refusal (400) in its `error` field,
-/// for example which permission Sylo lacks in a channel, and that text is far more useful than the
-/// generic one; anything else keeps the generic text.
+/// The sentence for a failed staff action. The server explains a refusal in its `error` field, for
+/// example which permission Sylo lacks in a channel or which role the person may not hand out, and that
+/// text is far more useful than the generic one.
 enum EditorFailure {
-    static func message(for error: NetworkError, serverFailure: String? = nil) -> String {
+    /// The server's own text for an error, when the client kept it. Today only a 400 carries it
+    /// (`NetworkError.badRequest`); once `NetworkError` keeps the text of every status, this is the one
+    /// place to read it from.
+    static func serverText(of error: NetworkError) -> String? {
         if case .badRequest(let message) = error, let message, !message.isEmpty, !message.hasPrefix("invalid_") {
             return message
         }
-        // The platform refused (502): the server worded why, but the client keeps only the status.
+        return nil
+    }
+
+    /// - Parameters:
+    ///   - serverFailure: What to say for a 502 when the server's own text was not kept (the platform
+    ///     refused a delete). Only for the call that can fail that way.
+    ///   - forbidden: What to say for a 403 when the server's own text was not kept, where a 403 means
+    ///     something specific (a role the person may not hand out) and not "no access to the server".
+    static func message(for error: NetworkError, serverFailure: String? = nil, forbidden: String? = nil) -> String {
+        if let text = serverText(of: error) { return text }
         if case .server(let status) = error, status == 502, let serverFailure { return serverFailure }
+        if error == .forbidden, let forbidden { return forbidden }
         return error.userMessage
     }
 }

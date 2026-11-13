@@ -224,6 +224,49 @@ struct IntroPromptTests {
     }
 
     @MainActor
+    @Test("an unsaved prompt text, published and then reloaded, is not an unsaved change any more, and other edits stay")
+    func unsavedPromptTextThenPublish() async throws {
+        let before = IntroductionsSettingsTests.pageJSON
+            .replacingOccurrences(of: #""promptMessageId": "333333333333333333""#, with: #""promptMessageId": """#)
+            .replacingOccurrences(of: #""promptText": "Introduce yourself!""#, with: #""promptText": "Old text""#)
+        // What the server stores after the publish: the new text, and the prompt's message.
+        let after = IntroductionsSettingsTests.pageJSON
+            .replacingOccurrences(of: #""promptText": "Introduce yourself!""#, with: #""promptText": "New text""#)
+        let unpublished = Data(before.utf8)
+        let published = Data(after.utf8)
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.PublishIntroPrompt {
+                return IntroPromptResult(
+                    settings: try JSONDecoder().decode(IntroductionsPage.self, from: published).settings)
+            }
+            return try JSONDecoder().decode(IntroductionsPage.self, from: unpublished)
+        }
+        let session = makeSignedInSession(clients: clients)
+        let model = ModuleSettingsModel<IntroductionsPage>(server: "9", session: session)
+        await model.load()
+        #expect(model.draft?.promptText == "Old text")
+
+        // The person types a new prompt text and publishes without saving first.
+        model.draft?.promptText = "New text"
+        #expect(model.hasChanges)
+        let prompt = IntroPromptModel(server: "9", session: session)
+        #expect(await prompt.publish(channelId: "222222222222222222", text: "New text") != nil)
+
+        clients.setHandler { _ in try JSONDecoder().decode(IntroductionsPage.self, from: published) }
+        await model.load()
+        #expect(model.page?.settings.isPromptPublished == true)
+        // The draft kept its text, and the server now has the same: nothing is left to save. The draft still
+        // has no prompt message id, which is what the comparison has to ignore.
+        #expect(model.draft?.isPromptPublished == false)
+        #expect(model.draft?.promptText == "New text")
+        #expect(!model.hasChanges)
+
+        // An edit made on top of that is still seen.
+        model.draft?.footer = "Another edit"
+        #expect(model.hasChanges)
+    }
+
+    @MainActor
     @Test("after publishing, reloading the page shows it published without turning it into an unsaved change")
     func reloadAfterPublish() async throws {
         let page = IntroductionsSettingsTests.pageJSON.replacingOccurrences(
