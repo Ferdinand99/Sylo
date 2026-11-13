@@ -26,6 +26,8 @@ struct ReactionRoleEditorView: View {
     @State private var original: ReactionRoleMessage
     @State private var isConfirmingMove = false
     @State private var isConfirmingDiscard = false
+    /// The set was deleted from the server by a move at the set limit and not put back yet.
+    @State private var isRemovedFromServer = false
     @State private var failure: EditorFailure?
     @Environment(\.dismiss) private var dismiss
 
@@ -71,7 +73,7 @@ struct ReactionRoleEditorView: View {
                     channelFooter
                 }
                 Section {
-                    UTF16TextArea(title: "Pick your roles below!", text: $draft.message,
+                    LimitedTextField(title: "Pick your roles below!", text: $draft.message,
                                   limit: model.messageLimit, lines: 2...6)
                 } header: {
                     Text("Message Text")
@@ -129,6 +131,10 @@ struct ReactionRoleEditorView: View {
             .interactiveDismissDisabled(isDirty || model.isSavingSet)
             .confirmationDialog("Discard your changes?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
                 Button("Discard Changes", role: .destructive) { dismiss() }
+            } message: {
+                if isRemovedFromServer {
+                    Text("This set is no longer on the server. It only exists here, so discarding loses it.")
+                }
             }
             .confirmationDialog(
                 "Move the posted message?", isPresented: $isConfirmingMove, titleVisibility: .visible
@@ -321,6 +327,9 @@ struct ReactionRoleEditorView: View {
         let move = model.channelMove(for: draft)
         let from = channelName(move?.from ?? "")
         let to = channelName(move?.to ?? "")
+        if !model.canAddSet {
+            return "The server is at its set limit, so the old message in #\(from) is deleted first and the set is posted again in #\(to). If that fails, the set is only kept in this sheet until you publish it again. The old buttons and reactions stop working."
+        }
         return "The set is posted again in #\(to), and the old message in #\(from) is deleted after that. Its buttons and reactions stop working. If posting in the new channel fails, nothing changes and the old message stays."
     }
 
@@ -349,6 +358,7 @@ struct ReactionRoleEditorView: View {
             case .failedAfterRemoval(let text):
                 // The set is gone from the server: the next publish puts it back under the same id.
                 draft.messageId = ""
+                isRemovedFromServer = true
                 failure = EditorFailure(title: "Old Message Deleted", message: text)
             case .needsConfirmation:
                 isConfirmingMove = true

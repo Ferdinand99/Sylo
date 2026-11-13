@@ -116,7 +116,7 @@ struct MessageBuilderView: View {
             }
 
             Section {
-                UTF16TextArea(title: "Message text", text: $model.spec.content,
+                LimitedTextField(title: "Message text", text: $model.spec.content,
                          limit: ComposedMessageSpec.maxContentLength, lines: 2...8)
             } header: {
                 Text("Message Text")

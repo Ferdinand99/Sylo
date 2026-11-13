@@ -152,7 +152,7 @@ private struct ApplicationsExportSection: View {
                 Text("The answers of the applicants are saved to a file you can read or share. The export is logged.")
             }
             .fileQuickLook($previewed) { download.clear() }
-            .onDisappear { download.clear() }
+            .onDisappear { if previewed == nil { download.clear() } }
             if let message = download.errorMessage {
                 StatusMessage(message, kind: .error)
             }

@@ -2,9 +2,8 @@ import SwiftUI
 import SyloKit
 
 /// Which of the overview's link cards (the ones without a switch: Commands, Embed messages,
-/// Insights, Leaderboard, ...) have a native screen in the app, and the screen for each. A card
-/// without one still opens its page in the web dashboard, so nothing disappears until its screen
-/// ships. Like ``ModuleScreens``, but for pages that belong to the server rather than to a module.
+/// Insights, Leaderboard, ...) have a native screen in the app, and the screen for each. Like
+/// ``ModuleScreens``, but for pages that belong to the server rather than to a module.
 ///
 /// Every package registers its pages in a file of its own, so two packages never edit the same
 /// file: `ServerPages+Moderation.swift` (commands), `ServerPages+Messages.swift` (embed messages)
@@ -34,10 +33,6 @@ enum ServerPages {
     static func screen(for cardID: String, server: ServerID, session: AppSession) -> some View {
         if let page = page(for: cardID) {
             page.screen(server, session)
-        } else {
-            ContentUnavailableView(
-                "Not in the App Yet", systemImage: "square.grid.2x2",
-                description: Text("This page isn't available in the app yet."))
         }
     }
 

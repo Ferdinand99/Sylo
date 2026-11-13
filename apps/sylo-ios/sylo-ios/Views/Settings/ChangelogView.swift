@@ -3,7 +3,7 @@ import SyloKit
 
 /// What's New: the Sylo server's release notes, newest first, ten releases at a time. Reached from
 /// Settings when the server sends its changelog to the app (`changelog` in its features); older
-/// servers open the dashboard's What's new page in the browser instead.
+/// servers open the server's public What's new page in the browser instead.
 struct ChangelogView: View {
     @State private var model: ChangelogModel
 

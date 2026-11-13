@@ -1,8 +1,9 @@
 import SwiftUI
 import SyloKit
 
-/// Which modules have a settings screen in the app, and the screen for each. Modules without one
-/// keep their switch on the overview and open in the web dashboard.
+/// Which modules have a settings screen in the app, and the screen for each. Every module the
+/// server has one for is here; a module a newer server adds keeps its switch on the overview and
+/// has no screen to open until the app learns it.
 enum ModuleScreens {
     static func hasScreen(_ moduleID: String) -> Bool { ids.contains(moduleID) }
 
@@ -67,9 +68,8 @@ enum ModuleScreens {
         case "github": GithubAlertsView(server: server, session: session)
         case "game-stats": GameStatsView(server: server, session: session)
         default:
-            ContentUnavailableView(
-                "Not in the App Yet", systemImage: "square.grid.2x2",
-                description: Text("Change this module's settings in the web dashboard for now."))
+            // Only reached for a module without a screen, and the overview never opens one.
+            EmptyView()
         }
     }
 }

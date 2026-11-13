@@ -32,7 +32,7 @@ struct ConnectCallbackSourceTests {
     @Test("The app has no handler for incoming URLs, so a sylo://connected link from outside is ignored")
     func noOpenURLHandler() throws {
         let app = Self.appRoot.appendingPathComponent("sylo-ios")
-        guard FileManager.default.fileExists(atPath: app.path) else { return }
+        #expect(FileManager.default.fileExists(atPath: app.path), "\(app.path) is missing, so the guard reads nothing")
         #expect(!Self.swiftFiles(under: app).isEmpty)
         for needle in ["onOpenURL", "handlesExternalEvents", "onContinueUserActivity", "open url: URL", "OpenURLOptionsKey"] {
             #expect(Self.files(app, containing: needle).isEmpty, "found \(needle) in the app")
@@ -44,12 +44,11 @@ struct ConnectCallbackSourceTests {
         let root = Self.appRoot
         let kit = root.appendingPathComponent("SyloKit/Sources/SyloKit")
         let app = root.appendingPathComponent("sylo-ios")
-        guard FileManager.default.fileExists(atPath: kit.path) else { return }
+        #expect(FileManager.default.fileExists(atPath: kit.path), "\(kit.path) is missing, so the guard reads nothing")
+        #expect(FileManager.default.fileExists(atPath: app.path), "\(app.path) is missing, so the guard reads nothing")
         #expect(Self.files(kit, containing: "Endpoints.CompleteConnect(") == ["AccountModel.swift"])
         #expect(Self.files(kit, containing: "ConnectCallback.result(") == ["AccountModel.swift"])
-        if FileManager.default.fileExists(atPath: app.path) {
-            #expect(Self.files(app, containing: "CompleteConnect").isEmpty)
-            #expect(Self.files(app, containing: "ConnectCallback.result(").isEmpty)
-        }
+        #expect(Self.files(app, containing: "CompleteConnect").isEmpty)
+        #expect(Self.files(app, containing: "ConnectCallback.result(").isEmpty)
     }
 }

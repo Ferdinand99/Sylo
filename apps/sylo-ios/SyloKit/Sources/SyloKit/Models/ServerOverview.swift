@@ -106,8 +106,6 @@ public struct OverviewCard: Decodable, Sendable, Hashable, Identifiable {
     /// Privileged Discord intents the bot lacks for this module (why ``status`` is `.blocked`).
     public let missingIntents: [String]
     public let status: ModuleStatus
-    /// The card's page in the web dashboard, relative to the server address.
-    public let webPath: String?
     public let lines: [StatusLine]
 
     /// The id to toggle, for a module card.
@@ -116,7 +114,7 @@ public struct OverviewCard: Decodable, Sendable, Hashable, Identifiable {
     public init(
         kind: OverviewCardKind, id: String, name: String, icon: String = "", description: String? = nil,
         hasToggle: Bool, isEnabled: Bool?, isBeta: Bool = false, missingIntents: [String] = [],
-        status: ModuleStatus, webPath: String? = nil, lines: [StatusLine] = []
+        status: ModuleStatus, lines: [StatusLine] = []
     ) {
         self.kind = kind
         self.id = id
@@ -128,12 +126,11 @@ public struct OverviewCard: Decodable, Sendable, Hashable, Identifiable {
         self.isBeta = isBeta
         self.missingIntents = missingIntents
         self.status = status
-        self.webPath = webPath
         self.lines = lines
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, id, name, icon, description, hasToggle, enabled, beta, missingIntents, status, href, lines
+        case kind, id, name, icon, description, hasToggle, enabled, beta, missingIntents, status, lines
     }
 
     public init(from decoder: any Decoder) throws {
@@ -148,7 +145,6 @@ public struct OverviewCard: Decodable, Sendable, Hashable, Identifiable {
         isBeta = try c.decodeIfPresent(Bool.self, forKey: .beta) ?? false
         missingIntents = try c.decodeIfPresent([String].self, forKey: .missingIntents) ?? []
         status = try c.decodeIfPresent(ModuleStatus.self, forKey: .status) ?? .other("")
-        webPath = try c.decodeIfPresent(String.self, forKey: .href)
         lines = try c.decodeLossyArray(of: StatusLine.self, forKey: .lines)
     }
 }

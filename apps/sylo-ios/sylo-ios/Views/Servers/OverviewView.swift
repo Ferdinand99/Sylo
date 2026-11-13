@@ -3,14 +3,13 @@ import SyloKit
 
 /// The Modules tab of a server: its header, then its modules grouped like the web overview, each
 /// with a switch. A module with a settings screen in the app opens it (``ModuleRoute``, handled by
-/// ``ServerView``); other cards without a switch (Commands, Embed messages) open their screen from
-/// ``ServerPages`` when the app has one, and the web dashboard when it does not. The server's
+/// ``ServerView``); the cards without a switch (Commands, Embed messages) open their screen from
+/// ``ServerPages``. The server's
 /// general settings are their own tab, so that card is left out here.
 struct OverviewView: View {
     let summary: ServerSummary
     let model: OverviewModel
 
-    @Environment(AppSession.self) private var session
     @State private var searchText = ""
     /// Select mode: pick modules, then switch them all on or off with one call.
     @State private var isSelecting = false
@@ -75,8 +74,6 @@ struct OverviewView: View {
                                 NavigationLink(value: ServerPageRoute(cardID: card.id)) {
                                     ServerPageRow(card: card)
                                 }
-                            } else {
-                                LinkCardRow(card: card, url: webURL(for: card))
                             }
                         }
                     }
@@ -165,12 +162,6 @@ struct OverviewView: View {
         Binding(
             get: { model.toggleError != nil },
             set: { if !$0 { model.toggleError = nil } })
-    }
-
-    /// The card's page in the web dashboard on this Sylo server.
-    private func webURL(for card: OverviewCard) -> URL? {
-        guard let path = card.webPath, !path.contains("?"), let server = session.server else { return nil }
-        return server.url(for: path)
     }
 }
 

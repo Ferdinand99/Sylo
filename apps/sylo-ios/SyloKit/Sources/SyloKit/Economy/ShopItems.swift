@@ -350,7 +350,7 @@ public struct ShopItemDraft: Sendable, Equatable {
     /// What is wrong with the item, in the server's words, or nil. The same checks as the server's
     /// `itemProblem`, plus the one kind the app cannot edit.
     public var problem: String? {
-        if !type.isKnown { return "The app cannot edit this kind of item. Use the web dashboard." }
+        if !type.isKnown { return "This kind of item is newer than this version of the app, so it cannot be edited here. Update the app." }
         if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Give the item a name." }
         if type.isRole, roleId.isEmpty { return "Pick the role this item gives." }
         return nil

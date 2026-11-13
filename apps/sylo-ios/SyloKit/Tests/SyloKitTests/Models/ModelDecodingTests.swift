@@ -101,7 +101,6 @@ struct ModelDecodingTests {
         #expect(!settings.hasToggle)
         #expect(settings.isEnabled == nil)
         #expect(settings.moduleID == nil)
-        #expect(settings.webPath == "/guilds/fluxer:223456789012345678/settings")
         #expect(settings.lines == [StatusLine(label: "Mod-log channel", value: "not set", state: .off)])
 
         let moderation = core[2]
@@ -136,7 +135,6 @@ struct ModelDecodingTests {
         #expect(autoReact.description == nil)
         #expect(autoReact.missingIntents.isEmpty)
         #expect(!autoReact.isBeta)
-        #expect(autoReact.webPath == nil)
 
         #expect(cards[2].kind == .other("widget"))
         #expect(cards[2].moduleID == nil)

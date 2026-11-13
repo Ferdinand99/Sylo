@@ -91,7 +91,7 @@ struct ApplicationQuestionEditorView: View {
     private var optionsSection: some View {
         Section {
             ForEach($question.options) { $option in
-                LimitedLineField(title: "Option", text: $option.label, limit: ApplicationQuestion.maxOptionLabelLength)
+                LimitedTextField(title: "Option", text: $option.label, limit: ApplicationQuestion.maxOptionLabelLength)
             }
             .onMove { source, destination in
                 question.moveOptions(fromOffsets: source, toOffset: destination)

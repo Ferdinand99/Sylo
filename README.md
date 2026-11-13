@@ -234,8 +234,9 @@ in [docs/grafana-dashboard.json](docs/grafana-dashboard.json). See
 
 **Sylo – Server Manager** is a native SwiftUI app (source in
 [`apps/sylo-ios`](apps/sylo-ios)) that signs in to the hosted Sylo or your own
-instance and manages your servers through the same API as the dashboard,
-with push notifications for new tickets. Get it on the
+instance and manages your servers through the same API as the dashboard. It
+covers everything a server administrator can do there, with push notifications
+for new tickets. Get it on the
 [App Store](https://apps.apple.com/app/sylo-server-manager/id6824036901).
 
 A self-hosted instance needs nothing extra beyond a working dashboard login

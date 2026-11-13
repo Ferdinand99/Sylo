@@ -21,6 +21,7 @@ final class FakeRolesServer: @unchecked Sendable {
     private var _timeoutDeleteRemoves = false
     private var _emojiFailures = 0
     private var _listFailures = 0
+    private var _infoDelay: TimeInterval = 0
     private let info: ServerInfo?
     private let setLimit: Int?
     private let hideLimits: Bool
@@ -69,6 +70,8 @@ final class FakeRolesServer: @unchecked Sendable {
     func failEmojis(times: Int) { lock.withLock { _emojiFailures = times } }
     /// The list fails this many times, then works.
     func failList(times: Int) { lock.withLock { _listFailures = times } }
+    /// The server's info takes this long to answer (it blocks the thread the stub runs on).
+    func delayInfo(_ seconds: TimeInterval) { lock.withLock { _infoDelay = seconds } }
 
     func clients() -> StubClients {
         StubClients { [self] endpoint in
@@ -95,6 +98,8 @@ final class FakeRolesServer: @unchecked Sendable {
             }
             if endpoint is Endpoints.ServerInfo {
                 lock.withLock { _calls.append("info") }
+                let delay = lock.withLock { _infoDelay }
+                if delay > 0 { Thread.sleep(forTimeInterval: delay) }
                 guard let info else { throw NetworkError.notFound }
                 return info
             }
@@ -574,14 +579,52 @@ struct RolesModelTests {
             return
         }
         #expect(text.contains("could not be read"))
-        // The next publish reads the list first and does not send another save.
+        // The next publish reads the list first and sends no second save. The copy is there, so it
+        // carries on from it: the old set is deleted and no second copy is made.
         let again = await model.save(Self.moved, confirmedMove: true)
-        guard case .failed = again else {
+        #expect(again == .saved)
+        #expect(server.changes == ["save:new:c2", "delete:1"])
+        #expect(server.sets.count == 1)
+        #expect(server.sets[0].channelId == "c2")
+        #expect(model.reactionMessages.map(\.id) == server.sets.map(\.id))
+    }
+
+    @Test("after a failed recheck, a publish that finds no copy only says so and sends nothing")
+    func moveRecheckWithoutCopy() async {
+        let server = FakeRolesServer(sets: [Self.posted])
+        let model = await make(server)
+        server.timeoutNextSave(stores: false)
+        server.failList(times: 1)
+        _ = await model.save(Self.moved, confirmedMove: true)
+        let again = await model.save(Self.moved, confirmedMove: true)
+        guard case .failed(let text) = again else {
             Issue.record("expected failed, got \(again)")
             return
         }
+        #expect(text.contains("up to date"))
         #expect(server.changes == ["save:new:c2"])
-        #expect(model.reactionMessages.contains { $0.channelId == "c2" })
+        #expect(server.sets.count == 1)
+        // With the list read, the next publish is a normal move again.
+        #expect(await model.save(Self.moved, confirmedMove: true) == .saved)
+        #expect(server.changes == ["save:new:c2", "save:new:c2", "delete:1"])
+    }
+
+    @Test("a second tap while the feature is being read is ignored, so only one set is made")
+    func doubleTapWhileReadingFeatures() async {
+        // The server's info fails, so the feature is asked for again on every save.
+        let server = FakeRolesServer()
+        let model = await make(server)
+        server.delayInfo(0.2)
+        let draft = ReactionRoleMessage(
+            channelId: "c1", style: "reaction", pairs: [ReactionRolePair(emoji: "🎮", roleId: "r1")])
+        async let first = model.save(draft)
+        async let second = model.save(draft)
+        let outcomes = await [first, second]
+        #expect(outcomes.filter { $0 == .ignored }.count == 1)
+        #expect(outcomes.filter { $0 == .saved }.count == 1)
+        #expect(server.changes == ["save:new:c1"])
+        #expect(server.sets.count == 1)
+        #expect(!model.isSavingSet)
     }
 
     @Test("a timeout on the delete of the old set: gone means done, still there means both exist")

@@ -52,7 +52,7 @@ struct CommandActionEditorView: View {
     private var messageSections: some View {
         ForEach($action.messages) { $message in
             Section {
-                UTF16TextArea(
+                LimitedTextField(
                     title: "Write your message here… (leave blank for embed-only)", text: $message.content,
                     limit: model.contentLimit, lines: 2...8)
                 PlaceholderInsertRow(tokens: model.placeholders, text: $message.content, limit: model.contentLimit)

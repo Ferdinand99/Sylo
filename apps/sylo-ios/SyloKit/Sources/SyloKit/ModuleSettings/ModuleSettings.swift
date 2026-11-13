@@ -14,6 +14,14 @@ public protocol ModuleSettingsPage: Decodable, Sendable {
     var settings: Settings { get }
 }
 
+/// Settings that can be in a state the server would quietly change or drop on save (a question
+/// without a label, an entry the app cannot read). The form disables Save while there is a problem,
+/// and ``ModuleSettingsModel/save()`` refuses too, so no other path can send them.
+public protocol SaveValidated {
+    /// Why the settings cannot be saved yet; nil when they can.
+    var saveProblem: String? { get }
+}
+
 /// The answer to a save: the settings as the server stored them (normalised and clamped).
 public struct SavedModuleSettings<Settings: Decodable & Sendable>: Decodable, Sendable {
     public let settings: Settings
