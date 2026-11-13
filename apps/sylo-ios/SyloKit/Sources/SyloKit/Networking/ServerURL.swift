@@ -78,7 +78,12 @@ public struct ServerURL: Hashable, Sendable, CustomStringConvertible {
 
     /// The URL for an API path below this server, keeping any sub-path. `path` is percent-encoded
     /// already (use encoded path segments for ids); a leading slash is optional.
-    public func url(for path: String, query: [URLQueryItem] = []) -> URL {
+    ///
+    /// A `+` in a query value is sent as `%2B`: `URLComponents` leaves it as is, and the server reads a
+    /// literal `+` as a space. `percentEncodedQuery`, when given, is used as it is instead of `query`
+    /// (for a link the server wrote, whose spelling must not change); it must be valid
+    /// percent-encoded text, as the query of a `URL` is.
+    public func url(for path: String, query: [URLQueryItem] = [], percentEncodedQuery: String? = nil) -> URL {
         var relative = Substring(path)
         while relative.hasPrefix("/") { relative.removeFirst() }
         let safe = String(relative).addingPercentEncoding(withAllowedCharacters: Self.encodedPathAllowed)
@@ -88,7 +93,13 @@ public struct ServerURL: Hashable, Sendable, CustomStringConvertible {
         components.encodedHost = host
         components.port = port
         components.percentEncodedPath = self.path + "/" + safe
-        if !query.isEmpty { components.queryItems = query }
+        if let raw = percentEncodedQuery, !raw.isEmpty {
+            components.percentEncodedQuery = raw
+        } else if !query.isEmpty {
+            components.queryItems = query
+            components.percentEncodedQuery = components.percentEncodedQuery?
+                .replacingOccurrences(of: "+", with: "%2B")
+        }
         return components.url ?? baseURL
     }
 
