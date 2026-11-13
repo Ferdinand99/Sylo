@@ -1455,6 +1455,21 @@ export const MIGRATIONS = [
       );
     `);
   },
+
+  // Collectibles in the Economy shop (src/db/economyShop.js, which adds the same columns on Postgres with
+  // ADD COLUMN IF NOT EXISTS before the indexes): the picture and rarity of an item, whether a purchase is
+  // announced, and on an inventory row the copy of the picture and rarity kept when the item is deleted.
+  (database) => {
+    database.exec(`
+      ALTER TABLE economy_items ADD COLUMN image_id TEXT;
+      ALTER TABLE economy_items ADD COLUMN rarity TEXT;
+      ALTER TABLE economy_items ADD COLUMN announce INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE economy_inventory ADD COLUMN image_id TEXT;
+      ALTER TABLE economy_inventory ADD COLUMN rarity TEXT;
+      CREATE INDEX idx_economy_items_image ON economy_items (image_id) WHERE image_id IS NOT NULL;
+      CREATE INDEX idx_economy_inventory_image ON economy_inventory (image_id) WHERE image_id IS NOT NULL;
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

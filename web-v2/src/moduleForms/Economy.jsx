@@ -407,6 +407,36 @@ function Settings({ guildId, m, limits }) {
               on the Members tab.
             </p>
           </div>
+          <div className="v2-field">
+            <label htmlFor="collectibleChannelId">
+              Channel for collectible announcements <span className="v2-field-hint">— optional</span>
+            </label>
+            <select
+              id="collectibleChannelId"
+              value={form.collectibleChannelId}
+              onChange={(e) => set({ collectibleChannelId: e.target.value })}
+            >
+              <option value="">— none —</option>
+              {data.channels.map((c) => (
+                <option key={c.id} value={c.id}>
+                  #{c.name}
+                </option>
+              ))}
+            </select>
+            <p className="v2-field-hint">
+              A collectible with &quot;Announce purchases&quot; switched on is announced here when someone
+              buys it, with its picture. Only the buyer is mentioned. The picture shows when the DASHBOARD_URL
+              setting is a public address.
+            </p>
+          </div>
+          <Check
+            id="collectionPublic"
+            label="Members can show their collection"
+            field="collectionPublic"
+            hint={`On: ${cmd('/collection')} is public and a member can look at another member's collection. Off (the default): ${cmd('/collection')} shows only your own, and only you see it.`}
+            form={form}
+            set={set}
+          />
         </div>
 
         <div className="v2-group">

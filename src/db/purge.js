@@ -13,6 +13,7 @@ import { prepare } from './driver.js';
 import { clearCommandPrefixCache } from './guildSettings.js';
 import { eraseMember } from './economy.js';
 import { eraseInventory } from './economyShop.js';
+import { removeGuildImages } from '../lib/collectibleFiles.js';
 
 // This file owns no table of its own — every DELETE below targets a table
 // bootstrapped by its owning file. But `registerPostgresBootstrap()` only
@@ -147,6 +148,8 @@ export async function purgeGuild(guildId) {
   await eventParticipantStmt.run(guildId); // before `guild_events`, which the subquery reads
   await suggestionVoteStmt.run(guildId); // before `guild_suggestions`, which the subquery reads
   for (const stmt of simpleStmts) await stmt.run(guildId);
+  // The pictures of the server's collectibles are files, not rows: they go with the rest of its data.
+  await removeGuildImages(guildId);
   clearCommandPrefixCache(guildId);
 }
 

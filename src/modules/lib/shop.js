@@ -4,7 +4,8 @@
 // `after` hook (a generator, see db/driver.js transaction()):
 //
 //   purchase   debit the price (`purchase`), take one from the stock, check the member's limit,
-//              write the temp-role record for a temporary role, add the inventory row.
+//              write the temp-role record for a temporary role, add the inventory row. A custom item
+//              and a collectible are `active` at once: nothing on the platform has to happen first.
 //   endRow     refund (`refund`) or revoke (`revoke`): the row's status, the stock, the temp-role
 //              record, and the money back, in one transaction.
 //   grantItem  a free item (`grant`, amount 0): the inventory row and the temp-role record.
@@ -28,11 +29,16 @@
 // (`added_ms`): a refund or revoke takes off only that, so time staff gave by hand stays. When the
 // temp-role code drops a record (it ran out, was taken off) the rows become `expired`.
 //
+// A collectible is an item with a picture (and maybe a rarity) that gives no role: it is bought, owned, shown
+// (/collection) and refunded like any other, optionally announced in a channel when it is bought
+// (modules/lib/collectibles.js), and a collectible without a picture cannot be bought yet.
+//
 // Items are the staff's text; nothing a member types ever goes into an item, a ledger reason or a
 // fulfilment note.
 import { EmbedBuilder } from 'discord.js';
 import { abort, transact } from './economy.js';
-import { formatMoney } from './economyConfig.js';
+import { formatMoney, isRoleItemType } from './economyConfig.js';
+import { announcePurchase } from './collectibles.js';
 import {
   activateRow,
   deferPendingLease,
@@ -40,6 +46,7 @@ import {
   getItem,
   liveRoleRows,
   liveRowsForRole,
+  releaseImage,
   stalePending,
 } from '../../db/economyShop.js';
 import { isNotFound } from '../../platform/messageErrors.js';
@@ -117,7 +124,8 @@ const rolesOf = (member) => [...(member?.roles?.cache?.keys?.() ?? [])];
 
 /**
  * The reasons a member cannot buy an item right now, before any money is asked: gone, paused, sold out,
- * missing role, Sylo cannot hand out the role, or a permanent role the member already has.
+ * missing role, a collectible that has no picture yet, Sylo cannot hand out the role, or a permanent role
+ * the member already has.
  * @returns {{ reason: string, message?: string } | null}
  */
 export function buyProblem(guild, member, item) {
@@ -125,7 +133,8 @@ export function buyProblem(guild, member, item) {
   if (!item.enabled) return { reason: 'item_paused' };
   if (item.stock !== null && item.sold >= item.stock) return { reason: 'sold_out' };
   if (!requirementsMet(item, rolesOf(member))) return { reason: 'requirements', roles: item.requiredRoles };
-  if (item.type !== 'custom') {
+  if (item.type === 'collectible' && !item.imageId) return { reason: 'no_image' };
+  if (isRoleItemType(item.type)) {
     const role = guild.roles.cache.get(item.roleId) ?? null;
     const refusal = botRefusal(guild, role);
     if (refusal) return { reason: 'cannot_grant', message: refusal };
@@ -167,6 +176,8 @@ export function shopRefusalText(result, config) {
       return 'That item is no longer in the shop.';
     case 'item_paused':
       return 'That item is not for sale right now.';
+    case 'no_image':
+      return 'That item is not ready yet: staff have not added its picture.';
     case 'sold_out':
       return 'That item is sold out.';
     case 'item_changed':
@@ -218,7 +229,8 @@ export function shopRefusalText(result, config) {
  * exactly 5. Buying a temporary role again while it runs ADDS the new time to what is left.
  *
  * Then, for a role item, the role goes on in the platform; if that fails the purchase is refunded.
- * For a custom item, a notice goes to the shop channel when one is set.
+ * For a custom item, a notice goes to the shop channel when one is set. A collectible is the member's at
+ * once; when the item announces its purchases and a channel is set, the purchase is announced there.
  * `expectedPrice` and `expectedVersion` (the item's `updatedAt`) are what the member saw (the
  * confirmation, the web page). When the item costs something else now: `price_changed` with the
  * current price; when it was changed in any other way: `item_changed`. Nothing is charged either way.
@@ -335,7 +347,7 @@ export async function purchase({
           item.roleId,
           item.price,
           'purchase',
-          item.type === 'custom' ? 'active' : 'pending',
+          isRoleItemType(item.type) ? 'pending' : 'active',
           box.added,
           now + GRANT_LEASE_MS,
           now,
@@ -347,9 +359,10 @@ export async function purchase({
   if (!out.ok) return out;
 
   const account = out.accounts.get(userId);
-  if (item.type === 'custom') {
+  if (!isRoleItemType(item.type)) {
     const row = await getInventoryRow(guildId, box.rowId);
-    await notifyStaff({ guildId, config, item, member, row });
+    if (item.type === 'custom') await notifyStaff({ guildId, config, item, member, row });
+    else await announcePurchase({ guildId, config, item, userId });
     return { ok: true, row, item, account };
   }
   return trackGrant(box.rowId, async () => {
@@ -452,7 +465,7 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
   const userId = member.id;
   const item = await getItem(guildId, itemId);
   if (!item) return { ok: false, reason: 'item_gone' };
-  if (item.type !== 'custom') {
+  if (isRoleItemType(item.type)) {
     const role = guild.roles.cache.get(item.roleId) ?? null;
     const refusal = botRefusal(guild, role);
     if (refusal) return { ok: false, reason: 'cannot_grant', message: refusal };
@@ -518,7 +531,7 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
           item.roleId,
           0,
           'grant',
-          item.type === 'custom' ? 'active' : 'pending',
+          isRoleItemType(item.type) ? 'pending' : 'active',
           box.added,
           now + GRANT_LEASE_MS,
           now,
@@ -529,7 +542,7 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
   );
   if (!out.ok) return out;
   const account = out.accounts.get(userId);
-  if (item.type === 'custom') {
+  if (!isRoleItemType(item.type)) {
     return { ok: true, row: await getInventoryRow(guildId, box.rowId), item, account };
   }
   return trackGrant(box.rowId, async () => {
@@ -668,6 +681,10 @@ async function endRowNow({
   );
   if (!out.ok) return out;
 
+  // An owned collectible whose item was deleted carries a copy of its picture: when this was the last
+  // owner, the file goes.
+  if (row.imageId) await releaseImage(guildId, row.imageId);
+
   let warning;
   if (platform && box.dropRole) {
     const taken = await takeRoleOnPlatform(
@@ -728,7 +745,7 @@ export async function recoverPending(now = Date.now(), { config, limit = 50 } = 
           member = null;
         }
       }
-      if (member && row.itemType !== 'custom' && member.roles.cache.has(row.roleId)) {
+      if (member && isRoleItemType(row.itemType) && member.roles.cache.has(row.roleId)) {
         await activateRow(row.guildId, row.id, now);
       } else {
         await endRow({

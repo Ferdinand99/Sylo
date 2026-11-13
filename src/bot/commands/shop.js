@@ -15,6 +15,7 @@ import {
 import { config as appConfig } from '../../config.js';
 import { balanceOf, formatMoney } from '../../modules/economy.js';
 import { itemLabel, purchase, requirementsMet } from '../../modules/lib/shop.js';
+import { rarityLabel } from '../../modules/lib/collectibles.js';
 import { getItem, listItems } from '../../db/economyShop.js';
 import { economySettings } from '../../modules/economy.js';
 import { guildKey, guildSupports } from '../../platform/platformOf.js';
@@ -49,7 +50,9 @@ function lineOf(item, number, roleIds, config) {
       ? ` (role for ${Math.round(item.durationMs / 3_600_000)}h)`
       : item.type === 'role'
         ? ' (role)'
-        : '';
+        : item.type === 'collectible'
+          ? ` (collectible${rarityLabel(item.rarity) ? `, ${rarityLabel(item.rarity)}` : ''})`
+          : '';
   const text = item.description ? `\n${item.description}` : '';
   return `**${number}.** ${lock}${itemLabel(item)}${kind} — ${formatMoney(item.price, config)}${stockText(item)}${text}`;
 }

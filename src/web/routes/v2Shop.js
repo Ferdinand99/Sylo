@@ -1,6 +1,6 @@
-// JSON API for the shop part of the Economy page: the items (create, edit, pause, reorder, delete),
-// a member's inventory (give an item for free, revoke it, refund a purchase, mark a custom item
-// fulfilled) and the activity log of purchases. Every change goes through modules/lib/shop.js, which
+// JSON API for the shop part of the Economy page: the items (create, edit, pause, reorder, delete, and the
+// picture of a collectible), a member's inventory (give an item for free, revoke it, refund a purchase, mark
+// a custom item fulfilled) and the activity log of purchases. Every change goes through modules/lib/shop.js, which
 // uses the money API and writes the ledger, exactly like the commands and the web shop.
 //
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set, the caller
@@ -9,7 +9,7 @@
 import { Router } from 'express';
 import { actingUserId, currentUser } from '../middleware/auth.js';
 import { checkRoleGrants } from '../middleware/roleGrants.js';
-import { platformActionLimit } from '../middleware/rateLimit.js';
+import { clientKey, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { assignableRoles } from '../lib/guildContext.js';
 import { guildTextChannels } from '../lib/discord.js';
@@ -28,10 +28,15 @@ import {
   listItems,
   markFulfilled,
   markUnfulfilled,
+  releaseImage,
   reorderItems,
   setItemEnabled,
+  setItemImage,
   updateItem,
 } from '../../db/economyShop.js';
+import { deleteImage, saveImage } from '../../lib/collectibleFiles.js';
+import { ImageError, processImage, readUpload } from '../../lib/collectibleImage.js';
+import { RARITIES, isRoleItemType } from '../../modules/lib/economyConfig.js';
 import { LIMITS as CEILINGS, checkLimit } from '../../lib/limits.js';
 import { economySettings, itemProblem, normaliseItem, normaliseReason } from '../../modules/economy.js';
 import { endRow, grantItem, shopRefusalText } from '../../modules/lib/shop.js';
@@ -43,6 +48,9 @@ const actor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(re
 const fail = (res, message, status = 400) => res.status(status).json({ error: message });
 const isId = (v) => /^\d{17,20}$/.test(String(v ?? ''));
 const isItemId = (v) => /^\d{1,15}$/.test(String(v ?? ''));
+
+/** The path of a picture on this site (the dashboard shows it; a message uses the full address instead). */
+const imagePathOf = (imageId) => (imageId ? `/c/${imageId}.png` : null);
 
 /** The staff-facing form of an item: its fields, how much is left, and what it has sold. */
 const itemView = (item, stats) => ({
@@ -61,6 +69,9 @@ const itemView = (item, stats) => ({
   perMemberLimit: item.perMemberLimit,
   enabled: item.enabled,
   sortOrder: item.sortOrder,
+  rarity: item.rarity,
+  announce: item.announce,
+  imagePath: item.type === 'collectible' ? imagePathOf(item.imageId) : null,
   purchases: stats?.purchases ?? 0,
   revenue: stats?.revenue ?? 0,
 });
@@ -77,8 +88,13 @@ function personOf(guild, userId) {
   return { id: userId, name: member?.displayName ?? userId, inServer: Boolean(member) };
 }
 
-/** An inventory row for the page, with the end time of a temp role and whether its item still exists. */
-export async function rowView(guild, row, itemIds) {
+/**
+ * An inventory row for the page, with the end time of a temp role and whether its item still exists. `items`
+ * maps the ids of the server's items to the items: a collectible shows its item's picture and rarity, or the
+ * copy on the row once the item is gone.
+ */
+export async function rowView(guild, row, items) {
+  const item = items.get(row.itemId);
   let expiresAt = null;
   if (row.itemType === 'temp_role' && row.roleId && (row.status === 'active' || row.status === 'pending')) {
     expiresAt = (await getTempRole(guild.id, row.userId, row.roleId))?.expires_at ?? null;
@@ -90,8 +106,10 @@ export async function rowView(guild, row, itemIds) {
     itemId: row.itemId,
     itemName: row.itemName,
     itemType: row.itemType,
-    itemRemoved: !itemIds.has(row.itemId),
+    itemRemoved: !item,
     roleId: row.roleId,
+    imagePath: row.itemType === 'collectible' ? imagePathOf(item ? item.imageId : row.imageId) : null,
+    rarity: row.itemType === 'collectible' ? (item ? item.rarity : row.rarity) : null,
     pricePaid: row.pricePaid,
     source: row.source,
     status: row.status,
@@ -105,9 +123,9 @@ export async function rowView(guild, row, itemIds) {
 
 /** A member's inventory as the page shows it (also used by the member panel of routes/v2Economy.js). */
 export async function inventoryPayload(guild, userId) {
-  const itemIds = new Set((await listItems(guild.id)).map((i) => i.id));
+  const items = new Map((await listItems(guild.id)).map((i) => [i.id, i]));
   const rows = await listInventory(guild.id, userId, 100);
-  return Promise.all(rows.map((r) => rowView(guild, r, itemIds)));
+  return Promise.all(rows.map((r) => rowView(guild, r, items)));
 }
 
 /**
@@ -124,7 +142,7 @@ function withinPlatformLimit(req, res) {
 
 /** The role of an item must be one the caller may hand out, and one the server really has. */
 function roleProblem(req, res, guild, item) {
-  if (item.type === 'custom') return false;
+  if (!isRoleItemType(item.type)) return false;
   if (!assignableRoles(guild).some((r) => r.id === item.roleId)) {
     fail(res, 'Pick a role from the list.');
     return true;
@@ -143,6 +161,7 @@ router.get(
       roles: assignableRoles(req.guild),
       channels: guildTextChannels(req.guild),
       maxItems: CEILINGS.shopItems,
+      rarities: RARITIES.map(({ key, label }) => ({ key, label })),
     });
   })
 );
@@ -230,6 +249,101 @@ router.post(
       detail: `deleted item #${id} (${held} still held)`,
     });
     res.json({ items: await itemsPayload(req.guild), held });
+  })
+);
+
+// --- the picture of a collectible -------------------------------------------------------------------------------
+//
+// A multipart upload (the field `file`), at most 2 MB. The kind is decided by the magic bytes and the picture is
+// decoded and re-encoded as a PNG of at most 512x512 (lib/collectibleImage.js), so what is stored is never what
+// was sent. Only the staff of this server get here (the admin guard) and the CSRF check has passed. A new
+// picture replaces the old one and the old file is deleted (unless a member's copy still refers to it).
+// Changes to one item's picture take turns, so two uploads at once cannot leave a file nothing refers to.
+
+const imageUploadLimit = rateLimit({
+  windowMs: 60_000,
+  max: 40,
+  message: 'Too many uploads: wait a minute and try again.',
+  keyFn: (req) => `coll-image|${req.params?.guildId ?? ''}|${clientKey(req)}`,
+});
+
+const imageChains = new Map();
+/** Run `fn` after every earlier call with the same key has finished. */
+function inTurn(key, fn) {
+  const run = (imageChains.get(key) ?? Promise.resolve()).catch(() => {}).then(fn);
+  imageChains.set(key, run);
+  const clean = () => {
+    if (imageChains.get(key) === run) imageChains.delete(key);
+  };
+  run.then(clean, clean);
+  return run;
+}
+
+/** The collectible this request is about, or null after answering (a 404 or a 400). */
+async function collectibleOf(req, res) {
+  if (!isItemId(req.params.id)) return fail(res, 'Unknown item.', 404) && null;
+  const item = await getItem(req.guild.id, Number(req.params.id));
+  if (!item) return fail(res, 'Unknown item.', 404) && null;
+  if (item.type !== 'collectible') return fail(res, 'Only a collectible has a picture.') && null;
+  return item;
+}
+
+router.post(
+  '/modules/economy/shop/items/:id/image',
+  imageUploadLimit,
+  asyncHandler(async (req, res) => {
+    const guildId = req.guild.id;
+    if (!(await collectibleOf(req, res))) return undefined;
+    const id = Number(req.params.id);
+    let png;
+    try {
+      ({ png } = await processImage(await readUpload(req)));
+    } catch (err) {
+      if (err instanceof ImageError) return fail(res, err.message, err.status);
+      throw err;
+    }
+    const outcome = await inTurn(`${guildId}|${id}`, async () => {
+      const current = await getItem(guildId, id);
+      if (!current || current.type !== 'collectible') return 'gone';
+      const imageId = await saveImage(guildId, png);
+      let attached = false;
+      try {
+        attached = await setItemImage(guildId, id, imageId);
+      } finally {
+        // Not attached (the item went away, or the write failed): the new file must not stay behind.
+        if (!attached) await deleteImage(guildId, imageId);
+      }
+      if (!attached) return 'gone';
+      if (current.imageId) await releaseImage(guildId, current.imageId);
+      return 'ok';
+    });
+    if (outcome !== 'ok') return fail(res, 'Unknown item.', 404);
+    await recordAudit(guildId, {
+      actor: actor(req),
+      action: 'economy:shop',
+      detail: `changed the picture of item #${id}`,
+    });
+    return res.json({ items: await itemsPayload(req.guild) });
+  })
+);
+
+router.post(
+  '/modules/economy/shop/items/:id/image/delete',
+  asyncHandler(async (req, res) => {
+    const guildId = req.guild.id;
+    if (!(await collectibleOf(req, res))) return undefined;
+    const id = Number(req.params.id);
+    await inTurn(`${guildId}|${id}`, async () => {
+      const current = await getItem(guildId, id);
+      if (!current?.imageId) return;
+      if (await setItemImage(guildId, id, null)) await releaseImage(guildId, current.imageId);
+    });
+    await recordAudit(guildId, {
+      actor: actor(req),
+      action: 'economy:shop',
+      detail: `removed the picture of item #${id}`,
+    });
+    return res.json({ items: await itemsPayload(req.guild) });
   })
 );
 
@@ -361,12 +475,12 @@ router.get(
       limit: ACTIVITY_PAGE,
       offset: (page - 1) * ACTIVITY_PAGE,
     });
-    const itemIds = new Set((await listItems(guild.id)).map((i) => i.id));
+    const items = new Map((await listItems(guild.id)).map((i) => [i.id, i]));
     res.json({
       page,
       pages: Math.max(1, Math.ceil(total / ACTIVITY_PAGE)),
       total,
-      rows: await Promise.all(rows.map((r) => rowView(guild, r, itemIds))),
+      rows: await Promise.all(rows.map((r) => rowView(guild, r, items))),
     });
   })
 );

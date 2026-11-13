@@ -24,6 +24,7 @@ function kindText(item) {
     return `A role for ${item.durationHours} hour${item.durationHours === 1 ? '' : 's'}`;
   }
   if (item.type === 'role') return 'A role';
+  if (item.type === 'collectible') return 'A collectible';
   return 'Staff take care of it';
 }
 
@@ -51,6 +52,7 @@ export default function Shop() {
   if (!data) return <p className="v2-state">Loading…</p>;
 
   const { currency } = data;
+  const collection = data.collection ?? [];
 
   async function onBuy(item) {
     const ok = await confirmDialog({
@@ -92,6 +94,9 @@ export default function Shop() {
         <div className="v2-list">
           {data.items.map((item) => (
             <div className="v2-row" key={item.id}>
+              {item.imagePath ? (
+                <img className="v2-thumb" src={item.imagePath} alt="" width="64" height="64" />
+              ) : null}
               <div className="v2-row-main">
                 <h3>
                   {item.emoji ? `${item.emoji} ` : ''}
@@ -103,6 +108,7 @@ export default function Shop() {
                     items={[
                       money(item.price, currency),
                       kindText(item),
+                      item.rarityLabel,
                       item.left !== null && (item.left === 0 ? 'Sold out' : `${item.left} left`),
                       item.requiredRoles.length > 0 &&
                         `Needs one of: ${item.requiredRoles.map((r) => r.name).join(', ')}`,
@@ -125,6 +131,37 @@ export default function Shop() {
           ))}
         </div>
       </div>
+
+      {collection.length > 0 ? (
+        <div className="v2-group v2-section-gap">
+          <h2 className="v2-group-title">Collection</h2>
+          <div className="v2-list">
+            {collection.map((entry) => (
+              <div className="v2-row" key={entry.itemId}>
+                {entry.imagePath ? (
+                  <img className="v2-thumb" src={entry.imagePath} alt="" width="64" height="64" />
+                ) : null}
+                <div className="v2-row-main">
+                  <h3>
+                    {entry.emoji ? `${entry.emoji} ` : ''}
+                    {entry.name}
+                    {entry.count > 1 ? ` ×${entry.count}` : ''}
+                  </h3>
+                  <p className="v2-field-hint">
+                    <Meta
+                      items={[
+                        entry.rarityLabel,
+                        entry.removed && 'Item removed',
+                        <Time key="t" value={entry.since} />,
+                      ]}
+                    />
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">What you own</h2>

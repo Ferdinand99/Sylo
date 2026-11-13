@@ -44,6 +44,7 @@ export async function execute(interaction) {
       if (t) bits.push(`until <t:${Math.floor(t.expires_at / 1000)}:f>`);
     }
     if (r.itemType === 'custom') bits.push(r.fulfilledAt ? 'fulfilled' : 'waiting for staff');
+    if (r.itemType === 'collectible') bits.push('collectible');
     if (r.status === 'pending') bits.push('being set up');
     bits.push(`<t:${Math.floor(r.createdAt / 1000)}:d>`);
     lines.push(bits.join(' · '));

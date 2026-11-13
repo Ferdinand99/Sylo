@@ -384,6 +384,9 @@ export const config = Object.freeze({
 
   // Persistence
   databasePath: optional('DATABASE_PATH', './data/sylo.db'),
+  // The folder of DATABASE_PATH, with or without Postgres: it also holds the backups and the images of
+  // collectibles (src/lib/collectibleFiles.js).
+  dataDir: dirname(resolve(process.cwd(), optional('DATABASE_PATH', './data/sylo.db'))),
   databaseUrl,
   // Database backups. backupDir null => <db dir>/backups. intervalHours 0 =>
   // scheduled backup off. retention = how many snapshots to keep.

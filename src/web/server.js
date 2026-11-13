@@ -24,6 +24,7 @@ import leaderboardRouter, { vanityRouter } from './routes/leaderboard.js';
 import quotesRouter from './routes/quotes.js';
 import economyBoardRouter from './routes/economyBoard.js';
 import eventPageRouter from './routes/events.js';
+import collectibleImageRouter from './routes/collectibleImage.js';
 import verifyRouter from './routes/verify.js';
 import appealRouter from './routes/appeal.js';
 import githubWebhookRouter from './routes/githubWebhook.js';
@@ -234,6 +235,9 @@ export function createApp() {
   app.use('/quotes', rateLimit({ windowMs: 60_000, max: 40 }), quotesRouter);
   app.use('/economy', rateLimit({ windowMs: 60_000, max: 40 }), economyBoardRouter);
   app.use('/events', rateLimit({ windowMs: 60_000, max: 40 }), eventPageRouter);
+  // The pictures of collectibles: no login (Discord and Fluxer fetch them for embeds), an unguessable id.
+  // Higher than the pages above: one collection page shows up to ten pictures, fetched in a burst.
+  app.use('/c', rateLimit({ windowMs: 60_000, max: 240 }), collectibleImageRouter);
   app.use('/verify', rateLimit({ windowMs: 60_000, max: 20 }), verifyRouter);
   app.use('/appeal', rateLimit({ windowMs: 60_000, max: 15 }), appealRouter);
   app.use('/roadmap', rateLimit({ windowMs: 60_000, max: 60 }), roadmapRouter);

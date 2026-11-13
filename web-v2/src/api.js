@@ -177,6 +177,14 @@ export const updateShopItem = (guildId, id, body) => postJson(`${shopBase(guildI
 export const setShopItemEnabled = (guildId, id, enabled) =>
   postJson(`${shopBase(guildId)}/shop/items/${id}/enabled`, { enabled });
 export const reorderShopItems = (guildId, ids) => postJson(`${shopBase(guildId)}/shop/items/order`, { ids });
+// The picture of a collectible: a multipart upload (the field "file"; the browser sets the content type).
+export const uploadShopItemImage = (guildId, id, file) => {
+  const body = new FormData();
+  body.append('file', file);
+  return apiFetch(`${shopBase(guildId)}/shop/items/${id}/image`, { method: 'POST', body });
+};
+export const deleteShopItemImage = (guildId, id) =>
+  postJson(`${shopBase(guildId)}/shop/items/${id}/image/delete`, {});
 export const deleteShopItem = (guildId, id) => postJson(`${shopBase(guildId)}/shop/items/${id}/delete`, {});
 export const grantShopItem = (guildId, userId, body) =>
   postJson(`${shopBase(guildId)}/members/${encodeURIComponent(userId)}/inventory/grant`, body);
