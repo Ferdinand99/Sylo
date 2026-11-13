@@ -7,13 +7,14 @@
 //     verifiedRoleId: '',
 //     channelId: '',                    // where the verify message is posted
 //     messageId: '',                    // id of that message (bot-managed)
+//     messageChannelId: '',             // channel that message is in (bot-managed; empty = channelId)
 //     title: 'Verification',
 //     message: '...',
 //     successMessage: '...',
 //     logChannelId: '',
 //     kickAfterMinutes: 0,              // 0 = never kick unverified
 //   }
-import { allClientsReady, guildByKey, guildKey } from '../platform/platformOf.js';
+import { allClientsReady, guildByKey, guildKey, platformOfGuild } from '../platform/platformOf.js';
 import {
   clearVerificationKick,
   dueVerificationKicks,
@@ -29,6 +30,8 @@ import { isPlatformGuildId } from '../lib/platformId.js';
 import { sendToChannel } from './lib/send.js';
 import { log } from '../lib/log.js';
 import { every } from './schedule.js';
+import { isMessageGone, isPermissionDenied } from '../platform/messageErrors.js';
+import { deleteComponentActions } from '../db/componentReactions.js';
 
 export const VERIFY_MODES = ['button', 'captcha'];
 const TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -38,6 +41,7 @@ const DEFAULTS = {
   verifiedRoleId: '',
   channelId: '',
   messageId: '',
+  messageChannelId: '',
   title: 'Verification',
   message: 'Click the button below to verify and unlock the rest of the server.',
   successMessage: 'You are verified — welcome!',
@@ -65,6 +69,7 @@ export function normaliseVerificationConfig(raw = {}) {
     verifiedRoleId: id(raw.verifiedRoleId),
     channelId: id(raw.channelId),
     messageId: id(raw.messageId),
+    messageChannelId: id(raw.messageChannelId),
     title: String(raw.title ?? DEFAULTS.title).slice(0, LIMITS.title.maxLength) || DEFAULTS.title,
     message: String(raw.message ?? DEFAULTS.message).slice(0, LIMITS.message.maxLength) || DEFAULTS.message,
     successMessage:
@@ -109,28 +114,115 @@ function verifyButtonRow(label = 'Verify') {
   );
 }
 
-/** Make sure the guild's verify message exists; (re)post it and store the id. */
-export async function ensureVerifyMessage(guild, cfg) {
-  if (!cfg.channelId || !cfg.verifiedRoleId) return;
+// Fetching the message by id needs Read Message History on top of what posting needs. Without it
+// the fetch fails like a deleted message would, and every join used to post a new one.
+const VERIFY_PERMS = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'ReadMessageHistory'];
+
+// One check at a time per server: a burst of joins must not each see "no message" and post one.
+const ensureQueue = new Map();
+
+/**
+ * Make sure the guild's verify message exists. It is edited in place when it is in the channel,
+ * posted again only when the platform says it is gone, and, when the channel changed, posted in the
+ * new channel with the old one deleted after the new id is stored. A missing permission or a failed
+ * lookup is logged and stops: it never posts. The stored `messageChannelId` says where the message is.
+ */
+export function ensureVerifyMessage(guild, cfg) {
+  const key = guildKey(guild);
+  const run = (ensureQueue.get(key) ?? Promise.resolve()).then(() => ensureVerifyMessageOnce(guild, cfg));
+  ensureQueue.set(
+    key,
+    run.catch(() => {})
+  );
+  return run;
+}
+
+async function ensureVerifyMessageOnce(guild, given) {
+  if (!given.channelId || !given.verifiedRoleId) return;
+  const key = guildKey(guild);
+  // The message id and its channel as stored now, not as the caller saw them a moment ago.
+  const stored = normaliseVerificationConfig((await getGuildModule(key, 'verification')).config);
+  const cfg = { ...given, messageId: stored.messageId, messageChannelId: stored.messageChannelId };
+  const postedIn = cfg.messageId ? cfg.messageChannelId || cfg.channelId : '';
+  const moved = Boolean(cfg.messageId) && postedIn !== cfg.channelId;
+
   const channel =
     guild.channels.cache.get(cfg.channelId) ?? (await guild.channels.fetch(cfg.channelId).catch(() => null));
   if (!channel?.isTextBased()) return;
   const me = guild.members.me;
-  if (!channel.permissionsFor(me)?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) return;
+  if (!channel.permissionsFor(me)?.has(VERIFY_PERMS)) {
+    log.warn(
+      'verification',
+      `missing permissions (need ${VERIFY_PERMS.join(', ')}) for the verify message in ${key}, channel ${cfg.channelId}`
+    );
+    return;
+  }
 
-  if (cfg.messageId) {
-    const existing = await channel.messages.fetch(cfg.messageId).catch(() => null);
+  const store = async (messageId) => {
+    const fresh = (await getGuildModule(key, 'verification')).config;
+    await setGuildModule(key, 'verification', {
+      config: { ...fresh, messageId, messageChannelId: cfg.channelId },
+    });
+  };
+
+  if (cfg.messageId && !moved) {
+    let existing = null;
+    try {
+      existing = await channel.messages.fetch(cfg.messageId);
+    } catch (err) {
+      // Only "it is gone" means post again. A permission error, a timeout or a 5xx must not.
+      if (!isMessageGone(err)) {
+        log.warn(
+          'verification',
+          `could not look up the verify message in ${key}, not posting a new one:`,
+          err
+        );
+        return;
+      }
+    }
     if (existing) {
       await existing.edit({ embeds: [verifyEmbed(cfg)], components: [verifyButtonRow()] }).catch(() => {});
+      if (stored.messageChannelId !== cfg.channelId) await store(cfg.messageId); // an older config: keep the channel too
       return;
     }
   }
   const posted = await channel
     .send({ embeds: [verifyEmbed(cfg)], components: [verifyButtonRow()] })
-    .catch(() => null);
+    .catch((err) => {
+      log.warn('verification', `could not post the verify message in ${key}:`, err);
+      return null;
+    });
   if (!posted) return;
-  const fresh = (await getGuildModule(guildKey(guild), 'verification')).config;
-  await setGuildModule(guildKey(guild), 'verification', { config: { ...fresh, messageId: posted.id } });
+  // Store the new post first; the old one is deleted only after that. When the store fails the new
+  // post goes again, so the stored pair and the old message still belong together.
+  try {
+    await store(posted.id);
+  } catch (err) {
+    await deleteVerifyMessage(guild, cfg.channelId, posted.id);
+    throw err;
+  }
+  if (moved) await deleteVerifyMessage(guild, postedIn, cfg.messageId);
+}
+
+/** Delete a verify message. Never throws; every failure is logged (a gone message or no access is expected). */
+async function deleteVerifyMessage(guild, channelId, messageId) {
+  const dropActions = async () => {
+    // On Fluxer the button is a reaction with a stored action: forget it with the message.
+    if (platformOfGuild(guild) === 'fluxer') await deleteComponentActions(messageId).catch(() => {});
+  };
+  try {
+    const channel = guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId));
+    await channel.messages.delete(messageId);
+    await dropActions();
+  } catch (err) {
+    if (isMessageGone(err)) await dropActions();
+    const why = isMessageGone(err) ? 'it is gone' : isPermissionDenied(err) ? 'no access' : 'failed';
+    log.warn(
+      'verification',
+      `could not delete message ${messageId} in channel ${channelId} of ${guildKey(guild)} (${why}):`,
+      err
+    );
+  }
 }
 
 function verifyEmbed(cfg) {
