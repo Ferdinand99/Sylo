@@ -128,7 +128,7 @@ public final class AccountModel {
             return false
         }
         // Every app token of the account was revoked with the login: this device is signed out too.
-        session.notice = "(connection.label) was disconnected, which signs every device out. Sign in again to continue."
+        session.notice = "\(connection.label) was disconnected, which signs every device out. Sign in again to continue."
         await session.signOut()
         return true
     }
