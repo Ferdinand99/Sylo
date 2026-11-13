@@ -265,7 +265,7 @@ public final class BackupsModel {
     /// now. With either uptime missing, a failed poll before the answer counts instead. A server that was
     /// young when the restore began (under three minutes) cannot be told apart by uptime, so a failed poll
     /// counts there too.
-    static func hasRestarted(_ report: HealthReport, before: Int?, elapsed: Duration, sawDown: Bool) -> Bool {
+    nonisolated static func hasRestarted(_ report: HealthReport, before: Int?, elapsed: Duration, sawDown: Bool) -> Bool {
         guard let before, let now = report.uptimeSeconds else { return sawDown }
         let expectedIfUnchanged = before + Int(elapsed.components.seconds)
         // Uptimes over an hour have a one-minute granularity.
@@ -274,7 +274,7 @@ public final class BackupsModel {
     }
 
     /// Whether a failed poll is how a restarting server fails, and not the phone losing its connection.
-    static func looksLikeARestart(_ error: NetworkError) -> Bool {
+    nonisolated static func looksLikeARestart(_ error: NetworkError) -> Bool {
         switch error {
         case .unreachable, .timeout, .server: true
         default: false
