@@ -68,6 +68,11 @@ struct OverviewView: View {
                                 NavigationLink(value: ModuleRoute(moduleID: card.id)) {
                                     moduleRow(card)
                                 }
+                            } else if card.hasToggle, ServerPages.hasScreen(card.id) {
+                                // A module with a switch whose screen is a server page (Insights).
+                                NavigationLink(value: ServerPageRoute(cardID: card.id)) {
+                                    moduleRow(card)
+                                }
                             } else if card.hasToggle {
                                 moduleRow(card)
                             } else if ServerPages.hasScreen(card.id) {
