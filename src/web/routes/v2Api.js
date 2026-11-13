@@ -62,6 +62,7 @@ import { withRowIds } from '../lib/rowIds.js';
 import { shouldSaveBotMasters } from '../lib/botMasters.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
+import { buildAttention } from '../lib/overviewAttention.js';
 import {
   ROADMAP_STATUSES,
   listPublicPosts,
@@ -484,11 +485,12 @@ router.get(
     // baseContext for the guild/ticket/appeal summary; buildOverview (see
     // src/web/lib/overviewSummary.js) for the category-grouped module cards
     // — reused wholesale rather than re-deriving the same grouping here.
-    const [{ guild, openTickets, openAppeals }, { groups }] = await Promise.all([
+    const [{ guild, openTickets, openAppeals }, { groups }, attention] = await Promise.all([
       baseContext(req.guild, 'overview'),
       buildOverview(req.guild, { owner: isOwner(req) }),
+      buildAttention(req.guild, { owner: isOwner(req) }),
     ]);
-    res.json({ guild, openTickets, openAppeals, groups });
+    res.json({ guild, openTickets, openAppeals, groups, attention });
   })
 );
 

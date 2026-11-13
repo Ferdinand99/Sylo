@@ -1,0 +1,108 @@
+import './helpers/tmpDb.js';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { PermissionsBitField } from 'discord.js';
+import { setGuildModule } from '../src/db/modules.js';
+import { buildAttention, moduleProblems } from '../src/web/lib/overviewAttention.js';
+
+const G = '700000000000000777';
+const CH = '111111111111111111';
+const ROLE = '222222222222222222';
+
+function stubGuild(id = G, { perms = PermissionsBitField.All } = {}) {
+  return {
+    id,
+    members: { me: { permissions: new PermissionsBitField(perms) } },
+    channels: { cache: new Map([[CH, { id: CH, name: 'general' }]]) },
+    roles: { cache: new Map([[ROLE, { id: ROLE, name: 'Verified', managed: false }]]) },
+  };
+}
+
+test('moduleProblems: a channel that is not set, or was deleted, is a problem; a set one is not', () => {
+  const guild = stubGuild();
+  assert.deepEqual(moduleProblems('logging', {}, guild), ['The log channel is not set']);
+  assert.deepEqual(moduleProblems('logging', { channel: '999999999999999999' }, guild), [
+    'The log channel no longer exists',
+  ]);
+  assert.deepEqual(moduleProblems('logging', { channel: CH }, guild), []);
+});
+
+test('moduleProblems: roles, lists and modules with no requirements', () => {
+  const guild = stubGuild();
+  assert.deepEqual(moduleProblems('verification', { channelId: CH }, guild), [
+    'The verified role is not set',
+  ]);
+  assert.deepEqual(
+    moduleProblems('verification', { channelId: CH, verifiedRoleId: '333333333333333333' }, guild),
+    ['The verified role no longer exists']
+  );
+  assert.deepEqual(moduleProblems('verification', { channelId: CH, verifiedRoleId: ROLE }, guild), []);
+  assert.deepEqual(moduleProblems('twitch-alerts', { alerts: [] }, guild), ['Streamers: none added yet']);
+  assert.deepEqual(moduleProblems('twitch-alerts', { alerts: [{ login: 'a' }] }, guild), []);
+  assert.deepEqual(
+    moduleProblems('leveling', {}, guild),
+    [],
+    'a module with no required setting is never a problem'
+  );
+  assert.deepEqual(
+    moduleProblems('logging', null, guild),
+    ['The log channel is not set'],
+    'a missing config counts as empty'
+  );
+});
+
+test('moduleProblems: Welcome needs a role in role mode, and a channel for each message that is on', () => {
+  const guild = stubGuild();
+  assert.deepEqual(moduleProblems('welcome', {}, guild), []);
+  assert.deepEqual(moduleProblems('welcome', { trigger: 'role', triggerRoleIds: [] }, guild), [
+    'No role is picked to start the welcome',
+  ]);
+  assert.deepEqual(
+    moduleProblems(
+      'welcome',
+      { trigger: 'role', triggerRoleIds: [ROLE], joinEnabled: true, joinChannel: CH },
+      guild
+    ),
+    []
+  );
+  assert.deepEqual(moduleProblems('welcome', { joinEnabled: true, leaveEnabled: true }, guild), [
+    'The welcome message has no channel',
+    'The leave message has no channel',
+  ]);
+});
+
+test('buildAttention lists enabled modules with problems, missing permissions and the waiting work', async () => {
+  const guild = stubGuild(G, { perms: PermissionsBitField.Flags.KickMembers });
+  await setGuildModule(G, 'logging', { enabled: true, config: {} });
+  await setGuildModule(G, 'counting', { enabled: false, config: {} });
+  await setGuildModule(G, 'birthdays', { enabled: true, config: { channel: CH } });
+  const out = await buildAttention(guild);
+  const byId = Object.fromEntries(out.problems.map((p) => [p.id, p]));
+  assert.deepEqual(byId.logging.issues, ['The log channel is not set']);
+  assert.equal(byId.logging.href, `/v2/guilds/${G}/m/logging`);
+  assert.equal(byId.logging.name, 'Server logging');
+  assert.equal(byId.counting, undefined, 'a module that is switched off is not a problem');
+  assert.equal(byId.birthdays, undefined, 'a configured module is not a problem');
+  assert.ok(out.missingPermissions.includes('Ban Members'));
+  assert.ok(!out.missingPermissions.includes('Kick Members'));
+  assert.deepEqual(out.waiting, { tickets: 0, appeals: 0, applications: 0, suggestions: 0 });
+});
+
+test('buildAttention counts waiting tickets, applications and suggestions', async () => {
+  const guild = stubGuild('700000000000000778');
+  const { createTicket } = await import('../src/db/tickets.js');
+  await createTicket('700000000000000778', '800000000000000001');
+  const sg = await import('../src/db/suggestions.js');
+  await sg.createSuggestion({
+    guildId: '700000000000000778',
+    channelId: CH,
+    authorId: '800000000000000002',
+    title: 'Idea',
+    body: 'More fries',
+    createdAt: Date.now(),
+  });
+  const out = await buildAttention(guild);
+  assert.equal(out.waiting.tickets, 1);
+  assert.equal(out.waiting.suggestions, 1);
+  assert.equal(out.waiting.applications, 0);
+});

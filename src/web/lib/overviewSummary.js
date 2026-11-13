@@ -147,12 +147,17 @@ export function v2CardHref(id, guildId) {
   return `/v2/guilds/${guildId}/${V2_CARD_PAGES[id] ?? `m/${id}`}`;
 }
 
-async function buildHealth(guild, settings, state, owner = true) {
-  const visible = MODULES.filter((d) => owner || !d.ownerOnly);
-  const me = guild.members.me;
-  const missingPerms = me
+/** The key permissions Sylo does not have in this server, by name (all of them when it is not a member). */
+export function missingPermissions(guild) {
+  const me = guild.members?.me;
+  return me
     ? KEY_PERMS.filter(([bit]) => !me.permissions.has(PermissionFlagsBits[bit])).map(([, l]) => l)
     : KEY_PERMS.map(([, l]) => l);
+}
+
+async function buildHealth(guild, settings, state, owner = true) {
+  const visible = MODULES.filter((d) => owner || !d.ownerOnly);
+  const missingPerms = missingPermissions(guild);
 
   // Which privileged intents an *enabled* module actually needs right now.
   let needMembers = false;
