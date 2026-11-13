@@ -83,6 +83,9 @@ export default function EconomyInventory({ guildId, userId, inventory, onChange,
           const live = row.status === 'active' || row.status === 'pending';
           return (
             <div className="v2-row" key={row.id}>
+              {row.itemType === 'collectible' && row.imagePath ? (
+                <img className="v2-thumb" src={row.imagePath} alt="" width="48" height="48" />
+              ) : null}
               <div className="v2-row-main">
                 <h3 className="v2-break">
                   {row.itemName}
@@ -105,6 +108,7 @@ export default function EconomyInventory({ guildId, userId, inventory, onChange,
                         (row.fulfilledAt
                           ? `fulfilled${row.fulfilledBy ? ` by ${row.fulfilledBy.name}` : ''}`
                           : 'waiting for staff'),
+                      row.itemType === 'collectible' && 'collectible',
                       row.note,
                       <Time key="t" value={row.createdAt} />,
                     ]}

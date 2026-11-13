@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Shop from '../pages/Shop.jsx';
 import { renderAtGuild } from './routerHarness.jsx';
@@ -51,6 +51,74 @@ beforeEach(() => {
   vi.resetAllMocks();
   confirmDialog.mockResolvedValue(true);
   api.getWebShop.mockResolvedValue(view());
+});
+
+describe('the web shop page: collectibles', () => {
+  it('shows a collectible with its picture and rarity, and the member collection with copies and removed items', async () => {
+    api.getWebShop.mockResolvedValue(
+      view({
+        items: [
+          item({
+            id: 5,
+            name: 'Founder badge',
+            type: 'collectible',
+            emoji: '🎖️',
+            imagePath: '/c/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.webp',
+            rarityLabel: 'Epic',
+            left: 2,
+          }),
+        ],
+        collection: [
+          {
+            itemId: 5,
+            name: 'Founder badge',
+            emoji: '🎖️',
+            imagePath: '/c/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.webp',
+            rarity: 'epic',
+            rarityLabel: 'Epic',
+            count: 2,
+            removed: false,
+            since: 1700000000000,
+          },
+          {
+            itemId: 6,
+            name: 'Old stamp',
+            emoji: '',
+            imagePath: null,
+            rarity: null,
+            rarityLabel: null,
+            count: 1,
+            removed: true,
+            since: 1700000000000,
+          },
+        ],
+      })
+    );
+    renderAtGuild(<Shop />, GUILD);
+    const row = (await screen.findByRole('heading', { name: /^🎖️ Founder badge$/, level: 3 })).closest(
+      '.v2-row'
+    );
+    expect(row.querySelector('img').getAttribute('src')).toBe('/c/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.webp');
+    expect(row.textContent).toContain('A collectible');
+    expect(row.textContent).toContain('Epic');
+    expect(row.textContent).toContain('2 left');
+    const section = screen.getByRole('heading', { name: 'Collection' }).closest('.v2-group');
+    expect(within(section).getByRole('heading', { name: /Founder badge ×2/ })).toBeTruthy();
+    expect(section.querySelectorAll('img').length).toBe(1);
+    expect(section.textContent).toContain('Item removed');
+  });
+
+  it('has no Collection section for a member without collectibles, or from a server that sends none', async () => {
+    api.getWebShop.mockResolvedValue(view({ collection: [] }));
+    const { unmount } = renderAtGuild(<Shop />, GUILD);
+    await screen.findByRole('heading', { name: /Shout-out/, level: 3 });
+    expect(screen.queryByRole('heading', { name: 'Collection' })).toBeNull();
+    unmount();
+    api.getWebShop.mockResolvedValue(view());
+    renderAtGuild(<Shop />, GUILD);
+    await screen.findByRole('heading', { name: /Shout-out/, level: 3 });
+    expect(screen.queryByRole('heading', { name: 'Collection' })).toBeNull();
+  });
 });
 
 describe('the web shop page', () => {

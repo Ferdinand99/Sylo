@@ -14,6 +14,7 @@ export const PLACEHOLDER_SETS = {
     t('{server}', 'The server name'),
     t('{memberCount}', 'How many members the server has'),
     t('{intro}', 'Mentions the introductions channel (empty when Introductions is off)'),
+    t('{role}', 'The role that started the welcome (empty when members are welcomed on joining)'),
   ],
   welcomeChannel: [
     t('{server}', 'The server name'),

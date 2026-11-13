@@ -16,6 +16,44 @@ function stubGuild(id) {
   };
 }
 
+test('the Welcome card shows when members are welcomed', async () => {
+  const find = async (guild = stubGuild(G)) =>
+    (await buildOverview(guild)).groups.flatMap((g) => g.cards).find((c) => c.id === 'welcome');
+  const when = (card) => card.lines.find((l) => l.label === 'Welcome when');
+  assert.deepEqual(
+    { ...when(await find()) },
+    { label: 'Welcome when', value: 'a member joins', state: 'neutral' },
+    'an unset trigger is a welcome on join'
+  );
+
+  const ROLE_A = '800000000000000001';
+  const ROLE_B = '800000000000000002';
+  const guild = {
+    ...stubGuild(G),
+    roles: {
+      cache: new Map([
+        [ROLE_A, { id: ROLE_A, name: 'Verified', managed: false }],
+        [ROLE_B, { id: ROLE_B, name: 'Member', managed: false }],
+      ]),
+    },
+  };
+  await setGuildModule(G, 'welcome', {
+    enabled: true,
+    config: { trigger: 'role', triggerRoleIds: [ROLE_A, ROLE_B] },
+  });
+  assert.deepEqual(
+    { ...when(await find(guild)) },
+    { label: 'Welcome when', value: 'a member gets Verified or Member', state: 'on' }
+  );
+
+  await setGuildModule(G, 'welcome', { enabled: true, config: { trigger: 'role', triggerRoleIds: [] } });
+  assert.deepEqual(
+    { ...when(await find(guild)) },
+    { label: 'Welcome when', value: 'a role is not picked yet', state: 'off' }
+  );
+  await setGuildModule(G, 'welcome', { enabled: true, config: {} });
+});
+
 test('the Quote board card counts the saved quotes and shows the public page switch', async () => {
   const { insertQuote } = await import('../src/db/quotes.js');
   const find = async () =>

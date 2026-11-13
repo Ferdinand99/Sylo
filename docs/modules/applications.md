@@ -133,6 +133,9 @@ If a role change fails, **the decision still stands**, the post shows a warning,
 dashboard can **retry** the roles. Nothing is applied twice, and a change that failed earlier is replaced by
 the decision (a waiting role that could not be given is not given after the application was decided).
 
+To greet an applicant once they are accepted, set the [Welcome](welcome.md#welcome-on-a-role)
+module to welcome **when a member gets a role** and pick the role the form gives on accept.
+
 ## Messages to the applicant
 
 Four texts, sent by DM: when they **start** (before the first question), when they have **submitted**, when

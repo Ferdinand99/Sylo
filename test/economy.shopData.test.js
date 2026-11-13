@@ -61,6 +61,9 @@ test('the migration made both tables with the documented columns, and both are i
     'sort_order',
     'created_at',
     'updated_at',
+    'image_id',
+    'rarity',
+    'announce',
   ]);
   assert.deepEqual(cols('economy_inventory'), [
     'id',
@@ -80,6 +83,8 @@ test('the migration made both tables with the documented columns, and both are i
     'updated_at',
     'added_ms',
     'lease_until',
+    'image_id',
+    'rarity',
   ]);
   assert.ok(GUILD_TABLES.includes('economy_items') && GUILD_TABLES.includes('economy_inventory'));
   assert.deepEqual(cols('giveaways').slice(-6), [

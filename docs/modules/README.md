@@ -21,7 +21,7 @@ platform gaps (native AutoMod rules, threads, moving members between voice).
 | [Verification](verification.md) | Gate new members behind a button or captcha | off | Server Members |
 | [Ban appeals](appeals.md) | DM banned members an appeal form; staff decide from the dashboard | off | — |
 | [Tickets (modmail)](tickets.md) | Members DM the bot; staff reply from the dashboard | off | — |
-| [Welcome & leave](welcome.md) | Greet joiners (with an optional image) and announce leavers | off | Server Members |
+| [Welcome & leave](welcome.md) | Greet joiners, or members who get a role (with an optional image), and announce leavers | off | Server Members |
 | [Welcome channel](welcome-channel.md) | One rich pinned message for a read-only welcome channel | off | — |
 | [Birthdays](birthdays.md) | Members save a birthday; Sylo greets them and can grant a role | off | — |
 | [Reaction roles & autoroles](roles.md) | Self-assign roles from a message; roles automatically on join | off | Server Members |

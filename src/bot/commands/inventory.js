@@ -23,8 +23,11 @@ export async function execute(interaction) {
   if (user.bot) return reply(interaction, 'Bots do not have an account.');
   const own = user.id === interaction.user.id;
 
+  // Someone else's collectibles are their collection: not listed here while collections are private.
+  const showCollectibles = own || config.collectionPublic;
   const rows = (await listInventory(interaction.guildId, user.id, 200)).filter(
-    (r) => r.status === 'active' || r.status === 'pending'
+    (r) =>
+      (r.status === 'active' || r.status === 'pending') && (showCollectibles || r.itemType !== 'collectible')
   );
   if (!rows.length)
     return reply(
@@ -44,6 +47,7 @@ export async function execute(interaction) {
       if (t) bits.push(`until <t:${Math.floor(t.expires_at / 1000)}:f>`);
     }
     if (r.itemType === 'custom') bits.push(r.fulfilledAt ? 'fulfilled' : 'waiting for staff');
+    if (r.itemType === 'collectible') bits.push('collectible');
     if (r.status === 'pending') bits.push('being set up');
     bits.push(`<t:${Math.floor(r.createdAt / 1000)}:d>`);
     lines.push(bits.join(' · '));

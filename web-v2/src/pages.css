@@ -24,6 +24,16 @@
   gap: 8px;
   min-width: 0;
 }
+/* The picture of a collectible: the whole picture, never stretched or cropped, and it keeps its size. */
+.v2-thumb {
+  flex: none;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--border-subtle);
+}
+.v2-thumb + .v2-row-main {
+  flex: 1 1 auto;
+}
 @media (max-width: 600px) {
   .v2-row.v2-row-stack > .v2-row-main {
     flex-basis: 100%;

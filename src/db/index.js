@@ -1442,6 +1442,51 @@ export const MIGRATIONS = [
       CREATE INDEX idx_applications_cooldowns_until ON applications_cooldowns (until_at);
     `);
   },
+
+  // Welcome on role (src/db/welcomeSent.js, which bootstraps the same table on Postgres): who has been
+  // welcomed in "when a member gets a role" mode, so the welcome is sent once per member and server.
+  (database) => {
+    database.exec(`
+      CREATE TABLE welcome_sent (
+        guild_id TEXT NOT NULL,
+        user_id  TEXT NOT NULL,
+        sent_at  INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+    `);
+  },
+
+  // Collectibles in the Economy shop (src/db/economyShop.js, which adds the same columns on Postgres with
+  // ADD COLUMN IF NOT EXISTS before the indexes): the picture and rarity of an item, whether a purchase is
+  // announced, and on an inventory row the copy of the picture and rarity kept when the item is deleted.
+  (database) => {
+    database.exec(`
+      ALTER TABLE economy_items ADD COLUMN image_id TEXT;
+      ALTER TABLE economy_items ADD COLUMN rarity TEXT;
+      ALTER TABLE economy_items ADD COLUMN announce INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE economy_inventory ADD COLUMN image_id TEXT;
+      ALTER TABLE economy_inventory ADD COLUMN rarity TEXT;
+      CREATE INDEX idx_economy_items_image ON economy_items (image_id) WHERE image_id IS NOT NULL;
+      CREATE INDEX idx_economy_inventory_image ON economy_inventory (image_id) WHERE image_id IS NOT NULL;
+    `);
+  },
+
+  // The pictures of collectibles (src/db/collectibleImages.js, which bootstraps the same table on Postgres):
+  // the re-encoded WebP itself, so it is part of every backup. Referenced by economy_items.image_id and
+  // economy_inventory.image_id.
+  (database) => {
+    database.exec(`
+      CREATE TABLE collectible_images (
+        id         TEXT PRIMARY KEY,
+        guild_id   TEXT NOT NULL,
+        mime       TEXT NOT NULL,
+        bytes      INTEGER NOT NULL,
+        data       BLOB NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_collectible_images_guild ON collectible_images (guild_id);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */
