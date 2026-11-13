@@ -1,5 +1,31 @@
 import Foundation
 
+/// THE CONNECT WIRE NAMES, IN ONE PLACE. Server PR S2 (adding the other login) is still changing:
+/// every path, query name, body key and error word the app uses for it is here, so a change on the
+/// server is an edit to this enum and nothing else. Check them against `docs/mobile-app.md` on the
+/// server before releasing.
+enum ConnectWire {
+    /// `POST` with the bearer token; answers `{ code }`.
+    static func startPath(_ platform: String) -> String { "/api/mobile/connect/\(platform)" }
+    /// `POST` with the bearer token and `{ result }`: the step that really links the platform.
+    static let completePath = "/api/mobile/connect/complete"
+    /// The page the browser sheet opens, with `?code=`.
+    static let browserPath = "auth/mobile/connect"
+    static let codeQuery = "code"
+    /// The answer of the start call.
+    static let codeKey = "code"
+    /// The callback `sylo://connected?result=…&platform=…` (or `error=…`).
+    static let callbackHost = "connected"
+    static let resultQuery = "result"
+    static let platformQuery = "platform"
+    static let errorQuery = "error"
+    static let cancelledError = "access_denied"
+    /// The body key of the complete call.
+    static let resultKey = "result"
+    /// What the complete call says when the login already belongs to the account.
+    static let alreadyLinkedWords: Set<String> = ["already-linked", "already_linked", "already_connected"]
+}
+
 extension ServerFeature {
     /// The server can add a platform to the account through the app (`POST /api/mobile/connect/:platform`
     /// and the one-time code it returns). Older servers only connect from their web page, so the app
@@ -15,11 +41,19 @@ public struct ConnectGrant: Decodable, Sendable, Equatable {
 
     public init(code: String) { self.code = code }
 
-    private enum CodingKeys: String, CodingKey { case code }
+    private struct Key: CodingKey {
+        let stringValue: String
+        let intValue: Int? = nil
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { return nil }
+    }
 
     public init(from decoder: any Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        code = try c.decode(String.self, forKey: .code)
+        let c = try decoder.container(keyedBy: Key.self)
+        guard let key = Key(stringValue: ConnectWire.codeKey) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "No code key"))
+        }
+        code = try c.decode(String.self, forKey: key)
     }
 }
 
@@ -29,21 +63,36 @@ public enum ConnectError: Error, Equatable, Sendable {
     case cancelled
     /// The sheet returned a URL that is not `sylo://connected`, or one for another platform.
     case wrongCallback
+    /// The callback has no result to finish the link with.
+    case missingResult
     /// The server redirected back with an error (its `error` value).
     case serverError(String)
     /// The address this server would open is not usable.
     case invalidServerURL
 }
 
-/// The callback of a connect: `sylo://connected?platform=discord`, or `sylo://connected?error=…`.
+/// What a finished connect sheet hands back: the platform and the result code that
+/// `POST /api/mobile/connect/complete` turns into the link. Nothing is linked before that call.
+public struct ConnectResult: Sendable, Equatable {
+    public let platform: Platform
+    public let result: String
+
+    public init(platform: Platform, result: String) {
+        self.platform = platform
+        self.result = result
+    }
+}
+
+/// The callback of a connect: `sylo://connected?result=…&platform=discord`, or
+/// `sylo://connected?error=…&platform=discord`.
 public enum ConnectCallback {
     public static let callbackScheme = "sylo"
-    static let callbackHost = "connected"
+    static let callbackHost = ConnectWire.callbackHost
 
-    /// Checks the URL the sign-in sheet returned and returns the platform that was connected.
+    /// Checks the URL the sign-in sheet returned and returns its result code.
     /// - Parameter expected: The platform the person asked to connect; a callback naming another one
     ///   is refused. A callback that names none is accepted as this one.
-    public static func platform(from url: URL, expected: Platform) throws(ConnectError) -> Platform {
+    public static func result(from url: URL, expected: Platform) throws(ConnectError) -> ConnectResult {
         guard
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
             components.scheme?.lowercased() == callbackScheme,
@@ -53,15 +102,18 @@ public enum ConnectCallback {
         else { throw .wrongCallback }
 
         let items = components.queryItems ?? []
-        if let error = items.first(where: { $0.name == "error" })?.value, !error.isEmpty {
-            throw error == "access_denied" ? .cancelled : .serverError(error)
+        if let error = items.first(where: { $0.name == ConnectWire.errorQuery })?.value, !error.isEmpty {
+            throw error == ConnectWire.cancelledError ? .cancelled : .serverError(error)
         }
-        guard let named = items.first(where: { $0.name == "platform" })?.value, !named.isEmpty else {
-            return expected
+        var platform = expected
+        if let named = items.first(where: { $0.name == ConnectWire.platformQuery })?.value, !named.isEmpty {
+            platform = Platform(rawValue: named)
+            guard platform == expected else { throw .wrongCallback }
         }
-        let platform = Platform(rawValue: named)
-        guard platform == expected else { throw .wrongCallback }
-        return platform
+        guard let result = items.first(where: { $0.name == ConnectWire.resultQuery })?.value, !result.isEmpty else {
+            throw .missingResult
+        }
+        return ConnectResult(platform: platform, result: result)
     }
 }
 
@@ -82,15 +134,45 @@ extension Endpoints {
         public typealias Response = ConnectGrant
         public let platform: Platform
         public init(platform: Platform) { self.platform = platform }
-        public var path: String { "/api/mobile/connect/\(platform.rawValue.encodedPathSegment)" }
+        public var path: String { ConnectWire.startPath(platform.rawValue.encodedPathSegment) }
         public var method: HTTPMethod { .post }
+    }
+
+    /// `POST /api/mobile/connect/complete` with `{result}`: links the platform the sheet just
+    /// logged in to. Only after this succeeds is the platform on the account. It can answer 409
+    /// (or a 400 with `already-linked`) when the login is already linked.
+    public struct CompleteConnect: APIEndpoint {
+        public typealias Response = EmptyResponse
+        public let result: String
+        public init(result: String) { self.result = result }
+        public var path: String { ConnectWire.completePath }
+        public var method: HTTPMethod { .post }
+        public var body: (any Encodable & Sendable)? { Body(result: result) }
+
+        private struct Body: Encodable, Sendable {
+            let result: String
+
+            private struct Key: CodingKey {
+                let stringValue: String
+                let intValue: Int? = nil
+                init?(stringValue: String) { self.stringValue = stringValue }
+                init?(intValue: Int) { return nil }
+            }
+
+            func encode(to encoder: any Encoder) throws {
+                var container = encoder.container(keyedBy: Key.self)
+                if let key = Key(stringValue: ConnectWire.resultKey) {
+                    try container.encode(result, forKey: key)
+                }
+            }
+        }
     }
 }
 
 extension ServerURL {
     /// The page the sign-in sheet opens to start a connect: `/auth/mobile/connect?code=…`.
     public func connectURL(code: String) -> URL {
-        url(for: "auth/mobile/connect", query: [URLQueryItem(name: "code", value: code)])
+        url(for: ConnectWire.browserPath, query: [URLQueryItem(name: ConnectWire.codeQuery, value: code)])
     }
 }
 

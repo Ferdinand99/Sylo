@@ -187,4 +187,18 @@ extension APIClientTests {
         #expect(request.method == "POST")
         #expect(request.header("Authorization") == "Bearer sylo_secret")
     }
+
+    @Test("Finishing a connect posts the result the sheet returned, with the token")
+    func completeConnectOnTheWire() async throws {
+        let mock = MockURLProtocol.state
+        mock.reset([.response(status: 204)])
+        _ = try await pagesClient().send(Endpoints.CompleteConnect(result: "r-1"))
+        let request = try #require(mock.requests.first)
+        #expect(request.url.absoluteString == "https://example.com/sylo/api/mobile/connect/complete")
+        #expect(request.method == "POST")
+        #expect(request.header("Authorization") == "Bearer sylo_secret")
+        let json = try pagesBody(request)
+        #expect(Set(json.keys) == ["result"])
+        #expect(json["result"] as? String == "r-1")
+    }
 }

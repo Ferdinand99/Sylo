@@ -150,7 +150,9 @@ public final class AccountModel {
         do {
             let grant = try await session.send(Endpoints.StartConnect(platform: connection.platform))
             let callback = try await authenticate(server.connectURL(code: grant.code))
-            _ = try ConnectCallback.platform(from: callback, expected: connection.platform)
+            let finished = try ConnectCallback.result(from: callback, expected: connection.platform)
+            // The sheet only logged in; this call links the platform to the account.
+            _ = try await session.send(Endpoints.CompleteConnect(result: finished.result))
         } catch ConnectError.cancelled {
             return false
         } catch NetworkError.cancelled {
@@ -170,7 +172,7 @@ public final class AccountModel {
     private static func message(for error: ConnectError) -> String {
         switch error {
         case .cancelled: "Cancelled."
-        case .wrongCallback, .invalidServerURL: "Connecting didn't finish. Try again."
+        case .wrongCallback, .missingResult, .invalidServerURL: "Connecting didn't finish. Try again."
         case .serverError(let code): Self.connectFailure(code)
         }
     }
@@ -190,6 +192,8 @@ public final class AccountModel {
         switch error {
         case .notFound: "This Sylo server can't connect a platform from the app. Use its web dashboard."
         case .http(status: 409): "That platform is already connected."
+        case .badRequest(let message?) where ConnectWire.alreadyLinkedWords.contains(message):
+            "That login is already linked."
         case .badRequest: "This Sylo server can't connect that platform."
         default: error.userMessage
         }

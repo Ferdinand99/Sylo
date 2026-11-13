@@ -17,36 +17,44 @@ struct AccountConnectTests {
         #expect(!older.supports(.appConnect))
     }
 
-    @Test("A connect callback names the platform that was connected")
+    @Test("A connect callback carries the platform and the result that finishes the link")
     func callback() throws {
-        #expect(try ConnectCallback.platform(from: URL(string: "sylo://connected?platform=discord")!, expected: .discord) == .discord)
+        let discord = try ConnectCallback.result(
+            from: URL(string: "sylo://connected?result=r-1&platform=discord")!, expected: .discord)
+        #expect(discord == ConnectResult(platform: .discord, result: "r-1"))
         // A server that names no platform means the one that was asked for.
-        #expect(try ConnectCallback.platform(from: URL(string: "sylo://connected")!, expected: .fluxer) == .fluxer)
-        #expect(try ConnectCallback.platform(from: URL(string: "SYLO://Connected/?platform=fluxer")!, expected: .fluxer) == .fluxer)
+        let bare = try ConnectCallback.result(from: URL(string: "sylo://connected?result=r-2")!, expected: .fluxer)
+        #expect(bare == ConnectResult(platform: .fluxer, result: "r-2"))
+        let shouting = try ConnectCallback.result(
+            from: URL(string: "SYLO://Connected/?platform=fluxer&result=r-3")!, expected: .fluxer)
+        #expect(shouting.result == "r-3")
     }
 
     @Test("A callback for another platform, another page or another scheme is refused")
     func wrongCallbacks() {
         func outcome(_ text: String, expected: Platform = .discord) -> ConnectError? {
             do {
-                _ = try ConnectCallback.platform(from: URL(string: text)!, expected: expected)
+                _ = try ConnectCallback.result(from: URL(string: text)!, expected: expected)
                 return nil
             } catch {
                 return error as? ConnectError
             }
         }
-        #expect(outcome("sylo://connected?platform=fluxer") == .wrongCallback)
+        #expect(outcome("sylo://connected?result=r&platform=fluxer") == .wrongCallback)
         #expect(outcome("sylo://auth?code=abc&state=xyz") == .wrongCallback)
-        #expect(outcome("https://evil.example/connected?platform=discord") == .wrongCallback)
-        #expect(outcome("sylo://connected/extra?platform=discord") == .wrongCallback)
-        #expect(outcome("sylo://user@connected?platform=discord") == .wrongCallback)
+        #expect(outcome("https://evil.example/connected?result=r&platform=discord") == .wrongCallback)
+        #expect(outcome("sylo://connected/extra?result=r&platform=discord") == .wrongCallback)
+        #expect(outcome("sylo://user@connected?result=r&platform=discord") == .wrongCallback)
+        // Nothing to finish the link with.
+        #expect(outcome("sylo://connected?platform=discord") == .missingResult)
+        #expect(outcome("sylo://connected?result=&platform=discord") == .missingResult)
     }
 
     @Test("A callback with an error is a refusal; declining on the platform is a cancel")
     func errors() {
         func outcome(_ text: String) -> ConnectError? {
             do {
-                _ = try ConnectCallback.platform(from: URL(string: text)!, expected: .discord)
+                _ = try ConnectCallback.result(from: URL(string: text)!, expected: .discord)
                 return nil
             } catch {
                 return error as? ConnectError
@@ -54,6 +62,8 @@ struct AccountConnectTests {
         }
         #expect(outcome("sylo://connected?error=access_denied") == .cancelled)
         #expect(outcome("sylo://connected?error=already_linked&platform=discord") == .serverError("already_linked"))
+        // An error wins over a result that came with it.
+        #expect(outcome("sylo://connected?result=r&error=expired&platform=discord") == .serverError("expired"))
     }
 
     @Test("The page that starts a connect carries the one-time code")
@@ -73,6 +83,9 @@ struct AccountConnectTests {
         let start = Endpoints.StartConnect(platform: .fluxer)
         #expect(start.path == "/api/mobile/connect/fluxer")
         #expect(start.method == .post)
+        let complete = Endpoints.CompleteConnect(result: "r-1")
+        #expect(complete.path == "/api/mobile/connect/complete")
+        #expect(complete.method == .post)
         #expect(Endpoints.Invites().path == "/api/v2/invites")
     }
 
@@ -101,11 +114,13 @@ struct AccountConnectModelTests {
     /// Answers the account, and starts connects with `start`; disconnects with `disconnect`.
     static func clients(
         start: @escaping @Sendable (Endpoints.StartConnect) throws -> ConnectGrant = { _ in ConnectGrant(code: "c1") },
-        disconnect: @escaping @Sendable (Endpoints.DisconnectPlatform) throws -> OKResponse = { _ in OKResponse() }
+        disconnect: @escaping @Sendable (Endpoints.DisconnectPlatform) throws -> OKResponse = { _ in OKResponse() },
+        complete: @escaping @Sendable (Endpoints.CompleteConnect) throws -> EmptyResponse = { _ in EmptyResponse() }
     ) -> StubClients {
         StubClients { endpoint in
             switch endpoint {
             case let call as Endpoints.StartConnect: return try start(call)
+            case let call as Endpoints.CompleteConnect: return try complete(call)
             case let call as Endpoints.DisconnectPlatform: return try disconnect(call)
             default: return AccountModelTests.account
             }
@@ -136,19 +151,31 @@ struct AccountConnectModelTests {
         #expect(other.connectablePlatforms(serverInfo: Self.connectInfo).isEmpty)
     }
 
-    @Test("Connecting asks for a code, opens the connect page with it, and reads the account again")
+    @Test("Connecting asks for a code, opens the connect page with it, completes with the result, and reads the account again")
     func connects() async throws {
         let clients = Self.clients()
         let model = await loadedModel(clients)
         var opened: [URL] = []
         let connected = await model.connect(AccountModelTests.fluxer) { url in
             opened.append(url)
-            return URL(string: "sylo://connected?platform=fluxer")!
+            return URL(string: "sylo://connected?result=r-1&platform=fluxer")!
         }
         #expect(connected)
         #expect(opened.map(\.absoluteString) == ["https://sylo.example.com/auth/mobile/connect?code=c1"])
         let start = try #require(clients.calls.compactMap { $0.endpoint as? Endpoints.StartConnect }.first)
         #expect(start.platform == .fluxer)
+        let complete = try #require(clients.calls.compactMap { $0.endpoint as? Endpoints.CompleteConnect }.first)
+        #expect(complete.result == "r-1")
+        // The account is only read again after the link is made.
+        let order = clients.calls.map { call -> String in
+            switch call.endpoint {
+            case is Endpoints.StartConnect: "start"
+            case is Endpoints.CompleteConnect: "complete"
+            case is Endpoints.Account: "account"
+            default: "other"
+            }
+        }
+        #expect(order == ["account", "start", "complete", "account"])
         #expect(accountLoads(clients) == 2)
         #expect(model.platformError == nil)
         #expect(model.changingPlatform == nil)
@@ -172,6 +199,40 @@ struct AccountConnectModelTests {
         #expect(!connected)
         #expect(model.platformError == "Connecting didn't finish. Try again.")
         #expect(accountLoads(clients) == 1)
+        #expect(!clients.calls.contains { $0.endpoint is Endpoints.CompleteConnect })
+    }
+
+    @Test("A callback without a result, or with an error, completes nothing")
+    func nothingToComplete() async {
+        let clients = Self.clients()
+        let model = await loadedModel(clients)
+        let noResult = await model.connect(AccountModelTests.fluxer) { _ in URL(string: "sylo://connected?platform=fluxer")! }
+        #expect(!noResult)
+        #expect(model.platformError == "Connecting didn't finish. Try again.")
+        let failed = await model.connect(AccountModelTests.fluxer) { _ in
+            URL(string: "sylo://connected?error=expired&platform=fluxer")!
+        }
+        #expect(!failed)
+        #expect(model.platformError == "That took too long. Try again.")
+        #expect(!clients.calls.contains { $0.endpoint is Endpoints.CompleteConnect })
+        #expect(accountLoads(clients) == 1)
+    }
+
+    @Test("A login that is already linked is said so, and the account is not read again")
+    func alreadyLinked() async {
+        for failure in [NetworkError.http(status: 409), NetworkError.badRequest(message: "already-linked")] {
+            let clients = Self.clients(complete: { _ in throw failure })
+            let model = await loadedModel(clients)
+            let connected = await model.connect(AccountModelTests.fluxer) { _ in
+                URL(string: "sylo://connected?result=r&platform=fluxer")!
+            }
+            #expect(!connected)
+            #expect(model.platformError != nil)
+            #expect(accountLoads(clients) == 1)
+        }
+        let model = await loadedModel(Self.clients(complete: { _ in throw NetworkError.badRequest(message: "already-linked") }))
+        await model.connect(AccountModelTests.fluxer) { _ in URL(string: "sylo://connected?result=r")! }
+        #expect(model.platformError == "That login is already linked.")
     }
 
     @Test("A server that cannot start a connect says to use the dashboard")
@@ -230,7 +291,9 @@ struct AccountConnectModelTests {
         }
         #expect(!first)
         #expect(model.platformError == "That login already belongs to another Sylo account.")
-        let second = await model.connect(AccountModelTests.fluxer) { _ in URL(string: "sylo://connected?platform=fluxer")! }
+        let second = await model.connect(AccountModelTests.fluxer) { _ in
+            URL(string: "sylo://connected?result=r-2&platform=fluxer")!
+        }
         #expect(second)
         #expect(model.platformError == nil)
         #expect(clients.calls.filter { $0.endpoint is Endpoints.StartConnect }.count == 2)
