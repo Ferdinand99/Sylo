@@ -85,6 +85,10 @@ public struct IntroductionsSettings: Codable, Sendable, Equatable {
     public let promptChannelId: String
     /// The prompt message's id (bot-managed, read only, not sent); "" = not published.
     public let promptMessageId: String
+    /// How many questions and role groups the server sent that this version of the app cannot read (read
+    /// only, never sent). A save replaces both lists, so with any of these the settings are not saved
+    /// from the app (see ``problem``): it would delete them.
+    public let unreadableEntries: Int
 
     /// Two settings are the same when what a save would send is the same. That leaves out only where
     /// the prompt is published, which is the server's to track, so publishing it is not an unsaved
@@ -104,7 +108,7 @@ public struct IntroductionsSettings: Codable, Sendable, Equatable {
                 roleGroups: [IntroductionsRoleGroup] = [], showRoles: Bool = false,
                 colorMode: IntroductionsColorMode = .fixed, color: String = "", description: String = "",
                 footer: String = "", deleteOnLeave: Bool = true, promptText: String = "",
-                promptChannelId: String = "", promptMessageId: String = "") {
+                promptChannelId: String = "", promptMessageId: String = "", unreadableEntries: Int = 0) {
         self.channelId = channelId
         self.questions = questions
         self.roleGroups = roleGroups
@@ -117,6 +121,7 @@ public struct IntroductionsSettings: Codable, Sendable, Equatable {
         self.promptText = promptText
         self.promptChannelId = promptChannelId
         self.promptMessageId = promptMessageId
+        self.unreadableEntries = unreadableEntries
     }
 
     /// The limits the server enforces (src/modules/introductions.js, LIMITS).
@@ -166,6 +171,11 @@ public struct IntroductionsSettings: Codable, Sendable, Equatable {
     /// label, a role group without a name and a second group with the same name without a word, so the
     /// app refuses to save them instead of losing what was typed.
     public var problem: String? {
+        if unreadableEntries > 0 {
+            return unreadableEntries == 1
+                ? "The server sent a question or role group this version of the app cannot read, so saving here would delete it. Update the app to edit these settings."
+                : "The server sent (unreadableEntries) questions or role groups this version of the app cannot read, so saving here would delete them. Update the app to edit these settings."
+        }
         if (questions ?? []).contains(where: { $0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
             return "Give every question a label."
         }
@@ -229,11 +239,20 @@ public struct IntroductionsSettings: Codable, Sendable, Equatable {
         case promptText, promptChannelId, promptMessageId
     }
 
+    /// One entry of a list, read on its own so one that fails is counted instead of silently dropped.
+    private struct EntrySlot<Entry: Decodable>: Decodable {
+        let value: Entry?
+        init(from decoder: any Decoder) throws { value = try? Entry(from: decoder) }
+    }
+
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         channelId = try c.decode(forKey: .channelId, or: "")
-        questions = try c.decodeLossyArrayIfPresent(of: IntroductionsQuestion.self, forKey: .questions)
-        roleGroups = try c.decodeLossyArray(of: IntroductionsRoleGroup.self, forKey: .roleGroups)
+        let questionSlots = try c.decodeIfPresent([EntrySlot<IntroductionsQuestion>].self, forKey: .questions)
+        let groupSlots = try c.decodeIfPresent([EntrySlot<IntroductionsRoleGroup>].self, forKey: .roleGroups) ?? []
+        questions = questionSlots?.compactMap(.value)
+        roleGroups = groupSlots.compactMap(.value)
+        unreadableEntries = (questionSlots ?? []).filter { $0.value == nil }.count + groupSlots.filter { $0.value == nil }.count
         showRoles = try c.decode(forKey: .showRoles, or: false)
         colorMode = (try? c.decodeIfPresent(IntroductionsColorMode.self, forKey: .colorMode)) ?? .fixed
         color = try c.decode(forKey: .color, or: "")
@@ -273,7 +292,7 @@ public struct IntroductionsQuestion: Codable, Sendable, Equatable, Identifiable 
     /// Shown side by side with the next one on the card.
     public var inline: Bool
     /// Fields of the question this version of the app does not model, sent back as they came.
-    public var extras: [String: PassthroughJSON]
+    public var extras: [String: JSONValue]
 
     /// The limits the server enforces.
     public static let maxLabelLength = 45
@@ -286,7 +305,7 @@ public struct IntroductionsQuestion: Codable, Sendable, Equatable, Identifiable 
     }
 
     public init(id: String, label: String, prompt: String = "", required: Bool = false, maxLength: Int = 500,
-                inline: Bool = false, extras: [String: PassthroughJSON] = [:]) {
+                inline: Bool = false, extras: [String: JSONValue] = [:]) {
         self.id = id
         self.label = label
         self.prompt = prompt
@@ -334,12 +353,12 @@ public struct IntroductionsRoleGroup: Codable, Sendable, Equatable, Identifiable
     /// server, but changes with every key). Never sent, never part of what makes two groups equal.
     public let key: String
     /// Fields of the group this version of the app does not model, sent back as they came.
-    public var extras: [String: PassthroughJSON]
+    public var extras: [String: JSONValue]
 
     public var id: String { key }
 
     public init(name: String = "", roleIds: [String] = [], hideWhenEmpty: Bool = false,
-                key: String = UUID().uuidString, extras: [String: PassthroughJSON] = [:]) {
+                key: String = UUID().uuidString, extras: [String: JSONValue] = [:]) {
         self.name = name
         self.roleIds = roleIds
         self.hideWhenEmpty = hideWhenEmpty

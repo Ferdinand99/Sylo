@@ -186,14 +186,14 @@ public enum ApplicationOnLeave: Hashable, Sendable, RawRepresentable, Codable {
 
 /// One option of a choice question (its own id and label), or of a role question (the role's id, and
 /// the role's name as the label).
-public struct ApplicationQuestionOption: Codable, Sendable, Hashable, Identifiable {
+public struct ApplicationQuestionOption: Codable, Sendable, Equatable, Identifiable {
     public var id: String
     public var label: String
     /// Fields of the option this version of the app does not model, sent back as they came.
-    public var extras: [String: PassthroughJSON]
+    public var extras: [String: JSONValue]
 
     public init(id: String = ApplicationQuestionOption.newID(), label: String = "",
-                extras: [String: PassthroughJSON] = [:]) {
+                extras: [String: JSONValue] = [:]) {
         self.id = id
         self.label = label
         self.extras = extras
@@ -252,13 +252,13 @@ public struct ApplicationQuestion: Codable, Sendable, Equatable, Identifiable {
     public var grant: ApplicationGrantWhen
     /// Fields of the question this version of the app does not model (a setting of a newer question
     /// type, say), sent back as they came so a save does not reset them.
-    public var extras: [String: PassthroughJSON]
+    public var extras: [String: JSONValue]
 
     public init(
         id: String = ApplicationQuestion.newID(), type: ApplicationQuestionType = .text, label: String = "",
         help: String = "", required: Bool = false, long: Bool = false, minLength: Int = 0, maxLength: Int = 300,
         options: [ApplicationQuestionOption] = [], multiple: Bool = false, minChoices: Int = 0, maxChoices: Int = 1,
-        grant: ApplicationGrantWhen = .never, extras: [String: PassthroughJSON] = [:]
+        grant: ApplicationGrantWhen = .never, extras: [String: JSONValue] = [:]
     ) {
         self.id = id
         self.type = type
@@ -473,7 +473,7 @@ public struct ApplicationForm: Codable, Sendable, Equatable, Identifiable {
     public let unreadableQuestions: Int
     /// Fields of the form this version of the app does not model, sent back as they came so a save does
     /// not reset them.
-    public var extras: [String: PassthroughJSON]
+    public var extras: [String: JSONValue]
 
     public init(
         id: Int? = nil, name: String = "", description: String = "", enabled: Bool = false,
@@ -488,7 +488,7 @@ public struct ApplicationForm: Codable, Sendable, Equatable, Identifiable {
         denyRemoveRoleIds: [String] = [], onLeave: ApplicationOnLeave = .keep,
         messages: ApplicationFormMessages = ApplicationFormMessages(), version: Double? = nil,
         setupProblem: String? = nil, rolesProblem: String? = nil, unreadableQuestions: Int = 0,
-        extras: [String: PassthroughJSON] = [:]
+        extras: [String: JSONValue] = [:]
     ) {
         self.id = id
         self.name = name
@@ -868,28 +868,26 @@ public final class ApplicationFormOrderModel {
 // MARK: - Error words
 
 /// The sentence for a failed staff action. The server explains a refusal in its `error` field, for
-/// example which permission Sylo lacks in a channel or which role the person may not hand out, and that
-/// text is far more useful than the generic one.
+/// example which permission Sylo lacks in a channel or which role the person may not hand out, whatever
+/// the status, and that text is far more useful than any canned one: it always comes first.
 enum EditorFailure {
-    /// The server's own text for an error, when the client kept it. Today only a 400 carries it
-    /// (`NetworkError.badRequest`); once `NetworkError` keeps the text of every status, this is the one
-    /// place to read it from.
+    /// The server's own words for an error: its text, never a machine code or a stock phrase.
     static func serverText(of error: NetworkError) -> String? {
-        if case .badRequest(let message) = error, let message, !message.isEmpty, !message.hasPrefix("invalid_") {
-            return message
-        }
-        return nil
+        error.serverMessage
     }
 
     /// - Parameters:
-    ///   - serverFailure: What to say for a 502 when the server's own text was not kept (the platform
+    ///   - serverFailure: What to say for a 502 when the server sent no text of its own (the platform
     ///     refused a delete). Only for the call that can fail that way.
-    ///   - forbidden: What to say for a 403 when the server's own text was not kept, where a 403 means
+    ///   - forbidden: What to say for a 403 when the server sent no text of its own, where a 403 means
     ///     something specific (a role the person may not hand out) and not "no access to the server".
+    ///
+    /// None of the staff routes of Applications and Introductions answers with a machine code, so
+    /// `serverCode` has nothing to map here; a code falls through to the app's own words.
     static func message(for error: NetworkError, serverFailure: String? = nil, forbidden: String? = nil) -> String {
         if let text = serverText(of: error) { return text }
-        if case .server(let status) = error, status == 502, let serverFailure { return serverFailure }
-        if error == .forbidden, let forbidden { return forbidden }
+        if case .server(let status) = error, status.code == 502, let serverFailure { return serverFailure }
+        if case .forbidden = error, let forbidden { return forbidden }
         return error.userMessage
     }
 }

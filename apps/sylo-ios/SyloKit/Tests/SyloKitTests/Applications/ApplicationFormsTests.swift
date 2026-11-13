@@ -529,23 +529,35 @@ struct ApplicationFormEndpointsTests {
         #expect(named.submissions.isEmpty)
     }
 
-    @Test("the server's reason is shown for a refusal, the generic text for anything else")
+    @Test("the server's words come first whatever the status, canned texts only stand in for silence, codes are not words")
     func failureText() {
+        // 400, 403, 404, 409 and 502 with the server's own text.
         #expect(EditorFailure.message(for: .badRequest(message: "Give the form a name.")) == "Give the form a name.")
-        #expect(EditorFailure.message(for: .badRequest(message: "invalid_grant")) == NetworkError.badRequest(message: "invalid_grant").userMessage)
-        #expect(EditorFailure.message(for: .badRequest(message: "invalid_request")) == NetworkError.badRequest(message: "invalid_request").userMessage)
-        #expect(EditorFailure.message(for: .badRequest(message: nil)) == NetworkError.badRequest(message: nil).userMessage)
-        #expect(EditorFailure.message(for: .badRequest(message: "")) == NetworkError.badRequest(message: nil).userMessage)
+        #expect(EditorFailure.message(for: .forbidden(message: "You may not give the role Admin."),
+                                      forbidden: "Not that role.") == "You may not give the role Admin.")
+        #expect(EditorFailure.message(for: .notFound(message: "No such form.")) == "No such form.")
+        #expect(EditorFailure.message(for: .http(status: HTTPStatus(409, message: "That was decided already."))) == "That was decided already.")
+        #expect(EditorFailure.message(
+            for: .server(status: HTTPStatus(502, message: "The post could not be deleted.")),
+            serverFailure: "Fallback.") == "The post could not be deleted.")
+
+        // Canned words only when the server said nothing.
+        #expect(EditorFailure.message(for: .forbidden, forbidden: "Not that role.") == "Not that role.")
         #expect(EditorFailure.message(for: .server(status: 502), serverFailure: "Manage Messages is missing.") == "Manage Messages is missing.")
         #expect(EditorFailure.message(for: .server(status: 502)) == NetworkError.server(status: 502).userMessage)
         #expect(EditorFailure.message(for: .server(status: 500), serverFailure: "x") == NetworkError.server(status: 500).userMessage)
         #expect(EditorFailure.message(for: .forbidden) == NetworkError.forbidden.userMessage)
-        #expect(EditorFailure.message(for: .forbidden, forbidden: "Not that role.") == "Not that role.")
-        // The server's own text always wins over a fallback.
-        #expect(EditorFailure.message(for: .badRequest(message: "Server says no."), serverFailure: "x", forbidden: "y") == "Server says no.")
-        #expect(EditorFailure.serverText(of: .badRequest(message: "Server says no.")) == "Server says no.")
-        #expect(EditorFailure.serverText(of: .forbidden) == nil)
+        #expect(EditorFailure.message(for: .badRequest(message: nil)) == NetworkError.badRequest(message: nil).userMessage)
+        #expect(EditorFailure.message(for: .badRequest(message: "")) == NetworkError.badRequest(message: nil).userMessage)
+
+        // A machine code or a stock phrase is not shown, the canned words are.
+        #expect(EditorFailure.message(for: .badRequest(message: "invalid_request")) == NetworkError.badRequest(message: "invalid_request").userMessage)
+        #expect(EditorFailure.message(for: .forbidden(message: "forbidden"), forbidden: "Not that role.") == "Not that role.")
+        #expect(EditorFailure.message(for: .server(status: HTTPStatus(502, message: "Bad gateway")), serverFailure: "Fallback.") == "Fallback.")
         #expect(EditorFailure.serverText(of: .badRequest(message: "invalid_request")) == nil)
+        #expect(EditorFailure.serverText(of: .forbidden) == nil)
+        #expect(EditorFailure.serverText(of: .notFound(message: "No such form.")) == "No such form.")
+        #expect(NetworkError.badRequest(message: "invalid_request").serverCode == "invalid_request")
     }
 }
 

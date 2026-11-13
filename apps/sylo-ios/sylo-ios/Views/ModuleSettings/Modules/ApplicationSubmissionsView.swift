@@ -66,6 +66,9 @@ struct ApplicationSubmissionsView: View {
                     Text("No applications match.")
                 }
             }
+            if !forms.isEmpty {
+                ApplicationsExportSection(server: server, session: session, forms: forms)
+            }
         }
         .overlay {
             if !model.hasLoaded {
@@ -87,6 +90,85 @@ struct ApplicationSubmissionsView: View {
         // Comes back from an application fresh, and reloads when the filter changes.
         .task(id: Filter(status: model.filter, form: model.formFilter)) { await model.load() }
         .refreshable { await model.load() }
+    }
+}
+
+/// Exports the answers of one form, optionally one status, as CSV or JSON. The file opens in Quick Look,
+/// where it can be read or shared, and is deleted when that closes or the screen goes away. The answers
+/// are personal data: the person confirms first, and the server writes every export to the audit log.
+private struct ApplicationsExportSection: View {
+    @State private var download: FileDownloadModel
+    @State private var chosenForm: Int?
+    @State private var status: ApplicationStatus?
+    @State private var format: ApplicationExportFormat = .csv
+    @State private var isConfirming = false
+    @State private var previewed: DownloadedFile?
+    private let server: ServerID
+    private let forms: [ApplicationForm]
+
+    init(server: ServerID, session: AppSession, forms: [ApplicationForm]) {
+        self.server = server
+        self.forms = forms
+        _download = State(initialValue: FileDownloadModel(session: session))
+    }
+
+    /// The form picked, or the first one until the person picks.
+    private var formID: Int? { chosenForm ?? forms.first?.id }
+
+    var body: some View {
+        Section {
+            Picker("Form", selection: Binding(get: { formID }, set: { chosenForm = $0 })) {
+                ForEach(forms) { form in
+                    Text(verbatim: form.name).tag(form.id)
+                }
+            }
+            Picker("Status", selection: $status) {
+                Text("Any status").tag(ApplicationStatus?.none)
+                ForEach(ApplicationStatus.filters, id: \.self) { status in
+                    Text(verbatim: status.title).tag(ApplicationStatus?.some(status))
+                }
+            }
+            Picker("Format", selection: $format) {
+                Text(verbatim: "CSV").tag(ApplicationExportFormat.csv)
+                Text(verbatim: "JSON").tag(ApplicationExportFormat.json)
+            }
+            .pickerStyle(.segmented)
+            Button {
+                isConfirming = true
+            } label: {
+                if download.isDownloading {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Exporting")
+                    }
+                } else {
+                    Label("Export Answers", systemImage: "square.and.arrow.down")
+                }
+            }
+            .disabled(formID == nil || download.isDownloading)
+            .confirmationDialog("Export These Answers?", isPresented: $isConfirming, titleVisibility: .visible) {
+                Button("Export") { start() }
+            } message: {
+                Text("The answers of the applicants are saved to a file you can read or share. The export is logged.")
+            }
+            .fileQuickLook($previewed) { download.clear() }
+            .onDisappear { download.clear() }
+            if let message = download.errorMessage {
+                StatusMessage(message, kind: .error)
+            }
+        } header: {
+            Text("Export answers")
+        } footer: {
+            Text("Answers are personal data. Keep the file safe and delete it when you are done. Every export is written to the server's audit log.")
+        }
+    }
+
+    private func start() {
+        guard let formID else { return }
+        let endpoint = Endpoints.ExportApplications(server: server, formID: formID, status: status, format: format)
+        Task {
+            if await download.download(endpoint) { previewed = download.file }
+        }
     }
 }
 
@@ -128,7 +210,6 @@ struct ApplicationSubmissionView: View {
     @State private var action: ApplicationDecisionAction = .accept
     @State private var isAsking = false
     @State private var isConfirmingDelete = false
-    @State private var reason = ""
     @Environment(\.dismiss) private var dismiss
     private let server: ServerID
     private let session: AppSession
@@ -167,16 +248,12 @@ struct ApplicationSubmissionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
         .refreshable { await model.load() }
-        .alert(alertTitle, isPresented: $isAsking) {
-            TextField("Reason (optional)", text: $reason)
-            Button(alertButton) {
-                let decision = action
-                let text = reason
-                Task { await model.decide(decision, reason: text) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The applicant is told by direct message. The reason is added to it.")
+        .reasonPrompt(
+            alertTitle, message: "The applicant is told by direct message. The reason is added to it.",
+            isPresented: $isAsking, confirmTitle: alertButton, confirmRole: action == .deny ? .destructive : nil
+        ) { reason in
+            let decision = action
+            Task { await model.decide(decision, reason: reason) }
         }
         .confirmationDialog("Delete This Application?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
             Button("Delete Application", role: .destructive) {
@@ -312,7 +389,6 @@ struct ApplicationSubmissionView: View {
     }
 
     private func ask(_ decision: ApplicationDecisionAction) {
-        reason = ""
         action = decision
         isAsking = true
     }

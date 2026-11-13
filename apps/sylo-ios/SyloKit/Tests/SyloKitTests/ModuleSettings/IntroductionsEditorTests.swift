@@ -114,6 +114,49 @@ struct IntroductionsEditorTests {
         #expect(settings.roleGroupPlaceholders.isEmpty)
     }
 
+    @Test("a question or role group the app cannot read is counted, and the settings are not saved over it")
+    func unreadableEntries() throws {
+        let json = Data(#"""
+        {"channelId": "222222222222222222",
+         "questions": [{"id": "a", "label": "About", "weight": 4}, {"id": "b"}, {"id": "c", "label": 7},
+                       {"id": "d", "label": "Fine", "maxLength": "lots"}],
+         "roleGroups": [{"name": "Country", "roleIds": ["1"]}, {"roleIds": ["2"]}]}
+        """#.utf8)
+        var settings = try JSONDecoder().decode(IntroductionsSettings.self, from: json)
+        #expect(settings.questions?.map(.id) == ["a"])
+        #expect(settings.roleGroups.map(.name) == ["Country"])
+        #expect(settings.unreadableEntries == 4)
+        let problem = try #require(settings.problem)
+        #expect(problem.contains("4 questions or role groups"))
+        #expect(problem.contains("delete"))
+
+        // Editing around them does not lift it, and it is never sent.
+        settings.footer = "Changed"
+        #expect(settings.problem == problem)
+        let body = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any])
+        #expect(body["unreadableEntries"] == nil)
+
+        let one = try JSONDecoder().decode(
+            IntroductionsSettings.self, from: Data(#"{"questions": [{"id": "b"}]}"#.utf8))
+        #expect(one.unreadableEntries == 1)
+        #expect(one.problem?.contains("a question or role group") == true)
+
+        // Readable lists, or no list at all, have no such problem.
+        let clean = try IntroductionsSettingsTests.decodePage().settings
+        #expect(clean.unreadableEntries == 0)
+        #expect(clean.problem == nil)
+        let none = try JSONDecoder().decode(IntroductionsSettings.self, from: Data("{}".utf8))
+        #expect(none.unreadableEntries == 0)
+        #expect(none.questions == nil)
+    }
+
+    @Test("the unreadable count is not an edit")
+    func unreadableIsNotAnEdit() throws {
+        let one = try JSONDecoder().decode(IntroductionsSettings.self, from: Data(#"{"questions": [{"id": "b"}]}"#.utf8))
+        let zero = try JSONDecoder().decode(IntroductionsSettings.self, from: Data(#"{"questions": []}"#.utf8))
+        #expect(one == zero)
+    }
+
     @Test("the limits are the server's")
     func limits() {
         #expect(IntroductionsQuestion.maxLabelLength == 45)
