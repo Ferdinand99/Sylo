@@ -250,3 +250,7 @@ public struct EconomySettings: Codable, Sendable, Equatable {
         collectionPublic = try? c.decodeIfPresent(Bool.self, forKey: .collectionPublic)
     }
 }
+
+extension EconomySettings: SaveValidated {
+    public var saveProblem: String? { currencyProblem }
+}

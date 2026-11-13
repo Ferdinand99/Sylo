@@ -181,3 +181,7 @@ public struct TempRoleRow: Decodable, Sendable, Hashable, Identifiable {
         expiresDate <= now ? "Ending now" : "Ends " + DateText.relative(expiresDate, now: now, locale: locale)
     }
 }
+
+extension TempRolesSettings: SaveValidated {
+    public var saveProblem: String? { durationProblem }
+}

@@ -56,10 +56,15 @@ public final class ModuleSettingsModel<Page: ModuleSettingsPage> {
     public func save() async -> Bool {
         guard let draft, hasChanges else { return true }
         guard !isSaving else { return false }
-        isSaving = true
-        defer { isSaving = false }
         saveError = nil
         saveWarning = nil
+        // The form disables Save for these too; this holds for every other way in.
+        if let problem = (draft as? any SaveValidated)?.saveProblem {
+            saveError = problem
+            return false
+        }
+        isSaving = true
+        defer { isSaving = false }
         do {
             let result = try await session.send(Endpoints.SaveModuleSettings<Page>(server: server, settings: draft))
             saved = result.settings

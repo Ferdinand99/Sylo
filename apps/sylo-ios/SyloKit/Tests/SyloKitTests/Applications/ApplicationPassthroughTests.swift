@@ -119,9 +119,10 @@ struct ApplicationPassthroughTests {
         #expect(await model.delete())
     }
 
-    @Test("a saved form with unknown keys survives the save through the real client")
-    func wireKeepsKeys() async throws {
-        // The kept keys are in the encoded body, which is what the wire carries.
+    @Test("a saved form with unknown keys keeps them when it is encoded and read back")
+    func encodingKeepsKeys() async throws {
+        // The kept keys are in the encoded body, which is what a save sends. This only encodes:
+        // the request itself is tested in the wire tests of the form endpoints.
         let data = try JSONEncoder().encode(try Self.decode())
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(object["reviewMode"] as? String == "double")

@@ -207,4 +207,28 @@ struct IntroductionsSettingsTests {
         #expect(sent.settings.roleGroups.count == 1)
         #expect(model.saved?.isPromptPublished == true)
     }
+
+    @Test("the model refuses to save a question without a label, whatever calls save")
+    @MainActor
+    func modelRefusesAProblem() async throws {
+        let clients = StubClients { endpoint in
+            if let saving = endpoint as? Endpoints.SaveModuleSettings<IntroductionsPage> {
+                return SavedModuleSettings(settings: saving.settings)
+            }
+            return try Self.decodePage()
+        }
+        let model = ModuleSettingsModel<IntroductionsPage>(server: "9", session: makeSignedInSession(clients: clients))
+        await model.load()
+        model.draft?.questions?[0].label = "  "
+        #expect(model.hasChanges)
+        #expect(await model.save() == false)
+        #expect(model.saveError == "Give every question a label.")
+        #expect(!model.isSaving)
+        #expect(!clients.calls.contains { $0.endpoint is Endpoints.SaveModuleSettings<IntroductionsPage> })
+        // Fixing it lets the save through.
+        model.draft?.questions?[0].label = "About me, again"
+        #expect(model.draft?.saveProblem == nil)
+        #expect(await model.save())
+        #expect(model.saveError == nil)
+    }
 }

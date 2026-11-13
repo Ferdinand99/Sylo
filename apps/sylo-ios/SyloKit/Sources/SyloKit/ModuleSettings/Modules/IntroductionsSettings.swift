@@ -403,3 +403,7 @@ public struct IntroductionsRoleGroup: Codable, Sendable, Equatable, Identifiable
         try c.encode(hideWhenEmpty, forKey: .hideWhenEmpty)
     }
 }
+
+extension IntroductionsSettings: SaveValidated {
+    public var saveProblem: String? { problem }
+}
