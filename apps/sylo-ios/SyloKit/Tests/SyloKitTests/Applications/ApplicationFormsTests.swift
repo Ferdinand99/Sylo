@@ -469,6 +469,29 @@ struct ApplicationFormEndpointsTests {
         #expect(Endpoints.ApplicationSubmissions(server: "1").query.isEmpty)
     }
 
+    @Test("the export asks for one form, optionally one status, as CSV or JSON, and names the file like the server")
+    func export() {
+        let csv = Endpoints.ExportApplications(server: "fluxer:1", formID: 3)
+        #expect(csv.path == "/api/v2/guilds/fluxer%3A1/applications/export")
+        #expect(csv.method == .get)
+        #expect(csv.body == nil)
+        #expect(csv.requiresAuth)
+        #expect(csv.query == [URLQueryItem(name: "formId", value: "3"), URLQueryItem(name: "format", value: "csv")])
+        #expect(csv.expectedFilename == "applications-form-3.csv")
+
+        let json = Endpoints.ExportApplications(server: "1", formID: 12, status: .pending, format: .json)
+        #expect(json.query == [
+            URLQueryItem(name: "formId", value: "12"),
+            URLQueryItem(name: "status", value: "pending"),
+            URLQueryItem(name: "format", value: "json"),
+        ])
+        #expect(json.expectedFilename == "applications-form-12-pending.json")
+        #expect(ApplicationExportFormat.allCases == [.csv, .json])
+        #expect(ApplicationExportFormat.csv.mimeType == "text/csv")
+        #expect(ApplicationExportFormat.json.mimeType == "application/json")
+        #expect(ApplicationExportFormat.csv.fileExtension == "csv")
+    }
+
     @Test("the answers decode: a panel result, a retry and a member's history")
     func answers() throws {
         let panel = try JSONDecoder().decode(

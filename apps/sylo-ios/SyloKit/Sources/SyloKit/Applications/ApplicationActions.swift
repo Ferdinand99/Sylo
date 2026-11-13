@@ -87,6 +87,19 @@ public struct ApplicantHistory: Decodable, Sendable, Equatable {
     public var displayName: String { userName ?? userId }
 }
 
+// MARK: - Export
+
+/// How the answers of a form are exported.
+public enum ApplicationExportFormat: String, Sendable, CaseIterable {
+    case csv
+    case json
+
+    public var fileExtension: String { rawValue }
+
+    /// The `Content-Type` the server answers with (without the charset).
+    public var mimeType: String { self == .csv ? "text/csv" : "application/json" }
+}
+
 // MARK: - Endpoints
 
 /// A body of `{}`, for staff actions that send nothing (the web dashboard sends one too).
@@ -220,6 +233,42 @@ extension Endpoints {
         public var path: String { "/api/v2/guilds/\(server.pathComponent)/applications/submissions/\(id)/delete" }
         public var method: HTTPMethod { .post }
         public var body: (any Encodable & Sendable)? { EmptyBody() }
+    }
+
+    /// `GET /api/v2/guilds/:id/applications/export?formId&status&format`: the answers of one form,
+    /// optionally one status, as a CSV or JSON attachment (404 when the form is gone). The answer is a
+    /// file, not JSON, so it is read with the raw download (`AppSession.download`) and its `Response` is
+    /// never decoded. The server logs every export in the audit log.
+    public struct ExportApplications: APIEndpoint {
+        public typealias Response = EmptyResponse
+        public let server: ServerID
+        public let formID: Int
+        /// nil for every status.
+        public let status: ApplicationStatus?
+        public let format: ApplicationExportFormat
+
+        public init(server: ServerID, formID: Int, status: ApplicationStatus? = nil,
+                    format: ApplicationExportFormat = .csv) {
+            self.server = server
+            self.formID = formID
+            self.status = status
+            self.format = format
+        }
+
+        public var path: String { "/api/v2/guilds/(server.pathComponent)/applications/export" }
+        public var query: [URLQueryItem] {
+            var items = [URLQueryItem(name: "formId", value: String(formID))]
+            if let status { items.append(URLQueryItem(name: "status", value: status.rawValue)) }
+            items.append(URLQueryItem(name: "format", value: format.rawValue))
+            return items
+        }
+
+        /// The file name the server gives the attachment (`applications-form-3-pending.csv`), for a
+        /// download that comes without one.
+        public var expectedFilename: String {
+            let suffix = status.map { "-" + $0.rawValue } ?? ""
+            return "applications-form-(formID)(suffix).(format.fileExtension)"
+        }
     }
 
     /// `GET /api/v2/guilds/:id/applications/members/:userId`: a member's applications, newest first.
