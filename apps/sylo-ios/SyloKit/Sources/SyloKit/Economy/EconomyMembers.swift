@@ -430,7 +430,7 @@ public final class EconomyMemberModel {
     }
 
     /// What is wrong with an amount for this action, in words, or nil when it can be sent.
-    public static func amountProblem(_ amount: Int, for action: EconomyAdjustAction) -> String? {
+    public nonisolated static func amountProblem(_ amount: Int, for action: EconomyAdjustAction) -> String? {
         guard action.needsAmount, !action.amountRange.contains(amount) else { return nil }
         let range = action.amountRange
         return "Enter a whole number from \(range.lowerBound.formatted()) to \(range.upperBound.formatted())."

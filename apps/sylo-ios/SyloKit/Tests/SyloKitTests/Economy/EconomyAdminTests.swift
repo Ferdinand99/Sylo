@@ -91,7 +91,11 @@ struct EconomyAdminDecodingTests {
 @Suite("Economy admin endpoints")
 struct EconomyAdminEndpointTests {
     private func json(_ body: (any Encodable & Sendable)?) throws -> [String: Any] {
-        let data = try JSONEncoder().encode(try #require(body))
+        guard let body else {
+            Issue.record("the call has no body")
+            return [:]
+        }
+        let data = try JSONEncoder().encode(body)
         return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
