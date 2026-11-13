@@ -124,7 +124,8 @@ struct EmbedItemTests {
         #expect(copy.id != odd.id)
         #expect(copy == odd)
         var list = [odd]
-        #expect(list.duplicateEmbed(at: 0, limit: 10))
+        let added = list.duplicateEmbed(at: 0, limit: 10)
+        #expect(added)
         #expect(list.count == 2)
     }
 
