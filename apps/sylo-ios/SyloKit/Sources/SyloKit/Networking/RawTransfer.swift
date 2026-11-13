@@ -16,6 +16,26 @@ public struct RawBody: Sendable, Equatable {
     }
 }
 
+/// A file on disk that is sent as the request body, read from the disk as it goes (a backup of up to
+/// 128 MB): it is never loaded into memory. An endpoint that sets ``APIEndpoint/uploadFile`` sends this
+/// instead of ``APIEndpoint/rawBody`` and ``APIEndpoint/body``.
+///
+/// Every upload carries its own size limit, because the limits differ a lot: the server takes 2 MB for a
+/// picture and 128 MB for a backup. The client measures the file on disk before sending anything and
+/// refuses a longer one with ``NetworkError/tooLarge``.
+public struct UploadFile: Sendable, Equatable {
+    public let fileURL: URL
+    public let contentType: String
+    /// The most the endpoint takes, in bytes.
+    public let maxBytes: Int64
+
+    public init(fileURL: URL, contentType: String, maxBytes: Int64) {
+        self.fileURL = fileURL
+        self.contentType = contentType
+        self.maxBytes = maxBytes
+    }
+}
+
 /// A file the server sent, kept on disk in a temporary folder, never as one big `Data`: the share
 /// sheet and Quick Look read the file, so a large export does not sit in memory.
 ///
@@ -54,6 +74,7 @@ public struct DownloadedFile: Sendable, Equatable {
         let url = try makeDestination(filename: name)
         do {
             try data.write(to: url)
+            protect(url)
         } catch {
             try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
             throw error
@@ -85,10 +106,29 @@ public struct DownloadedFile: Sendable, Equatable {
         return "download"
     }
 
+    /// What a downloaded file is created with. An export or a backup holds personal data, so on a phone
+    /// the file is readable only while the device is unlocked or while it is already open (Quick Look
+    /// keeps it open), not from the first unlock on as the default would allow. Nil where there is no
+    /// data protection (the Mac the tests run on).
+    static var fileAttributes: [FileAttributeKey: Any]? {
+        #if os(iOS) || os(tvOS) || os(watchOS) || os(visionOS)
+        return [.protectionKey: FileProtectionType.completeUnlessOpen]
+        #else
+        return nil
+        #endif
+    }
+
+    /// Gives a file that was written without ``fileAttributes`` the same protection.
+    static func protect(_ url: URL) {
+        guard let attributes = fileAttributes else { return }
+        try? FileManager.default.setAttributes(attributes, ofItemAtPath: url.path)
+    }
+
     /// A new, empty folder for one file, and the path of the file in it.
     static func makeDestination(filename: String, in directory: URL? = nil) throws -> URL {
         let folder = (directory ?? root).appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: folder, withIntermediateDirectories: true, attributes: fileAttributes)
         return folder.appendingPathComponent(filename, isDirectory: false)
     }
 

@@ -228,10 +228,18 @@ public final class AppSession {
     /// the same 401 handling as ``send(_:)``. Use an endpoint whose `Response` is ``EmptyResponse``
     /// (see ``Endpoints/Resource``).
     public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile where E.Response == EmptyResponse {
+        try await download(endpoint, progress: nil)
+    }
+
+    /// ``download(_:)`` that reports `progress(bytesReceived, bytesExpected)` from a background queue
+    /// (see ``APIClient/download(_:progress:)``). Cancelling the calling task stops the transfer.
+    public func download<E: APIEndpoint>(
+        _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws -> DownloadedFile where E.Response == EmptyResponse {
         guard let client else { throw NetworkError.unauthorized }
         let generation = self.generation
         do {
-            let file = try await client.download(endpoint)
+            let file = try await client.download(endpoint, progress: progress)
             // Exports can hold personal data: whatever is still on disk at sign-out is deleted then.
             if generation == self.generation {
                 if issuedFiles.count >= 32 {
@@ -253,6 +261,22 @@ public final class AppSession {
     /// site says what it does.
     public func upload<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response {
         try await send(endpoint)
+    }
+
+    /// Sends a call whose ``APIEndpoint/uploadFile`` is streamed from the disk (a database backup) and
+    /// reports `progress(bytesSent, bytesExpected)` as it goes (on a background queue). The token and the
+    /// 401 handling are those of ``send(_:)``. Cancelling the calling task stops the transfer.
+    public func upload<E: APIEndpoint>(
+        _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws -> E.Response {
+        guard let client else { throw NetworkError.unauthorized }
+        let generation = self.generation
+        do {
+            return try await client.upload(endpoint, progress: progress)
+        } catch NetworkError.unauthorized {
+            handleUnauthorized(generation: generation)
+            throw NetworkError.unauthorized
+        }
     }
 
     /// The setting limits of every module, loaded once per sign-in and kept. An empty set when the

@@ -21,6 +21,9 @@ public final class HealthModel {
     public private(set) var testResult: TestResult?
     /// Why the report or the log could not be loaded.
     public var errorMessage: String?
+    public private(set) var isSendingErrorTest = false
+    /// The last "log a real error": `.sent` means the server logged it, not that the channel got it.
+    public private(set) var errorTestResult: TestResult?
 
     private let session: AppSession
 
@@ -61,6 +64,24 @@ public final class HealthModel {
             testResult = result.ok ? .sent : .failed(result.error ?? "Couldn't send the test message. Check the dev-log channel, then try again.")
         } catch {
             testResult = .failed(NetworkError(error).userMessage)
+        }
+    }
+
+    /// Logs a real error on the server (not a test message), so the dev-log channel and the operators'
+    /// notifications get one end to end. The server skips it when an identical test was logged in the
+    /// last five minutes. The caller asks for confirmation first: every operator's phone may buzz.
+    public func sendErrorTest() async {
+        guard !isSendingErrorTest else { return }
+        isSendingErrorTest = true
+        defer { isSendingErrorTest = false }
+        errorTestResult = nil
+        do {
+            let result = try await session.send(Endpoints.SendDevLogErrorTest())
+            errorTestResult = result.ok ? .sent : .failed("The server did not log the test error.")
+        } catch {
+            let error = NetworkError(error)
+            if error == .cancelled || error == .unauthorized { return }
+            errorTestResult = .failed(error == .forbidden ? OperatorOnly.refusal : error.userMessage)
         }
     }
 

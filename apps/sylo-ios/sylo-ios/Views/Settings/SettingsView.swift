@@ -37,7 +37,9 @@ struct SettingsView: View {
                 DevicesSection(account: account)
                 serverSection
                 addToServerSection
-                if account.account?.isOperator == true {
+                // Only for an operator, and not there at all for anyone else. The account is read
+                // again whenever the sign-in changes (another account, a new token).
+                if !account.operatorFeatures.isEmpty {
                     operatorSection
                 }
                 aboutSection
@@ -72,11 +74,11 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .task { await account.load() }
+            .task(id: session.generation) { await account.load() }
             .task { await push.settings.load() }
             .task { await addToServer.load() }
             .navigationDestination(isPresented: $isShowingHealth) {
-                HealthView(session: session)
+                OperatorGate(account: account) { HealthView(session: session) }
             }
             // A tapped dev-log notification opens Settings (MainView) and then Health here.
             .onChange(of: push.pendingDevLog, initial: true) {
@@ -293,15 +295,45 @@ struct SettingsView: View {
     /// a server: the server refuses Health to anyone else too.
     private var operatorSection: some View {
         Section {
-            NavigationLink {
-                HealthView(session: session)
-            } label: {
-                Label("Health", systemImage: "stethoscope")
+            ForEach(account.operatorFeatures) { feature in
+                NavigationLink {
+                    OperatorGate(account: account) { operatorScreen(feature) }
+                } label: {
+                    Label(Self.title(feature), systemImage: Self.symbol(feature))
+                }
             }
         } header: {
             Text("Operator")
         } footer: {
-            Text("You run this Sylo. Health shows its status, database, backups and dev log.")
+            Text("You run this Sylo. These screens change things for every server on it, and the server checks that you are an operator on every call.")
+        }
+    }
+
+    @ViewBuilder
+    private func operatorScreen(_ feature: OperatorFeature) -> some View {
+        switch feature {
+        case .health: HealthView(session: session)
+        case .personalizer: PersonalizerView(session: session)
+        case .statsCache: StatsCacheView(session: session)
+        case .roadmapAdmin: RoadmapAdminView(session: session)
+        }
+    }
+
+    private static func title(_ feature: OperatorFeature) -> LocalizedStringKey {
+        switch feature {
+        case .health: "Health"
+        case .personalizer: "Bot Personalizer"
+        case .statsCache: "Stats Cache"
+        case .roadmapAdmin: "Roadmap Admin"
+        }
+    }
+
+    private static func symbol(_ feature: OperatorFeature) -> String {
+        switch feature {
+        case .health: "stethoscope"
+        case .personalizer: "paintbrush"
+        case .statsCache: "chart.bar.doc.horizontal"
+        case .roadmapAdmin: "map"
         }
     }
 

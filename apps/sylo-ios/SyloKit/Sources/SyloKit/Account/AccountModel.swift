@@ -23,6 +23,8 @@ public final class AccountModel {
 
     private var revoking: Set<String> = []
     private let session: AppSession
+    /// The sign-in (``AppSession/generation``) the loaded ``account`` belongs to.
+    private var accountGeneration = -1
 
     public init(session: AppSession) {
         self.session = session
@@ -53,11 +55,37 @@ public final class AccountModel {
         return (account?.platforms ?? []).filter { !$0.isConnected && $0.connectPath != nil }
     }
 
+    /// Whether this person runs the Sylo server (an operator), as the server said for the sign-in that
+    /// is live now. False until the account is loaded, and false again at once when the sign-in changes
+    /// (another account, a new token): what an earlier account was told never counts for a later one.
+    /// Only a gate for what the app shows; the server checks every operator call itself.
+    public var isOperator: Bool {
+        account?.isOperator == true && accountGeneration == session.generation
+    }
+
+    /// Whether the account page was read for the sign-in that is live now. False before the first read
+    /// and again as soon as the sign-in changes, until the next read; a screen that depends on who is
+    /// signed in shows a loading state, not a verdict, while this is false.
+    public var hasLoadedForSignIn: Bool {
+        account != nil && accountGeneration == session.generation
+    }
+
+    /// The operator-only screens the app offers: all of them for an operator, none for anyone else (they
+    /// are hidden, not disabled).
+    public var operatorFeatures: [OperatorFeature] {
+        isOperator ? OperatorFeature.allCases : []
+    }
+
     public func load() async {
         isLoading = true
         defer { isLoading = false }
+        let generation = session.generation
         do {
-            account = try await session.send(Endpoints.Account())
+            let loaded = try await session.send(Endpoints.Account())
+            // Another sign-in took over while this was on its way: its answer is not this account's.
+            guard session.generation == generation else { return }
+            account = loaded
+            accountGeneration = generation
             errorMessage = nil
         } catch {
             let error = NetworkError(error)
