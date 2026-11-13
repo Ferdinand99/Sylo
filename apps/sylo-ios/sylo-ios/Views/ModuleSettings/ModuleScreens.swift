@@ -11,6 +11,7 @@ enum ModuleScreens {
         "counting", "free-games", "giveaways", "honeypot", "invite-tracker", "kick-alerts", "leveling",
         "logging", "moderation", "polls", "rss", "server-stats", "starboard", "sticky", "temp-voice",
         "tickets", "twitch-alerts", "verification", "welcome", "welcome-channel", "youtube-alerts",
+        "roles", "custom-commands",
         "events", "suggestions", "temp-roles", "auto-threads", "quote-board",
         "introductions", "economy", "applications",
         "reminders", "channel-cleanup", "github", "game-stats",
@@ -41,6 +42,8 @@ enum ModuleScreens {
         case "events": EventsSettingsView(server: server, session: session)
         case "suggestions": SuggestionsSettingsView(server: server, session: session)
         case "temp-roles": TempRolesSettingsView(server: server, session: session)
+        case "roles": RolesView(server: server, session: session)
+        case "custom-commands": CustomCommandsView(server: server, session: session)
         case "quote-board": QuoteBoardSettingsView(server: server, session: session)
         case "introductions": IntroductionsSettingsView(server: server, session: session)
         case "economy": EconomySettingsView(server: server, session: session)
