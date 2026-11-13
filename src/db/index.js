@@ -1501,6 +1501,38 @@ export const MIGRATIONS = [
       CREATE INDEX idx_mobile_connect_codes_account ON mobile_connect_codes (account_id);
     `);
   },
+
+  // Adding a login from the app, second step (src/db/apiTokens.js and src/db/accounts.js, which carry
+  // the same changes for Postgres): a connect code names the app token that asked; the platform
+  // callback keeps the verified identity in a result code until that token completes the link; at
+  // most one live connect code per account; and one login per platform and account is enforced, not
+  // only checked (where two sign-ins at once left two, the one linked first stays).
+  (database) => {
+    database.exec(`
+      ALTER TABLE mobile_connect_codes ADD COLUMN token_id TEXT;
+      DELETE FROM mobile_connect_codes;
+      CREATE UNIQUE INDEX idx_mobile_connect_codes_one ON mobile_connect_codes (account_id);
+      CREATE TABLE mobile_connect_results (
+        code_hash        TEXT PRIMARY KEY,
+        account_id       TEXT NOT NULL,
+        token_id         TEXT NOT NULL,
+        platform         TEXT NOT NULL,
+        platform_user_id TEXT NOT NULL,
+        username         TEXT NOT NULL DEFAULT '',
+        avatar           TEXT,
+        guild_ids        TEXT NOT NULL DEFAULT '[]',
+        expires_at       INTEGER NOT NULL
+      );
+      DELETE FROM account_identities WHERE rowid NOT IN (
+        SELECT rowid FROM (
+          SELECT rowid, ROW_NUMBER() OVER (
+            PARTITION BY account_id, platform ORDER BY linked_at, platform_user_id
+          ) AS n FROM account_identities
+        ) WHERE n = 1
+      );
+      CREATE UNIQUE INDEX idx_account_identities_one ON account_identities (account_id, platform);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

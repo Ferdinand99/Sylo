@@ -33,6 +33,12 @@ registerPostgresBootstrap(`
     PRIMARY KEY (platform, platform_user_id)
   );
   CREATE INDEX IF NOT EXISTS idx_account_identities_account ON account_identities (account_id);
+  -- One login per platform and account. An earlier version only checked this before inserting, so two
+  -- sign-ins at the same moment could leave two: keep the one linked first, then enforce it.
+  DELETE FROM account_identities a USING account_identities b
+    WHERE a.account_id = b.account_id AND a.platform = b.platform
+      AND (a.linked_at, a.platform_user_id) > (b.linked_at, b.platform_user_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_account_identities_one ON account_identities (account_id, platform);
   CREATE TABLE IF NOT EXISTS sessions (
     id         TEXT PRIMARY KEY,
     account_id TEXT NOT NULL,
@@ -91,6 +97,7 @@ const s = {
   deleteAccountIdentities: prepare('DELETE FROM account_identities WHERE account_id = ?'),
   deleteAccountCodes: prepare('DELETE FROM mobile_codes WHERE account_id = ?'),
   deleteAccountConnectCodes: prepare('DELETE FROM mobile_connect_codes WHERE account_id = ?'),
+  deleteAccountConnectResults: prepare('DELETE FROM mobile_connect_results WHERE account_id = ?'),
   deleteAccount: prepare('DELETE FROM accounts WHERE id = ?'),
   deletePrefs: prepare('DELETE FROM user_prefs WHERE user_id = ?'),
   deleteVotes: prepare('DELETE FROM roadmap_votes WHERE user_id = ?'),
@@ -171,7 +178,23 @@ export async function linkIdentity(accountId, identity) {
   }
   const sameKind = (await identitiesOf(accountId)).find((i) => i.platform === identity.platform);
   if (sameKind) throw new PlatformAlreadyLinkedError(identity.platform);
-  await s.insertIdentity.run({ ...params(identity), accountId, linkedAt: Date.now() });
+  try {
+    await s.insertIdentity.run({ ...params(identity), accountId, linkedAt: Date.now() });
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+    // Lost a race: another link got there first, either this login to some account or another
+    // login on this platform to this account.
+    const taken = await findIdentity(identity.platform, identity.platformUserId);
+    if (taken && taken.accountId !== accountId) throw new IdentityLinkedError();
+    if (taken) return;
+    throw new PlatformAlreadyLinkedError(identity.platform);
+  }
+}
+
+/** A unique or primary key violation, from either driver (SQLite constraint codes, Postgres 23505). */
+function isUniqueViolation(err) {
+  const code = String(err?.code ?? '');
+  return code === '23505' || code === 'SQLITE_CONSTRAINT_UNIQUE' || code === 'SQLITE_CONSTRAINT_PRIMARYKEY';
 }
 
 /**
@@ -204,6 +227,7 @@ export async function deleteAccount(accountId) {
   await revokeAccountTokens(accountId);
   await s.deleteAccountCodes.run(accountId);
   await s.deleteAccountConnectCodes.run(accountId);
+  await s.deleteAccountConnectResults.run(accountId);
   for (const id of [...people, accountId]) {
     await s.deletePrefs.run(id);
     await s.deleteVotes.run(id);

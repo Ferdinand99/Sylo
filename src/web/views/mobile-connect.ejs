@@ -1,15 +1,22 @@
 <%- include('partials/auth-head', { title: 'Sylo — Add a login' }) %>
 
 <section class="card auth-card">
-  <h1 class="auth-title">Add <%= platformLabel %> to your Sylo account?</h1>
+  <h1 class="auth-title">Add <%= platformLabel %> to the Sylo account <%= name %>?</h1>
   <p>
     The <%= platformLabel %> login you pick next will be added to the Sylo account
-    <strong><%= name %></strong> (<%= platforms.join(' and ') %>). After that you can sign in to Sylo
-    with either one, and the servers you manage on both show up in one place.
+    <strong><%= name %></strong> (<%= platforms.join(' and ') %>). After that, whoever uses that account
+    can manage the servers you manage on <%= platformLabel %>, in the Sylo app and on the dashboard.
   </p>
+  <% if (browserName) { %>
+    <p class="auth-warning">
+      <strong>This browser is signed in to Sylo as <%= browserName %>, not as <%= name %>.</strong>
+      If <%= name %> is not you, someone else started this: cancel.
+    </p>
+  <% } %>
   <p class="muted small">
-    Only continue if you started this from the Sylo app yourself. You can disconnect a login again
-    from your account page.
+    Only continue if <strong><%= name %></strong> is your account and you started this from your own
+    Sylo app. The login is finished in the app, so it is only added if the app on this device agrees.
+    You can disconnect a login again from your account page.
   </p>
   <%# A link, not a form: the next step redirects to the platform's login, which the page's
       form-action rule would not allow after a form post. The nonce is what a link on another site

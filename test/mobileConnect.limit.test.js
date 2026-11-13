@@ -1,5 +1,5 @@
-// The rate limits of adding a login from the app: a code is asked for at most 10 times a minute per
-// app token, and the browser pages open at most 10 times a minute per client. Its own file, so the
+// The rate limits of adding a login from the app: a code is asked for, and a result completed, at most
+// 10 times a minute per app token, and the browser pages open at most 10 times a minute per client. Its own file, so the
 // counts of the other tests (every request from this machine) are not spent here.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -30,6 +30,20 @@ test('the 11th code in a minute is a JSON 429, and another token has its own cou
   assert.match(limited.headers.get('content-type'), /json/);
   assert.ok(limited.headers.get('retry-after'));
   assert.equal((await issue(other)).status, 200, 'a different device is not held back');
+});
+
+test('the 11th completion in a minute is a JSON 429, and a wrong one is only a 400 before that', async () => {
+  const t = await token();
+  const complete = () =>
+    app.get('/api/mobile/connect/complete', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${t}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ result: 'A'.repeat(43) }),
+    });
+  for (let i = 0; i < 10; i++) assert.equal((await complete()).status, 400, `call ${i + 1}`);
+  const limited = await complete();
+  assert.equal(limited.status, 429);
+  assert.match(limited.headers.get('content-type'), /json/);
 });
 
 test('the 11th visit to the connect page in a minute is refused, and no guess gets through', async () => {

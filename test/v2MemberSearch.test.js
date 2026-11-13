@@ -92,6 +92,18 @@ test('an exact id is found in the cache, or fetched live when it is not cached',
   assert.deepEqual(memberFetches, [LATE, '100000000000000098']);
 });
 
+test('an id of a member of another server finds nobody here', async () => {
+  const other = runtime.clients.discord.guilds.cache.get(OTHER_D_GUILD);
+  const STRANGER = '100000000000000777';
+  other.members.cache.set(STRANGER, person(STRANGER, 'Stranger', 'stranger'));
+  try {
+    assert.deepEqual(await names(STRANGER), [], 'not in this server, so not found by id');
+    assert.deepEqual(await names('stranger'), [], 'nor by name');
+  } finally {
+    other.members.cache.delete(STRANGER);
+  }
+});
+
 test('bots are never returned, by name or by id', async () => {
   assert.deepEqual(
     (await names('bob')).map((m) => m.id),
