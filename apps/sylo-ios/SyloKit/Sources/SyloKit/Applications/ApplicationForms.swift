@@ -211,12 +211,12 @@ public struct ApplicationQuestionOption: Codable, Sendable, Equatable, Identifia
         let id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
         self.init(
             id: id.isEmpty ? Self.newID() : id, label: try c.decode(forKey: .label, or: ""),
-            extras: try Passthrough.read(decoder, excluding: Self.knownKeys))
+            extras: UnknownKeys.read(from: decoder, excluding: Self.knownKeys))
     }
 
     public func encode(to encoder: any Encoder) throws {
-        var extra = encoder.container(keyedBy: PassthroughKey.self)
-        try Passthrough.write(extras, excluding: Self.knownKeys, to: &extra)
+        var extra = encoder.container(keyedBy: AnyCodingKey.self)
+        try UnknownKeys.write(extras, excluding: Self.knownKeys, to: &extra)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
         try c.encode(label, forKey: .label)
@@ -366,13 +366,13 @@ public struct ApplicationQuestion: Codable, Sendable, Equatable, Identifiable {
             minChoices: try c.decode(forKey: .minChoices, or: 0),
             maxChoices: try c.decode(forKey: .maxChoices, or: 1),
             grant: try c.decode(forKey: .grant, or: .never),
-            extras: try Passthrough.read(decoder, excluding: Self.knownKeys))
+            extras: UnknownKeys.read(from: decoder, excluding: Self.knownKeys))
     }
 
     /// Every field `normaliseQuestion` reads, and the fields the app does not model.
     public func encode(to encoder: any Encoder) throws {
-        var extra = encoder.container(keyedBy: PassthroughKey.self)
-        try Passthrough.write(extras, excluding: Self.knownKeys, to: &extra)
+        var extra = encoder.container(keyedBy: AnyCodingKey.self)
+        try UnknownKeys.write(extras, excluding: Self.knownKeys, to: &extra)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
         try c.encode(type, forKey: .type)
@@ -660,14 +660,14 @@ public struct ApplicationForm: Codable, Sendable, Equatable, Identifiable {
             setupProblem: setup?.isEmpty == false ? setup : nil,
             rolesProblem: roles?.isEmpty == false ? roles : nil,
             unreadableQuestions: slots.filter { $0.question == nil }.count,
-            extras: try Passthrough.read(decoder, excluding: Self.knownKeys))
+            extras: UnknownKeys.read(from: decoder, excluding: Self.knownKeys))
     }
 
     /// Every field `normaliseForm` reads and the fields the app does not model, but not the id (it is in
     /// the path), the version or the problems.
     public func encode(to encoder: any Encoder) throws {
-        var extra = encoder.container(keyedBy: PassthroughKey.self)
-        try Passthrough.write(extras, excluding: Self.knownKeys, to: &extra)
+        var extra = encoder.container(keyedBy: AnyCodingKey.self)
+        try UnknownKeys.write(extras, excluding: Self.knownKeys, to: &extra)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(name, forKey: .name)
         try c.encode(description, forKey: .description)

@@ -37,22 +37,18 @@ struct VerificationSettingsView: View {
             }
 
             Section("Message title") {
-                TextField("Title", text: $settings.title)
-                    .onChange(of: settings.title) {
-                        if settings.title.count > VerificationSettings.maxTitleLength {
-                            settings.title = String(settings.title.prefix(VerificationSettings.maxTitleLength))
-                        }
-                    }
+                LimitedTextField(title: "Title", text: $settings.title,
+                                 limit: VerificationSettings.maxTitleLength)
             }
 
             Section("Message body") {
-                TextArea(title: "Message", text: $settings.message,
-                         limit: VerificationSettings.maxMessageLength, lines: 2...8)
+                LimitedTextField(title: "Message", text: $settings.message,
+                                 limit: VerificationSettings.maxMessageLength, lines: 2...8)
             }
 
             Section("Reply after verifying") {
-                TextArea(title: "Reply", text: $settings.successMessage,
-                         limit: VerificationSettings.maxSuccessMessageLength, lines: 1...4)
+                LimitedTextField(title: "Reply", text: $settings.successMessage,
+                                 limit: VerificationSettings.maxSuccessMessageLength, lines: 1...4)
             }
 
             Section {

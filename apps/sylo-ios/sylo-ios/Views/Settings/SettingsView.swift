@@ -75,6 +75,7 @@ struct SettingsView: View {
                 }
             }
             .task(id: session.generation) { await account.load() }
+            .task(id: session.generation) { await account.refreshServerInfo() }
             .task { await push.settings.load() }
             .task { await addToServer.load() }
             .navigationDestination(isPresented: $isShowingHealth) {
@@ -187,8 +188,9 @@ struct SettingsView: View {
         }
     }
 
-    /// The Sylo's info: this launch's, or the one the notification settings fetched.
-    private var serverInfo: ServerInfo? { session.serverInfo ?? push.settings.serverInfo }
+    /// The Sylo's info: read when this screen opened, or, when that read failed, this launch's or
+    /// the one the notification settings fetched.
+    private var serverInfo: ServerInfo? { account.freshServerInfo ?? session.serverInfo ?? push.settings.serverInfo }
 
     private func platformRow(_ connection: PlatformConnection) -> some View {
         LabeledContent(connection.label) {
@@ -348,7 +350,7 @@ struct SettingsView: View {
             // In the app when this Sylo server sends its changelog (its info is fetched with the
             // notification settings when the session has none); older servers open the V2
             // dashboard's What's new page in the browser.
-            if push.settings.serverInfo?.supports(.changelog) == true {
+            if serverInfo?.supports(.changelog) == true {
                 NavigationLink {
                     ChangelogView(session: session)
                 } label: {

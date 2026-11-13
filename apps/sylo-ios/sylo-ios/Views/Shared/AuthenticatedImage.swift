@@ -26,6 +26,10 @@ struct AuthenticatedImage: View {
         case failed
     }
 
+    /// Drops every picture kept in memory. Called at sign-out, so one account's pictures do not
+    /// stay in memory while no one is signed in.
+    static func clearCache() { ImageCache.clear() }
+
     /// A picture at a path on the server (`/api/v2/...`, percent-encoded).
     init(path: String, query: [URLQueryItem] = [], contentMode: ContentMode = .fit) {
         source = .path(path, query)
@@ -136,6 +140,12 @@ private enum ImageCache {
     }()
 
     private static var generation: Int?
+
+    /// Empties the cache at once (sign-out); the next load starts clean.
+    static func clear() {
+        images.removeAllObjects()
+        generation = nil
+    }
 
     /// Empties the cache when the session's sign-in is not the one the pictures were loaded for.
     static func useGeneration(_ current: Int) {

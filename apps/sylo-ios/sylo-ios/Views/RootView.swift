@@ -21,6 +21,8 @@ struct RootView: View {
             }
         }
         .animation(.default, value: session.phase)
+        // Every sign-in and sign-out: what one account was shown is not kept in memory after it.
+        .onChange(of: session.generation) { AuthenticatedImage.clearCache() }
     }
 }
 

@@ -38,6 +38,7 @@ struct MessageBuilderView: View {
         .navigationBarTitleDisplayMode(.inline)
         // Like the module settings: no way back while there are unsaved changes, so none are lost.
         .navigationBarBackButtonHidden(model.hasChanges)
+        .tracksUnsavedChanges(model.hasChanges)
         .toolbar {
             if model.hasChanges {
                 ToolbarItem(placement: .cancellationAction) {

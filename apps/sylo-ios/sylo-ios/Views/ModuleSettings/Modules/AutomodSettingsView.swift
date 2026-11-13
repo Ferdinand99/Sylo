@@ -29,7 +29,8 @@ struct AutomodSettingsView: View {
                 Section {
                     AutomodModePicker(mode: $settings.rules.words.mode)
                     if settings.rules.words.enabled {
-                        TextArea(title: "Words and phrases", text: $settings.rules.words.listText, lines: 2...8)
+                        TextField("Words and phrases", text: $settings.rules.words.listText, axis: .vertical)
+                            .lineLimit(2...8)
                     }
                 } header: {
                     Text("Bad words")
@@ -56,7 +57,8 @@ struct AutomodSettingsView: View {
                 Section {
                     AutomodModePicker(mode: $settings.rules.links.mode)
                     if settings.rules.links.enabled {
-                        TextArea(title: "Allowed domains", text: $settings.rules.links.allowedText, lines: 2...6)
+                        TextField("Allowed domains", text: $settings.rules.links.allowedText, axis: .vertical)
+                            .lineLimit(2...6)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     }

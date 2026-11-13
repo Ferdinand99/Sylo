@@ -11,7 +11,7 @@ struct IntroRoleGroupEditorView: View {
     var body: some View {
         Form {
             Section {
-                TextArea(title: "Name", text: $group.name, limit: IntroductionsRoleGroup.maxNameLength, lines: 1...2)
+                LimitedTextField(title: "Name", text: $group.name, limit: IntroductionsRoleGroup.maxNameLength, lines: 1...2)
             } footer: {
                 if group.cleanName.isEmpty {
                     Text("A group without a name is not kept.")

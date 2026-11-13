@@ -250,9 +250,9 @@ public final class RoadmapModel {
     public static func suggestionProblem(title: String, description: String) -> String? {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let description = description.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !titleLimits.contains(title.count) { return "The title needs 3 to 100 characters." }
+        if !titleLimits.contains(title.utf16.count) { return "The title needs 3 to 100 characters." }
         if description.isEmpty { return "Describe the idea." }
-        if description.count > descriptionLimit { return "The description can be 2,000 characters at most." }
+        if description.utf16.count > descriptionLimit { return "The description can be 2,000 characters at most." }
         return nil
     }
 

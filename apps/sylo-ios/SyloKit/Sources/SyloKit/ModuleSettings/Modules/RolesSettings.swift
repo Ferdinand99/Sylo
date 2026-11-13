@@ -158,11 +158,11 @@ extension ReactionRolePair: Codable {
 
     /// Writes a pair the way the dashboard's form sends it: `{emoji, label, roleId, btnStyle}`.
     public func encode(to encoder: any Encoder) throws {
-        var c = encoder.container(keyedBy: ExtraCodingKey.self)
-        try c.encode(emoji, forKey: ExtraCodingKey("emoji"))
-        try c.encode(label, forKey: ExtraCodingKey("label"))
-        try c.encode(roleId, forKey: ExtraCodingKey("roleId"))
-        try c.encode(buttonStyle, forKey: ExtraCodingKey("btnStyle"))
+        var c = encoder.container(keyedBy: AnyCodingKey.self)
+        try c.encode(emoji, forKey: AnyCodingKey("emoji"))
+        try c.encode(label, forKey: AnyCodingKey("label"))
+        try c.encode(roleId, forKey: AnyCodingKey("roleId"))
+        try c.encode(buttonStyle, forKey: AnyCodingKey("btnStyle"))
     }
 }
 

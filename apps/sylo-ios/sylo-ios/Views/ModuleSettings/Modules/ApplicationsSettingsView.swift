@@ -59,8 +59,8 @@ struct ApplicationsSettingsView: View {
             }
 
             Section {
-                TextArea(title: "Panel text", text: $settings.panelText,
-                         limit: ApplicationsSettings.maxPanelTextLength, lines: 2...6)
+                LimitedTextField(title: "Panel text", text: $settings.panelText,
+                                 limit: ApplicationsSettings.maxPanelTextLength, lines: 2...6)
                 ChannelPicker(title: "Channel", selection: panelChannel(page: page), channels: page.channels,
                               noneTitle: "Choose a channel")
                 LabeledContent("Message") {

@@ -94,21 +94,21 @@ extension CommandMessage: Codable {
     private static let knownKeys: Set<String> = ["content", "embed"]
 
     public init(from decoder: any Decoder) throws {
-        let c = try decoder.container(keyedBy: ExtraCodingKey.self)
+        let c = try decoder.container(keyedBy: AnyCodingKey.self)
         self.init(
-            content: (try? c.decodeIfPresent(String.self, forKey: ExtraCodingKey("content"))) ?? "",
-            embed: try? c.decodeIfPresent(EmbedItem.self, forKey: ExtraCodingKey("embed")),
-            extra: ExtraKeys.read(from: decoder, known: Self.knownKeys))
+            content: (try? c.decodeIfPresent(String.self, forKey: AnyCodingKey("content"))) ?? "",
+            embed: try? c.decodeIfPresent(EmbedItem.self, forKey: AnyCodingKey("embed")),
+            extra: UnknownKeys.read(from: decoder, excluding: Self.knownKeys))
     }
 
     public func encode(to encoder: any Encoder) throws {
-        var c = encoder.container(keyedBy: ExtraCodingKey.self)
-        try ExtraKeys.write(extra, to: &c, skipping: Self.knownKeys)
-        try c.encode(content, forKey: ExtraCodingKey("content"))
+        var c = encoder.container(keyedBy: AnyCodingKey.self)
+        try UnknownKeys.write(extra, excluding: Self.knownKeys, to: &c)
+        try c.encode(content, forKey: AnyCodingKey("content"))
         if let embed {
-            try c.encode(embed, forKey: ExtraCodingKey("embed"))
+            try c.encode(embed, forKey: AnyCodingKey("embed"))
         } else {
-            try c.encodeNil(forKey: ExtraCodingKey("embed"))
+            try c.encodeNil(forKey: AnyCodingKey("embed"))
         }
     }
 }
@@ -229,16 +229,16 @@ extension CommandAction: Codable {
             self.init(raw: stored)
             return
         }
-        let c = try decoder.container(keyedBy: ExtraCodingKey.self)
-        let messages = (try? c.decodeIfPresent([LossyMessage].self, forKey: ExtraCodingKey("messages")))?
+        let c = try decoder.container(keyedBy: AnyCodingKey.self)
+        let messages = (try? c.decodeIfPresent([LossyMessage].self, forKey: AnyCodingKey("messages")))?
             .compactMap(\.value) ?? []
         self.init(
             kind: kind,
-            roleId: (try? c.decodeIfPresent(String.self, forKey: ExtraCodingKey("roleId"))) ?? "",
-            channelId: (try? c.decodeIfPresent(String.self, forKey: ExtraCodingKey("channelId"))) ?? "",
-            isPrivate: (try? c.decodeIfPresent(Bool.self, forKey: ExtraCodingKey("private"))) ?? false,
+            roleId: (try? c.decodeIfPresent(String.self, forKey: AnyCodingKey("roleId"))) ?? "",
+            channelId: (try? c.decodeIfPresent(String.self, forKey: AnyCodingKey("channelId"))) ?? "",
+            isPrivate: (try? c.decodeIfPresent(Bool.self, forKey: AnyCodingKey("private"))) ?? false,
             messages: kind.hasMessages ? (messages.isEmpty ? [CommandMessage()] : messages) : [],
-            extra: ExtraKeys.read(from: decoder, known: Self.knownKeys))
+            extra: UnknownKeys.read(from: decoder, excluding: Self.knownKeys))
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -246,16 +246,16 @@ extension CommandAction: Codable {
             try raw.encode(to: encoder)
             return
         }
-        var c = encoder.container(keyedBy: ExtraCodingKey.self)
-        try ExtraKeys.write(extra, to: &c, skipping: Self.knownKeys)
-        try c.encode(kind.rawValue, forKey: ExtraCodingKey("type"))
+        var c = encoder.container(keyedBy: AnyCodingKey.self)
+        try UnknownKeys.write(extra, excluding: Self.knownKeys, to: &c)
+        try c.encode(kind.rawValue, forKey: AnyCodingKey("type"))
         if kind.isRole {
-            try c.encode(roleId, forKey: ExtraCodingKey("roleId"))
+            try c.encode(roleId, forKey: AnyCodingKey("roleId"))
             return
         }
-        try c.encode(messages, forKey: ExtraCodingKey("messages"))
-        if kind == .reply { try c.encode(isPrivate, forKey: ExtraCodingKey("private")) }
-        if kind == .send { try c.encode(channelId, forKey: ExtraCodingKey("channelId")) }
+        try c.encode(messages, forKey: AnyCodingKey("messages"))
+        if kind == .reply { try c.encode(isPrivate, forKey: AnyCodingKey("private")) }
+        if kind == .send { try c.encode(channelId, forKey: AnyCodingKey("channelId")) }
     }
 
     /// A message block that is dropped when it cannot be read, so one odd block does not lose the action.

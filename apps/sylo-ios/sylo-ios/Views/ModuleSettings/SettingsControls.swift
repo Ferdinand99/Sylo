@@ -180,27 +180,3 @@ struct NumberField: View {
         }
     }
 }
-
-/// Several lines of text (a message, a template), with a character limit shown when it gets
-/// close.
-struct TextArea: View {
-    let title: LocalizedStringKey
-    @Binding var text: String
-    var limit: Int?
-    var lines: ClosedRange<Int> = 3...8
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            TextField(title, text: $text, axis: .vertical)
-                .lineLimit(lines)
-            if let limit, text.count > limit * 3 / 4 {
-                Text("\(text.count) of \(limit) characters")
-                    .font(.caption)
-                    .foregroundStyle(text.count > limit ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
-            }
-        }
-        .onChange(of: text) {
-            if let limit, text.count > limit { text = String(text.prefix(limit)) }
-        }
-    }
-}

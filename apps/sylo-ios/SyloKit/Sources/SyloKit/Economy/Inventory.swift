@@ -378,7 +378,7 @@ public final class MemberInventoryModel {
 
     /// A reason or note as the server keeps it: trimmed and cut to its limit.
     static func clean(_ text: String) -> String {
-        String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maxReasonLength))
+        UTF16Limit.truncated(text.trimmingCharacters(in: .whitespacesAndNewlines), to: maxReasonLength)
     }
 
     private func perform<E: APIEndpoint>(

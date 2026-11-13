@@ -449,7 +449,7 @@ public final class EconomyMemberModel {
         }
         isChanging = true
         defer { isChanging = false }
-        let text = String(reason.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxReasonLength))
+        let text = UTF16Limit.truncated(reason.trimmingCharacters(in: .whitespacesAndNewlines), to: Self.maxReasonLength)
         do {
             let result = try await session.send(
                 Endpoints.AdjustEconomyMember(server: server, userID: userID, action: action, amount: amount, reason: text))

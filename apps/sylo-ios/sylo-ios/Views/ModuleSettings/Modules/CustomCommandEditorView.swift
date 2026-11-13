@@ -81,6 +81,7 @@ struct CustomCommandEditorView: View {
                 }
             }
             .interactiveDismissDisabled(isDirty || model.isSaving)
+            .tracksUnsavedChanges(isDirty)
             .confirmationDialog("Discard your changes?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
                 Button("Discard Changes", role: .destructive) { dismiss() }
             }

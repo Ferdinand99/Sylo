@@ -176,13 +176,8 @@ private struct CaseReasonSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Reason", text: $reason, axis: .vertical)
-                        .lineLimit(3...10)
-                        .onChange(of: reason) {
-                            if reason.count > ModerationModel.maxCaseReasonLength {
-                                reason = String(reason.prefix(ModerationModel.maxCaseReasonLength))
-                            }
-                        }
+                    LimitedTextField(title: "Reason", text: $reason,
+                                     limit: ModerationModel.maxCaseReasonLength, lines: 3...10)
                 } header: {
                     Text("Reason for case #\(moderationCase.caseNumber)")
                 } footer: {

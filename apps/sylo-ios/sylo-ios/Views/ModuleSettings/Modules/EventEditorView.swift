@@ -52,8 +52,8 @@ struct EventEditorView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Title", text: $draft.title)
-                    TextArea(title: "Description (optional)", text: $draft.description, limit: EventDraft.descriptionLimit)
+                    LimitedTextField(title: "Title", text: $draft.title, limit: EventDraft.titleLimit)
+                    LimitedTextField(title: "Description (optional)", text: $draft.description, limit: EventDraft.descriptionLimit, lines: 3...8)
                 }
 
                 Section {
@@ -86,7 +86,7 @@ struct EventEditorView: View {
                 }
 
                 Section {
-                    TextField("Where (optional)", text: $draft.location)
+                    LimitedTextField(title: "Where (optional)", text: $draft.location, limit: EventDraft.locationLimit)
                     Toggle("Limit sign-ups", isOn: hasCapacity)
                     if draft.capacity != nil {
                         NumberField(title: "Capacity", value: capacity, range: EventDraft.capacityRange)
@@ -128,14 +128,6 @@ struct EventEditorView: View {
                             .toolbarSaveStyle()
                             .disabled(draft.problem(creating: isNew) != nil)
                     }
-                }
-            }
-            .onChange(of: draft.title) {
-                if draft.title.count > EventDraft.titleLimit { draft.title = String(draft.title.prefix(EventDraft.titleLimit)) }
-            }
-            .onChange(of: draft.location) {
-                if draft.location.count > EventDraft.locationLimit {
-                    draft.location = String(draft.location.prefix(EventDraft.locationLimit))
                 }
             }
             .alert("Couldn't Save Event", isPresented: isShowingError, presenting: actions.errorMessage) { _ in

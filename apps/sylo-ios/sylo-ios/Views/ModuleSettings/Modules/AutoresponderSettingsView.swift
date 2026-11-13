@@ -38,8 +38,8 @@ struct AutoresponderSettingsView: View {
                             Text(match.title).tag(match)
                         }
                     }
-                    TextArea(title: "Reply", text: $responder.response,
-                             limit: AutoresponderSettings.Responder.maxResponseLength, lines: 2...8)
+                    LimitedTextField(title: "Reply", text: $responder.response,
+                                     limit: AutoresponderSettings.Responder.maxResponseLength, lines: 2...8)
                     Toggle("Send as an embed", isOn: $responder.embed)
                     Toggle("Delete the trigger message", isOn: $responder.deleteTrigger)
                     Button("Remove Responder", role: .destructive) {

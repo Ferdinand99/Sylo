@@ -94,8 +94,8 @@ struct WelcomeSettingsView: View {
                 if settings.joinEnabled {
                     ChannelPicker(title: "Channel", selection: $settings.joinChannel, channels: page.channels,
                                   noneTitle: "Choose a channel")
-                    TextArea(title: "Message", text: $settings.joinMessage,
-                             limit: WelcomeSettings.maxMessageLength)
+                    LimitedTextField(title: "Message", text: $settings.joinMessage,
+                                     limit: WelcomeSettings.maxMessageLength, lines: 3...8)
                     Toggle("Send as an embed", isOn: $settings.useEmbed)
                 }
             } header: {
@@ -130,8 +130,8 @@ struct WelcomeSettingsView: View {
             Section {
                 Toggle(dmToggleTitle(settings), isOn: $settings.dmEnabled)
                 if settings.dmEnabled {
-                    TextArea(title: "DM text", text: $settings.dmMessage,
-                             limit: WelcomeSettings.maxMessageLength)
+                    LimitedTextField(title: "DM text", text: $settings.dmMessage,
+                                     limit: WelcomeSettings.maxMessageLength, lines: 3...8)
                 }
             } header: {
                 Text("Direct message")
@@ -142,8 +142,8 @@ struct WelcomeSettingsView: View {
                 if settings.leaveEnabled {
                     ChannelPicker(title: "Channel", selection: $settings.leaveChannel, channels: page.channels,
                                   noneTitle: "Choose a channel")
-                    TextArea(title: "Message", text: $settings.leaveMessage,
-                             limit: WelcomeSettings.maxMessageLength)
+                    LimitedTextField(title: "Message", text: $settings.leaveMessage,
+                                     limit: WelcomeSettings.maxMessageLength, lines: 3...8)
                 }
             } header: {
                 Text("Leave message")

@@ -486,7 +486,7 @@ public final class ApplicationSubmissionModel {
         isDeciding = true
         defer { isDeciding = false }
         actionError = nil
-        let reason = String(reason.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxReasonLength))
+        let reason = UTF16Limit.truncated(reason.trimmingCharacters(in: .whitespacesAndNewlines), to: Self.maxReasonLength)
         do {
             let result = try await session.send(
                 Endpoints.DecideApplication(server: server, id: submissionID, action: action, reason: reason))

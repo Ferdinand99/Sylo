@@ -32,7 +32,8 @@ struct AppleConnectSettingsView: View {
             }
 
             Section {
-                TextArea(title: "App ids", text: $settings.appsText, lines: 2...6)
+                TextField("App ids", text: $settings.appsText, axis: .vertical)
+                    .lineLimit(2...6)
             } header: {
                 Text("Apps")
             } footer: {

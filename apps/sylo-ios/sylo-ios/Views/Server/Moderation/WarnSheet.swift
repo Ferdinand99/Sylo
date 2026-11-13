@@ -28,13 +28,8 @@ struct WarnSheet: View {
                 }
 
                 Section {
-                    TextField("Why they are being warned", text: $reason, axis: .vertical)
-                        .lineLimit(2...6)
-                        .onChange(of: reason) {
-                            if reason.count > ModerationModel.maxWarnReasonLength {
-                                reason = String(reason.prefix(ModerationModel.maxWarnReasonLength))
-                            }
-                        }
+                    LimitedTextField(title: "Why they are being warned", text: $reason,
+                                     limit: ModerationModel.maxWarnReasonLength, lines: 2...6)
                 } header: {
                     Text("Reason")
                 } footer: {

@@ -20,6 +20,16 @@ struct MainView: View {
     @State private var detailPath = NavigationPath()
     @State private var column = NavigationSplitViewColumn.sidebar
     @State private var isShowingSettings = false
+    /// Where editors report unsaved edits; asked before the path is replaced.
+    @State private var unsavedEdits = UnsavedEdits()
+    /// A path replacement waiting for the person to say whether the unsaved edits may go.
+    @State private var heldReplacement: PathReplacement?
+
+    /// What replaces the detail path: another server from the sidebar, or a tapped ticket.
+    private enum PathReplacement {
+        case server(ServerID?)
+        case ticket(TicketNotification)
+    }
 
     init(server: ServerURL, session: AppSession) {
         self.server = server
@@ -80,6 +90,20 @@ struct MainView: View {
             if push.pendingDevLog { isShowingSettings = true }
         }
         .onChange(of: servers.hasLoaded) { openPendingTicket() }
+        .alert("Discard your changes?", isPresented: isHoldingReplacement, presenting: heldReplacement) { held in
+            Button("Discard Changes", role: .destructive) { apply(held) }
+            Button("Keep Editing", role: .cancel) {}
+        } message: { held in
+            switch held {
+            case .server: Text("You have unsaved changes. Showing another server discards them.")
+            case .ticket: Text("You have unsaved changes. Opening the ticket discards them.")
+            }
+        }
+        .environment(\.unsavedEdits, unsavedEdits)
+    }
+
+    private var isHoldingReplacement: Binding<Bool> {
+        Binding(get: { heldReplacement != nil }, set: { if !$0 { heldReplacement = nil } })
     }
 
     /// The sidebar's selection: another server starts on its Modules tab, at the top.
@@ -87,11 +111,32 @@ struct MainView: View {
         Binding {
             selection
         } set: { newValue in
-            if newValue != selection {
-                serverTab = .modules
-                detailPath = NavigationPath()
+            guard newValue != selection else { return }
+            // A pushed editor with unsaved edits would be dropped: ask first, and keep the
+            // current server until the answer is yes.
+            if unsavedEdits.wouldLoseEdits(changingServer: true) {
+                heldReplacement = .server(newValue)
+            } else {
+                apply(.server(newValue))
             }
-            selection = newValue
+        }
+    }
+
+    private func apply(_ replacement: PathReplacement) {
+        switch replacement {
+        case .server(let id):
+            serverTab = .modules
+            detailPath = NavigationPath()
+            selection = id
+        case .ticket(let ticket):
+            isShowingSettings = false
+            selection = ticket.guildID
+            serverTab = .tickets
+            var path = NavigationPath()
+            // The member's name is unknown here; the conversation shows it once loaded.
+            path.append(TicketRoute(id: ticket.ticketID, user: ""))
+            detailPath = path
+            column = .detail
         }
     }
 
@@ -109,14 +154,13 @@ struct MainView: View {
         guard let ticket = push.pendingTicket, servers.hasLoaded else { return }
         push.pendingTicket = nil
         guard servers.server(ticket.guildID) != nil else { return }
-        isShowingSettings = false
-        selection = ticket.guildID
-        serverTab = .tickets
-        var path = NavigationPath()
-        // The member's name is unknown here; the conversation shows it once loaded.
-        path.append(TicketRoute(id: ticket.ticketID, user: ""))
-        detailPath = path
-        column = .detail
+        // Unsaved edits in a pushed editor (or in the Settings sheet) would be dropped by the new
+        // path: ask first. "Keep Editing" leaves the notification unopened.
+        if unsavedEdits.wouldLoseEdits(changingServer: ticket.guildID != selection) {
+            heldReplacement = .ticket(ticket)
+        } else {
+            apply(.ticket(ticket))
+        }
     }
 }
 

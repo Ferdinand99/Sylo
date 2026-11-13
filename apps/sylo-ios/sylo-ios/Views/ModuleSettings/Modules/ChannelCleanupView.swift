@@ -289,6 +289,7 @@ private struct CleanupEditorView: View {
             }
         }
         .interactiveDismissDisabled(hasChanges || model.isSaving)
+        .tracksUnsavedChanges(hasChanges)
         .onAppear { model.saveError = nil }
         .task { limits = await session.moduleLimits()["channel-cleanup"] }
     }

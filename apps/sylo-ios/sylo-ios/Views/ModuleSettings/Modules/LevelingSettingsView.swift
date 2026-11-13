@@ -51,8 +51,8 @@ struct LevelingSettingsView: View {
                                   noneTitle: "Where they levelled up")
                 }
                 if settings.announce != .off {
-                    TextArea(title: "Level-up message", text: $settings.announceMessage,
-                             limit: LevelingSettings.maxMessageLength, lines: 2...6)
+                    LimitedTextField(title: "Level-up message", text: $settings.announceMessage,
+                                     limit: LevelingSettings.maxMessageLength, lines: 2...6)
                 }
             } header: {
                 Text("Leveling up")

@@ -55,6 +55,7 @@ struct ServerView: View {
         .navigationBarTitleDisplayMode(.inline)
         // Unsaved server settings can't be lost by going back to the server list.
         .navigationBarBackButtonHidden(settings.hasChanges)
+        .tracksUnsavedChanges(settings.hasChanges, scope: .server)
         .toolbar { settingsToolbar }
         .navigationDestination(for: ModuleRoute.self) { route in
             ModuleScreens.screen(for: route.moduleID, server: summary.id, session: session)

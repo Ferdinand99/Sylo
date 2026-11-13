@@ -15,8 +15,8 @@ struct TicketsSettingsView: View {
             ModuleIntro("Members open a ticket by sending Sylo a direct message. Staff read and reply on the Tickets tab; replies reach the member as an anonymous \"Staff\" DM.")
 
             Section {
-                TextArea(title: "Thanks for contacting the staff of {server}…", text: $settings.greeting,
-                         limit: TicketsSettings.maxMessageLength, lines: 2...8)
+                LimitedTextField(title: "Thanks for contacting the staff of {server}…", text: $settings.greeting,
+                                 limit: TicketsSettings.maxMessageLength, lines: 2...8)
             } header: {
                 Text("Greeting when a ticket opens")
             } footer: {
@@ -24,8 +24,8 @@ struct TicketsSettingsView: View {
             }
 
             Section {
-                TextArea(title: "This ticket has been closed…", text: $settings.closeMessage,
-                         limit: TicketsSettings.maxMessageLength, lines: 2...8)
+                LimitedTextField(title: "This ticket has been closed…", text: $settings.closeMessage,
+                                 limit: TicketsSettings.maxMessageLength, lines: 2...8)
             } header: {
                 Text("Message when a ticket is closed")
             } footer: {

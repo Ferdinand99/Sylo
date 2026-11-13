@@ -203,13 +203,6 @@ extension EmbedDraft: Decodable {
         case footerText, footer, footerIcon, timestamp, fields
     }
 
-    private struct AnyKey: CodingKey {
-        let stringValue: String
-        var intValue: Int? { nil }
-        init?(stringValue: String) { self.stringValue = stringValue }
-        init?(intValue: Int) { nil }
-    }
-
     /// Reads a stored embed (a spec from the server). Anything missing or of the wrong type is
     /// empty, and `footer` is read when there is no `footerText` (use ``reading(footerKey:)`` for a
     /// module that stores `footer`). `kind` and the keys the editor does not know are kept.
@@ -218,11 +211,7 @@ extension EmbedDraft: Decodable {
         let footerText = try c.decode(forKey: .footerText, or: "")
         let footer = try c.decode(forKey: .footer, or: "")
         let known = Set(CodingKeys.allCases.map(\.stringValue))
-        let all = try decoder.container(keyedBy: AnyKey.self)
-        var extra: [String: JSONValue] = [:]
-        for key in all.allKeys where !known.contains(key.stringValue) {
-            if let value = try? all.decode(JSONValue.self, forKey: key) { extra[key.stringValue] = value }
-        }
+        let extra = UnknownKeys.read(from: decoder, excluding: known)
         self.init(
             content: try c.decode(forKey: .content, or: ""),
             color: try c.decode(forKey: .color, or: ""),
@@ -261,15 +250,6 @@ public struct EmbedSpec: Encodable, Sendable, Equatable {
     let draft: EmbedDraft
     let options: EmbedOptions
 
-    /// The key names of the embed object, in the order the web editor writes them.
-    private struct Key: CodingKey {
-        let stringValue: String
-        var intValue: Int? { nil }
-        init(_ string: String) { stringValue = string }
-        init?(stringValue: String) { self.stringValue = stringValue }
-        init?(intValue: Int) { nil }
-    }
-
     /// Every key the editor can write.
     private static let ownKeys = [
         "kind", "color", "title", "image", "content", "authorName", "authorIcon", "description", "thumbnail",
@@ -283,31 +263,28 @@ public struct EmbedSpec: Encodable, Sendable, Equatable {
     }
 
     public func encode(to encoder: any Encoder) throws {
-        var c = encoder.container(keyedBy: Key.self)
+        var c = encoder.container(keyedBy: AnyCodingKey.self)
         // Keys the editor does not know go first and never replace one it writes.
-        let own = Set(EmbedSpec.ownKeys)
-        for (name, value) in draft.extra.sorted(by: { $0.key < $1.key }) where !own.contains(name) {
-            try c.encode(value, forKey: Key(name))
-        }
-        try c.encode(draft.kind, forKey: Key("kind"))
-        try c.encode(draft.resolvedColor(options), forKey: Key("color"))
-        try c.encode(draft.title, forKey: Key("title"))
-        try c.encode(draft.image, forKey: Key("image"))
-        if options.content { try c.encode(draft.content, forKey: Key("content")) }
+        try UnknownKeys.write(draft.extra, excluding: Set(EmbedSpec.ownKeys), to: &c)
+        try c.encode(draft.kind, forKey: AnyCodingKey("kind"))
+        try c.encode(draft.resolvedColor(options), forKey: AnyCodingKey("color"))
+        try c.encode(draft.title, forKey: AnyCodingKey("title"))
+        try c.encode(draft.image, forKey: AnyCodingKey("image"))
+        if options.content { try c.encode(draft.content, forKey: AnyCodingKey("content")) }
         if options.author {
-            try c.encode(draft.authorName, forKey: Key("authorName"))
-            try c.encode(draft.authorIcon, forKey: Key("authorIcon"))
+            try c.encode(draft.authorName, forKey: AnyCodingKey("authorName"))
+            try c.encode(draft.authorIcon, forKey: AnyCodingKey("authorIcon"))
         }
-        if options.description { try c.encode(draft.description, forKey: Key("description")) }
-        if options.thumbnail { try c.encode(draft.thumbnail, forKey: Key("thumbnail")) }
-        try c.encode(draft.footerText, forKey: Key(options.footerKey.rawValue))
-        if options.footerIcon { try c.encode(draft.footerIcon, forKey: Key("footerIcon")) }
-        if options.timestamp { try c.encode(draft.timestamp, forKey: Key("timestamp")) }
+        if options.description { try c.encode(draft.description, forKey: AnyCodingKey("description")) }
+        if options.thumbnail { try c.encode(draft.thumbnail, forKey: AnyCodingKey("thumbnail")) }
+        try c.encode(draft.footerText, forKey: AnyCodingKey(options.footerKey.rawValue))
+        if options.footerIcon { try c.encode(draft.footerIcon, forKey: AnyCodingKey("footerIcon")) }
+        if options.timestamp { try c.encode(draft.timestamp, forKey: AnyCodingKey("timestamp")) }
         if options.fields {
             let sent = draft.fields
                 .filter { !$0.name.isEmpty || !$0.value.isEmpty }
                 .map { FieldSpec(name: $0.name, value: $0.value, inline: $0.inline) }
-            try c.encode(sent, forKey: Key("fields"))
+            try c.encode(sent, forKey: AnyCodingKey("fields"))
         }
     }
 }

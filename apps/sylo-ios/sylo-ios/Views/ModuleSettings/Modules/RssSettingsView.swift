@@ -30,8 +30,8 @@ struct RssSettingsView: View {
                     ChannelPicker(title: "Post in", selection: $feed.channelId, channels: page.channels,
                                   noneTitle: "Choose a channel")
                     RolePicker(title: "Ping role", selection: $feed.roleId, roles: page.roles)
-                    TextArea(title: "Message template", text: $feed.template,
-                             limit: RssSettings.maxTemplateLength, lines: 2...6)
+                    LimitedTextField(title: "Message template", text: $feed.template,
+                                     limit: RssSettings.maxTemplateLength, lines: 2...6)
                     Button("Remove Feed", role: .destructive) {
                         settings.feeds.removeAll { $0.id == feed.id }
                     }

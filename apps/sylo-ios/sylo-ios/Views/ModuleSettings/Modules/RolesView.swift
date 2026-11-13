@@ -35,6 +35,7 @@ struct RolesView: View {
         .navigationBarTitleDisplayMode(.inline)
         // Like the module settings: no way back while the autoroles have unsaved changes.
         .navigationBarBackButtonHidden(model.autorolesChanged)
+        .tracksUnsavedChanges(model.autorolesChanged)
         .toolbar {
             if model.autorolesChanged {
                 ToolbarItem(placement: .cancellationAction) {

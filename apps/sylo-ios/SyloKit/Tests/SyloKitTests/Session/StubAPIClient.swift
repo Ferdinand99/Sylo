@@ -12,9 +12,13 @@ final class StubClients: @unchecked Sendable {
     }
 
     typealias Handler = @Sendable (any APIEndpoint) throws -> Any
+    /// Runs after a call is recorded and before it is answered. A test waits in it (with
+    /// `Task.sleep`, never a blocked thread) to keep a call open while it asks for another one.
+    typealias Hold = @Sendable (any APIEndpoint) async throws -> Void
 
     private let lock = NSLock()
     private var handler: Handler
+    private var hold: Hold?
     private var sent: [Call] = []
     private var progressSteps: [(sent: Int64, total: Int64)] = []
     private var holdsUploads = false
@@ -43,6 +47,11 @@ final class StubClients: @unchecked Sendable {
         lock.withLock { self.handler = handler }
     }
 
+    /// Makes `send` wait in `hold` before the handler answers; nil removes it.
+    func setHold(_ hold: Hold?) {
+        lock.withLock { self.hold = hold }
+    }
+
     func make(_ server: ServerURL, _ token: String?) -> any APIClient {
         Client(owner: self, server: server, token: token)
     }
@@ -55,6 +64,15 @@ final class StubClients: @unchecked Sendable {
         return try handler(endpoint)
     }
 
+    fileprivate func answerAfterHold(_ endpoint: any APIEndpoint, server: ServerURL, token: String?) async throws -> Any {
+        let (handler, hold) = lock.withLock {
+            sent.append(Call(endpoint: endpoint, server: server, token: token))
+            return (self.handler, self.hold)
+        }
+        try await hold?(endpoint)
+        return try handler(endpoint)
+    }
+
     private struct Client: APIClient {
         let owner: StubClients
         let server: ServerURL
@@ -62,7 +80,7 @@ final class StubClients: @unchecked Sendable {
 
         func send<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response {
             do {
-                guard let response = try owner.answer(endpoint, server: server, token: token) as? E.Response else {
+                guard let response = try await owner.answerAfterHold(endpoint, server: server, token: token) as? E.Response else {
                     throw NetworkError.decoding("stub answered \(E.self) with the wrong type")
                 }
                 return response

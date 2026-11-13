@@ -48,6 +48,7 @@ struct ApplicationFormEditorView: View {
         .navigationTitle(model.draft.name.isEmpty ? String(localized: "New Form") : model.draft.name)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(model.hasChanges)
+        .tracksUnsavedChanges(model.hasChanges)
         .toolbar {
             if model.hasChanges {
                 ToolbarItem(placement: .cancellationAction) {
@@ -130,8 +131,8 @@ struct ApplicationFormEditorView: View {
     private var generalSection: some View {
         Section {
             LimitedTextField(title: "Name", text: $model.draft.name, limit: ApplicationForm.maxNameLength)
-            TextArea(title: "Description (optional)", text: $model.draft.description,
-                     limit: ApplicationForm.maxDescriptionLength, lines: 2...5)
+            LimitedTextField(title: "Description (optional)", text: $model.draft.description,
+                             limit: ApplicationForm.maxDescriptionLength, lines: 2...5)
             Toggle("Open for applications", isOn: $model.draft.enabled)
             Picker("Where members fill it in", selection: $model.draft.fillMode) {
                 ForEach(ApplicationFillMode.choices, id: \.self) { mode in
@@ -284,14 +285,14 @@ struct ApplicationFormEditorView: View {
 
     private var messagesSection: some View {
         Section {
-            TextArea(title: "When they start", text: $model.draft.messages.start,
-                     limit: ApplicationFormMessages.maxLength, lines: 2...6)
-            TextArea(title: "When they have submitted", text: $model.draft.messages.completed,
-                     limit: ApplicationFormMessages.maxLength, lines: 2...6)
-            TextArea(title: "When accepted", text: $model.draft.messages.accepted,
-                     limit: ApplicationFormMessages.maxLength, lines: 2...6)
-            TextArea(title: "When denied", text: $model.draft.messages.denied,
-                     limit: ApplicationFormMessages.maxLength, lines: 2...6)
+            LimitedTextField(title: "When they start", text: $model.draft.messages.start,
+                             limit: ApplicationFormMessages.maxLength, lines: 2...6)
+            LimitedTextField(title: "When they have submitted", text: $model.draft.messages.completed,
+                             limit: ApplicationFormMessages.maxLength, lines: 2...6)
+            LimitedTextField(title: "When accepted", text: $model.draft.messages.accepted,
+                             limit: ApplicationFormMessages.maxLength, lines: 2...6)
+            LimitedTextField(title: "When denied", text: $model.draft.messages.denied,
+                             limit: ApplicationFormMessages.maxLength, lines: 2...6)
         } header: {
             Text("Messages to the applicant")
         } footer: {
