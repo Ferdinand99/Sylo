@@ -32,7 +32,7 @@ struct StarboardSettingsView: View {
                 } header: {
                     Text(verbatim: board.name.isEmpty ? "Starboard" : board.name)
                 } footer: {
-                    Text("The name (at most 60 characters) is shown on the dashboard only. Separate emoji with spaces; the first one is shown on the post.")
+                    Text("The name (at most 60 characters) only tells your boards apart here and in the dashboard; it is not shown in the server. Separate emoji with spaces; the first one is shown on the post.")
                 }
 
                 Section("Behaviour") {
