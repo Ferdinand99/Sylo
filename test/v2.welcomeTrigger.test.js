@@ -47,6 +47,30 @@ test('saving "when a member gets a role" keeps the usable roles and drops the re
   assert.deepEqual(await read().then((c) => [c.trigger, c.triggerRoleIds]), ['role', [ROLE.member]]);
 });
 
+test('the server stamps the roles when they start counting, and keeps the stamps of roles that stay', async () => {
+  await api.post('/modules/welcome/config', { trigger: 'join' });
+  assert.deepEqual((await stored()).triggerSince, {}, 'nothing counts in join mode');
+  const before = Date.now();
+  await api.post('/modules/welcome/config', {
+    trigger: 'role',
+    triggerRoleIds: [ROLE.member],
+    triggerSince: { [ROLE.member]: 1, [ROLE.admin]: 1 },
+  });
+  const first = (await stored()).triggerSince;
+  assert.deepEqual(Object.keys(first), [ROLE.member], 'a time sent by the client is ignored');
+  assert.ok(first[ROLE.member] >= before);
+  await new Promise((r) => setTimeout(r, 5));
+  await api.post('/modules/welcome/config', { trigger: 'role', triggerRoleIds: [ROLE.member, ROLE.admin] });
+  const second = (await stored()).triggerSince;
+  assert.equal(second[ROLE.member], first[ROLE.member], 'a role that stays keeps its time');
+  assert.ok(second[ROLE.admin] > first[ROLE.member], 'an added role starts now');
+  // a client that leaves the fields out keeps the times too (the Sylo app)
+  await api.post('/modules/welcome/config', { joinEnabled: true });
+  assert.deepEqual((await stored()).triggerSince, second);
+  await api.post('/modules/welcome/config', { trigger: 'role', triggerRoleIds: [ROLE.admin] });
+  assert.deepEqual(Object.keys((await stored()).triggerSince), [ROLE.admin], 'a removed role loses its time');
+});
+
 test('a bad trigger is saved as "join"', async () => {
   const res = await api.post('/modules/welcome/config', {
     trigger: 'whenever',

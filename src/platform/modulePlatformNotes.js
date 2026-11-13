@@ -34,7 +34,7 @@ const FLUXER_NOTES = {
   'auto-threads': () =>
     'Fluxer has no threads yet, so this module does nothing on a Fluxer server: posts stay as they are. The settings can be saved here and start working on a Discord server. Fluxer lists threads for 2026; Sylo will support them then.',
   welcome: () =>
-    'Welcoming a member when they get a role works as on Discord: Fluxer reports role changes in its member updates, and a role Sylo gives (Verification, Applications, an autorole) counts. Sylo only sees a member get a role when it already has that member in memory (someone who joined while Sylo was running, or whose roles Sylo changed itself). A role given by hand to a member Sylo has not seen since it started is not noticed, so that member gets no welcome.',
+    'Welcoming a member when they get a role works as on Discord: Fluxer reports role changes in its member updates, and a role Sylo gives (Verification, Applications, an autorole) counts. When Fluxer sends no earlier state for a member Sylo has not seen yet, Sylo welcomes the member only if they joined after the role was set up as a trigger and have not been welcomed; a member who joined before that is not welcomed by a role Sylo cannot see being given.',
   roles: () =>
     'Role menus show their buttons and dropdown options as reactions, with a short legend in the message. Members react to get or drop a role.',
   tickets: () =>

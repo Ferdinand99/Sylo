@@ -40,8 +40,12 @@ const config = (over = {}) => ({
   ...over,
 });
 // What the dashboard stores: the settings go through the normaliser, which empties a switched-off message.
-const setup = (over = {}) =>
-  setGuildModule(GID, 'welcome', { enabled: true, config: normaliseWelcomeConfig(config(over), env.guild) });
+// `since` replaces the times the server stamped (they are Date.now() at the call otherwise).
+const setup = (over = {}, since = null) => {
+  const stored = normaliseWelcomeConfig(config(over), env.guild);
+  if (since) stored.triggerSince = since;
+  return setGuildModule(GID, 'welcome', { enabled: true, config: stored });
+};
 
 /** A member of the fake server, shaped the way the module reads one. */
 function member(id, roleIds = []) {
@@ -69,8 +73,13 @@ test('defaults: a config without the setting welcomes on join, with no roles', (
   const clean = normaliseWelcomeConfig({});
   assert.equal(clean.trigger, 'join');
   assert.deepEqual(clean.triggerRoleIds, []);
-  assert.deepEqual(welcomeTrigger({}), { trigger: 'join', roleIds: [] });
-  assert.deepEqual(welcomeTrigger({ joinChannel: 'x' }), { trigger: 'join', roleIds: [] }, 'an old config');
+  assert.deepEqual(clean.triggerSince, {});
+  assert.deepEqual(welcomeTrigger({}), { trigger: 'join', roleIds: [], since: {} });
+  assert.deepEqual(
+    welcomeTrigger({ joinChannel: 'x' }),
+    { trigger: 'join', roleIds: [], since: {} },
+    'an old config'
+  );
   assert.equal(LIMITS.triggerRoleIds.maxItems, 10);
 });
 
@@ -275,7 +284,7 @@ test('a welcome with only the DM turned on is sent, and used up', async () => {
 
 // --- join mode stays as it was -------------------------------------------------------------------------
 
-test('join mode: joining welcomes, a role gain does not, and no claim is written', async () => {
+test('join mode: joining welcomes and records it, and a role gain does not welcome again', async () => {
   await setup({ trigger: 'join' });
   const m = member(U);
   await dispatch('guildMemberAdd', KEY, m);
@@ -283,11 +292,25 @@ test('join mode: joining welcomes, a role gain does not, and no claim is written
   assert.equal(posts()[0].content, `Welcome <@${U}>, you got  in Hedgerow HQ!`, '{role} is empty text');
   assert.equal(m.user.dms.length, 1);
   assert.equal(m.user.dms[0].content, `Hi ${m.user.username}, .`);
+  assert.ok(await rows(), 'the welcome was claimed like a role welcome');
   await gain(m, ROLE.adult);
   assert.equal(posts().length, 1);
+  await dispatch('guildMemberRemove', KEY, m);
+  await dispatch('guildMemberAdd', KEY, member(U));
+  assert.equal(posts().length, 2, 'a member who left and came back is welcomed again, as before');
+});
+
+test('join mode: a second join event of the same membership does not welcome twice', async () => {
+  await setup({ trigger: 'join' });
+  const m = member(U);
+  await Promise.all([dispatch('guildMemberAdd', KEY, m), dispatch('guildMemberAdd', KEY, m)]);
+  assert.equal(posts().length, 1);
+});
+
+test('join mode: nothing to send claims nothing', async () => {
+  await setup({ trigger: 'join', joinEnabled: false, dmEnabled: false });
+  await dispatch('guildMemberAdd', KEY, member(U));
   assert.equal(await rows(), null);
-  await dispatch('guildMemberAdd', KEY, m);
-  assert.equal(posts().length, 2, 'every join welcomes, as before');
 });
 
 test('a config saved before the setting existed welcomes on join', async () => {
@@ -415,6 +438,11 @@ test('a channel Sylo may not post in is a failed send, and keeps the claim too',
 test('claimWelcome: the first caller wins, others lose, a clear lets it be taken again', async () => {
   assert.equal(await claimWelcome(KEY, U), true);
   assert.equal(await claimWelcome(KEY, U), false);
+  assert.equal(
+    await claimWelcome(KEY, U, { joinedAt: Date.now() - 1000 }),
+    false,
+    'a fresh row is left alone'
+  );
   assert.equal(await claimWelcome(KEY, V), true, 'per member');
   assert.equal(await claimWelcome('900000000000000999', U), true, 'per server');
   const wins = await Promise.all(Array.from({ length: 8 }, () => claimWelcome(KEY, '700000000000000503')));
@@ -498,5 +526,265 @@ test('on Fluxer the claim and the welcome are keyed by the fluxer guild key', as
   } finally {
     runtime.clients.fluxer = null;
     await purgeGuild(FKEY);
+  }
+});
+
+// --- when the "before" cannot be trusted: the clock decides ----------------------------------------------
+
+const SINCE = 1_700_000_100_000; // a role started counting at this moment
+const joinedAfter = { joinedAt: SINCE + 60_000 };
+const joinedBefore = { joinedAt: SINCE - 60_000 };
+
+/** A member the module has no old roles for. `joined` is { joinedAt } as fakeMember takes it. */
+function uncached(id, roleIds, joined) {
+  const m = fakeMember(env.guild, id, { roleIds, ...joined });
+  m.guild = env.guild;
+  m.user.tag = `${m.user.username}#0`;
+  m.send = async (payload) => m.user.send(payload);
+  return m;
+}
+/** The three shapes of an update that has no usable "before". */
+const untrusted = (m) => [
+  { old: null, new: m }, // Fluxer sends no member it had not seen
+  { old: m, new: m }, // ... which the bridge turns into the member itself
+  { old: { ...copyOf(m), partial: true, roles: { cache: new Map() } }, new: m }, // a Discord partial
+];
+
+test('timestamps: the server stamps each role when it starts counting, and never takes the time from the client', () => {
+  const T0 = 1_000;
+  const a = ROLE.adult;
+  const b = ROLE.gamer;
+  assert.deepEqual(
+    normaliseWelcomeConfig({ trigger: 'join', triggerRoleIds: [a] }, env.guild).triggerSince,
+    {}
+  );
+  // switched on: every role is stamped
+  let stored = normaliseWelcomeConfig({ trigger: 'role', triggerRoleIds: [a] }, env.guild, { now: T0 });
+  assert.deepEqual(stored.triggerSince, { [a]: T0 });
+  // already on: a kept role keeps its time, an added one is stamped now, a client-sent time is ignored
+  stored = normaliseWelcomeConfig(
+    { trigger: 'role', triggerRoleIds: [a, b], triggerSince: { [a]: 5, [b]: 5 } },
+    env.guild,
+    { prev: stored, now: T0 + 500 }
+  );
+  assert.deepEqual(stored.triggerSince, { [a]: T0, [b]: T0 + 500 });
+  // a role that leaves the list loses its time
+  stored = normaliseWelcomeConfig({ trigger: 'role', triggerRoleIds: [b] }, env.guild, {
+    prev: stored,
+    now: T0 + 900,
+  });
+  assert.deepEqual(stored.triggerSince, { [b]: T0 + 500 });
+  // a role the guild does not accept gets no time either
+  assert.deepEqual(
+    normaliseWelcomeConfig({ trigger: 'role', triggerRoleIds: [ROLE.bot, a] }, env.guild, { now: T0 })
+      .triggerSince,
+    { [a]: T0 }
+  );
+  // back to join and on again: stamped anew, so what was held meanwhile does not count
+  const off = normaliseWelcomeConfig({ trigger: 'join', triggerRoleIds: [b] }, env.guild, { prev: stored });
+  assert.deepEqual(off.triggerSince, {});
+  assert.deepEqual(
+    normaliseWelcomeConfig({ trigger: 'role', triggerRoleIds: [b] }, env.guild, {
+      prev: off,
+      now: T0 + 2000,
+    }).triggerSince,
+    { [b]: T0 + 2000 }
+  );
+  assert.deepEqual(welcomeTrigger({ triggerSince: { [a]: 'x', junk: 1, [b]: 7 } }).since, { [b]: 7 });
+});
+
+test('no usable before: a member who joined after the role started counting is welcomed, once', async () => {
+  for (const shape of [0, 1, 2]) {
+    await purgeGuild(GID);
+    env.channel.log.sent.length = 0;
+    await setup({}, { [ROLE.adult]: SINCE });
+    const m = uncached(U, [ROLE.adult], joinedAfter);
+    await dispatch('guildMemberUpdate', KEY, untrusted(m)[shape]);
+    assert.equal(posts().length, 1, `welcomed (shape ${shape})`);
+    assert.match(posts()[0].content, /you got 18\+/);
+    await dispatch('guildMemberUpdate', KEY, { old: null, new: m });
+    assert.equal(posts().length, 1, 'once');
+  }
+});
+
+test('no usable before: a member who joined before it started counting is not welcomed', async () => {
+  await setup({}, { [ROLE.adult]: SINCE });
+  const m = uncached(U, [ROLE.adult], joinedBefore);
+  for (const update of untrusted(m)) await dispatch('guildMemberUpdate', KEY, update);
+  assert.equal(posts().length, 0);
+  assert.equal(await rows(), null);
+});
+
+test('no usable before: an unknown join time, or a role with no time, is skipped', async () => {
+  await setup({}, { [ROLE.adult]: SINCE });
+  const noTime = uncached(U, [ROLE.adult], {});
+  noTime.joinedTimestamp = null;
+  await dispatch('guildMemberUpdate', KEY, { old: null, new: noTime });
+  assert.equal(posts().length, 0);
+  assert.equal(await rows(), null);
+
+  await setup({ triggerRoleIds: [ROLE.adult, ROLE.gamer] }, { [ROLE.gamer]: SINCE });
+  await dispatch('guildMemberUpdate', KEY, { old: null, new: uncached(V, [ROLE.adult], joinedAfter) });
+  assert.equal(posts().length, 0, 'the held role has no time');
+});
+
+test('no usable before, a Fluxer member: the join time is its joinedAt date', async () => {
+  await setup({}, { [ROLE.adult]: SINCE });
+  const m = uncached(U, [ROLE.adult], {});
+  delete m.joinedTimestamp;
+  m.joinedAt = new Date(SINCE + 1000);
+  await dispatch('guildMemberUpdate', KEY, { old: null, new: m });
+  assert.equal(posts().length, 1);
+});
+
+test('a usable before decides alone: a gain counts whatever the join time, and a holder is not a gain', async () => {
+  await setup({}, { [ROLE.adult]: SINCE });
+  const old = member(U); // joined long before the role started counting
+  await gain(old, ROLE.adult);
+  assert.equal(posts().length, 1, 'a real gain of a long-time member');
+  const holder = member(V, [ROLE.adult]);
+  await dispatch('guildMemberUpdate', KEY, { old: copyOf(holder), new: holder });
+  assert.equal(posts().length, 1, 'an update with the role on both sides');
+});
+
+test('switching to role mode: holders from before are not welcomed, newcomers are, a role added later starts then', async () => {
+  const T1 = 1_750_000_000_000;
+  // the dashboard switches the mode on at T1
+  const stored = normaliseWelcomeConfig(config({ triggerRoleIds: [ROLE.adult] }), env.guild, { now: T1 });
+  await setGuildModule(GID, 'welcome', { enabled: true, config: stored });
+  const holder = uncached(U, [ROLE.adult], { joinedAt: T1 - 86_400_000 });
+  const newcomer = uncached(V, [ROLE.adult], { joinedAt: T1 + 1000 });
+  for (const m of [holder, newcomer]) await dispatch('guildMemberUpdate', KEY, { old: null, new: m });
+  assert.equal(posts().length, 1, 'only the member who joined after the switch');
+  assert.ok(await getWelcomeSent(KEY, V));
+  assert.equal(await rows(), null);
+
+  // a second role is added at T2: someone who joined between T1 and T2 and holds it is not welcomed
+  const T2 = T1 + 86_400_000;
+  const next = normaliseWelcomeConfig(config({ triggerRoleIds: [ROLE.adult, ROLE.gamer] }), env.guild, {
+    prev: stored,
+    now: T2,
+  });
+  assert.deepEqual(next.triggerSince, { [ROLE.adult]: T1, [ROLE.gamer]: T2 });
+  await setGuildModule(GID, 'welcome', { enabled: true, config: next });
+  const middle = uncached('700000000000000510', [ROLE.gamer], { joinedAt: T1 + 5000 });
+  await dispatch('guildMemberUpdate', KEY, { old: null, new: middle });
+  assert.equal(posts().length, 1, 'joined before the role was added');
+  const late = uncached('700000000000000511', [ROLE.gamer], { joinedAt: T2 + 5000 });
+  await dispatch('guildMemberUpdate', KEY, { old: null, new: late });
+  assert.equal(posts().length, 2);
+});
+
+// --- a member welcomed on joining, and long-time members ---------------------------------------------------
+
+test('a member welcomed in join mode is not welcomed again by a role after the switch', async () => {
+  await setup({ trigger: 'join' });
+  const m = member(U);
+  await dispatch('guildMemberAdd', KEY, m);
+  assert.equal(posts().length, 1);
+  await setup({ trigger: 'role' });
+  await gain(m, ROLE.adult);
+  assert.equal(posts().length, 1, 'already welcomed');
+  // a member who has no row (nothing was set up when they joined) still is welcomed
+  const other = member(V);
+  await gain(other, ROLE.adult);
+  assert.equal(posts().length, 2);
+});
+
+test('a long-time member who has a welcome row is not welcomed when they lose and regain a trigger role', async () => {
+  await setup();
+  const m = member(U); // joined in 2023
+  await gain(m, ROLE.adult);
+  assert.equal(posts().length, 1);
+  lose(m, ROLE.adult);
+  await gain(m, ROLE.adult);
+  assert.equal(posts().length, 1);
+});
+
+// --- a row left over from an earlier membership -----------------------------------------------------------
+
+test('claimWelcome replaces a row older than the join time, minus a minute, and only that', async () => {
+  const joined = 1_800_000_000_000;
+  assert.equal(await claimWelcome(KEY, U, { now: joined - 86_400_000 }), true);
+  assert.equal(
+    await claimWelcome(KEY, U, { joinedAt: joined - 86_400_000 - 1000 }),
+    false,
+    'same membership'
+  );
+  assert.equal(
+    await claimWelcome(KEY, U, { now: joined + 10, joinedAt: joined }),
+    true,
+    'left over: replaced'
+  );
+  assert.equal((await getWelcomeSent(KEY, U)).sent_at, joined + 10);
+  assert.equal(await claimWelcome(KEY, U, { now: joined + 20, joinedAt: joined }), false, 'and fresh now');
+  // within the minute of skew: still this membership
+  assert.equal(await claimWelcome(KEY, V, { now: joined - 30_000 }), true);
+  assert.equal(await claimWelcome(KEY, V, { joinedAt: joined }), false);
+  // several claims at the same moment on a stale row: exactly one replaces it
+  const stale = '700000000000000530';
+  assert.equal(await claimWelcome(KEY, stale, { now: 1_000 }), true);
+  const wins = await Promise.all(
+    Array.from({ length: 8 }, () => claimWelcome(KEY, stale, { now: joined + 5, joinedAt: joined }))
+  );
+  assert.equal(wins.filter(Boolean).length, 1);
+});
+
+test('a rejoin after a leave nobody saw is welcomed again', async () => {
+  await setup();
+  // the leave was missed (module off, Sylo down): a row from long before the new membership is left
+  assert.equal(await claimWelcome(KEY, U, { now: 1_000 }), true);
+  const again = member(U);
+  again.joinedTimestamp = Date.now() - 5_000; // rejoined five seconds ago
+  await gain(again, ROLE.adult);
+  assert.equal(posts().length, 1, 'the old row did not block it');
+  assert.ok((await rows()).sent_at > 1_000);
+});
+
+// --- which roles count when it runs ------------------------------------------------------------------------
+
+test('at run time only @everyone and managed roles are dropped: a role missing from the cache counts', async () => {
+  const missing = '100000000000000990';
+  await setGuildModule(GID, 'welcome', {
+    enabled: true,
+    config: {
+      ...normaliseWelcomeConfig(config(), env.guild),
+      triggerRoleIds: [ROLE.everyone, ROLE.bot, missing],
+    },
+  });
+  const m = member(U);
+  await gain(m, ROLE.bot);
+  await gain(m, ROLE.everyone);
+  assert.equal(posts().length, 0, 'managed and @everyone never start a welcome');
+  const before = copyOf(m);
+  m.roles.cache.set(missing, undefined);
+  await dispatch('guildMemberUpdate', KEY, { old: before, new: m });
+  assert.equal(posts().length, 1, 'a role the guild cache does not know yet still counts');
+  assert.match(posts()[0].content, /you got {2}in/, 'its name is empty text');
+});
+
+// --- the log -----------------------------------------------------------------------------------------------
+
+test('a skipped welcome is logged at debug level with ids, never with the message', async () => {
+  const lines = [];
+  const debug = log.debug;
+  log.debug = (...args) => lines.push(args.join(' '));
+  try {
+    await setup({ joinMessage: 'SECRET-TEXT {user}', dmMessage: 'SECRET-DM' }, { [ROLE.adult]: SINCE });
+    const noTime = uncached(U, [ROLE.adult], {});
+    noTime.joinedTimestamp = null;
+    await dispatch('guildMemberUpdate', KEY, { old: null, new: noTime });
+    await dispatch('guildMemberUpdate', KEY, { old: null, new: uncached(V, [ROLE.adult], joinedBefore) });
+    const done = member('700000000000000520');
+    await gain(done, ROLE.adult);
+    lose(done, ROLE.adult);
+    await gain(done, ROLE.adult); // already welcomed
+    const text = lines.join('\n');
+    assert.ok(text.includes(U) && text.includes(KEY) && text.includes(ROLE.adult), 'unknown join time');
+    assert.ok(text.includes(V) && /before/.test(text), 'joined before');
+    assert.ok(text.includes('700000000000000520') && /already welcomed/.test(text), 'claim held');
+    assert.ok(!text.includes('SECRET'), 'no message content');
+  } finally {
+    log.debug = debug;
   }
 });

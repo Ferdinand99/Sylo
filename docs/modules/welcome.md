@@ -51,21 +51,31 @@ the member joins.
   the welcome image and the DM, if they are turned on. All placeholders work, and `{role}`
   is the role that started it.
 - **Once per member** — a member is welcomed once per server, however many of the roles
-  they get. A member who leaves and comes back can be welcomed again, as when welcomed on
-  joining.
+  they get. A member who leaves and comes back can be welcomed again. Sylo keeps a short
+  record of who was welcomed (also when welcoming on joining); a record left over from an
+  earlier time on the server, because the leave was missed, does not block a member who has
+  rejoined since.
 - **Joining** — sends nothing, unless the member already has one of the roles when they
   join (for example from an autorole). Then they are welcomed right away.
 - **The leave message** works the same in both modes.
+- **Members who were already welcomed** — a member welcomed on joining (before you
+  switched to roles) is not welcomed again by a role. The same goes for a long-time member
+  who loses a trigger role and gets it back: once welcomed, never again.
 - **Switching on** — members who already have one of the roles are **not** welcomed when
-  you switch to **When a member gets a role**. Only roles given afterwards count.
+  you switch to **When a member gets a role**. Only roles given afterwards count. A role you
+  add to the list later starts counting from that moment, in the same way.
 - **No usable role** — the settings save with a warning, and nothing is sent until you
   pick one.
 
 Sylo notices a role change from the member update events, so it needs the **Server
-Members** intent, and it sees a member get a role only when it already has that member in
-memory: someone who joined while Sylo was running, or whose roles Sylo changed itself
-(Verification and Applications do). A role given by hand to a member Sylo has not seen
-since it started is not noticed, so that member gets no welcome.
+Members** intent. Normally the update says which roles the member had before, and a new
+trigger role is a gain. For a member Sylo has not seen since it started, the update says
+nothing about the earlier roles. Then Sylo welcomes the member only if they **joined after
+the role started counting** (when you switched to roles, or added the role to the list) and
+have not been welcomed yet. That covers a role given by hand after a restart, or while Sylo
+was offline (the welcome comes with the member's next update of any kind). A member who
+joined before the role started counting is not welcomed this way; this is what keeps a
+switch from welcoming everyone who already has the role.
 
 If a welcome cannot be sent (no permission in the channel, or DMs closed), it is not tried
 again: a missed welcome is better than a double one. The log notes it, without the message.

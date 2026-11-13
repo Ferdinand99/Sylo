@@ -31,6 +31,9 @@ function memberWith(roleIds) {
   return { member, puts };
 }
 
+const PRIOR = Symbol.for('sylo.priorRoleIds');
+const entriesOf = (member) => member.roles[PRIOR] ?? new Map();
+
 /** What the SDK's gateway handler does: copy the member (after the in-place add), then patch it. */
 function sdkUpdate(member) {
   const copy = {
@@ -99,22 +102,57 @@ test('the member update the bridge dispatches shows a role Sylo gave as a gain',
   assert.deepEqual(update.payload.new.roles.roleIds, [ADULT]);
 });
 
-test('an add that fails, or that adds nothing, keeps no state from before', async () => {
+test('an add that fails, or that adds nothing, leaves no entry', async () => {
   const { member } = memberWith([OTHER]);
   member.client.rest.put = async () => {
     throw new Error('Missing Permissions');
   };
   await assert.rejects(member.roles.add(ADULT), /Missing Permissions/);
   assert.deepEqual(member.roles.roleIds, [OTHER]);
-  const failed = sdkUpdate(member);
-  restoreOldRoles(failed.oldMember, failed.newMember);
-  assert.deepEqual(failed.oldMember.roles.roleIds, [OTHER], 'nothing to restore');
+  assert.equal(entriesOf(member).size, 0, 'a failed add clears its entry');
 
   const { member: holder } = memberWith([ADULT]);
   await holder.roles.add(ADULT); // already has it: the SDK does nothing
-  const same = sdkUpdate(holder);
-  holder.roles.ids = [ADULT, OTHER]; // a later change that came from the gateway only
-  const copy = { ...same, oldMember: same.oldMember };
-  restoreOldRoles(copy.oldMember, holder);
-  assert.deepEqual(copy.oldMember.roles.roleIds, [ADULT], 'no stale state was kept');
+  assert.equal(entriesOf(holder).size, 0);
+});
+
+test('three roles added in a row: the update of each one shows its own role as a gain, whatever the order', async () => {
+  const THIRD = '100000000000000805';
+  const { member } = memberWith([]);
+  await member.roles.add([ADULT, OTHER, THIRD]); // the SDK has all three in place when the updates arrive
+  assert.equal(entriesOf(member).size, 3);
+
+  // each update: a copy of the member as it is now (all three), and the payload of that one gateway event
+  const update = (payloadIds) => {
+    const oldMember = { id: 'u1', roles: new sdk.GuildMemberRoleManager({}, [...member.roles.roleIds]) };
+    const newMember = { id: 'u1', roles: { roleIds: payloadIds, [PRIOR]: entriesOf(member) } };
+    restoreOldRoles(oldMember, newMember);
+    return oldMember.roles.roleIds;
+  };
+  assert.ok(!update([ADULT]).includes(ADULT), 'the first role is a gain');
+  assert.ok(!update([ADULT, OTHER]).includes(OTHER), 'the second role is a gain');
+  const last = update([ADULT, OTHER, THIRD]);
+  assert.ok(!last.includes(THIRD), 'the trigger role, third in the row, is a gain');
+  assert.deepEqual(last, [ADULT, OTHER]);
+  assert.equal(entriesOf(member).size, 0, 'every entry was used once');
+});
+
+test('an add with no echo does not colour a later, unrelated update', async () => {
+  const { member } = memberWith([OTHER]);
+  await member.roles.add(ADULT);
+  assert.equal(entriesOf(member).size, 1);
+  const later = Date.now() + 31_000; // the gateway never confirmed it; a nickname change arrives much later
+  const { oldMember, newMember } = sdkUpdate(member);
+  restoreOldRoles(oldMember, newMember, later);
+  assert.deepEqual(oldMember.roles.roleIds, [OTHER, ADULT], 'the old member is the plain copy: no gain');
+  assert.equal(entriesOf(member).size, 0, 'the stale entry was dropped');
+});
+
+test('an update that does not hold the added role leaves its entry for the update that does', async () => {
+  const { member } = memberWith([]);
+  await member.roles.add(ADULT);
+  const oldMember = { id: 'u1', roles: new sdk.GuildMemberRoleManager({}, [ADULT]) };
+  restoreOldRoles(oldMember, { id: 'u1', roles: { roleIds: [OTHER], [PRIOR]: entriesOf(member) } });
+  assert.deepEqual(oldMember.roles.roleIds, [ADULT], 'a nickname update before the echo changes nothing');
+  assert.equal(entriesOf(member).size, 1);
 });

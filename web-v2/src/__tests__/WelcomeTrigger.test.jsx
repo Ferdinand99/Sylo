@@ -84,7 +84,7 @@ describe('Welcome: when to welcome', () => {
     expect(screen.getByRole('link', { name: 'application' }).getAttribute('href')).toBe(
       `/guilds/${GUILD}/m/applications`
     );
-    expect(screen.getByText(/does not welcome members who already have one of the roles/)).toBeTruthy();
+    expect(screen.getByText(/are not welcomed by a role/)).toBeTruthy();
     expect(screen.getByText(/No role is picked, so no welcome is sent/)).toBeTruthy();
   });
 
@@ -116,10 +116,11 @@ describe('Welcome: when to welcome', () => {
     expect(screen.getByLabelText('Add a role').disabled).toBe(true);
   });
 
-  it('the placeholder list offers {role}', async () => {
-    api.getModuleConfig.mockResolvedValue(data());
+  it('offers {role} under the welcome message and the DM, but not under the leave message', async () => {
+    api.getModuleConfig.mockResolvedValue(data({ dmEnabled: true, leaveEnabled: true }));
     renderAtGuild(<Welcome />, GUILD);
     await screen.findByLabelText('When a member joins');
-    expect(screen.getAllByRole('button', { name: 'Insert {role}' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Insert {role}' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Insert {user}' })).toHaveLength(3);
   });
 });

@@ -704,7 +704,8 @@ router.post(
     const body = { ...req.body };
     if (body.trigger === undefined) body.trigger = prev.trigger;
     if (body.triggerRoleIds === undefined) body.triggerRoleIds = prev.triggerRoleIds;
-    const config = normaliseWelcomeConfig(body, guild);
+    // The time each trigger role started counting is the server's to set, from what was stored before.
+    const config = normaliseWelcomeConfig(body, guild, { prev });
     const newRoles = config.autoroleEnabled ? normaliseAutoroles(req.body.autoroles) : [];
     const rolesMod = await getGuildModule(guild.id, 'roles');
     await setGuildModule(guild.id, 'roles', {

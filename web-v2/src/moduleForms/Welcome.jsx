@@ -21,6 +21,8 @@ export default function Welcome() {
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const tokens = tokensFor('welcome', data.placeholders);
+  // {role} only has a value in the welcome itself; the leave message has no role to name.
+  const leaveTokens = tokens.filter((tk) => tk.token !== '{role}');
   const joinChannelName = data.channels.find((c) => c.id === form.joinChannel)?.name;
   // A config from before the setting existed has neither field: it welcomes on join.
   const onRole = form.trigger === 'role';
@@ -73,8 +75,9 @@ export default function Welcome() {
                   <Link to={`/guilds/${guildId}/m/applications`}>application</Link> are typical.
                 </p>
                 <p className="v2-field-hint">
-                  Switching from “When a member joins” does not welcome members who already have one of the
-                  roles: only roles given from then on count.
+                  A member is welcomed once. Members who were already welcomed on joining, or who already have
+                  one of the roles when you switch from “When a member joins”, are not welcomed by a role:
+                  only members who get a role afterwards count.
                 </p>
               </div>
               {triggerRoleIds.length === 0 ? (
@@ -224,7 +227,7 @@ export default function Welcome() {
             />
             <PlaceholderHint
               fieldId="leaveMessage"
-              tokens={tokens}
+              tokens={leaveTokens}
               value={form.leaveMessage}
               onChange={(leaveMessage) => set({ leaveMessage })}
             />

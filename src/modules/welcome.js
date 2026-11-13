@@ -1,12 +1,14 @@
 // Welcome & leave module. config shape:
 //   { joinChannel, joinMessage, leaveChannel, leaveMessage, dmMessage, useEmbed,
-//     card, cardBackground, trigger, triggerRoleIds }
+//     card, cardBackground, trigger, triggerRoleIds, triggerSince }
 // Placeholders: {user} {user.tag} {user.name} {user.id} {server} {memberCount} {intro} {role}
 //
 // `trigger` says when the welcome (message, image and DM) goes out: 'join' (the default) when a
 // member joins, or 'role' when they first get one of `triggerRoleIds`. In 'role' mode a member is
 // welcomed once per server: the claim row in welcome_sent is written before the send, stays when the
-// send fails (a missed welcome is better than a double one) and goes when the member leaves.
+// send fails (a missed welcome is better than a double one) and goes when the member leaves. Welcomes
+// on joining claim the same row, so a member already welcomed is never welcomed again by a role.
+// `triggerSince` maps each trigger role to the moment it started counting (set by the server).
 import { guildKey, rawGuildId } from '../platform/platformOf.js';
 import { EmbedBuilder, AttachmentBuilder, escapeMarkdown } from 'discord.js';
 import { on } from './dispatch.js';
@@ -58,6 +60,39 @@ export function validTriggerRoleIds(guild, ids) {
 }
 
 /**
+ * The roles of `ids` that may start a welcome while the bot runs: everything except @everyone and a
+ * role known to be managed. A role missing from the role cache still counts (the cache may lag); the
+ * strict check of validTriggerRoleIds is for saving.
+ * @param {any} guild
+ * @param {string[]} ids
+ */
+export function usableTriggerRoleIds(guild, ids) {
+  const everyone = guild ? rawGuildId(guild) : null;
+  return ids.filter((id) => id !== everyone && guild?.roles?.cache?.get(id)?.managed !== true);
+}
+
+/** A `triggerSince` value as a clean { roleId: epochMs } map (ids only, finite times). */
+function sinceMap(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [id, at] of Object.entries(raw)) {
+    if (/^\d{17,20}$/.test(id) && Number.isFinite(at) && at > 0) out[id] = Math.floor(at);
+  }
+  return out;
+}
+
+/**
+ * When each trigger role started counting. In 'join' mode there are none. In 'role' mode a role keeps
+ * its time while it stays in the list of a config that already welcomed on roles, and gets `now` when it
+ * is added or when the mode is switched on. A role that leaves the list loses its time.
+ */
+function stampSince(prev, trigger, roleIds, now) {
+  if (trigger !== 'role') return {};
+  const before = prev?.trigger === 'role' ? sinceMap(prev.triggerSince) : {};
+  return Object.fromEntries(roleIds.map((id) => [id, before[id] ?? now]));
+}
+
+/**
  * Coerce a submitted welcome config into the canonical shape. Each message and channel is only
  * kept while its switch is on. `autoroleEnabled` is the switch only; the roles themselves live in
  * the roles module and are written by the route next to this config.
@@ -65,19 +100,26 @@ export function validTriggerRoleIds(guild, ids) {
  * `trigger` is 'join' unless it is exactly 'role'. `triggerRoleIds` is kept at most 10 long; give
  * the guild to also drop roles that do not exist, @everyone and managed roles. The roles are kept
  * while the trigger is 'join' too, so switching back and forth does not lose the choice.
+ *
+ * `triggerSince` is never taken from `raw`: the server sets it from the stored config `prev` (see
+ * stampSince) at `now`.
  * @param {object} [raw]
  * @param {any} [guild]
+ * @param {{ prev?: object, now?: number }} [opts]
  */
-export function normaliseWelcomeConfig(raw = {}, guild = null) {
+export function normaliseWelcomeConfig(raw = {}, guild = null, { prev = {}, now = Date.now() } = {}) {
+  const trigger = raw.trigger === 'role' ? 'role' : 'join';
   const joinOn = Boolean(raw.joinEnabled);
   const dmOn = Boolean(raw.dmEnabled);
   const leaveOn = Boolean(raw.leaveEnabled);
   const cardBg = String(raw.cardBackground ?? '').trim();
   let triggerRoleIds = idList(raw.triggerRoleIds, 100);
   if (guild) triggerRoleIds = validTriggerRoleIds(guild, triggerRoleIds);
+  triggerRoleIds = triggerRoleIds.slice(0, LIMITS.triggerRoleIds.maxItems);
   return {
-    trigger: raw.trigger === 'role' ? 'role' : 'join',
-    triggerRoleIds: triggerRoleIds.slice(0, LIMITS.triggerRoleIds.maxItems),
+    trigger,
+    triggerRoleIds,
+    triggerSince: stampSince(prev, trigger, triggerRoleIds, now),
     joinEnabled: joinOn,
     joinChannel: joinOn ? chan(raw.joinChannel) : '',
     joinMessage: joinOn ? String(raw.joinMessage ?? '').slice(0, LIMITS.joinMessage.maxLength) : '',
@@ -97,12 +139,13 @@ export function normaliseWelcomeConfig(raw = {}, guild = null) {
  * When a stored config welcomes members, and for which roles. A config saved before the setting
  * existed welcomes on join. The roles are not checked against the server here (see validTriggerRoleIds).
  * @param {object} [config]
- * @returns {{ trigger: 'join' | 'role', roleIds: string[] }}
+ * @returns {{ trigger: 'join' | 'role', roleIds: string[], since: Record<string, number> }}
  */
 export function welcomeTrigger(config = {}) {
   return {
     trigger: config?.trigger === 'role' ? 'role' : 'join',
     roleIds: idList(config?.triggerRoleIds, LIMITS.triggerRoleIds.maxItems),
+    since: sinceMap(config?.triggerSince),
   };
 }
 
@@ -201,14 +244,15 @@ async function sendWelcome(member, config, guildId, roleName = '') {
   return result;
 }
 
-/**
- * Welcome a member in 'role' mode, once per server. The claim comes first, so two events at the same
- * moment cannot both send; it stays when the send fails, so a failure never turns into a second welcome.
- * Only ids are logged, never the message.
- */
-async function welcomeOnce(member, config, guildId, roleName) {
-  if (!hasWelcome(config)) return false; // nothing to send, so nothing to use up
-  if (!(await claimWelcome(guildId, member.id))) return false;
+/** When the member joined, in epoch ms, or null when the platform does not say. */
+function joinedMs(member) {
+  const at = member?.joinedTimestamp ?? member?.joinedAt;
+  const ms = at instanceof Date ? at.getTime() : Number(at);
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
+}
+
+/** Send a welcome that is already claimed. Only ids are logged, never the message. */
+async function deliver(member, config, guildId, roleName) {
   try {
     const result = await sendWelcome(member, config, guildId, roleName);
     if (result.channel === false) {
@@ -223,7 +267,43 @@ async function welcomeOnce(member, config, guildId, roleName) {
   } catch (err) {
     log.warn('module:welcome', `welcome for ${member.id} in ${guildId} failed: ${err.message}`);
   }
+}
+
+const skipped = (guildId, userId, roleId, why) =>
+  log.debug('module:welcome', `no welcome for ${userId} in ${guildId} (role ${roleId || 'none'}): ${why}`);
+
+/**
+ * Welcome a member in 'role' mode, once per server. The claim comes first, so two events at the same
+ * moment cannot both send; it stays when the send fails, so a failure never turns into a second welcome.
+ * A row from an earlier membership (older than the member's join time) is replaced by the claim.
+ */
+async function welcomeOnce(member, config, guildId, roleId, { onJoin = false } = {}) {
+  if (!hasWelcome(config)) return false; // nothing to send, so nothing to use up
+  const joinedAt = joinedMs(member) ?? (onJoin ? Date.now() : null);
+  if (!(await claimWelcome(guildId, member.id, { joinedAt }))) {
+    skipped(guildId, member.id, roleId, 'already welcomed');
+    return false;
+  }
+  await deliver(member, config, guildId, roleNameOf(member.guild, roleId));
   return true;
+}
+
+/**
+ * Welcome a joining member in 'join' mode, as before, but through the same claim, so that a member who was
+ * welcomed here is not welcomed again when the server later switches to roles. A claim that cannot be made
+ * (a database error) does not stop the welcome.
+ */
+async function welcomeOnJoin(member, config, guildId) {
+  if (hasWelcome(config)) {
+    let won = true;
+    try {
+      won = await claimWelcome(guildId, member.id, { joinedAt: joinedMs(member) ?? Date.now() });
+    } catch (err) {
+      log.warn('module:welcome', `could not claim the welcome of ${member.id} in ${guildId}: ${err.message}`);
+    }
+    if (!won) return skipped(guildId, member.id, '', 'already welcomed');
+  }
+  await sendWelcome(member, config, guildId);
 }
 
 /**
@@ -238,38 +318,44 @@ function heldRoleIds(member) {
   return null;
 }
 
-/** The first of `roleIds` (in the order of the setting) that `held` contains, or null. */
-const firstHeld = (roleIds, held) => roleIds.find((id) => held.has(id)) ?? null;
-
 const roleNameOf = (guild, id) => guild?.roles?.cache?.get(id)?.name ?? '';
 
 on('welcome', 'guildMemberAdd', async (member, config, guildId) => {
   const { trigger, roleIds } = welcomeTrigger(config);
-  if (trigger === 'role') {
-    // Joining sends nothing, unless they already hold a trigger role (an autorole, for example).
-    const held = heldRoleIds(member);
-    const id = held ? firstHeld(validTriggerRoleIds(member.guild, roleIds), held) : null;
-    if (id) await welcomeOnce(member, config, guildId, roleNameOf(member.guild, id));
-    return;
-  }
-  await sendWelcome(member, config, guildId);
+  if (trigger !== 'role') return welcomeOnJoin(member, config, guildId);
+  // Joining sends nothing, unless they already hold a trigger role (an autorole, for example).
+  const held = heldRoleIds(member);
+  const id = held ? usableTriggerRoleIds(member.guild, roleIds).find((r) => held.has(r)) : null;
+  if (id) await welcomeOnce(member, config, guildId, id, { onJoin: true });
 });
 
-// A role gain is a role in the new member that the old one did not have. Without a trustworthy
-// "before" (the member was not in memory, or the platform sent none) there is no gain to see, and
-// nothing is sent: switching the mode on never welcomes members who already hold the role.
+// A role gain is a trigger role in the new member that the old one did not have.
+//
+// When the old member cannot be trusted (it is the member itself, a partial one, or there is none: a member
+// Sylo had not seen yet) the gain is read from the clock instead: the member holds a trigger role, joined
+// after that role started counting (`triggerSince`) and has not been welcomed. Whoever held the role when
+// the mode was switched on joined before that, so they are never reached; a member whose join time is
+// unknown is skipped.
 on('welcome', 'guildMemberUpdate', async ({ old: before, new: after }, config, guildId) => {
-  const { trigger, roleIds } = welcomeTrigger(config);
+  const { trigger, roleIds, since } = welcomeTrigger(config);
   if (trigger !== 'role' || !roleIds.length || !after?.id) return;
-  if (!before || before === after) return;
   const now = heldRoleIds(after);
-  const was = heldRoleIds(before);
-  if (!now || !was) return;
-  const gained = firstHeld(
-    validTriggerRoleIds(after.guild, roleIds).filter((id) => !was.has(id)),
-    now
-  );
-  if (gained) await welcomeOnce(after, config, guildId, roleNameOf(after.guild, gained));
+  if (!now) return;
+  const held = usableTriggerRoleIds(after.guild, roleIds).filter((id) => now.has(id));
+  if (!held.length) return;
+
+  const was = before && before !== after ? heldRoleIds(before) : null;
+  if (was) {
+    const gained = held.find((id) => !was.has(id));
+    if (gained) await welcomeOnce(after, config, guildId, gained);
+    return;
+  }
+
+  const joined = joinedMs(after);
+  if (joined === null) return skipped(guildId, after.id, held[0], 'old roles and join time unknown');
+  const id = held.find((r) => since[r] !== undefined && joined > since[r]);
+  if (!id) return skipped(guildId, after.id, held[0], 'joined before the role started counting');
+  await welcomeOnce(after, config, guildId, id);
 });
 
 on('welcome', 'guildMemberRemove', async (member, config, guildId) => {

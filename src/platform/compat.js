@@ -14,8 +14,9 @@
 import { fluxerEndpoints } from './instance.js';
 
 const WRAPPED = Symbol.for('sylo.fluxerCompat');
-// The role ids a member held before Sylo itself gave it a role (see GuildMemberRoleManager.add below).
+// The roles Sylo itself has just added to a member, with the time (see GuildMemberRoleManager.add below).
 const PRIOR_ROLES = Symbol.for('sylo.priorRoleIds');
+const PRIOR_ROLE_TTL_MS = 30_000;
 const idOf = (x) => (typeof x === 'string' ? x : x?.id);
 
 // Bulk delete skips anything older than this (discord.js's filterOld), less a
@@ -23,18 +24,25 @@ const idOf = (x) => (typeof x === 'string' ? x : x?.id);
 const BULK_DELETE_MAX_AGE_MS = 14 * 86_400_000 - 60_000;
 
 /**
- * For a Fluxer member update: put back the roles the member held before Sylo gave it one (kept by the
- * patched `roles.add`), so that `oldMember` shows what a gateway-only change would. Used once: the
- * kept state is dropped. Does nothing when there is none or the old member cannot take it.
+ * For a Fluxer member update: take the roles Sylo gave itself off the update's `oldMember`, so that it shows
+ * what a gateway-only change would. `roles.add` below notes each role it adds; an entry counts for the update
+ * whose payload (`newMember`) holds that role, is used once, and expires after PRIOR_ROLE_TTL_MS (a gateway
+ * echo arrives within seconds; an add that never got one must not colour a later, unrelated update).
+ * Does nothing when there is no entry or the old member cannot take it.
  * @param {any} oldMember  the update's "before" (a copy of the member)
  * @param {any} newMember  the update's "after" (the member Sylo holds)
+ * @param {number} [now]
  */
-export function restoreOldRoles(oldMember, newMember) {
-  const prior = newMember?.roles?.[PRIOR_ROLES];
-  if (!prior) return;
-  delete newMember.roles[PRIOR_ROLES];
+export function restoreOldRoles(oldMember, newMember, now = Date.now()) {
+  const added = newMember?.roles?.[PRIOR_ROLES];
+  if (!added) return;
+  for (const [id, entry] of added) if (now - entry.at > PRIOR_ROLE_TTL_MS) added.delete(id);
+  const inUpdate = new Set(newMember.roles.roleIds ?? []);
+  const confirmed = [...added.keys()].filter((id) => inUpdate.has(id));
+  for (const id of confirmed) added.delete(id);
+  if (!confirmed.length) return;
   if (oldMember && oldMember !== newMember && typeof oldMember.roles?._patch === 'function') {
-    oldMember.roles._patch(prior);
+    oldMember.roles._patch((oldMember.roles.roleIds ?? []).filter((id) => !confirmed.includes(id)));
   }
 }
 
@@ -575,30 +583,36 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
   );
   // discord.js add/remove take one role or many, plus an optional reason.
   //
-  // The SDK adds the role to the cached member in place, before the gateway's member update arrives,
-  // and the "old member" of that update is a copy made after that. A role Sylo gave itself would then
-  // never show as a gain. The first state from before the add is kept on the manager, until
-  // restoreOldRoles() hands it to the update (src/bot/fluxerModuleEvents.js).
+  // The SDK adds the role to the cached member in place, before the gateway's member update arrives, and the
+  // "old member" of that update is a copy made after that. A role Sylo gave itself would then never show as
+  // a gain. Each role added is noted on the manager until restoreOldRoles() uses it for the update that
+  // holds it (one entry per role, so several roles added in a row each keep theirs, whatever the order of
+  // the updates); a failed add leaves no entry.
   wrap(
     GuildMemberRoleManager.prototype,
     'add',
     (native) =>
       async function (roles) {
-        const keep = !this[PRIOR_ROLES];
-        const before = [...(this.roleIds ?? [])];
-        if (keep) {
+        if (!this[PRIOR_ROLES]) {
           Object.defineProperty(this, PRIOR_ROLES, {
-            value: before,
+            value: new Map(),
             configurable: true,
             writable: true,
             enumerable: false,
           });
         }
-        try {
-          for (const r of [].concat(roles).flat()) await native.call(this, idOf(r));
-        } finally {
-          // Nothing was added (the request failed), so no update will follow: do not keep a stale state.
-          if (keep && (this.roleIds ?? []).length === before.length) delete this[PRIOR_ROLES];
+        const added = this[PRIOR_ROLES];
+        for (const r of [].concat(roles).flat()) {
+          const id = idOf(r);
+          const had = (this.roleIds ?? []).includes(id);
+          if (!had) added.set(id, { at: Date.now() });
+          try {
+            await native.call(this, id);
+          } catch (err) {
+            added.delete(id);
+            throw err;
+          }
+          if (!(this.roleIds ?? []).includes(id)) added.delete(id);
         }
         return this.member;
       }

@@ -30,7 +30,7 @@ test(
 
     await t.test('the table is created by the bootstrap, and a claim round-trips', async () => {
       assert.equal(await sent.getWelcomeSent(G, U), null);
-      assert.equal(await sent.claimWelcome(G, U, 1_700_000_000_000), true);
+      assert.equal(await sent.claimWelcome(G, U, { now: 1_700_000_000_000 }), true);
       const row = await sent.getWelcomeSent(G, U);
       assert.equal(row.sent_at, 1_700_000_000_000);
       assert.equal(typeof row.sent_at, 'number', 'BIGINT comes back as a number');
@@ -42,6 +42,23 @@ test(
       assert.equal(await sent.claimWelcome(G, V), false);
       assert.equal(await sent.claimWelcome(H, V), true, 'per server');
     });
+
+    await t.test(
+      'a row from an earlier membership is replaced, by exactly one of several claims',
+      async () => {
+        const W = 'user-3';
+        const joined = 1_800_000_000_000;
+        assert.equal(await sent.claimWelcome(G, W, { now: 1_000 }), true);
+        assert.equal(await sent.claimWelcome(G, W, { joinedAt: 500 }), false, 'same membership');
+        const wins = await Promise.all(
+          Array.from({ length: 12 }, () => sent.claimWelcome(G, W, { now: joined + 5, joinedAt: joined }))
+        );
+        assert.equal(wins.filter(Boolean).length, 1);
+        assert.equal((await sent.getWelcomeSent(G, W)).sent_at, joined + 5);
+        assert.equal(await sent.claimWelcome(G, W, { joinedAt: joined }), false, 'fresh now');
+        await sent.clearWelcomeSent(G, W);
+      }
+    );
 
     await t.test('a clear lets the claim be taken again', async () => {
       await sent.clearWelcomeSent(G, U);
