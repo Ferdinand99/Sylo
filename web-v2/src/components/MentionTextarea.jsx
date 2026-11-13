@@ -126,7 +126,7 @@ export default function MentionTextarea({
     // Typing-like insert first: the browser keeps its undo history and fires the field's own input
     // event. Where that is not supported the value is set directly and the same event is fired.
     const inserted = next.value.slice(trigger.start, next.caret);
-    let done = false;
+    let done;
     try {
       done =
         typeof document.execCommand === 'function' && document.execCommand('insertText', false, inserted);

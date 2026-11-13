@@ -231,7 +231,7 @@ export function previewParts(template, { samples = sampleValues(), lookup = {} }
       out.push(piece);
       continue;
     }
-    let rest = piece.text;
+    const rest = piece.text;
     const styled = /\*\*(.+?)\*\*|`([^`\n]+)`/g;
     let at = 0;
     for (const m of rest.matchAll(styled)) {
@@ -240,7 +240,6 @@ export function previewParts(template, { samples = sampleValues(), lookup = {} }
       at = m.index + m[0].length;
     }
     if (at < rest.length) out.push({ kind: 'text', text: rest.slice(at) });
-    rest = '';
   }
   return out;
 }

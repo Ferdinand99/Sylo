@@ -158,7 +158,7 @@ export default function ApplicationsSubmissions({ guildId, forms }) {
             Downloads the answers of one form as CSV or JSON. It is for staff only and is written to the audit
             log.
           </p>
-          <div className="v2-field-row">
+          <form className="v2-field-row" onSubmit={(e) => e.preventDefault()}>
             <select
               aria-label="Form to export"
               value={exportForm || forms[0].id}
@@ -202,7 +202,7 @@ export default function ApplicationsSubmissions({ guildId, forms }) {
             >
               Download JSON
             </a>
-          </div>
+          </form>
         </div>
       ) : null}
     </div>

@@ -14,7 +14,7 @@ export function insertIntoField(el, token, selection) {
   if (el.maxLength > 0 && next.value.length > el.maxLength) return false;
   el.focus();
   el.setSelectionRange(start, end);
-  let done = false;
+  let done;
   try {
     done = typeof document.execCommand === 'function' && document.execCommand('insertText', false, token);
   } catch {

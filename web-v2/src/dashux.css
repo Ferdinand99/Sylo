@@ -605,3 +605,42 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
 }
+
+/* ---- Hierarchy touches from the 5.2 review ----------------------------------------------------------------- */
+/* A radio group that is a <fieldset> looks like the other groups, not a browser-default box. */
+fieldset.v2-field {
+  min-width: 0;
+  margin-inline: 0;
+  padding: 0;
+  border: 0;
+}
+fieldset.v2-field > legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+/* The answers of an application: one card, the question quiet and the answer plain. */
+.v2-answers {
+  margin: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+.v2-answer {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.v2-answer:last-child {
+  border-bottom: 0;
+}
+.v2-answer dt {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.v2-answer dt strong {
+  font-weight: 600;
+}
+.v2-answer dd {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
