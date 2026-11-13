@@ -62,12 +62,10 @@ struct NoDashboardLinkSourceTests {
         }
     }
 
-    /// String literals that send people to the web dashboard. Only the operator's backups line stays:
-    /// backups, restore and import are for the person who runs the Sylo server (owner-only on the
-    /// server), not for a server admin, and have no screen in the app.
-    private static let allowedDashboardText: [String: Int] = [
-        "sylo-ios/Views/Settings/HealthView.swift": 1,
-    ]
+    /// String literals that send people to the web dashboard. None are left: the operator's screens
+    /// (backups, restore, import, the personalizer, the stats cache and the roadmap admin) are in the app
+    /// too, for operator accounts only.
+    private static let allowedDashboardText: [String: Int] = [:]
 
     @Test("No text sends anyone to the web dashboard, except the allowlist")
     func noDashboardText() throws {

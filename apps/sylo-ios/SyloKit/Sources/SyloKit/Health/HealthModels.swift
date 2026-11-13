@@ -301,6 +301,15 @@ extension Endpoints {
         public init() {}
     }
 
+    /// `POST /api/v2/health/dev-log-error-test`: logs a real error on the server, to prove the whole
+    /// error pipeline (dev-log channel, notifications to the operators' devices) works.
+    public struct SendDevLogErrorTest: APIEndpoint {
+        public typealias Response = OKResponse
+        public var path: String { "/api/v2/health/dev-log-error-test" }
+        public var method: HTTPMethod { .post }
+        public init() {}
+    }
+
     /// `PUT /api/mobile/push/dev-log`: which dev-log events this device is notified about.
     public struct SetDevLogNotifications: APIEndpoint {
         public typealias Response = DevLogSettingResult
