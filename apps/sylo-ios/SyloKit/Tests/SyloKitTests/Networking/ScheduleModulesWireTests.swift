@@ -149,7 +149,7 @@ extension APIClientTests {
     @Test("Loading the schedules is a plain GET")
     func loadsCleanup() async throws {
         let mock = MockURLProtocol.state
-        mock.reset([.json(200, CleanupFixtures.page)])
+        mock.reset([.json(200, CleanupFixtures.page511)])
 
         let page = try await scheduleClient().send(Endpoints.LoadCleanupSchedules(server: "1"))
 
@@ -208,7 +208,7 @@ extension APIClientTests {
         }
         #expect(error?.userMessage == "Pick at least one event to announce, or set a changelog file path.")
 
-        mock.reset([.json(200, GithubFixtures.page)])
+        mock.reset([.json(200, GithubFixtures.page511)])
         let page = try await scheduleClient().send(Endpoints.LoadGithubWatches(server: "1"))
         #expect(page.watches.count == 2)
         #expect(mock.requests.first?.url.absoluteString == "https://example.com/sylo/api/v2/guilds/1/modules/github/watches")

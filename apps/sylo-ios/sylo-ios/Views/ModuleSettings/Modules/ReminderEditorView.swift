@@ -37,6 +37,12 @@ struct ReminderEditorView: View {
     }
 
     private var isNew: Bool { editingID == nil }
+
+    /// A stored reminder that is switched off (paused, or a single one that already posted).
+    private var isPaused: Bool {
+        guard case .edit(let reminder) = target else { return false }
+        return !reminder.enabled
+    }
     private var hasChanges: Bool { draft != initial }
     private var nameLimit: Int { limits["name"].maxLength ?? ReminderDraft.nameLimit }
     private var contentLimit: Int { limits["content"].maxLength ?? ReminderDraft.contentLimit }
@@ -175,15 +181,13 @@ struct ReminderEditorView: View {
         } header: {
             Text("When")
         } footer: {
-            switch draft.mode {
-            case .single:
-                if draft.postsImmediately() {
-                    Text("That time has passed: the reminder is posted as soon as you save it.")
-                } else {
-                    Text("Posted once at this time, then switched off.")
+            VStack(alignment: .leading, spacing: 4) {
+                if draft.mode == .multiple {
+                    Text("Every \(model.minIntervalMinutes) to \(model.maxIntervalMinutes) minutes.")
                 }
-            case .multiple:
-                Text("Every \(model.minIntervalMinutes) to \(model.maxIntervalMinutes) minutes.")
+                if let note = draft.timingNote(isPaused: isPaused) {
+                    timingNoteText(note)
+                }
             }
         }
 
@@ -206,9 +210,13 @@ struct ReminderEditorView: View {
             Section {
                 ScheduleDayPicker(selection: $draft.days, weekdays: model.weekdays)
             } header: {
-                Text("Day of the week")
+                if model.clock.needsServerTimeLabel {
+                    Text("Day of the week (server time)")
+                } else {
+                    Text("Day of the week")
+                }
             } footer: {
-                Text("Days are counted on the server's clock. With no day picked, the reminder runs every day.")
+                daysFooter
             }
         }
 
@@ -216,6 +224,36 @@ struct ReminderEditorView: View {
             Section {
                 StatusMessage(problem, kind: .notice)
             }
+        }
+    }
+
+    /// What saving does with the timing, in words (see ``ReminderDraft/TimingNote``).
+    @ViewBuilder
+    private func timingNoteText(_ note: ReminderDraft.TimingNote) -> some View {
+        switch note {
+        case .postedOnce:
+            Text("Posted once at this time, then switched off.")
+        case .postsNow:
+            Text("That time has passed: the reminder is posted as soon as you save it.")
+        case .pausedPostsAtTime:
+            Text("This reminder is off. Saving keeps it off; resume it from the list and it posts at this time.")
+        case .pausedPostsOnResume:
+            Text("That time has passed and this reminder is off. Saving keeps it off; resume it from the list and it posts at once.")
+        case .pausedRepeating:
+            Text("This reminder is paused. Saving keeps it paused; resume it from the list.")
+        }
+    }
+
+    /// The days are counted on the server's clock, which the app cannot move to the phone's (each run
+    /// has its own time of day): say which clock it is, unless it is the phone's.
+    @ViewBuilder
+    private var daysFooter: some View {
+        if let zone = model.clock.differingZoneName() {
+            Text("Days are counted in the server's time zone, \(zone). With no day picked, the reminder runs every day.")
+        } else if model.clock.needsServerTimeLabel {
+            Text("Days are counted on the server's clock, which may not be your time zone. With no day picked, the reminder runs every day.")
+        } else {
+            Text("With no day picked, the reminder runs every day.")
         }
     }
 

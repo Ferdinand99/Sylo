@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import SyloKit
 
-// Reminders: the list page (a 5.2 shaped one and a 5.1 shaped one), the form's draft, what the form
+// Reminders: the list page (as Sylo 5.0 and 5.1.1 send it, and as a server before 5.0 sent it), the form's draft, what the form
 // sends, and the screen's model. The dashboard's form is web-v2/src/moduleForms/Reminders.jsx.
 
 private func jsonObject(of value: some Encodable) throws -> [String: Any] {
@@ -13,8 +13,9 @@ private func jsonObject(of value: some Encodable) throws -> [String: Any] {
 private let channel = "222222222222222222"
 
 enum RemindersFixtures {
-    /// `GET .../modules/reminders/list` from a current server.
-    static let page52 = #"""
+    /// `GET .../modules/reminders/list` as Sylo 5.0 and 5.1.1 send it (the same shape in both, checked
+    /// against the v5.0.0 and v5.1.1 tags): with the pings flag and the shared lists, without `timeZone`.
+    static let page511 = #"""
     {
       "reminders": [
         {"id": 7, "name": "Stand-up", "channelId": "222222222222222222",
@@ -38,8 +39,8 @@ enum RemindersFixtures {
     }
     """#
 
-    /// A server from before the pings setting and the shared lists: just reminders and channels.
-    static let page51 = #"""
+    /// A server from before 5.0, before the pings setting and the shared lists: just reminders and channels.
+    static let pagePre50 = #"""
     {
       "reminders": [
         {"id": 1, "name": "Old", "channelId": "222222222222222222", "spec": {"content": "Hi", "embeds": []},
@@ -50,6 +51,10 @@ enum RemindersFixtures {
     }
     """#
 
+    /// The same page from a server that also says its zone.
+    static let pageWithZone = page511.replacingOccurrences(
+        of: "\"allowPings\": false,", with: "\"allowPings\": false, \"timeZone\": \"Europe/Oslo\",")
+
     static func decode(_ json: String) throws -> RemindersPage {
         try JSONDecoder().decode(RemindersPage.self, from: Data(json.utf8))
     }
@@ -59,7 +64,7 @@ enum RemindersFixtures {
 struct RemindersDecodingTests {
     @Test("a current page: reminders, pings, channels, the server's presets and weekdays")
     func decodesCurrentPage() throws {
-        let page = try RemindersFixtures.decode(RemindersFixtures.page52)
+        let page = try RemindersFixtures.decode(RemindersFixtures.page511)
 
         #expect(page.reminders.map(\.id) == [7, 8])
         #expect(page.allowPings == false)
@@ -91,9 +96,9 @@ struct RemindersDecodingTests {
         #expect(!launch.enabled)
     }
 
-    @Test("a 5.1 page has no pings switch, and the standard presets and weekdays stand in")
+    @Test("a page from before 5.0 has no pings switch, and the standard presets and weekdays stand in")
     func decodesOlderPage() throws {
-        let page = try RemindersFixtures.decode(RemindersFixtures.page51)
+        let page = try RemindersFixtures.decode(RemindersFixtures.pagePre50)
 
         #expect(page.reminders.count == 1)
         #expect(page.allowPings == nil)
@@ -101,6 +106,14 @@ struct RemindersDecodingTests {
         #expect(page.weekdays == ScheduleWeekday.standard)
         #expect(page.minIntervalMinutes == 1)
         #expect(page.maxIntervalMinutes == 40320)
+        #expect(page.timeZone == nil)
+    }
+
+    @Test("the server's zone is read when it sends one, and a 5.1.1 page has none")
+    func timeZone() throws {
+        #expect(try RemindersFixtures.decode(RemindersFixtures.page511).timeZone == nil)
+        #expect(try RemindersFixtures.decode(RemindersFixtures.pageWithZone).timeZone == "Europe/Oslo")
+        #expect(try RemindersFixtures.decode(#"{"timeZone": 5}"#).timeZone == nil)
     }
 
     @Test("a reminder that cannot be read is dropped, odd values fall back")
@@ -166,6 +179,8 @@ struct ReminderScheduleWordsTests {
         #expect(ScheduleDays.label(for: Array(0...6)) == "every day")
         #expect(ScheduleDays.label(for: [3, 1]) == "Mon/Wed")
         #expect(ScheduleDays.label(for: [9, 2]) == "Tue")
+        // The server runs a schedule with no day every day.
+        #expect(ScheduleDays.label(for: []) == "every day")
     }
 
     @Test("a repeating reminder reads as its preset and its days")
@@ -173,8 +188,20 @@ struct ReminderScheduleWordsTests {
         let hourly = Reminder(id: 1, intervalMinutes: 60)
         #expect(hourly.scheduleSummary() == "Every hour")
 
+        // The days are on the server's clock: with the zone not known the summary says so.
         let weekdays = Reminder(id: 2, intervalMinutes: 1440, days: [1, 3])
-        #expect(weekdays.scheduleSummary() == "Every day \u{00B7} Mon/Wed")
+        #expect(weekdays.scheduleSummary() == "Every day \u{00B7} Mon/Wed (server time)")
+
+        // The server's zone is the phone's: nothing to say.
+        let oslo = TimeZone(identifier: "Europe/Oslo")!
+        let tokyo = TimeZone(identifier: "Asia/Tokyo")!
+        let same = ServerClock(serverZone: "Europe/Oslo", phoneZone: oslo)
+        #expect(weekdays.scheduleSummary(clock: same) == "Every day \u{00B7} Mon/Wed")
+
+        // Another zone, known: the days name it, since a run has no single time of day to move them by.
+        let apart = ServerClock(serverZone: "Europe/Oslo", phoneZone: tokyo)
+        #expect(weekdays.scheduleSummary(clock: apart) == "Every day \u{00B7} Mon/Wed (Europe/Oslo)")
+        #expect(hourly.scheduleSummary(clock: apart) == "Every hour")
 
         let custom = Reminder(id: 3, intervalMinutes: 45)
         #expect(custom.scheduleSummary() == "Every 45 min")
@@ -279,9 +306,29 @@ struct ReminderDraftTests {
         #expect(!draft.postsImmediately(now: now))
     }
 
+    @Test("what saving does with the timing, for a new, an active and a paused reminder")
+    func timingNotes() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        var draft = Self.valid()
+
+        // A repeating reminder says nothing, unless it is paused.
+        #expect(draft.timingNote(isPaused: false, now: now) == nil)
+        #expect(draft.timingNote(isPaused: true, now: now) == .pausedRepeating)
+
+        draft.mode = .single
+        draft.runAt = now.addingTimeInterval(3600)
+        #expect(draft.timingNote(isPaused: false, now: now) == .postedOnce)
+        // Paused, or already posted (the server switched it off): saving keeps it off.
+        #expect(draft.timingNote(isPaused: true, now: now) == .pausedPostsAtTime)
+
+        draft.runAt = now.addingTimeInterval(-60)
+        #expect(draft.timingNote(isPaused: false, now: now) == .postsNow)
+        #expect(draft.timingNote(isPaused: true, now: now) == .pausedPostsOnResume)
+    }
+
     @Test("editing a stored text reminder and an embed reminder")
     func editing() throws {
-        let page = try RemindersFixtures.decode(RemindersFixtures.page52)
+        let page = try RemindersFixtures.decode(RemindersFixtures.page511)
 
         let text = ReminderDraft(editing: page.reminders[0])
         #expect(text.kind == .text)
@@ -378,7 +425,7 @@ struct ReminderBodyTests {
 
     @Test("a stored embed goes back with its kind, its timestamp and its unknown keys")
     func storedEmbedRoundTrip() throws {
-        let page = try RemindersFixtures.decode(RemindersFixtures.page52)
+        let page = try RemindersFixtures.decode(RemindersFixtures.page511)
         let draft = ReminderDraft(editing: page.reminders[1])
         let body = try jsonObject(of: ReminderBody(draft: draft))
 
@@ -418,9 +465,12 @@ final class FakeRemindersServer: @unchecked Sendable {
     private var _failure: NetworkError?
     private var nextID = 20
 
-    init(reminders: [Reminder] = [], allowPings: Bool? = false) {
+    private let timeZone: String?
+
+    init(reminders: [Reminder] = [], allowPings: Bool? = false, timeZone: String? = nil) {
         _reminders = reminders
         _allowPings = allowPings
+        self.timeZone = timeZone
     }
 
     var calls: [String] { lock.withLock { _calls } }
@@ -437,11 +487,15 @@ final class FakeRemindersServer: @unchecked Sendable {
                 record("list")
                 return RemindersPage(
                     reminders: reminders, allowPings: lock.withLock { _allowPings },
-                    channels: [ChannelOption(id: channel, name: "announcements")])
+                    channels: [ChannelOption(id: channel, name: "announcements")], timeZone: timeZone)
             }
             if let save = endpoint as? Endpoints.SaveReminder {
                 record("save:\(save.id.map(String.init) ?? "new")")
                 if let error = lock.withLock({ _failure }) { throw error }
+                // The server answers 404 for a reminder that is gone.
+                if let id = save.id, lock.withLock({ !_reminders.contains { $0.id == id } }) {
+                    throw NetworkError.notFound(message: "No such reminder")
+                }
                 return lock.withLock {
                     let id = save.id ?? nextID
                     if save.id == nil { nextID += 1 }
@@ -593,6 +647,32 @@ struct RemindersModelTests {
         await model.toggle(7)
         #expect(model.reminder(id: 7)?.enabled == true)
         #expect(server.calls == ["list", "toggle:7", "toggle:7"])
+    }
+
+    @Test("the server's zone gives the clock the screen compares with the phone's")
+    func clock() async {
+        let unknown = await make(FakeRemindersServer(reminders: [Self.stored]))
+        #expect(unknown.timeZone == nil)
+        #expect(unknown.clock.needsServerTimeLabel)
+
+        let server = FakeRemindersServer(reminders: [Self.stored], timeZone: "Europe/Oslo")
+        let model = await make(server)
+        #expect(model.timeZone == "Europe/Oslo")
+        #expect(!model.clock.needsServerTimeLabel)
+    }
+
+    @Test("an edit of a reminder that is gone (404) removes the stale row and says why")
+    func updateGone() async {
+        let server = FakeRemindersServer(reminders: [Self.stored])
+        let model = await make(server)
+        server.removeAll()
+        var draft = ReminderDraft(editing: Self.stored)
+        draft.name = "Daily"
+
+        #expect(!(await model.save(draft, editing: 7)))
+
+        #expect(model.reminders.isEmpty)
+        #expect(model.saveError == "No such reminder")
     }
 
     @Test("a toggle of a reminder that is gone removes it from the list")

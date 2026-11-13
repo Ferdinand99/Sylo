@@ -60,7 +60,8 @@ struct ChannelCleanupView: View {
                             editor = .edit(schedule)
                         } label: {
                             ScheduleRow(
-                                schedule: schedule, channelName: channelName(of: schedule), weekdays: model.weekdays)
+                                schedule: schedule, channelName: channelName(of: schedule), weekdays: model.weekdays,
+                                clock: model.clock)
                         }
                         .buttonStyle(.plain)
                         .disabled(model.busy.contains(schedule.id))
@@ -140,6 +141,7 @@ private struct ScheduleRow: View {
     let schedule: CleanupSchedule
     let channelName: String
     let weekdays: [ScheduleWeekday]
+    let clock: ServerClock
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -160,7 +162,7 @@ private struct ScheduleRow: View {
     /// "Mon/Wed at 03:00 · older than 1d · last ran 2026-11-12 (5 deleted)".
     private var details: String {
         var parts = [
-            schedule.whenSummary(weekdays: weekdays),
+            schedule.whenSummary(weekdays: weekdays, clock: clock),
             String(localized: "older than \(CleanupSchedule.ageLabel(hours: schedule.maxAgeHours))"),
         ]
         if let last = schedule.lastRunSummary { parts.append(last) }
@@ -216,16 +218,28 @@ private struct CleanupEditorView: View {
                 }
 
                 Section {
-                    ScheduleDayPicker(selection: $draft.days, weekdays: model.weekdays)
+                    ScheduleDayPicker(selection: daysBinding, weekdays: model.weekdays)
                 } header: {
-                    Text("Run on")
+                    if model.clock.needsServerTimeLabel {
+                        Text("Run on (server time)")
+                    } else {
+                        Text("Run on")
+                    }
+                } footer: {
+                    Text("With no day picked, the schedule runs every day.")
                 }
 
                 Section {
                     DatePicker("At", selection: timeBinding, displayedComponents: .hourAndMinute)
                         .environment(\.timeZone, CleanupTime.floatingZone)
+                } header: {
+                    if model.clock.needsServerTimeLabel {
+                        Text("At (server time)")
+                    }
                 } footer: {
-                    Text("The time is on the server's clock.")
+                    if model.clock.needsServerTimeLabel {
+                        Text("The time is on the server's clock, which may not be your time zone.")
+                    }
                 }
 
                 Section {
@@ -279,11 +293,33 @@ private struct CleanupEditorView: View {
         .task { limits = await session.moduleLimits()["channel-cleanup"] }
     }
 
+    /// The draft holds the time and days as the server counts them. When the server's zone is known
+    /// and differs from the phone's, the pickers show them on the phone's clock and the draft is
+    /// converted back on every change; with a zone that is not known they show the server's own.
+    private var phoneSchedule: (time: String, days: Set<Int>) {
+        model.clock.phoneSchedule(time: draft.timeHhmm, days: draft.days)
+    }
+
     /// The time of day as a floating date for the picker (see ``CleanupTime``).
     private var timeBinding: Binding<Date> {
         Binding(
-            get: { CleanupTime.date(from: draft.timeHhmm) ?? CleanupTime.date(from: "03:00") ?? .now },
-            set: { draft.timeHhmm = CleanupTime.text(from: $0) })
+            get: { CleanupTime.date(from: phoneSchedule.time) ?? CleanupTime.date(from: "03:00") ?? .now },
+            set: { newTime in
+                // The days the person sees stay as they are while the time moves, even when the
+                // server's day changes with it.
+                let shown = phoneSchedule.days
+                let server = model.clock.serverSchedule(time: CleanupTime.text(from: newTime), days: shown)
+                draft.timeHhmm = server.time
+                draft.days = server.days
+            })
+    }
+
+    private var daysBinding: Binding<Set<Int>> {
+        Binding(
+            get: { phoneSchedule.days },
+            set: { newDays in
+                draft.days = model.clock.serverSchedule(time: phoneSchedule.time, days: newDays).days
+            })
     }
 
     private func save() {

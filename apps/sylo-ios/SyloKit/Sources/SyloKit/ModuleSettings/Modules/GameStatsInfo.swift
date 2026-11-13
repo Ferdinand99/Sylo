@@ -31,10 +31,15 @@ public struct GameLookup: Decodable, Sendable, Equatable, Identifiable {
     /// How long ago it was looked up ("5m ago"), in the server's words.
     public let ago: String
 
-    /// The rows have no id of their own: this is the lookup's content.
-    public var id: String { [game, username, platform, ago, title].joined(separator: "\u{1F}") }
+    /// The rows have no id of their own: this is the row's place in the list (``GameStatsInfo`` numbers
+    /// them), so two identical lookups never share one.
+    public let id: Int
 
-    public init(game: String = "", title: String = "", username: String = "", platform: String = "", ago: String = "") {
+    public init(
+        id: Int = 0, game: String = "", title: String = "", username: String = "", platform: String = "",
+        ago: String = ""
+    ) {
+        self.id = id
         self.game = game
         self.title = title
         self.username = username
@@ -57,6 +62,11 @@ public struct GameLookup: Decodable, Sendable, Equatable, Identifiable {
     /// The row's heading: the title the game API gave, else the game.
     public var heading: String { title.isEmpty ? game : title }
 
+    /// The same lookup at another place in the list.
+    func numbered(_ id: Int) -> GameLookup {
+        GameLookup(id: id, game: game, title: title, username: username, platform: platform, ago: ago)
+    }
+
     /// "Player · PC · 5m ago".
     public var details: String {
         [username, GamePlatform.label(for: platform), ago].filter { !$0.isEmpty }.joined(separator: " \u{00B7} ")
@@ -72,7 +82,7 @@ public struct GameStatsInfo: Decodable, Sendable, Equatable {
 
     public init(isOperator: Bool = false, recent: [GameLookup] = []) {
         self.isOperator = isOperator
-        self.recent = recent
+        self.recent = recent.enumerated().map { $0.element.numbered($0.offset) }
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -83,7 +93,8 @@ public struct GameStatsInfo: Decodable, Sendable, Equatable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         isOperator = (try? c.decodeIfPresent(Bool.self, forKey: .isOperator)) ?? false
-        recent = try c.decodeLossyArray(of: GameLookup.self, forKey: .recent)
+        let rows = try c.decodeLossyArray(of: GameLookup.self, forKey: .recent)
+        recent = rows.enumerated().map { $0.element.numbered($0.offset) }
     }
 }
 

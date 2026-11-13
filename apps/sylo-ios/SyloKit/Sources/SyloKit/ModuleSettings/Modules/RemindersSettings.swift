@@ -54,11 +54,11 @@ extension UnkeyedDecodingContainer {
 public enum ScheduleDays {
     public static let all: Set<Int> = Set(0...6)
 
-    /// "every day" for all seven, else the short names in week order ("Mon/Wed"). A number the
-    /// list does not name is left out.
+    /// "every day" for all seven or none (the server runs a schedule with no day every day), else the
+    /// short names in week order ("Mon/Wed"). A number the list does not name is left out.
     public static func label(for days: [Int], weekdays: [ScheduleWeekday] = ScheduleWeekday.standard) -> String {
         let unique = Set(days)
-        if unique.count == 7 { return String(localized: "every day") }
+        if unique.count == 7 || unique.isEmpty { return String(localized: "every day") }
         let names = Dictionary(weekdays.map { ($0.number, $0.label) }, uniquingKeysWith: { first, _ in first })
         return unique.sorted().compactMap { names[$0] }.joined(separator: "/")
     }
@@ -208,10 +208,13 @@ public struct Reminder: Decodable, Sendable, Equatable, Identifiable {
             enabled: (try? c.decodeIfPresent(Bool.self, forKey: .enabled)) ?? true)
     }
 
-    /// "Once, Thu 24 Sep, 19:00", "Every hour · Mon/Wed" (the way the dashboard words a schedule).
+    /// "Once, Thu 24 Sep, 19:00", "Every hour · Mon/Wed (server time)" (the way the dashboard words a
+    /// schedule). The days are counted on the server's clock, so they carry a note: "server time" when
+    /// the app does not know the server's zone, the zone's name when it differs from the phone's, and
+    /// nothing when it is the phone's own. A once time and a start are exact moments, shown on the phone.
     public func scheduleSummary(
         presets: [ReminderPreset] = ReminderPreset.standard, weekdays: [ScheduleWeekday] = ScheduleWeekday.standard,
-        now: Date = .now, timeZone: TimeZone? = nil
+        now: Date = .now, timeZone: TimeZone? = nil, clock: ServerClock = .unknown
     ) -> String {
         if mode == .single {
             guard let runAt else { return String(localized: "Once, no time set") }
@@ -221,7 +224,14 @@ public struct Reminder: Decodable, Sendable, Equatable, Identifiable {
             ?? ReminderPreset.label(forMinutes: intervalMinutes)
         let unique = Set(days)
         if unique.count == 7 || unique.isEmpty { return every }
-        return every + " \u{00B7} " + ScheduleDays.label(for: days, weekdays: weekdays)
+        let names = ScheduleDays.label(for: days, weekdays: weekdays)
+        if clock.needsServerTimeLabel {
+            return every + " \u{00B7} " + String(localized: "\(names) (server time)")
+        }
+        if let zone = clock.differingZoneName(now: now) {
+            return every + " \u{00B7} " + String(localized: "\(names) (\(zone))")
+        }
+        return every + " \u{00B7} " + names
     }
 }
 
@@ -236,13 +246,17 @@ public struct RemindersPage: Decodable, Sendable, Equatable {
     public let weekdays: [ScheduleWeekday]
     public let minIntervalMinutes: Int
     public let maxIntervalMinutes: Int
+    /// The zone the server counts the weekdays in (an IANA name). nil on a server that does not say:
+    /// the days are then labelled "server time".
+    public let timeZone: String?
 
     public init(
         reminders: [Reminder] = [], allowPings: Bool? = nil, channels: [ChannelOption] = [],
         schedulePresets: [ReminderPreset] = ReminderPreset.standard,
         weekdays: [ScheduleWeekday] = ScheduleWeekday.standard, minIntervalMinutes: Int = 1,
-        maxIntervalMinutes: Int = 40320
+        maxIntervalMinutes: Int = 40320, timeZone: String? = nil
     ) {
+        self.timeZone = timeZone
         self.reminders = reminders
         self.allowPings = allowPings
         self.channels = channels
@@ -254,6 +268,7 @@ public struct RemindersPage: Decodable, Sendable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case reminders, allowPings, channels, schedulePresets, weekdays, minIntervalMinutes, maxIntervalMinutes
+        case timeZone
     }
 
     public init(from decoder: any Decoder) throws {
@@ -267,7 +282,8 @@ public struct RemindersPage: Decodable, Sendable, Equatable {
             schedulePresets: presets.isEmpty ? ReminderPreset.standard : presets,
             weekdays: days.isEmpty ? ScheduleWeekday.standard : days,
             minIntervalMinutes: (try? c.decodeIfPresent(Int.self, forKey: .minIntervalMinutes)) ?? 1,
-            maxIntervalMinutes: (try? c.decodeIfPresent(Int.self, forKey: .maxIntervalMinutes)) ?? 40320)
+            maxIntervalMinutes: (try? c.decodeIfPresent(Int.self, forKey: .maxIntervalMinutes)) ?? 40320,
+            timeZone: (try? c.decodeIfPresent(String.self, forKey: .timeZone)) ?? nil)
     }
 }
 
@@ -410,6 +426,33 @@ public struct ReminderDraft: Sendable, Equatable {
     public func postsImmediately(now: Date = .now) -> Bool {
         mode == .single && runAt <= now
     }
+
+    /// What saving does with a reminder's timing, for the line under the schedule.
+    public enum TimingNote: Sendable, Equatable {
+        /// A single reminder at a time to come: posted then, and switched off.
+        case postedOnce
+        /// A single reminder at a time that has passed, new or active: posted as soon as it is saved.
+        case postsNow
+        /// Paused, or a single reminder that already fired (the server switched it off): saving keeps
+        /// it off, and resuming it posts it at its time.
+        case pausedPostsAtTime
+        /// The same with a time that has passed: resuming posts it at once.
+        case pausedPostsOnResume
+        /// A paused repeating reminder: saving keeps it paused.
+        case pausedRepeating
+    }
+
+    /// `isPaused`: the stored reminder is switched off (a new reminder is not).
+    public func timingNote(isPaused: Bool, now: Date = .now) -> TimingNote? {
+        switch mode {
+        case .single:
+            let passed = runAt <= now
+            if isPaused { return passed ? .pausedPostsOnResume : .pausedPostsAtTime }
+            return passed ? .postsNow : .postedOnce
+        case .multiple:
+            return isPaused ? .pausedRepeating : nil
+        }
+    }
 }
 
 /// The body of a create, an edit and a test: what the dashboard's form sends. Times go as exact
@@ -544,6 +587,12 @@ extension Endpoints {
 /// How a list action's failure is worded: the server's own words where it gave any. nil for a
 /// call that was cancelled or whose sign-in ran out (the app handles those itself).
 enum ListFailure {
+    /// A 404 for a row that was changed or deleted somewhere else ("No such reminder").
+    static func isGone(_ error: any Error) -> Bool {
+        if case .notFound = NetworkError(error) { return true }
+        return false
+    }
+
     static func message(for error: any Error) -> String? {
         let error = NetworkError(error)
         if error == .cancelled || error == .unauthorized { return nil }
@@ -565,6 +614,8 @@ public final class RemindersModel {
     public private(set) var weekdays = ScheduleWeekday.standard
     public private(set) var minIntervalMinutes = 1
     public private(set) var maxIntervalMinutes = 40320
+    /// The server's zone, when it says (see ``ServerClock``).
+    public private(set) var timeZone: String?
     public private(set) var isLoading = false
     public private(set) var hasLoaded = false
     /// Why the page could not be loaded (the last list, if any, stays).
@@ -596,6 +647,9 @@ public final class RemindersModel {
 
     public func reminder(id: Int) -> Reminder? { reminders.first { $0.id == id } }
 
+    /// The server's clock against the phone's.
+    public var clock: ServerClock { ServerClock(serverZone: timeZone) }
+
     /// Whether the server offers the pings switch.
     public var hasPingSwitch: Bool { allowPings != nil }
 
@@ -611,6 +665,7 @@ public final class RemindersModel {
             weekdays = page.weekdays
             minIntervalMinutes = page.minIntervalMinutes
             maxIntervalMinutes = page.maxIntervalMinutes
+            timeZone = page.timeZone
             hasLoaded = true
             errorMessage = nil
         } catch {
@@ -647,6 +702,8 @@ public final class RemindersModel {
             return true
         } catch {
             if let message = ListFailure.message(for: error) { saveError = message }
+            // Deleted elsewhere: the stale row goes, and the message says why.
+            if let id, ListFailure.isGone(error) { reminders.removeAll { $0.id == id } }
             return false
         }
     }

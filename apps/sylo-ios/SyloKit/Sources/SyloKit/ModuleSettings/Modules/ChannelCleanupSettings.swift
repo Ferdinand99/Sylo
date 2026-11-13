@@ -97,10 +97,18 @@ public struct CleanupSchedule: Decodable, Sendable, Equatable, Identifiable {
         hours > 0 && hours % 24 == 0 ? "\(hours / 24)d" : "\(hours)h"
     }
 
-    /// "Mon/Wed at 03:00".
-    public func whenSummary(weekdays: [ScheduleWeekday] = ScheduleWeekday.standard) -> String {
-        let label = days.isEmpty ? String(localized: "no days") : ScheduleDays.label(for: days, weekdays: weekdays)
-        return String(localized: "\(label) at \(timeHhmm)")
+    /// "Mon/Wed at 03:00". The server counts the days and the time on its own clock: with its zone
+    /// known and different from the phone's both are shown on the phone's clock, with the zone not
+    /// known they end in "(server time)", and with the same zone they are shown as they are.
+    public func whenSummary(
+        weekdays: [ScheduleWeekday] = ScheduleWeekday.standard, clock: ServerClock = .unknown, now: Date = .now
+    ) -> String {
+        let shown = clock.phoneSchedule(time: timeHhmm, days: Set(days), now: now)
+        let label = ScheduleDays.label(for: Array(shown.days), weekdays: weekdays)
+        if clock.needsServerTimeLabel {
+            return String(localized: "\(label) at \(shown.time) (server time)")
+        }
+        return String(localized: "\(label) at \(shown.time)")
     }
 
     /// "last ran 2026-11-12 (5 deleted)", or nil when it never ran.
@@ -120,21 +128,26 @@ public struct CleanupPage: Decodable, Sendable, Equatable {
     public let weekdays: [ScheduleWeekday]
     /// The most hours a schedule's age can be (90 days).
     public let maxAgeHoursCap: Int
+    /// The zone the server counts the days and the time in (an IANA name). nil on a server that does
+    /// not say: they are then labelled "server time".
+    public let timeZone: String?
 
     /// What the server allows today; used when an older server does not say.
     public static let defaultMaxAgeHours = 24 * 90
 
     public init(
         schedules: [CleanupSchedule] = [], channels: [ChannelOption] = [],
-        weekdays: [ScheduleWeekday] = ScheduleWeekday.standard, maxAgeHoursCap: Int = CleanupPage.defaultMaxAgeHours
+        weekdays: [ScheduleWeekday] = ScheduleWeekday.standard, maxAgeHoursCap: Int = CleanupPage.defaultMaxAgeHours,
+        timeZone: String? = nil
     ) {
+        self.timeZone = timeZone
         self.schedules = schedules
         self.channels = channels
         self.weekdays = weekdays
         self.maxAgeHoursCap = maxAgeHoursCap
     }
 
-    private enum CodingKeys: String, CodingKey { case schedules, channels, weekdays, maxAgeHoursCap }
+    private enum CodingKeys: String, CodingKey { case schedules, channels, weekdays, maxAgeHoursCap, timeZone }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -143,7 +156,8 @@ public struct CleanupPage: Decodable, Sendable, Equatable {
             schedules: try c.decodeLossyArray(of: CleanupSchedule.self, forKey: .schedules),
             channels: try c.decodeLossyArray(of: ChannelOption.self, forKey: .channels),
             weekdays: days.isEmpty ? ScheduleWeekday.standard : days,
-            maxAgeHoursCap: (try? c.decodeIfPresent(Int.self, forKey: .maxAgeHoursCap)) ?? Self.defaultMaxAgeHours)
+            maxAgeHoursCap: (try? c.decodeIfPresent(Int.self, forKey: .maxAgeHoursCap)) ?? Self.defaultMaxAgeHours,
+            timeZone: (try? c.decodeIfPresent(String.self, forKey: .timeZone)) ?? nil)
     }
 }
 
@@ -189,11 +203,10 @@ public struct CleanupDraft: Sendable, Equatable {
         skipPinned = schedule.skipPinned
     }
 
-    /// Why this cannot be sent yet, in a sentence; nil when it can. A schedule with no day would
-    /// never run, so the app asks for one (the dashboard saves it as it is).
+    /// Why this cannot be sent yet, in a sentence; nil when it can. A schedule with no day is
+    /// allowed: the server stores it as every day, as the dashboard's form does.
     public func problem(maxAgeHoursCap: Int = CleanupPage.defaultMaxAgeHours) -> String? {
         if channelId.isEmpty { return String(localized: "Pick a channel.") }
-        if days.isEmpty { return String(localized: "Pick at least one day.") }
         if !CleanupTime.isValid(timeHhmm) { return String(localized: "Pick a valid time.") }
         if maxAgeHours < 1 || maxAgeHours > maxAgeHoursCap {
             return String(localized: "The age is between 1 and \(maxAgeHoursCap) hours.")
@@ -292,6 +305,8 @@ public final class ChannelCleanupModel {
     public private(set) var channels: [ChannelOption] = []
     public private(set) var weekdays = ScheduleWeekday.standard
     public private(set) var maxAgeHoursCap = CleanupPage.defaultMaxAgeHours
+    /// The server's zone, when it says (see ``ServerClock``).
+    public private(set) var timeZone: String?
     public private(set) var isLoading = false
     public private(set) var hasLoaded = false
     /// Why the page could not be loaded (the last list, if any, stays).
@@ -315,6 +330,9 @@ public final class ChannelCleanupModel {
 
     public func schedule(id: Int) -> CleanupSchedule? { schedules.first { $0.id == id } }
 
+    /// The server's clock against the phone's.
+    public var clock: ServerClock { ServerClock(serverZone: timeZone) }
+
     public func load() async {
         isLoading = true
         defer { isLoading = false }
@@ -324,6 +342,7 @@ public final class ChannelCleanupModel {
             channels = page.channels
             weekdays = page.weekdays
             maxAgeHoursCap = page.maxAgeHoursCap
+            timeZone = page.timeZone
             hasLoaded = true
             errorMessage = nil
         } catch {
@@ -358,6 +377,8 @@ public final class ChannelCleanupModel {
             return true
         } catch {
             if let message = ListFailure.message(for: error) { saveError = message }
+            // Deleted elsewhere: the stale row goes, and the message says why.
+            if let id, ListFailure.isGone(error) { schedules.removeAll { $0.id == id } }
             return false
         }
     }

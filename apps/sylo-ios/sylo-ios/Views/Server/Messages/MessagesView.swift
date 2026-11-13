@@ -135,17 +135,9 @@ private struct MessageRow: View {
                 Text(verbatim: item.name)
                     .lineLimit(2)
                 if item.published {
-                    Text("Published")
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.green.opacity(0.2), in: Capsule())
+                    StatusTag("Published", tint: .green)
                 } else {
-                    Text("Draft")
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.2), in: Capsule())
+                    StatusTag("Draft")
                 }
             }
             Text(verbatim: details)
