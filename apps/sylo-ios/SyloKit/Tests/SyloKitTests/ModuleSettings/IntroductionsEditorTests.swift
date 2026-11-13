@@ -123,8 +123,10 @@ struct IntroductionsEditorTests {
          "roleGroups": [{"name": "Country", "roleIds": ["1"]}, {"roleIds": ["2"]}]}
         """#.utf8)
         var settings = try JSONDecoder().decode(IntroductionsSettings.self, from: json)
-        #expect(settings.questions?.map(.id) == ["a"])
-        #expect(settings.roleGroups.map(.name) == ["Country"])
+        let questionIDs = (settings.questions ?? []).map { $0.id }
+        let groupNames = settings.roleGroups.map { $0.name }
+        #expect(questionIDs == ["a"])
+        #expect(groupNames == ["Country"])
         #expect(settings.unreadableEntries == 4)
         let problem = try #require(settings.problem)
         #expect(problem.contains("4 questions or role groups"))
