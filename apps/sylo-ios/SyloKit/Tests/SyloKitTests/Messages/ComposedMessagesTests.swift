@@ -115,7 +115,7 @@ struct EmbedItemTests {
     @Test("a readable embed is not opaque, and a copy of an opaque one stays as it came")
     func readableAndCopies() throws {
         let readable = try JSONDecoder().decode(
-            EmbedItem.self, from: Data(#"{"title":"T","fields":[{"name":"a","value":"b"}],"color":"#ff0000"}"#.utf8))
+            EmbedItem.self, from: Data(##"{"title":"T","fields":[{"name":"a","value":"b"}],"color":"#ff0000"}"##.utf8))
         #expect(!readable.isOpaque)
         #expect(readable.raw == nil)
         let odd = try JSONDecoder().decode(EmbedItem.self, from: Data(#"{"title":5}"#.utf8))
