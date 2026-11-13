@@ -1,9 +1,8 @@
 import Foundation
 
-/// THE CONNECT WIRE NAMES, IN ONE PLACE. Server PR S2 (adding the other login) is still changing:
-/// every path, query name, body key and error word the app uses for it is here, so a change on the
-/// server is an edit to this enum and nothing else. Check them against `docs/mobile-app.md` on the
-/// server before releasing.
+/// THE CONNECT WIRE NAMES, IN ONE PLACE: every path, query name, body key and error word the app
+/// uses for adding the other login is here, so a change on the server is an edit to this enum and
+/// nothing else. They follow "Adding the other login" in `docs/mobile-app.md` on the server.
 enum ConnectWire {
     /// `POST` with the bearer token; answers `{ code }`.
     static func startPath(_ platform: String) -> String { "/api/mobile/connect/\(platform)" }
@@ -19,19 +18,21 @@ enum ConnectWire {
     static let resultQuery = "result"
     static let platformQuery = "platform"
     static let errorQuery = "error"
-    static let cancelledError = "access_denied"
-    /// The error words of the callback (and of a refused complete call).
+    /// The error words of the callback (`sylo://connected?error=…`), hyphenated.
+    static let cancelledError = "access-denied"
+    static let invalidResponseError = "invalid-response"
     static let expiredError = "expired"
-    static let identityLinkedError = "identity_linked"
-    static let platformAlreadyLinkedError = "platform_already_linked"
-    static let accountGoneError = "account_gone"
-    static let knownErrors: Set<String> = [
-        expiredError, identityLinkedError, platformAlreadyLinkedError, accountGoneError,
-    ]
+    static let providerError = "provider-error"
+    static let tokenRevokedError = "token-revoked"
+    static let identityLinkedError = "identity-linked"
+    static let alreadyLinkedError = "already-linked"
     /// The body key of the complete call.
     static let resultKey = "result"
-    /// What the complete call says when the login already belongs to the account.
-    static let alreadyLinkedWords: Set<String> = ["already-linked", "already_linked", "already_connected"]
+    /// The error words of the JSON calls, snake_case: the start call answers `400 invalid_platform`
+    /// and `409 already_connected`, the complete call `400 invalid_result` and `409 identity_linked`
+    /// or `already_linked`.
+    static let invalidPlatformJSON = "invalid_platform"
+    static let invalidResultJSON = "invalid_result"
 }
 
 extension ServerFeature {
@@ -149,10 +150,10 @@ extension Endpoints {
     }
 
     /// `POST /api/mobile/connect/complete` with `{result}`: links the platform the sheet just
-    /// logged in to. Only after this succeeds is the platform on the account. It can answer 409
-    /// (or a 400 with `already-linked`) when the login is already linked.
+    /// logged in to. Only after this succeeds is the platform on the account. Errors: 400
+    /// `invalid_result`, 409 `identity_linked` or `already_linked`, 401.
     public struct CompleteConnect: APIEndpoint {
-        public typealias Response = EmptyResponse
+        public typealias Response = ConnectCompletion
         public let result: String
         public init(result: String) { self.result = result }
         public var path: String { ConnectWire.completePath }
@@ -183,6 +184,26 @@ extension ServerURL {
     /// The page the sign-in sheet opens to start a connect: `/auth/mobile/connect?code=…`.
     public func connectURL(code: String) -> URL {
         url(for: ConnectWire.browserPath, query: [URLQueryItem(name: ConnectWire.codeQuery, value: code)])
+    }
+}
+
+/// The answer of `POST /api/mobile/connect/complete`: `{ ok, platform, platforms }`.
+public struct ConnectCompletion: Decodable, Sendable, Equatable {
+    public let platform: Platform?
+    /// Every platform the account has now.
+    public let platforms: [Platform]
+
+    public init(platform: Platform?, platforms: [Platform]) {
+        self.platform = platform
+        self.platforms = platforms
+    }
+
+    private enum CodingKeys: String, CodingKey { case platform, platforms }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        platform = try c.decodeIfPresent(Platform.self, forKey: .platform)
+        platforms = try c.decodeIfPresent([Platform].self, forKey: .platforms) ?? []
     }
 }
 

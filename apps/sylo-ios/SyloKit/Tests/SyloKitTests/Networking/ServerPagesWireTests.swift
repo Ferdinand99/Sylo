@@ -76,7 +76,7 @@ extension APIClientTests {
             _ = try await pagesClient().send(Endpoints.SetLeaderboardVanity(server: "1", slug: "busy"))
             Issue.record("the refusal should have thrown")
         } catch {
-            #expect(NetworkError(error) == .badRequest(message: "taken"))
+            #expect(NetworkError(error) == NetworkError.badRequest(message: "taken"))
         }
     }
 
@@ -172,7 +172,7 @@ extension APIClientTests {
             _ = try await client.send(Endpoints.DisconnectPlatform(platform: .discord))
             Issue.record("the conflict should have thrown")
         } catch {
-            #expect(NetworkError(error) == .http(status: 409))
+            #expect(NetworkError(error) == NetworkError.http(status: 409))
         }
     }
 
@@ -188,11 +188,56 @@ extension APIClientTests {
         #expect(request.header("Authorization") == "Bearer sylo_secret")
     }
 
+    /// Sends the call and returns the error it failed with (nil when it did not fail).
+    private func failure<E: APIEndpoint>(_ endpoint: E, status: Int, body: String) async throws -> NetworkError? {
+        MockURLProtocol.state.reset([.json(status, body)])
+        do {
+            _ = try await pagesClient().send(endpoint)
+            return nil
+        } catch {
+            return NetworkError(error)
+        }
+    }
+
+    @Test("Every JSON error word of the connect calls arrives as the app expects")
+    func connectJSONErrors() async throws {
+        let start = Endpoints.StartConnect(platform: .fluxer)
+        #expect(try await failure(start, status: 400, body: #"{"error":"invalid_platform"}"#) == NetworkError.badRequest(message: "invalid_platform"))
+        #expect(try await failure(start, status: 409, body: #"{"error":"already_connected"}"#) == NetworkError.http(status: 409))
+        #expect(try await failure(start, status: 401, body: #"{"error":"Not signed in, or the token is no longer valid."}"#) == NetworkError.unauthorized)
+
+        let complete = Endpoints.CompleteConnect(result: "r")
+        #expect(try await failure(complete, status: 400, body: #"{"error":"invalid_result"}"#) == NetworkError.badRequest(message: "invalid_result"))
+        #expect(try await failure(complete, status: 409, body: #"{"error":"identity_linked"}"#) == NetworkError.http(status: 409))
+        #expect(try await failure(complete, status: 409, body: #"{"error":"already_linked"}"#) == NetworkError.http(status: 409))
+        #expect(try await failure(complete, status: 401, body: #"{"error":"Not signed in, or the token is no longer valid."}"#) == NetworkError.unauthorized)
+    }
+
+    @Test("Every one of those errors has a message, and none is the generic decoding text")
+    @MainActor
+    func connectJSONErrorsHaveWords() async throws {
+        let cases: [(NetworkError, String)] = [
+            (.badRequest(message: "invalid_platform"), "This Sylo server doesn't have that platform set up."),
+            (.badRequest(message: "invalid_result"), "The sign-in result wasn't accepted, or it had expired. Try again."),
+            (.http(status: 409), "That login can't be added: this account already has one on that platform, or it belongs to another Sylo account."),
+        ]
+        for (error, text) in cases {
+            let model = AccountModel(session: makeSignedInSession(clients: StubClients { endpoint in
+                if endpoint is Endpoints.StartConnect { throw error }
+                return AccountModelTests.account
+            }))
+            await model.load()
+            await model.connect(AccountModelTests.fluxer) { _ in URL(string: "sylo://connected")! }
+            #expect(model.platformError == text)
+        }
+    }
+
     @Test("Finishing a connect posts the result the sheet returned, with the token")
     func completeConnectOnTheWire() async throws {
         let mock = MockURLProtocol.state
-        mock.reset([.response(status: 204)])
-        _ = try await pagesClient().send(Endpoints.CompleteConnect(result: "r-1"))
+        mock.reset([.json(200, #"{"ok":true,"platform":"fluxer","platforms":["discord","fluxer"]}"#)])
+        let done = try await pagesClient().send(Endpoints.CompleteConnect(result: "r-1"))
+        #expect(done == ConnectCompletion(platform: .fluxer, platforms: [.discord, .fluxer]))
         let request = try #require(mock.requests.first)
         #expect(request.url.absoluteString == "https://example.com/sylo/api/mobile/connect/complete")
         #expect(request.method == "POST")
