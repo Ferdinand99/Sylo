@@ -152,19 +152,24 @@ struct SettingsView: View {
                 platformRow(connection)
             }
             // Only on a Sylo that can start a connect for the app.
-            ForEach(account.connectablePlatforms(serverInfo: serverInfo)) { connection in
-                Button {
-                    Task { await connect(connection) }
-                } label: {
-                    HStack {
-                        Label("Connect \(connection.label)", systemImage: "link.badge.plus")
-                        if account.changingPlatform == connection.platform {
-                            Spacer()
-                            ProgressView()
+            ForEach(account.unconnectedPlatforms) { connection in
+                if account.connectablePlatforms(serverInfo: serverInfo).contains(connection) {
+                    Button {
+                        Task { await connect(connection) }
+                    } label: {
+                        HStack {
+                            Label("Connect \(connection.label)", systemImage: "link.badge.plus")
+                            if account.changingPlatform == connection.platform {
+                                Spacer()
+                                ProgressView()
+                            }
                         }
                     }
+                    .disabled(account.changingPlatform != nil)
+                } else {
+                    // This Sylo cannot add it from the app (or its login is off): just say so.
+                    LabeledContent(connection.label, value: "Not connected")
                 }
-                .disabled(account.changingPlatform != nil)
             }
             if let message = account.errorMessage {
                 StatusMessage(message, kind: .error)
@@ -188,7 +193,14 @@ struct SettingsView: View {
             if account.changingPlatform == connection.platform {
                 ProgressView()
             } else {
-                Text(connection.username ?? "Connected")
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(connection.username ?? "Connected")
+                    if connection.serverCount > 0 {
+                        Text("Manages ^[\(connection.serverCount) server](inflect: true)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .swipeActions {
@@ -224,8 +236,10 @@ struct SettingsView: View {
                         callbackURLScheme: ConnectCallback.callbackScheme,
                         preferredBrowserSession: .shared)
                 }
-            } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
-                throw ConnectError.cancelled
+            } catch let error as ASWebAuthenticationSessionError {
+                // Closing the sheet is not a failure; anything else says what went wrong.
+                if error.code == .canceledLogin { throw ConnectError.cancelled }
+                throw ConnectError.sheetFailed(error.localizedDescription)
             }
         }
         // A new platform brings its servers.

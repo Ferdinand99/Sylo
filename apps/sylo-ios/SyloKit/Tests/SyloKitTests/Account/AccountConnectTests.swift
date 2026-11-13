@@ -282,7 +282,39 @@ struct AccountConnectModelTests {
         #expect(AccountModel.connectFailure("provider_error") == "The platform couldn't be connected. Try again.")
     }
 
-    @Test("A callback with an error shows that error, and the next try asks for a new code")
+    @Test("A refused complete call with a known word gets that word's own text")
+    func completeErrorWords() async {
+        for (word, text) in [
+            ("identity_linked", "That login already belongs to another Sylo account."),
+            ("platform_already_linked", "This account already has a login on that platform."),
+            ("expired", "That took too long. Try again."),
+            ("account_gone", "This Sylo account no longer exists."),
+        ] {
+            let model = await loadedModel(Self.clients(complete: { _ in throw NetworkError.badRequest(message: word) }))
+            await model.connect(AccountModelTests.fluxer) { _ in URL(string: "sylo://connected?result=r")! }
+            #expect(model.platformError == text)
+        }
+        let unknown = await loadedModel(Self.clients(complete: { _ in throw NetworkError.badRequest(message: "weird") }))
+        await unknown.connect(AccountModelTests.fluxer) { _ in URL(string: "sylo://connected?result=r")! }
+        #expect(unknown.platformError == "This Sylo server can't connect that platform.")
+    }
+
+    @Test("A sheet that failed to open says why")
+    func sheetFailed() async {
+        let model = await loadedModel(Self.clients())
+        let connected = await model.connect(AccountModelTests.fluxer) { _ in throw ConnectError.sheetFailed("No window") }
+        #expect(!connected)
+        #expect(model.platformError == "Couldn't open the sign-in sheet: No window")
+    }
+
+    @Test("Platforms not yet connected are listed, whether or not they can be connected here")
+    func unconnected() async {
+        let model = await loadedModel(Self.clients())
+        #expect(model.unconnectedPlatforms == [AccountModelTests.fluxer])
+        #expect(model.connectablePlatforms(serverInfo: ServerInfo(features: [.appLogin])).isEmpty)
+    }
+
+    @Test("A connect callback with an error shows that error, and the next try asks for a new code")
     func errorCallbackThenRetry() async {
         let clients = Self.clients()
         let model = await loadedModel(clients)
@@ -304,7 +336,7 @@ struct AccountConnectModelTests {
         let model = await loadedModel(Self.clients(start: { _ in throw NetworkError.http(status: 409) }))
         let connected = await model.connect(AccountModelTests.fluxer) { _ in URL(string: "sylo://connected")! }
         #expect(!connected)
-        #expect(model.platformError == "That platform is already connected.")
+        #expect(model.platformError == "This account already has a login on that platform.")
     }
 
     @Test("The only sign-in cannot be disconnected: nothing is sent")

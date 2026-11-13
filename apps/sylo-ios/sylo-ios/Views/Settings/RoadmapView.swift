@@ -191,7 +191,7 @@ private struct SuggestionSheet: View {
                 } header: {
                     Text("Description")
                 } footer: {
-                    Text(verbatim: "Markdown works: **bold**, _italic_, `code`, [links](https://example.com) and - bullet lists.")
+                    Text(verbatim: "Markdown works: **bold**, _italic_, `code`, and [links](https://example.com).")
                 }
                 if let message = model.actionError {
                     Section { StatusMessage(message, kind: .error) }

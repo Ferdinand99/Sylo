@@ -53,6 +53,10 @@ struct InsightsView: View {
 
     private func content(_ report: InsightsReport) -> some View {
         let utcDays = report.granularity == .day
+        // At least 1, so a range with no activity at all still has an axis to read.
+        let busiest = max(1, report.series.map { max($0.messages, 0) }.max() ?? 0)
+        let loudest = max(1, report.series.map { max($0.voiceMinutes, 0) }.max() ?? 0)
+        let moved = max(1, report.series.map { max($0.joins, $0.leaves) }.max() ?? 0)
         return List {
             if let message = model.errorMessage {
                 Section { StatusMessage(message, kind: .error) }
@@ -85,6 +89,7 @@ struct InsightsView: View {
                         y: .value("Messages", point.messages))
                     .foregroundStyle(.tint)
                 }
+                .chartYScale(domain: 0...busiest)
             }
             ChartSection(title: "Voice minutes \(perBucket)") {
                 Chart(report.datedSeries) { point in
@@ -93,6 +98,7 @@ struct InsightsView: View {
                         y: .value("Minutes", point.voiceMinutes))
                     .foregroundStyle(.purple)
                 }
+                .chartYScale(domain: 0...loudest)
             }
             ChartSection(title: "Member growth", note: "\(Self.signed(report.growth.last?.total ?? 0)) over the range") {
                 Chart(report.growth) { point in
@@ -115,6 +121,7 @@ struct InsightsView: View {
                         .foregroundStyle(by: .value("Kind", "Leaves"))
                     }
                 }
+                .chartYScale(domain: 0...moved)
                 .chartForegroundStyleScale(["Joins": Color.green, "Leaves": Color.red])
                 .chartLegend(position: .bottom)
             }
@@ -238,7 +245,8 @@ private struct TopChannelsChart: View {
 
     var body: some View {
         let top = max(channels.map(\.value).max() ?? 1, 1)
-        ForEach(channels) { channel in
+        // A channel that was deleted is named "deleted channel", so names repeat: key by position.
+        ForEach(Array(channels.enumerated()), id: \.offset) { _, channel in
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(verbatim: prefix + channel.name)

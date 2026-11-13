@@ -20,6 +20,14 @@ enum ConnectWire {
     static let platformQuery = "platform"
     static let errorQuery = "error"
     static let cancelledError = "access_denied"
+    /// The error words of the callback (and of a refused complete call).
+    static let expiredError = "expired"
+    static let identityLinkedError = "identity_linked"
+    static let platformAlreadyLinkedError = "platform_already_linked"
+    static let accountGoneError = "account_gone"
+    static let knownErrors: Set<String> = [
+        expiredError, identityLinkedError, platformAlreadyLinkedError, accountGoneError,
+    ]
     /// The body key of the complete call.
     static let resultKey = "result"
     /// What the complete call says when the login already belongs to the account.
@@ -65,6 +73,8 @@ public enum ConnectError: Error, Equatable, Sendable {
     case wrongCallback
     /// The callback has no result to finish the link with.
     case missingResult
+    /// The system sign-in sheet could not be shown or failed (not a cancel); the system's reason.
+    case sheetFailed(String)
     /// The server redirected back with an error (its `error` value).
     case serverError(String)
     /// The address this server would open is not usable.

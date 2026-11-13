@@ -149,12 +149,10 @@ public struct InsightsTotals: Decodable, Sendable, Hashable {
 }
 
 /// A channel in the top lists, with its messages or voice minutes.
-public struct InsightsChannel: Decodable, Sendable, Hashable, Identifiable {
+public struct InsightsChannel: Decodable, Sendable, Hashable {
     public let name: String
     /// Messages for a text channel, minutes for a voice channel.
     public let value: Int
-
-    public var id: String { name }
 
     public init(name: String, value: Int) {
         self.name = name

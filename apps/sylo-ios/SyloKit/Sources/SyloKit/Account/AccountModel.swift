@@ -41,6 +41,11 @@ public final class AccountModel {
         (account?.platforms ?? []).filter(\.isConnected)
     }
 
+    /// The platforms the account does not have yet (whose login is on), in the server's order.
+    public var unconnectedPlatforms: [PlatformConnection] {
+        (account?.platforms ?? []).filter { !$0.isConnected }
+    }
+
     /// The platforms that can be added through the app: not yet connected, with their login on, and
     /// only when the server can start a connect for the app (``ServerFeature/appConnect``).
     public func connectablePlatforms(serverInfo: ServerInfo?) -> [PlatformConnection] {
@@ -116,6 +121,7 @@ public final class AccountModel {
         changingPlatform = connection.platform
         platformError = nil
         defer { changingPlatform = nil }
+        let generation = session.generation
         do {
             _ = try await session.send(Endpoints.DisconnectPlatform(platform: connection.platform))
         } catch {
@@ -128,6 +134,8 @@ public final class AccountModel {
             return false
         }
         // Every app token of the account was revoked with the login: this device is signed out too.
+        // Not when the session changed while the call was on its way (another sign-in took over).
+        guard session.generation == generation else { return true }
         session.notice = "\(connection.label) was disconnected, which signs every device out. Sign in again to continue."
         await session.signOut()
         return true
@@ -173,6 +181,7 @@ public final class AccountModel {
         switch error {
         case .cancelled: "Cancelled."
         case .wrongCallback, .missingResult, .invalidServerURL: "Connecting didn't finish. Try again."
+        case .sheetFailed(let reason): "Couldn't open the sign-in sheet: \(reason)"
         case .serverError(let code): Self.connectFailure(code)
         }
     }
@@ -180,10 +189,10 @@ public final class AccountModel {
     /// The words for the error code Sylo puts on `sylo://connected`.
     static func connectFailure(_ code: String) -> String {
         switch code {
-        case "expired": "That took too long. Try again."
-        case "identity_linked": "That login already belongs to another Sylo account."
-        case "platform_already_linked": "This account already has a login on that platform."
-        case "account_gone": "This Sylo account no longer exists."
+        case ConnectWire.expiredError: "That took too long. Try again."
+        case ConnectWire.identityLinkedError: "That login already belongs to another Sylo account."
+        case ConnectWire.platformAlreadyLinkedError: "This account already has a login on that platform."
+        case ConnectWire.accountGoneError: "This Sylo account no longer exists."
         default: "The platform couldn't be connected. Try again."
         }
     }
@@ -191,7 +200,10 @@ public final class AccountModel {
     private static func connectMessage(for error: NetworkError) -> String {
         switch error {
         case .notFound: "This Sylo server can't connect a platform from the app. Use its web dashboard."
-        case .http(status: 409): "That platform is already connected."
+        // 409: the account already has a login on that platform.
+        case .http(status: 409): connectFailure(ConnectWire.platformAlreadyLinkedError)
+        case .badRequest(let message?) where ConnectWire.knownErrors.contains(message):
+            connectFailure(message)
         case .badRequest(let message?) where ConnectWire.alreadyLinkedWords.contains(message):
             "That login is already linked."
         case .badRequest: "This Sylo server can't connect that platform."
