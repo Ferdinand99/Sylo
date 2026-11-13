@@ -17,10 +17,14 @@ struct CountingSettingsView: View {
     /// What was typed as a count, nil when it is not a whole number.
     private var typedCount: Int? { Int(countText.trimmingCharacters(in: .whitespacesAndNewlines)) }
 
-    /// Runs a tool, then reads the page again so the numbers are the server's.
+    /// The game as the page or the last answer has it.
+    private func state(_ page: CountingPage) -> CountingState { actions.countingState ?? page.state }
+
+    /// Runs a tool. A count call answers with the new state, which is shown at once; any other tool,
+    /// or an answer without a state, reads the page again so the numbers are the server's.
     private func perform(_ action: @MainActor @escaping () async -> Bool) {
         Task {
-            if await action() { await model.load() }
+            if await action(), actions.countingState == nil { await model.load() }
         }
     }
 
@@ -89,10 +93,10 @@ struct CountingSettingsView: View {
 
             Section {
                 LabeledContent("Count") {
-                    Text(page.state.current, format: .number)
+                    Text(state(page).current, format: .number)
                 }
                 LabeledContent("Best streak") {
-                    Text(page.state.record, format: .number)
+                    Text(state(page).record, format: .number)
                 }
                 LabeledContent("Set the count to") {
                     TextField("Count", text: $countText)
@@ -115,8 +119,12 @@ struct CountingSettingsView: View {
                 Text("The next number posted in the channel must be one higher than this. The last-counter lock is cleared, so anyone may post it. The best streak is kept.")
             }
         }
-        .onChange(of: model.page?.state.current, initial: true) { _, current in
+        .onChange(of: actions.countingState?.current ?? model.page?.state.current, initial: true) { _, current in
             if let current { countText = String(current) }
+        }
+        // The page was read again: its numbers are the server's, so drop what an answer held.
+        .onChange(of: model.isLoading) { _, loading in
+            if !loading { actions.pageReloaded() }
         }
         .confirmationDialog("Reset the count to 0?", isPresented: $isConfirmingReset, titleVisibility: .visible) {
             Button("Reset to 0", role: .destructive) { perform { await actions.resetCount() } }

@@ -22,6 +22,16 @@ struct SendTestButton: View {
     var note = ""
 
     var body: some View {
+        // Like the dashboard, only while the module is on.
+        Group {
+            if model.isAvailable {
+                section
+            }
+        }
+        .task { await model.loadAvailability() }
+    }
+
+    private var section: some View {
         Section {
             Button {
                 Task { await model.send() }

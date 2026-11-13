@@ -170,14 +170,15 @@ struct MemberDataModelTests {
         #expect(server.forgets.isEmpty)
     }
 
-    @Test("forgetting needs a reason and sends nothing without one")
-    func needsReason() async {
+    @Test("forgetting without a reason still goes ahead, with an empty reason")
+    func reasonIsOptional() async {
         let server = Server()
         let model = make(server)
         await model.look(up: alex)
-        #expect(!(await model.forget(reason: "   ", typed: "DELETE")))
-        #expect(model.forgetError?.contains("reason") == true)
-        #expect(server.forgets.isEmpty)
+        #expect(await model.forget(reason: "   ", typed: "DELETE"))
+        #expect(server.forgets.count == 1)
+        #expect(server.forgets.first?.reason == "")
+        #expect(model.forgetError == nil)
     }
 
     @Test("forgetting sends the member and the cleaned reason, then reads the counts again")

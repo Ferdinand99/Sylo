@@ -130,6 +130,13 @@ public final class ModuleTestModel {
     public let module: ModuleID
     public private(set) var isSending = false
     public private(set) var outcome: Outcome?
+    /// Whether the module is on, from the server's overview; nil until known (or when the overview
+    /// could not be read).
+    public private(set) var isModuleEnabled: Bool?
+
+    /// Whether the screen shows the button. Like the dashboard, only while the module is on; a module
+    /// whose state is not known is treated as on, because the server's route does not care.
+    public var isAvailable: Bool { isModuleEnabled != false }
 
     private let session: AppSession
 
@@ -137,6 +144,14 @@ public final class ModuleTestModel {
         self.server = server
         self.module = module
         self.session = session
+    }
+
+    /// Reads whether the module is on (the dashboard reads the same overview). A failed read leaves
+    /// the state unknown, so the button stays.
+    public func loadAvailability() async {
+        guard let overview = try? await session.send(Endpoints.Overview(server: server)) else { return }
+        let card = overview.groups.lazy.flatMap(\.cards).first { $0.id == module.rawValue }
+        isModuleEnabled = card?.isEnabled
     }
 
     /// Sends the test. Does nothing while one is on its way.

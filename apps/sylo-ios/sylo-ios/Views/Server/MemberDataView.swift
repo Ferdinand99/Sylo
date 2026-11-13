@@ -5,7 +5,7 @@ import SyloKit
 /// request (for example a data-erasure request). Mirrors web-v2/src/pages/MemberData.jsx.
 ///
 /// This is personal data: nothing is logged, the lookup is dropped when the screen goes away, and
-/// the erasure asks for a reason and a typed confirmation.
+/// the erasure asks for a typed confirmation.
 struct MemberDataView: View {
     let server: ServerID
     let session: AppSession
@@ -124,7 +124,7 @@ struct MemberDataView: View {
     }
 }
 
-/// The erasure's confirmation: what happens, a required reason, and the word to type.
+/// The erasure's confirmation: what happens, an optional note for the member, and the word to type.
 private struct ForgetMemberSheet: View {
     let model: MemberDataModel
     let lookup: MemberDataLookup
@@ -134,7 +134,7 @@ private struct ForgetMemberSheet: View {
     @State private var typed = ""
 
     private var canDelete: Bool {
-        MemberForget.cleanedReason(reason) != nil && MemberForget.isConfirmed(typed) && !model.isForgetting
+        MemberForget.isConfirmed(typed) && !model.isForgetting
     }
 
     var body: some View {
@@ -146,7 +146,7 @@ private struct ForgetMemberSheet: View {
                 }
 
                 Section {
-                    TextField("Reason", text: $reason, axis: .vertical)
+                    TextField("Note to the member (optional)", text: $reason, axis: .vertical)
                         .lineLimit(2...5)
                         .onChange(of: reason) {
                             if reason.count > MemberForget.reasonLength {
@@ -154,7 +154,7 @@ private struct ForgetMemberSheet: View {
                             }
                         }
                 } header: {
-                    Text("Reason")
+                    Text("Note")
                 } footer: {
                     Text("For example \"Processed at your request\". It goes in the server's audit log and in the message to the member.")
                 }

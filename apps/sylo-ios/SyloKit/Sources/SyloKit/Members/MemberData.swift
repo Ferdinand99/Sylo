@@ -6,9 +6,9 @@ import Observation
 // counted per source, and the "forget this member" erasure used for a data-erasure request.
 //
 // This is personal data. Nothing here is logged or kept longer than the screen needs it: the model
-// drops the lookup when the screen goes away, and the erasure needs a typed confirmation and a
-// reason (the dashboard makes the reason optional; the app asks for one so the audit log and the
-// member's confirmation message say why).
+// drops the lookup when the screen goes away, and the erasure needs a typed confirmation. The reason
+// is optional, as on the dashboard: when given it goes in the audit log and in the message to the
+// member.
 
 /// Who the lookup is about, as the server sees them.
 public struct MemberProfile: Decodable, Sendable, Equatable {
@@ -218,11 +218,11 @@ public enum MemberForget {
         typed.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == confirmationWord
     }
 
-    /// The reason as it is sent: trimmed and cut. nil when nothing is left, which is not allowed.
-    public static func cleanedReason(_ text: String) -> String? {
+    /// The reason as it is sent: trimmed and cut at the server's limit. Empty when none was given,
+    /// which is allowed.
+    public static func cleanedReason(_ text: String) -> String {
         let cut = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(reasonLength))
-        let trimmed = cut.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        return cut.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -276,7 +276,7 @@ public final class MemberDataModel {
 
     /// Deletes the looked-up member's data, then looks again so the screen shows what is left.
     /// - Parameters:
-    ///   - reason: Why. Required: it goes in the audit log and in the message to the member.
+    ///   - reason: Why. Optional (empty is fine); it goes in the audit log and in the message to the member.
     ///   - typed: What the person typed to confirm; must be ``MemberForget/confirmationWord``.
     /// - Returns: Whether the data was deleted.
     @discardableResult
@@ -286,10 +286,7 @@ public final class MemberDataModel {
             forgetError = "Type \(MemberForget.confirmationWord) to confirm."
             return false
         }
-        guard let cleaned = MemberForget.cleanedReason(reason) else {
-            forgetError = "Give a reason. It is kept in the audit log and sent to the member."
-            return false
-        }
+        let cleaned = MemberForget.cleanedReason(reason)
         isForgetting = true
         forgetError = nil
         forgetNotice = nil

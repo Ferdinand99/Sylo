@@ -49,6 +49,25 @@ struct TempRoleAnswerTests {
         #expect(empty.roleRemoved)
     }
 
+    @Test("the count answer reads the state, and an unreadable one is no state")
+    func countAnswer() throws {
+        let answer = try decode(CountingStateAnswer.self, #"{"state":{"current":41,"record":120,"last_user_id":"1"}}"#)
+        #expect(answer.state?.current == 41)
+        #expect(answer.state?.record == 120)
+        #expect(try decode(CountingStateAnswer.self, #"{"state":"nope"}"#).state == nil)
+        #expect(try decode(CountingStateAnswer.self, "{}").state == nil)
+    }
+
+    @Test("the bonus answer reads the board, and an unreadable one is no board")
+    func bonusAnswer() throws {
+        let answer = try decode(InviteBonusAnswer.self, """
+            {"board":{"total":1,"canReadInvites":true,"rows":[{"rank":1,"userId":"1","name":"Alex","net":6,"regular":5,"leaves":0,"bonus":1}]}}
+            """)
+        #expect(answer.board?.rows.first?.bonus == 1)
+        #expect(try decode(InviteBonusAnswer.self, #"{"board":{"rows":[{"rank":"x"}]}}"#).board == nil)
+        #expect(try decode(InviteBonusAnswer.self, "{}").board == nil)
+    }
+
     @Test("a filter is active with text or a role, and spaces alone are not text")
     func filterActive() {
         #expect(!TempRoleFilter().isActive)
@@ -58,11 +77,20 @@ struct TempRoleAnswerTests {
     }
 }
 
+/// What the server answers each tool with, by default.
+private func defaultAnswer(_ endpoint: any APIEndpoint) throws -> Any {
+    if endpoint is Endpoints.SetCountingCount || endpoint is Endpoints.ResetCountingCount {
+        return CountingStateAnswer(state: CountingState(current: 7, record: 9))
+    }
+    if endpoint is Endpoints.SetInviteBonus { return InviteBonusAnswer(board: nil) }
+    return EmptyResponse()
+}
+
 @MainActor
 @Suite("Member action model")
 struct MemberActionModelTests {
     private func make(
-        _ answer: @escaping @Sendable (any APIEndpoint) throws -> Any = { _ in EmptyResponse() }
+        _ answer: @escaping @Sendable (any APIEndpoint) throws -> Any = { try defaultAnswer($0) }
     ) -> (MemberActionModel, Recorder) {
         let recorder = Recorder()
         let clients = StubClients { endpoint in
@@ -153,6 +181,35 @@ struct MemberActionModelTests {
         let alex = MemberChoice(id: "111111111111111111", name: "Alex")
         #expect(!(await model.setXP(member: alex, xp: 99_999)))
         #expect(model.errorMessage == "You cannot give the Admin role.")
+    }
+
+    @Test("a count call keeps the state the server answered with, until the page is read again")
+    func keepsCountingState() async throws {
+        let (model, _) = make()
+        #expect(model.countingState == nil)
+        #expect(await model.setCount(7))
+        #expect(model.countingState == CountingState(current: 7, record: 9))
+        model.pageReloaded()
+        #expect(model.countingState == nil)
+        #expect(await model.resetCount())
+        #expect(model.countingState?.current == 7)
+    }
+
+    @Test("an answer with no readable state leaves nothing to show, so the screen reads the page")
+    func countAnswerWithoutState() async {
+        let (model, _) = make { _ in CountingStateAnswer(state: nil) }
+        #expect(await model.setCount(5))
+        #expect(model.countingState == nil)
+    }
+
+    @Test("the bonus call keeps the leaderboard the server answered with")
+    func keepsBoard() async throws {
+        let board = InviteTrackerBoard(total: 1, rows: [InviteTrackerInviter(rank: 1, userId: "1", name: "Alex", net: 5, bonus: 5)])
+        let (model, _) = make { _ in InviteBonusAnswer(board: board) }
+        #expect(await model.setInviteBonus(member: MemberChoice(id: "1", name: "Alex"), bonus: 5))
+        #expect(model.inviteBoard == board)
+        model.pageReloaded()
+        #expect(model.inviteBoard == nil)
     }
 
     @Test("the reset word is RESET, as on the web")

@@ -34,7 +34,7 @@ extension Endpoints {
     /// `POST /modules/counting/count` with `{current}`: sets the count. The last-counter lock is
     /// cleared, so anyone may post the next number. 400 for a number outside the limits.
     public struct SetCountingCount: APIEndpoint {
-        public typealias Response = EmptyResponse
+        public typealias Response = CountingStateAnswer
         public let server: ServerID
         public let count: Int
 
@@ -53,7 +53,7 @@ extension Endpoints {
     /// `POST /modules/counting/count` with `{reset: true}`: the count goes back to 0, the best
     /// streak stays.
     public struct ResetCountingCount: APIEndpoint {
-        public typealias Response = EmptyResponse
+        public typealias Response = CountingStateAnswer
         public let server: ServerID
 
         public init(server: ServerID) { self.server = server }
@@ -85,9 +85,9 @@ extension Endpoints {
     }
 
     /// `POST /modules/invite-tracker/bonus` with `{userId, bonus}`: replaces the member's bonus
-    /// invites. The answer carries the new leaderboard; the app reads the page again instead.
+    /// invites. The answer carries the new leaderboard.
     public struct SetInviteBonus: APIEndpoint {
-        public typealias Response = EmptyResponse
+        public typealias Response = InviteBonusAnswer
         public let server: ServerID
         public let userID: String
         public let bonus: Int
@@ -239,6 +239,38 @@ extension Endpoints {
     }
 }
 
+// MARK: - What the counting and invite calls answer
+
+/// The answer of the count calls: `{state}`, the game as it stands now. `state` is nil when the
+/// server did not send one the app can read; the screen then reads the page again.
+public struct CountingStateAnswer: Decodable, Sendable, Equatable {
+    public let state: CountingState?
+
+    public init(state: CountingState? = nil) { self.state = state }
+
+    private enum CodingKeys: String, CodingKey { case state }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try? c.decodeIfPresent(CountingState.self, forKey: .state)
+    }
+}
+
+/// The answer of the bonus call: `{board}`, the invite leaderboard with the new bonus in it. nil
+/// when the server did not send one the app can read.
+public struct InviteBonusAnswer: Decodable, Sendable, Equatable {
+    public let board: InviteTrackerBoard?
+
+    public init(board: InviteTrackerBoard? = nil) { self.board = board }
+
+    private enum CodingKeys: String, CodingKey { case board }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        board = try? c.decodeIfPresent(InviteTrackerBoard.self, forKey: .board)
+    }
+}
+
 // MARK: - Temporary roles: the filter and what the calls answer
 
 /// The text and role the list of active temporary roles is cut with.
@@ -355,12 +387,23 @@ public final class MemberActionModel {
     public var errorMessage: String?
     /// Goes up with every successful call, for a haptic.
     public private(set) var doneCount = 0
+    /// The counting game as the server answered the last set or reset; nil when there is no newer
+    /// state than the page's. The screen shows this over the page's until the page is read again.
+    public private(set) var countingState: CountingState?
+    /// The invite leaderboard as the server answered the last bonus; same rule.
+    public private(set) var inviteBoard: InviteTrackerBoard?
 
     private let session: AppSession
 
     public init(server: ServerID, session: AppSession) {
         self.server = server
         self.session = session
+    }
+
+    /// The page was read again, so its numbers are the server's: drop what the answers held.
+    public func pageReloaded() {
+        countingState = nil
+        inviteBoard = nil
     }
 
     /// Sets the counting channel's count to `count`.
@@ -370,14 +413,16 @@ public final class MemberActionModel {
             return false
         }
         return await run(done: "The count is now \(count).") {
-            _ = try await self.session.send(Endpoints.SetCountingCount(server: self.server, count: count))
+            let answer = try await self.session.send(Endpoints.SetCountingCount(server: self.server, count: count))
+            self.countingState = answer.state
         }
     }
 
     /// Sends the count back to 0.
     public func resetCount() async -> Bool {
         await run(done: "The count is back at 0.") {
-            _ = try await self.session.send(Endpoints.ResetCountingCount(server: self.server))
+            let answer = try await self.session.send(Endpoints.ResetCountingCount(server: self.server))
+            self.countingState = answer.state
         }
     }
 
@@ -396,8 +441,9 @@ public final class MemberActionModel {
             return false
         }
         return await run(done: "\(member.name) now has \(bonus) bonus invites.") {
-            _ = try await self.session.send(
+            let answer = try await self.session.send(
                 Endpoints.SetInviteBonus(server: self.server, userID: member.id, bonus: bonus))
+            self.inviteBoard = answer.board
         }
     }
 

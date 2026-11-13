@@ -27,17 +27,20 @@ struct InviteTrackerSettingsView: View {
             if await actions.setInviteBonus(member: member, bonus: bonus) {
                 bonusMember = nil
                 bonusText = "0"
-                await model.load()
+                // The answer holds the new leaderboard; without one, read the page again.
+                if actions.inviteBoard == nil { await model.load() }
             }
         }
     }
 
     var body: some View {
         ModuleSettingsForm("Invite Tracker", model: model) { $settings, page in
+            // The leaderboard from the last bonus answer, until the page is read again.
+            let board = actions.inviteBoard ?? page.board
             ModuleIntro("Members get a personal invite link with /invites. When someone joins through it, that member's invite count goes up. /inviter and /invites-leaderboard read the same data.")
 
             Section {
-                if !page.board.canReadInvites {
+                if !board.canReadInvites {
                     Label("Sylo needs the Manage Server permission to read this server's invites. Without it, joins can't be credited to an inviter.", systemImage: "exclamationmark.triangle")
                         .font(.subheadline)
                         .foregroundStyle(.orange)
@@ -59,19 +62,19 @@ struct InviteTrackerSettingsView: View {
             }
 
             Section {
-                if page.board.rows.isEmpty {
+                if board.rows.isEmpty {
                     Text("No invites tracked yet.")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(page.board.rows, id: \.userId) { row in
+                    ForEach(board.rows, id: \.userId) { row in
                         InviteTrackerInviterRow(row: row)
                     }
                 }
             } header: {
                 Text("Leaderboard")
             } footer: {
-                if page.board.total > 0 {
-                    Text("^[\(page.board.total) member](inflect: true) invited someone.")
+                if board.total > 0 {
+                    Text("^[\(board.total) member](inflect: true) invited someone.")
                 }
             }
 
@@ -93,6 +96,9 @@ struct InviteTrackerSettingsView: View {
             } footer: {
                 Text("Set a member's bonus invites, for example to reward a giveaway. This replaces their current bonus; use a negative number to take invites away.")
             }
+        }
+        .onChange(of: model.isLoading) { _, loading in
+            if !loading { actions.pageReloaded() }
         }
         .alert("Couldn't Set Bonus", isPresented: isShowingActionError, presenting: actions.errorMessage) { _ in
             Button("OK") {}

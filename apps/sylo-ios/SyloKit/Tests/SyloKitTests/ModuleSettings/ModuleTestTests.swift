@@ -112,6 +112,42 @@ struct ModuleTestModelTests {
         #expect(model.outcome == .failed("This module has no test message."))
     }
 
+    nonisolated private static func overview(welcomeEnabled: Bool?) -> ServerOverview {
+        ServerOverview(
+            server: OverviewServer(id: "1", name: "Test"),
+            groups: [OverviewGroup(title: "Members", cards: [
+                OverviewCard(kind: .module, id: "welcome", name: "Welcome", hasToggle: welcomeEnabled != nil,
+                             isEnabled: welcomeEnabled, status: .on),
+            ])])
+    }
+
+    @Test("the button is available while the module is on, and hidden while it is off")
+    func availability() async {
+        let on = make { _ in Self.overview(welcomeEnabled: true) }
+        #expect(on.isAvailable)
+        await on.loadAvailability()
+        #expect(on.isModuleEnabled == true)
+        #expect(on.isAvailable)
+
+        let off = make { _ in Self.overview(welcomeEnabled: false) }
+        await off.loadAvailability()
+        #expect(off.isModuleEnabled == false)
+        #expect(!off.isAvailable)
+    }
+
+    @Test("when the overview cannot be read, or has no such card, the button stays")
+    func availabilityUnknown() async {
+        let failing = make { _ in throw NetworkError.offline }
+        await failing.loadAvailability()
+        #expect(failing.isModuleEnabled == nil)
+        #expect(failing.isAvailable)
+
+        let noCard = make { _ in Self.overview(welcomeEnabled: nil) }
+        await noCard.loadAvailability()
+        #expect(noCard.isModuleEnabled == nil)
+        #expect(noCard.isAvailable)
+    }
+
     @Test("a new send clears the old outcome, and the outcome can be cleared")
     func clears() async {
         let model = make { _ in ModuleTestResult(isSent: true, channelName: "welcome") }
