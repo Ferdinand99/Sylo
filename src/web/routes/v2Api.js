@@ -761,6 +761,8 @@ router.post(
       verifiedRoleId: req.body.verifiedRoleId,
       channelId: req.body.channelId,
       messageId: prev.messageId, // bot-managed, not form-editable
+      // Where that message is: the channel it was posted in, which the form may be changing now.
+      messageChannelId: prev.messageChannelId || (prev.messageId ? prev.channelId : ''),
       title: req.body.title,
       message: req.body.message,
       successMessage: req.body.successMessage,
@@ -773,7 +775,7 @@ router.post(
       action: 'module:verification',
       detail: 'settings saved',
     });
-    ensureVerifyMessage(guild, cfg).catch((err) =>
+    ensureVerifyMessage(guild).catch((err) =>
       log.error('verification', 'ensure message after save failed:', err.message)
     );
     res.json({ config: cfg });
