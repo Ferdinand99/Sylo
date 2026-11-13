@@ -2,12 +2,34 @@ import SwiftUI
 import SyloKit
 
 /// Invite tracker: the join/leave log channel, the fake-invite grace window, and the invite
-/// leaderboard. Mirrors web-v2/src/moduleForms/InviteTracker.jsx (without its bonus form).
+/// leaderboard, and bonus invites for a member. Mirrors web-v2/src/moduleForms/InviteTracker.jsx.
 struct InviteTrackerSettingsView: View {
     @State private var model: ModuleSettingsModel<InviteTrackerPage>
+    @State private var actions: MemberActionModel
+    @State private var bonusMember: MemberChoice?
+    @State private var bonusText = "0"
+    private let server: ServerID
+    private let session: AppSession
 
     init(server: ServerID, session: AppSession) {
+        self.server = server
+        self.session = session
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _actions = State(initialValue: MemberActionModel(server: server, session: session))
+    }
+
+    /// What was typed as the bonus, nil when it is not a whole number (a minus sign is fine).
+    private var typedBonus: Int? { Int(bonusText.trimmingCharacters(in: .whitespacesAndNewlines)) }
+
+    private func setBonus() {
+        guard let member = bonusMember, let bonus = typedBonus else { return }
+        Task {
+            if await actions.setInviteBonus(member: member, bonus: bonus) {
+                bonusMember = nil
+                bonusText = "0"
+                await model.load()
+            }
+        }
     }
 
     var body: some View {
@@ -52,7 +74,36 @@ struct InviteTrackerSettingsView: View {
                     Text("^[\(page.board.total) member](inflect: true) invited someone.")
                 }
             }
+
+            Section {
+                MemberPicker("Member", server: server, session: session, selection: $bonusMember)
+                LabeledContent("Bonus invites") {
+                    TextField("0", text: $bonusText)
+                        .keyboardType(.numbersAndPunctuation)
+                        .multilineTextAlignment(.trailing)
+                        .autocorrectionDisabled()
+                }
+                Button("Set Bonus") { setBonus() }
+                    .disabled(bonusMember == nil || typedBonus == nil || actions.isWorking)
+                if let notice = actions.notice {
+                    StatusMessage(notice, kind: .notice)
+                }
+            } header: {
+                Text("Adjust bonus invites")
+            } footer: {
+                Text("Set a member's bonus invites, for example to reward a giveaway. This replaces their current bonus; use a negative number to take invites away.")
+            }
         }
+        .alert("Couldn't Set Bonus", isPresented: isShowingActionError, presenting: actions.errorMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .sensoryFeedback(.success, trigger: actions.doneCount)
+    }
+
+    private var isShowingActionError: Binding<Bool> {
+        Binding(get: { actions.errorMessage != nil }, set: { if !$0 { actions.errorMessage = nil } })
     }
 }
 

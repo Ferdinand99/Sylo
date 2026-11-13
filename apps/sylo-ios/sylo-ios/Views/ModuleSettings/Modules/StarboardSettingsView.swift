@@ -6,9 +6,11 @@ import SyloKit
 /// web-v2/src/moduleForms/Starboard.jsx.
 struct StarboardSettingsView: View {
     @State private var model: ModuleSettingsModel<StarboardPage>
+    @State private var test: ModuleTestModel
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _test = State(initialValue: ModuleTestModel(server: server, module: "starboard", session: session))
     }
 
     var body: some View {
@@ -91,6 +93,13 @@ struct StarboardSettingsView: View {
                     Text("No boards yet.")
                 }
             }
+
+            SendTestButton(model: test, hasUnsavedChanges: model.hasChanges,
+                           sample: "a sample starred message",
+                           channelName: settings.boards.first.flatMap { board in
+                               page.channels.first { $0.id == board.channelId }?.name
+                           },
+                           note: settings.boards.count > 1 ? "the first board in the list" : "")
         }
     }
 }

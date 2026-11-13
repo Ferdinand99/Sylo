@@ -5,9 +5,11 @@ import SyloKit
 /// it when the stream ends. Mirrors web-v2/src/moduleForms/TwitchAlerts.jsx.
 struct TwitchAlertsSettingsView: View {
     @State private var model: ModuleSettingsModel<TwitchAlertsPage>
+    @State private var test: ModuleTestModel
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _test = State(initialValue: ModuleTestModel(server: server, module: "twitch-alerts", session: session))
     }
 
     var body: some View {
@@ -62,6 +64,13 @@ struct TwitchAlertsSettingsView: View {
             } footer: {
                 Text("A streamer without a username or a channel is dropped when you save.")
             }
+
+            SendTestButton(model: test, hasUnsavedChanges: model.hasChanges,
+                           sample: "a sample alert",
+                           channelName: settings.alerts.first.flatMap { alert in
+                               page.channels.first { $0.id == alert.channelId }?.name
+                           },
+                           note: settings.alerts.count > 1 ? "the first streamer in the list" : "")
         }
     }
 }

@@ -5,9 +5,11 @@ import SyloKit
 /// web-v2/src/moduleForms/Birthdays.jsx.
 struct BirthdaysSettingsView: View {
     @State private var model: ModuleSettingsModel<BirthdaysPage>
+    @State private var test: ModuleTestModel
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _test = State(initialValue: ModuleTestModel(server: server, module: "birthdays", session: session))
     }
 
     var body: some View {
@@ -39,6 +41,10 @@ struct BirthdaysSettingsView: View {
             } footer: {
                 Text("Mentions the birthday role in the announcement.")
             }
+
+            SendTestButton(model: test, hasUnsavedChanges: model.hasChanges,
+                           sample: "a sample birthday message (not your own text)",
+                           channelName: page.channels.first { $0.id == settings.channel }?.name)
         }
     }
 }

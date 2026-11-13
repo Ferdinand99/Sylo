@@ -1,13 +1,27 @@
 import SwiftUI
 import SyloKit
 
-/// Counting: the counting channel, its rules, the penalty role, and (read only) the current game
-/// and who is benched. Mirrors web-v2/src/moduleForms/Counting.jsx.
+/// Counting: the counting channel, its rules, the penalty role, who is benched (release them early),
+/// and the current game (set or reset the count). Mirrors web-v2/src/moduleForms/Counting.jsx.
 struct CountingSettingsView: View {
     @State private var model: ModuleSettingsModel<CountingPage>
+    @State private var actions: MemberActionModel
+    @State private var countText = ""
+    @State private var isConfirmingReset = false
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _actions = State(initialValue: MemberActionModel(server: server, session: session))
+    }
+
+    /// What was typed as a count, nil when it is not a whole number.
+    private var typedCount: Int? { Int(countText.trimmingCharacters(in: .whitespacesAndNewlines)) }
+
+    /// Runs a tool, then reads the page again so the numbers are the server's.
+    private func perform(_ action: @MainActor @escaping () async -> Bool) {
+        Task {
+            if await action() { await model.load() }
+        }
     }
 
     var body: some View {
@@ -58,7 +72,16 @@ struct CountingSettingsView: View {
                             }
                         }
                         .accessibilityElement(children: .combine)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button("Release") { release(penalty) }
+                                .tint(.accentColor)
+                        }
+                        .contextMenu {
+                            Button("Release Now", systemImage: "lock.open") { release(penalty) }
+                        }
                     }
+                } footer: {
+                    Text("Swipe a member, or press and hold, to give them the penalty role back now.")
                 }
             }
 
@@ -69,12 +92,49 @@ struct CountingSettingsView: View {
                 LabeledContent("Best streak") {
                     Text(page.state.record, format: .number)
                 }
+                LabeledContent("Set the count to") {
+                    TextField("Count", text: $countText)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .autocorrectionDisabled()
+                }
+                Button("Update Count") {
+                    if let count = typedCount { perform { await actions.setCount(count) } }
+                }
+                .disabled(typedCount == nil || actions.isWorking)
+                Button("Reset to 0", role: .destructive) { isConfirmingReset = true }
+                    .disabled(actions.isWorking)
+                if let notice = actions.notice {
+                    StatusMessage(notice, kind: .notice)
+                }
             } header: {
                 Text("Current game")
             } footer: {
-                Text("Set or reset the count in the web dashboard.")
+                Text("The next number posted in the channel must be one higher than this. The last-counter lock is cleared, so anyone may post it. The best streak is kept.")
             }
         }
+        .onChange(of: model.page?.state.current, initial: true) { _, current in
+            if let current { countText = String(current) }
+        }
+        .confirmationDialog("Reset the count to 0?", isPresented: $isConfirmingReset, titleVisibility: .visible) {
+            Button("Reset to 0", role: .destructive) { perform { await actions.resetCount() } }
+        } message: {
+            Text("The current count is cleared and the next number posted must be 1. The best streak is kept.")
+        }
+        .alert("Couldn't Update", isPresented: isShowingActionError, presenting: actions.errorMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .sensoryFeedback(.success, trigger: actions.doneCount)
+    }
+
+    private func release(_ penalty: CountingPenalty) {
+        perform { await actions.releasePenalty(userID: penalty.userId, name: penalty.label) }
+    }
+
+    private var isShowingActionError: Binding<Bool> {
+        Binding(get: { actions.errorMessage != nil }, set: { if !$0 { actions.errorMessage = nil } })
     }
 }
 

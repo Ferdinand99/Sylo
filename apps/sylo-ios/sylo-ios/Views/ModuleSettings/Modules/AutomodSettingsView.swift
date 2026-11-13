@@ -2,7 +2,7 @@ import SwiftUI
 import SyloKit
 
 /// Auto-moderation: each check's action and settings, native Discord AutoMod, the timeout length
-/// and exempt channels. The immunity roles are shown but saved in the web dashboard. Mirrors
+/// and exempt channels. The immunity roles are saved with the rest of the page. Mirrors
 /// web-v2/src/moduleForms/Automod.jsx.
 struct AutomodSettingsView: View {
     @State private var model: ModuleSettingsModel<AutomodPage>
@@ -186,23 +186,10 @@ struct AutomodSettingsView: View {
             }
 
             Section {
-                if settings.exemptRoles.isEmpty {
-                    Text("None")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(settings.exemptRoles, id: \.self) { id in
-                        if let role = page.roles.first(where: { $0.id == id }) {
-                            Text(verbatim: "@\(role.name)")
-                        } else {
-                            Text("Deleted role")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            } header: {
-                Text("Immunity roles")
+                MultiPicker(title: "Immunity roles", selection: $settings.immunityRoles, options: page.roles,
+                            prefix: "@")
             } footer: {
-                Text("Members with one of these roles are never touched by auto-moderation or the warning auto-actions. Change them in the web dashboard.")
+                Text("Members with one of these roles are never touched by auto-moderation or the warning auto-actions. Administrators, the server owner and bot master roles are always immune.")
             }
         }
     }
@@ -253,7 +240,7 @@ private struct AutomodPresetLabel: View {
         guard endpoint is Endpoints.LoadModuleSettings<AutomodPage> else { return nil }
         return AutomodPage(
             settings: AutomodSettings(
-                exemptChannels: ["c2"], exemptRoles: ["r1"],
+                exemptChannels: ["c2"], immunityRoles: ["r1"],
                 native: AutomodSettings.Native(enabled: true, words: true, presets: ["slurs"]),
                 rules: AutomodSettings.Rules(
                     words: AutomodSettings.WordsRule(enabled: true, action: .warn, listText: "badword, another phrase"),

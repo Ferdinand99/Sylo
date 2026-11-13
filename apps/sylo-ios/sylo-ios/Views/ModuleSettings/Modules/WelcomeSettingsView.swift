@@ -6,9 +6,15 @@ import SyloKit
 /// web-v2/src/moduleForms/Welcome.jsx.
 struct WelcomeSettingsView: View {
     @State private var model: ModuleSettingsModel<WelcomePage>
+    @State private var test: ModuleTestModel
+    /// Goes up when the person asks for a new preview; a save also gets a new one.
+    @State private var previewRefreshes = 0
+    private let server: ServerID
 
     init(server: ServerID, session: AppSession) {
+        self.server = server
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _test = State(initialValue: ModuleTestModel(server: server, module: "welcome", session: session))
     }
 
     /// `trigger` is nil on a server before Sylo 5.2; the picker is only shown when it is not.
@@ -32,6 +38,16 @@ struct WelcomeSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Welcome & Leave", model: model) { $settings, page in
+            // The server saved the settings but told us they will not do what was meant.
+            if let warning = model.saveWarning {
+                Section {
+                    StatusMessage(warning, kind: .notice)
+                    Button("Dismiss") { model.saveWarning = nil }
+                } header: {
+                    Text("Saved, with a note")
+                }
+            }
+
             if !page.placeholders.isEmpty {
                 Section {
                     Text(verbatim: page.placeholders.joined(separator: "  "))
@@ -105,11 +121,17 @@ struct WelcomeSettingsView: View {
                         .textContentType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                    AuthenticatedImage(
+                        path: WelcomeCardPreview.path(server: server),
+                        query: WelcomeCardPreview.query(version: model.saveCount + previewRefreshes))
+                        .frame(maxWidth: .infinity, minHeight: 80, maxHeight: 220)
+                        .accessibilityLabel("Welcome image preview")
+                    Button("Refresh Preview", systemImage: "arrow.clockwise") { previewRefreshes += 1 }
                 }
             } header: {
                 Text("Welcome image")
             } footer: {
-                Text("A generated banner with the member's avatar, name and member number, posted with the join message. The join message must be on for it to show. The background must be an https link to a PNG or JPG.")
+                Text("A generated banner with the member's avatar, name and member number, posted with the join message. The join message must be on for it to show. The background must be an https link to a PNG or JPG. The preview uses a sample member and the saved background: save to see a new one.")
             }
 
             Section {
@@ -156,6 +178,10 @@ struct WelcomeSettingsView: View {
             } footer: {
                 Text("Captcha verification for new members has its own module.")
             }
+
+            SendTestButton(model: test, hasUnsavedChanges: model.hasChanges,
+                           sample: "a sample join message (not your own text)",
+                           channelName: page.channels.first { $0.id == settings.joinChannel }?.name)
         }
     }
 }

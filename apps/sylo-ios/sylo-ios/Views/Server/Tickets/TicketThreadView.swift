@@ -15,11 +15,15 @@ struct TicketThreadView: View {
     @State private var reply = ""
     @State private var isConfirmingClose = false
     @State private var closingMessage = ""
+    /// The transcript download; the file is deleted when Quick Look closes or this screen goes.
+    @State private var transcript: FileDownloadModel
+    @State private var transcriptFile: DownloadedFile?
 
     init(server: ServerID, route: TicketRoute, session: AppSession) {
         self.server = server
         self.route = route
         _model = State(initialValue: TicketThreadModel(server: server, ticketID: route.id, session: session))
+        _transcript = State(initialValue: FileDownloadModel(session: session))
     }
 
     var body: some View {
@@ -27,6 +31,23 @@ struct TicketThreadView: View {
             .navigationTitle(model.ticket?.user ?? route.user)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                if model.ticket != nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            Task {
+                                let endpoint = Endpoints.TicketTranscript(server: server, id: route.id)
+                                if await transcript.download(endpoint) { transcriptFile = transcript.file }
+                            }
+                        } label: {
+                            if transcript.isDownloading {
+                                ProgressView()
+                            } else {
+                                Label("Transcript", systemImage: "doc.text")
+                            }
+                        }
+                        .disabled(transcript.isDownloading)
+                    }
+                }
                 if model.ticket != nil, !model.isClosed {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Close Ticket") {
@@ -35,6 +56,15 @@ struct TicketThreadView: View {
                         }
                     }
                 }
+            }
+            // The transcript holds what the member wrote: Quick Look (with its own share button),
+            // never an in-app page. The temporary file goes when Quick Look closes, and the model
+            // deletes it too when this screen is released.
+            .fileQuickLook($transcriptFile) { transcript.clear() }
+            .alert("Couldn't Download Transcript", isPresented: isShowingTranscriptError, presenting: transcript.errorMessage) { _ in
+                Button("OK") {}
+            } message: { message in
+                Text(message)
             }
             .task {
                 await model.load()
@@ -169,6 +199,10 @@ struct TicketThreadView: View {
 
     private var isShowingActionError: Binding<Bool> {
         Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })
+    }
+
+    private var isShowingTranscriptError: Binding<Bool> {
+        Binding(get: { transcript.errorMessage != nil }, set: { if !$0 { transcript.errorMessage = nil } })
     }
 }
 
