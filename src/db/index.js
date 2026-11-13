@@ -1511,6 +1511,8 @@ export const MIGRATIONS = [
     database.exec(`
       ALTER TABLE mobile_connect_codes ADD COLUMN token_id TEXT;
       DELETE FROM mobile_connect_codes;
+      -- The unique index below answers the same lookups as the plain one from migration 76.
+      DROP INDEX idx_mobile_connect_codes_account;
       CREATE UNIQUE INDEX idx_mobile_connect_codes_one ON mobile_connect_codes (account_id);
       CREATE TABLE mobile_connect_results (
         code_hash        TEXT PRIMARY KEY,
@@ -1523,15 +1525,24 @@ export const MIGRATIONS = [
         guild_ids        TEXT NOT NULL DEFAULT '[]',
         expires_at       INTEGER NOT NULL
       );
-      DELETE FROM account_identities WHERE rowid NOT IN (
-        SELECT rowid FROM (
-          SELECT rowid, ROW_NUMBER() OVER (
-            PARTITION BY account_id, platform ORDER BY linked_at, platform_user_id
-          ) AS n FROM account_identities
-        ) WHERE n = 1
-      );
-      CREATE UNIQUE INDEX idx_account_identities_one ON account_identities (account_id, platform);
     `);
+    const doubled = database
+      .prepare(
+        `DELETE FROM account_identities WHERE rowid NOT IN (
+           SELECT rowid FROM (
+             SELECT rowid, ROW_NUMBER() OVER (
+               PARTITION BY account_id, platform ORDER BY linked_at, platform_user_id
+             ) AS n FROM account_identities
+           ) WHERE n = 1
+         )`
+      )
+      .run().changes;
+    // The count only: which logins were dropped is not written down.
+    if (doubled > 0)
+      log.warn('db', `Migration 77 removed ${doubled} doubled login(s), keeping the first of each`);
+    database.exec(
+      'CREATE UNIQUE INDEX idx_account_identities_one ON account_identities (account_id, platform)'
+    );
   },
 ];
 

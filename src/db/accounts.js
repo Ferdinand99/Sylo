@@ -168,8 +168,10 @@ export async function signInIdentity(identity) {
  * Link an identity to an existing account ("connect Fluxer" while signed in).
  * @throws {IdentityLinkedError} when it already belongs to a different account
  * @throws {PlatformAlreadyLinkedError} when the account has another identity on that platform
+ * @param {{ afterChecks?: () => Promise<void> | void }} [hooks] for tests: runs after the checks and
+ *   before the insert, the moment a concurrent link can slip in
  */
-export async function linkIdentity(accountId, identity) {
+export async function linkIdentity(accountId, identity, { afterChecks } = {}) {
   const existing = await findIdentity(identity.platform, identity.platformUserId);
   if (existing && existing.accountId !== accountId) throw new IdentityLinkedError();
   if (existing) {
@@ -178,17 +180,23 @@ export async function linkIdentity(accountId, identity) {
   }
   const sameKind = (await identitiesOf(accountId)).find((i) => i.platform === identity.platform);
   if (sameKind) throw new PlatformAlreadyLinkedError(identity.platform);
+  await afterChecks?.();
   try {
-    await s.insertIdentity.run({ ...params(identity), accountId, linkedAt: Date.now() });
+    // ON CONFLICT DO NOTHING on the login's own key: no row written means somebody linked this login first.
+    const { changes } = await s.insertIdentity.run({ ...params(identity), accountId, linkedAt: Date.now() });
+    if (Number(changes) === 0) await refuseIfTakenByAnother(accountId, identity);
   } catch (err) {
     if (!isUniqueViolation(err)) throw err;
-    // Lost a race: another link got there first, either this login to some account or another
-    // login on this platform to this account.
-    const taken = await findIdentity(identity.platform, identity.platformUserId);
-    if (taken && taken.accountId !== accountId) throw new IdentityLinkedError();
-    if (taken) return;
+    // Lost a race on (account, platform): another login on this platform got into this account first.
+    await refuseIfTakenByAnother(accountId, identity);
     throw new PlatformAlreadyLinkedError(identity.platform);
   }
+}
+
+/** After a lost race: this login belongs to another account? Then say so. Same account: nothing to do. */
+async function refuseIfTakenByAnother(accountId, identity) {
+  const taken = await findIdentity(identity.platform, identity.platformUserId);
+  if (taken && taken.accountId !== accountId) throw new IdentityLinkedError();
 }
 
 /** A unique or primary key violation, from either driver (SQLite constraint codes, Postgres 23505). */

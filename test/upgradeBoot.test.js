@@ -45,6 +45,7 @@ function boot(env) {
     timeout: 120_000,
   });
   assert.equal(run.status, 0, `the database did not boot:\n${run.stderr}\n${run.stdout}`.slice(0, 4000));
+  return run;
 }
 
 // --- SQLite ---------------------------------------------------------------------------------------------------
@@ -214,7 +215,9 @@ test('SQLite: a database from before migration 77 with a doubled login boots, ke
     `);
     db.close();
 
-    boot({ DATABASE_PATH: old });
+    const run = boot({ DATABASE_PATH: old });
+    assert.match(run.stderr, /Migration 77 removed 1 doubled login\(s\)/, 'says how many were dropped');
+    assert.ok(!/\bf[12]\b|acct/.test(run.stderr), 'and not which');
     const after = new Database(old, { readonly: true });
     const kept = after
       .prepare('SELECT platform, platform_user_id FROM account_identities ORDER BY platform')
@@ -310,6 +313,7 @@ const BACK_TO_5_0 = `
   -- The app's connect step 2 (migration 77) taken back, with the doubled rows the old code could leave.
   DROP INDEX IF EXISTS idx_account_identities_one;
   DROP INDEX IF EXISTS idx_mobile_connect_codes_one;
+  CREATE INDEX IF NOT EXISTS idx_mobile_connect_codes_account ON mobile_connect_codes (account_id);
   DROP TABLE IF EXISTS mobile_connect_results;
   ALTER TABLE mobile_connect_codes DROP COLUMN IF EXISTS token_id;
   INSERT INTO account_identities (platform, platform_user_id, account_id, linked_at)
@@ -426,7 +430,7 @@ test(
       // migration 71 (the unknown added time) runs once on a database below it
       await b`INSERT INTO economy_inventory (guild_id, user_id, item_id, item_name, item_type, role_id, price_paid, source, status, created_at, updated_at)
         VALUES ('g', 'u', 1, 'x', 'temp_role', 'r', 0, 'purchase', 'active', 1, 1), ('g', 'u', 2, 'y', 'custom', NULL, 0, 'purchase', 'active', 1, 1)`;
-      await b`DELETE FROM schema_migrations WHERE version = 71`;
+      await b`DELETE FROM schema_migrations WHERE version >= 71`;
       pgBoot(oldDb);
       const added = await b`SELECT item_type, added_ms FROM economy_inventory ORDER BY id`;
       assert.deepEqual(

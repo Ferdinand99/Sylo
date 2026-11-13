@@ -45,7 +45,6 @@ registerPostgresBootstrap(`
     token_id   TEXT
   );
   ALTER TABLE mobile_connect_codes ADD COLUMN IF NOT EXISTS token_id TEXT;
-  CREATE INDEX IF NOT EXISTS idx_mobile_connect_codes_account ON mobile_connect_codes (account_id);
   -- One live code per account (an earlier shape could hold two): keep the newest, then enforce it.
   DELETE FROM mobile_connect_codes a USING mobile_connect_codes b
     WHERE a.account_id = b.account_id AND (a.expires_at, a.code_hash) < (b.expires_at, b.code_hash);
@@ -62,6 +61,9 @@ registerPostgresBootstrap(`
     expires_at       BIGINT NOT NULL
   );
 `);
+// The plain index on mobile_connect_codes (account_id) is covered by the unique one; mirrors SQLite
+// migration 77. A new install never creates it.
+registerPostgresMigration(77, 'DROP INDEX IF EXISTS idx_mobile_connect_codes_account');
 // Push notifications (internal/push-notifications-plan.md); mirrors SQLite migration 49.
 registerPostgresMigration(
   49,

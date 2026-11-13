@@ -203,6 +203,15 @@ keeps someone else's link from attaching your login to their account.
 The browser is not signed in to Sylo at any point: nothing here starts, replaces or
 extends a web session.
 
+**For app developers.** In the case this design exists for (someone else's link opened in
+the person's ordinary browser), the `sylo://connected?…&result=…` redirect goes through
+the operating system's URL-scheme dispatcher, and an app on the device that also claims
+`sylo://` could receive it. The server cannot prevent that, because the one who started
+the flow is the attacker. So the app must act only on the callback that comes back from its
+own `ASWebAuthenticationSession` (the one it opened in step 2), and must ignore a
+`sylo://connected` URL that arrives through the normal URL handler. Without the matching
+token a result code is useless to anyone else anyway.
+
 ---
 
 ## Endpoints
