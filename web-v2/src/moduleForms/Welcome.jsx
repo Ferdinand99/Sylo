@@ -75,9 +75,10 @@ export default function Welcome() {
                   <Link to={`/guilds/${guildId}/m/applications`}>application</Link> are typical.
                 </p>
                 <p className="v2-field-hint">
-                  A member is welcomed once. Members who were already welcomed on joining, or who already have
-                  one of the roles when you switch from “When a member joins”, are not welcomed by a role:
-                  only members who get a role afterwards count.
+                  A member is welcomed once. Members who were welcomed on joining since Sylo 5.2, or who
+                  already have one of the roles when you switch from “When a member joins”, are not welcomed
+                  by a role: only members who get a role afterwards count. (Someone welcomed on joining before
+                  5.2 has no record, so a role they get later can welcome them once.)
                 </p>
               </div>
               {triggerRoleIds.length === 0 ? (

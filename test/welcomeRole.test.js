@@ -11,7 +11,7 @@ import {
   validTriggerRoleIds,
   welcomeTrigger,
 } from '../src/modules/welcome.js';
-import { setGuildModule } from '../src/db/modules.js';
+import { getGuildModule, setGuildModule } from '../src/db/modules.js';
 import { claimWelcome, clearWelcomeSent, getWelcomeSent } from '../src/db/welcomeSent.js';
 import { describeUserData, exportUserData, forgetUser, purgeGuild } from '../src/db/purge.js';
 import { log } from '../src/lib/log.js';
@@ -44,8 +44,14 @@ const config = (over = {}) => ({
 const setup = (over = {}, since = null) => {
   const stored = normaliseWelcomeConfig(config(over), env.guild);
   if (since) stored.triggerSince = since;
-  return setGuildModule(GID, 'welcome', { enabled: true, config: stored });
+  return store(stored);
 };
+// Switching the module on restarts the clock of its roles, so the module is switched on first and the
+// config, with the times the test wants, is written after that.
+async function store(stored) {
+  await setGuildModule(GID, 'welcome', { enabled: true });
+  await setGuildModule(GID, 'welcome', { config: stored });
+}
 
 /** A member of the fake server, shaped the way the module reads one. */
 function member(id, roleIds = []) {
@@ -651,7 +657,7 @@ test('switching to role mode: holders from before are not welcomed, newcomers ar
   const T1 = 1_750_000_000_000;
   // the dashboard switches the mode on at T1
   const stored = normaliseWelcomeConfig(config({ triggerRoleIds: [ROLE.adult] }), env.guild, { now: T1 });
-  await setGuildModule(GID, 'welcome', { enabled: true, config: stored });
+  await store(stored);
   const holder = uncached(U, [ROLE.adult], { joinedAt: T1 - 86_400_000 });
   const newcomer = uncached(V, [ROLE.adult], { joinedAt: T1 + 1000 });
   for (const m of [holder, newcomer]) await dispatch('guildMemberUpdate', KEY, { old: null, new: m });
@@ -787,4 +793,77 @@ test('a skipped welcome is logged at debug level with ids, never with the messag
   } finally {
     log.debug = debug;
   }
+});
+
+// --- switching the module itself back on --------------------------------------------------------------------
+
+test('a role gained while Welcome was off does not welcome the member when it is switched on again', async () => {
+  // set up long ago, then switched off: the gains while it was off were never seen
+  await setGuildModule(GID, 'welcome', {
+    enabled: false,
+    config: {
+      ...normaliseWelcomeConfig(config(), env.guild),
+      triggerSince: { [ROLE.adult]: SINCE },
+    },
+  });
+  const gainedWhileOff = uncached(U, [ROLE.adult], joinedAfter); // joined after the role started counting
+  await dispatch('guildMemberUpdate', KEY, { old: null, new: gainedWhileOff });
+  assert.equal(posts().length, 0, 'off: nothing runs');
+
+  const before = Date.now();
+  await setGuildModule(GID, 'welcome', { enabled: true });
+  const { config: stored, enabled } = await getGuildModule(GID, 'welcome');
+  assert.equal(enabled, true);
+  assert.ok(stored.triggerSince[ROLE.adult] >= before, 'every listed role starts counting now');
+
+  // an unrelated update (a nickname) of that member, Sylo's cache having been emptied since
+  await dispatch('guildMemberUpdate', KEY, { old: null, new: gainedWhileOff });
+  assert.equal(posts().length, 0, 'no late welcome');
+  assert.equal(await rows(), null);
+
+  // a member who joins after it was switched on, and gets the role, is welcomed as usual
+  const later = uncached(V, [ROLE.adult], { joinedAt: Date.now() + 1000 });
+  await dispatch('guildMemberUpdate', KEY, { old: null, new: later });
+  assert.equal(posts().length, 1);
+});
+
+test('switching Welcome on restarts the clock only when it was off, and only in role mode', async () => {
+  await setup({}, { [ROLE.adult]: SINCE });
+  await setGuildModule(GID, 'welcome', { enabled: true }); // already on: nothing changes
+  assert.equal((await getGuildModule(GID, 'welcome')).config.triggerSince[ROLE.adult], SINCE);
+  await setGuildModule(GID, 'welcome', { enabled: false });
+  await setGuildModule(GID, 'welcome', { config: { ...(await getGuildModule(GID, 'welcome')).config } });
+  assert.equal((await getGuildModule(GID, 'welcome')).config.triggerSince[ROLE.adult], SINCE, 'still off');
+
+  const joinConfig = normaliseWelcomeConfig(config({ trigger: 'join' }), env.guild);
+  await setGuildModule(GID, 'welcome', { enabled: false, config: joinConfig });
+  await setGuildModule(GID, 'welcome', { enabled: true });
+  assert.deepEqual((await getGuildModule(GID, 'welcome')).config, joinConfig, 'join mode has no clock');
+
+  // another module is not touched
+  await setGuildModule(GID, 'sticky', {
+    enabled: false,
+    config: { trigger: 'role', triggerRoleIds: [ROLE.adult] },
+  });
+  await setGuildModule(GID, 'sticky', { enabled: true });
+  assert.equal((await getGuildModule(GID, 'sticky')).config.triggerSince, undefined);
+});
+
+// --- join mode: a rejoin after a leave nobody saw -----------------------------------------------------------
+
+test('join mode: a rejoin after a leave nobody saw is welcomed again', async () => {
+  await setup({ trigger: 'join' });
+  const first = member(U);
+  first.joinedTimestamp = Date.now() - 3_600_000;
+  await dispatch('guildMemberAdd', KEY, first);
+  assert.equal(posts().length, 1);
+  // the leave was never seen (module off, Sylo down): the row stays, an hour old
+  await clearWelcomeSent(KEY, U);
+  assert.equal(await claimWelcome(KEY, U, { now: Date.now() - 3_600_000 }), true);
+  const again = member(U);
+  again.joinedTimestamp = Date.now() - 5_000;
+  await dispatch('guildMemberAdd', KEY, again);
+  assert.equal(posts().length, 2, 'the old row did not block the new membership');
+  await dispatch('guildMemberAdd', KEY, again);
+  assert.equal(posts().length, 2, 'and the new one is on record');
 });

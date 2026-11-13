@@ -16,7 +16,7 @@ import { fluxerEndpoints } from './instance.js';
 const WRAPPED = Symbol.for('sylo.fluxerCompat');
 // The roles Sylo itself has just added to a member, with the time (see GuildMemberRoleManager.add below).
 const PRIOR_ROLES = Symbol.for('sylo.priorRoleIds');
-const PRIOR_ROLE_TTL_MS = 30_000;
+const PRIOR_ROLE_TTL_MS = 10_000;
 const idOf = (x) => (typeof x === 'string' ? x : x?.id);
 
 // Bulk delete skips anything older than this (discord.js's filterOld), less a

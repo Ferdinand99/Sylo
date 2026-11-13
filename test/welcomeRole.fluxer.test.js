@@ -156,3 +156,16 @@ test('an update that does not hold the added role leaves its entry for the updat
   assert.deepEqual(oldMember.roles.roleIds, [ADULT], 'a nickname update before the echo changes nothing');
   assert.equal(entriesOf(member).size, 1);
 });
+
+test('an entry counts for ten seconds', async () => {
+  for (const [wait, restored] of [
+    [9_000, true],
+    [11_000, false],
+  ]) {
+    const { member } = memberWith([OTHER]);
+    await member.roles.add(ADULT);
+    const { oldMember, newMember } = sdkUpdate(member);
+    restoreOldRoles(oldMember, newMember, Date.now() + wait);
+    assert.equal(!oldMember.roles.roleIds.includes(ADULT), restored, `${wait} ms after the add`);
+  }
+});

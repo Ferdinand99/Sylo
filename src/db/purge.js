@@ -216,8 +216,8 @@ const userStmts = {
   applicationsDecider: prepare(
     'UPDATE applications_submissions SET decided_by = NULL WHERE guild_id = ? AND decided_by = ?'
   ),
-  // The record that they were welcomed on a role gain (modules/welcome.js). Without it a role they gain
-  // later would welcome them again, which is what a member who asked to be forgotten expects.
+  // The record that they were welcomed, on joining or on a role gain (modules/welcome.js): only the time.
+  // It is deleted like the rest of their data, so a later role gain can welcome them again.
   welcomeSent: prepare('DELETE FROM welcome_sent WHERE guild_id = ? AND user_id = ?'),
   introductionsClear: prepare(
     "UPDATE introductions SET answers = '{}', updated_at = ? WHERE guild_id = ? AND user_id = ?"
@@ -619,7 +619,7 @@ const USER_DATA_SOURCES = [
   },
   {
     key: 'welcomeSent',
-    label: 'Welcome record (that you were welcomed when you got a role)',
+    label: 'Welcome record (the time Sylo last welcomed you in this server)',
     order: 'gu',
     countSql: 'SELECT COUNT(*) AS n FROM welcome_sent WHERE guild_id = ? AND user_id = ?',
     rowsSql: 'SELECT guild_id, user_id, sent_at FROM welcome_sent WHERE guild_id = ? AND user_id = ?',

@@ -118,3 +118,29 @@ test('a role that was deleted or became managed since is not shown in the form',
   });
   assert.deepEqual((await read()).triggerRoleIds, [ROLE.member]);
 });
+
+test('switching Welcome on, by the toggle or the bulk toggle, restarts the clock of its trigger roles', async () => {
+  await api.post('/modules/welcome/config', { trigger: 'role', triggerRoleIds: [ROLE.member] });
+  const { setGuildModule } = await import('../src/db/modules.js');
+  const old = 1_700_000_100_000;
+  const setOld = async (enabled) =>
+    setGuildModule(GID, 'welcome', {
+      enabled,
+      config: { ...(await stored()), triggerSince: { [ROLE.member]: old } },
+    });
+
+  await setOld(false);
+  const t1 = Date.now();
+  assert.equal((await api.post('/modules/welcome', { enabled: true })).status, 200);
+  assert.ok((await stored()).triggerSince[ROLE.member] >= t1, 'the toggle');
+
+  await setOld(false);
+  const t2 = Date.now();
+  assert.equal((await api.post('/modules/bulk', { ids: ['welcome'], enabled: true })).status, 200);
+  assert.ok((await stored()).triggerSince[ROLE.member] >= t2, 'the bulk toggle');
+
+  // a save while it is on keeps the time
+  const kept = (await stored()).triggerSince[ROLE.member];
+  await api.post('/modules/welcome/config', { trigger: 'role', triggerRoleIds: [ROLE.member] });
+  assert.equal((await stored()).triggerSince[ROLE.member], kept);
+});

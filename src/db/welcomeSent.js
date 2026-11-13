@@ -34,7 +34,12 @@ const s = {
   del: prepare('DELETE FROM welcome_sent WHERE guild_id = ? AND user_id = ?'),
 };
 
-/** How much earlier than the join time a row may be and still belong to this membership (clock skew). */
+/**
+ * How much earlier than the join time a row may be and still belong to this membership (clock skew
+ * between the platform and this host). The other side of the margin: when a member leaves and rejoins and
+ * the leave was never seen (the module was off, Sylo was down), a rejoin less than this long after the
+ * previous welcome still counts as the same membership, and is not welcomed again.
+ */
 const SKEW_MS = 60_000;
 
 /**

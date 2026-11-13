@@ -59,11 +59,15 @@ the member joins.
   join (for example from an autorole). Then they are welcomed right away.
 - **The leave message** works the same in both modes.
 - **Members who were already welcomed** — a member welcomed on joining (before you
-  switched to roles) is not welcomed again by a role. The same goes for a long-time member
-  who loses a trigger role and gets it back: once welcomed, never again.
+  switched to roles) is not welcomed again by a role, and neither is a long-time member who
+  loses a trigger role and gets it back: once welcomed, never again. This holds for
+  welcomes sent since Sylo 5.2, which is when Sylo started keeping the record; a member
+  welcomed on joining before that has none, so a role they get later can welcome them once.
 - **Switching on** — members who already have one of the roles are **not** welcomed when
   you switch to **When a member gets a role**. Only roles given afterwards count. A role you
-  add to the list later starts counting from that moment, in the same way.
+  add to the list later starts counting from that moment, in the same way, and so do all the
+  roles when you switch the Welcome module itself back on after it was off: a role a member
+  got while it was off does not welcome them.
 - **No usable role** — the settings save with a warning, and nothing is sent until you
   pick one.
 
