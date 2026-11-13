@@ -54,10 +54,13 @@ struct MultiPicker<Option: NamedOption>: View {
     let options: [Option]
     /// `#` for channels, `@` for roles.
     let prefix: String
+    /// The most the server keeps. Once reached, only a picked entry can still be changed (to
+    /// unpick it). nil means no limit.
+    var limit: Int?
 
     var body: some View {
         NavigationLink {
-            MultiPickerList(title: title, selection: $selection, options: options, prefix: prefix)
+            MultiPickerList(title: title, selection: $selection, options: options, prefix: prefix, limit: limit)
         } label: {
             LabeledContent(title) {
                 Text(summary)
@@ -80,25 +83,35 @@ private struct MultiPickerList<Option: NamedOption>: View {
     @Binding var selection: [String]
     let options: [Option]
     let prefix: String
+    let limit: Int?
+
+    private var isFull: Bool { limit.map { selection.count >= $0 } ?? false }
 
     var body: some View {
         List {
-            ForEach(options) { option in
-                Button {
-                    toggle(option.id)
-                } label: {
-                    HStack {
-                        Text(verbatim: prefix + option.name)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if selection.contains(option.id) {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
-                                .fontWeight(.semibold)
+            Section {
+                ForEach(options) { option in
+                    Button {
+                        toggle(option.id)
+                    } label: {
+                        HStack {
+                            Text(verbatim: prefix + option.name)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if selection.contains(option.id) {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.tint)
+                                    .fontWeight(.semibold)
+                            }
                         }
                     }
+                    .accessibilityAddTraits(selection.contains(option.id) ? .isSelected : [])
+                    .disabled(isFull && !selection.contains(option.id))
                 }
-                .accessibilityAddTraits(selection.contains(option.id) ? .isSelected : [])
+            } footer: {
+                if let limit {
+                    Text("Pick up to \(limit).")
+                }
             }
             // Selected ids the server no longer has: shown so they can be removed.
             let missing = selection.filter { id in !options.contains { $0.id == id } }

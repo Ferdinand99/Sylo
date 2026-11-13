@@ -11,6 +11,23 @@ struct WelcomeSettingsView: View {
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
     }
 
+    /// `trigger` is nil on a server before Sylo 5.2; the picker is only shown when it is not.
+    private func triggerBinding(_ settings: Binding<WelcomeSettings>) -> Binding<WelcomeTrigger> {
+        Binding(get: { settings.wrappedValue.trigger ?? .join }, set: { settings.wrappedValue.trigger = $0 })
+    }
+
+    private func triggerRolesBinding(_ settings: Binding<WelcomeSettings>) -> Binding<[String]> {
+        Binding(get: { settings.wrappedValue.triggerRoleIds ?? [] }, set: { settings.wrappedValue.triggerRoleIds = $0 })
+    }
+
+    private func joinToggleTitle(_ settings: WelcomeSettings) -> LocalizedStringKey {
+        settings.trigger == .role ? "Message when a member gets the role" : "Message when a member joins"
+    }
+
+    private func dmToggleTitle(_ settings: WelcomeSettings) -> LocalizedStringKey {
+        settings.trigger == .role ? "Private message to welcomed members" : "Private message to new members"
+    }
+
     var body: some View {
         ModuleSettingsForm("Welcome & Leave", model: model) { $settings, page in
             if !page.placeholders.isEmpty {
@@ -22,12 +39,47 @@ struct WelcomeSettingsView: View {
                 } header: {
                     Text("Placeholders")
                 } footer: {
-                    Text("Use these in the messages below; Sylo fills them in for each member.")
+                    if settings.supportsTrigger {
+                        Text("Use these in the messages below; Sylo fills them in for each member. {role} is the role that started the welcome; it is empty when members are welcomed on joining, and in the leave message.")
+                    } else {
+                        Text("Use these in the messages below; Sylo fills them in for each member.")
+                    }
+                }
+            }
+
+            // Sylo 5.2 and later. An older server does not send the setting, so none of this shows.
+            if settings.supportsTrigger {
+                Section {
+                    Picker("When to welcome", selection: triggerBinding($settings)) {
+                        Text("When a member joins").tag(WelcomeTrigger.join)
+                        Text("When a member gets a role").tag(WelcomeTrigger.role)
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    if settings.trigger == .role, settings.triggerRoleIds != nil {
+                        MultiPicker(title: "Roles", selection: triggerRolesBinding($settings), options: page.roles,
+                                    prefix: "@", limit: WelcomeSettings.maxTriggerRoles)
+                    }
+                } header: {
+                    Text("When to welcome")
+                } footer: {
+                    if settings.trigger == .role {
+                        Text("The welcome is sent the first time a member gets any of these roles, once per member. Joining sends nothing, unless the member already has one of the roles. Verification and Applications are typical sources of the role. Only role gains after you switch are welcomed: members who already have a role are not welcomed.")
+                    }
+                }
+
+                if settings.hasNoTriggerRole {
+                    Section {
+                        Label("No role is picked, so no welcome is sent. You can save, but pick at least one role for this to work.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.subheadline)
+                            .symbolRenderingMode(.multicolor)
+                    }
                 }
             }
 
             Section {
-                Toggle("Message when a member joins", isOn: $settings.joinEnabled)
+                Toggle(joinToggleTitle(settings), isOn: $settings.joinEnabled)
                 if settings.joinEnabled {
                     ChannelPicker(title: "Channel", selection: $settings.joinChannel, channels: page.channels,
                                   noneTitle: "Choose a channel")
@@ -59,7 +111,7 @@ struct WelcomeSettingsView: View {
             }
 
             Section {
-                Toggle("Private message to new members", isOn: $settings.dmEnabled)
+                Toggle(dmToggleTitle(settings), isOn: $settings.dmEnabled)
                 if settings.dmEnabled {
                     TextArea(title: "DM text", text: $settings.dmMessage,
                              limit: WelcomeSettings.maxMessageLength)
@@ -113,11 +165,11 @@ struct WelcomeSettingsView: View {
             settings: WelcomeSettings(
                 joinEnabled: true, joinChannel: "c1", joinMessage: "Welcome {user} to {server}!",
                 card: true, leaveEnabled: true, leaveChannel: "c2", leaveMessage: "{user.tag} left the server.",
-                autoroleEnabled: true, autoroles: ["r1"]),
+                autoroleEnabled: true, autoroles: ["r1"], trigger: .role, triggerRoleIds: ["r1"]),
             channels: [ChannelOption(id: "c1", name: "welcome"), ChannelOption(id: "c2", name: "goodbye")],
             roles: [RoleOption(id: "r1", name: "Member")],
             verificationEnabled: true,
-            placeholders: ["{user}", "{user.tag}", "{user.name}", "{user.id}", "{server}", "{memberCount}"])
+            placeholders: ["{user}", "{user.tag}", "{user.name}", "{user.id}", "{server}", "{memberCount}", "{role}"])
     }
     NavigationStack {
         WelcomeSettingsView(server: "1", session: session)

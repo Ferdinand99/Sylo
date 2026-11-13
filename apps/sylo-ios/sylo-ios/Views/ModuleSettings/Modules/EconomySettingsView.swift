@@ -3,8 +3,8 @@ import SyloKit
 
 /// Economy: the currency, what members earn from chat, voice, /daily and /work, the bank and
 /// payments, robbing, the web shop and leaderboard, and the staff log. A read only member lookup
-/// is one row away. The shop items, changing a member's money and the reset of the whole economy
-/// stay in the web dashboard. Mirrors web-v2/src/moduleForms/Economy.jsx.
+/// is one row away. The shop items (collectibles with their pictures and rarities too), changing a
+/// member's money and the reset of the whole economy stay in the web dashboard. Mirrors web-v2/src/moduleForms/Economy.jsx.
 struct EconomySettingsView: View {
     @State private var model: ModuleSettingsModel<EconomyPage>
     @State private var note: ModulePlatformNoteModel
@@ -16,6 +16,20 @@ struct EconomySettingsView: View {
         self.session = session
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
         _note = State(initialValue: ModulePlatformNoteModel(server: server, module: EconomyPage.moduleID, session: session))
+    }
+
+    /// The collectible settings are nil on a server before Sylo 5.2; their controls only show when
+    /// the server sent them.
+    private func announcementChannel(_ settings: Binding<EconomySettings>) -> Binding<String> {
+        Binding(
+            get: { settings.wrappedValue.collectibleChannelId ?? "" },
+            set: { settings.wrappedValue.collectibleChannelId = $0 })
+    }
+
+    private func collectionPublic(_ settings: Binding<EconomySettings>) -> Binding<Bool> {
+        Binding(
+            get: { settings.wrappedValue.collectionPublic ?? false },
+            set: { settings.wrappedValue.collectionPublic = $0 })
     }
 
     var body: some View {
@@ -161,6 +175,25 @@ struct EconomySettingsView: View {
                 Text("Signed-in members can browse and buy on the web shop page. Custom items post a notice in the channel for staff to fulfil. Add and change the shop's items in the web dashboard.")
             }
 
+            // Sylo 5.2 and later. An older server does not send these keys, so nothing shows.
+            if settings.supportsCollectibles {
+                Section {
+                    if settings.collectibleChannelId != nil {
+                        ChannelPicker(
+                            title: "Channel for announcements",
+                            selection: announcementChannel($settings),
+                            channels: page.channels, noneTitle: "None")
+                    }
+                    if settings.collectionPublic != nil {
+                        Toggle("Members can show their collection", isOn: collectionPublic($settings))
+                    }
+                } header: {
+                    Text("Collectibles")
+                } footer: {
+                    Text("A collectible with \"Announce purchases\" switched on is announced in this channel when someone buys it, with its picture. On: /collection is public and a member can look at another member's collection. Off: /collection shows only your own, and only you see it. Collectibles, their pictures and rarities are managed in the web dashboard.")
+                }
+            }
+
             Section {
                 Toggle("Public leaderboard page", isOn: $settings.publicLeaderboard)
                 ChannelPicker(title: "Staff log channel", selection: $settings.logChannelId,
@@ -184,7 +217,9 @@ struct EconomySettingsView: View {
         if endpoint is Endpoints.LoadPlatformInfo { return PlatformInfo(platform: .discord) }
         guard endpoint is Endpoints.LoadModuleSettings<EconomyPage> else { return nil }
         return EconomyPage(
-            settings: EconomySettings(currencyName: "gold", currencyEmoji: "🪙", robEnabled: true, logChannelId: "c1"),
+            settings: EconomySettings(
+                currencyName: "gold", currencyEmoji: "🪙", robEnabled: true, logChannelId: "c1",
+                collectibleChannelId: "c1", collectionPublic: false),
             channels: [ChannelOption(id: "c1", name: "eco-log")],
             roles: [RoleOption(id: "r1", name: "Bots")],
             messageLengthChecked: false)

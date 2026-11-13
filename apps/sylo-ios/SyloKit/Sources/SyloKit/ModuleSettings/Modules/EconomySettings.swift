@@ -7,7 +7,9 @@ import Foundation
 // The app edits every setting of the Settings tab. The shop items, the staff changes to a member's
 // money and the danger-zone reset stay in the web dashboard; the app adds a read only balance
 // lookup (see Economy/EconomyMembers.swift). The server builds the whole config from what it is
-// sent, so a save always carries every field.
+// sent, so a save always carries every field the server sent. Sylo 5.2 adds `collectibleChannelId` and
+// `collectionPublic` (the shop's collectibles; the items, their pictures and rarities stay in the web
+// dashboard). A server before 5.2 does not send them, so the app does not send them back either.
 
 /// The Economy settings page.
 public struct EconomyPage: ModuleSettingsPage {
@@ -97,6 +99,13 @@ public struct EconomySettings: Codable, Sendable, Equatable {
     /// Where staff changes to a member's money are posted; "" = nowhere.
     public var logChannelId: String
 
+    // Collectibles (Sylo 5.2). nil when the server does not send the key (an older server): the
+    // control is hidden and the key is never sent back, so an older server never sees it.
+    /// Where a purchase of a collectible with "Announce purchases" is announced; "" = nowhere.
+    public var collectibleChannelId: String?
+    /// Whether members may show their collection to others with /collection.
+    public var collectionPublic: Bool?
+
     /// The server's defaults for a setting it has not stored.
     public init(
         currencyName: String = "coins", currencyEmoji: String = "🪙", startingBalance: Int = 0,
@@ -109,8 +118,11 @@ public struct EconomySettings: Codable, Sendable, Equatable {
         robEnabled: Bool = false, robChancePercent: Int = 40, robMinPercent: Int = 10, robMaxPercent: Int = 30,
         robFinePercent: Int = 10, robFineMin: Int = 25, robCooldownHours: Int = 4, robVictimMinCash: Int = 100,
         robNewMemberHours: Int = 24, robProtectionMinutes: Int = 60,
-        webShop: Bool = false, shopChannelId: String = "", publicLeaderboard: Bool = true, logChannelId: String = ""
+        webShop: Bool = false, shopChannelId: String = "", publicLeaderboard: Bool = true, logChannelId: String = "",
+        collectibleChannelId: String? = nil, collectionPublic: Bool? = nil
     ) {
+        self.collectibleChannelId = collectibleChannelId
+        self.collectionPublic = collectionPublic
         self.currencyName = currencyName
         self.currencyEmoji = currencyEmoji
         self.startingBalance = startingBalance
@@ -189,7 +201,11 @@ public struct EconomySettings: Codable, Sendable, Equatable {
         case robEnabled, robChancePercent, robMinPercent, robMaxPercent, robFinePercent, robFineMin
         case robCooldownHours, robVictimMinCash, robNewMemberHours, robProtectionMinutes
         case webShop, shopChannelId, publicLeaderboard, logChannelId
+        case collectibleChannelId, collectionPublic
     }
+
+    /// Whether the server knows the collectible settings (Sylo 5.2 and later).
+    public var supportsCollectibles: Bool { collectibleChannelId != nil || collectionPublic != nil }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -228,5 +244,9 @@ public struct EconomySettings: Codable, Sendable, Equatable {
         shopChannelId = try c.decode(forKey: .shopChannelId, or: "")
         publicLeaderboard = try c.decode(forKey: .publicLeaderboard, or: d.publicLeaderboard)
         logChannelId = try c.decode(forKey: .logChannelId, or: "")
+        // Sylo 5.2 keys: nil when missing (or not the shape expected), so an older server never
+        // gets them back and an odd value cannot fail the page.
+        collectibleChannelId = try? c.decodeIfPresent(String.self, forKey: .collectibleChannelId)
+        collectionPublic = try? c.decodeIfPresent(Bool.self, forKey: .collectionPublic)
     }
 }

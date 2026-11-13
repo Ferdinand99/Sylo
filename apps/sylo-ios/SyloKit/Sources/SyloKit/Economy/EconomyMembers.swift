@@ -199,6 +199,15 @@ public struct EconomyTransaction: Decodable, Sendable, Hashable, Identifiable {
         "staff_remove": "Staff removed",
         "staff_set": "Staff set",
         "reset": "Reset",
+        // The shop and giveaways (src/modules/lib/economy.js, KINDS). A collectible is bought,
+        // given and refunded like any other item, so it uses these kinds; the row's `reason` holds
+        // the item's name.
+        "purchase": "Shop purchase",
+        "refund": "Refund",
+        "grant": "Item given",
+        "revoke": "Item taken away",
+        "giveaway_entry": "Giveaway entry",
+        "giveaway_prize": "Giveaway prize",
     ]
 }
 
