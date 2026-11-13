@@ -36,7 +36,7 @@ final class StubClients: @unchecked Sendable {
     }
 
     fileprivate var uploadBehaviour: (steps: [(sent: Int64, total: Int64)], holds: Bool) {
-        lock.withLock { (progressSteps, holdsUploads) }
+        lock.withLock { (steps: progressSteps, holds: holdsUploads) }
     }
 
     func setHandler(_ handler: @escaping Handler) {
