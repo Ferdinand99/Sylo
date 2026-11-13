@@ -203,10 +203,18 @@ import {
   listComposed,
   getComposed,
   createComposed,
-  updateComposed,
+  saveComposedDraft,
+  claimComposedPost,
+  clearComposedPost,
   deleteComposed,
 } from '../../db/composedMessages.js';
-import { sendComposed, editComposed, normaliseComposedSpec } from '../../modules/messageCreator.js';
+import {
+  sendComposed,
+  publishComposed,
+  deletePostedMessage,
+  storedChannel,
+  normaliseComposedSpec,
+} from '../../modules/messageCreator.js';
 import {
   activeGiveaways,
   endedGiveaways,
@@ -1846,6 +1854,12 @@ function composedListItem(guild, c) {
   };
 }
 
+class ComposedRaceError extends Error {
+  constructor() {
+    super('Someone else just published this message. Reload the page to see the current post.');
+  }
+}
+
 function composedRecJson(rec) {
   return { id: rec.id, name: rec.name, channelId: rec.channel_id, messageId: rec.message_id, spec: rec.spec };
 }
@@ -1900,38 +1914,53 @@ router.post(
     const channelId = /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '';
     const publish = req.body.action === 'publish';
 
+    // A posted message lives in the channel it was posted to: a new channel applies when it is
+    // published (the old post is deleted and a fresh one posted), not when a draft is saved. The
+    // draft save never writes the message id, so it cannot undo a publish that runs at the same time.
+    const wantedChannel = channelId || existing?.channel_id || '';
     let rec = existing;
     if (!rec) {
       rec = await createComposed(guild.id, { name, channelId, messageId: null, spec: normalisedSpec });
     } else {
-      rec = await updateComposed(guild.id, rec.id, {
+      rec = await saveComposedDraft(guild.id, rec.id, {
         name,
-        channelId: channelId || rec.channel_id,
-        messageId: rec.message_id,
+        channelId: wantedChannel,
         spec: normalisedSpec,
       });
     }
 
     if (!publish) return res.json({ rec: composedRecJson(rec), status: 'saved' });
 
-    if (!/^\d{17,20}$/.test(rec.channel_id)) {
+    if (!/^\d{17,20}$/.test(wantedChannel)) {
       return res.status(400).json({ error: 'Pick a channel before publishing.', rec: composedRecJson(rec) });
     }
     try {
-      if (rec.message_id) {
-        await editComposed(guild, rec.channel_id, rec.message_id, normalisedSpec);
-        return res.json({ rec: composedRecJson(rec), status: 'updated' });
-      }
-      const message = await sendComposed(guild, rec.channel_id, normalisedSpec);
-      rec = await updateComposed(guild.id, rec.id, {
-        name,
-        channelId: rec.channel_id,
-        messageId: message.id,
-        spec: normalisedSpec,
-      });
-      return res.json({ rec: composedRecJson(rec), status: 'sent' });
+      const posted = await publishComposed(
+        guild,
+        { channelId: rec.channel_id, messageId: rec.message_id },
+        wantedChannel,
+        normalisedSpec,
+        // Store the new post only if the message is still posted as it was when this began; the
+        // loser of two publishes at the same time has its own post removed again.
+        async (post) => {
+          const won = await claimComposedPost(guild.id, rec.id, {
+            name,
+            channelId: post.channelId,
+            messageId: post.messageId,
+            spec: normalisedSpec,
+            expectedMessageId: rec.message_id,
+          });
+          if (!won) throw new ComposedRaceError();
+        }
+      );
+      if (posted.messageId !== rec.message_id) rec = await getComposed(guild.id, rec.id);
+      return res.json({ rec: composedRecJson(rec), status: posted.status });
     } catch (err) {
-      return res.status(400).json({ error: err.message, rec: composedRecJson(rec) });
+      const current = (await getComposed(guild.id, rec.id)) ?? rec;
+      if (err instanceof ComposedRaceError) {
+        return res.status(409).json({ error: err.message, rec: composedRecJson(current) });
+      }
+      return res.status(400).json({ error: err.message, rec: composedRecJson(current) });
     }
   })
 );
@@ -1944,18 +1973,11 @@ router.post(
     const rec = await getComposed(guild.id, Number(req.params.id));
     if (!rec) return res.status(404).json({ error: 'Not found' });
     if (rec.message_id) {
-      try {
-        const ch = guild.channels.cache.get(rec.channel_id) ?? (await guild.channels.fetch(rec.channel_id));
-        await ch.messages.delete(rec.message_id);
-      } catch {
-        /* already gone */
+      // Clear the id only while it is still the one read above: a publish that moved the post in
+      // the meantime stored a newer one, and that post must stay. Nothing is deleted then.
+      if (await clearComposedPost(guild.id, rec.id, rec.message_id)) {
+        await deletePostedMessage(guild, rec.channel_id, rec.message_id);
       }
-      await updateComposed(guild.id, rec.id, {
-        name: rec.name,
-        channelId: rec.channel_id,
-        messageId: null,
-        spec: rec.spec,
-      });
     }
     res.json({ rec: composedRecJson(await getComposed(guild.id, rec.id)) });
   })
@@ -1968,14 +1990,7 @@ router.post(
     if (!numericId(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
     const rec = await getComposed(guild.id, Number(req.params.id));
     if (rec) {
-      if (rec.message_id) {
-        try {
-          const ch = guild.channels.cache.get(rec.channel_id) ?? (await guild.channels.fetch(rec.channel_id));
-          await ch.messages.delete(rec.message_id);
-        } catch {
-          /* already gone */
-        }
-      }
+      if (rec.message_id) await deletePostedMessage(guild, rec.channel_id, rec.message_id);
       await deleteComposed(guild.id, rec.id);
     }
     res.json({ ok: true });
@@ -3187,8 +3202,9 @@ router.post(
   '/guilds/:guildId/modules/welcome-channel/config',
   asyncHandler(async (req, res) => {
     const prev = (await getGuildModule(req.guild.id, 'welcome-channel')).config;
+    // The posted message stays in its channel until it is published again.
     const config = normaliseWelcomeChannelConfig({
-      channelId: req.body.channelId,
+      channelId: storedChannel(prev.channelId, prev.messageId, req.body.channelId),
       messageId: prev.messageId,
       spec: req.body.spec,
     });
@@ -3204,6 +3220,7 @@ router.post(
 
 router.post(
   '/guilds/:guildId/modules/welcome-channel/publish',
+  platformActionLimit, // a post, and a delete when the message moves
   asyncHandler(async (req, res) => {
     const prev = (await getGuildModule(req.guild.id, 'welcome-channel')).config;
     const config = normaliseWelcomeChannelConfig({
@@ -3211,10 +3228,24 @@ router.post(
       messageId: prev.messageId,
       spec: req.body.spec,
     });
-    await setGuildModule(req.guild.id, 'welcome-channel', { config });
-    const r = await publishWelcome(req.guild, config);
+    // Save the text first. The channel changes only once the new post worked: until then the
+    // stored channel and message id still say where the old post is.
+    const posted = {
+      channelId: storedChannel(prev.channelId, prev.messageId, config.channelId),
+      messageId: prev.messageId,
+    };
+    await setGuildModule(req.guild.id, 'welcome-channel', {
+      config: { ...config, channelId: posted.channelId },
+    });
+    // The new channel and message id are stored before the old post is deleted.
+    const r = await publishWelcome(req.guild, config, posted, ({ channelId, messageId }) =>
+      setGuildModule(req.guild.id, 'welcome-channel', {
+        enabled: true,
+        config: { ...config, channelId, messageId },
+      })
+    );
     if (!r.ok) return res.status(400).json({ error: r.error });
-    const published = { ...config, messageId: r.messageId };
+    const published = { ...config, channelId: r.channelId, messageId: r.messageId };
     await setGuildModule(req.guild.id, 'welcome-channel', { enabled: true, config: published });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
@@ -3244,14 +3275,16 @@ router.post(
     const r = await createWelcomeChannel(req.guild);
     if (!r.ok) return res.status(400).json({ error: r.error });
     const cfg = normaliseWelcomeChannelConfig((await getGuildModule(req.guild.id, 'welcome-channel')).config);
-    const next = { ...cfg, channelId: r.channelId };
+    // A posted message stays in its channel until it is published again; the page selects the
+    // new channel (createdChannelId) and Publish moves the message there.
+    const next = { ...cfg, channelId: storedChannel(cfg.channelId, cfg.messageId, r.channelId) };
     await setGuildModule(req.guild.id, 'welcome-channel', { config: next });
     await recordAudit(req.guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:welcome-channel',
       detail: 'created #welcome',
     });
-    res.json({ config: next, channels: guildTextChannels(req.guild) });
+    res.json({ config: next, createdChannelId: r.channelId, channels: guildTextChannels(req.guild) });
   })
 );
 
@@ -3336,16 +3369,32 @@ router.post(
       rm.messageId = '';
     }
 
+    const saveSet = (entry) =>
+      setGuildModule(guild.id, 'roles', {
+        enabled: true,
+        config: {
+          ...cfg,
+          reactionMessages: existing ? list.map((x) => (String(x.id) === id ? entry : x)) : [...list, entry],
+        },
+      });
     let publishError = null;
+    let stored = false;
     try {
-      rm.messageId = await publishReactionMessage(guild, rm);
+      // A new post is stored before the old one is deleted (see publishComposed).
+      rm.messageId = await publishReactionMessage(guild, rm, existing?.channelId, async (post) => {
+        await saveSet({ ...rm, ...post });
+        // Stored: from here on `rm` is the new pair, so nothing that fails later can write the old one.
+        Object.assign(rm, post);
+        stored = true;
+      });
     } catch (err) {
       publishError = err.message;
       log.error('roles', 'publish reaction message failed:', err.message);
+      // The old post is still where it was: keep its channel stored next to its message id.
+      if (!stored && existing && rm.messageId) rm.channelId = existing.channelId;
     }
 
-    const next = existing ? list.map((x) => (String(x.id) === id ? rm : x)) : [...list, rm];
-    await setGuildModule(guild.id, 'roles', { enabled: true, config: { ...cfg, reactionMessages: next } });
+    await saveSet(rm);
     await recordAudit(guild.id, {
       actor: moderatorDisplayName(req),
       action: 'module:roles',

@@ -10,6 +10,10 @@ import {
 } from 'discord.js';
 import { getComposedByMessage } from '../db/composedMessages.js';
 import { registerComponent } from '../bot/lib/components.js';
+import { guildKey, platformOfGuild } from '../platform/platformOf.js';
+import { deleteComponentActions } from '../db/componentReactions.js';
+import { isMessageGone, isPermissionDenied } from '../platform/messageErrors.js';
+import { log } from '../lib/log.js';
 
 const BUTTON_STYLE = {
   primary: ButtonStyle.Primary,
@@ -173,6 +177,115 @@ export async function editComposed(guild, channelId, messageId, spec) {
   const message = await channel.messages.fetch(messageId);
   await message.edit({ content: payload.content, embeds: payload.embeds, components: payload.components });
   return message;
+}
+
+/** On Fluxer the buttons of a message are reactions with stored actions: forget them with the message. */
+async function dropComponentActions(guild, messageId) {
+  if (platformOfGuild(guild) !== 'fluxer') return;
+  try {
+    await deleteComponentActions(messageId);
+  } catch (err) {
+    log.warn(
+      'messageCreator',
+      `could not remove the stored actions of message ${messageId}: ${err?.message}`
+    );
+  }
+}
+
+/**
+ * Delete a message the bot posted earlier. It never throws: the old post is already out of the
+ * way when the platform says it is gone or the bot lost access, and any other failure must not
+ * undo a move that has worked. Every failure is logged.
+ * @returns {Promise<boolean>} whether the message was deleted
+ */
+export async function deletePostedMessage(guild, channelId, messageId) {
+  if (!channelId || !messageId) return false;
+  try {
+    const channel = guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId));
+    await channel.messages.delete(messageId);
+    await dropComponentActions(guild, messageId);
+    return true;
+  } catch (err) {
+    if (isMessageGone(err)) await dropComponentActions(guild, messageId);
+    const why = isMessageGone(err) ? 'it is gone' : isPermissionDenied(err) ? 'no access' : 'failed';
+    log.warn(
+      'messageCreator',
+      `could not delete message ${messageId} in channel ${channelId} of ${guildKey(guild)} (${why}): ${err?.message}`
+    );
+    return false;
+  }
+}
+
+/**
+ * The channel to keep stored while a draft is saved. A posted message stays in the channel it was
+ * posted to until it is published again, so a draft save keeps that channel (the new one applies
+ * on publish) and the stored channel and message id always belong together.
+ */
+export const storedChannel = (postedChannelId, postedMessageId, wantedChannelId) =>
+  postedMessageId && postedChannelId ? postedChannelId : wantedChannelId;
+
+/** The error for a send into a new channel that failed while the message is posted in another. */
+export const newChannelError = (err) =>
+  new Error(
+    `Could not post in the new channel (${err?.message}). The message stays in its current channel.`,
+    {
+      cause: err,
+    }
+  );
+
+/**
+ * What follows a new post: `persist` stores it, then the old post (when the message moved) is
+ * deleted. When `persist` throws, the new post is deleted again and the error is rethrown, so the
+ * stored pair and the old post still belong together and a retry posts only one.
+ */
+export async function settleNewPost(guild, post, oldPost, persist) {
+  if (persist) {
+    try {
+      await persist(post);
+    } catch (err) {
+      await deletePostedMessage(guild, post.channelId, post.messageId);
+      throw err;
+    }
+  }
+  if (oldPost) await deletePostedMessage(guild, oldPost.channelId, oldPost.messageId);
+}
+
+/**
+ * Publish `spec` to `channelId` for a message that may be posted already.
+ * - Not posted yet: send it.
+ * - Posted in the same channel: edit it (a post that was deleted by hand is sent again).
+ * - Posted in another channel: send a fresh one here and only then delete the old one, so a
+ *   failed send leaves the old post alone. Editing the old id in the new channel cannot work.
+ * The order of a new post is: send, `persist` (the caller stores the new channel and message id),
+ * then delete the old post. When `persist` throws, the new post is deleted again and the error is
+ * rethrown, so the stored pair and the old post still belong together and a retry posts only one.
+ * An edit in place changes no id and does not call `persist`.
+ * @param {object} guild
+ * @param {{ channelId?: string, messageId?: string }} posted  the stored channel and message id
+ * @param {string} channelId  where the message should be
+ * @param {object} spec
+ * @param {(post: { channelId: string, messageId: string }) => Promise<void>} [persist]
+ * @returns {Promise<{ channelId: string, messageId: string, status: 'sent' | 'updated', message: object }>}
+ */
+export async function publishComposed(guild, posted, channelId, spec, persist) {
+  const had = Boolean(posted?.messageId && posted?.channelId);
+  const moved = had && posted.channelId !== channelId;
+  if (had && !moved) {
+    try {
+      const message = await editComposed(guild, channelId, posted.messageId, spec);
+      return { channelId, messageId: posted.messageId, status: 'updated', message };
+    } catch (err) {
+      if (!isMessageGone(err)) throw err; // deleted by hand: post it again below
+    }
+  }
+  let message;
+  try {
+    message = await sendComposed(guild, channelId, spec);
+  } catch (err) {
+    throw moved ? newChannelError(err) : err;
+  }
+  await settleNewPost(guild, { channelId, messageId: message.id }, moved ? posted : null, persist);
+  return { channelId, messageId: message.id, status: 'sent', message };
 }
 
 // --- interaction handlers: role buttons + role select --------------------
