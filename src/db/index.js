@@ -1470,6 +1470,23 @@ export const MIGRATIONS = [
       CREATE INDEX idx_economy_inventory_image ON economy_inventory (image_id) WHERE image_id IS NOT NULL;
     `);
   },
+
+  // The pictures of collectibles (src/db/collectibleImages.js, which bootstraps the same table on Postgres):
+  // the re-encoded WebP itself, so it is part of every backup. Referenced by economy_items.image_id and
+  // economy_inventory.image_id.
+  (database) => {
+    database.exec(`
+      CREATE TABLE collectible_images (
+        id         TEXT PRIMARY KEY,
+        guild_id   TEXT NOT NULL,
+        mime       TEXT NOT NULL,
+        bytes      INTEGER NOT NULL,
+        data       BLOB NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_collectible_images_guild ON collectible_images (guild_id);
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

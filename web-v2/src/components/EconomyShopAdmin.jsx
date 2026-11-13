@@ -44,6 +44,7 @@ const blankForm = (defaults = {}) => ({
   announce: false,
   imagePath: null,
   file: null, // a picture chosen in this form, uploaded after the item is saved
+  fileKey: 0, // changes when the file input has to be emptied (it is not a controlled input)
   ...defaults,
 });
 
@@ -139,7 +140,7 @@ export default function EconomyShopAdmin({ guildId, currency }) {
     if (collectible && form.file) {
       const uploaded = await run(() => uploadShopItemImage(guildId, id, form.file));
       if (!uploaded) {
-        set({ id, file: null });
+        set({ id, file: null, fileKey: form.fileKey + 1 });
         return;
       }
     }
@@ -150,7 +151,7 @@ export default function EconomyShopAdmin({ guildId, currency }) {
   async function onRemoveImage() {
     const ok = await confirmDialog({
       title: 'Remove the picture?',
-      body: 'The item cannot be bought until it has a picture again. Members who own it keep their copy.',
+      body: 'The item is not shown in the shop and cannot be bought until it has a picture again. Members who own it keep it, with the picture they have, until you upload a new one.',
       confirmLabel: 'Remove picture',
     });
     if (!ok) return;
@@ -197,7 +198,10 @@ export default function EconomyShopAdmin({ guildId, currency }) {
                   {item.name}
                   {!item.enabled ? <span className="v2-field-hint"> — paused</span> : null}
                   {item.type === 'collectible' && !item.imagePath ? (
-                    <span className="v2-field-hint"> — no picture yet, it cannot be bought</span>
+                    <span className="v2-field-hint">
+                      {' '}
+                      — needs a picture (hidden from members until it has one)
+                    </span>
                   ) : null}
                 </h3>
                 <p className="v2-field-hint">
@@ -407,6 +411,7 @@ export default function EconomyShopAdmin({ guildId, currency }) {
                   <label htmlFor="item-image">Picture</label>
                   <input
                     id="item-image"
+                    key={form.fileKey}
                     type="file"
                     accept={IMAGE_ACCEPT}
                     onChange={(e) => set({ file: e.target.files?.[0] ?? null })}

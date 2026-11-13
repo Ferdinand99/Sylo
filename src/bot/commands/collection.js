@@ -3,11 +3,13 @@
 // layer renders as reactions there).
 //
 // Who sees what is the "Members can show their collection" setting of the Economy module (off by default):
-//   off  /collection shows only your own collection, and only you see the reply (a short-lived public reply on
-//        Fluxer, which has no private replies). Asking for someone else's is refused.
+//   off  /collection shows only your own collection, and only you see the reply. Fluxer has no private
+//        replies, so there it is sent to your DMs (and the channel only hears "Sent to your DMs"; with your
+//        DMs closed you are told so and nothing is shown). Asking for someone else's is refused.
 //   on   the reply is public, and /collection <user> shows that member's collection.
-// The page buttons carry the member whose collection it is. Every click is checked again: with the setting
-// off, only that member may turn the pages (a public message from the time it was on does not stay open).
+// The page buttons carry the member whose collection it is and the server it is in (a button in a DM has no
+// server to read it from). Every click is checked again: with the setting off, only that member may turn the
+// pages (a public message from the time it was on does not stay open).
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -19,7 +21,8 @@ import {
 import { collectionPage } from '../../db/economyShop.js';
 import { economySettings } from '../../modules/economy.js';
 import { collectionEmbed } from '../../modules/lib/collectibles.js';
-import { guildKey } from '../../platform/platformOf.js';
+import { guildKey, platformOfGuild } from '../../platform/platformOf.js';
+import { isPlatformGuildId } from '../../lib/platformId.js';
 import { registerComponent } from '../lib/components.js';
 import { economyGate, reply } from '../lib/economyCmd.js';
 
@@ -47,13 +50,13 @@ export async function buildCollection({ guildId, userId, page }) {
       ? [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-              .setCustomId(`${PREFIX}${out.page - 1}:${userId}`)
+              .setCustomId(`${PREFIX}${out.page - 1}:${userId}:${guildId}`)
               .setEmoji('⬅️')
               .setLabel('Previous')
               .setStyle(ButtonStyle.Secondary)
               .setDisabled(out.page <= 1),
             new ButtonBuilder()
-              .setCustomId(`${PREFIX}${out.page + 1}:${userId}`)
+              .setCustomId(`${PREFIX}${out.page + 1}:${userId}:${guildId}`)
               .setEmoji('➡️')
               .setLabel('Next')
               .setStyle(ButtonStyle.Secondary)
@@ -82,6 +85,18 @@ export async function execute(interaction) {
   }
   const guildId = guildKey(interaction.guild);
   const payload = await buildCollection({ guildId, userId: user.id, page: 1 });
+  // Off on Fluxer (no private replies): a DM, and the channel hears only that it was sent.
+  if (payload && !config.collectionPublic && platformOfGuild(interaction.guild) === 'fluxer') {
+    try {
+      await interaction.user.send(payload);
+    } catch {
+      return reply(
+        interaction,
+        'I could not send you a DM. Allow direct messages from members of this server, then try again.'
+      );
+    }
+    return reply(interaction, '📬 Sent to your DMs.');
+  }
   // Off: only the member sees it. On: the member is showing it, so the reply is public.
   const send = (body) =>
     config.collectionPublic
@@ -98,12 +113,14 @@ export async function execute(interaction) {
   return send(payload);
 }
 
-// A page button: coll:<page>:<whose collection>. The page is clamped, so a stale button never shows an
-// empty page, and the right to look is checked on every click.
+// A page button: coll:<page>:<whose collection>:<server key>. The page is clamped, so a stale button never
+// shows an empty page, and the right to look is checked on every click.
 registerComponent('economy', PREFIX, async (interaction) => {
-  const [, page, targetId] = interaction.customId.split(':');
-  const { enabled, config } = await economySettings(interaction.guildId);
-  if (!enabled || !/^\d{1,20}$/.test(String(targetId))) return interaction.deferUpdate();
+  const [, page, targetId, ...rest] = interaction.customId.split(':');
+  const guildId = rest.join(':'); // a Fluxer key has a colon in it
+  if (!/^\d{1,20}$/.test(String(targetId)) || !isPlatformGuildId(guildId)) return interaction.deferUpdate();
+  const { enabled, config } = await economySettings(guildId);
+  if (!enabled) return interaction.deferUpdate();
   if (interaction.user.id !== targetId && !config.collectionPublic) {
     return interaction.reply({
       content: 'Collections are private in this server.',
@@ -111,11 +128,7 @@ registerComponent('economy', PREFIX, async (interaction) => {
       allowedMentions: { parse: [] },
     });
   }
-  const payload = await buildCollection({
-    guildId: guildKey(interaction.guild),
-    userId: targetId,
-    page: Number(page),
-  });
+  const payload = await buildCollection({ guildId, userId: targetId, page: Number(page) });
   if (!payload) return interaction.deferUpdate();
   return interaction.update(payload);
 });

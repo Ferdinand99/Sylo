@@ -34,7 +34,9 @@ export const data = new SlashCommandBuilder()
   .setContexts(InteractionContextType.Guild);
 
 /** The items a member sees: the ones for sale, in the staff's order. */
-export const itemsForSale = async (guildId) => (await listItems(guildId)).filter((i) => i.enabled);
+/** The items a member sees: the ones for sale (a collectible only once it has a picture), in the staff's order. */
+export const itemsForSale = async (guildId) =>
+  (await listItems(guildId)).filter((i) => i.enabled && (i.type !== 'collectible' || i.imageId));
 
 const stockText = (item) => {
   if (item.stock === null) return '';

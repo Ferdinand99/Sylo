@@ -1,11 +1,9 @@
 // Who may upload or remove the picture of a collectible: nobody who does not manage the server, nobody signed
 // out, nobody from another server, and nobody without the CSRF token. The multipart upload goes through the
-// same guards as every other write; a refused upload stores no file and changes no item. The upload limit is
+// same guards as every other write; a refused upload stores no picture and changes no item. The upload limit is
 // checked here too, in a file of its own because the limit counts every request of the file.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   D_GUILD,
   OTHER_D_GUILD,
@@ -16,16 +14,14 @@ import {
   startOAuthApp,
 } from './helpers/oauthApp.js';
 import { session } from './helpers/v2Guarded.js';
-import { makePicture, upload } from './helpers/collectibleFixtures.js';
+import { makePicture, storedPictures, upload } from './helpers/collectibleFixtures.js';
 
 await startOAuthApp();
 
 const { getItem, listItems } = await import('../src/db/economyShop.js');
-const { collectiblesRoot } = await import('../src/lib/collectibleFiles.js');
 const { listAudit } = await import('../src/db/audit.js');
 
-const folder = (g) => join(collectiblesRoot(), g);
-const stored = (g) => (existsSync(folder(g)) ? readdirSync(folder(g)) : []);
+const stored = async (g) => (await storedPictures(g)).map((r) => r.id);
 
 /** A browser signed in as a user with the given rights, with the multipart upload and the CSRF token. */
 async function uploader({ guilds, withToken = true } = {}) {
@@ -68,8 +64,8 @@ test('setup: a collectible in the main server', async () => {
 });
 
 const untouched = async (note) => {
-  assert.deepEqual(stored(D_GUILD), [], `${note}: no file`);
-  assert.deepEqual(stored(OTHER_D_GUILD), [], `${note}: no file in the other server`);
+  assert.deepEqual(await stored(D_GUILD), [], `${note}: no picture`);
+  assert.deepEqual(await stored(OTHER_D_GUILD), [], `${note}: no picture in the other server`);
   assert.equal((await getItem(D_GUILD, itemId)).imageId, null, `${note}: the item has no picture`);
 };
 
@@ -130,12 +126,12 @@ test('an admin with the token can upload, and the audit log says so', async () =
   assert.equal(res.status, 200);
   const item = await getItem(D_GUILD, itemId);
   assert.ok(item.imageId);
-  assert.deepEqual(stored(D_GUILD), [`${item.imageId}.png`]);
+  assert.deepEqual(await stored(D_GUILD), [item.imageId]);
   const audit = (await listAudit(D_GUILD, 50)).filter((r) => r.action === 'economy:shop');
   assert.ok(audit.some((r) => /changed the picture of item/.test(r.detail)));
   assert.equal((await listItems(D_GUILD)).length, 1);
   await admin.remove(D_GUILD, itemId);
-  assert.deepEqual(stored(D_GUILD), []);
+  assert.deepEqual(await stored(D_GUILD), []);
 });
 
 test('uploads are rate limited: past 40 a minute the answer is 429', async () => {

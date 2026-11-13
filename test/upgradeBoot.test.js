@@ -144,6 +144,11 @@ test('SQLite: a database from the 5.1 release with shop rows boots and gets the 
         .map((c) => c.name);
     assert.equal(columns('economy_items').includes('image_id'), false, '5.1 items have no picture');
     assert.equal(columns('economy_inventory').includes('rarity'), false, '5.1 inventory rows have no rarity');
+    assert.equal(
+      db.prepare("SELECT name FROM sqlite_master WHERE name = 'collectible_images'").get(),
+      undefined,
+      '5.1 has no table for pictures'
+    );
     db.exec(
       "INSERT INTO economy_items (guild_id, name, type, price, created_at, updated_at) VALUES ('g', 'Shout-out', 'custom', 10, 1, 1)"
     );
@@ -162,7 +167,19 @@ test('SQLite: a database from the 5.1 release with shop rows boots and gets the 
       )
       .all()
       .map((r) => r.name);
+    // the table for pictures exists and keeps bytes exactly (every byte value)
+    const bytes = Buffer.from(Array.from({ length: 256 }, (_, i) => i));
     after.close();
+    const writable = new Database(old);
+    writable
+      .prepare(
+        'INSERT INTO collectible_images (id, guild_id, mime, bytes, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      )
+      .run('a'.repeat(32), 'g', 'image/webp', bytes.length, bytes, 1);
+    const back = writable.prepare('SELECT bytes, data FROM collectible_images').get();
+    writable.close();
+    assert.equal(back.bytes, 256);
+    assert.ok(Buffer.from(back.data).equals(bytes), 'a picture comes back as it went in');
     assert.deepEqual(
       { ...item },
       { name: 'Shout-out', type: 'custom', image_id: null, rarity: null, announce: 0 }
@@ -386,6 +403,7 @@ test(
     const old = postgres(urlFor(oldDb));
     await old.unsafe(`
       DROP TABLE IF EXISTS welcome_sent;
+      DROP TABLE IF EXISTS collectible_images;
       ALTER TABLE economy_items DROP COLUMN IF EXISTS image_id, DROP COLUMN IF EXISTS rarity,
         DROP COLUMN IF EXISTS announce;
       ALTER TABLE economy_inventory DROP COLUMN IF EXISTS image_id, DROP COLUMN IF EXISTS rarity;
@@ -401,6 +419,8 @@ test(
     const lacking = await old`SELECT column_name FROM information_schema.columns
       WHERE table_name = 'economy_items' AND column_name IN ('image_id', 'rarity', 'announce')`;
     assert.equal(lacking.length, 0, 'the 5.1 shape has no collectible columns');
+    const [noPictures] = await old`SELECT to_regclass('public.collectible_images') AS t`;
+    assert.equal(noPictures.t, null, 'the 5.1 shape has no table for pictures');
     await old.end({ timeout: 1 });
 
     pgBoot(oldDb);
@@ -423,6 +443,14 @@ test(
         Array.from(indexes, (r) => r.indexname),
         ['idx_economy_inventory_image', 'idx_economy_items_image']
       );
+      const [pictures] = await b`SELECT to_regclass('public.collectible_images') AS t`;
+      assert.ok(pictures.t, 'the table for pictures exists after the upgrade');
+      // and keeps bytes exactly, every byte value
+      const bytes = Buffer.from(Array.from({ length: 256 }, (_, i) => i));
+      await b`INSERT INTO collectible_images (id, guild_id, mime, bytes, data, created_at)
+        VALUES (${'a'.repeat(32)}, 'g', 'image/webp', ${bytes.length}, ${bytes}, 1)`;
+      const [stored] = await b`SELECT data FROM collectible_images`;
+      assert.ok(Buffer.from(stored.data).equals(bytes), 'a picture comes back as it went in');
       const [exists] = await b`SELECT to_regclass('public.welcome_sent') AS t`;
       assert.ok(exists.t, 'welcome_sent exists after the upgrade');
       // it is usable: the primary key makes a second claim of the same member a no-op

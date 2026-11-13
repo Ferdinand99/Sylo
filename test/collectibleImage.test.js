@@ -1,29 +1,23 @@
 // What is accepted as the picture of a collectible, and what is stored: the kind is decided by the first
-// bytes, never by the name or the content type; the picture is decoded and re-encoded as a PNG of at most
-// 512x512 with its aspect ratio kept; everything else is refused. And the paths of the stored files: built only
-// from a server key and an id of the exact shape, so no text from a request can leave the folder.
+// bytes, never by the name or the content type; the picture is decoded and re-encoded as a WebP of at most
+// 512x512 with its aspect ratio kept; everything else is refused; sources over 16 megapixels are refused from
+// the header; at most two pictures are decoded at a time.
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { Readable } from 'node:stream';
 import {
   ImageError,
+  MAX_CONCURRENT_DECODES,
   MAX_UPLOAD_BYTES,
+  STORED_MIME,
+  _decodeQueue,
   processImage,
   readUpload,
   sniffImage,
 } from '../src/lib/collectibleImage.js';
-import {
-  collectiblesRoot,
-  deleteImage,
-  folderOf,
-  pathOf,
-  readImage,
-  removeGuildImages,
-  saveImage,
-} from '../src/lib/collectibleFiles.js';
-import { HTML, SVG, makePicture, pngClaiming, pngSize, upload } from './helpers/collectibleFixtures.js';
+import { imageDimensions } from '../src/lib/imageSize.js';
+import { HTML, SVG, makePicture, pngClaiming, upload } from './helpers/collectibleFixtures.js';
 
 const refused = async (bytes, pattern, status) => {
   await assert.rejects(
@@ -55,32 +49,37 @@ test('the kind of a file comes from its first bytes', async () => {
   assert.equal(sniffImage('PNG'), null);
 });
 
-test('PNG, JPEG and WebP are accepted and stored as a PNG', async () => {
+test('PNG, JPEG and WebP are accepted and stored as a WebP', async () => {
   for (const format of ['png', 'jpeg', 'webp']) {
     const out = await processImage(await makePicture(64, 32, format));
     assert.equal(out.kind, format);
-    assert.equal(sniffImage(out.png), 'png', `${format} is re-encoded as a PNG`);
-    assert.deepEqual(pngSize(out.png), { width: 64, height: 32 });
+    assert.equal(out.mime, 'image/webp');
+    assert.equal(STORED_MIME, 'image/webp');
+    assert.equal(sniffImage(out.data), 'webp', `${format} is re-encoded as a WebP`);
+    assert.deepEqual(imageDimensions(out.data), { width: 64, height: 32 });
   }
 });
 
 test('a large picture is scaled down to fit 512x512 with its aspect ratio kept, a small one is not enlarged', async () => {
-  const wide = await processImage(await makePicture(1000, 500));
-  assert.deepEqual(pngSize(wide.png), { width: 512, height: 256 });
-  assert.deepEqual([wide.width, wide.height], [512, 256]);
-  const tall = await processImage(await makePicture(300, 1200, 'jpeg'));
-  assert.deepEqual(pngSize(tall.png), { width: 128, height: 512 });
-  const square = await processImage(await makePicture(2000, 2000, 'webp'));
-  assert.deepEqual(pngSize(square.png), { width: 512, height: 512 });
-  const small = await processImage(await makePicture(40, 20));
-  assert.deepEqual(pngSize(small.png), { width: 40, height: 20 });
-  const one = await processImage(await makePicture(1, 1));
-  assert.deepEqual(pngSize(one.png), { width: 1, height: 1 });
+  const size = async (bytes) => {
+    const out = await processImage(bytes);
+    assert.deepEqual(imageDimensions(out.data), { width: out.width, height: out.height });
+    return [out.width, out.height];
+  };
+  assert.deepEqual(await size(await makePicture(1000, 500)), [512, 256]);
+  assert.deepEqual(await size(await makePicture(300, 1200, 'jpeg')), [128, 512]);
+  assert.deepEqual(await size(await makePicture(2000, 2000, 'webp')), [512, 512]);
+  assert.deepEqual(await size(await makePicture(40, 20)), [40, 20]);
+  assert.deepEqual(await size(await makePicture(1, 1)), [1, 1]);
 });
 
-test('what is stored is a new PNG: metadata and data appended after the picture are gone', async () => {
+test('a stored picture is small: a flat badge is a few kilobytes', async () => {
+  const out = await processImage(await makePicture(512, 512));
+  assert.ok(out.data.length < 20_000, `${out.data.length} bytes`);
+});
+
+test('what is stored is a new WebP: metadata and data appended after the picture are gone', async () => {
   const picture = await makePicture(32, 32);
-  // a text chunk with a secret before the image data, and a payload after the end of the file
   const iend = picture.indexOf(Buffer.from('IEND')) - 4;
   const text = Buffer.concat([
     Buffer.from([0, 0, 0, 22]),
@@ -94,9 +93,9 @@ test('what is stored is a new PNG: metadata and data appended after the picture 
     Buffer.from('APPENDED-PAYLOAD'),
   ]);
   const out = await processImage(loaded);
-  assert.equal(out.png.includes(Buffer.from('SECRET-METADATA')), false);
-  assert.equal(out.png.includes(Buffer.from('APPENDED-PAYLOAD')), false);
-  assert.equal(out.png.includes(Buffer.from('tEXt')), false);
+  assert.equal(out.data.includes(Buffer.from('SECRET-METADATA')), false);
+  assert.equal(out.data.includes(Buffer.from('APPENDED-PAYLOAD')), false);
+  assert.equal(out.data.includes(Buffer.from('tEXt')), false);
 });
 
 test('SVG, HTML and other formats are refused, however they are named', async () => {
@@ -121,20 +120,67 @@ test('a file that starts like a picture but is not one is refused', async () => 
   await refused(Buffer.concat([Buffer.from('RIFF....WEBPVP8 '), Buffer.alloc(40)]), /valid image|too large/);
 });
 
-test('a file over 2 MB is refused, and so is a picture that claims an enormous size', async () => {
+test('a file over 2 MB is refused, and so is a source over 16 megapixels or one that claims an enormous size', async () => {
   await refused(
     Buffer.concat([await makePicture(8, 8), Buffer.alloc(MAX_UPLOAD_BYTES)]),
     /larger than 2 MB/,
     413
   );
-  // 30000 x 30000 in a 33-byte header: refused from the header, before anything is decoded
+  // refused from the header, before anything is decoded
   await refused(pngClaiming(30000, 30000), /too large in pixels/);
   await refused(pngClaiming(8193, 10), /too large in pixels/);
+  await refused(pngClaiming(4001, 4001), /16 megapixels/); // 16.008 million
+  await refused(pngClaiming(5000, 3500), /16 megapixels/);
   await refused(pngClaiming(0, 10), /too large in pixels|valid image/);
+  // 16 megapixels or fewer pass the header check: this one then fails to decode (it has no pixels behind it)
+  await refused(pngClaiming(4000, 4000), /valid image/);
+});
+
+test('a 12 megapixel picture is accepted and scaled down', async () => {
+  const out = await processImage(await makePicture(4000, 3000));
+  assert.deepEqual([out.width, out.height], [512, 384]);
+});
+
+test('at most two pictures are decoded at a time; the others wait, and give up with a "busy" answer', async () => {
+  const big = await makePicture(3000, 2500);
+  // two take the places, three more wait with a very short patience
+  const running = [processImage(big), processImage(big)];
+  const impatient = [1, 2, 3].map(() =>
+    processImage(big, { queueTimeoutMs: 1 }).then(
+      () => 'done',
+      (err) => err
+    )
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  const state = _decodeQueue();
+  assert.ok(state.running <= MAX_CONCURRENT_DECODES, `running ${state.running}`);
+  const results = await Promise.all(impatient);
+  const busy = results.filter((r) => r instanceof ImageError && r.status === 503);
+  assert.ok(busy.length >= 1, 'some waited too long');
+  assert.match(busy[0].message, /busy/);
+  for (const done of await Promise.all(running)) assert.equal(sniffImage(done.data), 'webp');
+  assert.deepEqual(_decodeQueue(), { running: 0, waiting: 0 }, 'every place was given back');
+
+  // patient ones all get their turn, two at a time
+  const seen = [];
+  const sampler = setInterval(() => seen.push(_decodeQueue().running), 2);
+  const all = await Promise.all([1, 2, 3, 4, 5].map(() => processImage(big, { queueTimeoutMs: 60_000 })));
+  clearInterval(sampler);
+  assert.equal(all.length, 5);
+  assert.ok(Math.max(...seen, 0) <= MAX_CONCURRENT_DECODES);
+  assert.deepEqual(_decodeQueue(), { running: 0, waiting: 0 });
+});
+
+test('a refused picture gives its place back', async () => {
+  for (let i = 0; i < 6; i += 1) {
+    await assert.rejects(() =>
+      processImage(Buffer.concat([Buffer.from('RIFF....WEBPVP8 '), Buffer.alloc(40)]))
+    );
+  }
+  assert.deepEqual(_decodeQueue(), { running: 0, waiting: 0 });
 });
 
 test('an upload is read from a multipart request, with the size limited before it is held', async () => {
-  const { Readable } = await import('node:stream');
   const requestOf = async (form, extra = {}) => {
     const probe = new Response(form);
     const body = Buffer.from(await probe.arrayBuffer());
@@ -176,73 +222,4 @@ test('an upload is read from a multipart request, with the size limited before i
     () => readUpload(liar),
     (err) => err instanceof ImageError && err.status === 413
   );
-});
-
-test('a stored picture lives under collectibles/<server>/<id>.png and nowhere else', async () => {
-  const G = '900000000000000555';
-  const png = (await processImage(await makePicture(20, 20))).png;
-  const id = await saveImage(G, png);
-  assert.match(id, /^[0-9a-f]{32}$/);
-  const file = pathOf(G, id);
-  assert.equal(file, join(collectiblesRoot(), G, `${id}.png`));
-  assert.ok(existsSync(file));
-  assert.ok((await readImage(G, id)).equals(png));
-  // two saves never share an id
-  assert.notEqual(await saveImage(G, png), id);
-  // a Fluxer key becomes a folder name without the colon
-  assert.equal(folderOf('fluxer:900000000000000555'), 'fluxer-900000000000000555');
-  assert.equal(
-    pathOf('fluxer:900000000000000555', id),
-    join(collectiblesRoot(), 'fluxer-900000000000000555', `${id}.png`)
-  );
-  await deleteImage(G, id);
-  assert.equal(existsSync(file), false);
-  assert.equal(await readImage(G, id), null);
-  assert.equal(await deleteImage(G, id), false, 'a file that is gone is not an error');
-  await removeGuildImages(G);
-  assert.equal(existsSync(join(collectiblesRoot(), G)), false);
-});
-
-test('no server key or id that is not of the exact shape ever becomes a path', async () => {
-  const good = 'a'.repeat(32);
-  const G = '900000000000000555';
-  const hostile = [
-    '../../etc/passwd',
-    '..',
-    '.',
-    '',
-    `${good}/../../x`,
-    `${good}.png`,
-    good.toUpperCase(),
-    `${good}\0`,
-    'a'.repeat(31),
-    'a'.repeat(33),
-    `..\\${good}`,
-    '%2e%2e%2f',
-    null,
-    undefined,
-    42,
-  ];
-  for (const id of hostile) assert.equal(pathOf(G, id), null, `id ${JSON.stringify(id)}`);
-  for (const key of [
-    '..',
-    '../x',
-    '/abs',
-    'x',
-    '900000000000000555/..',
-    '9'.repeat(30),
-    'fluxer:',
-    'a:123',
-    null,
-    undefined,
-    '',
-  ]) {
-    assert.equal(pathOf(key, good), null, `key ${JSON.stringify(key)}`);
-    assert.equal(folderOf(key), null);
-  }
-  // and whatever passes stays inside the root
-  const inside = pathOf(G, good);
-  assert.ok(resolve(inside).startsWith(resolve(collectiblesRoot())));
-  assert.equal(await readImage('../..', good), null);
-  assert.equal(await removeGuildImages('..'), false);
 });

@@ -84,7 +84,8 @@ function plain(text, guild) {
 async function shopView({ guild, key, member, config }) {
   const roleIds = [...member.roles.cache.keys()];
   const bal = await balanceOf(key, member.id);
-  const items = (await listItems(key)).filter((i) => i.enabled);
+  // A collectible without a picture is not shown yet (it cannot be bought).
+  const items = (await listItems(key)).filter((i) => i.enabled && (i.type !== 'collectible' || i.imageId));
   // A collectible is shown in the collection below, not in the list of what the member owns.
   const rows = (await listInventory(key, member.id, 100)).filter(
     (r) => (r.status === 'active' || r.status === 'pending') && r.itemType !== 'collectible'
@@ -94,7 +95,7 @@ async function shopView({ guild, key, member, config }) {
     itemId: e.itemId,
     name: e.name,
     emoji: e.emoji,
-    imagePath: e.imageId ? `/c/${e.imageId}.png` : null,
+    imagePath: e.imageId ? `/c/${e.imageId}.webp` : null,
     rarity: e.rarity,
     rarityLabel: rarityLabel(e.rarity),
     count: e.count,
@@ -133,7 +134,7 @@ async function shopView({ guild, key, member, config }) {
         version: i.updatedAt,
         durationHours: i.durationMs == null ? null : Math.round(i.durationMs / 3_600_000),
         left: i.stock === null ? null : Math.max(0, i.stock - i.sold),
-        imagePath: i.type === 'collectible' && i.imageId ? `/c/${i.imageId}.png` : null,
+        imagePath: i.type === 'collectible' && i.imageId ? `/c/${i.imageId}.webp` : null,
         rarity: i.type === 'collectible' ? i.rarity : null,
         rarityLabel: i.type === 'collectible' ? rarityLabel(i.rarity) : null,
         requiredRoles: i.requiredRoles.map((id) => ({

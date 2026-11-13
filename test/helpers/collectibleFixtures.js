@@ -41,3 +41,25 @@ export function upload(bytes, { name = 'picture.png', type = 'image/png', field 
   form.append(field, new Blob([bytes], { type }), name);
   return form;
 }
+
+/**
+ * Give a collectible a stored picture the way the dashboard does (db/collectibleImages.js attachImage), with a
+ * real WebP of `size` x `size` pixels. Returns the picture's id. (The import is dynamic so a test can load its
+ * database helper first.)
+ */
+export async function putPicture(guildId, itemId, size = 32) {
+  const { attachImage } = await import('../../src/db/collectibleImages.js');
+  const data = await makePicture(size, size, 'webp');
+  const out = await attachImage(guildId, itemId, { mime: 'image/webp', data });
+  if (!out.ok) throw new Error(`no picture: ${out.reason}`);
+  return out.imageId;
+}
+
+/** The stored pictures of a server, as rows without the bytes. */
+export async function storedPictures(guildId) {
+  const { db } = await import('../../src/db/index.js');
+  return db
+    .prepare('SELECT id, mime, bytes FROM collectible_images WHERE guild_id = ? ORDER BY created_at, id')
+    .all(guildId)
+    .map((r) => ({ ...r }));
+}

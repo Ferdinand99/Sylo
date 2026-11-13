@@ -1,23 +1,24 @@
-// The picture of a collectible, at /c/<id>.png. Mounted before requireAuth in server.js with its own rate limit.
+// The picture of a collectible, at /c/<id>.webp. Mounted in server.js BEFORE the session and CSRF middleware,
+// with its own rate limit, so a request here never starts a session and its answer carries no cookie (it is
+// marked as cacheable by anyone).
 //
 // It needs no login: Discord and Fluxer fetch the picture themselves when a message or an embed shows it.
 // What keeps it private is the id, 128 random bits that are only ever shown to the people who see the item.
-// A picture is only served while an item or an owned inventory row still refers to it (db/economyShop.js
-// guildOfImage), so a file that was left behind is not served.
+// A picture exists only while an item or an owned inventory row refers to it (db/collectibleImages.js deletes
+// it in the transaction that drops the last reference).
 //
-// The address must have the exact shape /c/<32 lower-case hex characters>.png. Anything else, an unknown id,
-// and a picture whose file is gone all get the same plain 404 with no detail. Nothing a request sends is ever
-// part of a file path except an id that has passed that shape check (lib/collectibleFiles.js builds the path
-// from the server's folder and the id, and nothing else).
+// The address must be exactly /c/<32 lower-case hex characters>.webp, checked against the URL as it was sent
+// (so a different case in "/c", a trailing slash, an upper-case id or another extension are not matched). Any
+// other address, an unknown id and a picture that is gone all get the same plain 404 with no detail. The id is
+// a key into the database, never part of a path.
 //
-// What is sent is a PNG made by Sylo (lib/collectibleImage.js), with headers that keep a browser from treating
+// What is sent is a WebP made by Sylo (lib/collectibleImage.js), with headers that keep a browser from treating
 // it as anything else and from running anything: nosniff, a CSP that allows nothing, and a sandbox. It may be
 // kept for a year (the id changes when the picture does) and by any cache (it is public).
 import { Router } from 'express';
-import { guildOfImage } from '../../db/economyShop.js';
-import { readImage } from '../../lib/collectibleFiles.js';
+import { readImage } from '../../db/collectibleImages.js';
 
-const FILE_RE = /^([0-9a-f]{32})\.png$/;
+const URL_RE = /^\/c\/([0-9a-f]{32})\.webp$/;
 
 const notFound = (res) =>
   res
@@ -30,16 +31,13 @@ const router = Router();
 
 router.get('/:file', async (req, res, next) => {
   try {
-    const match = FILE_RE.exec(String(req.params.file));
+    const match = URL_RE.exec(String(req.originalUrl).split('?')[0]);
     if (!match) return notFound(res);
-    const id = match[1];
-    const guildId = await guildOfImage(id);
-    if (!guildId) return notFound(res);
-    const bytes = await readImage(guildId, id);
-    if (!bytes) return notFound(res);
+    const image = await readImage(match[1]);
+    if (!image) return notFound(res);
     res.set({
-      'Content-Type': 'image/png',
-      'Content-Length': String(bytes.length),
+      'Content-Type': image.mime,
+      'Content-Length': String(image.data.length),
       'Cache-Control': 'public, max-age=31536000, immutable',
       'X-Content-Type-Options': 'nosniff',
       'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
@@ -47,7 +45,7 @@ router.get('/:file', async (req, res, next) => {
       'Referrer-Policy': 'no-referrer',
       'X-Robots-Tag': 'noindex, nofollow',
     });
-    return res.end(bytes);
+    return res.end(image.data);
   } catch (err) {
     return next(err);
   }

@@ -1,12 +1,12 @@
 // Collectibles in the Economy shop: the item (normaliser, rarity tiers), buying one (price and version the
 // member saw, stock as a limited edition, the limit per member, no picture yet), refund, revoke and free
 // grants, the announcement of a purchase (on, off, one pass, only the buyer pinged), a member's collection
-// (grouping, paging, an item that was deleted) and the pictures' files when rows end or a member is erased.
+// (grouping, paging, an item that was deleted) and the pictures in the database when copies end, an item is
+// deleted or a member is erased (a picture is deleted in the same transaction as its last reference).
 import './helpers/dashboardUrl.js';
 import './helpers/tmpDb.js';
 import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
 import { getAccount } from '../src/db/economy.js';
 import {
   collectionPage,
@@ -15,13 +15,18 @@ import {
   eraseInventory,
   getInventoryRow,
   getItem,
-  guildOfImage,
   listInventory,
-  setItemImage,
   updateItem,
 } from '../src/db/economyShop.js';
+import {
+  attachImage,
+  detachImage,
+  imageUsage,
+  readImage,
+  MAX_IMAGES_PER_GUILD,
+} from '../src/db/collectibleImages.js';
 import { credit } from '../src/modules/lib/economy.js';
-import { normaliseEconomyConfig, normaliseItem, RARITIES } from '../src/modules/lib/economyConfig.js';
+import { RARITIES, normaliseEconomyConfig, normaliseItem } from '../src/modules/lib/economyConfig.js';
 import {
   announcePurchase,
   announcementLine,
@@ -30,10 +35,9 @@ import {
 } from '../src/modules/lib/collectibles.js';
 import { endRow, grantItem, purchase, shopRefusalText } from '../src/modules/lib/shop.js';
 import { purchaseText } from '../src/bot/lib/shopText.js';
-import { pathOf, saveImage } from '../src/lib/collectibleFiles.js';
-import { processImage } from '../src/lib/collectibleImage.js';
+import { itemsForSale } from '../src/bot/commands/shop.js';
 import { dropFakeShop, fakeMember, fakeRole, fakeShopGuild, ROLE_A, SHOP_CH } from './helpers/fakeShop.js';
-import { makePicture } from './helpers/collectibleFixtures.js';
+import { putPicture, storedPictures } from './helpers/collectibleFixtures.js';
 
 let n = 0;
 let G;
@@ -54,19 +58,17 @@ async function buyer(i, cash = 1000) {
   return m;
 }
 const cashOf = async (m) => Number((await getAccount(G, m.id))?.cash ?? 0);
+const imageIds = async () => (await storedPictures(G)).map((r) => r.id);
 
-let picture;
 /** A collectible with a picture (unless `image: false`). */
+let pictureSize = 20;
 async function collectible(over = {}) {
   const { image = true, ...rest } = over;
   const id = await createItem(
     G,
     normaliseItem({ name: 'Founder badge', price: 100, type: 'collectible', ...rest })
   );
-  if (image) {
-    picture ??= (await processImage(await makePicture(32, 32))).png;
-    await setItemImage(G, id, await saveImage(G, picture));
-  }
+  if (image) await putPicture(G, id, ++pictureSize);
   return id;
 }
 const buy = async (m, itemId, config = cfg()) => {
@@ -126,18 +128,23 @@ test('the settings have an announcement channel (an id or none) and a collection
   assert.deepEqual([bad.collectibleChannelId, bad.collectionPublic], ['', false]);
 });
 
-test('buying a collectible charges the price, uses one of the stock and gives the member an active row', async () => {
+test('buying a collectible charges the price, uses one of the stock, and gives the member an active copy with its picture', async () => {
   const m = await buyer(1);
-  const id = await collectible({ stock: 5, price: 150 });
+  const id = await collectible({ stock: 5, price: 150, rarity: 'epic' });
   const out = await buy(m, id);
   assert.equal(out.ok, true);
   assert.equal(await cashOf(m), 850);
-  const item = await getItem(G, id);
-  assert.equal(item.sold, 1);
+  assert.equal((await getItem(G, id)).sold, 1);
   const row = await getInventoryRow(G, out.row.id);
   assert.deepEqual(
     [row.itemType, row.status, row.source, row.pricePaid, row.roleId],
     ['collectible', 'active', 'purchase', 150, null]
+  );
+  const item = await getItem(G, id);
+  assert.deepEqual(
+    [row.imageId, row.rarity],
+    [item.imageId, 'epic'],
+    'the copy carries the picture and rarity'
   );
   assert.deepEqual(m.adds, [], 'no role is touched');
   assert.equal(ctx.sent.length, 0, 'staff are not asked to fulfil it, and nothing is announced by default');
@@ -152,6 +159,15 @@ test('a purchase is the price and version the member saw: a changed price, rarit
   const id = await collectible({ rarity: 'rare' });
   const seen = await getItem(G, id);
   const before = await cashOf(m);
+  const tryBuy = (price, version) =>
+    purchase({
+      guild: ctx.guild,
+      member: m,
+      itemId: id,
+      expectedPrice: price,
+      expectedVersion: version,
+      config: cfg(),
+    });
 
   // the price changed
   await updateItem(
@@ -159,14 +175,7 @@ test('a purchase is the price and version the member saw: a changed price, rarit
     id,
     normaliseItem({ name: 'Founder badge', price: 250, type: 'collectible', rarity: 'rare' })
   );
-  const priced = await purchase({
-    guild: ctx.guild,
-    member: m,
-    itemId: id,
-    expectedPrice: seen.price,
-    expectedVersion: seen.updatedAt,
-    config: cfg(),
-  });
+  const priced = await tryBuy(seen.price, seen.updatedAt);
   assert.deepEqual([priced.ok, priced.reason, priced.price], [false, 'price_changed', 250]);
 
   // the rarity changed (same price)
@@ -176,27 +185,13 @@ test('a purchase is the price and version the member saw: a changed price, rarit
     id,
     normaliseItem({ name: 'Founder badge', price: 250, type: 'collectible', rarity: 'legendary' })
   );
-  const rarer = await purchase({
-    guild: ctx.guild,
-    member: m,
-    itemId: id,
-    expectedPrice: 250,
-    expectedVersion: now.updatedAt,
-    config: cfg(),
-  });
+  const rarer = await tryBuy(250, now.updatedAt);
   assert.deepEqual([rarer.ok, rarer.reason], [false, 'item_changed']);
 
   // the picture was replaced
   const current = await getItem(G, id);
-  await setItemImage(G, id, await saveImage(G, picture));
-  const repicked = await purchase({
-    guild: ctx.guild,
-    member: m,
-    itemId: id,
-    expectedPrice: 250,
-    expectedVersion: current.updatedAt,
-    config: cfg(),
-  });
+  await putPicture(G, id, 77);
+  const repicked = await tryBuy(250, current.updatedAt);
   assert.deepEqual([repicked.ok, repicked.reason], [false, 'item_changed']);
 
   assert.equal(await cashOf(m), before, 'nothing was charged');
@@ -205,15 +200,43 @@ test('a purchase is the price and version the member saw: a changed price, rarit
   assert.equal((await buy(m, id)).ok, true, 'with the current price and version it works');
 });
 
-test('a collectible without a picture cannot be bought, and nothing is charged', async () => {
+test('a collectible without a picture cannot be bought, is not for sale, and nothing is charged', async () => {
   const m = await buyer(3);
   const id = await collectible({ image: false });
+  await collectible({ name: 'With picture' });
   const out = await buy(m, id);
   assert.deepEqual([out.ok, out.reason], [false, 'no_image']);
   assert.match(shopRefusalText(out, cfg()), /not ready yet/);
   assert.equal(await cashOf(m), 1000);
-  // staff can still give it for free
-  assert.equal((await grantItem({ guild: ctx.guild, member: m, itemId: id, config: cfg() })).ok, true);
+  assert.deepEqual(
+    (await itemsForSale(G)).map((i) => i.name),
+    ['With picture'],
+    'it is not listed in /shop, /buy or the web shop'
+  );
+  // staff can still give it for free; the copy has no picture until the item gets one
+  const gift = await grantItem({ guild: ctx.guild, member: m, itemId: id, config: cfg() });
+  assert.equal(gift.ok, true);
+  assert.equal(gift.row.imageId, null);
+  const imageId = await putPicture(G, id, 90);
+  assert.equal((await getInventoryRow(G, gift.row.id)).imageId, imageId, 'a new picture reaches the copies');
+});
+
+test('the picture can be taken off between the price check and the purchase: nothing is charged', async () => {
+  const m = await buyer(4);
+  const id = await collectible();
+  const item = await getItem(G, id);
+  await detachImage(G, id);
+  // a buyer who saw the item before the picture was taken off is told it changed, and charged nothing
+  const out = await purchase({
+    guild: ctx.guild,
+    member: m,
+    itemId: id,
+    expectedPrice: item.price,
+    expectedVersion: item.updatedAt,
+    config: cfg(),
+  });
+  assert.equal(out.ok, false);
+  assert.equal(await cashOf(m), 1000);
 });
 
 test('the stock is a limited edition: 12 buyers of the last 5 get exactly 5, and the rest are told it is sold out', async () => {
@@ -230,7 +253,7 @@ test('the stock is a limited edition: 12 buyers of the last 5 get exactly 5, and
 });
 
 test('the limit per member counts the copies a member owns, and ends with a refund', async () => {
-  const m = await buyer(4);
+  const m = await buyer(5);
   const id = await collectible({ perMemberLimit: 2, price: 10 });
   const first = await buy(m, id);
   assert.equal(first.ok, true);
@@ -246,7 +269,7 @@ test('the limit per member counts the copies a member owns, and ends with a refu
 });
 
 test('a refund gives the money and the stock back; a revoke takes it away without money; both leave the collection', async () => {
-  const m = await buyer(5);
+  const m = await buyer(6);
   const id = await collectible({ stock: 3, price: 40 });
   const a = await buy(m, id);
   const b = await buy(m, id);
@@ -263,6 +286,7 @@ test('a refund gives the money and the stock back; a revoke takes it away withou
   assert.equal(await cashOf(m), 960);
   assert.equal((await getItem(G, id)).sold, 1);
   assert.equal((await getInventoryRow(G, a.row.id)).status, 'refunded');
+  assert.equal((await imageIds()).length, 1, 'the item still has its picture');
   const revoked = await endRow({ guild: ctx.guild, rowId: b.row.id, mode: 'revoke', config: cfg() });
   assert.deepEqual([revoked.ok, revoked.refunded], [true, false]);
   assert.equal(await cashOf(m), 960, 'a revoke moves no money');
@@ -277,7 +301,7 @@ test('a refund gives the money and the stock back; a revoke takes it away withou
 });
 
 test('staff can give a collectible for free; it counts in the collection but not against the stock', async () => {
-  const m = await buyer(6, 0);
+  const m = await buyer(7, 0);
   const id = await collectible({ stock: 1 });
   const out = await grantItem({ guild: ctx.guild, member: m, itemId: id, by: 'staff1', config: cfg() });
   assert.equal(out.ok, true);
@@ -290,7 +314,7 @@ test('staff can give a collectible for free; it counts in the collection but not
 // --- the announcement --------------------------------------------------------------------------------------
 
 test('a purchase is announced only when the item and the settings ask for it, with the picture, pinging only the buyer', async () => {
-  const m = await buyer(7);
+  const m = await buyer(8);
   const on = await collectible({ announce: true, rarity: 'epic', emoji: '🎖️', name: 'Founder badge' });
   const off = await collectible({ announce: false, name: 'Quiet one' });
   const config = cfg({ collectibleChannelId: SHOP_CH });
@@ -307,7 +331,7 @@ test('a purchase is announced only when the item and the settings ask for it, wi
   assert.equal(msg.content, `🎉 <@${m.id}> bought 🎖️ **Founder badge** (Epic)!`);
   assert.deepEqual(msg.allowedMentions, { parse: [], users: [m.id] });
   const embed = msg.embeds[0].data;
-  assert.match(embed.image.url, /^https:\/\/sylo\.example\.test\/c\/[0-9a-f]{32}\.png$/);
+  assert.match(embed.image.url, /^https:\/\/sylo\.example\.test\/c\/[0-9a-f]{32}\.webp$/);
   assert.equal(embed.color, 0x9b59b6);
 });
 
@@ -326,7 +350,6 @@ test('the announcement is filled in one pass: a name that looks like a placehold
 });
 
 test('an announcement without a picture goes out as text; an address is only made for a real id', async () => {
-  // no picture (and so no address to put in an embed): the line alone
   const item = {
     type: 'collectible',
     announce: true,
@@ -343,12 +366,17 @@ test('an announcement without a picture goes out as text; an address is only mad
   // only a collectible that announces, in a server with a channel
   assert.equal(await announcePurchase({ guildId: G, config: cfg(), item, userId: U(8) }), false);
   assert.equal(
-    await announcePurchase({ guildId: G, config: channel, item: { ...item, announce: false }, userId: U(8) }),
+    await announcePurchase({
+      guildId: G,
+      config: channel,
+      item: { ...item, announce: false },
+      userId: U(8),
+    }),
     false
   );
   assert.equal(imageUrl('not-an-id'), null);
   assert.equal(imageUrl('A'.repeat(32)), null, 'lower-case hex only');
-  assert.equal(imageUrl('a'.repeat(32)), `https://sylo.example.test/c/${'a'.repeat(32)}.png`);
+  assert.equal(imageUrl('a'.repeat(32)), `https://sylo.example.test/c/${'a'.repeat(32)}.webp`);
 });
 
 test('a custom item still asks staff to fulfil it and is never announced', async () => {
@@ -362,17 +390,23 @@ test('a custom item still asks staff to fulfil it and is never announced', async
   assert.match(ctx.sent[0].embeds[0].data.title, /an item to fulfil/);
 });
 
-// --- the collection and the files ------------------------------------------------------------------------------
+// --- the collection ----------------------------------------------------------------------------------------------
 
 test('a collection groups copies by item, pages ten items at a time, and counts only what is owned', async () => {
   const m = await buyer(11, 100000);
   const ids = [];
-  for (let i = 1; i <= 23; i++)
+  for (let i = 1; i <= 23; i++) {
     ids.push(await collectible({ name: `Badge ${i}`, price: 1, rarity: i % 2 ? 'rare' : null }));
+  }
   for (const id of ids) assert.equal((await buy(m, id)).ok, true);
   const twice = await buy(m, ids[0]);
   assert.equal(twice.ok, true);
-  await endRow({ guild: ctx.guild, rowId: (await buy(m, ids[1])).row.id, mode: 'refund', config: cfg() });
+  await endRow({
+    guild: ctx.guild,
+    rowId: (await buy(m, ids[1])).row.id,
+    mode: 'refund',
+    config: cfg(),
+  });
 
   const first = await collectionPage(G, m.id, 1, 10);
   assert.deepEqual(
@@ -396,46 +430,140 @@ test('a collection groups copies by item, pages ten items at a time, and counts 
   assert.deepEqual((await collectionPage(G, U(99))).entries, [], 'another member owns nothing');
 });
 
-test('an item that was deleted while members own it is still in their collection, with its picture', async () => {
+test('an item that was deleted while members own it is still in their collection, with its picture and rarity', async () => {
   const m = await buyer(12);
   const id = await collectible({ name: 'Gone soon', rarity: 'epic' });
   const imageId = (await getItem(G, id)).imageId;
   await buy(m, id);
   assert.equal(await deleteItem(G, id), true);
   assert.equal(await getItem(G, id), null);
-  assert.ok(existsSync(pathOf(G, imageId)), 'the file is kept');
+  assert.deepEqual(await imageIds(), [imageId], 'the picture is kept');
   const page = await collectionPage(G, m.id);
   assert.deepEqual(
     [page.entries[0].removed, page.entries[0].name, page.entries[0].imageId, page.entries[0].rarity],
     [true, 'Gone soon', imageId, 'epic']
   );
-  assert.equal(await guildOfImage(imageId), G, 'and it is still served');
+  assert.equal((await readImage(imageId)).mime, 'image/webp', 'and it is still served');
 });
 
-test('the picture of an item nobody owns goes when the item is deleted; erasing the last owner removes it too', async () => {
-  const lonely = await collectible({ name: 'Nobody' });
-  const lonelyImage = (await getItem(G, lonely)).imageId;
-  assert.equal(await deleteItem(G, lonely), true);
-  assert.equal(existsSync(pathOf(G, lonelyImage)), false);
-  assert.equal(await guildOfImage(lonelyImage), null);
-
+test('the rarity is kept on the copies when the item has no picture, and follows a rarity edit', async () => {
   const m = await buyer(13);
-  const id = await collectible({ name: 'Owned' });
-  const imageId = (await getItem(G, id)).imageId;
-  await buy(m, id);
+  const id = await collectible({ name: 'Rare one', rarity: 'epic' });
+  const bought = await buy(m, id);
+  // staff take the picture off, change nothing else, then delete the item: the rarity is still epic
+  await detachImage(G, id);
+  assert.equal((await getInventoryRow(G, bought.row.id)).rarity, 'epic');
   await deleteItem(G, id);
-  assert.ok(existsSync(pathOf(G, imageId)));
-  const erased = await eraseInventory(G, m.id);
-  assert.equal(erased.rows, 1);
-  assert.equal(existsSync(pathOf(G, imageId)), false, '/forget removes the last copy and its file');
+  assert.equal((await collectionPage(G, m.id)).entries[0].rarity, 'epic');
+
+  // a rarity edit reaches the copies while the item exists
+  const other = await collectible({ name: 'Edited', rarity: 'common' });
+  const copy = await buy(m, other);
+  await updateItem(
+    G,
+    other,
+    normaliseItem({ name: 'Edited', price: 100, type: 'collectible', rarity: 'legendary' })
+  );
+  assert.equal((await getInventoryRow(G, copy.row.id)).rarity, 'legendary');
 });
 
-test('a picture shared by an item that still exists is never deleted by a member leaving', async () => {
-  const m = await buyer(14);
+test('a picture is deleted in the transaction that drops its last reference, never earlier', async () => {
+  const a = await buyer(14);
+  const b = await buyer(15);
+  const id = await collectible({ name: 'Shared' });
+  const imageId = (await getItem(G, id)).imageId;
+  const first = await buy(a, id);
+  const second = await buy(b, id);
+  await deleteItem(G, id);
+  assert.deepEqual(await imageIds(), [imageId], 'two owners hold it');
+  await endRow({ guild: ctx.guild, rowId: first.row.id, mode: 'revoke', config: cfg() });
+  assert.deepEqual(await imageIds(), [imageId], 'one owner still holds it');
+  await endRow({ guild: ctx.guild, rowId: second.row.id, mode: 'refund', config: cfg() });
+  assert.deepEqual(await imageIds(), [], 'the last one let go');
+  assert.equal(await readImage(imageId), null);
+});
+
+test('erasing a member (/forget) deletes the pictures only they held', async () => {
+  const m = await buyer(16);
+  const other = await buyer(17);
+  const mine = await collectible({ name: 'Mine' });
+  const shared = await collectible({ name: 'Shared' });
+  await buy(m, mine);
+  await buy(m, shared);
+  await buy(other, shared);
+  await deleteItem(G, mine);
+  await deleteItem(G, shared);
+  assert.equal((await imageIds()).length, 2);
+  const erased = await eraseInventory(G, m.id);
+  assert.equal(erased.rows, 2);
+  assert.equal((await imageIds()).length, 1, 'the one the other member still holds stays');
+  await eraseInventory(G, other.id);
+  assert.deepEqual(await imageIds(), []);
+});
+
+test('a picture that the item still has is never deleted by a member leaving', async () => {
+  const m = await buyer(18);
   const id = await collectible({ name: 'Kept' });
   const imageId = (await getItem(G, id)).imageId;
   await buy(m, id);
   await eraseInventory(G, m.id);
-  assert.ok(existsSync(pathOf(G, imageId)), 'the item still has it');
-  assert.equal(await guildOfImage(imageId), G);
+  assert.deepEqual(await imageIds(), [imageId], 'the item still has it');
+});
+
+test('replacing a picture moves the copies to the new one and deletes the old; an item and its copies never point at a missing picture', async () => {
+  const m = await buyer(19);
+  const id = await collectible({ name: 'Moving' });
+  const old = (await getItem(G, id)).imageId;
+  const copy = await buy(m, id);
+  const next = await putPicture(G, id, 99);
+  assert.notEqual(next, old);
+  assert.deepEqual(await imageIds(), [next]);
+  assert.equal((await getInventoryRow(G, copy.row.id)).imageId, next);
+  assert.equal((await getItem(G, id)).imageId, next);
+});
+
+test('a purchase and a replaced picture at the same moment never leave a copy pointing at a deleted picture', async () => {
+  const buyers = [];
+  for (let i = 30; i < 36; i++) buyers.push(await buyer(i, 100));
+  const id = await collectible({ price: 10 });
+  const seen = await getItem(G, id);
+  const racing = await Promise.all([
+    ...buyers.map((m) =>
+      purchase({
+        guild: ctx.guild,
+        member: m,
+        itemId: id,
+        expectedPrice: seen.price,
+        expectedVersion: seen.updatedAt,
+        config: cfg(),
+      })
+    ),
+    putPicture(G, id, 150),
+  ]);
+  assert.equal(racing.length, buyers.length + 1);
+  const live = await imageIds();
+  for (const m of buyers) {
+    for (const r of await listInventory(G, m.id)) {
+      if (r.status === 'active') assert.ok(live.includes(r.imageId), 'every owned copy has its picture');
+    }
+  }
+  assert.ok(live.includes((await getItem(G, id)).imageId));
+});
+
+test('the quota counts every stored picture of the server, and a changed type or a deleted item frees its picture', async () => {
+  const id = await collectible();
+  const use = await imageUsage(G);
+  assert.equal(use.count, 1);
+  assert.ok(use.bytes > 0);
+  assert.ok(MAX_IMAGES_PER_GUILD >= 200);
+  // an upload for an item that is gone
+  await deleteItem(G, id);
+  assert.deepEqual(await attachImage(G, id, { mime: 'image/webp', data: Buffer.alloc(10) }), {
+    ok: false,
+    reason: 'gone',
+  });
+  assert.deepEqual(await imageUsage(G), { count: 0, bytes: 0 });
+  // an item that is not a collectible has no picture to attach
+  const custom = await createItem(G, normaliseItem({ name: 'C', price: 1, type: 'custom' }));
+  assert.equal((await attachImage(G, custom, { mime: 'image/webp', data: Buffer.alloc(10) })).reason, 'gone');
 });

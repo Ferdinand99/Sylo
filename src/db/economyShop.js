@@ -3,7 +3,8 @@
 //   economy_items       id, guild_id, name, description, emoji, type ('temp_role' | 'role' | 'custom' |
 //                       'collectible'), role_id, duration_ms, price, stock (NULL = unlimited), sold,
 //                       required_roles (JSON list, any-of), per_member_limit, enabled, sort_order, and
-//                       for a collectible: image_id (the stored picture, see lib/collectibleFiles.js),
+//                       for a collectible: image_id (the picture, a row of collectible_images, see
+//                       db/collectibleImages.js),
 //                       rarity (NULL or one of modules/lib/collectibles.js RARITIES), announce (post a
 //                       message when it is bought)
 //   economy_inventory   id, guild_id, user_id, item_id, item_name / item_type / role_id (a copy of the
@@ -12,16 +13,17 @@
 //                       'refunded' | 'expired'), fulfilled_at / fulfilled_by / note (custom items:
 //                       staff text), added_ms (the time a temporary role purchase added to the
 //                       role's record), lease_until (a pending row's role grant may still be running
-//                       until then; the sweep leaves it alone), image_id / rarity (a copy of the item's
-//                       picture and rarity, written only when the item is deleted while members still
-//                       own it, so the collection keeps showing it; NULL while the item exists)
+//                       until then; the sweep leaves it alone), image_id / rarity (a collectible: the
+//                       picture and rarity this copy shows. Written when the copy is made and kept in step
+//                       with the item while it exists, so the collection still shows it when the item is
+//                       removed, or when staff take the picture off the item)
 //
 // Money and stock NEVER change through this file while a purchase, refund, grant or revoke runs:
 // those are transactions in modules/lib/shop.js (through the money API and its `after` hook). This
 // file holds the plain reads, the staff's editing of the item list, and the erasure of a member.
 // `guild_id` is the server key; the tables are created here for Postgres (SQLite: migration 68).
-import { prepare, registerPostgresBootstrap, registerPostgresMigration } from './driver.js';
-import { deleteImage } from '../lib/collectibleFiles.js';
+import { prepare, registerPostgresBootstrap, registerPostgresMigration, transaction } from './driver.js';
+import { releaseImageTx } from './collectibleImages.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS economy_items (
@@ -87,6 +89,11 @@ export const INVENTORY_STATUSES = ['pending', 'active', 'revoked', 'refunded', '
 const ITEM_COLUMNS = `id, guild_id, name, description, emoji, type, role_id, duration_ms, price, stock, sold,
   required_roles, per_member_limit, enabled, sort_order, image_id, rarity, announce, created_at, updated_at`;
 
+const UPDATE_ITEM_SQL = `UPDATE economy_items SET name = ?, description = ?, emoji = ?, type = ?, role_id = ?,
+    duration_ms = ?, price = ?, stock = ?, required_roles = ?, per_member_limit = ?, enabled = ?, rarity = ?,
+    announce = ?, updated_at = CASE WHEN updated_at >= ? THEN updated_at + 1 ELSE ? END
+  WHERE guild_id = ? AND id = ?`;
+
 const s = {
   insertItem: prepare(
     `INSERT INTO economy_items
@@ -99,37 +106,10 @@ const s = {
   listItems: prepare(`SELECT ${ITEM_COLUMNS} FROM economy_items WHERE guild_id = ? ORDER BY sort_order, id`),
   countItems: prepare('SELECT COUNT(*) AS n FROM economy_items WHERE guild_id = ?'),
   maxOrder: prepare('SELECT MAX(sort_order) AS m FROM economy_items WHERE guild_id = ?'),
-  updateItem: prepare(
-    `UPDATE economy_items SET name = ?, description = ?, emoji = ?, type = ?, role_id = ?, duration_ms = ?,
-       price = ?, stock = ?, required_roles = ?, per_member_limit = ?, enabled = ?, rarity = ?, announce = ?,
-       updated_at = CASE WHEN updated_at >= ? THEN updated_at + 1 ELSE ? END
-     WHERE guild_id = ? AND id = ?`
-  ),
   setEnabled: prepare(
     `UPDATE economy_items SET enabled = ?, updated_at = CASE WHEN updated_at >= ? THEN updated_at + 1 ELSE ? END WHERE guild_id = ? AND id = ?`
   ),
   setOrder: prepare('UPDATE economy_items SET sort_order = ? WHERE guild_id = ? AND id = ?'),
-  deleteItem: prepare('DELETE FROM economy_items WHERE guild_id = ? AND id = ?'),
-  setImage: prepare(
-    `UPDATE economy_items SET image_id = ?, updated_at = CASE WHEN updated_at >= ? THEN updated_at + 1 ELSE ? END
-     WHERE guild_id = ? AND id = ? AND type = 'collectible'`
-  ),
-  copyImageToRows: prepare(
-    `UPDATE economy_inventory SET image_id = ?, rarity = ?
-     WHERE guild_id = ? AND item_id = ? AND item_type = 'collectible'`
-  ),
-  imageOfItem: prepare('SELECT 1 AS n FROM economy_items WHERE guild_id = ? AND image_id = ? LIMIT 1'),
-  imageOfLiveRow: prepare(
-    `SELECT 1 AS n FROM economy_inventory
-     WHERE guild_id = ? AND image_id = ? AND status IN ('active', 'pending') LIMIT 1`
-  ),
-  guildOfItemImage: prepare('SELECT guild_id FROM economy_items WHERE image_id = ? LIMIT 1'),
-  guildOfRowImage: prepare('SELECT guild_id FROM economy_inventory WHERE image_id = ? LIMIT 1'),
-  rowImagesOfUser: prepare(
-    `SELECT DISTINCT image_id FROM economy_inventory
-     WHERE guild_id = ? AND user_id = ? AND image_id IS NOT NULL`
-  ),
-
   getRow: prepare('SELECT * FROM economy_inventory WHERE guild_id = ? AND id = ?'),
   listUser: prepare(
     'SELECT * FROM economy_inventory WHERE guild_id = ? AND user_id = ? ORDER BY id DESC LIMIT ?'
@@ -171,11 +151,6 @@ const s = {
   liveOfUser: prepare(
     `SELECT * FROM economy_inventory
      WHERE guild_id = ? AND user_id = ? AND item_type <> 'custom' AND role_id IS NOT NULL AND status IN ('active', 'pending')`
-  ),
-
-  eraseUser: prepare('DELETE FROM economy_inventory WHERE guild_id = ? AND user_id = ?'),
-  eraseFulfiller: prepare(
-    'UPDATE economy_inventory SET fulfilled_by = NULL WHERE guild_id = ? AND fulfilled_by = ?'
   ),
 };
 
@@ -273,29 +248,48 @@ export const itemCount = async (guildId) => Number((await s.countItems.get(guild
 /**
  * Replace the fields of an item (never its stock sold count). Every edit gives the item a new, larger
  * `updated_at`, even two within the same millisecond: it is the version a buyer's confirmation carries.
+ * A collectible's rarity is copied to the copies members hold. An item that stops being a collectible lets go of
+ * its picture (the members who own a copy keep theirs).
  * @returns {Promise<boolean>} found
  */
 export async function updateItem(guildId, id, v, now = Date.now()) {
-  const info = await s.updateItem.run(
-    v.name,
-    v.description,
-    v.emoji,
-    v.type,
-    v.roleId,
-    v.durationMs,
-    v.price,
-    v.stock,
-    JSON.stringify(v.requiredRoles),
-    v.perMemberLimit,
-    v.enabled ? 1 : 0,
-    v.rarity ?? null,
-    v.announce ? 1 : 0,
-    now,
-    now,
-    guildId,
-    id
-  );
-  return info.changes > 0;
+  return transaction(function* (tx) {
+    const cur = yield tx.get('SELECT image_id FROM economy_items WHERE guild_id = ? AND id = ?', guildId, id);
+    if (!cur) return false;
+    const info = yield tx.run(
+      UPDATE_ITEM_SQL,
+      v.name,
+      v.description,
+      v.emoji,
+      v.type,
+      v.roleId,
+      v.durationMs,
+      v.price,
+      v.stock,
+      JSON.stringify(v.requiredRoles),
+      v.perMemberLimit,
+      v.enabled ? 1 : 0,
+      v.rarity ?? null,
+      v.announce ? 1 : 0,
+      now,
+      now,
+      guildId,
+      id
+    );
+    if (info.changes < 1) return false;
+    if (v.type === 'collectible') {
+      yield tx.run(
+        "UPDATE economy_inventory SET rarity = ? WHERE guild_id = ? AND item_id = ? AND item_type = 'collectible'",
+        v.rarity ?? null,
+        guildId,
+        id
+      );
+    } else if (cur.image_id) {
+      yield tx.run('UPDATE economy_items SET image_id = NULL WHERE guild_id = ? AND id = ?', guildId, id);
+      yield* releaseImageTx(tx, guildId, cur.image_id);
+    }
+    return true;
+  });
 }
 
 export async function setItemEnabled(guildId, id, enabled, now = Date.now()) {
@@ -312,52 +306,24 @@ export async function reorderItems(guildId, orderedIds) {
 }
 
 /**
- * Delete an item. The inventory rows stay (they keep a copy of its name). A collectible's picture and rarity
- * are copied to the rows first, so the members who still own it keep seeing it ("item removed"); the picture
- * file is deleted at once when nobody owns it.
+ * Delete an item. The inventory rows stay (they keep a copy of its name, and a collectible's copies keep their
+ * picture and rarity, so the members who own it still see it, "item removed"). The picture is deleted in the
+ * same transaction when nobody owns a copy.
  * @returns {Promise<boolean>}
  */
 export async function deleteItem(guildId, id) {
-  const item = await getItem(guildId, id);
-  if (!item) return false;
-  if (item.imageId) await s.copyImageToRows.run(item.imageId, item.rarity, guildId, id);
-  const gone = (await s.deleteItem.run(guildId, id)).changes > 0;
-  if (gone && item.imageId) await releaseImage(guildId, item.imageId);
-  return gone;
-}
-
-// --- collectibles: pictures ------------------------------------------------------------------------------------
-
-/**
- * Give a collectible a new picture (an id made by lib/collectibleFiles.js saveImage), or none (null). Like
- * every edit this moves the item's version, so a buyer who saw the old picture is told to look again.
- * @returns {Promise<boolean>} found, and a collectible
- */
-export async function setItemImage(guildId, id, imageId, now = Date.now()) {
-  return (await s.setImage.run(imageId, now, now, guildId, id)).changes > 0;
-}
-
-/**
- * Delete the file of a picture, unless something still refers to it: an item that has it, or an owned
- * (active) inventory row that carries a copy of it. Called when a picture is replaced or removed, when an
- * item is deleted, and when an owned collectible ends (revoked, refunded) or is erased.
- * @returns {Promise<boolean>} the file was deleted
- */
-export async function releaseImage(guildId, imageId) {
-  if (!imageId) return false;
-  if (await s.imageOfItem.get(guildId, imageId)) return false;
-  if (await s.imageOfLiveRow.get(guildId, imageId)) return false;
-  return deleteImage(guildId, imageId);
-}
-
-/**
- * The server a picture belongs to, or null: what /c/<id>.png needs to find the file. Only a picture an
- * item or an inventory row refers to is served.
- */
-export async function guildOfImage(imageId) {
-  const fromItem = await s.guildOfItemImage.get(imageId);
-  if (fromItem) return fromItem.guild_id;
-  return (await s.guildOfRowImage.get(imageId))?.guild_id ?? null;
+  return transaction(function* (tx) {
+    const item = yield tx.get(
+      'SELECT image_id FROM economy_items WHERE guild_id = ? AND id = ?',
+      guildId,
+      id
+    );
+    if (!item) return false;
+    const gone = yield tx.run('DELETE FROM economy_items WHERE guild_id = ? AND id = ?', guildId, id);
+    if (gone.changes < 1) return false;
+    yield* releaseImageTx(tx, guildId, item.image_id);
+    return true;
+  });
 }
 
 // --- collectibles: a member's collection ------------------------------------------------------------------------
@@ -366,8 +332,8 @@ const COLLECTION_WHERE = "guild_id = ? AND user_id = ? AND item_type = 'collecti
 
 /**
  * One page of a member's collection: the collectibles they own (active rows), one entry per item with how many
- * copies they hold, oldest first. The item's current name, emoji, picture and rarity are used while the item
- * exists; after it was deleted the copies on the rows are.
+ * copies they hold, oldest first. The picture and rarity are the ones the copies carry (kept in step with the
+ * item); the item's current name and emoji are used while it exists, the name on the row after it was deleted.
  * @returns {Promise<{ page: number, pages: number, kinds: number, copies: number, entries: object[] }>}
  */
 export async function collectionPage(guildId, userId, page = 1, perPage = 10) {
@@ -405,8 +371,8 @@ export async function collectionPage(guildId, userId, page = 1, perPage = 10) {
       removed: !item,
       name: item?.name ?? r.item_name,
       emoji: item?.emoji ?? '',
-      imageId: item ? item.imageId : (r.image_id ?? null),
-      rarity: item ? item.rarity : (r.rarity ?? null),
+      imageId: r.image_id ?? null,
+      rarity: r.rarity ?? null,
       count: Number(r.n),
       firstAt: Number(r.first_at),
     });
@@ -529,12 +495,28 @@ export async function markUnfulfilled(guildId, id, now = Date.now()) {
 
 // --- erasure ----------------------------------------------------------------------------------------------
 
-/** /forget: delete the member's inventory; take the member's id off rows they fulfilled as staff. */
+/**
+ * /forget: delete the member's inventory; take the member's id off rows they fulfilled as staff. One
+ * transaction: the pictures that only this member held go with the rows.
+ */
 export async function eraseInventory(guildId, userId) {
-  // The pictures the member's rows carried copies of: delete the ones nobody else holds any more.
-  const copies = (await s.rowImagesOfUser.all(guildId, userId)).map((r) => r.image_id);
-  const rows = (await s.eraseUser.run(guildId, userId)).changes;
-  const fulfilled = (await s.eraseFulfiller.run(guildId, userId)).changes;
-  for (const imageId of copies) await releaseImage(guildId, imageId);
-  return { rows, fulfilled };
+  return transaction(function* (tx) {
+    const held = yield tx.all(
+      'SELECT DISTINCT image_id FROM economy_inventory WHERE guild_id = ? AND user_id = ? AND image_id IS NOT NULL',
+      guildId,
+      userId
+    );
+    const rows = yield tx.run(
+      'DELETE FROM economy_inventory WHERE guild_id = ? AND user_id = ?',
+      guildId,
+      userId
+    );
+    const fulfilled = yield tx.run(
+      'UPDATE economy_inventory SET fulfilled_by = NULL WHERE guild_id = ? AND fulfilled_by = ?',
+      guildId,
+      userId
+    );
+    for (const r of held) yield* releaseImageTx(tx, guildId, r.image_id);
+    return { rows: rows.changes, fulfilled: fulfilled.changes };
+  });
 }

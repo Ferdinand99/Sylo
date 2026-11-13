@@ -1,21 +1,21 @@
 // Collectibles in the Economy shop: the public address of a picture, the announcement of a purchase and the
 // embeds of a member's collection. The rules of buying are in modules/lib/shop.js, the storage in
-// db/economyShop.js, the pictures on disk in lib/collectibleFiles.js and what is accepted as a picture in
+// db/economyShop.js, the pictures themselves in db/collectibleImages.js and what is accepted as a picture in
 // lib/collectibleImage.js.
 //
-// A picture is served at <DASHBOARD_URL>/c/<id>.png (routes/collectibleImage.js). Discord and Fluxer fetch an
+// A picture is served at <DASHBOARD_URL>/c/<id>.webp (routes/collectibleImage.js). Discord and Fluxer fetch an
 // embed's image from there, so it needs no login; the id is 128 random bits. Without a DASHBOARD_URL there is no
 // public address and a message goes out without the picture.
 import { EmbedBuilder, escapeMarkdown } from 'discord.js';
 import { config as appConfig } from '../../config.js';
 import { rarityOf } from './economyConfig.js';
 import { sendToChannel } from './send.js';
-import { IMAGE_ID_RE } from '../../lib/collectibleFiles.js';
+import { IMAGE_ID_RE } from '../../db/collectibleImages.js';
 
 /** The public address of a picture, or null (no picture, or no DASHBOARD_URL to build an address from). */
 export function imageUrl(imageId) {
   if (!appConfig.dashboardUrl || typeof imageId !== 'string' || !IMAGE_ID_RE.test(imageId)) return null;
-  return `${appConfig.dashboardUrl}/c/${imageId}.png`;
+  return `${appConfig.dashboardUrl}/c/${imageId}.webp`;
 }
 
 /** The label of a rarity key ("Rare"), or null for none. */

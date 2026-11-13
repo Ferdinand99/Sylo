@@ -1,31 +1,36 @@
 // The picture of a collectible through the dashboard and the public address: the upload (type sniffing,
-// re-encoding, limits, the answers to hostile files), where the file is stored, what /c/<id>.png sends and
-// refuses (headers, the plain 404, path traversal and links), replacing and removing a picture, what happens to
-// the files when the item is deleted while members own it, and when the server's data is purged.
-// Who may upload (authorisation, CSRF) is in collectibles.permissions.test.js.
+// re-encoding, limits, the quota, the answers to hostile files), what is stored in the database, what
+// /c/<id>.webp sends and refuses (headers, no cookie, the plain 404, an exact address), replacing, removing and
+// the type change of a picture, and what happens to the pictures when the item is deleted while members own it,
+// and when the server's data is purged. Who may upload (authorisation, CSRF) is in
+// collectibles.permissions.test.js.
 import { startWebApp } from './helpers/webApp.js';
 import { v2Open } from './helpers/v2Open.js';
 import { GID } from './helpers/fakeGuild.js';
 import { buyNow, fakeMember } from './helpers/fakeShop.js';
-import { HTML, SVG, makePicture, pngClaiming, pngSize, upload } from './helpers/collectibleFixtures.js';
+import {
+  HTML,
+  SVG,
+  makePicture,
+  pngClaiming,
+  storedPictures,
+  upload,
+} from './helpers/collectibleFixtures.js';
 import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, symlinkSync, writeFileSync, mkdirSync } from 'node:fs';
 import http from 'node:http';
-import { join } from 'node:path';
 import { db } from '../src/db/index.js';
-import { getItem } from '../src/db/economyShop.js';
+import { getItem, listInventory } from '../src/db/economyShop.js';
+import { MAX_IMAGES_PER_GUILD, MAX_IMAGE_BYTES_PER_GUILD, readImage } from '../src/db/collectibleImages.js';
 import { setGuildModule } from '../src/db/modules.js';
 import { purgeGuild } from '../src/db/purge.js';
 import { credit } from '../src/modules/lib/economy.js';
-import { collectiblesRoot, pathOf } from '../src/lib/collectibleFiles.js';
+import { imageDimensions } from '../src/lib/imageSize.js';
 
 let app;
 let api;
 const U = '700000000000000021';
 const config = {};
-const files = () =>
-  existsSync(join(collectiblesRoot(), GID)) ? readdirSync(join(collectiblesRoot(), GID)) : [];
 
 test.before(async () => {
   app = await startWebApp();
@@ -57,7 +62,7 @@ const put = (id, form) =>
   });
 const view = async (id) =>
   (await json(await api.get('/modules/economy/shop/items'))).items.find((i) => i.id === id);
-const idOf = (path) => /^\/c\/([0-9a-f]{32})\.png$/.exec(path)?.[1];
+const idOf = (path) => /^\/c\/([0-9a-f]{32})\.webp$/.exec(path)?.[1];
 const get = (path) => fetch(`${app.base}${path}`);
 /** A GET with the path exactly as written: fetch() would fold "%2e%2e" segments before sending. */
 const raw = (path) =>
@@ -73,6 +78,10 @@ const raw = (path) =>
       })
       .on('error', reject);
   });
+const uploaded = async (id, n) =>
+  idOf((await json(await put(id, upload(await makePicture(n, n))))).items.find((i) => i.id === id).imagePath);
+const ids = async () => (await storedPictures(GID)).map((r) => r.id);
+const addMoney = (amount = 500) => credit(GID, U, amount, { kind: 'staff_add', config });
 
 test('a collectible keeps its rarity (one of the fixed tiers) and its announce switch; other kinds do not', async () => {
   const id = await addItem({ rarity: 'epic', announce: true });
@@ -102,7 +111,7 @@ test('a collectible keeps its rarity (one of the fixed tiers) and its announce s
   assert.deepEqual([edited.rarity, edited.announce], ['common', false]);
 });
 
-test('an upload is stored as a PNG of at most 512x512 under the server folder and served at /c/<id>.png', async () => {
+test('an upload is stored in the database as a WebP of at most 512x512 and served at /c/<id>.webp', async () => {
   const id = await addItem();
   const before = (await getItem(GID, id)).updatedAt;
   const res = await put(
@@ -112,29 +121,41 @@ test('an upload is stored as a PNG of at most 512x512 under the server folder an
   assert.equal(res.status, 200);
   const item = (await json(res)).items.find((i) => i.id === id);
   const imageId = idOf(item.imagePath);
-  assert.ok(imageId, `a /c/<id>.png path, got ${item.imagePath}`);
-  assert.deepEqual(files(), [`${imageId}.png`]);
-  assert.equal(pathOf(GID, imageId), join(collectiblesRoot(), GID, `${imageId}.png`));
+  assert.ok(imageId, `a /c/<id>.webp path, got ${item.imagePath}`);
+  const stored = await storedPictures(GID);
+  assert.deepEqual(
+    stored.map((r) => [r.id, r.mime]),
+    [[imageId, 'image/webp']]
+  );
   assert.ok((await getItem(GID, id)).updatedAt > before, 'a new picture is a new version of the item');
 
   const served = await get(item.imagePath);
   assert.equal(served.status, 200);
   const body = Buffer.from(await served.arrayBuffer());
-  assert.deepEqual(pngSize(body), { width: 512, height: 256 });
-  assert.equal(served.headers.get('content-type'), 'image/png');
+  assert.deepEqual(imageDimensions(body), { width: 512, height: 256 });
+  assert.equal(body.length, stored[0].bytes);
+  assert.equal(served.headers.get('content-type'), 'image/webp');
   assert.equal(served.headers.get('cache-control'), 'public, max-age=31536000, immutable');
   assert.equal(served.headers.get('x-content-type-options'), 'nosniff');
   assert.match(served.headers.get('content-security-policy'), /default-src 'none'/);
   assert.match(served.headers.get('content-security-policy'), /sandbox/);
   assert.equal(served.headers.get('content-length'), String(body.length));
-  assert.equal(served.headers.get('set-cookie'), null);
   // it needs no login and no CSRF: that is the point
   assert.equal((await fetch(`${app.base}${item.imagePath}`, { headers: { cookie: '' } })).status, 200);
   const head = await fetch(`${app.base}${item.imagePath}`, { method: 'HEAD' });
   assert.equal(head.status, 200);
 });
 
-test('hostile files are refused and leave nothing behind', async () => {
+test('/c starts no session: an answer carries no cookie, a hit or a miss', async () => {
+  const id = await addItem();
+  const imageId = await uploaded(id, 24);
+  for (const path of [`/c/${imageId}.webp`, `/c/${'0'.repeat(32)}.webp`, '/c/nonsense']) {
+    const res = await raw(path);
+    assert.equal(res.headers['set-cookie'], undefined, `${path} set a cookie`);
+  }
+});
+
+test('hostile files are refused and store nothing', async () => {
   const id = await addItem();
   const png = await makePicture(32, 32);
   const cases = [
@@ -181,6 +202,14 @@ test('hostile files are refused and leave nothing behind', async () => {
       400,
       /too large in pixels/,
     ],
+    [
+      'a header that claims 17 megapixels',
+      pngClaiming(4200, 4048),
+      'x.png',
+      'image/png',
+      400,
+      /16 megapixels/,
+    ],
     ['an empty file', Buffer.alloc(0), 'x.png', 'image/png', 400, /Choose an image|PNG, JPEG or WebP/],
   ];
   for (const [what, bytes, name, type, status, message] of cases) {
@@ -192,14 +221,10 @@ test('hostile files are refused and leave nothing behind', async () => {
   assert.equal(noFile.status, 400);
   const notMultipart = await fetch(
     `${app.base}/api/v2/guilds/${GID}/modules/economy/shop/items/${id}/image`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-    }
+    { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }
   );
   assert.equal(notMultipart.status, 415);
-  assert.deepEqual(files(), [], 'no file was written');
+  assert.deepEqual(await ids(), [], 'nothing was stored');
   assert.equal((await getItem(GID, id)).imageId, null);
 });
 
@@ -212,62 +237,58 @@ test('only a collectible has a picture, and only an item of this server', async 
   assert.equal((await put(999999, upload(png))).status, 404);
   assert.equal((await put('abc', upload(png))).status, 404);
   assert.equal((await api.post(`/modules/economy/shop/items/${custom}/image/delete`, {})).status, 400);
-  assert.deepEqual(files(), []);
+  assert.deepEqual(await ids(), []);
 });
 
-test('a new picture replaces the old one and the old file is deleted; removing it deletes the file too', async () => {
+test('a new picture replaces the old one (which is deleted); removing it deletes it too', async () => {
   const id = await addItem();
-  const uploaded = async (n) =>
-    idOf(
-      (await json(await put(id, upload(await makePicture(n, n))))).items.find((i) => i.id === id).imagePath
-    );
-  const first = await uploaded(20);
-  const second = await uploaded(30);
+  const first = await uploaded(id, 20);
+  const second = await uploaded(id, 30);
   assert.notEqual(first, second);
-  assert.deepEqual(files(), [`${second}.png`], 'only the new file is left');
-  assert.equal((await get(`/c/${first}.png`)).status, 404);
-  assert.equal((await get(`/c/${second}.png`)).status, 200);
+  assert.deepEqual(await ids(), [second], 'only the new picture is left');
+  assert.equal((await get(`/c/${first}.webp`)).status, 404);
+  assert.equal((await get(`/c/${second}.webp`)).status, 200);
 
   const removed = await api.post(`/modules/economy/shop/items/${id}/image/delete`, {});
   assert.equal(removed.status, 200);
   assert.equal((await json(removed)).items.find((i) => i.id === id).imagePath, null);
-  assert.deepEqual(files(), []);
-  assert.equal((await get(`/c/${second}.png`)).status, 404);
+  assert.deepEqual(await ids(), []);
+  assert.equal((await get(`/c/${second}.webp`)).status, 404);
 });
 
-test('two uploads at once leave exactly one file, the one the item has', async () => {
+test('two uploads at once leave exactly one picture, the one the item has', async () => {
   const id = await addItem();
   const results = await Promise.all(
     [12, 24, 36, 48].map(async (n) => put(id, upload(await makePicture(n, n))))
   );
   for (const res of results) assert.equal(res.status, 200);
-  const imageId = (await getItem(GID, id)).imageId;
-  assert.deepEqual(files(), [`${imageId}.png`]);
+  assert.deepEqual(await ids(), [(await getItem(GID, id)).imageId]);
 });
 
-test('/c answers an unknown id, a wrong shape and every attempt to leave the folder with the same plain 404', async () => {
+test('/c answers an unknown id, a wrong shape and every other address with the same plain 404', async () => {
   const id = await addItem();
-  const imageId = idOf(
-    (await json(await put(id, upload(await makePicture(16, 16))))).items.find((i) => i.id === id).imagePath
-  );
-  // a file outside the collectibles folder that a traversal would reach
-  writeFileSync(join(collectiblesRoot(), '..', 'secret.png'), 'TOP-SECRET');
+  const imageId = await uploaded(id, 16);
   const paths = [
-    `/c/${'0'.repeat(32)}.png`,
-    `/c/${imageId.toUpperCase()}.png`,
-    `/c/${imageId}.PNG`,
+    `/c/${'0'.repeat(32)}.webp`,
+    `/c/${imageId.toUpperCase()}.webp`,
+    `/c/${imageId}.WEBP`,
+    `/c/${imageId}.png`,
     `/c/${imageId}`,
-    `/c/${imageId}.png/extra`,
-    `/c/${imageId}.png%00`,
-    `/c/${imageId}.png%2f..%2f..%2fsecret.png`,
-    `/c/..%2fsecret.png`,
-    `/c/..%2f..%2fsecret.png`,
-    `/c/%2e%2e%2fsecret.png`,
-    `/c/%2e%2e/%2e%2e/secret.png`,
-    `/c/..\\secret.png`,
-    `/c/${GID}/${imageId}.png`,
-    `/c/${GID}%2f${imageId}.png`,
-    `/c/secret.png`,
+    `/c/${imageId}.webp/`,
+    `/C/${imageId}.webp`,
+    `/c/${imageId}.webp/extra`,
+    `/c/${imageId}.webp%00`,
+    `/c/${imageId}.webp%2f..%2f..%2fx.webp`,
+    `/c/..%2fx.webp`,
+    `/c/..%2f..%2fx.webp`,
+    `/c/%2e%2e%2fx.webp`,
+    `/c/%2e%2e/%2e%2e/x.webp`,
+    `/c/..\\x.webp`,
+    `/c/${GID}/${imageId}.webp`,
+    `/c/${GID}%2f${imageId}.webp`,
+    `/c/${imageId.slice(1)}.webp`,
+    `/c/${imageId}0.webp`,
+    `/c/'%20OR%201=1--.webp`,
     `/c/`,
     `/c/a`,
   ];
@@ -277,41 +298,105 @@ test('/c answers an unknown id, a wrong shape and every attempt to leave the fol
     assert.match(res.headers['content-type'], /text\/plain/, path);
     assert.equal(res.text, 'Not found', path);
     assert.equal(res.headers['cache-control'], 'no-store', path);
-    assert.doesNotMatch(res.text, /TOP-SECRET/, path);
   }
   // the real one still works
-  assert.equal((await get(`/c/${imageId}.png`)).status, 200);
+  assert.equal((await get(`/c/${imageId}.webp`)).status, 200);
 });
 
-test('a picture is only served while something refers to it, and a link in the folder is never followed', async () => {
-  // a file with a valid name that no item refers to
-  const orphan = 'b'.repeat(32);
-  mkdirSync(join(collectiblesRoot(), GID), { recursive: true });
-  writeFileSync(pathOf(GID, orphan), 'not referenced');
-  assert.equal((await get(`/c/${orphan}.png`)).status, 404);
-  // a link whose name an item does refer to points outside: not served
-  const linked = 'c'.repeat(32);
-  const target = join(collectiblesRoot(), '..', 'target.txt');
-  writeFileSync(target, 'OUTSIDE');
-  try {
-    symlinkSync(target, pathOf(GID, linked));
-  } catch {
-    return; // links need a privilege on this system: nothing to check
+test('the quota: at most 200 pictures or 25 MB per server, counting every stored picture', async () => {
+  const items = [];
+  for (let i = 0; i < 3; i += 1) items.push(await addItem({ name: `Item ${i}` }));
+  // fill the server up to its limit of pictures with rows made directly (they are not worth 200 uploads)
+  const ins = db.prepare(
+    'INSERT INTO collectible_images (id, guild_id, mime, bytes, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+  for (let i = 0; i < MAX_IMAGES_PER_GUILD - 1; i += 1) {
+    ins.run(i.toString(16).padStart(32, '0'), GID, 'image/webp', 10, Buffer.alloc(10), 1);
   }
-  const id = await addItem();
-  db.prepare('UPDATE economy_items SET image_id = ? WHERE guild_id = ? AND id = ?').run(linked, GID, id);
-  const res = await get(`/c/${linked}.png`);
-  assert.equal(res.status, 404);
-  assert.doesNotMatch(await res.text(), /OUTSIDE/);
+  assert.equal((await put(items[0], upload(await makePicture(20, 20)))).status, 200, 'the 200th fits');
+  const full = await put(items[1], upload(await makePicture(21, 21)));
+  assert.equal(full.status, 400);
+  assert.match((await json(full)).error, /already stores 200 pictures.*most is 200 pictures and 25 MB/);
+  assert.equal((await getItem(GID, items[1])).imageId, null);
+  assert.equal((await storedPictures(GID)).length, 200);
+  // a replacement frees the picture it replaces, so it fits when the server is full
+  assert.equal((await put(items[0], upload(await makePicture(22, 22)))).status, 200);
+  assert.equal((await storedPictures(GID)).length, 200);
+
+  // by bytes: one row that takes nearly all of the 25 MB
+  await purgeGuild(GID);
+  await setGuildModule(GID, 'economy', { enabled: true, config: {} });
+  const a = await addItem({ name: 'A' });
+  const b = await addItem({ name: 'B' });
+  ins.run('f'.repeat(32), GID, 'image/webp', MAX_IMAGE_BYTES_PER_GUILD - 10, Buffer.alloc(8), 1);
+  const bytes = await put(a, upload(await makePicture(24, 24)));
+  assert.equal(bytes.status, 400);
+  assert.match((await json(bytes)).error, /25 MB/);
+  assert.equal((await put(b, upload(await makePicture(24, 24)))).status, 400);
 });
 
-test('deleting an item keeps the file while members own it, then it goes with the last owner', async () => {
+test('the quota is per server: another server is not counted', async () => {
+  const id = await addItem();
+  db.prepare(
+    'INSERT INTO collectible_images (id, guild_id, mime, bytes, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run('e'.repeat(32), '900000000000009999', 'image/webp', MAX_IMAGE_BYTES_PER_GUILD, Buffer.alloc(8), 1);
+  assert.equal((await put(id, upload(await makePicture(16, 16)))).status, 200);
+  db.prepare("DELETE FROM collectible_images WHERE guild_id = '900000000000009999'").run();
+});
+
+test('removing the picture of an item keeps it for the members who own the item', async () => {
   const id = await addItem({ rarity: 'rare', stock: 5 });
-  const path = (await json(await put(id, upload(await makePicture(40, 40))))).items.find(
-    (i) => i.id === id
-  ).imagePath;
-  const imageId = idOf(path);
-  await credit(GID, U, 500, { kind: 'staff_add', config });
+  const imageId = await uploaded(id, 40);
+  await addMoney();
+  const bought = await buyNow({
+    guild: app.guild,
+    member: app.guild.members.cache.get(U),
+    itemId: id,
+    config,
+  });
+  assert.equal(bought.ok, true);
+  assert.equal((await listInventory(GID, U))[0].imageId, imageId, 'the copy carries the picture');
+
+  await api.post(`/modules/economy/shop/items/${id}/image/delete`, {});
+  assert.equal((await getItem(GID, id)).imageId, null);
+  assert.deepEqual(await ids(), [imageId], 'the owner still holds it');
+  assert.equal((await get(`/c/${imageId}.webp`)).status, 200);
+  const inv = (await json(await api.get(`/modules/economy/members/${U}/inventory`))).inventory[0];
+  assert.deepEqual([inv.imagePath, inv.rarity, inv.itemRemoved], [`/c/${imageId}.webp`, 'rare', false]);
+
+  // a new picture reaches the owners, and the old one goes
+  const next = await uploaded(id, 50);
+  assert.deepEqual(await ids(), [next]);
+  assert.equal((await listInventory(GID, U))[0].imageId, next);
+});
+
+test('a collectible that becomes another kind lets go of its picture', async () => {
+  const id = await addItem();
+  const imageId = await uploaded(id, 24);
+  assert.deepEqual(await ids(), [imageId]);
+  const changed = await api.post(`/modules/economy/shop/items/${id}`, {
+    name: 'Now custom',
+    price: 100,
+    type: 'custom',
+  });
+  assert.equal(changed.status, 200);
+  assert.equal((await getItem(GID, id)).imageId, null);
+  assert.deepEqual(await ids(), [], 'nobody owns it, so it is deleted');
+  assert.equal((await get(`/c/${imageId}.webp`)).status, 404);
+  // with an owner, the owner keeps theirs
+  const other = await addItem({ name: 'Other' });
+  const kept = await uploaded(other, 28);
+  await addMoney();
+  await buyNow({ guild: app.guild, member: app.guild.members.cache.get(U), itemId: other, config });
+  await api.post(`/modules/economy/shop/items/${other}`, { name: 'Other', price: 100, type: 'custom' });
+  assert.deepEqual(await ids(), [kept]);
+});
+
+test('deleting an item keeps its picture while members own it, then it goes with the last owner', async () => {
+  const id = await addItem({ rarity: 'rare', stock: 5 });
+  const imageId = await uploaded(id, 40);
+  const path = `/c/${imageId}.webp`;
+  await addMoney();
   const bought = await buyNow({
     guild: app.guild,
     member: app.guild.members.cache.get(U),
@@ -327,7 +412,7 @@ test('deleting an item keeps the file while members own it, then it goes with th
 
   const deleted = await json(await api.post(`/modules/economy/shop/items/${id}/delete`, {}));
   assert.equal(deleted.held, 1);
-  assert.deepEqual(files(), [`${imageId}.png`], 'the owner still has it');
+  assert.deepEqual(await ids(), [imageId], 'the owner still has it');
   assert.equal((await get(path)).status, 200, 'and it is still served');
   const after = (await json(await api.get(`/modules/economy/members/${U}/inventory`))).inventory[0];
   assert.deepEqual(
@@ -338,34 +423,43 @@ test('deleting an item keeps the file while members own it, then it goes with th
 
   const revoke = await api.post(`/modules/economy/members/${U}/inventory/${inv.id}/revoke`, {});
   assert.equal(revoke.status, 200);
-  assert.deepEqual(files(), [], 'the last owner is gone, so is the file');
+  assert.deepEqual(await ids(), [], 'the last owner is gone, so is the picture');
   assert.equal((await get(path)).status, 404);
 });
 
-test('deleting a collectible nobody owns deletes its file; a refund of the last copy of a deleted item does too', async () => {
+test('deleting a collectible nobody owns deletes its picture; a refund of the last copy of a deleted item does too', async () => {
   const lonely = await addItem();
-  await put(lonely, upload(await makePicture(16, 16)));
-  assert.equal(files().length, 1);
+  await uploaded(lonely, 16);
+  assert.equal((await ids()).length, 1);
   await api.post(`/modules/economy/shop/items/${lonely}/delete`, {});
-  assert.deepEqual(files(), []);
+  assert.deepEqual(await ids(), []);
 
   const id = await addItem({ price: 50 });
-  await put(id, upload(await makePicture(16, 16)));
-  await credit(GID, U, 100, { kind: 'staff_add', config });
+  await uploaded(id, 16);
+  await addMoney(100);
   await buyNow({ guild: app.guild, member: app.guild.members.cache.get(U), itemId: id, config });
   await api.post(`/modules/economy/shop/items/${id}/delete`, {});
-  assert.equal(files().length, 1);
+  assert.equal((await ids()).length, 1);
   const row = (await json(await api.get(`/modules/economy/members/${U}/inventory`))).inventory[0];
   assert.equal((await api.post(`/modules/economy/members/${U}/inventory/${row.id}/refund`, {})).status, 200);
-  assert.deepEqual(files(), []);
+  assert.deepEqual(await ids(), []);
 });
 
-test('the server purge removes the files of every collectible of the server', async () => {
+test('the server purge removes the pictures of the server', async () => {
   const a = await addItem({ name: 'A' });
   const b = await addItem({ name: 'B' });
-  await put(a, upload(await makePicture(16, 16)));
-  await put(b, upload(await makePicture(24, 24)));
-  assert.equal(files().length, 2);
+  await uploaded(a, 16);
+  await uploaded(b, 24);
+  assert.equal((await ids()).length, 2);
   await purgeGuild(GID);
-  assert.equal(existsSync(join(collectiblesRoot(), GID)), false);
+  assert.deepEqual(await ids(), []);
+});
+
+test('a picture is read by its id only, and an id of the wrong shape is never looked up', async () => {
+  const id = await addItem();
+  const imageId = await uploaded(id, 16);
+  assert.equal((await readImage(imageId)).mime, 'image/webp');
+  for (const bad of [null, undefined, 42, '', imageId.toUpperCase(), `${imageId}0`, `${imageId}' OR 1=1`]) {
+    assert.equal(await readImage(bad), null);
+  }
 });

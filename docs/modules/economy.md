@@ -181,27 +181,36 @@ nothing is charged), it writes one ledger row, and staff can refund it, revoke i
 member's Inventory panel. A collectible that has no picture yet cannot be bought ("not ready yet").
 
 **The picture.** Staff upload it on the **Shop** tab, in the item editor (the item is saved first, then the
-picture goes up). The file can be a PNG, JPEG or WebP of at most **2 MB**. Sylo decides what a file is from its first
-bytes, never from its name or the type the browser sent, and refuses everything else, SVG included. The picture is
-then decoded and **saved again as a new PNG of at most 512 by 512 pixels**, with its proportions kept and never
-enlarged. That removes metadata and anything that was not a real picture; an animated WebP becomes its first
-frame (animated pictures are not supported). The upload needs a dashboard login with the rights to manage the
-server, the usual CSRF check, and has its own rate limit.
+picture goes up). The file can be a PNG, JPEG or WebP of at most **2 MB** and at most 16 megapixels. Sylo decides what a
+file is from its first bytes, never from its name or the type the browser sent, and refuses everything else, SVG
+included. The picture is then decoded and **saved again as a new WebP of at most 512 by 512 pixels** (quality 85), with
+its proportions kept and never enlarged. That removes metadata and anything that was not a real picture, and keeps
+every picture small (a flat badge is a few kilobytes). An animated WebP becomes its first frame (animated pictures are
+not supported). The upload needs a dashboard login with the rights to manage the server, the usual CSRF check, and
+has its own rate limit; at most two pictures are decoded at a time, and an upload that has to wait too long is told
+the server is busy and can be tried again. A server can store at most **200 pictures and 25 MB** of them (every stored
+picture counts, also those that only members' copies still hold). An upload over that is refused with a message.
 
-The picture is stored in the data folder (the folder of `DATABASE_PATH`) as `collectibles/<server>/<id>.png`, where
-the id is 128 random bits. It is served at `<dashboard address>/c/<id>.png` **without a login**, because Discord and
-Fluxer fetch it themselves to show an embed. The id cannot be guessed, but anyone who has the address can open that
-one picture. The address needs a public `DASHBOARD_URL`; without one, messages go out without the picture. Any other
-address under `/c/` answers a plain "Not found".
+The picture is stored **in the database** (the table `collectible_images`), not in a folder, so it is part of every
+backup: the Health page backup, the scheduled ones and the off-site copy, and a restore brings back exactly the
+pictures that the restored items and copies refer to. It is served at `<dashboard address>/c/<id>.webp` **without a
+login**, because Discord and Fluxer fetch it themselves to show an embed (the id is 128 random bits; the address must
+be exactly that, anything else answers a plain "Not found", and the answer carries no cookie). The id cannot be
+guessed, but anyone who has the address can open that one picture. The address needs a public `DASHBOARD_URL`;
+without one, messages go out without the picture.
 
-Replacing a picture deletes the old file. **Deleting an item keeps the picture while members still own it**: their
-copies show as "item removed" with the picture kept, and the file goes when the last copy ends (revoked, refunded or
-erased with `/forget`). When a server removes Sylo (or its data is purged), all its pictures are deleted.
+**What a picture belongs to.** Members' copies keep the picture they were bought with. Replacing the picture of an
+item gives it to the item **and to every copy** (so the old announcements show the old picture only until then),
+and the old picture is deleted. **Removing the picture** only takes it off the item: it is not shown in the shop and
+cannot be bought until it has a picture again, while the members who own it keep their copies with the picture they
+have. **Deleting an item** keeps the copies as "item removed", with their picture and rarity. Changing a
+collectible into another kind takes its picture off the item the same way. A picture is deleted in the same step that
+drops its last reference: the last copy that ends (revoked, refunded or erased with `/forget`), or the item when
+nobody owns it. When a server removes Sylo (or its data is purged), all its pictures are deleted.
 
-**Backups do not cover the pictures.** The backups Sylo makes (the Health page, the scheduled ones and the off-site
-copy) hold the **database only**. Copy the `collectibles` folder in the data folder together with your database
-backups, also when you use Postgres (the pictures are files on the disk next to `DATABASE_PATH`). If the folder is
-lost, items and what members own are intact, but the pictures are gone and staff upload them again.
+**Size of backups.** The pictures add to the size of the database and of every backup, at most 25 MB a server; a
+shop of flat badges adds a few hundred kilobytes. The off-site copy to a Discord webhook stops at about 8 MiB, so an
+instance with many large pictures should use the WebDAV target (`BACKUP_WEBDAV_URL`, see [Self-hosting](../self-hosting.md)).
 
 **Announce purchases.** An item has a switch **Announce purchases**, and the settings have a **channel for
 collectible announcements**. With both set, a purchase posts "🎉 @buyer bought 🎖️ **Founder badge** (Epic)!" in
@@ -211,11 +220,14 @@ format anything. A free gift is not announced, and neither is an item without th
 **Showing a collection.** `/collection [user]` lists the collectibles a member owns, one embed each with the picture as a
 thumbnail, ten to a page (buttons on Discord, the ⬅️ and ➡️ reactions on Fluxer). A member who owns several copies
 sees "× 2". The setting **Members can show their collection** is **off by default**. Off: `/collection` shows only
-your own collection, and only you see it (on Fluxer, which has no private replies, it is a short-lived public
-message), and asking for someone else's is refused. On: `/collection` is public and `/collection @member` shows that
-member's collection. The page buttons are checked on every press, so a collection that was shown while the setting
-was on cannot be paged by others once it is off. `/inventory` works as before and lists collectibles too, and
-the web shop has a **Collection** section with the signed-in member's own collectibles.
+your own collection, and only you see it (on Fluxer, which has no private replies, it is sent to your DMs and paged
+there with the same reactions; with your DMs closed you are told so and nothing is shown), and asking for someone
+else's is refused. On: `/collection` is public and `/collection @member` shows that member's collection. The page
+buttons are checked on every press, so a collection that was shown while the setting was on cannot be paged by others
+once it is off. `/inventory` works as before and lists collectibles too (someone else's collectibles only while the
+setting is on), and the web shop has a **Collection** section with the signed-in member's own collectibles. A
+collectible that has no picture yet is hidden from `/shop`, `/buy` and the web shop (the item list in the dashboard
+says "needs a picture"). Staff see everything in the dashboard.
 
 **Not in this version** (later): gifting or trading collectibles between members, showing them on the
 introduction card, animated pictures, and sets or achievements.

@@ -6,7 +6,7 @@ import './helpers/tmpDb.js';
 import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { MessageFlags } from 'discord.js';
-import { createItem, deleteItem, getItem, setItemImage } from '../src/db/economyShop.js';
+import { createItem, deleteItem, getItem } from '../src/db/economyShop.js';
 import { setGuildModule } from '../src/db/modules.js';
 import { runtime } from '../src/runtime.js';
 import { loadCommands } from '../src/bot/loadCommands.js';
@@ -18,7 +18,7 @@ import * as inventory from '../src/bot/commands/inventory.js';
 import { credit } from '../src/modules/lib/economy.js';
 import { normaliseEconomyConfig, normaliseItem } from '../src/modules/lib/economyConfig.js';
 import { purchase } from '../src/modules/lib/shop.js';
-import { saveImage } from '../src/lib/collectibleFiles.js';
+import { putPicture } from './helpers/collectibleFixtures.js';
 import { dropFakeShop, fakeMember, fakeShopGuild } from './helpers/fakeShop.js';
 
 let n = 0;
@@ -28,7 +28,7 @@ const config = normaliseEconomyConfig({});
 const A = '8300000000000001';
 const B = '8300000000000002';
 const C = '8300000000000003';
-const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
+let pictureSize = 16;
 
 beforeEach(async () => {
   G = `5600000000000${String(++n).padStart(5, '0')}`;
@@ -47,7 +47,7 @@ const member = (id) => {
 /** A collectible with a picture. */
 async function badge(name, over = {}) {
   const id = await createItem(G, normaliseItem({ name, price: 1, type: 'collectible', ...over }));
-  await setItemImage(G, id, await saveImage(G, PNG));
+  await putPicture(G, id, ++pictureSize);
   return id;
 }
 async function own(m, ...ids) {
@@ -124,7 +124,7 @@ test('off (the default): /collection shows your own collection, privately, one e
   assert.equal(first.title, '🎖️ Founder badge ×2');
   assert.match(first.description, /Rare · since <t:\d+:d>/);
   assert.equal(first.color, 0x3498db);
-  assert.match(first.thumbnail.url, /^https:\/\/sylo\.example\.test\/c\/[0-9a-f]{32}\.png$/);
+  assert.match(first.thumbnail.url, /^https:\/\/sylo\.example\.test\/c\/[0-9a-f]{32}\.webp$/);
   assert.equal(second.title, 'Early bird');
   assert.equal(reply.components.length, 0, 'one page: no buttons');
 });
@@ -183,15 +183,15 @@ test('ten items to a page, and the buttons turn the page', async () => {
   assert.equal(first.embeds.length, 10);
   assert.match(first.content, /23 collectibles · page 1 of 3/);
   const [prev, next] = buttons(first).filter((c) => c.style === 2);
-  assert.deepEqual([prev.disabled, next.disabled, next.custom_id], [true, false, `coll:2:${A}`]);
+  assert.deepEqual([prev.disabled, next.disabled, next.custom_id], [true, false, `coll:2:${A}:${G}`]);
   assert.deepEqual([prev.emoji.name, next.emoji.name], ['⬅️', '➡️']);
 
-  const third = press(a, `coll:3:${A}`);
+  const third = press(a, `coll:3:${A}:${G}`);
   await routeComponent(third);
   assert.equal(third.out[0].update.embeds.length, 3);
   assert.equal(third.out[0].update.embeds[0].data.title, 'Badge 21');
   assert.match(third.out[0].update.content, /page 3 of 3/);
-  const past = press(a, `coll:99:${A}`);
+  const past = press(a, `coll:99:${A}:${G}`);
   await routeComponent(past);
   assert.match(past.out[0].update.content, /page 3 of 3/);
 });
@@ -205,23 +205,29 @@ test('a page button is checked on every press: with the setting off, only the ow
 
   // shown publicly while the setting was on ...
   await setPublic(true);
-  const viewer = press(b, `coll:2:${A}`);
+  const viewer = press(b, `coll:2:${A}:${G}`);
   await routeComponent(viewer);
   assert.equal(viewer.out[0].update.embeds.length, 2, 'on: anyone may turn the pages of a shown collection');
   // ... and no longer once it is off
   await setPublic(false);
-  const blocked = press(b, `coll:2:${A}`);
+  const blocked = press(b, `coll:2:${A}:${G}`);
   await routeComponent(blocked);
   assert.equal(blocked.out[0].update, undefined, 'nothing of the collection is sent');
   assert.equal(blocked.out[0].reply.flags, MessageFlags.Ephemeral);
   assert.match(blocked.out[0].reply.content, /private/);
-  const owner = press(a, `coll:2:${A}`);
+  const owner = press(a, `coll:2:${A}:${G}`);
   await routeComponent(owner);
   assert.equal(owner.out[0].update.embeds.length, 2, 'the owner can still turn the pages');
   // a button with a made-up member id does nothing
-  const bad = press(a, 'coll:2:abc');
+  const bad = press(a, `coll:2:abc:${G}`);
   await routeComponent(bad);
   assert.deepEqual(bad.out, [{ deferred: true }]);
+  // a button with no server, or a made-up one, does nothing either
+  for (const id of [`coll:2:${A}`, `coll:2:${A}:nonsense`, `coll:2:${A}:fluxer:`]) {
+    const odd = press(a, id);
+    await routeComponent(odd);
+    assert.deepEqual(odd.out, [{ deferred: true }], id);
+  }
 });
 
 test('with the Economy module off every press and command says so or does nothing', async () => {
@@ -234,7 +240,7 @@ test('with the Economy module off every press and command says so or does nothin
   const dm = interaction(a, { inGuild: false });
   await collection.execute(dm);
   assert.match(dm.replies[0].content, /in a server/);
-  const p = press(a, `coll:1:${A}`);
+  const p = press(a, `coll:1:${A}:${G}`);
   await routeComponent(p);
   assert.deepEqual(p.out, [{ deferred: true }]);
 });
@@ -249,20 +255,88 @@ test('a deleted item stays in the collection as "item removed", and /inventory l
   const embed = i.replies[0].embeds[0].data;
   assert.equal(embed.title, 'Gone soon');
   assert.match(embed.description, /Epic · item removed · since/);
-  assert.match(embed.thumbnail.url, /\/c\/[0-9a-f]{32}\.png$/, 'the picture is kept');
+  assert.match(embed.thumbnail.url, /\/c\/[0-9a-f]{32}\.webp$/, 'the picture is kept');
 
   const inv = interaction(a);
   await inventory.execute(inv);
   assert.match(inv.replies[0].embeds[0].data.description, /\*\*Gone soon\*\* · collectible · <t:\d+:d>/);
 });
 
-test('on Fluxer the pages turn with reactions: the same two buttons, and the pictures are plain embed images', async () => {
+test("/inventory @member does not list another member's collectibles while collections are private", async () => {
+  const a = member(A);
+  const b = member(B);
+  const plain = await createItem(G, normaliseItem({ name: 'Shout-out', price: 1, type: 'custom' }));
+  await own(a, plain, await badge('Golden dragon'));
+  const lines = async (viewer, user) => {
+    const i = interaction(viewer, { options: { user: user.user } });
+    await inventory.execute(i);
+    return i.replies[0].embeds?.[0]?.data.description ?? i.replies[0].content;
+  };
+  assert.equal(await lines(b, a), '• Shout-out', 'private: no collectibles');
+  const own1 = interaction(a);
+  await inventory.execute(own1);
+  assert.match(own1.replies[0].embeds[0].data.description, /Golden dragon/, 'your own is complete');
+  await setPublic(true);
+  assert.match(await lines(b, a), /Golden dragon/);
+  await setPublic(false);
+  // a member who owns only collectibles looks empty to others
+  const c = member(C);
+  await own(c, await badge('Only collectibles'));
+  assert.match(await lines(b, c), /do not hold any items/);
+});
+
+test('on Fluxer with collections private, /collection goes to your DMs, paged there; closed DMs get a short notice', async () => {
+  const fluxer = { isReady: () => true, guilds: { cache: new Map() }, users: { fetch: async () => null } };
+  runtime.clients.fluxer = fluxer;
+  try {
+    ctx.guild.client = fluxer;
+    G = `fluxer:${G}`;
+    await setGuildModule(G, 'economy', { enabled: true, config: {} });
+    const a = member(A);
+    const dms = [];
+    a.user.send = async (payload) => dms.push(payload);
+    const ids = [];
+    for (let k = 1; k <= 12; k++) ids.push(await badge(`Badge ${k}`));
+    await own(a, ...ids);
+
+    const i = interaction(a);
+    await collection.execute(i);
+    assert.equal(dms.length, 1, 'the collection went to the DMs');
+    assert.equal(dms[0].embeds.length, 10);
+    assert.match(dms[0].content, /Collection of <@8300000000000001>/);
+    assert.equal(i.replies.length, 1);
+    assert.equal(i.replies[0].embeds, undefined, 'nothing of it in the channel');
+    assert.match(i.replies[0].content, /Sent to your DMs/);
+    // the page button in the DM carries the member and the server, and works without a server in the interaction
+    const next = buttons(dms[0]).find((c) => c.style === 2 && !c.disabled);
+    assert.equal(next.custom_id, `coll:2:${A}:${G}`);
+    const page = press(a, next.custom_id);
+    page.guild = null;
+    page.guildId = null;
+    await routeComponent(page);
+    assert.equal(page.out[0].update.embeds.length, 2);
+
+    // DMs closed: a short notice, and still nothing of the collection in the channel
+    a.user.send = async () => {
+      throw new Error('Cannot send messages to this user');
+    };
+    const closed = interaction(a);
+    await collection.execute(closed);
+    assert.equal(closed.replies.length, 1);
+    assert.match(closed.replies[0].content, /could not send you a DM/);
+    assert.equal(closed.replies[0].embeds, undefined);
+  } finally {
+    runtime.clients.fluxer = null;
+  }
+});
+
+test('on Fluxer with collections shown, /collection is a public message with reaction paging', async () => {
   const fluxer = { isReady: () => true, guilds: { cache: new Map() }, users: { fetch: async () => null } };
   runtime.clients.fluxer = fluxer;
   try {
     ctx.guild.client = fluxer;
     G = `fluxer:${G}`; // on Fluxer the server key is the id with the platform in front, everywhere
-    await setGuildModule(G, 'economy', { enabled: true, config: {} });
+    await setGuildModule(G, 'economy', { enabled: true, config: { collectionPublic: true } });
     const a = member(A);
     const ids = [];
     for (let k = 1; k <= 11; k++) ids.push(await badge(`Badge ${k}`));

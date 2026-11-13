@@ -247,7 +247,7 @@ describe('Economy: collectibles on the Shop tab', () => {
       type: 'collectible',
       rarity: 'epic',
       announce: true,
-      imagePath: '/c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png',
+      imagePath: '/c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp',
       ...over,
     });
   const png = () => new File([new Uint8Array([1, 2, 3])], 'badge.png', { type: 'image/png' });
@@ -258,13 +258,13 @@ describe('Economy: collectibles on the Shop tab', () => {
     );
     await openTab('Shop');
     const row = (await screen.findByRole('heading', { name: /^Founder badge/, level: 3 })).closest('.v2-row');
-    expect(row.querySelector('img').getAttribute('src')).toBe('/c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png');
+    expect(row.querySelector('img').getAttribute('src')).toBe('/c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp');
     expect(row.textContent).toContain('Collectible (a picture, no role)');
     expect(row.textContent).toContain('Epic');
     expect(row.textContent).toContain('announced');
     const bare = screen.getByRole('heading', { name: /^Bare/, level: 3 }).closest('.v2-row');
     expect(bare.querySelector('img')).toBeNull();
-    expect(bare.textContent).toContain('no picture yet, it cannot be bought');
+    expect(bare.textContent).toContain('needs a picture');
   });
 
   it('adds a collectible: the fields go first, then the picture goes up to the new item', async () => {
@@ -317,6 +317,8 @@ describe('Economy: collectibles on the Shop tab', () => {
       screen.getByRole('heading', { name: 'Edit item' }),
       'the form is now an edit of the new item'
     ).toBeTruthy();
+    // the file input is emptied too, so it does not still show the refused file
+    expect(screen.getByLabelText('Picture').files.length).toBe(0);
     // a second try updates the item that now exists, and uploads again
     api.updateShopItem.mockResolvedValue({ items: [badge()] });
     api.uploadShopItemImage.mockResolvedValue({ items: [badge()] });
@@ -348,7 +350,7 @@ describe('Economy: collectibles on the Shop tab', () => {
     expect(screen.getByLabelText(/Rarity/).value).toBe('epic');
     expect(screen.getByLabelText('Announce purchases').checked).toBe(true);
     expect(screen.getByAltText('The current picture').getAttribute('src')).toBe(
-      '/c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png'
+      '/c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp'
     );
     fireEvent.click(screen.getByRole('button', { name: 'Remove picture' }));
     await waitFor(() => expect(api.deleteShopItemImage).toHaveBeenCalledWith(GUILD, 3));

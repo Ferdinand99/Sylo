@@ -28,13 +28,16 @@ import {
   listItems,
   markFulfilled,
   markUnfulfilled,
-  releaseImage,
   reorderItems,
   setItemEnabled,
-  setItemImage,
   updateItem,
 } from '../../db/economyShop.js';
-import { deleteImage, saveImage } from '../../lib/collectibleFiles.js';
+import {
+  MAX_IMAGES_PER_GUILD,
+  MAX_IMAGE_BYTES_PER_GUILD,
+  attachImage,
+  detachImage,
+} from '../../db/collectibleImages.js';
 import { ImageError, processImage, readUpload } from '../../lib/collectibleImage.js';
 import { RARITIES, isRoleItemType } from '../../modules/lib/economyConfig.js';
 import { LIMITS as CEILINGS, checkLimit } from '../../lib/limits.js';
@@ -50,7 +53,7 @@ const isId = (v) => /^\d{17,20}$/.test(String(v ?? ''));
 const isItemId = (v) => /^\d{1,15}$/.test(String(v ?? ''));
 
 /** The path of a picture on this site (the dashboard shows it; a message uses the full address instead). */
-const imagePathOf = (imageId) => (imageId ? `/c/${imageId}.png` : null);
+const imagePathOf = (imageId) => (imageId ? `/c/${imageId}.webp` : null);
 
 /** The staff-facing form of an item: its fields, how much is left, and what it has sold. */
 const itemView = (item, stats) => ({
@@ -90,8 +93,7 @@ function personOf(guild, userId) {
 
 /**
  * An inventory row for the page, with the end time of a temp role and whether its item still exists. `items`
- * maps the ids of the server's items to the items: a collectible shows its item's picture and rarity, or the
- * copy on the row once the item is gone.
+ * maps the ids of the server's items to the items.
  */
 export async function rowView(guild, row, items) {
   const item = items.get(row.itemId);
@@ -108,8 +110,9 @@ export async function rowView(guild, row, items) {
     itemType: row.itemType,
     itemRemoved: !item,
     roleId: row.roleId,
-    imagePath: row.itemType === 'collectible' ? imagePathOf(item ? item.imageId : row.imageId) : null,
-    rarity: row.itemType === 'collectible' ? (item ? item.rarity : row.rarity) : null,
+    // the picture and rarity this copy carries (kept in step with the item, and kept when the item is removed)
+    imagePath: row.itemType === 'collectible' ? imagePathOf(row.imageId) : null,
+    rarity: row.itemType === 'collectible' ? row.rarity : null,
     pricePaid: row.pricePaid,
     source: row.source,
     status: row.status,
@@ -255,10 +258,11 @@ router.post(
 // --- the picture of a collectible -------------------------------------------------------------------------------
 //
 // A multipart upload (the field `file`), at most 2 MB. The kind is decided by the magic bytes and the picture is
-// decoded and re-encoded as a PNG of at most 512x512 (lib/collectibleImage.js), so what is stored is never what
-// was sent. Only the staff of this server get here (the admin guard) and the CSRF check has passed. A new
-// picture replaces the old one and the old file is deleted (unless a member's copy still refers to it).
-// Changes to one item's picture take turns, so two uploads at once cannot leave a file nothing refers to.
+// decoded and re-encoded as a WebP of at most 512x512 (lib/collectibleImage.js), so what is stored is never what
+// was sent; at most two pictures are decoded at a time. Only the staff of this server get here (the admin guard)
+// and the CSRF check has passed. The picture is stored in the database (db/collectibleImages.js): a new one
+// replaces the old one in one transaction, within the server's quota of 200 pictures and 25 MB. Uploads of one
+// server take turns, so two at once cannot both slip under the quota.
 
 const imageUploadLimit = rateLimit({
   windowMs: 60_000,
@@ -295,29 +299,25 @@ router.post(
     const guildId = req.guild.id;
     if (!(await collectibleOf(req, res))) return undefined;
     const id = Number(req.params.id);
-    let png;
+    let picture;
     try {
-      ({ png } = await processImage(await readUpload(req)));
+      picture = await processImage(await readUpload(req));
     } catch (err) {
       if (err instanceof ImageError) return fail(res, err.message, err.status);
       throw err;
     }
-    const outcome = await inTurn(`${guildId}|${id}`, async () => {
-      const current = await getItem(guildId, id);
-      if (!current || current.type !== 'collectible') return 'gone';
-      const imageId = await saveImage(guildId, png);
-      let attached = false;
-      try {
-        attached = await setItemImage(guildId, id, imageId);
-      } finally {
-        // Not attached (the item went away, or the write failed): the new file must not stay behind.
-        if (!attached) await deleteImage(guildId, imageId);
+    const out = await inTurn(guildId, () =>
+      attachImage(guildId, id, { mime: picture.mime, data: picture.data })
+    );
+    if (!out.ok) {
+      if (out.reason === 'quota') {
+        return fail(
+          res,
+          `This server already stores ${out.count} pictures (${Math.ceil(out.bytes / 1024 / 1024)} MB). The most is ${MAX_IMAGES_PER_GUILD} pictures and ${MAX_IMAGE_BYTES_PER_GUILD / 1024 / 1024} MB: remove pictures or items nobody owns to make room.`
+        );
       }
-      if (!attached) return 'gone';
-      if (current.imageId) await releaseImage(guildId, current.imageId);
-      return 'ok';
-    });
-    if (outcome !== 'ok') return fail(res, 'Unknown item.', 404);
+      return fail(res, 'Unknown item.', 404);
+    }
     await recordAudit(guildId, {
       actor: actor(req),
       action: 'economy:shop',
@@ -327,17 +327,15 @@ router.post(
   })
 );
 
+// Taking the picture off an item: only the item lets go of it. The members who own the item keep the picture
+// their copy shows, and it is deleted when the last copy lets go.
 router.post(
   '/modules/economy/shop/items/:id/image/delete',
   asyncHandler(async (req, res) => {
     const guildId = req.guild.id;
     if (!(await collectibleOf(req, res))) return undefined;
     const id = Number(req.params.id);
-    await inTurn(`${guildId}|${id}`, async () => {
-      const current = await getItem(guildId, id);
-      if (!current?.imageId) return;
-      if (await setItemImage(guildId, id, null)) await releaseImage(guildId, current.imageId);
-    });
+    await detachImage(guildId, id);
     await recordAudit(guildId, {
       actor: actor(req),
       action: 'economy:shop',

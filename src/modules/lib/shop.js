@@ -39,6 +39,7 @@ import { EmbedBuilder } from 'discord.js';
 import { abort, transact } from './economy.js';
 import { formatMoney, isRoleItemType } from './economyConfig.js';
 import { announcePurchase } from './collectibles.js';
+import { releaseImageTx } from '../../db/collectibleImages.js';
 import {
   activateRow,
   deferPendingLease,
@@ -46,7 +47,6 @@ import {
   getItem,
   liveRoleRows,
   liveRowsForRole,
-  releaseImage,
   stalePending,
 } from '../../db/economyShop.js';
 import { isNotFound } from '../../platform/messageErrors.js';
@@ -69,9 +69,29 @@ import { every } from '../schedule.js';
 
 const INSERT_ROW = `
   INSERT INTO economy_inventory
-    (guild_id, user_id, item_id, item_name, item_type, role_id, price_paid, source, status, added_ms, lease_until, created_at, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (guild_id, user_id, item_id, item_name, item_type, role_id, price_paid, source, status, added_ms, lease_until, created_at, updated_at, image_id, rarity)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
+
+/**
+ * Inside a transaction: the picture and rarity a new copy of a collectible carries, read from the item as it is
+ * NOW. The item row is locked first (a no-op update, the lock a replaced picture also takes), so a picture
+ * that is replaced at the same moment either comes before this copy, which then carries the new one, or after
+ * it, and then its update moves this copy to the new picture too. `needPicture` (a purchase) refuses an item
+ * whose picture was taken off in the meantime. Anything that is not a collectible carries none.
+ */
+function* pictureOfCopy(tx, guildId, item, { needPicture }) {
+  if (item.type !== 'collectible') return { imageId: null, rarity: null };
+  yield tx.run('UPDATE economy_items SET sold = sold WHERE guild_id = ? AND id = ?', guildId, item.id);
+  const cur = yield tx.get(
+    'SELECT image_id, rarity FROM economy_items WHERE guild_id = ? AND id = ?',
+    guildId,
+    item.id
+  );
+  if (!cur) abort('item_gone');
+  if (needPicture && !cur.image_id) abort('no_image');
+  return { imageId: cur.image_id ?? null, rarity: cur.rarity ?? null };
+}
 
 /** A role grant that is not confirmed within this long after its purchase is mopped up by the sweep. */
 export const GRANT_LEASE_MS = 5 * 60_000;
@@ -337,6 +357,7 @@ export async function purchase({
             createdAt: now,
           });
         }
+        const picture = yield* pictureOfCopy(tx, guildId, item, { needPicture: true });
         box.rowId = yield tx.insertId(
           INSERT_ROW,
           guildId,
@@ -351,7 +372,9 @@ export async function purchase({
           box.added,
           now + GRANT_LEASE_MS,
           now,
-          now
+          now,
+          picture.imageId,
+          picture.rarity
         );
       },
     }
@@ -521,6 +544,7 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
             createdAt: now,
           });
         }
+        const picture = yield* pictureOfCopy(tx, guildId, item, { needPicture: false });
         box.rowId = yield tx.insertId(
           INSERT_ROW,
           guildId,
@@ -535,7 +559,9 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
           box.added,
           now + GRANT_LEASE_MS,
           now,
-          now
+          now,
+          picture.imageId,
+          picture.rarity
         );
       },
     }
@@ -621,6 +647,15 @@ async function endRowNow({
           rowId
         );
         if (ended.changes !== 1) abort('not_active');
+        // A collectible copy that was the last one holding its picture takes the picture with it.
+        if (row.itemType === 'collectible') {
+          const held = yield tx.get(
+            'SELECT image_id FROM economy_inventory WHERE guild_id = ? AND id = ?',
+            guildId,
+            rowId
+          );
+          yield* releaseImageTx(tx, guildId, held?.image_id ?? null);
+        }
         if (refundable) {
           // The item may be gone already (deleted): then there is no stock to give back.
           yield tx.run(
@@ -680,10 +715,6 @@ async function endRowNow({
     }
   );
   if (!out.ok) return out;
-
-  // An owned collectible whose item was deleted carries a copy of its picture: when this was the last
-  // owner, the file goes.
-  if (row.imageId) await releaseImage(guildId, row.imageId);
 
   let warning;
   if (platform && box.dropRole) {

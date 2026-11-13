@@ -63,7 +63,7 @@ describe('the web shop page: collectibles', () => {
             name: 'Founder badge',
             type: 'collectible',
             emoji: '🎖️',
-            imagePath: '/c/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png',
+            imagePath: '/c/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.webp',
             rarityLabel: 'Epic',
             left: 2,
           }),
@@ -73,7 +73,7 @@ describe('the web shop page: collectibles', () => {
             itemId: 5,
             name: 'Founder badge',
             emoji: '🎖️',
-            imagePath: '/c/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png',
+            imagePath: '/c/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.webp',
             rarity: 'epic',
             rarityLabel: 'Epic',
             count: 2,
@@ -98,7 +98,7 @@ describe('the web shop page: collectibles', () => {
     const row = (await screen.findByRole('heading', { name: /^🎖️ Founder badge$/, level: 3 })).closest(
       '.v2-row'
     );
-    expect(row.querySelector('img').getAttribute('src')).toBe('/c/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png');
+    expect(row.querySelector('img').getAttribute('src')).toBe('/c/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.webp');
     expect(row.textContent).toContain('A collectible');
     expect(row.textContent).toContain('Epic');
     expect(row.textContent).toContain('2 left');
