@@ -71,7 +71,7 @@ struct ReactionRoleEditorView: View {
                     channelFooter
                 }
                 Section {
-                    UTF16TextArea(title: "Pick your roles below!", text: $draft.message,
+                    LimitedTextField(title: "Pick your roles below!", text: $draft.message,
                                   limit: model.messageLimit, lines: 2...6)
                 } header: {
                     Text("Message Text")

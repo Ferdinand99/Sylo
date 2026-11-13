@@ -20,7 +20,7 @@ struct StickySettingsView: View {
                 Section {
                     ChannelPicker(title: "Channel", selection: $sticky.channelId, channels: page.channels,
                                   noneTitle: "Choose a channel")
-                    UTF16TextArea(title: "Message", text: $sticky.content,
+                    LimitedTextField(title: "Message", text: $sticky.content,
                              limit: StickySettings.Sticky.maxContentLength, lines: 2...8)
                     if sticky.embed != nil {
                         NavigationLink {

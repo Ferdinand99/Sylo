@@ -242,18 +242,6 @@ private struct EmbedTextField: View {
     let target: EmbedFocus
     var focus: FocusState<EmbedFocus?>.Binding
 
-    /// The longest start of `text` that fits `limit` UTF-16 units, cut between characters.
-    static func truncated(_ text: String, toUTF16 limit: Int) -> String {
-        var units = 0
-        var result = ""
-        for character in text {
-            units += character.utf16.count
-            if units > limit { break }
-            result.append(character)
-        }
-        return result
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let lines {
@@ -264,15 +252,10 @@ private struct EmbedTextField: View {
                 TextField(title, text: $text)
                     .focused(focus, equals: target)
             }
-            // Counted in UTF-16 units, the way the server counts and cuts.
-            if text.utf16.count > limit * 3 / 4 {
-                Text("\(text.utf16.count) of \(limit) characters")
-                    .font(.caption)
-                    .foregroundStyle(text.utf16.count > limit ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
-            }
+            LimitCounter(text: text, limit: limit)
         }
         .onChange(of: text) {
-            if text.utf16.count > limit { text = Self.truncated(text, toUTF16: limit) }
+            if text.utf16.count > limit { text = UTF16Limit.truncated(text, to: limit) }
         }
     }
 }

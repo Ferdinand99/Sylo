@@ -48,11 +48,13 @@ struct ShopItemEditorView: View {
             }
             Group {
                 Section {
-                    ShopTextField(title: "Name", text: $draft.name, limit: ShopItemLimits.nameLength)
-                    ShopTextField(title: "Emoji (optional)", text: $draft.emoji, limit: ShopItemLimits.emojiLength)
+                    LimitedTextField(title: "Name", text: $draft.name, limit: ShopItemLimits.nameLength,
+                                     showsCounter: true)
+                    LimitedTextField(title: "Emoji (optional)", text: $draft.emoji, limit: ShopItemLimits.emojiLength,
+                                     showsCounter: true)
                         .textInputAutocapitalization(.never)
-                    ShopTextField(title: "Description", text: $draft.description,
-                                  limit: ShopItemLimits.descriptionLength, lines: 2...5)
+                    LimitedTextField(title: "Description", text: $draft.description,
+                                     limit: ShopItemLimits.descriptionLength, lines: 2...5)
                 } footer: {
                     if let problem = draft.problem, draft.type.isKnown { Text(verbatim: problem) }
                 }

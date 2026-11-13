@@ -48,7 +48,7 @@ struct WelcomeChannelSettingsView: View {
             }
 
             Section {
-                UTF16TextArea(title: "Message text", text: $settings.content,
+                LimitedTextField(title: "Message text", text: $settings.content,
                          limit: WelcomeChannelSettings.maxContentLength, lines: 2...6)
             } header: {
                 Text("Message text")
@@ -208,7 +208,7 @@ private struct WelcomeBannerEditor: View {
             }
             Section {
                 LinkTextField(title: "Image URL", text: $draft.image)
-                UTF16TextArea(title: "Caption", text: $draft.description,
+                LimitedTextField(title: "Caption", text: $draft.description,
                          limit: EmbedLimits.standard.description, lines: 1...4)
             } footer: {
                 Text("A big picture with an optional caption. Links must start with http:// or https://.")

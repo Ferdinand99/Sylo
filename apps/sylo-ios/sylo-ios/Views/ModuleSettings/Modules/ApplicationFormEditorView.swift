@@ -129,7 +129,7 @@ struct ApplicationFormEditorView: View {
 
     private var generalSection: some View {
         Section {
-            LimitedLineField(title: "Name", text: $model.draft.name, limit: ApplicationForm.maxNameLength)
+            LimitedTextField(title: "Name", text: $model.draft.name, limit: ApplicationForm.maxNameLength)
             TextArea(title: "Description (optional)", text: $model.draft.description,
                      limit: ApplicationForm.maxDescriptionLength, lines: 2...5)
             Toggle("Open for applications", isOn: $model.draft.enabled)
@@ -332,20 +332,6 @@ struct ApplicationFormEditorView: View {
             return "Sent by direct message. Leave one empty to send nothing."
         }
         return "Sent by direct message. Leave one empty to send nothing. Placeholders: \(placeholders.joined(separator: ", "))"
-    }
-}
-
-/// A one-line text field that stops at a character limit, the way the server cuts the value.
-struct LimitedLineField: View {
-    let title: LocalizedStringKey
-    @Binding var text: String
-    let limit: Int
-
-    var body: some View {
-        TextField(title, text: $text)
-            .onChange(of: text) {
-                if text.count > limit { text = String(text.prefix(limit)) }
-            }
     }
 }
 

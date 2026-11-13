@@ -114,7 +114,7 @@ struct ReminderEditorView: View {
 
             switch draft.kind {
             case .text:
-                UTF16TextArea(title: "Hey, I'm a reminder!", text: $draft.content, limit: contentLimit)
+                LimitedTextField(title: "Hey, I'm a reminder!", text: $draft.content, limit: contentLimit, lines: 3...8)
             case .embed:
                 NavigationLink {
                     EmbedEditorView(draft: $draft.embed, options: ReminderDraft.embedOptions)
