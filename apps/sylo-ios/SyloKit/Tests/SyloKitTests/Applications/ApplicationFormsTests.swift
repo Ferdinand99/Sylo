@@ -503,7 +503,8 @@ struct ApplicationFormEndpointsTests {
     @Test("the server's reason is shown for a refusal, the generic text for anything else")
     func failureText() {
         #expect(EditorFailure.message(for: .badRequest(message: "Give the form a name.")) == "Give the form a name.")
-        #expect(EditorFailure.message(for: .badRequest(message: "invalid_grant")) == NetworkError.badRequest(message: nil).userMessage)
+        #expect(EditorFailure.message(for: .badRequest(message: "invalid_grant")) == NetworkError.badRequest(message: "invalid_grant").userMessage)
+        #expect(EditorFailure.message(for: .badRequest(message: "invalid_request")) == NetworkError.badRequest(message: "invalid_request").userMessage)
         #expect(EditorFailure.message(for: .badRequest(message: nil)) == NetworkError.badRequest(message: nil).userMessage)
         #expect(EditorFailure.message(for: .badRequest(message: "")) == NetworkError.badRequest(message: nil).userMessage)
         #expect(EditorFailure.message(for: .server(status: 502), serverFailure: "Manage Messages is missing.") == "Manage Messages is missing.")
