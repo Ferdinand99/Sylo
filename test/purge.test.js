@@ -393,6 +393,7 @@ const USER_ID_COLUMNS = {
   'guild_temp_roles.user_id': 'handled',
   'guild_temp_roles.added_by': 'handled',
   'introductions.user_id': 'handled',
+  'welcome_sent.user_id': 'handled',
   'applications_submissions.user_id': 'handled',
   'applications_submissions.decided_by': 'handled',
   'applications_cooldowns.user_id':

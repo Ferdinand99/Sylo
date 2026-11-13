@@ -1442,6 +1442,19 @@ export const MIGRATIONS = [
       CREATE INDEX idx_applications_cooldowns_until ON applications_cooldowns (until_at);
     `);
   },
+
+  // Welcome on role (src/db/welcomeSent.js, which bootstraps the same table on Postgres): who has been
+  // welcomed in "when a member gets a role" mode, so the welcome is sent once per member and server.
+  (database) => {
+    database.exec(`
+      CREATE TABLE welcome_sent (
+        guild_id TEXT NOT NULL,
+        user_id  TEXT NOT NULL,
+        sent_at  INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

@@ -65,6 +65,7 @@ const render = {
   quotes: (r) => plural(r.length, 'quote'),
   quotesSaved: (r) => plural(r.length, 'quote'),
   introductions: () => 'your introduction answers',
+  welcomeSent: () => 'a record that you were welcomed',
   economyAccount: (r) => `${r[0].cash} cash · ${r[0].bank} bank · ${r[0].daily_streak} day streak`,
   economyTransactions: (r) => plural(r.length, 'transaction'),
   economyInventory: (r) => plural(r.length, 'shop item'),

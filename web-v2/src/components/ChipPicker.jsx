@@ -2,10 +2,11 @@
 // ctrl/cmd-click to pick more than one — not discoverable, flagged by the
 // user). Selected items render as removable chips; a plain single-select
 // dropdown adds more.
-export default function ChipPicker({ items, value, onChange, kind = 'role', placeholder, id }) {
+export default function ChipPicker({ items, value, onChange, kind = 'role', placeholder, id, max }) {
   const selected = value || [];
   const selectedItems = selected.map((id) => items.find((i) => String(i.id) === String(id))).filter(Boolean);
   const available = items.filter((i) => !selected.includes(i.id));
+  const full = max != null && selected.length >= max;
   const defaultPlaceholder = kind === 'channel' ? '+ Add a channel…' : '+ Add a role…';
 
   function remove(id) {
@@ -47,10 +48,11 @@ export default function ChipPicker({ items, value, onChange, kind = 'role', plac
         id={id}
         className="v2-chip-add"
         value=""
+        disabled={full}
         onChange={add}
         aria-label={placeholder || (kind === 'channel' ? 'Add a channel' : 'Add a role')}
       >
-        <option value="">{placeholder || defaultPlaceholder}</option>
+        <option value="">{full ? `At most ${max} picked` : placeholder || defaultPlaceholder}</option>
         {available.map((opt) => (
           <option key={opt.id} value={opt.id}>
             {kind === 'channel' ? '#' : ''}

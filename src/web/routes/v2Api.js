@@ -156,7 +156,12 @@ import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
 import { reservedCommandNames, syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
-import { WELCOME_PLACEHOLDERS, normaliseWelcomeConfig } from '../../modules/welcome.js';
+import {
+  WELCOME_PLACEHOLDERS,
+  normaliseWelcomeConfig,
+  validTriggerRoleIds,
+  welcomeTrigger,
+} from '../../modules/welcome.js';
 import { MODULE_LIMITS } from '../../modules/limits.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { normaliseAfkConfig } from '../../modules/afk.js';
@@ -658,8 +663,13 @@ router.get(
     const autoroleEnabled =
       cfg.autoroleEnabled !== undefined ? Boolean(cfg.autoroleEnabled) : picked.length > 0;
 
+    const { trigger, roleIds } = welcomeTrigger(cfg);
+    const triggerRoleIds = validTriggerRoleIds(guild, roleIds);
+
     res.json({
       config: {
+        trigger,
+        triggerRoleIds,
         joinEnabled,
         joinChannel: cfg.joinChannel || '',
         joinMessage: cfg.joinMessage || '',
@@ -688,7 +698,14 @@ router.post(
   '/guilds/:guildId/modules/welcome/config',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    const config = normaliseWelcomeConfig(req.body);
+    // A client that does not know the "when to welcome" fields (the Sylo app) leaves them out: that keeps
+    // what is saved, instead of switching the server back to welcoming on join.
+    const prev = (await getGuildModule(guild.id, 'welcome')).config;
+    const body = { ...req.body };
+    if (body.trigger === undefined) body.trigger = prev.trigger;
+    if (body.triggerRoleIds === undefined) body.triggerRoleIds = prev.triggerRoleIds;
+    // The time each trigger role started counting is the server's to set, from what was stored before.
+    const config = normaliseWelcomeConfig(body, guild, { prev });
     const newRoles = config.autoroleEnabled ? normaliseAutoroles(req.body.autoroles) : [];
     const rolesMod = await getGuildModule(guild.id, 'roles');
     await setGuildModule(guild.id, 'roles', {
@@ -701,7 +718,12 @@ router.post(
       action: 'module:welcome',
       detail: 'settings saved',
     });
-    res.json({ config: { ...config, autoroles: newRoles } });
+    // Saved either way, but a "when a member gets a role" welcome with no usable role never fires.
+    const warning =
+      config.trigger === 'role' && config.triggerRoleIds.length === 0
+        ? 'No usable role is picked, so no welcome is sent until you pick one.'
+        : undefined;
+    res.json({ config: { ...config, autoroles: newRoles }, ...(warning ? { warning } : {}) });
   })
 );
 

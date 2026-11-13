@@ -33,6 +33,8 @@ const FLUXER_NOTES = {
     `Fluxer has no slash commands or buttons yet: members use chat commands, for example ${prefix}balance, ${prefix}daily, ${prefix}work, ${prefix}pay @member 100, ${prefix}deposit all and ${prefix}economy-leaderboard (turn the pages with the ⬅️ and ➡️ reactions). Staff use ${prefix}eco add @member 500 reason:"Event prize". A rob result is posted in the channel as on Discord, and the victim gets the same DM. The shop is ${prefix}shop (a numbered list that pages with the ⬅️ and ➡️ reactions), ${prefix}buy <name or number> and ${prefix}inventory. A giveaway with an entry fee or a currency prize works as on Discord: members press the reaction to enter, and a second press leaves and gets the fee back. The dashboard and the web shop work as on Discord.`,
   'auto-threads': () =>
     'Fluxer has no threads yet, so this module does nothing on a Fluxer server: posts stay as they are. The settings can be saved here and start working on a Discord server. Fluxer lists threads for 2026; Sylo will support them then.',
+  welcome: () =>
+    'Welcoming a member when they get a role works as on Discord: Fluxer reports role changes in its member updates, and a role Sylo gives (Verification, Applications, an autorole) counts. When Fluxer sends no earlier state for a member Sylo has not seen yet, Sylo welcomes the member only if they joined after the role was set up as a trigger and have not been welcomed; a member who joined before that is not welcomed by a role Sylo cannot see being given.',
   roles: () =>
     'Role menus show their buttons and dropdown options as reactions, with a short legend in the message. Members react to get or drop a role.',
   tickets: () =>
