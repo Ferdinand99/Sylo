@@ -12,6 +12,10 @@ public final class OverviewModel {
     public var errorMessage: String?
     /// Why the last switch did not go through (the toggle is back where it was).
     public var toggleError: String?
+    /// What the last bulk switch left undone, when the server changed fewer modules than asked.
+    public var bulkNotice: String?
+    /// A bulk switch is on its way to the server.
+    public private(set) var isBulkSwitching = false
 
     private var pending: Set<String> = []
     private let session: AppSession
@@ -62,6 +66,51 @@ public final class OverviewModel {
                 update(id, isEnabled: result.isEnabled)
             } catch {
                 update(id, isEnabled: before)
+                let error = NetworkError(error)
+                if error != .cancelled, error != .unauthorized { toggleError = error.userMessage }
+            }
+        }
+    }
+
+    /// The modules the overview can switch in bulk: every module card with a switch.
+    public var switchableModuleIDs: [String] {
+        (overview?.groups.flatMap(\.cards) ?? []).filter { $0.hasToggle && $0.moduleID != nil }.map(\.id)
+    }
+
+    /// Switches several modules on or off with one call. The cards change at once; the server's
+    /// answer then confirms them. A failure puts every card back with a ``toggleError``. When the
+    /// server changed fewer modules than asked (it skips ids it does not know or that only
+    /// operators may switch) the overview is read again and ``bulkNotice`` says so.
+    /// - Returns: The running switch, or nil when none of the ids can be switched or a bulk switch
+    ///   is already on its way.
+    @discardableResult
+    public func setModules(_ ids: [String], enabled: Bool) -> Task<Void, Never>? {
+        var seen: Set<String> = []
+        let wanted = ids.filter { id in
+            guard let card = card(id), card.hasToggle, card.moduleID != nil, !pending.contains(id) else { return false }
+            return seen.insert(id).inserted
+        }
+        guard !wanted.isEmpty, !isBulkSwitching else { return nil }
+        let before = Dictionary(uniqueKeysWithValues: wanted.map { ($0, card($0)?.isEnabled ?? false) })
+        toggleError = nil
+        bulkNotice = nil
+        isBulkSwitching = true
+        pending.formUnion(wanted)
+        for id in wanted { update(id, isEnabled: enabled) }
+        return Task {
+            defer {
+                pending.subtract(wanted)
+                isBulkSwitching = false
+            }
+            do {
+                let result = try await session.send(
+                    Endpoints.SetModulesBulk(server: server, modules: wanted.map { ModuleID($0) }, enabled: enabled))
+                if result.count < wanted.count {
+                    bulkNotice = "\(result.count) of \(wanted.count) modules changed. The rest can't be switched from here."
+                    await load()
+                }
+            } catch {
+                for id in wanted { update(id, isEnabled: before[id] ?? false) }
                 let error = NetworkError(error)
                 if error != .cancelled, error != .unauthorized { toggleError = error.userMessage }
             }

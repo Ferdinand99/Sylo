@@ -1,9 +1,11 @@
+import AuthenticationServices
 import SwiftUI
 import SyloKit
 import UIKit
 
-/// Account, notifications, signed-in devices, the Sylo server (with Health for its operators), the
-/// policies, Sign Out, and deleting the account.
+/// Account (with its connected platforms), notifications, signed-in devices, the Sylo server (with
+/// its command list, roadmap and Health for its operators), adding Sylo to a server, the policies,
+/// Sign Out, and deleting the account.
 struct SettingsView: View {
     let server: ServerURL
     /// The servers the person manages, for a notification switch each.
@@ -12,15 +14,19 @@ struct SettingsView: View {
     @Environment(AppSession.self) private var session
     @Environment(PushCoordinator.self) private var push
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.webAuthenticationSession) private var webAuthenticationSession
     @State private var account: AccountModel
+    @State private var addToServer: AddToServerModel
     @State private var isConfirmingSignOut = false
     @State private var isConfirmingDelete = false
     @State private var isShowingHealth = false
+    @State private var platformToDisconnect: PlatformConnection?
 
     init(server: ServerURL, session: AppSession, servers: ServersModel) {
         self.server = server
         self.servers = servers
         _account = State(initialValue: AccountModel(session: session))
+        _addToServer = State(initialValue: AddToServerModel(session: session))
     }
 
     var body: some View {
@@ -30,6 +36,7 @@ struct SettingsView: View {
                 NotificationsSection(push: push, servers: servers.servers)
                 DevicesSection(account: account)
                 serverSection
+                addToServerSection
                 if account.account?.isOperator == true {
                     operatorSection
                 }
@@ -67,6 +74,7 @@ struct SettingsView: View {
             }
             .task { await account.load() }
             .task { await push.settings.load() }
+            .task { await addToServer.load() }
             .navigationDestination(isPresented: $isShowingHealth) {
                 HealthView(session: session)
             }
@@ -112,24 +120,130 @@ struct SettingsView: View {
             } message: { message in
                 Text(message)
             }
+            .confirmationDialog(
+                "Disconnect \(platformToDisconnect?.label ?? "")?", isPresented: isConfirmingDisconnect,
+                titleVisibility: .visible, presenting: platformToDisconnect
+            ) { connection in
+                Button("Disconnect \(connection.label)", role: .destructive) {
+                    // On success the server has signed every device out, this one too; the app
+                    // goes back to sign-in by itself.
+                    Task {
+                        if await account.disconnect(connection) { dismiss() }
+                    }
+                }
+            } message: { connection in
+                Text("This signs you out of Sylo on every device, and you can't manage the servers you reach only through \(connection.label) anymore. You can connect it again later.")
+            }
+            .alert("Couldn't Change Account", isPresented: isShowingPlatformError, presenting: account.platformError) { _ in
+                Button("OK") {}
+            } message: { message in
+                Text(message)
+            }
         }
     }
 
     @ViewBuilder
     private var accountSection: some View {
-        Section("Account") {
+        Section {
             if let name = session.account?.name {
                 LabeledContent("Signed in as", value: name)
             }
             ForEach(account.connectedPlatforms) { connection in
-                LabeledContent(connection.label, value: connection.username ?? "Connected")
+                platformRow(connection)
+            }
+            // Only on a Sylo that can start a connect for the app.
+            ForEach(account.unconnectedPlatforms) { connection in
+                if account.connectablePlatforms(serverInfo: serverInfo).contains(connection) {
+                    Button {
+                        Task { await connect(connection) }
+                    } label: {
+                        HStack {
+                            Label("Connect \(connection.label)", systemImage: "link.badge.plus")
+                            if account.changingPlatform == connection.platform {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(account.changingPlatform != nil)
+                } else {
+                    // This Sylo cannot add it from the app (or its login is off): just say so.
+                    LabeledContent(connection.label, value: "Not connected")
+                }
             }
             if let message = account.errorMessage {
                 StatusMessage(message, kind: .error)
             } else if session.account == nil, account.account == nil {
                 ProgressView()
             }
+        } header: {
+            Text("Account")
+        } footer: {
+            if account.connectedPlatforms.contains(where: \.canDisconnect) {
+                Text("Swipe a connected platform to disconnect it. You can't disconnect your only sign-in.")
+            }
         }
+    }
+
+    /// The Sylo's info: this launch's, or the one the notification settings fetched.
+    private var serverInfo: ServerInfo? { session.serverInfo ?? push.settings.serverInfo }
+
+    private func platformRow(_ connection: PlatformConnection) -> some View {
+        LabeledContent(connection.label) {
+            if account.changingPlatform == connection.platform {
+                ProgressView()
+            } else {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(connection.username ?? "Connected")
+                    if connection.serverCount > 0 {
+                        Text("Manages ^[\(connection.serverCount) server](inflect: true)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .swipeActions {
+            if connection.canDisconnect {
+                Button("Disconnect", role: .destructive) { platformToDisconnect = connection }
+            }
+        }
+        .contextMenu {
+            if connection.canDisconnect {
+                Button("Disconnect", systemImage: "link.badge.minus", role: .destructive) {
+                    platformToDisconnect = connection
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Opens the server's connect page in the system sign-in sheet; it ends on `sylo://connected`.
+    private func connect(_ connection: PlatformConnection) async {
+        let web = webAuthenticationSession
+        let connected = await account.connect(connection) { url in
+            do {
+                // Shared with Safari, like sign-in: someone signed in to the platform there skips that step.
+                if #available(iOS 17.4, *) {
+                    return try await web.authenticate(
+                        using: url,
+                        callback: .customScheme(ConnectCallback.callbackScheme),
+                        preferredBrowserSession: .shared,
+                        additionalHeaderFields: [:])
+                } else {
+                    return try await web.authenticate(
+                        using: url,
+                        callbackURLScheme: ConnectCallback.callbackScheme,
+                        preferredBrowserSession: .shared)
+                }
+            } catch let error as ASWebAuthenticationSessionError {
+                // Closing the sheet is not a failure; anything else says what went wrong.
+                if error.code == .canceledLogin { throw ConnectError.cancelled }
+                throw ConnectError.sheetFailed(error.localizedDescription)
+            }
+        }
+        // A new platform brings its servers.
+        if connected { await servers.load() }
     }
 
     private var serverSection: some View {
@@ -140,8 +254,37 @@ struct SettingsView: View {
             if let version = session.serverInfo?.version ?? push.settings.serverInfo?.version {
                 LabeledContent("Version", value: version)
             }
+            NavigationLink {
+                CommandListView(session: session)
+            } label: {
+                Label("Command List", systemImage: "slash.circle")
+            }
+            NavigationLink {
+                RoadmapView(session: session)
+            } label: {
+                Label("Roadmap", systemImage: "map")
+            }
             Link(destination: server.baseURL) {
                 Label("Open Dashboard", systemImage: "safari")
+            }
+        }
+    }
+
+    /// The links to add Sylo to a server: each is the platform's own page, opened in the browser.
+    /// Nothing while the server has none to offer (an older Sylo, or no bot set up).
+    @ViewBuilder
+    private var addToServerSection: some View {
+        if !addToServer.invites.isEmpty {
+            Section {
+                ForEach(addToServer.invites) { invite in
+                    Link(destination: invite.url) {
+                        Label("Add Sylo to a \(invite.label) Server", systemImage: "plus.app")
+                    }
+                }
+            } header: {
+                Text("Add Sylo to a server")
+            } footer: {
+                Text("Opens the platform's own page in your browser, where you pick the server. When you are back, pull down on the server list to see it.")
             }
         }
     }
@@ -197,6 +340,18 @@ struct SettingsView: View {
         Binding(
             get: { account.revokeError != nil },
             set: { if !$0 { account.revokeError = nil } })
+    }
+
+    private var isConfirmingDisconnect: Binding<Bool> {
+        Binding(
+            get: { platformToDisconnect != nil },
+            set: { if !$0 { platformToDisconnect = nil } })
+    }
+
+    private var isShowingPlatformError: Binding<Bool> {
+        Binding(
+            get: { account.platformError != nil },
+            set: { if !$0 { account.platformError = nil } })
     }
 
     private var isShowingDeleteError: Binding<Bool> {

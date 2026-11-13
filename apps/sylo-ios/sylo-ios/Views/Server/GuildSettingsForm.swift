@@ -9,6 +9,8 @@ import SyloKit
 struct GuildSettingsForm: View {
     let model: GuildSettingsModel
 
+    @Environment(AppSession.self) private var session
+
     var body: some View {
         Group {
             if let page = model.page {
@@ -66,10 +68,27 @@ struct GuildSettingsForm: View {
             } footer: {
                 Text("Members with these roles can open the dashboard and change Sylo's settings for the server, like someone with Manage Server. Roles with Administrator already can.")
             }
+
+            serverDataSection
         }
         .tabBarClearance()
         .disabled(model.isSaving)
         .refreshable { await model.load() }
+    }
+
+    /// What Sylo keeps about this server: its change history. Export and member data join it later.
+    private var serverDataSection: some View {
+        Section {
+            NavigationLink {
+                AuditLogView(server: model.server, session: session)
+            } label: {
+                Label("Audit Log", systemImage: "list.bullet.clipboard")
+            }
+        } header: {
+            Text("Server data")
+        } footer: {
+            Text("Who changed which settings of this server, and when.")
+        }
     }
 
     /// Fluxer only: the prefix members type before a command. Same rules as the server; the
