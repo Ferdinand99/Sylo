@@ -35,6 +35,7 @@ public final class AppSession {
     /// newer one.
     private(set) var generation = 0
     private var client: (any APIClient)?
+    private var cachedLimits: AllModuleLimits?
 
     private let tokens: any TokenStore
     private let preference: any ServerPreference
@@ -218,6 +219,38 @@ public final class AppSession {
         }
     }
 
+    /// Sends a call and keeps its answer as a file (``APIClient/download(_:)``), with the token and
+    /// the same 401 handling as ``send(_:)``. Use an endpoint whose `Response` is ``EmptyResponse``
+    /// (see ``Endpoints/Resource``).
+    public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile {
+        guard let client else { throw NetworkError.unauthorized }
+        let generation = self.generation
+        do {
+            return try await client.download(endpoint)
+        } catch NetworkError.unauthorized {
+            handleUnauthorized(generation: generation)
+            throw NetworkError.unauthorized
+        }
+    }
+
+    /// Sends a call whose ``APIEndpoint/rawBody`` is a multipart form (a picture) and decodes the
+    /// JSON answer. The same as ``send(_:)``, with the token and the 401 handling; named so the call
+    /// site says what it does.
+    public func upload<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response {
+        try await send(endpoint)
+    }
+
+    /// The setting limits of every module, loaded once per sign-in and kept. An empty set when the
+    /// server has none (an older Sylo) or cannot be reached right now: callers fall back to the
+    /// fixed limits (``EmbedLimits/standard``) and the server still clamps what is saved.
+    public func moduleLimits() async -> AllModuleLimits {
+        if let cachedLimits { return cachedLimits }
+        let generation = self.generation
+        guard let loaded = try? await send(Endpoints.LoadModuleLimits()) else { return .empty }
+        if generation == self.generation { cachedLimits = loaded }
+        return loaded
+    }
+
     /// Sends a call that needs no sign-in to another server (the notification relay), with a
     /// client that has no token: the Sylo server's token never goes anywhere else.
     public func send<E: APIEndpoint>(_ endpoint: E, to server: ServerURL) async throws -> E.Response {
@@ -236,6 +269,7 @@ public final class AppSession {
     private func enterSignedIn(_ server: ServerURL, token: String) {
         generation += 1
         client = makeClient(server, token)
+        cachedLimits = nil
         phase = .signedIn(server)
     }
 
@@ -243,6 +277,7 @@ public final class AppSession {
         generation += 1
         try? tokens.delete(for: key(server))
         client = nil
+        cachedLimits = nil
         account = nil
         phase = .signIn(server)
     }

@@ -20,6 +20,9 @@ public protocol APIEndpoint: Sendable {
     var query: [URLQueryItem] { get }
     /// Sent as JSON; nil sends no body and no `Content-Type`.
     var body: (any Encodable & Sendable)? { get }
+    /// Sent as it is with its own `Content-Type` (a multipart form), instead of ``body``. nil for
+    /// every JSON call.
+    var rawBody: RawBody? { get }
     /// Whether the app token goes along. False only before sign-in (info, code exchange).
     var requiresAuth: Bool { get }
 }
@@ -28,6 +31,7 @@ extension APIEndpoint {
     public var method: HTTPMethod { .get }
     public var query: [URLQueryItem] { [] }
     public var body: (any Encodable & Sendable)? { nil }
+    public var rawBody: RawBody? { nil }
     public var requiresAuth: Bool { true }
 }
 

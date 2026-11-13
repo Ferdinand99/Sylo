@@ -54,6 +54,18 @@ final class StubClients: @unchecked Sendable {
                 throw NetworkError(error)
             }
         }
+
+        /// A download is answered with a ``DownloadedFile`` (or thrown error) from the handler.
+        func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile {
+            do {
+                guard let file = try owner.answer(endpoint, server: server, token: token) as? DownloadedFile else {
+                    throw NetworkError.decoding("stub answered \(E.self) with something that is not a file")
+                }
+                return file
+            } catch {
+                throw NetworkError(error)
+            }
+        }
     }
 }
 

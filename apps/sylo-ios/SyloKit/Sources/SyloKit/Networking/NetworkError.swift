@@ -16,6 +16,8 @@ public enum NetworkError: Error, Sendable, Equatable {
     case badRequest(message: String?)
     /// 429: too many requests from this address.
     case rateLimited
+    /// 413, or a download that is longer than the app is willing to keep.
+    case tooLarge
     /// 5xx.
     case server(status: Int)
     /// Any other status the app does not handle on its own (for example 409).
@@ -68,6 +70,7 @@ public enum NetworkError: Error, Sendable, Equatable {
             "Sign-in didn't finish. Try signing in again."
         case .badRequest: "The server couldn't do that. Refresh and try again."
         case .rateLimited: "Too many requests. Wait a minute, then try again."
+        case .tooLarge: "That file is too large."
         case .server: "The server ran into a problem. Try again in a moment."
         case .http(let status): "Something went wrong (error \(status)). Try again."
         case .notASyloServer: "This address doesn't answer like a Sylo server. Check the address."
@@ -113,6 +116,7 @@ public enum NetworkError: Error, Sendable, Equatable {
         case 403: return .forbidden
         case 400: return .badRequest(message: isJSON ? serverMessage(in: body) : nil)
         case 404: return .notFound
+        case 413: return .tooLarge
         case 429: return .rateLimited
         case 500..<600: return .server(status: status)
         default: return .http(status: status)

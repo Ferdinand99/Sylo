@@ -3,8 +3,9 @@ import SyloKit
 
 /// The Modules tab of a server: its header, then its modules grouped like the web overview, each
 /// with a switch. A module with a settings screen in the app opens it (``ModuleRoute``, handled by
-/// ``ServerView``); other cards without a switch (Commands, Embed messages) open in the web
-/// dashboard. The server's general settings are their own tab, so that card is left out here.
+/// ``ServerView``); other cards without a switch (Commands, Embed messages) open their screen from
+/// ``ServerPages`` when the app has one, and the web dashboard when it does not. The server's
+/// general settings are their own tab, so that card is left out here.
 struct OverviewView: View {
     let summary: ServerSummary
     let model: OverviewModel
@@ -50,6 +51,10 @@ struct OverviewView: View {
                                 }
                             } else if card.hasToggle {
                                 moduleRow(card)
+                            } else if ServerPages.hasScreen(card.id) {
+                                NavigationLink(value: ServerPageRoute(cardID: card.id)) {
+                                    ServerPageRow(card: card)
+                                }
                             } else {
                                 LinkCardRow(card: card, url: webURL(for: card))
                             }
@@ -58,6 +63,9 @@ struct OverviewView: View {
                 }
             }
             .tabBarClearance()
+            .navigationDestination(for: ServerPageRoute.self) { route in
+                ServerPages.screen(for: route.cardID, server: model.server, session: session)
+            }
             .searchable(text: $searchText, prompt: "Search modules")
             .overlay {
                 if isSearching, shownGroups(overview).isEmpty {

@@ -8,6 +8,20 @@ import FoundationNetworking
 public protocol APIClient: Sendable {
     /// Sends the call and decodes its answer. Throws ``NetworkError`` only.
     func send<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response
+
+    /// Sends the call and keeps its answer as a file, whatever it is (CSV, JSON, HTML, a picture):
+    /// the answer is not checked for JSON and not decoded, and is written to disk as it arrives. An
+    /// error status still throws the same ``NetworkError`` as ``send(_:)``; an answer over the
+    /// download limit throws ``NetworkError/tooLarge``. The endpoint's `Response` is ignored, so use
+    /// ``EmptyResponse`` for it. Throws ``NetworkError`` only.
+    func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile
+}
+
+extension APIClient {
+    /// A client that cannot download answers like a server that has no such file.
+    public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile {
+        throw NetworkError.notFound
+    }
 }
 
 /// The ``APIClient`` for a real server, over `URLSession`.
@@ -18,6 +32,8 @@ public protocol APIClient: Sendable {
 public final class URLSessionAPIClient: APIClient {
     /// 0.5 s, then 1 s.
     static let defaultRetryDelays: [Duration] = [.milliseconds(500), .seconds(1)]
+    /// The longest download kept (an application export or a ticket transcript is far smaller).
+    public static let defaultMaxDownloadBytes = 32 * 1024 * 1024
 
     public let server: ServerURL
     private let token: @Sendable () async -> String?
@@ -26,25 +42,28 @@ public final class URLSessionAPIClient: APIClient {
     private let decoder: JSONDecoder
     private let retryDelays: [Duration]
     private let maxResponseBytes: Int?
+    private let maxDownloadBytes: Int
 
     /// - Parameters:
     ///   - session: nil for the default session (``defaultConfiguration()``, redirects refused).
     ///   - retryDelays: how long to wait before each retry of a `GET` (nil: 0.5 s, then 1 s); empty for none.
     ///   - maxResponseBytes: refuse an answer longer than this (nil: no limit). The body is read
     ///     as it arrives and dropped at the limit, so a huge answer never sits in memory.
+    ///   - maxDownloadBytes: refuse a ``download(_:)`` longer than this.
     ///   - token: the current app token, asked for once per call; nil when signed out.
     public convenience init(
         server: ServerURL, session: URLSession? = nil, decoder: JSONDecoder = JSONDecoder(),
         retryDelays: [Duration]? = nil, maxResponseBytes: Int? = nil,
+        maxDownloadBytes: Int = URLSessionAPIClient.defaultMaxDownloadBytes,
         token: @escaping @Sendable () async -> String?
     ) {
         self.init(server: server, session: session, decoder: decoder, retryDelays: retryDelays ?? Self.defaultRetryDelays,
-                  maxResponseBytes: maxResponseBytes, token: token)
+                  maxResponseBytes: maxResponseBytes, maxDownloadBytes: maxDownloadBytes, token: token)
     }
 
     init(
         server: ServerURL, session: URLSession?, decoder: JSONDecoder, retryDelays: [Duration],
-        maxResponseBytes: Int?, token: @escaping @Sendable () async -> String?
+        maxResponseBytes: Int?, maxDownloadBytes: Int, token: @escaping @Sendable () async -> String?
     ) {
         self.server = server
         self.session = session ?? URLSession(
@@ -53,6 +72,7 @@ public final class URLSessionAPIClient: APIClient {
         self.decoder = decoder
         self.retryDelays = retryDelays
         self.maxResponseBytes = maxResponseBytes
+        self.maxDownloadBytes = maxDownloadBytes
         self.token = token
     }
 
@@ -94,13 +114,120 @@ public final class URLSessionAPIClient: APIClient {
         }
     }
 
+    public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile {
+        let request = try await makeRequest(for: endpoint, accept: "*/*")
+        var attempt = 0
+        while true {
+            do {
+                return try await fetchFile(request)
+            } catch {
+                let error = NetworkError(error)
+                guard endpoint.method == .get, error.isRetryable, attempt < retryDelays.count else { throw error }
+                do {
+                    try await Task.sleep(for: retryDelays[attempt])
+                } catch {
+                    throw NetworkError.cancelled
+                }
+                attempt += 1
+            }
+        }
+    }
+
+    // MARK: - Downloads
+
+    /// How much of an error answer is read for its message.
+    private static let errorBodyBytes = 16 * 1024
+    private static let writeChunkBytes = 64 * 1024
+
+    private func fetchFile(_ request: URLRequest) async throws -> DownloadedFile {
+        let limit = maxDownloadBytes
+        #if canImport(FoundationNetworking)
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw NetworkError.notASyloServer }
+        try Self.checkDownloadStatus(http, errorBody: Data(data.prefix(Self.errorBodyBytes)))
+        guard data.count <= limit else { throw NetworkError.tooLarge }
+        let (name, mime) = Self.descriptor(of: http)
+        return try DownloadedFile.write(data, filename: name, mimeType: mime)
+        #else
+        let (bytes, response) = try await session.bytes(for: request, delegate: RefuseRedirects())
+        guard let http = response as? HTTPURLResponse else { throw NetworkError.notASyloServer }
+        if !(200..<300).contains(http.statusCode) {
+            // An error answer is a short JSON message.
+            var body = Data()
+            for try await byte in bytes {
+                body.append(byte)
+                if body.count >= Self.errorBodyBytes { break }
+            }
+            try Self.checkDownloadStatus(http, errorBody: body)
+        }
+        guard response.expectedContentLength <= Int64(limit) else { throw NetworkError.tooLarge }
+
+        let (filename, mimeType) = Self.descriptor(of: http)
+        let destination = try DownloadedFile.makeDestination(filename: filename)
+        let folder = destination.deletingLastPathComponent()
+        do {
+            guard FileManager.default.createFile(atPath: destination.path, contents: nil) else {
+                throw NetworkError.transport(code: CocoaError.fileWriteUnknown.rawValue)
+            }
+            let handle = try FileHandle(forWritingTo: destination)
+            var total = 0
+            var chunk = Data()
+            chunk.reserveCapacity(Self.writeChunkBytes)
+            do {
+                for try await byte in bytes {
+                    total += 1
+                    guard total <= limit else { throw NetworkError.tooLarge }
+                    chunk.append(byte)
+                    if chunk.count >= Self.writeChunkBytes {
+                        try handle.write(contentsOf: chunk)
+                        chunk.removeAll(keepingCapacity: true)
+                    }
+                }
+                if !chunk.isEmpty { try handle.write(contentsOf: chunk) }
+                try handle.close()
+            } catch {
+                try? handle.close()
+                throw error
+            }
+            return DownloadedFile(fileURL: destination, filename: filename, mimeType: mimeType, byteCount: total)
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            throw error
+        }
+        #endif
+    }
+
+    /// Throws what a non-success status means; returns for a success.
+    private static func checkDownloadStatus(_ http: HTTPURLResponse, errorBody: Data) throws {
+        guard !(200..<300).contains(http.statusCode) else { return }
+        let isJSON = Self.isJSON(errorBody, contentType: Self.header("Content-Type", in: http))
+        throw NetworkError.from(status: http.statusCode, body: errorBody, isJSON: isJSON)
+    }
+
+    /// The file name (from `Content-Disposition`, else by type) and the media type of a download.
+    private static func descriptor(of http: HTTPURLResponse) -> (filename: String, mimeType: String) {
+        var mime = "application/octet-stream"
+        if let type = Self.header("Content-Type", in: http) {
+            let bare = type.split(separator: ";").first.map { $0.trimmingCharacters(in: .whitespaces).lowercased() } ?? ""
+            if !bare.isEmpty { mime = bare }
+        }
+        let name = ContentDisposition.filename(from: Self.header("Content-Disposition", in: http))
+            ?? DownloadedFile.fallbackFilename(mimeType: mime)
+        return (name, mime)
+    }
+
     // MARK: - Request and answer
 
-    private func makeRequest<E: APIEndpoint>(for endpoint: E) async throws(NetworkError) -> URLRequest {
+    private func makeRequest<E: APIEndpoint>(
+        for endpoint: E, accept: String = "application/json"
+    ) async throws(NetworkError) -> URLRequest {
         var request = URLRequest(url: server.url(for: endpoint.path, query: endpoint.query))
         request.httpMethod = endpoint.method.rawValue
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let body = endpoint.body {
+        request.setValue(accept, forHTTPHeaderField: "Accept")
+        if let raw = endpoint.rawBody {
+            request.httpBody = raw.data
+            request.setValue(raw.contentType, forHTTPHeaderField: "Content-Type")
+        } else if let body = endpoint.body {
             do {
                 request.httpBody = try JSONEncoder().encode(body)
             } catch {
