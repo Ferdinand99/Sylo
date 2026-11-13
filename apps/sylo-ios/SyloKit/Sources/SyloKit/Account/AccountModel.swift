@@ -158,7 +158,9 @@ public final class AccountModel {
         do {
             let grant = try await session.send(Endpoints.StartConnect(platform: connection.platform))
             let callback = try await authenticate(server.connectURL(code: grant.code))
-            let finished = try ConnectCallback.result(from: callback, expected: connection.platform)
+            // Only the URL that this call's own sheet returned is read: a `sylo://connected` link that
+        // arrives any other way is ignored (the app has no open-URL handler).
+        let finished = try ConnectCallback.result(from: callback, expected: connection.platform)
             // The sheet only logged in; this call links the platform to the account.
             _ = try await session.send(Endpoints.CompleteConnect(result: finished.result))
         } catch ConnectError.cancelled {

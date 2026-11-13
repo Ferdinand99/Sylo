@@ -94,6 +94,11 @@ public struct ConnectResult: Sendable, Equatable {
     }
 }
 
+/// **Only the callback that the session's own sign-in sheet returns may be passed in here.** A
+/// `sylo://connected` URL that reaches the app another way (a link, another app) is never read: the
+/// app registers no handler for incoming URLs, and the complete call is reached only from
+/// ``AccountModel/connect(_:authenticate:)`` (both checked in `ConnectCallbackSourceTests`).
+///
 /// The callback of a connect: `sylo://connected?result=…&platform=discord`, or
 /// `sylo://connected?error=…&platform=discord`.
 public enum ConnectCallback {
