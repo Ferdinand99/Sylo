@@ -216,7 +216,7 @@ public final class AccountModel {
         default: break
         }
         switch error {
-        case .notFound: return "This Sylo server can't connect a platform from the app. Use its web dashboard."
+        case .notFound: return "This Sylo server is too old to connect a platform from the app. Update Sylo on the server."
         case .http(status: 409):
             return "That login can't be added: it belongs to another Sylo account, or this account already has one on that platform."
         case .badRequest: return "This Sylo server can't connect that platform."

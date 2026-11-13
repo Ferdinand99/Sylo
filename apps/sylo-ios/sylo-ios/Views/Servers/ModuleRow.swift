@@ -61,43 +61,11 @@ struct BetaBadge: View {
     }
 }
 
-/// A card without a switch: opens its page in the web dashboard.
-struct LinkCardRow: View {
-    let card: OverviewCard
-    let url: URL?
-
-    @ScaledMetric(relativeTo: .body) private var iconWidth = 28
-
-    var body: some View {
-        if let url {
-            Link(destination: url) {
-                Label {
-                    HStack {
-                        Text(card.name)
-                        Spacer()
-                        Image(systemName: "arrow.up.forward")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: ModuleSymbol.name(forIcon: card.icon))
-                        .foregroundStyle(.tint)
-                        .frame(width: iconWidth)
-                }
-            }
-            .foregroundStyle(.primary)
-            .accessibilityHint("Opens in the web dashboard")
-        }
-    }
-}
-
 #Preview {
     List {
         ForEach(PreviewData.overview.groups.flatMap(\.cards)) { card in
             if card.hasToggle {
                 ModuleRow(card: card, isPending: false) { _ in }
-            } else {
-                LinkCardRow(card: card, url: URL(string: "https://app.sylobot.com"))
             }
         }
     }

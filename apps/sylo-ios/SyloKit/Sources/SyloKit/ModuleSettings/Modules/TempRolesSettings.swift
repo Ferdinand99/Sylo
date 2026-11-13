@@ -2,8 +2,8 @@ import Foundation
 
 // Temporary roles (src/modules/tempRoles.js, normaliseTempRolesConfig, parseTempDuration; page
 // route src/web/routes/v2TempRoles.js; web form web-v2/src/moduleForms/TempRoles.jsx): staff give a
-// member a role for a set time and Sylo takes it back. The app edits the settings and lists the
-// roles that are active; giving and removing one is left to the web dashboard.
+// member a role for a set time and Sylo takes it back. The app edits the settings, lists the
+// roles that are active, and gives and removes them.
 
 /// The Temporary roles settings page.
 public struct TempRolesPage: ModuleSettingsPage {

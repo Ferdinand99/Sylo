@@ -70,11 +70,3 @@ public final class ModulePlatformNoteModel {
         note = info.note(for: module)
     }
 }
-
-extension ServerURL {
-    /// The module's own page in the web dashboard, for what the app leaves to the web (managing
-    /// the lists on a module's page).
-    public func dashboardURL(server: ServerID, module: ModuleID) -> URL {
-        url(for: "/v2/guilds/\(server.pathComponent)/m/\(module.pathComponent)")
-    }
-}

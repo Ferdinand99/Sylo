@@ -135,6 +135,6 @@ extension OverviewCard {
             kind: kind, id: id, name: name, icon: icon, description: description, hasToggle: hasToggle,
             isEnabled: isEnabled, isBeta: isBeta, missingIntents: missingIntents,
             status: status == .blocked ? .blocked : (isEnabled ? .on : .off),
-            webPath: webPath, lines: lines)
+            lines: lines)
     }
 }

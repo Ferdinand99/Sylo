@@ -120,14 +120,9 @@ struct PlatformNoteTests {
         #expect(try JSONDecoder().decode(PlatformInfo.self, from: Data("{}".utf8)).platform == .discord)
     }
 
-    @Test("the endpoint and the dashboard link use the server's paths")
-    func paths() throws {
+    @Test("the endpoint uses the server's path")
+    func paths() {
         #expect(Endpoints.LoadPlatformInfo(server: "fluxer:9").path == "/api/v2/guilds/fluxer%3A9/platform")
-        let server = try ServerURL("https://sylo.example.com/app")
-        #expect(server.dashboardURL(server: "900", module: "auto-threads").absoluteString
-            == "https://sylo.example.com/app/v2/guilds/900/m/auto-threads")
-        #expect(server.dashboardURL(server: "fluxer:9", module: "events").absoluteString
-            == "https://sylo.example.com/app/v2/guilds/fluxer%3A9/m/events")
     }
 
     @MainActor
