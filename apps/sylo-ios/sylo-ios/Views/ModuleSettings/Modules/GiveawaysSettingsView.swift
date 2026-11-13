@@ -18,6 +18,61 @@ struct GiveawaysSettingsView: View {
     }
 
     var body: some View {
+        alerts
+    }
+
+    /// The form with its confirmations and alerts, in layers so each stays quick to type-check.
+    private var alerts: some View {
+        dialogs
+            .alert("Reroll Winners", isPresented: isRerolling, presenting: rerolling) { giveaway in
+                TextField("Winners", text: $rerollCount)
+                    .keyboardType(.numberPad)
+                Button("Reroll") {
+                    let count = Int(rerollCount.trimmingCharacters(in: .whitespaces)) ?? 1
+                    Task { await actions.reroll(giveaway, count: count) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { giveaway in
+                Text("Giveaway #\(giveaway.id): new winners are drawn from the entrants and announced. How many (1 to \(GiveawaysGiveaway.rerollRange.upperBound))?")
+            }
+            .alert("Couldn't Update Giveaway", isPresented: isShowingError, presenting: actions.errorMessage) { _ in
+                Button("OK") {}
+            } message: { message in
+                Text(message)
+            }
+            .alert(noticeTitle, isPresented: isShowingNotice, presenting: actions.notice) { _ in
+                Button("OK") {}
+            } message: { notice in
+                Text(notice.message)
+            }
+            .sensoryFeedback(.success, trigger: actions.doneCount)
+    }
+
+    private var noticeTitle: LocalizedStringKey {
+        actions.notice?.isError == true ? "Some Entry Fees Are Still Open" : "Giveaway Cancelled"
+    }
+
+    private var dialogs: some View {
+        form
+            .confirmationDialog(
+                "End This Giveaway Now?", isPresented: isEnding, titleVisibility: .visible, presenting: ending
+            ) { giveaway in
+                Button("End and Draw Winners") { Task { await actions.end(giveaway) } }
+                Button("Keep Running", role: .cancel) {}
+            } message: { giveaway in
+                Text("Giveaway #\(giveaway.id): the winners are drawn immediately and announced in the giveaway channel.")
+            }
+            .confirmationDialog(
+                "Cancel This Giveaway?", isPresented: isCancelling, titleVisibility: .visible, presenting: cancelling
+            ) { giveaway in
+                Button("Cancel Giveaway", role: .destructive) { Task { await actions.cancel(giveaway) } }
+                Button("Keep Running", role: .cancel) {}
+            } message: { giveaway in
+                Text(Self.cancelMessage(giveaway))
+            }
+    }
+
+    private var form: some View {
         ModuleSettingsForm("Giveaways", model: model) { $settings, page in
             ModuleIntro("Staff start giveaways with /giveaway start; members join with the Enter button. Winners are drawn automatically at the end time.")
 
@@ -61,47 +116,6 @@ struct GiveawaysSettingsView: View {
         }
         // A fresh page replaces what the last action answered.
         .onChange(of: model.page?.giveaways) { actions.forgetAnswer() }
-        .confirmationDialog(
-            "End This Giveaway Now?", isPresented: isEnding, titleVisibility: .visible, presenting: ending
-        ) { giveaway in
-            Button("End and Draw Winners") { Task { await actions.end(giveaway) } }
-            Button("Keep Running", role: .cancel) {}
-        } message: { giveaway in
-            Text("Giveaway #\(giveaway.id): the winners are drawn immediately and announced in the giveaway channel.")
-        }
-        .confirmationDialog(
-            "Cancel This Giveaway?", isPresented: isCancelling, titleVisibility: .visible, presenting: cancelling
-        ) { giveaway in
-            Button("Cancel Giveaway", role: .destructive) { Task { await actions.cancel(giveaway) } }
-            Button("Keep Running", role: .cancel) {}
-        } message: { giveaway in
-            Text(Self.cancelMessage(giveaway))
-        }
-        .alert("Reroll Winners", isPresented: isRerolling, presenting: rerolling) { giveaway in
-            TextField("Winners", text: $rerollCount)
-                .keyboardType(.numberPad)
-            Button("Reroll") {
-                let count = Int(rerollCount.trimmingCharacters(in: .whitespaces)) ?? 1
-                Task { await actions.reroll(giveaway, count: count) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { giveaway in
-            Text("Giveaway #\(giveaway.id): new winners are drawn from the entrants and announced. How many (1 to \(GiveawaysGiveaway.rerollRange.upperBound))?")
-        }
-        .alert("Couldn't Update Giveaway", isPresented: isShowingError, presenting: actions.errorMessage) { _ in
-            Button("OK") {}
-        } message: { message in
-            Text(message)
-        }
-        .alert(
-            actions.notice?.isError == true ? "Some Entry Fees Are Still Open" : "Giveaway Cancelled",
-            isPresented: isShowingNotice, presenting: actions.notice
-        ) { _ in
-            Button("OK") {}
-        } message: { notice in
-            Text(notice.message)
-        }
-        .sensoryFeedback(.success, trigger: actions.doneCount)
     }
 
     /// One giveaway with its menu: End Now and Cancel while it runs, Reroll once it has ended.

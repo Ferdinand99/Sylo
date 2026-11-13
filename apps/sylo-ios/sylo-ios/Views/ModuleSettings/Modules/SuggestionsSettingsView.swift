@@ -22,6 +22,58 @@ struct SuggestionsSettingsView: View {
     }
 
     var body: some View {
+        alerts
+    }
+
+    /// The form with its confirmations and alerts, in layers so each stays quick to type-check.
+    private var alerts: some View {
+        dialogs
+            .alert("Couldn't Update Suggestion", isPresented: isShowingActionError, presenting: list.actionError) { _ in
+                Button("OK") {}
+            } message: { message in
+                Text(message)
+            }
+            .alert(noticeTitle, isPresented: isShowingNotice, presenting: list.notice) { _ in
+                Button("OK") {}
+            } message: { notice in
+                Text(notice.message)
+            }
+            .sensoryFeedback(.success, trigger: list.doneCount)
+    }
+
+    private var noticeTitle: LocalizedStringKey {
+        list.notice?.isError == true ? "Not Everything Moved" : "Moved Back"
+    }
+
+    private var dialogs: some View {
+        form
+            .alert("Set the Status?", isPresented: isAskingReason, presenting: deciding) { pending in
+                TextField("Reason (optional)", text: $reason)
+                Button(pending.action.title) {
+                    let text = reason
+                    Task { await list.decide(pending.suggestion, pending.action, reason: text) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { pending in
+                Text("Suggestion #\(pending.suggestion.number) becomes \(pending.action.title). The reason is shown on the post and sent to the author.")
+            }
+            .confirmationDialog(
+                "Delete This Suggestion?", isPresented: isConfirmingDelete, titleVisibility: .visible, presenting: deleting
+            ) { suggestion in
+                Button("Delete", role: .destructive) { Task { await list.delete(suggestion) } }
+                Button("Cancel", role: .cancel) {}
+            } message: { suggestion in
+                Text("Suggestion #\(suggestion.number), its votes and its post are removed. This can't be undone.")
+            }
+            .confirmationDialog("Move All Back?", isPresented: $isConfirmingMoveAll, titleVisibility: .visible) {
+                Button("Move All Back") { Task { await list.moveAllBack() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Sylo posts each one again in the suggestions channel, oldest first, and removes the old post. With a log channel in copy mode, a decided suggestion keeps the old post as its log copy. A suggestion whose old post Sylo cannot reach is skipped and listed afterwards. This can take a while.")
+            }
+    }
+
+    private var form: some View {
         ModuleSettingsForm("Suggestions", model: model) { $settings, page in
             ModuleIntro("Members post ideas and everyone votes with thumbs up and down. Staff approve, deny or mark a suggestion as implemented, in chat or right here.")
             PlatformNoteSection(model: note)
@@ -85,46 +137,6 @@ struct SuggestionsSettingsView: View {
         .onChange(of: model.saveCount) { Task { await list.load() } }
         .onChange(of: list.filter) { Task { await list.load() } }
         .onChange(of: list.sort) { Task { await list.load() } }
-        .alert(
-            "Set the Status?", isPresented: isAskingReason, presenting: deciding
-        ) { pending in
-            TextField("Reason (optional)", text: $reason)
-            Button(pending.action.title) {
-                let text = reason
-                Task { await list.decide(pending.suggestion, pending.action, reason: text) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { pending in
-            Text("Suggestion #\(pending.suggestion.number) becomes \(pending.action.title). The reason is shown on the post and sent to the author.")
-        }
-        .confirmationDialog(
-            "Delete This Suggestion?", isPresented: isConfirmingDelete, titleVisibility: .visible, presenting: deleting
-        ) { suggestion in
-            Button("Delete", role: .destructive) { Task { await list.delete(suggestion) } }
-            Button("Cancel", role: .cancel) {}
-        } message: { suggestion in
-            Text("Suggestion #\(suggestion.number), its votes and its post are removed. This can't be undone.")
-        }
-        .confirmationDialog("Move All Back?", isPresented: $isConfirmingMoveAll, titleVisibility: .visible) {
-            Button("Move All Back") { Task { await list.moveAllBack() } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Sylo posts each one again in the suggestions channel, oldest first, and removes the old post. With a log channel in copy mode, a decided suggestion keeps the old post as its log copy. A suggestion whose old post Sylo cannot reach is skipped and listed afterwards. This can take a while.")
-        }
-        .alert("Couldn't Update Suggestion", isPresented: isShowingActionError, presenting: list.actionError) { _ in
-            Button("OK") {}
-        } message: { message in
-            Text(message)
-        }
-        .alert(
-            list.notice?.isError == true ? "Not Everything Moved" : "Moved Back",
-            isPresented: isShowingNotice, presenting: list.notice
-        ) { _ in
-            Button("OK") {}
-        } message: { notice in
-            Text(notice.message)
-        }
-        .sensoryFeedback(.success, trigger: list.doneCount)
     }
 
     /// The filter and order, the move-all-back banner and the suggestions.
