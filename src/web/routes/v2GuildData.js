@@ -8,6 +8,8 @@ import { Router } from 'express';
 import { currentUser, isOwner } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { timeAgo } from '../lib/format.js';
+import { searchMembers } from '../lib/memberSearch.js';
+import { clientKey, rateLimit } from '../middleware/rateLimit.js';
 import {
   exportGuildConfigFor,
   forgetMember,
@@ -35,6 +37,25 @@ function parseUserId(raw) {
 }
 
 const router = Router({ mergeParams: true });
+
+// Search as you type from a member picker, one count per person and server. Generous, because the
+// picker asks on every pause in typing; it mainly bounds the live lookups of pasted ids.
+const memberSearchLimit = rateLimit({
+  windowMs: 60_000,
+  max: 100,
+  keyFn: (req) => `member-search|${req.params.guildId}|${req.account?.id ?? clientKey(req)}`,
+});
+
+// Members of this server by name or one pasted id, for a member picker (the Sylo app's). The same
+// answer as the Temporary roles search: at most 25, never a bot, cached members by name and an
+// exact id looked up live.
+router.get(
+  '/members',
+  memberSearchLimit,
+  asyncHandler(async (req, res) => {
+    res.json({ members: await searchMembers(req.guild, req.query.q) });
+  })
+);
 
 // Config change history.
 router.get(

@@ -147,6 +147,7 @@ authorization-code flow with PKCE (RFC 7636, S256 only).
 | `DELETE /api/mobile/token` | Bearer token | `204`, or `401` without a valid token |
 | `/api/v2/*` | Bearer token | The dashboard's JSON API |
 | `GET /api/v2/changelog?limit=N` | Bearer token or session | `{ version, releases: [{ version, date, url, sections: [{ title, kind, items: [{ scope, text, refs }] }] }] }`, newest first; the same release notes as the dashboard's What's new page |
+| `GET /api/v2/guilds/:id/members?q=` | Bearer token or session, Manage Server | `{ members: [{ id, name, username }] }`: the server's members by name (those Sylo has cached) or one pasted id (looked up live), never a bot, at most 25. 100 searches per minute per account and server |
 
 `GET /api/mobile/info` is public. The app calls it when you type a server
 address, to tell whether the address is a Sylo server and whether it can sign
@@ -160,10 +161,21 @@ in there:
 | `login` | Whether sign-in is available (false in open mode) |
 | `loginProviders` | The configured logins, for example `["discord", "fluxer"]`; empty when `login` is false |
 | `platforms` | The platforms the bot runs on, for example `["discord"]` |
-| `features` | What this version's app API supports, for example `["app-login", "live-access", "changelog"]`, so the app can hide what an older Sylo lacks; `changelog` means `GET /api/v2/changelog` is there |
+| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger` and `member-search`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
+
+The feature strings:
+
+- `app-login`: the app sign-in above.
+- `live-access`: server access is checked live through the bot on every request.
+- `changelog`: `GET /api/v2/changelog`.
+- `collectibles`: the Economy shop's collectible items, their picture upload and the inventory.
+- `welcome-trigger`: the Welcome module's `trigger` setting (a member joins, or first gets a role).
+- `member-search`: `GET /api/v2/guilds/:id/members?q=`.
+- `push`, `push-pigeon`: this instance can send notifications to signed-in apps.
 
 An older Sylo without this endpoint answers `404`, and the app says the server
-is too old for it.
+is too old for it. A Sylo that has the endpoint but lacks a string does not have
+that feature: the app hides the control.
 
 On a token request, "not signed in" and "not allowed" are JSON, never a
 redirect or an HTML page:

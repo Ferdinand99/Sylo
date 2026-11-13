@@ -184,7 +184,17 @@ export const mobileApiRouter = Router();
 // (`changelog`: GET /api/v2/changelog). `push` is added when this instance can send
 // notifications the older way (APNs keys, or a relay) to signed-in apps, `push-pigeon` when it
 // can through Postal Pigeon. An app that knows Pigeon uses it when it is the official one.
-const FEATURES = Object.freeze(['app-login', 'live-access', 'changelog']);
+// `collectibles` is the collectible picture upload and inventory of the Economy shop,
+// `welcome-trigger` the Welcome module's `trigger` setting (a member joins, or first gets a role),
+// `member-search` GET /api/v2/guilds/:id/members?q=.
+const FEATURES = Object.freeze([
+  'app-login',
+  'live-access',
+  'changelog',
+  'collectibles',
+  'welcome-trigger',
+  'member-search',
+]);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode
 // server must still say it is a Sylo, just one the app cannot sign in to. Its own rate-limit bucket,
