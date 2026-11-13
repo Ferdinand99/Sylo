@@ -139,6 +139,31 @@ struct AccountConnectModelTests {
         return model
     }
 
+    @Test("The server's info is read again for the connect gate, and a failed read leaves nothing fresh")
+    func freshInfo() async {
+        let upgraded = StubClients { endpoint in
+            switch endpoint {
+            case is Endpoints.ServerInfo: return Self.connectInfo
+            default: return AccountModelTests.account
+            }
+        }
+        let model = await loadedModel(upgraded)
+        #expect(model.freshServerInfo == nil)
+        await model.refreshServerInfo()
+        #expect(model.freshServerInfo == Self.connectInfo)
+        #expect(upgraded.calls.contains { $0.endpoint is Endpoints.ServerInfo })
+
+        // The server cannot be reached: nothing fresh, so the screen uses the cached info.
+        let offline = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { throw NetworkError.offline }
+            return AccountModelTests.account
+        }
+        let session = makeSignedInSession(clients: offline)
+        let other = AccountModel(session: session)
+        await other.refreshServerInfo()
+        #expect(other.freshServerInfo == nil)
+    }
+
     func accountLoads(_ clients: StubClients) -> Int {
         clients.calls.filter { $0.endpoint is Endpoints.Account }.count
     }

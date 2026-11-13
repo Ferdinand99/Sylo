@@ -21,6 +21,11 @@ public final class AccountModel {
     /// Why the last disconnect or connect did not go through.
     public var platformError: String?
 
+    /// The Sylo's `/api/mobile/info`, read just now. nil until it was read, and when the read failed
+    /// (the screen then falls back to what the session cached). Read again every time the screen
+    /// opens, so a server upgraded since sign-in offers "Connect" without a relaunch.
+    public private(set) var freshServerInfo: ServerInfo?
+
     private var revoking: Set<String> = []
     private let session: AppSession
     /// The sign-in (``AppSession/generation``) the loaded ``account`` belongs to.
@@ -91,6 +96,14 @@ public final class AccountModel {
             let error = NetworkError(error)
             if error != .cancelled, error != .unauthorized { errorMessage = error.userMessage }
         }
+    }
+
+    /// Reads the server's info again, for the features that gate what this screen offers
+    /// (``connectablePlatforms(serverInfo:)``). A failed read keeps the last one.
+    public func refreshServerInfo() async {
+        let generation = session.generation
+        guard let info = try? await session.send(Endpoints.ServerInfo()), session.generation == generation else { return }
+        freshServerInfo = info
     }
 
     /// Whether signing this device out is on its way to the server.
