@@ -126,9 +126,6 @@ struct TempRolesSettingsView: View {
             if let given = tempRoles.lastGiven {
                 StatusMessage(Self.givenText(given), kind: .notice)
             }
-            if let warning = tempRoles.removalWarning {
-                StatusMessage(warning, kind: .notice)
-            }
         } header: {
             Text("Give a temporary role")
         } footer: {
@@ -175,6 +172,10 @@ struct TempRolesSettingsView: View {
                 ForEach(page.roles) { role in
                     Text(verbatim: "@\(role.name)").tag(role.id)
                 }
+            }
+            // What happened when a role was taken back (the record is gone, the role may not be).
+            if let warning = tempRoles.removalWarning {
+                StatusMessage(warning, kind: .notice)
             }
             if list.rows.isEmpty {
                 Text("Nothing here.").foregroundStyle(.secondary)

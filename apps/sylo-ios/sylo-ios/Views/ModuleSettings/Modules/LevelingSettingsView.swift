@@ -10,6 +10,8 @@ struct LevelingSettingsView: View {
     @State private var xpMember: MemberChoice?
     @State private var xpText = ""
     @State private var isConfirmingReset = false
+    /// Whether the last notice came from the wipe (it is shown under that button, not the XP form).
+    @State private var noticeIsWipe = false
     private let server: ServerID
     private let session: AppSession
 
@@ -25,6 +27,7 @@ struct LevelingSettingsView: View {
 
     private func setXP() {
         guard let member = xpMember, let xp = typedXP else { return }
+        noticeIsWipe = false
         Task {
             if await actions.setXP(member: member, xp: xp) {
                 xpMember = nil
@@ -190,7 +193,7 @@ struct LevelingSettingsView: View {
                 }
                 Button("Update XP") { setXP() }
                     .disabled(xpMember == nil || typedXP == nil || actions.isWorking)
-                if let notice = actions.notice {
+                if let notice = actions.notice, !noticeIsWipe {
                     StatusMessage(notice, kind: .notice)
                 }
             } header: {
@@ -202,6 +205,9 @@ struct LevelingSettingsView: View {
             Section {
                 Button("Reset All Leveling Data…", role: .destructive) { isConfirmingReset = true }
                     .disabled(actions.isWorking)
+                if let notice = actions.notice, noticeIsWipe {
+                    StatusMessage(notice, kind: .notice)
+                }
             } footer: {
                 Text("Wipes every member's XP, level and message count on this server. This can't be undone.")
             }
@@ -212,6 +218,7 @@ struct LevelingSettingsView: View {
             word: MemberActionLimits.resetXPWord, isPresented: $isConfirmingReset,
             confirmTitle: "Wipe All Leveling Data"
         ) {
+            noticeIsWipe = true
             Task { _ = await actions.resetAllXP() }
         }
         .alert("Couldn't Update XP", isPresented: isShowingActionError, presenting: actions.errorMessage) { _ in

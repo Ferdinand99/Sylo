@@ -138,6 +138,7 @@ public final class ModuleTestModel {
     /// whose state is not known is treated as on, because the server's route does not care.
     public var isAvailable: Bool { isModuleEnabled != false }
 
+    private var hasLoadedAvailability = false
     private let session: AppSession
 
     public init(server: ServerID, module: ModuleID, session: AppSession) {
@@ -149,6 +150,9 @@ public final class ModuleTestModel {
     /// Reads whether the module is on (the dashboard reads the same overview). A failed read leaves
     /// the state unknown, so the button stays.
     public func loadAvailability() async {
+        // Once per screen: the row comes and goes as the form scrolls, and the overview is a big read.
+        guard !hasLoadedAvailability else { return }
+        hasLoadedAvailability = true
         guard let overview = try? await session.send(Endpoints.Overview(server: server)) else { return }
         let card = overview.groups.lazy.flatMap(\.cards).first { $0.id == module.rawValue }
         isModuleEnabled = card?.isEnabled

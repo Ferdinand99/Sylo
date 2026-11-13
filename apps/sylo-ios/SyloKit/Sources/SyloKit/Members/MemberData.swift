@@ -134,7 +134,8 @@ public struct MemberDataAnswer: Decodable, Sendable, Equatable {
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        lookup = try? c.decodeIfPresent(MemberDataLookup.self, forKey: .lookup)
+        // A lookup that is there but cannot be read is an error, not "nothing found".
+        lookup = try c.decodeIfPresent(MemberDataLookup.self, forKey: .lookup)
         unaffected = try c.decode(forKey: .unaffected, or: "")
     }
 }
@@ -213,9 +214,9 @@ public enum MemberForget {
     /// The server keeps at most this many characters of the reason.
     public static let reasonLength = 500
 
-    /// Whether what was typed is the confirmation word (any case, spaces around are fine).
+    /// Whether what was typed is exactly the confirmation word, as the dashboard compares it.
     public static func isConfirmed(_ typed: String) -> Bool {
-        typed.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == confirmationWord
+        typed == confirmationWord
     }
 
     /// The reason as it is sent: trimmed and cut at the server's limit. Empty when none was given,

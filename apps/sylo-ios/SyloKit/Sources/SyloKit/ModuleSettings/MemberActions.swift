@@ -430,6 +430,9 @@ public final class MemberActionModel {
     public func releasePenalty(userID: String, name: String) async -> Bool {
         await run(done: "\(name) can count again.") {
             _ = try await self.session.send(Endpoints.ReleaseCountingPenalty(server: self.server, userID: userID))
+            // The answer has no list of who is still benched, so the screen must read the page again:
+            // dropping the state of an earlier count call makes it do so.
+            self.countingState = nil
         }
     }
 

@@ -51,9 +51,14 @@ struct TempRoleAnswerTests {
 
     @Test("the count answer reads the state, and an unreadable one is no state")
     func countAnswer() throws {
-        let answer = try decode(CountingStateAnswer.self, #"{"state":{"current":41,"record":120,"last_user_id":"1"}}"#)
+        // The count calls answer with the stored row, as the server sends it.
+        let answer = try decode(CountingStateAnswer.self, """
+            {"state":{"guild_id":"1","current":41,"record":120,"last_user_id":"222222222222222222",
+                      "last_message_id":"333333333333333333","updated_at":1700000000000}}
+            """)
         #expect(answer.state?.current == 41)
         #expect(answer.state?.record == 120)
+        #expect(answer.state?.lastUserId == "222222222222222222")
         #expect(try decode(CountingStateAnswer.self, #"{"state":"nope"}"#).state == nil)
         #expect(try decode(CountingStateAnswer.self, "{}").state == nil)
     }
@@ -193,6 +198,15 @@ struct MemberActionModelTests {
         #expect(model.countingState == nil)
         #expect(await model.resetCount())
         #expect(model.countingState?.current == 7)
+    }
+
+    @Test("releasing a member drops the state of an earlier count call, so the page is read again")
+    func releaseDropsCountingState() async {
+        let (model, _) = make()
+        #expect(await model.setCount(7))
+        #expect(model.countingState != nil)
+        #expect(await model.releasePenalty(userID: "222222222222222222", name: "Sam"))
+        #expect(model.countingState == nil)
     }
 
     @Test("an answer with no readable state leaves nothing to show, so the screen reads the page")

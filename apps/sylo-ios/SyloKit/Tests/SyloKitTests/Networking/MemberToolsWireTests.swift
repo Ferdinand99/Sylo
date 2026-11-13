@@ -27,9 +27,14 @@ extension APIClientTests {
     @Test("Counting: set sends current, reset sends only reset, release sends the member")
     func countingOnTheWire() async throws {
         let mock = MockURLProtocol.state
-        mock.reset([.json(200, #"{"state":{"current":41}}"#)])
+        mock.reset([.json(200, """
+            {"state":{"guild_id":"1","current":41,"record":120,"last_user_id":"222222222222222222",
+                      "last_message_id":"333333333333333333","updated_at":1700000000000}}
+            """)])
         let client = try toolsClient()
-        _ = try await client.send(Endpoints.SetCountingCount(server: "1", count: 41))
+        let set = try await client.send(Endpoints.SetCountingCount(server: "1", count: 41))
+        #expect(set.state?.current == 41)
+        #expect(set.state?.lastUserId == "222222222222222222")
         _ = try await client.send(Endpoints.ResetCountingCount(server: "1"))
         _ = try await client.send(Endpoints.ReleaseCountingPenalty(server: "1", userID: "111111111111111111"))
 
@@ -40,9 +45,9 @@ extension APIClientTests {
             #expect(request.method == "POST")
             #expect(request.header("Authorization") == "Bearer sylo_secret")
         }
-        let set = try toolsBody(requests[0])
-        #expect(Set(set.keys) == ["current"])
-        #expect(set["current"] as? Int == 41)
+        let setBody = try toolsBody(requests[0])
+        #expect(Set(setBody.keys) == ["current"])
+        #expect(setBody["current"] as? Int == 41)
         let reset = try toolsBody(requests[1])
         #expect(Set(reset.keys) == ["reset"])
         #expect(reset["reset"] as? Bool == true)

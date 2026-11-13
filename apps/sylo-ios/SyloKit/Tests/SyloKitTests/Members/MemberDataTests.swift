@@ -49,6 +49,16 @@ struct MemberDataTests {
         #expect(try decode(MemberDataAnswer.self, "{}").lookup == nil)
     }
 
+    @Test("a lookup that is there but cannot be read is an error, not nothing found")
+    func malformedLookup() {
+        #expect(throws: DecodingError.self) {
+            try decode(MemberDataAnswer.self, #"{"lookup":{"profile":"x"},"unaffected":""}"#)
+        }
+        #expect(throws: DecodingError.self) {
+            try decode(MemberDataAnswer.self, #"{"lookup":"x"}"#)
+        }
+    }
+
     @Test("an unknown member has no tag and no picture, and reads as unknown")
     func unknownMember() throws {
         let profile = try decode(MemberProfile.self, #"{"id":"111111111111111111","tag":null,"avatar":null}"#)
@@ -76,10 +86,12 @@ struct MemberDataTests {
         #expect(summary.erasable == 2)
     }
 
-    @Test("the confirmation word is DELETE in any case, and nothing else")
+    @Test("the confirmation word is exactly DELETE, as the dashboard compares it")
     func confirmationWord() {
         #expect(MemberForget.isConfirmed("DELETE"))
-        #expect(MemberForget.isConfirmed(" delete "))
+        #expect(!MemberForget.isConfirmed("delete"))
+        #expect(!MemberForget.isConfirmed("Delete"))
+        #expect(!MemberForget.isConfirmed(" DELETE "))
         #expect(!MemberForget.isConfirmed(""))
         #expect(!MemberForget.isConfirmed("DELET"))
         #expect(!MemberForget.isConfirmed("RESET"))
@@ -159,6 +171,17 @@ struct MemberDataModelTests {
         #expect(model.errorMessage == "“abc” is not a valid user ID or mention.")
     }
 
+    @Test("a malformed lookup shows an error and no member")
+    func malformedLookupModel() async {
+        let clients = StubClients { _ in
+            try JSONDecoder().decode(MemberDataAnswer.self, from: Data(#"{"lookup":{"profile":1}}"#.utf8))
+        }
+        let model = MemberDataModel(server: "1", session: makeSignedInSession(clients: clients))
+        await model.look(up: alex)
+        #expect(model.lookup == nil)
+        #expect(model.errorMessage != nil)
+    }
+
     @Test("forgetting needs the typed word and sends nothing without it")
     func needsTypedWord() async {
         let server = Server()
@@ -186,7 +209,7 @@ struct MemberDataModelTests {
         let server = Server()
         let model = make(server)
         await model.look(up: alex)
-        let done = await model.forget(reason: "  At their request ", typed: "Delete")
+        let done = await model.forget(reason: "  At their request ", typed: "DELETE")
         #expect(done)
         #expect(server.forgets.count == 1)
         #expect(server.forgets.first?.userID == "111111111111111111")

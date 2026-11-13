@@ -46,12 +46,15 @@ struct MemberDataView: View {
         }
         .navigationTitle("Member Data")
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: member) { _, chosen in
-            guard let chosen else {
+        // Runs on every appear and every change: opening the member picker and coming back, or
+        // choosing the same member again, looks the member up again (the screen drops the data
+        // when it disappears, see below).
+        .task(id: member) {
+            if let member {
+                await model.look(up: member)
+            } else {
                 model.clear()
-                return
             }
-            Task { await model.look(up: chosen) }
         }
         // Nothing about the member stays in memory once the screen is gone.
         .onDisappear { model.clear() }

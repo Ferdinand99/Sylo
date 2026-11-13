@@ -9,7 +9,7 @@ extension View {
     ///                    word: "RESET", isPresented: $isAsking, confirmTitle: "Wipe") { … }
     /// ```
     /// - Parameters:
-    ///   - word: What must be typed. Any case, spaces around it are fine.
+    ///   - word: What must be typed, exactly (the dashboard compares the same way).
     ///   - confirmTitle: The destructive button.
     func typedConfirmation(
         _ title: LocalizedStringKey, message: LocalizedStringKey, word: String, isPresented: Binding<Bool>,
@@ -32,7 +32,7 @@ private struct TypedConfirmationModifier: ViewModifier {
     @State private var typed = ""
 
     private var isConfirmed: Bool {
-        typed.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == word.uppercased()
+        typed == word
     }
 
     func body(content: Content) -> some View {
@@ -41,8 +41,12 @@ private struct TypedConfirmationModifier: ViewModifier {
                 TextField(word, text: $typed)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
-                Button(confirmTitle, role: .destructive, action: onConfirm)
-                    .disabled(!isConfirmed)
+                // Checked again here: the action is irreversible, so it must not rely on the disabled
+                // state of an alert button alone.
+                Button(confirmTitle, role: .destructive) {
+                    if isConfirmed { onConfirm() }
+                }
+                .disabled(!isConfirmed)
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text(message) + Text(verbatim: "\n\n") + Text("Type \(word) to confirm.")

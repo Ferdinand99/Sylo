@@ -135,6 +135,19 @@ struct ModuleTestModelTests {
         #expect(!off.isAvailable)
     }
 
+    @Test("the overview is read once per screen, not on every appear")
+    func availabilityReadOnce() async {
+        let count = LockedBox<Int>(0)
+        let model = make { _ in
+            count.value += 1
+            return Self.overview(welcomeEnabled: true)
+        }
+        await model.loadAvailability()
+        await model.loadAvailability()
+        await model.loadAvailability()
+        #expect(count.value == 1)
+    }
+
     @Test("when the overview cannot be read, or has no such card, the button stays")
     func availabilityUnknown() async {
         let failing = make { _ in throw NetworkError.offline }
