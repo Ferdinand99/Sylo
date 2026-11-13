@@ -85,12 +85,12 @@ struct MemberDataTests {
         #expect(!MemberForget.isConfirmed("RESET"))
     }
 
-    @Test("a reason is needed, trimmed and cut at 500 characters")
+    @Test("the reason is optional, trimmed and cut at 500 characters")
     func reasonRules() {
-        #expect(MemberForget.cleanedReason("") == nil)
-        #expect(MemberForget.cleanedReason("  \n ") == nil)
+        #expect(MemberForget.cleanedReason("").isEmpty)
+        #expect(MemberForget.cleanedReason("  \n ") .isEmpty)
         #expect(MemberForget.cleanedReason("  At their request  ") == "At their request")
-        #expect(MemberForget.cleanedReason(String(repeating: "a", count: 900))?.count == 500)
+        #expect(MemberForget.cleanedReason(String(repeating: "a", count: 900)).count == 500)
     }
 
     @Test("the notice says whether the member was told")
