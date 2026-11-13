@@ -346,3 +346,68 @@
   box-shadow: inset 3px 0 0 var(--accent);
   border-radius: var(--radius-sm);
 }
+
+/* ---- # and @ suggestions in message fields, and the names of the mentions as chips ---------------------- */
+.v2-mention-wrap {
+  position: relative;
+}
+.v2-mention-pop {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  max-width: 340px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-pop);
+}
+.v2-mention-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: var(--fs-md);
+  cursor: pointer;
+}
+.v2-mention-option.is-active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.v2-mention-kind {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.v2-mention-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.v2-mention-chip {
+  padding: 2px 9px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+.v2-mention-chip.is-missing {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}

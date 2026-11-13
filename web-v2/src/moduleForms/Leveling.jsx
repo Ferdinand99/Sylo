@@ -4,6 +4,7 @@ import { apiFetch } from '../api.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import MentionTextarea from '../components/MentionTextarea.jsx';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -157,7 +158,9 @@ export default function Leveling() {
           </div>
           <div className="v2-field">
             <label htmlFor="announceMessage">Level-up message</label>
-            <textarea
+            <MentionTextarea
+              channels={data.channels}
+              roles={data.roles}
               id="announceMessage"
               rows={2}
               maxLength={limitOf(limits, 'announceMessage').maxLength}

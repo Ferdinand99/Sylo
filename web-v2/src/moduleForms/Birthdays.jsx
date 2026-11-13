@@ -1,5 +1,6 @@
 import { useCmd } from '../platformContext.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import MentionTextarea from '../components/MentionTextarea.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
@@ -40,7 +41,9 @@ export default function Birthdays() {
 
         <div className="v2-field">
           <label htmlFor="message">Message</label>
-          <textarea
+          <MentionTextarea
+            channels={data.channels}
+            roles={data.roles}
             id="message"
             rows={2}
             maxLength={limitOf(limits, 'message').maxLength}

@@ -494,6 +494,32 @@ router.get(
   })
 );
 
+// Members of this server by name, for the @ suggestions in the message fields. Only the members Sylo has
+// cached are searched (no id is looked up), bots are left out and at most MENTION_SHOWN come back.
+const MENTION_SHOWN = 8;
+router.get('/guilds/:guildId/members/search', (req, res) => {
+  const q = String(req.query.q ?? '')
+    .trim()
+    .toLowerCase()
+    .slice(0, 100);
+  const found = [];
+  if (q) {
+    for (const m of req.guild.members.cache.values()) {
+      if (m.user?.bot) continue;
+      const names = [m.displayName, m.user?.username].map((v) => String(v ?? '').toLowerCase());
+      if (names.some((n) => n.includes(q))) found.push(m);
+      if (found.length >= MENTION_SHOWN) break;
+    }
+  }
+  res.json({
+    members: found.map((m) => ({
+      id: m.id,
+      name: m.displayName ?? m.user?.username ?? m.id,
+      username: m.user?.username ?? '',
+    })),
+  });
+});
+
 // Bulk enable/disable from the overview page's "select mode" — mirrors
 // guilds.js's own /modules/bulk route (same per-module side effects as a
 // single toggle, just looped). Registered before the `:moduleId` route

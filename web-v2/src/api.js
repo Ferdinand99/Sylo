@@ -92,6 +92,9 @@ export const setModuleEnabled = (guildId, moduleId, enabled) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/${moduleId}`, { enabled });
 export const setModulesEnabledBulk = (guildId, ids, enabled) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/bulk`, { ids, enabled });
+// Members of the server by name (the ones Sylo has cached), for the @ suggestions in message fields.
+export const searchMembers = (guildId, q) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/members/search?q=${encodeURIComponent(q)}`);
 export const getPlatformInfo = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/platform`);
 
 // The setting limits of every module (see components/useModuleLimits.js).

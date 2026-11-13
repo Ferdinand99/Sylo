@@ -4,6 +4,7 @@ import ToggleSection from '../components/ToggleSection.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import Callout from '../components/Callout.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import MentionTextarea from '../components/MentionTextarea.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
@@ -117,7 +118,9 @@ export default function Welcome() {
           </div>
           <div className="v2-field">
             <label htmlFor="joinMessage">Message</label>
-            <textarea
+            <MentionTextarea
+              channels={data.channels}
+              roles={data.roles}
               id="joinMessage"
               rows={3}
               maxLength={limitOf(limits, 'joinMessage').maxLength}
@@ -179,7 +182,9 @@ export default function Welcome() {
         >
           <div className="v2-field">
             <label htmlFor="dmMessage">DM text</label>
-            <textarea
+            <MentionTextarea
+              channels={data.channels}
+              roles={data.roles}
               id="dmMessage"
               rows={3}
               maxLength={limitOf(limits, 'dmMessage').maxLength}
@@ -218,7 +223,9 @@ export default function Welcome() {
           </div>
           <div className="v2-field">
             <label htmlFor="leaveMessage">Message</label>
-            <textarea
+            <MentionTextarea
+              channels={data.channels}
+              roles={data.roles}
               id="leaveMessage"
               rows={3}
               maxLength={limitOf(limits, 'leaveMessage').maxLength}

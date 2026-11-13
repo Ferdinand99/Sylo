@@ -7,6 +7,7 @@ import ColorPicker from '../components/ColorPicker.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import LoadError from '../components/LoadError.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import MentionTextarea from '../components/MentionTextarea.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
@@ -362,7 +363,9 @@ export default function Introductions() {
           </p>
           <div className="v2-field">
             <label htmlFor="intro-description">Description (optional)</label>
-            <textarea
+            <MentionTextarea
+              channels={data.channels}
+              roles={data.roles}
               id="intro-description"
               rows={3}
               maxLength={limitOf(limits, 'description').maxLength}
@@ -431,7 +434,9 @@ export default function Introductions() {
           </p>
           <div className="v2-field">
             <label htmlFor="intro-prompt">Message text</label>
-            <textarea
+            <MentionTextarea
+              channels={data.channels}
+              roles={data.roles}
               id="intro-prompt"
               rows={2}
               maxLength={limitOf(limits, 'promptText').maxLength}

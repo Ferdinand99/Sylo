@@ -8,6 +8,7 @@ import { isDirty } from '../components/formEqual.js';
 import { useUnsavedChangesGuard, SKIP_UNSAVED_GUARD } from '../components/useUnsavedChangesGuard.js';
 import AppTag from '../components/AppTag.jsx';
 import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
+import MentionTextarea from '../components/MentionTextarea.jsx';
 import EmbedCard, { newKey } from '../components/EmbedCard.jsx';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
@@ -94,6 +95,7 @@ export default function MessageBuilder() {
   const [channelId, setChannelId] = useState('');
   const [messageId, setMessageId] = useState(null);
   const [channels, setChannels] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [busy, setBusy] = useState(false);
   // What the server last had — dirty while name / channel / message differ.
   const [savedSnapshot, setSavedSnapshot] = useState(null);
@@ -112,6 +114,7 @@ export default function MessageBuilder() {
         setForm(loaded);
         setSavedSnapshot({ name: d.rec.name, channelId: d.rec.channelId, form: loaded });
         setChannels(d.channels);
+        setRoles(d.roles ?? []);
         setState({ loading: false, error: null });
       })
       .catch((error) => !cancelled && setState({ loading: false, error }));
@@ -250,8 +253,8 @@ export default function MessageBuilder() {
 
       <h2 className="v2-group-title v2-section-gap">Message</h2>
       <p className="v2-field-hint">
-        This is a live preview — click straight into any part of it to edit. To ping a role, type it into the
-        message text as {'<@&ROLE_ID>'}; mentions placed inside an embed don't notify anyone.
+        This is a live preview — click straight into any part of it to edit. To ping a role, type @ in the
+        message text and pick it; mentions placed inside an embed don't notify anyone.
       </p>
 
       <div className="v2-msg-preview">
@@ -263,7 +266,10 @@ export default function MessageBuilder() {
             <span className="v2-msg-time">Today</span>
           </div>
         </div>
-        <AutoGrowTextarea
+        <MentionTextarea
+          as={AutoGrowTextarea}
+          channels={channels}
+          roles={roles}
           className="v2-msg-content"
           aria-label="Message text"
           maxLength={2000}
