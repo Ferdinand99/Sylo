@@ -1,16 +1,24 @@
 import SwiftUI
 import SyloKit
 
-/// The application inbox: pending ones first, filtered by status, newest first. A row opens the
-/// application with its answers.
+/// The application inbox: pending ones first, filtered by status and form, newest first. A row opens
+/// the application with its answers.
 struct ApplicationSubmissionsView: View {
     @State private var model: ApplicationSubmissionsModel
     private let server: ServerID
     private let session: AppSession
+    private let forms: [ApplicationForm]
 
-    init(server: ServerID, session: AppSession) {
+    /// What the list shows; a change loads it again.
+    private struct Filter: Hashable {
+        let status: ApplicationStatus?
+        let form: Int?
+    }
+
+    init(server: ServerID, session: AppSession, forms: [ApplicationForm] = []) {
         self.server = server
         self.session = session
+        self.forms = forms
         _model = State(initialValue: ApplicationSubmissionsModel(server: server, session: session))
     }
 
@@ -27,6 +35,14 @@ struct ApplicationSubmissionsView: View {
                     Text("Withdrawn").tag(ApplicationStatus?.some(.withdrawn))
                     Text("All").tag(ApplicationStatus?.none)
                 }
+                if forms.count > 1 {
+                    Picker("Form", selection: $model.formFilter) {
+                        Text("All forms").tag(Int?.none)
+                        ForEach(forms) { form in
+                            Text(verbatim: form.name).tag(form.id)
+                        }
+                    }
+                }
             }
             Section {
                 ForEach(model.submissions) { submission in
@@ -34,7 +50,7 @@ struct ApplicationSubmissionsView: View {
                         ApplicationSubmissionView(server: server, session: session, submissionID: submission.id,
                                                   applicant: submission.applicantName)
                     } label: {
-                        SubmissionRow(submission: submission)
+                        ApplicationSubmissionRow(submission: submission)
                     }
                 }
                 if model.canLoadMore {
@@ -49,6 +65,9 @@ struct ApplicationSubmissionsView: View {
                 if model.hasLoaded, model.submissions.isEmpty {
                     Text("No applications match.")
                 }
+            }
+            if !forms.isEmpty {
+                ApplicationsExportSection(server: server, session: session, forms: forms)
             }
         }
         .overlay {
@@ -69,19 +88,100 @@ struct ApplicationSubmissionsView: View {
         .navigationTitle("Applications")
         .navigationBarTitleDisplayMode(.inline)
         // Comes back from an application fresh, and reloads when the filter changes.
-        .task(id: model.filter) { await model.load() }
+        .task(id: Filter(status: model.filter, form: model.formFilter)) { await model.load() }
         .refreshable { await model.load() }
     }
 }
 
+/// Exports the answers of one form, optionally one status, as CSV or JSON. The file opens in Quick Look,
+/// where it can be read or shared, and is deleted when that closes or the screen goes away. The answers
+/// are personal data: the person confirms first, and the server writes every export to the audit log.
+private struct ApplicationsExportSection: View {
+    @State private var download: FileDownloadModel
+    @State private var chosenForm: Int?
+    @State private var status: ApplicationStatus?
+    @State private var format: ApplicationExportFormat = .csv
+    @State private var isConfirming = false
+    @State private var previewed: DownloadedFile?
+    private let server: ServerID
+    private let forms: [ApplicationForm]
+
+    init(server: ServerID, session: AppSession, forms: [ApplicationForm]) {
+        self.server = server
+        self.forms = forms
+        _download = State(initialValue: FileDownloadModel(session: session))
+    }
+
+    /// The form picked, or the first one until the person picks.
+    private var formID: Int? { chosenForm ?? forms.first?.id }
+
+    var body: some View {
+        Section {
+            Picker("Form", selection: Binding(get: { formID }, set: { chosenForm = $0 })) {
+                ForEach(forms) { form in
+                    Text(verbatim: form.name).tag(form.id)
+                }
+            }
+            Picker("Status", selection: $status) {
+                Text("Any status").tag(ApplicationStatus?.none)
+                ForEach(ApplicationStatus.filters, id: \.self) { status in
+                    Text(verbatim: status.title).tag(ApplicationStatus?.some(status))
+                }
+            }
+            Picker("Format", selection: $format) {
+                Text(verbatim: "CSV").tag(ApplicationExportFormat.csv)
+                Text(verbatim: "JSON").tag(ApplicationExportFormat.json)
+            }
+            .pickerStyle(.segmented)
+            Button {
+                isConfirming = true
+            } label: {
+                if download.isDownloading {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Exporting")
+                    }
+                } else {
+                    Label("Export Answers", systemImage: "square.and.arrow.down")
+                }
+            }
+            .disabled(formID == nil || download.isDownloading)
+            .confirmationDialog("Export These Answers?", isPresented: $isConfirming, titleVisibility: .visible) {
+                Button("Export") { start() }
+            } message: {
+                Text("The answers of the applicants are saved to a file you can read or share. The export is logged.")
+            }
+            .fileQuickLook($previewed) { download.clear() }
+            .onDisappear { download.clear() }
+            if let message = download.errorMessage {
+                StatusMessage(message, kind: .error)
+            }
+        } header: {
+            Text("Export answers")
+        } footer: {
+            Text("Answers are personal data. Keep the file safe and delete it when you are done. Every export is written to the server's audit log.")
+        }
+    }
+
+    private func start() {
+        guard let formID else { return }
+        let endpoint = Endpoints.ExportApplications(server: server, formID: formID, status: status, format: format)
+        Task {
+            if await download.download(endpoint) { previewed = download.file }
+        }
+    }
+}
+
 /// One application: who, for which form, how it stands and when it came in.
-private struct SubmissionRow: View {
+struct ApplicationSubmissionRow: View {
     let submission: ApplicationSubmission
+    /// False where the list is one member's, so their name is not repeated on every row.
+    var showsApplicant = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline) {
-                Text(verbatim: submission.applicantName)
+                Text(verbatim: showsApplicant ? submission.applicantName : submission.formName)
                     .font(.headline)
                     .lineLimit(1)
                 Spacer(minLength: 8)
@@ -98,7 +198,7 @@ private struct SubmissionRow: View {
 
     /// "Staff · 3 min. ago".
     private var details: String {
-        var parts = [submission.formName]
+        var parts = showsApplicant ? [submission.formName] : []
         if let date = submission.createdDate { parts.append(DateText.relative(date)) }
         return parts.joined(separator: " · ")
     }
@@ -109,10 +209,15 @@ struct ApplicationSubmissionView: View {
     @State private var model: ApplicationSubmissionModel
     @State private var action: ApplicationDecisionAction = .accept
     @State private var isAsking = false
-    @State private var reason = ""
+    @State private var isConfirmingDelete = false
+    @Environment(\.dismiss) private var dismiss
+    private let server: ServerID
+    private let session: AppSession
     private let applicant: String
 
     init(server: ServerID, session: AppSession, submissionID: Int, applicant: String) {
+        self.server = server
+        self.session = session
         self.applicant = applicant
         _model = State(initialValue: ApplicationSubmissionModel(
             server: server, submissionID: submissionID, session: session))
@@ -143,21 +248,27 @@ struct ApplicationSubmissionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
         .refreshable { await model.load() }
-        .alert(alertTitle, isPresented: $isAsking) {
-            TextField("Reason (optional)", text: $reason)
-            Button(alertButton) {
-                let decision = action
-                let text = reason
-                Task { await model.decide(decision, reason: text) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The applicant is told by direct message. The reason is added to it.")
+        .reasonPrompt(
+            alertTitle, message: "The applicant is told by direct message. The reason is added to it.",
+            isPresented: $isAsking, confirmTitle: alertButton, confirmRole: action == .deny ? .destructive : nil
+        ) { reason in
+            let decision = action
+            Task { await model.decide(decision, reason: reason) }
         }
-        .alert("Couldn't Decide", isPresented: isShowingActionError, presenting: model.actionError) { _ in
+        .confirmationDialog("Delete This Application?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+            Button("Delete Application", role: .destructive) {
+                Task { await model.deleteSubmission() }
+            }
+        } message: {
+            Text("The answers and the posts in the channels are deleted. This cannot be undone.")
+        }
+        .alert("Something Went Wrong", isPresented: isShowingActionError, presenting: model.actionError) { _ in
             Button("OK") {}
         } message: { message in
             Text(message)
+        }
+        .onChange(of: model.wasDeleted) {
+            if model.wasDeleted { dismiss() }
         }
         .sensoryFeedback(.success, trigger: model.decisionCount)
     }
@@ -210,10 +321,14 @@ struct ApplicationSubmissionView: View {
                 ForEach(Array(submission.rolesPending.enumerated()), id: \.offset) { _, change in
                     Label(Self.title(of: change), systemImage: "person.crop.circle.badge.exclamationmark")
                 }
+                Button("Retry the Roles", systemImage: "arrow.clockwise") {
+                    Task { await model.retryRoles() }
+                }
+                .disabled(model.isWorking)
             } header: {
                 Text("Roles waiting")
             } footer: {
-                Text("These role changes did not go through. Retry them in the web dashboard.")
+                Text("These role changes did not go through. Check that Sylo can manage the roles, then retry.")
             }
         }
 
@@ -256,10 +371,24 @@ struct ApplicationSubmissionView: View {
                 }
             }
         }
+
+        Section {
+            NavigationLink {
+                ApplicantHistoryView(
+                    server: server, session: session, userID: submission.userId, name: submission.applicantName)
+            } label: {
+                Label("Everything From This Member", systemImage: "person.text.rectangle")
+            }
+            Button("Delete Application", systemImage: "trash", role: .destructive) {
+                isConfirmingDelete = true
+            }
+            .disabled(model.isWorking || model.isDeciding)
+        } footer: {
+            Text("Deleting removes the answers and the posts. It cannot be undone.")
+        }
     }
 
     private func ask(_ decision: ApplicationDecisionAction) {
-        reason = ""
         action = decision
         isAsking = true
     }

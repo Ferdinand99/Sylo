@@ -1,23 +1,25 @@
 import SwiftUI
 import SyloKit
 
-/// Introductions: where the membership cards are posted, how they look, and the text of the
-/// "Introduce yourself" message. The questions and the role groups are shown read only; adding,
-/// changing and ordering them, and publishing the prompt message, stay in the web dashboard. They
-/// go back untouched with every save. Mirrors web-v2/src/moduleForms/Introductions.jsx.
+/// Introductions: where the membership cards are posted, how they look, the questions members are
+/// asked and their order, the role groups listed on the card, and the "Introduce yourself" message
+/// (published and removed here). Mirrors web-v2/src/moduleForms/Introductions.jsx.
 struct IntroductionsSettingsView: View {
     @State private var model: ModuleSettingsModel<IntroductionsPage>
     @State private var note: ModulePlatformNoteModel
-    private let server: ServerID
+    @State private var prompt: IntroPromptModel
+    @State private var isConfirmingRemove = false
+    /// Owned here so the Edit button in the questions header can switch the list to reordering.
+    @State private var editMode = EditMode.inactive
 
     init(server: ServerID, session: AppSession) {
-        self.server = server
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
         _note = State(initialValue: ModulePlatformNoteModel(server: server, module: IntroductionsPage.moduleID, session: session))
+        _prompt = State(initialValue: IntroPromptModel(server: server, session: session))
     }
 
     var body: some View {
-        ModuleSettingsForm("Introductions", model: model) { $settings, page in
+        ModuleSettingsForm("Introductions", model: model, problem: model.draft?.problem) { $settings, page in
             ModuleIntro("A member answers a few questions in a direct message and Sylo posts a membership card for them in the introductions channel. Running the command again edits their card.")
             PlatformNoteSection(model: note)
 
@@ -27,6 +29,13 @@ struct IntroductionsSettingsView: View {
             } footer: {
                 Text(page.introductions == 1 ? "1 card posted so far." : "\(page.introductions) cards posted so far.")
             }
+
+            if let problem = settings.problem {
+                Section { StatusMessage(problem, kind: .notice) }
+            }
+
+            questionsSection(settings: $settings)
+            roleGroupsSection(settings: $settings, page: page)
 
             Section {
                 Picker("Colour", selection: $settings.colorChoice) {
@@ -42,7 +51,7 @@ struct IntroductionsSettingsView: View {
             } header: {
                 Text("Card")
             } footer: {
-                Text("The top role colour is the colour of the member's highest role that has one. Role groups below are always listed on the card.")
+                Text("The top role colour is the colour of the member's highest role that has one. Role groups are always listed on the card.")
             }
 
             Section {
@@ -51,7 +60,7 @@ struct IntroductionsSettingsView: View {
             } header: {
                 Text("Description")
             } footer: {
-                Text(Self.placeholderFooter(page.placeholders))
+                Text(Self.placeholderFooter(page.placeholders, groups: settings.roleGroupPlaceholders))
             }
 
             Section {
@@ -63,57 +72,152 @@ struct IntroductionsSettingsView: View {
                 Text("Plain text at the bottom of the card. Placeholders work here too.")
             }
 
-            Section {
-                TextArea(title: "Prompt text", text: $settings.promptText,
-                         limit: IntroductionsSettings.maxPromptTextLength, lines: 2...6)
-                LabeledContent("Message") {
-                    Text(settings.isPromptPublished ? "Published" : "Not published")
-                }
-            } header: {
-                Text("Prompt message")
-            } footer: {
-                Text("A pinned message with a Create my intro button. Leave the text empty for Sylo's own. Publish or remove the message in the web dashboard.")
-            }
-
-            Section {
-                if let questions = settings.questions, !questions.isEmpty {
-                    ForEach(questions) { question in
-                        ListLine(title: question.label, details: Self.details(of: question))
-                    }
-                } else {
-                    Text("None").foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Questions")
-            } footer: {
-                Text("Add, change or reorder the questions in the web dashboard.")
-            }
-
-            Section {
-                if settings.roleGroups.isEmpty {
-                    Text("None").foregroundStyle(.secondary)
-                }
-                ForEach(settings.roleGroups) { group in
-                    ListLine(title: group.name, details: Self.details(of: group, roles: page.roles))
-                }
-            } header: {
-                Text("Role groups")
-            } footer: {
-                Text("A group lists the member's roles from a set, for example Country or Age. Edit them in the web dashboard.")
-            }
-
-            DashboardLinkSection(
-                server: server, module: IntroductionsPage.moduleID,
-                footer: "Edit the questions and role groups, and publish the prompt message, in the web dashboard.")
+            promptSection(settings: $settings, page: page)
         }
+        .environment(\.editMode, $editMode)
         .task { await note.load() }
+        .confirmationDialog("Remove the prompt message?", isPresented: $isConfirmingRemove, titleVisibility: .visible) {
+            Button("Remove Message", role: .destructive) { remove() }
+        } message: {
+            Text("The message is deleted from the channel. Members can still use the command.")
+        }
+        .sensoryFeedback(.success, trigger: prompt.successCount)
     }
 
-    private static func placeholderFooter(_ placeholders: [String]) -> LocalizedStringKey {
-        guard !placeholders.isEmpty else {
+    // MARK: - Questions and role groups
+
+    private func questionsSection(settings: Binding<IntroductionsSettings>) -> some View {
+        let questions = Binding<[IntroductionsQuestion]>(
+            get: { settings.wrappedValue.questions ?? [] },
+            set: { settings.wrappedValue.questions = $0 })
+        let count = questions.wrappedValue.count
+        return Section {
+            ForEach(questions) { $question in
+                NavigationLink {
+                    IntroQuestionEditorView(question: $question)
+                } label: {
+                    ListLine(title: question.label.isEmpty ? String(localized: "New question") : question.label,
+                             details: Self.details(of: question))
+                }
+            }
+            .onMove { source, destination in
+                settings.wrappedValue.moveQuestions(fromOffsets: source, toOffset: destination)
+            }
+            .onDelete { offsets in
+                var remaining = settings.wrappedValue.questions ?? []
+                remaining.remove(atOffsets: offsets)
+                settings.wrappedValue.questions = remaining
+            }
+            if count == 0 {
+                Text("None").foregroundStyle(.secondary)
+            }
+            Button("Add Question", systemImage: "plus") {
+                settings.wrappedValue.addQuestion()
+            }
+            .disabled(count >= IntroductionsSettings.maxQuestions)
+        } header: {
+            HStack {
+                Text("Questions")
+                Spacer()
+                if count > 1 {
+                    EditButton().textCase(nil)
+                }
+            }
+        } footer: {
+            if settings.wrappedValue.questions == nil {
+                Text("This server did not send its questions, so it keeps its own until you add one here.")
+            } else {
+                Text("Members answer these in order, up to \(IntroductionsSettings.maxQuestions) of them. Tap Edit to reorder or swipe one to remove it. A question without a label is not kept.")
+            }
+        }
+    }
+
+    private func roleGroupsSection(settings: Binding<IntroductionsSettings>, page: IntroductionsPage) -> some View {
+        Section {
+            ForEach(settings.roleGroups) { $group in
+                NavigationLink {
+                    IntroRoleGroupEditorView(group: $group, roles: page.roles)
+                } label: {
+                    ListLine(title: group.cleanName.isEmpty ? String(localized: "New group") : group.cleanName,
+                             details: Self.details(of: group, roles: page.roles))
+                }
+            }
+            .onDelete { offsets in
+                settings.wrappedValue.roleGroups.remove(atOffsets: offsets)
+            }
+            if settings.wrappedValue.roleGroups.isEmpty {
+                Text("None").foregroundStyle(.secondary)
+            }
+            Button("Add Role Group", systemImage: "plus") {
+                settings.wrappedValue.addRoleGroup()
+            }
+            .disabled(settings.wrappedValue.roleGroups.count >= IntroductionsSettings.maxRoleGroups)
+        } header: {
+            Text("Role groups")
+        } footer: {
+            Text("A group lists the member's roles from a set, for example Country or Age, as one field on the card. Swipe a group to remove it.")
+        }
+    }
+
+    // MARK: - Prompt message
+
+    private func promptSection(settings: Binding<IntroductionsSettings>, page: IntroductionsPage) -> some View {
+        Section {
+            TextArea(title: "Prompt text", text: settings.promptText,
+                     limit: IntroductionsSettings.maxPromptTextLength, lines: 2...6)
+            LabeledContent("Message") {
+                Text(page.settings.isPromptPublished ? "Published" : "Not published")
+            }
+            Button(page.settings.isPromptPublished ? "Update Prompt Message" : "Publish Prompt Message",
+                   systemImage: "paperplane") {
+                publish(channelId: settings.wrappedValue.channelId, text: settings.wrappedValue.promptText)
+            }
+            .disabled(settings.wrappedValue.channelId.isEmpty || prompt.isBusy)
+            if page.settings.isPromptPublished {
+                Button("Remove Prompt Message", systemImage: "trash", role: .destructive) {
+                    isConfirmingRemove = true
+                }
+                .disabled(prompt.isBusy)
+            }
+            if let message = prompt.errorMessage {
+                StatusMessage(message, kind: .error)
+            }
+            if let notice = prompt.notice {
+                StatusMessage(notice, kind: .notice)
+            }
+        } header: {
+            Text("Prompt message")
+        } footer: {
+            Text("A pinned message with a Create my intro button, posted in the introductions channel above. Leave the text empty for Sylo's own. On Fluxer the button is a reaction.")
+        }
+    }
+
+    /// Posts the prompt with the channel and text as they are in the form (the server saves those two with
+    /// it) and loads the page again, so the status is the server's.
+    private func publish(channelId: String, text: String) {
+        Task {
+            if await prompt.publish(channelId: channelId, text: text) != nil {
+                await model.load()
+            }
+        }
+    }
+
+    private func remove() {
+        Task {
+            if await prompt.unpublish() != nil {
+                await model.load()
+            }
+        }
+    }
+
+    // MARK: - Words
+
+    private static func placeholderFooter(_ placeholders: [String], groups: [String]) -> LocalizedStringKey {
+        let all = placeholders + groups
+        guard !all.isEmpty else {
             return "Shown under the member's name. Markdown works."
         }
-        return "Shown under the member's name. Markdown works. Placeholders: \(placeholders.joined(separator: ", "))"
+        return "Shown under the member's name. Markdown works. Placeholders: \(all.joined(separator: ", "))"
     }
 
     private static func details(of question: IntroductionsQuestion) -> String {
