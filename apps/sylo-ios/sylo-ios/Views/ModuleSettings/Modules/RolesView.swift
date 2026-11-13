@@ -151,7 +151,7 @@ private struct ReactionRoleRow: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(verbatim: title)
                     .lineLimit(2)
-                StatusTag(isPosted: set.isPublished)
+                StatusTag(set.isPublished ? "Published" : "Draft", tint: set.isPublished ? .green : .secondary, tintsText: true)
             }
             Text(verbatim: details)
                 .font(.footnote)
@@ -185,20 +185,6 @@ private struct ReactionRoleRow: View {
         }
         if set.exclusive { parts.append(String(localized: "Exclusive")) }
         return parts.joined(separator: " · ")
-    }
-}
-
-/// "Published" or "Draft" next to a set's title.
-private struct StatusTag: View {
-    let isPosted: Bool
-
-    var body: some View {
-        Text(isPosted ? "Published" : "Draft")
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(isPosted ? Color.green.opacity(0.18) : Color.secondary.opacity(0.18), in: Capsule())
-            .foregroundStyle(isPosted ? Color.green : Color.secondary)
     }
 }
 
