@@ -381,7 +381,7 @@ public final class SuggestionListModel {
     }
 
     /// " 2 could not be moved and stay where they are: #4, #9. <why>", or nothing.
-    static func skippedText(_ failed: [SuggestionMoveFailure]) -> String {
+    nonisolated static func skippedText(_ failed: [SuggestionMoveFailure]) -> String {
         guard let first = failed.first else { return "" }
         let numbers = failed.map { "#\($0.number)" }.joined(separator: ", ")
         return " \(failed.count) could not be moved and stay where they are: \(numbers). \(first.error)"

@@ -188,7 +188,7 @@ public final class GiveawayActionsModel {
     }
 
     /// "3 entry fee(s) were given back." and, when some failed, that Sylo tries those again.
-    static func refundNotice(refunded: Int, failed: Int) -> CommunityNotice {
+    nonisolated static func refundNotice(refunded: Int, failed: Int) -> CommunityNotice {
         if failed > 0 {
             return CommunityNotice(
                 "\(refunded) entry fee(s) were given back. \(failed) could not be just now: Sylo tries those again within a minute.",
