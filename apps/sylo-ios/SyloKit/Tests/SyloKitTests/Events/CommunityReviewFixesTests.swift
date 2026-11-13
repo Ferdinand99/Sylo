@@ -2,12 +2,46 @@ import Foundation
 import Testing
 @testable import SyloKit
 
-/// Holds a stubbed call until the test lets it go, so an action can be asked for while another one runs.
+/// Holds calls until the test lets them go, so an action can be asked for while another one runs.
 private final class Gate: @unchecked Sendable {
-    private let semaphore = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var opened = false
 
-    func wait() { _ = semaphore.wait(timeout: .now() + 10) }
-    func open() { semaphore.signal() }
+    var isOpen: Bool { lock.withLock { opened } }
+    func open() { lock.withLock { opened = true } }
+}
+
+/// A client that waits at the gate (without blocking a thread), then answers from `answer`.
+private struct GatedClient: APIClient {
+    let gate: Gate
+    let answer: @Sendable (any APIEndpoint) -> Any
+
+    func send<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response {
+        while !gate.isOpen { try await Task.sleep(for: .milliseconds(5)) }
+        guard let response = answer(endpoint) as? E.Response else {
+            throw NetworkError.decoding("gated client answered \(E.self) with the wrong type")
+        }
+        return response
+    }
+}
+
+@MainActor
+private func makeGatedSession(gate: Gate, answer: @escaping @Sendable (any APIEndpoint) -> Any) -> AppSession {
+    let server = try! ServerURL("https://sylo.example.com")
+    let tokens = InMemoryTokenStore(tokens: [
+        server.description: StoredToken(token: "sylo_live", expiresAt: Date().addingTimeInterval(86_400)),
+    ])
+    let session = AppSession(
+        tokens: tokens, preference: MemoryServerPreference(server), deviceName: "Test",
+        makeClient: { _, _ in GatedClient(gate: gate, answer: answer) })
+    session.start()
+    return session
+}
+
+/// Lets the running action reach its first wait.
+@MainActor
+private func waitUntil(_ condition: () -> Bool) async {
+    for _ in 0..<2000 where !condition() { await Task.yield() }
 }
 
 @Suite("Event times around a clock change")
@@ -63,13 +97,11 @@ struct CommunityBusyTests {
     @Test("an event action asked for while another runs says so, and the first one still finishes")
     func events() async {
         let gate = Gate()
-        let clients = StubClients { _ in
-            gate.wait()
-            return EventListAnswer()
-        }
-        let model = EventActionsModel(server: "9", session: makeSignedInSession(clients: clients))
+        let session = makeGatedSession(gate: gate) { _ in EventListAnswer() }
+        let model = EventActionsModel(server: "9", session: session)
         let first = Task { await model.cancel(id: 1) }
-        while !model.isWorking { await Task.yield() }
+        await waitUntil { model.isWorking }
+        #expect(model.isWorking)
         #expect(await model.cancel(id: 2) == false)
         #expect(model.errorMessage == CommunityMessage.busy)
         gate.open()
@@ -80,19 +112,17 @@ struct CommunityBusyTests {
     @Test("the same for a suggestion")
     func suggestions() async {
         let gate = Gate()
-        let clients = StubClients { endpoint in
-            if endpoint is Endpoints.DeleteSuggestion {
-                gate.wait()
-                return OKResponse()
-            }
-            return SuggestionListAnswer()
+        let session = makeGatedSession(gate: gate) { endpoint in
+            endpoint is Endpoints.DeleteSuggestion ? OKResponse() as Any : SuggestionListAnswer() as Any
         }
-        let model = SuggestionListModel(server: "9", session: makeSignedInSession(clients: clients))
+        let model = SuggestionListModel(server: "9", session: session)
         let one = SuggestionSummary(id: 1, number: 1, text: "x")
         let first = Task { await model.delete(one) }
-        while !model.isWorking { await Task.yield() }
+        await waitUntil { model.isWorking }
+        #expect(model.isWorking)
         #expect(await model.delete(one) == false)
         #expect(model.actionError == CommunityMessage.busy)
+        model.actionError = nil
         await model.moveAllBack()
         #expect(model.actionError == CommunityMessage.busy)
         gate.open()
@@ -102,17 +132,14 @@ struct CommunityBusyTests {
     @Test("the same for a quote")
     func quotes() async {
         let gate = Gate()
-        let clients = StubClients { endpoint in
-            if endpoint is Endpoints.DeleteQuote {
-                gate.wait()
-                return OKResponse()
-            }
-            return QuoteListAnswer()
+        let session = makeGatedSession(gate: gate) { endpoint in
+            endpoint is Endpoints.DeleteQuote ? OKResponse() as Any : QuoteListAnswer() as Any
         }
-        let model = QuoteListModel(server: "9", session: makeSignedInSession(clients: clients))
+        let model = QuoteListModel(server: "9", session: session)
         let quote = QuoteSummary(number: 1)
         let first = Task { await model.delete(quote) }
-        while !model.isWorking { await Task.yield() }
+        await waitUntil { model.isWorking }
+        #expect(model.isWorking)
         #expect(await model.delete(quote) == false)
         #expect(model.actionError == CommunityMessage.busy)
         gate.open()
@@ -122,14 +149,12 @@ struct CommunityBusyTests {
     @Test("the same for a giveaway")
     func giveaways() async {
         let gate = Gate()
-        let clients = StubClients { _ in
-            gate.wait()
-            return GiveawayListAnswer()
-        }
-        let model = GiveawayActionsModel(server: "9", session: makeSignedInSession(clients: clients))
+        let session = makeGatedSession(gate: gate) { _ in GiveawayListAnswer() }
+        let model = GiveawayActionsModel(server: "9", session: session)
         let giveaway = GiveawaysGiveaway(id: 1, prize: "x", endsAt: Date(timeIntervalSince1970: 1_794_000_000))
         let first = Task { await model.end(giveaway) }
-        while model.busyID == nil { await Task.yield() }
+        await waitUntil { model.busyID != nil }
+        #expect(model.busyID == 1)
         #expect(await model.reroll(giveaway, count: 1) == false)
         #expect(model.errorMessage == CommunityMessage.busy)
         gate.open()
