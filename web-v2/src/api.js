@@ -92,6 +92,9 @@ export const setModuleEnabled = (guildId, moduleId, enabled) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/${moduleId}`, { enabled });
 export const setModulesEnabledBulk = (guildId, ids, enabled) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/bulk`, { ids, enabled });
+// The names of members by id, for the mentions already saved in a text.
+export const getMemberNames = (guildId, ids) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/members/names?ids=${ids.map(encodeURIComponent).join(',')}`);
 // Members of the server by name (the ones Sylo has cached), for the @ suggestions in message fields.
 export const searchMembers = (guildId, q) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/members/search?q=${encodeURIComponent(q)}`);

@@ -1,6 +1,11 @@
+import { useParams } from 'react-router-dom';
 import { useOverview } from '../OverviewContext.jsx';
+import { useMemberNames } from '../memberNames.js';
 import { previewParts, sampleValues } from '../mentions.js';
 import AppTag from './AppTag.jsx';
+
+// Only a plain #rrggbb goes into the inline style.
+const HEX = /^#[0-9a-fA-F]{6}$/;
 
 /** A message template as Discord shows it: sample data in the placeholders, mentions as names. */
 function Rendered({ text, lookup, samples }) {
@@ -42,8 +47,13 @@ export default function MessagePreview({
   samples = {},
   className = '',
 }) {
+  const { guildId } = useParams();
   const overview = useOverview();
-  const server = overview?.data?.guild?.name ?? 'Your server';
+  // The server's name only while the overview is the one of this server (not the previous one's).
+  const server = (overview?.dataGuildId === guildId && overview?.data?.guild?.name) || 'Your server';
+  const members = useMemberNames(content, embed?.description, embed?.title);
+  const names = new Map([...(lookup.members ?? []), ...members]);
+  lookup = { ...lookup, members: names };
   const values = sampleValues({ server, extra: samples });
   const empty = !String(content).trim() && !embed;
   return (
@@ -66,7 +76,10 @@ export default function MessagePreview({
       ) : null}
       {embed ? (
         <div className="v2-embed-preview v2-embed-readonly">
-          <span className="v2-embed-bar" style={{ background: embed.color ?? 'var(--accent)' }} />
+          <span
+            className="v2-embed-bar"
+            style={{ background: HEX.test(embed.color ?? '') ? embed.color : 'var(--accent)' }}
+          />
           <div className="v2-embed-body">
             {embed.authorName ? <p className="v2-embed-author">{embed.authorName}</p> : null}
             {embed.title ? (

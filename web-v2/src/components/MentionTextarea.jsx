@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { searchMembers } from '../api.js';
+import { rememberMember, useMemberNames } from '../memberNames.js';
 import {
   filterChannels,
   filterRoles,
@@ -65,9 +66,9 @@ export default function MentionTextarea({
   const [trigger, setTrigger] = useState(null);
   const [active, setActive] = useState(0);
   const [people, setPeople] = useState([]);
-  // Names of members seen in this session (picked or searched), for the chips.
-  const names = useRef(new Map());
-  const [, bump] = useState(0);
+  // Names of the members mentioned in the text: the ones picked or searched in this session, and the ones
+  // the server can name for a mention that was saved earlier.
+  const members = useMemberNames(rest.value);
 
   const lookupTrigger = () => {
     const el = ref.current;
@@ -89,7 +90,7 @@ export default function MentionTextarea({
         .then((res) => {
           if (!live) return;
           const list = Array.isArray(res?.members) ? res.members : [];
-          for (const m of list) names.current.set(m.id, m.name);
+          for (const m of list) rememberMember(guildId, m.id, m.name);
           setPeople(list);
         })
         .catch(() => live && setPeople([]));
@@ -118,7 +119,7 @@ export default function MentionTextarea({
   function pick(s) {
     const el = ref.current;
     if (!el || !trigger) return;
-    if (s.type === 'user') names.current.set(s.id, s.label.slice(1));
+    if (s.type === 'user') rememberMember(guildId, s.id, s.label.slice(1));
     const caret = el.selectionStart;
     const next = insertMention(el.value, trigger, caret, tokenOf(s));
     el.focus();
@@ -140,7 +141,6 @@ export default function MentionTextarea({
       el.setSelectionRange(next.caret, next.caret);
     }
     setTrigger(null);
-    bump((n) => n + 1);
   }
 
   function handleKeyDown(e) {
@@ -165,13 +165,15 @@ export default function MentionTextarea({
     onKeyDown?.(e);
   }
 
-  const lookup = { channels, roles, members: names.current };
   return (
     <div className="v2-mention-wrap">
       <Tag
         {...rest}
         {...(typeof Tag === 'string' ? { ref } : { innerRef: ref })}
         className={className}
+        role="combobox"
+        aria-expanded={open}
+        aria-haspopup="listbox"
         aria-autocomplete="list"
         aria-controls={open ? listId : undefined}
         aria-activedescendant={open ? `${listId}-${active}` : undefined}
@@ -222,9 +224,7 @@ export default function MentionTextarea({
           ))}
         </ul>
       ) : null}
-      {chips ? (
-        <MentionChips value={rest.value} channels={channels} roles={roles} members={lookup.members} />
-      ) : null}
+      {chips ? <MentionChips value={rest.value} channels={channels} roles={roles} members={members} /> : null}
     </div>
   );
 }

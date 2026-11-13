@@ -13,6 +13,7 @@ import Meta from '../components/Meta.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import TabRow from '../components/TabRow.jsx';
 import SectionIndex from '../components/SectionIndex.jsx';
+import EmojiPicker from '../components/EmojiPicker.jsx';
 import Time from '../components/Time.jsx';
 import UnitInput from '../components/UnitInput.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
@@ -156,16 +157,20 @@ function Settings({ guildId, m, limits }) {
             </div>
             <div className="v2-field">
               <label htmlFor="currencyEmoji">Emoji</label>
-              <input
-                id="currencyEmoji"
-                type="text"
-                maxLength={limitOf(limits, 'currencyEmoji').maxLength}
-                value={form.currencyEmoji}
-                onChange={(e) => set({ currencyEmoji: e.target.value })}
-              />
+              <div className="v2-field-row v2-emoji-row">
+                <input
+                  id="currencyEmoji"
+                  type="text"
+                  maxLength={limitOf(limits, 'currencyEmoji').maxLength}
+                  value={form.currencyEmoji}
+                  onChange={(e) => set({ currencyEmoji: e.target.value })}
+                />
+                <EmojiPicker onPick={(emoji) => set({ currencyEmoji: emoji })} />
+              </div>
               <p className="v2-field-hint">
-                Shown before every amount. Use a normal emoji, or copy a server emoji from Discord's emoji
-                picker and paste it here.
+                Shown before every amount, like {form.currencyEmoji || '🪙'} 250{' '}
+                {form.currencyName || 'coins'}. Pick one from the list (it has this server's own emojis too),
+                or type your own.
               </p>
             </div>
           </div>
@@ -759,7 +764,7 @@ function Members({ guildId, config }) {
             <input
               id="eco-search"
               type="search"
-              placeholder="A name, or paste a member ID"
+              placeholder="Search by member name"
               value={q}
               onChange={(e) => {
                 setQ(e.target.value);

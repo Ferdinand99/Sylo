@@ -89,6 +89,72 @@ describe('PreviewLayout', () => {
     expect(screen.getByRole('button', { name: 'Hide preview' })).toBeTruthy();
   });
 
+  for (const [name, wide] of [
+    ['wide', true],
+    ['narrow', false],
+  ]) {
+    it(`never remounts the form when a preview appears or goes away (${name}): the field keeps its focus`, () => {
+      stubMedia(wide);
+      const form = (
+        <>
+          <h1>Title</h1>
+          <p>Intro</p>
+          <input id="field" aria-label="field" defaultValue="typed" />
+        </>
+      );
+      const shown = [{ key: 'a', title: 'A', content: 'hi' }];
+      const hidden = [{ key: 'a', title: 'A', content: 'hi', hidden: true }];
+      const { rerender } = wrap(
+        <PreviewLayout previews={hidden} lookup={lookup}>
+          {form}
+        </PreviewLayout>
+      );
+      const field = screen.getByLabelText('field');
+      field.focus();
+      field.value = 'half-typed';
+      expect(document.activeElement).toBe(field);
+
+      rerender(
+        <MemoryRouter>
+          <PreviewLayout previews={shown} lookup={lookup}>
+            {form}
+          </PreviewLayout>
+        </MemoryRouter>
+      );
+      expect(screen.getByLabelText('field')).toBe(field);
+      expect(document.activeElement).toBe(field);
+      expect(field.value).toBe('half-typed');
+
+      rerender(
+        <MemoryRouter>
+          <PreviewLayout previews={hidden} lookup={lookup}>
+            {form}
+          </PreviewLayout>
+        </MemoryRouter>
+      );
+      expect(screen.getByLabelText('field')).toBe(field);
+      expect(document.activeElement).toBe(field);
+    });
+  }
+
+  it('puts the "Show preview" button after the introduction, not above the title', () => {
+    stubMedia(false);
+    wrap(
+      <PreviewLayout previews={previews} lookup={lookup}>
+        <>
+          <h1>Title</h1>
+          <p>Intro</p>
+          <form>the form</form>
+        </>
+      </PreviewLayout>
+    );
+    const order = [...document.querySelector('.v2-with-preview-main').children].map((el) => el.tagName);
+    expect(order).toEqual(['H1', 'P', 'DIV', 'FORM']);
+    expect(document.querySelector('.v2-with-preview-main > .v2-preview-toggle button').textContent).toBe(
+      'Show preview'
+    );
+  });
+
   it('renders just the form when every preview is hidden', () => {
     stubMedia(true);
     wrap(

@@ -54,8 +54,8 @@ export default function Welcome() {
       <>
         <h1 className="v2-section-title">Welcome &amp; leave</h1>
         <p className="v2-field-hint">
-          Greet new members, say goodbye when they leave, and give them starting roles. Under each message you
-          can insert placeholders such as the member's name.
+          Greet new members, say goodbye when they leave, and give them starting roles. The placeholder row
+          stays in view while you scroll: click into a message, then click a placeholder to insert it there.
         </p>
 
         <form onSubmit={save} data-savebar>

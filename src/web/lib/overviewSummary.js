@@ -32,6 +32,9 @@ import { AUTOMOD_RULES } from '../../modules/automod.js';
 import { normaliseSuggestionsConfig } from '../../modules/suggestions.js';
 import { validTriggerRoleIds, welcomeTrigger } from '../../modules/welcome.js';
 import { moduleIcon } from './moduleIcons.js';
+import { summaryParts } from './cardSummary.js';
+import { listGithubWatches } from '../../db/githubWatches.js';
+import { listCleanupSchedules } from '../../db/channelCleanup.js';
 
 // Permissions Sylo relies on for its core moderation / role / logging features.
 const KEY_PERMS = [
@@ -109,13 +112,14 @@ function channelName(guild, id) {
 /**
  * Build the whole overview view-model for a guild.
  * @param {import('discord.js').Guild} guild
- * @param {{ owner?: boolean }} [viewer]  a non-owner never sees an owner-only module's card.
+ * @param {{ owner?: boolean, modules?: Array<any> }} [viewer]  a non-owner never sees an owner-only module's card.
+ *   `modules` is the guild's module rows when the caller has them already (saves a query).
  *   Every card's `href` is an address in the dashboard (/v2/...), for the web dashboard and the
  *   Sylo app.
  */
-export async function buildOverview(guild, { owner = true } = {}) {
+export async function buildOverview(guild, { owner = true, modules } = {}) {
   const settings = await getGuildSettings(guild.id);
-  const state = new Map((await getGuildModules(guild.id)).map((m) => [m.id, m]));
+  const state = new Map((modules ?? (await getGuildModules(guild.id))).map((m) => [m.id, m]));
 
   return {
     health: await buildHealth(guild, settings, state, owner),
@@ -126,7 +130,7 @@ export async function buildOverview(guild, { owner = true } = {}) {
           await Promise.all(
             g.ids
               .filter((id) => owner || !getModule(id)?.ownerOnly)
-              .map((id) => buildCard(id, guild, settings, state))
+              .map(async (id) => withSummary(await buildCard(id, guild, settings, state)))
           )
         ).filter(Boolean),
       }))
@@ -145,6 +149,13 @@ export const V2_CARD_PAGES = {
 
 export function v2CardHref(id, guildId) {
   return `/v2/guilds/${guildId}/${V2_CARD_PAGES[id] ?? `m/${id}`}`;
+}
+
+/** A card with its plain-words summary (see cardSummary.js) next to its lines. */
+function withSummary(card) {
+  if (!card) return card;
+  const parts = summaryParts(card.id, card.lines);
+  return { ...card, summaryParts: parts, summary: parts.join(' · ') };
 }
 
 /** The key permissions Sylo does not have in this server, by name (all of them when it is not a member). */
@@ -444,8 +455,20 @@ async function moduleLines(id, guild, cfg) {
       return [
         open ? on('Open suggestions', String(open)) : neutral('Open suggestions', '0'),
         neutral('Stored', String(total)),
-        cfg.channel ? on('Channel', 'set') : off('Channel', 'not set'),
-        logChannel ? on('Log channel', logMode) : off('Log channel', 'not set'),
+        channelName(guild, cfg.channel)
+          ? on('Channel', `#${channelName(guild, cfg.channel)}`)
+          : off('Channel', 'not set'),
+        channelName(guild, logChannel)
+          ? on('Log channel', `#${channelName(guild, logChannel)}`)
+          : off('Log channel', 'not set'),
+        ...(channelName(guild, logChannel)
+          ? [
+              neutral(
+                'When decided',
+                logMode === 'move' ? 'moved to the log channel' : 'copied to the log channel'
+              ),
+            ]
+          : []),
       ];
     }
     case 'polls': {
@@ -566,8 +589,24 @@ async function moduleLines(id, guild, cfg) {
         neutral('Exempt roles', String(cfg.exemptRoles?.length ?? 0)),
       ];
     }
+    case 'birthdays': {
+      const ch = channelName(guild, cfg.channel);
+      const role = cfg.roleId ? guild.roles?.cache?.get(cfg.roleId) : null;
+      return [
+        ch ? on('Channel', `#${ch}`) : off('Channel', 'not set'),
+        role ? on('Birthday role', `@${role.name}`) : neutral('Birthday role', 'none'),
+      ];
+    }
+    case 'github': {
+      const n = (await listGithubWatches(guild.id)).length;
+      return [n ? on('Repositories', String(n)) : off('Repositories', 'none')];
+    }
+    case 'channel-cleanup': {
+      const n = (await listCleanupSchedules(guild.id)).length;
+      return [n ? on('Schedules', String(n)) : off('Schedules', 'none')];
+    }
     default:
-      return [neutral('Status', 'enabled')];
+      return [];
   }
 }
 

@@ -20,8 +20,12 @@ function isDrawerLayout() {
 // (waiting work) is drawn as a small pill.
 function NavLinks({ items, pathname, onClose, title, separated = false }) {
   return (
-    <div className={`v2-sidebar-section${separated ? ' is-separated' : ''}`} role="group" aria-label={title}>
-      <div className="v2-sidebar-heading">{title}</div>
+    <div
+      className={`v2-sidebar-section${separated ? ' is-separated' : ''}`}
+      role={title ? 'group' : undefined}
+      aria-label={title}
+    >
+      {title ? <div className="v2-sidebar-heading">{title}</div> : null}
       {items.map((it) => {
         if (!it.href) {
           return (
@@ -72,7 +76,9 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
   // Same overview data the Dashboard page reads (OverviewContext, provided
   // in Shell.jsx) — not a separate fetch, so toggling a module there is
   // reflected here immediately, no refresh needed.
-  const { data } = useOverview();
+  const { data: shared, dataGuildId } = useOverview();
+  // Not the previous server's counts and modules while the next server loads.
+  const data = dataGuildId === activeGuildId ? shared : null;
   const navRef = useRef(null);
   const isDrawer = useSyncExternalStore(subscribeDrawerQuery, isDrawerLayout);
   const drawerOpen = isDrawer && open;
@@ -121,6 +127,7 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
         aria-label="Dashboard"
         inert={isDrawer && !open}
       >
+        <NavLinks items={nav.top} pathname={pathname} onClose={onClose} />
         <NavLinks items={nav.inbox} pathname={pathname} onClose={onClose} title="Inbox" />
         <NavLinks items={nav.people} pathname={pathname} onClose={onClose} title="Members & moderation" />
         <NavLinks items={nav.server} pathname={pathname} onClose={onClose} title="Server" />

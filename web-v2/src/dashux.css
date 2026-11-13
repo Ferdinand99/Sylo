@@ -426,6 +426,8 @@
 }
 .v2-with-preview-main {
   min-width: 0;
+}
+.v2-with-preview > .v2-with-preview-main {
   max-width: 860px;
 }
 .v2-preview-col {
@@ -618,29 +620,230 @@ fieldset.v2-field > legend {
   padding: 0;
   margin-bottom: 6px;
 }
-/* The answers of an application: one card, the question quiet and the answer plain. */
+
+/* ---- Review fixes: attention row, summary parts, sticky placeholder row, shop rows, answers ---------------- */
+.v2-attention-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin-top: 4px;
+}
+.v2-attention-pill {
+  padding: 4px 12px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+.v2-attention-pill:hover {
+  text-decoration: none;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+@media (pointer: coarse) {
+  .v2-attention-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+.v2-modrow-part + .v2-modrow-part::before {
+  content: ' · ';
+  white-space: pre;
+}
+/* A phone has room for one part of the summary; the rest is on the module's own page. */
+@media (max-width: 600px) {
+  .v2-modrow-part:not(:first-child) {
+    display: none;
+  }
+}
+
+.v2-with-preview-off {
+  display: block;
+}
+.v2-ph-bar {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 15;
+}
+@media (max-width: 860px) {
+  .v2-ph-bar {
+    padding: 6px 10px;
+  }
+  .v2-ph-bar .v2-ph-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+  .v2-ph-bar .v2-ph-chips > * {
+    flex: none;
+  }
+  .v2-ph-bar .v2-field-hint {
+    display: none;
+  }
+}
+
+/* Economy shop rows: the actions stay on one line, descriptions wrap on words. */
+.v2-shop-row .v2-row-main p {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.v2-shop-desc {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  overflow-wrap: break-word;
+  hyphens: manual;
+}
+.v2-shop-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+.v2-rarity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 1px 9px;
+  border: 1px solid var(--rarity, var(--border-control));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--rarity, var(--text-muted)) 16%, transparent);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  vertical-align: middle;
+}
+.v2-rarity::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rarity, var(--text-muted));
+}
+.v2-rarity.is-common {
+  --rarity: #95a5a6;
+}
+.v2-rarity.is-uncommon {
+  --rarity: #2ecc71;
+}
+.v2-rarity.is-rare {
+  --rarity: #3498db;
+}
+.v2-rarity.is-epic {
+  --rarity: #9b59b6;
+}
+.v2-rarity.is-legendary {
+  --rarity: #f1c40f;
+}
+
+.v2-overflow {
+  position: relative;
+  flex: none;
+}
+.v2-overflow-button {
+  min-width: 40px;
+  padding-inline: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.v2-overflow-menu {
+  position: absolute;
+  z-index: 30;
+  right: 0;
+  top: calc(100% + 4px);
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-pop);
+}
+.v2-overflow-item {
+  padding: 8px 12px;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-md);
+  text-align: left;
+  cursor: pointer;
+}
+.v2-overflow-item:hover:not(:disabled),
+.v2-overflow-item:focus-visible {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  outline: none;
+}
+.v2-overflow-item:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+.v2-overflow-item.is-danger {
+  color: var(--danger);
+}
+@media (pointer: coarse) {
+  .v2-overflow-item {
+    min-height: 44px;
+  }
+}
+
+/* One card per answer of an application, the question as its heading. */
 .v2-answers {
-  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+.v2-answer {
+  padding: 12px 16px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
 }
-.v2-answer {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.v2-answer:last-child {
-  border-bottom: 0;
-}
-.v2-answer dt {
+.v2-answer h3 {
+  margin: 0 0 4px;
   color: var(--text-muted);
   font-size: var(--fs-sm);
-}
-.v2-answer dt strong {
   font-weight: 600;
 }
-.v2-answer dd {
-  margin: 4px 0 0;
+.v2-answer p {
+  margin: 0;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+}
+
+/* Tabs: the open one is a solid accent pill, the others stay quiet. */
+.v2-tab.is-active,
+.v2-hub-tabs .v2-tab.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+/* Suggestions: the status list has room for its own label. */
+.v2-row-actions select {
+  min-width: 11rem;
+}
+.v2-emoji-row > input {
+  max-width: 9rem;
+}
+.v2-member-picked {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.v2-member-picked .v2-mention-chip {
+  font-size: var(--fs-md);
+}
+.v2-member-clear {
+  min-height: 30px;
+  padding: 2px 12px;
 }

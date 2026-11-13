@@ -479,13 +479,18 @@ describe('Economy: the Shop tab', () => {
       )
     );
 
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Pause' }))[0]);
+    // The less common actions are in each row's "⋯" menu, so the row keeps its buttons on one line.
+    const choose = async (row, name) => {
+      fireEvent.click(await screen.findByRole('button', { name: `More actions for ${row}` }));
+      fireEvent.click(await screen.findByRole('menuitem', { name }));
+    };
+    await choose('Renamed', 'Pause');
     await waitFor(() => expect(api.setShopItemEnabled).toHaveBeenCalledWith(GUILD, 1, false));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Move Renamed down' }));
+    await choose('Renamed', 'Move down');
     await waitFor(() => expect(api.reorderShopItems).toHaveBeenCalledWith(GUILD, [2, 1]));
 
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Delete' }))[0]);
+    await choose('Renamed', 'Delete');
     await waitFor(() => expect(api.deleteShopItem).toHaveBeenCalled());
     expect(confirmDialog).toHaveBeenCalledWith(expect.objectContaining({ confirmLabel: 'Delete item' }));
   });

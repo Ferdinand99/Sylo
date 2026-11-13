@@ -71,13 +71,11 @@ describe('Overview', () => {
     });
   }
 
-  it('links the ticket and appeal tiles to their pages', async () => {
+  it('says how many modules are on in the heading, without a separate count strip', async () => {
     mockOverview();
     renderAtGuild(<Overview />, GUILD);
-    const tickets = (await screen.findByText('open tickets')).closest('a');
-    const appeals = screen.getByText('open appeal').closest('a');
-    expect(tickets.getAttribute('href')).toBe(`/guilds/${GUILD}/tickets`);
-    expect(appeals.getAttribute('href')).toBe(`/guilds/${GUILD}/appeals`);
+    expect(await screen.findByText(/1 of 1 modules on/)).toBeTruthy();
+    expect(screen.queryByText('modules active')).toBeNull();
   });
 
   const ISSUE = {
@@ -86,22 +84,23 @@ describe('Overview', () => {
     waiting: { tickets: 2, appeals: 1, applications: 3, suggestions: 0 },
   };
 
-  it('lists what needs attention at the top, each item with a link to fix it', async () => {
+  it('lists what needs attention at the top: the waiting work as one row of links, the rest with a link to fix it', async () => {
     mockOverview({ attention: ISSUE });
     renderAtGuild(<Overview />, GUILD);
     const panel = (await screen.findByRole('heading', { name: /Needs attention/ })).closest('section');
-    expect(within(panel).getByText('2 open tickets', { selector: 'strong' })).toBeTruthy();
-    expect(within(panel).getByText('3 applications waiting', { selector: 'strong' })).toBeTruthy();
+    expect(within(panel).getAllByText('Waiting for a person')).toHaveLength(1);
+    const tickets = within(panel).getByRole('link', { name: '2 open tickets' });
+    expect(tickets.getAttribute('href')).toBe(`/guilds/${GUILD}/tickets`);
+    const applications = within(panel).getByRole('link', { name: '3 applications waiting' });
+    expect(applications.getAttribute('href')).toBe(`/guilds/${GUILD}/m/applications`);
     expect(within(panel).getByText('AFK is on but not set up', { selector: 'strong' })).toBeTruthy();
     expect(within(panel).getByText('The channel is not set')).toBeTruthy();
     const fix = within(panel).getByRole('link', { name: /Fix AFK is on but not set up/ });
     expect(fix.getAttribute('href')).toBe(`/guilds/${GUILD}/m/afk`);
-    const open = within(panel).getByRole('link', { name: /Open 3 applications waiting/ });
-    expect(open.getAttribute('href')).toBe(`/guilds/${GUILD}/m/applications`);
   });
 
   it('says so when nothing needs attention', async () => {
-    mockOverview({ openTickets: 0, openAppeals: 0 });
+    mockOverview({ openTickets: 0, openAppeals: 0, attention: undefined });
     renderAtGuild(<Overview />, GUILD);
     expect(await screen.findByText('Nothing needs your attention right now.')).toBeTruthy();
   });
@@ -150,6 +149,45 @@ describe('Overview', () => {
     fireEvent.click(await screen.findByRole('switch', { name: 'AFK' }));
     await waitFor(() => expect(api.setModuleEnabled).toHaveBeenCalledWith(GUILD, 'afk', true));
     expect(confirmDialog).not.toHaveBeenCalled();
+  });
+
+  it('asks before a bulk "Disable" too, and only calls the server on yes', async () => {
+    mockOverview();
+    api.setModulesEnabledBulk.mockResolvedValue({});
+    confirmDialog.mockResolvedValueOnce(false);
+    renderAtGuild(<Overview />, GUILD);
+    fireEvent.click(await screen.findByRole('button', { name: 'Bulk edit' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select AFK' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    expect(confirmDialog.mock.calls[0][0].title).toBe('Switch off 1 module?');
+    expect(api.setModulesEnabledBulk).not.toHaveBeenCalled();
+
+    confirmDialog.mockResolvedValueOnce(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+    await waitFor(() => expect(api.setModulesEnabledBulk).toHaveBeenCalledWith(GUILD, ['afk'], false));
+  });
+
+  it('shows markup in a name or a summary as plain text', async () => {
+    const evil = '<img src=x onerror="window.pwned=1"> <b>bold</b>';
+    mockOverview({
+      groups: [
+        {
+          title: 'Utility',
+          cards: [card({ name: evil, summaryParts: [evil], icon: 'moon' })],
+        },
+      ],
+      attention: {
+        problems: [{ id: 'afk', name: evil, issues: [evil] }],
+        missingPermissions: [],
+        waiting: { tickets: 0, appeals: 0, applications: 0, suggestions: 0 },
+      },
+    });
+    const { container } = renderAtGuild(<Overview />, GUILD);
+    await screen.findAllByText(evil, { exact: false });
+    expect(container.querySelector('img[src="x"]')).toBeNull();
+    expect(container.querySelector('b')).toBeNull();
+    expect(window.pwned).toBeUndefined();
   });
 
   it('folds a category, remembers it, and opens it again while searching', async () => {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import OverflowMenu from './OverflowMenu.jsx';
 import {
   createShopItem,
   deleteShopItem,
@@ -188,7 +189,7 @@ export default function EconomyShopAdmin({ guildId, currency }) {
         {items.length === 0 ? <p className="v2-note">No items yet. Add the first one below.</p> : null}
         <div className="v2-list">
           {items.map((item, index) => (
-            <div className="v2-row" key={item.id}>
+            <div className="v2-row v2-shop-row" key={item.id}>
               {item.type === 'collectible' && item.imagePath ? (
                 <img className="v2-thumb" src={item.imagePath} alt="" width="48" height="48" />
               ) : null}
@@ -196,6 +197,11 @@ export default function EconomyShopAdmin({ guildId, currency }) {
                 <h3 className="v2-break">
                   {item.emoji ? `${item.emoji} ` : ''}
                   {item.name}
+                  {item.type === 'collectible' && item.rarity ? (
+                    <span className={`v2-rarity is-${item.rarity}`}>
+                      {rarities.find((r) => r.key === item.rarity)?.label ?? item.rarity}
+                    </span>
+                  ) : null}
                   {!item.enabled ? <span className="v2-field-hint"> — paused</span> : null}
                   {item.type === 'collectible' && !item.imagePath ? (
                     <span className="v2-field-hint">
@@ -204,6 +210,7 @@ export default function EconomyShopAdmin({ guildId, currency }) {
                     </span>
                   ) : null}
                 </h3>
+                {item.description ? <p className="v2-shop-desc">{item.description}</p> : null}
                 <p className="v2-field-hint">
                   <Meta
                     items={[
@@ -212,9 +219,6 @@ export default function EconomyShopAdmin({ guildId, currency }) {
                       item.type === 'temp_role' && `${item.durationHours} h`,
                       (item.type === 'temp_role' || item.type === 'role') &&
                         (roles.find((r) => r.id === item.roleId)?.name ?? 'role missing'),
-                      item.type === 'collectible' &&
-                        item.rarity &&
-                        (rarities.find((r) => r.key === item.rarity)?.label ?? item.rarity),
                       item.type === 'collectible' && item.announce && 'announced',
                       item.left === null ? 'unlimited stock' : `${item.left} of ${item.stock} left`,
                       `${item.purchases} sold`,
@@ -223,44 +227,27 @@ export default function EconomyShopAdmin({ guildId, currency }) {
                   />
                 </p>
               </div>
-              <div className="v2-row-actions">
-                <button
-                  type="button"
-                  className="v2-btn-ghost"
-                  disabled={busy || index === 0}
-                  aria-label={`Move ${item.name} up`}
-                  onClick={() => onMove(index, -1)}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className="v2-btn-ghost"
-                  disabled={busy || index === items.length - 1}
-                  aria-label={`Move ${item.name} down`}
-                  onClick={() => onMove(index, 1)}
-                >
-                  ↓
-                </button>
+              <div className="v2-row-actions v2-shop-actions">
                 <button type="button" className="v2-btn-ghost" onClick={() => setForm(toForm(item))}>
                   Edit
                 </button>
-                <button
-                  type="button"
-                  className="v2-btn-ghost"
-                  disabled={busy}
-                  onClick={() => run(() => setShopItemEnabled(guildId, item.id, !item.enabled))}
-                >
-                  {item.enabled ? 'Pause' : 'Resume'}
-                </button>
-                <button
-                  type="button"
-                  className="v2-btn-danger-ghost"
-                  disabled={busy}
-                  onClick={() => onDelete(item)}
-                >
-                  Delete
-                </button>
+                <OverflowMenu
+                  label={`More actions for ${item.name}`}
+                  items={[
+                    { label: 'Move up', disabled: busy || index === 0, onClick: () => onMove(index, -1) },
+                    {
+                      label: 'Move down',
+                      disabled: busy || index === items.length - 1,
+                      onClick: () => onMove(index, 1),
+                    },
+                    {
+                      label: item.enabled ? 'Pause' : 'Resume',
+                      disabled: busy,
+                      onClick: () => run(() => setShopItemEnabled(guildId, item.id, !item.enabled)),
+                    },
+                    { label: 'Delete', danger: true, disabled: busy, onClick: () => onDelete(item) },
+                  ]}
+                />
               </div>
             </div>
           ))}

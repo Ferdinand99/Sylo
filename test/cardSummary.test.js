@@ -1,0 +1,106 @@
+// The plain-words summary of a module on the overview ("#welcome · Verified role", "Not set up yet"): the
+// wording per module, and that no card falls back to words like "Status: enabled" or "Channel: set".
+import './helpers/tmpDb.js';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { PermissionsBitField } from 'discord.js';
+import { setGuildModule } from '../src/db/modules.js';
+import { buildOverview } from '../src/web/lib/overviewSummary.js';
+import { summaryParts } from '../src/web/lib/cardSummary.js';
+import { MODULES } from '../src/modules/registry.js';
+
+const G = '700000000000000555';
+const line = (label, value, state) => ({ label, value, state });
+
+test('a module with nothing set says "Not set up yet"', () => {
+  assert.deepEqual(
+    summaryParts('logging', [
+      line('Log channel', 'not set', 'off'),
+      line('Events tracked', '0 of 12', 'off'),
+    ]),
+    ['Not set up yet']
+  );
+  assert.deepEqual(
+    summaryParts('twitch-alerts', [line('Streamers', 'none', 'off'), line('API', 'x', 'off')]),
+    ['Not set up yet']
+  );
+});
+
+test('channels and roles read as #channel and "Name role"', () => {
+  assert.deepEqual(
+    summaryParts('welcome', [
+      line('Welcome when', 'a member gets Verified', 'on'),
+      line('Welcome message', '#welcome', 'on'),
+      line('Leave message', 'off', 'off'),
+      line('Welcome DM', 'on', 'on'),
+    ]),
+    ['#welcome', 'Verified role', 'DM']
+  );
+  assert.deepEqual(
+    summaryParts('verification', [
+      line('Verified role', '@Member', 'on'),
+      line('Channel', '#welcome', 'on'),
+      line('Mode', 'button', 'neutral'),
+    ]),
+    ['Member role', '#welcome']
+  );
+  assert.deepEqual(
+    summaryParts('logging', [
+      line('Log channel', '#server-log', 'on'),
+      line('Events tracked', '8 of 12', 'on'),
+    ]),
+    ['#server-log', '8 of 12 events']
+  );
+});
+
+test('counts are nouns with the right plural, and zero says nothing', () => {
+  assert.deepEqual(
+    summaryParts('twitch-alerts', [line('Streamers', '1', 'on'), line('API', 'connected', 'neutral')]),
+    ['1 streamer']
+  );
+  assert.deepEqual(summaryParts('rss', [line('Feeds', '2', 'on')]), ['2 feeds']);
+  assert.deepEqual(
+    summaryParts('polls', [
+      line('Open polls', '0', 'neutral'),
+      line('Vote restriction', 'everyone', 'neutral'),
+    ]),
+    []
+  );
+  assert.deepEqual(
+    summaryParts('economy', [
+      line('Currency', '🪙 Harbor Coins', 'neutral'),
+      line('Accounts', '10', 'neutral'),
+      line('Robbing', 'on', 'on'),
+    ]),
+    ['🪙 Harbor Coins', '10 accounts', 'robbing on']
+  );
+  assert.deepEqual(
+    summaryParts('economy', [
+      line('Currency', '🪙 coins', 'neutral'),
+      line('Accounts', '0', 'neutral'),
+      line('Robbing', 'off', 'off'),
+    ]),
+    ['🪙 coins']
+  );
+});
+
+test('every card of the overview has summary parts, and none says "Status: enabled" or "Channel: set"', async () => {
+  const guild = {
+    id: G,
+    members: { me: { permissions: new PermissionsBitField(PermissionsBitField.All) } },
+    channels: { cache: { get: () => undefined } },
+  };
+  for (const m of MODULES) await setGuildModule(G, m.id, { enabled: true, config: {} });
+  const cards = (await buildOverview(guild)).groups.flatMap((g) => g.cards);
+  assert.ok(cards.length > 30);
+  for (const card of cards) {
+    assert.ok(Array.isArray(card.summaryParts), `${card.id} has summaryParts`);
+    assert.equal(card.summary, card.summaryParts.join(' · '));
+    const text = `${card.summary} ${card.lines.map((l) => `${l.label}: ${l.value}`).join(' ')}`;
+    assert.ok(!/Status: enabled/.test(text), `${card.id}: ${text}`);
+    assert.ok(!/Channel: set\b/.test(text), `${card.id}: ${text}`);
+  }
+  // an empty server: a module that needs a channel says it is not set up
+  const logging = cards.find((c) => c.id === 'logging');
+  assert.deepEqual(logging.summaryParts, ['Not set up yet']);
+});

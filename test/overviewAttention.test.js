@@ -86,10 +86,35 @@ test('buildAttention lists enabled modules with problems, missing permissions an
   assert.ok(out.missingPermissions.includes('Ban Members'));
   assert.ok(!out.missingPermissions.includes('Kick Members'));
   assert.deepEqual(out.waiting, { tickets: 0, appeals: 0, applications: 0, suggestions: 0 });
+  assert.equal(out.platform, 'discord');
+});
+
+test('Events is not a problem without a default channel: it is optional', async () => {
+  const guild = stubGuild('700000000000000779');
+  await setGuildModule('700000000000000779', 'events', { enabled: true, config: {} });
+  assert.deepEqual(moduleProblems('events', {}, guild), []);
+  const out = await buildAttention(guild);
+  assert.equal(
+    out.problems.find((p) => p.id === 'events'),
+    undefined
+  );
+});
+
+test('an owner-only module is only ever listed for the bot owner', async () => {
+  const id = '700000000000000780';
+  const guild = stubGuild(id);
+  await setGuildModule(id, 'apple-connect', { enabled: true, config: {} });
+  const forOwner = await buildAttention(guild, { owner: true });
+  const forAdmin = await buildAttention(guild, { owner: false });
+  assert.ok(forOwner.problems.some((p) => p.id === 'apple-connect'));
+  assert.ok(!forAdmin.problems.some((p) => p.id === 'apple-connect'));
 });
 
 test('buildAttention counts waiting tickets, applications and suggestions', async () => {
   const guild = stubGuild('700000000000000778');
+  for (const m of ['tickets', 'suggestions', 'applications']) {
+    await setGuildModule('700000000000000778', m, { enabled: true, config: {} });
+  }
   const { createTicket } = await import('../src/db/tickets.js');
   await createTicket('700000000000000778', '800000000000000001');
   const sg = await import('../src/db/suggestions.js');
@@ -105,4 +130,31 @@ test('buildAttention counts waiting tickets, applications and suggestions', asyn
   assert.equal(out.waiting.tickets, 1);
   assert.equal(out.waiting.suggestions, 1);
   assert.equal(out.waiting.applications, 0);
+});
+
+test('waiting work of a module that is switched off is not counted', async () => {
+  const id = '700000000000000781';
+  const guild = stubGuild(id);
+  const sg = await import('../src/db/suggestions.js');
+  await sg.createSuggestion({
+    guildId: id,
+    channelId: CH,
+    authorId: '800000000000000002',
+    title: 'Idea',
+    body: 'More fries',
+    createdAt: Date.now(),
+  });
+  await setGuildModule(id, 'suggestions', { enabled: false, config: {} });
+  assert.equal((await buildAttention(guild)).waiting.suggestions, 0);
+  await setGuildModule(id, 'suggestions', { enabled: true, config: {} });
+  assert.equal((await buildAttention(guild)).waiting.suggestions, 1);
+});
+
+test('counts and module rows the caller already has are used as given', async () => {
+  const id = '700000000000000782';
+  const guild = stubGuild(id);
+  const modules = [{ id: 'tickets', enabled: true, config: {} }];
+  const out = await buildAttention(guild, { modules, openTickets: 7, openAppeals: 3 });
+  assert.equal(out.waiting.tickets, 7);
+  assert.equal(out.waiting.appeals, 0, 'appeals is not enabled in the rows given');
 });

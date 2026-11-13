@@ -126,7 +126,6 @@ export default function Starboard() {
     embed: {
       authorName: 'Mara',
       description: 'Look at this pixel art I made over the weekend!',
-      footer: 'ID 1100000000000000',
     },
     note: 'A "Jump to message" button is added under it.',
   }));

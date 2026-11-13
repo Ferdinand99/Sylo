@@ -143,6 +143,8 @@ export default function Introductions() {
       key: 'card',
       title: 'Membership card',
       embed: {
+        // The custom colour; the server's colour or the member's role colour is not known here.
+        color: form.colorChoice === 'custom' ? form.color : undefined,
         title: 'Mara',
         description: form.description,
         fields: form.questions.map((q) => ({

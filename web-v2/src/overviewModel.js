@@ -9,11 +9,29 @@ const hrefOf = (id, guildId) => v2Href({ id }, guildId);
 const lineText = (l) => (l.value === 'on' || l.value === 'yes' ? l.label : `${l.label}: ${l.value}`);
 
 /**
+ * The summary of a card as short parts ("#welcome", "Verified role"), written by the server in plain words
+ * (summaryParts on the card). A card from an older server has none: the parts are then built from its
+ * lines ("Log channel: #server-log"). A phone shows only the first part.
+ * @returns {string[]}
+ */
+export function cardSummaryParts(card) {
+  if (!Array.isArray(card.summaryParts)) return [legacySummary(card)];
+  const parts = card.summaryParts;
+  if (!card.hasToggle) return parts.length ? parts : [card.description ?? ''];
+  if (card.status === 'blocked') return ['Blocked: the bot needs a permission first'];
+  if (!card.enabled) return parts.length && parts[0] !== 'Not set up yet' ? ['Off', parts[0]] : ['Off'];
+  return parts.length ? parts : ['On'];
+}
+
+/** The summary as one line: parts joined with " · ". */
+export const cardSummary = (card) => cardSummaryParts(card).join(' · ');
+
+/**
  * One line that says how a module is set up, from the lines the server already sends for its card:
  * "Log channel: #server-log · Events tracked: 8 of 12", "Not set up", "Off".
  * @param {{ hasToggle?: boolean, enabled?: boolean|null, status?: string, lines?: Array<{label: string, value: string, state: string}>, description?: string }} card
  */
-export function cardSummary(card) {
+function legacySummary(card) {
   const lines = Array.isArray(card.lines) ? card.lines : [];
   const on = lines.filter((l) => l.state === 'on');
   if (!card.hasToggle) return on.length ? on.slice(0, 2).map(lineText).join(' · ') : (card.description ?? '');
@@ -54,10 +72,12 @@ export function attentionItems(data, guildId) {
   const a = data.attention ?? {};
   const waiting = a.waiting ?? {};
   const items = [];
-  const tickets = Number(data.openTickets ?? waiting.tickets ?? 0);
-  const appeals = Number(data.openAppeals ?? waiting.appeals ?? 0);
+  // The server counts waiting work only for modules that are on; an older server sends just the two totals.
+  const tickets = Number(a.waiting ? (waiting.tickets ?? 0) : (data.openTickets ?? 0));
+  const appeals = Number(a.waiting ? (waiting.appeals ?? 0) : (data.openAppeals ?? 0));
   const applications = Number(waiting.applications ?? 0);
   const suggestions = Number(waiting.suggestions ?? 0);
+  const where = a.platform === 'fluxer' ? 'Fluxer' : 'Discord';
   const work = (key, n, one, many, href) => {
     if (n > 0)
       items.push({ key, kind: 'waiting', title: plural(n, one, many), detail: 'Waiting for a person', href });
@@ -102,7 +122,7 @@ export function attentionItems(data, guildId) {
       key: 'permissions',
       kind: 'permissions',
       title: `Sylo is missing ${plural(a.missingPermissions.length, 'permission', 'permissions')}`,
-      detail: `Give Sylo's role in Discord: ${a.missingPermissions.join(', ')}.`,
+      detail: `Give Sylo's role in ${where}: ${a.missingPermissions.join(', ')}.`,
       href: null,
     });
   }
@@ -123,12 +143,15 @@ const SETTINGS_SUFFIX = new Set(['tickets', 'appeals']);
 /**
  * The sidebar as groups. `guildId` is null before a server is picked (links are then null and shown
  * disabled). `operator` is whether the server marks the viewer as the bot owner (OWNER_IDS): the bot
- * pages (Health, Roadmap admin, Stats cache) only exist for them.
+ * pages (Bot personalizer, Health, Roadmap admin, Stats cache) only exist for them.
  */
 export function navModel({ guildId, data, operator }) {
   const g = (path) => (guildId ? `/guilds/${guildId}${path}` : null);
   const waiting = data?.attention?.waiting ?? {};
   const count = (n) => (Number(n) > 0 ? Number(n) : 0);
+  const top = [{ key: 'overview', label: 'Overview', icon: 'grid', href: g('') }];
+  const ticketCount = data?.attention ? waiting.tickets : data?.openTickets;
+  const appealCount = data?.attention ? waiting.appeals : data?.openAppeals;
   const inbox = [
     {
       key: 'tickets',
@@ -136,7 +159,7 @@ export function navModel({ guildId, data, operator }) {
       icon: 'inbox',
       href: g('/tickets'),
       prefix: true,
-      count: count(data?.openTickets ?? waiting.tickets),
+      count: count(ticketCount),
     },
     {
       key: 'appeals',
@@ -144,7 +167,7 @@ export function navModel({ guildId, data, operator }) {
       icon: 'flag',
       href: g('/appeals'),
       prefix: true,
-      count: count(data?.openAppeals ?? waiting.appeals),
+      count: count(appealCount),
     },
     {
       key: 'applications',
@@ -188,7 +211,6 @@ export function navModel({ guildId, data, operator }) {
   const server = [
     { key: 'settings', label: 'Server settings', icon: 'gear', href: g('/settings') },
     { key: 'commands', label: 'Commands', icon: 'terminal', href: g('/moderation/commands') },
-    { key: 'personalizer', label: 'Bot personalizer', icon: 'id', href: '/settings' },
   ];
   const more = [
     { key: 'command-list', label: 'Command list', icon: 'list', href: '/commands' },
@@ -197,10 +219,11 @@ export function navModel({ guildId, data, operator }) {
   ];
   const bot = operator
     ? [
+        { key: 'personalizer', label: 'Bot personalizer', icon: 'id', href: '/settings' },
         { key: 'health', label: 'Health', icon: 'pulse', href: '/health' },
         { key: 'roadmap-admin', label: 'Roadmap admin', icon: 'megaphone', href: '/roadmap/admin' },
         { key: 'stats', label: 'Game stats cache', icon: 'chart', href: '/stats' },
       ]
     : [];
-  return { inbox, people, modules, server, more, bot };
+  return { top, inbox, people, modules, server, more, bot };
 }

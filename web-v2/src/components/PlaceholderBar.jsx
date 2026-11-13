@@ -31,7 +31,8 @@ export function insertIntoField(el, token, selection) {
 
 /**
  * One row of placeholder chips for a whole form that has several message fields, instead of the same
- * chips under every field. A chip goes into the field the person edited last (the first one until they
+ * chips under every field. The row stays in view under the top bar while the form scrolls (a single
+ * scrolling line on a phone), so it is always next to the field being edited. A chip goes into the field the person edited last (the first one until they
  * have clicked into another), and the row says which. Each field still warns about a `{token}` it does not
  * fill in (PlaceholderHint with `chips={false}`).
  *
@@ -41,6 +42,19 @@ export default function PlaceholderBar({ fields }) {
   const [targetId, setTargetId] = useState(fields[0]?.id);
   const lastSelection = useRef(new Map());
   const [noRoom, setNoRoom] = useState('');
+  // The row sticks just under the top bar, which is taller on a phone (it wraps to two rows).
+  const [top, setTop] = useState(null);
+
+  useEffect(() => {
+    const bar = document.querySelector('.v2-topbar');
+    if (!bar) return undefined;
+    const measure = () => setTop(Math.round(bar.getBoundingClientRect().height));
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const ids = new Set(fields.map((f) => f.id));
@@ -75,7 +89,7 @@ export default function PlaceholderBar({ fields }) {
   }
 
   return (
-    <div className="v2-ph v2-ph-bar">
+    <div className="v2-ph v2-ph-bar" style={top ? { top } : undefined}>
       <div className="v2-ph-chips" role="group" aria-label="Insert a placeholder">
         <span className="v2-ph-label">Insert into “{target.label}”:</span>
         {target.tokens.map((tk) => (

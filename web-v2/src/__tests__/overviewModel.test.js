@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { attentionItems, cardSummary, cardTone, navModel, problemIdsOf } from '../overviewModel.js';
+import {
+  attentionItems,
+  cardSummary,
+  cardSummaryParts,
+  cardTone,
+  navModel,
+  problemIdsOf,
+} from '../overviewModel.js';
 import { readCollapsed, toggled, writeCollapsed } from '../collapsedGroups.js';
 
 vi.mock('../moduleForms/index.js', () => ({
@@ -137,7 +144,7 @@ describe('navModel', () => {
   const data = {
     openTickets: 4,
     openAppeals: 0,
-    attention: { waiting: { applications: 2, suggestions: 0 } },
+    attention: { waiting: { tickets: 4, appeals: 0, applications: 2, suggestions: 0 } },
     groups: [
       {
         title: 'Core',
@@ -160,8 +167,9 @@ describe('navModel', () => {
     ],
   };
 
-  it('puts the inbox, members and moderation, and server links in their groups, with counts', () => {
+  it('opens with an Overview link, then the inbox, members and moderation, and server links, with counts', () => {
     const nav = navModel({ guildId: G, data, operator: false });
+    expect(nav.top.map((i) => [i.label, i.href])).toEqual([['Overview', `/guilds/${G}`]]);
     expect(nav.inbox.map((i) => [i.label, i.count])).toEqual([
       ['Tickets', 4],
       ['Appeals', 0],
@@ -174,7 +182,21 @@ describe('navModel', () => {
       'Leaderboard',
       'Audit log',
     ]);
-    expect(nav.server.map((i) => i.label)).toEqual(['Server settings', 'Commands', 'Bot personalizer']);
+    expect(nav.server.map((i) => i.label)).toEqual(['Server settings', 'Commands']);
+  });
+
+  it('takes the inbox counts from the attention data (a module that is off counts nothing), else from the totals', () => {
+    const off = {
+      ...data,
+      attention: { waiting: { tickets: 0, appeals: 0, applications: 0, suggestions: 0 } },
+    };
+    expect(navModel({ guildId: G, data: off, operator: false }).inbox.map((i) => i.count)).toEqual([
+      0, 0, 0, 0,
+    ]);
+    const old = { openTickets: 3, openAppeals: 1, groups: [] };
+    expect(navModel({ guildId: G, data: old, operator: false }).inbox.map((i) => i.count)).toEqual([
+      3, 1, 0, 0,
+    ]);
   });
 
   it('lists each module once: no Settings, Commands or Moderation twin, and only modules that are on', () => {
@@ -184,9 +206,16 @@ describe('navModel', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('hides the bot pages from everyone but the bot owner', () => {
-    expect(navModel({ guildId: G, data, operator: false }).bot).toEqual([]);
+  it('hides every bot-owner page, the Bot personalizer included, from everyone but the bot owner', () => {
+    const everyone = navModel({ guildId: G, data, operator: false });
+    expect(everyone.bot).toEqual([]);
+    const labels = (n) =>
+      Object.values(n)
+        .flat()
+        .map((i) => i.label ?? '');
+    expect(labels(everyone)).not.toContain('Bot personalizer');
     expect(navModel({ guildId: G, data, operator: true }).bot.map((i) => i.label)).toEqual([
+      'Bot personalizer',
       'Health',
       'Roadmap admin',
       'Game stats cache',
@@ -195,9 +224,56 @@ describe('navModel', () => {
 
   it('has no server addresses before a server is picked', () => {
     const nav = navModel({ guildId: null, data: null, operator: false });
+    expect(nav.top[0].href).toBeNull();
     expect(nav.inbox.every((i) => i.href === null)).toBe(true);
     expect(nav.modules).toEqual([]);
-    expect(nav.server.find((i) => i.key === 'personalizer').href).toBe('/settings');
+  });
+});
+
+describe('cardSummaryParts', () => {
+  it('uses the parts the server wrote, "Off" for a module that is off, and "On" when there is nothing to say', () => {
+    expect(cardSummaryParts(card({ summaryParts: ['#welcome', 'Verified role'] }))).toEqual([
+      '#welcome',
+      'Verified role',
+    ]);
+    expect(cardSummary(card({ summaryParts: ['#welcome', 'Verified role'] }))).toBe(
+      '#welcome · Verified role'
+    );
+    expect(cardSummaryParts(card({ enabled: false, summaryParts: ['#welcome', 'Verified role'] }))).toEqual([
+      'Off',
+      '#welcome',
+    ]);
+    expect(cardSummaryParts(card({ enabled: false, summaryParts: ['Not set up yet'] }))).toEqual(['Off']);
+    expect(cardSummaryParts(card({ summaryParts: [] }))).toEqual(['On']);
+    expect(cardSummaryParts(card({ summaryParts: ['x'], status: 'blocked' }))[0]).toMatch(/Blocked/);
+    expect(cardSummaryParts({ hasToggle: false, description: 'Bot masters', summaryParts: [] })).toEqual([
+      'Bot masters',
+    ]);
+  });
+
+  it('builds the parts from the lines for a server that does not send them', () => {
+    expect(cardSummaryParts(card({ lines: [line('Log channel', '#a', 'on')] }))).toEqual(['Log channel: #a']);
+  });
+});
+
+describe('attentionItems with the attention data', () => {
+  it('counts waiting work only from the attention data, and names the platform in the permission hint', () => {
+    const base = {
+      openTickets: 9,
+      openAppeals: 9,
+      groups: [],
+      attention: {
+        platform: 'fluxer',
+        problems: [],
+        missingPermissions: ['Ban Members'],
+        waiting: { tickets: 0, appeals: 0, applications: 0, suggestions: 0 },
+      },
+    };
+    const items = attentionItems(base, G);
+    expect(items.map((i) => i.key)).toEqual(['permissions']);
+    expect(items[0].detail).toBe("Give Sylo's role in Fluxer: Ban Members.");
+    const discord = attentionItems({ ...base, attention: { ...base.attention, platform: 'discord' } }, G);
+    expect(discord[0].detail).toContain('in Discord');
   });
 });
 

@@ -128,16 +128,14 @@ export default function ApplicationDetail() {
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Answers</h2>
         {s.cleared ? <p className="v2-note">The answers were erased.</p> : null}
-        <dl className="v2-answers">
+        <div className="v2-answers">
           {s.answers.map((a) => (
-            <div key={a.id} className="v2-answer">
-              <dt>
-                <strong>{a.label}</strong>
-              </dt>
-              <dd>{a.answer || '—'}</dd>
-            </div>
+            <section key={a.id} className="v2-answer" aria-label={a.label}>
+              <h3>{a.label}</h3>
+              <p>{a.answer || '—'}</p>
+            </section>
           ))}
-        </dl>
+        </div>
       </div>
 
       {s.status === 'pending' ? (

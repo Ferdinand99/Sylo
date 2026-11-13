@@ -79,7 +79,12 @@ import {
 import { mdToHtml } from '../lib/markdown.js';
 import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } from '../lib/roadmapLimits.js';
 import { roadmapView } from '../lib/roadmapView.js';
-import { getGuildModule, listEnabledModuleConfigs, setGuildModule } from '../../db/modules.js';
+import {
+  getGuildModule,
+  getGuildModules,
+  listEnabledModuleConfigs,
+  setGuildModule,
+} from '../../db/modules.js';
 import {
   normaliseLevelingConfig,
   validXp,
@@ -485,25 +490,31 @@ router.get(
     // baseContext for the guild/ticket/appeal summary; buildOverview (see
     // src/web/lib/overviewSummary.js) for the category-grouped module cards
     // — reused wholesale rather than re-deriving the same grouping here.
-    const [{ guild, openTickets, openAppeals }, { groups }, attention] = await Promise.all([
-      baseContext(req.guild, 'overview'),
-      buildOverview(req.guild, { owner: isOwner(req) }),
-      buildAttention(req.guild, { owner: isOwner(req) }),
+    // The module rows and the two counts are read once and shared.
+    const modules = await getGuildModules(req.guild.id);
+    const { guild, openTickets, openAppeals } = await baseContext(req.guild, 'overview', modules);
+    const [{ groups }, attention] = await Promise.all([
+      buildOverview(req.guild, { owner: isOwner(req), modules }),
+      buildAttention(req.guild, { owner: isOwner(req), modules, openTickets, openAppeals }),
     ]);
     res.json({ guild, openTickets, openAppeals, groups, attention });
   })
 );
 
 // Members of this server by name, for the @ suggestions in the message fields. Only the members Sylo has
-// cached are searched (no id is looked up), bots are left out and at most MENTION_SHOWN come back.
+// cached are searched (no id is looked up), bots are left out and at most MENTION_SHOWN come back. A
+// query needs at least two characters, so one letter does not scan a large member list.
 const MENTION_SHOWN = 8;
+const MENTION_MIN_QUERY = 2;
+const NAMES_MAX_IDS = 20;
+const NAMES_MAX_FETCH = 5;
 router.get('/guilds/:guildId/members/search', (req, res) => {
   const q = String(req.query.q ?? '')
     .trim()
     .toLowerCase()
     .slice(0, 100);
   const found = [];
-  if (q) {
+  if (q.length >= MENTION_MIN_QUERY) {
     for (const m of req.guild.members.cache.values()) {
       if (m.user?.bot) continue;
       const names = [m.displayName, m.user?.username].map((v) => String(v ?? '').toLowerCase());
@@ -519,6 +530,34 @@ router.get('/guilds/:guildId/members/search', (req, res) => {
     })),
   });
 });
+
+// The names of members by id, for the mentions saved in a message (a saved <@id> shows as a name after a
+// reload). Cached members first; a few unknown ids are fetched, and an id that cannot be found is left
+// out, so the page shows "@member" for it.
+router.get(
+  '/guilds/:guildId/members/names',
+  asyncHandler(async (req, res) => {
+    const ids = [
+      ...new Set(
+        String(req.query.ids ?? '')
+          .split(',')
+          .filter((id) => /^\d{17,20}$/.test(id))
+      ),
+    ].slice(0, NAMES_MAX_IDS);
+    const names = {};
+    let fetches = 0;
+    for (const id of ids) {
+      let m = req.guild.members.cache.get(id);
+      if (!m && fetches < NAMES_MAX_FETCH) {
+        fetches += 1;
+        m = await req.guild.members.fetch(id).catch(() => null);
+      }
+      const name = m ? (m.displayName ?? m.user?.username) : null;
+      if (name) names[id] = name;
+    }
+    res.json({ names });
+  })
+);
 
 // Bulk enable/disable from the overview page's "select mode" — mirrors
 // guilds.js's own /modules/bulk route (same per-module side effects as a

@@ -9,6 +9,7 @@ import { openTicketCount } from '../../db/tickets.js';
 import { pendingCount } from '../../db/applications.js';
 import { openSuggestionCount } from '../../db/suggestions.js';
 import { missingPermissions, v2CardHref } from './overviewSummary.js';
+import { platformOfGuild } from '../../platform/platformOf.js';
 import { validTriggerRoleIds, welcomeTrigger } from '../../modules/welcome.js';
 
 const CHANNEL = 'channel';
@@ -17,7 +18,7 @@ const LIST = 'list';
 
 // What a module must have before it does anything: [kind, config key, what it is called].
 // Only settings without which the module does nothing at all are listed; the optional ones
-// (a log channel for tickets, a ping role, ...) are not problems.
+// (a log channel for tickets, a ping role, the default channel of Events, ...) are not problems.
 export const REQUIRED = {
   logging: [[CHANNEL, 'channel', 'The log channel']],
   verification: [
@@ -30,7 +31,6 @@ export const REQUIRED = {
   birthdays: [[CHANNEL, 'channel', 'The birthday channel']],
   suggestions: [[CHANNEL, 'channel', 'The suggestions channel']],
   'free-games': [[CHANNEL, 'channelId', 'The channel for free games']],
-  events: [[CHANNEL, 'channel', 'The events channel']],
   starboard: [[LIST, 'boards', 'Starboards']],
   sticky: [[LIST, 'stickies', 'Sticky messages']],
   autoresponder: [[LIST, 'responders', 'Responders']],
@@ -40,6 +40,7 @@ export const REQUIRED = {
   'temp-voice': [[LIST, 'hubs', 'Hub channels']],
   'server-stats': [[LIST, 'channels', 'Statistics channels']],
   honeypot: [[LIST, 'channels', 'Honeypot channels']],
+  'apple-connect': [[CHANNEL, 'channelId', 'The channel']],
   'twitch-alerts': [[LIST, 'alerts', 'Streamers']],
   'kick-alerts': [[LIST, 'alerts', 'Streamers']],
   'youtube-alerts': [[LIST, 'alerts', 'YouTube channels']],
@@ -84,11 +85,22 @@ export function moduleProblems(id, cfg, guild) {
 
 /**
  * The overview's "needs attention" data for a server.
+ * Waiting work is only counted for modules that are switched on, so a module that was turned off does not
+ * leave a count behind that nobody can clear.
  * @param {any} guild
- * @param {{ owner?: boolean }} [viewer]  a non-owner never sees an owner-only module
+ * @param {{ owner?: boolean, modules?: Array<any>, openTickets?: number, openAppeals?: number }} [opts]
+ *   a non-owner never sees an owner-only module; `modules` and the two counts are passed by a caller
+ *   that has them already, so they are not queried again
  */
-export async function buildAttention(guild, { owner = true } = {}) {
-  const rows = new Map((await getGuildModules(guild.id)).map((m) => [m.id, m]));
+export async function buildAttention(guild, { owner = true, modules, openTickets, openAppeals } = {}) {
+  const rows = new Map((modules ?? (await getGuildModules(guild.id))).map((m) => [m.id, m]));
+  const enabled = (id) => rows.get(id)?.enabled ?? getModule(id)?.defaultEnabled ?? false;
+  const [tickets, appeals, applications, suggestions] = await Promise.all([
+    enabled('tickets') ? (openTickets ?? openTicketCount(guild.id)) : 0,
+    enabled('appeals') ? (openAppeals ?? countOpenAppeals(guild.id)) : 0,
+    enabled('applications') ? pendingCount(guild.id) : 0,
+    enabled('suggestions') ? openSuggestionCount(guild.id) : 0,
+  ]);
   const problems = [];
   for (const def of MODULES) {
     if (!owner && def.ownerOnly) continue;
@@ -101,12 +113,8 @@ export async function buildAttention(guild, { owner = true } = {}) {
   }
   return {
     problems,
+    platform: platformOfGuild(guild),
     missingPermissions: missingPermissions(guild),
-    waiting: {
-      tickets: await openTicketCount(guild.id),
-      appeals: await countOpenAppeals(guild.id),
-      applications: await pendingCount(guild.id),
-      suggestions: await openSuggestionCount(guild.id),
-    },
+    waiting: { tickets, appeals, applications, suggestions },
   };
 }

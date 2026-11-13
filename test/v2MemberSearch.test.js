@@ -33,6 +33,24 @@ test('finds cached members by name and leaves bots out', async () => {
   assert.deepEqual(Object.keys(found[0]).sort(), ['id', 'name', 'username']);
 });
 
+test('needs two characters: one letter returns nothing', async () => {
+  assert.deepEqual(await search('a'), []);
+});
+
+test('names by id: cached members only come back, an unknown id is left out', async () => {
+  app.guild.members.fetch = async () => {
+    throw new Error('Unknown Member');
+  };
+  const res = await api.get(
+    '/members/names?ids=100000000000000021,100000000000000022,100000000000000099,junk'
+  );
+  assert.deepEqual((await res.json()).names, {
+    '100000000000000021': 'Alice',
+    '100000000000000022': 'Alina',
+  });
+  assert.deepEqual((await (await api.get('/members/names')).json()).names, {});
+});
+
 test('is case-insensitive, short and empty for an empty query', async () => {
   assert.equal((await search('ALICE')).length, 1);
   assert.equal((await search('zed')).length, 8);

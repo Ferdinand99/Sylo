@@ -133,7 +133,11 @@ function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
             aria-label={`Set status of suggestion #${item.number}`}
             value={pick}
             disabled={busy}
-            onChange={(e) => setPick(e.target.value)}
+            onChange={(e) => {
+              // Picking a status opens its reason panel at once.
+              setPick(e.target.value);
+              if (e.target.value) setAction(e.target.value);
+            }}
           >
             <option value="">Set status…</option>
             {ACTIONS.filter(([, status]) => status !== item.status).map(([a, , label]) => (
@@ -142,14 +146,6 @@ function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            className="v2-btn-ghost"
-            disabled={busy || !pick}
-            onClick={() => setAction(pick)}
-          >
-            Set…
-          </button>
           {item.canMoveBack ? (
             <button
               type="button"

@@ -12,7 +12,7 @@ import Reveal from '../components/Reveal.jsx';
 import BlockedNote from '../components/BlockedNote.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { Icon } from '../components/icons.jsx';
-import { attentionItems, cardSummary, cardTone, problemIdsOf, TONE_LABEL } from '../overviewModel.js';
+import { attentionItems, cardSummaryParts, cardTone, problemIdsOf, TONE_LABEL } from '../overviewModel.js';
 import { readCollapsed, toggled, writeCollapsed } from '../collapsedGroups.js';
 
 // A newly-added module gets this next to its name until it's had enough
@@ -36,13 +36,31 @@ function NeedsAttention({ items }) {
       </p>
     );
   }
+  // The waiting work is one row of links; every other item gets its own row with what is wrong.
+  const waiting = items.filter((i) => i.kind === 'waiting');
+  const rest = items.filter((i) => i.kind !== 'waiting');
   return (
     <section className="v2-attention" aria-labelledby="v2-attention-title">
       <h2 id="v2-attention-title" className="v2-attention-title">
         Needs attention <span className="v2-attention-count">{items.length}</span>
       </h2>
       <ul className="v2-attention-list">
-        {items.map((item) => (
+        {waiting.length ? (
+          <li className="v2-attention-item is-waiting">
+            <span className="v2-attention-dot" aria-hidden="true" />
+            <div className="v2-attention-text">
+              <strong>Waiting for a person</strong>
+              <span className="v2-attention-pills">
+                {waiting.map((item) => (
+                  <Link key={item.key} className="v2-attention-pill" to={item.href}>
+                    {item.title}
+                  </Link>
+                ))}
+              </span>
+            </div>
+          </li>
+        ) : null}
+        {rest.map((item) => (
           <li key={item.key} className={`v2-attention-item is-${item.kind}`}>
             <span className="v2-attention-dot" aria-hidden="true" />
             <div className="v2-attention-text">
@@ -70,7 +88,7 @@ function NeedsAttention({ items }) {
 function ModuleRow({ card, guildId, tone, onToggle, selecting, picked, onPick }) {
   const href = v2Href(card, guildId);
   const blocked = card.missingIntents.length > 0;
-  const summary = cardSummary(card);
+  const parts = cardSummaryParts(card);
   return (
     <div className={`v2-modrow is-${tone}`}>
       <span className="v2-modrow-icon" aria-hidden="true">
@@ -83,7 +101,11 @@ function ModuleRow({ card, guildId, tone, onToggle, selecting, picked, onPick })
           </h3>
         </Link>
         <p className="v2-modrow-summary" title={card.description}>
-          {summary}
+          {parts.map((part, i) => (
+            <span key={i} className="v2-modrow-part">
+              {part}
+            </span>
+          ))}
         </p>
         {blocked && card.hasToggle ? (
           <p className="v2-row-warn">
@@ -248,7 +270,7 @@ export default function Overview() {
     }
   }
 
-  const { guild, groups, openTickets, openAppeals } = data;
+  const { guild, groups } = data;
   const toggleCards = groups.flatMap((g) => g.cards).filter((c) => c.hasToggle);
   const enabledCount = toggleCards.filter((c) => c.enabled).length;
   const searching = query.trim() !== '';
@@ -265,32 +287,14 @@ export default function Overview() {
         )}
         <div className="v2-hero-text">
           <h1>{guild.name}</h1>
-          <p>{plural(guild.memberCount, 'member')}</p>
+          <p>
+            {plural(guild.memberCount, 'member')} · {formatCount(enabledCount)} of{' '}
+            {formatCount(toggleCards.length)} modules on
+          </p>
         </div>
       </div>
 
       <NeedsAttention items={attention} />
-
-      <p className="v2-field-hint v2-overview-hint">
-        Switch a module on or off here, or open it to change its settings.
-      </p>
-
-      <div className="v2-stat-strip v2-stat-strip-3">
-        <div className="v2-stat">
-          <strong>
-            {formatCount(enabledCount)}/{formatCount(toggleCards.length)}
-          </strong>
-          <span>modules active</span>
-        </div>
-        <Link className="v2-stat is-link" to={`/guilds/${guildId}/tickets`}>
-          <strong>{formatCount(openTickets)}</strong>
-          <span>open {openTickets === 1 ? 'ticket' : 'tickets'}</span>
-        </Link>
-        <Link className="v2-stat is-link" to={`/guilds/${guildId}/appeals`}>
-          <strong>{formatCount(openAppeals)}</strong>
-          <span>open {openAppeals === 1 ? 'appeal' : 'appeals'}</span>
-        </Link>
-      </div>
 
       <div className="v2-field-row v2-search-row">
         <input
@@ -305,6 +309,9 @@ export default function Overview() {
           {selecting ? 'Cancel' : 'Bulk edit'}
         </button>
       </div>
+      <p className="v2-field-hint v2-overview-hint">
+        Switch a module on or off here, or open it to change its settings.
+      </p>
 
       {selecting ? (
         <div className="v2-bulk-bar">
