@@ -6,14 +6,26 @@ import SyloKit
 /// Mirrors web-v2/src/moduleForms/Appeals.jsx.
 struct AppealsSettingsView: View {
     @State private var model: ModuleSettingsModel<AppealsPage>
+    private let server: ServerID
+    private let session: AppSession
 
     init(server: ServerID, session: AppSession) {
+        self.server = server
+        self.session = session
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
     }
 
     var body: some View {
         ModuleSettingsForm("Ban Appeals", model: model) { $settings, page in
-            ModuleIntro("When a member is banned, Sylo DMs them a private link to an appeal form. Their answers show up on the dashboard's Appeals tab, and the decision (with a single-use rejoin invite on accept) is shown on that same link when they reopen it.")
+            ModuleIntro("When a member is banned, Sylo DMs them a private link to an appeal form. Their answers show up under Appeals in the Moderation tab, and the decision (with a single-use rejoin invite on accept) is shown on that same link when they reopen it.")
+
+            Section {
+                NavigationLink {
+                    AppealsReviewView(server: server, session: session, showsSettingsLink: false)
+                } label: {
+                    Label("Review Appeals", systemImage: "tray.full")
+                }
+            }
 
             Section {
                 if !page.dashboardUrlSet {
