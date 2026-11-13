@@ -203,9 +203,9 @@ import {
   listComposed,
   getComposed,
   createComposed,
-  updateComposed,
   saveComposedDraft,
   claimComposedPost,
+  clearComposedPost,
   deleteComposed,
 } from '../../db/composedMessages.js';
 import {
@@ -1973,13 +1973,11 @@ router.post(
     const rec = await getComposed(guild.id, Number(req.params.id));
     if (!rec) return res.status(404).json({ error: 'Not found' });
     if (rec.message_id) {
-      await deletePostedMessage(guild, rec.channel_id, rec.message_id);
-      await updateComposed(guild.id, rec.id, {
-        name: rec.name,
-        channelId: rec.channel_id,
-        messageId: null,
-        spec: rec.spec,
-      });
+      // Clear the id only while it is still the one read above: a publish that moved the post in
+      // the meantime stored a newer one, and that post must stay. Nothing is deleted then.
+      if (await clearComposedPost(guild.id, rec.id, rec.message_id)) {
+        await deletePostedMessage(guild, rec.channel_id, rec.message_id);
+      }
     }
     res.json({ rec: composedRecJson(await getComposed(guild.id, rec.id)) });
   })
@@ -3385,6 +3383,8 @@ router.post(
       // A new post is stored before the old one is deleted (see publishComposed).
       rm.messageId = await publishReactionMessage(guild, rm, existing?.channelId, async (post) => {
         await saveSet({ ...rm, ...post });
+        // Stored: from here on `rm` is the new pair, so nothing that fails later can write the old one.
+        Object.assign(rm, post);
         stored = true;
       });
     } catch (err) {

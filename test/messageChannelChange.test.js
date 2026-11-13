@@ -595,3 +595,89 @@ for (const platform of ['discord', 'fluxer']) {
     assert.equal(left === null, platform === 'fluxer');
   });
 }
+
+// --- second review round: unpublish against a move, and what a late error may write --------------------
+
+for (const platform of ['discord', 'fluxer']) {
+  const where = `(${platform})`;
+
+  test(`an unpublish that runs while the post is moved does not null out the new post ${where}`, async () => {
+    const e = setup(platform);
+    const first = await e.api.post('/messages/new', {
+      name: 'Rules',
+      channelId: A,
+      action: 'publish',
+      spec: spec('v1'),
+    });
+    const rec = (await first.json()).rec;
+    // The new post comes after 40 ms and the delete of the old post takes 80 ms, so the publish
+    // stores its post while the unpublish is still deleting.
+    slow(e.chanB);
+    const del = e.chanA.messages.delete.bind(e.chanA.messages);
+    e.chanA.messages.delete = async (id) => {
+      await new Promise((r) => setTimeout(r, 80));
+      return del(id);
+    };
+    const [pub, off] = await Promise.all([
+      e.api.post(`/messages/${rec.id}`, {
+        name: rec.name,
+        channelId: B,
+        action: 'publish',
+        spec: spec('v2'),
+      }),
+      e.api.post(`/messages/${rec.id}/unpublish`),
+    ]);
+    assert.equal(off.status, 200);
+    assert.ok([200, 409].includes(pub.status), `publish answered ${pub.status}`);
+    // Whichever came first, the stored pair and the posts agree.
+    const stored = await getComposed(e.key, rec.id);
+    if (stored.message_id === null) {
+      assert.deepEqual([...ids(e.chanA), ...ids(e.chanB)], [], 'unpublished: nothing is left posted');
+    } else {
+      assert.equal(stored.channel_id, B);
+      assert.deepEqual(ids(e.chanB), [stored.message_id]);
+      assert.deepEqual(ids(e.chanA), []);
+    }
+  });
+
+  test(`unpublish clears the id it read and deletes that post ${where}`, async () => {
+    const e = setup(platform);
+    const first = await e.api.post('/messages/new', {
+      name: 'Rules',
+      channelId: A,
+      action: 'publish',
+      spec: spec('v1'),
+    });
+    const rec = (await first.json()).rec;
+    const off = await e.api.post(`/messages/${rec.id}/unpublish`);
+    assert.equal((await off.json()).rec.messageId, null);
+    assert.deepEqual(ids(e.chanA), []);
+    const stored = await getComposed(e.key, rec.id);
+    assert.equal(stored.name, 'Rules');
+    assert.equal(stored.spec.content, 'v1', 'name and text are left as they were');
+  });
+
+  test(`role message (reaction): an error after the post is stored writes the new pair, not the old ${where}`, async () => {
+    const e = setup(platform);
+    // Panels in A can react; those in B cannot (a message without react() throws after the post is stored).
+    const send = e.chanA.send;
+    e.chanA.send = async (p) => Object.assign(await send(p), { react: async () => {} });
+    const post = (body) =>
+      e.api.post('/modules/roles/rr', {
+        style: 'reaction',
+        channelId: A,
+        pairs: [{ roleId: ROLE.member, emoji: '👍' }],
+        ...body,
+      });
+    const first = (await (await post({})).json()).reactionMessage;
+    assert.ok(first.messageId);
+
+    const moved = await (await post({ id: first.id, channelId: B })).json();
+    assert.ok(moved.error, 'the late error is reported');
+    const [stored] = (await getGuildModule(e.key, 'roles')).config.reactionMessages;
+    assert.equal(stored.channelId, B);
+    assert.deepEqual(ids(e.chanB), [stored.messageId], 'the stored pair is the new post');
+    assert.deepEqual(ids(e.chanA), [], 'and the old post is gone');
+    assert.equal(moved.reactionMessage.messageId, stored.messageId);
+  });
+}

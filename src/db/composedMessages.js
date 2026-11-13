@@ -53,6 +53,9 @@ const claimStmt = (expectedSql) =>
 `);
 const claimUnpostedStmt = claimStmt('message_id IS NULL');
 const claimPostedStmt = claimStmt('message_id = @expected');
+const clearStmt = prepare(
+  'UPDATE composed_messages SET message_id = NULL, updated_at = ? WHERE id = ? AND guild_id = ? AND message_id = ?'
+);
 const deleteStmt = prepare('DELETE FROM composed_messages WHERE id = ? AND guild_id = ?');
 
 const parse = (row) => ({ ...row, spec: safe(row.spec) });
@@ -139,6 +142,14 @@ export async function claimComposedPost(
   const stmt = expectedMessageId == null ? claimUnpostedStmt : claimPostedStmt;
   if (expectedMessageId != null) params.expected = expectedMessageId;
   return (await stmt.run(params)).changes === 1;
+}
+
+/**
+ * Mark a message as not posted, but only while it still has `expectedMessageId` (the post an unpublish
+ * is about to delete). False when a publish stored another post in between; nothing is written then.
+ */
+export async function clearComposedPost(guildId, id, expectedMessageId) {
+  return (await clearStmt.run(Date.now(), id, guildId, expectedMessageId)).changes === 1;
 }
 
 export async function deleteComposed(guildId, id) {
