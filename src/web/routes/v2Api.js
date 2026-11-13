@@ -775,7 +775,7 @@ router.post(
       action: 'module:verification',
       detail: 'settings saved',
     });
-    ensureVerifyMessage(guild, cfg).catch((err) =>
+    ensureVerifyMessage(guild).catch((err) =>
       log.error('verification', 'ensure message after save failed:', err.message)
     );
     res.json({ config: cfg });

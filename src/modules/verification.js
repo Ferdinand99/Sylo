@@ -118,43 +118,90 @@ function verifyButtonRow(label = 'Verify') {
 // the fetch fails like a deleted message would, and every join used to post a new one.
 const VERIFY_PERMS = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'ReadMessageHistory'];
 
-// One check at a time per server: a burst of joins must not each see "no message" and post one.
-const ensureQueue = new Map();
+// Checks of one server run one at a time, and at most one more waits behind the running one: a
+// check reads the stored config when it starts, so everything that asks while one is waiting is
+// answered by that one. A raid of joins is then one or two checks, not one per join.
+const ensureSlots = new Map(); // guild key -> { running, next }
+const warnedPermissions = new Set(); // guild keys already told about a missing permission
 
-/**
- * Make sure the guild's verify message exists. It is edited in place when it is in the channel,
- * posted again only when the platform says it is gone, and, when the channel changed, posted in the
- * new channel with the old one deleted after the new id is stored. A missing permission or a failed
- * lookup is logged and stops: it never posts. The stored `messageChannelId` says where the message is.
- */
-export function ensureVerifyMessage(guild, cfg) {
-  const key = guildKey(guild);
-  const run = (ensureQueue.get(key) ?? Promise.resolve()).then(() => ensureVerifyMessageOnce(guild, cfg));
-  ensureQueue.set(
-    key,
-    run.catch(() => {})
-  );
-  return run;
+export const _internals = {
+  warnedPermissions,
+  /** Time a call to the platform may take inside a check. */
+  timeoutMs: 15_000,
+  /** Resolves when no check of this guild is running or waiting (for tests). */
+  async settled(guild) {
+    const key = guildKey(guild);
+    for (let slot = ensureSlots.get(key); slot; slot = ensureSlots.get(key)) {
+      await (slot.next ?? slot.running)?.catch(() => {});
+    }
+  },
+};
+
+/** A call to the platform that never answers must not hold the server's checks for ever. */
+function within(promise, what) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${what} took longer than ${_internals.timeoutMs} ms`)),
+      _internals.timeoutMs
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-async function ensureVerifyMessageOnce(guild, given) {
-  if (!given.channelId || !given.verifiedRoleId) return;
+/**
+ * Make sure the guild's verify message exists, from the config stored now. It is edited in place
+ * when it is in the channel, posted again only when the platform says it is gone, and, when the
+ * channel changed, posted in the new channel with the old one deleted after the new id is stored.
+ * A missing permission or a failed lookup is logged and stops: it never posts. The stored
+ * `messageChannelId` says where the message is.
+ */
+export function ensureVerifyMessage(guild) {
   const key = guildKey(guild);
-  // The message id and its channel as stored now, not as the caller saw them a moment ago.
-  const stored = normaliseVerificationConfig((await getGuildModule(key, 'verification')).config);
-  const cfg = { ...given, messageId: stored.messageId, messageChannelId: stored.messageChannelId };
+  let slot = ensureSlots.get(key);
+  if (!slot) ensureSlots.set(key, (slot = { running: null, next: null }));
+  if (slot.next) return slot.next; // one is waiting already: it will see the newest config
+
+  const start = () => {
+    const run = ensureVerifyMessageOnce(guild).finally(() => {
+      slot.running = null;
+      if (!slot.next && ensureSlots.get(key) === slot) ensureSlots.delete(key); // idle: forget the server
+    });
+    slot.running = run;
+    return run;
+  };
+  if (!slot.running) return start();
+  slot.next = slot.running
+    .catch(() => {})
+    .then(() => {
+      slot.next = null;
+      return start();
+    });
+  return slot.next;
+}
+
+async function ensureVerifyMessageOnce(guild) {
+  const key = guildKey(guild);
+  // Everything comes from the stored config, as it is now, not from what the caller saw earlier.
+  const cfg = normaliseVerificationConfig((await getGuildModule(key, 'verification')).config);
+  if (!cfg.channelId || !cfg.verifiedRoleId) return;
   const postedIn = cfg.messageId ? cfg.messageChannelId || cfg.channelId : '';
   const moved = Boolean(cfg.messageId) && postedIn !== cfg.channelId;
 
   const channel =
-    guild.channels.cache.get(cfg.channelId) ?? (await guild.channels.fetch(cfg.channelId).catch(() => null));
+    guild.channels.cache.get(cfg.channelId) ??
+    (await within(guild.channels.fetch(cfg.channelId), 'looking up the verify channel').catch(() => null));
   if (!channel?.isTextBased()) return;
   const me = guild.members.me;
   if (!channel.permissionsFor(me)?.has(VERIFY_PERMS)) {
-    log.warn(
-      'verification',
-      `missing permissions (need ${VERIFY_PERMS.join(', ')}) for the verify message in ${key}, channel ${cfg.channelId}`
-    );
+    // Once per server and run: this check runs on every join.
+    if (!warnedPermissions.has(key)) {
+      warnedPermissions.add(key);
+      log.warn(
+        'verification',
+        `missing permissions (need ${VERIFY_PERMS.join(', ')}) for the verify message in ${key}, channel ${cfg.channelId}`
+      );
+    }
     return;
   }
 
@@ -168,7 +215,7 @@ async function ensureVerifyMessageOnce(guild, given) {
   if (cfg.messageId && !moved) {
     let existing = null;
     try {
-      existing = await channel.messages.fetch(cfg.messageId);
+      existing = await within(channel.messages.fetch(cfg.messageId), 'looking up the verify message');
     } catch (err) {
       // Only "it is gone" means post again. A permission error, a timeout or a 5xx must not.
       if (!isMessageGone(err)) {
@@ -181,17 +228,21 @@ async function ensureVerifyMessageOnce(guild, given) {
       }
     }
     if (existing) {
-      await existing.edit({ embeds: [verifyEmbed(cfg)], components: [verifyButtonRow()] }).catch(() => {});
-      if (stored.messageChannelId !== cfg.channelId) await store(cfg.messageId); // an older config: keep the channel too
+      await within(
+        existing.edit({ embeds: [verifyEmbed(cfg)], components: [verifyButtonRow()] }),
+        'editing the verify message'
+      ).catch(() => {});
+      if (cfg.messageChannelId !== cfg.channelId) await store(cfg.messageId); // an older config: keep the channel too
       return;
     }
   }
-  const posted = await channel
-    .send({ embeds: [verifyEmbed(cfg)], components: [verifyButtonRow()] })
-    .catch((err) => {
-      log.warn('verification', `could not post the verify message in ${key}:`, err);
-      return null;
-    });
+  const posted = await within(
+    channel.send({ embeds: [verifyEmbed(cfg)], components: [verifyButtonRow()] }),
+    'posting the verify message'
+  ).catch((err) => {
+    log.warn('verification', `could not post the verify message in ${key}:`, err);
+    return null;
+  });
   if (!posted) return;
   // Store the new post first; the old one is deleted only after that. When the store fails the new
   // post goes again, so the stored pair and the old message still belong together.
@@ -211,8 +262,10 @@ async function deleteVerifyMessage(guild, channelId, messageId) {
     if (platformOfGuild(guild) === 'fluxer') await deleteComponentActions(messageId).catch(() => {});
   };
   try {
-    const channel = guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId));
-    await channel.messages.delete(messageId);
+    const channel =
+      guild.channels.cache.get(channelId) ??
+      (await within(guild.channels.fetch(channelId), 'looking up the verify channel'));
+    await within(channel.messages.delete(messageId), 'deleting a verify message');
     await dropActions();
   } catch (err) {
     if (isMessageGone(err)) await dropActions();
@@ -309,8 +362,11 @@ registerComponent('verification', 'verify:start', handleVerifyButton);
 
 on('verification', 'guildMemberAdd', async (member, rawConfig) => {
   const cfg = normaliseVerificationConfig(rawConfig);
-  // Ensure the verify message still exists (cheap no-op if it does).
-  await ensureVerifyMessage(member.guild, cfg).catch(() => {});
+  // Ensure the verify message still exists (cheap no-op if it does). Not awaited: a platform call
+  // that hangs must not hold back the kick schedule or the other modules' join handlers.
+  ensureVerifyMessage(member.guild).catch((err) =>
+    log.warn('verification', `checking the verify message failed in ${guildKey(member.guild)}:`, err)
+  );
 
   if (cfg.kickAfterMinutes <= 0 || !cfg.verifiedRoleId) return;
   // Stored, not a timer: a restart within the grace period must not cancel the kick.
