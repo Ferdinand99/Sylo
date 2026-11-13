@@ -52,7 +52,8 @@ struct ReactionRoleEditorView: View {
     private var isDirty: Bool { draft != original }
 
     private var problems: [String] {
-        draft.problems(customEmojis: model.customEmojis, pairsLimit: model.pairsLimit)
+        draft.problems(
+            customEmojis: model.customEmojis, pairsLimit: model.pairsLimit, emojiListKnown: model.hasEmojiList)
     }
 
     private var maxRows: Int {
@@ -86,6 +87,13 @@ struct ReactionRoleEditorView: View {
                 if draft.style == "select" { menuSection }
                 rowSections
                 if draft.hasMode { modeSection }
+                if draft.hasUncheckedShortcode(listKnown: model.hasEmojiList) {
+                    Section {
+                        Text("The server's emoji list could not be loaded, so a :shortcode: is sent as typed and the server looks it up.")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
+                }
                 if !problems.isEmpty {
                     Section {
                         ForEach(problems, id: \.self) { problem in
@@ -97,6 +105,8 @@ struct ReactionRoleEditorView: View {
                 }
             }
             .disabled(model.isSavingSet)
+            // Whatever the first load could not get (emoji list, limits, the server's move feature) is asked again.
+            .task { await model.prepare() }
             .navigationTitle(draft.isNew ? "New Reaction Role" : "Edit Reaction Role")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -177,7 +187,7 @@ struct ReactionRoleEditorView: View {
             if model.serverMovesMessages {
                 Text("The message is posted in the new channel, and the old one is deleted after that.")
             } else {
-                Text("The posted message is deleted from the old channel and posted again in the new one, after you confirm.")
+                Text("The set is posted again in the new channel and the old message is deleted after that, once you confirm.")
             }
         } else if draft.isPublished {
             Text("Publish edits the posted message.")
@@ -311,7 +321,7 @@ struct ReactionRoleEditorView: View {
         let move = model.channelMove(for: draft)
         let from = channelName(move?.from ?? "")
         let to = channelName(move?.to ?? "")
-        return "The posted message is deleted from #\(from) and posted again in #\(to). Its buttons and reactions stop working. If posting fails, the old message stays deleted and what you see here is kept."
+        return "The set is posted again in #\(to), and the old message in #\(from) is deleted after that. Its buttons and reactions stop working. If posting in the new channel fails, nothing changes and the old message stays."
     }
 
     private func publish(confirmedMove: Bool = false) {
@@ -325,11 +335,19 @@ struct ReactionRoleEditorView: View {
                     title: "Saved, but Not Posted",
                     message: text + " The set is saved as a draft; publish it again once that is fixed.",
                     closesEditor: true)
+            case .stillPosted(let text, let moved):
+                let message = moved
+                    ? String(localized: "The message was not moved: it is still posted in the old channel. The set is saved with your changes, but the new channel only applies once posting there works. ")
+                    : String(localized: "The set is saved, but the posted message was not updated. ")
+                failure = EditorFailure(
+                    title: moved ? "Not Moved" : "Saved, but Not Updated", message: message + text,
+                    closesEditor: true)
+            case .movedOldRemains(let text):
+                failure = EditorFailure(title: "Moved, Old Set Remains", message: text, closesEditor: true)
             case .failed(let text):
                 failure = EditorFailure(title: "Couldn't Publish", message: text)
             case .failedAfterRemoval(let text):
-                // The set is gone from the server: the next publish makes a new one.
-                draft.id = ""
+                // The set is gone from the server: the next publish puts it back under the same id.
                 draft.messageId = ""
                 failure = EditorFailure(title: "Old Message Deleted", message: text)
             case .needsConfirmation:

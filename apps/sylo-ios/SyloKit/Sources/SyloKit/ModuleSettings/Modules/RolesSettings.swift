@@ -246,10 +246,30 @@ public struct ReactionRoleMessage: Sendable, Equatable, Identifiable {
 
     // MARK: Checks, as the server makes them
 
+    /// Whether an emoji the person typed will do for a reaction. When the server's emoji list could not
+    /// be read (`listKnown` false), a `:shortcode:` is let through: the server looks it up itself.
+    static func isUsable(_ text: String, among custom: [GuildEmoji], listKnown: Bool) -> Bool {
+        let token = EmojiToken.parse(text)
+        if !listKnown, case .shortcode = token { return true }
+        return token.isUsable(among: custom)
+    }
+
+    /// Whether a row holds a `:shortcode:` that this app could not check, because the server's emoji
+    /// list is not available. It is sent as typed.
+    public func hasUncheckedShortcode(listKnown: Bool) -> Bool {
+        guard !listKnown, style == "reaction" else { return false }
+        return pairs.contains { row in
+            if case .shortcode = EmojiToken.parse(row.emoji) { return true }
+            return false
+        }
+    }
+
     /// What stops the set from being saved, in the dashboard's words (`buildReactionPairs` in
     /// src/web/lib/reactionPairs.js and the checks in the route). Row numbers are the rows as shown.
     /// Empty: the server will take it.
-    public func problems(customEmojis: [GuildEmoji] = [], pairsLimit: Int? = nil) -> [String] {
+    public func problems(
+        customEmojis: [GuildEmoji] = [], pairsLimit: Int? = nil, emojiListKnown: Bool = true
+    ) -> [String] {
         var problems: [String] = []
         if channelId.isEmpty { problems.append("Pick a channel.") }
         let maxPairs = pairsLimit ?? Limits.pairs
@@ -260,7 +280,7 @@ public struct ReactionRoleMessage: Sendable, Equatable, Identifiable {
             if row.roleId.isEmpty {
                 problems.append("Row \(index + 1): select a role.")
                 hadRowError = true
-            } else if style == "reaction", !EmojiToken.parse(row.emoji).isUsable(among: customEmojis) {
+            } else if style == "reaction", !Self.isUsable(row.emoji, among: customEmojis, listKnown: emojiListKnown) {
                 problems.append("Row \(index + 1): enter a valid emoji (required for the Reactions style).")
                 hadRowError = true
             } else {
