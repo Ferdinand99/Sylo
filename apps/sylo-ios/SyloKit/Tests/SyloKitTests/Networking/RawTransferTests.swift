@@ -96,31 +96,37 @@ struct RawTransferTests {
 
     // MARK: Links on the server
 
+    /// A URL from text, failing the test when it is not one (no nested #require).
+    private func link(_ text: String) throws -> URL {
+        guard let url = URL(string: text) else { throw NetworkError.invalidURL }
+        return url
+    }
+
     @Test("A link on the server becomes an API path and query; links elsewhere do not")
     func apiPath() throws {
         let server = try ServerURL("https://example.com/sylo")
-        let found = try #require(server.apiPath(of: try #require(URL(string: "https://example.com/sylo/c/abc.webp?size=2&x=a%20b"))))
+        let found = try #require(server.apiPath(of: try link("https://example.com/sylo/c/abc.webp?size=2&x=a%20b")))
         #expect(found.path == "/c/abc.webp")
         #expect(found.query == [URLQueryItem(name: "size", value: "2"), URLQueryItem(name: "x", value: "a b")])
 
-        #expect(server.apiPath(of: try #require(URL(string: "https://example.com/sylo/c/abc.webp")))?.query == [])
-        #expect(server.apiPath(of: try #require(URL(string: "HTTPS://EXAMPLE.COM/sylo/c/abc.webp")))?.path == "/c/abc.webp")
+        #expect(server.apiPath(of: try link("https://example.com/sylo/c/abc.webp"))?.query == [])
+        #expect(server.apiPath(of: try link("HTTPS://EXAMPLE.COM/sylo/c/abc.webp"))?.path == "/c/abc.webp")
         // Another host, the same host outside the sub-path, a lookalike path and another scheme.
-        #expect(server.apiPath(of: try #require(URL(string: "https://evil.example.org/sylo/c/abc.webp"))) == nil)
-        #expect(server.apiPath(of: try #require(URL(string: "https://example.com/other/c/abc.webp"))) == nil)
-        #expect(server.apiPath(of: try #require(URL(string: "https://example.com/sylo-evil/c/abc.webp"))) == nil)
-        #expect(server.apiPath(of: try #require(URL(string: "http://example.com/sylo/c/abc.webp"))) == nil)
-        #expect(server.apiPath(of: try #require(URL(string: "https://example.com/sylo"))) == nil)
+        #expect(server.apiPath(of: try link("https://evil.example.org/sylo/c/abc.webp")) == nil)
+        #expect(server.apiPath(of: try link("https://example.com/other/c/abc.webp")) == nil)
+        #expect(server.apiPath(of: try link("https://example.com/sylo-evil/c/abc.webp")) == nil)
+        #expect(server.apiPath(of: try link("http://example.com/sylo/c/abc.webp")) == nil)
+        #expect(server.apiPath(of: try link("https://example.com/sylo")) == nil)
     }
 
     @Test("A resource from a link keeps the path and query, and refuses another host")
     func resourceFromURL() throws {
         let server = try ServerURL("https://example.com")
-        let resource = try #require(Endpoints.Resource(url: try #require(URL(string: "https://example.com/api/v2/x?a=1")), on: server))
+        let resource = try #require(Endpoints.Resource(url: try link("https://example.com/api/v2/x?a=1"), on: server))
         #expect(resource.path == "/api/v2/x")
         #expect(resource.query == [URLQueryItem(name: "a", value: "1")])
         #expect(resource.method == .get)
-        #expect(Endpoints.Resource(url: try #require(URL(string: "https://example.org/api/v2/x")), on: server) == nil)
+        #expect(Endpoints.Resource(url: try link("https://example.org/api/v2/x"), on: server) == nil)
     }
 
     @Test("The network error for a too-large answer has words")
