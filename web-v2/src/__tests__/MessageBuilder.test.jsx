@@ -76,5 +76,48 @@ describe('Message Creator channel of a published message', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
     await waitFor(() => expect(notify).toHaveBeenCalled());
     expect(notify.mock.calls[0][0]).toMatch(/stays in its channel until you click "Update published"/);
+    // The picked channel stays in the picker and the page stays unsaved on it, so "Update published" moves the post.
+    expect(screen.getByLabelText('Channel').value).toBe('100000000000000002');
+    expect(screen.getByText('Unsaved changes')).toBeTruthy();
+  });
+
+  it('keeps the picked channel after a draft save and sends it on "Update published"', async () => {
+    saveComposedMessage.mockResolvedValueOnce({ rec, status: 'saved' });
+    saveComposedMessage.mockResolvedValueOnce({
+      rec: { ...rec, channelId: '100000000000000002', messageId: 'm2' },
+      status: 'sent',
+    });
+    renderAt('123456789012345678', '5');
+    fireEvent.change(await screen.findByLabelText('Channel'), { target: { value: '100000000000000002' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(saveComposedMessage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(notify).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Update published' }));
+    await waitFor(() => expect(saveComposedMessage).toHaveBeenCalledTimes(2));
+    expect(saveComposedMessage.mock.calls[1][2]).toMatchObject({
+      action: 'publish',
+      channelId: '100000000000000002',
+    });
+  });
+
+  it('says nothing about a posted message for a draft that was never posted', async () => {
+    const draft = { ...rec, messageId: null };
+    getComposedMessage.mockResolvedValue({
+      rec: draft,
+      channels: [
+        { id: '100000000000000001', name: 'rules' },
+        { id: '100000000000000002', name: 'news' },
+      ],
+    });
+    saveComposedMessage.mockResolvedValue({
+      rec: { ...draft, channelId: '100000000000000002' },
+      status: 'saved',
+    });
+    renderAt('123456789012345678', '5');
+    fireEvent.change(await screen.findByLabelText('Channel'), { target: { value: '100000000000000002' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(notify).toHaveBeenCalled());
+    expect(notify.mock.calls[0][0]).toBe('Draft saved.');
+    expect(screen.getByLabelText('Channel').value).toBe('100000000000000002');
   });
 });

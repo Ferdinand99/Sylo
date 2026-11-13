@@ -192,13 +192,15 @@ export function resolveWelcomeSpec(cfg, guild) {
  * @param {object} guild
  * @param {object} cfg  the config to publish
  * @param {{ channelId?: string, messageId?: string }} [posted]  the stored channel and message id
+ * @param {(post: { channelId: string, messageId: string }) => Promise<void>} [persist]  stores a new post
+ *   before the old one is deleted (see publishComposed)
  * @returns {Promise<{ ok: boolean, channelId?: string, messageId?: string, error?: string }>}
  */
-export async function publishWelcome(guild, cfg, posted = cfg) {
+export async function publishWelcome(guild, cfg, posted = cfg, persist) {
   if (!cfg.channelId) return { ok: false, error: 'Pick a channel first.' };
   const spec = resolveWelcomeSpec(cfg, guild);
   try {
-    const r = await publishComposed(guild, posted, cfg.channelId, spec);
+    const r = await publishComposed(guild, posted, cfg.channelId, spec, persist);
     return { ok: true, channelId: r.channelId, messageId: r.messageId };
   } catch (err) {
     return { ok: false, error: err.message || 'Publish failed.' };

@@ -160,7 +160,7 @@ in there:
 | `login` | Whether sign-in is available (false in open mode) |
 | `loginProviders` | The configured logins, for example `["discord", "fluxer"]`; empty when `login` is false |
 | `platforms` | The platforms the bot runs on, for example `["discord"]` |
-| `features` | What this version's app API supports, for example `["app-login", "live-access", "changelog"]`, so the app can hide what an older Sylo lacks; `changelog` means `GET /api/v2/changelog` is there |
+| `features` | What this version's app API supports, for example `["app-login", "live-access", "changelog", "message-move"]`, so the app can hide what an older Sylo lacks; `changelog` means `GET /api/v2/changelog` is there; `message-move` means the server moves a posted embed message itself (deletes the old post, posts a fresh one) when its channel changes, so the app must not unpublish first |
 
 An older Sylo without this endpoint answers `404`, and the app says the server
 is too old for it.

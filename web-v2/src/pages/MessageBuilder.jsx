@@ -165,8 +165,10 @@ export default function MessageBuilder() {
       if (error) {
         notify(error);
       } else {
-        // A posted message stays in its channel until it is published again.
-        const keptChannel = status === 'saved' && rec.channelId !== channelId;
+        // A posted message stays in its channel until it is published again. Keep the picked
+        // channel in the picker (the page stays unsaved on it), so "Update published" moves the post.
+        const keptChannel =
+          status === 'saved' && Boolean(rec.messageId) && channelId && rec.channelId !== channelId;
         notify(
           keptChannel
             ? 'Draft saved. The posted message stays in its channel until you click "Update published".'
@@ -177,7 +179,7 @@ export default function MessageBuilder() {
               }[status],
           'info'
         );
-        setChannelId(rec.channelId);
+        if (!keptChannel) setChannelId(rec.channelId);
         setMessageId(rec.messageId);
         setSavedSnapshot({ ...sent, channelId: rec.channelId });
         if (isNew) {

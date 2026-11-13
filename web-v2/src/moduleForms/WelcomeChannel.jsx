@@ -195,11 +195,13 @@ export default function WelcomeChannel() {
         action === 'publish'
           ? await publishWelcomeChannel(guildId, body)
           : await saveWelcomeChannel(guildId, body);
-      setChannelId(config.channelId);
+      // A posted message stays in its channel until it is published again. Keep the picked
+      // channel in the picker (the page stays unsaved on it), so Publish moves the post.
+      const keptChannel =
+        action !== 'publish' && Boolean(config.messageId) && channelId && config.channelId !== channelId;
+      if (!keptChannel) setChannelId(config.channelId);
       setMessageId(config.messageId);
       setSavedSnapshot({ channelId: config.channelId, form: sentForm });
-      // A posted message stays in its channel until it is published again.
-      const keptChannel = action !== 'publish' && config.channelId !== channelId;
       notify(
         action === 'publish'
           ? 'Published to the channel.'

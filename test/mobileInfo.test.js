@@ -34,6 +34,7 @@ test('GET /api/mobile/info describes a server with login on, without a cookie or
   assert.ok(info.features.includes('app-login'));
   assert.ok(info.features.includes('live-access'));
   assert.ok(info.features.includes('changelog'), 'GET /api/v2/changelog');
+  assert.ok(info.features.includes('message-move'), 'a posted message moves when its channel changes');
   assert.ok(info.features.every((f) => typeof f === 'string'));
 });
 
