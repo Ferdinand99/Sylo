@@ -58,7 +58,7 @@ struct CountingSettingsView: View {
             }
 
             if !page.penalties.isEmpty {
-                Section("Currently benched") {
+                Section {
                     ForEach(page.penalties) { penalty in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(verbatim: penalty.label)
@@ -80,6 +80,8 @@ struct CountingSettingsView: View {
                             Button("Release Now", systemImage: "lock.open") { release(penalty) }
                         }
                     }
+                } header: {
+                    Text("Currently benched")
                 } footer: {
                     Text("Swipe a member, or press and hold, to give them the penalty role back now.")
                 }
