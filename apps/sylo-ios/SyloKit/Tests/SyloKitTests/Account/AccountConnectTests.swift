@@ -269,7 +269,7 @@ struct AccountConnectModelTests {
         await model.connect(AccountModelTests.fluxer) { _ in URL(string: "sylo://connected?platform=fluxer&result=r")! }
         #expect(model.platformError == nil)
     }
-    @Test("A server that cannot start a connect says to use the dashboard")
+    @Test("A server that cannot start a connect says the server is too old")
     func startRefused() async {
         let model = await loadedModel(Self.clients(start: { _ in throw NetworkError.notFound }))
         var opened = false
@@ -279,7 +279,7 @@ struct AccountConnectModelTests {
         }
         #expect(!connected)
         #expect(!opened)
-        #expect(model.platformError == "This Sylo server can't connect a platform from the app. Use its web dashboard.")
+        #expect(model.platformError == "This Sylo server is too old to connect a platform from the app. Update Sylo on the server.")
     }
 
     @Test("An already connected platform is not connected again")
