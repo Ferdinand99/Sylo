@@ -13,6 +13,7 @@ enum ModuleScreens {
         "tickets", "twitch-alerts", "verification", "welcome", "welcome-channel", "youtube-alerts",
         "events", "suggestions", "temp-roles", "auto-threads", "quote-board",
         "introductions", "economy", "applications",
+        "reminders", "channel-cleanup", "github", "game-stats",
     ]
 
     @ViewBuilder
@@ -58,6 +59,10 @@ enum ModuleScreens {
         case "rss": RssSettingsView(server: server, session: session)
         case "free-games": FreeGamesSettingsView(server: server, session: session)
         case "apple-connect": AppleConnectSettingsView(server: server, session: session)
+        case "reminders": RemindersView(server: server, session: session)
+        case "channel-cleanup": ChannelCleanupView(server: server, session: session)
+        case "github": GithubAlertsView(server: server, session: session)
+        case "game-stats": GameStatsView(server: server, session: session)
         default:
             ContentUnavailableView(
                 "Not in the App Yet", systemImage: "square.grid.2x2",
