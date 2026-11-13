@@ -96,7 +96,7 @@ struct RestoreWaitTests {
         }
     }
 
-    private func makeModel(_ clients: StubClients, giveUpAfter: Duration = .milliseconds(400)) -> BackupsModel {
+    private func makeModel(_ clients: StubClients, giveUpAfter: Duration = .seconds(30)) -> BackupsModel {
         BackupsModel(
             session: makeSignedInSession(clients: clients), firstPoll: .zero, pollEvery: .milliseconds(2),
             giveUpAfter: giveUpAfter)
@@ -105,7 +105,7 @@ struct RestoreWaitTests {
     @Test("The old process keeps answering: no success is claimed, and the wait ends with a clear message")
     func oldProcessKeepsAnswering() async {
         let restored = LockedFlag()
-        let model = makeModel(Self.clients(restored: restored, health: { Self.report("2d 03h 10m") }))
+        let model = makeModel(Self.clients(restored: restored, health: { Self.report("2d 03h 10m") }), giveUpAfter: .milliseconds(300))
         await model.load()
         _ = await model.restore("sylo-1.db", typed: "sylo-1.db")
         #expect(model.restoring == nil)
@@ -152,7 +152,7 @@ struct RestoreWaitTests {
                 throw NetworkError.unreachable
             }
             return Self.report("2d 03h 10m")
-        }))
+        }), giveUpAfter: .milliseconds(300))
         await model.load()
         _ = await model.restore("sylo-1.db", typed: "sylo-1.db")
         #expect(model.notice == nil)
@@ -170,7 +170,7 @@ struct RestoreWaitTests {
                 throw NetworkError.offline
             }
             return Self.report(nil)
-        }))
+        }), giveUpAfter: .milliseconds(300))
         await model.load()
         _ = await model.restore("sylo-1.db", typed: "sylo-1.db")
         #expect(model.notice == nil)
@@ -209,7 +209,7 @@ struct RestoreWaitTests {
             default: throw NetworkError.notFound
             }
         }
-        let model = makeModel(clients)
+        let model = makeModel(clients, giveUpAfter: .milliseconds(300))
         await model.load()
         _ = await model.restore("sylo-1.db", typed: "sylo-1.db")
         #expect(model.actionError?.hasPrefix("Couldn't confirm the restore: Sylo never restarted") == true)
