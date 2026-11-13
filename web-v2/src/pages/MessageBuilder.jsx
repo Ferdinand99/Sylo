@@ -165,12 +165,16 @@ export default function MessageBuilder() {
       if (error) {
         notify(error);
       } else {
+        // A posted message stays in its channel until it is published again.
+        const keptChannel = status === 'saved' && rec.channelId !== channelId;
         notify(
-          {
-            saved: 'Draft saved.',
-            sent: 'Published to the channel.',
-            updated: 'Published message updated.',
-          }[status],
+          keptChannel
+            ? 'Draft saved. The posted message stays in its channel until you click "Update published".'
+            : {
+                saved: 'Draft saved.',
+                sent: 'Published to the channel.',
+                updated: 'Published message updated.',
+              }[status],
           'info'
         );
         setChannelId(rec.channelId);
@@ -243,7 +247,8 @@ export default function MessageBuilder() {
         </select>
         {messageId ? (
           <p className="v2-field-hint">
-            Published — "Update published" edits the posted message; changing the channel posts a fresh one.
+            Published — "Update published" edits the posted message. To move it, pick another channel and
+            click "Update published": the old post is deleted and a fresh one is posted there.
           </p>
         ) : null}
       </div>

@@ -198,7 +198,16 @@ export default function WelcomeChannel() {
       setChannelId(config.channelId);
       setMessageId(config.messageId);
       setSavedSnapshot({ channelId: config.channelId, form: sentForm });
-      notify(action === 'publish' ? 'Published to the channel.' : 'Draft saved.', 'info');
+      // A posted message stays in its channel until it is published again.
+      const keptChannel = action !== 'publish' && config.channelId !== channelId;
+      notify(
+        action === 'publish'
+          ? 'Published to the channel.'
+          : keptChannel
+            ? 'Draft saved. The posted message stays in its channel until you publish.'
+            : 'Draft saved.',
+        'info'
+      );
     } catch (err) {
       notify(err.message);
     } finally {
@@ -228,10 +237,11 @@ export default function WelcomeChannel() {
   async function onCreateChannel() {
     setBusy(true);
     try {
-      const { config, channels: chans } = await createWelcomeReadOnlyChannel(guildId);
-      setChannelId(config.channelId);
+      const { config, createdChannelId, channels: chans } = await createWelcomeReadOnlyChannel(guildId);
+      setChannelId(createdChannelId ?? config.channelId);
       setChannels(chans);
-      // The server stores the new channel as this message's channel.
+      // The server stores the new channel as this message's channel, unless the message is
+      // posted already: it stays where it is until Publish moves it.
       setSavedSnapshot((s) => (s ? { ...s, channelId: config.channelId } : s));
       notify('Created #welcome.', 'info');
     } catch (err) {

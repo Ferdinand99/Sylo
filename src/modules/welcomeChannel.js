@@ -3,7 +3,7 @@
 // the Message Creator's embed payload builder.
 import { createGuildChannel } from '../platform/channels.js';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
-import { sendComposed, editComposed } from './messageCreator.js';
+import { publishComposed, deletePostedMessage } from './messageCreator.js';
 
 const id = (v) => (/^\d{17,20}$/.test(v ?? '') ? v : '');
 const url = (v) => (/^https?:\/\/\S+$/i.test(v ?? '') ? v : '');
@@ -186,17 +186,20 @@ export function resolveWelcomeSpec(cfg, guild) {
   };
 }
 
-/** Send the message (or edit the existing one). Returns { ok, messageId?, error? }. */
-export async function publishWelcome(guild, cfg) {
+/**
+ * Send the message, or edit it when it is posted in `cfg.channelId` already. When it is posted in
+ * another channel, post a fresh one in `cfg.channelId` and delete the old one.
+ * @param {object} guild
+ * @param {object} cfg  the config to publish
+ * @param {{ channelId?: string, messageId?: string }} [posted]  the stored channel and message id
+ * @returns {Promise<{ ok: boolean, channelId?: string, messageId?: string, error?: string }>}
+ */
+export async function publishWelcome(guild, cfg, posted = cfg) {
   if (!cfg.channelId) return { ok: false, error: 'Pick a channel first.' };
   const spec = resolveWelcomeSpec(cfg, guild);
   try {
-    let message = null;
-    if (cfg.messageId) {
-      message = await editComposed(guild, cfg.channelId, cfg.messageId, spec).catch(() => null);
-    }
-    if (!message) message = await sendComposed(guild, cfg.channelId, spec);
-    return { ok: true, messageId: message.id };
+    const r = await publishComposed(guild, posted, cfg.channelId, spec);
+    return { ok: true, channelId: r.channelId, messageId: r.messageId };
   } catch (err) {
     return { ok: false, error: err.message || 'Publish failed.' };
   }
@@ -204,10 +207,7 @@ export async function publishWelcome(guild, cfg) {
 
 /** Delete the published message (best-effort). */
 export async function unpublishWelcome(guild, cfg) {
-  if (!cfg.channelId || !cfg.messageId) return;
-  const ch = guild.channels.cache.get(cfg.channelId);
-  const msg = ch && (await ch.messages.fetch(cfg.messageId).catch(() => null));
-  if (msg) await msg.delete().catch(() => {});
+  await deletePostedMessage(guild, cfg.channelId, cfg.messageId);
 }
 
 /** Create a read-only #welcome text channel. Returns { ok, channelId?, error? }. */

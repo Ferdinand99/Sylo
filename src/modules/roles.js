@@ -29,7 +29,7 @@ import {
 import { on } from './dispatch.js';
 import { registerComponent } from '../bot/lib/components.js';
 import { getGuildModule } from '../db/modules.js';
-import { buildEmbed, sendComposed, editComposed } from './messageCreator.js';
+import { buildEmbed, publishComposed, deletePostedMessage, newChannelError } from './messageCreator.js';
 import { log } from '../lib/log.js';
 import { idList } from '../web/lib/idList.js';
 import { normaliseEmbedSpec } from './welcomeChannel.js';
@@ -178,20 +178,24 @@ function roleMessageEmbedSpec(rm) {
  * Send (or edit) a role message. For the "reaction" style it also reconciles the
  * message's reactions; for "buttons"/"select" it attaches the components.
  * @param {import('discord.js').Guild} guild
+ * When the message is posted in another channel than `rm.channelId`, a fresh one is posted in
+ * `rm.channelId` and the old one is deleted; nothing is deleted when the new post fails.
  * @param {object} rm  entry from config.reactionMessages (see shape above)
+ * @param {string} [postedChannelId]  the channel `rm.messageId` is posted in (default: `rm.channelId`)
  * @returns {Promise<string>} the message id
  */
-export async function publishReactionMessage(guild, rm) {
+export async function publishReactionMessage(guild, rm, postedChannelId = rm.channelId) {
   const style = rm.style === 'buttons' || rm.style === 'select' ? rm.style : 'reaction';
   const embedSpec = roleMessageEmbedSpec(rm);
 
   if (style === 'reaction') {
     const spec = { content: rm.message || '', embeds: [embedSpec] };
-    let message = null;
-    if (rm.messageId) {
-      message = await editComposed(guild, rm.channelId, rm.messageId, spec).catch(() => null);
-    }
-    if (!message) message = await sendComposed(guild, rm.channelId, spec);
+    const { message } = await publishComposed(
+      guild,
+      { channelId: postedChannelId, messageId: rm.messageId },
+      rm.channelId,
+      spec
+    );
 
     const wanted = new Set(rm.pairs.map((p) => p.key));
     try {
@@ -221,12 +225,18 @@ export async function publishReactionMessage(guild, rm) {
     allowedMentions: { parse: [] },
   };
 
-  let message = rm.messageId ? await channel.messages.fetch(rm.messageId).catch(() => null) : null;
+  const moved = Boolean(rm.messageId) && postedChannelId !== rm.channelId;
+  let message = rm.messageId && !moved ? await channel.messages.fetch(rm.messageId).catch(() => null) : null;
   if (message) {
     await message.edit(payload);
     await message.reactions.removeAll().catch(() => {}); // in case it used to be reaction-style
   } else {
-    message = await channel.send(payload);
+    try {
+      message = await channel.send(payload);
+    } catch (err) {
+      throw moved ? newChannelError(err) : err;
+    }
+    if (moved) await deletePostedMessage(guild, postedChannelId, rm.messageId);
   }
   return message.id;
 }
