@@ -196,16 +196,52 @@ struct AccountConnectModelTests {
         #expect(!clients.calls.contains { $0.endpoint is Endpoints.StartConnect })
     }
 
-    @Test("Disconnecting sends the platform and reads the account again")
+    @Test("Disconnecting sends the platform, then signs this device out: the server revoked every token")
     func disconnects() async throws {
         let clients = Self.clients()
-        let model = await loadedModel(clients)
+        let session = makeSignedInSession(clients: clients)
+        let model = AccountModel(session: session)
+        await model.load()
         let done = await model.disconnect(AccountModelTests.discord)
         #expect(done)
         let sent = try #require(clients.calls.compactMap { $0.endpoint as? Endpoints.DisconnectPlatform }.first)
         #expect(sent.platform == .discord)
-        #expect(accountLoads(clients) == 2)
+        #expect(accountLoads(clients) == 1)
         #expect(model.platformError == nil)
+        if case .signedIn = session.phase { Issue.record("still signed in") }
+        #expect(session.notice?.contains("Discord was disconnected") == true)
+    }
+
+    @Test("A connect error code from the server has its own words")
+    func connectFailureWords() {
+        #expect(AccountModel.connectFailure("expired") == "That took too long. Try again.")
+        #expect(AccountModel.connectFailure("identity_linked") == "That login already belongs to another Sylo account.")
+        #expect(AccountModel.connectFailure("platform_already_linked") == "This account already has a login on that platform.")
+        #expect(AccountModel.connectFailure("account_gone") == "This Sylo account no longer exists.")
+        #expect(AccountModel.connectFailure("provider_error") == "The platform couldn't be connected. Try again.")
+    }
+
+    @Test("A callback with an error shows that error, and the next try asks for a new code")
+    func errorCallbackThenRetry() async {
+        let clients = Self.clients()
+        let model = await loadedModel(clients)
+        let first = await model.connect(AccountModelTests.fluxer) { _ in
+            URL(string: "sylo://connected?platform=fluxer&error=identity_linked")!
+        }
+        #expect(!first)
+        #expect(model.platformError == "That login already belongs to another Sylo account.")
+        let second = await model.connect(AccountModelTests.fluxer) { _ in URL(string: "sylo://connected?platform=fluxer")! }
+        #expect(second)
+        #expect(model.platformError == nil)
+        #expect(clients.calls.filter { $0.endpoint is Endpoints.StartConnect }.count == 2)
+    }
+
+    @Test("Starting a connect that the server refuses explains")
+    func startConflict() async {
+        let model = await loadedModel(Self.clients(start: { _ in throw NetworkError.http(status: 409) }))
+        let connected = await model.connect(AccountModelTests.fluxer) { _ in URL(string: "sylo://connected")! }
+        #expect(!connected)
+        #expect(model.platformError == "That platform is already connected.")
     }
 
     @Test("The only sign-in cannot be disconnected: nothing is sent")

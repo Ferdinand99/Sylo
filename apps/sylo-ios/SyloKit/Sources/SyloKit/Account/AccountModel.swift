@@ -106,8 +106,9 @@ public final class AccountModel {
         }
     }
 
-    /// Removes a platform login from the account (never the only sign-in). On success the account
-    /// is read again; on failure ``platformError`` says why and nothing changes.
+    /// Removes a platform login from the account (never the only sign-in). The server then signs
+    /// out every app on the account, this one included, so on success the app goes back to sign-in
+    /// with a notice; on failure ``platformError`` says why and nothing changes.
     /// - Returns: Whether the platform was disconnected.
     @discardableResult
     public func disconnect(_ connection: PlatformConnection) async -> Bool {
@@ -126,7 +127,9 @@ public final class AccountModel {
             }
             return false
         }
-        await load()
+        // Every app token of the account was revoked with the login: this device is signed out too.
+        session.notice = "(connection.label) was disconnected, which signs every device out. Sign in again to continue."
+        await session.signOut()
         return true
     }
 
@@ -168,14 +171,28 @@ public final class AccountModel {
         switch error {
         case .cancelled: "Cancelled."
         case .wrongCallback, .invalidServerURL: "Connecting didn't finish. Try again."
-        case .serverError: "The platform couldn't be connected. Try again."
+        case .serverError(let code): Self.connectFailure(code)
+        }
+    }
+
+    /// The words for the error code Sylo puts on `sylo://connected`.
+    static func connectFailure(_ code: String) -> String {
+        switch code {
+        case "expired": "That took too long. Try again."
+        case "identity_linked": "That login already belongs to another Sylo account."
+        case "platform_already_linked": "This account already has a login on that platform."
+        case "account_gone": "This Sylo account no longer exists."
+        default: "The platform couldn't be connected. Try again."
         }
     }
 
     private static func connectMessage(for error: NetworkError) -> String {
-        error == .notFound
-            ? "This Sylo server can't connect a platform from the app. Use its web dashboard."
-            : error.userMessage
+        switch error {
+        case .notFound: "This Sylo server can't connect a platform from the app. Use its web dashboard."
+        case .http(status: 409): "That platform is already connected."
+        case .badRequest: "This Sylo server can't connect that platform."
+        default: error.userMessage
+        }
     }
 
     /// Puts a device back at its old position, unless a reload already brought it back.

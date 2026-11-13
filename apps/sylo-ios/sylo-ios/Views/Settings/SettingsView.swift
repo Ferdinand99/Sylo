@@ -125,12 +125,14 @@ struct SettingsView: View {
                 titleVisibility: .visible, presenting: platformToDisconnect
             ) { connection in
                 Button("Disconnect \(connection.label)", role: .destructive) {
+                    // On success the server has signed every device out, this one too; the app
+                    // goes back to sign-in by itself.
                     Task {
-                        if await account.disconnect(connection) { await servers.load() }
+                        if await account.disconnect(connection) { dismiss() }
                     }
                 }
             } message: { connection in
-                Text("You can't manage the servers you reach only through \(connection.label) from this account anymore. You can connect it again later.")
+                Text("This signs you out of Sylo on every device, and you can't manage the servers you reach only through \(connection.label) anymore. You can connect it again later.")
             }
             .alert("Couldn't Change Account", isPresented: isShowingPlatformError, presenting: account.platformError) { _ in
                 Button("OK") {}
