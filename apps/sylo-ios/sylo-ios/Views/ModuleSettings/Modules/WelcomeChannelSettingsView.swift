@@ -2,25 +2,41 @@ import SwiftUI
 import SyloKit
 
 /// Welcome Channel: the channel, the message text and its embeds and banners (each edited on its
-/// own screen). Mirrors web-v2/src/moduleForms/WelcomeChannel.jsx; saving here is the web page's
-/// Save Draft. Publishing, removing the published message and creating the channel stay on the web.
+/// own screen, with a live preview). Mirrors web-v2/src/moduleForms/WelcomeChannel.jsx. Save keeps a
+/// draft, Publish posts it to the channel (or updates the posted message), Remove Published Message
+/// takes it down again, and Create Read-Only #welcome makes the channel.
 struct WelcomeChannelSettingsView: View {
     @State private var model: ModuleSettingsModel<WelcomeChannelPage>
+    @State private var publisher: WelcomeChannelPublisher
+    @State private var isConfirmingRemove = false
+    @State private var isConfirmingClear = false
+
+    /// What the server fills in on the message text and in the embeds.
+    private static let variables = [
+        EmbedVariable(token: "{server}", label: "Server name"),
+        EmbedVariable(token: "{memberCount}", label: "Member count"),
+    ]
 
     init(server: ServerID, session: AppSession) {
-        _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        let model = ModuleSettingsModel<WelcomeChannelPage>(server: server, session: session)
+        _model = State(initialValue: model)
+        _publisher = State(initialValue: WelcomeChannelPublisher(model: model, session: session))
     }
 
     var body: some View {
         ModuleSettingsForm("Welcome Channel", model: model) { $settings, page in
-            ModuleIntro("Build one rich message for a dedicated read-only channel. Saving keeps it as a draft; publish it to the channel from the web dashboard.")
+            ModuleIntro("Build one rich message for a dedicated read-only channel. Save keeps it as a draft. Publish posts it to the channel, or updates it if it is already posted.")
 
             Section {
                 ChannelPicker(title: "Channel", selection: $settings.channelId, channels: page.channels,
                               noneTitle: "Choose a channel")
+                Button("Create Read-Only #welcome", systemImage: "plus.bubble") {
+                    Task { await publisher.createChannel() }
+                }
+                .disabled(publisher.isBusy)
             } footer: {
-                if settings.isPublished {
-                    Text("Published. Publish again from the web dashboard to update the message in the channel.")
+                if publisher.isPublished {
+                    Text("Published in the channel. Publish again to update the message there.")
                 } else {
                     Text("Not published yet.")
                 }
@@ -35,41 +51,23 @@ struct WelcomeChannelSettingsView: View {
                 Text("Optional, shown above the embeds. Placeholders: {server}, {memberCount}.")
             }
 
-            ForEach($settings.embeds) { $embed in
-                Section {
-                    NavigationLink {
-                        WelcomeChannelEmbedEditor(embed: $embed)
-                    } label: {
-                        WelcomeChannelEmbedSummary(embed: embed)
-                    }
-                    if let index = settings.embeds.firstIndex(where: { $0.id == embed.id }) {
-                        if index > 0 {
-                            Button("Move Up", systemImage: "arrow.up") {
-                                settings.embeds.swapAt(index, index - 1)
-                            }
-                        }
-                        if index < settings.embeds.count - 1 {
-                            Button("Move Down", systemImage: "arrow.down") {
-                                settings.embeds.swapAt(index, index + 1)
-                            }
-                        }
-                    }
-                    Button("Remove Element", role: .destructive) {
-                        settings.embeds.removeAll { $0.id == embed.id }
-                    }
-                } header: {
-                    if embed.kind == .banner {
-                        Text("Banner")
-                    } else {
-                        Text("Embed")
-                    }
+            Section("Preview") {
+                MessagePreviewCard(content: settings.content, embeds: settings.embeds)
+            }
+
+            EmbedElementSections(items: $settings.embeds, limit: WelcomeChannelSettings.maxEmbeds) { item in
+                if item.wrappedValue.isBanner {
+                    WelcomeBannerEditor(draft: item.draft)
+                } else {
+                    EmbedEditorView(
+                        draft: item.draft, options: EmbedItem.options, variables: Self.variables)
                 }
             }
             Section {
                 if settings.embeds.count < WelcomeChannelSettings.maxEmbeds {
                     if page.presets.isEmpty {
                         Button("Add Embed", systemImage: "plus") {
-                            settings.embeds.append(WelcomeChannelSettings.Embed())
+                            settings.embeds.append(EmbedItem())
                         }
                     } else {
                         Menu {
@@ -86,167 +84,125 @@ struct WelcomeChannelSettingsView: View {
                     }
                 }
             } footer: {
-                Text("Up to 10 embeds and banners.")
-            }
-        }
-    }
-}
-
-/// An element's title (or kind) over the start of its text.
-private struct WelcomeChannelEmbedSummary: View {
-    let embed: WelcomeChannelSettings.Embed
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if !embed.title.isEmpty {
-                Text(verbatim: embed.title)
-            } else if embed.kind == .banner {
-                if embed.image.isEmpty {
-                    Text("Banner without an image")
+                if settings.embeds.isEmpty {
+                    Text("No elements yet. An embed is a card with a title, text and fields; a banner is a large picture. A message holds up to \(WelcomeChannelSettings.maxEmbeds).")
                 } else {
-                    Text("Banner")
+                    Text("Up to \(WelcomeChannelSettings.maxEmbeds) embeds and banners.")
                 }
-            } else {
-                Text("Untitled embed")
             }
-            if !embed.description.isEmpty {
-                Text(verbatim: embed.description)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+
+            Section {
+                if publisher.isBusy {
+                    HStack {
+                        Text("Working\u{2026}")
+                        Spacer()
+                        ProgressView()
+                    }
+                } else {
+                    Button {
+                        Task { await publisher.publish() }
+                    } label: {
+                        Label(publisher.isPublished ? "Update Published Message" : "Publish to Channel",
+                              systemImage: "paperplane")
+                    }
+                    .disabled(settings.channelId.isEmpty)
+                    if publisher.isPublished {
+                        Button("Remove Published Message", systemImage: "trash", role: .destructive) {
+                            isConfirmingRemove = true
+                        }
+                    }
+                }
+            } footer: {
+                actionFooter(channelChosen: !settings.channelId.isEmpty)
+            }
+
+            if !settings.content.isEmpty || !settings.embeds.isEmpty {
+                Section {
+                    Button("Clear Message", role: .destructive) {
+                        isConfirmingClear = true
+                    }
+                } footer: {
+                    Text("Clears the editor. Nothing changes in the channel until you save or publish.")
+                }
             }
         }
+        .confirmationDialog(
+            "Remove the published message?", isPresented: $isConfirmingRemove, titleVisibility: .visible
+        ) {
+            Button("Remove Message", role: .destructive) { Task { await publisher.unpublish() } }
+        } message: {
+            Text("The message is deleted from the channel. Your draft stays here, so you can publish it again.")
+        }
+        .confirmationDialog(
+            "Clear the whole message?", isPresented: $isConfirmingClear, titleVisibility: .visible
+        ) {
+            Button("Clear Message", role: .destructive) {
+                model.draft?.content = ""
+                model.draft?.embeds = []
+            }
+        } message: {
+            Text("Removes every element and the message text from the editor.")
+        }
+        .alert(failureTitle, isPresented: isShowingError, presenting: publisher.errorMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .sensoryFeedback(.success, trigger: publisher.successCount)
+    }
+
+    @ViewBuilder
+    private func actionFooter(channelChosen: Bool) -> some View {
+        if let notice = publisher.notice {
+            switch notice {
+            case .published: Text("Published to the channel.")
+            case .updated: Text("Published message updated.")
+            case .removed: Text("Published message removed.")
+            case .channelCreated: Text("Created #welcome.")
+            }
+        } else if !channelChosen {
+            Text("Choose a channel to publish to.")
+        } else {
+            Text("Publishing also saves your changes.")
+        }
+    }
+
+    private var failureTitle: LocalizedStringKey {
+        switch publisher.failedStep {
+        case .remove: "Couldn't Remove Message"
+        case .createChannel: "Couldn't Create Channel"
+        default: "Couldn't Publish"
+        }
+    }
+
+    private var isShowingError: Binding<Bool> {
+        Binding(get: { publisher.errorMessage != nil }, set: { if !$0 { publisher.errorMessage = nil } })
     }
 }
 
-/// One embed or banner, on its own screen.
-private struct WelcomeChannelEmbedEditor: View {
-    @Binding var embed: WelcomeChannelSettings.Embed
+/// A banner: a big picture with an optional caption, and nothing else.
+private struct WelcomeBannerEditor: View {
+    @Binding var draft: EmbedDraft
 
     var body: some View {
         Form {
-            if embed.kind == .banner {
-                Section {
-                    WelcomeChannelURLField(title: "Image URL", text: $embed.image)
-                    TextArea(title: "Caption", text: $embed.description,
-                             limit: WelcomeChannelSettings.Embed.maxDescriptionLength, lines: 1...4)
-                } footer: {
-                    Text("A big image with an optional caption.")
+            Section("Preview") {
+                VStack(alignment: .leading, spacing: 8) {
+                    BotMessageHeader()
+                    EmbedPreviewCard(draft: draft)
                 }
-            } else {
-                Section {
-                    WelcomeChannelColorField(color: $embed.color)
-                }
-
-                Section("Author") {
-                    WelcomeChannelLimitedField(title: "Author name", text: $embed.authorName,
-                                               limit: WelcomeChannelSettings.Embed.maxAuthorLength)
-                    WelcomeChannelURLField(title: "Author icon URL", text: $embed.authorIcon)
-                }
-
-                Section {
-                    WelcomeChannelLimitedField(title: "Title", text: $embed.title,
-                                               limit: WelcomeChannelSettings.Embed.maxTitleLength)
-                    TextArea(title: "Description", text: $embed.description,
-                             limit: WelcomeChannelSettings.Embed.maxDescriptionLength, lines: 3...10)
-                } header: {
-                    Text("Text")
-                } footer: {
-                    Text(verbatim: "{server} {memberCount}")
-                }
-
-                Section("Images") {
-                    WelcomeChannelURLField(title: "Image URL", text: $embed.image)
-                    WelcomeChannelURLField(title: "Thumbnail URL", text: $embed.thumbnail)
-                }
-
-                Section("Footer") {
-                    WelcomeChannelLimitedField(title: "Footer text", text: $embed.footerText,
-                                               limit: WelcomeChannelSettings.Embed.maxFooterLength)
-                    WelcomeChannelURLField(title: "Footer icon URL", text: $embed.footerIcon)
-                }
-
-                ForEach($embed.fields) { $field in
-                    Section("Field") {
-                        WelcomeChannelLimitedField(title: "Name", text: $field.name,
-                                                   limit: WelcomeChannelSettings.Field.maxNameLength)
-                        TextArea(title: "Value", text: $field.value,
-                                 limit: WelcomeChannelSettings.Field.maxValueLength, lines: 1...6)
-                        Toggle("Inline", isOn: $field.inline)
-                        Button("Remove Field", role: .destructive) {
-                            embed.fields.removeAll { $0.id == field.id }
-                        }
-                    }
-                }
-                Section {
-                    if embed.fields.count < WelcomeChannelSettings.Embed.maxFields {
-                        Button("Add Field", systemImage: "plus") {
-                            embed.fields.append(WelcomeChannelSettings.Field())
-                        }
-                    }
-                } footer: {
-                    Text("A field needs both a name and a value to be shown.")
-                }
+                .padding(.vertical, 4)
+            }
+            Section {
+                LinkTextField(title: "Image URL", text: $draft.image)
+                TextArea(title: "Caption", text: $draft.description,
+                         limit: EmbedLimits.standard.description, lines: 1...4)
+            } footer: {
+                Text("A big picture with an optional caption. Links must start with http:// or https://.")
             }
         }
-        .navigationTitle(embed.kind == .banner ? Text("Banner") : Text("Embed"))
+        .navigationTitle("Banner")
         .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-/// One line of text, cut off at `limit` characters.
-private struct WelcomeChannelLimitedField: View {
-    let title: LocalizedStringKey
-    @Binding var text: String
-    let limit: Int
-
-    var body: some View {
-        TextField(title, text: $text)
-            .onChange(of: text) {
-                if text.count > limit { text = String(text.prefix(limit)) }
-            }
-    }
-}
-
-/// An image URL (`https://…`). The server drops anything that isn't one.
-private struct WelcomeChannelURLField: View {
-    let title: LocalizedStringKey
-    @Binding var text: String
-
-    var body: some View {
-        TextField(title, text: $text, prompt: Text(verbatim: "https://"))
-            .keyboardType(.URL)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-    }
-}
-
-/// The embed's side colour as `#rrggbb`, with a swatch.
-private struct WelcomeChannelColorField: View {
-    @Binding var color: String
-
-    var body: some View {
-        LabeledContent("Color") {
-            HStack(spacing: 8) {
-                TextField("Color", text: $color, prompt: Text(verbatim: WelcomeChannelSettings.Embed.defaultColor))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .multilineTextAlignment(.trailing)
-                    .fixedSize()
-                Circle()
-                    .fill(swatch)
-                    .frame(width: 20, height: 20)
-                    .accessibilityHidden(true)
-            }
-        }
-    }
-
-    private var swatch: Color {
-        guard WelcomeChannelSettings.Embed.isValidColor(color),
-              let value = UInt32(color.dropFirst(), radix: 16) else { return Color.secondary.opacity(0.3) }
-        return Color(red: Double((value >> 16) & 0xFF) / 255,
-                     green: Double((value >> 8) & 0xFF) / 255,
-                     blue: Double(value & 0xFF) / 255)
     }
 }
 
@@ -258,16 +214,17 @@ private struct WelcomeChannelColorField: View {
                 channelId: "c1",
                 content: "Welcome to {server}!",
                 embeds: [
-                    WelcomeChannelSettings.Embed(title: "Server rules", description: "Be respectful to everyone.",
-                                                 fields: [WelcomeChannelSettings.Field(name: "1", value: "No spam")]),
-                    WelcomeChannelSettings.Embed(kind: .banner, image: "https://example.com/banner.png"),
+                    EmbedItem(EmbedDraft(
+                        color: "#5865f2", title: "Server rules", description: "Be respectful to everyone.",
+                        fields: [EmbedDraft.Field(name: "1", value: "No spam")])),
+                    EmbedItem(EmbedDraft(image: "https://example.com/banner.png", kind: "banner")),
                 ]),
             channels: [ChannelOption(id: "c1", name: "welcome")],
             presets: [
                 WelcomeChannelPreset(id: "welcome-embed", label: "Welcome embed",
-                                     defaults: WelcomeChannelSettings.Embed(title: "Welcome to {server}!")),
+                                     defaults: EmbedDraft(title: "Welcome to {server}!")),
                 WelcomeChannelPreset(id: "welcome-banner", label: "Welcome banner",
-                                     defaults: WelcomeChannelSettings.Embed(kind: .banner)),
+                                     defaults: EmbedDraft(kind: "banner")),
             ])
     }
     NavigationStack {

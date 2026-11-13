@@ -23,7 +23,7 @@ struct EmbedVariable: Hashable, Identifiable {
 /// }
 /// ```
 ///
-/// There is no live preview of how the embed looks in chat. The limits come from
+/// A live preview at the top shows how the embed looks in Discord (``EmbedPreviewCard``). The limits come from
 /// ``AppSession/moduleLimits()``, with `limits` applied on top where a module's embed is narrower.
 /// Counters and cut-offs count UTF-16 units, as the server does.
 struct EmbedEditorView: View {
@@ -46,6 +46,18 @@ struct EmbedEditorView: View {
 
     var body: some View {
         Form {
+            Section("Preview") {
+                VStack(alignment: .leading, spacing: 8) {
+                    BotMessageHeader()
+                    if options.content, !draft.content.isEmpty {
+                        discordText(draft.content)
+                            .font(.footnote)
+                    }
+                    EmbedPreviewCard(draft: draft, options: options)
+                }
+                .padding(.vertical, 4)
+            }
+
             if options.content {
                 Section {
                     EmbedTextField(

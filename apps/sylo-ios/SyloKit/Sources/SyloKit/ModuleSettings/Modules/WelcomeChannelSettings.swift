@@ -1,10 +1,12 @@
 import Foundation
+import Observation
 
 // Welcome Channel (src/modules/welcomeChannel.js, normaliseWelcomeChannelConfig and
 // normaliseEmbedSpec; web form web-v2/src/moduleForms/WelcomeChannel.jsx): one rich message
 // (text plus up to 10 embeds and banners) for a read-only channel. Saving keeps it as a draft;
 // publishing it to the channel, removing the published message and creating the channel are
-// separate actions on the web page.
+// separate calls (``WelcomeChannelPublisher``). The elements are shared-editor embeds
+// (``EmbedItem``), so a banner's `kind` and every key the app does not know survive a save.
 
 /// The Welcome Channel settings page.
 public struct WelcomeChannelPage: ModuleSettingsPage {
@@ -35,34 +37,21 @@ public struct WelcomeChannelPage: ModuleSettingsPage {
     }
 }
 
-/// An embed (title, text, fields, images) or a banner (a big image with a caption).
-public enum WelcomeChannelEmbedKind: String, Codable, Sendable, CaseIterable {
-    case embed, banner
-
-    public init(from decoder: any Decoder) throws {
-        self = WelcomeChannelEmbedKind(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .embed
-    }
-}
-
 /// One "Add element" choice: a ready-made embed or banner.
 public struct WelcomeChannelPreset: Decodable, Sendable, Equatable, Identifiable {
     public let id: String
     public let label: String
-    public let defaults: WelcomeChannelSettings.Embed
+    public let defaults: EmbedDraft
 
-    public init(id: String, label: String, defaults: WelcomeChannelSettings.Embed) {
+    public init(id: String, label: String, defaults: EmbedDraft) {
         self.id = id
         self.label = label
         self.defaults = defaults
     }
 
-    /// A new element from this preset (its own list id).
-    public func makeEmbed() -> WelcomeChannelSettings.Embed {
-        let d = defaults
-        return WelcomeChannelSettings.Embed(
-            kind: d.kind, color: d.color, authorName: d.authorName, authorIcon: d.authorIcon, title: d.title,
-            description: d.description, image: d.image, thumbnail: d.thumbnail, footerText: d.footerText,
-            footerIcon: d.footerIcon, fields: d.fields.map { WelcomeChannelSettings.Field(name: $0.name, value: $0.value, inline: $0.inline) })
+    /// A new element from this preset (its own list id and field ids).
+    public func makeEmbed() -> EmbedItem {
+        EmbedItem(defaults).duplicated()
     }
 
     private enum CodingKeys: String, CodingKey { case id, label, defaults }
@@ -71,7 +60,7 @@ public struct WelcomeChannelPreset: Decodable, Sendable, Equatable, Identifiable
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         label = try c.decode(forKey: .label, or: id)
-        defaults = try c.decode(forKey: .defaults, or: WelcomeChannelSettings.Embed())
+        defaults = try c.decode(forKey: .defaults, or: EmbedDraft())
     }
 }
 
@@ -82,9 +71,10 @@ public struct WelcomeChannelSettings: Codable, Sendable, Equatable {
     public let messageId: String
     /// Text above the embeds; `{server}` and `{memberCount}` are filled in.
     public var content: String
-    public var embeds: [Embed]
+    /// The embeds and banners, in order.
+    public var embeds: [EmbedItem]
 
-    public init(channelId: String = "", messageId: String = "", content: String = "", embeds: [Embed] = []) {
+    public init(channelId: String = "", messageId: String = "", content: String = "", embeds: [EmbedItem] = []) {
         self.channelId = channelId
         self.messageId = messageId
         self.content = content
@@ -96,128 +86,6 @@ public struct WelcomeChannelSettings: Codable, Sendable, Equatable {
     public static let maxContentLength = 2000
     public static let maxEmbeds = 10
 
-    public struct Embed: Codable, Sendable, Equatable, Identifiable {
-        /// For lists only; not sent.
-        public let id: UUID
-        public var kind: WelcomeChannelEmbedKind
-        /// `#rrggbb`.
-        public var color: String
-        public var authorName: String
-        /// Image URLs below are `https://…` or "".
-        public var authorIcon: String
-        public var title: String
-        /// For a banner, its caption.
-        public var description: String
-        public var image: String
-        public var thumbnail: String
-        public var footerText: String
-        public var footerIcon: String
-        public var fields: [Field]
-
-        public init(kind: WelcomeChannelEmbedKind = .embed, color: String = Embed.defaultColor,
-                    authorName: String = "", authorIcon: String = "", title: String = "",
-                    description: String = "", image: String = "", thumbnail: String = "",
-                    footerText: String = "", footerIcon: String = "", fields: [Field] = []) {
-            id = UUID()
-            self.kind = kind
-            self.color = color
-            self.authorName = authorName
-            self.authorIcon = authorIcon
-            self.title = title
-            self.description = description
-            self.image = image
-            self.thumbnail = thumbnail
-            self.footerText = footerText
-            self.footerIcon = footerIcon
-            self.fields = fields
-        }
-
-        /// Discord's blurple, what the web form shows for an embed without a valid colour.
-        public static let defaultColor = "#5865f2"
-        public static let maxTitleLength = 256
-        public static let maxDescriptionLength = 4096
-        public static let maxAuthorLength = 256
-        public static let maxFooterLength = 2048
-        public static let maxFields = 25
-
-        /// Whether `color` is a `#rrggbb` colour.
-        public static func isValidColor(_ color: String) -> Bool {
-            color.count == 7 && color.first == "#" && color.dropFirst().allSatisfy(\.isHexDigit)
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case kind, color, authorName, authorIcon, title, description, image, thumbnail
-            case footerText, footerIcon, fields
-        }
-
-        public init(from decoder: any Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            let color = try c.decode(String.self, forKey: .color, or: "")
-            self.init(
-                kind: try c.decode(forKey: .kind, or: .embed),
-                color: Self.isValidColor(color) ? color : Self.defaultColor,
-                authorName: try c.decode(forKey: .authorName, or: ""),
-                authorIcon: try c.decode(forKey: .authorIcon, or: ""),
-                title: try c.decode(forKey: .title, or: ""),
-                description: try c.decode(forKey: .description, or: ""),
-                image: try c.decode(forKey: .image, or: ""),
-                thumbnail: try c.decode(forKey: .thumbnail, or: ""),
-                footerText: try c.decode(forKey: .footerText, or: ""),
-                footerIcon: try c.decode(forKey: .footerIcon, or: ""),
-                fields: try c.decode(forKey: .fields, or: []))
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            var c = encoder.container(keyedBy: CodingKeys.self)
-            try c.encode(kind, forKey: .kind)
-            try c.encode(color, forKey: .color)
-            try c.encode(authorName, forKey: .authorName)
-            try c.encode(authorIcon, forKey: .authorIcon)
-            try c.encode(title, forKey: .title)
-            try c.encode(description, forKey: .description)
-            try c.encode(image, forKey: .image)
-            try c.encode(thumbnail, forKey: .thumbnail)
-            try c.encode(footerText, forKey: .footerText)
-            try c.encode(footerIcon, forKey: .footerIcon)
-            // Like the web form, rows with neither a name nor a value are left out.
-            try c.encode(fields.filter { !$0.name.isEmpty || !$0.value.isEmpty }, forKey: .fields)
-        }
-    }
-
-    /// A name/value field in an embed.
-    public struct Field: Codable, Sendable, Equatable, Identifiable {
-        /// For lists only; not sent.
-        public let id: UUID
-        public var name: String
-        public var value: String
-        public var inline: Bool
-
-        public init(name: String = "", value: String = "", inline: Bool = false) {
-            id = UUID()
-            self.name = name
-            self.value = value
-            self.inline = inline
-        }
-
-        public static let maxNameLength = 256
-        public static let maxValueLength = 1024
-
-        private enum CodingKeys: String, CodingKey { case name, value, inline }
-
-        public init(from decoder: any Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            self.init(name: try c.decode(forKey: .name, or: ""), value: try c.decode(forKey: .value, or: ""),
-                      inline: try c.decode(forKey: .inline, or: false))
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            var c = encoder.container(keyedBy: CodingKeys.self)
-            try c.encode(name, forKey: .name)
-            try c.encode(value, forKey: .value)
-            try c.encode(inline, forKey: .inline)
-        }
-    }
-
     private enum CodingKeys: String, CodingKey { case channelId, messageId, spec }
     private enum SpecKeys: String, CodingKey { case content, embeds }
 
@@ -228,7 +96,7 @@ public struct WelcomeChannelSettings: Codable, Sendable, Equatable {
         if c.contains(.spec), try !c.decodeNil(forKey: .spec) {
             let spec = try c.nestedContainer(keyedBy: SpecKeys.self, forKey: .spec)
             content = try spec.decode(forKey: .content, or: "")
-            embeds = try spec.decode(forKey: .embeds, or: [])
+            embeds = try spec.decodeLossyArray(of: EmbedItem.self, forKey: .embeds)
         } else {
             content = ""
             embeds = []
@@ -241,5 +109,198 @@ public struct WelcomeChannelSettings: Codable, Sendable, Equatable {
         var spec = c.nestedContainer(keyedBy: SpecKeys.self, forKey: .spec)
         try spec.encode(content, forKey: .content)
         try spec.encode(embeds, forKey: .embeds)
+    }
+}
+
+// MARK: - Publishing
+
+/// The answer to creating the read-only channel: the config as stored (with the new channel) and the
+/// channel list, refreshed.
+public struct WelcomeChannelCreated: Decodable, Sendable, Equatable {
+    public let settings: WelcomeChannelSettings
+    public let channels: [ChannelOption]
+
+    private enum CodingKeys: String, CodingKey {
+        case settings = "config"
+        case channels
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        settings = try c.decode(forKey: .settings, or: WelcomeChannelSettings())
+        channels = try c.decode(forKey: .channels, or: [])
+    }
+}
+
+/// `{}`, the body of a POST that only names an action.
+struct EmptyBody: Encodable, Sendable {}
+
+extension Endpoints {
+    private static func welcomeChannelPath(_ server: ServerID, _ action: String) -> String {
+        "/api/v2/guilds/\(server.pathComponent)/modules/welcome-channel/\(action)"
+    }
+
+    /// `POST /api/v2/guilds/:id/modules/welcome-channel/publish`: saves the message as the draft and
+    /// posts it to the channel (or edits the message already there). 400 with the server's words
+    /// when it cannot (no channel, the bot may not post there, nothing to send).
+    public struct PublishWelcomeChannel: APIEndpoint {
+        public typealias Response = SavedModuleSettings<WelcomeChannelSettings>
+        public let server: ServerID
+        public let settings: WelcomeChannelSettings
+
+        public init(server: ServerID, settings: WelcomeChannelSettings) {
+            self.server = server
+            self.settings = settings
+        }
+
+        public var path: String { Endpoints.welcomeChannelPath(server, "publish") }
+        public var method: HTTPMethod { .post }
+        public var body: (any Encodable & Sendable)? { settings }
+    }
+
+    /// `POST /api/v2/guilds/:id/modules/welcome-channel/unpublish`: deletes the posted message; the
+    /// draft stays.
+    public struct UnpublishWelcomeChannel: APIEndpoint {
+        public typealias Response = SavedModuleSettings<WelcomeChannelSettings>
+        public let server: ServerID
+        public init(server: ServerID) { self.server = server }
+
+        public var path: String { Endpoints.welcomeChannelPath(server, "unpublish") }
+        public var method: HTTPMethod { .post }
+        public var body: (any Encodable & Sendable)? { EmptyBody() }
+    }
+
+    /// `POST /api/v2/guilds/:id/modules/welcome-channel/create-channel`: makes a read-only #welcome
+    /// channel and stores it as the message's channel.
+    public struct CreateWelcomeChannel: APIEndpoint {
+        public typealias Response = WelcomeChannelCreated
+        public let server: ServerID
+        public init(server: ServerID) { self.server = server }
+
+        public var path: String { Endpoints.welcomeChannelPath(server, "create-channel") }
+        public var method: HTTPMethod { .post }
+        public var body: (any Encodable & Sendable)? { EmptyBody() }
+    }
+}
+
+/// Publishing the Welcome Channel message, removing it from the channel and creating the channel,
+/// on top of the settings model so the screen's draft and saved state stay in step with the server.
+@MainActor
+@Observable
+public final class WelcomeChannelPublisher {
+    public let server: ServerID
+    private let model: ModuleSettingsModel<WelcomeChannelPage>
+    private let session: AppSession
+
+    public private(set) var isBusy = false
+    /// Why the last action did not go through, in the server's words.
+    public var errorMessage: String?
+    /// Which action `errorMessage` belongs to.
+    public private(set) var failedStep: Step?
+    /// Goes up with every action that went through, for a haptic.
+    public private(set) var successCount = 0
+    /// What the last action did, for a one-line confirmation under the buttons.
+    public private(set) var notice: Notice?
+
+    public enum Notice: Sendable, Equatable {
+        case published, updated, removed, channelCreated
+    }
+
+    public enum Step: Sendable, Equatable {
+        case publish, remove, createChannel
+    }
+
+    public init(model: ModuleSettingsModel<WelcomeChannelPage>, session: AppSession) {
+        self.model = model
+        self.session = session
+        server = model.server
+    }
+
+    /// Whether the message is posted in the channel, as the server last said (not the unsaved draft).
+    public var isPublished: Bool { model.page?.settings.isPublished ?? false }
+
+    /// Saves any unsaved edits, then posts the message (or edits the posted one).
+    /// - Returns: Whether it is in the channel now.
+    @discardableResult
+    public func publish() async -> Bool {
+        guard !isBusy, model.draft != nil else { return false }
+        errorMessage = nil
+        failedStep = nil
+        notice = nil
+        guard model.draft?.channelId.isEmpty == false else {
+            errorMessage = "Pick a channel first."
+            failedStep = .publish
+            return false
+        }
+        isBusy = true
+        defer { isBusy = false }
+        let wasPublished = isPublished
+        if model.hasChanges {
+            // A failed save is shown by the settings screen itself.
+            guard await model.save() else { return false }
+        }
+        guard let toPublish = model.draft else { return false }
+        do {
+            _ = try await session.send(Endpoints.PublishWelcomeChannel(server: server, settings: toPublish))
+            await model.load()
+            notice = wasPublished ? .updated : .published
+            successCount += 1
+            return true
+        } catch {
+            report(error, during: .publish)
+            return false
+        }
+    }
+
+    /// Deletes the posted message. The draft stays.
+    @discardableResult
+    public func unpublish() async -> Bool {
+        guard !isBusy else { return false }
+        errorMessage = nil
+        failedStep = nil
+        notice = nil
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            _ = try await session.send(Endpoints.UnpublishWelcomeChannel(server: server))
+            await model.load()
+            notice = .removed
+            successCount += 1
+            return true
+        } catch {
+            report(error, during: .remove)
+            return false
+        }
+    }
+
+    /// Makes the read-only channel and picks it for the message.
+    @discardableResult
+    public func createChannel() async -> Bool {
+        guard !isBusy else { return false }
+        errorMessage = nil
+        failedStep = nil
+        notice = nil
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let created = try await session.send(Endpoints.CreateWelcomeChannel(server: server))
+            // The server stored the channel already; unsaved edits stay, with the new channel on them.
+            await model.load()
+            model.draft?.channelId = created.settings.channelId
+            notice = .channelCreated
+            successCount += 1
+            return true
+        } catch {
+            report(error, during: .createChannel)
+            return false
+        }
+    }
+
+    private func report(_ error: any Error, during step: Step) {
+        let error = NetworkError(error)
+        if error != .cancelled, error != .unauthorized {
+            errorMessage = error.userMessage
+            failedStep = step
+        }
     }
 }

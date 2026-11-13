@@ -192,19 +192,18 @@ struct EmbedDraftTests {
 
     @Test("A stored sticky embed opens in the editor and saves with the same keys")
     func stickyEmbedKeysMatch() throws {
-        let sticky = StickyEmbed(
-            title: "Rules", description: "Be nice", color: "#5865f2", image: "https://e.com/i.png",
-            thumbnail: "https://e.com/t.png", authorName: "Mods", authorIcon: "https://e.com/a.png",
-            footerText: "Thanks", footerIcon: "https://e.com/f.png",
-            fields: [StickyEmbed.Field(name: "1", value: "x")])
-        let stickyJSON = try JSONEncoder().encode(sticky)
-        let stickyObject = try #require(try JSONSerialization.jsonObject(with: stickyJSON) as? [String: Any])
-        let stickyKeys = Set(stickyObject.keys)
+        // A sticky's embed as the server stores it (the keys the web editor writes).
+        let stored = #"""
+        {"kind":"embed","color":"#5865f2","title":"Rules","image":"https://e.com/i.png","authorName":"Mods",
+         "authorIcon":"https://e.com/a.png","description":"Be nice","thumbnail":"https://e.com/t.png",
+         "footerText":"Thanks","footerIcon":"https://e.com/f.png","fields":[{"name":"1","value":"x","inline":false}]}
+        """#
+        let storedObject = try #require(try JSONSerialization.jsonObject(with: Data(stored.utf8)) as? [String: Any])
 
-        let draft = try JSONDecoder().decode(EmbedDraft.self, from: stickyJSON)
+        let draft = try JSONDecoder().decode(EmbedDraft.self, from: Data(stored.utf8))
         #expect(draft.title == "Rules")
         #expect(draft.fields.count == 1)
-        #expect(try Self.keys(draft.spec()) == stickyKeys)
+        #expect(try Self.keys(draft.spec()) == Set(storedObject.keys))
     }
 
     // MARK: What the editor does not model

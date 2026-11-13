@@ -2,8 +2,8 @@ import SwiftUI
 import SyloKit
 
 /// Sticky messages: one message per channel (text, an embed, or both) that Sylo re-posts at the
-/// bottom. Mirrors web-v2/src/moduleForms/Sticky.jsx; the embed is edited on its own screen
-/// (without the web editor's live preview).
+/// bottom. Mirrors web-v2/src/moduleForms/Sticky.jsx; the embed is edited in the shared embed editor
+/// on its own screen, with its live preview.
 struct StickySettingsView: View {
     @State private var model: ModuleSettingsModel<StickyPage>
 
@@ -24,8 +24,8 @@ struct StickySettingsView: View {
                              limit: StickySettings.Sticky.maxContentLength, lines: 2...8)
                     if sticky.embed != nil {
                         NavigationLink {
-                            StickyEmbedEditor(embed: Binding(
-                                get: { sticky.embed ?? StickyEmbed() },
+                            EmbedEditorView(draft: Binding(
+                                get: { sticky.embed ?? EmbedDraft() },
                                 set: { sticky.embed = $0 }))
                         } label: {
                             LabeledContent("Embed") {
@@ -37,7 +37,7 @@ struct StickySettingsView: View {
                         }
                     } else {
                         Button("Add Embed", systemImage: "plus") {
-                            sticky.embed = StickyEmbed()
+                            sticky.embed = EmbedDraft()
                         }
                     }
                     Toggle("Also bump for other apps", isOn: $sticky.repostOnBots)
@@ -80,91 +80,6 @@ private struct StickyHeader: View {
     }
 }
 
-/// Edits one sticky's embed on its own screen. Changes go straight into the settings draft; Save
-/// is on the screen before this one.
-private struct StickyEmbedEditor: View {
-    @Binding var embed: StickyEmbed
-
-    var body: some View {
-        Form {
-            Section {
-                TextField("Title", text: $embed.title)
-                TextArea(title: "Description", text: $embed.description,
-                         limit: StickyEmbed.maxDescriptionLength, lines: 3...10)
-                ColorPicker("Colour", selection: colour, supportsOpacity: false)
-            }
-
-            Section("Author") {
-                TextField("Name", text: $embed.authorName)
-                StickyURLField(title: "Icon URL", text: $embed.authorIcon)
-            }
-
-            Section {
-                StickyURLField(title: "Image URL", text: $embed.image)
-                StickyURLField(title: "Thumbnail URL", text: $embed.thumbnail)
-            } header: {
-                Text("Images")
-            } footer: {
-                Text("Links must start with http:// or https://.")
-            }
-
-            Section("Footer") {
-                TextField("Text", text: $embed.footerText)
-                StickyURLField(title: "Icon URL", text: $embed.footerIcon)
-            }
-
-            ForEach($embed.fields) { $field in
-                Section("Field") {
-                    TextField("Name", text: $field.name)
-                    TextArea(title: "Value", text: $field.value,
-                             limit: StickyEmbed.Field.maxValueLength, lines: 2...6)
-                    Toggle("Inline", isOn: $field.inline)
-                    Button("Remove Field", role: .destructive) {
-                        embed.fields.removeAll { $0.id == field.id }
-                    }
-                }
-            }
-            Section {
-                if embed.fields.count < StickyEmbed.maxFields {
-                    Button("Add Field", systemImage: "plus") {
-                        embed.fields.append(StickyEmbed.Field())
-                    }
-                }
-            } footer: {
-                Text("A field needs both a name and a value.")
-            }
-        }
-        .navigationTitle("Embed")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var colour: Binding<Color> {
-        Binding(
-            get: {
-                let rgb = embed.rgb
-                return Color(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue)
-            },
-            set: { newValue in
-                let resolved = newValue.resolve(in: EnvironmentValues())
-                embed.setRGB(red: Double(resolved.red), green: Double(resolved.green), blue: Double(resolved.blue))
-            })
-    }
-}
-
-/// A text field for a link.
-private struct StickyURLField: View {
-    let title: LocalizedStringKey
-    @Binding var text: String
-
-    var body: some View {
-        TextField(title, text: $text)
-            .keyboardType(.URL)
-            .textContentType(.URL)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-    }
-}
-
 #Preview {
     let session = AppSession.preview(.signedIn) { endpoint in
         guard endpoint is Endpoints.LoadModuleSettings<StickyPage> else { return nil }
@@ -173,8 +88,8 @@ private struct StickyURLField: View {
                 StickySettings.Sticky(channelId: "c1", content: "Please read the pinned rules before posting."),
                 StickySettings.Sticky(
                     channelId: "c2",
-                    embed: StickyEmbed(title: "Welcome", description: "Be nice to each other.",
-                                       fields: [StickyEmbed.Field(name: "Rule 1", value: "No spam")]),
+                    embed: EmbedDraft(title: "Welcome", description: "Be nice to each other.",
+                                       fields: [EmbedDraft.Field(name: "Rule 1", value: "No spam")]),
                     cooldownSeconds: 30),
             ]),
             channels: [ChannelOption(id: "c1", name: "general"), ChannelOption(id: "c2", name: "rules")])
