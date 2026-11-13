@@ -2,7 +2,7 @@ import SwiftUI
 import SyloKit
 
 /// The Economy member lookup: the members with the most money, or whoever a name search finds,
-/// with their balances. Read only; a member opens to their transactions.
+/// with their balances. A member opens to their transactions, inventory and the staff changes.
 struct EconomyMembersView: View {
     @State private var model: EconomyMembersModel
     private let server: ServerID
@@ -110,10 +110,16 @@ private struct MemberRow: View {
     }
 }
 
-/// One member's balances and their latest transactions, newest first.
+/// One member's balances, the staff changes to their money, their inventory and their latest
+/// transactions, newest first.
 struct EconomyMemberView: View {
     @State private var model: EconomyMemberModel
+    @State private var action: EconomyAdjustAction = .add
+    @State private var amount = 100
+    @State private var reason = ""
+    @State private var isConfirming = false
     private let server: ServerID
+    private let session: AppSession
     private let name: String
     private let currencyEmoji: String
     private let currencyName: String
@@ -121,6 +127,7 @@ struct EconomyMemberView: View {
     init(server: ServerID, session: AppSession, userID: String, name: String, currencyEmoji: String,
          currencyName: String) {
         self.server = server
+        self.session = session
         self.name = name
         self.currencyEmoji = currencyEmoji
         self.currencyName = currencyName
@@ -144,6 +151,46 @@ struct EconomyMemberView: View {
                     }
                 }
 
+                if let notice = model.notice {
+                    Section { StatusMessage(notice, kind: .notice) }
+                }
+
+                Section {
+                    Picker("Change", selection: $action) {
+                        ForEach(EconomyAdjustAction.allCases) { choice in
+                            Text(verbatim: choice.title).tag(choice)
+                        }
+                    }
+                    if action.needsAmount {
+                        NumberField(title: "Amount", value: $amount, range: action.amountRange)
+                    }
+                    TextField("Reason (optional)", text: $reason)
+                        .onChange(of: reason) {
+                            if reason.count > EconomyMemberModel.maxReasonLength {
+                                reason = String(reason.prefix(EconomyMemberModel.maxReasonLength))
+                            }
+                        }
+                    Button("Apply…") { isConfirming = true }
+                        .disabled(!canApply)
+                } header: {
+                    Text("Change the balance")
+                } footer: {
+                    Text("The reason is kept in the member's ledger. Every change is in it with your name, and is posted to the log channel when there is one.")
+                }
+
+                Section {
+                    NavigationLink {
+                        InventoryView(
+                            server: server, session: session, userID: model.userID, name: name,
+                            currencyEmoji: currencyEmoji, currencyName: currencyName,
+                            onChange: { Task { await model.load() } })
+                    } label: {
+                        LabeledContent("Inventory", value: detail.inventory.count.formatted())
+                    }
+                } footer: {
+                    Text("What \(name) owns. Give an item, revoke or refund one, or mark a custom item as fulfilled.")
+                }
+
                 Section {
                     if detail.transactions.isEmpty {
                         Text("No transactions yet.").foregroundStyle(.secondary)
@@ -158,10 +205,6 @@ struct EconomyMemberView: View {
                         Text("Showing the latest \(detail.transactions.count) of \(detail.transactionCount).")
                     }
                 }
-
-                DashboardLinkSection(
-                    server: server, module: EconomyPage.moduleID,
-                    footer: "Add, remove or set money, and see the inventory, in the web dashboard.")
             }
         }
         .overlay {
@@ -183,6 +226,35 @@ struct EconomyMemberView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
         .refreshable { await model.load() }
+        .confirmationDialog(
+            action.question(member: name, amount: money(amount)), isPresented: $isConfirming,
+            titleVisibility: .visible
+        ) {
+            Button(action.confirmTitle, role: action.isDestructive ? .destructive : nil) {
+                Task { await apply() }
+            }
+        } message: {
+            Text(verbatim: action.consequence)
+        }
+        .alert("Couldn't Change the Balance", isPresented: isShowingActionError, presenting: model.actionError) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .sensoryFeedback(.success, trigger: model.changeCount)
+    }
+
+    private var canApply: Bool {
+        !model.isChanging && EconomyMemberModel.amountProblem(amount, for: action) == nil
+    }
+
+    private func apply() async {
+        let sent = reason
+        if await model.adjust(action, amount: amount, reason: sent) { reason = "" }
+    }
+
+    private var isShowingActionError: Binding<Bool> {
+        Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })
     }
 
     private func money(_ amount: Int) -> String {

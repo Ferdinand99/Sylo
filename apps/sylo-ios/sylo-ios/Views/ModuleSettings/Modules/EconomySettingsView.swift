@@ -2,12 +2,14 @@ import SwiftUI
 import SyloKit
 
 /// Economy: the currency, what members earn from chat, voice, /daily and /work, the bank and
-/// payments, robbing, the web shop and leaderboard, and the staff log. A read only member lookup
-/// is one row away. The shop items (collectibles with their pictures and rarities too), changing a
-/// member's money and the reset of the whole economy stay in the web dashboard. Mirrors web-v2/src/moduleForms/Economy.jsx.
+/// payments, robbing, the web shop and leaderboard, and the staff log. The member balances (change a
+/// member's money, their inventory), the shop's items (collectibles with their pictures and rarities
+/// too), the shop's activity and the reset of the whole economy are one row away. Mirrors
+/// web-v2/src/moduleForms/Economy.jsx.
 struct EconomySettingsView: View {
     @State private var model: ModuleSettingsModel<EconomyPage>
     @State private var note: ModulePlatformNoteModel
+    @State private var isResetting = false
     private let server: ServerID
     private let session: AppSession
 
@@ -45,8 +47,22 @@ struct EconomySettingsView: View {
                 } label: {
                     Label("Member balances", systemImage: "person.2")
                 }
+                NavigationLink {
+                    ShopItemsView(
+                        server: server, session: session,
+                        currencyEmoji: settings.currencyEmoji, currencyName: settings.currencyName)
+                } label: {
+                    Label("Shop items", systemImage: "bag")
+                }
+                NavigationLink {
+                    ShopActivityView(
+                        server: server, session: session,
+                        currencyEmoji: settings.currencyEmoji, currencyName: settings.currencyName)
+                } label: {
+                    Label("Shop activity", systemImage: "clock.arrow.circlepath")
+                }
             } footer: {
-                Text("See who holds what and each member's latest transactions. Changing a balance is done in the web dashboard.")
+                Text("See who holds what, add, remove or set a member's money, and see or change what they own. Add and change the shop's items, including collectibles, and see what was bought.")
             }
 
             Section {
@@ -172,7 +188,7 @@ struct EconomySettingsView: View {
             } header: {
                 Text("Shop")
             } footer: {
-                Text("Signed-in members can browse and buy on the web shop page. Custom items post a notice in the channel for staff to fulfil. Add and change the shop's items in the web dashboard.")
+                Text("Signed-in members can browse and buy on the web shop page. Custom items post a notice in the channel for staff to fulfil.")
             }
 
             // Sylo 5.2 and later. An older server does not send these keys, so nothing shows.
@@ -190,7 +206,7 @@ struct EconomySettingsView: View {
                 } header: {
                     Text("Collectibles")
                 } footer: {
-                    Text("A collectible with \"Announce purchases\" switched on is announced in this channel when someone buys it, with its picture. On: /collection is public and a member can look at another member's collection. Off: /collection shows only your own, and only you see it. Collectibles, their pictures and rarities are managed in the web dashboard.")
+                    Text("A collectible with \"Announce purchases\" switched on is announced in this channel when someone buys it, with its picture. On: /collection is public and a member can look at another member's collection. Off: /collection shows only your own, and only you see it.")
                 }
             }
 
@@ -204,11 +220,18 @@ struct EconomySettingsView: View {
                 Text("Anyone with the link can see the richest members, by name and total only. Sylo posts to the log channel when staff add, remove or set money, or reset a member or the whole economy.")
             }
 
-            DashboardLinkSection(
-                server: server, module: EconomyPage.moduleID,
-                footer: "Shop items, refunds, changing a member's money and resetting the economy are done in the web dashboard.")
+            Section {
+                Button("Reset the Whole Economy…", role: .destructive) { isResetting = true }
+            } header: {
+                Text("Danger zone")
+            } footer: {
+                Text("Every member goes back to a new start. Use it for a fresh season. You type a word to confirm, and it cannot be undone.")
+            }
         }
         .task { await note.load() }
+        .sheet(isPresented: $isResetting) {
+            EconomyResetSheet(server: server, session: session)
+        }
     }
 }
 
