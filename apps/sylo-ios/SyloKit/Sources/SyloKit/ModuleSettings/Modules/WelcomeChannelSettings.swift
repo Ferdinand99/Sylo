@@ -114,21 +114,30 @@ public struct WelcomeChannelSettings: Codable, Sendable, Equatable {
 
 // MARK: - Publishing
 
-/// The answer to creating the read-only channel: the config as stored (with the new channel) and the
-/// channel list, refreshed.
+/// The answer to creating the read-only channel: the config as stored, the channel list refreshed,
+/// and the new channel. A server that keeps the stored channel while the message is posted (Sylo
+/// 5.2) answers with the old channel in the config and the new one in `createdChannelId`; an older
+/// one stores the new channel and has no `createdChannelId`.
 public struct WelcomeChannelCreated: Decodable, Sendable, Equatable {
     public let settings: WelcomeChannelSettings
     public let channels: [ChannelOption]
+    /// The channel that was made, when the server says so apart from the config.
+    public let createdChannelId: String?
+
+    /// The channel to pick for the message: the one that was made.
+    public var newChannelId: String { createdChannelId ?? settings.channelId }
 
     private enum CodingKeys: String, CodingKey {
         case settings = "config"
-        case channels
+        case channels, createdChannelId
     }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         settings = try c.decode(forKey: .settings, or: WelcomeChannelSettings())
         channels = try c.decode(forKey: .channels, or: [])
+        let created = try c.decodeIfPresent(String.self, forKey: .createdChannelId)
+        createdChannelId = (created ?? "").isEmpty ? nil : created
     }
 }
 
@@ -216,6 +225,20 @@ public final class WelcomeChannelPublisher {
     /// Whether the message is posted in the channel, as the server last said (not the unsaved draft).
     public var isPublished: Bool { model.page?.settings.isPublished ?? false }
 
+    /// Whether the server moves the posted message itself when it is published in another channel
+    /// (``ServerFeature/messageMove``, announced by Sylo 5.2 and later). False until
+    /// ``loadFeatures()`` has asked, and on servers that do not say.
+    public private(set) var serverMovesMessages = false
+
+    /// Asks the server what it can do; the screen words its channel hint by the answer.
+    public func loadFeatures() async {
+        if let info = try? await session.send(Endpoints.ServerInfo()) {
+            serverMovesMessages = info.supports(.messageMove)
+        } else if let info = session.serverInfo {
+            serverMovesMessages = info.supports(.messageMove)
+        }
+    }
+
     /// Saves any unsaved edits, then posts the message (or edits the posted one).
     /// - Returns: Whether it is in the channel now.
     @discardableResult
@@ -237,11 +260,15 @@ public final class WelcomeChannelPublisher {
         isBusy = true
         defer { isBusy = false }
         let wasPublished = isPublished
+        // What the person chose, taken before the save: a server that keeps the stored channel while
+        // the message is posted (Sylo 5.2) answers the save with the old channel, and the settings
+        // model would then show that one. Publishing carries the picked channel, so the server posts
+        // there (and moves the old post), or on an older server posts a new message there.
+        guard let toPublish = model.draft else { return false }
         if model.hasChanges {
             // A failed save is shown by the settings screen itself.
             guard await model.save() else { return false }
         }
-        guard let toPublish = model.draft else { return false }
         do {
             _ = try await session.send(Endpoints.PublishWelcomeChannel(server: server, settings: toPublish))
             await model.load()
@@ -288,7 +315,7 @@ public final class WelcomeChannelPublisher {
             let created = try await session.send(Endpoints.CreateWelcomeChannel(server: server))
             // The server stored the channel already; unsaved edits stay, with the new channel on them.
             await model.load()
-            model.draft?.channelId = created.settings.channelId
+            model.draft?.channelId = created.newChannelId
             notice = .channelCreated
             successCount += 1
             return true

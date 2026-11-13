@@ -155,7 +155,7 @@ struct MessageBuilderView: View {
             case .updated: Text("Published message updated.")
             }
         } else if model.isPublished {
-            Text("Published in #\(channelName(model.channelMove?.from ?? model.channelId)). Update Published Message edits the posted message. If you pick another channel, the posted message is deleted there and posted again in the new one, after you confirm.")
+            Text("Published in #\(channelName(model.channelMove?.from ?? model.channelId)). Update Published Message edits the posted message. If you pick another channel, publishing moves the posted message there, after you confirm.")
         } else {
             Text("Save keeps a draft. Publish posts the message to the channel as Sylo.")
         }
@@ -194,6 +194,9 @@ struct MessageBuilderView: View {
         let to = channelName(move?.to ?? "")
         switch action {
         case .publish:
+            if model.serverMovesMessages {
+                return "The message is posted in #\(to) first, then the old post in #\(from) is deleted. If posting fails, the old post stays."
+            }
             return "The posted message is deleted from #\(from) and posted again in #\(to). If posting fails, it stays deleted and your message is kept as a draft."
         case .save:
             return "The posted message is deleted from #\(from). Your changes are saved as a draft for #\(to); publish it to post it there."

@@ -37,7 +37,11 @@ struct WelcomeChannelSettingsView: View {
                 .disabled(publisher.isBusy)
             } footer: {
                 if publisher.isPublished {
-                    Text("Published in the channel. Publish again to update the message there. If you pick another channel, the new one gets a new message and the old one stays where it is, so remove the published message first if you do not want it.")
+                    if publisher.serverMovesMessages {
+                        Text("Published in the channel. Publish again to update the message there. Another channel applies when you publish: the message is posted there and the old one is deleted.")
+                    } else {
+                        Text("Published in the channel. Publish again to update the message there. If you pick another channel, the new one gets a new message and the old one stays where it is, so remove the published message first if you do not want it.")
+                    }
                 } else {
                     Text("Not published yet.")
                 }
@@ -157,6 +161,7 @@ struct WelcomeChannelSettingsView: View {
             Text(message)
         }
         .sensoryFeedback(.success, trigger: publisher.successCount)
+        .task { await publisher.loadFeatures() }
     }
 
     @ViewBuilder

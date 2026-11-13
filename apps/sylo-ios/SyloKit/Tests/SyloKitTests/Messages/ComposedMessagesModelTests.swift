@@ -13,6 +13,9 @@ final class FakeMessagesServer: @unchecked Sendable {
     private var _saveError: NetworkError?
     private var _unpublishError: NetworkError?
     private var _okAnswerError: String?
+    private var _features: [ServerFeature]?
+    private var _removesDespiteError = false
+    private var _failLoad = false
     private let nextID = 5
 
     init(message: ComposedMessage? = nil, items: [ComposedMessageSummary] = []) {
@@ -27,6 +30,10 @@ final class FakeMessagesServer: @unchecked Sendable {
     func failSave(with error: NetworkError?) { lock.withLock { _saveError = error } }
     func failUnpublish(with error: NetworkError?) { lock.withLock { _unpublishError = error } }
     func answerOK(withError text: String?) { lock.withLock { _okAnswerError = text } }
+    func announce(_ features: [ServerFeature]?) { lock.withLock { _features = features } }
+    /// The unpublish fails on the way back, after the server already removed the post.
+    func removePostEvenWhenUnpublishFails(_ on: Bool) { lock.withLock { _removesDespiteError = on } }
+    func failLoad(_ on: Bool) { lock.withLock { _failLoad = on } }
 
     func clients() -> StubClients {
         StubClients { [self] endpoint in
@@ -36,6 +43,7 @@ final class FakeMessagesServer: @unchecked Sendable {
             }
             if let load = endpoint as? Endpoints.LoadComposedMessage {
                 lock.withLock { _calls.append("load:\(load.id.pathComponent)") }
+                if lock.withLock({ _failLoad }) { throw NetworkError.timeout }
                 let message = lock.withLock { _message } ?? ComposedMessage()
                 return ComposedMessageDetail(
                     message: load.id == .new ? ComposedMessage() : message,
@@ -46,15 +54,21 @@ final class FakeMessagesServer: @unchecked Sendable {
             }
             if let unpublish = endpoint as? Endpoints.UnpublishComposedMessage {
                 lock.withLock { _calls.append("unpublish:\(unpublish.id)") }
-                if let error = lock.withLock({ _unpublishError }) { throw error }
+                let failure = lock.withLock { _unpublishError }
+                if let failure, !lock.withLock({ _removesDespiteError }) { throw failure }
                 lock.withLock {
                     if let m = _message {
                         _message = ComposedMessage(
                             id: m.id, name: m.name, channelId: m.channelId, messageId: nil, spec: m.spec)
                     }
                 }
+                if let failure { throw failure }
                 return try JSONDecoder().decode(
                     ComposedMessageRecord.self, from: Data(#"{"rec":{"id":3,"messageId":null}}"#.utf8))
+            }
+            if endpoint is Endpoints.ServerInfo {
+                guard let features = lock.withLock({ _features }) else { throw NetworkError.notFound }
+                return ServerInfo(features: features)
             }
             if let delete = endpoint as? Endpoints.DeleteComposedMessage {
                 lock.withLock { _calls.append("delete:\(delete.id)") }
@@ -349,6 +363,155 @@ struct ComposedMessageBuilderModelTests {
         #expect(await model.publish())
         #expect(server.calls == ["load:3", "unpublish:3", "save:3:publish", "save:3:publish"])
         #expect(model.isPublished)
+    }
+
+    @Test("a move followed by a failed save says the old post is gone and the draft is what is on screen")
+    func moveThenSaveFails() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        server.failSave(with: .badRequest(message: "The message is too large to save."))
+        let model = await make(server, id: .saved(3))
+        model.channelId = "333333333333333333"
+
+        #expect(await model.saveDraft(confirmedMove: true) == false)
+
+        #expect(server.calls == ["load:3", "unpublish:3", "save:3:save"])
+        #expect(model.failedAction == .save)
+        let text = model.actionError ?? ""
+        #expect(text.contains("deleted in the old channel"))
+        #expect(text.contains("saving it in the new channel failed"))
+        #expect(text.contains("The message is too large to save."))
+        #expect(!model.isPublished)
+        #expect(model.channelMove == nil)
+        #expect(model.hasChanges)
+    }
+
+    // MARK: A server that moves the post itself (message-move)
+
+    @Test("with message-move, publishing in another channel is one publish and the server does the move")
+    func serverMovesOnPublish() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        server.announce([.appLogin, .messageMove])
+        let model = await make(server, id: .saved(3))
+        #expect(model.serverMovesMessages)
+        model.channelId = "333333333333333333"
+        #expect(model.channelMove != nil)
+
+        // The person still has to agree.
+        #expect(await model.publish() == false)
+        #expect(model.failedAction == .move)
+        #expect(server.calls == ["load:3"])
+
+        #expect(await model.publish(confirmedMove: true))
+
+        #expect(server.calls == ["load:3", "save:3:publish"])
+        #expect(!server.calls.contains("unpublish:3"))
+        #expect(model.isPublished)
+        #expect(model.channelId == "333333333333333333")
+        #expect(model.channelMove == nil)
+        #expect(!model.hasChanges)
+    }
+
+    @Test("with message-move, a refused post keeps the old post and the move stays pending")
+    func serverMoveRefused() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        server.announce([.messageMove])
+        server.failPublish(with: .badRequest(message: "The bot lacks View Channel / Send Messages / Embed Links there."))
+        let model = await make(server, id: .saved(3))
+        model.channelId = "333333333333333333"
+
+        #expect(await model.publish(confirmedMove: true) == false)
+
+        #expect(!server.calls.contains("unpublish:3"))
+        #expect(model.failedAction == .publish)
+        let text = model.actionError ?? ""
+        #expect(text == "The bot lacks View Channel / Send Messages / Embed Links there.")
+        // Nothing was deleted: the message is still posted, and the move can be asked again.
+        #expect(model.isPublished)
+        #expect(model.channelMove != nil)
+    }
+
+    @Test("with message-move, saving a draft in another channel still takes the old post down first")
+    func serverMoveSaveKeepsClientFlow() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        server.announce([.messageMove])
+        let model = await make(server, id: .saved(3))
+        model.channelId = "333333333333333333"
+
+        #expect(await model.saveDraft(confirmedMove: true))
+
+        #expect(server.calls.suffix(2) == ["unpublish:3", "save:3:save"])
+        #expect(!model.isPublished)
+    }
+
+    @Test("without message-move, and when the server does not say, publishing deletes the old post first")
+    func clientMoveWithoutTheFeature() async {
+        for features in [nil, [ServerFeature.appLogin]] as [[ServerFeature]?] {
+            let server = FakeMessagesServer(message: Self.posted)
+            server.announce(features)
+            let model = await make(server, id: .saved(3))
+            #expect(!model.serverMovesMessages)
+            model.channelId = "333333333333333333"
+
+            #expect(await model.publish(confirmedMove: true))
+
+            #expect(server.calls.suffix(2) == ["unpublish:3", "save:3:publish"])
+        }
+    }
+
+    // MARK: An unpublish whose outcome is not known
+
+    @Test("a timeout while removing the old post is not reported as nothing changed: the model asks and says the post is gone")
+    func timeoutAfterRemoval() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        server.failUnpublish(with: .timeout)
+        server.removePostEvenWhenUnpublishFails(true)
+        let model = await make(server, id: .saved(3))
+        model.channelId = "333333333333333333"
+        model.spec.content = "Edited while moving"
+
+        #expect(await model.publish(confirmedMove: true) == false)
+
+        let text = model.actionError ?? ""
+        #expect(!text.contains("nothing was changed"))
+        #expect(text.contains("the old post is gone"))
+        #expect(model.failedAction == .move)
+        // The state was read from the server, and the unsaved edits are still there.
+        #expect(!model.isPublished)
+        #expect(model.channelMove == nil)
+        #expect(model.spec.content == "Edited while moving")
+        #expect(model.channelId == "333333333333333333")
+        #expect(server.calls == ["load:3", "unpublish:3", "load:3"])
+    }
+
+    @Test("a timeout when the post was not removed says it is still there")
+    func timeoutBeforeRemoval() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        server.failUnpublish(with: .timeout)
+        let model = await make(server, id: .saved(3))
+        model.channelId = "333333333333333333"
+
+        #expect(await model.publish(confirmedMove: true) == false)
+
+        let text = model.actionError ?? ""
+        #expect(text.contains("still there"))
+        #expect(model.isPublished)
+        #expect(model.channelMove != nil)
+    }
+
+    @Test("when the model cannot ask after a timeout it says it does not know")
+    func timeoutAndNoAnswer() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        server.failUnpublish(with: .timeout)
+        let model = await make(server, id: .saved(3))
+        model.channelId = "333333333333333333"
+        server.failLoad(true)
+
+        #expect(await model.publish(confirmedMove: true) == false)
+
+        let text = model.actionError ?? ""
+        #expect(text.contains("Couldn't tell whether"))
+        #expect(!text.contains("nothing was changed"))
+        #expect(model.failedAction == .move)
     }
 
     @Test("publishing needs a channel")

@@ -234,6 +234,10 @@ final class FakeWelcomeServer: @unchecked Sendable {
     private var _saveError: NetworkError?
     private var _content = "Welcome!"
     private var _embeds = "[]"
+    private var _publishedChannels: [String] = []
+    private var _keepsChannelWhilePosted = false
+    private var _features: [ServerFeature]?
+    private var _createdIdApart = false
 
     init(channelId: String = "111111111111111111", messageId: String = "") {
         _channelId = channelId
@@ -244,9 +248,13 @@ final class FakeWelcomeServer: @unchecked Sendable {
     var channelId: String { lock.withLock { _channelId } }
     var messageId: String { lock.withLock { _messageId } }
     var content: String { lock.withLock { _content } }
+    var publishedChannels: [String] { lock.withLock { _publishedChannels } }
 
     func failPublish(with error: NetworkError?) { lock.withLock { _publishError = error } }
     func failSave(with error: NetworkError?) { lock.withLock { _saveError = error } }
+    func keepChannelWhilePosted(_ on: Bool) { lock.withLock { _keepsChannelWhilePosted = on } }
+    func announce(_ features: [ServerFeature]?) { lock.withLock { _features = features } }
+    func answerCreateWithCreatedChannel(_ on: Bool) { lock.withLock { _createdIdApart = on } }
 
     private func config(_ channelId: String, _ messageId: String, content: String) throws -> WelcomeChannelSettings {
         let json = #"{"channelId":"\#(channelId)","messageId":"\#(messageId)","spec":{"content":"\#(content)","embeds":\#(lock.withLock { _embeds })}}"#
@@ -264,15 +272,21 @@ final class FakeWelcomeServer: @unchecked Sendable {
                 lock.withLock { _calls.append("save") }
                 if let error = lock.withLock({ _saveError }) { throw error }
                 lock.withLock {
-                    _channelId = saving.settings.channelId
+                    // 5.2 keeps the stored channel while a message is posted.
+                    if !(_keepsChannelWhilePosted && !_messageId.isEmpty) { _channelId = saving.settings.channelId }
                     _content = saving.settings.content
                 }
                 return SavedModuleSettings(settings: try config(channelId, messageId, content: content))
             }
-            if endpoint is Endpoints.PublishWelcomeChannel {
+            if let publishing = endpoint as? Endpoints.PublishWelcomeChannel {
                 lock.withLock { _calls.append("publish") }
                 if let error = lock.withLock({ _publishError }) { throw error }
-                lock.withLock { _messageId = "999999999999999999" }
+                lock.withLock {
+                    _publishedChannels.append(publishing.settings.channelId)
+                    // The publish route stores the body, and posts (or moves the post) there.
+                    _channelId = publishing.settings.channelId
+                    _messageId = "999999999999999999"
+                }
                 return SavedModuleSettings(settings: try config(channelId, messageId, content: content))
             }
             if endpoint is Endpoints.UnpublishWelcomeChannel {
@@ -283,12 +297,20 @@ final class FakeWelcomeServer: @unchecked Sendable {
                 return SavedModuleSettings(settings: try config(channelId, messageId, content: content))
             }
             if endpoint is Endpoints.CreateWelcomeChannel {
+                let keepsOld = lock.withLock { _createdIdApart }
                 lock.withLock {
                     _calls.append("create")
-                    _channelId = "333333333333333333"
+                    if !keepsOld { _channelId = "333333333333333333" }
                 }
-                let json = #"{"config":{"channelId":"333333333333333333","messageId":"","spec":{"content":"","embeds":[]}},"channels":[{"id":"333333333333333333","name":"welcome"}]}"#
+                // 5.2 while a message is posted: the config still has the old channel.
+                let shown = keepsOld ? channelId : "333333333333333333"
+                let apart = keepsOld ? #","createdChannelId":"333333333333333333""# : ""
+                let json = #"{"config":{"channelId":"\#(shown)","messageId":"","spec":{"content":"","embeds":[]}}\#(apart),"channels":[{"id":"333333333333333333","name":"welcome"}]}"#
                 return try JSONDecoder().decode(WelcomeChannelCreated.self, from: Data(json.utf8))
+            }
+            if endpoint is Endpoints.ServerInfo {
+                guard let features = lock.withLock({ _features }) else { throw NetworkError.notFound }
+                return ServerInfo(features: features)
             }
             throw NetworkError.notFound
         }
@@ -423,6 +445,88 @@ struct WelcomeChannelPublisherTests {
 
         #expect(publisher.errorMessage == "Sylo needs the Manage Channels permission.")
         #expect(publisher.failedStep == .createChannel)
+    }
+
+    // MARK: A 5.2 server keeps the stored channel while a message is posted
+
+    @Test("a save that answers with the old channel does not change where the publish goes")
+    func publishCarriesThePickedChannel() async throws {
+        let server = FakeWelcomeServer(channelId: "111111111111111111", messageId: "888888888888888888")
+        server.keepChannelWhilePosted(true)
+        let (model, publisher) = await make(server)
+        model.draft?.channelId = "222222222222222222"
+
+        #expect(await publisher.publish())
+
+        // The save came back with the old channel (and the settings model took it over), but the
+        // publish was sent with the one the person picked.
+        #expect(server.calls == ["load", "save", "publish", "load"])
+        #expect(server.publishedChannels == ["222222222222222222"])
+        #expect(publisher.notice == .updated)
+        // After the reload the screen shows the channel the message is in now.
+        #expect(model.draft?.channelId == "222222222222222222")
+        #expect(!model.hasChanges)
+    }
+
+    @Test("on a server that stores the picked channel with the save, the publish still goes there")
+    func publishAfterPlainSave() async throws {
+        let server = FakeWelcomeServer(channelId: "111111111111111111")
+        let (model, publisher) = await make(server)
+        model.draft?.channelId = "222222222222222222"
+
+        #expect(await publisher.publish())
+
+        #expect(server.publishedChannels == ["222222222222222222"])
+        #expect(server.channelId == "222222222222222222")
+    }
+
+    @Test("creating the channel on a server that keeps the stored channel selects the new one")
+    func createdChannelIsSelected() async throws {
+        let server = FakeWelcomeServer(channelId: "111111111111111111", messageId: "888888888888888888")
+        server.answerCreateWithCreatedChannel(true)
+        let (model, publisher) = await make(server)
+
+        #expect(await publisher.createChannel())
+
+        #expect(model.draft?.channelId == "333333333333333333")
+        // Not saved yet: publishing is what moves the message there.
+        #expect(model.hasChanges)
+    }
+
+    @Test("the created channel is read from createdChannelId, and from the config when there is none")
+    func decodesCreatedChannel() throws {
+        let apart = try JSONDecoder().decode(WelcomeChannelCreated.self, from: Data(
+            #"{"config":{"channelId":"111"},"createdChannelId":"333","channels":[]}"#.utf8))
+        #expect(apart.createdChannelId == "333")
+        #expect(apart.newChannelId == "333")
+        let old = try JSONDecoder().decode(WelcomeChannelCreated.self, from: Data(
+            #"{"config":{"channelId":"333"},"channels":[]}"#.utf8))
+        #expect(old.createdChannelId == nil)
+        #expect(old.newChannelId == "333")
+        let empty = try JSONDecoder().decode(WelcomeChannelCreated.self, from: Data(
+            #"{"config":{"channelId":"333"},"createdChannelId":"","channels":[]}"#.utf8))
+        #expect(empty.newChannelId == "333")
+    }
+
+    @Test("the screen words its channel hint by the server's message-move feature")
+    func featureHint() async throws {
+        let without = FakeWelcomeServer()
+        let (_, plain) = await make(without)
+        await plain.loadFeatures()
+        #expect(!plain.serverMovesMessages)
+
+        let with = FakeWelcomeServer()
+        with.announce([.appLogin, .messageMove])
+        let (_, moving) = await make(with)
+        #expect(!moving.serverMovesMessages)
+        await moving.loadFeatures()
+        #expect(moving.serverMovesMessages)
+
+        let other = FakeWelcomeServer()
+        other.announce([.appLogin])
+        let (_, older) = await make(other)
+        await older.loadFeatures()
+        #expect(!older.serverMovesMessages)
     }
 }
 
