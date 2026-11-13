@@ -217,14 +217,18 @@ struct MemberSearchTests {
 
     @Test("An older search that ends does not switch the spinner off under a newer one")
     func spinnerStaysForNewest() async throws {
-        // The stub holds the first two searches until the test lets them go.
-        let gateOld = DispatchSemaphore(value: 0)
-        let gateNew = DispatchSemaphore(value: 0)
+        // The stub holds the first two searches until the test lets them go. They wait with sleeps,
+        // not a blocked thread, so parallel tests cannot starve each other.
+        let gateOld = TestGate()
+        let gateNew = TestGate()
         let clients = StubClients { endpoint in
-            guard let search = endpoint as? Endpoints.SearchMembers else { throw NetworkError.notFound }
-            if search.text == "al" { gateOld.wait() }
-            if search.text == "ale" { gateNew.wait() }
+            guard endpoint is Endpoints.SearchMembers else { throw NetworkError.notFound }
             return MemberSearchResult(members: [Self.alex])
+        }
+        clients.setHold { endpoint in
+            guard let search = endpoint as? Endpoints.SearchMembers else { return }
+            let gate: TestGate? = search.text == "al" ? gateOld : (search.text == "ale" ? gateNew : nil)
+            while let gate, !gate.isOpen { try await Task.sleep(for: .milliseconds(5)) }
         }
         let model = MemberSearchModel(server: "1", session: makeSignedInSession(clients: clients))
 
@@ -237,12 +241,12 @@ struct MemberSearchTests {
         #expect(model.isSearching)
 
         // The older search ends first: the newer one is still running, so the spinner stays.
-        gateOld.signal()
+        gateOld.open()
         await old.value
         #expect(model.isSearching)
         #expect(model.results.isEmpty)
 
-        gateNew.signal()
+        gateNew.open()
         await new.value
         #expect(!model.isSearching)
         #expect(model.results == [Self.alex])

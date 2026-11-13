@@ -21,7 +21,7 @@ final class FakeRolesServer: @unchecked Sendable {
     private var _timeoutDeleteRemoves = false
     private var _emojiFailures = 0
     private var _listFailures = 0
-    private var _infoDelay: TimeInterval = 0
+    private var _infoGate: TestGate?
     private let info: ServerInfo?
     private let setLimit: Int?
     private let hideLimits: Bool
@@ -70,11 +70,12 @@ final class FakeRolesServer: @unchecked Sendable {
     func failEmojis(times: Int) { lock.withLock { _emojiFailures = times } }
     /// The list fails this many times, then works.
     func failList(times: Int) { lock.withLock { _listFailures = times } }
-    /// The server's info takes this long to answer (it blocks the thread the stub runs on).
-    func delayInfo(_ seconds: TimeInterval) { lock.withLock { _infoDelay = seconds } }
+    /// The server's info does not answer until `gate` opens (the call waits with sleeps, so no thread
+    /// is blocked). Each call that reaches it is counted in the gate's arrivals.
+    func holdInfo(_ gate: TestGate) { lock.withLock { _infoGate = gate } }
 
     func clients() -> StubClients {
-        StubClients { [self] endpoint in
+        let stub = StubClients { [self] endpoint in
             if endpoint is Endpoints.LoadRoles {
                 lock.withLock { _calls.append("load") }
                 if lock.withLock({ _listFailures > 0 }) {
@@ -98,8 +99,6 @@ final class FakeRolesServer: @unchecked Sendable {
             }
             if endpoint is Endpoints.ServerInfo {
                 lock.withLock { _calls.append("info") }
-                let delay = lock.withLock { _infoDelay }
-                if delay > 0 { Thread.sleep(forTimeInterval: delay) }
                 guard let info else { throw NetworkError.notFound }
                 return info
             }
@@ -133,6 +132,12 @@ final class FakeRolesServer: @unchecked Sendable {
             }
             throw NetworkError.notFound
         }
+        stub.setHold { [self] endpoint in
+            guard endpoint is Endpoints.ServerInfo, let gate = lock.withLock({ _infoGate }) else { return }
+            gate.arrive()
+            while !gate.isOpen { try await Task.sleep(for: .milliseconds(5)) }
+        }
+        return stub
     }
 
     private func save(_ body: ReactionRoleMessage) throws -> ReactionRoleSaved {
@@ -614,12 +619,16 @@ struct RolesModelTests {
         // The server's info fails, so the feature is asked for again on every save.
         let server = FakeRolesServer()
         let model = await make(server)
-        server.delayInfo(0.2)
+        let gate = TestGate()
+        server.holdInfo(gate)
         let draft = ReactionRoleMessage(
             channelId: "c1", style: "reaction", pairs: [ReactionRolePair(emoji: "🎮", roleId: "r1")])
-        async let first = model.save(draft)
-        async let second = model.save(draft)
-        let outcomes = await [first, second]
+        // The first tap waits at the server's info; the second comes in while it does.
+        let first = Task { await model.save(draft) }
+        await waitForArrival(gate)
+        let second = await model.save(draft)
+        gate.open()
+        let outcomes = [await first.value, second]
         #expect(outcomes.filter { $0 == .ignored }.count == 1)
         #expect(outcomes.filter { $0 == .saved }.count == 1)
         #expect(server.changes == ["save:new:c1"])
