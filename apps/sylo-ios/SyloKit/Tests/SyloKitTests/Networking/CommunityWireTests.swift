@@ -126,6 +126,32 @@ extension APIClientTests {
         #expect(requests[1].url.absoluteString == "https://example.com/sylo/api/v2/guilds/1/modules/quote-board/7/delete")
     }
 
+    @Test("A quote search with a plus sign reaches the server as %2B, not as a space")
+    func quoteSearchWithPlus() async throws {
+        let mock = MockURLProtocol.state
+        mock.reset([.json(200, #"{"total":1,"quotes":[]}"#)])
+        _ = try await communityClient().send(Endpoints.QuoteList(server: "1", search: "C++"))
+        let url = try #require(mock.requests.first?.url)
+        #expect(url.absoluteString == "https://example.com/sylo/api/v2/guilds/1/modules/quote-board/list?q=C%2B%2B")
+    }
+
+    @Test("A 403 with the server's sentence shows that sentence, also for a refused role")
+    func forbiddenText() async throws {
+        let mock = MockURLProtocol.state
+        mock.reset([.json(403, #"{"error":"You can only give roles below your own."}"#)])
+        let draft = EventDraft(
+            title: "Quiz", start: EventTime.floating(fromText: "2026-11-06T22:00")!, timeZone: "UTC",
+            channelID: "1", roleID: "5")
+        do {
+            _ = try await communityClient().send(Endpoints.CreateEvent(server: "1", draft: draft))
+            Issue.record("a 403 should throw")
+        } catch {
+            let error = NetworkError(error)
+            #expect(error.communityMessage(grantingRole: true) == "You can only give roles below your own.")
+            #expect(error.communityMessage == "You can only give roles below your own.")
+        }
+    }
+
     @Test("Giveaways are ended, cancelled and rerolled with a count")
     func giveawaysOnTheWire() async throws {
         let mock = MockURLProtocol.state
