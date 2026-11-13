@@ -3,7 +3,7 @@ import Foundation
 // Giveaways (src/modules/giveaways.js, normaliseGiveawaysConfig; web form
 // web-v2/src/moduleForms/Giveaways.jsx): who is pinged when winners are drawn and whether
 // winners get a DM, plus the running and recently ended giveaways (started with
-// `/giveaway start`, so read only here).
+// `/giveaway start`). The app ends, cancels and rerolls them (Giveaways/GiveawayActions.swift).
 
 /// The Giveaways settings page.
 public struct GiveawaysPage: ModuleSettingsPage {
@@ -29,7 +29,7 @@ public struct GiveawaysPage: ModuleSettingsPage {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         settings = try c.decode(forKey: .settings, or: GiveawaysSettings())
-        giveaways = try c.decode(forKey: .giveaways, or: [])
+        giveaways = try c.decodeLossyArray(of: GiveawaysGiveaway.self, forKey: .giveaways)
     }
 }
 
@@ -67,7 +67,7 @@ public struct GiveawaysSettings: Codable, Sendable, Equatable {
     }
 }
 
-/// One giveaway, for the lists under the settings (bot-managed, read only).
+/// One giveaway, for the lists under the settings.
 public struct GiveawaysGiveaway: Decodable, Sendable, Hashable, Identifiable {
     public enum State: String, Decodable, Sendable {
         case active, ended
@@ -90,9 +90,20 @@ public struct GiveawaysGiveaway: Decodable, Sendable, Hashable, Identifiable {
     public let channel: String
     /// Only members with this role may enter.
     public let requiredRoleId: String?
+    /// The winners' names, in the order of ``wonIds``; a name that could not be resolved is the id.
+    /// Empty from a server that does not send names.
+    public let wonNames: [String]
+    /// What entering costs (with the Economy module); 0 for nothing.
+    public let entryFee: Int
+    /// What each winner is paid (with the Economy module); 0 for nothing.
+    public let prizeAmount: Int
+    /// Whether it was cancelled. nil from a server from before cancelling (Sylo 5.1), which also
+    /// has no cancel call.
+    public let cancelled: Bool?
 
     public init(id: Int, prize: String, state: State = .active, winners: Int = 1, endsAt: Date,
-                entries: Int = 0, wonIds: [String] = [], channel: String = "", requiredRoleId: String? = nil) {
+                entries: Int = 0, wonIds: [String] = [], channel: String = "", requiredRoleId: String? = nil,
+                wonNames: [String] = [], entryFee: Int = 0, prizeAmount: Int = 0, cancelled: Bool? = nil) {
         self.id = id
         self.prize = prize
         self.state = state
@@ -102,12 +113,32 @@ public struct GiveawaysGiveaway: Decodable, Sendable, Hashable, Identifiable {
         self.wonIds = wonIds
         self.channel = channel
         self.requiredRoleId = requiredRoleId
+        self.wonNames = wonNames
+        self.entryFee = entryFee
+        self.prizeAmount = prizeAmount
+        self.cancelled = cancelled
     }
 
     public var isRoleGated: Bool { !(requiredRoleId ?? "").isEmpty }
 
+    /// Whether it ended by being cancelled, so nobody won.
+    public var isCancelled: Bool { cancelled == true }
+
+    /// Whether the server offers cancelling, and this giveaway is still running.
+    public var canCancel: Bool { state == .active && cancelled != nil }
+
+    /// The name to show for the winner at `index`: the resolved name, else a generic one.
+    public func winnerName(at index: Int) -> String {
+        guard wonIds.indices.contains(index) else { return "" }
+        if wonNames.indices.contains(index), !wonNames[index].isEmpty, wonNames[index] != wonIds[index] {
+            return wonNames[index]
+        }
+        return "a member (ID \(wonIds[index]))"
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id, prize, state, winners, endsAt, entries, wonIds, channel, requiredRoleId
+        case wonNames, entryFee, prizeAmount, cancelled
     }
 
     public init(from decoder: any Decoder) throws {
@@ -122,6 +153,10 @@ public struct GiveawaysGiveaway: Decodable, Sendable, Hashable, Identifiable {
             entries: try c.decode(forKey: .entries, or: 0),
             wonIds: try c.decode(forKey: .wonIds, or: []),
             channel: try c.decode(forKey: .channel, or: ""),
-            requiredRoleId: try c.decodeIfPresent(String.self, forKey: .requiredRoleId))
+            requiredRoleId: try c.decodeIfPresent(String.self, forKey: .requiredRoleId),
+            wonNames: try c.decode(forKey: .wonNames, or: []),
+            entryFee: try c.decode(forKey: .entryFee, or: 0),
+            prizeAmount: try c.decode(forKey: .prizeAmount, or: 0),
+            cancelled: try c.decodeIfPresent(Bool.self, forKey: .cancelled))
     }
 }

@@ -2,17 +2,20 @@ import SwiftUI
 import SyloKit
 
 /// Events: the default channel and reminder, DM reminders, event pages, the time zone commands
-/// read times in and the staff roles, with the events listed read only. Creating, editing and
-/// cancelling an event stays in the web dashboard. Mirrors web-v2/src/moduleForms/Events.jsx.
+/// read times in and the staff roles, and the events themselves: post a new one, edit an upcoming
+/// one or cancel it. Mirrors web-v2/src/moduleForms/Events.jsx.
 struct EventsSettingsView: View {
     @State private var model: ModuleSettingsModel<EventsPage>
     @State private var note: ModulePlatformNoteModel
-    private let server: ServerID
+    @State private var actions: EventActionsModel
+    @State private var editor: EventEditorTarget?
+    @State private var cancelling: EventSummary?
+    @Environment(AppSession.self) private var session
 
     init(server: ServerID, session: AppSession) {
-        self.server = server
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
         _note = State(initialValue: ModulePlatformNoteModel(server: server, module: EventsPage.moduleID, session: session))
+        _actions = State(initialValue: EventActionsModel(server: server, session: session))
     }
 
     var body: some View {
@@ -56,28 +59,80 @@ struct EventsSettingsView: View {
                 Text("May manage events without Manage Events.")
             }
 
-            eventSection("Upcoming events", page.upcoming, emptyText: "None scheduled.")
-            if !page.past.isEmpty {
-                eventSection("Past events", page.past, emptyText: "")
+            let events = actions.events ?? page.events
+            upcomingSection(events.filter { $0.state == .scheduled })
+            let past = events.filter { $0.state != .scheduled }
+            if !past.isEmpty {
+                Section("Past events") {
+                    ForEach(past) { event in
+                        EventRow(event: event, pageURL: pageURL(of: event))
+                    }
+                }
             }
-
-            DashboardLinkSection(
-                server: server, module: EventsPage.moduleID,
-                footer: "Create, edit and cancel events in the web dashboard.")
         }
         .task { await note.load() }
+        // A fresh page replaces what the last action answered.
+        .onChange(of: model.page?.events) { actions.forgetAnswer() }
+        .sheet(item: $editor) { target in
+            EventEditorView(
+                target: target, actions: actions, channels: model.page?.channels ?? [],
+                roles: model.page?.roles ?? [], defaults: model.page?.settings ?? EventsSettings())
+        }
+        .confirmationDialog(
+            "Cancel This Event?", isPresented: isCancelling, titleVisibility: .visible, presenting: cancelling
+        ) { event in
+            Button("Cancel Event", role: .destructive) {
+                Task { await actions.cancel(id: event.id) }
+            }
+            Button("Keep Event", role: .cancel) {}
+        } message: { event in
+            Text("“\(event.title)” is marked as cancelled, the participant role is taken back and sign-ups stop.")
+        }
+        .alert("Couldn't Update Events", isPresented: isShowingError, presenting: actions.errorMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .sensoryFeedback(.success, trigger: actions.doneCount)
     }
 
-    @ViewBuilder
-    private func eventSection(_ title: LocalizedStringKey, _ events: [EventSummary], emptyText: LocalizedStringKey) -> some View {
-        Section(title) {
-            if events.isEmpty {
-                Text(emptyText).foregroundStyle(.secondary)
+    private func upcomingSection(_ upcoming: [EventSummary]) -> some View {
+        Section {
+            if upcoming.isEmpty {
+                Text("None scheduled.").foregroundStyle(.secondary)
             }
-            ForEach(events) { event in
-                ListLine(title: "#\(event.id) · \(event.title)", details: Self.details(of: event))
+            ForEach(upcoming) { event in
+                EventRow(event: event, pageURL: pageURL(of: event)) {
+                    editor = .edit(event)
+                }
+                .swipeActions(edge: .trailing) {
+                    Button("Cancel Event", systemImage: "xmark.circle", role: .destructive) { cancelling = event }
+                }
+                .contextMenu {
+                    Button("Edit", systemImage: "pencil") { editor = .edit(event) }
+                    Button("Cancel Event", systemImage: "xmark.circle", role: .destructive) { cancelling = event }
+                }
             }
+            Button("New Event", systemImage: "plus") { editor = .new }
+        } header: {
+            Text("Upcoming events (\(upcoming.count))")
         }
+    }
+
+    private func pageURL(of event: EventSummary) -> URL? {
+        guard let path = event.pagePath, let base = session.server else { return nil }
+        return base.url(for: path)
+    }
+
+    private var isCancelling: Binding<Bool> {
+        Binding(get: { cancelling != nil }, set: { if !$0 { cancelling = nil } })
+    }
+
+    /// The editor shows its own errors while it is open.
+    private var isShowingError: Binding<Bool> {
+        Binding(
+            get: { actions.errorMessage != nil && editor == nil },
+            set: { if !$0 { actions.errorMessage = nil } })
     }
 
     /// "Thu 24 Sep, 19:00 · #events · 4/12 going · 1 maybe".
@@ -106,6 +161,39 @@ struct EventsSettingsView: View {
     }
 }
 
+/// One event in the lists: its number and title, when and where, the sign-ups and, when the event has
+/// one, the link to its page. A row with `onSelect` opens the event for editing.
+struct EventRow: View {
+    let event: EventSummary
+    let pageURL: URL?
+    var onSelect: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let onSelect {
+                Button(action: onSelect) { line }
+                    .buttonStyle(.plain)
+            } else {
+                line
+            }
+            if let pageURL {
+                Link(event.isPageMembersOnly ? "Members-only page" : "Public page", destination: pageURL)
+                    .font(.footnote)
+            } else if event.pageHidden {
+                Text("No page: the channel is age-restricted, or Sylo cannot see it.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var line: some View {
+        ListLine(title: "#\(event.id) · \(event.title)", details: EventsSettingsView.details(of: event))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+    }
+}
+
 /// The time zone commands read times in: a row that opens a searchable list. "" is UTC.
 private struct TimeZoneRow: View {
     @Binding var selection: String
@@ -121,8 +209,11 @@ private struct TimeZoneRow: View {
     }
 }
 
-private struct TimeZoneList: View {
+/// A searchable list of time zones. With `includesDefault` the first row is "" (UTC), the
+/// setting's way of saying "none"; an event always names its zone, so its picker leaves it out.
+struct TimeZoneList: View {
     @Binding var selection: String
+    var includesDefault = true
     @State private var search = ""
 
     private var zones: [String] {
@@ -135,7 +226,7 @@ private struct TimeZoneList: View {
 
     var body: some View {
         List {
-            if search.isEmpty {
+            if includesDefault, search.isEmpty {
                 row("UTC (default)", value: "")
             }
             ForEach(zones, id: \.self) { zone in

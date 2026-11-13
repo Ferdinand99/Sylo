@@ -3,8 +3,7 @@ import Foundation
 // Events (src/modules/events.js, normaliseEventsConfig; page route src/web/routes/v2Events.js; web
 // form web-v2/src/moduleForms/Events.jsx): staff post an event with Join / Maybe / Leave sign-ups,
 // Sylo reminds the people who joined and closes the event when it is over. The app edits the
-// server-wide settings and lists the events; creating, editing and cancelling an event is left to
-// the web dashboard.
+// server-wide settings, lists the events and creates, edits and cancels them (Events/EventEndpoints.swift).
 
 /// The Events settings page.
 public struct EventsPage: ModuleSettingsPage {
@@ -124,7 +123,7 @@ public enum EventState: Hashable, Sendable, RawRepresentable, Decodable {
     }
 }
 
-/// One event in the list under the settings (read only here).
+/// One event in the list under the settings.
 public struct EventSummary: Decodable, Sendable, Hashable, Identifiable {
     public let id: Int
     public let title: String
@@ -139,9 +138,38 @@ public struct EventSummary: Decodable, Sendable, Hashable, Identifiable {
     public let maybe: Int
     /// nil = no limit.
     public let capacity: Int?
+    /// "" when none.
+    public let description: String
+    /// "" when none.
+    public let location: String
+    /// An https link; "" when none.
+    public let imageUrl: String
+    /// The end, in milliseconds since 1970; nil when the event has none.
+    public let endAt: Double?
+    /// The start as the creator typed it, "2026-11-06T22:00" on the wall clock of ``timeZone``;
+    /// "" from a server that does not send it.
+    public let start: String
+    /// The same for the end; "" when none.
+    public let end: String
+    /// The role people get while they are signed up; "" when none.
+    public let roleId: String
+    /// Minutes before the start that everyone is reminded; nil from a server that does not send it.
+    public let reminderMinutes: Int?
+    /// The channel the post is in; "" from a server that does not send it.
+    public let channelId: String
+    /// The event's web page below the Sylo server's address ("/events/abc"); nil when it has none.
+    public let pagePath: String?
+    /// `public` (anyone with the link) or `private` (signed-in members who see the channel); nil with no page.
+    public let pageAudience: String?
+    /// Event pages are on, but this event's channel has no audience (age-restricted, or Sylo cannot see it).
+    public let pageHidden: Bool
 
     public init(id: Int, title: String, startAt: Double? = nil, timeZone: String = "", channel: String = "",
-                state: EventState = .scheduled, joined: Int = 0, maybe: Int = 0, capacity: Int? = nil) {
+                state: EventState = .scheduled, joined: Int = 0, maybe: Int = 0, capacity: Int? = nil,
+                description: String = "", location: String = "", imageUrl: String = "", endAt: Double? = nil,
+                start: String = "", end: String = "", roleId: String = "", reminderMinutes: Int? = nil,
+                channelId: String = "", pagePath: String? = nil, pageAudience: String? = nil,
+                pageHidden: Bool = false) {
         self.id = id
         self.title = title
         self.startAt = startAt
@@ -151,10 +179,24 @@ public struct EventSummary: Decodable, Sendable, Hashable, Identifiable {
         self.joined = joined
         self.maybe = maybe
         self.capacity = capacity
+        self.description = description
+        self.location = location
+        self.imageUrl = imageUrl
+        self.endAt = endAt
+        self.start = start
+        self.end = end
+        self.roleId = roleId
+        self.reminderMinutes = reminderMinutes
+        self.channelId = channelId
+        self.pagePath = pagePath
+        self.pageAudience = pageAudience
+        self.pageHidden = pageHidden
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, title, startAt, timeZone, channel, state, joined, maybe, capacity
+        case description, location, imageUrl, endAt, start, end, roleId, reminderMinutes, channelId
+        case pagePath, pageAudience, pageHidden
     }
 
     public init(from decoder: any Decoder) throws {
@@ -168,7 +210,19 @@ public struct EventSummary: Decodable, Sendable, Hashable, Identifiable {
             state: try c.decode(forKey: .state, or: .scheduled),
             joined: try c.decode(forKey: .joined, or: 0),
             maybe: try c.decode(forKey: .maybe, or: 0),
-            capacity: try c.decodeIfPresent(Int.self, forKey: .capacity))
+            capacity: try c.decodeIfPresent(Int.self, forKey: .capacity),
+            description: try c.decodeIfPresent(String.self, forKey: .description) ?? "",
+            location: try c.decodeIfPresent(String.self, forKey: .location) ?? "",
+            imageUrl: try c.decodeIfPresent(String.self, forKey: .imageUrl) ?? "",
+            endAt: try c.decodeIfPresent(Double.self, forKey: .endAt),
+            start: try c.decodeIfPresent(String.self, forKey: .start) ?? "",
+            end: try c.decodeIfPresent(String.self, forKey: .end) ?? "",
+            roleId: try c.decodeIfPresent(String.self, forKey: .roleId) ?? "",
+            reminderMinutes: try c.decodeIfPresent(Int.self, forKey: .reminderMinutes),
+            channelId: try c.decodeIfPresent(String.self, forKey: .channelId) ?? "",
+            pagePath: try c.decodeIfPresent(String.self, forKey: .pagePath),
+            pageAudience: try c.decodeIfPresent(String.self, forKey: .pageAudience),
+            pageHidden: try c.decode(forKey: .pageHidden, or: false))
     }
 
     /// The start as a date.
@@ -176,4 +230,7 @@ public struct EventSummary: Decodable, Sendable, Hashable, Identifiable {
 
     /// The zone to show the start in: the event's own, else the device's.
     public var zone: TimeZone { TimeZone(identifier: timeZone) ?? .current }
+
+    /// Whether the page is for signed-in members only.
+    public var isPageMembersOnly: Bool { pageAudience == "private" }
 }
