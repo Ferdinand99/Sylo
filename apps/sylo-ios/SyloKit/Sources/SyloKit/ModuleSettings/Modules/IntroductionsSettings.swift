@@ -250,8 +250,8 @@ public struct IntroductionsSettings: Codable, Sendable, Equatable {
         channelId = try c.decode(forKey: .channelId, or: "")
         let questionSlots = try c.decodeIfPresent([EntrySlot<IntroductionsQuestion>].self, forKey: .questions)
         let groupSlots = try c.decodeIfPresent([EntrySlot<IntroductionsRoleGroup>].self, forKey: .roleGroups) ?? []
-        questions = questionSlots?.compactMap(.value)
-        roleGroups = groupSlots.compactMap(.value)
+        questions = questionSlots?.compactMap { $0.value }
+        roleGroups = groupSlots.compactMap { $0.value }
         unreadableEntries = (questionSlots ?? []).filter { $0.value == nil }.count + groupSlots.filter { $0.value == nil }.count
         showRoles = try c.decode(forKey: .showRoles, or: false)
         colorMode = (try? c.decodeIfPresent(IntroductionsColorMode.self, forKey: .colorMode)) ?? .fixed
