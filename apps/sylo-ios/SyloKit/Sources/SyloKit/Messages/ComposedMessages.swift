@@ -79,12 +79,15 @@ public struct ComposedLinkButton: Sendable, Equatable, Identifiable {
     /// A unicode emoji or a custom one as `<:name:id>`.
     public var emoji: String
     public var url: String
+    /// Keys of the stored button that this page does not know, sent back as they came.
+    public var extra: [String: JSONValue]
 
-    public init(label: String = "", emoji: String = "", url: String = "") {
+    public init(label: String = "", emoji: String = "", url: String = "", extra: [String: JSONValue] = [:]) {
         id = UUID()
         self.label = label
         self.emoji = emoji
         self.url = url
+        self.extra = extra
     }
 
     public static let maxLabelLength = 80
@@ -92,7 +95,7 @@ public struct ComposedLinkButton: Sendable, Equatable, Identifiable {
 
     /// Equal when the content is (the id is only for lists).
     public static func == (lhs: ComposedLinkButton, rhs: ComposedLinkButton) -> Bool {
-        lhs.label == rhs.label && lhs.emoji == rhs.emoji && lhs.url == rhs.url
+        lhs.label == rhs.label && lhs.emoji == rhs.emoji && lhs.url == rhs.url && lhs.extra == rhs.extra
     }
 
     /// Whether the server keeps this button: it needs a link and a label or an emoji.
@@ -116,16 +119,21 @@ public struct ComposedLinkButton: Sendable, Equatable, Identifiable {
 /// build.
 ///
 /// A message's `rows` can also hold a role-select or role-button row, made by the Reaction roles
-/// module. Everything that is not a plain link-button row is kept as it came (``keptRows``), so
-/// saving here never drops it, and written back before the link buttons.
+/// module. Everything that is not the first plain link-button row is kept as it came
+/// (``keptRows``), so saving here never drops it. The editable link buttons are written back as one
+/// row in the place the stored link row had (at the end for a message without one).
 public struct ComposedMessageSpec: Sendable, Equatable {
     /// Text above the embeds (at most 2000 characters).
     public var content: String
     public var embeds: [EmbedItem]
-    /// The link buttons, shown in one row.
+    /// The link buttons, shown in one row (the first plain link-button row of the message).
     public var links: [ComposedLinkButton]
-    /// Rows that are not plain link-button rows, untouched.
+    /// Rows other than the editable link row, untouched.
     public private(set) var keptRows: [JSONValue]
+    /// How many kept rows come before the link row, so it is written back where it was; nil: last.
+    public private(set) var linkRowPosition: Int?
+    /// Keys of the stored link row besides `type` and `buttons`, sent back as they came.
+    public private(set) var linkRowExtra: [String: JSONValue]
 
     public static let maxContentLength = 2000
     public static let maxEmbeds = 10
@@ -134,18 +142,24 @@ public struct ComposedMessageSpec: Sendable, Equatable {
     public static let maxRows = 5
 
     public init(content: String = "", embeds: [EmbedItem] = [], links: [ComposedLinkButton] = [],
-                keptRows: [JSONValue] = []) {
+                keptRows: [JSONValue] = [], linkRowPosition: Int? = nil,
+                linkRowExtra: [String: JSONValue] = [:]) {
         self.content = content
         self.embeds = embeds
         self.links = links
         self.keptRows = keptRows
+        self.linkRowPosition = linkRowPosition
+        self.linkRowExtra = linkRowExtra
     }
 
-    /// Whether another link button fits: the link row needs a row of its own.
-    public var canAddLink: Bool { links.count < Self.maxLinks && keptRows.count < Self.maxRows }
+    /// Whether another link button fits: up to five in the row, and a message that has none yet
+    /// needs a row of its own.
+    public var canAddLink: Bool {
+        links.count < Self.maxLinks && (!links.isEmpty || keptRows.count < Self.maxRows)
+    }
 
     /// Whether the rows kept from elsewhere leave no room for a row of link buttons.
-    public var linkRowHasNoRoom: Bool { keptRows.count >= Self.maxRows }
+    public var linkRowHasNoRoom: Bool { links.isEmpty && keptRows.count >= Self.maxRows }
 
     /// Whether the message has button rows or menus from elsewhere (reaction roles), kept as they are.
     public var hasKeptRows: Bool { !keptRows.isEmpty }
@@ -164,15 +178,19 @@ extension ComposedMessageSpec: Codable {
         let rows = (try? c.decodeIfPresent([JSONValue].self, forKey: .rows)) ?? []
         var kept: [JSONValue] = []
         var links: [ComposedLinkButton] = []
+        var position: Int?
+        var rowExtra: [String: JSONValue] = [:]
         for row in rows {
-            // A row of only link buttons becomes the editable link buttons. Anything else stays as is:
-            // role rows and menus, a row of an unknown type, and a row that mixes link buttons with
-            // role buttons (its link buttons stay in it).
-            if case .object(let object) = row, object["type"] == .string("buttons"),
+            // The first row of only link buttons becomes the editable link buttons. Anything else stays
+            // as it is: role rows and menus, a row of an unknown type, a row that mixes link buttons
+            // with role buttons (its link buttons stay in it), and any further link row.
+            if position == nil, case .object(let object) = row, object["type"] == .string("buttons"),
                case .array(let buttons)? = object["buttons"] {
                 let all = buttons.compactMap { ComposedLinkButton(json: $0) }
-                if all.count == buttons.count {
-                    links.append(contentsOf: all)
+                if all.count == buttons.count, !all.isEmpty {
+                    links = all
+                    position = kept.count
+                    rowExtra = object.filter { $0.key != "type" && $0.key != "buttons" }
                     continue
                 }
             }
@@ -181,7 +199,7 @@ extension ComposedMessageSpec: Codable {
         self.init(
             content: try c.decode(forKey: .content, or: ""),
             embeds: try c.decodeLossyArray(of: EmbedItem.self, forKey: .embeds),
-            links: links, keptRows: kept)
+            links: links, keptRows: kept, linkRowPosition: position, linkRowExtra: rowExtra)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -191,33 +209,44 @@ extension ComposedMessageSpec: Codable {
         var rows = keptRows
         let buttons = links.filter(\.isComplete).map(\.json)
         if !buttons.isEmpty {
-            rows.append(.object(["type": .string("buttons"), "buttons": .array(buttons)]))
+            var object = linkRowExtra
+            object["type"] = .string("buttons")
+            object["buttons"] = .array(buttons)
+            rows.insert(.object(object), at: min(linkRowPosition ?? rows.count, rows.count))
         }
         try c.encode(rows, forKey: .rows)
     }
 }
 
 extension ComposedLinkButton {
-    /// A stored link button, nil when it is not one (a role button, say).
+    /// A stored link button, nil when it is not one (a role button, say) or when it holds something
+    /// this page could not write back faithfully (a label that is not text).
     fileprivate init?(json: JSONValue) {
         guard case .object(let object) = json else { return nil }
         let style = object["style"]
         guard style == .string("link") || (style == nil && object["url"] != nil) else { return nil }
-        func text(_ key: String) -> String {
-            if case .string(let value)? = object[key] { return value }
-            return ""
+        var text: [String: String] = [:]
+        for key in ["label", "emoji", "url"] {
+            switch object[key] {
+            case .string(let value)?: text[key] = value
+            case nil, .null?: text[key] = ""
+            default: return nil
+            }
         }
-        self.init(label: text("label"), emoji: text("emoji"), url: text("url"))
+        let known: Set<String> = ["style", "label", "emoji", "url"]
+        self.init(
+            label: text["label"] ?? "", emoji: text["emoji"] ?? "", url: text["url"] ?? "",
+            extra: object.filter { !known.contains($0.key) })
     }
 
-    /// The button as the web page writes it, trimmed.
+    /// The button as the web page writes it, trimmed, with the keys this page does not know.
     fileprivate var json: JSONValue {
-        .object([
-            "style": .string("link"),
-            "label": .string(label.trimmingCharacters(in: .whitespaces)),
-            "emoji": .string(emoji.trimmingCharacters(in: .whitespaces)),
-            "url": .string(url.trimmingCharacters(in: .whitespaces)),
-        ])
+        var object = extra
+        object["style"] = .string("link")
+        object["label"] = .string(label.trimmingCharacters(in: .whitespaces))
+        object["emoji"] = .string(emoji.trimmingCharacters(in: .whitespaces))
+        object["url"] = .string(url.trimmingCharacters(in: .whitespaces))
+        return .object(object)
     }
 }
 

@@ -114,8 +114,9 @@ public final class ComposedMessageBuilderModel {
     /// Why the last save or publish did not go through, in the server's words.
     public var actionError: String?
     /// Which step the error belongs to: `save` for a failed save (also the first step of posting a new
-    /// message), `publish` for a failed post.
-    public private(set) var failedAction: ComposedSaveAction?
+    /// message), `publish` for a failed post, `move` for taking the posted message out of the old
+    /// channel (or a move that was not confirmed).
+    public private(set) var failedAction: FailedAction?
     /// What the last action did.
     public private(set) var notice: Notice?
     /// Goes up with every action that went through, for a haptic.
@@ -123,6 +124,18 @@ public final class ComposedMessageBuilderModel {
 
     public enum Notice: Sendable, Equatable {
         case saved, published, updated
+    }
+
+    public enum FailedAction: Sendable, Equatable {
+        case save, publish, move
+    }
+
+    /// A posted message whose channel was changed: saving or posting it has to delete the posted
+    /// message in the old channel first (the server edits the posted message in the channel the
+    /// message is stored under, so a new channel with the old post would fail from then on).
+    public struct ChannelMove: Sendable, Equatable {
+        public let from: String
+        public let to: String
     }
 
     private struct Snapshot: Equatable {
@@ -150,6 +163,14 @@ public final class ComposedMessageBuilderModel {
 
     /// Posting needs a channel.
     public var canPublish: Bool { hasLoaded && !channelId.isEmpty && !isSaving }
+
+    /// Set while the message is posted and a different channel is picked. The screen asks the person
+    /// before saving or posting (``saveDraft(confirmedMove:)``, ``publish(confirmedMove:)``).
+    public var channelMove: ChannelMove? {
+        guard isPublished, let snapshot, !snapshot.channelId.isEmpty, !channelId.isEmpty,
+              channelId != snapshot.channelId else { return nil }
+        return ChannelMove(from: snapshot.channelId, to: channelId)
+    }
 
     public func load() async {
         isLoading = true
@@ -179,13 +200,19 @@ public final class ComposedMessageBuilderModel {
         spec = snapshot.spec
     }
 
-    /// Keeps the message as a draft.
+    /// Keeps the message as a draft. When the channel of a posted message was changed, the posted
+    /// message is deleted in the old channel first, and only with `confirmedMove`.
     /// - Returns: Whether it was saved.
     @discardableResult
-    public func saveDraft() async -> Bool {
+    public func saveDraft(confirmedMove: Bool = false) async -> Bool {
         guard !isSaving else { return false }
         notice = nil
-        guard await submit(.save) != nil else { return false }
+        let moved = channelMove != nil
+        guard await prepareMove(confirmed: confirmedMove) else { return false }
+        guard await submit(.save) != nil else {
+            if moved { explainMove(afterwards: "saving it in the new channel failed") }
+            return false
+        }
         notice = .saved
         successCount += 1
         return true
@@ -193,19 +220,65 @@ public final class ComposedMessageBuilderModel {
 
     /// Posts the message to the channel, or edits the posted one. A new message is saved first, so a
     /// post that fails (the bot may not write there) still leaves a draft the screen knows about,
-    /// rather than one the next try would duplicate.
+    /// rather than one the next try would duplicate; the retry posts that saved message.
+    ///
+    /// When the channel of a posted message was changed, it goes: delete the posted message in the old
+    /// channel, then save and post in the new one. That needs `confirmedMove`, and each step stops
+    /// with its own message.
     /// - Returns: Whether it is in the channel now.
     @discardableResult
-    public func publish() async -> Bool {
+    public func publish(confirmedMove: Bool = false) async -> Bool {
         guard canPublish else { return false }
         notice = nil
+        let moved = channelMove != nil
+        guard await prepareMove(confirmed: confirmedMove) else { return false }
         if id == .new {
             guard await submit(.save) != nil else { return false }
         }
-        guard let result = await submit(.publish) else { return false }
+        guard let result = await submit(.publish) else {
+            if moved { explainMove(afterwards: "posting it in the new channel failed") }
+            return false
+        }
         notice = result.status == .updated ? .updated : .published
         successCount += 1
         return true
+    }
+
+    /// Takes the posted message out of the old channel before a channel change is saved, while the
+    /// server still holds the old channel. Nothing happens without a move.
+    private func prepareMove(confirmed: Bool) async -> Bool {
+        guard channelMove != nil else { return true }
+        guard confirmed else {
+            actionError = "Confirm moving the posted message to the other channel first."
+            failedAction = .move
+            return false
+        }
+        guard case .saved(let savedID) = id else { return true }
+        isSaving = true
+        defer { isSaving = false }
+        actionError = nil
+        failedAction = nil
+        do {
+            _ = try await session.send(Endpoints.UnpublishComposedMessage(server: server, id: savedID))
+            messageId = nil
+            return true
+        } catch {
+            let error = NetworkError(error)
+            if error != .cancelled, error != .unauthorized {
+                actionError = "Couldn't remove the posted message from the old channel, so nothing was changed. "
+                    + error.userMessage
+                failedAction = .move
+            }
+            return false
+        }
+    }
+
+    /// After the posted message was deleted in the old channel and the next step failed: say where
+    /// things stand, so nothing is half done out of sight.
+    private func explainMove(afterwards problem: String) {
+        guard let text = actionError else { return }
+        actionError = "The posted message was deleted in the old channel, but \(problem). It is not posted any more; the draft is what you see here. "
+            + text
     }
 
     private func submit(_ action: ComposedSaveAction) async -> ComposedSaveResult? {
@@ -221,7 +294,7 @@ public final class ComposedMessageBuilderModel {
                     server: server, id: id, name: name, channelId: channelId, action: action, spec: sent))
             if let error = result.error {
                 actionError = error
-                failedAction = action
+                failedAction = action == .publish ? .publish : .save
                 return nil
             }
             let message = result.message
@@ -235,7 +308,7 @@ public final class ComposedMessageBuilderModel {
             let error = NetworkError(error)
             if error != .cancelled, error != .unauthorized {
                 actionError = error.userMessage
-                failedAction = action
+                failedAction = action == .publish ? .publish : .save
             }
             return nil
         }

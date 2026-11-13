@@ -7,6 +7,12 @@ import SyloKit
 struct MessageBuilderView: View {
     @State private var model: ComposedMessageBuilderModel
     @State private var isConfirmingDiscard = false
+    @State private var pendingMove: PendingMove?
+
+    /// What was asked when a posted message is about to change channel.
+    private enum PendingMove {
+        case save, publish
+    }
 
     init(server: ServerID, id: ComposedMessageID, session: AppSession) {
         _model = State(initialValue: ComposedMessageBuilderModel(server: server, id: id, session: session))
@@ -44,7 +50,7 @@ struct MessageBuilderView: View {
                     if model.isSaving {
                         ProgressView()
                     } else {
-                        Button("Save") { Task { await model.saveDraft() } }
+                        Button("Save") { save() }
                             .toolbarSaveStyle()
                             .disabled(!model.hasChanges)
                     }
@@ -55,6 +61,21 @@ struct MessageBuilderView: View {
             Button("Discard Changes", role: .destructive) { model.discardChanges() }
         } message: {
             Text("Everything you changed since the last save is lost.")
+        }
+        .confirmationDialog(
+            "Move the posted message?", isPresented: isConfirmingMove, titleVisibility: .visible,
+            presenting: pendingMove
+        ) { action in
+            Button(action == .publish ? "Move and Publish" : "Move and Save", role: .destructive) {
+                Task {
+                    switch action {
+                    case .save: await model.saveDraft(confirmedMove: true)
+                    case .publish: await model.publish(confirmedMove: true)
+                    }
+                }
+            }
+        } message: { action in
+            Text(moveMessage(for: action))
         }
         .alert(
             alertTitle,
@@ -85,10 +106,9 @@ struct MessageBuilderView: View {
                 ChannelPicker(title: "Channel", selection: $model.channelId, channels: model.channels,
                               noneTitle: "Choose a channel")
                 Button {
-                    Task { await model.publish() }
+                    publish()
                 } label: {
-                    Label(model.isPublished ? "Update Published Message" : "Publish to Channel",
-                          systemImage: "paperplane")
+                    Label(publishTitle, systemImage: "paperplane")
                 }
                 .disabled(!model.canPublish)
             } footer: {
@@ -96,7 +116,7 @@ struct MessageBuilderView: View {
             }
 
             Section {
-                TextArea(title: "Message text", text: $model.spec.content,
+                UTF16TextArea(title: "Message text", text: $model.spec.content,
                          limit: ComposedMessageSpec.maxContentLength, lines: 2...8)
             } header: {
                 Text("Message Text")
@@ -135,14 +155,61 @@ struct MessageBuilderView: View {
             case .updated: Text("Published message updated.")
             }
         } else if model.isPublished {
-            Text("Published. Update Published Message edits the posted message; changing the channel posts a fresh one.")
+            Text("Published in #\(channelName(model.channelMove?.from ?? model.channelId)). Update Published Message edits the posted message. If you pick another channel, the posted message is deleted there and posted again in the new one, after you confirm.")
         } else {
             Text("Save keeps a draft. Publish posts the message to the channel as Sylo.")
         }
     }
 
+    // MARK: - Moving a posted message to another channel
+
+    private func save() {
+        if model.channelMove != nil {
+            pendingMove = .save
+        } else {
+            Task { await model.saveDraft() }
+        }
+    }
+
+    private func publish() {
+        if model.channelMove != nil {
+            pendingMove = .publish
+        } else {
+            Task { await model.publish() }
+        }
+    }
+
+    private var publishTitle: LocalizedStringKey {
+        if model.channelMove != nil { return "Move to the New Channel and Publish" }
+        return model.isPublished ? "Update Published Message" : "Publish to Channel"
+    }
+
+    private func channelName(_ id: String) -> String {
+        model.channels.first { $0.id == id }?.name ?? String(localized: "deleted channel")
+    }
+
+    private func moveMessage(for action: PendingMove) -> LocalizedStringKey {
+        let move = model.channelMove
+        let from = channelName(move?.from ?? "")
+        let to = channelName(move?.to ?? "")
+        switch action {
+        case .publish:
+            return "The posted message is deleted from #\(from) and posted again in #\(to). If posting fails, it stays deleted and your message is kept as a draft."
+        case .save:
+            return "The posted message is deleted from #\(from). Your changes are saved as a draft for #\(to); publish it to post it there."
+        }
+    }
+
+    private var isConfirmingMove: Binding<Bool> {
+        Binding(get: { pendingMove != nil }, set: { if !$0 { pendingMove = nil } })
+    }
+
     private var alertTitle: LocalizedStringKey {
-        model.failedAction == .publish ? "Couldn't Publish" : "Couldn't Save"
+        switch model.failedAction {
+        case .publish: "Couldn't Publish"
+        case .move: "Couldn't Move Message"
+        default: "Couldn't Save"
+        }
     }
 
     private var isShowingActionError: Binding<Bool> {

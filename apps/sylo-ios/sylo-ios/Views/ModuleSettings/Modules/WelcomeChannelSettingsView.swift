@@ -10,6 +10,7 @@ struct WelcomeChannelSettingsView: View {
     @State private var publisher: WelcomeChannelPublisher
     @State private var isConfirmingRemove = false
     @State private var isConfirmingClear = false
+    @State private var isConfirmingCreate = false
 
     /// What the server fills in on the message text and in the embeds.
     private static let variables = [
@@ -31,19 +32,19 @@ struct WelcomeChannelSettingsView: View {
                 ChannelPicker(title: "Channel", selection: $settings.channelId, channels: page.channels,
                               noneTitle: "Choose a channel")
                 Button("Create Read-Only #welcome", systemImage: "plus.bubble") {
-                    Task { await publisher.createChannel() }
+                    isConfirmingCreate = true
                 }
                 .disabled(publisher.isBusy)
             } footer: {
                 if publisher.isPublished {
-                    Text("Published in the channel. Publish again to update the message there.")
+                    Text("Published in the channel. Publish again to update the message there. If you pick another channel, the new one gets a new message and the old one stays where it is, so remove the published message first if you do not want it.")
                 } else {
                     Text("Not published yet.")
                 }
             }
 
             Section {
-                TextArea(title: "Message text", text: $settings.content,
+                UTF16TextArea(title: "Message text", text: $settings.content,
                          limit: WelcomeChannelSettings.maxContentLength, lines: 2...6)
             } header: {
                 Text("Message text")
@@ -134,6 +135,13 @@ struct WelcomeChannelSettingsView: View {
             Text("The message is deleted from the channel. Your draft stays here, so you can publish it again.")
         }
         .confirmationDialog(
+            "Create a read-only #welcome channel?", isPresented: $isConfirmingCreate, titleVisibility: .visible
+        ) {
+            Button("Create Channel") { Task { await publisher.createChannel() } }
+        } message: {
+            Text("Members can read it but not write in it. It is picked as this message's channel.")
+        }
+        .confirmationDialog(
             "Clear the whole message?", isPresented: $isConfirmingClear, titleVisibility: .visible
         ) {
             Button("Clear Message", role: .destructive) {
@@ -195,7 +203,7 @@ private struct WelcomeBannerEditor: View {
             }
             Section {
                 LinkTextField(title: "Image URL", text: $draft.image)
-                TextArea(title: "Caption", text: $draft.description,
+                UTF16TextArea(title: "Caption", text: $draft.description,
                          limit: EmbedLimits.standard.description, lines: 1...4)
             } footer: {
                 Text("A big picture with an optional caption. Links must start with http:// or https://.")

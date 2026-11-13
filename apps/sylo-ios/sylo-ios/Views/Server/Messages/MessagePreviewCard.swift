@@ -24,7 +24,16 @@ struct MessagePreviewCard: View {
                     .font(.footnote)
             }
             ForEach(embeds) { embed in
-                EmbedPreviewCard(draft: embed.draft, options: EmbedItem.options)
+                if embed.isOpaque {
+                    Text("Unsupported embed (kept as is)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                } else {
+                    EmbedPreviewCard(draft: embed.draft, options: EmbedItem.options)
+                }
             }
             if !shownLinks.isEmpty {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 6, alignment: .leading)],

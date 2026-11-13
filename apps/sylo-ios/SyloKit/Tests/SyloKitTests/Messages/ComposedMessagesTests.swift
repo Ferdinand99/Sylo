@@ -59,15 +59,93 @@ struct EmbedItemTests {
         #expect(item.draft.kind == "embed")
     }
 
+    private func object(_ item: EmbedItem) throws -> [String: Any] {
+        let data = try JSONEncoder().encode(item)
+        return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
     @Test("an embed list encodes the web editor's keys, keeping what it does not know")
     func encodes() throws {
-        let item = try JSONDecoder().decode(
-            EmbedItem.self, from: Data(#"{"title":"T","future":{"x":1},"timestamp":true}"#.utf8))
-        let data = try JSONEncoder().encode(item)
+        let item = try JSONDecoder().decode(EmbedItem.self, from: Data(#"{"title":"T","future":{"x":1}}"#.utf8))
+        let sent = try object(item)
+        #expect(sent["future"] != nil)
+        #expect(sent["kind"] as? String == "embed")
+        // No time stored: no key.
+        #expect(sent["timestamp"] == nil)
+        #expect(Set(sent.keys).isSuperset(of: ["kind", "color", "title", "image", "fields"]))
+    }
+
+    @Test("a stored timestamp goes back on save, and an embed without one gets no key")
+    func keepsTimestamp() throws {
+        let on = try JSONDecoder().decode(EmbedItem.self, from: Data(#"{"title":"T","timestamp":true}"#.utf8))
+        #expect(on.draft.timestamp)
+        #expect(try object(on)["timestamp"] as? Bool == true)
+
+        let off = try JSONDecoder().decode(EmbedItem.self, from: Data(#"{"title":"T","timestamp":false}"#.utf8))
+        #expect(try object(off)["timestamp"] == nil)
+
+        // Switching it on in the editor sends it, and a copy keeps it.
+        var edited = off
+        edited.draft.timestamp = true
+        #expect(try object(edited)["timestamp"] as? Bool == true)
+        #expect(edited.duplicated().draft.timestamp)
+        #expect(EmbedItem.options.timestamp)
+    }
+
+    @Test("an embed with values of the wrong type is kept as it came, shown as unsupported and sent back unchanged")
+    func opaqueEmbeds() throws {
+        let stored = [
+            #"{"title":123,"color":5793266,"futureKey":[1,2]}"#,
+            #"{"title":"T","timestamp":1}"#,
+            #"{"title":"T","fields":"nope"}"#,
+            #"{"title":"T","fields":[{"name":"a","value":"b"},{"name":7,"value":"x"}]}"#,
+            #""just a string""#,
+            #"[1,2]"#,
+        ]
+        for json in stored {
+            let item = try JSONDecoder().decode(EmbedItem.self, from: Data(json.utf8))
+            #expect(item.isOpaque, "\(json)")
+            #expect(!item.isBanner)
+            let back = try JSONEncoder().encode(item)
+            let original = try JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
+            #expect(try JSONDecoder().decode(JSONValue.self, from: back) == original, "\(json)")
+        }
+    }
+
+    @Test("a readable embed is not opaque, and a copy of an opaque one stays as it came")
+    func readableAndCopies() throws {
+        let readable = try JSONDecoder().decode(
+            EmbedItem.self, from: Data(#"{"title":"T","fields":[{"name":"a","value":"b"}],"color":"#ff0000"}"#.utf8))
+        #expect(!readable.isOpaque)
+        #expect(readable.raw == nil)
+        let odd = try JSONDecoder().decode(EmbedItem.self, from: Data(#"{"title":5}"#.utf8))
+        let copy = odd.duplicated()
+        #expect(copy.isOpaque)
+        #expect(copy.id != odd.id)
+        #expect(copy == odd)
+        var list = [odd]
+        #expect(list.duplicateEmbed(at: 0, limit: 10))
+        #expect(list.count == 2)
+    }
+
+    @Test("an embed with odd values in a message is kept, in place, when the message is saved")
+    func opaqueInMessage() throws {
+        let json = #"""
+        {"content":"c","rows":[],"embeds":[
+          {"title":"Fine"},{"title":99,"color":123},{"title":"Also fine"}]}
+        """#
+        var spec = try JSONDecoder().decode(ComposedMessageSpec.self, from: Data(json.utf8))
+        #expect(spec.embeds.map(\.isOpaque) == [false, true, false])
+        spec.content = "edited"
+        let data = try JSONEncoder().encode(spec)
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        #expect(object["future"] != nil)
-        #expect(object["kind"] as? String == "embed")
-        #expect(object["timestamp"] == nil)
+        let embeds = try #require(object["embeds"] as? [[String: Any]])
+        #expect(embeds.count == 3)
+        #expect(embeds[0]["title"] as? String == "Fine")
+        #expect(embeds[1]["title"] as? Int == 99)
+        #expect(embeds[1]["color"] as? Int == 123)
+        #expect(Set(embeds[1].keys) == ["title", "color"])
+        #expect(embeds[2]["title"] as? String == "Also fine")
     }
 }
 
@@ -279,6 +357,72 @@ struct ComposedMessagesTests {
         #expect(ComposedLinkButton(emoji: "<a:party:123456789012345678>").emojiText == ":party:")
         #expect(ComposedLinkButton(emoji: "  ").emojiText.isEmpty)
         #expect(ComposedLinkButton(emoji: "<broken>").emojiText == "<broken>")
+    }
+
+    @Test("the link row keeps its place, and a further link row stays a row of its own")
+    func linkRowPlacement() throws {
+        let json = #"""
+        {"content":"","embeds":[],"rows":[
+          {"type":"buttons","id":"first","buttons":[
+            {"style":"link","label":"A","url":"https://a.example","disabled":true},
+            {"style":"link","label":"B","url":"https://b.example"}]},
+          {"type":"roleselect","placeholder":"Pick","options":[]},
+          {"type":"buttons","buttons":[
+            {"style":"link","label":"C","url":"https://c.example"},
+            {"style":"link","label":"D","url":"https://d.example"},
+            {"style":"link","label":"E","url":"https://e.example"},
+            {"style":"link","label":"F","url":"https://f.example"}]}]}
+        """#
+        var spec = try JSONDecoder().decode(ComposedMessageSpec.self, from: Data(json.utf8))
+        // Only the first link row is editable; the second one is kept whole, so it is not merged into
+        // a row of more than five buttons.
+        #expect(spec.links.map(\.label) == ["A", "B"])
+        #expect(spec.hasKeptRows)
+        #expect(spec.linkRowPosition == 0)
+        spec.links[0].label = "Alpha"
+
+        let rows = try #require(try Self.sent(spec)["rows"] as? [[String: Any]])
+        #expect(rows.count == 3)
+        // The link row is still first, with its unknown keys.
+        #expect(rows[0]["id"] as? String == "first")
+        let first = try #require(rows[0]["buttons"] as? [[String: Any]])
+        #expect(first.map { $0["label"] as? String } == ["Alpha", "B"])
+        #expect(first[0]["disabled"] as? Bool == true)
+        #expect(rows[1]["type"] as? String == "roleselect")
+        #expect((rows[2]["buttons"] as? [[String: Any]])?.count == 4)
+    }
+
+    @Test("a message without a link row gets one at the end, and one with five rows has no room")
+    func newLinkRow() throws {
+        var spec = ComposedMessageSpec(keptRows: [.object(["type": .string("roleselect")])])
+        spec.links = [ComposedLinkButton(label: "A", url: "https://a.example")]
+        let rows = try #require(try Self.sent(spec)["rows"] as? [[String: Any]])
+        #expect(rows.map { $0["type"] as? String } == ["roleselect", "buttons"])
+
+        // Adding a button to a row that exists needs no new row, so it fits even with four others.
+        var withRow = ComposedMessageSpec(
+            keptRows: Array(repeating: .object(["type": .string("poll")]), count: 4),
+            linkRowPosition: 2)
+        #expect(withRow.canAddLink)
+        withRow.links = [ComposedLinkButton(label: "A", url: "https://a.example")]
+        #expect(withRow.canAddLink)
+        #expect(!withRow.linkRowHasNoRoom)
+        let placed = try #require(try Self.sent(withRow)["rows"] as? [[String: Any]])
+        #expect(placed.map { $0["type"] as? String } == ["poll", "poll", "buttons", "poll", "poll"])
+    }
+
+    @Test("a row of buttons that is empty, or holds a label that is not text, is kept as it came")
+    func uneditableButtonRows() throws {
+        let json = #"""
+        {"content":"","embeds":[],"rows":[
+          {"type":"buttons","buttons":[]},
+          {"type":"buttons","buttons":[{"style":"link","label":42,"url":"https://a.example"}]}]}
+        """#
+        let spec = try JSONDecoder().decode(ComposedMessageSpec.self, from: Data(json.utf8))
+        #expect(spec.links.isEmpty)
+        let rows = try #require(try Self.sent(spec)["rows"] as? [[String: Any]])
+        #expect(rows.count == 2)
+        #expect((rows[1]["buttons"] as? [[String: Any]])?.first?["label"] as? Int == 42)
     }
 
     // MARK: Save answers

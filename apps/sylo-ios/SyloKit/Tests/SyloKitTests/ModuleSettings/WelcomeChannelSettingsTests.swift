@@ -107,10 +107,15 @@ struct WelcomeChannelSettingsTests {
         let spec = try #require(body["spec"] as? [String: Any])
         #expect(Set(spec.keys) == ["content", "embeds"])
         let embed = try #require((spec["embeds"] as? [[String: Any]])?.first)
+        // This embed was stored with the time switched on, so that goes back too.
         #expect(Set(embed.keys) == [
             "kind", "color", "authorName", "authorIcon", "title", "description", "image", "thumbnail",
-            "footerText", "footerIcon", "fields",
+            "footerText", "footerIcon", "fields", "timestamp",
         ])
+        #expect(embed["timestamp"] as? Bool == true)
+        // The banner had it off: no key.
+        let banner = try #require((spec["embeds"] as? [[String: Any]])?.last)
+        #expect(banner["timestamp"] == nil)
         let fields = try #require(embed["fields"] as? [[String: Any]])
         #expect(fields.count == 1)
         #expect(Set(fields[0].keys) == ["name", "value", "inline"])
@@ -151,9 +156,10 @@ struct WelcomeChannelSettingsTests {
         // The banner had no colour stored; what is sent is the colour the editor shows.
         #expect(again.embeds[1].draft.color == "#5865f2")
         #expect(again.embeds[1].isBanner)
-        // Like the web form, the Welcome embed has no timestamp switch, so a stored one is not sent.
+        // A stored timestamp is kept (and shown in the preview), not dropped on save.
         #expect(settings.embeds[0].draft.timestamp)
-        #expect(!again.embeds[0].draft.timestamp)
+        #expect(again.embeds[0].draft.timestamp)
+        #expect(!again.embeds[1].draft.timestamp)
     }
 
     @Test("new elements and presets start like the web form's new ones")
@@ -417,5 +423,68 @@ struct WelcomeChannelPublisherTests {
 
         #expect(publisher.errorMessage == "Sylo needs the Manage Channels permission.")
         #expect(publisher.failedStep == .createChannel)
+    }
+}
+
+// MARK: - Publishing while a save runs
+
+/// Holds calls until the test lets them go, so a publish can be asked for while a save runs.
+private final class SaveGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var closed = false
+
+    var isOpen: Bool { lock.withLock { !closed } }
+    func close() { lock.withLock { closed = true } }
+    func open() { lock.withLock { closed = false } }
+}
+
+private struct GatedWelcomeClient: APIClient {
+    let gate: SaveGate
+
+    func send<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response {
+        while !gate.isOpen { try await Task.sleep(for: .milliseconds(5)) }
+        let answer: Any
+        if let saving = endpoint as? Endpoints.SaveModuleSettings<WelcomeChannelPage> {
+            answer = SavedModuleSettings(settings: saving.settings)
+        } else if endpoint is Endpoints.LoadModuleSettings<WelcomeChannelPage> {
+            answer = try WelcomeChannelSettingsTests.page()
+        } else {
+            throw NetworkError.notFound
+        }
+        guard let response = answer as? E.Response else { throw NetworkError.decoding("wrong type") }
+        return response
+    }
+}
+
+@MainActor
+@Suite("Welcome channel publishing during a save")
+struct WelcomeChannelPublishDuringSaveTests {
+    @Test("publishing while a save is running says so and posts nothing")
+    func publishWaitsForSave() async throws {
+        let gate = SaveGate()
+        let server = try ServerURL("https://sylo.example.com")
+        let session = AppSession(
+            tokens: InMemoryTokenStore(tokens: [
+                server.description: StoredToken(token: "sylo_live", expiresAt: Date().addingTimeInterval(86_400)),
+            ]),
+            preference: MemoryServerPreference(server), deviceName: "Test",
+            makeClient: { _, _ in GatedWelcomeClient(gate: gate) })
+        session.start()
+        let model = ModuleSettingsModel<WelcomeChannelPage>(server: "9", session: session)
+        await model.load()
+        let publisher = WelcomeChannelPublisher(model: model, session: session)
+
+        model.draft?.content = "changed"
+        gate.close()
+        let save = Task { await model.save() }
+        while !model.isSaving { try await Task.sleep(for: .milliseconds(5)) }
+
+        #expect(await publisher.publish() == false)
+        #expect(publisher.errorMessage == "A save is still running. Wait for it to finish, then publish again.")
+        #expect(publisher.failedStep == .publish)
+        #expect(!publisher.isBusy)
+
+        gate.open()
+        #expect(await save.value)
     }
 }

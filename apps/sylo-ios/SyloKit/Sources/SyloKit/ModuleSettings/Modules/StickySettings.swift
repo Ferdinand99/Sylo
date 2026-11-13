@@ -82,7 +82,7 @@ public struct StickySettings: Codable, Sendable, Equatable {
             try c.encode(channelId, forKey: .channelId)
             try c.encode(content, forKey: .content)
             if let embed {
-                try c.encode(embed.spec(), forKey: .embed)
+                try c.encode(embed.specKeepingTimestamp(), forKey: .embed)
             } else {
                 try c.encodeNil(forKey: .embed)
             }

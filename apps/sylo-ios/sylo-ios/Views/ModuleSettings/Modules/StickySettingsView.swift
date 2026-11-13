@@ -20,13 +20,13 @@ struct StickySettingsView: View {
                 Section {
                     ChannelPicker(title: "Channel", selection: $sticky.channelId, channels: page.channels,
                                   noneTitle: "Choose a channel")
-                    TextArea(title: "Message", text: $sticky.content,
+                    UTF16TextArea(title: "Message", text: $sticky.content,
                              limit: StickySettings.Sticky.maxContentLength, lines: 2...8)
                     if sticky.embed != nil {
                         NavigationLink {
                             EmbedEditorView(draft: Binding(
                                 get: { sticky.embed ?? EmbedDraft() },
-                                set: { sticky.embed = $0 }))
+                                set: { sticky.embed = $0 }), options: EmbedItem.options)
                         } label: {
                             LabeledContent("Embed") {
                                 Text(verbatim: sticky.embed?.title ?? "")

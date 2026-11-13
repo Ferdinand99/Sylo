@@ -19,10 +19,15 @@ struct EmbedElementSections<Editor: View>: View {
     var body: some View {
         ForEach($items) { $item in
             Section {
-                NavigationLink {
-                    editor($item)
-                } label: {
+                if item.isOpaque {
+                    // Nothing to edit: the embed goes back unchanged.
                     EmbedItemSummary(item: item)
+                } else {
+                    NavigationLink {
+                        editor($item)
+                    } label: {
+                        EmbedItemSummary(item: item)
+                    }
                 }
                 if let index = items.firstIndex(where: { $0.id == item.id }) {
                     if index > 0 {
@@ -61,7 +66,12 @@ struct EmbedItemSummary: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            if !item.draft.title.isEmpty {
+            if item.isOpaque {
+                Text("Unsupported embed (kept as is)")
+                Text("The app cannot edit it. It is sent back unchanged when you save.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if !item.draft.title.isEmpty {
                 Text(verbatim: item.draft.title)
             } else if item.isBanner {
                 if item.draft.image.isEmpty {

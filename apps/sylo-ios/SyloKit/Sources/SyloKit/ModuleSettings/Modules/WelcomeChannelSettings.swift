@@ -232,6 +232,11 @@ public final class WelcomeChannelPublisher {
             failedStep = .publish
             return false
         }
+        guard !model.isSaving else {
+            errorMessage = "A save is still running. Wait for it to finish, then publish again."
+            failedStep = .publish
+            return false
+        }
         isBusy = true
         defer { isBusy = false }
         let wasPublished = isPublished

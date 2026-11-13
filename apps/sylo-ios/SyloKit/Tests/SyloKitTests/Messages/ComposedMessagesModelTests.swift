@@ -47,6 +47,12 @@ final class FakeMessagesServer: @unchecked Sendable {
             if let unpublish = endpoint as? Endpoints.UnpublishComposedMessage {
                 lock.withLock { _calls.append("unpublish:\(unpublish.id)") }
                 if let error = lock.withLock({ _unpublishError }) { throw error }
+                lock.withLock {
+                    if let m = _message {
+                        _message = ComposedMessage(
+                            id: m.id, name: m.name, channelId: m.channelId, messageId: nil, spec: m.spec)
+                    }
+                }
                 return try JSONDecoder().decode(
                     ComposedMessageRecord.self, from: Data(#"{"rec":{"id":3,"messageId":null}}"#.utf8))
             }
@@ -237,6 +243,112 @@ struct ComposedMessageBuilderModelTests {
         #expect(model.failedAction == .publish)
         #expect(model.notice == nil)
         #expect(model.hasChanges)
+    }
+
+    // MARK: Changing the channel of a posted message
+
+    @Test("a posted message with another channel picked is a move, and it is not one before or after")
+    func channelMove() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        let model = await make(server, id: .saved(3))
+        #expect(model.channelMove == nil)
+        model.channelId = "333333333333333333"
+        #expect(model.channelMove == ComposedMessageBuilderModel.ChannelMove(from: "111111111111111111", to: "333333333333333333"))
+        model.discardChanges()
+        #expect(model.channelMove == nil)
+
+        // A draft can change channel freely.
+        let draft = FakeMessagesServer(message: ComposedMessage(id: 3, name: "x", channelId: "111111111111111111"))
+        let draftModel = await make(draft, id: .saved(3))
+        draftModel.channelId = "333333333333333333"
+        #expect(draftModel.channelMove == nil)
+    }
+
+    @Test("a move is not made without the person's confirmation")
+    func moveNeedsConfirmation() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        let model = await make(server, id: .saved(3))
+        model.channelId = "333333333333333333"
+
+        #expect(await model.publish() == false)
+        #expect(await model.saveDraft() == false)
+
+        #expect(server.calls == ["load:3"])
+        #expect(model.failedAction == .move)
+        #expect(model.actionError != nil)
+        #expect(model.isPublished)
+    }
+
+    @Test("a confirmed move deletes the post in the old channel first, then saves and posts in the new one")
+    func movesAndPublishes() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        let model = await make(server, id: .saved(3))
+        model.channelId = "333333333333333333"
+
+        #expect(await model.publish(confirmedMove: true))
+
+        #expect(server.calls == ["load:3", "unpublish:3", "save:3:publish"])
+        #expect(model.isPublished)
+        #expect(model.channelId == "333333333333333333")
+        #expect(model.channelMove == nil)
+        #expect(!model.hasChanges)
+        #expect(model.notice == .published)
+        #expect(model.actionError == nil)
+    }
+
+    @Test("a confirmed move can also just save the draft in the new channel")
+    func movesAndSaves() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        let model = await make(server, id: .saved(3))
+        model.channelId = "333333333333333333"
+
+        #expect(await model.saveDraft(confirmedMove: true))
+
+        #expect(server.calls == ["load:3", "unpublish:3", "save:3:save"])
+        #expect(!model.isPublished)
+        #expect(model.notice == .saved)
+        #expect(model.channelMove == nil)
+    }
+
+    @Test("when the old post cannot be deleted nothing else happens, and the message says nothing changed")
+    func moveStopsAtUnpublish() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        server.failUnpublish(with: .forbidden(message: "Sylo can't delete messages in that channel."))
+        let model = await make(server, id: .saved(3))
+        model.channelId = "333333333333333333"
+
+        #expect(await model.publish(confirmedMove: true) == false)
+
+        #expect(server.calls == ["load:3", "unpublish:3"])
+        #expect(model.failedAction == .move)
+        #expect(model.actionError?.contains("nothing was changed") == true)
+        #expect(model.actionError?.contains("Sylo can't delete messages in that channel.") == true)
+        #expect(model.isPublished)
+        #expect(!model.isSaving)
+        #expect(server.message?.channelId == "111111111111111111")
+    }
+
+    @Test("when posting in the new channel fails after the old post is gone, the message says where things stand and the retry does not delete again")
+    func movePublishFails() async {
+        let server = FakeMessagesServer(message: Self.posted)
+        server.failPublish(with: .badRequest(message: "The bot lacks View Channel / Send Messages / Embed Links there."))
+        let model = await make(server, id: .saved(3))
+        model.channelId = "333333333333333333"
+
+        #expect(await model.publish(confirmedMove: true) == false)
+
+        #expect(model.failedAction == .publish)
+        let text = model.actionError ?? ""
+        #expect(text.contains("deleted in the old channel"))
+        #expect(text.contains("The bot lacks View Channel / Send Messages / Embed Links there."))
+        // The post is gone, so the screen shows a draft and no move is pending.
+        #expect(!model.isPublished)
+        #expect(model.channelMove == nil)
+
+        server.failPublish(with: nil)
+        #expect(await model.publish())
+        #expect(server.calls == ["load:3", "unpublish:3", "save:3:publish", "save:3:publish"])
+        #expect(model.isPublished)
     }
 
     @Test("publishing needs a channel")

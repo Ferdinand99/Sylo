@@ -34,6 +34,10 @@ struct EmbedEditorView: View {
     /// A module's own limits for the paths where its embed is narrower than the standard one (a
     /// poll's title), applied on top of the server's. nil: the server's alone.
     var limits: ModuleFieldLimits?
+    /// Whether the top of the form shows how the embed looks in Discord. Off for an embed that is not
+    /// posted as a bot message (a reply sent as a user reply, say), or where placeholders make the
+    /// preview misleading.
+    var showsPreview = true
 
     @Environment(AppSession.self) private var session
     @State private var loadedLimits = EmbedLimits.standard
@@ -46,16 +50,18 @@ struct EmbedEditorView: View {
 
     var body: some View {
         Form {
-            Section("Preview") {
-                VStack(alignment: .leading, spacing: 8) {
-                    BotMessageHeader()
-                    if options.content, !draft.content.isEmpty {
-                        discordText(draft.content)
-                            .font(.footnote)
+            if showsPreview {
+                Section("Preview") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        BotMessageHeader()
+                        if options.content, !draft.content.isEmpty {
+                            discordText(draft.content)
+                                .font(.footnote)
+                        }
+                        EmbedPreviewCard(draft: draft, options: options)
                     }
-                    EmbedPreviewCard(draft: draft, options: options)
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
             }
 
             if options.content {

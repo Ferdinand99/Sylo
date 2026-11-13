@@ -41,3 +41,27 @@ struct LinkTextField: View {
             .autocorrectionDisabled()
     }
 }
+
+/// Several lines of text with a counter near the limit and a hard stop at it, counted in UTF-16
+/// units like the server (and the embed editor), so text heavy with emoji is not cut afterwards.
+struct UTF16TextArea: View {
+    let title: LocalizedStringKey
+    @Binding var text: String
+    let limit: Int
+    var lines: ClosedRange<Int> = 3...8
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField(title, text: $text, axis: .vertical)
+                .lineLimit(lines)
+            if text.utf16.count > limit * 3 / 4 {
+                Text("\(text.utf16.count) of \(limit) characters")
+                    .font(.caption)
+                    .foregroundStyle(text.utf16.count > limit ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+            }
+        }
+        .onChange(of: text) {
+            if text.utf16.count > limit { text = LimitedTextField.truncated(text, toUTF16: limit) }
+        }
+    }
+}
