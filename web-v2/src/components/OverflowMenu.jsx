@@ -1,7 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { menuPlacement } from './overflowPlacement.js';
 
-// Room a menu needs below its button before it opens upward instead (a row's height is about 40 px).
+// Used until the menu can be measured (and where nothing is laid out, as in a test): a row is about 40 px.
+const FALLBACK_WIDTH = 160;
 const ITEM_HEIGHT = 40;
 const MENU_PADDING = 12;
 
@@ -25,17 +27,22 @@ export default function OverflowMenu({ label, items }) {
   const menu = useRef(null);
   const menuId = useId();
 
-  // Where the menu goes, read from the button when it opens.
+  // Where the menu goes: measured once it is on the page (hidden until then), and kept inside the window
+  // on every side (see overflowPlacement.js).
   useLayoutEffect(() => {
-    if (!open || !button.current) return;
-    const rect = button.current.getBoundingClientRect();
-    const need = items.length * ITEM_HEIGHT + MENU_PADDING;
-    const below = window.innerHeight - rect.bottom;
-    const up = below < need && rect.top > below;
-    setPlace({
-      right: Math.max(8, window.innerWidth - rect.right),
-      ...(up ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }),
-    });
+    if (!open || !button.current || !menu.current) return;
+    const trigger = button.current.getBoundingClientRect();
+    const box = menu.current.getBoundingClientRect();
+    setPlace(
+      menuPlacement(
+        trigger,
+        {
+          width: box.width || FALLBACK_WIDTH,
+          height: box.height || items.length * ITEM_HEIGHT + MENU_PADDING,
+        },
+        { width: window.innerWidth, height: window.innerHeight }
+      )
+    );
   }, [open, items.length]);
 
   useEffect(() => {
@@ -95,7 +102,7 @@ export default function OverflowMenu({ label, items }) {
       >
         <span aria-hidden="true">⋯</span>
       </button>
-      {open && place
+      {open
         ? createPortal(
             <div
               ref={menu}
@@ -103,7 +110,7 @@ export default function OverflowMenu({ label, items }) {
               role="menu"
               id={menuId}
               aria-label={label}
-              style={{ position: 'fixed', ...place }}
+              style={{ position: 'fixed', ...(place ?? { top: 0, left: 0, visibility: 'hidden' }) }}
               onKeyDown={onKeyDown}
             >
               {items.map((item) => (

@@ -225,14 +225,18 @@ describe('OverflowMenu', () => {
     expect(menu.style.top).not.toBe('');
   });
 
-  it('opens upward when there is no room below the button', () => {
-    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+  it('opens upward when there is no room below the button, and stays inside the window sideways', () => {
+    const menuBox = { top: 0, bottom: 92, left: 0, right: 160, width: 160, height: 92 };
+    const triggerBox = {
       top: window.innerHeight - 40,
       bottom: window.innerHeight - 4,
-      left: 400,
-      right: 440,
+      left: 20,
+      right: 60,
       width: 40,
       height: 36,
+    };
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function box() {
+      return this.getAttribute('role') === 'menu' ? menuBox : triggerBox;
     });
     render(
       <OverflowMenu
@@ -245,8 +249,11 @@ describe('OverflowMenu', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'More' }));
     const menu = screen.getByRole('menu');
-    expect(menu.style.bottom).toBe('44px');
-    expect(menu.style.top).toBe('');
+    // it ends 4 px above the button
+    expect(menu.style.top).toBe(`${window.innerHeight - 40 - 4 - 92}px`);
+    // the button is near the left edge: right-aligned the menu would start at x = -100, so it keeps 8 px
+    expect(menu.style.left).toBe('8px');
+    expect(menu.style.visibility).toBe('');
     rect.mockRestore();
   });
 
