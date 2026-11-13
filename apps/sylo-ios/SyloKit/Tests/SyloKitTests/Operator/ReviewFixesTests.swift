@@ -270,7 +270,7 @@ struct BackupImportSignInTests {
 // MARK: - Progress
 
 @MainActor
-private final class Seen {
+private final class RelayValues {
     var values: [Int64] = []
 }
 
@@ -279,7 +279,7 @@ private final class Seen {
 struct ProgressTests {
     @Test("Updates from many threads in any order reach the main actor in order, ending at the newest")
     func relayIsMonotonic() async {
-        let seen = Seen()
+        let seen = RelayValues()
         let relay = ProgressRelay { sent, _ in seen.values.append(sent) }
         let values = (1...500).map { Int64($0) }.shuffled()
         await withTaskGroup(of: Void.self) { group in
