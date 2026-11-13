@@ -12,6 +12,7 @@ enum ModuleScreens {
         "logging", "moderation", "polls", "rss", "server-stats", "starboard", "sticky", "temp-voice",
         "tickets", "twitch-alerts", "verification", "welcome", "welcome-channel", "youtube-alerts",
         "events", "suggestions", "temp-roles", "auto-threads", "quote-board",
+        "introductions", "economy", "applications",
     ]
 
     @ViewBuilder
@@ -40,6 +41,9 @@ enum ModuleScreens {
         case "suggestions": SuggestionsSettingsView(server: server, session: session)
         case "temp-roles": TempRolesSettingsView(server: server, session: session)
         case "quote-board": QuoteBoardSettingsView(server: server, session: session)
+        case "introductions": IntroductionsSettingsView(server: server, session: session)
+        case "economy": EconomySettingsView(server: server, session: session)
+        case "applications": ApplicationsSettingsView(server: server, session: session)
         // Messages and channels
         case "autoresponder": AutoresponderSettingsView(server: server, session: session)
         case "auto-react": AutoReactSettingsView(server: server, session: session)
