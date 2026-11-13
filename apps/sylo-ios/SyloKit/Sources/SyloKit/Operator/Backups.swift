@@ -225,7 +225,10 @@ public final class BackupsModel {
         var sawDown = false
         do {
             try await Task.sleep(for: firstPoll)
-            while clock.now < deadline {
+            // At least one look, however late the first poll comes: then until the deadline.
+            var isFirstPoll = true
+            while isFirstPoll || clock.now < deadline {
+                isFirstPoll = false
                 guard session.generation == generation else { restoring = nil; return }
                 do {
                     let loaded = try await session.send(Endpoints.Health())

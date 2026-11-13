@@ -287,7 +287,7 @@ struct BackupsModelTests {
         }
         let model = BackupsModel(
             session: makeSignedInSession(clients: clients), firstPoll: .zero, pollEvery: .milliseconds(2),
-            giveUpAfter: .milliseconds(40))
+            giveUpAfter: .milliseconds(300))
         await model.load()
         _ = await model.restore("sylo-1.db", typed: "sylo-1.db")
         #expect(model.restoring == nil)

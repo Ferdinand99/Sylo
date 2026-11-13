@@ -96,7 +96,7 @@ struct RestoreWaitTests {
         }
     }
 
-    private func makeModel(_ clients: StubClients, giveUpAfter: Duration = .milliseconds(60)) -> BackupsModel {
+    private func makeModel(_ clients: StubClients, giveUpAfter: Duration = .milliseconds(400)) -> BackupsModel {
         BackupsModel(
             session: makeSignedInSession(clients: clients), firstPoll: .zero, pollEvery: .milliseconds(2),
             giveUpAfter: giveUpAfter)
