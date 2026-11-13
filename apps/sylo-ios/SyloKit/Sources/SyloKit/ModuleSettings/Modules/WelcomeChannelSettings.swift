@@ -132,9 +132,6 @@ public struct WelcomeChannelCreated: Decodable, Sendable, Equatable {
     }
 }
 
-/// `{}`, the body of a POST that only names an action.
-struct EmptyBody: Encodable, Sendable {}
-
 extension Endpoints {
     private static func welcomeChannelPath(_ server: ServerID, _ action: String) -> String {
         "/api/v2/guilds/\(server.pathComponent)/modules/welcome-channel/\(action)"
