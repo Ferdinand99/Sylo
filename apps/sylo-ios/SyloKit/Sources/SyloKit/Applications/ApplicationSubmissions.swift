@@ -4,8 +4,8 @@ import Observation
 // Application submissions (src/web/routes/v2Applications.js: `/applications/submissions`,
 // `/applications/submissions/:id` and `/applications/submissions/:id/decide`). Staff read what
 // members sent in and accept or deny with an optional reason, the same calls the dashboard makes.
-// Retrying roles, deleting a submission, a member's history and the export stay in the web
-// dashboard. Every one of these calls is staff only on the server, because answers are personal.
+// Retrying roles, deleting a submission and a member's history are in ApplicationActions.swift. Every
+// one of these calls is staff only on the server, because answers are personal.
 
 /// Where an application stands.
 public enum ApplicationStatus: Hashable, Sendable, RawRepresentable {
@@ -150,7 +150,7 @@ public struct ApplicationSubmission: Decodable, Sendable, Hashable, Identifiable
     public let dmNote: String
     /// The answers were cleared (the member used /forget).
     public let cleared: Bool
-    /// Role changes that failed and wait to be retried in the web dashboard.
+    /// Role changes that failed and wait to be retried.
     public let rolesPending: [ApplicationRoleChange]
     public let answers: [ApplicationAnswer]
     public let history: [ApplicationHistoryEntry]
@@ -280,16 +280,18 @@ public struct ApplicationDecision: Decodable, Sendable, Equatable {
 
 extension Endpoints {
     /// `GET /api/v2/guilds/:id/applications/submissions`: newest first, 25 to a page; `status`
-    /// narrows it to one status.
+    /// narrows it to one status and `formId` to one form.
     public struct ApplicationSubmissions: APIEndpoint {
         public typealias Response = ApplicationSubmissionList
         public let server: ServerID
         public let status: ApplicationStatus?
+        public let formID: Int?
         public let page: Int
 
-        public init(server: ServerID, status: ApplicationStatus? = nil, page: Int = 1) {
+        public init(server: ServerID, status: ApplicationStatus? = nil, formID: Int? = nil, page: Int = 1) {
             self.server = server
             self.status = status
+            self.formID = formID
             self.page = page
         }
 
@@ -297,6 +299,7 @@ extension Endpoints {
         public var query: [URLQueryItem] {
             var items: [URLQueryItem] = []
             if let status { items.append(URLQueryItem(name: "status", value: status.rawValue)) }
+            if let formID { items.append(URLQueryItem(name: "formId", value: String(formID))) }
             if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
             return items
         }
@@ -352,6 +355,8 @@ public final class ApplicationSubmissionsModel {
     public let server: ServerID
     /// Which status the list shows; nil for all.
     public var filter: ApplicationStatus? = .pending
+    /// Which form the list shows; nil for all.
+    public var formFilter: Int?
     public private(set) var submissions: [ApplicationSubmission] = []
     /// How many applications match the filter in all.
     public private(set) var total = 0
@@ -362,6 +367,7 @@ public final class ApplicationSubmissionsModel {
 
     private var page = 0
     private var loadedFilter: ApplicationStatus?
+    private var loadedForm: Int?
     /// Goes up with every new list, so a slow answer for an old filter is dropped.
     private var generation = 0
     private let session: AppSession
@@ -380,10 +386,13 @@ public final class ApplicationSubmissionsModel {
         isLoading = true
         defer { if mine == generation { isLoading = false } }
         let asked = filter
+        let askedForm = formFilter
         do {
-            let list = try await session.send(Endpoints.ApplicationSubmissions(server: server, status: asked))
+            let list = try await session.send(
+                Endpoints.ApplicationSubmissions(server: server, status: asked, formID: askedForm))
             guard mine == generation else { return }
             loadedFilter = asked
+            loadedForm = askedForm
             submissions = list.submissions
             total = list.total
             page = list.page
@@ -404,7 +413,8 @@ public final class ApplicationSubmissionsModel {
         defer { if mine == generation { isLoading = false } }
         do {
             let list = try await session.send(
-                Endpoints.ApplicationSubmissions(server: server, status: loadedFilter, page: page + 1))
+                Endpoints.ApplicationSubmissions(
+                    server: server, status: loadedFilter, formID: loadedForm, page: page + 1))
             guard mine == generation else { return }
             var seen = Set(submissions.map(\.id))
             submissions += list.submissions.filter { seen.insert($0.id).inserted }
@@ -431,6 +441,10 @@ public final class ApplicationSubmissionModel {
     public private(set) var submission: ApplicationSubmission?
     public private(set) var isLoading = false
     public private(set) var isDeciding = false
+    /// Whether a retry of the roles or a delete is on its way.
+    public private(set) var isWorking = false
+    /// Whether the application was deleted here; the screen closes.
+    public private(set) var wasDeleted = false
     /// Why the application could not be loaded.
     public var errorMessage: String?
     /// Why a decision did not go through.
@@ -449,7 +463,7 @@ public final class ApplicationSubmissionModel {
     }
 
     /// Only a pending application can be decided.
-    public var canDecide: Bool { submission?.status == .pending && !isDeciding }
+    public var canDecide: Bool { submission?.status == .pending && !isDeciding && !isWorking }
 
     public func load() async {
         isLoading = true
@@ -491,6 +505,70 @@ public final class ApplicationSubmissionModel {
                 await load()
             } else if error != .cancelled, error != .unauthorized {
                 actionError = error.userMessage
+            }
+            return false
+        }
+    }
+
+    /// Tries the role changes that failed earlier again. What is left over stays in
+    /// ``ApplicationSubmission/rolesPending`` and is noted in ``decisionNotes``.
+    /// - Returns: Whether the call went through.
+    @discardableResult
+    public func retryRoles() async -> Bool {
+        guard submission != nil, !isWorking, !isDeciding else { return false }
+        isWorking = true
+        defer { isWorking = false }
+        actionError = nil
+        do {
+            let result = try await session.send(Endpoints.RetryApplicationRoles(server: server, id: submissionID))
+            if let fresh = result.submission {
+                submission = fresh
+            } else {
+                await load()
+            }
+            if result.remaining == 1 {
+                decisionNotes = ["1 role change still did not go through. Check that Sylo can manage the role."]
+            } else if result.remaining > 1 {
+                decisionNotes = [
+                    "\(result.remaining) role changes still did not go through. Check that Sylo can manage the roles.",
+                ]
+            } else {
+                decisionNotes = []
+            }
+            decisionCount += 1
+            return true
+        } catch {
+            let error = NetworkError(error)
+            if error != .cancelled, error != .unauthorized { actionError = EditorFailure.message(for: error) }
+            return false
+        }
+    }
+
+    /// Deletes the application with its answers and its posts. This cannot be undone.
+    /// - Returns: Whether it is gone. When a post could not be deleted the server erases the answers
+    ///   and keeps the row; the failure says so and the screen is reloaded.
+    @discardableResult
+    public func deleteSubmission() async -> Bool {
+        guard submission != nil, !isWorking, !isDeciding else { return false }
+        isWorking = true
+        defer { isWorking = false }
+        actionError = nil
+        do {
+            _ = try await session.send(Endpoints.DeleteApplicationSubmission(server: server, id: submissionID))
+            wasDeleted = true
+            return true
+        } catch {
+            let error = NetworkError(error)
+            if error == .notFound {
+                // Already gone (deleted elsewhere): the screen closes.
+                wasDeleted = true
+                return true
+            }
+            if error != .cancelled, error != .unauthorized {
+                actionError = EditorFailure.message(
+                    for: error,
+                    serverFailure: "A post could not be deleted, so the answers were erased and the application was kept.")
+                await load()
             }
             return false
         }

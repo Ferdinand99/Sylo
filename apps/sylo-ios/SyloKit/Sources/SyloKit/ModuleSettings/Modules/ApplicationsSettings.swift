@@ -5,17 +5,19 @@ import Foundation
 // forms that members answer in DMs or on the web, which staff accept or deny.
 //
 // Two layers of settings: the module's own (how long decided applications are kept, the panel
-// message's text), which the app edits, and the forms. A form is a big nested object (questions with
-// options, role rules, messages) that the dashboard saves one at a time, so the app only lists them
-// and leaves editing to the web dashboard. Submissions are in Applications/ApplicationSubmissions.swift.
+// message's text), saved with the module, and the forms. A form is a big nested object (questions
+// with options, role rules, messages) that the dashboard saves one at a time, so it has its own model
+// and calls (Applications/ApplicationForms.swift). Publishing the panel and the rest of the staff
+// actions are in Applications/ApplicationActions.swift, submissions in
+// Applications/ApplicationSubmissions.swift.
 
 /// The Applications settings page.
 public struct ApplicationsPage: ModuleSettingsPage {
     public static let moduleID: ModuleID = "applications"
 
     public let settings: ApplicationsSettings
-    /// The forms in the dashboard's order (read only here).
-    public let forms: [ApplicationFormSummary]
+    /// The forms in the dashboard's order, each with everything the editor changes.
+    public let forms: [ApplicationForm]
     public let channels: [ChannelOption]
     public let roles: [RoleOption]
     /// How many applications wait for a decision.
@@ -26,10 +28,20 @@ public struct ApplicationsPage: ModuleSettingsPage {
     public let defaultRetentionDays: Int
     /// The panel text the server posts when ``ApplicationsSettings/panelText`` is empty.
     public let defaultPanelText: String
+    /// The longest short answer a text question can allow.
+    public let shortTextMax: Int
+    /// The texts a new form starts with.
+    public let defaultMessages: ApplicationFormMessages
+    /// The placeholders the messages understand ("{user}", "{server}", "{form}", "{reason}").
+    public let placeholders: [String]
+    /// Whether the platform has threads (the staff thread option). nil when the server did not say.
+    public let supportsThreads: Bool?
 
-    public init(settings: ApplicationsSettings, forms: [ApplicationFormSummary] = [], channels: [ChannelOption] = [],
+    public init(settings: ApplicationsSettings, forms: [ApplicationForm] = [], channels: [ChannelOption] = [],
                 roles: [RoleOption] = [], pending: Int = 0, maxForms: Int = 10, defaultRetentionDays: Int = 180,
-                defaultPanelText: String = "") {
+                defaultPanelText: String = "", shortTextMax: Int = 1024,
+                defaultMessages: ApplicationFormMessages = ApplicationFormMessages(), placeholders: [String] = [],
+                supportsThreads: Bool? = nil) {
         self.settings = settings
         self.forms = forms
         self.channels = channels
@@ -38,23 +50,33 @@ public struct ApplicationsPage: ModuleSettingsPage {
         self.maxForms = maxForms
         self.defaultRetentionDays = defaultRetentionDays
         self.defaultPanelText = defaultPanelText
+        self.shortTextMax = shortTextMax
+        self.defaultMessages = defaultMessages
+        self.placeholders = placeholders
+        self.supportsThreads = supportsThreads
     }
 
     private enum CodingKeys: String, CodingKey {
         case settings = "config"
         case forms, channels, roles, pending, maxForms, defaultRetentionDays, defaultPanelText
+        case shortTextMax, defaultMessages, placeholders
+        case supportsThreads = "threads"
     }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         settings = try c.decode(forKey: .settings, or: ApplicationsSettings())
-        forms = try c.decodeLossyArray(of: ApplicationFormSummary.self, forKey: .forms)
+        forms = try c.decodeLossyArray(of: ApplicationForm.self, forKey: .forms)
         channels = try c.decode(forKey: .channels, or: [])
         roles = try c.decode(forKey: .roles, or: [])
         pending = try c.decode(forKey: .pending, or: 0)
         maxForms = try c.decode(forKey: .maxForms, or: 10)
         defaultRetentionDays = try c.decode(forKey: .defaultRetentionDays, or: 180)
         defaultPanelText = try c.decode(forKey: .defaultPanelText, or: "")
+        shortTextMax = try c.decode(forKey: .shortTextMax, or: ApplicationQuestion.defaultMaxShortText)
+        defaultMessages = try c.decode(forKey: .defaultMessages, or: ApplicationFormMessages())
+        placeholders = try c.decode(forKey: .placeholders, or: [])
+        supportsThreads = try c.decodeIfPresent(Bool.self, forKey: .supportsThreads)
     }
 }
 
@@ -82,6 +104,12 @@ public struct ApplicationsSettings: Codable, Sendable, Equatable {
 
     /// Whether the panel message is out in a channel.
     public var isPanelPublished: Bool { !panelMessageId.isEmpty }
+
+    /// Two settings are the same when the person's edits are: where the panel is published is the
+    /// server's to track, so publishing it is not an unsaved change.
+    public static func == (lhs: ApplicationsSettings, rhs: ApplicationsSettings) -> Bool {
+        lhs.retentionDays == rhs.retentionDays && lhs.panelText == rhs.panelText
+    }
 
     private enum CodingKeys: String, CodingKey { case retentionDays, panelText, panelChannelId, panelMessageId }
 
@@ -125,54 +153,5 @@ public enum ApplicationFillMode: Hashable, Sendable, RawRepresentable {
         case .both: "both"
         case .other(let raw): raw
         }
-    }
-}
-
-/// One form in the list under the settings (read only; forms are edited in the web dashboard).
-public struct ApplicationFormSummary: Decodable, Sendable, Hashable, Identifiable {
-    public let id: Int
-    public let name: String
-    /// Whether members can apply with it now.
-    public let isEnabled: Bool
-    public let fillMode: ApplicationFillMode
-    public let questionCount: Int
-    /// What still stops the form from taking applications (no questions, no channel); nil when ready.
-    public let setupProblem: String?
-    /// What is wrong with the roles the form hands out (Sylo cannot manage one); nil when fine.
-    public let rolesProblem: String?
-
-    public init(id: Int, name: String, isEnabled: Bool = true, fillMode: ApplicationFillMode = .both,
-                questionCount: Int = 0, setupProblem: String? = nil, rolesProblem: String? = nil) {
-        self.id = id
-        self.name = name
-        self.isEnabled = isEnabled
-        self.fillMode = fillMode
-        self.questionCount = questionCount
-        self.setupProblem = setupProblem
-        self.rolesProblem = rolesProblem
-    }
-
-    private enum CodingKeys: String, CodingKey { case id, name, enabled, fillMode, questions, problems }
-    private enum ProblemKeys: String, CodingKey { case setup, roles }
-
-    /// One question, of which the list only counts them.
-    private struct QuestionStub: Decodable {}
-
-    public init(from decoder: any Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        var setup: String?
-        var roles: String?
-        if c.contains(.problems), let problems = try? c.nestedContainer(keyedBy: ProblemKeys.self, forKey: .problems) {
-            setup = try? problems.decodeIfPresent(String.self, forKey: .setup)
-            roles = try? problems.decodeIfPresent(String.self, forKey: .roles)
-        }
-        self.init(
-            id: try c.decode(Int.self, forKey: .id),
-            name: try c.decode(forKey: .name, or: ""),
-            isEnabled: try c.decode(forKey: .enabled, or: false),
-            fillMode: ApplicationFillMode(rawValue: try c.decode(forKey: .fillMode, or: "both")),
-            questionCount: try c.decodeLossyArray(of: QuestionStub.self, forKey: .questions).count,
-            setupProblem: setup?.isEmpty == false ? setup : nil,
-            rolesProblem: roles?.isEmpty == false ? roles : nil)
     }
 }

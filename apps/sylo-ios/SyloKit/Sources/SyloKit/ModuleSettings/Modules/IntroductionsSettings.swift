@@ -4,10 +4,10 @@ import Foundation
 // src/web/routes/v2Intro.js; web form web-v2/src/moduleForms/Introductions.jsx): members answer a
 // few questions in DMs and Sylo posts a membership card in the introductions channel.
 //
-// The app edits the channel, the card's look and the prompt text. The questions and the role
-// groups are lists a phone edits badly, so they are read only here (and left to the web
-// dashboard), but they travel with every save: the server builds the whole config from what it is
-// sent, so leaving them out would wipe them.
+// The app edits the channel, the card's look, the questions, the role groups and the prompt text.
+// The server builds the whole config from what it is sent, so the lists travel with every save; the
+// questions only when the server sent them, so a server that sent none keeps its default ones.
+// Publishing and removing the prompt message is in Introductions/IntroPrompt.swift.
 
 /// The Introductions settings page.
 public struct IntroductionsPage: ModuleSettingsPage {
@@ -63,10 +63,10 @@ public enum IntroductionsColorChoice: Hashable, Sendable, CaseIterable {
 public struct IntroductionsSettings: Codable, Sendable, Equatable {
     /// Where the cards are posted; "" = nowhere yet.
     public var channelId: String
-    /// What members are asked, in order. Read only in the app. nil when the server sent none, so
-    /// the save leaves the field out and the server keeps its default questions.
+    /// What members are asked, in order. nil when the server sent none, so the save leaves the
+    /// field out and the server keeps its default questions.
     public var questions: [IntroductionsQuestion]?
-    /// Role groups shown on the card. Read only in the app.
+    /// Role groups shown on the card.
     public var roleGroups: [IntroductionsRoleGroup]
     /// List the member's other roles on the card.
     public var showRoles: Bool
@@ -85,6 +85,15 @@ public struct IntroductionsSettings: Codable, Sendable, Equatable {
     public let promptChannelId: String
     /// The prompt message's id (bot-managed, read only, not sent); "" = not published.
     public let promptMessageId: String
+
+    /// Two settings are the same when the person's edits are: where the prompt is published is the
+    /// server's to track, so publishing it is not an unsaved change.
+    public static func == (lhs: IntroductionsSettings, rhs: IntroductionsSettings) -> Bool {
+        lhs.channelId == rhs.channelId && lhs.questions == rhs.questions && lhs.roleGroups == rhs.roleGroups
+            && lhs.showRoles == rhs.showRoles && lhs.colorMode == rhs.colorMode && lhs.color == rhs.color
+            && lhs.description == rhs.description && lhs.footer == rhs.footer
+            && lhs.deleteOnLeave == rhs.deleteOnLeave && lhs.promptText == rhs.promptText
+    }
 
     public init(channelId: String = "", questions: [IntroductionsQuestion]? = [],
                 roleGroups: [IntroductionsRoleGroup] = [], showRoles: Bool = false,
@@ -111,12 +120,60 @@ public struct IntroductionsSettings: Codable, Sendable, Equatable {
     public static let maxPromptTextLength = 500
     public static let maxQuestions = 8
     public static let maxRoleGroups = 10
+    /// The most roles one group holds.
+    public static let maxRolesPerGroup = 25
 
     /// The colour the form starts a custom colour from.
     public static let fallbackColor = "#7aa2f7"
 
     /// Whether the prompt message is out in a channel.
     public var isPromptPublished: Bool { !promptMessageId.isEmpty }
+
+    // MARK: Editing the lists
+
+    /// Moves questions the way `onMove` reports it.
+    public mutating func moveQuestions(fromOffsets source: IndexSet, toOffset destination: Int) {
+        guard var moved = questions else { return }
+        FormListOrder.move(&moved, fromOffsets: source, toOffset: destination)
+        questions = moved
+    }
+
+    /// Adds an empty question (up to ``maxQuestions``).
+    /// - Returns: Whether there was room.
+    @discardableResult
+    public mutating func addQuestion() -> Bool {
+        let current = questions ?? []
+        guard current.count < Self.maxQuestions else { return false }
+        questions = current + [IntroductionsQuestion.blank()]
+        return true
+    }
+
+    /// Adds an empty role group (up to ``maxRoleGroups``).
+    /// - Returns: Whether there was room.
+    @discardableResult
+    public mutating func addRoleGroup() -> Bool {
+        guard roleGroups.count < Self.maxRoleGroups else { return false }
+        roleGroups.append(IntroductionsRoleGroup())
+        return true
+    }
+
+    /// Why the settings cannot be saved yet; nil when they can. The server drops a question without a
+    /// label, a role group without a name and a second group with the same name without a word, so the
+    /// app refuses to save them instead of losing what was typed.
+    public var problem: String? {
+        if (questions ?? []).contains(where: { $0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+            return "Give every question a label."
+        }
+        let names = roleGroups.map { $0.cleanName.lowercased() }
+        if names.contains("") { return "Give every role group a name." }
+        if Set(names).count != names.count { return "Two role groups have the same name." }
+        return nil
+    }
+
+    /// The placeholders for the role groups that have a name, as the description and footer take them.
+    public var roleGroupPlaceholders: [String] {
+        roleGroups.map(\.cleanName).filter { !$0.isEmpty }.map { "{rolegroup:\($0)}" }
+    }
 
     /// The colour as the web form offers it.
     public var colorChoice: IntroductionsColorChoice {
@@ -211,6 +268,16 @@ public struct IntroductionsQuestion: Codable, Sendable, Equatable, Identifiable 
     /// Shown side by side with the next one on the card.
     public var inline: Bool
 
+    /// The limits the server enforces.
+    public static let maxLabelLength = 45
+    public static let maxPromptLength = 300
+    public static let answerLengthRange = 1...1024
+
+    /// An empty question for the editor. Its id is made here; the server keeps it.
+    public static func blank() -> IntroductionsQuestion {
+        IntroductionsQuestion(id: "q" + UUID().uuidString.prefix(8).lowercased(), label: "", maxLength: 300)
+    }
+
     public init(id: String, label: String, prompt: String = "", required: Bool = false, maxLength: Int = 500,
                 inline: Bool = false) {
         self.id = id
@@ -235,19 +302,37 @@ public struct IntroductionsQuestion: Codable, Sendable, Equatable, Identifiable 
     }
 }
 
-/// A group of roles listed on the card under one name (for example Country). Sent back as it came.
+/// A group of roles listed on the card under one name (for example Country).
 public struct IntroductionsRoleGroup: Codable, Sendable, Equatable, Identifiable {
     public var name: String
     public var roleIds: [String]
     /// Leave the group out of a card that has none of its roles.
     public var hideWhenEmpty: Bool
+    /// Tells groups apart while a name is being typed (the name is the group's identity on the
+    /// server, but changes with every key). Never sent, never part of what makes two groups equal.
+    public let key: String
 
-    public var id: String { name }
+    public var id: String { key }
 
-    public init(name: String, roleIds: [String] = [], hideWhenEmpty: Bool = false) {
+    public init(name: String = "", roleIds: [String] = [], hideWhenEmpty: Bool = false,
+                key: String = UUID().uuidString) {
         self.name = name
         self.roleIds = roleIds
         self.hideWhenEmpty = hideWhenEmpty
+        self.key = key
+    }
+
+    public static func == (lhs: IntroductionsRoleGroup, rhs: IntroductionsRoleGroup) -> Bool {
+        lhs.name == rhs.name && lhs.roleIds == rhs.roleIds && lhs.hideWhenEmpty == rhs.hideWhenEmpty
+    }
+
+    public static let maxNameLength = 45
+
+    /// The name as the server stores it: no braces (it sits inside `{rolegroup:<name>}`), spaces
+    /// collapsed and trimmed.
+    public var cleanName: String {
+        name.replacingOccurrences(of: "{", with: "").replacingOccurrences(of: "}", with: "")
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     private enum CodingKeys: String, CodingKey { case name, roleIds, hideWhenEmpty }
@@ -258,5 +343,12 @@ public struct IntroductionsRoleGroup: Codable, Sendable, Equatable, Identifiable
             name: try c.decode(String.self, forKey: .name),
             roleIds: try c.decode(forKey: .roleIds, or: []),
             hideWhenEmpty: try c.decode(forKey: .hideWhenEmpty, or: false))
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(name, forKey: .name)
+        try c.encode(roleIds, forKey: .roleIds)
+        try c.encode(hideWhenEmpty, forKey: .hideWhenEmpty)
     }
 }

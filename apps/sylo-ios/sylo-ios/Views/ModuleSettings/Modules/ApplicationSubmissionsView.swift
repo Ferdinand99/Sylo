@@ -1,16 +1,24 @@
 import SwiftUI
 import SyloKit
 
-/// The application inbox: pending ones first, filtered by status, newest first. A row opens the
-/// application with its answers.
+/// The application inbox: pending ones first, filtered by status and form, newest first. A row opens
+/// the application with its answers.
 struct ApplicationSubmissionsView: View {
     @State private var model: ApplicationSubmissionsModel
     private let server: ServerID
     private let session: AppSession
+    private let forms: [ApplicationForm]
 
-    init(server: ServerID, session: AppSession) {
+    /// What the list shows; a change loads it again.
+    private struct Filter: Hashable {
+        let status: ApplicationStatus?
+        let form: Int?
+    }
+
+    init(server: ServerID, session: AppSession, forms: [ApplicationForm] = []) {
         self.server = server
         self.session = session
+        self.forms = forms
         _model = State(initialValue: ApplicationSubmissionsModel(server: server, session: session))
     }
 
@@ -27,6 +35,14 @@ struct ApplicationSubmissionsView: View {
                     Text("Withdrawn").tag(ApplicationStatus?.some(.withdrawn))
                     Text("All").tag(ApplicationStatus?.none)
                 }
+                if forms.count > 1 {
+                    Picker("Form", selection: $model.formFilter) {
+                        Text("All forms").tag(Int?.none)
+                        ForEach(forms) { form in
+                            Text(verbatim: form.name).tag(form.id)
+                        }
+                    }
+                }
             }
             Section {
                 ForEach(model.submissions) { submission in
@@ -34,7 +50,7 @@ struct ApplicationSubmissionsView: View {
                         ApplicationSubmissionView(server: server, session: session, submissionID: submission.id,
                                                   applicant: submission.applicantName)
                     } label: {
-                        SubmissionRow(submission: submission)
+                        ApplicationSubmissionRow(submission: submission)
                     }
                 }
                 if model.canLoadMore {
@@ -69,19 +85,21 @@ struct ApplicationSubmissionsView: View {
         .navigationTitle("Applications")
         .navigationBarTitleDisplayMode(.inline)
         // Comes back from an application fresh, and reloads when the filter changes.
-        .task(id: model.filter) { await model.load() }
+        .task(id: Filter(status: model.filter, form: model.formFilter)) { await model.load() }
         .refreshable { await model.load() }
     }
 }
 
 /// One application: who, for which form, how it stands and when it came in.
-private struct SubmissionRow: View {
+struct ApplicationSubmissionRow: View {
     let submission: ApplicationSubmission
+    /// False where the list is one member's, so their name is not repeated on every row.
+    var showsApplicant = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline) {
-                Text(verbatim: submission.applicantName)
+                Text(verbatim: showsApplicant ? submission.applicantName : submission.formName)
                     .font(.headline)
                     .lineLimit(1)
                 Spacer(minLength: 8)
@@ -98,7 +116,7 @@ private struct SubmissionRow: View {
 
     /// "Staff · 3 min. ago".
     private var details: String {
-        var parts = [submission.formName]
+        var parts = showsApplicant ? [submission.formName] : []
         if let date = submission.createdDate { parts.append(DateText.relative(date)) }
         return parts.joined(separator: " · ")
     }
@@ -109,10 +127,16 @@ struct ApplicationSubmissionView: View {
     @State private var model: ApplicationSubmissionModel
     @State private var action: ApplicationDecisionAction = .accept
     @State private var isAsking = false
+    @State private var isConfirmingDelete = false
     @State private var reason = ""
+    @Environment(\.dismiss) private var dismiss
+    private let server: ServerID
+    private let session: AppSession
     private let applicant: String
 
     init(server: ServerID, session: AppSession, submissionID: Int, applicant: String) {
+        self.server = server
+        self.session = session
         self.applicant = applicant
         _model = State(initialValue: ApplicationSubmissionModel(
             server: server, submissionID: submissionID, session: session))
@@ -154,10 +178,20 @@ struct ApplicationSubmissionView: View {
         } message: {
             Text("The applicant is told by direct message. The reason is added to it.")
         }
-        .alert("Couldn't Decide", isPresented: isShowingActionError, presenting: model.actionError) { _ in
+        .confirmationDialog("Delete This Application?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+            Button("Delete Application", role: .destructive) {
+                Task { await model.deleteSubmission() }
+            }
+        } message: {
+            Text("The answers and the posts in the channels are deleted. This cannot be undone.")
+        }
+        .alert("Something Went Wrong", isPresented: isShowingActionError, presenting: model.actionError) { _ in
             Button("OK") {}
         } message: { message in
             Text(message)
+        }
+        .onChange(of: model.wasDeleted) {
+            if model.wasDeleted { dismiss() }
         }
         .sensoryFeedback(.success, trigger: model.decisionCount)
     }
@@ -210,10 +244,14 @@ struct ApplicationSubmissionView: View {
                 ForEach(Array(submission.rolesPending.enumerated()), id: \.offset) { _, change in
                     Label(Self.title(of: change), systemImage: "person.crop.circle.badge.exclamationmark")
                 }
+                Button("Retry the Roles", systemImage: "arrow.clockwise") {
+                    Task { await model.retryRoles() }
+                }
+                .disabled(model.isWorking)
             } header: {
                 Text("Roles waiting")
             } footer: {
-                Text("These role changes did not go through. Retry them in the web dashboard.")
+                Text("These role changes did not go through. Check that Sylo can manage the roles, then retry.")
             }
         }
 
@@ -255,6 +293,21 @@ struct ApplicationSubmissionView: View {
                     ListLine(title: Self.actionTitle(entry.action), details: Self.details(of: entry))
                 }
             }
+        }
+
+        Section {
+            NavigationLink {
+                ApplicantHistoryView(
+                    server: server, session: session, userID: submission.userId, name: submission.applicantName)
+            } label: {
+                Label("Everything From This Member", systemImage: "person.text.rectangle")
+            }
+            Button("Delete Application", systemImage: "trash", role: .destructive) {
+                isConfirmingDelete = true
+            }
+            .disabled(model.isWorking || model.isDeciding)
+        } footer: {
+            Text("Deleting removes the answers and the posts. It cannot be undone.")
         }
     }
 

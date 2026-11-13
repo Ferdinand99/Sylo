@@ -1,13 +1,19 @@
 import SwiftUI
 import SyloKit
 
-/// Applications: how long decided applications are kept and the text of the panel message, the
-/// forms listed read only, and a way in to the submissions, where staff read answers and accept or
-/// deny. Writing and changing forms (questions, requirements, roles, messages), publishing the
-/// panel and the export stay in the web dashboard. Mirrors web-v2/src/moduleForms/Applications.jsx.
+/// Applications: the forms (created, edited, deleted and ordered here), a way in to the submissions
+/// where staff read answers and accept or deny, how long decided applications are kept, and the panel
+/// message with its Apply buttons (published and removed here). Mirrors
+/// web-v2/src/moduleForms/Applications.jsx.
 struct ApplicationsSettingsView: View {
     @State private var model: ModuleSettingsModel<ApplicationsPage>
     @State private var note: ModulePlatformNoteModel
+    @State private var panel: ApplicationsPanelModel
+    /// The channel picked for the panel; nil until the person picks one, so it follows the stored one.
+    @State private var pickedPanelChannel: String?
+    @State private var isConfirmingRemove = false
+    /// Owned here so the Edit button inside the forms section can switch the whole list to reordering.
+    @State private var editMode = EditMode.inactive
     private let server: ServerID
     private let session: AppSession
 
@@ -16,6 +22,7 @@ struct ApplicationsSettingsView: View {
         self.session = session
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
         _note = State(initialValue: ModulePlatformNoteModel(server: server, module: ApplicationsPage.moduleID, session: session))
+        _panel = State(initialValue: ApplicationsPanelModel(server: server, session: session))
     }
 
     var body: some View {
@@ -25,7 +32,7 @@ struct ApplicationsSettingsView: View {
 
             Section {
                 NavigationLink {
-                    ApplicationSubmissionsView(server: server, session: session)
+                    ApplicationSubmissionsView(server: server, session: session, forms: page.forms)
                 } label: {
                     LabeledContent {
                         if page.pending > 0 {
@@ -36,8 +43,11 @@ struct ApplicationsSettingsView: View {
                     }
                 }
             } footer: {
-                Text("Read what members sent in, then accept or deny with an optional reason.")
+                Text("Read what members sent in, then accept or deny with an optional reason. Answers can be exported, retried and deleted there.")
             }
+
+            ApplicationFormsSection(
+                server: server, session: session, page: page, onChanged: { await model.load() })
 
             Section {
                 NumberField(title: "Keep decided applications", value: $settings.retentionDays,
@@ -51,46 +61,156 @@ struct ApplicationsSettingsView: View {
             Section {
                 TextArea(title: "Panel text", text: $settings.panelText,
                          limit: ApplicationsSettings.maxPanelTextLength, lines: 2...6)
+                ChannelPicker(title: "Channel", selection: panelChannel(page: page), channels: page.channels,
+                              noneTitle: "Choose a channel")
                 LabeledContent("Message") {
-                    Text(settings.isPanelPublished ? "Published" : "Not published")
+                    Text(panelStatus(page: page))
+                }
+                Button(page.settings.isPanelPublished ? "Republish Panel" : "Publish Panel",
+                       systemImage: "paperplane") {
+                    publish(text: settings.panelText, page: page)
+                }
+                .disabled(panelChannel(page: page).wrappedValue.isEmpty || panel.isBusy)
+                if page.settings.isPanelPublished {
+                    Button("Remove Panel", systemImage: "trash", role: .destructive) {
+                        isConfirmingRemove = true
+                    }
+                    .disabled(panel.isBusy)
+                }
+                if let message = panel.errorMessage {
+                    StatusMessage(message, kind: .error)
+                }
+                if let notice = panel.notice {
+                    StatusMessage(notice, kind: .notice)
                 }
             } header: {
                 Text("Panel message")
             } footer: {
-                Text(Self.panelFooter(settings: settings, defaultText: page.defaultPanelText))
+                Text(Self.panelFooter(defaultText: page.defaultPanelText))
             }
-
-            Section {
-                if page.forms.isEmpty {
-                    Text("No forms yet.").foregroundStyle(.secondary)
-                }
-                ForEach(page.forms) { form in
-                    FormLine(form: form)
-                }
-            } header: {
-                Text("Forms")
-            } footer: {
-                Text("Create and edit forms in the web dashboard.")
-            }
-
-            DashboardLinkSection(
-                server: server, module: ApplicationsPage.moduleID,
-                footer: "Forms, the panel message and the export of answers are managed in the web dashboard.")
         }
+        .environment(\.editMode, $editMode)
         .task { await note.load() }
+        .confirmationDialog("Remove the panel message?", isPresented: $isConfirmingRemove, titleVisibility: .visible) {
+            Button("Remove Message", role: .destructive) { remove() }
+        } message: {
+            Text("The message is deleted from the channel. Members can still use /apply.")
+        }
+        .sensoryFeedback(.success, trigger: panel.successCount)
     }
 
-    private static func panelFooter(settings: ApplicationsSettings, defaultText: String) -> String {
-        var text = String(localized: "A message with Apply buttons, pinned in a channel. Leave the text empty for Sylo's own.")
+    // MARK: - The panel
+
+    /// The channel the panel is published in, or the one picked for it.
+    private func panelChannel(page: ApplicationsPage) -> Binding<String> {
+        Binding(
+            get: { pickedPanelChannel ?? page.settings.panelChannelId },
+            set: { pickedPanelChannel = $0 })
+    }
+
+    private func panelStatus(page: ApplicationsPage) -> String {
+        guard page.settings.isPanelPublished else { return String(localized: "Not published") }
+        if let channel = page.channels.first(where: { $0.id == page.settings.panelChannelId }) {
+            return String(localized: "Published in #\(channel.name)")
+        }
+        return String(localized: "Published")
+    }
+
+    /// Posts the panel with the text as typed (it is saved with it) and loads the page again, so the
+    /// status is the server's.
+    private func publish(text: String, page: ApplicationsPage) {
+        let channel = panelChannel(page: page).wrappedValue
+        Task {
+            if await panel.publish(channelId: channel, text: text) != nil {
+                pickedPanelChannel = nil
+                await model.load()
+            }
+        }
+    }
+
+    private func remove() {
+        Task {
+            if await panel.unpublish() != nil {
+                pickedPanelChannel = nil
+                await model.load()
+            }
+        }
+    }
+
+    private static func panelFooter(defaultText: String) -> String {
+        var text = String(localized: "A message with Apply buttons, pinned in a channel. Leave the text empty for Sylo's own. Publishing again sends a new panel and deletes the old one.")
         if !defaultText.isEmpty { text += " " + String(localized: "Default: \(defaultText)") }
-        text += " " + String(localized: "Publish or remove the message in the web dashboard.")
         return text
+    }
+}
+
+/// The forms: each opens its editor, new ones are added here, and edit mode reorders them.
+private struct ApplicationFormsSection: View {
+    @State private var order: ApplicationFormOrderModel
+    private let server: ServerID
+    private let session: AppSession
+    private let page: ApplicationsPage
+    private let onChanged: () async -> Void
+
+    init(server: ServerID, session: AppSession, page: ApplicationsPage, onChanged: @escaping () async -> Void) {
+        self.server = server
+        self.session = session
+        self.page = page
+        self.onChanged = onChanged
+        _order = State(initialValue: ApplicationFormOrderModel(server: server, forms: page.forms, session: session))
+    }
+
+    var body: some View {
+        Section {
+            if order.forms.isEmpty {
+                Text("No forms yet.").foregroundStyle(.secondary)
+            }
+            ForEach(order.forms) { form in
+                NavigationLink {
+                    ApplicationFormEditorView(
+                        server: server, session: session, form: form, page: page, onChanged: onChanged)
+                } label: {
+                    FormLine(form: form)
+                }
+            }
+            .onMove { source, destination in
+                Task { await order.move(fromOffsets: source, toOffset: destination) }
+            }
+            NavigationLink {
+                ApplicationFormEditorView(
+                    server: server, session: session, form: .blank(messages: page.defaultMessages), page: page,
+                    onChanged: onChanged)
+            } label: {
+                Label("New Form", systemImage: "plus")
+            }
+            .disabled(order.forms.count >= page.maxForms)
+            if let message = order.errorMessage {
+                StatusMessage(message, kind: .error)
+            }
+        } header: {
+            HStack {
+                Text("Forms")
+                Spacer()
+                if order.forms.count > 1 {
+                    EditButton().textCase(nil)
+                }
+            }
+        } footer: {
+            if order.forms.count >= page.maxForms {
+                Text("A server can have at most \(page.maxForms) forms.")
+            } else {
+                Text("Each form has its own questions, requirements, channels and roles.")
+            }
+        }
+        .onChange(of: page.forms) {
+            order.sync(page.forms)
+        }
     }
 }
 
 /// One form: its name, whether it takes applications, and what still stops it.
 private struct FormLine: View {
-    let form: ApplicationFormSummary
+    let form: ApplicationForm
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -139,10 +259,12 @@ extension ApplicationFillMode {
         return ApplicationsPage(
             settings: ApplicationsSettings(retentionDays: 90, panelText: "Apply here"),
             forms: [
-                ApplicationFormSummary(id: 1, name: "Staff", isEnabled: true, questionCount: 5),
-                ApplicationFormSummary(id: 2, name: "Builder", isEnabled: false, fillMode: .web,
-                                       setupProblem: "The form has no questions."),
+                ApplicationForm(id: 1, name: "Staff", enabled: true,
+                                questions: [ApplicationQuestion(id: "q1", label: "Why?")]),
+                ApplicationForm(id: 2, name: "Builder", enabled: false, fillMode: .web,
+                                setupProblem: "The form has no questions."),
             ],
+            channels: [ChannelOption(id: "c1", name: "applications")],
             pending: 3, defaultPanelText: "Press a button to apply.")
     }
     NavigationStack {
