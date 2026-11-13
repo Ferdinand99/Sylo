@@ -15,6 +15,13 @@ const count = (lines, label, one, many) =>
   num(lines, label) > 0 ? [noun(num(lines, label), one, many)] : [];
 
 // id -> (lines) => string[]
+const LEVEL_UPS = {
+  channel: 'level-ups in a channel',
+  reply: 'level-ups as a reply',
+  dm: 'level-ups by DM',
+  off: 'level-ups off',
+};
+
 const FORMAT = {
   general: (l) => [
     isOn(l, 'Mod-log channel') ? `Mod-log in ${value(l, 'Mod-log channel')}` : 'No mod-log channel yet',
@@ -147,9 +154,14 @@ const FORMAT = {
     ...(isOn(l, 'Channel') ? [value(l, 'Channel')] : ['No channel yet']),
     ...(isOn(l, 'Ping role') ? [`pings ${value(l, 'Ping role')}`] : []),
   ],
-  reminders: (l) => (isOn(l, 'Reminders') ? [`${value(l, 'Reminders')} reminders`.replace(' · ', ', ')] : []),
+  reminders: (l) => {
+    // the line says "3 active" or "3 active · 1 off"
+    const m = /^(\d+) active(?: · (\d+) off)?$/.exec(value(l, 'Reminders') ?? '');
+    if (!m) return [];
+    return [noun(Number(m[1]), 'active reminder'), ...(m[2] ? [`${m[2]} off`] : [])];
+  },
   leveling: (l) => [
-    ...(value(l, 'Announce') ? [`level-ups ${value(l, 'Announce').toLowerCase()}`] : []),
+    ...(LEVEL_UPS[value(l, 'Announce')] ? [LEVEL_UPS[value(l, 'Announce')]] : []),
     ...count(l, 'Reward roles', 'reward role'),
   ],
   economy: (l) =>

@@ -1,30 +1,69 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+
+// Room a menu needs below its button before it opens upward instead (a row's height is about 40 px).
+const ITEM_HEIGHT = 40;
+const MENU_PADDING = 12;
 
 /**
  * A "⋯" button that opens a small menu of the less common actions of a row, so the row's buttons stay on
  * one line. Items are { label, onClick, danger?, disabled? }. It is a real menu button: Escape and a click
- * outside close it, the arrow keys move between the items, and focus goes back to the button on close.
+ * outside close it, the arrow keys move between the items, and focus goes back to the button on close
+ * (also after an action).
+ *
+ * The menu is drawn in its own layer on the page (a portal with a fixed position), so a list with
+ * `overflow: hidden` around the row never clips it, and it opens upward when there is no room below. It
+ * closes when the page scrolls or the window is resized, since it would no longer sit under its button.
  *
  *   <OverflowMenu label="More actions for Golden Anchor" items={[{ label: 'Pause', onClick }, …]} />
  */
 export default function OverflowMenu({ label, items }) {
   const [open, setOpen] = useState(false);
+  const [place, setPlace] = useState(null);
   const root = useRef(null);
   const button = useRef(null);
+  const menu = useRef(null);
   const menuId = useId();
+
+  // Where the menu goes, read from the button when it opens.
+  useLayoutEffect(() => {
+    if (!open || !button.current) return;
+    const rect = button.current.getBoundingClientRect();
+    const need = items.length * ITEM_HEIGHT + MENU_PADDING;
+    const below = window.innerHeight - rect.bottom;
+    const up = below < need && rect.top > below;
+    setPlace({
+      right: Math.max(8, window.innerWidth - rect.right),
+      ...(up ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }),
+    });
+  }, [open, items.length]);
 
   useEffect(() => {
     if (!open) return undefined;
     const away = (e) => {
-      if (!root.current?.contains(e.target)) setOpen(false);
+      if (!root.current?.contains(e.target) && !menu.current?.contains(e.target)) setOpen(false);
     };
+    const leave = () => setOpen(false);
     document.addEventListener('pointerdown', away);
-    root.current?.querySelector('[role="menuitem"]:not(:disabled)')?.focus();
-    return () => document.removeEventListener('pointerdown', away);
+    window.addEventListener('scroll', leave, true);
+    window.addEventListener('resize', leave);
+    return () => {
+      document.removeEventListener('pointerdown', away);
+      window.removeEventListener('scroll', leave, true);
+      window.removeEventListener('resize', leave);
+    };
   }, [open]);
+
+  useEffect(() => {
+    if (open && place)
+      menu.current?.querySelector('[role="menuitem"]:not(:disabled)')?.focus({ preventScroll: true });
+    // only when the menu has just been placed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, place === null]);
 
   function close() {
     setOpen(false);
+    setPlace(null);
     button.current?.focus();
   }
 
@@ -36,14 +75,14 @@ export default function OverflowMenu({ label, items }) {
     }
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     e.preventDefault();
-    const entries = [...root.current.querySelectorAll('[role="menuitem"]:not(:disabled)')];
+    const entries = [...menu.current.querySelectorAll('[role="menuitem"]:not(:disabled)')];
     const at = entries.indexOf(document.activeElement);
     const next = (at + (e.key === 'ArrowDown' ? 1 : -1) + entries.length) % entries.length;
-    entries[next]?.focus();
+    entries[next]?.focus({ preventScroll: true });
   }
 
   return (
-    <div className="v2-overflow" ref={root} onKeyDown={open ? onKeyDown : undefined}>
+    <div className="v2-overflow" ref={root}>
       <button
         ref={button}
         type="button"
@@ -52,29 +91,40 @@ export default function OverflowMenu({ label, items }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (open ? close() : setOpen(true))}
       >
         <span aria-hidden="true">⋯</span>
       </button>
-      {open ? (
-        <div className="v2-overflow-menu" role="menu" id={menuId} aria-label={label}>
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              className={`v2-overflow-item${item.danger ? ' is-danger' : ''}`}
-              disabled={item.disabled}
-              onClick={() => {
-                setOpen(false);
-                item.onClick();
-              }}
+      {open && place
+        ? createPortal(
+            <div
+              ref={menu}
+              className="v2-overflow-menu"
+              role="menu"
+              id={menuId}
+              aria-label={label}
+              style={{ position: 'fixed', ...place }}
+              onKeyDown={onKeyDown}
             >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+              {items.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  role="menuitem"
+                  className={`v2-overflow-item${item.danger ? ' is-danger' : ''}`}
+                  disabled={item.disabled}
+                  onClick={() => {
+                    close();
+                    item.onClick();
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

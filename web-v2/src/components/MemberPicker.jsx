@@ -4,12 +4,15 @@ import { searchMembers } from '../api.js';
 import { rememberMember, useMemberNames } from '../memberNames.js';
 
 const MIN_QUERY = 2;
+const ID = /^\d{17,20}$/;
 
 /**
  * Pick one member by name instead of pasting an id: type two letters, pick from the members Sylo knows.
- * The chosen member shows as a name with a button to clear it. `value` is the member id ('' for nobody).
+ * A member who has left, or who Sylo has not cached, can still be picked by pasting the member's id (17 to
+ * 20 digits), which is offered as the one option. The chosen member shows as a name with a button to clear
+ * it. `value` is the member id ('' for nobody).
  *
- *   <MemberPicker id="as-user" label="Member" value={userId} onChange={setUserId} />
+ *   <MemberPicker id="as-user" value={userId} onChange={setUserId} />
  */
 export default function MemberPicker({ id, value, onChange, placeholder = 'All members' }) {
   const { guildId } = useParams();
@@ -19,11 +22,12 @@ export default function MemberPicker({ id, value, onChange, placeholder = 'All m
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const names = useMemberNames(value ? `<@${value}>` : '');
-  const shown = value ? (names.get(value) ?? 'This member') : '';
+  // A member the server cannot name (left, or not cached) shows by the end of the id.
+  const shown = value ? (names.get(value) ?? `member …${value.slice(-4)}`) : '';
 
   useEffect(() => {
     const q = text.trim();
-    if (q.length < MIN_QUERY) {
+    if (q.length < MIN_QUERY || ID.test(q)) {
       setFound([]);
       return undefined;
     }
@@ -41,7 +45,7 @@ export default function MemberPicker({ id, value, onChange, placeholder = 'All m
   }, [text, guildId]);
 
   function pick(m) {
-    rememberMember(guildId, m.id, m.name);
+    if (m.name) rememberMember(guildId, m.id, m.name);
     onChange(m.id);
     setText('');
     setFound([]);
@@ -51,9 +55,10 @@ export default function MemberPicker({ id, value, onChange, placeholder = 'All m
   if (value) {
     return (
       <div className="v2-member-picked">
-        <span className="v2-mention-chip" id={id}>
+        {/* an <output> so the field's label still points at something labelable */}
+        <output className="v2-mention-chip" id={id}>
           @{shown}
-        </span>
+        </output>
         <button
           type="button"
           className="v2-btn-ghost v2-member-clear"
@@ -66,7 +71,14 @@ export default function MemberPicker({ id, value, onChange, placeholder = 'All m
     );
   }
 
-  const list = open ? found : [];
+  const typed = text.trim();
+  // A pasted id is one option of its own; names come from the search.
+  const list = !open
+    ? []
+    : ID.test(typed)
+      ? [{ id: typed, name: '', label: `Use the member id ${typed}` }]
+      : found.map((m) => ({ ...m, label: m.name }));
+  const optionId = (i) => `${listId}-${i}`;
   return (
     <div className="v2-mention-wrap">
       <input
@@ -75,6 +87,7 @@ export default function MemberPicker({ id, value, onChange, placeholder = 'All m
         role="combobox"
         aria-expanded={list.length > 0}
         aria-controls={list.length ? listId : undefined}
+        aria-activedescendant={list.length ? optionId(active) : undefined}
         aria-autocomplete="list"
         autoComplete="off"
         placeholder={placeholder}
@@ -98,14 +111,15 @@ export default function MemberPicker({ id, value, onChange, placeholder = 'All m
           }
         }}
       />
-      {text.trim().length > 0 && text.trim().length < MIN_QUERY ? (
-        <p className="v2-field-hint">Type at least two letters of a name.</p>
+      {typed.length > 0 && typed.length < MIN_QUERY ? (
+        <p className="v2-field-hint">Type at least two letters of a name, or paste a member id.</p>
       ) : null}
       {list.length ? (
         <ul className="v2-mention-pop" role="listbox" id={listId} aria-label="Members">
           {list.map((m, i) => (
             <li
               key={m.id}
+              id={optionId(i)}
               role="option"
               aria-selected={i === active}
               className={`v2-mention-option${i === active ? ' is-active' : ''}`}
@@ -118,7 +132,7 @@ export default function MemberPicker({ id, value, onChange, placeholder = 'All m
               <span className="v2-mention-kind" aria-hidden="true">
                 @
               </span>
-              {m.name}
+              {m.label}
               {m.username && m.username !== m.name ? (
                 <span className="v2-field-hint"> {m.username}</span>
               ) : null}

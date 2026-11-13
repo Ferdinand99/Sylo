@@ -84,6 +84,22 @@ test('counts are nouns with the right plural, and zero says nothing', () => {
   );
 });
 
+test('reminders and level-ups read naturally', () => {
+  assert.deepEqual(summaryParts('reminders', [line('Reminders', '3 active', 'on')]), ['3 active reminders']);
+  assert.deepEqual(summaryParts('reminders', [line('Reminders', '1 active · 2 off', 'on')]), [
+    '1 active reminder',
+    '2 off',
+  ]);
+  assert.deepEqual(
+    summaryParts('leveling', [line('Announce', 'channel', 'neutral'), line('Reward roles', '3', 'on')]),
+    ['level-ups in a channel', '3 reward roles']
+  );
+  assert.deepEqual(
+    summaryParts('leveling', [line('Announce', 'dm', 'neutral'), line('Reward roles', 'none', 'off')]),
+    ['level-ups by DM']
+  );
+});
+
 test('every card of the overview has summary parts, and none says "Status: enabled" or "Channel: set"', async () => {
   const guild = {
     id: G,

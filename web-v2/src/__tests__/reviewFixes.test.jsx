@@ -123,6 +123,58 @@ describe('MemberPicker', () => {
     expect(changes).toEqual([USER, '']);
     expect(screen.getByRole('combobox')).toBeTruthy();
   });
+
+  it('announces the active option, and the chosen member sits in something the label can point at', async () => {
+    searchMembers.mockResolvedValue({
+      members: [
+        { id: USER, name: 'Mara', username: 'mara' },
+        { id: '300000000000000042', name: 'Marlin', username: 'marlin' },
+      ],
+    });
+    function Host() {
+      const [id, setId] = useState('');
+      return (
+        <>
+          <label htmlFor="m">Member</label>
+          <MemberPicker id="m" value={id} onChange={setId} />
+        </>
+      );
+    }
+    inGuild(<Host />);
+    const input = screen.getByLabelText('Member');
+    fireEvent.change(input, { target: { value: 'mar' } });
+    await screen.findAllByRole('option');
+    expect(input.getAttribute('aria-activedescendant')).toBe(screen.getAllByRole('option')[0].id);
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input.getAttribute('aria-activedescendant')).toBe(screen.getAllByRole('option')[1].id);
+    fireEvent.keyDown(input, { key: 'Enter' });
+    // after the pick, the label still labels the element that shows the member
+    expect(screen.getByLabelText('Member').textContent).toBe('@Marlin');
+  });
+
+  it('accepts a pasted member id, for a member who left or is not cached', async () => {
+    const changes = [];
+    function Host() {
+      const [id, setId] = useState('');
+      return (
+        <MemberPicker
+          id="m"
+          value={id}
+          onChange={(v) => {
+            changes.push(v);
+            setId(v);
+          }}
+        />
+      );
+    }
+    inGuild(<Host />);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: ` ${USER} ` } });
+    expect(searchMembers).not.toHaveBeenCalled();
+    fireEvent.mouseDown(await screen.findByRole('option', { name: `Use the member id ${USER}` }));
+    expect(changes).toEqual([USER]);
+    // nobody can name this member: it shows by the end of the id
+    expect(screen.getByText(/@member …0041/)).toBeTruthy();
+  });
 });
 
 describe('OverflowMenu', () => {
@@ -155,6 +207,47 @@ describe('OverflowMenu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Pause' }));
     expect(onPause).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('menu')).toBeNull();
+    // after an action the focus is back on the button, not lost
+    expect(document.activeElement).toBe(button);
+  });
+
+  it('is drawn outside the row, so a list with overflow hidden cannot clip it', () => {
+    render(
+      <div className="v2-list" style={{ overflow: 'hidden' }}>
+        <OverflowMenu label="More" items={[{ label: 'Pause', onClick: () => {} }]} />
+      </div>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    const menu = screen.getByRole('menu');
+    expect(menu.closest('.v2-list')).toBeNull();
+    expect(menu.parentElement).toBe(document.body);
+    expect(menu.style.position).toBe('fixed');
+    expect(menu.style.top).not.toBe('');
+  });
+
+  it('opens upward when there is no room below the button', () => {
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: window.innerHeight - 40,
+      bottom: window.innerHeight - 4,
+      left: 400,
+      right: 440,
+      width: 40,
+      height: 36,
+    });
+    render(
+      <OverflowMenu
+        label="More"
+        items={[
+          { label: 'Pause', onClick: () => {} },
+          { label: 'Delete', onClick: () => {} },
+        ]}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    const menu = screen.getByRole('menu');
+    expect(menu.style.bottom).toBe('44px');
+    expect(menu.style.top).toBe('');
+    rect.mockRestore();
   });
 
   it('closes on a press outside', () => {

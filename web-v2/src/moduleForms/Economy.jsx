@@ -764,7 +764,7 @@ function Members({ guildId, config }) {
             <input
               id="eco-search"
               type="search"
-              placeholder="Search by member name"
+              placeholder="Search by member name or ID"
               value={q}
               onChange={(e) => {
                 setQ(e.target.value);

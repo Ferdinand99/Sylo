@@ -133,19 +133,25 @@ function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
             aria-label={`Set status of suggestion #${item.number}`}
             value={pick}
             disabled={busy}
-            onChange={(e) => {
-              // Picking a status opens its reason panel at once.
-              setPick(e.target.value);
-              if (e.target.value) setAction(e.target.value);
-            }}
+            onChange={(e) => setPick(e.target.value)}
           >
-            <option value="">Set status…</option>
+            {/* Choosing an option only picks it: an arrow key on a closed list changes it, so the reason
+                form opens from the button, never from the change itself. */}
+            <option value="">Choose status…</option>
             {ACTIONS.filter(([, status]) => status !== item.status).map(([a, , label]) => (
               <option key={a} value={a}>
                 {label}
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            className="v2-btn-ghost"
+            disabled={busy || !pick}
+            onClick={() => setAction(pick)}
+          >
+            Set status
+          </button>
           {item.canMoveBack ? (
             <button
               type="button"

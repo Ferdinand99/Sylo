@@ -131,6 +131,7 @@ describe('Suggestions form', () => {
     renderAtGuild(<Suggestions />, GUILD);
     const setStatus = (await screen.findAllByRole('combobox', { name: /Set status of suggestion/ }))[0];
     fireEvent.change(setStatus, { target: { value: 'approve' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Set status' })[0]);
     const reason = screen.getByLabelText(/Reason/);
     await waitFor(() => expect(reason.maxLength).toBe(500));
     fireEvent.change(reason, { target: { value: 'Planned' } });
@@ -154,23 +155,30 @@ describe('Suggestions form', () => {
     const all = ['Approved', 'Denied', 'Implemented', 'Considering'];
     for (const select of lists) {
       const labels = optionLabels(select);
-      expect(labels[0]).toBe('Set status…');
+      expect(labels[0]).toBe('Choose status…');
       expect(labels.slice(1).every((l) => all.includes(l))).toBe(true);
     }
     // The open suggestion offers all four; the approved one does not offer "Approved" again.
     expect(lists.map((s) => optionLabels(s).length).sort()).toEqual([4, 5]);
     expect(lists.some((s) => !optionLabels(s).includes('Approved'))).toBe(true);
     fireEvent.change(lists[0], { target: { value: 'deny' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Set status' })[0]);
     const form = screen.getByLabelText(/Reason/).closest('form');
     fireEvent.click(within(form).getByRole('button', { name: 'Set to Denied' }));
     await waitFor(() => expect(decideSuggestion).toHaveBeenCalledWith(GUILD, 7, 'deny', ''));
   });
 
-  it('a picked status opens its reason form at once; the reason is focused and Close gives focus back', async () => {
+  it('a picked status opens the reason form only from the "Set status" button, so arrow keys can browse the list', async () => {
     renderAtGuild(<Suggestions />, GUILD);
     const lists = await screen.findAllByRole('combobox', { name: /Set status of suggestion/ });
-    expect(screen.queryByRole('button', { name: 'Set…' })).toBeNull();
+    const buttons = screen.getAllByRole('button', { name: 'Set status' });
+    expect(buttons[0].disabled).toBe(true);
+    // each change of the list (an arrow key on a closed list fires one) only picks an option
+    fireEvent.change(lists[0], { target: { value: 'approve' } });
     fireEvent.change(lists[0], { target: { value: 'deny' } });
+    expect(screen.queryByLabelText(/Reason/)).toBeNull();
+    expect(buttons[0].disabled).toBe(false);
+    fireEvent.click(buttons[0]);
     expect(document.activeElement).toBe(screen.getByLabelText(/Reason/));
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByLabelText(/Reason/)).toBeNull();
