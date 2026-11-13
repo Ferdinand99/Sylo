@@ -142,6 +142,7 @@ import {
 import { GITHUB_EVENT_TYPES, normaliseGithubWatch } from '../../modules/githubAlerts.js';
 import { normaliseTempVoiceConfig } from '../../modules/tempVoice.js';
 import { normaliseCleanupSchedule, CLEANUP_MAX_AGE_HOURS } from '../../modules/channelCleanup.js';
+import { serverTimeZone } from '../../lib/serverTimeZone.js';
 import { boardsToRescan, normaliseStarboard, scheduleRescan } from '../../modules/starboard.js';
 import {
   normaliseAutomodConfig,
@@ -2805,6 +2806,8 @@ router.get(
       channels: guildTextChannels(req.guild),
       weekdays: WEEKDAYS,
       maxAgeHoursCap: CLEANUP_MAX_AGE_HOURS,
+      // The zone the days and the time of day are counted in (see lib/serverTimeZone.js).
+      timeZone: serverTimeZone(),
     });
   })
 );
@@ -3014,6 +3017,8 @@ router.get(
       weekdays: WEEKDAYS,
       minIntervalMinutes: MIN_INTERVAL_MINUTES,
       maxIntervalMinutes: MAX_INTERVAL_MINUTES,
+      // The zone the weekdays, the repeat time and the wall-clock times are counted in.
+      timeZone: serverTimeZone(),
     });
   })
 );

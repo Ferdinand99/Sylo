@@ -16,6 +16,7 @@ import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 import { describeTime } from '../formatTime.js';
+import { serverTimeNote } from '../serverTime.js';
 
 function msToLocalInput(ms) {
   if (!ms) return '';
@@ -24,7 +25,7 @@ function msToLocalInput(ms) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function scheduleLabel(r, schedulePresets, weekdays) {
+function scheduleLabel(r, schedulePresets, weekdays, timeZone) {
   if (r.mode === 'single') {
     return r.runAt ? `once, ${describeTime(r.runAt).text}` : 'once — no time set';
   }
@@ -39,7 +40,7 @@ function scheduleLabel(r, schedulePresets, weekdays) {
           .sort((a, b) => a - b)
           .map((n) => names.get(n))
           .join('/')}`;
-  return `${every}${days}`;
+  return `${every}${days}${days ? serverTimeNote(timeZone) : ''}`;
 }
 
 function ReminderForm({
@@ -48,6 +49,7 @@ function ReminderForm({
   channels,
   schedulePresets,
   weekdays,
+  timeZone,
   minIntervalMinutes,
   maxIntervalMinutes,
   onSave,
@@ -210,7 +212,7 @@ function ReminderForm({
 
         {mode === 'single' ? (
           <div className="v2-field u-mt-2">
-            <label>Send once at</label>
+            <label>Send once at{serverTimeNote(timeZone)}</label>
             <input
               type="datetime-local"
               value={runAt}
@@ -270,7 +272,7 @@ function ReminderForm({
             </div>
 
             <div className="v2-field">
-              <label>Day of the week</label>
+              <label>Day of the week{serverTimeNote(timeZone)}</label>
               <div className="v2-field-row">
                 {weekdays.map(([n, label]) => (
                   <label className="v2-check" key={n}>
@@ -396,6 +398,7 @@ export default function Reminders() {
     channels: d.channels,
     schedulePresets: d.schedulePresets,
     weekdays: d.weekdays,
+    timeZone: d.timeZone,
     minIntervalMinutes: d.minIntervalMinutes,
     maxIntervalMinutes: d.maxIntervalMinutes,
     saving,
@@ -446,7 +449,7 @@ export default function Reminders() {
                     <p>
                       #{channel ? channel.name : r.channelId} ·{' '}
                       <span title={r.mode === 'single' && r.runAt ? describeTime(r.runAt).title : undefined}>
-                        {scheduleLabel(r, d.schedulePresets, d.weekdays)}
+                        {scheduleLabel(r, d.schedulePresets, d.weekdays, d.timeZone)}
                       </span>
                     </p>
                     {editingId === r.id ? (
