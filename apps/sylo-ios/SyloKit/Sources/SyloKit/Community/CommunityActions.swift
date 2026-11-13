@@ -13,6 +13,22 @@ extension NetworkError {
         }
         return userMessage
     }
+
+    /// Like ``communityMessage``, for a call that hands a role out. The server refuses a role the
+    /// person may not give with a 403 and its own sentence, which the app's error type does not
+    /// keep, so the reason (its rule for roles) is worded here instead of the generic "no access".
+    public func communityMessage(grantingRole: Bool) -> String {
+        if grantingRole, self == .forbidden {
+            return "You can't hand out that role: it must rank below your highest role, and a role with elevated permissions needs Manage Roles. Pick another role, or none."
+        }
+        return communityMessage
+    }
+}
+
+/// What the community actions say when they are asked for while another one is still running, so a
+/// tap never does nothing without a word.
+public enum CommunityMessage {
+    public static let busy = "Another action is still running. Wait a moment, then try again."
 }
 
 /// `{}`, what the dashboard posts for an action that takes nothing (cancel, end, delete).

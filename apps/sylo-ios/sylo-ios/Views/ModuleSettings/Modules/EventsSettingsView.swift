@@ -73,6 +73,8 @@ struct EventsSettingsView: View {
         .task { await note.load() }
         // A fresh page replaces what the last action answered.
         .onChange(of: model.page?.events) { actions.forgetAnswer() }
+        // Saving can change which events have a page, so the list comes again after a save.
+        .onChange(of: model.saveCount) { Task { await model.load() } }
         .sheet(item: $editor) { target in
             EventEditorView(
                 target: target, actions: actions, channels: model.page?.channels ?? [],
@@ -105,7 +107,7 @@ struct EventsSettingsView: View {
                 EventRow(event: event, pageURL: pageURL(of: event)) {
                     editor = .edit(event)
                 }
-                .swipeActions(edge: .trailing) {
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button("Cancel Event", systemImage: "xmark.circle", role: .destructive) { cancelling = event }
                 }
                 .contextMenu {
@@ -179,6 +181,7 @@ struct EventRow: View {
             if let pageURL {
                 Link(event.isPageMembersOnly ? "Members-only page" : "Public page", destination: pageURL)
                     .font(.footnote)
+                    .buttonStyle(.borderless)
             } else if event.pageHidden {
                 Text("No page: the channel is age-restricted, or Sylo cannot see it.")
                     .font(.footnote)

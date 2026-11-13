@@ -56,11 +56,30 @@ public enum EventTime {
         return floatingCalendar.date(from: calendar.dateComponents(fields, from: instant)) ?? instant
     }
 
+    /// Whether the wall-clock time of a floating date happens in `zone`. A clock change that skips an
+    /// hour (spring forward) leaves times that never show on a wall clock there.
+    public static func exists(_ floating: Date, in zone: TimeZone) -> Bool {
+        let wall = floatingCalendar.dateComponents(fields, from: floating)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let own = DateComponents(year: wall.year, month: wall.month, day: wall.day, hour: wall.hour, minute: wall.minute)
+        guard let instant = calendar.date(from: own) else { return false }
+        let back = calendar.dateComponents(fields, from: instant)
+        return back.year == wall.year && back.month == wall.month && back.day == wall.day
+            && back.hour == wall.hour && back.minute == wall.minute
+    }
+
     /// The floating date of the next full hour after `minimumLead` seconds from now, in `zone`: where
-    /// a new event's start begins.
+    /// a new event's start begins. An hour a clock change skips is passed over for the next one.
     public static func nextFullHour(after now: Date = .now, in zone: TimeZone, minimumLead: TimeInterval = 3600) -> Date {
         let wall = floating(of: now.addingTimeInterval(minimumLead), in: zone)
-        return Date(timeIntervalSince1970: (wall.timeIntervalSince1970 / 3600).rounded(.up) * 3600)
+        var start = Date(timeIntervalSince1970: (wall.timeIntervalSince1970 / 3600).rounded(.up) * 3600)
+        var steps = 0
+        while !exists(start, in: zone), steps < 48 {
+            start = start.addingTimeInterval(3600)
+            steps += 1
+        }
+        return start
     }
 }
 
@@ -140,6 +159,10 @@ public struct EventDraft: Equatable, Sendable {
         let image = imageURL.trimmingCharacters(in: .whitespacesAndNewlines)
         if !image.isEmpty, !Self.isAcceptableImageURL(image) {
             return "The image must be an https link of at most \(Self.imageURLLimit) characters."
+        }
+        if let zone = TimeZone(identifier: timeZone) {
+            if !EventTime.exists(start, in: zone) { return "The start time does not exist in \(timeZone): the clocks skip it. Pick another time." }
+            if let end, !EventTime.exists(end, in: zone) { return "The end time does not exist in \(timeZone): the clocks skip it. Pick another time." }
         }
         if let end, end <= start { return "The end time must be after the start time." }
         if let capacity, !Self.capacityRange.contains(capacity) {
@@ -290,7 +313,7 @@ public final class EventActionsModel {
             errorMessage = problem
             return false
         }
-        return await run(Endpoints.CreateEvent(server: server, draft: draft))
+        return await run(Endpoints.CreateEvent(server: server, draft: draft), grantingRole: !draft.roleID.isEmpty)
     }
 
     /// Saves the changes to an upcoming event.
@@ -314,8 +337,12 @@ public final class EventActionsModel {
         events = nil
     }
 
-    private func run<E: APIEndpoint>(_ endpoint: E) async -> Bool where E.Response == EventListAnswer {
-        guard !isWorking else { return false }
+    private func run<E: APIEndpoint>(_ endpoint: E, grantingRole: Bool = false) async -> Bool
+    where E.Response == EventListAnswer {
+        guard !isWorking else {
+            errorMessage = CommunityMessage.busy
+            return false
+        }
         isWorking = true
         defer { isWorking = false }
         errorMessage = nil
@@ -325,7 +352,9 @@ public final class EventActionsModel {
             return true
         } catch {
             let error = NetworkError(error)
-            if error != .cancelled, error != .unauthorized { errorMessage = error.communityMessage }
+            if error != .cancelled, error != .unauthorized {
+                errorMessage = error.communityMessage(grantingRole: grantingRole)
+            }
             return false
         }
     }

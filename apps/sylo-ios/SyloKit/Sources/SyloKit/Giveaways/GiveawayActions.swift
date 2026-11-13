@@ -198,7 +198,10 @@ public final class GiveawayActionsModel {
     }
 
     private func begin(_ id: Int) -> Bool {
-        guard busyID == nil else { return false }
+        guard busyID == nil else {
+            errorMessage = CommunityMessage.busy
+            return false
+        }
         busyID = id
         errorMessage = nil
         return true

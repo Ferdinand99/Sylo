@@ -142,7 +142,10 @@ public final class QuoteListModel {
     /// Deletes a quote and fetches the list again.
     @discardableResult
     public func delete(_ quote: QuoteSummary) async -> Bool {
-        guard !isWorking else { return false }
+        guard !isWorking else {
+            actionError = CommunityMessage.busy
+            return false
+        }
         isWorking = true
         defer { isWorking = false }
         actionError = nil

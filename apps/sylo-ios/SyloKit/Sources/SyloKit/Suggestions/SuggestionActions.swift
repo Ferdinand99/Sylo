@@ -344,7 +344,10 @@ public final class SuggestionListModel {
     /// Moves every suggestion outside the suggestions channel back, a batch at a time, and
     /// explains how it went in ``notice``.
     public func moveAllBack() async {
-        guard !isWorking else { return }
+        guard !isWorking else {
+            actionError = CommunityMessage.busy
+            return
+        }
         isWorking = true
         defer { isWorking = false }
         actionError = nil
@@ -388,7 +391,10 @@ public final class SuggestionListModel {
     }
 
     private func perform<E: APIEndpoint>(_ endpoint: E) async -> Bool {
-        guard !isWorking else { return false }
+        guard !isWorking else {
+            actionError = CommunityMessage.busy
+            return false
+        }
         isWorking = true
         defer { isWorking = false }
         actionError = nil
