@@ -1,20 +1,21 @@
 import SwiftUI
 import SyloKit
 
-/// Quote board: the public quote page, who may save a quote and the staff roles, with the latest
-/// quotes listed read only. Searching and deleting quotes stays in the web dashboard. Mirrors
-/// web-v2/src/moduleForms/QuoteBoard.jsx.
+/// Quote board: the public quote page, who may save a quote and the staff roles, and the quotes
+/// themselves: search them by text or author, or delete one. Mirrors web-v2/src/moduleForms/QuoteBoard.jsx.
 struct QuoteBoardSettingsView: View {
     @State private var model: ModuleSettingsModel<QuoteBoardPage>
     @State private var note: ModulePlatformNoteModel
-    private let server: ServerID
+    @State private var list: QuoteListModel
+    @State private var search = ""
+    @State private var deleting: QuoteSummary?
 
     @Environment(AppSession.self) private var session
 
     init(server: ServerID, session: AppSession) {
-        self.server = server
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
         _note = State(initialValue: ModulePlatformNoteModel(server: server, module: QuoteBoardPage.moduleID, session: session))
+        _list = State(initialValue: QuoteListModel(server: server, session: session))
     }
 
     var body: some View {
@@ -50,22 +51,87 @@ struct QuoteBoardSettingsView: View {
                 Text("May remove any quote. Manage Messages, Manage Server and Administrator always may.")
             }
 
-            Section {
-                if page.quotes.isEmpty {
-                    Text("Nothing here yet.").foregroundStyle(.secondary)
-                }
-                ForEach(page.quotes) { quote in
-                    QuoteLine(quote: quote)
-                }
-            } header: {
-                Text("Quotes (\(page.total))")
-            }
-
-            DashboardLinkSection(
-                server: server, module: QuoteBoardPage.moduleID,
-                footer: "Search and delete quotes in the web dashboard.")
+            quotesSection(page)
         }
         .task { await note.load() }
+        // The page comes with the newest quotes; take them over whenever the page is loaded.
+        .onChange(of: model.page?.quotes, initial: true) {
+            if let page = model.page { Task { await list.adopt(page) } }
+        }
+        // Wait for the typing to pause, and skip a search that is already on screen.
+        .task(id: search) {
+            if QuoteSearch.normalised(search) == list.search { return }
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            await list.load(search: search)
+        }
+        .confirmationDialog(
+            "Delete This Quote?", isPresented: isConfirmingDelete, titleVisibility: .visible, presenting: deleting
+        ) { quote in
+            Button("Delete", role: .destructive) { Task { await list.delete(quote) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { quote in
+            Text("Quote #\(quote.number) is deleted and its number will not be used again. The original message stays.")
+        }
+        .alert("Couldn't Delete Quote", isPresented: isShowingActionError, presenting: list.actionError) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .sensoryFeedback(.success, trigger: list.deleteCount)
+    }
+
+    /// The search field and the quotes.
+    @ViewBuilder
+    private func quotesSection(_ page: QuoteBoardPage) -> some View {
+        let quotes = list.hasLoaded ? list.quotes : page.quotes
+        let total = list.hasLoaded ? list.total : page.total
+        Section {
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                TextField("Search text or author", text: $search)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.search)
+                if !search.isEmpty {
+                    Button("Clear Search", systemImage: "xmark.circle.fill") { search = "" }
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.secondary)
+                        .buttonStyle(.borderless)
+                }
+            }
+        }
+
+        Section {
+            if quotes.isEmpty {
+                Text(list.isLoading ? "Loading…" : "Nothing here yet.").foregroundStyle(.secondary)
+            }
+            ForEach(quotes) { quote in
+                QuoteLine(quote: quote)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button("Delete", systemImage: "trash", role: .destructive) { deleting = quote }
+                    }
+                    .contextMenu {
+                        Button("Delete", systemImage: "trash", role: .destructive) { deleting = quote }
+                    }
+            }
+        } header: {
+            Text(list.search.isEmpty ? "Quotes (\(total))" : "Quotes (\(quotes.count) of \(total))")
+        } footer: {
+            if let message = list.errorMessage {
+                StatusMessage(message, kind: .error)
+            }
+        }
+    }
+
+    private var isConfirmingDelete: Binding<Bool> {
+        Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
+    }
+
+    private var isShowingActionError: Binding<Bool> {
+        Binding(get: { list.actionError != nil }, set: { if !$0 { list.actionError = nil } })
     }
 
     private func publicURL(_ page: QuoteBoardPage) -> URL? {
