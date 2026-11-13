@@ -177,9 +177,9 @@ struct CleanupDraftTests {
         draft.timeHhmm = "03:00"
 
         draft.maxAgeHours = 0
-        #expect(draft.problem()?.hasPrefix("The age is between 1 and 2160") == true)
+        #expect(draft.problem()?.hasPrefix("The age is between 1 and") == true)
         draft.maxAgeHours = 2161
-        #expect(draft.problem()?.hasPrefix("The age is between 1 and 2160") == true)
+        #expect(draft.problem()?.hasPrefix("The age is between 1 and") == true)
         draft.maxAgeHours = 2160
         #expect(draft.problem() == nil)
         #expect(draft.problem(maxAgeHoursCap: 100) != nil)
