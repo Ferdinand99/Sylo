@@ -154,7 +154,8 @@ struct IntroPromptTests {
         let remove = Endpoints.UnpublishIntroPrompt(server: "1")
         #expect(remove.path == "/api/v2/guilds/1/modules/introductions/prompt/unpublish")
         #expect(remove.method == .post)
-        #expect(try JSONEncoder().encode(try #require(remove.body)) == Data("{}".utf8))
+        let removeBody = try #require(remove.body)
+        #expect(try JSONEncoder().encode(removeBody) == Data("{}".utf8))
     }
 
     @Test("the answer carries the stored settings with the prompt's message, and a warning")

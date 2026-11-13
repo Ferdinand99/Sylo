@@ -439,7 +439,8 @@ struct ApplicationFormEndpointsTests {
         let remove = Endpoints.UnpublishApplicationsPanel(server: "1")
         #expect(remove.path == "/api/v2/guilds/1/applications/panel/unpublish")
         #expect(remove.method == .post)
-        #expect(try JSONEncoder().encode(try #require(remove.body)) == Data("{}".utf8))
+        let removeBody = try #require(remove.body)
+        #expect(try JSONEncoder().encode(removeBody) == Data("{}".utf8))
     }
 
     @Test("retrying roles, deleting an application and reading a member's history use the staff paths")
