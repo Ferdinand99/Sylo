@@ -255,7 +255,7 @@ extension Endpoints {
             self.format = format
         }
 
-        public var path: String { "/api/v2/guilds/(server.pathComponent)/applications/export" }
+        public var path: String { "/api/v2/guilds/\(server.pathComponent)/applications/export" }
         public var query: [URLQueryItem] {
             var items = [URLQueryItem(name: "formId", value: String(formID))]
             if let status { items.append(URLQueryItem(name: "status", value: status.rawValue)) }
@@ -267,7 +267,7 @@ extension Endpoints {
         /// download that comes without one.
         public var expectedFilename: String {
             let suffix = status.map { "-" + $0.rawValue } ?? ""
-            return "applications-form-(formID)(suffix).(format.fileExtension)"
+            return "applications-form-\(formID)\(suffix).\(format.fileExtension)"
         }
     }
 
