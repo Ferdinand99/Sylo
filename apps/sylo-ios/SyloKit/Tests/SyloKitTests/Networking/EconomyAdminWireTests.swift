@@ -108,7 +108,8 @@ extension APIClientTests {
 
     @Test("The refusals of an upload become the words staff read, and none is sent twice", arguments: [
         (413, #"{"error":"The image is larger than 2 MB."}"#, ShopPictureProblem.tooLarge),
-        (415, #"{"error":"Send the image as a multipart upload."}"#, .unsupportedType),
+        (415, #"{"error":"Send the image as a multipart upload."}"#, .badUpload("Send the image as a multipart upload.")),
+        (503, #"{"error":"This server cannot process images right now."}"#, .cannotProcess("This server cannot process images right now.")),
         (400, #"{"error":"Use a PNG, JPEG or WebP image."}"#, .unsupportedType),
         (400, #"{"error":"That image is too large in pixels (at most 16 megapixels), or it is not a valid image."}"#, .tooManyPixels),
         (400, #"{"error":"That file is not a valid image."}"#, .notAnImage),

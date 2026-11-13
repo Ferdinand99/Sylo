@@ -92,8 +92,9 @@ struct InventoryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
         .refreshable { await model.load() }
+        // Item and member names are shown as typed: no Markdown in a name.
         .reasonPrompt(
-            LocalizedStringKey(pending?.title ?? ""), message: LocalizedStringKey(message(of: pending)),
+            verbatimTitle: pending?.title ?? "", message: message(of: pending),
             isPresented: $isAsking, confirmTitle: LocalizedStringKey(pending?.confirmTitle ?? "OK"),
             confirmRole: pending?.isDestructive == true ? .destructive : nil,
             reasonLabel: pending?.isNote == true ? "Note (optional)" : "Reason (optional)"

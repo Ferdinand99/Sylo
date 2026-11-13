@@ -48,11 +48,11 @@ struct ShopItemEditorView: View {
             }
             Group {
                 Section {
-                    TextField("Name", text: $draft.name)
-                    TextField("Emoji (optional)", text: $draft.emoji)
+                    ShopTextField(title: "Name", text: $draft.name, limit: ShopItemLimits.nameLength)
+                    ShopTextField(title: "Emoji (optional)", text: $draft.emoji, limit: ShopItemLimits.emojiLength)
                         .textInputAutocapitalization(.never)
-                    TextArea(title: "Description", text: $draft.description,
-                             limit: ShopItemLimits.descriptionLength, lines: 2...5)
+                    ShopTextField(title: "Description", text: $draft.description,
+                                  limit: ShopItemLimits.descriptionLength, lines: 2...5)
                 } footer: {
                     if let problem = draft.problem, draft.type.isKnown { Text(verbatim: problem) }
                 }
@@ -145,7 +145,8 @@ struct ShopItemEditorView: View {
                     ProgressView()
                 } else {
                     Button("Save") { Task { await save() } }
-                        .disabled(draft.problem != nil)
+                        // After a create the server did not name, saving again would add the item twice.
+                        .disabled(draft.problem != nil || model.savedWithoutID)
                 }
             }
         }

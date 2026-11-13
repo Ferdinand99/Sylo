@@ -172,6 +172,8 @@ public final class ShopItemsModel {
     public private(set) var pictureProblem: ShopPictureProblem?
     /// Goes up with every change that went through, for a haptic.
     public private(set) var changeCount = 0
+    /// The last create went through but its answer did not name the new item (see ``save(_:)``).
+    public private(set) var savedWithoutID = false
 
     /// What the server's info said about collectibles; nil when it could not be asked.
     private var announcedCollectibles: Bool?
@@ -221,10 +223,16 @@ public final class ShopItemsModel {
     public var canAddItem: Bool { maxItems.map { items.count < $0 } ?? true }
 
     /// Creates or saves an item. For a new item the answer's id is the result.
+    ///
+    /// A create whose answer has no `id` (no known server does that) is looked up by what is new in the
+    /// answer's list. When even that finds nothing, the item exists but the app cannot tell which one:
+    /// ``savedWithoutID`` is set and ``actionError`` says so, and the form must not save again, or it
+    /// would add the item a second time.
     /// - Returns: The item's id, or nil when it did not go through (``actionError`` says why).
     public func save(_ draft: ShopItemDraft) async -> Int? {
         guard !isBusy else { return nil }
         actionError = nil
+        savedWithoutID = false
         if let problem = draft.problem {
             actionError = problem
             return nil
@@ -233,18 +241,21 @@ public final class ShopItemsModel {
         isBusy = true
         defer { isBusy = false }
         do {
-            let answer: ShopItemsAnswer
-            let id: Int?
             if let existing = draft.id {
-                answer = try await session.send(Endpoints.UpdateShopItem(server: server, id: existing, item: body))
-                id = existing
-            } else {
-                answer = try await session.send(Endpoints.CreateShopItem(server: server, item: body))
-                id = answer.id
+                items = try await session.send(Endpoints.UpdateShopItem(server: server, id: existing, item: body)).items
+                changeCount += 1
+                return existing
             }
+            let before = Set(items.map(\.id))
+            let answer = try await session.send(Endpoints.CreateShopItem(server: server, item: body))
             items = answer.items
             changeCount += 1
-            return id
+            if let id = answer.id { return id }
+            let added = answer.items.map(\.id).filter { !before.contains($0) }
+            if added.count == 1 { return added[0] }
+            savedWithoutID = true
+            actionError = "The item was added, but the server did not say which one it is. Close this form and check the shop list; saving again would add it a second time."
+            return nil
         } catch {
             show(error)
             return nil

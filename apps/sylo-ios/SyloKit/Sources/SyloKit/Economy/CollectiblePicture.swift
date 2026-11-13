@@ -169,7 +169,7 @@ public enum CollectiblePicture {
 }
 
 /// Why an upload or removal of a picture failed, worded for the person. The server's own text is
-/// kept where it has the numbers (the quota).
+/// kept where it has the numbers (the quota) or says something specific (busy, cannot process).
 public enum ShopPictureProblem: Equatable, Sendable {
     /// Over 2 MB (413).
     case tooLarge
@@ -181,8 +181,16 @@ public enum ShopPictureProblem: Equatable, Sendable {
     case notAnImage
     /// The server already stores its 200 pictures or 25 MB; carries the server's sentence.
     case quota(String?)
-    /// The decode queue is full or the picture took too long (503); carries the server's sentence.
+    /// The decode queue is full or the picture took too long (503); carries the server's sentence, which
+    /// already says to try again.
     case busy(String?)
+    /// The server cannot process pictures at all (its image tools are missing); carries its sentence.
+    /// Trying again does not help.
+    case cannotProcess(String?)
+    /// The server did not understand the upload as a form (415). The server sends this only when the
+    /// request is not multipart, which is a problem of the app or of something between it and the server,
+    /// never of the picture; carries the server's sentence.
+    case badUpload(String?)
     /// Too many uploads in a minute (429).
     case rateLimited
     /// The server has no pictures for collectibles (a server before Sylo 5.2).
@@ -199,9 +207,10 @@ public enum ShopPictureProblem: Equatable, Sendable {
         case .rateLimited:
             self = .rateLimited
         case .http(let status) where status.code == 415:
-            self = .unsupportedType
+            self = .badUpload(text)
         case .server(let status) where status.code == 503:
-            self = .busy(text)
+            // "This server cannot process images right now." is permanent; "busy" and "took too long" pass.
+            self = text?.lowercased().contains("cannot process") == true ? .cannotProcess(text) : .busy(text)
         case .notFound:
             // The server names a missing item; a missing route (a server before 5.2) has no words.
             self = text == nil ? .notAvailable : .itemGone
@@ -238,7 +247,12 @@ public enum ShopPictureProblem: Equatable, Sendable {
         case .quota(let text):
             text ?? "This server already stores the most pictures it can (\(CollectiblePictureLimits.maxPicturesPerServer) pictures or \(CollectiblePictureLimits.maxMegabytesPerServer) MB). Remove pictures or items nobody owns to make room."
         case .busy(let text):
-            (text ?? "The server is busy processing pictures.") + " Tap Try Again in a moment."
+            // The server's busy sentences end in their own "try again": nothing is added to them.
+            text ?? "The server is busy processing pictures. Try again in a moment."
+        case .cannotProcess(let text):
+            text ?? "This server cannot process pictures right now."
+        case .badUpload(let text):
+            "The server did not understand the upload. This is a problem with the app or the connection, not with your picture: update the app, or check for a proxy between you and the server." + (text.map { " It said: \($0)" } ?? "")
         case .rateLimited:
             "Too many uploads. Wait a minute and try again."
         case .notAvailable:
@@ -255,6 +269,17 @@ public enum ShopPictureProblem: Equatable, Sendable {
         switch self {
         case .busy, .rateLimited: true
         default: false
+        }
+    }
+
+    /// Whether the form offers Try Again: for a busy server and a rate limit, for a full quota (once the
+    /// person made room), and for a failure the app cannot name (a dropped connection). Not when the
+    /// same picture can never go through, and not when the server cannot process pictures at all.
+    public var offersRetry: Bool {
+        switch self {
+        case .busy, .rateLimited, .quota, .other: true
+        case .tooLarge, .tooManyPixels, .unsupportedType, .notAnImage, .cannotProcess, .badUpload, .notAvailable,
+             .itemGone: false
         }
     }
 }

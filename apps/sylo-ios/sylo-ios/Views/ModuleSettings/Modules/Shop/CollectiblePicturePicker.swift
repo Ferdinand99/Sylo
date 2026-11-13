@@ -73,7 +73,7 @@ struct CollectiblePicturePicker: View {
             }
             if let problem {
                 StatusMessage(problem.message, kind: .error)
-                if canRetry, staged != nil {
+                if canRetry, staged != nil, problem.offersRetry {
                     Button("Try Again", systemImage: "arrow.clockwise", action: onRetry)
                         .disabled(isBusy)
                 }

@@ -27,15 +27,30 @@ extension View {
         onConfirm: @escaping (String) -> Void
     ) -> some View {
         modifier(ReasonPromptModifier(
-            title: title, message: message, isPresented: isPresented, confirmTitle: confirmTitle,
+            title: Text(title), message: Text(message), isPresented: isPresented, confirmTitle: confirmTitle,
             confirmRole: confirmRole, reasonLabel: reasonLabel, reasonRequired: reasonRequired,
             onConfirm: onConfirm))
+    }
+
+    /// The same alert with a title and message that are shown exactly as given. Use it when the text holds
+    /// a name a member or a server chose: a `LocalizedStringKey` would read `*`, `_` and `[x](y)` in it as
+    /// Markdown.
+    func reasonPrompt(
+        verbatimTitle title: String, message: String, isPresented: Binding<Bool>,
+        confirmTitle: LocalizedStringKey, confirmRole: ButtonRole? = nil,
+        reasonLabel: LocalizedStringKey = "Reason (optional)", reasonRequired: Bool = false,
+        onConfirm: @escaping (String) -> Void
+    ) -> some View {
+        modifier(ReasonPromptModifier(
+            title: Text(verbatim: title), message: Text(verbatim: message), isPresented: isPresented,
+            confirmTitle: confirmTitle, confirmRole: confirmRole, reasonLabel: reasonLabel,
+            reasonRequired: reasonRequired, onConfirm: onConfirm))
     }
 }
 
 private struct ReasonPromptModifier: ViewModifier {
-    let title: LocalizedStringKey
-    let message: LocalizedStringKey
+    let title: Text
+    let message: Text
     @Binding var isPresented: Bool
     let confirmTitle: LocalizedStringKey
     let confirmRole: ButtonRole?
@@ -59,7 +74,7 @@ private struct ReasonPromptModifier: ViewModifier {
                 .disabled(reasonRequired && trimmedReason.isEmpty)
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text(message)
+                message
             }
             // A fresh, empty field every time the alert comes up.
             .onChange(of: isPresented) { _, shown in

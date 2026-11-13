@@ -138,34 +138,109 @@ struct CollectiblePictureTests {
         }
     }
 
-    @Test("a HEIC photo becomes a JPEG, on a device that can write HEIC")
-    func heic() throws {
+    // MARK: Privacy and HEIC
+
+    /// A 64 x 48 HEIC written by a phone-like tool with the metadata a photo carries: GPS (59 54' N, 10 44' E),
+    /// a camera make and model, a lens and the time it was taken. Checked in as bytes, so it decodes on every
+    /// runner whether or not the runner can *write* HEIC.
+    static let heicWithMetadata = Data(base64Encoded: "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")!
+
+    /// What a photo gives away, read back from encoded bytes: the entries of the GPS, EXIF and TIFF
+    /// dictionaries that name a place, a time or a camera. Empty for a picture with none of it.
+    static func sensitiveMetadata(in data: Data) throws -> [String] {
+        let source = try #require(CGImageSourceCreateWithData(data as CFData, nil))
+        let properties = try #require(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+        var found: [String] = []
+        if let gps = properties[kCGImagePropertyGPSDictionary] as? [CFString: Any], !gps.isEmpty {
+            found.append(contentsOf: gps.keys.map { "GPS " + ($0 as String) })
+        }
+        if let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any] {
+            for key in [kCGImagePropertyExifDateTimeOriginal, kCGImagePropertyExifDateTimeDigitized,
+                        kCGImagePropertyExifLensModel, kCGImagePropertyExifLensMake,
+                        kCGImagePropertyExifBodySerialNumber, kCGImagePropertyExifCameraOwnerName]
+            where exif[key] != nil {
+                found.append("Exif " + (key as String))
+            }
+        }
+        if let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] {
+            for key in [kCGImagePropertyTIFFMake, kCGImagePropertyTIFFModel, kCGImagePropertyTIFFSoftware,
+                        kCGImagePropertyTIFFDateTime, kCGImagePropertyTIFFArtist, kCGImagePropertyTIFFHostComputer]
+            where tiff[key] != nil {
+                found.append("TIFF " + (key as String))
+            }
+        }
+        return found
+    }
+
+    /// Fails (does not pass quietly) when a source does not really carry the metadata the privacy tests are
+    /// about: without it "nothing survived" would prove nothing.
+    static func requireMetadata(in data: Data) throws {
+        let source = try #require(CGImageSourceCreateWithData(data as CFData, nil))
+        let properties = try #require(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+        let gps = try #require(properties[kCGImagePropertyGPSDictionary] as? [CFString: Any], "the source has no GPS")
+        #expect(gps[kCGImagePropertyGPSLatitude] != nil)
+        #expect(gps[kCGImagePropertyGPSLongitude] != nil)
+        let exif = try #require(properties[kCGImagePropertyExifDictionary] as? [CFString: Any], "the source has no EXIF")
+        #expect(exif[kCGImagePropertyExifDateTimeOriginal] != nil)
+        let tiff = try #require(properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any], "the source has no TIFF")
+        #expect(tiff[kCGImagePropertyTIFFMake] != nil)
+        #expect(tiff[kCGImagePropertyTIFFModel] != nil)
+    }
+
+    @Test("a HEIC photo with GPS, EXIF and camera data becomes a JPEG that carries none of it")
+    func heicPhotoIsStripped() throws {
+        // The source really has what a phone photo has.
+        try Self.requireMetadata(in: Self.heicWithMetadata)
+        #expect(try Self.sensitiveMetadata(in: Self.heicWithMetadata).count >= 5)
+
+        let picture = try CollectiblePicture.prepare(Self.heicWithMetadata)
+        #expect(Self.isJPEG(picture.data))
+        #expect(picture.width == 64 && picture.height == 48)
+        #expect(picture.data.count <= CollectiblePictureLimits.maxUploadBytes)
+        #expect(try Self.sensitiveMetadata(in: picture.data).isEmpty)
+    }
+
+    @Test("a JPEG with GPS, EXIF and camera data is stripped the same way")
+    func jpegPhotoIsStripped() throws {
+        let image = try Self.makeImage(width: 400, height: 300)
+        let data = NSMutableData()
+        let destination = try #require(CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil))
+        let gps: [CFString: Any] = [
+            kCGImagePropertyGPSLatitude: 59.9, kCGImagePropertyGPSLatitudeRef: "N",
+            kCGImagePropertyGPSLongitude: 10.7, kCGImagePropertyGPSLongitudeRef: "E",
+        ]
+        let exif: [CFString: Any] = [
+            kCGImagePropertyExifDateTimeOriginal: "2026:11:01 12:00:00", kCGImagePropertyExifLensModel: "Lens X",
+        ]
+        let tiff: [CFString: Any] = [kCGImagePropertyTIFFMake: "Contoso", kCGImagePropertyTIFFModel: "Phone 9"]
+        let properties: [CFString: Any] = [
+            kCGImagePropertyGPSDictionary: gps, kCGImagePropertyExifDictionary: exif, kCGImagePropertyTIFFDictionary: tiff,
+        ]
+        CGImageDestinationAddImage(destination, image, properties as CFDictionary)
+        #expect(CGImageDestinationFinalize(destination))
+        let source = data as Data
+        try Self.requireMetadata(in: source)
+
+        let picture = try CollectiblePicture.prepare(source)
+        #expect(try Self.sensitiveMetadata(in: picture.data).isEmpty)
+    }
+
+    /// Whether this runner can write HEIC (an Apple-silicon runner can, a virtual machine may not).
+    static var canEncodeHEIC: Bool {
+        CGImageDestinationCreateWithData(NSMutableData(), UTType.heic.identifier as CFString, 1, nil) != nil
+    }
+
+    @Test("a big HEIC made on the runner becomes a 1024 px JPEG", .enabled(if: CollectiblePictureTests.canEncodeHEIC, "this runner cannot write HEIC"))
+    func bigHEIC() throws {
         let image = try Self.makeImage(width: 3000, height: 2250)
         let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.heic.identifier as CFString, 1, nil) else {
-            // This machine has no HEIC encoder: nothing to test here.
-            return
-        }
+        let destination = try #require(CGImageDestinationCreateWithData(data, UTType.heic.identifier as CFString, 1, nil))
         CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else { return }
+        #expect(CGImageDestinationFinalize(destination))
         let picture = try CollectiblePicture.prepare(data as Data)
         #expect(Self.isJPEG(picture.data))
         #expect(picture.width == 1024)
         #expect(picture.data.count <= CollectiblePictureLimits.maxUploadBytes)
-    }
-
-    @Test("the metadata of a photo is not carried over")
-    func metadataDropped() throws {
-        let image = try Self.makeImage(width: 400, height: 300)
-        let data = NSMutableData()
-        let destination = try #require(CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil))
-        let gps: [CFString: Any] = [kCGImagePropertyGPSLatitude: 59.9, kCGImagePropertyGPSLongitude: 10.7]
-        CGImageDestinationAddImage(destination, image, [kCGImagePropertyGPSDictionary: gps] as CFDictionary)
-        #expect(CGImageDestinationFinalize(destination))
-        let picture = try CollectiblePicture.prepare(data as Data)
-        let source = try #require(CGImageSourceCreateWithData(picture.data as CFData, nil))
-        let properties = try #require(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
-        #expect(properties[kCGImagePropertyGPSDictionary] == nil)
     }
 
     @Test("the limits are the server's")

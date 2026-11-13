@@ -247,7 +247,7 @@ struct ShopItemsModelTests {
 
     @Test("the refusals of an upload read as words, and nothing retries by itself", arguments: [
         (NetworkError.tooLarge(message: "The image is larger than 2 MB."), ShopPictureProblem.tooLarge),
-        (NetworkError.http(status: HTTPStatus(415)), ShopPictureProblem.unsupportedType),
+        (NetworkError.http(status: HTTPStatus(415, message: "Send the image as a multipart upload.")), ShopPictureProblem.badUpload("Send the image as a multipart upload.")),
         (NetworkError.rateLimited, ShopPictureProblem.rateLimited),
         (NetworkError.notFound, ShopPictureProblem.notAvailable),
     ])
@@ -264,7 +264,7 @@ struct ShopItemsModelTests {
         #expect(uploads.count == 1)
     }
 
-    @Test("removing a picture replaces the items, a failure is a picture problem")
+    @Test("removing a picture replaces the items with the server's answer")
     func removesPicture() async throws {
         let clients = StubClients { endpoint in
             switch endpoint {
@@ -280,6 +280,62 @@ struct ShopItemsModelTests {
         #expect(model.items[0].imagePath == nil)
         let sent = try #require(clients.calls.last?.endpoint as? Endpoints.RemoveShopItemPicture)
         #expect(sent.id == 2)
+    }
+
+    @Test("a refused removal keeps the picture and says why in the form's error, not as a picture problem")
+    func removeFails() async {
+        let clients = StubClients { endpoint in
+            switch endpoint {
+            case is Endpoints.LoadShopItems:
+                return ShopItemList(items: [Self.item(2, type: .collectible, imagePath: "/c/abc.webp")])
+            default: throw NetworkError.notFound(message: "Unknown item.")
+            }
+        }
+        let model = ShopItemsModel(server: "9", session: makeSignedInSession(clients: clients))
+        await model.load()
+        #expect(await model.removePicture(from: 2) == false)
+        #expect(model.items[0].imagePath == "/c/abc.webp")
+        #expect(model.actionError == "That item is gone. Refresh the shop.")
+        #expect(model.pictureProblem == nil)
+    }
+
+    @Test("a create whose answer does not name the item finds it among the new ones")
+    func createWithoutIDFindsIt() async {
+        let clients = StubClients { endpoint in
+            switch endpoint {
+            case is Endpoints.LoadShopItems: return ShopItemList(items: [Self.item(1)], rarities: nil)
+            case is Endpoints.CreateShopItem: return ShopItemsAnswer(items: [Self.item(1), Self.item(2)])
+            default: throw NetworkError.notFound
+            }
+        }
+        let model = ShopItemsModel(server: "9", session: makeSignedInSession(clients: clients))
+        await model.load()
+        var draft = ShopItemDraft()
+        draft.name = "New"
+        #expect(await model.save(draft) == 2)
+        #expect(!model.savedWithoutID)
+    }
+
+    @Test("a create whose answer cannot be told from the list says so and blocks a second save")
+    func createWithoutIDIsAnError() async {
+        let clients = StubClients { endpoint in
+            switch endpoint {
+            case is Endpoints.LoadShopItems: return ShopItemList(items: [Self.item(1)], rarities: nil)
+            case is Endpoints.CreateShopItem: return ShopItemsAnswer(items: [Self.item(1)])
+            default: throw NetworkError.notFound
+            }
+        }
+        let model = ShopItemsModel(server: "9", session: makeSignedInSession(clients: clients))
+        await model.load()
+        var draft = ShopItemDraft()
+        draft.name = "New"
+        #expect(await model.save(draft) == nil)
+        #expect(model.savedWithoutID)
+        #expect(model.actionError?.contains("did not say which one") == true)
+        #expect(model.changeCount == 1)
+        // A later save starts clean.
+        #expect(await model.save(ShopItemDraft()) == nil)
+        #expect(!model.savedWithoutID)
     }
 }
 
@@ -298,6 +354,12 @@ struct ShopPictureProblemTests {
         #expect(problem(.notFound) == .notAvailable)
         #expect(problem(.server(status: HTTPStatus(503, message: "The server is busy processing pictures. Try again in a moment."))) == .busy("The server is busy processing pictures. Try again in a moment."))
         #expect(problem(.server(status: 503)) == .busy(nil))
+        #expect(problem(.http(status: HTTPStatus(415, message: "Send the image as a multipart upload."))) == .badUpload("Send the image as a multipart upload."))
+        #expect(problem(.http(status: 415)) == .badUpload(nil))
+        let cannot = "This server cannot process images right now."
+        #expect(problem(.server(status: HTTPStatus(503, message: cannot))) == .cannotProcess(cannot))
+        let slow = "Processing that picture took too long. Try a smaller image."
+        #expect(problem(.server(status: HTTPStatus(503, message: slow))) == .busy(slow))
         #expect(problem(.badRequest(message: "Something new.")) == .other("Something new."))
         #expect(problem(.offline) == .other(NetworkError.offline.userMessage))
     }
@@ -310,12 +372,23 @@ struct ShopPictureProblemTests {
         #expect(ShopPictureProblem.tooLarge.message.contains("2 MB"))
         #expect(ShopPictureProblem.unsupportedType.message.contains("PNG, JPEG or WebP"))
         #expect(ShopPictureProblem.busy(nil).message.contains("busy"))
-        #expect(ShopPictureProblem.busy("Processing took too long.").message.hasPrefix("Processing took too long."))
+        // The server's busy sentence already says to try again: nothing is added to it.
+        let busy = "The server is busy processing pictures. Try again in a moment."
+        #expect(ShopPictureProblem.busy(busy).message == busy)
+        #expect(ShopPictureProblem.busy(nil).message.components(separatedBy: "ry again").count == 2)
+        #expect(ShopPictureProblem.cannotProcess(nil).message.contains("cannot process"))
+        // A 415 is about the upload, not about the picture's format.
+        let upload = ShopPictureProblem.badUpload(nil).message
+        #expect(upload.contains("app") && !upload.contains("PNG"))
         #expect(ShopPictureProblem.notAvailable.message.contains("5.2"))
         #expect(ShopPictureProblem.busy(nil).isWorthRetrying)
         #expect(ShopPictureProblem.rateLimited.isWorthRetrying)
         #expect(!ShopPictureProblem.tooLarge.isWorthRetrying)
         #expect(!ShopPictureProblem.quota(nil).isWorthRetrying)
+        // Try Again is offered where a second try can work, and not for a picture or a server that never will.
+        for problem in [ShopPictureProblem.busy(nil), .rateLimited, .quota(nil), .other("Offline")] { #expect(problem.offersRetry) }
+        for problem in [ShopPictureProblem.tooLarge, .tooManyPixels, .unsupportedType, .notAnImage, .cannotProcess(nil),
+                        .badUpload(nil), .notAvailable, .itemGone] { #expect(!problem.offersRetry) }
         #expect(CollectiblePictureLimits.maxUploadBytes == 2 * 1024 * 1024)
         #expect(CollectiblePictureLimits.targetBytes < CollectiblePictureLimits.maxUploadBytes)
     }

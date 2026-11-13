@@ -153,6 +153,9 @@ public struct ShopItem: Decodable, Sendable, Hashable, Identifiable {
     public let purchases: Int
     /// What the item has earned in all.
     public let revenue: Int
+    /// Fields of the item the app does not model (a newer server's), kept and sent back on save: the server
+    /// builds the whole item from what it is sent, so a field left out would be reset to its default.
+    public let extras: [String: JSONValue]
 
     /// A collectible without a picture is hidden from members and cannot be bought.
     public var needsPicture: Bool { type.isCollectible && imagePath == nil }
@@ -161,7 +164,7 @@ public struct ShopItem: Decodable, Sendable, Hashable, Identifiable {
                 roleId: String? = nil, durationHours: Int? = nil, price: Int = 1, stock: Int? = nil, sold: Int = 0,
                 left: Int? = nil, requiredRoles: [String] = [], perMemberLimit: Int? = nil, enabled: Bool = true,
                 sortOrder: Int = 0, rarity: String? = nil, announce: Bool = false, imagePath: String? = nil,
-                purchases: Int = 0, revenue: Int = 0) {
+                purchases: Int = 0, revenue: Int = 0, extras: [String: JSONValue] = [:]) {
         self.id = id
         self.name = name
         self.description = description
@@ -182,12 +185,18 @@ public struct ShopItem: Decodable, Sendable, Hashable, Identifiable {
         self.imagePath = imagePath
         self.purchases = purchases
         self.revenue = revenue
+        self.extras = extras
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case id, name, description, emoji, type, roleId, durationHours, price, stock, sold, left, requiredRoles
         case perMemberLimit, enabled, sortOrder, rarity, announce, imagePath, purchases, revenue
     }
+    /// Every field the item view of the server has, so what is left over is what the app does not know.
+    static let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
+
+    // The id names an item, and equal items have equal ids; `extras` (a `JSONValue`) is not hashable.
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -215,7 +224,8 @@ public struct ShopItem: Decodable, Sendable, Hashable, Identifiable {
             announce: try c.decode(forKey: .announce, or: false),
             imagePath: try nonEmpty(.imagePath),
             purchases: try c.decode(forKey: .purchases, or: 0),
-            revenue: try c.decode(forKey: .revenue, or: 0))
+            revenue: try c.decode(forKey: .revenue, or: 0),
+            extras: try Passthrough.read(decoder, excluding: Self.knownKeys))
     }
 }
 
@@ -313,6 +323,8 @@ public struct ShopItemDraft: Sendable, Equatable {
     public var announce = false
     /// The picture the item has now (for showing); a new one goes up separately.
     public var imagePath: String?
+    /// Fields of the item the app does not model, sent back unchanged.
+    public var extras: [String: JSONValue] = [:]
 
     public init() {}
 
@@ -332,6 +344,7 @@ public struct ShopItemDraft: Sendable, Equatable {
         rarity = item.rarity ?? ""
         announce = item.announce
         imagePath = item.imagePath
+        extras = item.extras
     }
 
     /// What is wrong with the item, in the server's words, or nil. The same checks as the server's
@@ -350,9 +363,9 @@ public struct ShopItemDraft: Sendable, Equatable {
         func clamp(_ value: Int, _ range: ClosedRange<Int>) -> Int { min(max(value, range.lowerBound), range.upperBound) }
         let collectible = type.isCollectible
         return ShopItemBody(
-            name: String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(ShopItemLimits.nameLength)),
-            description: String(description.prefix(ShopItemLimits.descriptionLength)),
-            emoji: String(emoji.prefix(ShopItemLimits.emojiLength)),
+            name: UTF16Limit.truncated(name.trimmingCharacters(in: .whitespacesAndNewlines), to: ShopItemLimits.nameLength),
+            description: UTF16Limit.truncated(description, to: ShopItemLimits.descriptionLength),
+            emoji: UTF16Limit.truncated(emoji, to: ShopItemLimits.emojiLength),
             type: type.rawValue,
             roleId: type.isRole ? roleId : "",
             durationHours: clamp(durationHours, ShopItemLimits.durationHours),
@@ -362,7 +375,8 @@ public struct ShopItemDraft: Sendable, Equatable {
             requiredRoles: Array(requiredRoles.prefix(ShopItemLimits.requiredRoles)),
             enabled: enabled,
             rarity: supportsCollectibles ? (collectible ? rarity : "") : nil,
-            announce: supportsCollectibles ? (collectible && announce) : nil)
+            announce: supportsCollectibles ? (collectible && announce) : nil,
+            extras: extras)
     }
 }
 
@@ -382,13 +396,37 @@ public struct ShopItemBody: Encodable, Sendable, Equatable {
     public let enabled: Bool
     public let rarity: String?
     public let announce: Bool?
+    /// Fields the app does not model, written first so a field it does model always wins.
+    public let extras: [String: JSONValue]
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case name, description, emoji, type, roleId, durationHours, price, stock, perMemberLimit, requiredRoles, enabled
         case rarity, announce
     }
 
+    public init(name: String, description: String, emoji: String, type: String, roleId: String, durationHours: Int,
+                price: Int, stock: Int?, perMemberLimit: Int?, requiredRoles: [String], enabled: Bool,
+                rarity: String?, announce: Bool?, extras: [String: JSONValue] = [:]) {
+        self.name = name
+        self.description = description
+        self.emoji = emoji
+        self.type = type
+        self.roleId = roleId
+        self.durationHours = durationHours
+        self.price = price
+        self.stock = stock
+        self.perMemberLimit = perMemberLimit
+        self.requiredRoles = requiredRoles
+        self.enabled = enabled
+        self.rarity = rarity
+        self.announce = announce
+        self.extras = extras
+    }
+
     public func encode(to encoder: any Encoder) throws {
+        var extra = encoder.container(keyedBy: PassthroughKey.self)
+        // An output-only key (`sold`, `imagePath` ...) never reaches here: it is a ShopItem key, not an extra.
+        try Passthrough.write(extras, excluding: Set(CodingKeys.allCases.map(\.rawValue)), to: &extra)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(name, forKey: .name)
         try c.encode(description, forKey: .description)
@@ -407,5 +445,22 @@ public struct ShopItemBody: Encodable, Sendable, Equatable {
         try c.encode(enabled, forKey: .enabled)
         try c.encodeIfPresent(rarity, forKey: .rarity)
         try c.encodeIfPresent(announce, forKey: .announce)
+    }
+}
+
+/// Cuts text to the server's limits, which count UTF-16 units (JavaScript's `slice`), between characters so
+/// a surrogate pair or an emoji is never split.
+public enum UTF16Limit {
+    /// The longest start of `text` that is at most `limit` UTF-16 units.
+    public static func truncated(_ text: String, to limit: Int) -> String {
+        guard text.utf16.count > limit else { return text }
+        var units = 0
+        var result = ""
+        for character in text {
+            units += character.utf16.count
+            if units > limit { break }
+            result.append(character)
+        }
+        return result
     }
 }
