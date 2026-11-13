@@ -40,12 +40,16 @@ and the app has no "manage this in the web dashboard" links. That covers:
 - Insights, the leaderboard, the roadmap, the changelog, and the account page
   (connected platforms, signed-in devices, delete account).
 
-What stays on the web is what is not a server administrator's job: the
-operator's backups (create, restore, import, download) and the roadmap admin,
-both for the people who run the instance only, and the public pages (the web
-shop, the application forms, event and quote pages) that members open in a
-browser. The app can copy or open the address of a public page; it never needs
-the dashboard to finish a task.
+The people who run the instance (its operators) get their own screens too, under
+Settings and only for operator accounts: Health with the database backups
+(create, download, import, restore, delete) and the dev-log tests, the Bot
+Personalizer, the stats cache and the roadmap admin. See
+[Health and the dev log (operators)](#health-and-the-dev-log-operators).
+
+What stays on the web is only what is not an administrator's job: the public
+pages (the web shop, the application forms, event and quote pages) that members
+open in a browser. The app can copy or open the address of a public page; it
+never needs the dashboard to finish a task.
 
 The app works against older Sylo servers too: it hides what a server does not
 offer and never sends a field the server did not send.
@@ -370,14 +374,28 @@ without use.
 ## Health and the dev log (operators)
 
 The people who run an instance, its operators (`OWNER_IDS` and
-`FLUXER_OWNER_IDS`), get two more things in the app. Someone who only has Manage
-Server never does: the app hides them, and the server answers `403` to anyone
-else.
+`FLUXER_OWNER_IDS`), get more in the app, in an Operator section of Settings.
+Someone who only has Manage Server never does: the app hides it (it reads
+`operator` from `GET /api/v2/account` again whenever the sign-in changes), and
+the server answers `403` to anyone else. An app token works on these routes when
+its account is an operator.
 
-- **Health**, under Settings: whether the bot is up, its version, uptime,
-  gateway ping, servers and members, the database and the latest backups, and
-  the dev log. It is read only; backups are made, restored and downloaded from
-  the web dashboard (they are the operator's, and stay there).
+- **Health**: whether the bot is up, its version, uptime, gateway ping, servers
+  and members, the database, and the dev log, with a test message and a test
+  error for the dev-log channel.
+- **Backups**, from Health: create a backup, download one (it opens in Quick Look
+  and the share sheet, and the temporary file is deleted), delete one, restore
+  one, or import a file. Delete, restore and import ask for a typed word. A
+  restore replaces the live database with the backup and restarts the bot, so
+  every server's data goes back to that snapshot, and the app is signed out when
+  the backup is older than its sign-in. An import is stored as a snapshot only.
+  The import is sent as raw `application/octet-stream` (a JSON body is cut at
+  256 kB) of up to 128 MB, read from the file as it goes.
+- **Bot Personalizer**: the bot's name and pictures, its presence, and the
+  announcement everyone sees.
+- **Stats cache**: the game-stats lookups every server shares (read only).
+- **Roadmap admin**: review suggestions, post, move a post to another stage,
+  edit, delete.
 - **The dev log**: Sylo's own errors and warnings, stored in the database for
   30 days (the newest 500). It works with or without a dev-log channel
   (`DEV_LOG_CHANNEL_ID`); the channel still gets errors only.
@@ -391,6 +409,15 @@ else.
 | `GET /api/v2/health` | Operators only | The Health report |
 | `GET /api/v2/dev-log?level=error&limit=100` | Operators only | `{ entries: [{ id, level, scope, message, at }] }`, newest first |
 | `POST /api/v2/health/dev-log-test` | Operators only | Posts a test message to the dev-log channel; `{ ok }` or `{ ok: false, error }` |
+| `POST /api/v2/health/dev-log-error-test` | Operators only | Logs a real error to test the pipeline; `{ ok }` |
+| `POST /api/v2/health/backups` | Operators only | Takes a backup; `{ name }` |
+| `GET /api/v2/health/backups/:name` | Operators only | The backup file, as a download |
+| `POST /api/v2/health/backups/:name/delete`, `/restore` | Operators only | `{ ok }` (a restore then restarts the bot) |
+| `POST /api/v2/health/backups/import` | Operators only | A raw body (`application/octet-stream`, up to 128 MB); `{ name }` |
+| `GET /api/v2/personalizer`, `/personalizer/presence` | Operators only | The bot; the presence and its choices |
+| `POST /api/v2/personalizer/identity`, `/presence`, `/announcement`, `/announcement/clear` | Operators only | Bot-wide settings |
+| `GET /api/v2/stats` | Operators only | `{ rows, ttlMinutes }`, the newest 50 cached game-stats lookups |
+| `GET /api/v2/roadmap/admin` and `POST /api/v2/roadmap/admin[/:id/approve, reject, status, edit, delete]` | Operators only | The roadmap review board |
 | `GET /api/v2/account` | Bearer token or session | Includes `operator: true` for an operator |
 
 ---

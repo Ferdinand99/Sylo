@@ -5,9 +5,11 @@ import SyloKit
 /// stats command and, for the operators of the Sylo server, lists the lookups the shared cache holds.
 /// Mirrors web-v2/src/moduleForms/GameStats.jsx.
 struct GameStatsView: View {
+    let session: AppSession
     @State private var model: GameStatsModel
 
     init(server: ServerID, session: AppSession) {
+        self.session = session
         _model = State(initialValue: GameStatsModel(server: server, session: session))
     }
 
@@ -65,6 +67,13 @@ struct GameStatsView: View {
             }
             ForEach(recent) { lookup in
                 ListLine(title: lookup.heading, details: lookup.details)
+            }
+            // The operator-only page behind this list (the dashboard's "Full cache view"). This screen
+            // only shows the list when the server said the person is an operator.
+            NavigationLink {
+                StatsCacheView(session: session)
+            } label: {
+                Label("Full Cache View", systemImage: "chart.bar.doc.horizontal")
             }
         } header: {
             Text("Recently queried stats")
