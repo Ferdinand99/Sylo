@@ -477,3 +477,10 @@ public struct ComposedMessageRecord: Decodable, Sendable, Equatable {
         message = try c.decode(forKey: .rec, or: ComposedMessage())
     }
 }
+
+extension ServerFeature {
+    /// The server moves a posted message to another channel itself when it is published there: it
+    /// posts in the new channel first and deletes the old post second (`message-move` in
+    /// `GET /api/mobile/info`). Without it the app deletes the old post first.
+    public static let messageMove = ServerFeature(rawValue: "message-move")
+}

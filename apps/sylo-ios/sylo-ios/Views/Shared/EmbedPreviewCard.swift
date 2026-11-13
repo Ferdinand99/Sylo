@@ -90,9 +90,12 @@ final class PreviewImageConsent {
 }
 
 /// Fetches an embed picture the way a stranger's link must be fetched: no token, no cookies, https
-/// only, at most 8 MB, shown downsized.
+/// only (also after a redirect), at most 8 MB read in the chunks the network delivers, at most
+/// 4096 pixels on a side, and shown downsized.
 private nonisolated enum RemotePictureLoader {
     static let maxBytes = 8 * 1024 * 1024
+    /// Longest side of a picture the preview will decode; a small file can claim huge dimensions.
+    static let maxSourcePixels = 4096
     static let maxPixels = 1024
 
     private nonisolated(unsafe) static let session: URLSession = {
@@ -118,27 +121,20 @@ private nonisolated enum RemotePictureLoader {
         request.httpShouldHandleCookies = false
         request.setValue("image/*", forHTTPHeaderField: "Accept")
         request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
-        do {
-            let (bytes, response) = try await session.bytes(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
-                  http.url?.scheme?.lowercased() == "https",
-                  http.expectedContentLength <= Int64(maxBytes) else { return nil }
-            var data = Data()
-            for try await byte in bytes {
-                data.append(byte)
-                if data.count > maxBytes { return nil }
-            }
-            guard let image = downsized(data) else { return nil }
-            cache.setObject(image, forKey: url as NSURL)
-            return image
-        } catch {
-            return nil
-        }
+        guard let data = await CappedDownload.fetch(request, on: session, maxBytes: maxBytes),
+              let image = downsized(data) else { return nil }
+        cache.setObject(image, forKey: url as NSURL)
+        return image
     }
 
     /// The picture at most ``maxPixels`` on its longest side, so a huge one cannot fill the memory.
-    private static func downsized(_ data: Data) -> UIImage? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+    /// A picture whose dimensions are over ``maxSourcePixels`` is refused before it is decoded.
+    static func downsized(_ data: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int,
+              width > 0, height > 0, width <= maxSourcePixels, height <= maxSourcePixels else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
@@ -146,6 +142,94 @@ private nonisolated enum RemotePictureLoader {
         ]
         guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         return UIImage(cgImage: cgImage)
+    }
+}
+
+/// One download that stops as soon as it is over the size limit: the declared length is checked
+/// before any byte is kept, and the chunks that arrive are counted. Only `https` is followed.
+private nonisolated final class CappedDownload: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    // @unchecked: `data`, `continuation` and `finished` are only touched while holding `lock`.
+    private let lock = NSLock()
+    private let maxBytes: Int
+    private var data = Data()
+    private var continuation: CheckedContinuation<Data?, Never>?
+    private var finished = false
+
+    private init(maxBytes: Int) {
+        self.maxBytes = maxBytes
+        super.init()
+    }
+
+    /// The body of a successful answer, nil for anything else (a status other than 200, a link that
+    /// leaves https, too much data, an error).
+    static func fetch(_ request: URLRequest, on session: URLSession, maxBytes: Int) async -> Data? {
+        let download = CappedDownload(maxBytes: maxBytes)
+        let task = session.dataTask(with: request)
+        task.delegate = download
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Data?, Never>) in
+                download.lock.withLock { download.continuation = continuation }
+                task.resume()
+            }
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func finish(_ result: Data?) {
+        let pending: CheckedContinuation<Data?, Never>? = lock.withLock {
+            guard !finished else { return nil }
+            finished = true
+            defer { continuation = nil }
+            return continuation
+        }
+        pending?.resume(returning: result)
+    }
+
+    func urlSession(
+        _ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+        completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void
+    ) {
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+              http.url?.scheme?.lowercased() == "https",
+              http.expectedContentLength <= Int64(maxBytes) else {
+            completionHandler(.cancel)
+            finish(nil)
+            return
+        }
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive chunk: Data) {
+        let tooMuch: Bool = lock.withLock {
+            data.append(chunk)
+            return data.count > maxBytes
+        }
+        if tooMuch {
+            dataTask.cancel()
+            finish(nil)
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        // A redirect away from https ends the download.
+        if request.url?.scheme?.lowercased() == "https" {
+            completionHandler(request)
+        } else {
+            completionHandler(nil)
+            finish(nil)
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+        if error == nil {
+            finish(lock.withLock { data })
+        } else {
+            finish(nil)
+        }
     }
 }
 
